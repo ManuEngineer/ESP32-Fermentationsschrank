@@ -62,6 +62,22 @@ NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES
 FRONTEND_ONLY_TIME_GATE=NO
 APPLICATION_DOMAIN_START_GATE=YES
 NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO
+R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES
+UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN
+LAST_VALID_UTC_CURRENT_RETAINED_ON_TIME_TRUST_LOSS=YES
+PERIODIC_FERMENTING_CHECKPOINT_WITHOUT_TRUSTED_UTC=SKIP_NO_WRITE
+SKIPPED_FOR_MISSING_TRUSTED_UTC_DOES_NOT_CONFIRM_CHECKPOINT_SCHEDULE=YES
+FERMENTING_MUTATION_RESULTING_IN_FERMENTING_REQUIRES_TRUSTED_UTC=YES
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC=REJECT_OR_DEFER_BEFORE_PERSISTENCE_AND_RAM_APPLY
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC_RAM_APPLY=NO
+ALL_PERSISTENCE_REQUIRES_UTC=NO
+WRITE_INVARIANT_TIGHTENED=YES
+READ_COMPATIBILITY_RETAINED=YES
+NO_SYNTHETIC_UTC_FROM_MONOTONIC=YES
+NO_LAST_UTC_PLUS_MONOTONIC_SECOND_CLOCK=YES
+NO_RETROACTIVE_CHECKPOINT_REWRITE=YES
+NO_FALLBACK_AUTO_PROMOTION=YES
+NO_ISSUE124_CHANGE=YES
 
 NTP_ONLY_START_BEFORE_SYNC=REJECT_NO_MUTATION_OR_CHECKPOINT
 NTP_ONLY_START_AFTER_SYNC=ALLOW_FIRST_CHECKPOINT_HAS_TRUSTED_UTC
@@ -146,6 +162,15 @@ unixTimeSeconds()
   abgewiesen.
 - Keine UTC-lose Run-Start-Checkpoint-Ankerung und keine nachtraegliche
   Reparatur historischer UTC-loser Checkpoints.
+- Kein neuer aktiver `ProgramRun`-/`ManualRun`-Current im Zustand
+  `ProcessState::Fermenting` darf ohne trusted UTC committed werden. Bei einer
+  Trust-Luecke wird der letzte UTC-tragende Current behalten; es werden weder
+  synthetische UTC noch eine zweite monotone Ersatzuhr, Checkpoint-Rewrites
+  oder eine automatische Fallback-Hochstufung gebaut.
+- Keine globale Regel `ALL_PERSISTENCE_REQUIRES_UTC=YES`: Stop/Abort zu
+  `NoActiveRun`, terminale/sichere Non-`FERMENTING`-Zustaende und andere
+  bestehende gueltige Nicht-Recovery-Pfade behalten ihre vorhandene Semantik,
+  sofern kein anderer Vertrag UTC verlangt.
 - Kein provisionaler Operator-Resume und keine Aktorfreigabe ohne trusted
   absolute Zeit, wenn #124 sie fuer Current-`FERMENTING` benoetigt.
 - Keine geratenen GPIOs, I2C-Ports, Pegel, Batterieannahmen oder
@@ -204,6 +229,23 @@ Der relevante Produktionsstand ist:
 - `RunCheckpointTime.utcUnixSeconds` ist optional und
   `FermentationApplication::currentCheckpointTime()` reicht die optionale
   Rueckgabe des `ITimeSource` unveraendert weiter.
+- `checkpointPeriodic(...)` prueft Faelligkeit und baut danach einen Snapshot
+  mit der optionalen Zeit. Ohne Guard koennte ein faelliger
+  `FERMENTING`-Checkpoint mit `utcUnixSeconds=nullopt` Slot und Current
+  ersetzen; `RunCheckpointSchedule::confirm()` wird erst nach dem durable
+  Commit aufgerufen.
+- `persistCommand`, `persistTransition` und `persistSensorSelection` bilden
+  ebenfalls zuerst den Ziel-Snapshot und fuehren den Write-before-Apply-Pfad
+  aus. Ohne gemeinsame Pruefung koennte auch eine Mutation einen aktiven
+  `FERMENTING`-Current ohne UTC durable machen. Ein bestehender
+  `AppliedRamOnly`-Sonderpfad ist kein neuer durable Current und wird nicht
+  pauschal durch eine UTC-Regel blockiert.
+- `makeRunPersistenceSnapshotInto(...)` und der Snapshot-Validator sehen die
+  UTC im aeusseren `StorageEnvelope` nicht vollstaendig. Der neue
+  Schreibinvariant muss deshalb an einer Application-/Persistence-Domain-
+  Grenze geprueft werden, die Ziel-Snapshot und `RunCheckpointTime` gemeinsam
+  sieht; eine alleinige Validatorverschaerfung waere fuer den Envelopevertrag
+  unzureichend.
 - Die bestehenden Programm- und Manual-Startentscheidungen nehmen derzeit
   keine Zeitquelle entgegen. Der bestehende
   `TemperatureControlApplicationOrchestrator::persistFreshStartCommand(...)`
@@ -220,7 +262,9 @@ Der relevante Produktionsstand ist:
 Damit ist keine zweite Zeit-API erforderlich. Die kleinste Erweiterung besteht
 aus einer konkreten Systemzeit-/Trust-Implementierung hinter demselben Port,
 einem DS3231-Adapter, einem kleinen ESP-IDF-SNTP-/Arbitrationskoordinator und
-einem einzigen produktiven Startgate an der bestehenden Application-Grenze.
+einem einzigen produktiven Startgate sowie einem gemeinsamen
+Current-FERMENTING-Schreibguard an der bestehenden Application-/Persistence-
+Grenze.
 
 ### 4.3 Trusted-Time-Startgate-Audit
 
@@ -314,6 +358,51 @@ ueberschreiben.
 RTC-/I2C-Fehler und waehlt den NTP-only-Betriebsmodus. `rtc.present=true`
 aktiviert nur die konfigurierte DS3231-Pruefung; fehlende oder untrusted RTC
 bleibt ein fail-closed Zeitquellenzustand.
+
+### 4.5 Audit des recoverbaren Current-FERMENTING-Schreibpfads
+
+Der bestehende Checkpointvertrag traegt UTC optional, obwohl #124 fuer die
+Recovery eines aktiven `FERMENTING`-Current einen UTC-tragenden Current
+benoetigt. Ein neuer Run wird durch das Startgate nur beim ersten Start
+geschuetzt; eine spaetere Trust-Luecke koennte ohne weiteren Guard einen
+gueltigen Current A durch einen UTC-losen Current B ersetzen. #124 darf einen
+frueheren Current nicht automatisch aus Fallback oder Historie hochstufen.
+
+Der Zielvertrag fuer neue Writes ist deshalb:
+
+```text
+IF Current.variant IN {ProgramRun, ManualRun}
+AND Current.processState == Fermenting
+THEN Current.utcUnixSeconds MUST be present
+```
+
+Die Pruefung muss den resultierenden Snapshot und die zu speichernde
+`RunCheckpointTime` gemeinsam sehen. Sie liegt in der
+`fermentation_app`-/Persistence-Domain-Grenze unterhalb von UI und einzelnen
+Orchestrator-Aufrufern, bleibt aber ausserhalb von `device_platform`,
+DS3231-Adapter und SNTP-Adapter. Sie erfolgt vor dem durable Write und, fuer
+Write-before-Apply-Pfade, vor dem RAM-Apply.
+
+Bei `checkpointPeriodic(...)` wird bei Faelligkeit und fehlender trusted UTC
+ohne jede dauerhafte oder RAM-seitige Mutation ein ehrlicher bestehender
+Resultstatus verwendet. Der genaue Statusname (`NotDue`, `NotEligible`,
+`Blocked` oder ein gleichwertiger vorhandener Status) wird im
+Umsetzungs-Audit anhand der vorhandenen Semantik gewaehlt; fuer den
+Trust-Fehler wird kein unnoetiger neuer Persistenzstatus erfunden. Der
+Schedule wird nicht bestaetigt, weil kein Checkpoint erfolgreich geschrieben
+wurde. Der letzte gueltige Current, Slot und Fallback bleiben unangetastet.
+
+Bei einer persistierten Command-/Automatikmutation, deren Ziel weiterhin ein
+aktiver `FERMENTING`-Current ist, wird ohne trusted UTC vor Persistenz und
+RAM-Apply abgelehnt oder deferiert. Terminale oder sonstige gueltige
+Non-`FERMENTING`-Ziele werden nicht allein durch diesen Guard blockiert. Die
+Anwendung erfindet keine UTC aus monotonic time, schreibt keinen kleineren
+Ersatzwert und korrigiert keine gespeicherte Historie rueckwirkend.
+
+Historische UTC-lose Records bleiben lesbar. #124 behandelt sie bei einem
+Recoveryversuch weiterhin mit seinem bestehenden fail-closed-Vertrag; es gibt
+keine Fallback-Auto-Promotion und keine Aenderung der #124-Formel oder
+Recovery-Disposition.
 
 ## 5. Zielvertrag der Zeitplattform
 
@@ -489,6 +578,85 @@ Das Gate verhindert nur neue nicht rekonstruierbare Anker. Es aendert weder
 `wall_clock_since_checkpoint_seconds`, `RecoveryDisposition`, die bestehende
 `WaitingForTrustedTime`-Reevaluation noch die FSM-Recoverytopologie. Alte
 UTC-lose Checkpoints werden nicht nachtraeglich repariert.
+
+### 5.6 Schreibschutz fuer den recoverbaren Current-FERMENTING-Zustand
+
+Das Startgate schuetzt den ersten Checkpoint eines neuen Runs. Zusaetzlich
+gilt fuer jeden neuen Write, der einen aktiven Current repraesentiert:
+
+```text
+R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES
+UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN
+LAST_VALID_UTC_CURRENT_RETAINED_ON_TIME_TRUST_LOSS=YES
+```
+
+Der resultierende Snapshot ist die Entscheidungsgrundlage. Wenn
+
+```text
+Current.variant IN {ProgramRun, ManualRun}
+AND Current.processState == Fermenting
+```
+
+gilt, muss die zu speichernde `RunCheckpointTime.utcUnixSeconds` vorhanden
+sein. Die gemeinsame Guard-Pruefung sieht deshalb den Ziel-Snapshot und die
+aktuelle Checkpoint-Zeit zusammen und liegt an der tiefsten gemeinsamen
+`fermentation_app`-/Persistence-Domain-Grenze, die vor dem durable Write
+erreicht wird. Sie darf nicht nur im UI, in einem einzelnen Orchestrator,
+`device_platform`, dem DS3231-Adapter oder dem SNTP-Adapter liegen.
+
+Fuer `checkpointPeriodic(...)` gilt bei aktivem `FERMENTING`, faelligem
+Schedule und `unixTimeSeconds()==nullopt`:
+
+```text
+PERIODIC_FERMENTING_CHECKPOINT_WITHOUT_TRUSTED_UTC=SKIP_NO_WRITE
+CURRENT_HEAD_MUTATION=NO
+CHECKPOINT_SLOT_MUTATION=NO
+FALLBACK_MUTATION=NO
+RUN_RAM_MUTATION=NO
+LAST_VALID_CURRENT_RETAINED=YES
+NO_DURABLE_MUTATION
+```
+
+Der vorhandene ehrliche Resultstatus wird nach Ist-Audit gewaehlt
+(`NotDue`, `NotEligible`, `Blocked` oder gleichwertig); fuer diese
+Planentscheidung wird kein neuer Persistenzstatus erfunden. Der ausgelassene
+Checkpoint bestaetigt den Schedule nicht:
+
+```text
+SKIPPED_FOR_MISSING_TRUSTED_UTC_DOES_NOT_CONFIRM_CHECKPOINT_SCHEDULE=YES
+```
+
+Der Guard muss vor einer moeglichen Kandidaten-/Live-Evidence-Mutation
+greifen. Sobald trusted UTC wieder verfuegbar ist, darf der naechste regulär
+faellige Checkpoint normal geschrieben und der Schedule bestaetigt werden.
+
+Bei einem Command oder einer automatischen/persistierten Mutation, deren
+erfolgreiches Apply einen neuen weiterhin aktiven `FERMENTING`-Current
+durable machen wuerde, gilt:
+
+```text
+FERMENTING_MUTATION_RESULTING_IN_FERMENTING_REQUIRES_TRUSTED_UTC=YES
+NO_TRUSTED_UTC=REJECT_OR_DEFER_BEFORE_PERSISTENCE_AND_RAM_APPLY
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC_RAM_APPLY=NO
+```
+
+Write-before-Apply bleibt der bestehende Ablauf. Der neue Guard wird nach der
+Zielprojektion, aber vor Persistenz und RAM-Apply ausgefuehrt. Ein bestehender
+RAM-only-Pfad ohne neuen durable Current wird nicht durch eine globale
+UTC-Pflicht umdefiniert. Stop/Abort zu `NoActiveRun`, terminale/sichere
+Non-`FERMENTING`-Ziele und andere bestehende gueltige Nicht-Recovery-Ziele
+bleiben erlaubt, sofern kein anderer bestehender Vertrag UTC verlangt:
+
+```text
+ALL_PERSISTENCE_REQUIRES_UTC=NO
+TERMINAL_NO_ACTIVE_RUN_PATHS_BLOCKED_BY_NEW_GUARD=NO
+```
+
+Es gibt keine synthetische UTC aus monotonic time, keine zweite
+`last UTC + monotonic`-Uhr, keinen retroaktiven Checkpoint- oder
+Recovery-Rewrite und keine automatische Fallback-Promotion. Historische
+Records ohne UTC bleiben lesbar; der bestehende #124-Read-/Recoveryvertrag
+entscheidet weiterhin fail-closed.
 
 ## 6. Vollstaendige RTC/NTP-Arbitration
 
@@ -827,7 +995,49 @@ WHY=
 OWNER_DECISION_REQUIRED=NO
 ```
 
-### 6.13 Aufgeloeste Ownerentscheidungen
+### 6.13 Current-FERMENTING-Guard bei Trust-Luecke
+
+```text
+CURRENT_STATE=
+  RunCheckpointTime.utcUnixSeconds ist optional und wird vom bestehenden
+  ITimeSource unveraendert uebernommen. Nach einem trusted Start koennte ein
+  periodischer oder persistierter FERMENTING-Write bei spaeterem nullopt den
+  recoverbaren Current ersetzen. #124 kann den frueheren Current nicht
+  automatisch hochstufen.
+
+MINIMAL_KISS_OPTION=
+  Den resultierenden Snapshot an der gemeinsamen
+  fermentation_app-/Persistence-Domain-Grenze gegen die aeussere
+  RunCheckpointTime pruefen. Aktiver ProgramRun-/ManualRun-Current im Zustand
+  Fermenting verlangt UTC. Periodic ohne UTC wird vor Kandidaten-/Live-
+  Evidence-Mutation und vor jedem Write uebersprungen; persistierte
+  Fermenting-Mutationen werden vor Persistenz und RAM-Apply abgelehnt oder
+  deferiert. Nicht-Fermenting-/NoActiveRun-Ziele behalten ihre bestehende
+  Persistenzsemantik.
+
+RECOMMENDATION=
+  R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES,
+  UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN und
+  LAST_VALID_UTC_CURRENT_RETAINED_ON_TIME_TRUST_LOSS=YES. Fuer Periodic gilt
+  SKIP_NO_WRITE ohne Head-, Slot-, Fallback- oder RAM-Mutation; der Schedule
+  wird nicht bestaetigt. Fuer Mutationen gilt
+  REJECT_OR_DEFER_BEFORE_PERSISTENCE_AND_RAM_APPLY. Der bestehende ehrliche
+  Resultstatus wird nach Audit gewaehlt; kein neuer Status, keine synthetische
+  UTC, kein retroaktiver Rewrite, keine Fallback-Auto-Promotion.
+
+WHY=
+  Ein aktiver FERMENTING-Current ohne UTC ist fuer den bestehenden #124-
+  Recoveryvertrag nicht rekonstruierbar. Das Behalten des letzten gueltigen
+  Current deckt die gesamte spaetere Wall-Clock-Zeit ab und bewahrt die
+  bestehende fail-closed Recoverysemantik. Ein Guard am tiefen gemeinsamen
+  Write-before-Apply-Punkt verhindert UI-Bypass und Teilmutationen, ohne
+  device_platform mit Fermentationssemantik zu belasten oder Terminalpfade
+  global zu blockieren.
+
+OWNER_DECISION_REQUIRED=NO
+```
+
+### 6.14 Aufgeloeste Ownerentscheidungen
 
 ```text
 OWNER_DECISIONS_REQUIRED=NONE
@@ -842,6 +1052,23 @@ NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES
 FRONTEND_ONLY_TIME_GATE=NO
 APPLICATION_DOMAIN_START_GATE=YES
 NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO
+R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES
+UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN
+LAST_VALID_UTC_CURRENT_RETAINED_ON_TIME_TRUST_LOSS=YES
+PERIODIC_FERMENTING_CHECKPOINT_WITHOUT_TRUSTED_UTC=SKIP_NO_WRITE
+SKIPPED_FOR_MISSING_TRUSTED_UTC_DOES_NOT_CONFIRM_CHECKPOINT_SCHEDULE=YES
+FERMENTING_MUTATION_RESULTING_IN_FERMENTING_REQUIRES_TRUSTED_UTC=YES
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC=REJECT_OR_DEFER_BEFORE_PERSISTENCE_AND_RAM_APPLY
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC_RAM_APPLY=NO
+ALL_PERSISTENCE_REQUIRES_UTC=NO
+TERMINAL_NO_ACTIVE_RUN_PATHS_BLOCKED_BY_NEW_GUARD=NO
+WRITE_INVARIANT_TIGHTENED=YES
+READ_COMPATIBILITY_RETAINED=YES
+NO_SYNTHETIC_UTC_FROM_MONOTONIC=YES
+NO_LAST_UTC_PLUS_MONOTONIC_SECOND_CLOCK=YES
+NO_RETROACTIVE_CHECKPOINT_REWRITE=YES
+NO_FALLBACK_AUTO_PROMOTION=YES
+NO_ISSUE124_CHANGE=YES
 I2C_PORT_LIFETIME_OWNER=I2CDEV
 I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
 SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO
@@ -1036,10 +1263,10 @@ Der Koordinator bleibt klein und linear. Keine allgemeine Zeit-Consensus-
 Engine, kein globaler Service-Locator und keine Fermentationskenntnis.
 Callback-Arbeit, RTC-Schreiben und Systemzeit-Trust werden gegen die konkrete
 ESP-IDF-/FreeRTOS-Lebensdauer und Thread-Sicherheit serialisiert. Ein NTP-
-Callback darf die FSM nicht direkt aufrufen. Ein Smooth-Sync-Event in
-`IN_PROGRESS` darf keinen RTC-Write ausloesen; nur `COMPLETED` startet den
-asynchronen Write-/Readback-/Trust-Abschluss. Der Adapter darf keine direkte
-zweite Businitialisierung auf demselben I2C-Port einfuehren.
+  Callback darf die FSM nicht direkt aufrufen. Ein Smooth-Sync-Event in
+  `IN_PROGRESS` darf keinen RTC-Write ausloesen; nur `COMPLETED` startet den
+  asynchronen Write-/Readback-/Trust-Abschluss. Der Adapter darf keine direkte
+  zweite Businitialisierung auf demselben I2C-Port einfuehren.
 
 ### Schnitt C – Boardprofil und Composition Root
 
@@ -1054,6 +1281,14 @@ zweite Businitialisierung auf demselben I2C-Port einfuehren.
   bestehenden `ITimeSource`; die spaetere UI projiziert nur den
   `TrustedAbsoluteTimeRequired`-Grund. Kein RTC-/NTP-Typ gelangt in
   `fermentation_app`.
+- Die gemeinsame Application-/Persistence-Domain-Grenze prueft jeden
+  resultierenden Snapshot, der ein aktiver `ProgramRun`-/`ManualRun`-Current im
+  Zustand `Fermenting` waere, zusammen mit der zu speichernden
+  `RunCheckpointTime`. Ohne trusted UTC wird ein solcher persistierter Write
+  vor durable Write und RAM-Apply abgelehnt/deferiert. Der Periodic-Pfad
+  ueberspringt bei fehlender UTC ohne Kandidaten-, RAM-, Slot-, Head- oder
+  Fallback-Mutation und bestaetigt den Schedule nicht. Terminale und andere
+  Non-`FERMENTING`-Ziele bleiben von dieser Guard allein unberuehrt.
 - Der bestehende `ITimeSource`-Aufruf und die automatische #124-Reevaluation
   bleiben unveraendert.
 
@@ -1078,6 +1313,32 @@ Die digitale Testschicht muss ohne reale Uhr, Netzwerk oder DS3231 auskommen:
   des aktuellen Boot-Trusts;
 - fehlgeschlagener RTC-Write bei weiter trusted NTP-Systemzeit;
 - unveraenderte monotone Zeit trotz Systemzeitkorrektur;
+- `PERIODIC_FERMENTING_CHECKPOINT_WITHOUT_TRUSTED_UTC`: Current A traegt UTC,
+  danach wird `unixTimeSeconds()` nullopt und ein faelliger Periodic-Write
+  versucht. Es gibt keinen Slot-, Head-, Fallback- oder RAM-Write; Current A
+  bleibt erhalten und der Schedule wird nicht als bestaetigt markiert.
+- `POWER_LOSS_DURING_TIME_TRUST_GAP`: Nach einem oder mehreren ausgelassenen
+  Periodic-Checkpoints wird Current A beim spaeteren Boot mit trusted UTC von
+  #124 normal bewertet. Die Wall-Clock-Differenz umfasst das gesamte
+  Intervall, ohne Doppelzaehlung, Fallback-Auto-Promotion oder History-Rewrite.
+- `TIME_TRUST_RETURNS`: Nach wieder verfuegbarer trusted UTC schreibt der
+  naechste regulaer faellige Periodic-Checkpoint Current B mit UTC und bestaetigt
+  erst dann den Schedule.
+- `FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC`: Eine AdjustRun- oder andere
+  persistierte Mutation, deren Ziel weiterhin aktiver FERMENTING-Current waere,
+  wird vor durable Write und RAM-Apply abgelehnt/deferiert; Current A bleibt.
+- `FERMENTING_MUTATION_AFTER_TRUST_RESTORED`: Der semantisch frische oder
+  gemaess Commandvertrag neu bewertete Command laeuft nach Trust-Rueckkehr
+  durch die normalen Stale-/Idempotency-Pruefungen und commit/apply normal;
+  stale Entscheidungen werden nicht blind wiederverwendet.
+- `TERMINAL_NO_ACTIVE_RUN`: Ein gueltiger Stop/Abort nach `NoActiveRun` wird
+  ohne trusted UTC nicht allein durch den neuen FERMENTING-Guard blockiert.
+  Mindestens ein weiterer bestehender sicherer/terminaler Non-FERMENTING-Pfad
+  prueft ebenfalls, dass keine globale `ALL_PERSISTENCE_REQUIRES_UTC`-Regel
+  eingefuehrt wurde.
+- `UI_BYPASS_ACTIVE_FERMENTING`: Ein direkter Application-/Persistence-Pfad
+  ohne UI kann keinen aktiven FERMENTING-Current mit `utcUnixSeconds=nullopt`
+  durable schreiben; es gibt keinen RAM-Apply ohne passenden durable Commit.
 - `NTP_ONLY_START_BEFORE_SYNC`: `rtc.present=false` und `unixTimeSeconds()`
   ohne Wert weist einen neuen produktiven Run ab und erzeugt weder aktive
   Startmutation noch Checkpoint;
@@ -1118,6 +1379,9 @@ werden vom Agenten selbst ausgefuehrt und benoetigen keine Owner-Anweisung:
 TARGETED_TESTS=REQUIRED
 F1_DOMAIN_START_GATE=REQUIRED
 F2_SHARED_I2C_OWNERSHIP=REQUIRED
+R1_CURRENT_FERMENTING_CHECKPOINT_GUARD=REQUIRED
+FERMENTING_MUTATION_TRUST_GUARD=REQUIRED
+PERSISTENCE_WRITE_INVARIANT=REQUIRED
 FULL_NATIVE_SUITE=REQUIRED_BEFORE_OWNER_FINAL_IMPLEMENTATION_REVIEW
 ESP_IDF_BRINGUP_BUILD=REQUIRED
 ESP_IDF_RELEASE_BUILD=REQUIRED
@@ -1241,6 +1505,28 @@ Implementierungs-Head ausgefuehrt.
 - [ ] Jeder neue produktive Run verlangt vor Persistenz/Apply eine vorhandene
       trusted UTC; ein UI-only-Gate ist ausgeschlossen und ein UTC-loser
       Recoveryanker kann nicht entstehen.
+- [ ] Jeder neue `ProgramRun`-/`ManualRun`-Current im Zustand `Fermenting`
+      enthaelt UTC. Ein UTC-loser aktiver FERMENTING-Current kann durch keinen
+      neuen #126-kompatiblen Write committed werden.
+- [ ] Ein faelliger Periodic-Checkpoint bei fehlender trusted UTC wird ohne
+      Slot-, Head-, Fallback-, Kandidaten- oder RAM-Mutation uebersprungen;
+      der letzte gueltige Current bleibt erhalten und der Schedule wird nicht
+      bestaetigt. Der vorhandene ehrliche Resultstatus ist dokumentiert.
+- [ ] Nach Trust-Rueckkehr schreibt der naechste regulaer faellige Periodic-
+      Checkpoint wieder einen UTC-tragenden Current und bestaetigt den
+      Schedule erst nach durablem Erfolg.
+- [ ] Persistierte Mutationen mit resultierendem aktivem FERMENTING-Current
+      werden ohne trusted UTC vor Persistenz und RAM-Apply abgelehnt/deferiert;
+      der direkte Application-/Persistence-Bypass kann den Guard nicht
+      umgehen. Nach Trust-Rueckkehr gelten die normalen frischen
+      Stale-/Idempotency-Pruefungen.
+- [ ] Stop/Abort zu `NoActiveRun` und mindestens ein weiterer sicherer oder
+      terminaler Non-`FERMENTING`-Pfad werden nicht allein durch den neuen
+      Guard blockiert; `ALL_PERSISTENCE_REQUIRES_UTC=NO` bleibt erhalten.
+- [ ] Die Schreibinvariante ist auf neue Writes begrenzt, alte UTC-lose
+      Records bleiben lesbar und #124 behandelt sie weiterhin fail-closed.
+      Es gibt kein Schemafeld, keine synthetische UTC, keinen retroaktiven
+      Rewrite und keine Fallback-Auto-Promotion.
 - [ ] NTP-only weist den Start vor Synchronisierung ab, erlaubt ihn nach
       abgeschlossenem NTP-Sync mit UTC im ersten Checkpoint, und trusted
       RTC erlaubt den Start ohne Netzwerkwartezeit.
@@ -1337,6 +1623,26 @@ RAW_REGISTER_VALIDATION=REQUIRED
 NARROW_DS3231_HEALTH_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
 FULL_OWN_DS3231_DRIVER=NO
 ALLOWED_NARROW_ADAPTER_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
+
+R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES
+UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN
+LAST_VALID_UTC_CURRENT_RETAINED_ON_TIME_TRUST_LOSS=YES
+PERIODIC_FERMENTING_CHECKPOINT_WITHOUT_TRUSTED_UTC=SKIP_NO_WRITE
+SKIPPED_FOR_MISSING_TRUSTED_UTC_DOES_NOT_CONFIRM_CHECKPOINT_SCHEDULE=YES
+FERMENTING_MUTATION_RESULTING_IN_FERMENTING_REQUIRES_TRUSTED_UTC=YES
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC=REJECT_OR_DEFER_BEFORE_PERSISTENCE_AND_RAM_APPLY
+FERMENTING_MUTATION_WITHOUT_TRUSTED_UTC_RAM_APPLY=NO
+ALL_PERSISTENCE_REQUIRES_UTC=NO
+TERMINAL_NO_ACTIVE_RUN_PATHS_BLOCKED_BY_NEW_GUARD=NO
+WRITE_INVARIANT_TIGHTENED=YES
+READ_COMPATIBILITY_RETAINED=YES
+SCHEMA_CHANGE=NO
+NEW_PERSISTENCE_FIELD=NO
+NO_SYNTHETIC_UTC_FROM_MONOTONIC=YES
+NO_LAST_UTC_PLUS_MONOTONIC_SECOND_CLOCK=YES
+NO_RETROACTIVE_CHECKPOINT_REWRITE=YES
+NO_FALLBACK_AUTO_PROMOTION=YES
+NO_ISSUE124_CHANGE=YES
 
 I2C_PORT_LIFETIME_OWNER=I2CDEV
 I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
