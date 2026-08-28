@@ -26,6 +26,10 @@
 #include "storage_envelope.hpp"
 #include "actuation_interlock.hpp"
 #include "temperature_control_orchestrator.hpp"
+#include "fermentation_application.hpp"
+#include "device_platform.hpp"
+#include "virtual_time_source.hpp"
+#include "mock_time_zone_resolver.hpp"
 
 namespace fermentation {
 
@@ -4917,6 +4921,56 @@ RunCommandState persistedFermentingRun(RunPersistenceCoordinator& coordinator,
     return state;
 }
 
+RunCommandState persistedFermentingRunWithCompletion(
+    RunPersistenceCoordinator& coordinator, CommandId startId,
+    CompletionMode completionMode, std::uint32_t durationMinutes = 1U) {
+    auto program = runnableProgram();
+    program.program.fermentationStages.front().durationMinutes =
+        durationMinutes;
+    program.program.completion.mode = completionMode;
+    if (completionMode != CompletionMode::FinishWithoutCooling) {
+        program.program.completion.coolingTargetCelsius = 20.0;
+    }
+    if (completionMode == CompletionMode::CoolAndHoldForDuration) {
+        program.program.completion.holdDurationMinutes = 30U;
+    }
+    TEST_ASSERT_TRUE(validateProgram(program).valid());
+
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state,
+                                startDecision(state, startId, 100U, program),
+                                RunCheckpointTime{100U, 0})
+                .status));
+    ProcessSignals signals;
+    signals.qualificationProgress = QualificationProgress::Complete;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(coordinator
+                             .persistTransition(state, transition,
+                                                RunCheckpointTime{200U, 0})
+                             .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(coordinator
+                             .persistTransition(state, transition,
+                                                RunCheckpointTime{600300U, 0})
+                             .status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(state.processState.state));
+    return state;
+}
+
 RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
                                         CommandId startId) {
     auto program = runnableProgram();
@@ -5244,15 +5298,13 @@ void test_fallback_qualifying_recovery_rebases_through_common_helper() {
     const auto recovered = application.activateRecovery(
         recovery, current, RunCheckpointTime{80'000U, std::nullopt},
         recoveryPlausibility(80'000U));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
-                          static_cast<int>(recovered.status));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(recovered.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
                           static_cast<int>(current.processState.state));
-    TEST_ASSERT_FALSE(
+    TEST_ASSERT_TRUE(
         current.processState.qualificationValidSinceMillis.has_value());
-    TEST_ASSERT_EQUAL_UINT64(80'000U,
-                             current.processState.targetReachStartedAtMillis);
-    TEST_ASSERT_FALSE(current.processState.targetReachWarningIssued);
 }
 
 void test_loaded_recovery_rebase_preserves_reaching_preheating_and_fermenting() {
@@ -8561,7 +8613,7 @@ void test_orchestrator_reconciles_non_resumable_current_before_standby() {
     RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
                                    RunCheckpointSchedule{});
     static_cast<void>(seed.loadAndInitialize());
-    static_cast<void>(persistedFermentingRun(seed, 1230U));
+    static_cast<void>(readyActiveRunWithSensorSelection(seed, 1230U));
     store.restart();
 
     RunPersistenceCoordinator coordinator(
@@ -8791,7 +8843,7 @@ void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
     RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
                                    RunCheckpointSchedule{});
     static_cast<void>(seed.loadAndInitialize());
-    static_cast<void>(persistedFermentingRun(seed, 1235U));
+    static_cast<void>(readyActiveRunWithSensorSelection(seed, 1235U));
     store.restart();
 
     RunPersistenceCoordinator coordinator(
@@ -8832,6 +8884,589 @@ void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
     TEST_ASSERT_TRUE(evaluation.permission ==
                      ActuatorSafetyGateStatus::Allowed);
     TEST_ASSERT_TRUE(input.loadDisposition == RunLoadDisposition::Standby);
+}
+
+RunCommandState checkpointCurrentFermenting(
+    RunPersistenceCoordinator& coordinator, CommandId startId,
+    std::uint32_t liveSeconds, std::int64_t checkpointUtc,
+    CompletionMode completionMode = CompletionMode::FinishWithoutCooling,
+    std::uint32_t durationMinutes = 120U) {
+    auto state = persistedFermentingRunWithCompletion(
+        coordinator, startId, completionMode, durationMinutes);
+    const auto checkpointMillis =
+        state.processState.stateEnteredAtMillis +
+        static_cast<std::uint64_t>(liveSeconds) * 1000U;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            coordinator
+                .checkpointPeriodic(
+                    state, RunCheckpointTime{checkpointMillis, checkpointUtc})
+                .status));
+    return state;
+}
+
+RunCommandState restoreCurrentForR1(SequencedWriteStore& store,
+                                    RunPersistenceCoordinator& coordinator) {
+    store.restart();
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    return *restored;
+}
+
+R1RecoveryEvaluation evaluateR1PersistedPrior(
+    const std::optional<TaggedPriorBootPhaseElapsed>& prior,
+    std::uint32_t liveSeconds = 1U, std::int64_t checkpointUtc = 1'000) {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = persistedFermentingRunWithCompletion(
+        seed, 12430U, CompletionMode::FinishWithoutCooling, 120U);
+    auto candidate = state;
+    candidate.priorBootPhaseElapsed = prior;
+    ++candidate.runRevision;
+    const auto checkpointMillis =
+        state.processState.stateEnteredAtMillis +
+        static_cast<std::uint64_t>(liveSeconds) * 1'000U;
+    const auto persisted = seed.persistRecoveryCandidate(
+        state, candidate, RunCheckpointTime{checkpointMillis, checkpointUtc});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(persisted.status));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    return coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, checkpointUtc});
+}
+
+void test_r1_prior_phase_elapsed_requires_exact_fermenting_bounds() {
+    const auto exact = evaluateR1PersistedPrior(
+        TaggedPriorBootPhaseElapsed{ProcessState::Fermenting,
+                                    PriorBootPhaseElapsed{600U, 600U}},
+        1'200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(exact.disposition));
+
+    const auto missingUpper = evaluateR1PersistedPrior(
+        TaggedPriorBootPhaseElapsed{ProcessState::Fermenting,
+                                    PriorBootPhaseElapsed{10U, std::nullopt}});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(missingUpper.disposition));
+
+    const auto bounded = evaluateR1PersistedPrior(TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{10U, 11U}});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(bounded.disposition));
+
+    // A wrong tag cannot be a valid active snapshot. It must nevertheless
+    // remain fail-closed when a caller presents such a stale/mutated copy.
+    {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        static_cast<void>(
+            checkpointCurrentFermenting(seed, 12431U, 1'200U, 1'000));
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        auto current = restoreCurrentForR1(store, coordinator);
+        current.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Cooling, PriorBootPhaseElapsed{0U, 0U}};
+        const auto rejected = coordinator.evaluateCurrentFermentingRecovery(
+            current, RunCheckpointTime{0U, 1'000});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+            static_cast<int>(rejected.disposition));
+    }
+
+    // PartialUnknownHistory is never converted into an exact R1 phase time.
+    {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        static_cast<void>(
+            checkpointCurrentFermenting(seed, 12432U, 1'200U, 1'000));
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        auto current = restoreCurrentForR1(store, coordinator);
+        current.runProgress.basis = RunProgressBasis::PartialUnknownHistory;
+        const auto rejected = coordinator.evaluateCurrentFermentingRecovery(
+            current, RunCheckpointTime{0U, 1'000});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+            static_cast<int>(rejected.disposition));
+    }
+
+    const auto overflow = evaluateR1PersistedPrior(
+        TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting,
+            PriorBootPhaseElapsed{std::numeric_limits<std::uint32_t>::max(),
+                                  std::numeric_limits<std::uint32_t>::max()}},
+        1U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(overflow.disposition));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CounterOverflow),
+        static_cast<int>(overflow.persistenceResult.status));
+}
+
+void test_r1_missing_or_backwards_checkpoint_utc_fails_closed() {
+    {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        auto state = persistedFermentingRunWithCompletion(
+            seed, 12433U, CompletionMode::FinishWithoutCooling);
+        const auto checkpointMillis =
+            state.processState.stateEnteredAtMillis + 1'200'000U;
+        const auto checkpoint = seed.checkpointPeriodic(
+            state, RunCheckpointTime{checkpointMillis, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+            static_cast<int>(checkpoint.status));
+
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        auto current = restoreCurrentForR1(store, coordinator);
+        const auto rejected = coordinator.evaluateCurrentFermentingRecovery(
+            current, RunCheckpointTime{0U, 1'000});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+            static_cast<int>(rejected.disposition));
+    }
+
+    // The helper evaluates at the checkpoint UTC. Recreate the same trusted
+    // record with a lower current UTC to exercise the signed subtraction gate.
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12434U, 1'200U, 1'000));
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    const auto rejected = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 999});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(rejected.disposition));
+}
+
+void test_r1_recovery_write_unknown_keeps_ram_fail_closed() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12435U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    const auto before = current;
+    const auto unknownWrite = store.writeCount() + 1U;
+    store.unknownWithoutCommitAt(unknownWrite);
+    store.readFaultAt(unknownWrite, SequencedWriteStore::ReadFault::ReadError);
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(evaluation.disposition));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(evaluation.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(before.runRevision, current.runRevision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
+}
+
+void test_r1_adjust_run_rebases_phase_timer_without_observed_runtime_reuse() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = persistedFermentingRunWithCompletion(
+        seed, 12436U, CompletionMode::FinishWithoutCooling, 90U);
+
+    RunAdjustmentCommandRequest adjustment;
+    adjustment.envelope = {12437U,
+                           CommandSource::LocalDisplay,
+                           state.processState.stateEnteredAtMillis + 900'000U,
+                           state.processState.transitionSequence,
+                           state.runRevision,
+                           std::nullopt,
+                           std::nullopt,
+                           true,
+                           std::nullopt};
+    adjustment.remainingDurationMinutes = 80U;
+    adjustment.safetyAllowsChange = true;
+    const auto decision = decideRunAdjustment(state, adjustment);
+    TEST_ASSERT_TRUE(decision.proposed());
+    const auto adjusted = seed.persistCommand(
+        state, decision,
+        RunCheckpointTime{adjustment.envelope.monotonicMillis, 1'000});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(adjusted.status));
+    TEST_ASSERT_EQUAL_UINT32(900U, state.runProgress.observedRunSeconds);
+    TEST_ASSERT_TRUE(state.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, state.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+
+    const auto checkpointMillis =
+        state.processState.stateEnteredAtMillis + 600'000U;
+    const auto checkpoint = seed.checkpointPeriodic(
+        state, RunCheckpointTime{checkpointMillis, 2'000});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(checkpoint.status));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    TEST_ASSERT_EQUAL_UINT64(1'500'300U,
+                             current.processState.stateEnteredAtMillis);
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 2'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(evaluation.disposition));
+    // Current phase time is 10 minutes live after the rebaseline plus the
+    // observable 10-minute wall-clock delta. The older observed total is not
+    // the phase timer and therefore must not turn this into 25 minutes.
+    TEST_ASSERT_EQUAL_UINT32(
+        1'200U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(1'500U, current.runProgress.observedRunSeconds);
+}
+
+void test_r1_legacy_recovery_fields_do_not_change_wall_clock_elapsed() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = persistedFermentingRunWithCompletion(
+        seed, 12438U, CompletionMode::FinishWithoutCooling, 120U);
+    auto candidate = state;
+    candidate.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{999U, 7U, 999U};
+    candidate.recoveryTemperatureEvidence = RecoveryTemperatureEvidence{
+        CrossRoleEvidence{RoleTemperatureEvidence{
+                              20.0, device_platform::SensorQuality::Valid},
+                          {},
+                          {}}};
+    candidate.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{};
+    candidate.lastRecoveryEpisodeEvidence->beforeOutage.air =
+        RoleTemperatureEvidence{20.0, device_platform::SensorQuality::Valid};
+    WeightedProgressState weighted;
+    weighted.cumulative = WeightedProgressBounds{100U, 200U};
+    weighted.coverage = WeightedProgressCoverage::Complete;
+    weighted.lastApplied = WeightedProgressProvenance{
+        RunSensorMode::Product, WeightedProgressConfidence::ProductPreferred,
+        1U, 1U};
+    candidate.runProgress.weightedProgress = weighted;
+    ++candidate.runRevision;
+    const auto persisted = seed.persistRecoveryCandidate(
+        state, candidate,
+        RunCheckpointTime{state.processState.stateEnteredAtMillis + 1'200'000U,
+                          1'000});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(persisted.status));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    TEST_ASSERT_EQUAL_UINT64(600'300U,
+                             current.processState.stateEnteredAtMillis);
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(evaluation.disposition));
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(1'200U, current.runProgress.observedRunSeconds);
+}
+
+void test_r1_current_fermenting_exact_time_keeps_observed_runtime_separate() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12401U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(evaluation.disposition));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(evaluation.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_UINT64(0U, current.processState.stateEnteredAtMillis);
+    TEST_ASSERT_TRUE(current.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, *current.priorBootPhaseElapsed->elapsed.upperBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(1'200U, current.runProgress.observedRunSeconds);
+}
+
+void test_r1_checkpoint_to_powerloss_gap_is_not_called_exact_outage() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12402U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    // The physical example is 4 minutes powered after checkpoint plus 6
+    // minutes without power. Only the 10-minute wall-clock delta is
+    // observable to this contract; the physical cut duration is unknown.
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(evaluation.disposition));
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(1'200U, current.runProgress.observedRunSeconds);
+}
+
+void test_r1_recovery_prior_is_used_by_the_running_fsm_timer() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(
+        checkpointCurrentFermenting(seed, 12403U, 1'200U, 1'000,
+                                    CompletionMode::FinishWithoutCooling, 60U));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(evaluation.disposition));
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+
+    auto decision = decideProcessTransition(
+        current.processState, &*current.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, 1'740'000U,
+        current.priorBootPhaseElapsed->elapsed);
+    TEST_ASSERT_FALSE(decision.proposed());
+    decision = decideProcessTransition(
+        current.processState, &*current.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, 1'800'000U,
+        current.priorBootPhaseElapsed->elapsed);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::FermentationCompleted),
+        static_cast<int>(decision.reason));
+}
+
+void test_r1_multiple_reboots_keep_phase_and_observed_time_distinct() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12404U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator firstRecovery(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto first = restoreCurrentForR1(store, firstRecovery);
+    const auto firstEvaluation =
+        firstRecovery.evaluateCurrentFermentingRecovery(
+            first, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(firstEvaluation.disposition));
+    TEST_ASSERT_EQUAL_UINT32(
+        1'800U, first.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(1'200U, first.runProgress.observedRunSeconds);
+
+    // The ordinary periodic checkpoint does not write every sensor-cycle
+    // delta into observedRunSeconds. The next R1 evaluation folds this boot's
+    // live segment once, while phase time starts from the exact prior offset.
+    const auto secondCheckpoint = firstRecovery.checkpointPeriodic(
+        first, RunCheckpointTime{900'000U, 1'900});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(secondCheckpoint.status));
+
+    RunPersistenceCoordinator secondRecovery(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto second = restoreCurrentForR1(store, secondRecovery);
+    const auto secondEvaluation =
+        secondRecovery.evaluateCurrentFermentingRecovery(
+            second, RunCheckpointTime{0U, 2'200});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(secondEvaluation.disposition));
+    TEST_ASSERT_EQUAL_UINT32(
+        3'000U, second.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(2'100U, second.runProgress.observedRunSeconds);
+}
+
+void test_r1_recovery_completion_modes_use_normal_fsm_semantics() {
+    const std::array<CompletionMode, 4> modes = {
+        CompletionMode::FinishWithoutCooling, CompletionMode::CoolThenFinish,
+        CompletionMode::CoolAndHoldForDuration,
+        CompletionMode::CoolAndHoldUntilManualStop};
+    const std::array<ProcessState, 4> expected = {
+        ProcessState::Completed, ProcessState::Cooling, ProcessState::Cooling,
+        ProcessState::Cooling};
+
+    for (std::size_t index = 0U; index < modes.size(); ++index) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        static_cast<void>(checkpointCurrentFermenting(
+            seed, static_cast<CommandId>(12410U + index), 600U, 1'000,
+            modes[index], 1U));
+
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        auto current = restoreCurrentForR1(store, coordinator);
+        const auto evaluation = coordinator.evaluateCurrentFermentingRecovery(
+            current, RunCheckpointTime{0U, 1'000});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+            static_cast<int>(evaluation.disposition));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(expected[index]),
+                              static_cast<int>(current.processState.state));
+        TEST_ASSERT_FALSE(current.priorBootPhaseElapsed.has_value());
+    }
+}
+
+void test_r1_time_pending_is_ram_only_and_rechecks_same_revision() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12420U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, coordinator);
+    const auto before = current;
+    const auto writesBefore = store.writeCount();
+    const auto pending = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::WaitingForTrustedTime),
+        static_cast<int>(pending.disposition));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(pending.persistenceResult.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(before.processState.state),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(before.runRevision, current.runRevision);
+
+    const auto resumed = coordinator.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(resumed.disposition));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(resumed.persistenceResult.status));
+}
+
+void test_r1_pending_revision_change_is_fail_closed() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12421U, 1'200U, 1'000));
+
+    RunPersistenceCoordinator waiting(store, device_platform::StorageEpoch(1U),
+                                      RunCheckpointSchedule{});
+    auto current = restoreCurrentForR1(store, waiting);
+    const auto pending = waiting.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::WaitingForTrustedTime),
+        static_cast<int>(pending.disposition));
+
+    RunPersistenceCoordinator writer(store, device_platform::StorageEpoch(1U),
+                                     RunCheckpointSchedule{});
+    auto writerCurrent = restoreCurrentForR1(store, writer);
+    const auto advanced = writer.evaluateCurrentFermentingRecovery(
+        writerCurrent, RunCheckpointTime{0U, 1'600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(advanced.disposition));
+
+    const auto stale = waiting.evaluateCurrentFermentingRecovery(
+        current, RunCheckpointTime{0U, 1'700});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+        static_cast<int>(stale.disposition));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(stale.persistenceResult.status));
+}
+
+void test_r1_application_waits_for_utc_and_rechecks_without_user_confirmation() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(checkpointCurrentFermenting(seed, 12422U, 1'200U, 1'000));
+    store.restart();
+
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(
+        application.begin(platform, store, timeZoneResolver, timeSource));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_TRUE(application.recoveryDisposition().has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::WaitingForTrustedTime),
+        static_cast<int>(*application.recoveryDisposition()));
+    TEST_ASSERT_TRUE(application.publishedProcessState().has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::RecoveryEvaluation),
+        static_cast<int>(application.publishedProcessState()->state));
+
+    timeSource.setUnixTimeSeconds(1'600);
+    application.update();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryDisposition::CurrentRunRecoverable),
+        static_cast<int>(*application.recoveryDisposition()));
+    TEST_ASSERT_TRUE(application.publishedProcessState().has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fermenting),
+        static_cast<int>(application.publishedProcessState()->state));
 }
 
 }  // namespace
@@ -9023,5 +9658,21 @@ int main(int, char**) {
         test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision);
     RUN_TEST(
         test_start_sensor_selection_notice_only_visible_after_successful_commit);
+    RUN_TEST(test_r1_prior_phase_elapsed_requires_exact_fermenting_bounds);
+    RUN_TEST(test_r1_missing_or_backwards_checkpoint_utc_fails_closed);
+    RUN_TEST(test_r1_recovery_write_unknown_keeps_ram_fail_closed);
+    RUN_TEST(
+        test_r1_adjust_run_rebases_phase_timer_without_observed_runtime_reuse);
+    RUN_TEST(test_r1_legacy_recovery_fields_do_not_change_wall_clock_elapsed);
+    RUN_TEST(
+        test_r1_current_fermenting_exact_time_keeps_observed_runtime_separate);
+    RUN_TEST(test_r1_checkpoint_to_powerloss_gap_is_not_called_exact_outage);
+    RUN_TEST(test_r1_recovery_prior_is_used_by_the_running_fsm_timer);
+    RUN_TEST(test_r1_multiple_reboots_keep_phase_and_observed_time_distinct);
+    RUN_TEST(test_r1_recovery_completion_modes_use_normal_fsm_semantics);
+    RUN_TEST(test_r1_time_pending_is_ram_only_and_rechecks_same_revision);
+    RUN_TEST(test_r1_pending_revision_change_is_fail_closed);
+    RUN_TEST(
+        test_r1_application_waits_for_utc_and_rechecks_without_user_confirmation);
     return UNITY_END();
 }

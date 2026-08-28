@@ -483,6 +483,8 @@ const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
             return "STANDBY";
         case fermentation::RunLoadDisposition::ResumeOffer:
             return "RESUME_OFFER";
+        case fermentation::RunLoadDisposition::RecoveryEvaluation:
+            return "RECOVERY_EVALUATION";
         case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
         case fermentation::RunLoadDisposition::Completed:
@@ -593,6 +595,8 @@ const char* runProductOutcomeName(
                                                                    snapshot)) {
             case fermentation::RunLoadDisposition::ResumeOffer:
                 return "NEW_VALID_RESUME";
+            case fermentation::RunLoadDisposition::RecoveryEvaluation:
+                return "RECOVERY_EVALUATION";
             case fermentation::RunLoadDisposition::Completed:
                 return "COMPLETED";
             case fermentation::RunLoadDisposition::TerminalFault:

@@ -34,14 +34,16 @@ void test_resume_eligibility_keeps_the_r1_phase_matrix() {
     }
 }
 
-void test_current_non_resumable_and_legacy_recovery_evaluation_are_discardable() {
+void test_current_fermenting_enters_r1_recovery_evaluation() {
     auto snapshot = snapshotFor(ProcessState::Fermenting);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunLoadDisposition::NoActiveRun),
-                          static_cast<int>(classifyRunLoad(
-                              RunPersistenceLoadStatus::Current, &snapshot)));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(BootClassification::DiscardableRun),
-                          static_cast<int>(classify(
-                              RunPersistenceLoadStatus::Current, &snapshot)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunLoadDisposition::RecoveryEvaluation),
+        static_cast<int>(
+            classifyRunLoad(RunPersistenceLoadStatus::Current, &snapshot)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(BootClassification::RecoveryEvaluation),
+        static_cast<int>(
+            classify(RunPersistenceLoadStatus::Current, &snapshot)));
 
     snapshot.processState.state = ProcessState::RecoveryEvaluation;
     TEST_ASSERT_FALSE(isR1ResumeEligible(snapshot));
@@ -122,8 +124,7 @@ void test_legacy_process_state_enum_order_is_unchanged() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_resume_eligibility_keeps_the_r1_phase_matrix);
-    RUN_TEST(
-        test_current_non_resumable_and_legacy_recovery_evaluation_are_discardable);
+    RUN_TEST(test_current_fermenting_enters_r1_recovery_evaluation);
     RUN_TEST(test_fallback_recovered_never_resumes_or_discards);
     RUN_TEST(test_all_load_outcomes_map_to_the_r1_boot_classification);
     RUN_TEST(test_legacy_boot_and_safeboot_snapshots_are_rejected_as_invalid);
