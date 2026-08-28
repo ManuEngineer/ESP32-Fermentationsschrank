@@ -37,32 +37,34 @@ esp_err_t EspIdfSntpTimeCoordinator::initialize(
     const auto status = esp_netif_sntp_init(&config);
     if (status == ESP_OK) {
         initialized_ = true;
-        completionHandled_ = false;
+        arbitration_.reset();
     }
     return status;
 }
 
 esp_err_t EspIdfSntpTimeCoordinator::start() noexcept {
     if (!initialized_) return ESP_ERR_INVALID_STATE;
-    completionHandled_ = false;
+    arbitration_.reset();
     return esp_netif_sntp_start();
 }
 
 void EspIdfSntpTimeCoordinator::poll() noexcept {
     if (!initialized_) return;
     const auto status = sntp_get_sync_status();
+    internal::SntpSyncObservation observation =
+        internal::SntpSyncObservation::Other;
     if (status == SNTP_SYNC_STATUS_IN_PROGRESS) {
         // In smooth mode, the response can be accepted while adjtime is still
         // converging.  RTC synchronization is intentionally deferred until
         // the later COMPLETED observation.
-        completionHandled_ = false;
-        return;
+        observation = internal::SntpSyncObservation::InProgress;
+    } else if (status == SNTP_SYNC_STATUS_RESET) {
+        observation = internal::SntpSyncObservation::Reset;
+    } else if (status == SNTP_SYNC_STATUS_COMPLETED) {
+        observation = internal::SntpSyncObservation::Completed;
     }
-    if (status == SNTP_SYNC_STATUS_RESET) {
-        completionHandled_ = false;
-        return;
-    }
-    if (status != SNTP_SYNC_STATUS_COMPLETED || completionHandled_) return;
+    const auto action = arbitration_.observe(observation);
+    if (!action.promoteSystemTrust) return;
 
     // ESP-IDF has already completed the system-time update.  Marking the
     // local clock trusted does not bypass EspTimerTimeSource's retrograde
@@ -75,7 +77,6 @@ void EspIdfSntpTimeCoordinator::poll() noexcept {
         // time; the next COMPLETED sync retries the write.
         static_cast<void>(rtc_->synchronizeFromSystemUtc(*currentUtc));
     }
-    completionHandled_ = true;
 }
 
 }  // namespace device_platform_esp_idf

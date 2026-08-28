@@ -4,6 +4,7 @@
 
 #include "esp_err.h"
 
+#include "absolute_time_internal.hpp"
 #include "ds3231_sn_rtc_adapter.hpp"
 #include "esp_timer_time_source.hpp"
 
@@ -43,7 +44,7 @@ class EspIdfSntpTimeCoordinator final {
     const EspTimerTimeSource& timeSource_;
     Ds3231SnRtcAdapter* rtc_{nullptr};
     bool initialized_{false};
-    bool completionHandled_{false};
+    internal::SntpArbitration arbitration_;
 };
 
 }  // namespace device_platform_esp_idf

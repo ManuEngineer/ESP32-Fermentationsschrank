@@ -1,6 +1,5 @@
 #include "ds3231_sn_rtc_adapter.hpp"
 
-#include <array>
 #include <ctime>
 
 #include "ds3231.h"
@@ -13,48 +12,6 @@ constexpr std::uint8_t kRtcAddress = 0x68U;
 constexpr std::uint8_t kTimeRegister = 0x00U;
 constexpr std::uint8_t kControlRegister = 0x0EU;
 constexpr std::uint8_t kStatusRegister = 0x0FU;
-constexpr std::uint8_t kEoscMask = 0x80U;
-constexpr std::uint8_t kRsMask = 0x18U;
-constexpr std::uint8_t kOsfMask = 0x80U;
-constexpr std::uint8_t kEn32khzMask = 0x08U;
-
-bool validBcd(const std::uint8_t value, const std::uint8_t maximum) {
-    if ((value & 0x0FU) > 9U || ((value >> 4U) & 0x0FU) > 9U) return false;
-    const auto decoded =
-        static_cast<unsigned>((value >> 4U) * 10U + (value & 0x0FU));
-    return decoded <= maximum;
-}
-
-std::uint8_t decodeBcd(const std::uint8_t value) {
-    return static_cast<std::uint8_t>((value >> 4U) * 10U + (value & 0x0FU));
-}
-
-bool leapYear(const int year) {
-    return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
-}
-
-std::uint8_t daysInMonth(const int year, const std::uint8_t month) {
-    constexpr std::uint8_t days[] = {31U, 28U, 31U, 30U, 31U, 30U,
-                                     31U, 31U, 30U, 31U, 30U, 31U};
-    if (month == 2U && leapYear(year)) return 29U;
-    return days[month - 1U];
-}
-
-// Howard Hinnant's civil-calendar conversion, restricted by the R1 gate to
-// 2000..2099.  It avoids timezone and libc range/locale behavior entirely.
-std::int64_t daysFromCivil(const int year, const unsigned month,
-                           const unsigned day) {
-    const int adjustedYear = year - (month <= 2U ? 1 : 0);
-    const int era =
-        (adjustedYear >= 0 ? adjustedYear : adjustedYear - 399) / 400;
-    const unsigned yearOfEra = static_cast<unsigned>(adjustedYear - era * 400);
-    const unsigned marchBasedMonth = month > 2U ? month - 3U : month + 9U;
-    const unsigned dayOfYear = (153U * marchBasedMonth + 2U) / 5U + day - 1U;
-    const unsigned dayOfEra =
-        yearOfEra * 365U + yearOfEra / 4U - yearOfEra / 100U + dayOfYear;
-    return static_cast<std::int64_t>(era) * 146097LL +
-           static_cast<std::int64_t>(dayOfEra) - 719468LL;
-}
 
 }  // namespace
 
@@ -77,17 +34,26 @@ esp_err_t Ds3231SnRtcAdapter::initialize(
         config_.bus >= I2C_NUM_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (!i2c_.claimPort(config_.bus, config_.sdaPin, config_.sclPin))
+        return ESP_ERR_INVALID_ARG;
+    portClaimed_ = true;
 
     auto descriptor = std::make_unique<RtcDevice>();
     const auto initStatus = ds3231_init_desc(
         &descriptor->value, static_cast<i2c_port_t>(config_.bus),
         static_cast<gpio_num_t>(config_.sdaPin),
         static_cast<gpio_num_t>(config_.sclPin));
-    if (initStatus != ESP_OK) return initStatus;
+    if (initStatus != ESP_OK) {
+        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
+        portClaimed_ = false;
+        return initStatus;
+    }
     device_ = std::move(descriptor);
     if (i2c_dev_check_present(&device_->value) != ESP_OK) {
         static_cast<void>(ds3231_free_desc(&device_->value));
         device_.reset();
+        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
+        portClaimed_ = false;
         return ESP_ERR_NOT_FOUND;
     }
     initialized_ = true;
@@ -105,6 +71,10 @@ esp_err_t Ds3231SnRtcAdapter::shutdown() noexcept {
         status = ds3231_free_desc(&device_->value);
         device_.reset();
     }
+    if (portClaimed_) {
+        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
+        portClaimed_ = false;
+    }
     initialized_ = false;
     return status;
 }
@@ -113,8 +83,9 @@ esp_err_t Ds3231SnRtcAdapter::readRaw(RawRegisters& registers) noexcept {
     if (!initialized_ || device_ == nullptr) return ESP_ERR_INVALID_STATE;
     auto status = i2c_dev_take_mutex(&device_->value);
     if (status != ESP_OK) return status;
-    status = i2c_dev_read_reg(&device_->value, kTimeRegister,
-                              registers.calendar, sizeof(registers.calendar));
+    status =
+        i2c_dev_read_reg(&device_->value, kTimeRegister,
+                         registers.calendar.data(), registers.calendar.size());
     if (status == ESP_OK)
         status = i2c_dev_read_reg(&device_->value, kControlRegister,
                                   &registers.control, 1U);
@@ -127,167 +98,110 @@ esp_err_t Ds3231SnRtcAdapter::readRaw(RawRegisters& registers) noexcept {
 
 esp_err_t Ds3231SnRtcAdapter::writeControl(const std::uint8_t value) noexcept {
     if (!initialized_ || device_ == nullptr) return ESP_ERR_INVALID_STATE;
-    auto status = i2c_dev_take_mutex(&device_->value);
-    if (status == ESP_OK)
-        status =
-            i2c_dev_write_reg(&device_->value, kControlRegister, &value, 1U);
-    const auto giveStatus = i2c_dev_give_mutex(&device_->value);
-    return status == ESP_OK ? giveStatus : status;
+    internal::I2cMutexWriteBackend backend{
+        &device_->value,
+        [](void* context) {
+            return static_cast<int>(
+                i2c_dev_take_mutex(static_cast<i2c_dev_t*>(context)));
+        },
+        [](void* context, const std::uint8_t controlValue) {
+            return static_cast<int>(
+                i2c_dev_write_reg(static_cast<i2c_dev_t*>(context),
+                                  kControlRegister, &controlValue, 1U));
+        },
+        [](void* context) {
+            return static_cast<int>(
+                i2c_dev_give_mutex(static_cast<i2c_dev_t*>(context)));
+        }};
+    return static_cast<esp_err_t>(
+        internal::writeRegisterWithMutex(backend, value));
 }
 
 bool Ds3231SnRtcAdapter::ensureHealthControls() noexcept {
     RawRegisters registers;
     if (readRaw(registers) != ESP_OK) return false;
-    const auto originalRs = registers.control & kRsMask;
-    if ((registers.control & kEoscMask) != 0U) {
-        if (writeControl(static_cast<std::uint8_t>(registers.control &
-                                                   ~kEoscMask)) != ESP_OK)
+    const auto originalRs = registers.control & internal::kDs3231RsMask;
+    if ((registers.control & internal::kDs3231EoscMask) != 0U) {
+        if (writeControl(internal::clearEoscPreservingControlBits(
+                registers.control)) != ESP_OK)
             return false;
         if (readRaw(registers) != ESP_OK ||
-            (registers.control & kEoscMask) != 0U ||
-            (registers.control & kRsMask) != originalRs)
+            (registers.control & internal::kDs3231EoscMask) != 0U ||
+            (registers.control & internal::kDs3231RsMask) != originalRs)
             return false;
     }
     // Use the adopted library operation for the public R1 feature, then use
     // the narrow raw shim only to prove the exact DS3231SN register contract.
     if (ds3231_disable_32khz(&device_->value) != ESP_OK) return false;
     if (readRaw(registers) != ESP_OK) return false;
-    return (registers.control & kEoscMask) == 0U &&
-           (registers.status & kEn32khzMask) == 0U &&
-           (registers.control & kRsMask) == originalRs;
-}
-
-bool Ds3231SnRtcAdapter::validateCalendar(
-    const std::uint8_t (&calendar)[7]) const noexcept {
-    if ((calendar[0] & 0x80U) != 0U || !validBcd(calendar[0] & 0x7FU, 59U) ||
-        (calendar[1] & 0x80U) != 0U || !validBcd(calendar[1], 59U) ||
-        (calendar[3] & 0xF8U) != 0U || !validBcd(calendar[3], 7U) ||
-        decodeBcd(calendar[3]) == 0U || decodeBcd(calendar[3]) > 7U ||
-        (calendar[4] & 0xC0U) != 0U || !validBcd(calendar[4] & 0x3FU, 31U) ||
-        decodeBcd(calendar[4] & 0x3FU) == 0U || (calendar[5] & 0x80U) != 0U ||
-        !validBcd(calendar[5] & 0x1FU, 12U) ||
-        decodeBcd(calendar[5] & 0x1FU) == 0U || !validBcd(calendar[6], 99U)) {
-        return false;
-    }
-    const auto month = decodeBcd(calendar[5] & 0x1FU);
-    const auto day = decodeBcd(calendar[4] & 0x3FU);
-    const int year = 2000 + decodeBcd(calendar[6]);
-    if (month < 1U || month > 12U || day > daysInMonth(year, month))
-        return false;
-    const auto rawHour = calendar[2];
-    if ((rawHour & 0x80U) != 0U) return false;
-    if ((rawHour & 0x40U) != 0U) {
-        if (!validBcd(rawHour & 0x1FU, 12U)) return false;
-        const auto hour = decodeBcd(rawHour & 0x1FU);
-        if (hour == 0U || hour > 12U) return false;
-    } else if (!validBcd(rawHour & 0x3FU, 23U)) {
-        return false;
-    }
-    return true;
-}
-
-bool Ds3231SnRtcAdapter::validateRaw(
-    const RawRegisters& registers) const noexcept {
-    // Status bits 6..4 are reserved in the DS3231/DS3231SN contract.  BSY
-    // and alarm flags remain device-owned and are valid values for R1.
-    return validateCalendar(registers.calendar) &&
-           (registers.status & 0x70U) == 0U &&
-           (registers.control & kEoscMask) == 0U &&
-           (registers.status & kOsfMask) == 0U &&
-           (registers.status & kEn32khzMask) == 0U;
-}
-
-bool Ds3231SnRtcAdapter::readLibraryTimeMatchesRaw(
-    const RawRegisters& registers) noexcept {
-    ::tm decoded{};
-    if (ds3231_get_time(&device_->value, &decoded) != ESP_OK) return false;
-    const auto& raw = registers.calendar;
-    const auto rawHour =
-        (raw[2] & 0x40U) != 0U
-            ? static_cast<int>(decodeBcd(raw[2] & 0x1FU) % 12U) +
-                  ((raw[2] & 0x20U) != 0U ? 12 : 0)
-            : static_cast<int>(decodeBcd(raw[2] & 0x3FU));
-    return decoded.tm_sec == decodeBcd(raw[0] & 0x7FU) &&
-           decoded.tm_min == decodeBcd(raw[1]) && decoded.tm_hour == rawHour &&
-           decoded.tm_mday == decodeBcd(raw[4] & 0x3FU) &&
-           decoded.tm_mon == static_cast<int>(decodeBcd(raw[5] & 0x1FU)) - 1 &&
-           decoded.tm_year == static_cast<int>(decodeBcd(raw[6])) + 100 &&
-           decoded.tm_isdst == 0;
-}
-
-std::optional<std::int64_t> Ds3231SnRtcAdapter::rawCalendarToUnix(
-    const std::uint8_t (&calendar)[7]) const noexcept {
-    if (!validateCalendar(calendar)) return std::nullopt;
-    const int year = 2000 + decodeBcd(calendar[6]);
-    const auto month = decodeBcd(calendar[5] & 0x1FU);
-    const auto day = decodeBcd(calendar[4] & 0x3FU);
-    const auto hour =
-        (calendar[2] & 0x40U) != 0U
-            ? static_cast<int>(decodeBcd(calendar[2] & 0x1FU) % 12U) +
-                  ((calendar[2] & 0x20U) != 0U ? 12 : 0)
-            : static_cast<int>(decodeBcd(calendar[2] & 0x3FU));
-    return daysFromCivil(year, month, day) * 86400LL +
-           static_cast<std::int64_t>(hour) * 3600LL +
-           static_cast<std::int64_t>(decodeBcd(calendar[1])) * 60LL +
-           static_cast<std::int64_t>(decodeBcd(calendar[0] & 0x7FU));
+    return (registers.control & internal::kDs3231EoscMask) == 0U &&
+           (registers.status & internal::kDs3231En32khzMask) == 0U &&
+           (registers.control & internal::kDs3231RsMask) == originalRs;
 }
 
 std::optional<std::int64_t> Ds3231SnRtcAdapter::readTrustedUtc() noexcept {
     if (!initialized_) return std::nullopt;
     RawRegisters registers;
-    if (readRaw(registers) != ESP_OK || !validateRaw(registers) ||
-        !readLibraryTimeMatchesRaw(registers))
+    // The raw burst is the authoritative coherent trust sample.  The
+    // adopted library API is checked separately by its compatibility gate;
+    // a second library read here could cross a one-second RTC boundary.
+    if (readRaw(registers) != ESP_OK || !internal::validateRaw(registers))
         return std::nullopt;
-    return rawCalendarToUnix(registers.calendar);
+    return internal::rawCalendarToUnix(registers.calendar);
 }
 
-bool Ds3231SnRtcAdapter::unixToTm(const std::int64_t utcUnixSeconds,
-                                  ::tm& value) const noexcept {
-    // R1 only writes the DS3231SN's explicitly supported 2000..2099 range.
-    const std::time_t seconds = static_cast<std::time_t>(utcUnixSeconds);
-    if (static_cast<std::int64_t>(seconds) != utcUnixSeconds ||
-        gmtime_r(&seconds, &value) == nullptr || value.tm_year < 100 ||
-        value.tm_year > 199) {
-        return false;
-    }
-    return true;
+bool Ds3231SnRtcAdapter::backendSetTime(void* context,
+                                        const ::tm& value) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    if (adapter == nullptr || adapter->device_ == nullptr) return false;
+    ::tm writableValue = value;
+    return ds3231_set_time(&adapter->device_->value, &writableValue) == ESP_OK;
+}
+
+bool Ds3231SnRtcAdapter::backendReadRaw(
+    void* context, internal::Ds3231SnRawRegisters& registers) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    return adapter != nullptr && adapter->readRaw(registers) == ESP_OK;
+}
+
+bool Ds3231SnRtcAdapter::backendWriteControl(
+    void* context, const std::uint8_t value) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    return adapter != nullptr && adapter->writeControl(value) == ESP_OK;
+}
+
+bool Ds3231SnRtcAdapter::backendDisable32khz(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    return adapter != nullptr && adapter->device_ != nullptr &&
+           ds3231_disable_32khz(&adapter->device_->value) == ESP_OK;
+}
+
+bool Ds3231SnRtcAdapter::backendReadOsf(void* context, bool& osf) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    return adapter != nullptr && adapter->device_ != nullptr &&
+           ds3231_get_oscillator_stop_flag(&adapter->device_->value, &osf) ==
+               ESP_OK;
+}
+
+bool Ds3231SnRtcAdapter::backendClearOsf(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    return adapter != nullptr && adapter->device_ != nullptr &&
+           ds3231_clear_oscillator_stop_flag(&adapter->device_->value) ==
+               ESP_OK;
 }
 
 bool Ds3231SnRtcAdapter::synchronizeFromSystemUtc(
     const std::int64_t utcUnixSeconds) noexcept {
     if (!initialized_) return false;
-    ::tm value{};
-    if (!unixToTm(utcUnixSeconds, value)) return false;
-    if (ds3231_set_time(&device_->value, &value) != ESP_OK) return false;
-
-    RawRegisters registers;
-    if (readRaw(registers) != ESP_OK || !validateCalendar(registers.calendar) ||
-        !readLibraryTimeMatchesRaw(registers))
-        return false;
-    const auto readbackUtc = rawCalendarToUnix(registers.calendar);
-    if (!readbackUtc.has_value() || *readbackUtc != utcUnixSeconds)
-        return false;
-    if ((registers.control & kEoscMask) != 0U &&
-        (writeControl(static_cast<std::uint8_t>(registers.control &
-                                                ~kEoscMask)) != ESP_OK))
-        return false;
-    if (ds3231_disable_32khz(&device_->value) != ESP_OK ||
-        readRaw(registers) != ESP_OK || (registers.control & kEoscMask) != 0U ||
-        (registers.status & kEn32khzMask) != 0U ||
-        !validateCalendar(registers.calendar))
-        return false;
-
-    bool osf = true;
-    if (ds3231_get_oscillator_stop_flag(&device_->value, &osf) != ESP_OK)
-        return false;
-    if (osf && ds3231_clear_oscillator_stop_flag(&device_->value) != ESP_OK)
-        return false;
-    if (readRaw(registers) != ESP_OK || !validateRaw(registers) ||
-        !readLibraryTimeMatchesRaw(registers))
-        return false;
-    const auto finalUtc = rawCalendarToUnix(registers.calendar);
-    if (!finalUtc.has_value() || *finalUtc != utcUnixSeconds) return false;
-    return true;
+    internal::Ds3231SnSyncBackend backend{
+        this,
+        &Ds3231SnRtcAdapter::backendSetTime,
+        &Ds3231SnRtcAdapter::backendReadRaw,
+        &Ds3231SnRtcAdapter::backendWriteControl,
+        &Ds3231SnRtcAdapter::backendDisable32khz,
+        &Ds3231SnRtcAdapter::backendReadOsf,
+        &Ds3231SnRtcAdapter::backendClearOsf};
+    return internal::synchronizeDs3231FromSystemUtc(backend, utcUnixSeconds);
 }
 
 }  // namespace device_platform_esp_idf

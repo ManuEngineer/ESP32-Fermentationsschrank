@@ -7,6 +7,7 @@
 
 #include "esp_err.h"
 
+#include "absolute_time_internal.hpp"
 #include "esp_idf_i2c_subsystem.hpp"
 
 namespace device_platform_esp_idf {
@@ -46,32 +47,28 @@ class Ds3231SnRtcAdapter final {
         std::int64_t utcUnixSeconds) noexcept;
 
    private:
-    struct RawRegisters {
-        std::uint8_t calendar[7]{};
-        std::uint8_t control{0U};
-        std::uint8_t status{0U};
-    };
+    using RawRegisters = internal::Ds3231SnRawRegisters;
 
     struct RtcDevice;
 
     [[nodiscard]] esp_err_t readRaw(RawRegisters& registers) noexcept;
     [[nodiscard]] esp_err_t writeControl(std::uint8_t value) noexcept;
     [[nodiscard]] bool ensureHealthControls() noexcept;
-    [[nodiscard]] bool validateRaw(
-        const RawRegisters& registers) const noexcept;
-    [[nodiscard]] bool validateCalendar(
-        const std::uint8_t (&calendar)[7]) const noexcept;
-    [[nodiscard]] bool readLibraryTimeMatchesRaw(
-        const RawRegisters& registers) noexcept;
-    [[nodiscard]] std::optional<std::int64_t> rawCalendarToUnix(
-        const std::uint8_t (&calendar)[7]) const noexcept;
-    [[nodiscard]] bool unixToTm(std::int64_t utcUnixSeconds,
-                                ::tm& value) const noexcept;
+    [[nodiscard]] static bool backendSetTime(void* context,
+                                             const ::tm& value) noexcept;
+    [[nodiscard]] static bool backendReadRaw(
+        void* context, internal::Ds3231SnRawRegisters& registers) noexcept;
+    [[nodiscard]] static bool backendWriteControl(void* context,
+                                                  std::uint8_t value) noexcept;
+    [[nodiscard]] static bool backendDisable32khz(void* context) noexcept;
+    [[nodiscard]] static bool backendReadOsf(void* context, bool& osf) noexcept;
+    [[nodiscard]] static bool backendClearOsf(void* context) noexcept;
 
     EspIdfI2cSubsystem& i2c_;
     Ds3231SnRtcConfig config_{};
     std::unique_ptr<RtcDevice> device_;
     bool initialized_{false};
+    bool portClaimed_{false};
 };
 
 }  // namespace device_platform_esp_idf

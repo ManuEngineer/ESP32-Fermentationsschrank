@@ -13,6 +13,9 @@ ausfuehrliche Quellen- und Lizenznachweis steht in
 [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](audits/THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md),
 die technische Bewertung in
 [`COMPONENT_EVALUATIONS.md`](audits/COMPONENT_EVALUATIONS.md).
+Der aktuelle digitale Zielnachweis ist `ESP32_TARGET_COMPATIBILITY=PASS_BUILD`;
+`ESP32S3_TARGET_COMPATIBILITY=REGISTRY_DECLARED_NOT_PROJECT_BUILD` bleibt
+solange bestehen, bis ein projektnaher S3-Compile-Gate ausgefuehrt wurde.
 
 ## Statuswerte
 

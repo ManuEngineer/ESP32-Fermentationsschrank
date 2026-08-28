@@ -6,6 +6,8 @@
 
 #include "time_source.hpp"
 
+#include "absolute_time_internal.hpp"
+
 namespace device_platform_esp_idf {
 
 // ESP-IDF-Adapter fuer device_platform::ITimeSource, gestuetzt auf
@@ -34,8 +36,7 @@ class EspTimerTimeSource final : public device_platform::ITimeSource {
    private:
     int64_t baselineMicros_;
     mutable std::mutex trustMutex_;
-    mutable bool absoluteTimeTrusted_{false};
-    mutable std::optional<int64_t> lastPublishedTrustedUtc_;
+    mutable internal::UtcHighWaterPublicationGate publicationGate_;
 };
 
 }  // namespace device_platform_esp_idf

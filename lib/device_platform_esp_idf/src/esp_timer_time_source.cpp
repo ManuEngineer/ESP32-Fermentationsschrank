@@ -19,7 +19,7 @@ uint64_t EspTimerTimeSource::monotonicMillis() const {
 
 std::optional<int64_t> EspTimerTimeSource::unixTimeSeconds() const {
     const std::lock_guard<std::mutex> lock(trustMutex_);
-    if (!absoluteTimeTrusted_) {
+    if (!publicationGate_.trusted()) {
         return std::nullopt;
     }
 
@@ -37,15 +37,9 @@ std::optional<int64_t> EspTimerTimeSource::unixTimeSeconds() const {
         return std::nullopt;
     }
 
-    const auto utc = static_cast<int64_t>(current);
-    if (lastPublishedTrustedUtc_.has_value() &&
-        utc < *lastPublishedTrustedUtc_) {
-        // This is the boot-local publication gate, not a second clock.  A
-        // real retrograde correction is never published as trusted UTC.
-        return std::nullopt;
-    }
-    lastPublishedTrustedUtc_ = utc;
-    return utc;
+    // This is the boot-local publication gate, not a second clock.  A real
+    // retrograde correction is never published as trusted UTC.
+    return publicationGate_.publish(static_cast<int64_t>(current));
 }
 
 bool EspTimerTimeSource::setSystemTimeUtc(
@@ -60,7 +54,7 @@ bool EspTimerTimeSource::setSystemTimeUtc(
 
 bool EspTimerTimeSource::markAbsoluteTimeTrusted() const noexcept {
     const std::lock_guard<std::mutex> lock(trustMutex_);
-    absoluteTimeTrusted_ = true;
+    publicationGate_.markTrusted();
     return true;
 }
 

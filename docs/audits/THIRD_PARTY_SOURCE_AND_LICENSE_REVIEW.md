@@ -42,6 +42,26 @@ Ownerentscheid und Nachweis, keine optionale Verschiebung und keine
 automatische Produktivauswahl. Diese Quellenpruefung ersetzt den technischen
 Securitynachweis nicht.
 
+### Issue-126-Digitalnachweis
+
+Der generierte `dependencies.lock` ist die deterministische Source of Truth
+fuer die aufgeloesten Component-Versionen und Hashes. Fuer den aktuellen
+digitalen Nachweis gilt:
+
+- `esp-idf-lib/ds3231` `1.1.7`: Component-Hash
+  `474f5cc0e8e02ffaca0f21e3b1bbc5d4a20d0679368cd9e21de4203f1b8016f6`;
+- `esp-idf-lib/i2cdev` `2.1.2`: Component-Hash
+  `ad8981cc64533dcaced5107d72e42bcebe79345e194e82795792af531b300ce3`;
+- `esp-idf-lib/esp_idf_lib_helpers` `1.4.0`: Component-Hash
+  `689853bb8993434f9556af0f2816e808bf77b5d22100144b21f3519993daf237`;
+- ESP32-Projektbuild: `PASS_BUILD`;
+- ESP32-S3: `REGISTRY_DECLARED_NOT_PROJECT_BUILD` (die Registry deklariert
+  das Ziel, aber dieser Projektlauf baut nur das konfigurierte ESP32-Ziel).
+
+Die Hashwerte werden nicht manuell in diesem Register aufgeloest oder
+veraendert; jede Abweichung vom Lockfile blockiert den License-/Dependency-
+Gate.
+
 ## Register
 
 Alle Onlinequellen des ursprünglichen Audits wurden am 2026-07-27 abgerufen;
@@ -55,7 +75,7 @@ Qualitaet oder eine Supportgarantie.
 |---|---|---|---|---|---|---|
 | Zielframework | [Espressif ESP-IDF](https://github.com/espressif/esp-idf) | `v6.0.2`, Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e` (Issue #71 / PR #79, aktive Produktionsbasis) | Apache-2.0 plus dokumentierte Drittbestandteile | bestehende Buildgrundlage (nativer Hosttestpfad ueber PlatformIO, Produktionsprofile ueber ESP-IDF); spaetere Adapter verwenden nur benoetigte APIs | Lizenz-/Notice-Dateien der tatsaechlich verwendeten ESP-IDF-Komponenten und des Firmware-Distributionswegs pruefen | `FRAMEWORK_PRESENT` |
 | esp-idf-lib ds3231 | [ESP Component Registry](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/readme?language=en), [Quellrepository](https://github.com/esp-idf-lib/ds3231/tree/cbe14063d3f2bf39489e18d896c725b8111b5cc4) | `1.1.7`, Component-Hash `474f5cc0e8e02ffaca0f21e3b1bbc5d4a20d0679368cd9e21de4203f1b8016f6`; direkte Dependency von `lib/device_platform_esp_idf`, Lockfile `dependencies.lock` | Paket-`LICENSE`: MIT; transitive `i2cdev`- und `esp_idf_lib_helpers`-Lizenzen separat erfassen | unveränderte Treibernutzung hinter dem DS3231SN-Adapter plus dokumentierter schmaler Health-Shim für EOSC-/Rohregisterprüfung; kein vollständiger Eigenbau | vor Distribution `LICENSE`, Notices, exakten verwendeten Dateisatz, R1-API-Subset und DS3231SN-Hardwarebezug erneut prüfen | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` |
-| esp-idf-lib i2cdev | [ESP Component Registry](https://components.espressif.com/components/esp-idf-lib/i2cdev/versions/2.1.2/readme?language=en), [Quellrepository](https://github.com/esp-idf-lib/i2cdev/tree/7113b661fa467ad266e0b97b4e649ffa23d18cc5) | `2.1.2`, Component-Hash `ad8981cc64533dcaced5107d72e42bcebe79345e194e82795792af531c6`; direkte Dependency in `lib/device_platform_esp_idf/idf_component.yml`, Lockfile `dependencies.lock` | Paket-`LICENSE`: MIT | thread-sicherer Shared-I2C-Transport; `i2cdev` bleibt Port-/Device-Lifecycle-Owner | vor Distribution `LICENSE`, Notices und den tatsächlich genutzten Transportpfad prüfen | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` |
+| esp-idf-lib i2cdev | [ESP Component Registry](https://components.espressif.com/components/esp-idf-lib/i2cdev/versions/2.1.2/readme?language=en), [Quellrepository](https://github.com/esp-idf-lib/i2cdev/tree/7113b661fa467ad266e0b97b4e649ffa23d18cc5) | `2.1.2`, Component-Hash `ad8981cc64533dcaced5107d72e42bcebe79345e194e82795792af531b300ce3`; direkte Dependency in `lib/device_platform_esp_idf/idf_component.yml`, Lockfile `dependencies.lock`; ESP32-Projektbuild `PASS_BUILD`, ESP32-S3 `REGISTRY_DECLARED_NOT_PROJECT_BUILD` | Paket-`LICENSE`: MIT | thread-sicherer Shared-I2C-Transport; `i2cdev` bleibt Port-/Device-Lifecycle-Owner | vor Distribution `LICENSE`, Notices und den tatsächlich genutzten Transportpfad prüfen | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` |
 | esp-idf-lib esp_idf_lib_helpers | [ESP Component Registry](https://components.espressif.com/components/esp-idf-lib/esp_idf_lib_helpers/versions/1.4.0/readme?language=en), [Quellrepository](https://github.com/esp-idf-lib/esp_idf_lib_helpers/tree/918d82cafb1f00fd86f1ad8571271cb3e910588b) | `1.4.0`, Component-Hash `689853bb8993434f9556af0f2816e808bf77b5d22100144b21f3519993daf237`; transitive Dependency, Lockfile `dependencies.lock` | Paket-`LICENSE`: ISC | transitive Hilfsfunktionen des `i2cdev`-Pfads; keine direkte Plattform- oder App-API | vor Distribution `LICENSE`, Notices und den tatsächlich genutzten Dateisatz prüfen | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` |
 | Arduino-ESP32 WebServer (historisch) | [Espressif Arduino-ESP32](https://github.com/espressif/arduino-esp32) | Fruehere Projektevaluation auf `2.0.17`, Framework-SHA `dcc1105b`; Arduino-ESP32 ist seit Issue #71 / PR #79 keine aktive Produktionsbasis mehr | LGPL-2.1 und eingebettete Drittkomponentenhinweise des damaligen Pakets galten | keine aktive Nutzung mehr; ESP-IDF `esp_http_server` ist der aktuelle Espressif-first-Primaerkandidat (siehe eigene Zeile) | keine, solange keine erneute Arduino-Einbindung erfolgt | `DEFERRED` |
 | ESP-IDF esp_http_server | [Espressif ESP-IDF](https://github.com/espressif/esp-idf/tree/v6.0.2/components/esp_http_server) | Bestandteil ESP-IDF `v6.0.2`; `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | Apache-2.0 (Bestandteil der ESP-IDF-Zielframework-Zeile) | interne begrenzte Baselineevaluation fuer lokalen HTTP-Transport; noch keine Produktivuebernahme | konkret verwendete ESP-IDF-Komponentendateien sowie Lizenz-/Notice-Abdeckung des Firmwareartefakts im umsetzenden PR erfassen | `FRAMEWORK_PRESENT` |
