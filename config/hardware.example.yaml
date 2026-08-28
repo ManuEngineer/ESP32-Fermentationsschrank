@@ -117,7 +117,13 @@ features:
     status: not_planned_release_1
   rtc:
     required: false
-    status: FUTURE_RELEASE
+    type: DS3231SN
+    storage_timezone: UTC
+    i2c_address: 0x68
+    bus: TBD_HARDWARE
+    sda: TBD_HARDWARE
+    scl: TBD_HARDWARE
+    status: optional_r1_unverified
   web_ota:
     enabled: false
     status: FUTURE_RELEASE

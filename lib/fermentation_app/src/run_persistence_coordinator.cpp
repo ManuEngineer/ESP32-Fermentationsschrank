@@ -111,6 +111,20 @@ bool currentMatchesLoadedRecord(
            projectedBytes == loadedBytes;
 }
 
+bool isActiveFermentingSnapshot(const RunPersistenceSnapshot& snapshot) {
+    const bool activeVariant =
+        snapshot.variant == RunCheckpointVariant::ProgramRun ||
+        snapshot.variant == RunCheckpointVariant::ManualRun;
+    return activeVariant &&
+           snapshot.processState.state == ProcessState::Fermenting;
+}
+
+bool isActiveFermentingCurrent(const RunCommandState& current) {
+    return (current.activeProgramRun.has_value() ||
+            current.activeManualRun.has_value()) &&
+           current.processState.state == ProcessState::Fermenting;
+}
+
 RoleTemperatureEvidence toRoleTemperatureEvidence(
     const device_platform::SensorQualitySnapshot& source) {
     return {source.filteredCelsius, source.quality};
@@ -1880,6 +1894,17 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     std::optional<std::size_t> targetSlotOverride,
     RunPersistenceFallbackDirective fallbackDirective,
     RunPersistenceCoordinatorState rollbackState) {
+    // R1 write invariant: an active FERMENTING Current is the recovery anchor
+    // consumed by #124 and therefore must carry trusted UTC.  This check is
+    // deliberately before schedule/counter/state mutation and is shared by
+    // command, transition, sensor-selection, periodic, and recovery writes.
+    if (isActiveFermentingSnapshot(snapshot) &&
+        !time.utcUnixSeconds.has_value()) {
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
     if (nextCheckpointRevision_ == 0U || nextHeadRevision_ == 0U ||
         (!periodic &&
          nextHeadRevision_ == std::numeric_limits<std::uint64_t>::max()))
@@ -2196,6 +2221,18 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
         if (persistedIds_[i] == decision.envelope.id)
             return result(RunPersistenceResultStatus::AlreadyPersisted);
+    const bool freshProductiveStart =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    if (freshProductiveStart && !time.utcUnixSeconds.has_value()) {
+        // The application/domain boundary uses the existing honest Blocked
+        // result.  No candidate Apply, durable write, or RAM Apply is allowed
+        // to happen before trusted absolute time exists.
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
     // #21, 9.7-Korrektur (letzter Abschlussblocker): AppliedRamOnly ist per
     // Plan-Vertrag nicht persistierbar - der manuelle Sensorselektionspfad
     // wendet diese Entscheidung ausschliesslich im RAM an, stale-geprueft
@@ -2478,14 +2515,15 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto& confirmed = slots_[currentHead_->current.slot]->snapshot;
+    RunPersistenceSnapshot expectedSnapshot;
     const bool expectedValid = makeRunPersistenceSnapshotInto(
         current, persistedIds_, persistedIdCount_, confirmed.trigger,
         RunCheckpointTime{confirmed.checkpointMonotonicMillis, std::nullopt},
-        confirmed.intervalMinutes, workingSet_.snapshot);
+        confirmed.intervalMinutes, expectedSnapshot);
     std::string expectedBytes;
     std::string confirmedBytes;
     if (!expectedValid ||
-        encodeRunPersistenceSnapshot(workingSet_.snapshot, expectedBytes) !=
+        encodeRunPersistenceSnapshot(expectedSnapshot, expectedBytes) !=
             RunPersistenceCodecStatus::Success ||
         encodeRunPersistenceSnapshot(confirmed, confirmedBytes) !=
             RunPersistenceCodecStatus::Success ||
@@ -2499,6 +2537,16 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         return result(RunPersistenceResultStatus::NotDue);
     if (due != RunCheckpointScheduleStatus::Success)
         return result(RunPersistenceResultStatus::TimeWentBackwards);
+    if (isActiveFermentingCurrent(current) &&
+        !time.utcUnixSeconds.has_value()) {
+        // No copy, schedule confirmation, or RAM change occurs for this
+        // skipped checkpoint.  The existing Current remains the last valid
+        // UTC-bearing recovery anchor.
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
     workingSet_.candidate = current;
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);

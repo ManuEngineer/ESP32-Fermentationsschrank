@@ -347,7 +347,8 @@ Netzwerkmodule umfassen:
 - lokalen Webserver
 - Anmeldung und Sitzungen
 - lokale Lese-API
-- NTP als primaere absolute Zeitquelle
+- app-neutrale absolute Zeitplattform aus optionaler DS3231SN-RTC und
+  ESP-IDF-SNTP; WLAN/Connectivity bleibt bei Issue #89
 
 Kein Cloudzwang, kein automatischer Firmwaredownload und keine offizielle externe
 Schreib-API in Release 1.
@@ -371,16 +372,32 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 ## Zeit und Wiederanlauf
 
 - monotone Zeit steuert aktive Ablaufe
-- UTC/NTP dient Kalenderzeit; historische Unterbrechungs-/Progress-Recovery ist
+- `device_platform::ITimeSource` ist der einzige Zeitport des
+  `fermentation_app`; die App kennt weder DS3231SN noch SNTP
+- `monotonicMillis()` bleibt bootlokal monoton und wird durch RTC/NTP nicht
+  korrigiert
+- `unixTimeSeconds()` liefert nur trusted ESP-System-UTC und bleibt bis zur
+  erfolgreichen RTC- oder NTP-Etablierung `nullopt`; ein bootlokales
+  High-Water-Gate publiziert keine retrograde UTC
+- Die optionale DS3231SN speichert UTC und darf nur nach I2C-, Rohregister-,
+  Kalender-, OSF-, EOSC- und R1-Jahresbereichprüfung als Bootquelle dienen.
+  Ohne RTC ist NTP-only ein gültiger R1-Modus; trusted RTC ermöglicht dagegen
+  unmittelbare Offline-Recovery ohne Netzwerkwartezeit.
+- UTC dient Kalenderzeit; historische Unterbrechungs-/Progress-Recovery ist
   #18/C2 und kein aktiver #24-R1-Pfad
 - Laufrevisionen speichern eine monotone Epoche. Jede Wiederherstellung
   eroeffnet eine neue Epoche, sodass die Uptime bei null beginnen darf, ohne die
   Reihenfolge der persistierten Revisionen zu verletzen.
 - Ein zwischenzeitlich fehlender UTC-Wert verwirft den letzten bekannten
   UTC-Zeitbezug nicht; spaetere UTC-Werte duerfen dahinter nicht zurueckfallen.
+- Ein neuer produktiver Lauf und jeder neue aktive FERMENTING-Current brauchen
+  trusted UTC; ohne sie wird kein neuer Recoveryanker persistiert. Terminale
+  Non-FERMENTING-Pfade bleiben nach ihren bestehenden Verträgen zulässig.
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
 - fehlende NTP-Zeit erzeugt in #24-R1 keine Charge-Rettung oder Aktorfreigabe
-- eine spaetere batteriegepufferte RTC passt hinter dieselbe Zeitquellenschnittstelle
+- NTP-Synchronisierung folgt der offiziellen ESP-IDF-SNTP-Semantik. Nach
+  abgeschlossener Konvergenz wird die RTC nachgeführt; Quellenverlust allein
+  entwertet die bereits etablierte lokale Systemzeit nicht.
 
 ## Ressourcenmodell
 
@@ -401,7 +418,7 @@ Architektonisch moeglich, aber nicht aktiv implementiert:
 - PID-Autotuning
 - Web-OTA mit signierten Paketen und Rollback
 - benutzeraktivierbare UART-Diagnose
-- RTC
+- alternative RTC-Varianten ausserhalb des DS3231SN-R1-Profils
 - 12-V-ADC-Messung
 - Tuerkontakt
 - Push-/Telegram-Benachrichtigungen

@@ -1,12 +1,14 @@
-Status: DRAFT – Ownerfreigabe ausstehend
+Status: Implementierung digital bestanden; Owner Final Implementation Review ausstehend
 
-# Vorgeschlagenes Third-Party-Komponentenregister
+# Third-Party-Komponentenregister
 
 ## Status
 
-Dieses Register ist ein Entwurf aus dem
+Dieses Register ist die laufend gepflegte Auswahl aus dem
 [`Release-1-Adopt-or-build-Audit`](audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md).
-Es bindet keine Abhaengigkeit ein und trifft keine endgueltige Auswahl. Der
+Die R1-Zeitplattform bindet den DS3231-Treiber über den Component Manager
+direkt in `lib/device_platform_esp_idf` ein; die physische RTC-Abnahme steht
+noch aus. Der
 ausfuehrliche Quellen- und Lizenznachweis steht in
 [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](audits/THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md),
 die technische Bewertung in
@@ -17,6 +19,7 @@ die technische Bewertung in
 | Status | Bedeutung |
 |---|---|
 | `FRAMEWORK_CANDIDATE` | Bestandteil der fixierten Plattform; Adapter und Messung fehlen |
+| `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` | digitale Integration, Builds und gezielte Gates bestanden; reale Hardwareabnahme fehlt |
 | `FIRST_EVALUATION_CANDIDATE` | verbindlich zuerst zu pruefende Richtung; noch keine Produktivauswahl |
 | `FIRST_EVALUATION_DIRECTION` | zuerst zu untersuchender technischer Pfad, der mehrere konkrete Integrationsvarianten enthalten kann; keine Produktivauswahl |
 | `SPIKE_REQUIRED` | technisch plausibel, aber auf Zielhardware nicht bestaetigt |
@@ -37,6 +40,9 @@ keine konkrete Integration automatisch aus.
 | Komponente | Kandidat oder Quelle | Gepruefter Stand | Lizenzstatus | Auditstatus | Vorgesehene Verwendung |
 |---|---|---|---|---|---|
 | ESP32-Plattform | ESP-IDF `v6.0.2` (`7101770dc6db2667b3c477cc31365dd1acd6db4e`) | aktive Produktionsbasis aus Issue #71 / PR #79 | Apache-2.0 mit Komponentenlizenzen; konkret verwendete Bestandteile vor einer Einbindung pruefen | `FRAMEWORK_CANDIDATE` | GPIO, SPI, WLAN, Zeit, NVS, UART hinter Adaptern; PlatformIO/Arduino ist keine aktive Produktionsbasis |
+| RTC-Treiber | [`esp-idf-lib/ds3231`](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/readme?language=en) | `1.1.7`, Component-Hash `474f5cc0e8e02ffaca0f21e3b1bbc5d4a20d0679368cd9e21de4203f1b8016f6`; `dependencies.lock` | MIT; mitgelieferte `LICENSE` muss im Distributionshinweis erhalten bleiben | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` | wiederverwendeter DS3231/DS3231SN-Kalender-/I2C-Treiber im ESP-IDF-Adapter; R1 nutzt nur den verifizierten API-Subset und einen schmalen Health-Shim für fehlende EOSC-/Rohregisterprüfung |
+| I2C-Transport | [`esp-idf-lib/i2cdev`](https://components.espressif.com/components/esp-idf-lib/i2cdev/versions/2.1.2/readme?language=en) | `2.1.2`, Component-Hash `ad8981cc64533dcaced5107d72e42bcebe79345e194e82795792af531b300ce3`; direkte Dependency in `lib/device_platform_esp_idf/idf_component.yml`, `dependencies.lock` | MIT; mitgelieferte `LICENSE` und Noticepflicht im Distributionshinweis erhalten | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` | einziger Port-/Device-Lifecycle-Owner für den geteilten I2C-Bus; kein zweiter ESP-IDF-Masterbus auf demselben Port |
+| I2C-Hilfsfunktionen | [`esp-idf-lib/esp_idf_lib_helpers`](https://components.espressif.com/components/esp-idf-lib/esp_idf_lib_helpers/versions/1.4.0/readme?language=en) | `1.4.0`, Component-Hash `689853bb8993434f9556af0f2816e808bf77b5d22100144b21f3519993daf237`; transitive Dependency in `dependencies.lock` | ISC; mitgelieferte `LICENSE` und Noticepflicht im Distributionshinweis erhalten | `IMPLEMENTED_DIGITAL_PENDING_HARDWARE` | transitive Laufzeithilfe des adoptierten `i2cdev`-Pfads, keine direkte App- oder Plattform-API |
 | Display | ESP-IDF `esp_lcd` (eingebaut) plus `espressif/esp_lcd_ili9341 2.0.2` | 2026-08-05 | Apache-2.0 (ESP-IDF/Registry) | `SPIKE_REQUIRED` | Espressif-first-Primaerkandidat fuer Stufe 1 (ESP-IDF >=4.4, durch ESP-IDF 6.0.2 erfuellt); Controller erst an realer Hardware bestaetigen |
 | Touch | `espressif/esp_lcd_touch 1.2.1` | 2026-08-05 | Apache-2.0 | `SPIKE_REQUIRED` | generische Touch-Abstraktion (ESP-IDF >=4.4.2) fuer den Espressif-first-Displaypfad; kein XPT2046-Treiber selbst, siehe naechste Zeile |
 | Touch | `atanisoft/esp_lcd_touch_xpt2046 1.0.6` | 2026-08-05 | MIT | `SPIKE_REQUIRED` | kein offizieller `espressif/*`-XPT2046-Treiber vorhanden; am besten belegter kompatibler Registry-Kandidat (ESP-IDF >=4.4 + `esp_lcd_touch` >=1.0.4); nur nach real bestaetigtem Touchcontroller |

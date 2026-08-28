@@ -231,7 +231,7 @@ void test_product_application_keeps_resume_offer_after_begin_returns() {
         static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
         static_cast<int>(seed.persistCommand(state, decision,
                                              fermentation::RunCheckpointTime{
-                                                 100U, std::nullopt})
+                                                 100U, 1'700'000'000LL})
                              .status));
     store.restart();
 

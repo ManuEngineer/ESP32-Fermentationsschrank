@@ -79,6 +79,16 @@ spi_touch:
   candidate_status: unverified_order_description
   controller_status: TBD_HARDWARE
 
+rtc:
+  present: false
+  type: DS3231SN
+  bus: TBD_HARDWARE
+  sda: TBD_HARDWARE
+  scl: TBD_HARDWARE
+  address: 0x68
+  storage_timezone: UTC
+  status: optional_r1_unverified
+
 uart_programming:
   tx_gpio: default_rom_uart_TBD_HARDWARE
   rx_gpio: default_rom_uart_TBD_HARDWARE
