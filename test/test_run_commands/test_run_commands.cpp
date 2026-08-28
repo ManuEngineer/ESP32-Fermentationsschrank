@@ -882,7 +882,7 @@ void test_recovery_time_correction_is_cumulative_bounded_and_idempotent() {
             decideApplyRecoveryTimeCorrection(unknown, unknownBounds).status));
 }
 
-void test_recovery_correction_is_effective_for_fermenting_completion() {
+void test_nominal_recovery_correction_does_not_change_r1_phase_timer() {
     auto state = startedProgramState();
     state.processState.state = ProcessState::Fermenting;
     state.processState.stateEnteredAtMillis = 1'000U;
@@ -897,16 +897,15 @@ void test_recovery_correction_is_effective_for_fermenting_completion() {
 
     const auto effective = effectivePriorElapsedForFermenting(state);
     TEST_ASSERT_TRUE(effective.has_value());
-    TEST_ASSERT_EQUAL_UINT32(60U, effective->lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(30U, effective->lowerBoundSeconds);
     TEST_ASSERT_EQUAL_UINT32(60U, *effective->upperBoundSeconds);
 
     const auto decision = decideProcessTransition(
         state.processState, &*state.processRunSnapshot, ProcessSignals{},
         TransitionRequest{}, 1'000U, *effective);
-    TEST_ASSERT_TRUE(decision.proposed());
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(TransitionReason::FermentationCompleted),
-        static_cast<int>(decision.reason));
+    TEST_ASSERT_FALSE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
+                          static_cast<int>(decision.status));
 }
 
 void test_late_run_adjustment_rejections_discard_the_complete_candidate() {
@@ -2500,7 +2499,7 @@ int main() {
     RUN_TEST(test_target_only_adjustment_keeps_recovery_and_timer_baseline);
     RUN_TEST(
         test_recovery_time_correction_is_cumulative_bounded_and_idempotent);
-    RUN_TEST(test_recovery_correction_is_effective_for_fermenting_completion);
+    RUN_TEST(test_nominal_recovery_correction_does_not_change_r1_phase_timer);
     RUN_TEST(
         test_late_run_adjustment_rejections_discard_the_complete_candidate);
     RUN_TEST(test_composed_cooling_rejections_discard_the_complete_candidate);

@@ -51,6 +51,66 @@ std::optional<std::uint32_t> checkedToUint32(std::uint64_t value) {
     return static_cast<std::uint32_t>(value);
 }
 
+std::optional<std::uint64_t> checkedUtcDelta(std::int64_t current,
+                                             std::int64_t checkpoint) {
+    if (current < checkpoint) return std::nullopt;
+    if (checkpoint >= 0 || current < 0) {
+        // In this branch the signed subtraction cannot overflow: either both
+        // values are non-negative or both are negative and current >=
+        // checkpoint.
+        return static_cast<std::uint64_t>(current - checkpoint);
+    }
+
+    // current is non-negative and checkpoint is negative. Build the distance
+    // without negating INT64_MIN and keep the final addition checked.
+    const auto negativeMagnitude =
+        static_cast<std::uint64_t>(-(checkpoint + 1)) + 1U;
+    return checkedAdd(static_cast<std::uint64_t>(current), negativeMagnitude);
+}
+
+std::optional<std::uint32_t> exactPriorFermentingSeconds(
+    const RunCommandState& current) {
+    if (!current.priorBootPhaseElapsed.has_value()) return 0U;
+    const auto& tagged = *current.priorBootPhaseElapsed;
+    if (tagged.taggedState != ProcessState::Fermenting ||
+        !tagged.elapsed.upperBoundSeconds.has_value() ||
+        *tagged.elapsed.upperBoundSeconds != tagged.elapsed.lowerBoundSeconds) {
+        return std::nullopt;
+    }
+    return tagged.elapsed.lowerBoundSeconds;
+}
+
+bool sameCheckpointReference(const RunCheckpointReference& left,
+                             const RunCheckpointReference& right) {
+    return left.slot == right.slot &&
+           left.schemaVersion == right.schemaVersion &&
+           left.storageEpoch == right.storageEpoch &&
+           left.checkpointRevision == right.checkpointRevision &&
+           left.payloadLength == right.payloadLength &&
+           left.payloadCrc == right.payloadCrc && left.variant == right.variant;
+}
+
+bool currentMatchesLoadedRecord(
+    const RunCommandState& current, const RunPersistenceRawRecord& record,
+    const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
+    std::size_t idCount) {
+    RunPersistenceSnapshot projection;
+    const RunCheckpointTime checkpointTime{
+        record.snapshot.checkpointMonotonicMillis, record.utcUnixSeconds};
+    if (!makeRunPersistenceSnapshotInto(
+            current, ids, idCount, record.snapshot.trigger, checkpointTime,
+            record.snapshot.intervalMinutes, projection)) {
+        return false;
+    }
+    std::string projectedBytes;
+    std::string loadedBytes;
+    return encodeRunPersistenceSnapshot(projection, projectedBytes) ==
+               RunPersistenceCodecStatus::Success &&
+           encodeRunPersistenceSnapshot(record.snapshot, loadedBytes) ==
+               RunPersistenceCodecStatus::Success &&
+           projectedBytes == loadedBytes;
+}
+
 RoleTemperatureEvidence toRoleTemperatureEvidence(
     const device_platform::SensorQualitySnapshot& source) {
     return {source.filteredCelsius, source.quality};
@@ -275,6 +335,8 @@ void RunPersistenceCoordinator::loadAndInitializeInto(
     RunPersistenceLoadResult& destination) {
     destination.status = RunPersistenceLoadStatus::ReadFailed;
     destination.snapshot.reset();
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
     if (state_ != RunPersistenceCoordinatorState::Uninitialized) {
         destination.status = RunPersistenceLoadStatus::AlreadyInitialized;
         return;
@@ -891,6 +953,222 @@ RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
 
     current = workingSet_.candidate;
     return persisted;
+}
+
+R1RecoveryEvaluation
+RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
+    RunCommandState& current, const RunCheckpointTime& time) {
+    const auto rejected =
+        [this](RunPersistenceResultStatus status,
+               RunPersistenceStep step = RunPersistenceStep::CandidateApply,
+               RunPersistenceTechnicalReason reason =
+                   RunPersistenceTechnicalReason::InvalidProjection) {
+            pendingR1CheckpointRevision_.reset();
+            pendingR1RunRevision_.reset();
+            return R1RecoveryEvaluation{
+                RecoveryDisposition::RecoveryRejectedOrFailClosed,
+                result(status, step, reason)};
+        };
+
+    if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+        !currentHead_.has_value() ||
+        !slots_[currentHead_->current.slot].has_value()) {
+        return rejected(state_ == RunPersistenceCoordinatorState::Ready
+                            ? RunPersistenceResultStatus::StaleDecision
+                            : RunPersistenceResultStatus::NotEligible);
+    }
+
+    const auto& loadedRecord = *slots_[currentHead_->current.slot];
+    // Re-read the head and current slot before each evaluation. Waiting for
+    // UTC must not turn an externally advanced persistence revision into a
+    // decision based on stale in-memory evidence.
+    const auto liveHeadRead = store_.readHead(kMaximumHeadRecordBytes);
+    if (liveHeadRead.status != device_platform::StateStoreReadStatus::Success) {
+        enterBlockedIndeterminate();
+        return rejected(RunPersistenceResultStatus::PersistenceIndeterminate,
+                        RunPersistenceStep::LoadHead,
+                        RunPersistenceTechnicalReason::StoreReadError);
+    }
+    const auto liveHead = decodeRunPersistenceHead(liveHeadRead.value, epoch_);
+    if (!liveHead.has_value() ||
+        !sameCheckpointReference(liveHead->current, currentHead_->current)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision,
+                        RunPersistenceStep::LoadHead);
+    }
+    const auto liveSlotRead = store_.readSlot(currentHead_->current.slot,
+                                              kMaximumCheckpointRecordBytes);
+    if (liveSlotRead.status != device_platform::StateStoreReadStatus::Success) {
+        enterBlockedIndeterminate();
+        return rejected(RunPersistenceResultStatus::PersistenceIndeterminate,
+                        RunPersistenceStep::LoadCurrent,
+                        RunPersistenceTechnicalReason::StoreReadError);
+    }
+    RunPersistenceRawRecord liveRecord;
+    if (!decodeRunPersistenceRecordInto(liveSlotRead.value, epoch_,
+                                        liveRecord) ||
+        !runCheckpointReferenceMatches(currentHead_->current, liveRecord,
+                                       currentHead_->current.slot) ||
+        !currentMatchesLoadedRecord(current, liveRecord, persistedIds_,
+                                    persistedIdCount_)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision,
+                        RunPersistenceStep::LoadCurrent);
+    }
+
+    if (current.processState.state != ProcessState::Fermenting ||
+        current.runProgress.basis != RunProgressBasis::KnownTotal ||
+        !current.processRunSnapshot.has_value() ||
+        !current.processRunSnapshot->fermentationDurationMinutes.has_value() ||
+        loadedRecord.checkpointRevision !=
+            currentHead_->current.checkpointRevision ||
+        !currentMatchesLoadedRecord(current, loadedRecord, persistedIds_,
+                                    persistedIdCount_)) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+
+    if (pendingR1CheckpointRevision_.has_value() &&
+        (*pendingR1CheckpointRevision_ != loadedRecord.checkpointRevision ||
+         !pendingR1RunRevision_.has_value() ||
+         *pendingR1RunRevision_ != current.runRevision)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision);
+    }
+    pendingR1CheckpointRevision_ = loadedRecord.checkpointRevision;
+    pendingR1RunRevision_ = current.runRevision;
+
+    if (!loadedRecord.utcUnixSeconds.has_value()) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    // Missing current UTC is a non-terminal asynchronous state only after
+    // the persisted checkpoint UTC has been proven present. Without that
+    // record anchor, a later RTC/NTP value cannot make the wall-clock term
+    // reconstructible. The loaded checkpoint remains untouched and can be
+    // evaluated again by the same coordinator when trusted UTC is available.
+    if (!time.utcUnixSeconds.has_value()) {
+        return R1RecoveryEvaluation{
+            RecoveryDisposition::WaitingForTrustedTime,
+            result(RunPersistenceResultStatus::RecoveryPending,
+                   RunPersistenceStep::CandidateApply)};
+    }
+
+    const auto prior = exactPriorFermentingSeconds(current);
+    if (!prior.has_value() || loadedRecord.snapshot.checkpointMonotonicMillis <
+                                  current.processState.stateEnteredAtMillis) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    const auto liveSegment =
+        checkedToUint32((loadedRecord.snapshot.checkpointMonotonicMillis -
+                         current.processState.stateEnteredAtMillis) /
+                        1000U);
+    if (!liveSegment.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
+    const auto wallClockSinceCheckpoint =
+        checkedUtcDelta(*time.utcUnixSeconds, *loadedRecord.utcUnixSeconds);
+    if (!phaseAtCheckpoint.has_value() ||
+        !wallClockSinceCheckpoint.has_value()) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    const auto recoveredPhase =
+        checkedAdd(*phaseAtCheckpoint, *wallClockSinceCheckpoint);
+    if (!recoveredPhase.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto fermentationDuration = checkedToUint32(
+        static_cast<std::uint64_t>(
+            *current.processRunSnapshot->fermentationDurationMinutes) *
+        60U);
+    if (!fermentationDuration.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto recoveredPrior = checkedToUint32(*recoveredPhase);
+    if (!recoveredPrior.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+
+    auto candidate = current;
+    if (!foldObservedRunSeconds(candidate, *liveSegment)) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+
+    if (*recoveredPhase < *fermentationDuration) {
+        // Use the existing RecoveryEvaluation -> RecoveryResume topology in
+        // RAM to obtain the same FSM invariants as every other recovery
+        // handoff. Only the final candidate is persisted.
+        const auto hop1 = propose(
+            candidate.processState, ProcessState::RecoveryEvaluation,
+            TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
+        if (!hop1.proposed() ||
+            !applyProcessTransition(candidate.processState, hop1,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        auto recoveredState = current.processState;
+        recoveredState.state = ProcessState::Fermenting;
+        recoveredState.stateEnteredAtMillis = time.monotonicMillis;
+        recoveredState.qualificationValidSinceMillis.reset();
+        recoveredState.targetReachStartedAtMillis = 0U;
+        recoveredState.targetReachWarningIssued = false;
+        const auto hop2 = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryResume, recoveredState},
+            time.monotonicMillis,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior});
+        if (!hop2.proposed() ||
+            !applyProcessTransition(candidate.processState, hop2,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
+    } else {
+        const auto completion =
+            completeTimedRun(current.processState, *current.processRunSnapshot,
+                             time.monotonicMillis);
+        if (!completion.proposed() ||
+            !applyProcessTransition(candidate.processState, completion,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        // A prior offset is meaningful only for the phase it times. The
+        // normal FermentationCompleted transition consumes it; Cooling and
+        // Completed must not carry a FERMENTING tag.
+        candidate.priorBootPhaseElapsed.reset();
+    }
+
+    if (candidate.runRevision == std::numeric_limits<std::uint32_t>::max()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    ++candidate.runRevision;
+    const auto persisted = persistRecoveryCandidate(current, candidate, time);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        pendingR1CheckpointRevision_.reset();
+        pendingR1RunRevision_.reset();
+        return R1RecoveryEvaluation{
+            RecoveryDisposition::RecoveryRejectedOrFailClosed, persisted};
+    }
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
+    return R1RecoveryEvaluation{RecoveryDisposition::CurrentRunRecoverable,
+                                persisted};
+}
+
+bool RunPersistenceCoordinator::prepareRecoveryEvaluationState(
+    RunCommandState& current, std::uint64_t monotonicMillis) const {
+    auto candidate = current;
+    const auto transition =
+        propose(candidate.processState, ProcessState::RecoveryEvaluation,
+                TransitionReason::RecoveryReentryRequired, monotonicMillis);
+    if (!transition.proposed() ||
+        !applyProcessTransition(candidate.processState, transition,
+                                candidate.processRunSnapshot.has_value()
+                                    ? &*candidate.processRunSnapshot
+                                    : nullptr)) {
+        return false;
+    }
+    current = std::move(candidate);
+    return true;
 }
 
 RecoveryActivationOutcome
@@ -2059,6 +2337,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
         return persisted;
     }
     current = candidate;
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
     auto applied = persisted;
     applied.step = RunPersistenceStep::RamApply;
     applied.durability = RunPersistenceDurability::Changed;

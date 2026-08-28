@@ -111,6 +111,21 @@ struct RunPersistenceResult {
         committedControlContextTransition;
 };
 
+// Application-level disposition for the narrow R1 Current-FERMENTING
+// recovery evaluation. This is deliberately not a persisted process state and
+// does not add a second recovery coordinator.
+enum class RecoveryDisposition : std::uint8_t {
+    WaitingForTrustedTime,
+    CurrentRunRecoverable,
+    RecoveryRejectedOrFailClosed,
+};
+
+struct R1RecoveryEvaluation {
+    RecoveryDisposition disposition{
+        RecoveryDisposition::RecoveryRejectedOrFailClosed};
+    RunPersistenceResult persistenceResult;
+};
+
 enum class RunPersistenceLoadStatus : std::uint8_t {
     NoPersistedRun,
     Current,
@@ -236,6 +251,20 @@ class RunPersistenceCoordinator {
         RunCommandState& current, const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
 
+    // Evaluates the loaded Current FERMENTING record using the exact R1
+    // phase-time contract. A missing current UTC returns WaitingForTrustedTime
+    // without mutating persistence. A trusted result is committed through the
+    // existing write-before-apply recovery core before `current` is changed.
+    [[nodiscard]] R1RecoveryEvaluation evaluateCurrentFermentingRecovery(
+        RunCommandState& current, const RunCheckpointTime& time);
+
+    // Applies only the existing domain transition into the RAM-side
+    // RecoveryEvaluation view used while the application waits for UTC. No
+    // persistence write is performed; the coordinator remains the single
+    // owner of process-transition application at this boundary.
+    [[nodiscard]] bool prepareRecoveryEvaluationState(
+        RunCommandState& current, std::uint64_t monotonicMillis) const;
+
     // Gemeinsamer, write-before-apply Recovery-Schreibpfad fuer spaetere
     // fachliche Recovery-Kandidaten (Zeit-Reevaluation und Gewichtung). Der
     // Aufrufer liefert bereits den vollstaendigen, um genau eine
@@ -295,6 +324,11 @@ class RunPersistenceCoordinator {
     std::size_t persistedIdCount_{0U};
     std::uint64_t nextCheckpointRevision_{1U};
     std::uint64_t nextHeadRevision_{1U};
+    // RAM-only identity of the evidence held while the application waits for
+    // trusted UTC. It is never serialized and is invalidated by a successful
+    // recovery commit or any changed persistence state.
+    std::optional<std::uint64_t> pendingR1CheckpointRevision_;
+    std::optional<std::uint32_t> pendingR1RunRevision_;
 };
 
 }  // namespace fermentation

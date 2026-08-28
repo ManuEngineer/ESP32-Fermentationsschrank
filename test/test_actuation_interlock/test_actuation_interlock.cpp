@@ -129,6 +129,43 @@ void test_no_active_run_load_is_not_a_resume_offer() {
     TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
 }
 
+void test_recovery_evaluation_actuation_is_blocked() {
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    input.loadDisposition = RunLoadDisposition::RecoveryEvaluation;
+
+    const auto result = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_waiting_for_trusted_time_actuation_is_blocked() {
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    // WaitingForTrustedTime is an application disposition represented at the
+    // actuation boundary by the RecoveryEvaluation load disposition.
+    input.loadDisposition = RunLoadDisposition::RecoveryEvaluation;
+
+    const auto result = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_recovery_rejected_actuation_is_blocked() {
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    // RecoveryRejectedOrFailClosed remains in the application's
+    // RecoveryEvaluation handoff; it cannot become an activation offer.
+    input.loadDisposition = RunLoadDisposition::RecoveryEvaluation;
+
+    const auto result = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
+}
+
 void test_validated_explicit_activation_is_allowed_only_after_all_evidence() {
     ActuationEvidence input;
     device_platform::SensorQualitySnapshot sensor;
@@ -898,6 +935,9 @@ void setup_suite() {
     RUN_TEST(test_missing_boot_evidence_is_safe_boot);
     RUN_TEST(test_no_active_run_is_standby_without_actuator_allow);
     RUN_TEST(test_no_active_run_load_is_not_a_resume_offer);
+    RUN_TEST(test_recovery_evaluation_actuation_is_blocked);
+    RUN_TEST(test_waiting_for_trusted_time_actuation_is_blocked);
+    RUN_TEST(test_recovery_rejected_actuation_is_blocked);
     RUN_TEST(
         test_validated_explicit_activation_is_allowed_only_after_all_evidence);
     RUN_TEST(test_fresh_start_stays_unresolved_until_new_run_is_applied);

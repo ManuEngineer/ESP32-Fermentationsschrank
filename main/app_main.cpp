@@ -155,6 +155,7 @@ extern "C" void app_main(void) {
 
     device_platform::DevicePlatform platform;
     const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
+    const device_platform_esp_idf::EspTimerTimeSource timeSource;
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
 
@@ -164,7 +165,7 @@ extern "C" void app_main(void) {
     const bool applicationStarted =
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
-                          timeZoneResolver, &resetCauseSource);
+                          timeZoneResolver, timeSource, &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());
@@ -195,11 +196,9 @@ extern "C" void app_main(void) {
     }
 #endif
 
-    // Erst hier, unmittelbar vor der Laufzeitschleife, konstruiert: die
-    // geloggte Uptime bedeutet damit eindeutig "Laufzeit seit
-    // Schleifenstart" und schliesst Startpruefung, Bootlogging und die
-    // erste Ressourcenmessung nicht mit ein.
-    const device_platform_esp_idf::EspTimerTimeSource timeSource;
+    // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
+    // Recovery bereits beim Laden des Current-Records dieselbe monotone und
+    // absolute Quelle wie die spaetere Laufzeitschleife verwendet.
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;

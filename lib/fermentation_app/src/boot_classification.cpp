@@ -51,6 +51,13 @@ RunLoadDisposition classifyRunLoad(
                 return RunLoadDisposition::Completed;
             if (snapshot->processState.state == ProcessState::Fault)
                 return RunLoadDisposition::TerminalFault;
+            // A valid Current FERMENTING record is evaluated against trusted
+            // UTC by the application. It is neither a user-facing ResumeOffer
+            // nor a discardable run. The load path has already validated the
+            // complete record graph; the evaluator applies the stricter R1
+            // exact-time gates before any candidate can be committed.
+            if (snapshot->processState.state == ProcessState::Fermenting)
+                return RunLoadDisposition::RecoveryEvaluation;
             return isR1ResumeEligible(*snapshot)
                        ? RunLoadDisposition::ResumeOffer
                        : RunLoadDisposition::NoActiveRun;
@@ -76,6 +83,8 @@ BootClassification classify(RunPersistenceLoadStatus status,
             return BootClassification::NoRun;
         case RunLoadDisposition::ResumeOffer:
             return BootClassification::ResumeOffer;
+        case RunLoadDisposition::RecoveryEvaluation:
+            return BootClassification::RecoveryEvaluation;
         case RunLoadDisposition::NoActiveRun:
             return BootClassification::DiscardableRun;
         case RunLoadDisposition::Completed:

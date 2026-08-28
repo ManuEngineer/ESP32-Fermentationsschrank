@@ -52,18 +52,9 @@ std::optional<PriorBootPhaseElapsed> effectivePriorElapsedForFermenting(
         effective = current.priorBootPhaseElapsed->elapsed;
     }
 
-    if (current.nominalRecoveryAdjustment.has_value()) {
-        const auto nominal =
-            current.nominalRecoveryAdjustment->cumulativeAppliedSeconds;
-        const auto lower =
-            static_cast<std::uint64_t>(effective.lowerBoundSeconds) + nominal;
-        if (lower > std::numeric_limits<std::uint32_t>::max() ||
-            (effective.upperBoundSeconds.has_value() &&
-             lower > *effective.upperBoundSeconds)) {
-            return std::nullopt;
-        }
-        effective.lowerBoundSeconds = static_cast<std::uint32_t>(lower);
-    }
+    // R1 uses priorBootPhaseElapsed as the sole phase-timer offset. The
+    // schema-3 nominal correction remains codec-compatible for historical
+    // commands, but it is not folded into the neutral FSM prior value.
     return effective;
 }
 
@@ -822,7 +813,6 @@ void decideProgramStartInto(const RunCommandState& current,
     decision.after.sensorSelectionRuntime = outcome.runtime;
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
-    return;
 }
 
 void decideManualStartInto(const RunCommandState& current,
@@ -901,7 +891,6 @@ void decideManualStartInto(const RunCommandState& current,
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
-    return;
 }
 
 CommandDecision decideProgramStart(const RunCommandState& current,

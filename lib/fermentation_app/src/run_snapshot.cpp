@@ -206,9 +206,12 @@ ActiveRun::ActiveRun(RunProgramSnapshot snapshot,
                      EffectiveRunValues initialValues)
     : snapshot_(std::move(snapshot)), effectiveValues_(initialValues) {}
 
-ActiveRun::ActiveRun(RestoreConstructionTag, RunProgramSnapshot snapshot,
+ActiveRun::ActiveRun(RestoreConstructionTag restoreTag,
+                     RunProgramSnapshot snapshot,
                      EffectiveRunValues initialValues)
-    : ActiveRun(std::move(snapshot), initialValues) {}
+    : ActiveRun(std::move(snapshot), initialValues) {
+    static_cast<void>(restoreTag);
+}
 
 std::optional<ActiveRun> ActiveRun::start(const ProgramDocument& sourceProgram,
                                           ProgramSourceKind sourceKind,

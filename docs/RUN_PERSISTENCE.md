@@ -22,15 +22,16 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 - Ein Neustart ist kein Fehlerreset; #24 fuehrt keine allgemeine persistente
   Persistenz- oder Safety-Sperre ein.
 
-## Issue #24 Release-1-Persistenzgrenze
+## Issue #124 Release-1-Persistenzgrenze
 
-Issue #24 fuehrt keine allgemeine Safety-Persistenz, keinen Restart-Zaehler,
+Issue #124 fuehrt keine allgemeine Safety-Persistenz, keinen Restart-Zaehler,
 kein Resetzeitfenster und keinen persistenten Watchdog-/Sensor-Latch ein. Der
 kanonische #17-Loadstatus unterscheidet vertrauenswuerdige `Current`-/Tombstone-
-Zustaende von technisch untrusted Persistenz. Ein vertrauenswuerdiger, aber
-nicht einfach resumefaehiger Current wird write-before-apply als `NoActiveRun`
-beendet; technisch untrusted bleibt `SAFE_BOOT` und wird nicht blind
-ueberschrieben.
+Zustaende von technisch untrusted Persistenz. Ein vollstaendig validierter
+Current-`FERMENTING`-Run wird nach dem exakten R1-Zeitvertrag logisch
+automatisch fortgesetzt; technisch untrusted bleibt `SAFE_BOOT` und wird
+nicht blind ueberschrieben. Die automatische logische Recovery gibt allein
+keine Aktorfreigabe.
 
 `PreparedHead -> CheckpointSlot -> CommittedHead` bleibt eine einzige
 Gesamttransaktion. Einzel-Key-`Success` ist definitiv und benoetigt keinen
@@ -38,9 +39,12 @@ zweiten Readback; nur `CommitOutcomeUnknown` wird durch `writeExact()`
 aufgeloest. RAM/FSM wird erst nach dem Gesamtstatus `Applied` geaendert.
 
 Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
-Legacy. Sie werden von #24 nicht automatisch als aktiver Produktpfad
-aufgerufen; R1 fuehrt kein automatisches Fallback-Resume, keine automatische
-Promotion und keine Charge-Rettungsrechnung ein.
+Legacy. Sie werden von #124 nicht als aktiver gewichteter oder biologischer
+Produktpfad aufgerufen; R1 fuehrt kein automatisches Fallback-Resume, keine
+automatische Promotion und keine Charge-Rettungsrechnung ein. Der aktuelle
+Current-`FERMENTING`-Pfad ist davon getrennt und verwendet ausschliesslich
+`priorBootPhaseElapsed` sowie die Wandzeit seit dem exakt validierten
+Checkpointrecord.
 
 ### R5.9-Record- und Recoverygrenze
 
@@ -98,7 +102,10 @@ fail-closed.
 
 Der aktive R1-Vertrag verwendet die kanonischen Run-/Transaktionsfelder. Die
 nachfolgend mit Recovery-/Progressbezug genannten Schema-3-Felder bleiben als
-C2-Legacy lesbar, sind aber kein R1-Resume- oder Charge-Recovery-Vertrag.
+C2-Legacy lesbar. `priorBootPhaseElapsed` wird dabei als neutraler exakter
+Phasen-Timeroffset fuer den #124-Current-`FERMENTING`-Vertrag verwendet;
+gewichtete/biologische Recoveryfelder sind kein R1-Resume- oder
+Charge-Recovery-Vertrag.
 
 Mindestens enthalten:
 
@@ -109,8 +116,10 @@ Mindestens enthalten:
 - Regelmodus und primaerer Regelsensor
 - dokumentierte Sensorwechsel
 - nominelle Dauer
-- ehrliche beobachtete Fortschrittsbasis; gewichtete Beitraege bleiben C2-
-  Legacy und werden im R1-Pfad nicht gutgeschrieben
+- ehrliche beobachtete Fortschrittsbasis; `runProgress.observedRunSeconds`
+  bleibt sicher beobachtete Laufzeit und enthaelt keine Ausfallzeit
+- `priorBootPhaseElapsed` als neutraler, boot-unabhaengiger und bei Bedarf
+  exakt getaggter Phasen-Timeroffset fuer den R1-FSM-Handoff
 - Verlaengerungen und Korrekturen nur ueber bestehende kanonische Commands
 - letzter monotoner Zeitstand
 - Zeitqualitaetsstatus als Diagnose
@@ -128,8 +137,68 @@ Mindestens enthalten:
 
 Schema-3-Felder wie UTC-Anker, Recovery-Episode, Boot-Anker, nominale
 Zeitkorrektur und gewichtete Progressbasis bleiben darunter als C2-Legacy
-kompatibel lesbar. Sie erzeugen in R1 weder Resume-Gutschrift noch
-Charge-Recovery.
+kompatibel lesbar. `weightedProgress`, Temperatur-Evidenz und
+`nominalRecoveryAdjustment` erzeugen in R1 weder Resume-Gutschrift noch
+Charge-Recovery. `priorBootPhaseElapsed` ist die Ausnahme: Sein bestehender
+neutraler Vertrag wird fuer die exakte R1-Phasenkontinuitaet verwendet. Nur
+`lowerBoundSeconds == upperBoundSeconds` mit `taggedState == FERMENTING` ist
+automatisch zulaessig; fehlende Bounds oder partielle Historie bleiben
+fail-closed.
+
+### Exakter R1-Current-`FERMENTING`-Checkpointvertrag
+
+Die UTC des exakt validierten `RunPersistenceRawRecord` ist der Recordanker.
+Payload, Checkpointrevision, monotone Checkpointzeit und
+`utcUnixSeconds` werden gemeinsam gegen den Current-Head, CRC, Schema, Epoch
+und Referenzen validiert. Die Phasenzeit wird schemafrei so berechnet:
+
+```text
+prior_phase_elapsed_seconds =
+    0, falls priorBootPhaseElapsed fehlt
+    exact lowerBoundSeconds, falls FERMENTING getaggt und lower == upper
+
+current_live_segment_to_checkpoint =
+    (checkpointMonotonicMillis - stateEnteredAtMillis) / 1000
+
+phase_elapsed_at_checkpoint =
+    prior_phase_elapsed_seconds
+    + current_live_segment_to_checkpoint
+
+wall_clock_since_checkpoint_seconds =
+    trusted_current_utc - checkpoint_record_utc
+
+recovered_phase_elapsed =
+    phase_elapsed_at_checkpoint
+    + wall_clock_since_checkpoint_seconds
+```
+
+Alle Operationen und das Narrowing auf bestehende Feldbreiten sind checked.
+Ein negativer UTC-Abstand, ungueltige Zeitordnung, Overflow oder untrusted
+Recordgraph fuehren fail-closed zu `RecoveryRejectedOrFailClosed`.
+`wall_clock_since_checkpoint_seconds` ist keine hergeleitete exakte
+physische Ausfalldauer: Der Zeitraum kann auch noch powered-on gelaufene Zeit
+vor dem Stromausfall enthalten.
+
+Die beobachtete Laufzeit wird separat und ausschliesslich um den sicher
+beobachteten Live-Abschnitt erhoeht:
+
+```text
+observedRunSeconds =
+    previous_observedRunSeconds + current_live_segment_to_checkpoint
+```
+
+Ausfallzeit, rekonstruierte Phasenzeit und der Priorwert werden nie in
+`observedRunSeconds` geschrieben. Unterhalb der nominellen Dauer wird der
+Kandidat mit `stateEnteredAtMillis = current_monotonic_millis` und einem
+exakten `priorBootPhaseElapsed` des wiederhergestellten Phasenwertes
+persistiert. Die FSM erhaelt diesen Wert ueber ihren bestehenden
+`priorElapsed`-Parameter und bleibt frei von Persistenz, UTC und `ITimeSource`.
+
+Fehlt die aktuelle UTC, bleibt der geladene Current-Checkpoint unveraendert;
+`RecoveryEvaluation/WaitingForTrustedTime` ist eine RAM-/Application-
+Disposition ohne Tombstone oder Schreibvorgang nur fuer das Warten. Spaetere
+Neubewertung nutzt dieselbe Revision; eine veraenderte Evidenzbasis wird
+fail-closed abgelehnt.
 
 Nicht gespeichert werden:
 
@@ -225,10 +294,10 @@ Das Kontrollpunktintervall ist zugleich eine Grenze fuer die Unsicherheit des
 Stromausfallzeitpunkts. Es darf nicht mit der exakten Ausfalldauer verwechselt
 werden.
 
-## C2-Legacy: Fortschritts- und Zeitmodell, nicht #24-R1
+## C2-Legacy: Fortschritts- und Zeitmodell, nicht #124-R1
 
 Die folgenden Felder und Berechnungen bleiben als Schema-3-/#18-Bestand
-lesbar, werden aber im aktiven #24-R1-Pfad weder fuer Resume noch fuer eine
+lesbar, werden aber im aktiven #124-R1-Pfad weder fuer Resume noch fuer eine
 Charge-/Zeitgutschrift verwendet. Neutral vorhandene Schema-3-Felder duerfen
 ein einfaches Resume nicht pauschal ablehnen; aktive alte Recovery-Evidenz
 fuehrt stattdessen zu `NoActiveRun`.
@@ -299,7 +368,7 @@ Beitrags. `confidence` bezeichnet die kumulative, konservative Vertrauensstufe:
 ein einziges `AirReduced` bleibt auch nach einem spaeteren
 `ProductPreferred`-Beitrag `AirReduced` und wird nie hochgestuft.
 
-## C2-Legacy: Zeitanker und Ausfallintervall, nicht #24-R1
+## C2-Legacy: Zeitanker und Ausfallintervall, nicht #124-R1
 
 Nach dem NTP-Abgleich ist
 
@@ -385,8 +454,12 @@ Bereinigung erfolgt proaktiv vor einer Ressourcenwarnung.
 Ist die aktuelle Revision technisch untrusted, wird sie nicht durch eine
 Fallback-Promotion oder eine geschaetzte Zeit-/Progressrechnung ersetzt: Das
 Geraet bleibt in `SAFE_BOOT`. Ein trusted, semantisch nicht resumefaehiger
-Current wird dagegen ueber den bestehenden #17-Pfad als `NoActiveRun`
-abgeschlossen.
+Current wird nur nach seinem jeweils geltenden kanonischen Pfad behandelt.
+Ein vollstaendig validierter Current-`FERMENTING`-Run wird nach #124 mit
+vertrauenswuerdiger UTC automatisch logisch fortgesetzt; fehlt diese UTC,
+bleibt er als `RecoveryEvaluation/WaitingForTrustedTime` unveraendert im RAM.
+Nicht eindeutig rekonstruierbare Evidenz wird nicht als `NoActiveRun`
+umetikettiert.
 
 ## Kritischer Persistenzfehler
 
@@ -416,10 +489,12 @@ Beim Boot gilt:
 
 Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv. #24
 persistiert dafuer keinen allgemeinen Safety-/Watchdog-/Sensor-Latch; aktuelle
-untrusted Load-Zustaende bleiben `SAFE_BOOT`, und ein trusted semantisch nicht
-resumefaehiger Current wird ueber #17 als `NoActiveRun` abgeschlossen.
+untrusted Load-Zustaende bleiben `SAFE_BOOT`. Der exakt rekonstruierbare
+Current-`FERMENTING`-Fall wird nach #124 logisch automatisch fortgesetzt,
+ohne dadurch Aktoren freizugeben; fehlende UTC fuehrt zu
+`RecoveryEvaluation/WaitingForTrustedTime` statt zu einem Tombstone.
 
-## Wiederanlaufreihenfolge im #24-R1-Pfad
+## Wiederanlaufreihenfolge im #124-R1-Pfad
 
 ```text
 Boot
@@ -427,22 +502,27 @@ Boot
 -> Resetcause diagnostisch erfassen
 -> Config und Load-/Coordinatorstatus frisch validieren
 -> Completed erhalten, NoPersistedRun/NoActiveRun als Standby projizieren
--> Current gegen das enge R1-Resume-Praedikat pruefen
--> nicht resumefaehigen vertrauenswuerdigen Current als NoActiveRun schreiben
+-> Current-`FERMENTING` gegen den exakten #124-Zeitvertrag pruefen
+-> bei fehlender UTC `RecoveryEvaluation/WaitingForTrustedTime` RAM-only halten
+-> bei gueltiger UTC R1-Current-Kandidaten write-before-apply persistieren
 -> untrusted Load als SAFE_BOOT sperren
--> nur nach explizitem Start/Resume und aktueller Evidenz den Gatepfad pruefen
+-> nach logischer Recovery oder explizitem Start/Resume stets aktuelle
+   Config-/Sensor-/Planner-/Safety-Evidenz fuer den Gatepfad pruefen
 ```
 
-Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein exakter
-Unterbrechungsfortschritt erfunden und kein automatischer Phasenabschluss allein
-aus einer Schaetzung abgeleitet.
+Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein
+Phasenfortschritt behauptet und keine Persistenz nur fuer `TimePending`
+geschrieben. Die spaetere Bewertung verwendet denselben geladenen
+revisionsgebundenen Checkpoint. Die Differenz von aktueller UTC und
+Checkpoint-UTC ist `wall_clock_since_checkpoint_seconds` fuer die
+Phasenrechnung, aber keine exakte physische Ausfalldauer.
 
 ## Historische Recovery-API und Regelsensorauswahl bei Reaktivierung (C2)
 
 Issue #21 (Regelsensorauswahl, Ersatzbetrieb, Rueckkehrlogik) liefert den
 persistierten und den laufzeitseitigen Auswahlzustand. Die
 Die `RunRecoveryCoordinator`-Grenze bleibt als bestehender #18/C2-Code
-erhalten, wird aber vom aktiven #24-R1-Produktpfad nicht aufgerufen. #24
+erhalten, wird aber vom aktiven #124-R1-Produktpfad nicht aufgerufen. #124
 verwendet stattdessen die aktuelle #20/#21-Projektion, das enge
 Resume-Angebot und den kanonischen `NoActiveRun`-Abbruch.
 

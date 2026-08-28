@@ -31,6 +31,23 @@ thermische `SAFETY_RECOVERY` bleiben ausserhalb des #24-R1-Produktpfads.
 Hardware- und thermische Nachweise gehoeren zu E5 und den dort genannten
 Inbetriebnahme-Gates.
 
+Issue #124 ersetzt die historische #24-Entscheidung fuer den eng begrenzten
+Current-`FERMENTING`-Fall: Ist der aktuelle Run-/Checkpointgraph vollstaendig
+validiert, `priorBootPhaseElapsed` exakt fuer `FERMENTING` getaggt und eine
+vertrauenswuerdige aktuelle UTC vorhanden, wird die Phase mit der Wandzeit
+seit dem Checkpoint logisch automatisch fortgesetzt. Das ist keine
+Benutzerentscheidung und keine Aktorfreigabe. Die Aktoren bleiben nach jedem
+Boot AUS, bis die bestehenden frischen Config-/Sensor-/Hardware-/Safety- und
+Planner-Gates erfolgreich sind.
+
+Fehlt UTC unmittelbar nach Boot, bleibt der FSM-Zustand
+`RecoveryEvaluation` mit der RAM-Disposition `WaitingForTrustedTime`. Es
+werden weder Tombstone noch Recoverykandidat nur fuer das Warten persistiert;
+die gleiche revisionsgebundene Evidenz wird spaeter erneut bewertet. Eine
+negative UTC-Differenz, nicht exakte Zeitbasis oder untrusted Persistenz bleibt
+fail-closed. `wall_clock_since_checkpoint_seconds` bezeichnet Wandzeit seit
+dem Record und wird nicht als exakte physische Ausfalldauer ausgegeben.
+
 ### R5.9-Produkt-Recovery-Gate und Backendcharakterisierung
 
 Die technische Backendcharakterisierung ist keine Produktfreigabe. Fuer
@@ -355,10 +372,10 @@ kann, wird erst angewendet, nachdem Transaktionsabsicht und neue Revision
 erfolgreich persistiert wurden. Ein unvollstaendiger oder nicht eindeutig
 aufgeloester Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`.
 
-Vor jeder Resume- oder Fresh-Start-Freigabe muessen die bestehende
-Write-before-Apply-Transaktion den Gesamtstatus `Applied`, die anschliessende
-FSM-Anwendung und frische Config-/Sensor-/Planner-Evidenz liefern. Ein
-kanonisches `Success` benoetigt keinen zweiten Readback; nur
+Vor jeder Recoverykandidaten-, Resume- oder Fresh-Start-Freigabe muessen die
+bestehende Write-before-Apply-Transaktion den Gesamtstatus `Applied`, die
+anschliessende FSM-Anwendung und frische Config-/Sensor-/Planner-Evidenz
+liefern. Ein kanonisches `Success` benoetigt keinen zweiten Readback; nur
 `CommitOutcomeUnknown` wird nach dem vorhandenen `writeExact()`-Vertrag durch
 Readback aufgeloest. Nach `PreparedHead` oder Slot-Teilmutation bleibt der
 Coordinator bei `BlockedIndeterminate`/unknown-safe.
@@ -426,10 +443,15 @@ Verbindliche Regeln:
   nicht akkumuliert.
 - Ein Neustart erzeugt keine implizite Freigabe und keinen neuen persistenten
   Safety-Latch.
-- Eine nicht eindeutig einfache R1-Fortsetzung wird als `NoActiveRun` beendet;
-  Charge-Rettung und gewichteter Ausfallfortschritt sind nicht #24-R1.
-- Ist die Lauf- oder Sicherheitslage nicht eindeutig, wird nicht automatisch
-  fortgesetzt.
+- Ein exakt rekonstruierbarer Current-`FERMENTING`-Run wird nach #124 logisch
+  automatisch fortgesetzt; der Stromausfall allein verlangt keine
+  Benutzerbestaetigung und gibt keine Aktoren frei.
+- Fehlt fuer diesen Pfad die aktuelle UTC, bleibt
+  `RecoveryEvaluation/WaitingForTrustedTime` RAM-only bestehen. Ist die Lauf-
+  oder Sicherheitslage anderweitig nicht eindeutig, wird fail-closed weder
+  fortgesetzt noch als `NoActiveRun` umetikettiert.
+- Charge-Rettung, temperaturgewichteter Ausfallfortschritt und automatische
+  Fallback-Promotion sind nicht #124-R1.
 - Der Neustart selbst gilt nicht als Ursachenbehebung.
 
 ## Akzeptierte Entscheidungen aus Phase 8C
