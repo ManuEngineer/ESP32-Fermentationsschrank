@@ -19,6 +19,8 @@ FERMENTATION_DURATION_REACHED_DURING_OUTAGE=USE_NORMAL_FSM_COMPLETION_SEMANTICS
 USER_CONFIRMATION_ONLY_BECAUSE_OF_OUTAGE=NO
 NO_DOUBLE_COUNTING=YES
 OUTAGE_TIME_IN_OBSERVED_RUN_SECONDS=NO
+EXACT_POWER_OUTAGE_DURATION_DERIVED=NO
+WALL_CLOCK_SINCE_CHECKPOINT_USED_FOR_PHASE_ACCOUNTING=YES
 REDEFINE_OBSERVED_RUN_SECONDS_SEMANTICS=NO
 R1_PHASE_TIMER_CONTINUITY_FIELD=priorBootPhaseElapsed
 R1_OBSERVED_RUNTIME_FIELD=runProgress.observedRunSeconds
@@ -64,14 +66,18 @@ main
   -> integration/r1-development
 EXPECTED_R1_DEVELOPMENT_HEAD=7642739c8a05fb08615ff04e2d0770c5a381b23d
 ACTUAL_R1_DEVELOPMENT_HEAD=7642739c8a05fb08615ff04e2d0770c5a381b23d
-OPEN_PULL_REQUESTS=0
+PLAN_BASELINE_OPEN_PRS_BEFORE_ISSUE124_PLAN_PR=0
+CURRENT_PLAN_PR=125_OPEN_DRAFT
 ```
 
-Der aktuelle R1-Vertrag in
+Der obige PR-Wert ist eine historische Plan-Baseline vor Erstellung von PR
+#125; er ist kein aktueller Open-PR-Count. Der aktuelle Plan-PR ist offen und
+Draft. Der aktuelle R1-Vertrag in
 `docs/RECOVERY_AND_INTERRUPTION.md` und `docs/RUN_PERSISTENCE.md` verwirft
 einen technisch vertrauenswuerdigen, aber semantisch nicht explizit
-resumierbaren Lauf als `NoActiveRun`. Fuer `FERMENTING` gibt es dort keine
-Wall-Clock-Ausfallzeitgutschrift und keine R1-Fortsetzung. Das steht im
+resumierbaren Lauf als `NoActiveRun`. Fuer `FERMENTING` gibt es dort keinen
+R1-Zeitkredit aus der Wandzeit seit dem Checkpoint und keine R1-Fortsetzung.
+Das steht im
 Widerspruch zur verbindlichen Owner-Zielsetzung dieses Auftrags:
 
 ```text
@@ -100,7 +106,7 @@ Der relevante Iststand ist:
 
 | Quelle | Aktueller Vertrag/Befund | Bedeutung fuer #124 |
 |---|---|---|
-| `docs/RECOVERY_AND_INTERRUPTION.md` | R1 all-off; `FERMENTING` nicht fortsetzbar; kein R1-UTC-/Ausfallzeitkredit; `RECOVERY_TIME_PENDING` bisher nur als C2-Legacy-Kontext; #90-Fallback nicht aktivierend | Muss nach Owner-Freigabe auf den einfachen Zeitvertrag aktualisiert werden |
+| `docs/RECOVERY_AND_INTERRUPTION.md` | R1 all-off; `FERMENTING` nicht fortsetzbar; kein R1-UTC-/Checkpoint-Wandzeitkredit; `RECOVERY_TIME_PENDING` bisher nur als C2-Legacy-Kontext; #90-Fallback nicht aktivierend | Muss nach Owner-Freigabe auf den einfachen Zeitvertrag aktualisiert werden |
 | `docs/RUN_PERSISTENCE.md` | `rh0`/`rc0`/`rc1`, vollstaendige Head-/Slot-/CRC-/Epoch-/Referenzvalidierung; Checkpoint 1/5/60 Minuten; aktive Schema-3-C2-Felder lesbar; aktuelle `Current`-Recovery fachlich nicht resumierbar | Persistenzgrenze und Write-before-Apply bleiben; kein unnoetiger Schemaumbau |
 | `docs/STATE_MACHINE.md` | FSM ist deterministisch sowie frei von Hardware und Persistenz; `ProcessState::RecoveryEvaluation` existiert; `RECOVERY_TIME_PENDING` ist bisher nur ein Kontext; Boot und direkte GPIO-Ausgabe bleiben getrennt | Bestehenden Prozesszustand nutzen, kleine Recovery-Disposition ergaenzen, keine FSM-/Hardwarevermischung |
 | `docs/SYSTEM_SAFETY_AND_RECOVERY.md` | #24-KISS: all-off, kein automatischer Restart, untrusted bleibt `SAFE_BOOT`, frische Sensor-/Safety-Evidenz vor Freigabe | Wall-Clock-Berechnung darf keine Aktorfreigabe oder Safety-Abkuerzung erzeugen |
@@ -247,8 +253,9 @@ wenn alle folgenden Bedingungen vorliegen:
 
 Die exakte schemafreie Rechnung ist in Abschnitt 4.2 festgelegt. Sie
 verwendet den exakten neutralen `priorBootPhaseElapsed`-Phasenoffset plus den
-beim Checkpoint noch offenen Live-Abschnitt und anschliessend die Ausfallzeit
-aus der UTC desselben validierten Checkpointrecords. `observedRunSeconds` ist
+beim Checkpoint noch offenen Live-Abschnitt und anschliessend die Wandzeit
+seit dem Checkpoint aus der UTC desselben validierten Checkpointrecords.
+`observedRunSeconds` ist
 eine davon getrennte monotone Beobachtungsstatistik und kein aktueller
 Fermentationstimer. Eine fachlich aequivalente Darstellung ist nur zulaessig,
 wenn sie exakt diese kanonischen vorhandenen Felder verwendet. Die Formel ist
@@ -402,14 +409,29 @@ phase_elapsed_at_checkpoint =
     prior_phase_elapsed_seconds
     + checkpoint_live_segment_seconds
 
-outage_seconds =
+wall_clock_since_checkpoint_seconds =
     trusted_current_utc
     - checkpoint_record_utc
 
 recovered_phase_elapsed_seconds =
     phase_elapsed_at_checkpoint
-    + outage_seconds
+    + wall_clock_since_checkpoint_seconds
 ```
+
+`wall_clock_since_checkpoint_seconds` ist die seit dem exakt validierten
+Checkpoint vergangene absolute Wandzeit. Sie ist keine exakt abgeleitete
+physische Stromausfalldauer: Zwischen Checkpoint und Stromausfall kann der
+Prozess noch weitergelaufen sein. R1 verwendet diese Wandzeit dennoch fuer
+die Phasenrechnung, weil `Strom aus != Fermentation aus` gilt.
+
+```text
+EXACT_POWER_OUTAGE_DURATION_DERIVED=NO
+WALL_CLOCK_SINCE_CHECKPOINT_USED_FOR_PHASE_ACCOUNTING=YES
+```
+
+Aus Checkpointintervall, monotoner Zeit oder Temperatur wird keine exakte
+Power-Cut-Zeit geschaetzt, protokolliert oder fuer eine spaetere Projektion
+behauptet.
 
 Ein fehlender `priorBootPhaseElapsed`-Wert bedeutet den exakten neutralen
 Anfangswert `0`. Ein vorhandener Wert muss dagegen fuer diese automatische
@@ -431,7 +453,8 @@ RunPersistenceRawRecord::utcUnixSeconds
 `RunCheckpointTime::utcUnixSeconds` ist der bestehende Eingang, aus dem der
 Record-UTC-Anker beim Schreiben entsteht. Die monotone Zeit ist nur fuer den
 noch offenen Live-Abschnitt innerhalb der aktuellen Boot-/Prozessbasis gueltig;
-sie wird nicht selbst als bootuebergreifende Ausfallzeit verwendet.
+der UTC-Delta-Term wird nicht als exakte physische Stromausfalldauer
+interpretiert.
 
 Die Mindestvorbedingungen sind:
 
@@ -490,7 +513,7 @@ candidate.runProgress.observedRunSeconds =
     )
 ```
 
-`outage_seconds`, `recovered_phase_elapsed_seconds` und
+`wall_clock_since_checkpoint_seconds`, `recovered_phase_elapsed_seconds` und
 `prior_phase_elapsed_seconds` werden nie in `observedRunSeconds` gefaltet.
 Damit bleibt `OUTAGE_TIME_IN_OBSERVED_RUN_SECONDS=NO` und es entsteht keine
 Doppelzaehlung.
@@ -528,7 +551,7 @@ FERMENTING laeuft
 -> bestehende Semantik verankert stateEnteredAtMillis und effektive Restdauer
 -> spaeterer Checkpoint und Stromausfall
 -> R1 verwendet aktuelles exact priorBootPhaseElapsed + Live-Segment + UTC-
-   Ausfallzeit
+   Wandzeit seit Checkpoint
 -> die alte observedRunSeconds-Gesamtsumme verlaengert/verkuerzt die aktuelle
    Restdauer nicht versehentlich
 ```
@@ -686,7 +709,7 @@ Es gibt kein generisches `CompletionPending` nur wegen Power Loss, kein
 automatisches Ueberspringen von `Cooling` und kein behauptetes
 `CoolingTargetReached` waehrend des Ausfalls. `CoolingTargetReached` ist
 sensor-/signalabhaengig. Ohne Ausfallmesswerte darf die Software weder den
-Zeitpunkt des Kuehlzieles rekonstruieren noch Stromausfallzeit auf einen noch
+Zeitpunkt des Kuehlzieles rekonstruieren noch Wandzeit seit Checkpoint auf einen noch
 nicht begonnenen `CoolHolding`-Timer anrechnen.
 
 Nach dem Boot darf der logisch abgelaufene FERMENTING-Run gemaess dieser
@@ -868,7 +891,7 @@ Bestandteil dieses Plan-PRs:
 | Slice | Gezielte Tests/Nachweise |
 |---|---|
 | A | Native Recovery-Disposition- und Boot-Klassifikationsmatrix; `KnownTotal`-/Timestamp-/CRC-/Referenz-/Revision-/Overflow-Grenzen; `WaitingForTrustedTime` ist nicht `NoActiveRun` und nicht `ResumeOffer` |
-| B | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: exakt `prior phase elapsed + live segment + outage`, Record-UTC-Anker, getrennte Fortschreibung `observedRunSeconds + live segment`, Write-before-Apply und automatische logische `FERMENTING`-Fortsetzung |
+| B | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: exakt `prior phase elapsed + live segment + wall-clock since checkpoint`, Record-UTC-Anker, getrennte Fortschreibung `observedRunSeconds + live segment`, Write-before-Apply und automatische logische `FERMENTING`-Fortsetzung; kein Anspruch auf exakte physische Ausfalldauer |
 | C | `test_process_state_machine`: `FermentationCompleted`-Semantik fuer alle vier CompletionModes; `FinishWithoutCooling -> Completed`, drei Cooling-Modi -> `Cooling`; kein CoolingTargetReached ohne Sensorbeobachtung und kein Hold-Timer-Kredit |
 | D | `test_time_source`, VirtualTimeSource absent -> trusted transition, Application-/Composition-/Dependency-Guard; `ITimeSource`-Injektion ohne blockierenden Boot-Wait und ohne WLAN-/Provisioning-Implementierung |
 | E | `test_issue90_product_recovery_oracle`; Fallback nie automatisch Current/Aktorfreigabe, explizite Auswahlgrenze; `test_run_recovery_time`/`test_run_progress_weighting` bleiben als Legacy-Negativtests oder werden nur bei realer aktiver Kopplung entfernt |
@@ -885,24 +908,36 @@ vorzusehen:
 CURRENT_FERMENTING_EXACT_TIME:
   exact prior phase elapsed + current live segment = 20 min
   observedRunSeconds = 20 min observed (or the existing prior observed total)
-  outage = 10 min
+  wall_clock_since_checkpoint_seconds = 10 min
   -> phase elapsed at checkpoint = 20 min
   -> recovered phase elapsed = 30 min
-  -> observedRunSeconds remains observed-only; outage is not folded into it
+  -> observedRunSeconds remains observed-only; wall-clock delta is not folded into it
   -> logical FERMENTING, sofern nominale Dauer nicht erreicht
+
+CHECKPOINT_TO_POWERLOSS_GAP:
+  phase elapsed at checkpoint = 20 min
+  device remains powered and FERMENTING after checkpoint = 4 min
+  physical outage = 6 min
+  trusted current UTC - checkpoint UTC = 10 min
+  -> recovered phase elapsed = 30 min
+  -> RECOVERED_PHASE_TIMER=30_MIN
+  -> exact physical outage duration = UNKNOWN_NOT_DERIVED
+  -> EXACT_POWER_OUTAGE_DURATION=UNKNOWN_NOT_DERIVED
+  -> no double counting
 
 MULTI_REBOOT_NO_DOUBLE_COUNTING:
   nominal = 120 min
-  Boot A: 20 min live -> checkpoint -> 10 min outage
+  Boot A: 20 min live -> checkpoint -> wall-clock since checkpoint = 10 min
   Recovery A: priorBootPhaseElapsed = 30 min, observedRunSeconds += 20 min
-  Boot B: 15 min live -> checkpoint -> 5 min outage
+  Boot B: 15 min live -> checkpoint -> wall-clock since checkpoint = 5 min
   Recovery B: phase at checkpoint = 30 + 15 = 45 min
               recovered phase elapsed = 45 + 5 = 50 min
               priorBootPhaseElapsed = 50 min
               observedRunSeconds += 15 min
   -> FSM phase elapsed = 50 min
   -> observedRunSeconds total = 35 min
-  -> outage credit total = 15 min
+  -> checkpoint-wall-clock accounting total = 15 min
+  -> exact physical outage duration remains unknown/not derived
   -> no double counting
 
 RUNTIME_TIMER_AFTER_RECOVERY:
@@ -911,9 +946,10 @@ RUNTIME_TIMER_AFTER_RECOVERY:
   -> after 30 further live minutes normal FermentationCompleted semantics
 
 OBSERVED_RUNTIME_SEPARATE:
-  20 min observed + 10 min outage
+  20 min observed; wall-clock since checkpoint = 10 min
   -> recovered phase elapsed = 30 min
   -> observedRunSeconds = 20 min, never 30 min
+  -> exact physical outage duration is not derived
 
 PRIOR_BOOT_PHASE_ELAPSED_EXACT_REQUIRED:
   absent -> prior phase elapsed = 0
@@ -925,7 +961,7 @@ PRIOR_BOOT_PHASE_ELAPSED_EXACT_REQUIRED:
 ADJUST_RUN_REBASE:
   FERMENTING -> real AdjustRun folds observed live time
   -> existing semantics reanchor stateEnteredAtMillis and effective rest duration
-  -> later checkpoint/outage uses current exact priorBootPhaseElapsed + live
+  -> later checkpoint/wall-clock delta uses current exact priorBootPhaseElapsed + live
   -> observedRunSeconds global sum does not replace the current phase timer
   -> ADJUST_RUN_REBASE_RECOVERY_TIMER_CORRECT=YES
 
@@ -944,7 +980,7 @@ DURATION_COMPLETION:
 NO_INFERRED_COOLING:
   keine Sensor-/Signal-Evidenz waehrend des Ausfalls
   -> CoolingTargetReached nie behaupten
-  -> Ausfallzeit nie auf noch nicht begonnenen CoolHolding-Timer anrechnen
+  -> Wandzeit seit Checkpoint nie auf noch nicht begonnenen CoolHolding-Timer anrechnen
 
 TIME_PENDING:
   trusted checkpoint + keine aktuelle UTC
@@ -987,8 +1023,9 @@ Hardwareakzeptanz.
    reaktivieren.
 2. Ein vollstaendig validierter `FERMENTING`-Checkpoint mit vertrauenswuerdigem
    UTC-Anker und aktueller UTC verwendet exakt
-   `exact prior phase elapsed + current live segment + trusted outage`; separat
-   wird `observedRunSeconds + current live segment` fortgeschrieben.
+   `exact prior phase elapsed + current live segment + wall-clock since checkpoint`;
+   separat wird `observedRunSeconds + current live segment` fortgeschrieben.
+   Die exakte physische Stromausfalldauer wird daraus nicht abgeleitet.
    Temperatur-/Biologie-/Weighting-Felder beeinflussen die Entscheidung nicht.
 3. Liegt `recovered_elapsed_seconds` unter der nominalen Dauer, wird der
    Current-Run ohne Benutzerbestaetigung logisch automatisch als `FERMENTING`
