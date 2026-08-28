@@ -58,6 +58,14 @@ NTP_REAL_NETWORK_OPERATION_DEPENDS_ON_CONNECTIVITY=YES
 RTC_HARDWARE_OPTIONAL=YES
 NTP_ONLY_MODE_SUPPORTED=YES
 RTC_REQUIRED_FOR_IMMEDIATE_OFFLINE_RECOVERY=YES
+NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES
+FRONTEND_ONLY_TIME_GATE=NO
+APPLICATION_DOMAIN_START_GATE=YES
+NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO
+
+NTP_ONLY_START_BEFORE_SYNC=REJECT_NO_MUTATION_OR_CHECKPOINT
+NTP_ONLY_START_AFTER_SYNC=ALLOW_FIRST_CHECKPOINT_HAS_TRUSTED_UTC
+RTC_START_WITHOUT_NETWORK=ALLOW_AFTER_TRUSTED_RTC_BOOT_SEED
 SMALL_RTC_NTP_DELTA_POLICY=USE_ESP_IDF_SMOOTH_SYNC_FOR_NORMAL_CORRECTION
 CUSTOM_SMALL_DELTA_THRESHOLD=NO
 MONOTONIC_MILLIS_RETROGRADE=NEVER
@@ -80,6 +88,12 @@ MANIFEST_PATH=lib/device_platform_esp_idf/idf_component.yml
 DEPENDENCIES_LOCK=project-level generated dependencies.lock
 NTP_SERVER_CONFIGURATION_OWNER=ISSUE126_TIME_PLATFORM
 NETWORK_CONNECTIVITY_OWNER=ISSUE89
+I2C_PORT_LIFETIME_OWNER=I2CDEV_IF_ADOPTED
+I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
+SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO
+SHARED_I2C_BUS=YES
+I2C_PIN_CONFLICT_POLICY=REJECT_NO_SILENT_RECONFIGURATION
+I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 OWNER_DECISIONS_REQUIRED=NONE
 ```
 
@@ -125,6 +139,12 @@ unixTimeSeconds()
 - Keine Aenderung an `priorBootPhaseElapsed`, `observedRunSeconds`,
   `wall_clock_since_checkpoint_seconds`, `RecoveryDisposition` oder der
   bestehenden FSM-Recoverytopologie.
+- Kein produktiver Run darf ohne trusted UTC beginnen. Ein UI darf diesen
+  Zustand anzeigen, ist aber nicht die Autoritaet; ein direkter
+  Domain-/Application-Aufruf wird am gemeinsamen Startgate ebenfalls
+  abgewiesen.
+- Keine UTC-lose Run-Start-Checkpoint-Ankerung und keine nachtraegliche
+  Reparatur historischer UTC-loser Checkpoints.
 - Kein provisionaler Operator-Resume und keine Aktorfreigabe ohne trusted
   absolute Zeit, wenn #124 sie fuer Current-`FERMENTING` benoetigt.
 - Keine geratenen GPIOs, I2C-Ports, Pegel, Batterieannahmen oder
@@ -180,6 +200,16 @@ Der relevante Produktionsstand ist:
 - `RunPersistenceCoordinator` behandelt fehlende aktuelle UTC nach validiertem
   Checkpoint-UTC als `WaitingForTrustedTime`; negative oder unklare UTC-Deltas
   werden nicht geraten, sondern abgelehnt.
+- `RunCheckpointTime.utcUnixSeconds` ist optional und
+  `FermentationApplication::currentCheckpointTime()` reicht die optionale
+  Rueckgabe des `ITimeSource` unveraendert weiter.
+- Die bestehenden Programm- und Manual-Startentscheidungen nehmen derzeit
+  keine Zeitquelle entgegen. Der bestehende
+  `TemperatureControlApplicationOrchestrator::persistFreshStartCommand(...)`
+  ist jedoch die gemeinsame Application-Grenze vor Persistenz und Apply und
+  prueft aktuell nur die Start-Entscheidungsart. Ohne zusaetzliches Gate kann
+  `RunPersistenceCoordinator::persistCommand` dadurch einen neuen aktiven
+  Checkpoint mit `utcUnixSeconds=nullopt` serialisieren.
 - `ProcessStateMachine` kennt weder Persistenz, RTC, NTP noch Systemzeit und
   bleibt unveraendert.
 - Das Repository besitzt derzeit keine ESP-IDF-Komponentendependency, kein
@@ -188,9 +218,41 @@ Der relevante Produktionsstand ist:
 
 Damit ist keine zweite Zeit-API erforderlich. Die kleinste Erweiterung besteht
 aus einer konkreten Systemzeit-/Trust-Implementierung hinter demselben Port,
-einem DS3231-Adapter und einem kleinen ESP-IDF-SNTP-/Arbitrationskoordinator.
+einem DS3231-Adapter, einem kleinen ESP-IDF-SNTP-/Arbitrationskoordinator und
+einem einzigen produktiven Startgate an der bestehenden Application-Grenze.
 
-### 4.3 Board- und I2C-Audit
+### 4.3 Trusted-Time-Startgate-Audit
+
+Der Startgate-Befund ist eine Domain-/Application-Luecke, keine UI-Luecke:
+
+- `fermentation_app` kennt bereits nur `device_platform::ITimeSource`; RTC,
+  NTP und deren Herkunft bleiben ausserhalb der Application.
+- Der Gatepunkt muss vor der ersten Start-Persistenz und vor dem Apply einer
+  produktiven Startentscheidung liegen. Eine reine UI-Deaktivierung des
+  Startbuttons waere durch direkte Command-Aufrufe umgehbar.
+- Die spaetere rendererunabhaengige Command-/Result-Schicht muss einen
+  eindeutigen Ablehnungsgrund sinngemaess `TrustedAbsoluteTimeRequired`
+  projizieren koennen. Der konkrete Enum-/Typname folgt den vorhandenen
+  Command-Namenskonventionen; es wird kein neuer Zeit-Port eingefuehrt.
+
+Der geplante minimale Gatevertrag ist:
+
+```text
+ITimeSource::unixTimeSeconds().has_value() == false
+    -> produktiven neuen Run ablehnen
+    -> keine aktive Run-Mutation und kein Start-Checkpoint
+
+trusted UTC vorhanden
+    -> bestehenden Startpfad normal fortsetzen
+    -> erster persistierter Run-Checkpoint enthaelt UTC
+```
+
+Der Gatevertrag ist unabhaengig davon, ob die trusted UTC aus RTC oder NTP
+stammt. #124 bleibt unveraendert; insbesondere werden keine bestehenden
+Recoveryfelder, Formeln, Zustandsuebergaenge oder UTC-losen Alt-Checkpoints
+nachtraeglich umgeschrieben.
+
+### 4.4 Board- und I2C-Audit
 
 Es gibt aktuell kein bestaetigtes Boardprofil mit RTC-Konfiguration:
 
@@ -215,9 +277,36 @@ rtc:
 ```
 
 `0x68` ist die DS3231-Adressentscheidung; Bus, SDA und SCL bleiben bis zum
-Owner-Hardwareprofil offen. Der I2C-Bus wird als geteilter Bus mit einem
-einzigen Lebensdauer-/Initialisierungsowner geplant, nicht als DS3231-
-Sonderbus. Der DS3231-Adapter darf keine bereits belegten Busressourcen
+Owner-Hardwareprofil offen. Der I2C-Bus wird als geteilter Bus geplant, nicht
+als DS3231-Sonderbus. Bei Adoption von `ds3231` + `i2cdev` ist `i2cdev` der
+kanonische I2C-Port-/Device-Lebensdauerowner mit seinem per-Port-Bus-Handle,
+Mutex-, Device-Registry- und Reference-Count-Vertrag:
+
+```text
+I2C_PORT_LIFETIME_OWNER=I2CDEV_IF_ADOPTED
+I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
+SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO
+SHARED_I2C_BUS=YES
+```
+
+Die Device-Platform-/Composition-Root besitzt, wann der I2C-Subsystem-
+Lebenszyklus gestartet und beendet wird, erzeugt aber fuer denselben Port
+keinen zweiten konkurrierenden `i2c_master_bus_handle_t`. Spaetere I2C-
+Geraete benutzen denselben kanonischen Bus-/Handle-Vertrag. Ein fremder
+ESP-IDF-Adapter verwendet, falls erforderlich, den von `i2cdev` vorgesehenen
+Shared-Bus-/Handle-Weg. Unterschiedliche SDA-/SCL-Anforderungen fuer denselben
+Port werden abgewiesen; der Bus wird nicht still umkonfiguriert.
+
+Wenn der feste ESP-IDF-6.0.2-Spike keinen sauberen Shared-Bus-/Lifecycle-
+Vertrag erlaubt oder einen zweiten Busowner erfordern wuerde, gilt:
+
+```text
+I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
+```
+
+Es wird dann weder ein zweiter Bus erzeugt noch die Architektur still
+verbogen; stattdessen erfolgt eine begruendete Alternativpruefung mit neuer
+Planrevision. Der DS3231-Adapter darf keine bereits belegten Busressourcen
 ueberschreiben.
 
 `rtc.present=false` ist ein gueltiges Produktprofil. Es erzeugt keinen
@@ -345,6 +434,60 @@ abhängig von #89 und wird in diesem PR nicht ausgefuehrt.
 NTP_SERVER_CONFIGURATION_OWNER=ISSUE126_TIME_PLATFORM
 NETWORK_CONNECTIVITY_OWNER=ISSUE89
 ```
+
+### 5.5 Trusted-Time-Startgate fuer neue produktive Runs
+
+Ein neuer produktiver Run darf erst beginnen, wenn der bestehende
+`device_platform::ITimeSource`-Port eine trusted absolute UTC liefert:
+
+```text
+NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES
+FRONTEND_ONLY_TIME_GATE=NO
+APPLICATION_DOMAIN_START_GATE=YES
+NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO
+```
+
+Die Application prueft dafuer ausschliesslich
+`ITimeSource::unixTimeSeconds().has_value()`. Sie kennt weder RTC noch NTP und
+wertet auch nicht aus, welche Quelle die UTC etabliert hat. Das Gate liegt am
+gemeinsamen Domain-/Application-Startpfad, konkret vor der ersten produktiven
+Start-Persistenz und vor dem Apply; der vorhandene
+`TemperatureControlApplicationOrchestrator::persistFreshStartCommand(...)`
+ist dafuer der bevorzugte Integrationspunkt, sofern der vollstaendige
+Umsetzungs-Audit keinen noch frueheren gemeinsamen Startpfad nachweist.
+
+Ohne trusted UTC wird der neue Start abgelehnt, ohne aktive Run-Mutation und
+ohne Checkpoint. Der Ablehnungsgrund wird ueber den vorhandenen
+Command-/Result-Vertrag sinngemaess als `TrustedAbsoluteTimeRequired`
+projiziert; der konkrete Typname folgt bestehenden Konventionen. Das Gate ist
+auch bei einem direkten Domain-/Application-Command wirksam. Ein spaeteres UI
+darf den Grund und den deaktivierten Start anzeigen, ist aber nicht die
+Autoritaet.
+
+Die Betriebsmodi sind damit:
+
+```text
+rtc.present=false + NTP nicht trusted
+    -> Boot, Konfiguration und Standby moeglich
+    -> neuer produktiver Run abgewiesen
+
+rtc.present=false + NTP trusted
+    -> NTP-only-Start moeglich
+    -> erster committed Run-Checkpoint enthaelt UTC
+
+trusted RTC beim Boot
+    -> Start ohne Netzwerk-/NTP-Wartezeit moeglich
+
+RTC vorhanden, aber untrusted, + NTP nicht trusted
+    -> unixTimeSeconds() == nullopt
+    -> neuer produktiver Run abgewiesen
+```
+
+Das Gate verhindert nur neue nicht rekonstruierbare Anker. Es aendert weder
+`priorBootPhaseElapsed`, `observedRunSeconds`,
+`wall_clock_since_checkpoint_seconds`, `RecoveryDisposition`, die bestehende
+`WaitingForTrustedTime`-Reevaluation noch die FSM-Recoverytopologie. Alte
+UTC-lose Checkpoints werden nicht nachtraeglich repariert.
 
 ## 6. Vollstaendige RTC/NTP-Arbitration
 
@@ -594,7 +737,37 @@ WHY=
 OWNER_DECISION_REQUIRED=NO
 ```
 
-### 6.10 Ehrliches `nullopt` und Source-Verlust
+### 6.10 Trusted-Time-Startgate
+
+```text
+CURRENT_STATE=
+  RunCheckpointTime.utcUnixSeconds ist optional. Der aktuelle gemeinsame
+  Start-/Persistenzpfad kann deshalb ohne zusaetzliches Gate einen neuen
+  Checkpoint ohne UTC anlegen, obwohl #124 diesen spaeter nicht exakt
+  rekonstruieren kann.
+
+MINIMAL_KISS_OPTION=
+  ITimeSource::unixTimeSeconds().has_value() am gemeinsamen
+  Domain-/Application-Startgate pruefen. Bei false keine Startmutation und
+  keinen Checkpoint erzeugen; bei true den bestehenden Startpfad unveraendert
+  fortsetzen.
+
+RECOMMENDATION=
+  NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES,
+  FRONTEND_ONLY_TIME_GATE=NO und APPLICATION_DOMAIN_START_GATE=YES. Der
+  Grund wird ueber den bestehenden Command-/Result-Vertrag projiziert,
+  sinngemaess TrustedAbsoluteTimeRequired. RTC-/NTP-Herkunft bleibt fuer die
+  Application unsichtbar.
+
+WHY=
+  NTP-only bleibt ein vollwertiger Betriebsmodus, aber ein neuer Run erzeugt
+  keinen UTC-losen Recoveryanker. Das Gate ist fail-closed und vermeidet eine
+  spaetere Recovery-Sonderlogik, ohne #124 zu aendern.
+
+OWNER_DECISION_REQUIRED=NO
+```
+
+### 6.11 Ehrliches `nullopt` und Source-Verlust
 
 ```text
 CURRENT_STATE=
@@ -623,7 +796,37 @@ WHY=
 OWNER_DECISION_REQUIRED=NO
 ```
 
-### 6.11 Aufgeloeste Ownerentscheidungen
+### 6.12 Shared-I2C-Ownership
+
+```text
+CURRENT_STATE=
+  Der DS3231-Kandidat verwendet esp-idf-lib/i2cdev. Der bisherige Plan
+  beschrieb einen geteilten I2C-Lebensdauerowner, wies aber nicht explizit zu,
+  ob i2cdev oder die Plattform den Bus auf einem Port erzeugt.
+
+MINIMAL_KISS_OPTION=
+  Bei Adoption besitzt i2cdev den per-Port Bus-/Device-Lifecycle. Die
+  device_platform_esp_idf-Composition Root besitzt nur den globalen
+  I2C-Subsystem-Lebenszyklus und erzeugt auf demselben Port keinen zweiten
+  i2c_master_bus_handle_t. Spaetere Devices teilen den kanonischen Bus.
+
+RECOMMENDATION=
+  I2C_PORT_LIFETIME_OWNER=I2CDEV_IF_ADOPTED,
+  I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME,
+  SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO und SHARED_I2C_BUS=YES.
+  Unterschiedliche SDA-/SCL-Werte fuer denselben Port werden ohne stille
+  Reconfiguration abgewiesen.
+
+WHY=
+  Ein einziger Busowner verhindert konkurrierende Masterhandles, doppelte
+  Loeschung und Use-after-free, waehrend mehrere Geraete den Bus teilen
+  koennen. Wenn der v6.0.2-Spike diesen Vertrag nicht erfuellt, wird die
+  Kandidatenadoption abgebrochen statt die Ownership zu duplizieren.
+
+OWNER_DECISION_REQUIRED=NO
+```
+
+### 6.13 Aufgeloeste Ownerentscheidungen
 
 ```text
 OWNER_DECISIONS_REQUIRED=NONE
@@ -634,6 +837,16 @@ LARGE_TIME_DELTA_POLICY=ESP_IDF_DOCUMENTED_IMMEDIATE_STEP_ACCEPTED
 CUSTOM_LARGE_DELTA_THRESHOLD=NO
 LARGE_DELTA_RECOVERY_POLICY=NO_RETROACTIVE_RECOVERY_ENGINE
 RTC_SYNC_WRITE_FREQUENCY=AFTER_EVERY_COMPLETED_NTP_SYNCHRONIZATION
+NEW_PRODUCTIVE_RUN_START_REQUIRES_TRUSTED_UTC=YES
+FRONTEND_ONLY_TIME_GATE=NO
+APPLICATION_DOMAIN_START_GATE=YES
+NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO
+I2C_PORT_LIFETIME_OWNER=I2CDEV_IF_ADOPTED
+I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
+SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO
+SHARED_I2C_BUS=YES
+I2C_PIN_CONFLICT_POLICY=REJECT_NO_SILENT_RECONFIGURATION
+I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 ```
 
 Die Empfehlungen sind damit verbindlicher Planbestandteil. Eine materielle
@@ -774,6 +987,9 @@ Alle folgenden Schnitte beginnen erst nach Owner-Freigabe dieser Plan-SHA.
   konkreten ESP-IDF-Adapters mit fester `esp-idf-lib/ds3231`-Version anlegen.
 - Die Komponente mit dem ESP Component Manager aufloesen; das projektweite
   erzeugte `dependencies.lock` versionieren und nicht manuell editieren.
+- `DEPENDENCY_OWNER_COMPONENT=lib/device_platform_esp_idf` bleibt eindeutig;
+  `device_platform` und `fermentation_app` erhalten keine DS3231-/i2cdev-
+  Dependency.
 - Direkte und transitive Lizenzdateien/Notices fuer DS3231, `i2cdev`,
   `esp_idf_lib_helpers`, `esp_netif` und I2C-Bestand erfassen.
 - `device_platform_esp_idf` um nur die konkret benoetigten ESP-IDF-
@@ -782,9 +998,14 @@ Alle folgenden Schnitte beginnen erst nach Owner-Freigabe dieser Plan-SHA.
   mit gesperrten Aktoren.
 
 Abbruchsignal: Die Komponente baut nicht sauber gegen v6.0.2, benoetigt eine
-ungepruefte Legacy-I2C-API, verletzt den Lockfilevertrag oder kann OSF nicht
-nachweisen. Dann Implementation anhalten, Befund dokumentieren und einen neuen
-Plan fuer einen begruendeten Alternativkandidaten vorlegen.
+ungepruefte Legacy-I2C-API, verletzt den Lockfilevertrag, kann OSF nicht
+nachweisen oder ermoeglicht den untenstehenden Shared-I2C-Lifecycle nicht.
+Dann Implementation anhalten, Befund dokumentieren und einen neuen Plan fuer
+einen begruendeten Alternativkandidaten vorlegen:
+
+```text
+I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
+```
 
 ### Schnitt B – Schmale konkrete Platform-Adapter
 
@@ -794,8 +1015,13 @@ In `lib/device_platform_esp_idf`:
   `set_time`, Readback, OSF-Zugriff, EOSC-Vertrag und EN32kHz-Deaktivierung;
 - falls erforderlich der schmale dokumentierte Health-/Trust-Shim fuer rohe
   Control-/Statusregister, ohne einen vollstaendigen Eigen-Treiber;
-- geteilter I2C-Bus-/Device-Lebensdauerowner, der nur verifizierte
-  Boardprofilwerte akzeptiert;
+- `i2cdev` als I2C-Port-/Device-Lebensdauerowner bei Adoption, mit seinem
+  kanonischen per-Port Bus-Handle, Mutex-, Device-Registry- und
+  Reference-Count-Vertrag;
+- Composition Root als Owner des globalen I2C-Subsystem-Lebenszyklus, ohne
+  einen zweiten `i2c_master_bus_handle_t` auf demselben Port zu erzeugen;
+- Shared-Bus-Verwendung fuer spaetere Devices, inklusive Abweisung von
+  SDA-/SCL-Konflikten ohne stille Bus-Reconfiguration;
 - Erweiterung oder klare Umbenennung von `EspTimerTimeSource`, ohne den
   `ITimeSource`-Port zu duplizieren, mit Trust-Latch und bootlokalem
   `lastPublishedTrustedUtc`-High-Water;
@@ -811,7 +1037,8 @@ Callback-Arbeit, RTC-Schreiben und Systemzeit-Trust werden gegen die konkrete
 ESP-IDF-/FreeRTOS-Lebensdauer und Thread-Sicherheit serialisiert. Ein NTP-
 Callback darf die FSM nicht direkt aufrufen. Ein Smooth-Sync-Event in
 `IN_PROGRESS` darf keinen RTC-Write ausloesen; nur `COMPLETED` startet den
-asynchronen Write-/Readback-/Trust-Abschluss.
+asynchronen Write-/Readback-/Trust-Abschluss. Der Adapter darf keine direkte
+zweite Businitialisierung auf demselben I2C-Port einfuehren.
 
 ### Schnitt C – Boardprofil und Composition Root
 
@@ -822,9 +1049,12 @@ asynchronen Write-/Readback-/Trust-Abschluss.
   Lebensdauer und Injektion der konkreten Plattformobjekte.
 - `src/main.cpp` bleibt native Composition Root; native Tests verwenden
   `VirtualTimeSource` und Fake-/Host-Transporte.
-- `fermentation_app` wird nur dann geaendert, wenn der Audit einen konkreten
-  Integrationsfehler findet; der bestehende `ITimeSource`-Aufruf und die
-  automatische #124-Reevaluation bleiben der Vertrag.
+- Der gemeinsame Application-Startpfad prueft vor Persistenz/Apply den
+  bestehenden `ITimeSource`; die spaetere UI projiziert nur den
+  `TrustedAbsoluteTimeRequired`-Grund. Kein RTC-/NTP-Typ gelangt in
+  `fermentation_app`.
+- Der bestehende `ITimeSource`-Aufruf und die automatische #124-Reevaluation
+  bleiben unveraendert.
 
 ### Schnitt D – Host/Fake-I2C und Arbitration
 
@@ -847,6 +1077,28 @@ Die digitale Testschicht muss ohne reale Uhr, Netzwerk oder DS3231 auskommen:
   des aktuellen Boot-Trusts;
 - fehlgeschlagener RTC-Write bei weiter trusted NTP-Systemzeit;
 - unveraenderte monotone Zeit trotz Systemzeitkorrektur;
+- `NTP_ONLY_START_BEFORE_SYNC`: `rtc.present=false` und `unixTimeSeconds()`
+  ohne Wert weist einen neuen produktiven Run ab und erzeugt weder aktive
+  Startmutation noch Checkpoint;
+- `NTP_ONLY_START_AFTER_SYNC`: nach abgeschlossenem NTP-Sync wird der Start
+  zugelassen und der erste committed Checkpoint enthaelt UTC;
+- `RTC_START_WITHOUT_NETWORK`: trusted RTC-Bootseed erlaubt den Start ohne
+  Netzwerk-/NTP-Wartezeit;
+- `UNTRUSTED_RTC_NO_NTP`: OSF/EOSC/Kalenderfehler lassen UTC `nullopt` und
+  weisen den Start ab;
+- `UI_BYPASS`: ein direkter Domain-/Application-Command ohne trusted UTC wird
+  am selben Startgate abgewiesen;
+- `NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO`: ein abgewiesener Start
+  veraendert keine produktive Run-/Checkpointstruktur;
+- `ONE_I2C_PORT_ONE_BUS_OWNER`: DS3231 und ein zweites Fake-Device teilen
+  einen Port mit genau einem Bus-Lifecycle und ohne doppelte Master-Erzeugung;
+- `PIN_CONFLICT`: ein zweites Device mit abweichendem SDA/SCL fuer denselben
+  Port wird abgewiesen und konfiguriert den Bus nicht still um;
+- `DEVICE_REMOVAL`: das Entfernen eines Devices laesst den Shared-Bus leben,
+  solange weitere Devices registriert sind;
+- `LAST_DEVICE_REMOVAL`: die Busfreigabe folgt dem gepinnten i2cdev-Vertrag;
+- `COMPOSITION_SHUTDOWN`: geordneter Shutdown fuehrt weder zu doppeltem
+  Delete noch zu Use-after-free;
 - `FermentationApplication`-/#124-Test: `WaitingForTrustedTime` wird nach
   einem spaeter gelieferten trusted Wert automatisch ueber `update()` erneut
   bewertet, ohne neue Persistenzmutation nur durch das Warten.
@@ -863,11 +1115,14 @@ werden vom Agenten selbst ausgefuehrt und benoetigen keine Owner-Anweisung:
 
 ```text
 TARGETED_TESTS=REQUIRED
+F1_DOMAIN_START_GATE=REQUIRED
+F2_SHARED_I2C_OWNERSHIP=REQUIRED
 FULL_NATIVE_SUITE=REQUIRED_BEFORE_OWNER_FINAL_IMPLEMENTATION_REVIEW
 ESP_IDF_BRINGUP_BUILD=REQUIRED
 ESP_IDF_RELEASE_BUILD=REQUIRED
 ESP_CLANG_BRINGUP=REQUIRED
 ESP_CLANG_RELEASE=REQUIRED
+BOTH_ESP_IDF_PROFILES_REQUIRED=YES
 ARCHITECTURE_GATES=REQUIRED
 LICENSE_NOTICE_GATES=REQUIRED
 ```
@@ -909,6 +1164,8 @@ Der Nachweis muss fuer `esp32_bringup` und `esp32_release` pruefen:
 - ESP-IDF exakt v6.0.2 und kein Arduino-Produktionspfad;
 - ESP32- und, soweit die Komponente dies behauptet, ESP32-S3-Kompatibilitaet;
 - moderne I2C-Master-API ohne unkontrollierte Legacy-Driver-Annahme;
+- bei Adoption genau ein `i2cdev`-Busowner je konfiguriertem Port und kein
+  zweiter `i2c_master_bus_handle_t` fuer denselben Port;
 - korrekte `REQUIRES`-/Lockfile-/Lizenzabdeckung;
 - `ESP_CLANG_BRINGUP=REQUIRED` und `ESP_CLANG_RELEASE=REQUIRED` mit dem
   kanonischen Static-Analysis-Treiber;
@@ -980,6 +1237,15 @@ Implementierungs-Head ausgefuehrt.
       `lib/device_platform_esp_idf/idf_component.yml`; `dependencies.lock` ist
       generiert und versioniert.
 - [ ] `ITimeSource` bleibt einziger Application-Zeitvertrag.
+- [ ] Jeder neue produktive Run verlangt vor Persistenz/Apply eine vorhandene
+      trusted UTC; ein UI-only-Gate ist ausgeschlossen und ein UTC-loser
+      Recoveryanker kann nicht entstehen.
+- [ ] NTP-only weist den Start vor Synchronisierung ab, erlaubt ihn nach
+      abgeschlossenem NTP-Sync mit UTC im ersten Checkpoint, und trusted
+      RTC erlaubt den Start ohne Netzwerkwartezeit.
+- [ ] Untrusted RTC ohne NTP und ein direkter Domain-/Application-Bypass
+      werden am selben Startgate abgewiesen; der Grund ist ueber den
+      Command-/Result-Vertrag projizierbar.
 - [ ] monotone Zeit bleibt von RTC-/NTP-Korrekturen unberuehrt.
 - [ ] `unixTimeSeconds()` liefert nur bei trusted System-UTC, oberhalb des
       bootlokalen High-Water, und sonst `nullopt`.
@@ -997,6 +1263,12 @@ Implementierungs-Head ausgefuehrt.
       Checkpoint-Historienrewrite oder direkten FSM-Callback.
 - [ ] Verlust von WLAN, NTP-Erreichbarkeit oder RTC nach etablierter
       Bootzeit entwertet diese Zeit nicht automatisch.
+- [ ] `i2cdev` besitzt bei Adoption den Port-/Device-Lifecycle, die Composition
+      Root den globalen Subsystem-Lebenszyklus, und es gibt keinen zweiten
+      Master-Busowner auf demselben Port.
+- [ ] Shared-I2C-Tests decken Pin-Konflikt ohne stille Reconfiguration,
+      Device-Removal, Last-Device-Removal und Composition-Shutdown ohne
+      Double-Delete/Use-after-free ab.
 - [ ] Shared-I2C-Bus und semantisches Boardprofil verwenden keine geratenen
       Pins oder `TBD_HARDWARE` als Laufzeitwerte.
 - [ ] #89-Grenze und #124-Vertrag bleiben erhalten.
@@ -1058,9 +1330,19 @@ RTC_UNREACHABLE_AFTER_SUCCESSFUL_BOOT_SEED_INVALIDATES_CURRENT_BOOT_TIME=NO
 
 DS3231_EOSC_REQUIRED=0
 DS3231_32KHZ_OUTPUT_R1=DISABLED
+SQW_INT_R1=UNUSED
 R1_DS3231_SUPPORTED_UTC_YEAR_RANGE=2000..2099
 RAW_REGISTER_VALIDATION=REQUIRED
 NARROW_DS3231_HEALTH_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
+FULL_OWN_DS3231_DRIVER=NO
+ALLOWED_NARROW_ADAPTER_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
+
+I2C_PORT_LIFETIME_OWNER=I2CDEV_IF_ADOPTED
+I2CDEV_GLOBAL_INIT_OWNER=DEVICE_PLATFORM_ESP_IDF_COMPOSITION_LIFETIME
+SECOND_I2C_MASTER_BUS_OWNER_ON_SAME_PORT=NO
+SHARED_I2C_BUS=YES
+I2C_PIN_CONFLICT_POLICY=REJECT_NO_SILENT_RECONFIGURATION
+I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 
 DEPENDENCY_OWNER_COMPONENT=lib/device_platform_esp_idf
 MANIFEST_PATH=lib/device_platform_esp_idf/idf_component.yml
@@ -1069,11 +1351,14 @@ NTP_SERVER_CONFIGURATION_OWNER=ISSUE126_TIME_PLATFORM
 NETWORK_CONNECTIVITY_OWNER=ISSUE89
 
 TARGETED_TESTS=REQUIRED
+F1_DOMAIN_START_GATE=REQUIRED
+F2_SHARED_I2C_OWNERSHIP=REQUIRED
 FULL_NATIVE_SUITE=REQUIRED_BEFORE_OWNER_FINAL_IMPLEMENTATION_REVIEW
 ESP_IDF_BRINGUP_BUILD=REQUIRED
 ESP_IDF_RELEASE_BUILD=REQUIRED
 ESP_CLANG_BRINGUP=REQUIRED
 ESP_CLANG_RELEASE=REQUIRED
+BOTH_ESP_IDF_PROFILES_REQUIRED=YES
 ARCHITECTURE_GATES=REQUIRED
 LICENSE_NOTICE_GATES=REQUIRED
 
