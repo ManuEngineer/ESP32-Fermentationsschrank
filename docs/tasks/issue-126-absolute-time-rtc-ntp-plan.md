@@ -1,4 +1,4 @@
-# [E3.8] Plan: R1-Absolute-Zeitplattform mit DS3231 und ESP-IDF-SNTP
+# [E3.8] Plan: R1-Absolute-Zeitplattform mit DS3231M und ESP-IDF-SNTP
 
 ## Status und Owner-Gate
 
@@ -49,11 +49,14 @@ Die folgenden Entscheidungen sind fuer diesen Plan vorgegeben:
 
 ```text
 ABSOLUTE_TIME_ARCHITECTURE=RTC_DS3231_PLUS_NTP
-RTC=DS3231
+RTC=DS3231M
+RTC_DEVICE=DS3231M
+RTC_FAMILY=DS3231_COMPATIBLE
 NTP=ESP_IDF_SNTP
 APPLICATION_TIME_PORT=device_platform::ITimeSource
 PROVISIONAL_OPERATOR_RESUME_BEFORE_TRUSTED_TIME=NO
 RTC_STORAGE_TIMEZONE=UTC
+RTC_I2C_ADDRESS=0x68
 NTP_REAL_NETWORK_OPERATION_DEPENDS_ON_CONNECTIVITY=YES
 RTC_HARDWARE_OPTIONAL=YES
 NTP_ONLY_MODE_SUPPORTED=YES
@@ -97,9 +100,22 @@ RTC_WRITE_AFTER_SYNC_COMPLETED=YES
 WIFI_LOSS_AFTER_SUCCESSFUL_NTP_SYNC_INVALIDATES_CURRENT_BOOT_TIME=NO
 NTP_SERVER_UNREACHABLE_AFTER_SUCCESSFUL_SYNC_INVALIDATES_CURRENT_BOOT_TIME=NO
 RTC_UNREACHABLE_AFTER_SUCCESSFUL_BOOT_SEED_INVALIDATES_CURRENT_BOOT_TIME=NO
-DS3231_EOSC_REQUIRED=0
-DS3231_32KHZ_OUTPUT_R1=DISABLED
-R1_DS3231_SUPPORTED_UTC_YEAR_RANGE=2000..2099
+DS3231M_EOSC_REQUIRED=0
+DS3231M_32KHZ_OUTPUT_R1=DISABLED
+SQW_INT_R1=UNUSED
+R1_DS3231M_SUPPORTED_UTC_YEAR_RANGE=2000..2099
+DS3231M_LIBRARY_COMPATIBILITY=UNVERIFIED_IMPLEMENTATION_GATE
+DS3231M_LIBRARY_ADOPTION=PROVISIONAL
+DS3231M_REQUIRED_API_SUBSET_INCOMPATIBLE=UNVERIFIED_IMPLEMENTATION_GATE
+FULL_OWN_DS3231M_DRIVER=NO
+RAW_REGISTER_VALIDATION=REQUIRED
+RAW_REGISTER_VALIDATION_SOURCE=ANALOG_DEVICES_DS3231M_DATASHEET
+NARROW_DS3231M_HEALTH_SHIM=YES_IF_REQUIRED
+FULL_REGISTER_DRIVER=NO
+DS3231M_NA_BITS_NOT_TREATED_AS_DS3231_RS_BITS=REQUIRED
+DS3231_SQUAREWAVE_RATE_API_REQUIRED=NO
+DS3231_AGING_OFFSET_API_REQUIRED=NO
+DS3231_TEMPERATURE_API_REQUIRED=NO
 DEPENDENCY_OWNER_COMPONENT=lib/device_platform_esp_idf
 MANIFEST_PATH=lib/device_platform_esp_idf/idf_component.yml
 DEPENDENCIES_LOCK=project-level generated dependencies.lock
@@ -117,7 +133,7 @@ OWNER_DECISIONS_REQUIRED=NONE
 Der Datenfluss ist:
 
 ```text
-DS3231 RTC --------------------\
+DS3231M RTC -------------------\
                                 -> ESP-Systemzeit / UTC
 ESP-IDF SNTP ------------------/             |
                                              v
@@ -127,7 +143,7 @@ ESP-IDF SNTP ------------------/             |
                                       fermentation_app
 ```
 
-`fermentation_app` kennt weder DS3231 noch SNTP. `device_platform` bleibt
+`fermentation_app` kennt weder DS3231M noch SNTP. `device_platform` bleibt
 app-neutral und enthaelt keine ESP-IDF- oder Fermentationsbegriffe.
 
 Zielsemantik des bestehenden Ports:
@@ -149,7 +165,7 @@ unixTimeSeconds()
 - Keine WLAN-Provisionierung, Credentials, SoftAP-/Captive-Portal-,
   Connectivity- oder Connection-Manager-Logik. Das bleibt Issue #89.
 - Kein eigener NTP-Client.
-- Kein vollstaendiger eigener DS3231-Registertreiber. Ein schmaler,
+- Kein vollstaendiger eigener DS3231M-Registertreiber. Ein schmaler,
   dokumentierter Health-/Trust-Shim ist nur fuer EOSC und rohe
   Registervalidierung zulaessig, falls die ausgewaehlte Komponente diese
   Nachweise nicht oeffentlich ermoeglicht.
@@ -188,7 +204,7 @@ unixTimeSeconds()
 |---|---|---|
 | `docs/AGENT_WORKFLOW.md` | Plan-first; versionierter vollstaendiger Plan, exakte Plan-SHA, Draft-PR und Handover | Nur Dokumentations- und Reihenfolgesynchronisierung in dieser Runde |
 | `docs/ENGINEERING_PRINCIPLES.md` | Repository-first, Espressif-first, Adopt-or-build vor Eigenbau, keine Parallelvertraege | Erst ESP-IDF-Bestand und Registry-Kandidat bewerten; Adapter hinter bestehendem Port |
-| `docs/DECISIONS.md`, ADR-013 | `device_platform` fuer app-neutrale Ports, `device_platform_esp_idf` fuer konkrete Adapter, `fermentation_app` nur gegen Ports | DS3231/SNTP in `device_platform_esp_idf`; `ITimeSource` bleibt einziger App-Port |
+| `docs/DECISIONS.md`, ADR-013 | `device_platform` fuer app-neutrale Ports, `device_platform_esp_idf` fuer konkrete Adapter, `fermentation_app` nur gegen Ports | DS3231M/SNTP in `device_platform_esp_idf`; `ITimeSource` bleibt einziger App-Port |
 | `docs/ARCHITECTURE.md` | `ITimeSource` und optionale UTC sind vorhanden; NTP ist als absolute Zeitquelle vorgesehen; RTC war bisher Erweiterungspunkt | Der Isttext benoetigt nach Ownerfreigabe eine konsistente RTC-Ergaenzung; in dieser Planrunde nicht umschreiben |
 | `docs/RECOVERY_AND_INTERRUPTION.md` | #124 verlangt trusted aktuelle UTC fuer den exakten Current-`FERMENTING`-Pfad; fehlende UTC bleibt RAM-only `WaitingForTrustedTime` und all-off | Zeitplattform liefert nur den bestehenden Eingang; keine Recoverylogik duplizieren |
 | `docs/SYSTEM_SAFETY_AND_RECOVERY.md` | Fail-closed, keine Aktorfreigabe aus unbekannter Lage, frische Safety-Evidenz bleibt erforderlich | RTC/NTP-Trust darf keine Safety-Grenze umgehen |
@@ -201,7 +217,7 @@ unixTimeSeconds()
 Die bisherigen Aussagen "RTC nicht verpflichtend" und "RTC Zukunftshardware"
 werden nicht in eine RTC-Pflicht fuer jedes Produktprofil umgedeutet:
 `rtc.present=false` und NTP-only sind gueltig. Die Ownerentscheidung bestimmt
-DS3231 als optionale Plattformquelle und verlangt sofortige Offline-Recovery
+DS3231M als optionale Plattformquelle und verlangt sofortige Offline-Recovery
 nur bei vorhandener und trusted RTC. Die alten Dokumente benoetigen erst in
 einem spaeteren freigegebenen Normativschnitt eine konsistente Einordnung; bis
 dahin gilt `SOURCE_OF_TRUTH=ISSUE126_OWNER_DECISION_WITH_RTC_OPTIONALITY`.
@@ -261,7 +277,7 @@ Der relevante Produktionsstand ist:
 
 Damit ist keine zweite Zeit-API erforderlich. Die kleinste Erweiterung besteht
 aus einer konkreten Systemzeit-/Trust-Implementierung hinter demselben Port,
-einem DS3231-Adapter, einem kleinen ESP-IDF-SNTP-/Arbitrationskoordinator und
+einem DS3231M-Adapter, einem kleinen ESP-IDF-SNTP-/Arbitrationskoordinator und
 einem einzigen produktiven Startgate sowie einem gemeinsamen
 Current-FERMENTING-Schreibguard an der bestehenden Application-/Persistence-
 Grenze.
@@ -314,16 +330,18 @@ Boardprofil und seine Pin-/Busnachweise vorliegen:
 ```yaml
 rtc:
   present: <verified boolean>
-  type: DS3231
+  type: DS3231M
   bus: <verified I2C bus>
   sda: <verified board-profile pin>
   scl: <verified board-profile pin>
   address: 0x68
 ```
 
-`0x68` ist die DS3231-Adressentscheidung; Bus, SDA und SCL bleiben bis zum
-Owner-Hardwareprofil offen. Der I2C-Bus wird als geteilter Bus geplant, nicht
-als DS3231-Sonderbus. Bei Adoption von `ds3231` + `i2cdev` ist `i2cdev` der
+`RTC_DEVICE=DS3231M`, `RTC_FAMILY=DS3231_COMPATIBLE` und
+`RTC_I2C_ADDRESS=0x68` sind die Hardwareentscheidungen. Bus, SDA und SCL
+bleiben bis zum Owner-Hardwareprofil offen. Der I2C-Bus wird als geteilter Bus
+geplant, nicht als DS3231M-Sonderbus. Bei Adoption von `ds3231` + `i2cdev` ist
+`i2cdev` der
 kanonische I2C-Port-/Device-Lebensdauerowner mit seinem per-Port-Bus-Handle,
 Mutex-, Device-Registry- und Reference-Count-Vertrag:
 
@@ -351,12 +369,12 @@ I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 
 Es wird dann weder ein zweiter Bus erzeugt noch die Architektur still
 verbogen; stattdessen erfolgt eine begruendete Alternativpruefung mit neuer
-Planrevision. Der DS3231-Adapter darf keine bereits belegten Busressourcen
+Planrevision. Der DS3231M-Adapter darf keine bereits belegten Busressourcen
 ueberschreiben.
 
 `rtc.present=false` ist ein gueltiges Produktprofil. Es erzeugt keinen
 RTC-/I2C-Fehler und waehlt den NTP-only-Betriebsmodus. `rtc.present=true`
-aktiviert nur die konfigurierte DS3231-Pruefung; fehlende oder untrusted RTC
+aktiviert nur die konfigurierte DS3231M-Pruefung; fehlende oder untrusted RTC
 bleibt ein fail-closed Zeitquellenzustand.
 
 ### 4.5 Audit des recoverbaren Current-FERMENTING-Schreibpfads
@@ -380,7 +398,7 @@ Die Pruefung muss den resultierenden Snapshot und die zu speichernde
 `RunCheckpointTime` gemeinsam sehen. Sie liegt in der
 `fermentation_app`-/Persistence-Domain-Grenze unterhalb von UI und einzelnen
 Orchestrator-Aufrufern, bleibt aber ausserhalb von `device_platform`,
-DS3231-Adapter und SNTP-Adapter. Sie erfolgt vor dem durable Write und, fuer
+DS3231M-Adapter und SNTP-Adapter. Sie erfolgt vor dem durable Write und, fuer
 Write-before-Apply-Pfade, vor dem RAM-Apply.
 
 Bei `checkpointPeriodic(...)` wird bei Faelligkeit und fehlender trusted UTC
@@ -408,7 +426,7 @@ Recovery-Disposition.
 
 ### 5.1 Trust-Gate fuer RTC
 
-Der DS3231-Wert darf nur dann als trusted absolute Zeit in die Systemzeit und
+Der DS3231M-Wert darf nur dann als trusted absolute Zeit in die Systemzeit und
 `ITimeSource` gelangen, wenn alle folgenden Nachweise in derselben validierten
 Leseoperation vorhanden sind:
 
@@ -440,6 +458,20 @@ eingebaut.
 geloescht, um einen vorhandenen Wert nachtraeglich vertrauenswuerdig aussehen
 zu lassen.
 
+Der R1-Health-/Trust-Vertrag ist variantenspezifisch auf den DS3231M-
+Datenblattvertrag zu pruefen. Die benoetigten Kernregister sind:
+
+```text
+DS3231M Control 0x0E: EOSC = bit 7; bits 4 und 3 = N/A
+DS3231M Status  0x0F: OSF = bit 7; EN32KHZ = bit 3
+DS3231M I2C address: 0x68
+RAW_REGISTER_VALIDATION_VARIANT=DS3231M_DATASHEET
+```
+
+Die N/A-/fixed-bit-Semantik des DS3231M wird validiert. DS3231-RS1/RS2-
+Annahmen werden nicht auf den DS3231M uebertragen. Die Library-dekodierte
+`struct tm` allein bleibt kein Rohregisterbeweis.
+
 ### 5.2 Systemzeit und bestehender Port
 
 Die konkrete ESP32-Zeitquelle behaelt die bisherige monotone Baseline. Sie
@@ -470,9 +502,9 @@ Nach Ownerfreigabe wird folgende Reihenfolge implementiert:
 
 1. Das Profil lesen. Bei `rtc.present=false` wird kein RTC-/I2C-Fehler erzeugt;
    der Adapter startet im gueltigen NTP-only-Modus. Bei `true` werden
-   ESP-IDF-/I2C-Bus und DS3231-Adapter gemaess validiertem Boardprofil
+   ESP-IDF-/I2C-Bus und DS3231M-Adapter gemaess validiertem Boardprofil
    vorbereitet.
-2. Bei `rtc.present=true` DS3231 erreichen, rohe Control-/Statusregister und
+2. Bei `rtc.present=true` DS3231M erreichen, rohe Control-/Statusregister und
    Kalender lesen, EOSC/EN32kHz/OSF sowie den Kalendervertrag validieren.
 3. Bei vollstaendig trusted RTC: UTC in die ESP-Systemzeit setzen, den
    bestehenden `ITimeSource`-Trust setzen und den High-Water initialisieren.
@@ -602,7 +634,7 @@ sein. Die gemeinsame Guard-Pruefung sieht deshalb den Ziel-Snapshot und die
 aktuelle Checkpoint-Zeit zusammen und liegt an der tiefsten gemeinsamen
 `fermentation_app`-/Persistence-Domain-Grenze, die vor dem durable Write
 erreicht wird. Sie darf nicht nur im UI, in einem einzelnen Orchestrator,
-`device_platform`, dem DS3231-Adapter oder dem SNTP-Adapter liegen.
+`device_platform`, dem DS3231M-Adapter oder dem SNTP-Adapter liegen.
 
 Fuer `checkpointPeriodic(...)` gilt bei aktivem `FERMENTING`, faelligem
 Schedule und `unixTimeSeconds()==nullopt`:
@@ -852,24 +884,27 @@ WHY=
 OWNER_DECISION_REQUIRED=NO
 ```
 
-### 6.8 OSF-, EOSC- und EN32kHz-Vertrag
+### 6.8 DS3231M-OSF-, EOSC- und EN32kHz-Vertrag
 
 ```text
 CURRENT_STATE=
-  Die Komponente bietet OSF-Zugriff und die Deaktivierung des 32-kHz-Ausgangs,
-  aber keine eindeutige oeffentliche EOSC-Read/Write-API im geprueften Header.
-  Eine Set-/Readback-/OSF-Transaktion ist noch nicht implementiert.
+  Die bestehende esp-idf-lib/ds3231-Komponente bietet OSF-Zugriff und die
+  Deaktivierung des 32-kHz-Ausgangs, aber keine eindeutige oeffentliche
+  EOSC-Read/Write-API im geprueften Header. Eine Set-/Readback-/OSF-
+  Transaktion gegen die DS3231M-Variante ist noch nicht implementiert.
 
 MINIMAL_KISS_OPTION=
-  NTP setzt eine UTC in die RTC, liest Zeit und rohe Control-/Statusregister
-  zurueck und validiert sie. Erst danach wird OSF geloescht und anschliessend
-  erneut gelesen. Nur OSF=0 und EOSC=0 schliessen den RTC-Trust. EN32kHz wird
-  deaktiviert; SQW/INT bleiben ungenutzt.
+  NTP setzt eine UTC in die DS3231M, liest Zeit und rohe Control-/Statusregister
+  zurueck und validiert sie gegen das DS3231M-Datenblatt. Erst danach wird OSF
+  geloescht und anschliessend erneut gelesen. Nur OSF=0 und EOSC=0 schliessen
+  den RTC-Trust. EN32KHZ wird deaktiviert; SQW/INT bleiben ungenutzt.
 
 RECOMMENDATION=
-  DS3231_EOSC_REQUIRED=0 und DS3231_32KHZ_OUTPUT_R1=DISABLED. Fehler bei
-  Setzen, Readback, Kalender-/Controlvalidierung oder OSF-Clear lassen RTC-
-  Trust untrusted; kein Clear-first und kein stiller Erfolg.
+  DS3231M_EOSC_REQUIRED=0 und DS3231M_32KHZ_OUTPUT_R1=DISABLED. Die
+  Control-0x0E-Bits 4/3 werden als N/A behandelt; DS3231-RS1/RS2 werden nicht
+  angenommen. Fehler bei Setzen, Readback, Kalender-/Controlvalidierung oder
+  OSF-Clear lassen RTC-Trust untrusted; kein Clear-first und kein stiller
+  Erfolg.
 
 WHY=
   OSF=1 beweist untrusted RTC. EOSC darf den Battery-Backup-Oszillator nicht
@@ -969,7 +1004,7 @@ OWNER_DECISION_REQUIRED=NO
 
 ```text
 CURRENT_STATE=
-  Der DS3231-Kandidat verwendet esp-idf-lib/i2cdev. Der bisherige Plan
+  Der esp-idf-lib/ds3231-Kandidat verwendet esp-idf-lib/i2cdev. Der bisherige Plan
   beschrieb einen geteilten I2C-Lebensdauerowner, wies aber nicht explizit zu,
   ob i2cdev oder die Plattform den Bus auf einem Port erzeugt.
 
@@ -1082,9 +1117,10 @@ Abweichung benoetigt vor Umsetzung eine neue exakte Planrevision.
 
 ## 7. Bibliotheks- und Lizenz-Audit
 
-### 7.1 Pflichtkandidat DS3231
+### 7.1 Pflichtkandidat fuer DS3231M: esp-idf-lib/ds3231
 
-Der am 2026-08-28 live gepruefte Pflichtkandidat ist:
+Der am 2026-08-28 live gepruefte Library-Kandidat fuer die DS3231M-Hardware
+ist:
 
 ```text
 DS3231_COMPONENT_CANDIDATE=esp-idf-lib/ds3231
@@ -1112,10 +1148,43 @@ EOSC-Read/Write-API ist im geprueften v1.1.7-Header nicht vorhanden. Ebenso
 ist die von `ds3231_get_time()` bereits dekodierte `struct tm` allein kein
 Beweis fuer rohe BCD-Nibbles und reservierte Registerbits.
 
+Analog Devices beschreibt den DS3231M als footprint- und funktional
+DS3231-kompatibel. Diese Familienkompatibilitaet rechtfertigt die
+Kandidatenpruefung der bestehenden `esp-idf-lib/ds3231`-Komponente, aber nicht
+die Annahme byte-identischer Control-/Statusregister oder identischer
+optionaler Features. Der verbindliche Variantenvertrag ist das
+[DS3231M-Datenblatt von Analog Devices](https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231M.pdf).
+
+Der Registry-/Headertext nennt DS3231M nicht explizit. Der gemeinsame
+I2C-/Kalenderkern ist wegen der vom Hersteller beschriebenen DS3231-
+Kompatibilitaet ein Reuse-Kandidat, aber DS3231M darf nicht byte-identisch als
+DS3231 modelliert werden. Vor Adoption wird deshalb der tatsaechlich benoetigte
+R1-API-Subset gegen den DS3231M-Datenblattvertrag verifiziert:
+
+```text
+DS3231M_LIBRARY_COMPATIBILITY=UNVERIFIED_IMPLEMENTATION_GATE
+DS3231M_LIBRARY_ADOPTION=PROVISIONAL
+DS3231M_REQUIRED_API_SUBSET_INCOMPATIBLE=YES -> STOP_LIBRARY_ADOPTION_GATE
+
+I2C descriptor/lifecycle
+get time
+set time
+oscillator stop flag read and clear
+32kHz output disable
+raw Control/Status access via the allowed narrow shim
+EOSC verification
+calendar readback/validation
+```
+
+Die DS3231M-Registervariante ist verbindlich: Control 0x0E bit 7 ist EOSC,
+Control 0x0E bits 4 und 3 sind N/A, Status 0x0F bit 7 ist OSF und Status 0x0F
+bit 3 ist EN32KHZ. DS3231-RS1/RS2-Annahmen werden weder aus der Library noch
+aus dem DS3231-Datenblatt als DS3231M-Vertrag uebernommen.
+
 Der Projektvertrag begrenzt deshalb den R1-Kalender explizit:
 
 ```text
-R1_DS3231_SUPPORTED_UTC_YEAR_RANGE=2000..2099
+R1_DS3231M_SUPPORTED_UTC_YEAR_RANGE=2000..2099
 RTC_TIME_TRUSTED=NO_OUTSIDE_R1_YEAR_RANGE
 ```
 
@@ -1155,9 +1224,13 @@ Kompatibilitaetsnachweis.
 
 ```text
 REUSE_EXISTING_COMPONENT=YES_PROVISIONAL
-FULL_OWN_DS3231_DRIVER=NO
+DS3231M_LIBRARY_COMPATIBILITY=UNVERIFIED_IMPLEMENTATION_GATE
+DS3231M_LIBRARY_ADOPTION=PROVISIONAL
+DS3231M_REQUIRED_API_SUBSET_INCOMPATIBLE=UNVERIFIED_IMPLEMENTATION_GATE
+FULL_OWN_DS3231M_DRIVER=NO
+FULL_REGISTER_DRIVER=NO
 ALLOWED_NARROW_ADAPTER_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
-OWN_DS3231_REGISTER_DRIVER=NO
+NARROW_DS3231M_HEALTH_SHIM=YES_IF_REQUIRED
 ESP_IDF_6_0_2_COMPATIBILITY=UNVERIFIED_PLAN_GATE
 ESP32_TARGET_COMPATIBILITY=REGISTRY_DECLARED_NOT_BUILT
 ESP32S3_TARGET_COMPATIBILITY=REGISTRY_DECLARED_NOT_BUILT
@@ -1166,15 +1239,22 @@ OSF_ACCESS_CAPABILITY=API_PRESENT_NOT_RUN
 EOSC_ACCESS_CAPABILITY=PUBLIC_API_MISSING_NARROW_SHIM_REQUIRED_IF_ADOPTED
 EN32KHZ_ACCESS_CAPABILITY=DISABLE_API_PRESENT_NOT_RUN
 RAW_REGISTER_VALIDATION=SHIM_OR_EQUIVALENT_PROOF_REQUIRED
+RAW_REGISTER_VALIDATION_SOURCE=ANALOG_DEVICES_DS3231M_DATASHEET
+RAW_REGISTER_VALIDATION_VARIANT=DS3231M_DATASHEET
+DS3231M_NA_BITS_NOT_TREATED_AS_DS3231_RS_BITS=REQUIRED
+DS3231_SQUAREWAVE_RATE_API_REQUIRED=NO
+DS3231_AGING_OFFSET_API_REQUIRED=NO
+DS3231_TEMPERATURE_API_REQUIRED=NO
 THREAD_SAFETY=DEVICE/PORT_MUTEXES_DECLARED_NOT_INTEGRATED
 FLASH_RAM_COST=NOT_MEASURED
 LICENSE_NOTICE_REQUIREMENT=ALL_RESOLVED_COMPONENT_LICENSES_AND_NOTICES_RECORD
 MAINTENANCE_STATUS=REGISTRY_VERSION_LATEST_AT_AUDIT_DATE_MAINTAINER_DECLARED
 ```
 
-Die bevorzugte Umsetzung verwendet die DS3231-Komponente fuer den normalen
-Treibervertrag. Falls EOSC oder rohe Registervalidierung erforderlich sind,
-darf nur ein kleiner dokumentierter Health-/Trust-Shim im konkreten
+Die bevorzugte Umsetzung verwendet die `esp-idf-lib/ds3231`-Komponente fuer
+den normalen DS3231M-kompatiblen Kernvertrag. Falls EOSC oder rohe
+Registervalidierung erforderlich sind, darf nur ein kleiner dokumentierter
+DS3231M-Health-/Trust-Shim im konkreten
 `device_platform_esp_idf`-Adapter ueber die ohnehin vorhandene `i2cdev`-
 Transportebene ergaenzt werden. Er darf keine zweite allgemeine RTC-Library
 und keinen vollstaendigen Registertreiber bilden. Wenn dieser Shim wegen
@@ -1187,13 +1267,14 @@ STOP_LIBRARY_ADOPTION_GATE
 Dann wird ein Alternativkandidat mit neuer Planrevision verglichen; es gibt
 keinen stillen Eigenbau. Die Auswahl wird erst nach dem festen
 ESP-IDF-6.0.2-Compile-/Static-Test, Lockfilepruefung, Lizenzabdeckung und
-gezieltem Adaptertest endgueltig.
+gezieltem DS3231M-Adaptertest endgueltig.
 Die Registry-Lizenz- und Abhaengigkeitsangaben sind in diesem Plan referenziert:
 
-- [DS3231 Registry v1.1.7](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/readme?language=en)
-- [DS3231 v1.1.7 Manifest und Commit](https://github.com/esp-idf-lib/ds3231/blob/cbe14063d3f2bf39489e18d896c725b8111b5cc4/idf_component.yml)
-- [DS3231 API-Dokumentation](https://esp-idf-lib.github.io/ds3231/)
-- [DS3231-Abhaengigkeiten](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/dependencies?language=en)
+- [esp-idf-lib/ds3231 Registry v1.1.7](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/readme?language=en)
+- [esp-idf-lib/ds3231 v1.1.7 Manifest und Commit](https://github.com/esp-idf-lib/ds3231/blob/cbe14063d3f2bf39489e18d896c725b8111b5cc4/idf_component.yml)
+- [esp-idf-lib/ds3231 API-Dokumentation](https://esp-idf-lib.github.io/ds3231/)
+- [esp-idf-lib/ds3231-Abhaengigkeiten](https://components.espressif.com/components/esp-idf-lib/ds3231/versions/1.1.7/dependencies?language=en)
+- [Analog Devices DS3231M-Datenblatt](https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231M.pdf)
 - [i2cdev Registry](https://components.espressif.com/components/esp-idf-lib/i2cdev/versions/2.1.2/readme)
 - [ESP-IDF Systemzeit und SNTP](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/system/system_time.html)
 - [ESP-NETIF-SNTP-API](https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32/api-reference/network/esp_netif_programming.html)
@@ -1216,9 +1297,11 @@ Alle folgenden Schnitte beginnen erst nach Owner-Freigabe dieser Plan-SHA.
 - Die Komponente mit dem ESP Component Manager aufloesen; das projektweite
   erzeugte `dependencies.lock` versionieren und nicht manuell editieren.
 - `DEPENDENCY_OWNER_COMPONENT=lib/device_platform_esp_idf` bleibt eindeutig;
-  `device_platform` und `fermentation_app` erhalten keine DS3231-/i2cdev-
+  `device_platform` und `fermentation_app` erhalten keine
+  `esp-idf-lib/ds3231`-/i2cdev-
   Dependency.
-- Direkte und transitive Lizenzdateien/Notices fuer DS3231, `i2cdev`,
+- Direkte und transitive Lizenzdateien/Notices fuer die
+  `esp-idf-lib/ds3231`-Komponente, `i2cdev`,
   `esp_idf_lib_helpers`, `esp_netif` und I2C-Bestand erfassen.
 - `device_platform_esp_idf` um nur die konkret benoetigten ESP-IDF-
   Komponentenanforderungen erweitern.
@@ -1226,12 +1309,15 @@ Alle folgenden Schnitte beginnen erst nach Owner-Freigabe dieser Plan-SHA.
   mit gesperrten Aktoren.
 
 Abbruchsignal: Die Komponente baut nicht sauber gegen v6.0.2, benoetigt eine
-ungepruefte Legacy-I2C-API, verletzt den Lockfilevertrag, kann OSF nicht
-nachweisen oder ermoeglicht den untenstehenden Shared-I2C-Lifecycle nicht.
+ungepruefte Legacy-I2C-API, verletzt den Lockfilevertrag, kann den
+DS3231M-R1-API-Subset nicht gegen den DS3231M-Datenblattvertrag nachweisen
+oder ermoeglicht den untenstehenden Shared-I2C-Lifecycle nicht. Insbesondere
+gilt bei einem inkompatiblen benoetigten API-Subset:
 Dann Implementation anhalten, Befund dokumentieren und einen neuen Plan fuer
 einen begruendeten Alternativkandidaten vorlegen:
 
 ```text
+DS3231M_REQUIRED_API_SUBSET_INCOMPATIBLE=YES
 I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 ```
 
@@ -1239,10 +1325,11 @@ I2C_LIBRARY_ADOPTION_ABORT_GATE=STOP_LIBRARY_ADOPTION_GATE
 
 In `lib/device_platform_esp_idf`:
 
-- DS3231-Adapter fuer Erreichbarkeit, Register-/Kalenderread, UTC-Konvertierung,
-  `set_time`, Readback, OSF-Zugriff, EOSC-Vertrag und EN32kHz-Deaktivierung;
-- falls erforderlich der schmale dokumentierte Health-/Trust-Shim fuer rohe
-  Control-/Statusregister, ohne einen vollstaendigen Eigen-Treiber;
+- DS3231M-Adapter fuer Erreichbarkeit, Register-/Kalenderread,
+  UTC-Konvertierung, `set_time`, Readback, OSF-Zugriff, EOSC-Vertrag und
+  EN32KHZ-Deaktivierung gegen die DS3231M-Bitsemantik;
+- falls erforderlich der schmale dokumentierte DS3231M-Health-/Trust-Shim fuer
+  rohe Control-/Statusregister, ohne einen vollstaendigen Eigen-Treiber;
 - `i2cdev` als I2C-Port-/Device-Lebensdauerowner bei Adoption, mit seinem
   kanonischen per-Port Bus-Handle, Mutex-, Device-Registry- und
   Reference-Count-Vertrag;
@@ -1272,6 +1359,9 @@ ESP-IDF-/FreeRTOS-Lebensdauer und Thread-Sicherheit serialisiert. Ein NTP-
 
 - Das kanonische Boardprofil um `rtc.present`, `rtc.type`, `rtc.bus`,
   `rtc.sda`, `rtc.scl` und `rtc.address` erweitern.
+- `rtc.type=DS3231M`, `RTC_FAMILY=DS3231_COMPATIBLE` und `rtc.address=0x68`
+  werden semantisch festgelegt; Bus und Pins bleiben verifiziertes
+  Boardprofilmaterial und werden nicht geraten.
 - Keine `TBD_HARDWARE`-Zahl in eine produktive Konfiguration uebernehmen.
 - `main/app_main.cpp` bleibt der Composition Root fuer Erstellung, Besitz,
   Lebensdauer und Injektion der konkreten Plattformobjekte.
@@ -1294,14 +1384,29 @@ ESP-IDF-/FreeRTOS-Lebensdauer und Thread-Sicherheit serialisiert. Ein NTP-
 
 ### Schnitt D – Host/Fake-I2C und Arbitration
 
-Die digitale Testschicht muss ohne reale Uhr, Netzwerk oder DS3231 auskommen:
+Die digitale Testschicht muss ohne reale Uhr, Netzwerk oder DS3231M auskommen:
 
 - Fake-I2C-Registertransporte fuer erreichbares/nicht erreichbares Geraet,
   Read-/Write-Fehler und konkurrierende Zugriffe;
-- gueltige/ungueltige rohe BCD-, Control-, Status- und Kalenderwerte,
+- gueltige/ungueltige rohe BCD-, DS3231M-Control-, DS3231M-Status- und
+  Kalenderwerte,
   einschliesslich 12-/24-Stunden-Encoding, reservierter Bits und 2000..2099;
-- OSF=0/1, EOSC=0/1 und EN32kHz; OSF-Clear erst nach erfolgreichem Setzen,
-  Readback, Kalender-/Controlvalidierung und finalem OSF-Readback;
+- DS3231M-OSF=0/1, EOSC=0/1 und EN32KHZ; OSF-Clear erst nach erfolgreichem
+  Setzen, Readback, Kalender-/Controlvalidierung und finalem OSF-Readback;
+- `DS3231M_CALENDAR_READ_WRITE`: R1-Kalender ueber die DS3231M-Register
+  lesen/schreiben und 2000..2099 validieren;
+- `DS3231M_OSF_READ_CLEAR_SEQUENCE`: OSF lesen, erst nach validiertem Setzen
+  und Readback loeschen und final erneut lesen;
+- `DS3231M_EOSC_VALIDATION`: EOSC=0 als Batterie-/Trust-Voraussetzung
+  nachweisen;
+- `DS3231M_EN32KHZ_DISABLE`: den ungenutzten Ausgang deaktivieren und
+  Readback pruefen;
+- `DS3231M_RAW_CONTROL_STATUS_VALIDATION`: Control-/Statusbits gegen das
+  DS3231M-Datenblatt validieren;
+- `DS3231M_NA_BITS_NOT_TREATED_AS_DS3231_RS_BITS`: Control 0x0E bits 4/3
+  nicht als DS3231-RS1/RS2 verwenden;
+- `DS3231M_LIBRARY_API_SUBSET_COMPATIBILITY`: den benoetigten R1-Subset der
+  Library vor Adoption gegen DS3231M pruefen;
 - RTC-Bootseed, `rtc.present=false`, fehlender/untrusted RTC und vollwertiger
   NTP-only-Pfad;
 - normaler ESP-IDF-Smooth-Sync mit `IN_PROGRESS` ohne RTC-Write und
@@ -1352,7 +1457,7 @@ Die digitale Testschicht muss ohne reale Uhr, Netzwerk oder DS3231 auskommen:
   am selben Startgate abgewiesen;
 - `NEW_RUN_CAN_CREATE_UTC_LESS_RECOVERY_ANCHOR=NO`: ein abgewiesener Start
   veraendert keine produktive Run-/Checkpointstruktur;
-- `ONE_I2C_PORT_ONE_BUS_OWNER`: DS3231 und ein zweites Fake-Device teilen
+- `ONE_I2C_PORT_ONE_BUS_OWNER`: DS3231M und ein zweites Fake-Device teilen
   einen Port mit genau einem Bus-Lifecycle und ohne doppelte Master-Erzeugung;
 - `PIN_CONFLICT`: ein zweites Device mit abweichendem SDA/SCL fuer denselben
   Port wird abgewiesen und konfiguriert den Bus nicht still um;
@@ -1382,6 +1487,9 @@ F2_SHARED_I2C_OWNERSHIP=REQUIRED
 R1_CURRENT_FERMENTING_CHECKPOINT_GUARD=REQUIRED
 FERMENTING_MUTATION_TRUST_GUARD=REQUIRED
 PERSISTENCE_WRITE_INVARIANT=REQUIRED
+DS3231M_LIBRARY_API_SUBSET_COMPATIBILITY=REQUIRED
+DS3231M_RAW_CONTROL_STATUS_VALIDATION=REQUIRED
+DS3231M_OSF_EOSC_EN32KHZ_CONTRACT=REQUIRED
 FULL_NATIVE_SUITE=REQUIRED_BEFORE_OWNER_FINAL_IMPLEMENTATION_REVIEW
 ESP_IDF_BRINGUP_BUILD=REQUIRED
 ESP_IDF_RELEASE_BUILD=REQUIRED
@@ -1431,6 +1539,8 @@ Der Nachweis muss fuer `esp32_bringup` und `esp32_release` pruefen:
 - moderne I2C-Master-API ohne unkontrollierte Legacy-Driver-Annahme;
 - bei Adoption genau ein `i2cdev`-Busowner je konfiguriertem Port und kein
   zweiter `i2c_master_bus_handle_t` fuer denselben Port;
+- DS3231M-API-Subset und Control-/Status-Reserved-Bits gegen das
+  DS3231M-Datenblatt, nicht nur gegen den DS3231-Header;
 - korrekte `REQUIRES`-/Lockfile-/Lizenzabdeckung;
 - `ESP_CLANG_BRINGUP=REQUIRED` und `ESP_CLANG_RELEASE=REQUIRED` mit dem
   kanonischen Static-Analysis-Treiber;
@@ -1492,10 +1602,19 @@ Implementierungs-Head ausgefuehrt.
 
 ## 11. Definition of Done fuer die spaetere Umsetzung
 
-- [ ] DS3231-Komponentenkandidat gegen ESP-IDF 6.0.2 gebaut oder begruendet
-      verworfen; kein vollstaendiger Eigen-Registertreiber.
+- [ ] `esp-idf-lib/ds3231`-Komponentenkandidat gegen ESP-IDF 6.0.2 gebaut oder
+      begruendet verworfen; der R1-API-Subset ist gegen DS3231M validiert und
+      es gibt keinen vollstaendigen Eigen-Registertreiber.
+- [ ] DS3231M wird als DS3231_COMPATIBLE wiederverwendet, aber nicht
+      byte-identisch modelliert; Control-/Status-N/A-/fixed-bit-Semantik folgt
+      dem DS3231M-Datenblatt und RS1/RS2 werden nicht angenommen.
+- [ ] DS3231M-Library-Compatibility bleibt bis zum festen Spike
+      UNVERIFIED_IMPLEMENTATION_GATE und Adoption bleibt PROVISIONAL.
+- [ ] Der benoetigte DS3231M-R1-API-Subset fuer I2C-Lifecycle, Kalender,
+      Set/Get, OSF, EOSC, EN32KHZ, Readback und Raw-Registervalidierung ist
+      nachgewiesen; bei Inkompatibilitaet greift STOP_LIBRARY_ADOPTION_GATE.
 - [ ] `rtc.present=false` als fehlerfreien NTP-only-Modus und
-      `rtc.present=true` als optionalen DS3231-Pfad nachgewiesen.
+      `rtc.present=true` als optionalen DS3231M-Pfad nachgewiesen.
 - [ ] Direkte Dependencies, feste Lockfile-Versionen, Lizenzen und Notices
       nachgewiesen.
 - [ ] Component-Manager-Manifest liegt ausschliesslich unter
@@ -1537,9 +1656,12 @@ Implementierungs-Head ausgefuehrt.
 - [ ] `unixTimeSeconds()` liefert nur bei trusted System-UTC, oberhalb des
       bootlokalen High-Water, und sonst `nullopt`.
 - [ ] RTC-Trust prueft Reachability, Rohregister/gleichwertigen Beweis,
-      Kalender 2000..2099, OSF=0 und EOSC=0.
+      Kalender 2000..2099, OSF=0 und EOSC=0 nach dem DS3231M-Datenblatt.
 - [ ] OSF wird erst nach bewusstem validiertem Setzen/Readback/Clear und
-      finalem OSF-Readback geschlossen; EN32kHz ist deaktiviert.
+      finalem OSF-Readback geschlossen; DS3231M-EN32KHZ ist deaktiviert.
+- [ ] DS3231M-Kalender-Read/Write, OSF-Read/Clear-Sequenz, EOSC-Validierung,
+      EN32KHZ-Deaktivierung, Raw-Control-/Statusvalidierung, N/A-Bit-Schutz
+      und der Library-API-Subset sind gezielt getestet.
 - [ ] RTC-Seed, NTP-Systemzeit und NTP-zu-RTC-Sync sind getestet.
 - [ ] Smooth-Sync schreibt waehrend `IN_PROGRESS` nicht in die RTC und schreibt
       genau nach `COMPLETED` mit konvergierter UTC.
@@ -1576,7 +1698,9 @@ PLAN_PATH=docs/tasks/issue-126-absolute-time-rtc-ntp-plan.md
 PLAN_SHA=RECORDED_IN_PR127_AND_SESSION_HANDOVER
 
 TIME_ARCHITECTURE=RTC_DS3231_PLUS_NTP
-RTC_DEVICE=DS3231
+RTC_DEVICE=DS3231M
+RTC_FAMILY=DS3231_COMPATIBLE
+RTC_I2C_ADDRESS=0x68
 RTC_STORAGE_TIMEZONE=UTC
 RTC_TRUST_OSF=OSF_1_MEANS_RTC_TIME_TRUSTED_NO
 NTP_IMPLEMENTATION=ESP_IDF_SNTP
@@ -1615,14 +1739,31 @@ WIFI_LOSS_AFTER_SUCCESSFUL_NTP_SYNC_INVALIDATES_CURRENT_BOOT_TIME=NO
 NTP_SERVER_UNREACHABLE_AFTER_SUCCESSFUL_SYNC_INVALIDATES_CURRENT_BOOT_TIME=NO
 RTC_UNREACHABLE_AFTER_SUCCESSFUL_BOOT_SEED_INVALIDATES_CURRENT_BOOT_TIME=NO
 
-DS3231_EOSC_REQUIRED=0
-DS3231_32KHZ_OUTPUT_R1=DISABLED
+DS3231M_EOSC_REQUIRED=0
+DS3231M_32KHZ_OUTPUT_R1=DISABLED
 SQW_INT_R1=UNUSED
-R1_DS3231_SUPPORTED_UTC_YEAR_RANGE=2000..2099
+R1_DS3231M_SUPPORTED_UTC_YEAR_RANGE=2000..2099
 RAW_REGISTER_VALIDATION=REQUIRED
-NARROW_DS3231_HEALTH_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
-FULL_OWN_DS3231_DRIVER=NO
+RAW_REGISTER_VALIDATION_SOURCE=ANALOG_DEVICES_DS3231M_DATASHEET
+RAW_REGISTER_VALIDATION_VARIANT=DS3231M_DATASHEET
+DS3231M_NA_BITS_NOT_TREATED_AS_DS3231_RS_BITS=REQUIRED
+NARROW_DS3231M_HEALTH_SHIM=YES_IF_REQUIRED
+FULL_OWN_DS3231M_DRIVER=NO
+FULL_REGISTER_DRIVER=NO
 ALLOWED_NARROW_ADAPTER_SHIM=YES_IF_REQUIRED_FOR_EOSC_AND_RAW_REGISTER_VALIDATION
+DS3231M_LIBRARY_COMPATIBILITY=UNVERIFIED_IMPLEMENTATION_GATE
+DS3231M_LIBRARY_ADOPTION=PROVISIONAL
+DS3231M_REQUIRED_API_SUBSET_INCOMPATIBLE=UNVERIFIED_IMPLEMENTATION_GATE
+DS3231_SQUAREWAVE_RATE_API_REQUIRED=NO
+DS3231_AGING_OFFSET_API_REQUIRED=NO
+DS3231_TEMPERATURE_API_REQUIRED=NO
+
+DS3231M_CALENDAR_READ_WRITE=REQUIRED
+DS3231M_OSF_READ_CLEAR_SEQUENCE=REQUIRED
+DS3231M_EOSC_VALIDATION=REQUIRED
+DS3231M_EN32KHZ_DISABLE=REQUIRED
+DS3231M_RAW_CONTROL_STATUS_VALIDATION=REQUIRED
+DS3231M_LIBRARY_API_SUBSET_COMPATIBILITY=REQUIRED
 
 R1_CURRENT_FERMENTING_CHECKPOINT_REQUIRES_TRUSTED_UTC=YES
 UTC_LESS_CURRENT_FERMENTING_COMMIT=FORBIDDEN
