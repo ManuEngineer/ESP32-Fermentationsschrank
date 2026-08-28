@@ -142,7 +142,7 @@ class ActiveRun {
     // Der Tag ist absichtlich nur innerhalb von ActiveRun erzeugbar. Er
     // erlaubt std::optional eine direkte Konstruktion ohne einen
     // stack-schweren ActiveRun-Temporary.
-    ActiveRun(RestoreConstructionTag, RunProgramSnapshot snapshot,
+    ActiveRun(RestoreConstructionTag restoreTag, RunProgramSnapshot snapshot,
               EffectiveRunValues initialValues);
 
     [[nodiscard]] static std::optional<ActiveRun> start(

@@ -813,7 +813,6 @@ void decideProgramStartInto(const RunCommandState& current,
     decision.after.sensorSelectionRuntime = outcome.runtime;
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
-    return;
 }
 
 void decideManualStartInto(const RunCommandState& current,
@@ -892,7 +891,6 @@ void decideManualStartInto(const RunCommandState& current,
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
-    return;
 }
 
 CommandDecision decideProgramStart(const RunCommandState& current,

@@ -167,114 +167,130 @@ bool FermentationApplication::beginPersistent(
     runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
 
     persistenceLoadStatus_ = loadResult->status;
-    const auto* snapshot =
-        loadResult->snapshot.has_value() ? &*loadResult->snapshot : nullptr;
+    const RunPersistenceSnapshot* snapshot = nullptr;
+    if (loadResult->snapshot.has_value()) {
+        snapshot = loadResult->snapshot.operator->();
+    }
     loadDisposition_ =
         boot_classification::classifyRunLoad(loadResult->status, snapshot);
     const auto classification =
         boot_classification::classify(loadResult->status, snapshot);
 
     const RunCheckpointTime bootTime = currentCheckpointTime();
-    switch (classification) {
-        case BootClassification::NoRun:
-            if (!publishStandby()) {
-                return true;
-            }
-            break;
-        case BootClassification::ResumeOffer:
-            if (snapshot == nullptr) {
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            pendingResume_ = std::unique_ptr<RunCommandState>{
-                new (std::nothrow) RunCommandState{}};
-            if (pendingResume_ == nullptr) {
-                requireService(FaultCode::None, true);
-                return true;
-            }
-            if (!restoreRunPersistenceSnapshotInto(*snapshot,
-                                                   *pendingResume_)) {
-                pendingResume_.reset();
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            break;
-        case BootClassification::RecoveryEvaluation: {
-            if (snapshot == nullptr) {
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            pendingRecoverySource_ = std::unique_ptr<RunCommandState>{
-                new (std::nothrow) RunCommandState{}};
-            if (pendingRecoverySource_ == nullptr) {
-                requireService(FaultCode::None, true);
-                return true;
-            }
-            if (!restoreRunPersistenceSnapshotInto(*snapshot,
-                                                   *pendingRecoverySource_)) {
-                pendingRecoverySource_.reset();
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            const auto evaluation =
-                runPersistenceCoordinator_->evaluateCurrentFermentingRecovery(
-                    *pendingRecoverySource_, bootTime);
-            recoveryDisposition_ = evaluation.disposition;
-            if (evaluation.disposition ==
-                RecoveryDisposition::WaitingForTrustedTime) {
-                if (!enterRecoveryEvaluationRamState(*pendingRecoverySource_)) {
-                    return true;
-                }
-                break;
-            }
-            if (evaluation.disposition ==
-                RecoveryDisposition::CurrentRunRecoverable) {
-                runtimeRunState_ = std::move(pendingRecoverySource_);
-                break;
-            }
-            if (!enterRecoveryEvaluationRamState(*pendingRecoverySource_)) {
-                return true;
-            }
-            break;
-        }
-        case BootClassification::DiscardableRun:
-        case BootClassification::CompletedRun:
-        case BootClassification::TerminalRunFault: {
-            if (snapshot == nullptr) {
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            auto target = std::unique_ptr<RunCommandState>{
-                new (std::nothrow) RunCommandState{}};
-            if (target == nullptr) {
-                requireService(FaultCode::None, true);
-                return true;
-            }
-            if (!restoreRunPersistenceSnapshotInto(*snapshot, *target)) {
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-
-            const auto persisted =
-                classification == BootClassification::DiscardableRun
-                    ? runPersistenceCoordinator_->discardAsNoActiveRun(*target,
-                                                                       bootTime)
-                    : runPersistenceCoordinator_->activateR1EligibleRun(
-                          *target, bootTime, nullptr);
-            if (persisted.status != RunPersistenceResultStatus::Applied) {
-                requireService(FaultCode::RunPersistenceUntrusted);
-                return true;
-            }
-            runtimeRunState_ = std::move(target);
-            break;
-        }
-        case BootClassification::SafeBoot:
-        case BootClassification::Unresolved:
-            requireService(FaultCode::RunPersistenceUntrusted);
-            return true;
+    if (!processBootClassification(classification, snapshot, bootTime)) {
+        return true;
     }
 
     lifecycleState_ = ApplicationLifecycleState::Ready;
+    return true;
+}
+
+bool FermentationApplication::processBootClassification(
+    BootClassification classification, const RunPersistenceSnapshot* snapshot,
+    const RunCheckpointTime& bootTime) {
+    switch (classification) {
+        case BootClassification::NoRun:
+            return publishStandby();
+        case BootClassification::ResumeOffer:
+            return prepareResumeOffer(snapshot);
+        case BootClassification::RecoveryEvaluation:
+            return evaluateCurrentRecovery(snapshot, bootTime);
+        case BootClassification::DiscardableRun:
+        case BootClassification::CompletedRun:
+        case BootClassification::TerminalRunFault:
+            return processTerminalClassification(classification, snapshot,
+                                                 bootTime);
+        case BootClassification::SafeBoot:
+        case BootClassification::Unresolved:
+            requireService(FaultCode::RunPersistenceUntrusted);
+            return false;
+    }
+    requireService(FaultCode::RunPersistenceUntrusted);
+    return false;
+}
+
+bool FermentationApplication::prepareResumeOffer(
+    const RunPersistenceSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    pendingResume_ =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (pendingResume_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    if (!restoreRunPersistenceSnapshotInto(*snapshot, *pendingResume_)) {
+        pendingResume_.reset();
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    return true;
+}
+
+bool FermentationApplication::evaluateCurrentRecovery(
+    const RunPersistenceSnapshot* snapshot, const RunCheckpointTime& bootTime) {
+    if (snapshot == nullptr) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    pendingRecoverySource_ =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (pendingRecoverySource_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    if (!restoreRunPersistenceSnapshotInto(*snapshot,
+                                           *pendingRecoverySource_)) {
+        pendingRecoverySource_.reset();
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+
+    const auto evaluation =
+        runPersistenceCoordinator_->evaluateCurrentFermentingRecovery(
+            *pendingRecoverySource_, bootTime);
+    recoveryDisposition_ = evaluation.disposition;
+    if (evaluation.disposition == RecoveryDisposition::WaitingForTrustedTime) {
+        return enterRecoveryEvaluationRamState(*pendingRecoverySource_);
+    }
+    if (evaluation.disposition == RecoveryDisposition::CurrentRunRecoverable) {
+        runtimeRunState_ = std::move(pendingRecoverySource_);
+        return true;
+    }
+    return enterRecoveryEvaluationRamState(*pendingRecoverySource_);
+}
+
+bool FermentationApplication::processTerminalClassification(
+    BootClassification classification, const RunPersistenceSnapshot* snapshot,
+    const RunCheckpointTime& bootTime) {
+    if (snapshot == nullptr) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    auto target =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (target == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    if (!restoreRunPersistenceSnapshotInto(*snapshot, *target)) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+
+    const auto persisted =
+        classification == BootClassification::DiscardableRun
+            ? runPersistenceCoordinator_->discardAsNoActiveRun(*target,
+                                                               bootTime)
+            : runPersistenceCoordinator_->activateR1EligibleRun(
+                  *target, bootTime, nullptr);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    runtimeRunState_ = std::move(target);
     return true;
 }
 
@@ -282,7 +298,9 @@ void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
 
 RunCheckpointTime FermentationApplication::currentCheckpointTime()
     const noexcept {
-    if (timeSource_ == nullptr) return RunCheckpointTime{};
+    if (timeSource_ == nullptr) {
+        return RunCheckpointTime{};
+    }
     return RunCheckpointTime{timeSource_->monotonicMillis(),
                              timeSource_->unixTimeSeconds()};
 }
@@ -320,8 +338,9 @@ void FermentationApplication::reevaluateWaitingForTrustedTime() {
         runPersistenceCoordinator_->evaluateCurrentFermentingRecovery(
             *pendingRecoverySource_, currentCheckpointTime());
     recoveryDisposition_ = evaluation.disposition;
-    if (evaluation.disposition == RecoveryDisposition::WaitingForTrustedTime)
+    if (evaluation.disposition == RecoveryDisposition::WaitingForTrustedTime) {
         return;
+    }
     if (evaluation.disposition == RecoveryDisposition::CurrentRunRecoverable) {
         runtimeRunState_ = std::move(pendingRecoverySource_);
         return;

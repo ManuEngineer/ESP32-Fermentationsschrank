@@ -36,6 +36,11 @@ enum class ApplicationLifecycleState : std::uint8_t {
 
 class FermentationApplication {
    public:
+    FermentationApplication() = default;
+    FermentationApplication(const FermentationApplication&) = delete;
+    FermentationApplication& operator=(const FermentationApplication&) = delete;
+    FermentationApplication(FermentationApplication&&) = delete;
+    FermentationApplication& operator=(FermentationApplication&&) = delete;
     ~FermentationApplication();
 
     [[nodiscard]] bool begin(
@@ -81,6 +86,19 @@ class FermentationApplication {
         const device_platform::ITimeZoneResolver& timeZoneResolver,
         const device_platform::ITimeSource* timeSource,
         const device_platform::IResetCauseSource* resetCauseSource);
+    [[nodiscard]] bool processBootClassification(
+        BootClassification classification,
+        const RunPersistenceSnapshot* snapshot,
+        const RunCheckpointTime& bootTime);
+    [[nodiscard]] bool prepareResumeOffer(
+        const RunPersistenceSnapshot* snapshot);
+    [[nodiscard]] bool evaluateCurrentRecovery(
+        const RunPersistenceSnapshot* snapshot,
+        const RunCheckpointTime& bootTime);
+    [[nodiscard]] bool processTerminalClassification(
+        BootClassification classification,
+        const RunPersistenceSnapshot* snapshot,
+        const RunCheckpointTime& bootTime);
     [[nodiscard]] RunCheckpointTime currentCheckpointTime() const noexcept;
     [[nodiscard]] bool enterRecoveryEvaluationRamState(
         const RunCommandState& source);
