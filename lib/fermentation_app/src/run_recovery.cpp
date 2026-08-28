@@ -49,10 +49,14 @@ RunPersistenceResult activateWith(
             return outcome.persistenceResult;
         }
         case RunPersistenceCoordinatorState::FallbackRecoveryPending: {
-            const auto outcome = persistence.activateFallbackRecoveredRun(
-                current, time, liveSensorEvidence);
-            current = outcome.resultingState;
-            return outcome.persistenceResult;
+            // #124 keeps the #90 fallback as a non-activating offer. There is
+            // no canonical explicit fallback-selection command in R1, so the
+            // generic automatic activation entry point must not promote it.
+            static_cast<void>(current);
+            static_cast<void>(time);
+            static_cast<void>(liveSensorEvidence);
+            return coordinatorResult(RunPersistenceResultStatus::NotEligible,
+                                     persistence.state());
         }
         case RunPersistenceCoordinatorState::ReadyEmpty:
             return coordinatorResult(RunPersistenceResultStatus::NoActiveRun,

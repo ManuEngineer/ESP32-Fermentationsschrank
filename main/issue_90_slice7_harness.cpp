@@ -115,6 +115,8 @@ const char* runLoadDispositionName(RunLoadDisposition value) noexcept {
             return "Standby";
         case RunLoadDisposition::ResumeOffer:
             return "ResumeOffer";
+        case RunLoadDisposition::RecoveryEvaluation:
+            return "RecoveryEvaluation";
         case RunLoadDisposition::NoActiveRun:
             return "NoActiveRun";
         case RunLoadDisposition::Completed:

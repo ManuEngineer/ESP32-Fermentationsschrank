@@ -40,6 +40,8 @@ bool FermentationApplication::begin(
     }
 
     platformServices_ = &platformServices;
+    timeSource_ = nullptr;
+    recoveryDisposition_.reset();
     lifecycleState_ = ApplicationLifecycleState::Ready;
     presentationState_ = PresentationState{};
     presentationState_.resetCause = resetCauseSource == nullptr
@@ -53,11 +55,32 @@ bool FermentationApplication::begin(
     device_platform::IStateStore& store,
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver, nullptr,
+                           resetCauseSource);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource);
+}
+
+bool FermentationApplication::beginPersistent(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource* timeSource,
+    const device_platform::IResetCauseSource* resetCauseSource) {
     if (!platformServices.ready()) {
         return false;
     }
 
     platformServices_ = &platformServices;
+    timeSource_ = timeSource;
     lifecycleState_ = ApplicationLifecycleState::Initializing;
     presentationState_ = PresentationState{};
     presentationState_.resetCause = resetCauseSource == nullptr
@@ -69,6 +92,8 @@ bool FermentationApplication::begin(
     configurationRecoveryStatus_.reset();
 #endif
     pendingResume_.reset();
+    pendingRecoverySource_.reset();
+    recoveryDisposition_.reset();
     runtimeRunState_.reset();
     runPersistenceCoordinator_.reset();
     configurationService_.reset();
@@ -149,7 +174,7 @@ bool FermentationApplication::begin(
     const auto classification =
         boot_classification::classify(loadResult->status, snapshot);
 
-    const RunCheckpointTime bootTime{};
+    const RunCheckpointTime bootTime = currentCheckpointTime();
     switch (classification) {
         case BootClassification::NoRun:
             if (!publishStandby()) {
@@ -174,6 +199,44 @@ bool FermentationApplication::begin(
                 return true;
             }
             break;
+        case BootClassification::RecoveryEvaluation: {
+            if (snapshot == nullptr) {
+                requireService(FaultCode::RunPersistenceUntrusted);
+                return true;
+            }
+            pendingRecoverySource_ = std::unique_ptr<RunCommandState>{
+                new (std::nothrow) RunCommandState{}};
+            if (pendingRecoverySource_ == nullptr) {
+                requireService(FaultCode::None, true);
+                return true;
+            }
+            if (!restoreRunPersistenceSnapshotInto(*snapshot,
+                                                   *pendingRecoverySource_)) {
+                pendingRecoverySource_.reset();
+                requireService(FaultCode::RunPersistenceUntrusted);
+                return true;
+            }
+            const auto evaluation =
+                runPersistenceCoordinator_->evaluateCurrentFermentingRecovery(
+                    *pendingRecoverySource_, bootTime);
+            recoveryDisposition_ = evaluation.disposition;
+            if (evaluation.disposition ==
+                RecoveryDisposition::WaitingForTrustedTime) {
+                if (!enterRecoveryEvaluationRamState(*pendingRecoverySource_)) {
+                    return true;
+                }
+                break;
+            }
+            if (evaluation.disposition ==
+                RecoveryDisposition::CurrentRunRecoverable) {
+                runtimeRunState_ = std::move(pendingRecoverySource_);
+                break;
+            }
+            if (!enterRecoveryEvaluationRamState(*pendingRecoverySource_)) {
+                return true;
+            }
+            break;
+        }
         case BootClassification::DiscardableRun:
         case BootClassification::CompletedRun:
         case BootClassification::TerminalRunFault: {
@@ -215,8 +278,55 @@ bool FermentationApplication::begin(
     return true;
 }
 
-void FermentationApplication::update() {
-    // Die Fermentationslogik wird issueweise in diesem Modul implementiert.
+void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
+
+RunCheckpointTime FermentationApplication::currentCheckpointTime()
+    const noexcept {
+    if (timeSource_ == nullptr) return RunCheckpointTime{};
+    return RunCheckpointTime{timeSource_->monotonicMillis(),
+                             timeSource_->unixTimeSeconds()};
+}
+
+bool FermentationApplication::enterRecoveryEvaluationRamState(
+    const RunCommandState& source) {
+    auto target =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (target == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    *target = source;
+    const auto now = currentCheckpointTime().monotonicMillis;
+    if (runPersistenceCoordinator_ == nullptr ||
+        !runPersistenceCoordinator_->prepareRecoveryEvaluationState(*target,
+                                                                    now)) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    runtimeRunState_ = std::move(target);
+    loadDisposition_ = RunLoadDisposition::RecoveryEvaluation;
+    return true;
+}
+
+void FermentationApplication::reevaluateWaitingForTrustedTime() {
+    if (!recoveryDisposition_.has_value() ||
+        *recoveryDisposition_ != RecoveryDisposition::WaitingForTrustedTime ||
+        pendingRecoverySource_ == nullptr ||
+        runPersistenceCoordinator_ == nullptr || timeSource_ == nullptr) {
+        return;
+    }
+
+    const auto evaluation =
+        runPersistenceCoordinator_->evaluateCurrentFermentingRecovery(
+            *pendingRecoverySource_, currentCheckpointTime());
+    recoveryDisposition_ = evaluation.disposition;
+    if (evaluation.disposition == RecoveryDisposition::WaitingForTrustedTime)
+        return;
+    if (evaluation.disposition == RecoveryDisposition::CurrentRunRecoverable) {
+        runtimeRunState_ = std::move(pendingRecoverySource_);
+        return;
+    }
+    static_cast<void>(enterRecoveryEvaluationRamState(*pendingRecoverySource_));
 }
 
 bool FermentationApplication::ready() const {

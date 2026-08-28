@@ -10,6 +10,7 @@ enum class BootClassification : std::uint8_t {
     Unresolved,
     NoRun,
     ResumeOffer,
+    RecoveryEvaluation,
     DiscardableRun,
     CompletedRun,
     TerminalRunFault,
@@ -19,6 +20,7 @@ enum class BootClassification : std::uint8_t {
 enum class RunLoadDisposition : std::uint8_t {
     Standby,
     ResumeOffer,
+    RecoveryEvaluation,
     NoActiveRun,
     Completed,
     TerminalFault,

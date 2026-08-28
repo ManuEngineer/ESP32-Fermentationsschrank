@@ -228,6 +228,7 @@ ActuationEvaluation ActuationInterlock::evaluate(
                                            evidence.loadDisposition))
                 result.permission = ActuatorSafetyGateStatus::Allowed;
             break;
+        case RunLoadDisposition::RecoveryEvaluation:
         case RunLoadDisposition::NoActiveRun:
         case RunLoadDisposition::Completed:
         case RunLoadDisposition::TerminalFault:
