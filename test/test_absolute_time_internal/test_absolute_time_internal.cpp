@@ -78,6 +78,23 @@ void test_invalid_calendar_day_month_and_leap_year_are_rejected() {
     TEST_ASSERT_FALSE(internal::validateCalendar(invalidMonth.calendar));
 }
 
+void test_month_reserved_and_century_bits_are_rejected() {
+    for (const std::uint8_t invalidMonth : {0x21U, 0x41U, 0x61U, 0x81U}) {
+        auto raw = validRaw();
+        raw.calendar[5] = invalidMonth;
+        TEST_ASSERT_FALSE(internal::validateCalendar(raw.calendar));
+        TEST_ASSERT_FALSE(
+            internal::rawCalendarToUnix(raw.calendar).has_value());
+    }
+
+    for (unsigned month = 1U; month <= 12U; ++month) {
+        auto raw = validRaw();
+        raw.calendar[5] = bcd(month);
+        TEST_ASSERT_TRUE(internal::validateCalendar(raw.calendar));
+        TEST_ASSERT_TRUE(internal::rawCalendarToUnix(raw.calendar).has_value());
+    }
+}
+
 void test_year_outside_r1_contract_is_rejected() {
     ::tm value{};
     TEST_ASSERT_FALSE(
@@ -211,6 +228,9 @@ struct SyncFake {
     bool failReadOsf{false};
     bool failClearOsf{false};
     bool mismatchAfterSet{false};
+    bool malformedFirstReadback{false};
+    std::array<std::int64_t, 3> scriptedReadbacks{};
+    std::size_t scriptedReadbackCount{0U};
     int setCalls{0};
     int readCalls{0};
     int writeControlCalls{0};
@@ -244,6 +264,20 @@ bool syncReadRaw(void* context, internal::Ds3231SnRawRegisters& raw) {
     ++fake.readCalls;
     if (fake.failRead || fake.failReadAt == fake.readCalls) return false;
     raw = fake.raw;
+    if (fake.scriptedReadbackCount > 0U &&
+        static_cast<std::size_t>(fake.readCalls) <=
+            fake.scriptedReadbackCount) {
+        ::tm value{};
+        if (!internal::unixToDs3231Tm(
+                fake.scriptedReadbacks[static_cast<std::size_t>(fake.readCalls -
+                                                                1)],
+                value)) {
+            return false;
+        }
+        encodeCalendar(value, raw.calendar);
+    }
+    if (fake.malformedFirstReadback && fake.readCalls == 1)
+        raw.calendar[0] = 0x6AU;
     return true;
 }
 
@@ -310,6 +344,55 @@ void test_rtc_sync_readback_mismatch_is_untrusted() {
     TEST_ASSERT_FALSE(
         internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), syncUtc()));
     TEST_ASSERT_EQUAL_INT(1, fake.setCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.readCalls);
+}
+
+void test_rtc_sync_allows_normal_forward_second_rollover() {
+    SyncFake fake;
+    fake.scriptedReadbacks = {syncUtc(), syncUtc() + 1, syncUtc() + 1};
+    fake.scriptedReadbackCount = 3U;
+
+    TEST_ASSERT_TRUE(
+        internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), syncUtc()));
+    TEST_ASSERT_EQUAL_INT(3, fake.readCalls);
+}
+
+void test_rtc_sync_allows_midnight_forward_second_rollover() {
+    SyncFake fake;
+    const auto target = expectedUtc(2024, 2U, 29U, 23U, 59U, 59U);
+    fake.scriptedReadbacks = {target, target + 1, target + 1};
+    fake.scriptedReadbackCount = 3U;
+
+    TEST_ASSERT_TRUE(
+        internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), target));
+}
+
+void test_rtc_sync_rejects_backward_readback() {
+    SyncFake fake;
+    fake.scriptedReadbacks = {syncUtc(), syncUtc() - 1, syncUtc() - 1};
+    fake.scriptedReadbackCount = 3U;
+
+    TEST_ASSERT_FALSE(
+        internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), syncUtc()));
+    TEST_ASSERT_EQUAL_INT(2, fake.readCalls);
+}
+
+void test_rtc_sync_rejects_implausible_forward_readback() {
+    SyncFake fake;
+    fake.scriptedReadbacks = {syncUtc(), syncUtc() + 2, syncUtc() + 2};
+    fake.scriptedReadbackCount = 3U;
+
+    TEST_ASSERT_FALSE(
+        internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), syncUtc()));
+    TEST_ASSERT_EQUAL_INT(2, fake.readCalls);
+}
+
+void test_rtc_sync_rejects_malformed_readback() {
+    SyncFake fake;
+    fake.malformedFirstReadback = true;
+
+    TEST_ASSERT_FALSE(
+        internal::synchronizeDs3231FromSystemUtc(syncBackend(fake), syncUtc()));
     TEST_ASSERT_EQUAL_INT(1, fake.readCalls);
 }
 
@@ -406,6 +489,49 @@ void test_sntp_completed_promotes_once_and_retries_after_next_sync() {
     TEST_ASSERT_EQUAL_INT(2, rtcSynchronizationAttempts);
 }
 
+struct SntpActionFake {
+    bool systemTimeTrusted{false};
+    std::optional<std::int64_t> systemUtc{syncUtc()};
+    bool rtcSyncResult{true};
+    int rtcSyncCalls{0};
+};
+
+void fakePromoteSystemTrust(void* context) {
+    static_cast<SntpActionFake*>(context)->systemTimeTrusted = true;
+}
+
+std::optional<std::int64_t> fakeReadSystemUtc(void* context) {
+    return static_cast<SntpActionFake*>(context)->systemUtc;
+}
+
+bool fakeSynchronizeRtc(void* context, const std::int64_t) {
+    auto& fake = *static_cast<SntpActionFake*>(context);
+    ++fake.rtcSyncCalls;
+    return fake.rtcSyncResult;
+}
+
+void test_sntp_completed_keeps_system_trust_when_rtc_write_fails_and_retries() {
+    internal::SntpArbitration arbitration;
+    SntpActionFake fake;
+    const internal::SntpActionBackend backend{&fake, &fakePromoteSystemTrust,
+                                              &fakeReadSystemUtc,
+                                              &fakeSynchronizeRtc};
+
+    auto action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    internal::consumeSntpArbitrationAction(action, backend);
+    TEST_ASSERT_TRUE(fake.systemTimeTrusted);
+    TEST_ASSERT_EQUAL_INT(1, fake.rtcSyncCalls);
+
+    fake.rtcSyncResult = false;
+    static_cast<void>(
+        arbitration.observe(internal::SntpSyncObservation::Reset));
+    action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    internal::consumeSntpArbitrationAction(action, backend);
+    TEST_ASSERT_TRUE(fake.systemTimeTrusted);
+    TEST_ASSERT_TRUE(fake.systemUtc.has_value());
+    TEST_ASSERT_EQUAL_INT(2, fake.rtcSyncCalls);
+}
+
 void test_high_water_gate_is_fail_closed_until_trusted() {
     internal::UtcHighWaterPublicationGate gate;
 
@@ -472,12 +598,26 @@ void test_shared_i2c_claims_one_bus_and_rejects_pin_conflict() {
     internal::SharedI2cPortClaims claims;
     constexpr internal::I2cPortConfiguration configuration{0, 21, 22};
     constexpr internal::I2cPortConfiguration conflict{0, 25, 26};
+    constexpr internal::I2cPortConfiguration secondPort{1, 25, 26};
+    constexpr internal::I2cPortConfiguration secondPortConflict{1, 27, 28};
 
     TEST_ASSERT_TRUE(claims.claim(configuration));
     TEST_ASSERT_TRUE(claims.claim(configuration));
-    TEST_ASSERT_EQUAL_UINT32(2U, claims.users());
+    TEST_ASSERT_TRUE(claims.claim(secondPort));
+    TEST_ASSERT_EQUAL_UINT32(3U, claims.users());
     TEST_ASSERT_FALSE(claims.claim(conflict));
-    TEST_ASSERT_EQUAL_UINT32(2U, claims.users());
+    TEST_ASSERT_FALSE(claims.claim(secondPortConflict));
+    TEST_ASSERT_EQUAL_UINT32(3U, claims.users());
+
+    TEST_ASSERT_TRUE(claims.release(configuration));
+    TEST_ASSERT_TRUE(claims.hasClaims());
+    TEST_ASSERT_FALSE(claims.claim(conflict));
+    TEST_ASSERT_TRUE(claims.release(configuration));
+    TEST_ASSERT_TRUE(claims.claim(conflict));
+    TEST_ASSERT_TRUE(claims.release(conflict));
+    TEST_ASSERT_TRUE(claims.hasClaims());
+    TEST_ASSERT_TRUE(claims.release(secondPort));
+    TEST_ASSERT_FALSE(claims.hasClaims());
 }
 
 void test_shared_i2c_removal_keeps_bus_until_last_device() {
@@ -510,6 +650,7 @@ int main() {
     RUN_TEST(test_valid_12_hour_am_and_pm_calendar_is_converted);
     RUN_TEST(test_invalid_bcd_is_rejected);
     RUN_TEST(test_invalid_calendar_day_month_and_leap_year_are_rejected);
+    RUN_TEST(test_month_reserved_and_century_bits_are_rejected);
     RUN_TEST(test_year_outside_r1_contract_is_rejected);
     RUN_TEST(test_invalid_health_bits_are_untrusted);
     RUN_TEST(test_control_read_modify_write_clears_eosc_and_preserves_rs_bits);
@@ -519,6 +660,11 @@ int main() {
     RUN_TEST(test_mutex_give_failure_is_returned_after_successful_write);
     RUN_TEST(test_rtc_sync_set_failure_is_untrusted);
     RUN_TEST(test_rtc_sync_readback_mismatch_is_untrusted);
+    RUN_TEST(test_rtc_sync_allows_normal_forward_second_rollover);
+    RUN_TEST(test_rtc_sync_allows_midnight_forward_second_rollover);
+    RUN_TEST(test_rtc_sync_rejects_backward_readback);
+    RUN_TEST(test_rtc_sync_rejects_implausible_forward_readback);
+    RUN_TEST(test_rtc_sync_rejects_malformed_readback);
     RUN_TEST(test_rtc_sync_raw_read_failure_is_fail_closed);
     RUN_TEST(test_rtc_sync_control_write_failure_is_untrusted);
     RUN_TEST(test_rtc_sync_osf_clear_failure_is_untrusted);
@@ -526,6 +672,8 @@ int main() {
     RUN_TEST(test_rtc_sync_success_completes_control_and_osf_sequence);
     RUN_TEST(test_sntp_reset_and_in_progress_do_not_promote_or_write_rtc);
     RUN_TEST(test_sntp_completed_promotes_once_and_retries_after_next_sync);
+    RUN_TEST(
+        test_sntp_completed_keeps_system_trust_when_rtc_write_fails_and_retries);
     RUN_TEST(test_high_water_gate_is_fail_closed_until_trusted);
     RUN_TEST(test_i2c_lifecycle_initializes_and_shuts_down_exactly_once);
     RUN_TEST(test_i2c_lifecycle_failed_operations_keep_retryable_state);

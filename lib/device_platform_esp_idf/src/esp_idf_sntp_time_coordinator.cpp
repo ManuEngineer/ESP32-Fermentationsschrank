@@ -7,6 +7,37 @@
 
 namespace device_platform_esp_idf {
 
+namespace {
+
+struct SntpActionContext {
+    const EspTimerTimeSource* timeSource{nullptr};
+    Ds3231SnRtcAdapter* rtc{nullptr};
+};
+
+void promoteSntpSystemTrust(void* context) {
+    auto* actionContext = static_cast<SntpActionContext*>(context);
+    if (actionContext != nullptr && actionContext->timeSource != nullptr)
+        static_cast<void>(actionContext->timeSource->markAbsoluteTimeTrusted());
+}
+
+std::optional<std::int64_t> readSntpSystemUtc(void* context) {
+    auto* actionContext = static_cast<SntpActionContext*>(context);
+    if (actionContext == nullptr || actionContext->timeSource == nullptr)
+        return std::nullopt;
+    return actionContext->timeSource->unixTimeSeconds();
+}
+
+bool synchronizeSntpRtc(void* context, const std::int64_t utc) {
+    auto* actionContext = static_cast<SntpActionContext*>(context);
+    if (actionContext == nullptr || actionContext->rtc == nullptr ||
+        !actionContext->rtc->present() || !actionContext->rtc->initialized()) {
+        return false;
+    }
+    return actionContext->rtc->synchronizeFromSystemUtc(utc);
+}
+
+}  // namespace
+
 EspIdfSntpTimeCoordinator::EspIdfSntpTimeCoordinator(
     const EspTimerTimeSource& timeSource, Ds3231SnRtcAdapter* rtc) noexcept
     : timeSource_(timeSource), rtc_(rtc) {}
@@ -64,19 +95,13 @@ void EspIdfSntpTimeCoordinator::poll() noexcept {
         observation = internal::SntpSyncObservation::Completed;
     }
     const auto action = arbitration_.observe(observation);
-    if (!action.promoteSystemTrust) return;
-
-    // ESP-IDF has already completed the system-time update.  Marking the
-    // local clock trusted does not bypass EspTimerTimeSource's retrograde
-    // publication gate.
-    static_cast<void>(timeSource_.markAbsoluteTimeTrusted());
-    const auto currentUtc = timeSource_.unixTimeSeconds();
-    if (currentUtc.has_value() && rtc_ != nullptr && rtc_->present() &&
-        rtc_->initialized()) {
-        // A failed RTC write does not revoke the current NTP-backed system
-        // time; the next COMPLETED sync retries the write.
-        static_cast<void>(rtc_->synchronizeFromSystemUtc(*currentUtc));
-    }
+    // ESP-IDF has already completed the system-time update.  The action
+    // explicitly separates trust promotion from RTC synchronization: a
+    // failed RTC write must not revoke the current NTP-backed system time.
+    SntpActionContext actionContext{&timeSource_, rtc_};
+    internal::consumeSntpArbitrationAction(
+        action, {&actionContext, &promoteSntpSystemTrust, &readSntpSystemUtc,
+                 &synchronizeSntpRtc});
 }
 
 }  // namespace device_platform_esp_idf

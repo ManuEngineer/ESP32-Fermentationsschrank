@@ -68,7 +68,7 @@ inline bool validateCalendar(const std::array<std::uint8_t, 7>& calendar) {
         decodeBcd(calendar[3]) == 0U || decodeBcd(calendar[3]) > 7U ||
         (calendar[4] & 0xC0U) != 0U || !validBcd(calendar[4] & 0x3FU, 31U) ||
         decodeBcd(calendar[4] & 0x3FU) == 0U || (calendar[5] & 0x80U) != 0U ||
-        !validBcd(calendar[5] & 0x1FU, 12U) ||
+        (calendar[5] & 0xE0U) != 0U || !validBcd(calendar[5] & 0x1FU, 12U) ||
         decodeBcd(calendar[5] & 0x1FU) == 0U || !validBcd(calendar[6], 99U)) {
         return false;
     }
@@ -121,6 +121,22 @@ inline std::uint8_t clearEoscPreservingControlBits(const std::uint8_t control) {
     // R1 does not use RS1/RS2, but the health shim must preserve them (and all
     // other control bits) when it changes EOSC.
     return static_cast<std::uint8_t>(control & ~kDs3231EoscMask);
+}
+
+// A DS3231 keeps counting after the seconds register is written.  Synchronize
+// readbacks may therefore be the target or exactly its next UTC second, but
+// never an arbitrary tolerance, a backwards value, or a larger jump.
+inline bool syncReadbackMatchesTarget(
+    const std::optional<std::int64_t>& candidate, const std::int64_t target,
+    std::optional<std::int64_t>& previous) noexcept {
+    if (!candidate.has_value() || *candidate < target) return false;
+    if (target != std::numeric_limits<std::int64_t>::max() &&
+        *candidate > target + 1) {
+        return false;
+    }
+    if (previous.has_value() && *candidate < *previous) return false;
+    previous = candidate;
+    return true;
 }
 
 struct Ds3231SnSyncBackend {
@@ -184,9 +200,10 @@ inline bool synchronizeDs3231FromSystemUtc(Ds3231SnSyncBackend backend,
     }
 
     Ds3231SnRawRegisters registers;
+    std::optional<std::int64_t> previousReadback;
     const auto readbackMatchesTarget = [&]() {
-        const auto readback = rawCalendarToUnix(registers.calendar);
-        return readback.has_value() && *readback == utcUnixSeconds;
+        return syncReadbackMatchesTarget(rawCalendarToUnix(registers.calendar),
+                                         utcUnixSeconds, previousReadback);
     };
     if (!backend.readRaw(backend.context, registers) ||
         !validateCalendar(registers.calendar) || !readbackMatchesTarget()) {
@@ -249,6 +266,13 @@ struct SntpArbitrationAction {
     bool synchronizeRtc{false};
 };
 
+struct SntpActionBackend {
+    void* context{nullptr};
+    void (*promoteSystemTrust)(void*){nullptr};
+    std::optional<std::int64_t> (*readSystemUtc)(void*){nullptr};
+    bool (*synchronizeRtc)(void*, std::int64_t){nullptr};
+};
+
 class SntpArbitration final {
    public:
     void reset() noexcept { completionHandled_ = false; }
@@ -273,6 +297,23 @@ class SntpArbitration final {
    private:
     bool completionHandled_{false};
 };
+
+// Keeps the two production effects of a completed SNTP observation explicit:
+// trust promotion is independent from RTC write success.  The adapter layer
+// supplies the narrow callbacks; no second public time API is introduced.
+inline void consumeSntpArbitrationAction(
+    const SntpArbitrationAction action,
+    const SntpActionBackend backend) noexcept {
+    if (action.promoteSystemTrust && backend.promoteSystemTrust != nullptr)
+        backend.promoteSystemTrust(backend.context);
+    if (!action.synchronizeRtc || backend.readSystemUtc == nullptr ||
+        backend.synchronizeRtc == nullptr) {
+        return;
+    }
+    const auto utc = backend.readSystemUtc(backend.context);
+    if (utc.has_value())
+        static_cast<void>(backend.synchronizeRtc(backend.context, *utc));
+}
 
 class I2cLifecycleState final {
    public:
@@ -312,39 +353,60 @@ class SharedI2cPortClaims final {
             configuration.scl < 0) {
             return false;
         }
-        if (users_ == 0U) {
-            configuration_ = configuration;
-            users_ = 1U;
+        if (configuration.bus >= static_cast<int>(kTrackedPortCount))
+            return false;
+        auto& claim = claims_[static_cast<std::size_t>(configuration.bus)];
+        if (claim.users == 0U) {
+            claim.configuration = configuration;
+            claim.users = 1U;
             return true;
         }
-        if (configuration.bus != configuration_.bus ||
-            configuration.sda != configuration_.sda ||
-            configuration.scl != configuration_.scl) {
+        if (configuration.sda != claim.configuration.sda ||
+            configuration.scl != claim.configuration.scl) {
             return false;
         }
-        ++users_;
+        ++claim.users;
         return true;
     }
 
     [[nodiscard]] bool release(
         const I2cPortConfiguration configuration) noexcept {
-        if (users_ == 0U || configuration.bus != configuration_.bus ||
-            configuration.sda != configuration_.sda ||
-            configuration.scl != configuration_.scl) {
+        if (configuration.bus < 0 ||
+            configuration.bus >= static_cast<int>(kTrackedPortCount)) {
             return false;
         }
-        --users_;
-        if (users_ == 0U) configuration_ = {};
+        auto& claim = claims_[static_cast<std::size_t>(configuration.bus)];
+        if (claim.users == 0U || configuration.sda != claim.configuration.sda ||
+            configuration.scl != claim.configuration.scl) {
+            return false;
+        }
+        --claim.users;
+        if (claim.users == 0U) claim.configuration = {};
         return true;
     }
 
-    [[nodiscard]] bool hasClaims() const noexcept { return users_ != 0U; }
+    [[nodiscard]] bool hasClaims() const noexcept {
+        for (const auto& claim : claims_)
+            if (claim.users != 0U) return true;
+        return false;
+    }
 
-    [[nodiscard]] std::size_t users() const noexcept { return users_; }
+    [[nodiscard]] std::size_t users() const noexcept {
+        std::size_t total = 0U;
+        for (const auto& claim : claims_) total += claim.users;
+        return total;
+    }
 
    private:
-    I2cPortConfiguration configuration_{};
-    std::size_t users_{0U};
+    struct PortClaim {
+        I2cPortConfiguration configuration{};
+        std::size_t users{0U};
+    };
+
+    // ESP32 and ESP32-S3 R1 targets expose I2C ports 0 and 1.  Keeping the
+    // claim table bounded avoids a heap-backed registry in the adapter.
+    static constexpr std::size_t kTrackedPortCount = 2U;
+    std::array<PortClaim, kTrackedPortCount> claims_{};
 };
 
 }  // namespace device_platform_esp_idf::internal
