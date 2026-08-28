@@ -1034,17 +1034,19 @@ RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
     pendingR1CheckpointRevision_ = loadedRecord.checkpointRevision;
     pendingR1RunRevision_ = current.runRevision;
 
-    // Missing current UTC is a non-terminal asynchronous state. The loaded
-    // checkpoint remains untouched and can be evaluated again by the same
-    // coordinator when the injected ITimeSource later becomes trustworthy.
+    if (!loadedRecord.utcUnixSeconds.has_value()) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    // Missing current UTC is a non-terminal asynchronous state only after
+    // the persisted checkpoint UTC has been proven present. Without that
+    // record anchor, a later RTC/NTP value cannot make the wall-clock term
+    // reconstructible. The loaded checkpoint remains untouched and can be
+    // evaluated again by the same coordinator when trusted UTC is available.
     if (!time.utcUnixSeconds.has_value()) {
         return R1RecoveryEvaluation{
             RecoveryDisposition::WaitingForTrustedTime,
             result(RunPersistenceResultStatus::RecoveryPending,
                    RunPersistenceStep::CandidateApply)};
-    }
-    if (!loadedRecord.utcUnixSeconds.has_value()) {
-        return rejected(RunPersistenceResultStatus::InvalidDecision);
     }
 
     const auto prior = exactPriorFermentingSeconds(current);

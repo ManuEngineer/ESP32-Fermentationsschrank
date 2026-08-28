@@ -9040,6 +9040,20 @@ void test_r1_missing_or_backwards_checkpoint_utc_fails_closed() {
         RunPersistenceCoordinator coordinator(
             store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
         auto current = restoreCurrentForR1(store, coordinator);
+        const auto writesBeforeMissingCurrentUtc = store.writeCount();
+        const auto rejectedWithoutAnyUtc =
+            coordinator.evaluateCurrentFermentingRecovery(
+                current, RunCheckpointTime{0U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RecoveryDisposition::RecoveryRejectedOrFailClosed),
+            static_cast<int>(rejectedWithoutAnyUtc.disposition));
+        TEST_ASSERT_NOT_EQUAL(
+            static_cast<int>(RecoveryDisposition::WaitingForTrustedTime),
+            static_cast<int>(rejectedWithoutAnyUtc.disposition));
+        TEST_ASSERT_EQUAL_UINT(
+            static_cast<unsigned>(writesBeforeMissingCurrentUtc),
+            static_cast<unsigned>(store.writeCount()));
+
         const auto rejected = coordinator.evaluateCurrentFermentingRecovery(
             current, RunCheckpointTime{0U, 1'000});
         TEST_ASSERT_EQUAL_INT(
