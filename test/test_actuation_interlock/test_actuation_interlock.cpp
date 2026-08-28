@@ -158,9 +158,9 @@ void test_recovery_rejected_actuation_is_blocked() {
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
     validBootEvidence(input, sensor, selection);
-    // A fail-closed RecoveryRejectedOrFailClosed projection cannot be an
-    // activation offer. SafeBoot is the conservative actuation projection.
-    input.loadDisposition = RunLoadDisposition::SafeBoot;
+    // RecoveryRejectedOrFailClosed remains in the application's
+    // RecoveryEvaluation handoff; it cannot become an activation offer.
+    input.loadDisposition = RunLoadDisposition::RecoveryEvaluation;
 
     const auto result = ActuationInterlock::evaluate(input);
     TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
