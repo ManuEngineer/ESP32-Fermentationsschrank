@@ -45,10 +45,12 @@ ownerreviewt und in der R1-Integrationsbaseline enthalten. Die verbleibenden
 Issue #124 ist die vor #25 eingeschobene, eigenstaendige R1-Recovery-
 Planung. PR #125 ist in die aktuelle R1-Integrationsbaseline gemergt; die
 fachliche #124-Policy bleibt unveraendert. Issue #126 liefert nun davor die
-app-neutrale trusted UTC ueber RTC/NTP; die digitale Implementation ist
-abgeschlossen und wartet auf den Owner Final Implementation Review; #18
-und #24 bleiben geschlossen, die #121-Architektur bleibt unveraendert und #25
-wird in diesem Schritt weder implementiert noch geplant.
+app-neutrale trusted UTC ueber RTC/NTP; die digitale Implementation ist PASS,
+der Owner Final Implementation Review ist PASS und die reale GitHub-CI ist
+PASS. Naechster Schritt ist die Owner Merge Decision; Hardware-/Netzwerk-
+gates bleiben separat offen. #18 und #24 bleiben geschlossen, die
+#121-Architektur bleibt unveraendert und #25 wird in diesem Schritt weder
+implementiert noch geplant.
 
 Die endgültige Priorisierungsrichtung ist:
 
@@ -98,10 +100,12 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
 
 - PR #113 / Issue #111 sind als Markdown-only-Governancearbeit abgeschlossen;
   Firmware- und Safety-Semantik bleiben davon unberührt.
-- Issue #126 bleibt bis zum Owner Final Implementation Review Draft; seine
-  digitale RTC-/NTP-Implementierung darf #89-Connectivity nicht duplizieren
-  und ändert den fachlichen #124-Vertrag nicht. Reale RTC-/Netzwerk- und
-  Power-Cycle-Nachweise bleiben separate Hardware-/Netzwerk-Gates.
+- PR #127 / Issue #126 sind Ready for review; Owner Final Implementation
+  Review=PASS und GitHub-CI=PASS. Der PR wartet nur auf die Owner Merge
+  Decision. Die digitale RTC-/NTP-Implementierung darf #89-Connectivity nicht
+  duplizieren und ändert den fachlichen #124-Vertrag nicht. Reale
+  RTC-/Netzwerk- und Power-Cycle-Nachweise bleiben separate
+  Hardware-/Netzwerk-Gates.
 - #29 und #90 bilden die erste reale Plattformbasis; danach folgen #25, #26
   und #31 für die echte Device Shell, App und Bedienung.
 - #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
