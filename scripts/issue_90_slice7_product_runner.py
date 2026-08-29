@@ -10,11 +10,15 @@ The runner is deliberately split into fail-closed phases:
 * ``verify-restored-boot`` verifies the normal product boot after an Owner
   power cycle.
 
-The runner never toggles RTS or EN and never controls board power.  Physical
-power removal is performed only by the Owner at the explicit power-cut
-window.  All recovery decisions use the raw current product status and the
-explicit Slice-7 classifier below; no status-string existence is a PASS
-criterion.
+``prepare``/``restore`` let esptool auto-reset the board into the ROM
+bootloader for flash/read access (``--before default-reset``); this is
+ordinary flash tooling over the same control lines, not a substitute for a
+real power interruption, and no such reset ever counts as one of the six
+campaign power-cut attempts. The runner never removes or restores board
+power itself: physical power removal during the campaign is performed only
+by the Owner at the explicit power-cut window. All recovery decisions use
+the raw current product status and the explicit Slice-7 classifier below;
+no status-string existence is a PASS criterion.
 """
 
 from __future__ import annotations
@@ -195,17 +199,25 @@ def run_esptool(port: str, baud: int, command: list[str]) -> str:
 
 
 def confirm_rom_bootloader(args: argparse.Namespace, action: str) -> bool:
+    # esptool's own "--before default-reset" handles the actual ROM-bootloader
+    # entry automatically via the existing control lines; this is ordinary
+    # flash/read tooling access, never a substitute for a real power-cut
+    # attempt. The Owner only confirms the board is powered on and connected
+    # before esptool resets it into the bootloader.
     print(f"OWNER_ACTION_REQUIRED={action}", flush=True)
     print(
-        "OWNER_INSTRUCTIONS=POWER_ON_HOLD_IO0_TO_GND_TOGGLE_EN_OR_POWER_CYCLE_"
-        "RELEASE_IO0_AFTER_ROM_BOOTLOADER",
+        "OWNER_INSTRUCTIONS=CONFIRM_BOARD_POWERED_ON_AND_USB_CONNECTED_"
+        "ESPTOOL_WILL_AUTO_RESET_INTO_ROM_BOOTLOADER",
         flush=True,
     )
     try:
-        input("After the ESP32 ROM bootloader is active, press Enter. ")
+        input(
+            "After confirming the ESP32 is powered on and connected, press "
+            "Enter to let esptool reset it into the ROM bootloader. "
+        )
     except (EOFError, KeyboardInterrupt) as error:
         print("ROM_BOOTLOADER_READY=FAIL", flush=True)
-        raise RunnerError("owner ROM-bootloader confirmation missing") from error
+        raise RunnerError("owner flash/restore-step confirmation missing") from error
     try:
         probe_output = run_esptool(args.port, args.baud, ["chip-id"])
     except RunnerError as error:
@@ -421,7 +433,8 @@ def prepare_pre_harness_backup(
         "actor_free": True,
         "real_actuators_enabled": False,
         "power_cut_type": "PHYSICAL_POWER_REMOVAL",
-        "rts_en_software_reset_substitute": False,
+        "rts_en_power_cut_substitute": False,
+        "esptool_prepare_restore_reset_mode": "default-reset",
         "production_restore_required": True,
         "campaign_result": "NOT_RUN",
         "restore_state": "PENDING_OWNER_BOOTLOADER_ACTION",
@@ -1272,7 +1285,7 @@ def run_restore(args: argparse.Namespace) -> int:
     require_restore_pending(manifest)
     print("RESTORE_REQUIRED=YES", flush=True)
     rom_bootloader_ready = confirm_rom_bootloader(
-        args, "POWER_ON_AND_ENTER_ROM_BOOTLOADER_FOR_PRODUCTION_RESTORE"
+        args, "CONFIRM_BOARD_READY_FOR_PRODUCTION_RESTORE"
     )
     try:
         application_sha = restore_production_layout(
@@ -1823,7 +1836,7 @@ def main() -> int:
             if not args.production_source_sha:
                 parser.error("--production-source-sha is required for --phase prepare")
             rom_bootloader_ready = confirm_rom_bootloader(
-                args, "ENTER_ROM_BOOTLOADER_FOR_PRE_HARNESS_BACKUP"
+                args, "CONFIRM_BOARD_READY_FOR_PRE_HARNESS_BACKUP"
             )
             return prepare_pre_harness_backup(
                 args, rom_bootloader_ready=rom_bootloader_ready
