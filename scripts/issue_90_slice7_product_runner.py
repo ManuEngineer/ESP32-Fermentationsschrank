@@ -343,6 +343,52 @@ def require_release_artifacts(release_dir: Path) -> dict[str, dict[str, object]]
     return artifacts
 
 
+def freeze_release_restore_bundle(
+    release_artifacts: dict[str, dict[str, object]],
+    provenance_path: Path,
+    provenance: dict[str, str],
+    backup_dir: Path,
+) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
+    """Copy the verified release artifacts and build report into the local
+    backup bundle so a later rebuild of the live build directory can never
+    change what a future --phase restore reads. The manifest only ever
+    references these frozen copies afterward; restore stays a byte-exact
+    SHA-256 check against them, never a source-SHA-only substitute.
+    """
+    frozen_dir = backup_dir / "production_release"
+    frozen_dir.mkdir(parents=True, exist_ok=True)
+    frozen_names = {
+        "bootloader": "bootloader.bin",
+        "partition_table": "partition-table.bin",
+        "application": "application.bin",
+    }
+    frozen_artifacts: dict[str, dict[str, object]] = {}
+    for name, artifact in release_artifacts.items():
+        source = Path(str(artifact["file"]))
+        frozen_path = frozen_dir / frozen_names[name]
+        shutil.copyfile(source, frozen_path)
+        frozen_sha = sha256_file(frozen_path)
+        if frozen_sha != artifact["sha256"]:
+            raise RunnerError(f"frozen {name} artifact copy hash mismatch")
+        frozen_artifacts[name] = {
+            "file": str(frozen_path.resolve()),
+            "offset": artifact["offset"],
+            "size": artifact["size"],
+            "sha256": frozen_sha,
+        }
+    frozen_report_path = frozen_dir / "build-report.md"
+    shutil.copyfile(provenance_path, frozen_report_path)
+    frozen_report_sha = sha256_file(frozen_report_path)
+    if frozen_report_sha != provenance["report_sha256"]:
+        raise RunnerError("frozen build-report copy hash mismatch")
+    frozen_provenance = {
+        "file": str(frozen_report_path.resolve()),
+        "sha256": frozen_report_sha,
+        "profile": "esp32_release",
+    }
+    return frozen_artifacts, frozen_provenance
+
+
 def prepare_pre_harness_backup(
     args: argparse.Namespace, *, rom_bootloader_ready: bool = False
 ) -> int:
@@ -393,6 +439,10 @@ def prepare_pre_harness_backup(
         "production state-store backup",
     )
 
+    frozen_release_artifacts, frozen_provenance = freeze_release_restore_bundle(
+        release_artifacts, provenance_path, provenance, backup_dir
+    )
+
     manifest = {
         "protocol_version": PROTOCOL_VERSION,
         "phase": "PRE_HARNESS_BACKUP",
@@ -400,11 +450,7 @@ def prepare_pre_harness_backup(
         "production_source_sha": source_sha,
         "release_build_source_sha": provenance["Source-Git-SHA"],
         "release_build_commit": provenance["Build-Commit"],
-        "release_build_provenance": {
-            "file": str(provenance_path.resolve()),
-            "sha256": provenance["report_sha256"],
-            "profile": "esp32_release",
-        },
+        "release_build_provenance": frozen_provenance,
         "backup_source_state": "PRODUCTION_LAYOUT",
         "test_partition": {
             "label": TEST_PARTITION,
@@ -427,7 +473,9 @@ def prepare_pre_harness_backup(
                 "sha256": state_backup_sha,
             },
         },
-        "production_release_artifacts": release_artifacts,
+        "production_release_artifacts": frozen_release_artifacts,
+        "release_artifacts_frozen": True,
+        "restore_bundle_local_only": True,
         "sensitive_artifacts_local_only": True,
         "full_flash_backup": False,
         "actor_free": True,
@@ -453,6 +501,7 @@ def prepare_pre_harness_backup(
         f"RELEASE_BUILD_SOURCE_SHA={provenance['Source-Git-SHA']}", flush=True
     )
     print("RELEASE_ARTIFACT_PROVENANCE_GATE=PASS", flush=True)
+    print("RELEASE_ARTIFACTS_FROZEN=YES", flush=True)
     print(f"PRODUCTION_PARTITION_TABLE_BACKUP_SHA256={table_backup_sha}", flush=True)
     print(f"PRODUCTION_STATE_STORE_BACKUP_SHA256={state_backup_sha}", flush=True)
     print("OWNER_ACTION_REQUIRED=ENTER_ROM_BOOTLOADER_FOR_HARNESS_FLASH", flush=True)
@@ -1252,6 +1301,246 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
     return 0
 
 
+def load_manifest_for_production_rebaseline(path: Path) -> dict[str, object]:
+    """Load only the parts of an existing pre-harness manifest that a
+    ``--phase rebaseline-production`` run may still trust: the raw
+    production backups (partition table, state store), which are literal
+    flash-region captures and unaffected by the non-reproducible-build
+    problem. The manifest's own release-artifact bookkeeping is
+    deliberately NOT re-verified here - superseding it with a freshly
+    established, explicitly-named release baseline is the entire point of
+    this phase, not something to silently re-trust as if unchanged.
+    """
+    require_file(path, "pre-harness backup manifest")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RunnerError(f"backup manifest cannot be read: {path}") from error
+    if not isinstance(data, dict):
+        raise RunnerError("backup manifest is not an object")
+    if data.get("protocol_version") != PROTOCOL_VERSION:
+        raise RunnerError("backup manifest protocol version rejected")
+    if data.get("phase") != "PRE_HARNESS_BACKUP":
+        raise RunnerError("backup manifest phase rejected")
+    if data.get("plan_sha") != PLAN_SHA:
+        raise RunnerError("backup manifest plan SHA rejected")
+    if data.get("backup_source_state") != "PRODUCTION_LAYOUT":
+        raise RunnerError("BACKUP_SOURCE_STATE rejected; production layout required")
+    if (
+        data.get("actor_free") is not True
+        or data.get("real_actuators_enabled") is not False
+    ):
+        raise RunnerError("backup manifest actor-free contract rejected")
+    backups = data.get("backups")
+    if not isinstance(backups, dict):
+        raise RunnerError("backup manifest backups missing")
+    table_backup = _manifest_file(
+        backups.get("production_partition_table"),
+        "production partition-table backup",
+    )
+    if table_backup[1] != PARTITION_TABLE_OFFSET:
+        raise RunnerError("production partition-table backup offset rejected")
+    if table_backup[3] <= 0 or table_backup[3] > PARTITION_TABLE_RESERVED_SIZE:
+        raise RunnerError("production partition-table backup boundary rejected")
+    state_backup = _manifest_file(
+        backups.get("production_state_store"), "production state-store backup"
+    )
+    if state_backup[1] != STATE_STORE_OFFSET or state_backup[3] != STATE_STORE_SIZE:
+        raise RunnerError("production state-store backup range rejected")
+    return data
+
+
+def rebaseline_production_write(
+    args: argparse.Namespace, *, rom_bootloader_ready: bool = False
+) -> tuple[dict[str, object], Path]:
+    """Explicit, one-time production-rebaseline write for the case where an
+    existing pre-harness manifest's release-artifact application binary can
+    no longer be reproduced byte-exact (ESP-IDF embeds a compile timestamp,
+    so even a rebuild of the identical source commit differs). This is NOT
+    a normal restore: it never claims to restore the lost original
+    application binary, only that the production data (partition table,
+    state store) is restored byte-exact and that a freshly built, source-
+    verified release image is newly established in its place. The old
+    manifest file itself is only ever read, never written.
+    """
+    if not rom_bootloader_ready:
+        raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRODUCTION_REBASELINE")
+    old_manifest_path = Path(args.pre_harness_manifest)
+    old_manifest = load_manifest_for_production_rebaseline(old_manifest_path)
+    print("OLD_MANIFEST_VALID=YES", flush=True)
+
+    backups = old_manifest.get("backups")
+    if not isinstance(backups, dict):
+        raise RunnerError("backup manifest backups missing during rebaseline")
+    table_backup, table_offset, table_sha, table_size = _manifest_file(
+        backups.get("production_partition_table"),
+        "production partition-table backup",
+    )
+    print("OLD_PARTITION_BACKUP_HASH=PASS", flush=True)
+    state_backup, state_offset, state_sha, state_size = _manifest_file(
+        backups.get("production_state_store"), "production state-store backup"
+    )
+    print("OLD_STATE_STORE_BACKUP_HASH=PASS", flush=True)
+
+    new_source_sha = require_source_sha(args.production_source_sha)
+    new_release_artifacts = require_release_artifacts(Path(args.production_release_dir))
+    new_provenance = release_build_provenance(Path(args.release_build_report))
+    if (
+        new_provenance["Source-Git-SHA"] != new_source_sha
+        or new_provenance["Build-Commit"] != new_source_sha
+    ):
+        raise RunnerError("BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH")
+    require_embedded_source_sha(
+        Path(str(new_release_artifacts["application"]["file"])), new_source_sha
+    )
+    if new_release_artifacts["partition_table"]["sha256"] != table_sha:
+        raise RunnerError(
+            "REBASELINE_PARTITION_LAYOUT_MISMATCH: new release partition table "
+            "differs from the captured production partition table"
+        )
+    print(f"NEW_RELEASE_SOURCE_SHA={new_source_sha}", flush=True)
+    print(f"NEW_RELEASE_BUILD_COMMIT={new_provenance['Build-Commit']}", flush=True)
+    print(f"NEW_APPLICATION_EMBEDDED_SOURCE_SHA={new_source_sha}", flush=True)
+    print("NEW_RELEASE_PARTITION_TABLE_MATCHES_OLD_PRODUCTION=PASS", flush=True)
+
+    write_and_verify_flash_region(
+        args.port,
+        args.baud,
+        state_offset,
+        state_backup,
+        state_size,
+        state_sha,
+        "production state-store rebaseline restore",
+    )
+    write_and_verify_flash_region(
+        args.port,
+        args.baud,
+        table_offset,
+        table_backup,
+        table_size,
+        table_sha,
+        "production partition-table rebaseline restore",
+    )
+    command = ["write-flash"]
+    ordered_names = ("bootloader", "partition_table", "application")
+    for name in ordered_names:
+        artifact = new_release_artifacts[name]
+        command.extend([hex(int(artifact["offset"])), str(artifact["file"])])
+    run_esptool(args.port, args.baud, command)
+
+    state_readback = readback_hash(
+        args.port, args.baud, state_offset, state_size, state_sha,
+        "production state-store rebaseline readback",
+    )
+    table_readback = readback_hash(
+        args.port, args.baud, table_offset, table_size, table_sha,
+        "production partition-table rebaseline readback",
+    )
+    bootloader_artifact = new_release_artifacts["bootloader"]
+    bootloader_readback = readback_hash(
+        args.port,
+        args.baud,
+        int(bootloader_artifact["offset"]),
+        int(bootloader_artifact["size"]),
+        str(bootloader_artifact["sha256"]),
+        "bootloader rebaseline readback",
+    )
+    application_artifact = new_release_artifacts["application"]
+    application_readback = readback_hash(
+        args.port,
+        args.baud,
+        int(application_artifact["offset"]),
+        int(application_artifact["size"]),
+        str(application_artifact["sha256"]),
+        "application rebaseline readback",
+    )
+
+    print("PRODUCTION_DATA_BYTE_EXACT_RESTORED=PASS", flush=True)
+    print("PRODUCTION_PARTITION_TABLE_BYTE_EXACT_RESTORED=PASS", flush=True)
+    print("ORIGINAL_APPLICATION_BYTE_EXACT_RESTORE=NOT_POSSIBLE_ARTIFACT_LOST", flush=True)
+    print("PRODUCTION_APPLICATION_REBASELINED=PASS", flush=True)
+    print(f"REBASELINE_SOURCE_SHA={new_source_sha}", flush=True)
+    print(f"REBASELINE_APPLICATION_SHA256={application_artifact['sha256']}", flush=True)
+
+    old_application = old_manifest.get("production_release_artifacts", {})
+    old_application = (
+        old_application.get("application", {})
+        if isinstance(old_application, dict)
+        else {}
+    )
+    record = {
+        "protocol_version": PROTOCOL_VERSION,
+        "phase": "PRODUCTION_REBASELINE",
+        "old_manifest_file": str(old_manifest_path.resolve()),
+        "old_manifest_sha256": sha256_file(old_manifest_path),
+        "old_application_expected_sha256": old_application.get("sha256", ""),
+        "old_production_source_sha": old_manifest.get("production_source_sha", ""),
+        "new_release_source_sha": new_source_sha,
+        "new_application_sha256": application_artifact["sha256"],
+        "state_store_backup_sha256": state_sha,
+        "partition_table_sha256": table_sha,
+        "readback": {
+            "state_store": state_readback,
+            "partition_table": table_readback,
+            "bootloader": bootloader_readback,
+            "application": application_readback,
+        },
+        "original_application_byte_exact_restore": "NOT_POSSIBLE_ARTIFACT_LOST",
+        "rebaseline_state": "REBASELINE_WRITTEN_PENDING_NORMAL_BOOT",
+    }
+    record_path = Path(args.backup_dir) / "rebaseline-record.json"
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    print(f"REBASELINE_RECORD={record_path.resolve()}", flush=True)
+    return record, record_path
+
+
+def rebaseline_production_verify_boot(
+    args: argparse.Namespace,
+    record: dict[str, object],
+    record_path: Path,
+    *,
+    normal_power_cycle_ready: bool = False,
+) -> None:
+    if not normal_power_cycle_ready:
+        raise RunnerError(
+            "BLOCKED_NORMAL_POWER_CYCLE_REQUIRED_FOR_PRODUCTION_REBASELINE_BOOT"
+        )
+    new_source_sha = require_source_sha(str(record["new_release_source_sha"]))
+    with ProductSerial(args.port, args.baud, args.timeout) as device:
+        observed_source_sha = device.wait_for_product_boot()
+    print(f"POST_REBASELINE_PRODUCT_SOURCE_SHA={observed_source_sha}", flush=True)
+    print(f"EXPECTED_PRODUCT_SOURCE_SHA={new_source_sha}", flush=True)
+    verify_observed_product_source_sha(new_source_sha, observed_source_sha)
+
+    record["rebaseline_state"] = "COMPLETE"
+    record["post_rebaseline_product_source_sha"] = observed_source_sha
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    print("POST_REBASELINE_PRODUCT_BOOT=PASS", flush=True)
+    print(f"POST_REBASELINE_SOURCE_SHA={observed_source_sha}", flush=True)
+    print("PRODUCTION_BASELINE_REESTABLISHED=PASS", flush=True)
+
+
+def rebaseline_production(args: argparse.Namespace) -> int:
+    """CLI entry point for --phase rebaseline-production: gates the write
+    on the Owner confirming the board is ready for ROM-bootloader access,
+    then gates the post-write boot verification on the Owner confirming a
+    real normal power cycle - mirroring the existing restore/
+    verify-restored-boot split so both halves stay unit-testable without a
+    real input() prompt.
+    """
+    rom_bootloader_ready = confirm_rom_bootloader(
+        args, "CONFIRM_BOARD_READY_FOR_PRODUCTION_REBASELINE"
+    )
+    record, record_path = rebaseline_production_write(
+        args, rom_bootloader_ready=rom_bootloader_ready
+    )
+    confirm_normal_power_cycle()
+    rebaseline_production_verify_boot(
+        args, record, record_path, normal_power_cycle_ready=True
+    )
+    return 0
+
+
 def verify_restored_product_boot(
     args: argparse.Namespace,
     manifest: dict[str, object],
@@ -1486,12 +1775,68 @@ def selftest_backup_workflow() -> None:
                 "production partition-table backup missing",
             )
 
+            # Freeze verification: the manifest's release-artifact bookkeeping
+            # must reference the local backup bundle, never the live build
+            # directory, so a later rebuild of build/esp32_release (or its
+            # build report) can never change what --phase restore reads. This
+            # is the actual regression this selftest exists to catch.
+            frozen_check = load_pre_harness_manifest(manifest_path)
+            if (
+                frozen_check.get("release_artifacts_frozen") is not True
+                or frozen_check.get("restore_bundle_local_only") is not True
+            ):
+                raise RunnerError("release artifacts were not marked frozen")
+            frozen_application_path = Path(
+                str(
+                    frozen_check["production_release_artifacts"]["application"][
+                        "file"
+                    ]
+                )
+            )
+            frozen_report_path = Path(
+                str(frozen_check["release_build_provenance"]["file"])
+            )
+            if frozen_application_path.resolve() == application_path.resolve():
+                raise RunnerError(
+                    "frozen application artifact still points at the live build"
+                )
+            if frozen_report_path.resolve() == release_report.resolve():
+                raise RunnerError(
+                    "frozen build report still points at the live build report"
+                )
+
+            # Overwriting the ORIGINAL live artifacts must not affect a
+            # manifest load: the frozen bundle makes it fully independent.
+            application_path.write_bytes(b"overwritten-by-a-later-rebuild")
             release_report.write_bytes(release_report_original + b"stale\n")
+            reloaded_after_live_rebuild = load_pre_harness_manifest(manifest_path)
+            if reloaded_after_live_rebuild.get("release_artifacts_frozen") is not True:
+                raise RunnerError(
+                    "manifest load regressed after the live release artifacts "
+                    "it must no longer depend on were overwritten"
+                )
+
+            # Tampering the FROZEN copies themselves must still be caught.
+            # Flip a byte rather than change the length, so this exercises the
+            # hash check specifically rather than the separate size check.
+            frozen_application_original = frozen_application_path.read_bytes()
+            tampered_application = bytearray(frozen_application_original)
+            tampered_application[0] ^= 0x01
+            frozen_application_path.write_bytes(bytes(tampered_application))
+            _expect_rejected(
+                lambda: load_pre_harness_manifest(manifest_path),
+                "hash mismatch",
+            )
+            frozen_application_path.write_bytes(frozen_application_original)
+
+            frozen_report_original = frozen_report_path.read_bytes()
+            frozen_report_path.write_bytes(frozen_report_original + b"tamper")
             _expect_rejected(
                 lambda: load_pre_harness_manifest(manifest_path),
                 "release build provenance file hash mismatch",
             )
-            release_report.write_bytes(release_report_original)
+            frozen_report_path.write_bytes(frozen_report_original)
+            manifest = load_pre_harness_manifest(manifest_path)
 
             restore_args = argparse.Namespace(
                 port="mock",
@@ -1587,7 +1932,7 @@ def selftest_backup_workflow() -> None:
                 campaign_result="PASS",
                 production_restore_required=True,
                 restore_state="RESTORED_PENDING_NORMAL_BOOT",
-                restored_application_sha256=sha256_file(application_path),
+                restored_application_sha256=sha256_file(frozen_application_path),
             )
 
             class FakeProductSerial:
@@ -1637,6 +1982,229 @@ def selftest_backup_workflow() -> None:
     print("PASS: ROM bootloader and restore phase state selftests", flush=True)
     print("PASS: exact release/post-restore provenance selftests", flush=True)
     print("PASS: proof build/prepare rejects dirty source tree", flush=True)
+
+
+def selftest_rebaseline_workflow() -> None:
+    """Covers --phase rebaseline-production: an old manifest whose live
+    release-artifact bookkeeping is now stale (the exact scenario a frozen
+    bundle cannot happen for a *new* manifest, but which any manifest
+    captured before this fix still has) must still yield its still-valid
+    raw production backups, and rebaseline must newly establish a fresh,
+    source-verified release image without ever pretending to have restored
+    the unreproducible original application binary.
+    """
+    with tempfile.TemporaryDirectory(prefix="issue90-rebaseline-selftest-") as directory:
+        root = Path(directory)
+        old_source_sha = "3" * 40
+        old_release_dir = root / "old_release"
+        (old_release_dir / "bootloader").mkdir(parents=True)
+        (old_release_dir / "partition_table").mkdir(parents=True)
+        table = b"production-partition-table" * 100
+        old_bootloader = b"old-bootloader" * 100
+        old_application = b"old-application" * 1000
+        old_report = root / "old-build-report.md"
+        old_report.write_text(
+            "## ESP-IDF esp32_release (JSON2-basierte IDF-Messung)\n\n"
+            f"- Build-Commit: {old_source_sha}\n"
+            f"- Source-Git-SHA: {old_source_sha}\n",
+            encoding="utf-8",
+        )
+        (old_release_dir / "partition_table" / "partition-table.bin").write_bytes(table)
+        (old_release_dir / "bootloader" / "bootloader.bin").write_bytes(old_bootloader)
+        (old_release_dir / "esp32_fermentationsschrank.bin").write_bytes(
+            old_application + old_source_sha.encode("ascii")
+        )
+        state = bytes((index % 197 for index in range(STATE_STORE_SIZE)))
+        regions: dict[int, bytes] = {
+            PARTITION_TABLE_OFFSET: table,
+            STATE_STORE_OFFSET: state,
+        }
+
+        def fake_esptool(_port: str, _baud: int, command: list[str]) -> str:
+            operation = command[0]
+            if operation == "chip-id":
+                return "Connected to ESP32 on /dev/ttyFAKE:\nChip type: ESP32-D0WD-V3"
+            if operation == "read-flash":
+                offset = int(command[1], 0)
+                size = int(command[2], 0)
+                target = Path(command[3])
+                source = bytearray(b"\xff" * size)
+                for region_offset, region in regions.items():
+                    start = max(offset, region_offset)
+                    end = min(offset + size, region_offset + len(region))
+                    if start < end:
+                        source[start - offset : end - offset] = region[
+                            start - region_offset : end - region_offset
+                        ]
+                target.write_bytes(bytes(source))
+            elif operation == "write-flash":
+                pairs = command[1:]
+                for index in range(0, len(pairs), 2):
+                    regions[int(pairs[index], 0)] = Path(pairs[index + 1]).read_bytes()
+            else:
+                raise RunnerError(f"unexpected mocked esptool operation: {operation}")
+            return ""
+
+        old_manifest_path = root / "old-manifest.json"
+        with mock.patch(__name__ + ".run_esptool", side_effect=fake_esptool):
+            with mock.patch.object(
+                check_build_profiles, "source_tree_status", return_value=""
+            ):
+                prepare_args = argparse.Namespace(
+                    port="mock",
+                    baud=115200,
+                    production_source_sha=old_source_sha,
+                    production_partition_table=str(
+                        old_release_dir / "partition_table" / "partition-table.bin"
+                    ),
+                    production_release_dir=str(old_release_dir),
+                    backup_dir=str(root / "old-backup"),
+                    manifest_output=str(old_manifest_path),
+                    release_build_report=str(old_report),
+                )
+                with contextlib.redirect_stdout(io.StringIO()):
+                    prepare_pre_harness_backup(prepare_args, rom_bootloader_ready=True)
+
+            # Simulate the actual regression this phase exists for: the old
+            # manifest's own (frozen, in this case) release artifacts are
+            # simply ignored by rebaseline - it only ever trusts `backups`.
+            # A manifest captured before the freeze fix existed would have
+            # had its live release-artifact bookkeeping go stale here
+            # instead; rebaseline-production does not care either way.
+
+            new_source_sha = "4" * 40
+            new_release_dir = root / "new_release"
+            (new_release_dir / "bootloader").mkdir(parents=True)
+            (new_release_dir / "partition_table").mkdir(parents=True)
+            new_bootloader = b"new-bootloader" * 100
+            new_application = b"new-application" * 1000
+            new_report = root / "new-build-report.md"
+            new_report.write_text(
+                "## ESP-IDF esp32_release (JSON2-basierte IDF-Messung)\n\n"
+                f"- Build-Commit: {new_source_sha}\n"
+                f"- Source-Git-SHA: {new_source_sha}\n",
+                encoding="utf-8",
+            )
+            (new_release_dir / "partition_table" / "partition-table.bin").write_bytes(
+                table
+            )
+            (new_release_dir / "bootloader" / "bootloader.bin").write_bytes(
+                new_bootloader
+            )
+            (new_release_dir / "esp32_fermentationsschrank.bin").write_bytes(
+                new_application + new_source_sha.encode("ascii")
+            )
+
+            rebaseline_args = argparse.Namespace(
+                port="mock",
+                baud=115200,
+                timeout=1.0,
+                pre_harness_manifest=str(old_manifest_path),
+                production_source_sha=new_source_sha,
+                production_partition_table=str(
+                    new_release_dir / "partition_table" / "partition-table.bin"
+                ),
+                production_release_dir=str(new_release_dir),
+                backup_dir=str(root / "old-backup"),
+                release_build_report=str(new_report),
+            )
+
+            # A new release build whose partition table differs from the
+            # captured production partition table must be rejected before
+            # any hardware write.
+            mismatched_table_dir = root / "mismatched_release"
+            (mismatched_table_dir / "bootloader").mkdir(parents=True)
+            (mismatched_table_dir / "partition_table").mkdir(parents=True)
+            (mismatched_table_dir / "partition_table" / "partition-table.bin").write_bytes(
+                table + b"\x00"
+            )
+            (mismatched_table_dir / "bootloader" / "bootloader.bin").write_bytes(
+                new_bootloader
+            )
+            (mismatched_table_dir / "esp32_fermentationsschrank.bin").write_bytes(
+                new_application + new_source_sha.encode("ascii")
+            )
+            mismatched_report = root / "mismatched-build-report.md"
+            mismatched_report.write_text(
+                "## ESP-IDF esp32_release (JSON2-basierte IDF-Messung)\n\n"
+                f"- Build-Commit: {new_source_sha}\n"
+                f"- Source-Git-SHA: {new_source_sha}\n",
+                encoding="utf-8",
+            )
+            mismatched_args = argparse.Namespace(**vars(rebaseline_args))
+            mismatched_args.production_partition_table = str(
+                mismatched_table_dir / "partition_table" / "partition-table.bin"
+            )
+            mismatched_args.production_release_dir = str(mismatched_table_dir)
+            mismatched_args.release_build_report = str(mismatched_report)
+            with contextlib.redirect_stdout(io.StringIO()):
+                _expect_rejected(
+                    lambda: rebaseline_production_write(
+                        mismatched_args, rom_bootloader_ready=True
+                    ),
+                    "REBASELINE_PARTITION_LAYOUT_MISMATCH",
+                )
+
+            class FakeProductSerial:
+                def __init__(self, observed_source_sha: str) -> None:
+                    self.observed_source_sha = observed_source_sha
+
+                def __enter__(self) -> "FakeProductSerial":
+                    return self
+
+                def __exit__(self, *_: object) -> None:
+                    return None
+
+                def wait_for_product_boot(self) -> str:
+                    return self.observed_source_sha
+
+            with mock.patch(
+                __name__ + ".ProductSerial",
+                return_value=FakeProductSerial(new_source_sha),
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _expect_rejected(
+                        lambda: rebaseline_production_write(rebaseline_args),
+                        "BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRODUCTION_REBASELINE",
+                    )
+                    written_record, written_record_path = rebaseline_production_write(
+                        rebaseline_args, rom_bootloader_ready=True
+                    )
+                    _expect_rejected(
+                        lambda: rebaseline_production_verify_boot(
+                            rebaseline_args, written_record, written_record_path
+                        ),
+                        "BLOCKED_NORMAL_POWER_CYCLE_REQUIRED_FOR_PRODUCTION_REBASELINE_BOOT",
+                    )
+                    rebaseline_production_verify_boot(
+                        rebaseline_args,
+                        written_record,
+                        written_record_path,
+                        normal_power_cycle_ready=True,
+                    )
+
+            record_path = Path(rebaseline_args.backup_dir) / "rebaseline-record.json"
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            if (
+                record.get("rebaseline_state") != "COMPLETE"
+                or record.get("new_release_source_sha") != new_source_sha
+                or record.get("old_production_source_sha") != old_source_sha
+                or record.get("original_application_byte_exact_restore")
+                != "NOT_POSSIBLE_ARTIFACT_LOST"
+            ):
+                raise RunnerError("rebaseline record did not capture the expected state")
+
+            # The old manifest file itself must remain byte-for-byte
+            # untouched: rebaseline is not a normal restore and must never
+            # edit historical evidence.
+            old_manifest_after = old_manifest_path.read_text(encoding="utf-8")
+            if json.loads(old_manifest_after).get("production_source_sha") != (
+                old_source_sha
+            ):
+                raise RunnerError("rebaseline modified the old manifest's source SHA")
+    print("PASS: production-rebaseline partition-layout guard", flush=True)
+    print("PASS: production-rebaseline write/readback/record sequence", flush=True)
+    print("PASS: production-rebaseline leaves the old manifest untouched", flush=True)
 
 
 def selftest_recovery_classifier() -> None:
@@ -1789,6 +2357,7 @@ def selftest() -> int:
     if verify_harness_source_sha(source_sha, source_sha) != source_sha:
         raise RunnerError("exact harness source SHA was not accepted")
     selftest_backup_workflow()
+    selftest_rebaseline_workflow()
     selftest_recovery_classifier()
     print("PASS: clean source tree accepted", flush=True)
     print("PASS: Issue #90 Slice-7 UART field parser", flush=True)
@@ -1802,7 +2371,13 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     parser.add_argument(
         "--phase",
-        choices=("prepare", "campaign", "restore", "verify-restored-boot"),
+        choices=(
+            "prepare",
+            "campaign",
+            "restore",
+            "verify-restored-boot",
+            "rebaseline-production",
+        ),
         default="campaign",
     )
     parser.add_argument("--port")
@@ -1845,6 +2420,15 @@ def main() -> int:
             if not args.pre_harness_manifest:
                 raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
             return run_physical_campaign(args)
+        if args.phase == "rebaseline-production":
+            if not args.pre_harness_manifest:
+                raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
+            if not args.production_source_sha:
+                parser.error(
+                    "--production-source-sha is required for "
+                    "--phase rebaseline-production"
+                )
+            return rebaseline_production(args)
         if not args.pre_harness_manifest:
             raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
         if args.phase == "restore":
