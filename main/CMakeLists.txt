@@ -67,7 +67,13 @@ endif()
 set(APP_SOURCE_GIT_SHA_DEFINE "APP_SOURCE_GIT_SHA=\"${APP_SOURCE_GIT_SHA}\"")
 
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
-if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
+if(CONFIG_APP_PROFILE_ESP32_BRINGUP AND NOT APP_ISSUE_90_SLICE7_HARNESS)
+    # The Issue #90 Slice-7 harness is a separate, independent hardware
+    # runner and must not automatically compile or run the unrelated
+    # Issue #29 diagnostic probe (real-hardware panic observed in the
+    # probe's own resource-sampling code, tracked in #29; unaffected by
+    # and unrelated to the Slice-7 harness). The normal esp32_bringup
+    # path (without the harness flag) is unchanged.
     target_sources(${COMPONENT_LIB} PRIVATE "issue_29_bringup_probe.cpp")
     set_source_files_properties(
         "issue_29_bringup_probe.cpp"
