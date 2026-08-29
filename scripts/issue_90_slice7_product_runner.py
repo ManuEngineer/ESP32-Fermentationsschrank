@@ -763,6 +763,7 @@ KNOWN_RUN_LOAD_STATUSES = KNOWN_RUN_LOAD_SUCCESS | KNOWN_RUN_LOAD_FAIL_CLOSED | 
 KNOWN_DISPOSITIONS = {
     "Standby",
     "ResumeOffer",
+    "RecoveryEvaluation",
     "NoActiveRun",
     "Completed",
     "TerminalFault",
@@ -821,10 +822,18 @@ def classify_product_recovery(
     """Classify only exact current-product status combinations.
 
     The allowed combinations mirror the current recovery sources: a valid
-    configuration publishes ``Standby``; a valid R1-resumable run publishes
-    no operational state until the resume decision and exposes
-    ``ResumeOffer``; a no-run/tombstone result maps to ``Standby``; and an
-    untrusted configuration/run path is ``ServiceRequired``/``SafeBoot``.
+    configuration publishes ``Standby``; a no-run/tombstone result maps to
+    ``Standby``; and an untrusted configuration/run path is
+    ``ServiceRequired``/``SafeBoot``. ``ResumeOffer`` remains a valid
+    disposition for a resume-eligible run (``Preheating``/``Cooling``/
+    ``ManualHolding``), but this harness's ``run`` scenario cannot currently
+    drive a run into one of those states (no automatic control loop is
+    composed yet), so it stays untested here rather than unreachable-by-
+    design. ``RecoveryEvaluation`` (a loaded ``Current``+``Fermenting``
+    record) is deliberately never classified ``PASS``: its status fields
+    alone cannot distinguish a trusted-time-pending record from a rejected
+    one, so it is routed to owner review instead of guessed as safe or
+    unsafe.
     """
 
     if scenario not in {"config", "run"}:
@@ -898,6 +907,13 @@ def classify_product_recovery(
                 "UNEXPECTED_CONFIGURATION_OUTCOME",
                 "configuration_scenario_status_tuple_not_allowed",
                 "FAIL",
+            )
+
+        if status["run_load_disposition"] == "RecoveryEvaluation":
+            return RecoveryClassification(
+                "RECOVERY_EVALUATION_REQUIRES_OWNER_REVIEW",
+                "recovery_evaluation_disposition_not_classifiable_by_slice7_status",
+                "BLOCKED",
             )
 
         run_tuple = (
@@ -1071,11 +1087,31 @@ class ProductSerial:
             raise RunnerError(f"unexpected response to {command}: {fields}")
         return fields
 
+    def set_trusted_utc(self, unix_seconds: int) -> dict[str, str]:
+        self.send(f"SET_TRUSTED_UTC {unix_seconds}")
+        _, fields = self.read_until("ISSUE90_TRUSTED_UTC_SET")
+        return fields
+
     def prepare_power_cut(self, scenario: str) -> dict[str, str]:
         command = {
             "config": "ARM_CONFIG_WRITE_LOAD",
             "run": "ARM_RUN_WRITE_LOAD",
         }[scenario]
+        if scenario == "run":
+            preflight = self.status()
+            if preflight.get("trusted_utc") != "NOT_AVAILABLE":
+                raise RunnerError(
+                    f"trusted_utc was already available before injection: {preflight}"
+                )
+            injected = self.set_trusted_utc(int(time.time()))
+            if injected.get("result") != "PASS":
+                raise RunnerError(f"SET_TRUSTED_UTC failed: {injected}")
+            confirmed = self.status()
+            trusted_utc = confirmed.get("trusted_utc")
+            if trusted_utc is None or trusted_utc == "NOT_AVAILABLE":
+                raise RunnerError(
+                    f"trusted_utc not numeric after injection: {confirmed}"
+                )
         self.send(command)
         _, armed = self.read_until("ISSUE90_LOAD_ARMED")
         if armed.get("result") != "PASS":
@@ -1109,6 +1145,7 @@ def print_attempt_result(
         ),
         "RUN_LOAD_DISPOSITION": status.get("run_load_disposition", "UNKNOWN"),
         "PUBLISHED_PROCESS_STATE": status.get("published_process_state", "UNKNOWN"),
+        "TRUSTED_UTC": status.get("trusted_utc", "UNKNOWN"),
         "ACTUATOR_RELEASE": status.get("actuator_release", "UNKNOWN"),
         "PRODUCT_RECOVERY_CLASSIFICATION": classification.classification,
         "PRODUCT_RECOVERY_REASON": classification.reason,
@@ -1624,6 +1661,24 @@ def selftest_recovery_classifier() -> None:
     ):
         if classify_product_recovery("run", status, faults).result != "PASS":
             raise RunnerError(f"valid standby/run outcome rejected: {status}")
+
+    recovery_evaluation = _base_status(
+        run_persistence_load_status="Current",
+        run_load_disposition="RecoveryEvaluation",
+        published_process_state="RecoveryEvaluation",
+    )
+    recovery_evaluation_classification = classify_product_recovery(
+        "run", recovery_evaluation, faults
+    )
+    if (
+        recovery_evaluation_classification.result != "BLOCKED"
+        or recovery_evaluation_classification.classification
+        != "RECOVERY_EVALUATION_REQUIRES_OWNER_REVIEW"
+    ):
+        raise RunnerError(
+            f"RecoveryEvaluation disposition not routed to owner review: "
+            f"{recovery_evaluation_classification}"
+        )
 
     config_fail_closed = _base_status(
         application_lifecycle="ServiceRequired",
