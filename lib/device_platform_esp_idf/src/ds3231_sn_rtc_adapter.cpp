@@ -22,11 +22,18 @@ struct Ds3231SnRtcAdapter::RtcDevice {
 Ds3231SnRtcAdapter::Ds3231SnRtcAdapter(EspIdfI2cSubsystem& i2c) noexcept
     : i2c_(i2c) {}
 
-Ds3231SnRtcAdapter::~Ds3231SnRtcAdapter() { static_cast<void>(shutdown()); }
+Ds3231SnRtcAdapter::~Ds3231SnRtcAdapter() {
+    // The object cannot retry after destruction.  If i2cdev still owns the
+    // descriptor after a failed cleanup, deliberately leak/quarantine its
+    // backing storage rather than let unique_ptr create a dangling registry
+    // entry.  The retained project claim still blocks i2cdev_done().
+    static_cast<void>(shutdownImpl(true));
+}
 
 esp_err_t Ds3231SnRtcAdapter::initialize(
     const Ds3231SnRtcConfig& config) noexcept {
-    if (initialized_) return ESP_ERR_INVALID_STATE;
+    if (initialized_ || device_ != nullptr || portClaimed_)
+        return ESP_ERR_INVALID_STATE;
     config_ = config;
     if (!config_.present) return ESP_OK;
     if (config_.address != kRtcAddress || !i2c_.initialized() ||
@@ -50,33 +57,37 @@ esp_err_t Ds3231SnRtcAdapter::initialize(
     }
     device_ = std::move(descriptor);
     if (i2c_dev_check_present(&device_->value) != ESP_OK) {
-        static_cast<void>(ds3231_free_desc(&device_->value));
-        device_.reset();
-        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
-        portClaimed_ = false;
-        return ESP_ERR_NOT_FOUND;
+        const auto cleanupStatus = shutdownImpl(false);
+        return cleanupStatus == ESP_OK ? ESP_ERR_NOT_FOUND : cleanupStatus;
     }
     initialized_ = true;
     if (!ensureHealthControls()) {
-        static_cast<void>(shutdown());
-        return ESP_FAIL;
+        const auto cleanupStatus = shutdownImpl(false);
+        return cleanupStatus == ESP_OK ? ESP_FAIL : cleanupStatus;
     }
     return ESP_OK;
 }
 
 esp_err_t Ds3231SnRtcAdapter::shutdown() noexcept {
-    if (!initialized_ && device_ == nullptr) return ESP_OK;
-    esp_err_t status = ESP_OK;
-    if (device_ != nullptr) {
-        status = ds3231_free_desc(&device_->value);
-        device_.reset();
-    }
-    if (portClaimed_) {
-        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
-        portClaimed_ = false;
-    }
+    return shutdownImpl(false);
+}
+
+esp_err_t Ds3231SnRtcAdapter::shutdownImpl(
+    const bool quarantineOnFailure) noexcept {
+    if (device_ == nullptr)
+        return portClaimed_ ? ESP_ERR_INVALID_STATE : ESP_OK;
+
+    // A requested shutdown makes normal adapter operations unavailable even
+    // when upstream cleanup fails.  The descriptor and claim remain owned for
+    // an explicit retry, or are quarantined by the destructor path.
     initialized_ = false;
-    return status;
+    internal::DescriptorCleanupBackend backend{
+        this, &Ds3231SnRtcAdapter::backendFreeDescriptor,
+        &Ds3231SnRtcAdapter::backendDestroyDescriptor,
+        &Ds3231SnRtcAdapter::backendReleasePortClaim,
+        &Ds3231SnRtcAdapter::backendQuarantineDescriptor};
+    return static_cast<esp_err_t>(
+        internal::cleanupDescriptor(backend, quarantineOnFailure));
 }
 
 esp_err_t Ds3231SnRtcAdapter::readRaw(RawRegisters& registers) noexcept {
@@ -188,6 +199,34 @@ bool Ds3231SnRtcAdapter::backendClearOsf(void* context) noexcept {
     return adapter != nullptr && adapter->device_ != nullptr &&
            ds3231_clear_oscillator_stop_flag(&adapter->device_->value) ==
                ESP_OK;
+}
+
+int Ds3231SnRtcAdapter::backendFreeDescriptor(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    if (adapter == nullptr || adapter->device_ == nullptr) return -1;
+    return static_cast<int>(ds3231_free_desc(&adapter->device_->value));
+}
+
+void Ds3231SnRtcAdapter::backendDestroyDescriptor(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    if (adapter != nullptr) adapter->device_.reset();
+}
+
+void Ds3231SnRtcAdapter::backendReleasePortClaim(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    if (adapter == nullptr || !adapter->portClaimed_) return;
+    adapter->i2c_.releasePort(adapter->config_.bus, adapter->config_.sdaPin,
+                              adapter->config_.sclPin);
+    adapter->portClaimed_ = false;
+}
+
+void Ds3231SnRtcAdapter::backendQuarantineDescriptor(void* context) noexcept {
+    auto* adapter = static_cast<Ds3231SnRtcAdapter*>(context);
+    if (adapter != nullptr) {
+        // No owner may destroy this storage while i2cdev's registry is
+        // unresolved.  The retained port claim prevents composition shutdown.
+        static_cast<void>(adapter->device_.release());
+    }
 }
 
 bool Ds3231SnRtcAdapter::synchronizeFromSystemUtc(

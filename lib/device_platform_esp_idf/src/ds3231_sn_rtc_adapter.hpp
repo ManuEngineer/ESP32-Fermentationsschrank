@@ -63,6 +63,11 @@ class Ds3231SnRtcAdapter final {
     [[nodiscard]] static bool backendDisable32khz(void* context) noexcept;
     [[nodiscard]] static bool backendReadOsf(void* context, bool& osf) noexcept;
     [[nodiscard]] static bool backendClearOsf(void* context) noexcept;
+    [[nodiscard]] static int backendFreeDescriptor(void* context) noexcept;
+    static void backendDestroyDescriptor(void* context) noexcept;
+    static void backendReleasePortClaim(void* context) noexcept;
+    static void backendQuarantineDescriptor(void* context) noexcept;
+    [[nodiscard]] esp_err_t shutdownImpl(bool quarantineOnFailure) noexcept;
 
     EspIdfI2cSubsystem& i2c_;
     Ds3231SnRtcConfig config_{};

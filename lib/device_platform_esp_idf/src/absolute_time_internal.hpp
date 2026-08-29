@@ -172,6 +172,41 @@ inline int writeRegisterWithMutex(I2cMutexWriteBackend backend,
     return writeStatus == 0 ? giveStatus : writeStatus;
 }
 
+struct DescriptorCleanupBackend {
+    void* context{nullptr};
+    int (*freeDescriptor)(void*){nullptr};
+    void (*destroyDescriptor)(void*){nullptr};
+    void (*releasePortClaim)(void*){nullptr};
+    void (*quarantineDescriptor)(void*){nullptr};
+};
+
+// ds3231_free_desc() delegates to i2c_dev_delete_mutex().  If that upstream
+// cleanup fails before deregistration, the descriptor may still be present in
+// i2cdev's active-device registry.  Destroying its storage or releasing our
+// port claim then would make i2cdev_done() unsafe.  Ownership therefore moves
+// only after a confirmed free success.  The destructor may quarantine the
+// backing storage when retry is no longer possible; explicit shutdown keeps it
+// owned for a later retry.
+inline int cleanupDescriptor(DescriptorCleanupBackend backend,
+                             const bool quarantineOnFailure) noexcept {
+    if (backend.freeDescriptor == nullptr ||
+        backend.destroyDescriptor == nullptr ||
+        backend.releasePortClaim == nullptr) {
+        return -1;
+    }
+
+    const int freeStatus = backend.freeDescriptor(backend.context);
+    if (freeStatus != 0) {
+        if (quarantineOnFailure && backend.quarantineDescriptor != nullptr)
+            backend.quarantineDescriptor(backend.context);
+        return freeStatus;
+    }
+
+    backend.destroyDescriptor(backend.context);
+    backend.releasePortClaim(backend.context);
+    return 0;
+}
+
 inline bool unixToDs3231Tm(const std::int64_t utcUnixSeconds, ::tm& value) {
     const auto seconds = static_cast<std::time_t>(utcUnixSeconds);
     if (static_cast<std::int64_t>(seconds) != utcUnixSeconds ||

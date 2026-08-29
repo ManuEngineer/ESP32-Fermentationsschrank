@@ -218,6 +218,150 @@ void test_mutex_give_failure_is_returned_after_successful_write() {
     TEST_ASSERT_EQUAL_INT(1, fake.giveCalls);
 }
 
+struct DescriptorCleanupFake {
+    int freeResult{-7};
+    int freeCalls{0};
+    int destroyCalls{0};
+    int releaseCalls{0};
+    int quarantineCalls{0};
+    bool descriptorOwned{true};
+    bool claimHeld{true};
+};
+
+int fakeFreeDescriptor(void* context) {
+    auto& fake = *static_cast<DescriptorCleanupFake*>(context);
+    ++fake.freeCalls;
+    return fake.freeResult;
+}
+
+void fakeDestroyDescriptor(void* context) {
+    auto& fake = *static_cast<DescriptorCleanupFake*>(context);
+    ++fake.destroyCalls;
+    fake.descriptorOwned = false;
+}
+
+void fakeReleasePortClaim(void* context) {
+    auto& fake = *static_cast<DescriptorCleanupFake*>(context);
+    ++fake.releaseCalls;
+    fake.claimHeld = false;
+}
+
+void fakeQuarantineDescriptor(void* context) {
+    auto& fake = *static_cast<DescriptorCleanupFake*>(context);
+    ++fake.quarantineCalls;
+}
+
+internal::DescriptorCleanupBackend cleanupBackend(DescriptorCleanupFake& fake) {
+    return {&fake, &fakeFreeDescriptor, &fakeDestroyDescriptor,
+            &fakeReleasePortClaim, &fakeQuarantineDescriptor};
+}
+
+void test_descriptor_cleanup_success_transfers_ownership() {
+    DescriptorCleanupFake fake;
+    fake.freeResult = 0;
+
+    TEST_ASSERT_EQUAL_INT(
+        0, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(1, fake.freeCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.releaseCalls);
+    TEST_ASSERT_FALSE(fake.descriptorOwned);
+    TEST_ASSERT_FALSE(fake.claimHeld);
+}
+
+void test_descriptor_cleanup_failure_retains_descriptor_and_claim() {
+    DescriptorCleanupFake fake;
+
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(1, fake.freeCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+    TEST_ASSERT_TRUE(fake.descriptorOwned);
+    TEST_ASSERT_TRUE(fake.claimHeld);
+}
+
+void test_descriptor_cleanup_retries_after_upstream_failure() {
+    DescriptorCleanupFake fake;
+
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(0, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+
+    fake.freeResult = 0;
+    TEST_ASSERT_EQUAL_INT(
+        0, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(2, fake.freeCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.releaseCalls);
+}
+
+void test_initialize_probe_failure_cleanup_success_releases_ownership() {
+    DescriptorCleanupFake fake;
+    fake.freeResult = 0;
+
+    // The descriptor was initialized, then the device probe failed.  The
+    // same cleanup seam used by initialize() must complete the rollback.
+    TEST_ASSERT_EQUAL_INT(
+        0, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(1, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.releaseCalls);
+}
+
+void test_initialize_probe_failure_cleanup_failure_retains_ownership() {
+    DescriptorCleanupFake fake;
+
+    // A failed probe must not turn an unresolved upstream descriptor into a
+    // dangling pointer by releasing either local ownership or the claim.
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(0, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+    TEST_ASSERT_TRUE(fake.descriptorOwned);
+    TEST_ASSERT_TRUE(fake.claimHeld);
+}
+
+void test_initialize_health_failure_cleanup_failure_retains_ownership() {
+    DescriptorCleanupFake fake;
+
+    // Probe succeeded but health validation failed; cleanup remains retryable
+    // under exactly the same success-bound ownership rule.
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(0, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+    TEST_ASSERT_TRUE(fake.descriptorOwned);
+    TEST_ASSERT_TRUE(fake.claimHeld);
+}
+
+void test_destructor_cleanup_failure_quarantines_descriptor() {
+    DescriptorCleanupFake fake;
+
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), true));
+    TEST_ASSERT_EQUAL_INT(0, fake.destroyCalls);
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+    TEST_ASSERT_EQUAL_INT(1, fake.quarantineCalls);
+    TEST_ASSERT_TRUE(fake.descriptorOwned);
+    TEST_ASSERT_TRUE(fake.claimHeld);
+}
+
+void test_failed_descriptor_cleanup_keeps_composition_shutdown_blocked() {
+    DescriptorCleanupFake fake;
+    internal::SharedI2cPortClaims claims;
+    constexpr internal::I2cPortConfiguration configuration{0, 21, 22};
+
+    TEST_ASSERT_TRUE(claims.claim(configuration));
+    TEST_ASSERT_EQUAL_INT(
+        -7, internal::cleanupDescriptor(cleanupBackend(fake), false));
+    TEST_ASSERT_EQUAL_INT(0, fake.releaseCalls);
+    TEST_ASSERT_TRUE(claims.hasClaims());
+    // EspIdfI2cSubsystem::shutdown() maps this exact guard to
+    // ESP_ERR_INVALID_STATE and therefore must not call i2cdev_done().
+    TEST_ASSERT_TRUE(claims.users() != 0U);
+}
+
 struct SyncFake {
     internal::Ds3231SnRawRegisters raw{validRaw()};
     bool failSet{false};
@@ -658,6 +802,14 @@ int main() {
     RUN_TEST(test_mutex_take_failure_does_not_write_or_give);
     RUN_TEST(test_mutex_write_failure_gives_once_and_preserves_write_error);
     RUN_TEST(test_mutex_give_failure_is_returned_after_successful_write);
+    RUN_TEST(test_descriptor_cleanup_success_transfers_ownership);
+    RUN_TEST(test_descriptor_cleanup_failure_retains_descriptor_and_claim);
+    RUN_TEST(test_descriptor_cleanup_retries_after_upstream_failure);
+    RUN_TEST(test_initialize_probe_failure_cleanup_success_releases_ownership);
+    RUN_TEST(test_initialize_probe_failure_cleanup_failure_retains_ownership);
+    RUN_TEST(test_initialize_health_failure_cleanup_failure_retains_ownership);
+    RUN_TEST(test_destructor_cleanup_failure_quarantines_descriptor);
+    RUN_TEST(test_failed_descriptor_cleanup_keeps_composition_shutdown_blocked);
     RUN_TEST(test_rtc_sync_set_failure_is_untrusted);
     RUN_TEST(test_rtc_sync_readback_mismatch_is_untrusted);
     RUN_TEST(test_rtc_sync_allows_normal_forward_second_rollover);

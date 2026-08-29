@@ -62,6 +62,15 @@ Die Hashwerte werden nicht manuell in diesem Register aufgeloest oder
 veraendert; jede Abweichung vom Lockfile blockiert den License-/Dependency-
 Gate.
 
+Der gepruefte Cleanup-Vertrag bleibt fuer den ESP-IDF-Adapter relevant:
+`ds3231_free_desc()` delegiert an `i2c_dev_delete_mutex()`. Dieser Upstream-
+Pfad kann vor der Deregistrierung mit einem Fehler wie `ESP_ERR_TIMEOUT`
+zurueckkehren. Der Adapter behaelt deshalb Descriptor-Speicher und
+Port-Claim bis zu einem bestaetigten `ESP_OK`; erst dann werden Descriptor und
+Claim freigegeben. Der Destruktor quarantänisiert bei einem nicht mehr
+retryfaehigen Fehler den Speicher und laesst den Claim bestehen, damit
+`i2cdev_done()` nicht auf ungeklärte Descriptor-Ownership zugreift.
+
 ## Register
 
 Alle Onlinequellen des ursprünglichen Audits wurden am 2026-07-27 abgerufen;
