@@ -211,7 +211,7 @@ def confirm_rom_bootloader(args: argparse.Namespace, action: str) -> bool:
     except RunnerError as error:
         print("ROM_BOOTLOADER_READY=FAIL", flush=True)
         raise RunnerError("ROM_BOOTLOADER_READY=FAIL") from error
-    if "chip is" not in probe_output.lower():
+    if "connected to esp32" not in probe_output.lower():
         print("ROM_BOOTLOADER_READY=FAIL", flush=True)
         raise RunnerError("ROM_BOOTLOADER_READY=FAIL; chip-id response unrecognized")
     print("ROM_BOOTLOADER_READY=PASS", flush=True)
@@ -1362,7 +1362,7 @@ def selftest_backup_workflow() -> None:
             nonlocal tamper_state_readback
             operation = command[0]
             if operation == "chip-id":
-                return "Chip is ESP32"
+                return "Connected to ESP32 on /dev/ttyFAKE:\nChip type: ESP32-D0WD-V3"
             if operation == "read-flash":
                 offset = int(command[1], 0)
                 size = int(command[2], 0)
