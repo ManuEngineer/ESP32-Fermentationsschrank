@@ -230,10 +230,27 @@ nicht bestueckt (`FUTURE_RELEASE`).
 Versorgungsspannungen, Reglerleistung, Leitungsquerschnitte, Sicherungshalter und
 Stecker werden am realen Aufbau dokumentiert.
 
+## Optionale R1-RTC
+
+Die vorgesehene RTC-Variante des HW-084-Moduls ist `DS3231SN`, I2C-Adresse
+`0x68`. Sie speichert ausschliesslich UTC. Die RTC ist optional: `present=false`
+ist ein gültiges R1-Produktprofil und führt in den NTP-only-Modus. Eine
+trusted RTC ermöglicht sofortige Offline-Recovery; ohne trusted RTC wartet die
+Anwendung auf NTP und startet keinen neuen produktiven Lauf ohne trusted UTC.
+
+Der DS3231SN wird über den bestehenden geteilten I2C-Bus eingebunden. Bus,
+SDA-/SCL-Pins, Pull-ups, Versorgung, Batterie-/Ladepfad und weitere Geräte sind
+noch nicht am realen Aufbau bestätigt und bleiben `TBD_HARDWARE`. Der
+physische IC-Aufdruck, die I2C-Erreichbarkeit, OSF-/EOSC-Verhalten und die
+Power-Loss-Zeitretention müssen im Hardwaregate nachgewiesen werden.
+
+Die Software akzeptiert RTC-Zeit nur nach Rohregister-, BCD-, Kalender-,
+OSF-, EOSC-, EN32kHz- und R1-Jahresbereichprüfung. Der ungenutzte 32-kHz-
+Ausgang wird deaktiviert; SQW/INT bleibt in R1 ungenutzt.
+
 ## Nicht vorgesehene Hardware in Release 1
 
 - Tuerkontakt
-- verpflichtende batteriegepufferte RTC
 - verpflichtende 12-V-ADC-Messung
 - Luefter-Tachosignal
 - externe Strommessung zusaetzlich zu optionalem R_IS/L_IS

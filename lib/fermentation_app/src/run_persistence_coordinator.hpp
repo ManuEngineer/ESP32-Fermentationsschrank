@@ -75,6 +75,7 @@ enum class RunPersistenceTechnicalReason : std::uint8_t {
     StoreOutcomeUnknown,
     CodecError,
     InvalidProjection,
+    TrustedAbsoluteTimeRequired,
 };
 
 enum class RunPersistenceDurability : std::uint8_t {

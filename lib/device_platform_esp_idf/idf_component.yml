@@ -1,0 +1,5 @@
+dependencies:
+  esp-idf-lib/ds3231:
+    version: "1.1.7"
+  esp-idf-lib/i2cdev:
+    version: "2.1.2"

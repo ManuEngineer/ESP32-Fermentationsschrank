@@ -4,6 +4,9 @@
 
 #include "app_config.hpp"
 #include "device_platform.hpp"
+#include "ds3231_sn_rtc_adapter.hpp"
+#include "esp_idf_i2c_subsystem.hpp"
+#include "esp_idf_sntp_time_coordinator.hpp"
 #include "esp_timer_time_source.hpp"
 #include "esp_reset_cause_source.hpp"
 #include "esp_time_zone_resolver.hpp"
@@ -42,6 +45,12 @@ constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // docs/tasks/issue-73-implementation-plan.md, Abschnitt 12. Bewusst nicht
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
 constexpr TickType_t kCooperativeYieldTicks = 1;
+constexpr const char* kNtpServers[] = {"pool.ntp.org"};
+
+// No board profile with verified RTC bus pins exists yet.  The disabled
+// profile is therefore intentional and is the supported NTP-only mode; a
+// future hardware gate supplies these fields before setting present=true.
+constexpr device_platform_esp_idf::Ds3231SnRtcConfig kRtcConfig{};
 
 // The composition root owns the concrete partition lifecycle.  The adapter
 // only opens/closes its handle; it never initializes, erases, or deinitializes
@@ -156,6 +165,32 @@ extern "C" void app_main(void) {
     device_platform::DevicePlatform platform;
     const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
     const device_platform_esp_idf::EspTimerTimeSource timeSource;
+    device_platform_esp_idf::EspIdfI2cSubsystem i2cSubsystem;
+    device_platform_esp_idf::Ds3231SnRtcAdapter rtc(i2cSubsystem);
+    if (kRtcConfig.present) {
+        if (i2cSubsystem.begin() != ESP_OK ||
+            rtc.initialize(kRtcConfig) != ESP_OK) {
+            ESP_LOGW(kTag, "DS3231SN RTC unavailable; continuing NTP-only");
+        }
+    }
+    if (const auto rtcUtc = rtc.readTrustedUtc();
+        rtcUtc.has_value() &&
+        device_platform_esp_idf::EspTimerTimeSource::setSystemTimeUtc(
+            *rtcUtc)) {
+        static_cast<void>(timeSource.markAbsoluteTimeTrusted());
+        ESP_LOGI(kTag, "trusted UTC seeded from DS3231SN RTC");
+    }
+    device_platform_esp_idf::EspIdfSntpTimeCoordinator sntp(timeSource, &rtc);
+    const device_platform_esp_idf::SntpServerConfiguration sntpConfiguration{
+        kNtpServers, 1U, false};
+    if (sntp.initialize(sntpConfiguration) == ESP_OK) {
+        // Starting SNTP is non-blocking.  It depends on the connectivity
+        // lifecycle owned by Issue #89 and may be restarted when an IP is
+        // available.
+        static_cast<void>(sntp.start());
+    } else {
+        ESP_LOGW(kTag, "SNTP initialization failed; continuing fail-closed");
+    }
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
 
@@ -205,6 +240,7 @@ extern "C" void app_main(void) {
 
     for (;;) {
         platform.update();
+        sntp.poll();
         application.update();
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
         issue90Harness.update();

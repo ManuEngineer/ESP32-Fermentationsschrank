@@ -300,7 +300,15 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform", "nvs_flash"}),
-        "private": frozenset({"esp_timer"}),
+        "private": frozenset(
+            {
+                "esp_timer",
+                "esp_netif",
+                "lwip",
+                "esp-idf-lib__ds3231",
+                "esp-idf-lib__i2cdev",
+            }
+        ),
     },
     "main/CMakeLists.txt": {
         "public": frozenset(),
@@ -337,7 +345,10 @@ COMPONENT_REGISTER_KEYWORDS = frozenset(
 )
 COMPONENT_REGISTER_CALL_PATTERN = re.compile(r"idf_component_register\s*\(")
 CMAKE_TOKEN_PATTERN = re.compile(r'"(?P<quoted>[^"]*)"|(?P<bare>\S+)')
-CMAKE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# ESP-IDF component targets may contain hyphens (for example the generated
+# target `esp-idf-lib__ds3231`).  Keep CMake variable expansion and other
+# non-literal tokens outside this allowlist.
+CMAKE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 
 
 def text_files(directory: Path):
@@ -956,7 +967,9 @@ def create_clean_fixture(root: Path) -> None:
         ),
         "lib/device_platform_esp_idf/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
-            'REQUIRES device_platform nvs_flash PRIV_REQUIRES esp_timer)\n'
+            'REQUIRES device_platform nvs_flash PRIV_REQUIRES '
+            'esp_timer esp_netif lwip esp-idf-lib__ds3231 '
+            'esp-idf-lib__i2cdev)\n'
         ),
         "main/app_main.cpp": '#include "device_platform.hpp"\n',
         "main/CMakeLists.txt": (
