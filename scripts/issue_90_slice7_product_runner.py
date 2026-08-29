@@ -356,7 +356,9 @@ def freeze_release_restore_bundle(
     SHA-256 check against them, never a source-SHA-only substitute.
     """
     frozen_dir = backup_dir / "production_release"
-    frozen_dir.mkdir(parents=True, exist_ok=True)
+    if frozen_dir.exists():
+        raise RunnerError(f"BLOCKED_PREPARE_TARGET_ALREADY_EXISTS: {frozen_dir}")
+    frozen_dir.mkdir(parents=True)
     frozen_names = {
         "bootloader": "bootloader.bin",
         "partition_table": "partition-table.bin",
@@ -389,11 +391,32 @@ def freeze_release_restore_bundle(
     return frozen_artifacts, frozen_provenance
 
 
+def require_prepare_targets_available(args: argparse.Namespace) -> None:
+    """Refuse to prepare into any location a previous cycle already used.
+
+    The old manifest and its raw/frozen backups must remain historical
+    evidence; a later prepare cycle must pass a new --backup-dir/
+    --manifest-output rather than silently overwrite the previous cycle's
+    raw production backups or frozen release bundle. Checked before any
+    hardware access.
+    """
+    targets = (
+        Path(args.manifest_output),
+        Path(args.backup_dir) / "production_partition_table.bin",
+        Path(args.backup_dir) / "production_state_store.bin",
+        Path(args.backup_dir) / "production_release",
+    )
+    for target in targets:
+        if target.exists():
+            raise RunnerError(f"BLOCKED_PREPARE_TARGET_ALREADY_EXISTS: {target}")
+
+
 def prepare_pre_harness_backup(
     args: argparse.Namespace, *, rom_bootloader_ready: bool = False
 ) -> int:
     if not rom_bootloader_ready:
         raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRE_HARNESS_BACKUP")
+    require_prepare_targets_available(args)
     require_clean_source_tree()
     source_sha = require_source_sha(args.production_source_sha)
     production_table = Path(args.production_partition_table)
@@ -542,6 +565,11 @@ def load_pre_harness_manifest(path: Path) -> dict[str, object]:
         raise RunnerError("backup manifest plan SHA rejected")
     if data.get("backup_source_state") != "PRODUCTION_LAYOUT":
         raise RunnerError("BACKUP_SOURCE_STATE rejected; production layout required")
+    if (
+        data.get("release_artifacts_frozen") is not True
+        or data.get("restore_bundle_local_only") is not True
+    ):
+        raise RunnerError("BLOCKED_LEGACY_NON_FROZEN_RESTORE_MANIFEST")
     if data.get("actor_free") is not True or data.get("real_actuators_enabled") is not False:
         raise RunnerError("backup manifest actor-free contract rejected")
     if data.get("source_tree_clean") is not True:
@@ -1365,6 +1393,9 @@ def rebaseline_production_write(
     """
     if not rom_bootloader_ready:
         raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRODUCTION_REBASELINE")
+    record_path = Path(args.backup_dir) / "rebaseline-record.json"
+    if record_path.exists():
+        raise RunnerError(f"BLOCKED_REBASELINE_RECORD_ALREADY_EXISTS: {record_path}")
     old_manifest_path = Path(args.pre_harness_manifest)
     old_manifest = load_manifest_for_production_rebaseline(old_manifest_path)
     print("OLD_MANIFEST_VALID=YES", flush=True)
@@ -1488,7 +1519,6 @@ def rebaseline_production_write(
         "original_application_byte_exact_restore": "NOT_POSSIBLE_ARTIFACT_LOST",
         "rebaseline_state": "REBASELINE_WRITTEN_PENDING_NORMAL_BOOT",
     }
-    record_path = Path(args.backup_dir) / "rebaseline-record.json"
     record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     print(f"REBASELINE_RECORD={record_path.resolve()}", flush=True)
     return record, record_path
@@ -1742,6 +1772,46 @@ def selftest_backup_workflow() -> None:
                 prepare_pre_harness_backup(
                     prepare_args, rom_bootloader_ready=True
                 )
+
+            # A later prepare cycle must never silently reuse or overwrite
+            # any target a previous cycle already produced - it must use a
+            # fresh --backup-dir/--manifest-output instead. Each of the four
+            # tracked targets is checked in isolation, before any hardware
+            # access (require_prepare_targets_available runs before
+            # require_clean_source_tree).
+            for existing_target_name in (
+                "manifest_output",
+                "partition_table_backup",
+                "state_store_backup",
+                "frozen_release_dir",
+            ):
+                reuse_backup_dir = root / f"reuse-check-{existing_target_name}-backup"
+                reuse_manifest_output = (
+                    root / f"reuse-check-{existing_target_name}-manifest.json"
+                )
+                if existing_target_name == "manifest_output":
+                    reuse_manifest_output.write_text("{}", encoding="utf-8")
+                elif existing_target_name == "partition_table_backup":
+                    reuse_backup_dir.mkdir(parents=True)
+                    (reuse_backup_dir / "production_partition_table.bin").write_bytes(
+                        b"stale"
+                    )
+                elif existing_target_name == "state_store_backup":
+                    reuse_backup_dir.mkdir(parents=True)
+                    (reuse_backup_dir / "production_state_store.bin").write_bytes(
+                        b"stale"
+                    )
+                else:
+                    (reuse_backup_dir / "production_release").mkdir(parents=True)
+                reuse_args = argparse.Namespace(**vars(prepare_args))
+                reuse_args.manifest_output = str(reuse_manifest_output)
+                reuse_args.backup_dir = str(reuse_backup_dir)
+                _expect_rejected(
+                    lambda captured=reuse_args: prepare_pre_harness_backup(
+                        captured, rom_bootloader_ready=True
+                    ),
+                    "BLOCKED_PREPARE_TARGET_ALREADY_EXISTS",
+                )
             manifest_path = Path(prepare_args.manifest_output)
             manifest = load_pre_harness_manifest(manifest_path)
             _expect_rejected(
@@ -1757,6 +1827,37 @@ def selftest_backup_workflow() -> None:
                 lambda: load_pre_harness_manifest(wrong_layout),
                 "BACKUP_SOURCE_STATE",
             )
+
+            # A manifest predating the restore-bundle freeze (or one with the
+            # frozen markers stripped/false) must never be usable by a normal
+            # restore - only load_manifest_for_production_rebaseline() may
+            # still read its still-valid raw backups.
+            for missing_flag in ("release_artifacts_frozen", "restore_bundle_local_only"):
+                legacy_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                del legacy_data[missing_flag]
+                legacy_manifest = root / f"legacy-missing-{missing_flag}.json"
+                legacy_manifest.write_text(json.dumps(legacy_data), encoding="utf-8")
+                _expect_rejected(
+                    lambda captured=legacy_manifest: load_pre_harness_manifest(captured),
+                    "BLOCKED_LEGACY_NON_FROZEN_RESTORE_MANIFEST",
+                )
+                legacy_data_false = json.loads(manifest_path.read_text(encoding="utf-8"))
+                legacy_data_false[missing_flag] = False
+                legacy_manifest_false = root / f"legacy-false-{missing_flag}.json"
+                legacy_manifest_false.write_text(
+                    json.dumps(legacy_data_false), encoding="utf-8"
+                )
+                _expect_rejected(
+                    lambda captured=legacy_manifest_false: load_pre_harness_manifest(
+                        captured
+                    ),
+                    "BLOCKED_LEGACY_NON_FROZEN_RESTORE_MANIFEST",
+                )
+                # The same legacy-shaped manifest must still work through the
+                # separate, explicitly narrower rebaseline loader, since that
+                # is exactly the real manifest this guard exists to preserve
+                # access to.
+                load_manifest_for_production_rebaseline(legacy_manifest)
 
             wrong_hash = root / "wrong-hash.json"
             wrong_data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1982,6 +2083,8 @@ def selftest_backup_workflow() -> None:
     print("PASS: ROM bootloader and restore phase state selftests", flush=True)
     print("PASS: exact release/post-restore provenance selftests", flush=True)
     print("PASS: proof build/prepare rejects dirty source tree", flush=True)
+    print("PASS: prepare rejects any already-existing target before hardware access", flush=True)
+    print("PASS: legacy non-frozen manifest rejected by normal restore, still readable by rebaseline loader", flush=True)
 
 
 def selftest_rebaseline_workflow() -> None:
@@ -2064,6 +2167,7 @@ def selftest_rebaseline_workflow() -> None:
                 )
                 with contextlib.redirect_stdout(io.StringIO()):
                     prepare_pre_harness_backup(prepare_args, rom_bootloader_ready=True)
+            old_manifest_before = old_manifest_path.read_bytes()
 
             # Simulate the actual regression this phase exists for: the old
             # manifest's own (frozen, in this case) release artifacts are
@@ -2197,14 +2301,26 @@ def selftest_rebaseline_workflow() -> None:
             # The old manifest file itself must remain byte-for-byte
             # untouched: rebaseline is not a normal restore and must never
             # edit historical evidence.
-            old_manifest_after = old_manifest_path.read_text(encoding="utf-8")
-            if json.loads(old_manifest_after).get("production_source_sha") != (
-                old_source_sha
-            ):
-                raise RunnerError("rebaseline modified the old manifest's source SHA")
+            old_manifest_after = old_manifest_path.read_bytes()
+            if old_manifest_after != old_manifest_before:
+                raise RunnerError(
+                    "rebaseline modified the old manifest file byte content"
+                )
+
+            # A second rebaseline attempt into the same --backup-dir must
+            # never overwrite the first attempt's record - historical
+            # evidence of a rebaseline must be as immutable as the manifest
+            # backups it was built from.
+            _expect_rejected(
+                lambda: rebaseline_production_write(
+                    rebaseline_args, rom_bootloader_ready=True
+                ),
+                "BLOCKED_REBASELINE_RECORD_ALREADY_EXISTS",
+            )
     print("PASS: production-rebaseline partition-layout guard", flush=True)
     print("PASS: production-rebaseline write/readback/record sequence", flush=True)
     print("PASS: production-rebaseline leaves the old manifest untouched", flush=True)
+    print("PASS: production-rebaseline record cannot be overwritten", flush=True)
 
 
 def selftest_recovery_classifier() -> None:
