@@ -2,9 +2,14 @@
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
 
+#include <charconv>
 #include <cinttypes>
+#include <cstdint>
+#include <cstdio>
 #include <limits>
+#include <optional>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include "configuration_recovery_service.hpp"
@@ -24,6 +29,22 @@ namespace {
 constexpr char kTag[] = "issue90_slice7";
 constexpr char kTestPartition[] = "state_store_test";
 constexpr std::uint64_t kLoadIntervalMicros = 500000U;
+constexpr std::string_view kSetTrustedUtcCommand = "SET_TRUSTED_UTC";
+
+// Strictly a single positive int64 token, no leading/trailing/embedded
+// non-digit characters, no overflow. Harness-only test seam; never reached
+// by the release build (APP_ISSUE_90_SLICE7_HARNESS-gated translation unit).
+std::optional<std::int64_t> parseTrustedUtcArgument(
+    std::string_view argument) noexcept {
+    std::int64_t value = 0;
+    const auto result = std::from_chars(
+        argument.data(), argument.data() + argument.size(), value);
+    if (result.ec != std::errc{} ||
+        result.ptr != argument.data() + argument.size() || value <= 0) {
+        return std::nullopt;
+    }
+    return value;
+}
 
 const char* lifecycleName(ApplicationLifecycleState value) noexcept {
     switch (value) {
@@ -244,8 +265,10 @@ const char* runResultStatusName(RunPersistenceResultStatus value) noexcept {
 
 }  // namespace
 
-Harness::Harness(FermentationApplication& application) noexcept
-    : application_(application) {}
+Harness::Harness(
+    FermentationApplication& application,
+    const device_platform_esp_idf::EspTimerTimeSource& timeSource) noexcept
+    : application_(application), timeSource_(timeSource) {}
 
 std::uint64_t Harness::nowMicros() const noexcept {
     return timeSource_.monotonicMillis() * 1000U;
@@ -332,6 +355,8 @@ void Harness::processLine() noexcept {
         loadMode_ = LoadMode::Stopped;
         const bool stopped = stopActiveRun();
         emitCommandResult("STOP", stopped);
+    } else if (command.rfind(kSetTrustedUtcCommand, 0) == 0) {
+        handleSetTrustedUtc(command.substr(kSetTrustedUtcCommand.size()));
     } else if (!command.empty()) {
         ESP_LOGE(kTag, "ISSUE90_COMMAND_RESULT command=UNKNOWN result=FAIL");
     }
@@ -351,13 +376,22 @@ void Harness::emitStatus() const noexcept {
         publishedState =
             processStateName(application_.runtimeRunState_->processState.state);
     }
+    const auto trustedUtc = application_.currentCheckpointTime().utcUnixSeconds;
+    char trustedUtcText[24];
+    if (trustedUtc.has_value()) {
+        std::snprintf(trustedUtcText, sizeof(trustedUtcText), "%" PRId64,
+                      *trustedUtc);
+    } else {
+        std::snprintf(trustedUtcText, sizeof(trustedUtcText), "NOT_AVAILABLE");
+    }
     ESP_LOGI(
         kTag,
         "ISSUE90_STATUS application_started=YES application_lifecycle=%s "
         "configuration_recovery_status=%s "
         "configuration_runtime_available=%s "
         "run_persistence_load_status=%s run_load_disposition=%s "
-        "published_process_state=%s actuator_release=false",
+        "published_process_state=%s actuator_release=false "
+        "trusted_utc=%s",
         lifecycleName(application_.lifecycleState_),
         recoveryStatus == nullptr
             ? "NOT_AVAILABLE"
@@ -368,7 +402,8 @@ void Harness::emitStatus() const noexcept {
             : "NO",
         loadStatus == nullptr ? "NOT_AVAILABLE"
                               : runLoadStatusName(*loadStatus),
-        runLoadDispositionName(application_.loadDisposition_), publishedState);
+        runLoadDispositionName(application_.loadDisposition_), publishedState,
+        trustedUtcText);
 }
 
 void Harness::emitCommandResult(const char* command,
@@ -460,14 +495,17 @@ bool Harness::writeRun() noexcept {
         return stopActiveRun();
     }
 
-    const auto timestamp = nowMicros() / 1000U;
+    const auto checkpointTime = application_.currentCheckpointTime();
     ManualStartRequest request;
-    request.envelope = {
-        nextCommandId_++,  CommandSource::LocalDisplay,
-        timestamp,         state.processState.transitionSequence,
-        state.runRevision, std::nullopt,
-        std::nullopt,      true,
-        std::nullopt};
+    request.envelope = {nextCommandId_++,
+                        CommandSource::LocalDisplay,
+                        checkpointTime.monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
     request.plan.runId =
         (loadIteration_ % 2U) == 0U ? "issue90-run-a" : "issue90-run-b";
     request.plan.targetTemperatureCelsius = 37.0;
@@ -486,7 +524,7 @@ bool Harness::writeRun() noexcept {
         return false;
     }
     const auto result = application_.runPersistenceCoordinator_->persistCommand(
-        state, decision, RunCheckpointTime{timestamp, std::nullopt});
+        state, decision, checkpointTime);
     const bool passed = result.status == RunPersistenceResultStatus::Applied;
     ESP_LOGI(kTag, "ISSUE90_RUN_WRITE_RESULT status=%s result=%s",
              runResultStatusName(result.status), passed ? "PASS" : "FAIL");
@@ -504,14 +542,17 @@ bool Harness::stopActiveRun() noexcept {
         return true;
     }
 
-    const auto timestamp = nowMicros() / 1000U;
+    const auto checkpointTime = application_.currentCheckpointTime();
     StopRequest request;
-    request.envelope = {
-        nextCommandId_++,  CommandSource::LocalDisplay,
-        timestamp,         state.processState.transitionSequence,
-        state.runRevision, std::nullopt,
-        std::nullopt,      true,
-        std::nullopt};
+    request.envelope = {nextCommandId_++,
+                        CommandSource::LocalDisplay,
+                        checkpointTime.monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
     request.option = StopOption::AbortAndTurnOff;
     request.safetyAllowsCooling = false;
     request.airSensorValid = true;
@@ -519,7 +560,7 @@ bool Harness::stopActiveRun() noexcept {
     const auto decision = decideStop(state, request);
     if (!decision.proposed()) return false;
     const auto result = application_.runPersistenceCoordinator_->persistCommand(
-        state, decision, RunCheckpointTime{timestamp, std::nullopt});
+        state, decision, checkpointTime);
     const bool passed = result.status == RunPersistenceResultStatus::Applied;
     ESP_LOGI(kTag, "ISSUE90_RUN_STOP_RESULT status=%s result=%s",
              runResultStatusName(result.status), passed ? "PASS" : "FAIL");
@@ -533,8 +574,7 @@ bool Harness::discardPendingRun() noexcept {
     }
     const auto result =
         application_.runPersistenceCoordinator_->discardAsNoActiveRun(
-            *application_.pendingResume_,
-            RunCheckpointTime{nowMicros() / 1000U, std::nullopt});
+            *application_.pendingResume_, application_.currentCheckpointTime());
     if (result.status != RunPersistenceResultStatus::Applied) {
         ESP_LOGE(kTag,
                  "ISSUE90_RUN_DISCARD_PENDING_RESULT status=%s result=FAIL",
@@ -554,6 +594,31 @@ void Harness::requestRestart(const char* command) noexcept {
     ESP_LOGI(kTag, "ISSUE90_RELOAD_REQUEST command=%s result=PASS", command);
     vTaskDelay(pdMS_TO_TICKS(100U));
     esp_restart();
+}
+
+void Harness::handleSetTrustedUtc(std::string_view argument) noexcept {
+    if (argument.empty() || argument.front() != ' ') {
+        ESP_LOGE(kTag,
+                 "ISSUE90_TRUSTED_UTC_SET result=FAIL reason=INVALID_INPUT");
+        return;
+    }
+    argument.remove_prefix(1U);
+    const auto parsed = parseTrustedUtcArgument(argument);
+    if (!parsed.has_value()) {
+        ESP_LOGE(kTag,
+                 "ISSUE90_TRUSTED_UTC_SET result=FAIL reason=INVALID_INPUT");
+        return;
+    }
+    if (!device_platform_esp_idf::EspTimerTimeSource::setSystemTimeUtc(
+            *parsed)) {
+        ESP_LOGE(kTag,
+                 "ISSUE90_TRUSTED_UTC_SET result=FAIL "
+                 "reason=SET_SYSTEM_TIME_FAILED");
+        return;
+    }
+    static_cast<void>(timeSource_.markAbsoluteTimeTrusted());
+    ESP_LOGI(kTag, "ISSUE90_TRUSTED_UTC_SET result=PASS unix_seconds=%" PRId64,
+             *parsed);
 }
 
 }  // namespace fermentation::issue_90_slice7
