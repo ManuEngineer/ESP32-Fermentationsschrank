@@ -175,7 +175,7 @@ def run_esptool(port: str, baud: int, command: list[str]) -> str:
             "--baud",
             str(baud),
             "--before",
-            "no-reset",
+            "default-reset",
             "--after",
             "no-reset",
             *command,
