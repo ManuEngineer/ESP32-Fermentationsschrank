@@ -16,6 +16,7 @@
 #include "configuration_service.hpp"
 #include "driver/uart.h"
 #include "esp_timer_time_source.hpp"
+#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "run_commands.hpp"
@@ -30,6 +31,9 @@ constexpr char kTag[] = "issue90_slice7";
 constexpr char kTestPartition[] = "state_store_test";
 constexpr std::uint64_t kLoadIntervalMicros = 500000U;
 constexpr std::string_view kSetTrustedUtcCommand = "SET_TRUSTED_UTC";
+// Must exceed the ESP32 UART hardware FIFO (128 bytes) per the ESP-IDF
+// uart_driver_install() contract; a small harness-only RX ring buffer.
+constexpr int kUartRxBufferBytes = 256;
 
 // Strictly a single positive int64 token, no leading/trailing/embedded
 // non-digit characters, no overflow. Harness-only test seam; never reached
@@ -275,6 +279,21 @@ std::uint64_t Harness::nowMicros() const noexcept {
 }
 
 void Harness::start() noexcept {
+    // uart_get_buffered_data_len()/uart_read_bytes() in pollUart() require
+    // the ESP-IDF UART driver to be installed; the default console path
+    // does not install it. Baud rate, pins, word length, parity and stop
+    // bits are the existing console configuration and are left untouched
+    // here (no uart_param_config()/uart_set_pin() call).
+    if (!uart_is_driver_installed(UART_NUM_0)) {
+        const esp_err_t installStatus = uart_driver_install(
+            UART_NUM_0, kUartRxBufferBytes, 0, 0, nullptr, 0);
+        if (installStatus != ESP_OK) {
+            ESP_LOGE(kTag, "ISSUE90_UART_RX_READY result=FAIL error=%s",
+                     esp_err_to_name(installStatus));
+            return;
+        }
+    }
+    ESP_LOGI(kTag, "ISSUE90_UART_RX_READY result=PASS");
     ESP_LOGI(kTag, "ISSUE90_PROTOCOL_VERSION=1");
     ESP_LOGI(kTag,
              "ISSUE90_READY partition=%s actor_free=YES "
