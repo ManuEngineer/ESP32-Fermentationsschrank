@@ -216,7 +216,8 @@ extern "C" void app_main(void) {
     }
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
-    fermentation::issue_90_slice7::Harness issue90Harness(application);
+    fermentation::issue_90_slice7::Harness issue90Harness(application,
+                                                          timeSource);
     issue90Harness.start();
 #endif
 

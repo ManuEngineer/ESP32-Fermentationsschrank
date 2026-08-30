@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "esp_timer_time_source.hpp"
 #include "fermentation_application.hpp"
@@ -13,7 +14,9 @@ namespace fermentation::issue_90_slice7 {
 
 class Harness final {
    public:
-    explicit Harness(FermentationApplication& application) noexcept;
+    Harness(
+        FermentationApplication& application,
+        const device_platform_esp_idf::EspTimerTimeSource& timeSource) noexcept;
 
     void start() noexcept;
     void update() noexcept;
@@ -33,6 +36,7 @@ class Harness final {
     [[nodiscard]] bool stopActiveRun() noexcept;
     [[nodiscard]] bool discardPendingRun() noexcept;
     void requestRestart(const char* command) noexcept;
+    void handleSetTrustedUtc(std::string_view argument) noexcept;
 
     FermentationApplication& application_;
     std::array<char, 160U> line_{};
@@ -42,7 +46,7 @@ class Harness final {
     std::uint32_t loadIteration_{0U};
     std::uint64_t nextLoadAtMicros_{0U};
     std::uint64_t nextCommandId_{0x90000000U};
-    device_platform_esp_idf::EspTimerTimeSource timeSource_;
+    const device_platform_esp_idf::EspTimerTimeSource& timeSource_;
 };
 
 }  // namespace fermentation::issue_90_slice7

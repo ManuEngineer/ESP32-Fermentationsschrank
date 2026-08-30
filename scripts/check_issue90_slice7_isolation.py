@@ -56,16 +56,35 @@ def check_elf(path: Path, *, expect_harness: bool) -> None:
     print(f"PASS: {path} harness symbols {'present' if present else 'absent'}")
 
 
+def check_issue29_probe_isolation(path: Path, *, expect_probe: bool) -> None:
+    """The Issue #90 Slice-7 harness must never link the independent Issue
+    #29 diagnostic probe; the plain esp32_bringup profile must still.
+    """
+    output = nm_output(path)
+    present = "issue_29_bringup::run" in output
+    if present != expect_probe:
+        expected = "present" if expect_probe else "absent"
+        raise SystemExit(f"{path}: issue_29_bringup probe symbols are not {expected}")
+    print(
+        f"PASS: {path} issue_29_bringup probe symbols "
+        f"{'present' if present else 'absent'}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness-elf", type=Path)
     parser.add_argument("--release-elf", type=Path)
+    parser.add_argument("--plain-bringup-elf", type=Path)
     args = parser.parse_args()
     check_source_contract()
     if args.harness_elf is not None:
         check_elf(args.harness_elf, expect_harness=True)
+        check_issue29_probe_isolation(args.harness_elf, expect_probe=False)
     if args.release_elf is not None:
         check_elf(args.release_elf, expect_harness=False)
+    if args.plain_bringup_elf is not None:
+        check_issue29_probe_isolation(args.plain_bringup_elf, expect_probe=True)
     if args.harness_elf is None or args.release_elf is None:
         print("INFO: ELF checks require --harness-elf and --release-elf")
     return 0
