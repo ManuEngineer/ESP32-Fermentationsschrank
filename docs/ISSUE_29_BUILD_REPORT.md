@@ -3,10 +3,86 @@
 Dieser Bericht gehört zu Issue #29. Die historische Firmware-Provenienz
 `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (B2-Fix) und der frühere
 Pre-Fix-Stand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` bleiben unten
-dokumentiert. Der aktuelle digitale 96-KiB-Diagnosebuild ist separat dem
-Firmware-Source-Commit `3d7b02260e18dd203cd609d97cc66fa96e435cdf`
-zugeordnet. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
+dokumentiert. Der frühere 96-KiB-Diagnosebuild aus
+`3d7b02260e18dd203cd609d97cc66fa96e435cdf` bleibt historische,
+nicht-qualifizierende Evidenz. Der korrigierte digitale 96-KiB-Source-Commit
+ist `b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6`. Die ESP-IDF-Profile wurden
+mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
+
+## Aktueller Korrekturstand – qualifizierende 96-KiB-Requalifikation noch nicht gestartet (2026-08-31)
+
+Der frühere vollständige beobachtete 96-KiB-Run bleibt als Diagnoseevidenz
+erhalten, zählt aber weder wegen des Artefakts noch wegen der Capture-Prozedur
+als Boot der geplanten 3/3-Serie. Der korrigierte Stand ist ausschließlich
+digital gebaut und darf erst nach Owner-Review geflasht werden.
+
+```text
+PR129=OPEN_DRAFT
+APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_FILE_CHANGED=NO
+INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+
+OLD_96K_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+OLD_96K_ARTIFACT_STATUS=HISTORICAL_NONQUALIFYING
+CORRECTED_96K_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+OLD_PROBE_TASK_STACK_BYTES=67584
+NEW_PROBE_TASK_STACK_BYTES=98304
+ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=STACK_SIZE
+RUNTIME_LOG_FORMAT_CHANGED=NO
+PRODUCT_TASK_STACK_CHANGED=NO
+PRODUCT_MAIN_TASK_STACK_CHANGED=NO
+PROBE_LOGIC_CHANGED=NO
+HEAP_API_CHANGED=NO
+FAULT_SEAM_CHANGED=NO
+PERSISTENCE_CHANGED=NO
+GPIO_SSOT_CHANGED=NO
+
+ESP_IDF_BRINGUP_BUILD=PASS
+ESP_IDF_RELEASE_BUILD=PASS
+FULL_NATIVE_BUILD=PASS
+FULL_NATIVE_TESTS=PASS (1081/1081)
+ESP_CLANG_BRINGUP=PASS
+ESP_CLANG_RELEASE=PASS
+ARCHITECTURE_GATES=PASS
+SECRET_SCAN=PASS
+QUALITY_GATES=PASS
+CI_ARTIFACT_SCAN_COVERAGE=PASS
+EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAIL_PRIVATE_ABSOLUTE_PATHS (14328 findings)
+CI_PATH_NORMALIZED_COPY_DIAGNOSTIC=NOT_RUN
+GITHUB_CI_ARTIFACT_SCAN=NOT_RUN_DRAFT
+GIT_DIFF_CHECK=PASS
+CORRECTED_96K_DIGITAL_GATES=PASS_WITH_LOCAL_ARTIFACT_PATH_FINDINGS
+
+BRINGUP_HAS_ISSUE29_PROBE=YES
+RELEASE_HAS_ISSUE29_PROBE=NO
+NATIVE_HAS_ISSUE29_PROBE=NO
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO
+BUILD_LINK=PASS
+FLASH_FIT=PASS
+PARTITION_FIT=PASS
+CORRECTED_96K_ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
+CORRECTED_96K_BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
+
+VALID_96K_BOOT_COUNT=0
+OBSERVED_NONQUALIFYING_COMPLETE_RUN_COUNT=1
+BOOT_REQUALIFICATION=NOT_STARTED_ON_CORRECTED_ARTIFACT
+HWM_RESULT=NONQUALIFYING_SINGLE_RUN_EVIDENCE
+ROOT_CAUSE=UNRESOLVED
+CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
+HARDWARE_RUN_CORRECTED_ARTIFACT=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ACTUATOR_RELEASE=NO
+ISSUE25_STARTED=NO
+MERGE=NO
+OWNER_CORRECTION_REVIEW_REQUIRED=YES
+```
+
+Der exakte lokale Artefakt-Scan wurde ohne Normalisierung auf den erzeugten
+Textartefakten ausgeführt und fand ausschließlich die vom Checker bewusst
+abgewiesenen privaten absoluten lokalen Pfade. Er ist kein PASS. Ein
+normalisierter Kopienscan wurde nicht als Ersatznachweis ausgeführt; die
+tatsächliche GitHub-CI-Artefaktprüfung ist auf dem Draft-PR noch `NOT_RUN`.
 
 ## Historischer KISS-Pivot V1 (SUPERSEDED_BY_KISS_V2)
 
@@ -116,12 +192,13 @@ Das bestätigt die Reproduktion auf der aktuellen Baseline, aber nicht die
 Root Cause. Der private 96-KiB-Kausaltest bleibt ein separates
 Owner-Review-Gate; bis dahin bleibt `ROOT_CAUSE=UNRESOLVED`.
 
-## 96-KiB-Diagnose-Stack – digitaler Implementierungsnachweis (2026-08-31)
+## Historischer digitaler 96-KiB-Implementierungsnachweis vor erstem Hardwareversuch (2026-08-31, SUPERSEDED_BY_CORRECTED_ARTIFACT)
 
 Der Current-base-Kontrollpanic bleibt die akzeptierte Kausalbaseline. Der
-folgende Nachweis ändert ausschließlich den privaten Diagnose-Stack des
-Bring-up-Probes; er enthält keinen Flash, keinen Hardwareboot und keine
-Pegelmessung.
+folgende historische Nachweis beanspruchte ausschließlich den privaten
+Diagnose-Stack zu ändern; die später festgestellten Runtime-Log-Label-
+Änderungen machen ihn jedoch nicht streng einvariabel. Er enthält keinen
+Flash, keinen Hardwareboot und keine Pegelmessung.
 
 ```text
 APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
@@ -137,7 +214,7 @@ STACK96_IMPLEMENTATION_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
 OLD_PROBE_TASK_STACK_BYTES=67584
 NEW_PROBE_TASK_STACK_BYTES=98304
 DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
-ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=PRIVATE_DIAGNOSTIC_STACK_SIZE
+ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=HISTORICAL_CLAIM_INVALIDATED_BY_RUNTIME_LOG_LABELS
 PRODUCT_TASK_STACK_CHANGED=NO
 PRODUCT_MAIN_TASK_STACK_CHANGED=NO
 PROBE_LOGIC_CHANGED=NO
@@ -194,9 +271,10 @@ ACTUATOR_RELEASE=NO
 ROOT_CAUSE=UNRESOLVED
 96_KIB_STACK_IMPLEMENTED=YES
 96_KIB_BUILD_GATES=PASS
-96_KIB_HARDWARE_RUN=NOT_RUN
-BOOT_REQUALIFICATION=NOT_RUN
-HWM_RESULT=NOT_RUN
+SNAPSHOT_STATUS=HISTORICAL_PRE_HARDWARE_ATTEMPT
+96_KIB_HARDWARE_RUN=NOT_RUN_AT_SNAPSHOT_TIME
+BOOT_REQUALIFICATION=NOT_RUN_AT_SNAPSHOT_TIME
+HWM_RESULT=NOT_RUN_AT_SNAPSHOT_TIME
 LEVEL_MEASUREMENTS=NOT_RUN
 ISSUE25_STARTED=NO
 MERGE=NO
@@ -217,7 +295,7 @@ legt als späteren, separat freizugebenden Kausaltest ausschließlich einen
 privaten Diagnose-Stack von 98304 B fest; Produkt-/Main-Task, Probe-Fachlogik,
 Heap-API und Fault-Seam bleiben unverändert.
 
-## 96-KiB-Kausaltest – Boot-1-Stop-Gate (2026-08-31)
+## Historischer nicht-qualifizierender 96-KiB-Run (2026-08-31)
 
 Das freigegebene `esp32_bringup`-Artefakt wurde genau einmal direkt mit
 `esptool v5.3.1` geschrieben und nach dem Schreiben verifiziert. Ein erster
@@ -258,7 +336,9 @@ BOOT_SEQUENCE_VALID=NO
 BOOT_1=FAIL_PROCEDURE_INVALID_EXTRA_PRE_CANONICAL_BOOT
 BOOT_2=NOT_RUN_STOP_GATE
 BOOT_3=NOT_RUN_STOP_GATE
-BOOT_REQUALIFICATION=NOT_RUN
+VALID_96K_BOOT_COUNT=0
+OBSERVED_NONQUALIFYING_COMPLETE_RUN_COUNT=1
+BOOT_REQUALIFICATION=NOT_STARTED_ON_CORRECTED_ARTIFACT
 
 PANIC=NO_OBSERVED
 STACK_OVERFLOW=NO
@@ -284,8 +364,8 @@ SAFETY_FAIL_CLOSED=PASS
 
 ROOT_CAUSE=UNRESOLVED
 ROOT_CAUSE_RECOMMENDATION=NOT_PROPOSED_PROCEDURAL_INVALIDATION
-96_KIB_HARDWARE_RUN=ATTEMPTED_STOPPED
-HWM_RESULT=INCOMPLETE_1_OF_3
+96_KIB_HARDWARE_RUN=HISTORICAL_NONQUALIFYING_ATTEMPT
+HWM_RESULT=NONQUALIFYING_SINGLE_RUN_EVIDENCE
 LEVEL_MEASUREMENTS=NOT_RUN
 ISSUE29_CLOSE=NO
 ISSUE25_STARTED=NO
@@ -303,6 +383,22 @@ Vorabsequenz keinen gültigen 3-Boot-Nachweis. Die HWM-Werte sind deshalb nur
 beobachtete Einzelrun-Evidenz und keine finale Root-Cause- oder
 Requalifikationsentscheidung. Vor jedem weiteren Boot ist ein Owner-Review der
 Capture-/Reset-Prozedur erforderlich.
+
+Die vorgelegte Host-Prozedur steht kanonisch im Messprotokoll: Port vor dem
+Öffnen mit DTR/RTS=`false` und ohne Flow-Control vorbereiten, Capture bei
+eindeutiger nichtzählender Bootgrenze öffnen, Puffer leeren und anschließend
+genau einen RTS-Resetpuls auslösen. Im qualifizierenden Fenster ist exakt eine
+`rst:`-Sequenz zulässig; jede Vorab-/Zusatzsequenz oder abweichende
+Provenienz invalidiert den Run und stoppt Boot 2/3. Alle drei späteren Boots
+müssen denselben korrigierten ELF-/BIN-Hash verwenden.
+
+```text
+CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
+HOST_PROCEDURE_HARDWARE_REVALIDATED=NO
+QUALIFYING_WINDOW_EXPECTED_RST_LINES=1
+INVALID_EXTRA_OR_PRECANONICAL_RST=YES
+INVALID_RUN_STOPS_BOOT_2_AND_BOOT_3=YES
+```
 
 ## `esp32_bringup`
 

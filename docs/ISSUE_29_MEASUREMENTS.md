@@ -12,13 +12,68 @@ reproduziert. Der folgende historische Status- und Identitätsabschnitt bleibt
 als Provenienz des PR-#116-Standes erhalten und wird nicht rückwirkend
 umgeschrieben.
 
-## 96-KiB-Diagnose-Stack – digitaler Nachweis (2026-08-31)
+## Aktueller Korrekturstand – qualifizierende 96-KiB-Requalifikation noch nicht gestartet (2026-08-31)
+
+Der beobachtete frühere 96-KiB-Run bleibt Diagnoseevidenz, zählt aber nicht
+als Boot der geplanten 3/3-Serie: Das Artefakt änderte zusätzlich Runtime-
+Log-Labels und das Capture-Fenster enthielt eine Vorab-Resetsequenz. Der
+korrigierte Stand ist digital gebaut, aber noch nicht geflasht.
+
+```text
+PR129=OPEN_DRAFT
+APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_FILE_CHANGED=NO
+INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+
+OLD_96K_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+OLD_96K_ARTIFACT_STATUS=HISTORICAL_NONQUALIFYING
+CORRECTED_96K_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+OLD_PROBE_TASK_STACK_BYTES=67584
+NEW_PROBE_TASK_STACK_BYTES=98304
+ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=STACK_SIZE
+RUNTIME_LOG_FORMAT_CHANGED=NO
+PRODUCT_TASK_STACK_CHANGED=NO
+PRODUCT_MAIN_TASK_STACK_CHANGED=NO
+PROBE_LOGIC_CHANGED=NO
+HEAP_API_CHANGED=NO
+FAULT_SEAM_CHANGED=NO
+PERSISTENCE_CHANGED=NO
+GPIO_SSOT_CHANGED=NO
+
+CORRECTED_96K_DIGITAL_GATES=PASS_WITH_LOCAL_ARTIFACT_PATH_FINDINGS
+CORRECTED_96K_ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
+CORRECTED_96K_BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
+EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAIL_PRIVATE_ABSOLUTE_PATHS (14328 findings)
+CI_PATH_NORMALIZED_COPY_DIAGNOSTIC=NOT_RUN
+GITHUB_CI_ARTIFACT_SCAN=NOT_RUN_DRAFT
+
+VALID_96K_BOOT_COUNT=0
+OBSERVED_NONQUALIFYING_COMPLETE_RUN_COUNT=1
+BOOT_REQUALIFICATION=NOT_STARTED_ON_CORRECTED_ARTIFACT
+HWM_RESULT=NONQUALIFYING_SINGLE_RUN_EVIDENCE
+ROOT_CAUSE=UNRESOLVED
+CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
+HARDWARE_RUN_CORRECTED_ARTIFACT=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ACTUATOR_RELEASE=NO
+ISSUE25_STARTED=NO
+MERGE=NO
+OWNER_CORRECTION_REVIEW_REQUIRED=YES
+```
+
+Der exakte lokale Originalartefakt-Scan ist kein PASS: Er fand die vom
+Checker absichtlich beanstandeten privaten absoluten lokalen Pfade. Es wurde
+kein normalisierter Kopienscan als Ersatz für dieses Ergebnis verwendet.
+GitHub-CI ist auf dem Draft-PR nicht gelaufen.
+
+## Historischer digitaler 96-KiB-Implementierungsnachweis vor erstem Hardwareversuch (2026-08-31, SUPERSEDED_BY_CORRECTED_ARTIFACT)
 
 Der Current-base-Kontrollboot ist mit `CONTROL_BOOT_1=PANIC_REPRODUCED` als
-Kausalbaseline bestätigt. Danach wurde ausschließlich die private
-Diagnose-Taskgröße im Bring-up-Probe von 67584 B auf den ownerfreigegebenen
-experimentellen Wert 98304 B geändert. Dieser Nachweis ist digital und
-enthält keinen Flash, Hardwareboot, HWM-Wert oder Pegelmessung.
+Kausalbaseline bestätigt. Der folgende historische digitale Nachweis
+beanspruchte, ausschließlich die private Diagnose-Taskgröße von 67584 B auf
+98304 B zu ändern; die zusätzlichen Runtime-Log-Labels machen ihn jedoch
+nicht streng einvariabel. Er enthält keinen Flash, Hardwareboot, HWM-Wert oder
+Pegelmessung.
 
 ```text
 APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
@@ -34,7 +89,7 @@ STACK96_IMPLEMENTATION_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
 OLD_PROBE_TASK_STACK_BYTES=67584
 NEW_PROBE_TASK_STACK_BYTES=98304
 DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
-ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=PRIVATE_DIAGNOSTIC_STACK_SIZE
+ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=HISTORICAL_CLAIM_INVALIDATED_BY_RUNTIME_LOG_LABELS
 PRODUCT_TASK_STACK_CHANGED=NO
 PRODUCT_MAIN_TASK_STACK_CHANGED=NO
 PROBE_LOGIC_CHANGED=NO
@@ -91,9 +146,10 @@ ACTUATOR_RELEASE=NO
 ROOT_CAUSE=UNRESOLVED
 96_KIB_STACK_IMPLEMENTED=YES
 96_KIB_BUILD_GATES=PASS
-96_KIB_HARDWARE_RUN=NOT_RUN
-BOOT_REQUALIFICATION=NOT_RUN
-HWM_RESULT=NOT_RUN
+SNAPSHOT_STATUS=HISTORICAL_PRE_HARDWARE_ATTEMPT
+96_KIB_HARDWARE_RUN=NOT_RUN_AT_SNAPSHOT_TIME
+BOOT_REQUALIFICATION=NOT_RUN_AT_SNAPSHOT_TIME
+HWM_RESULT=NOT_RUN_AT_SNAPSHOT_TIME
 LEVEL_MEASUREMENTS=NOT_RUN
 ISSUE25_STARTED=NO
 MERGE=NO
@@ -105,7 +161,7 @@ ephemere Benutzer- und Workspace-Pfade; der getrackte Scan und die
 inhaltlich identische Artefaktprüfung unter der CI-Pfadkonvention sind PASS.
 Das ist kein Secret- oder Firmwarebefund.
 
-## 96-KiB-Kausaltest – Boot-1-Stop-Gate (2026-08-31)
+## Historischer nicht-qualifizierender 96-KiB-Run (2026-08-31)
 
 Das freigegebene `esp32_bringup`-Artefakt wurde genau einmal direkt mit
 `esptool v5.3.1` geschrieben und verifiziert. Ein vorheriger `idf.py flash`-
@@ -146,7 +202,9 @@ BOOT_SEQUENCE_VALID=NO
 BOOT_1=FAIL_PROCEDURE_INVALID_EXTRA_PRE_CANONICAL_BOOT
 BOOT_2=NOT_RUN_STOP_GATE
 BOOT_3=NOT_RUN_STOP_GATE
-BOOT_REQUALIFICATION=NOT_RUN
+VALID_96K_BOOT_COUNT=0
+OBSERVED_NONQUALIFYING_COMPLETE_RUN_COUNT=1
+BOOT_REQUALIFICATION=NOT_STARTED_ON_CORRECTED_ARTIFACT
 
 PANIC=NO_OBSERVED
 STACK_OVERFLOW=NO
@@ -172,8 +230,8 @@ SAFETY_FAIL_CLOSED=PASS
 
 ROOT_CAUSE=UNRESOLVED
 ROOT_CAUSE_RECOMMENDATION=NOT_PROPOSED_PROCEDURAL_INVALIDATION
-96_KIB_HARDWARE_RUN=ATTEMPTED_STOPPED
-HWM_RESULT=INCOMPLETE_1_OF_3
+96_KIB_HARDWARE_RUN=HISTORICAL_NONQUALIFYING_ATTEMPT
+HWM_RESULT=NONQUALIFYING_SINGLE_RUN_EVIDENCE
 LEVEL_MEASUREMENTS=NOT_RUN
 ISSUE29_CLOSE=NO
 ISSUE25_STARTED=NO
@@ -190,6 +248,50 @@ Stabilitätsbeobachtung. Die HWM ist wegen der prozedural invalidierten
 Bootzählung nur Einzelrun-Evidenz; `ROOT_CAUSE` bleibt `UNRESOLVED` und es
 gibt keinen 3/3-Requalifikationsnachweis. Vor jedem weiteren Boot ist ein
 Owner-Review der Capture-/Reset-Prozedur erforderlich.
+
+## Vorgesehene Capture-/Reset-Prozedur für den korrigierten Artefaktstand (OWNER REVIEW REQUIRED)
+
+Diese Host-Prozedur ist dokumentiert, aber noch nicht auf Hardware ausgeführt.
+Sie ändert weder Firmware noch Boardprofil und soll das qualifizierende
+Testfenster auf genau einen eindeutig ausgelösten Boot begrenzen.
+
+1. Vor dem Öffnen des Captures Artefakt, SHA-256 und eingebettete Source-SHA
+   gegen den freigegebenen korrigierten Stand prüfen. Alle drei Boots dürfen
+   nur denselben korrigierten ELF-/BIN-Hash verwenden.
+2. Den Port mit deaktivierter Flow-Control öffnen: DTR und RTS vor `open()`
+   auf `false`, `dsrdtr=false` und `rtscts=false` setzen. Das Capture darf
+   weder beim Öffnen noch beim Anlegen der Logdatei eine Resetleitung toggeln.
+3. Das Board bis zum bereiten Capture in einer eindeutigen nichtzählenden
+   Ausgangsgrenze halten (nach einem künftig autorisierten Flash mit
+   `--after no-reset` im Bootloader oder gleichwertig unter gehaltenem EN).
+   Vor dem kanonischen Trigger wird der Puffer geleert und es darf keine
+   `rst:`-Zeile im qualifizierenden Fenster vorliegen.
+4. Erst wenn Capture, Zeitstempel und Rohlog bereit sind, genau einen
+   kanonischen Reset auslösen: DTR bleibt `false`; RTS wird einmal für die
+   festgelegte Pulsdauer auf `true` und anschließend wieder auf `false`
+   gesetzt. Kein weiterer DTR-/RTS-Wechsel ist zulässig.
+5. Im qualifizierenden Fenster wird genau eine `rst:`-Sequenz und genau ein
+   App-Start mit Profil, Source-SHA, `ACTUATOR_POLICY=LOCKED_FOR_BRINGUP` und
+   `REAL_ACTUATORS=DISABLED` erwartet.
+6. Eine Vorab-`rst:`-Zeile, mehr oder weniger als eine Resetsequenz, eine
+   fehlende Artefakt-/Profilprovenienz oder jede Panic-, Stackoverflow-,
+   Watchdog-, Brownout-, Ressourcen- oder Aktorfreigabeanzeige invalidiert den
+   Lauf sofort.
+7. Nach einem invalidierten oder fehlgeschlagenen Lauf bleiben Boot 2 und
+   Boot 3 `NOT_RUN_STOP_GATE`; es erfolgt weder ein zweiter Flash noch ein
+   improvisierter Wiederholungsboot.
+8. Nur ein gültiger, vollständiger 35-Sekunden-PASS mit Ready- und
+   Completion-HWM zählt als Boot der 3/3-Serie. Das Minimum aller gültigen
+   HWM-Werte wird erst nach drei unabhängigen Boots gegen 30720 B bewertet.
+
+```text
+CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
+HOST_PROCEDURE_HARDWARE_REVALIDATED=NO
+QUALIFYING_WINDOW_EXPECTED_RST_LINES=1
+INVALID_EXTRA_OR_PRECANONICAL_RST=YES
+INVALID_RUN_STOPS_BOOT_2_AND_BOOT_3=YES
+QUALIFYING_BOOT_ARTIFACT_REQUIREMENT=SAME_CORRECTED_ELF_AND_BIN_HASH_FOR_ALL_3
+```
 
 ## Historischer Status (PR #116, vor der aktuellen Gesamtbaseline)
 
