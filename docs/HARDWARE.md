@@ -208,14 +208,17 @@ Ob ein Tachosignal spaeter ergaenzt wird, bleibt `FUTURE_RELEASE`.
 
 ## Summer
 
-Geplant ist ein aktiver 5-V- oder 12-V-Summer ueber einen geeigneten
-MOSFET-/Treiberkanal.
+Geplant ist ein aktiver Summer über den im Boardprofil festgelegten
+PCB-festen Buzzer-/MOSFET-Kanal. Die R1-Designzuordnung ist damit im
+Boardprofil festgelegt.
 
 Noch offen:
 
 - Spannung und Stromaufnahme
-- konkrete Kanalzuordnung
 - aktiver Pegel
+- Gate-/Treiberbeschaltung
+- Boot-/Resetwirkung
+- reale Funktion
 - akustische Lautstaerke und Montageort
 
 Der Summer darf keine Sicherheitsaufgabe blockieren.

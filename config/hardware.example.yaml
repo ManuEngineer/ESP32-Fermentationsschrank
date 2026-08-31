@@ -90,7 +90,7 @@ fans:
 buzzer:
   type: active
   voltage_v: TBD_HARDWARE
-  driver_channel: TBD_HARDWARE
+  driver_source: board_profile
 
 ui:
   display:
