@@ -125,6 +125,7 @@ Pegelmessung.
 
 ```text
 APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+CURRENT_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
 PLAN_FILE_CHANGED=NO
 CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
@@ -444,7 +445,12 @@ Buildprovenienz erneut zu prüfen; nicht ausgeführte Nachweise bleiben
 `NOT_RUN` oder `BLOCKED`.
 
 
-## Aktueller KISS-Pivot V2 nach PR-#131-Synchronisierung (2026-08-31)
+## Historischer KISS-Pivot V2-Planstand vor 96-KiB-Implementierung (SUPERSEDED_BY_96K_DIGITAL_EVIDENCE)
+
+Dieser Abschnitt dokumentiert den ownerfreigegebenen V2-Plan- und
+Baseline-Stand vor der anschliessenden 96-KiB-Implementierung. Der aktuelle
+digitale Implementierungsstatus steht im Abschnitt `96-KiB-Diagnose-Stack –
+digitaler Implementierungsnachweis` weiter oben.
 
 Die PR-#129-Historie wurde ohne Rebase und ohne Force-Push per Merge der neuen
 Integrationsbaseline synchronisiert. PR #131 hat keine #29-Firmware-, Stack-
@@ -503,6 +509,7 @@ Neue kanonische Planrevision:
 ~~~text
 NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
 CURRENT_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_STATUS=APPROVED_PLAN_SNAPSHOT
 PLAN_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 CURRENT_BASE_CONTROL_BOOT_SPECIFIED=YES
 DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
