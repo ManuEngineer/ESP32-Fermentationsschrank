@@ -6,6 +6,45 @@ Firmwarestand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` ist nur die
 Pre-Fix-Provenienz. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
+## Aktueller KISS-Pivot für PR #129
+
+Die nachfolgende Implementierungsevidenz aus dem exhaustive Versuch bleibt
+als historische Evidenz erhalten. Sie ist durch die Owner-Korrektur
+`EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS` ersetzt und kein aktueller
+Build- oder CI-Gate.
+
+```text
+PR129=OPEN_DRAFT
+EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
+ANALYZER_REVERTED=YES (auf 3fbaf32)
+MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
+DEVICE_PLATFORM_ISSUE29_INSTRUMENTATION_REVERTED=YES
+
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_UPPER_BOUND=NO
+FULL_TRANSITIVE_STATIC_CALLGRAPH_CLOSURE=NOT_REQUIRED
+STATIC_ANALYSIS_ROLE=DIAGNOSTIC_EVIDENCE_NOT_GLOBAL_UPPER_BOUND
+HARDWARE_HWM_ROLE=PRIMARY_EMPIRICAL_STACK_EVIDENCE
+
+OLD_PROBE_TASK_STACK_BYTES=67584
+COMPILED_runProbe_FRAME_BYTES=65712
+OLD_PROBE_TASK_STACK_IS_BELOW_KNOWN_STATIC_PATH=YES
+ROOT_CAUSE=UNRESOLVED
+IMPLEMENTATION=NOT_STARTED_KISS_REVISION
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+```
+
+Die drei neuen #29-Änderungen in `scripts/analyze_issue_29_stack.py`,
+`main/CMakeLists.txt` und `lib/device_platform/CMakeLists.txt` werden auf
+den Vor-Implementierungsstand `3fbaf32` zurückgeführt. Historische, bereits
+vorher vorhandene #121-Instrumentierung bleibt unverändert. Der neue Plan
+legt als späteren, separat freizugebenden Kausaltest ausschließlich einen
+privaten Diagnose-Stack von 98304 B fest; Produkt-/Main-Task, Probe-Fachlogik,
+Heap-API und Fault-Seam bleiben unverändert.
+
 ## `esp32_bringup`
 
 - `size.json total_size`: 194215 Bytes
@@ -108,7 +147,7 @@ Messung und kein Produktivbudget. `CONFIG_ESP_MAIN_TASK_STACK_SIZE` wurde
 nicht verändert. Die `uxTaskGetStackHighWaterMark()`-Einheit ist für ESP32 in
 ESP-IDF 6.0.2 als Bytes verifiziert.
 
-## Implementierung Plan-Abschnitt 4.1-4.5 (2026-08-31)
+## Historische Implementierung Plan-Abschnitt 4.1-4.5 (2026-08-31, SUPERSEDED_KISS)
 
 Owner-Freigabe: `OWNER_PLAN_REVIEW=PASS`,
 `APPROVED_PLAN_SHA=4a34967ac202196b7afceaebfe2b2429338d6d93`. Vollständige
@@ -206,3 +245,29 @@ strukturell nicht schließbar. Das ist kein Implementierungsfehler dieser
 Runde, sondern ein während der Implementierung entdeckter, plan-relevanter
 Befund: `PLAN_CHANGE_REQUIRED=YES`. Weder (A) noch (B) wurden ohne
 Ownerfreigabe umgesetzt oder umgangen.
+
+## Aktueller Status nach KISS-Korrektur
+
+```text
+EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_UPPER_BOUND=NO
+ANALYZER_REVERTED=YES
+MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
+DEVICE_PLATFORM_ISSUE29_INSTRUMENTATION_REVERTED=YES
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NOT_RE_RUN_THIS_CORRECTION_ROUND
+
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
+IMPLEMENTATION=NOT_STARTED_KISS_REVISION
+ROOT_CAUSE=UNRESOLVED
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+```
+
+Die historische Analyse ist damit nur noch Diagnoseevidenz. Die 72224 B sind
+kein globaler Upper Bound. Vor einem späteren Hardwarelauf sind die digitale
+Isolation, ein frischer Issue-90-Harness-Nachweis und die exakte
+Buildprovenienz erneut zu prüfen; nicht ausgeführte Nachweise bleiben
+`NOT_RUN` oder `BLOCKED`.

@@ -519,14 +519,20 @@ lokal, nicht committed, unter `build/issue29_requalification/` (siehe
 `.gitignore`, `build/`). Dieser Abschnitt hier ist die versionierte,
 kanonische Kurzfassung; keine Megabyte-Rohlogs werden committed.
 
-## Implementierung Abschnitt 4.1-4.5 (2026-08-31, Owner-Freigabe Plan-SHA `4a34967ac202196b7afceaebfe2b2429338d6d93`)
+## Historische Implementierung Abschnitt 4.1-4.5 (2026-08-31, SUPERSEDED_KISS)
+
+Die folgende Evidenz dokumentiert den damals mit der Owner-Freigabe der
+Plan-SHA `4a34967ac202196b7afceaebfe2b2429338d6d93` ausgeführten exhaustive
+Versuch. Sie bleibt als Provenienz erhalten, ist aber kein aktueller
+Stack-Gate und kein Auftrag zur weiteren Analyse.
 
 Umsetzung von `docs/tasks/issue-29-panic-requalification-correction-plan.md`,
-Abschnitt 4.1-4.5: `scripts/analyze_issue_29_stack.py` wurde vollständig neu
+Abschnitt 4.1-4.5: `scripts/analyze_issue_29_stack.py` wurde damals vollständig neu
 geschrieben (Mehrpfad-Traversierung `probeTask` -> jedes Blatt, fail-closed
 nach 4.1.1, `heap`-Componentinstrumentierung nach 4.2). Keine Hardware, kein
-Flash. Ergebnis: **`STACK_GATE=BLOCKED`**, real reproduzierbar, kein
-fabrizierter Wert.
+Flash. Ergebnis war **`STACK_GATE=BLOCKED`**, real reproduzierbar, kein
+fabrizierter Wert. Dieser exhaustive Ansatz ist inzwischen
+`EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS`.
 
 ### Neue Instrumentierung (project-local, kein Vendor-Patch)
 
@@ -740,3 +746,59 @@ Ersatzverfahren für (B) wurde **nicht** vorgenommen; siehe
 `docs/ISSUE_29_BUILD_REPORT.md` für die vollständige Owner-Entscheidungsfrage.
 `STACK_GATE=BLOCKED` ist der reale, reproduzierbare Endzustand dieser Runde,
 kein Zwischenstand mit fehlender Arbeit.
+
+## Aktueller KISS-Pivot nach Owner-Korrektur (2026-08-31)
+
+Der exhaustive Analyzer, die neue `main`-Heap-Instrumentierung und die neue
+componentweite `device_platform`-Instrumentierung werden nicht weitergeführt.
+Die drei Implementierungsdateien sind auf den Vor-Implementierungsstand
+`3fbaf32` zurückgeführt; historische #121-Instrumentierung bleibt bestehen.
+
+```text
+EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
+FULL_TRANSITIVE_STATIC_CALLGRAPH_CLOSURE=NOT_REQUIRED
+GENERIC_BINARY_CALLGRAPH_ANALYZER=NO
+TRANSITIVE_LIBSTDCXX_BINARY_STACK_PLATFORM=NO
+MORE_SDK_COMPONENT_INSTRUMENTATION=NO
+STATIC_ANALYSIS_ROLE=DIAGNOSTIC_EVIDENCE_NOT_GLOBAL_UPPER_BOUND
+HARDWARE_HWM_ROLE=PRIMARY_EMPIRICAL_STACK_EVIDENCE
+
+ANALYZER_REVERTED=YES
+MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
+DEVICE_PLATFORM_ISSUE29_INSTRUMENTATION_REVERTED=YES
+
+OLD_PROBE_TASK_STACK_BYTES=67584
+COMPILED_runProbe_FRAME_BYTES=65712
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_UPPER_BOUND=NO
+OLD_PROBE_TASK_STACK_IS_BELOW_KNOWN_STATIC_PATH=YES
+ROOT_CAUSE=UNRESOLVED
+
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
+IMPLEMENTATION=NOT_STARTED_KISS_REVISION
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NOT_RE_RUN_THIS_CORRECTION_ROUND
+```
+
+Die bekannte Relation `67584 < 72224` zeigt, dass der alte Diagnose-Stack
+unter mindestens einem real kompilierten bekannten Pfad lag. Sie beweist
+nicht den konkreten Root Cause des beobachteten Heap-Walk-Panics. Die 72224 B
+sind weiterhin nützliche Build-Evidenz, aber kein vollständiger statischer
+Upper Bound.
+
+Für den späteren Kausaltest ist ausschließlich die private
+Diagnosegröße `kProbeTaskStackBytes -> 98304` vorgesehen. Die historischen
+Variablen `kMeasuredCallPathBytes`,
+`kMeasuredCallPathSafetyBufferBytes` und `kUnroundedProbeTaskStackBytes`
+werden, falls beibehalten, nur als historische/diagnostische Untergrenzen
+geführt. Es wird kein globales CI-Stackgate daraus gebaut.
+
+Die zusätzliche Diagnose-Task reserviert internen RAM. Deshalb wird ein
+vollständig bestandener Resource-/Fault-Probe unter 96 KiB als
+`RESOURCE_GATE=PASS_CONSERVATIVE` eingeordnet. Ein Ressourcenfehler wird bei
+diesem Diagnose-Overhead nicht automatisch als Produktressourcenfehler
+behauptet; in diesem Fall gilt `DIAGNOSTIC_OVERHEAD_CONFOUNDING=YES` und
+`STOP_OWNER_REVIEW`.

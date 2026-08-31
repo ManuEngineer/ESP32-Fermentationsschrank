@@ -24,26 +24,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     )
 endif()
 
-# Issue #29 (docs/tasks/issue-29-panic-requalification-correction-plan.md,
-# Abschnitt 4.2): der vom Bring-up-Probe erreichbare P2-Pfad
-# (sampleResources -> heap_caps_get_largest_free_block/heap_caps_get_info)
-# fuehrt in den ESP-IDF-Vendor-Component "heap" (heap_caps.c/multi_heap.c/
-# tlsf.c), der heute ohne -fstack-usage/-fcallgraph-info=su gebaut wird.
-# ESP-IDF 6.0.2 erlaubt keinen sauberen datei-genauen Zugriff auf einzelne
-# Quellen eines fremden Components von hier aus; component-weite
-# Instrumentierung ist deshalb der im Plan vorgesehene Fallback (analog zum
-# bereits component-weiten Muster in lib/fermentation_app/CMakeLists.txt,
-# #121). Kein Vendor-Patch: keine Datei unter $IDF_PATH wird veraendert,
-# nur das bestehende Component-Target aus dem Projekt-Build heraus mit
-# zusaetzlichen, rein analytischen Compileroptionen versehen.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    idf_component_get_property(app_issue_29_heap_lib heap COMPONENT_LIB)
-    target_compile_options(${app_issue_29_heap_lib} PRIVATE
-        -fstack-usage
-        -fcallgraph-info=su
-    )
-endif()
-
 # Profilwahl kommt aus main/Kconfig.projbuild (choice APP_ESP32_PROFILE),
 # gesetzt ueber sdkconfig.defaults.bringup/.release (siehe
 # docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.2). Genau eine
