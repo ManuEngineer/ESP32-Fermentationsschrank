@@ -105,6 +105,92 @@ ephemere Benutzer- und Workspace-Pfade; der getrackte Scan und die
 inhaltlich identische Artefaktprüfung unter der CI-Pfadkonvention sind PASS.
 Das ist kein Secret- oder Firmwarebefund.
 
+## 96-KiB-Kausaltest – Boot-1-Stop-Gate (2026-08-31)
+
+Das freigegebene `esp32_bringup`-Artefakt wurde genau einmal direkt mit
+`esptool v5.3.1` geschrieben und verifiziert. Ein vorheriger `idf.py flash`-
+Aufruf wurde vor dem Flash abgebrochen, weil ESP-IDF die Flash-Aktion
+automatisch um `all`/Build erweiterte. ELF und BIN waren danach weiterhin
+hashgleich; der anschliessende Flash erfolgte ausschließlich buildfrei mit
+dem direkten `esptool write-flash`-Aufruf.
+
+Der UART-Rohlog enthält zwei Resetsequenzen: eine unvollständige
+Vorabsequenz aus der Capture-/RTS-Initialisierung und eine danach bewusst
+ausgelöste vollständige Run-Sequenz. Wegen dieser zusätzlichen Sequenz wird
+der Test nicht als eindeutiger kanonischer Boot 1 gewertet. Boot 2 und Boot 3
+wurden entsprechend dem Stop-Gate nicht gestartet.
+
+```text
+FLASH_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+FLASH_ELF_SHA256=5ded6891c753678eef0157e7e857f782562d5d50b777251dc16c25c37ef3e6f8
+FLASH_BIN_SHA256=7f8889109f39c4405d5b0b4ea82f5fb8c056427e056b232f8c2cbbe4c01e15fa
+FLASH=PASS
+DIRECT_ESPTOOL_FLASH=PASS
+IDF_PY_FLASH_REBUILD_ATTEMPT=ABORTED_BEFORE_LINK_AND_FLASH
+ELF_HASH_MATCH=YES
+BIN_HASH_MATCH=YES
+
+PORT=/dev/ttyUSB0
+BOARD_MAC=20:50:0d:1b:2f:34
+PROFILE=esp32_bringup
+APP_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+APP_EMBEDDED_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+ACTUATOR_POLICY=LOCKED_FOR_BRINGUP
+REAL_ACTUATORS=DISABLED
+PRODUCTIVE_OUTPUT_RELEASE=NO
+
+UART_RST_LINES_OBSERVED=2
+PRE_CANONICAL_SETUP_BOOT=YES
+CANONICAL_COMPLETE_BOOT_OBSERVED=1
+BOOT_SEQUENCE_VALID=NO
+BOOT_1=FAIL_PROCEDURE_INVALID_EXTRA_PRE_CANONICAL_BOOT
+BOOT_2=NOT_RUN_STOP_GATE
+BOOT_3=NOT_RUN_STOP_GATE
+BOOT_REQUALIFICATION=NOT_RUN
+
+PANIC=NO_OBSERVED
+STACK_OVERFLOW=NO
+WATCHDOG=NO
+BROWNOUT=NO
+UNRELATED_UNEXPECTED_RESET=NO
+ACTOR_RELEASE=false
+STABLE_SMOKE_35S=PASS (40.089 s captured)
+
+PROBE_RESULT=PASS (one complete observed run only)
+READY_TASK_STACK_HWM_BYTES=97840
+COMPLETION_TASK_STACK_HWM_BYTES=25840
+OBSERVED_MIN_PROBE_TASK_HWM_BYTES=25840
+OBSERVED_PEAK_PROBE_TASK_STACK_USED_BYTES=72464
+OLD_PROBE_TASK_STACK_BYTES=67584
+HWM_THRESHOLD_BYTES=30720
+RESOURCE_GATE=PASS_CONSERVATIVE (one complete observed run only)
+DIAGNOSTIC_OVERHEAD_CONFOUNDING=NOT_DETERMINED_FOR_3_OF_3
+FAULT_PASS=PASS
+STATE_UNCHANGED=PASS
+PERSISTENCE_UNCHANGED=PASS
+SAFETY_FAIL_CLOSED=PASS
+
+ROOT_CAUSE=UNRESOLVED
+ROOT_CAUSE_RECOMMENDATION=NOT_PROPOSED_PROCEDURAL_INVALIDATION
+96_KIB_HARDWARE_RUN=ATTEMPTED_STOPPED
+HWM_RESULT=INCOMPLETE_1_OF_3
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE29_CLOSE=NO
+ISSUE25_STARTED=NO
+MERGE=NO
+RAW_UART_LOG=build/issue29_requalification/boot1_96k_raw_uart.log
+RAW_UART_LOG_SHA256=140958843e6e784f41c61fb747aa55223b41353456f74d2049f25bc0be67c9f2
+FLASH_LOG=build/issue29_requalification/flash_96k_direct.log
+FLASH_LOG_SHA256=b9221823bfc4d2d459ee4164c9cce0a6d461fe3f4010c2c99ce4c9c7a7fc9497
+OWNER_96K_HARDWARE_REVIEW_REQUIRED=YES
+```
+
+Die eine vollständige Run-Sequenz selbst bestand Probe und 40-Sekunden-
+Stabilitätsbeobachtung. Die HWM ist wegen der prozedural invalidierten
+Bootzählung nur Einzelrun-Evidenz; `ROOT_CAUSE` bleibt `UNRESOLVED` und es
+gibt keinen 3/3-Requalifikationsnachweis. Vor jedem weiteren Boot ist ein
+Owner-Review der Capture-/Reset-Prozedur erforderlich.
+
 ## Historischer Status (PR #116, vor der aktuellen Gesamtbaseline)
 
 Status dieses Protokolls: Software-/Buildnachweise `PASS`. Reale Board-/UART-/
