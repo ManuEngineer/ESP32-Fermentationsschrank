@@ -2,17 +2,36 @@
 
 ## Planstatus und Owner-Gate
 
-Dieser Plan ist die vollständige Neubewertung von PR #131 / Issue #130. Er
-ersetzt den bisher nicht freigegebenen Plan-Commit
-f85df6127708e69484a0f69d50a6bc5d23978071. Die alte Plan-SHA bleibt als
-historische Vorgängerreferenz erhalten; sie ist keine elektrische Autorität.
+Dieser Plan ist die vollständige Neubewertung von PR #131 / Issue #130. Der
+direkte Vorgänger ist
+cdac588dbbaa3ac9b3695e3089efd38bddcea058. Die älteren Plan-SHAs
+6d165feacfd0a04a04eec2e5ab7785cfe2bf9b26 und
+f85df6127708e69484a0f69d50a6bc5d23978071 bleiben als historische
+superseded Provenienz erhalten; sie sind keine elektrische Autorität.
 
 Die folgende Statuszeile beschreibt den Zustand nach dem Plan-Commit. Die
 exakte neue Plan-SHA wird erst durch diesen Commit festgelegt und danach im
 Draft-PR und im aktuellen SESSION-HANDOVER eingetragen.
 
     PLAN_REVISION=COMPLETE
-    OLD_PLAN_SHA=6d165feacfd0a04a04eec2e5ab7785cfe2bf9b26
+    DIRECT_PREDECESSOR_PLAN_SHA=cdac588dbbaa3ac9b3695e3089efd38bddcea058
+    REAL_HARDWARE_PRESENT=YES
+    BOARD_FAMILY_REFERENCE_MATCH=CONFIRMED_BY_OWNER
+    BOARD_FAMILY=esp32_32e_quad_mosfet
+    MCU_MODULE=ESP32-WROOM-32E
+    BOARD_REVISION=TBD_HARDWARE
+    ACTIVE_LEVELS_CONFIRMED=NO
+    BOOT_LEVELS_CONFIRMED=NO
+    MOSFET_ELECTRICAL_BEHAVIOR_CONFIRMED=NO
+    BTS7960_LOGIC_CONFIRMED=NO
+    DISPLAY_TOUCH_ELECTRICAL_FUNCTION_CONFIRMED=NO
+    GPIO_FUNCTIONAL_TEST=NO
+    ACTUATOR_RELEASE=NO
+    CONFIRMED_TEST=NO
+    ADR002_AMENDMENT=PLANNED
+    GPIO_MATRIX=UNCHANGED
+    GPIO_MATRIX_STATUS=PLANNED_NOT_CONFIRMED
+    ELECTRICAL_VERIFICATION=PENDING
     ISSUE130_PLAN_SCOPE_SYNC=PASS
     POST_MERGE_ISSUE_SYNC=PLANNED
     PLAN_APPROVED=NO
@@ -31,7 +50,8 @@ Draft-PR und im aktuellen SESSION-HANDOVER eingetragen.
 
 Es gibt für diesen Scope keine freigegebene Plan-SHA. Umsetzung, Issue-Body-
 Synchronisierung und Hardwareabnahme bleiben bis zur ausdrücklichen Freigabe
-genau dieser neuen Plan-SHA gesperrt.
+genau dieser neuen Plan-SHA gesperrt. Die Boardfamilienidentität ist durch
+Owner-Referenzabgleich bestätigt; das ist kein elektrischer Funktionsnachweis.
 
 ## 1. Live-Basis und Abgrenzung
 
@@ -42,13 +62,22 @@ Roadmap, lokale Agentenregeln und die feste Pfadnutzung geprüft.
 |---|---|
 | Zielbasis | origin/integration/r1-development, c1f5fbb5f19ab8e7d2c25708fe79777d523217d4 |
 | Arbeitsbranch | agent/issue-130-r1-gpio-matrix |
-| PR #131 | OPEN, DRAFT, Base integration/r1-development, Head 6d165feacfd0a04a04eec2e5ab7785cfe2bf9b26 |
+| PR #131 | OPEN, DRAFT, Base integration/r1-development, Head cdac588dbbaa3ac9b3695e3089efd38bddcea058 |
 | Issue #130 | OPEN, Eigentümer des eigenständigen GPIO-/Verdrahtungsscope; beim Start dieser Revision enthielt der Live-Body noch die nun ersetzte Reset-Entkopplungsannahme |
 | PR #129 | OPEN, DRAFT, Head f3725e5557b040dc388a9d9ca9077329b0e5c672; vollständig getrennt |
 | bisheriger Plan | docs/tasks/issue-130-r1-gpio-matrix-plan.md @ f85df6127708e69484a0f69d50a6bc5d23978071; nicht freigegeben |
 | Roadmap | bestehende Issue-130-Zeile; wird nur auf den neuen Planstatus und die SSOT-/Issue-Gate-Semantik synchronisiert |
 | feste Pfadnutzung | Keine aktive Script-/CI-/Dokumentationsreferenz auf eine vollständige pins.example.yaml-Matrix gefunden; historische Verweise in einem älteren Plan werden bei der Migration nicht als Laufzeitvertrag behandelt |
 | Arbeitszustand | Branch war vor dieser Planrevision sauber; die bestehende Plan-Datei wurde ausschließlich zur vollständigen Ersetzung entfernt und wird in diesem Commit wieder angelegt |
+
+Die reale Controllerplatine ist vorhanden und entspricht laut Owner-Abgleich
+der im Repository dokumentierten ESP32-WROOM-32E-Quad-MOSFET-Boardfamilie.
+Damit ist BOARD_FAMILY_IDENTITY=CONFIRMED_BY_OWNER_REFERENCE_MATCH. Die
+Boardfamilie und das MCU-Modul sind identifiziert; eine exakte
+PCB-Revisionskennung ist nicht belegt und bleibt
+BOARD_REVISION=TBD_HARDWARE. Daraus folgen keine bestätigten aktiven Pegel,
+Boot-/Resetpegel, MOSFET-/BTS-/Display-/Touch-Funktionen, GPIO-Funktionstests
+oder Aktorfreigaben. ELECTRICAL_VERIFICATION=PENDING.
 
 PR #129 behandelt ausschließlich Issue #29, Panic-Requalifikation und
 Stackbudget. Inhalte, Root-Cause-Entscheidungen und historische Statuszeilen
@@ -83,6 +112,8 @@ Scope-/Plan-Texts von Issue #130 geändert. Nicht enthalten sind:
   Issue #130 ist die ausdrücklich erlaubte Ausnahme und wird nur auf den
   aktuellen Plan-/Ownerentscheid korrigiert, ohne eine ungemergte SSOT als
   bereits autoritativ auszugeben;
+- Änderung von docs/DECISIONS.md beziehungsweise Implementation des
+  ADR-002-Amendments;
 - Firmware, ESP-IDF-Adapter, Composition Root, Generator oder Validator;
 - Produktionsfreigabe, Aktorfreigabe, Firmware-Build oder Hardwarelauf;
 - eine Behauptung von confirmed_test.
@@ -133,6 +164,57 @@ Gegenüber dem Vorgängerplan gelten insbesondere diese Änderungen:
   Merge dieses PR gegen die reale Merge-SHA und das dann existierende
   Boardprofil synchronisiert; vor dem Merge bleibt ISSUE_SYNC=PLANNED.
 
+### Geplanter ADR-002-Amendment
+
+Der aktuelle kanonische ADR-002 in docs/DECISIONS.md ist für den früheren
+Stand formuliert und verbietet konkrete GPIO-Zuweisungen pauschal, solange
+Hardwarebestätigung fehlt. Er wird nicht gelöscht und in dieser Runde nicht
+geändert. Nach Ownerfreigabe wird er minimal amended, weil Board-/Hardware-
+identität, Design-/Verdrahtungsentscheidung und elektrische Verifikation
+getrennte Gates sind.
+
+Vorgesehener Amendment:
+
+    ADR-002: GPIO-Designzuweisung und reale Hardwarefreigabe sind getrennte
+    Gates.
+
+    Status: accepted; amended by Issue #130 / PR #131
+
+    Konkrete GPIO-Zahlen dürfen als versionierter Design-/Sollzustand in
+    einer getrackten Board-/Wiring-SSOT festgelegt werden, sobald die
+    zugrunde liegende Board-/Modulfamilie hinreichend identifiziert und die
+    Zuordnung gegen belastbare Schalt-, Hersteller- und PCB-Unterlagen
+    geprüft ist.
+
+    Solche Werte sind planned bzw.
+    board_fixed_pending_electrical_verification und stellen noch keinen
+    elektrischen Hardware-PASS dar.
+
+    PCB-feste Zuordnungen dürfen als
+    board_fixed_pending_electrical_verification dokumentiert werden, wenn
+    reale Platine und Referenzunterlage in der Boardfamilie übereinstimmen.
+
+    confirmed_test entsteht ausschließlich durch reale elektrische bzw.
+    funktionale Verifikation am konkreten Aufbau.
+
+    Ein geplanter oder board-fixed GPIO darf niemals automatisch
+    pins_confirmed, active_levels_confirmed, boot_levels_confirmed,
+    actuator_release oder ein anderes Hardware-PASS-Gate setzen.
+
+    Safety-relevante Ausgänge bleiben bis zu ihren owning Hardwaregates
+    fail-closed.
+
+    Historische Issues oder alte Pinannahmen sind keine elektrische
+    Autorität, wenn sie der gemergten Board-/Wiring-SSOT oder belastbaren
+    Primärquellen widersprechen.
+
+    Eine zweite unabhängig handgepflegte Pinmatrix bleibt verboten.
+
+Der Statussatz board-fixed ist hierbei nur Kurzform im Fließtext; als
+Assignment-Status wird ausschließlich
+board_fixed_pending_electrical_verification verwendet. Der Amendment-Text
+wird erst in der Implementierungsphase in docs/DECISIONS.md eingetragen.
+
 ## 4. Primärquellen- und Real-Hardware-Prüfung
 
 Vor der Implementierung werden die folgenden Fragen gegen vorhandene lokale
@@ -141,6 +223,7 @@ Planphase behauptet damit noch keine reale elektrische Bestätigung.
 
 | Prüfobjekt | Zu belegende Punkte | Ergebnisstatus in dieser Planphase |
 |---|---|---|
+| Owner-Referenzabgleich der realen Controllerplatine | Reale Hardware vorhanden; Übereinstimmung mit der im Repository dokumentierten ESP32-WROOM-32E-Quad-MOSFET-Boardfamilie | CONFIRMED_BY_OWNER; keine Aussage über aktive Pegel, Bootwirkung oder Funktion |
 | ESP32-WROOM-32E/32UE und Espressif GPIO-/Hardware-Guidelines | EN/CHIP_PU, GPIO0/GPIO2/GPIO12/GPIO15-Straps, GPIO6..11 Flash, Input-only GPIO34..39, nicht herausgeführte Pins, Boot-Pegel und UART0 | geplant, noch kein Hardwaretest |
 | MSP2807-Schaltbild und reales Modul | ILI9341 RESET als Eingang, Signalrichtung, LED-Polarität, CS/DC/SPI/Touch-Signale, R4 tatsächlich 10 kOhm nach 3,3 V für T_IRQ | geplant; R4 bleibt bis zum Nachweis nicht als real bestätigt |
 | ILI9341-Datenblatt | RESET- und SPI-Pegel sowie gemeinsame Reset-Netzverträglichkeit | geplant |
@@ -253,7 +336,7 @@ Profil enthält mindestens:
 - profile.mcu_module: ESP32-WROOM-32E;
 - profile.release: r1;
 - profile.verification_state: planned_not_confirmed;
-- pro Pin Funktion, optionale Anwendungsrolle, Richtung bzw. input_only,
+- pro Pin Funktion, optionale Anwendungsrolle, direction, capability,
   elektrische aktive Ebene nur bei sinnvoller Semantik, externe Bias-
   Metadaten einschließlich Zielplatzierung, sicheren Boot-/Reset-Pegel,
   Assignment-Status und Verifikationshinweise;
@@ -288,7 +371,9 @@ Vorgesehene Statussemantik:
 - forbidden: für R1 verboten, insbesondere Flash-/Strap-Konflikt;
 - unavailable_not_exposed: nicht verfügbar oder am ESP32-WROOM-32E nicht
   herausgeführt, niemals free;
-- free: elektrisch frei und input-only, ohne R1-Zuordnung;
+- free: keiner R1-Funktion zugewiesen und innerhalb der separat
+  dokumentierten Pin-Capabilities verfügbar; free bedeutet nicht allgemein
+  input-only;
 - confirmed_test: erst nach realer Kontinuität, Pegel-, Boot-/Reset- und
   Funktionsmessung am konkreten Aufbau. Diese Stufe wird nicht durch
   Dokumentation erzeugt.
@@ -298,7 +383,12 @@ planned, board_fixed_pending_electrical_verification, reserved,
 reserved_disabled, forbidden, unavailable_not_exposed, free und
 confirmed_test. Der Profilzustand planned_not_confirmed ist davon getrennt
 und darf nicht als Assignment-Status verwendet werden. Für EN gilt
-assignment_status: planned.
+assignment_status: planned. Capability ist eine davon getrennte Eigenschaft.
+Für GPIO36 lautet die Zielstruktur ausdrücklich:
+
+    gpio36:
+      capability: input_only
+      assignment_status: free
 
 ## 6. Vollständiges R1-GPIO-Inventar als Zielinhalt
 
@@ -349,7 +439,7 @@ geprüft wird; das ist nicht die bevorzugte KISS-Variante dieses Plans.
 | GPIO33 | externer 1-Wire-Bus: abnehmbarer Produktfühler | bidirectional data; eigener Hot-Plug-Bus | eigener 4,7-kOhm Pull-up nach 3,3 V; 3-Leiter-Betrieb | planned |
 | GPIO34 | BTS7960 R_IS Reserve / disabled | input_only, ADC1_CH6; nicht roh anschließen | ris_lis_enabled=false; keine produktive Nutzung; Schutz-/Teiler-/RC-/Clamp-Schaltung erst nach Pegelmessung | reserved_disabled |
 | GPIO35 | BTS7960 L_IS Reserve / disabled | input_only, ADC1_CH7; nicht roh anschließen | ris_lis_enabled=false; keine produktive Nutzung; Schutz-/Teiler-/RC-/Clamp-Schaltung erst nach Pegelmessung | reserved_disabled |
-| GPIO36 | frei / input-only; DS3231 INT/SQW bleibt unbenutzt | input_only; keine R1-Zuordnung | nicht als Ausgang verwenden | free |
+| GPIO36 | frei; DS3231 INT/SQW bleibt unbenutzt | capability: input_only; direction: input_only; keine R1-Zuordnung | nicht als Ausgang verwenden | free |
 | GPIO37 | unavailable / nicht auf ESP32-WROOM-32E herausgeführt | nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
 | GPIO38 | unavailable / nicht auf ESP32-WROOM-32E herausgeführt | nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
 | GPIO39 | Touch IRQ / XPT2046 T_IRQ | input_only, active-low; Pegel pollen | MSP2807 R4 als 10-kOhm Pull-up nach 3,3 V am realen Modul verifizieren; kein zusätzlicher Pull-up, wenn bestätigt | planned |
@@ -543,13 +633,27 @@ Die Matrix ist variantenneutral:
     GPIO22  -> SCL/C
     INT/SQW -> R1 unbenutzt
 
-Das Boardprofil führt nur physical_family=DS3231 und nach bestätigter
-Primärquellenprüfung wiring_compatible_variants=[DS3231SN, DS3231M]. Die
-elektrische Verdrahtung bleibt damit variantenneutral. delivered_variant ist
-kein statisches Board-Wiring-Metadatum: delivered_variant=TBD_DELIVERY und
-software_supported_variant=DS3231SN gehören in Produkt-/Hardwarekonfiguration
-beziehungsweise Commissioning. Der bereits gemergte Softwarevertrag aus #126
-wird nicht still umgeschrieben. Falls DS3231M geliefert wird, ist
+Der Board-/Wiring-SSOT-Teil erhält nach Primärquellenbestätigung:
+
+    rtc:
+      physical_family: DS3231
+      sda_gpio: 21
+      scl_gpio: 22
+      int_sqw: unused_r1
+      wiring_compatible_variants:
+        - DS3231SN
+        - DS3231M
+
+Die Liste wiring_compatible_variants wird nur eingetragen, wenn die
+Primärquellen die elektrische Verdrahtungskompatibilität bestätigen. Das
+tatsächlich gelieferte Modul ist kein statisches Board-Wiring-Metadatum:
+
+    delivered_variant: TBD_DELIVERY
+    software_supported_variant: DS3231SN
+
+Diese Felder gehören in Produkt-/Hardwarekonfiguration beziehungsweise
+Commissioning. Der bereits gemergte Softwarevertrag aus #126 wird nicht
+still umgeschrieben. Falls DS3231M geliefert wird, ist
 Kompatibilitäts-/Registerarbeit ein eigener Follow-up-Scope und keine
 GPIO-Änderung.
 
@@ -586,16 +690,21 @@ Fermenter, sofern der reale Aufbau dies nicht ausdrücklich verifiziert.
 Die Implementierung folgt nach Ownerfreigabe in einem vollständigen Diff gegen
 diesen Plan:
 
-1. config/board_profiles/esp32_32e_quad_mosfet_r1.yaml anlegen und die Matrix,
+1. docs/DECISIONS.md durch einen minimalen Amendment von ADR-002 ergänzen:
+   Status accepted; amended by Issue #130 / PR #131, mit der in Abschnitt 3
+   beschriebenen Trennung von Boardidentität, Designzuweisung und realer
+   elektrischer Verifikation. ADR-002 wird nicht gelöscht und es wird kein
+   neuer ADR angelegt.
+2. config/board_profiles/esp32_32e_quad_mosfet_r1.yaml anlegen und die Matrix,
    Metadaten,
    Busse, Netze und Widerstandspolitik gemäß Abschnitt 5 bis 7 eintragen.
-2. Vor der Änderung erneut mit rg prüfen, ob pins.example.yaml inzwischen von
+3. Vor der Änderung erneut mit rg prüfen, ob pins.example.yaml inzwischen von
    Script, CI oder Dokumentation als fester Vertragspfad verwendet wird.
-3. config/pins.example.yaml entweder entfernen oder auf einen kleinen,
+4. config/pins.example.yaml entweder entfernen oder auf einen kleinen,
    ausdrücklich nichtautoritativen Verweis reduzieren, zum Beispiel mit
    profile_id: esp32_32e_quad_mosfet_r1. Keine vollständigen GPIO-Zahlen
    duplizieren.
-4. config/hardware.example.yaml um
+5. config/hardware.example.yaml um
    controller.board_profile: esp32_32e_quad_mosfet_r1 ergänzen und konkrete
    Pinzahlen daraus entfernen. Produkt-/Komponentendaten bleiben dort
    erhalten. physical_family: DS3231 und wiring_compatible_variants kommen
@@ -603,7 +712,7 @@ diesen Plan:
    Variantenneutralität bestätigt. delivered_variant: TBD_DELIVERY und
    software_supported_variant: DS3231SN gehören in Hardwarekonfiguration
    beziehungsweise Commissioning, nicht in das statische Boardprofil.
-5. docs/HARDWARE.md mit dem eindeutigen Hinweis aktualisieren:
+6. docs/HARDWARE.md mit dem eindeutigen Hinweis aktualisieren:
 
        Electrical/design SSOT for the R1 pin assignment:
        config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
@@ -615,9 +724,24 @@ diesen Plan:
    Ein vollständiger Markdown-Block ist nur zulässig, wenn er deterministisch
    aus dem Profil erzeugt und im selben Scope gegen die SSOT geprüft wird;
    dieses Profilreferenzmodell ist die bevorzugte KISS-Variante.
-6. references/LINKS.md nur für tatsächlich fehlende Hersteller-/Schaltungs-
+
+   Die Hardwarestatusdarstellung verwendet dieselbe Dreiteilung:
+
+   - Identität/Referenzabgleich: reale Hardware vorhanden und Boardfamilie
+     mit der Repository-Referenz durch den Owner abgeglichen;
+   - Designzustand: planned oder
+     board_fixed_pending_electrical_verification;
+   - reale elektrische Abnahme: confirmed_test.
+
+   Die Designmatrix darf nach dem Merge nicht mehr pauschal als
+   alle GPIOs seien TBD_HARDWARE beschrieben werden. TBD_HARDWARE bleibt auf
+   tatsächlich offene Eigenschaften begrenzt, insbesondere exakte
+   PCB-Revision, aktive MOSFET-Pegel, Gate-/Treiberbias, reale
+   IBT-2-Variante/Logikschwelle und andere noch nicht verifizierte
+   elektrische Eigenschaften.
+7. references/LINKS.md nur für tatsächlich fehlende Hersteller-/Schaltungs-
    quellen ergänzen.
-7. docs/ROADMAP.md nur mit Status, Planreferenz und Gate synchronisieren; die
+8. docs/ROADMAP.md nur mit Status, Planreferenz und Gate synchronisieren; die
    Anforderungen werden dort nicht kopiert.
 
 Die spätere produktive Nutzung darf keine handgepflegte Ersatzmatrix in
@@ -645,8 +769,11 @@ Der korrigierte Issue-#130-Text muss mindestens festhalten:
   config/board_profiles/esp32_32e_quad_mosfet_r1.yaml; bis zum Merge ist
   dieser Pfad auf integration/r1-development noch nicht vorhanden und
   nicht live autoritativ.
-- PLAN_ONLY, IMPLEMENTATION=NOT_STARTED, GPIO_MATRIX=PLANNED_NOT_CONFIRMED,
-  HARDWARE_RUN=NOT_RUN und kein confirmed_test.
+- PLAN_ONLY, PLAN_REVISION=COMPLETE, PLAN_SHA=<new-plan-sha>,
+  REAL_HARDWARE_PRESENT=YES, BOARD_FAMILY_REFERENCE_MATCH=CONFIRMED_BY_OWNER,
+  BOARD_REVISION=TBD_HARDWARE, GPIO_MATRIX=UNCHANGED,
+  GPIO_MATRIX_STATUS=PLANNED_NOT_CONFIRMED, ELECTRICAL_VERIFICATION=PENDING,
+  IMPLEMENTATION=NOT_STARTED, HARDWARE_RUN=NOT_RUN und kein confirmed_test.
 - PR #129 / Issue #29 bleiben vollständig getrennt.
 
 Issue #130 darf den geplanten SSOT-Pfad also als Ziel- und Planreferenz
@@ -729,9 +856,12 @@ Werte aus derselben Quelle abgeleitet werden. Der bevorzugte Pfad ist:
 board_profile.hpp ist generiert und nicht handgepflegt. Eine zweite Liste mit
 GPIO_NUM_13, GPIO_NUM_14 oder vergleichbaren konkreten Zahlen ist unzulässig.
 YAML wird nicht zur Laufzeit auf dem ESP32 interpretiert. fermentation_app
-bleibt frei von konkreten GPIO-Zahlen; device_platform erhält keine
-anwendungsspezifische GPIO-Matrix; konkrete Zuordnung wird ausschließlich in
-der ESP-IDF-Composition bereitgestellt.
+bleibt frei von konkreten GPIO-Zahlen; lib/device_platform/** erhält keine
+konkrete R1-GPIO-Matrix oder anwendungsspezifische Boardzuordnung;
+device_platform_esp_idf stellt generische Adapter bereit; die konkrete
+Zuordnung wird ausschließlich in der ESP-IDF-Composition bereitgestellt.
+Andere Geräte oder Boards erhalten eigene Boardprofile und werden nicht in
+dieses R1-Profil hineingemischt.
 
 Falls ein Generator bei der ersten Adapterintegration unverhältnismäßig wäre,
 wird vor jeder Implementierung ein einfacher gleichwertiger Single-Source-
