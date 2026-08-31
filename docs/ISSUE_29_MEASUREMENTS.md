@@ -883,3 +883,75 @@ ROOT_CAUSE=UNRESOLVED
 
 In diesem Nachtrag wurden kein Build, kein Flash, kein Hardwareboot und keine
 Pegelmessung ausgeführt.
+
+## Current-base-Kontrollbuild (2026-08-31)
+
+Die folgende Ergänzung dokumentiert ausschließlich die nachträglich
+ausgeführte digitale Evidenz auf dem owner-freigegebenen Kontrollstand. Sie
+ändert weder die historische Panic-Provenienz noch den unveränderten
+KISS-V2-Plan. Es gab keinen Flash, keinen Hardwareboot und keine
+Pegelmessung.
+
+```text
+CONTROL_WORK_HEAD=7edda30de1d39d5a4945137146ab16da530c5dc6
+CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+CURRENT_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+
+SOURCE_TREE_CLEAN=YES
+kMeasuredCallPathBytes=62928
+kMeasuredCallPathSafetyBufferBytes=4096
+kProbeTaskStackBytes=67584
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=67584
+STACK_FIX_IMPLEMENTED=NO
+
+ESP_IDF_BRINGUP_BUILD=PASS
+ESP_IDF_RELEASE_BUILD=PASS
+FULL_NATIVE_BUILD=PASS
+FULL_NATIVE_TESTS=PASS (1081/1081)
+ESP_CLANG_BRINGUP=PASS
+ESP_CLANG_RELEASE=PASS
+ARCHITECTURE_GATES=PASS
+SECRET_SCAN=PASS
+QUALITY_GATES=PASS
+GIT_DIFF_CHECK=PASS
+
+BRINGUP_HAS_ISSUE29_PROBE=YES
+RELEASE_HAS_ISSUE29_PROBE=NO
+NATIVE_HAS_ISSUE29_PROBE=NO
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO
+
+IMPLEMENTATION_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+ESP32_BRINGUP_BUILD_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+APP_EMBEDDED_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+ELF_SHA256=f3ab27542f2686ff7e8ce954bcdca4bf033e1485524824774022e2e70fbda0c4
+BIN_SHA256=cd7cb24a62e9fd3092ef351574443b819607616641da8723c0eb78c0855d2184
+
+ESP_IDF_TAG=v6.0.2
+ESP_IDF_COMMIT=7101770dc6db2667b3c477cc31365dd1acd6db4e
+XTENSA_TOOLCHAIN=esp-15.2.0_20251204
+ESP_CLANG_TOOLCHAIN=esp-20.1.1_20250829
+PYTHON_VERSION=3.13.5
+
+GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+PR131_GPIO_SSOT_PRESERVED=YES
+GPIO_MATRIX_STATUS=PLANNED_NOT_CONFIRMED
+ELECTRICAL_VERIFICATION=PENDING
+CONFIRMED_TEST=NO
+ACTUATOR_RELEASE=NO
+
+CURRENT_BASE_CONTROL_BOOT=NOT_RUN
+CURRENT_BASELINE_PANIC_CONFIRMED=PENDING
+ROOT_CAUSE=UNRESOLVED
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+```
+
+Der frische Issue-90-Harness-Nachweis wurde gegen die finalen
+Produktions-ELFs wiederholt: Die #29-Probe ist nur im Bring-up vorhanden,
+nicht in Release, Native oder dem Issue-90-Harness. `SECRET_SCAN=PASS`
+bezieht auch alle durch den CI-Artefaktvertrag hochgeladenen Textartefakte
+und die Abdeckungsprüfung ein. Der Current-base-Panic bleibt bis zum
+separat autorisierten Kontrollboot `PENDING`.
