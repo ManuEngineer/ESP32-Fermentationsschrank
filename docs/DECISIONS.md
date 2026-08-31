@@ -14,18 +14,42 @@
 - **Folgen:** Der Arduino-Produktionspfad wurde mit PR #79 entfernt. Das Ziel
   bestaetigt weiterhin keine konkrete Boardrevision oder Pinbelegung.
 
-## ADR-002: Keine GPIO-Zuweisung vor Hardwarebestaetigung
+## ADR-002: GPIO-Designzuweisung und reale Hardwarefreigabe sind getrennte Gates
 
-- **Status:** accepted
+- **Status:** accepted; amended by Issue #130 / PR #131
 - **Datum:** 2026-07-20
-- **Kontext:** Importierte Komponentenangaben enthalten keine verifizierte
-  Anschlussbelegung oder aktive Pegel.
-- **Entscheidung:** Die Firmware verwendet keine Kandidatenpins. Zahlenwerte
-  duerfen nur in Beispiel- oder lokaler Hardwarekonfiguration mit explizitem
-  Status `TBD_HARDWARE` beziehungsweise `confirmed_test` dokumentiert werden.
-  Die lokale bestaetigte `config/pins.yaml` bleibt ignoriert.
-- **Alternativen:** Plausible Standardpins als Kandidaten in Firmware verwenden.
-- **Folgen:** Reale Aktoren bleiben bis zur Hardwareverifikation gesperrt.
+- **Kontext:** Die reale ESP32-WROOM-32E-Quad-MOSFET-Boardfamilie ist durch
+  Owner-Referenzabgleich identifiziert. Design-/Verdrahtungszuweisung und
+  elektrische Funktionsverifikation bleiben dennoch unterschiedliche Gates.
+- **Entscheidung:** Konkrete GPIO-Zahlen duerfen als versionierter
+  Design-/Sollzustand in einer getrackten Board-/Wiring-SSOT festgelegt
+  werden, sobald die zugrunde liegende Board-/Modulfamilie hinreichend
+  identifiziert und die Zuordnung gegen belastbare Schalt-, Hersteller- und
+  PCB-Unterlagen geprueft ist.
+
+  Solche Werte tragen `planned` oder
+  `board_fixed_pending_electrical_verification` und stellen noch keinen
+  elektrischen Hardware-PASS dar. PCB-feste Zuordnungen duerfen als
+  `board_fixed_pending_electrical_verification` dokumentiert werden, wenn
+  reale Platine und Referenzunterlage in der Boardfamilie uebereinstimmen.
+
+  `confirmed_test` entsteht ausschliesslich durch reale elektrische oder
+  funktionale Verifikation am konkreten Aufbau. Ein geplanter oder
+  board-fester GPIO darf niemals automatisch `pins_confirmed`,
+  `active_levels_confirmed`, `boot_levels_confirmed`, `actuator_release` oder
+  ein anderes Hardware-PASS-Gate setzen.
+
+  Safety-relevante Ausgaenge bleiben bis zu ihren owning Hardwaregates
+  fail-closed. Historische Issues oder alte Pinannahmen sind keine
+  elektrische Autoritaet, wenn sie der gemergten Board-/Wiring-SSOT oder
+  belastbaren Primaerquellen widersprechen. Eine zweite unabhaengig
+  handgepflegte Pinmatrix bleibt verboten.
+- **Alternativen:** Plausible Standardpins als Kandidaten in Firmware
+  verwenden oder Designzuweisung und Hardwarefreigabe in einem Gate
+  vermischen.
+- **Folgen:** Die konkrete R1-Board-/Wiring-SSOT ist
+  config/board_profiles/esp32_32e_quad_mosfet_r1.yaml. Reale Aktoren
+  bleiben bis zur Hardwareverifikation gesperrt.
 
 ## ADR-003: Spezifikation vor Fermentationssteuerung
 
