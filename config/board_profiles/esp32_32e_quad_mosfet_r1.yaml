@@ -1,0 +1,558 @@
+# Canonical electrical/design profile for the Release-1 controller board.
+# This file is the only hand-maintained source for concrete R1 GPIO numbers.
+# Design assignment is not electrical or functional hardware confirmation.
+
+profile:
+  id: esp32_32e_quad_mosfet_r1
+  board_family: esp32_32e_quad_mosfet
+  board_revision: TBD_HARDWARE
+  mcu_module: ESP32-WROOM-32E
+  release: r1
+  real_hardware_present: true
+  board_family_reference_match: confirmed_by_owner
+  verification_state: planned_not_confirmed
+  electrical_verification: pending
+  confirmed_test: false
+  actuator_release: false
+
+pins:
+  en:
+    function: esp32_reset_chip_pu
+    capability: reset_control
+    direction: reset_input
+    active_level: low
+    assignment_status: planned
+
+  gpio0:
+    function: boot_rom_download
+    capability: boot_strap
+    direction: strap
+    assignment_status: reserved
+
+  gpio1:
+    function: uart0_tx
+    capability: uart_tx
+    direction: output
+    assignment_status: planned
+
+  gpio2:
+    function: tft_dc_rs
+    capability: digital_output
+    direction: output
+    boot_constraint: no_external_high_drive_during_reset
+    weak_pulldown_allowed: true
+    assignment_status: planned
+
+  gpio3:
+    function: uart0_rx
+    capability: uart_rx
+    direction: input
+    io_voltage: 3.3V
+    assignment_status: planned
+
+  gpio4:
+    function: tft_backlight_pwm
+    application_role: msp2807_led
+    capability: digital_output
+    direction: output
+    active_level: high
+    safe_boot_level: low
+    external_bias:
+      type: pulldown
+      resistance_ohm: 10000
+      to: GND
+      placement: receiver_input_or_connector_side
+    assignment_status: planned
+
+  gpio5:
+    function: tft_cs
+    application_role: msp2807_cs
+    capability: digital_output
+    direction: output
+    active_level: low
+    safe_boot_level: high
+    external_bias:
+      type: pullup
+      resistance_ohm: 10000
+      to: 3.3V
+      placement: receiver_input_or_connector_side
+    assignment_status: planned
+
+  gpio6:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio7:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio8:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio9:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio10:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio11:
+    function: spi_flash
+    capability: reserved_system
+    direction: system_reserved
+    assignment_status: forbidden
+
+  gpio12:
+    function: vdd_sdio_strap
+    capability: reserved_strap
+    direction: strap
+    assignment_status: forbidden
+
+  gpio13:
+    function: peltier_rpwm
+    application_role: bts7960_rpwm
+    capability: digital_output
+    direction: output
+    active_level: high
+    safe_boot_level: low
+    external_bias:
+      type: pulldown
+      resistance_ohm: 10000
+      to: GND
+      placement: receiver_side_or_ibt2_connector_side
+    assignment_status: planned
+
+  gpio14:
+    function: peltier_lpwm
+    application_role: bts7960_lpwm
+    capability: digital_output
+    direction: output
+    active_level: high
+    safe_boot_level: low
+    external_bias:
+      type: pulldown
+      resistance_ohm: 10000
+      to: GND
+      placement: receiver_side_or_ibt2_connector_side
+    assignment_status: planned
+
+  gpio15:
+    function: touch_cs
+    application_role: xpt2046_t_cs
+    capability: digital_output
+    direction: output
+    active_level: low
+    safe_boot_level: high
+    external_bias:
+      type: pullup
+      resistance_ohm: 10000
+      to: 3.3V
+      placement: receiver_input_or_connector_side
+    assignment_status: planned
+
+  gpio16:
+    function: onboard_mosfet_1
+    application_role: internal_fan
+    capability: digital_output
+    direction: output
+    active_level: TBD_HARDWARE
+    safe_boot_level: TBD_HARDWARE
+    external_bias: TBD_BOARD_CIRCUIT
+    assignment_status: board_fixed_pending_electrical_verification
+
+  gpio17:
+    function: onboard_mosfet_2
+    application_role: external_heatsink_fan
+    capability: digital_output
+    direction: output
+    active_level: TBD_HARDWARE
+    safe_boot_level: TBD_HARDWARE
+    external_bias: TBD_BOARD_CIRCUIT
+    assignment_status: board_fixed_pending_electrical_verification
+
+  gpio18:
+    function: spi_sck
+    capability: spi_clock
+    direction: output
+    bus_role: display_touch_spi.sck
+    assignment_status: planned
+
+  gpio19:
+    function: spi_miso
+    capability: spi_data_in
+    direction: input
+    bus_role: display_touch_spi.miso
+    assignment_status: planned
+
+  gpio20:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio21:
+    function: i2c_sda
+    capability: i2c_data
+    direction: bidirectional
+    bus_role: ds3231_i2c.sda
+    assignment_status: planned
+
+  gpio22:
+    function: i2c_scl
+    capability: i2c_clock
+    direction: open_drain_output
+    bus_role: ds3231_i2c.scl
+    assignment_status: planned
+
+  gpio23:
+    function: spi_mosi
+    capability: spi_data_out
+    direction: output
+    bus_role: display_touch_spi.mosi
+    assignment_status: planned
+
+  gpio24:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio25:
+    function: bts7960_enable
+    application_role: shared_r_en_l_en
+    capability: digital_output
+    direction: output
+    active_level: high
+    safe_boot_level: low
+    external_bias:
+      type: pulldown
+      resistance_ohm: 10000
+      to: GND
+      placement: receiver_side_or_ibt2_connector_side
+    assignment_status: planned
+
+  gpio26:
+    function: onboard_mosfet_3
+    application_role: active_buzzer
+    capability: digital_output
+    direction: output
+    active_level: TBD_HARDWARE
+    safe_boot_level: TBD_HARDWARE
+    external_bias: TBD_BOARD_CIRCUIT
+    assignment_status: board_fixed_pending_electrical_verification
+
+  gpio27:
+    function: onboard_mosfet_4
+    application_role: reserve
+    capability: digital_output
+    direction: output
+    active_level: TBD_HARDWARE
+    safe_boot_level: TBD_HARDWARE
+    external_bias: TBD_BOARD_CIRCUIT
+    assignment_status: board_fixed_pending_electrical_verification
+
+  gpio28:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio29:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio30:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio31:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio32:
+    function: one_wire_internal
+    application_role: chamber_air_and_heatsink
+    capability: one_wire_data
+    direction: bidirectional
+    bus_role: one_wire_internal.data
+    assignment_status: planned
+
+  gpio33:
+    function: one_wire_product
+    application_role: removable_product_probe
+    capability: one_wire_data
+    direction: bidirectional
+    bus_role: one_wire_product.data
+    assignment_status: planned
+
+  gpio34:
+    function: bts7960_r_is_reserve
+    application_role: disabled
+    capability: input_only
+    direction: input_only
+    adc_channel: ADC1_CH6
+    ris_lis_enabled: false
+    raw_connection_allowed: false
+    assignment_status: reserved_disabled
+
+  gpio35:
+    function: bts7960_l_is_reserve
+    application_role: disabled
+    capability: input_only
+    direction: input_only
+    adc_channel: ADC1_CH7
+    ris_lis_enabled: false
+    raw_connection_allowed: false
+    assignment_status: reserved_disabled
+
+  gpio36:
+    function: free
+    capability: input_only
+    direction: input_only
+    application_role: no_r1_assignment
+    assignment_status: free
+
+  gpio37:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio38:
+    function: unavailable
+    capability: unavailable
+    direction: unavailable
+    assignment_status: unavailable_not_exposed
+
+  gpio39:
+    function: touch_irq
+    application_role: xpt2046_t_irq
+    capability: input_only
+    direction: input_only
+    active_level: low
+    external_bias:
+      type: module_pullup
+      resistance_ohm: 10000
+      to: 3.3V
+      source: MSP2807_R4
+      placement: module
+      condition: omit_external_pullup_if_confirmed
+    assignment_status: planned
+
+buses:
+  display_touch_spi:
+    protocol: spi
+    signal_roles:
+      - sck
+      - mosi
+      - miso
+    sck_gpio: 18
+    mosi_gpio: 23
+    miso_gpio: 19
+    members:
+      - MSP2807_SCK
+      - MSP2807_SDI_MOSI
+      - MSP2807_SDO_MISO
+      - XPT2046_T_CLK
+      - XPT2046_T_DIN
+      - XPT2046_T_DO
+    chip_selects:
+      - gpio5_tft_cs
+      - gpio15_touch_cs
+
+  one_wire_internal:
+    protocol: one_wire
+    signal_roles:
+      - data
+    gpio: 32
+    roles:
+      - chamber_air
+      - heatsink
+    topology: multidrop
+    wiring: three_wire
+    pullup_ohm: 4700
+    pullup_voltage: 3.3V
+    pullup_placement: one_wire_bus_data_net_at_receiver_or_bus
+
+  one_wire_product:
+    protocol: one_wire
+    signal_roles:
+      - data
+    gpio: 33
+    roles:
+      - product
+    topology: dedicated_removable_bus
+    wiring: three_wire
+    pullup_ohm: 4700
+    pullup_voltage: 3.3V
+    pullup_placement: one_wire_bus_data_net_at_receiver_or_bus
+
+  uart0_programming:
+    protocol: uart0
+    signal_roles:
+      - tx
+      - rx
+    tx_gpio: 1
+    rx_gpio: 3
+    io_voltage: 3.3V
+    adapter: FT232RL
+
+  ds3231_i2c:
+    protocol: i2c
+    signal_roles:
+      - sda
+      - scl
+    sda_gpio: 21
+    scl_gpio: 22
+    int_sqw: unused_r1
+
+rtc:
+  physical_family: DS3231
+  bus: ds3231_i2c
+  wiring_compatible_variants:
+    - DS3231SN
+    - DS3231M
+
+nets:
+  display_reset:
+    source: EN_CHIP_PU
+    target: MSP2807_RESET
+    topology: direct_active_low_shared_reset
+    common_ground_required: true
+    target_is_input_only: true
+    independent_drive_forbidden: true
+    power_logic_domain_compatibility_required: true
+    additional_stage: none_unless_primary_source_conflict
+
+  bts_enable:
+    source_gpio: 25
+    targets:
+      - BTS7960_R_EN
+      - BTS7960_L_EN
+    topology: shared_fail_low_enable
+
+resistor_policy:
+  external_design_components:
+    - id: one_wire_internal_pullup
+      gpio: 32
+      net: one_wire_internal.data
+      resistance_ohm: 4700
+      connection: 3.3V
+      placement: one_wire_bus_data_net_at_receiver_or_bus
+      required: true
+    - id: one_wire_product_pullup
+      gpio: 33
+      net: one_wire_product.data
+      resistance_ohm: 4700
+      connection: 3.3V
+      placement: one_wire_bus_data_net_at_receiver_or_bus
+      required: true
+    - id: bts_rpwm_pulldown
+      gpio: 13
+      net: BTS7960_RPWM
+      resistance_ohm: 10000
+      connection: GND
+      placement: receiver_side_or_ibt2_connector_side
+      required: true
+    - id: bts_lpwm_pulldown
+      gpio: 14
+      net: BTS7960_LPWM
+      resistance_ohm: 10000
+      connection: GND
+      placement: receiver_side_or_ibt2_connector_side
+      required: true
+    - id: bts_enable_pulldown
+      gpio: 25
+      net: BTS7960_R_EN_L_EN
+      resistance_ohm: 10000
+      connection: GND
+      placement: receiver_side_or_ibt2_connector_side
+      required: true
+    - id: tft_cs_pullup
+      gpio: 5
+      net: MSP2807_CS
+      resistance_ohm: 10000
+      connection: 3.3V
+      placement: receiver_input_or_connector_side
+      required: true
+    - id: touch_cs_pullup
+      gpio: 15
+      net: XPT2046_T_CS
+      resistance_ohm: 10000
+      connection: 3.3V
+      placement: receiver_input_or_connector_side
+      required: true
+    - id: tft_backlight_pulldown
+      gpio: 4
+      net: MSP2807_LED
+      resistance_ohm: 10000
+      connection: GND
+      placement: receiver_input_or_connector_side
+      required: true
+
+  conditional_no_duplication:
+    touch_irq:
+      gpio: 39
+      module_bias:
+        source: MSP2807_R4
+        resistance_ohm: 10000
+        connection: 3.3V
+      additional_external_pullup: omit_if_module_bias_confirmed
+    ds3231_i2c:
+      power_off_inspection_required: true
+      omit_additional_pullups_if:
+        each_line_has_pullup_ohm: 4700
+        pullup_target: module_vcc
+        module_vcc: 3.3V
+      otherwise_add:
+        - gpio: 21
+          net: DS3231_SDA
+          resistance_ohm: 4700
+          connection: 3.3V
+        - gpio: 22
+          net: DS3231_SCL
+          resistance_ohm: 4700
+          connection: 3.3V
+    onboard_mosfet_channels:
+      gpios:
+        - 16
+        - 17
+        - 26
+        - 27
+      additional_bias: omit_until_real_board_circuit_is_known
+
+verification:
+  board_family_identity: confirmed_by_owner_reference_match
+  board_revision: TBD_HARDWARE
+  active_levels_confirmed: false
+  boot_levels_confirmed: false
+  mosfet_electrical_behavior_confirmed: false
+  bts7960_logic_confirmed: false
+  display_touch_electrical_function_confirmed: false
+  gpio_functional_test: false
+  confirmed_test: false
+  actuator_release: false
+  electrical_verification: pending
+  direct_reset_checks:
+    common_ground: required
+    reset_input_is_high_impedance: required
+    no_independent_module_drive: required
+    power_logic_domain_compatibility: required
