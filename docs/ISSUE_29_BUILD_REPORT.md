@@ -40,6 +40,80 @@ ISSUE25_STARTED=NO
 MERGE=NO
 ```
 
+## Current-base-Kontrollboot 1 (2026-08-31)
+
+Der exakt einmal bewusst gestartete Current-base-Kontrollboot wurde mit dem
+unveränderten, bereits geprüften `esp32_bringup`-Artefakt aus
+`7edda30de1d39d5a4945137146ab16da530c5dc6` ausgeführt. Der Panic trat im
+normalen Bring-up auf der aktuellen Integrationsbaseline auf. Die danach
+automatisch ausgelösten Panic-Reboots zählen nicht als weitere Testboots; die
+serielle Erfassung wurde nach ausreichender Evidenz beendet und das Board im
+Reset gehalten. Es gab keine Pegelmessung und keine Aktorfreigabe.
+
+```text
+CONTROL_BOOT_1=PANIC_REPRODUCED
+CONTROL_BOOT_COUNT=1
+CONTROL_BOOT_PROFILE=esp32_bringup
+CONTROL_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+HISTORICAL_PANIC_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+CURRENT_BASE_CONTROL_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+APP_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+APP_EMBEDDED_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+PORT=/dev/ttyUSB0
+BOARD_MAC=20:50:0d:1b:2f:34
+PROFILE=esp32_bringup
+ELF_SHA256=f3ab27542f2686ff7e8ce954bcdca4bf033e1485524824774022e2e70fbda0c4
+BIN_SHA256=cd7cb24a62e9fd3092ef351574443b819607616641da8723c0eb78c0855d2184
+kMeasuredCallPathBytes=62928
+kMeasuredCallPathSafetyBufferBytes=4096
+kProbeTaskStackBytes=67584
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=67584
+STACK_FIX_IMPLEMENTED=NO
+96_KIB_FIX_IMPLEMENTED=NO
+ACTUATOR_POLICY=LOCKED_FOR_BRINGUP
+REAL_ACTUATORS=DISABLED
+PRODUCTIVE_OUTPUT_RELEASE=NO
+PANIC=YES
+PANIC_TIME_FROM_BOOT=~798 ms (firmware timestamp; capture detector ~1.002 s)
+PANIC_PC=0x401130d6
+EXCVADDR=0xf077d7e0
+PANIC_INDUCED_RESET=YES
+RESET_REASON=POWERON_RESET (initial boot)
+PANIC_RESET_REASON=SW_CPU_RESET (automatic post-panic reboot)
+RAW_BACKTRACE=0x401130d3:0x3ffc7e10 0x40112e5b:0x3ffc7e30 0x400d3996:0x3ffc7e50 0x400d39e5:0x3ffc7e90 0x400db120:0x3ffc7ed0 0x400dc5d8:0x3ffc7ef0 0x400dca26:0x3ffd7fa0 0x40110e52:0x3ffd7fd0
+ADDR2LINE_BACKTRACE=
+  0x401130d3: block_next at components/heap/tlsf/tlsf_block_functions.h:161 (inlined by tlsf_walk_pool at components/heap/tlsf/tlsf.c:221)
+  0x40112e5b: multi_heap_get_info_impl at components/heap/multi_heap.c:427
+  0x400d3996: heap_caps_get_info at components/heap/heap_caps.c:392
+  0x400d39e5: heap_caps_get_largest_free_block at components/heap/heap_caps.c:321
+  0x400db120: sampleResources at main/issue_29_bringup_probe.cpp:128
+  0x400dc5d8: runProbe at main/issue_29_bringup_probe.cpp:326
+  0x400dca26: probeTask at main/issue_29_bringup_probe.cpp:450
+  0x40110e52: vPortTaskWrapper at components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:147
+WATCHDOG=NO
+BROWNOUT=NO
+UNRELATED_UNEXPECTED_RESET=NO
+ACTOR_RELEASE=NO
+CURRENT_BASELINE_PANIC_CONFIRMED=YES
+ROOT_CAUSE=UNRESOLVED
+NEXT_EXPERIMENT=96_KIB_PRIVATE_DIAGNOSTIC_STACK
+OWNER_REVIEW_REQUIRED=YES
+HARDWARE_RUN=CONTROL_BOOT_ONLY
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+ESP_IDF_TAG=v6.0.2
+ESP_IDF_COMMIT=7101770dc6db2667b3c477cc31365dd1acd6db4e
+XTENSA_TOOLCHAIN=esp-15.2.0_20251204
+```
+
+Der dekodierte erste Backtrace fällt wieder in die bekannte Kette
+`probeTask -> runProbe -> sampleResources -> heap_caps_get_largest_free_block
+-> heap_caps_get_info -> multi_heap_get_info_impl -> tlsf_walk_pool`.
+Das bestätigt die Reproduktion auf der aktuellen Baseline, aber nicht die
+Root Cause. Der private 96-KiB-Kausaltest bleibt ein separates
+Owner-Review-Gate; bis dahin bleibt `ROOT_CAUSE=UNRESOLVED`.
+
 Die drei neuen #29-Änderungen in `scripts/analyze_issue_29_stack.py`,
 `main/CMakeLists.txt` und `lib/device_platform/CMakeLists.txt` werden auf
 den Vor-Implementierungsstand `3fbaf32` zurückgeführt. Historische, bereits
@@ -289,8 +363,9 @@ PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
-CURRENT_BASE_CONTROL_BOOT=NOT_RUN
-CURRENT_BASELINE_PANIC_CONFIRMED=PENDING
+CURRENT_BASE_CONTROL_BOOT=PANIC_REPRODUCED
+CURRENT_BASELINE_PANIC_CONFIRMED=YES
+CURRENT_BASE_CONTROL_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
 PR131_GPIO_SSOT_PRESERVED=YES
 GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
 
@@ -340,14 +415,14 @@ DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
 HWM_ROOT_CAUSE_DISCRIMINATOR_SPECIFIED=YES
 GPIO_SSOT_LEVEL_GATE_SYNC=YES
 IMPLEMENTATION=NOT_STARTED_KISS_REVISION
-HARDWARE_RUN=NO
+HARDWARE_RUN=CONTROL_BOOT_ONLY
 LEVEL_MEASUREMENTS=NOT_RUN
 ROOT_CAUSE=UNRESOLVED
 ~~~
 
-## Current-base-Kontrollbuild (2026-08-31)
+## Historischer digitaler Current-base-Kontrollbuild vor Kontrollboot (SUPERSEDED_BY_CONTROL_BOOT_1)
 
-Dieser Abschnitt ist die aktuelle digitale Kontrollbuild-Evidenz auf dem
+Dieser Abschnitt ist die historische digitale Kontrollbuild-Evidenz auf dem
 owner-freigegebenen Kontrollstand. Frühere historische Nachträge und ihre
 damaligen `NOT_RUN`-Aussagen bleiben unverändert; die Artefakte dieses
 Abschnitts wurden anschließend nicht geflasht und nicht auf Hardware gebootet.
@@ -424,6 +499,6 @@ MERGE=NO
 
 Der Panic-Nachweis bleibt auf der historischen Quelle
 `c1f5fbb5f19ab8e7d2c25708fe79777d523217d4`; dieser digitale Kontrollbuild
-belegt keinen aktuellen Baseline-Panic. `CURRENT_BASE_CONTROL_BOOT` wurde
-bewusst nicht ausgeführt. `SECRET_SCAN=PASS` umfasst den getrackten Scan, den
-Scan der 15 hochgeladenen Build-Artefakte und die Artifact-Scan-Abdeckung.
+belegte zum damaligen Dokumentationszeitpunkt keinen aktuellen
+Baseline-Panic. `SECRET_SCAN=PASS` umfasst den getrackten Scan, den Scan der
+15 hochgeladenen Build-Artefakte und die Artifact-Scan-Abdeckung.
