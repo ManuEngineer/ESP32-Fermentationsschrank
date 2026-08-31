@@ -107,3 +107,87 @@ Hardwarelauf. Die Werte sind Compiler-/Build-Evidenz, keine On-Target-HWM-
 Messung und kein Produktivbudget. `CONFIG_ESP_MAIN_TASK_STACK_SIZE` wurde
 nicht verändert. Die `uxTaskGetStackHighWaterMark()`-Einheit ist für ESP32 in
 ESP-IDF 6.0.2 als Bytes verifiziert.
+
+## Implementierung Plan-Abschnitt 4.1-4.5 (2026-08-31)
+
+Owner-Freigabe: `OWNER_PLAN_REVIEW=PASS`,
+`APPROVED_PLAN_SHA=4a34967ac202196b7afceaebfe2b2429338d6d93`. Vollständige
+technische Herleitung, Instrumentierungsdetails und die Klassifikation der
+unaufgelösten Randbedingungen stehen in
+[`ISSUE_29_MEASUREMENTS.md`](ISSUE_29_MEASUREMENTS.md), Abschnitt
+"Implementierung Abschnitt 4.1-4.5"; hier nur die digitalen Gate-Ergebnisse.
+
+### Digitale Gates (kein Hardwarelauf, kein Flash)
+
+```text
+SOURCE_TREE_CLEAN=NO (main/CMakeLists.txt, lib/device_platform/CMakeLists.txt,
+  scripts/analyze_issue_29_stack.py geaendert, siehe Diff dieser Runde)
+ISSUE29_STACK_ANALYZER=IMPLEMENTED (voll neu geschrieben: P0-P6-Traversierung,
+  fail-closed nach 4.1.1, Whitelist fuer 4 verifizierte virtuelle
+  Aufrufstellen, ROM-Boundary-Tabelle)
+ISSUE29_DIAGNOSTIC_TASK_STATIC_STACK_GATE=BLOCKED
+ALL_RELEVANT_PROBE_STACK_PATHS=BLOCKED
+CURRENT_MAX_PROBE_TASK_CUMULATIVE_BYTES=72224
+UNKNOWN_REACHABLE_EDGES=225 (32 eindeutige Symbole)
+UNRESOLVED_INDIRECT_CALLS=1 (tlsf_walk_pool Callback)
+UNRESOLVED_CALLGRAPH_CYCLES=0
+STACK_CONSTANT_GATE=NOT_REACHED (Gate stoppt vor der Staleness-Pruefung)
+kMeasuredCallPathBytes=62928 (main/issue_29_bringup_probe.cpp, UNVERAENDERT)
+kProbeTaskStackBytes=67584 (main/issue_29_bringup_probe.cpp, UNVERAENDERT)
+ESP_IDF_BRINGUP_BUILD=PASS
+ESP_IDF_RELEASE_BUILD=PASS
+FULL_NATIVE_BUILD=PASS
+FULL_NATIVE_TESTS=PASS (1081/1081)
+ARCHITECTURE_GATES=PASS (nach Ruecknahme von main PRIV_REQUIRES heap, siehe
+  ISSUE_29_MEASUREMENTS.md)
+SECRET_SCAN=PASS
+QUALITY_GATE_SELFTEST=PASS
+GIT_DIFF_CHECK=PASS
+BRINGUP_HAS_ISSUE29_PROBE=YES (ELF-Symbolnachweis: probeTask vorhanden)
+RELEASE_HAS_ISSUE29_PROBE=NO (kein issue_29-Quellcode im Build, kein
+  probeTask-Symbol im ELF)
+NATIVE_HAS_ISSUE29_PROBE=NO (kein Verweis unter src/, include/)
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO (main/CMakeLists.txt-Gate unveraendert,
+  gegenseitiger Ausschluss weiterhin strukturell erzwungen)
+FAULT_SEAM_UNCHANGED=YES (lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp
+  unveraendert)
+PRODUCT_TASK_STACKS_UNCHANGED=YES (nur Diagnose-Konstanten betroffen, und
+  auch diese wurden mangels STACK_GATE=PASS NICHT veraendert)
+```
+
+`kMeasuredCallPathBytes`/`kProbeTaskStackBytes` in
+`main/issue_29_bringup_probe.cpp` wurden **nicht** verändert: der Plan
+erlaubt das ausdrücklich nur nach einem echten `STACK_GATE=PASS` mit
+exaktem Witness; dieser wurde in dieser Runde nicht erreicht.
+`scripts/build_esp_idf_profiles.py` wurde **nicht** um den Analyzer-Aufruf
+erweitert (Plan 4.4) — das würde jeden künftigen `esp32_bringup`-Build/CI-Lauf
+sofort fehlschlagen lassen, solange `STACK_GATE=BLOCKED` real ist; diese
+Konsequenz wird dem Owner vorgelegt statt einseitig scharf geschaltet.
+
+### Owner-Entscheidungsfrage (`PLAN_CHANGE_REQUIRED=YES`)
+
+Plan-Abschnitt 4.2 benennt ausdrücklich nur den ESP-IDF-Component `heap` als
+"die aktuell einzige konkret bekannte reachable-aber-uninstrumentierte
+Komponente". Der real implementierte, vollständig fail-closed Analyzer
+findet nach Schließung von `heap` und `device_platform` noch 32 weitere
+eindeutige unaufgelöste Randstellen, davon:
+
+- **(A)** 12 Symbole in weiteren, quellcodeverfügbaren ESP-IDF-Components
+  (`freertos`, `esp_system`/`heap`-Rest, `cxx`, `esp_libc`/newlib) —
+  grundsätzlich mit demselben, bereits etablierten CMake-Muster schließbar,
+  aber nicht durch Plan 4.2 namentlich freigegeben.
+- **(B)** 20 Symbole toolchain-vorkompiliert (libstdc++/`libsupc++`,
+  picolibc), davon `operator new` objdump-bestätigt **nicht leaf**
+  (ruft real `malloc` sowie die Exception-Allocation-/Throw-Kette auf). Kein
+  Quellcode unter `$IDF_PATH` oder im Projekt verfügbar; eine Grenzbestimmung
+  würde eine transitive Binär-Callgraph-Analyse über mehrere vorkompilierte
+  Bibliotheksebenen erfordern (vom Plan als "neue generische
+  Analyseplattform" ausgeschlossen) oder eine unbegründete Annahme
+  einführen (durch "Nicht durch Annahmen umgehen" ausgeschlossen).
+
+Damit ist der reale Umfang, um `STACK_GATE=PASS` zu erreichen, größer als in
+Plan 4.2 vorgesehen, und (B) ist mit den im Plan erlaubten Mitteln aktuell
+strukturell nicht schließbar. Das ist kein Implementierungsfehler dieser
+Runde, sondern ein während der Implementierung entdeckter, plan-relevanter
+Befund: `PLAN_CHANGE_REQUIRED=YES`. Weder (A) noch (B) wurden ohne
+Ownerfreigabe umgesetzt oder umgangen.

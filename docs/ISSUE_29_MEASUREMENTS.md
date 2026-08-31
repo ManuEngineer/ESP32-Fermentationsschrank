@@ -518,3 +518,166 @@ Der vollständige Rohlog (UART, unkomprimiert) sowie ELF/BIN-Hashes liegen
 lokal, nicht committed, unter `build/issue29_requalification/` (siehe
 `.gitignore`, `build/`). Dieser Abschnitt hier ist die versionierte,
 kanonische Kurzfassung; keine Megabyte-Rohlogs werden committed.
+
+## Implementierung Abschnitt 4.1-4.5 (2026-08-31, Owner-Freigabe Plan-SHA `4a34967ac202196b7afceaebfe2b2429338d6d93`)
+
+Umsetzung von `docs/tasks/issue-29-panic-requalification-correction-plan.md`,
+Abschnitt 4.1-4.5: `scripts/analyze_issue_29_stack.py` wurde vollständig neu
+geschrieben (Mehrpfad-Traversierung `probeTask` -> jedes Blatt, fail-closed
+nach 4.1.1, `heap`-Componentinstrumentierung nach 4.2). Keine Hardware, kein
+Flash. Ergebnis: **`STACK_GATE=BLOCKED`**, real reproduzierbar, kein
+fabrizierter Wert.
+
+### Neue Instrumentierung (project-local, kein Vendor-Patch)
+
+```text
+ESP_IDF_VENDOR_SOURCE_MODIFICATION=NO
+ESP_IDF_INSTALLATION_PATCH=NO
+```
+
+- `lib/device_platform/CMakeLists.txt`: componentweit `-fstack-usage`/
+  `-fcallgraph-info=su`, analog zum bestehenden Muster in
+  `lib/fermentation_app/CMakeLists.txt` (#121).
+- `main/CMakeLists.txt`: `idf_component_get_property(... heap COMPONENT_LIB)`
+  + componentweite Instrumentierung des ESP-IDF-Vendor-Components `heap`
+  (`heap_caps.c`, `heap_caps_base.c`, `heap_caps_init.c`, `multi_heap.c`,
+  `tlsf/tlsf.c`), Fallback aus Plan 4.2 Punkt 2 (datei-genauer Zugriff auf
+  fremde Components ist in ESP-IDF 6.0.2 nicht sauber erreichbar). `heap`
+  wurde bewusst **nicht** zu `main`s `PRIV_REQUIRES` hinzugefügt: das war
+  zunächst versucht, verletzte aber die kuratierte ADR-013-Zulassungsliste in
+  `scripts/check_architecture_boundaries.py`
+  (`COMPONENT_REQUIRES_ALLOWLIST["main/CMakeLists.txt"]`, #72/#73) und war
+  ohnehin nicht nötig: `heap` ist bereits heute transitiv verfügbar (der
+  Probe ruft `heap_caps_get_largest_free_block` direkt auf, auch vor dieser
+  Runde, ohne explizites `PRIV_REQUIRES`); `idf_component_get_property`
+  findet das Ziel zuverlässig auch ohne die explizite Deklaration
+  (verifiziert durch sauberen Clean-Rebuild).
+
+### Whitelist für geschlossene virtuelle Zielmengen (Plan 4.1.1), quellcodeverifiziert
+
+Die tatsächlichen Aufrufstellen wurden über den Quellcode präzise
+nachvollzogen (nicht die im Plantext informell genannte Beschreibung
+"via `RunPersistenceCoordinator`" — `RunPersistenceCoordinator` hält intern
+eine `RunPersistenceStore`-Wrapperklasse, nicht direkt `IStateStore&`):
+
+| Aufrufstelle (verifiziert) | Ziel-Interface | geschlossene Zielmenge |
+|---|---|---|
+| `RunPersistenceStore::readHead()` | `IStateStore::read` | `BringupStateStore::read` |
+| `RunPersistenceStore::readSlot()` | `IStateStore::read` | `BringupStateStore::read` |
+| `{anonymous}::writeExact(IStateStore&, ...)` | `IStateStore::write`+`read` | `BringupStateStore::write`+`read` |
+| `ActuatorPlanSinkDriver::apply(...)` | `IBidirectionalActuatorSink::setForward/setReverse`, `IBinaryOutputSink::setEnabled` | `AllOffBidirectionalSink::setForward/setReverse`, `AllOffBinarySink::setEnabled` |
+
+Verifiziert per GCC `-fcallgraph-info=su`: jeder virtuelle/indirekte Aufruf
+erzeugt eine Kante mit `targetname: "__indirect_call"` (kein stilles Fehlen
+der Kante, wie zuvor angenommen). Der erweiterte Analyzer fand genau diese
+vier Aufrufer als einzige im gesamten erreichbaren Graphen — die Whitelist
+ist damit nachweislich vollständig, keine fünfte Stelle offen. Alle sechs
+konkreten Überschreibungen sind weiterhin `static`, 32 Bytes.
+
+### Neuer, bisher unbekannter fünfter indirekter Aufruf: `tlsf_walk_pool`
+
+Die jetzt instrumentierte `heap`-Kette deckt einen fünften erreichbaren
+`__indirect_call` auf: `tlsf_walk_pool()` (`tlsf.c`) ruft einen
+Callback-Funktionszeiger auf (C-Funktionszeiger, kein virtueller
+C++-Dispatch). Dieser ist **nicht** durch die Plan-4.1.1-Ausnahme gedeckt
+(die benennt ausschließlich die drei genannten `device_platform`-Interfaces)
+und bleibt deshalb `UNRESOLVED_INDIRECT_CALL`. Kein eigenmächtiger
+Whitelist-Eintrag ohne Ownerfreigabe.
+
+### ROM-Boundary-Nachweis (objdump-verifiziert, kein `-fstack-usage`-fähiger Quellcode)
+
+`memcpy`/`memset`/`memcmp`/`memmove` sowie die libgcc-Softfloat-Routinen
+(`__eqdf2`/`__gedf2`/`__gtdf2`/`__ledf2`/`__nedf2`/`__unorddf2`) und
+`__udivdi3` sind auf dem ESP32 in der Mask-ROM verlinkt (`nm` zeigt
+`*ABS*`-Symbole in `0x4000xxxx`/`0x40063xxx`), nicht aus
+`esp_libc`-Quellcode. `-fstack-usage` ist ein reines Compiler-Flag und kann
+auf ROM-Code nicht angewendet werden. Stattdessen: `objdump -d` gegen die
+gelinkte ELF **und** gegen `esp-rom-elfs-20241011`s
+`esp32_rev0_rom.elf`/`esp32_rev300_rom.elf` (identische Adressen und
+Instruktionen auf beiden Chiprevisionen -> physische ROM, revisionsunabhängig,
+passend zu `CONFIG_ESP32_REV_MIN=0`/`CONFIG_ESP32_REV_MAX_FULL=399`).
+Jede Funktion hat genau ein Xtensa-Fenster (`entry a1, N`) und **keinen**
+weiteren `call`/`callx` im vollständigen erreichbaren Rumpf (inklusive
+Sprungzielen unterhalb des eigenen Funktionsanfangs, z. B. `memcpy`s
+gemeinsam genutztes `__memcpy_aux`-Tail):
+
+```text
+memcpy   @ 0x4000c2c8  entry a1, 16   (kein weiterer call)
+memset   @ 0x4000c44c  entry a1, 16   (kein weiterer call)
+memcmp   @ 0x4000c260  entry a1, 32   (kein weiterer call)
+memmove  @ 0x4000c3c0  entry a1, 32   (kein weiterer call)
+__udivdi3     @ 0x4000cff8  entry a1, 32  (646 B Rumpf, kein call)
+__eqdf2/__gtdf2/__ledf2/__gedf2/__unorddf2/__ltdf2
+              @ 0x400636a8-0x40063850  je entry a1, 16  (kein call)
+```
+
+Dies ist ein gemessener, nicht angenommener Grenzwert (Plan 4.1.1:
+"ihre Stackwirkung nachvollziehbar begrenzt").
+
+### `ISSUE29_DIAGNOSTIC_TASK_STATIC_STACK_GATE`-Ergebnis (real, reproduzierbar)
+
+```text
+CURRENT_MAX_PROBE_TASK_CUMULATIVE_BYTES=72224
+UNKNOWN_REACHABLE_EDGES=225 (32 eindeutige Zielsymbole)
+UNRESOLVED_INDIRECT_CALLS=1 (tlsf_walk_pool)
+UNRESOLVED_CALLGRAPH_CYCLES=0
+STACK_GATE=BLOCKED
+```
+
+Der neue, vollständig automatische Witness-Pfad (72224 Bytes) übersteigt
+bereits den in Abschnitt 3 als "worst fully-closed path known" dokumentierten
+P3-Handbefund (71920 Bytes) und bestätigt damit den Plantext ("Der manuelle
+Befund aus Abschnitt 3 ... ist die Untergrenze ..., kein Ersatz dafür.").
+`72224` ist selbst noch **keine** vollständige Obergrenze, da der Gate an den
+unten aufgeführten unaufgelösten Grenzen abbricht, bevor tiefere Pfade
+(insbesondere durch `operator new`/`std::string`-Reallokation) vollständig
+durchlaufen sind.
+
+Die 32 eindeutigen unaufgelösten Zielsymbole gliedern sich wie folgt:
+
+**(A) Quellcode-verfügbare, bisher nicht instrumentierte ESP-IDF-/Projekt-Components**
+(gleiches Muster wie `heap`/`device_platform` anwendbar, aber **nicht**
+durch Plan 4.2 namentlich freigegeben — Plan 4.2 nennt ausdrücklich nur
+`heap` als "die aktuell einzige konkret bekannte reachable-aber-
+uninstrumentierte Komponente"):
+
+```text
+freertos:  uxTaskGetStackHighWaterMark, vTaskDelay, vTaskDelete,
+           xTaskGenericNotify, xTaskGenericNotifyWait,
+           vPortExitCritical, xPortEnterCriticalTimeout, xPortInIsrContext
+esp_system/heap: esp_get_free_heap_size, esp_get_minimum_free_heap_size
+cxx:       __cxa_guard_acquire, __cxa_guard_release
+esp_libc/newlib: __assert_func, strlen
+```
+
+**(B) Toolchain-vorkompiliert, kein Quellcode im Projekt oder unter
+`$IDF_PATH` verfügbar — strukturell nicht durch das gleiche
+CMake-Instrumentierungsmuster schließbar:**
+
+```text
+libstdc++ (libsupc++/functexcept, precompiled .a):
+  _Znwj, _ZdlPvj, _ZSt17__throw_bad_allocv, _ZSt19__throw_logic_errorPKc,
+  _ZSt20__throw_length_errorPKc, _ZSt28__throw_bad_array_new_lengthv,
+  sowie 10 basic_string-Templatemethoden ohne lokale Instanziierung mit
+  Frame-Daten (_M_construct, _M_create, _M_dispose, _M_assign, reserve,
+  append (x2), swap, _S_copy, Move-Konstruktor/-Zuweisung)
+picolibc (precompiled): __cxa_atexit
+```
+
+`_Znwj` (`operator new`) ist per objdump bestätigt **nicht** leaf: es ruft
+`malloc` sowie `__wrap___cxa_allocate_exception`/`__wrap___cxa_throw` real
+auf (`callx8`), trotz `CONFIG_COMPILER_CXX_EXCEPTIONS` nicht gesetzt. Eine
+Grenzbestimmung für (B) würde entweder eine transitive
+Binär-Callgraph-Analyse durch mehrere vorkompilierte Bibliotheksebenen
+erfordern (das im Plan ausdrücklich verbotene "neue generische
+Analyseplattform", KISS-widrig) oder bliebe eine Annahme statt eines
+Nachweises — genau das, was "Nicht durch Annahmen umgehen" ausschließt.
+
+### Disposition
+
+Weder (A) noch (B) sind durch die von Plan 4.2 namentlich freigegebene
+Instrumentierung gedeckt. Eigenmächtige Erweiterung auf (A) und/oder ein
+Ersatzverfahren für (B) wurde **nicht** vorgenommen; siehe
+`docs/ISSUE_29_BUILD_REPORT.md` für die vollständige Owner-Entscheidungsfrage.
+`STACK_GATE=BLOCKED` ist der reale, reproduzierbare Endzustand dieser Runde,
+kein Zwischenstand mit fehlender Arbeit.
