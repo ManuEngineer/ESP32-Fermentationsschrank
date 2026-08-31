@@ -1,364 +1,630 @@
-# Issue #130 – R1-GPIO-Zielmatrix und Verdrahtung kanonisieren
+# Issue #130 – R1-GPIO-SSOT und Synchronisierung der Hardware-Issues
 
-## Status und Owner-Gate
+## Planstatus und Owner-Gate
 
-Diese Datei ist der vollständige, eigenständige Plan für Issue #130. Sie
-beschreibt die vom Owner vorgegebene R1-Zielentscheidung und die spätere
-Dokumentationsumsetzung. Sie ist keine Bestätigung einer real gemessenen
-Verdrahtung.
+Dieser Plan ist die vollständige Neubewertung von PR #131 / Issue #130. Er
+ersetzt den bisher nicht freigegebenen Plan-Commit
+f85df6127708e69484a0f69d50a6bc5d23978071. Die alte Plan-SHA bleibt als
+historische Vorgängerreferenz erhalten; sie ist keine elektrische Autorität.
 
-Bis zur ausdrücklichen Freigabe der exakten Commit-SHA dieser Datei gilt:
+Die folgende Statuszeile beschreibt den Zustand nach dem Plan-Commit. Die
+exakte neue Plan-SHA wird erst durch diesen Commit festgelegt und danach im
+Draft-PR und im aktuellen SESSION-HANDOVER eingetragen.
 
-```text
-PLAN_STATUS=PLAN_ONLY
-IMPLEMENTATION=NOT_STARTED
-GPIO_MATRIX=PLANNED_NOT_CONFIRMED
-HARDWARE_RUN=NOT_RUN
-OWNER_PLAN_REVIEW_REQUIRED=YES
-MERGE=NO
-```
+    PLAN_REEVALUATION=COMPLETE
+    GPIO_SSOT=PLANNED
+    ISSUE_SYNC=PLANNED
+    OLD_ISSUE_PIN_ASSUMPTIONS=NON_AUTHORITATIVE
+    EXTERNAL_RESISTORS=OWNER_APPROVED_AS_SPECIFIED
+    IMPLEMENTATION=NOT_STARTED
+    GPIO_MATRIX=PLANNED_NOT_CONFIRMED
+    HARDWARE_RUN=NOT_RUN
+    OWNER_PLAN_REVIEW_REQUIRED=YES
+    MERGE=NO
 
-Die Plan-SHA ist die Commit-SHA, die diese vollständige Datei zusammen mit der
-minimalen Roadmap-Synchronisierung enthält. Sie wird nach dem Commit im
-Draft-PR #131 und im aktuellen `SESSION HANDOVER` eingetragen. Eine allgemeine
-Zustimmung zu Issue, PR oder Chattext ersetzt die Freigabe dieser exakten SHA
-nicht.
+Es gibt für diesen Scope keine freigegebene Plan-SHA. Umsetzung, Issue-Body-
+Synchronisierung und Hardwareabnahme bleiben bis zur ausdrücklichen Freigabe
+genau dieser neuen Plan-SHA gesperrt.
 
-## 1. Verifizierte Live-Basis
+## 1. Live-Basis und Abgrenzung
 
-Die Live-Prüfung vor Erstellung dieses Plans ergab:
+Vor der Neubewertung wurden Repository, Branch, Live-PRs, Issue #130,
+Roadmap, lokale Agentenregeln und die feste Pfadnutzung geprüft.
 
-| Quelle | Live-Stand | Bedeutung für Issue #130 |
-|---|---|---|
-| Repository | `ManuEngineer/ESP32-Fermentationsschrank` | Zielrepository dieses PR |
-| Basisbranch | `integration/r1-development @ c1f5fbb5f19ab8e7d2c25708fe79777d523217d4` | verifizierte Branchbasis |
-| Arbeitsbranch | `agent/issue-130-r1-gpio-matrix` | eigener Branch für Issue #130 |
-| Issue #130 | `OPEN`, `[E5.0] R1-GPIO-Zielmatrix und Verdrahtungsbasis kanonisieren` | eigener Hardware-/Dokumentationsscope |
-| PR #131 | `OPEN`, `DRAFT`, gegen `integration/r1-development` | Owner-Gate für diesen Plan |
-| PR #129 | `OPEN`, `DRAFT`, Head `92f6cf6c3ee16868b95b7ee6a4e9b233d9ffb0c6` | separater Issue-#29-Panic-/Stack-Scope, nicht Bestandteil dieses Plans |
-| Aktueller Branch-Head vor Plan | `85edbb06de298ab4e7ecc307e39de36be277f2c3` (`chore(issue130): initialize draft branch`) | leerer Initialisierungscommit zum Eröffnen des Draft-PR; noch keine Matrixänderung |
-| Roadmap | Stand `2026-08-31`, Integration ebenfalls auf `c1f5fbb5…` | wird nur um den neuen Plan-/PR-Status ergänzt |
-| Freigegebener Plan dieses PR | `NONE` vor diesem Commit | Ownerfreigabe bleibt offen |
-
-```text
-CONTEXT_BASELINE_BRANCH: integration/r1-development
-CONTEXT_BASELINE_SHA: c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
-CONTEXT_HEAD_SHA: 85edbb06de298ab4e7ecc307e39de36be277f2c3
-CONTEXT_PLAN_SHA: assigned by the commit containing this file
-CONTEXT_REFRESH_MODE: FULL
-CONTEXT_DELTA: Live-Issue/PR/branch/base check; Roadmap; root rules; hardware,
-  configuration, open-point, safety, actuator, acceptance, ADR and CI sources;
-  local archived component references
-SOURCE_OF_TRUTH_CONFLICT: EXISTING_HARDWARE_DOCUMENTS_NOT_YET_ALIGNED_WITH_ISSUE130_TARGET;
-  existing TBD/preference text is not treated as confirmation or as a second
-  accepted design
-```
-
-PR #129 bleibt in allen Fällen getrennt. Wenn #129 vor der Umsetzung dieses
-Plans in `integration/r1-development` gemergt wird, muss der aktuelle
-Integration-Stand ohne Rebase oder Force-Push in diesen Branch übernommen, die
-Roadmap neu gegen den Live-Stand geprüft und historische #129-Statuszeilen
-erhalten werden. Dieser Plan übernimmt keine #129-Root-Cause- oder
-Stackentscheidung.
-
-## 2. Ziel und Nicht-Ziele
-
-### Ziel
-
-Die akzeptierte Release-1-GPIO- und Verdrahtungs-Zielmatrix wird in den bereits
-kanonischen Quellen abgebildet:
-
-- `config/pins.example.yaml` als strukturierte Pin-/Buszuordnung;
-- `config/hardware.example.yaml` als komponentenbezogene R1-Beispielkonfiguration;
-- `docs/HARDWARE.md` als lesbare Hardware- und Verifikationsquelle;
-- `docs/ROADMAP.md` nur mit einer knappen Status-/PR-Synchronisierung;
-- `references/LINKS.md` nur, falls für tatsächlich verwendete fehlende
-  Herstellerquellen erforderlich.
-
-Die Matrix beschreibt eine akzeptierte Designzuordnung. Jeder Eintrag bleibt
-explizit `planned`, `reserved`, `forbidden`, `free` oder
-`board-fixed / pending electrical verification`; keiner wird durch diesen PR
-zu `confirmed_test`.
-
-### Nicht-Ziele
-
-- keine Änderung an Produktionscode, Testcode, Ports, Adaptern, Bibliotheken,
-  Toolchain, Buildprofilen, Wireformaten oder Persistenz;
-- keine Aktorfreigabe, kein Firmwareflash, kein UART-/GPIO-/Pegeltest und kein
-  sonstiger Hardwarelauf;
-- keine Aufhebung von `HARDWARE_UNVERIFIED`, `real_actuators_enabled: false`
-  oder der bestehenden Release-/Bring-up-Gates;
-- keine Schließung oder fälschliche Bestätigung der Gates #29, #30, #31, #32
-  oder #33;
-- keine Änderung des gemergten DS3231SN-Softwarevertrags aus #126;
-- keine Auswahl eines DS3231M als produktiv unterstützte Softwarevariante;
-- kein zweites `GPIO_MATRIX_R1.md` und keine neue parallele Hardwarequelle;
-- keine Änderung, Übernahme oder Vereinigung von PR #129 / Issue #29;
-- kein `Ready for review`, kein Merge, kein Auto-Merge und kein Issue-Schluss
-  durch den Agenten.
-
-## 3. Verbindliche Zielmatrix
-
-Die folgende Tabelle ist die Designentscheidung dieses Auftrags. Sie wird in
-der späteren Umsetzung semantisch unverändert in `pins.example.yaml` und
-`docs/HARDWARE.md` abgebildet. `planned` bedeutet eine akzeptierte
-Zielzuordnung ohne vollständige reale Messung. `board-fixed` bedeutet nur, dass
-die Zuordnung aus der PCB-Struktur stammt; Pegel, Bootwirkung und elektrische
-Sicherheit bleiben offen.
-
-| Pin | R1-Rolle | Verdrahtung / Regel | Zielstatus |
-|---|---|---|---|
-| `EN / CHIP_PU` | ESP32-Hardware-Reset + Quelle für TFT-Reset | TFT `RESET` folgt `EN` nur über einseitige, low-aktive Entkopplung; kein harter bidirektionaler Netztie | `planned` |
-| `GPIO0` | BOOT / ROM-Download | keine R1-Peripherie anschließen | `reserved` |
-| `GPIO1` | UART0 TX | ESP32 TX -> FT232RL RX | `planned` |
-| `GPIO2` | TFT D/C | MSP2807 `DC/RS`; keine externe Beschaltung, die GPIO2 beim Reset HIGH erzwingt; schwacher Pulldown zulässig | `planned` |
-| `GPIO3` | UART0 RX | FT232RL TX -> ESP32 RX; 3,3-V-I/O | `planned` |
-| `GPIO4` | TFT-Backlight PWM | MSP2807 `LED`, active-high; externer Pulldown für Boot/Reset-AUS; ermöglicht die verbindliche R1-Helligkeits-/Dimmfunktion | `planned` |
-| `GPIO5` | TFT CS | MSP2807 `CS`; externer ca. 10-kΩ Pull-up nach 3,3 V | `planned` |
-| `GPIO6..11` | SPI-Flash | nicht verwenden | `forbidden` |
-| `GPIO12` | VDD_SDIO-Strap | keine R1-Funktion | `forbidden` |
-| `GPIO13` | BTS7960 RPWM | externer ca. 10-kΩ Pulldown | `planned` |
-| `GPIO14` | BTS7960 LPWM | externer ca. 10-kΩ Pulldown | `planned` |
-| `GPIO15` | Touch CS | XPT2046/MSP2807 `T_CS`; externer ca. 10-kΩ Pull-up nach 3,3 V | `planned` |
-| `GPIO16` | Onboard-MOSFET 1 | Innenlüfter; PCB-seitig fest verdrahteter MOSFET-Kanal | `board-fixed / pending electrical verification` |
-| `GPIO17` | Onboard-MOSFET 2 | Außen-/Kühlkörperlüfter; PCB-seitig fest verdrahteter MOSFET-Kanal | `board-fixed / pending electrical verification` |
-| `GPIO18` | SPI SCK | gemeinsam TFT `SCK` + Touch `T_CLK` | `planned` |
-| `GPIO19` | SPI MISO | gemeinsam TFT `SDO/MISO` + Touch `T_DO` | `planned` |
-| `GPIO21` | I2C SDA | DS3231-Familie SDA | `planned` |
-| `GPIO22` | I2C SCL | DS3231-Familie SCL | `planned` |
-| `GPIO23` | SPI MOSI | gemeinsam TFT `SDI/MOSI` + Touch `T_DIN` | `planned` |
-| `GPIO25` | H-Brücken Enable | `R_EN` + `L_EN` gemeinsam; externer ca. 10-kΩ Pulldown; zentrale fail-low Freigabe | `planned` |
-| `GPIO26` | Onboard-MOSFET 3 | aktiver Summer; PCB-seitig fest verdrahteter MOSFET-Kanal | `board-fixed / pending electrical verification` |
-| `GPIO27` | Onboard-MOSFET 4 | Reserve; PCB-seitig fest verdrahteter MOSFET-Kanal | `board-fixed / pending electrical verification` |
-| `GPIO32` | interner 1-Wire-Bus | DS18B20 Schrankluft **und** DS18B20 Kühlkörper gemeinsam; 4,7-kΩ Pull-up nach 3,3 V; 3-Leiter-Betrieb; Rollen über ROM-ID | `planned` |
-| `GPIO33` | externer 1-Wire-Bus | abnehmbarer DS18B20 Produktfühler; eigener 4,7-kΩ Pull-up nach 3,3 V; 3-Leiter-Betrieb | `planned` |
-| `GPIO34` | BTS7960 R_IS Reserve | ADC1_CH6, input-only; R_IS **nicht roh anschließen**; nur nach realer Pegelmessung und geeigneter Schutz-/Teilerbeschaltung | `reserved / disabled` |
-| `GPIO35` | BTS7960 L_IS Reserve | ADC1_CH7, input-only; L_IS **nicht roh anschließen**; nur nach realer Pegelmessung und geeigneter Schutz-/Teilerbeschaltung | `reserved / disabled` |
-| `GPIO36` | frei / input-only | keine R1-Zuordnung; DS3231 `INT/SQW` bleibt R1 unbenutzt | `free` |
-| `GPIO39` | Touch IRQ | MSP2807/XPT2046 `T_IRQ`; input-only; standardmäßig als Pegel pollen, realen Modul-Pull-up verifizieren | `planned` |
-
-GPIO20, GPIO24, GPIO28..31 und GPIO37..38 werden in der Umsetzung im
-vollständigen ESP32-WROOM-32E-/Board-Inventar mitgeprüft. Für nicht bonded oder
-nicht herausgeführte Pins wird keine R1-Rolle erfunden. Die Prüfliste darf die
-Abwesenheit dieser nicht gelisteten Nummern nicht als frei verfügbare
-Hardwarekapazität umdeuten.
-
-## 4. Status- und Sicherheitsmodell
-
-| Status | Bedeutung in diesem PR |
+| Gegenstand | Live-Stand / Bedeutung |
 |---|---|
-| `planned` | Designzuordnung akzeptiert, am realen Aufbau noch nicht vollständig gemessen |
-| `board-fixed / pending electrical verification` | PCB-seitig fest verdrahtete Zuordnung; elektrische Pegel, Bootwirkung und Verbraucherwirkung noch nicht verifiziert |
-| `confirmed_test` | nur nach realer Kontinuität, Pegel-, Boot-/Reset- und Funktionsmessung am konkreten Aufbau zulässig; wird durch diesen PR nirgendwo gesetzt |
+| Zielbasis | origin/integration/r1-development, c1f5fbb5f19ab8e7d2c25708fe79777d523217d4 |
+| Arbeitsbranch | agent/issue-130-r1-gpio-matrix |
+| PR #131 | OPEN, DRAFT, Base integration/r1-development, Head f85df6127708e69484a0f69d50a6bc5d23978071 |
+| Issue #130 | OPEN, Eigentümer des eigenständigen GPIO-/Verdrahtungsscope |
+| PR #129 | OPEN, DRAFT, Head f3725e5557b040dc388a9d9ca9077329b0e5c672; vollständig getrennt |
+| bisheriger Plan | docs/tasks/issue-130-r1-gpio-matrix-plan.md @ f85df6127708e69484a0f69d50a6bc5d23978071; nicht freigegeben |
+| Roadmap | bestehende Issue-130-Zeile; wird nur auf den neuen Planstatus und die SSOT-/Issue-Gate-Semantik synchronisiert |
+| feste Pfadnutzung | Keine aktive Script-/CI-/Dokumentationsreferenz auf eine vollständige pins.example.yaml-Matrix gefunden; historische Verweise in einem älteren Plan werden bei der Migration nicht als Laufzeitvertrag behandelt |
+| Arbeitszustand | Branch war vor dieser Planrevision sauber; die bestehende Plan-Datei wurde ausschließlich zur vollständigen Ersetzung entfernt und wird in diesem Commit wieder angelegt |
 
-`reserved`, `forbidden`, `free` und `reserved / disabled` sind
-Ressourcen-/Nutzungsstatus, kein Ersatz für Messnachweis. Ein reservierter
-oder freier Pin darf nicht als implizite zukünftige Aktorfreigabe erscheinen.
+PR #129 behandelt ausschließlich Issue #29, Panic-Requalifikation und
+Stackbudget. Inhalte, Root-Cause-Entscheidungen und historische Statuszeilen
+von PR #129 werden nicht übernommen oder verändert. Falls PR #129 vor der
+Umsetzung dieses Plans in die Integrationsbasis gelangt, wird der GPIO-Branch
+ohne Rebase oder Force-Push auf den neuen Live-Stand synchronisiert; die
+Roadmap wird dann nur gegen diesen Stand aufgelöst.
 
-Unverändert bleiben `HARDWARE_UNVERIFIED`,
-`pins_confirmed: false`, `active_levels_confirmed: false`,
-`boot_levels_confirmed: false`, `real_actuators_enabled: false`,
-`requires_verified_hardware_profile: true` und
-`peltier_pulse_test_passed: false`. Die Dokumentation erzeugt keine
-`ActuatorSafetyGateStatus::Allowed`-Bedingung. Die bestehenden SafetyCore-,
-Planner- und Sink-Verträge bleiben bei Boot, Reset, Fehler, unbekanntem Zustand,
-unbestätigter Hardware und offenem Safety-Gate all-off beziehungsweise
-fail-closed.
+## 2. Ziel und Nicht-Ziele dieser Runde
 
-## 5. Quellen und fachliche Grenzen
+Ziel ist ein vollständiger, standalone versionierter Umsetzungsplan für:
 
-Der Plan verwendet in dieser Reihenfolge:
+1. eine einzige handgepflegte R1-Boardprofilquelle für konkrete GPIO-Zahlen;
+2. elektrische Metadaten, Bus-/Netz-Sharing und den vollständigen Inventarbereich
+   EN sowie GPIO0 bis GPIO39;
+3. die vom Owner festgelegte Widerstandspolitik;
+4. die direkte gemeinsame EN-/TFT-RESET-Zielverdrahtung;
+5. die spätere Synchronisierung der relevanten Hardware-Issues auf die SSOT;
+6. einen späteren Generator-/Validatorpfad ohne handgepflegte Firmware-
+   Doppelquelle.
 
-- `AGENTS.md`, `docs/AGENT_WORKFLOW.md` und `docs/ENGINEERING_PRINCIPLES.md`;
-- `docs/SPECIFICATION_REVIEW.md`, `docs/DECISIONS.md`, insbesondere
-  ADR-002, ADR-008, ADR-011, ADR-012 und ADR-013;
-- `docs/HARDWARE.md`, `docs/HARDWARE_REVISIONS.md`, `docs/OPEN_POINTS.md`,
-  `docs/ACTUATOR_TIMING.md`, `docs/SAFETY_COMPONENT_FAULTS.md`,
-  `docs/ACCEPTANCE_TESTS.md` und `docs/RUNTIME_BEHAVIOR.md`;
-- Live-Issues #29, #30, #31, #32 und #33, Issue #126/PR #127 sowie
-  `docs/CI_AND_QUALITY_GATES.md`;
-- lokale Archive `references/datasheets/Display/MSP2807-2.8-SPI.pdf`,
-  `2.8inch_SPI_Module_MSP2807_User_Manual_EN.pdf`, `ILI9341 Datasheet.pdf`,
-  `esp32-32e-quad-mosfet-board-supplier.pdf`, `bts7960-infineon.pdf`,
-  `ds18b20.pdf` und `ft232rl-adapter-supplier.pdf`.
+In dieser Runde werden ausschließlich dieser Plan, die minimale Roadmap-
+Synchronisierung und der PR-/Handover-Status geändert. Nicht enthalten sind:
 
-Die bestehenden Hardwaredokumente enthalten noch `TBD_HARDWARE`, die frühere
-Präferenz „ein GPIO je Sensor“ und offene Display-/MOSFET-/BTS7960-Pegel. Das
-ist die auszugleichende Dokumentationsausgangslage, keine reale Bestätigung und
-keine zweite akzeptierte Matrix. Hersteller-URLs werden nur ergänzt, wenn ein
-verwendeter Nachweis in `references/LINKS.md` fehlt.
+- Anlage von config/board_profiles/esp32_32e_r1.yaml;
+- Migration, Entfernung oder inhaltliche Erweiterung von
+  config/pins.example.yaml;
+- Änderung von config/hardware.example.yaml;
+- Änderung von docs/HARDWARE.md oder references/LINKS.md;
+- Änderungen an Issue-Bodies #29, #30, #31, #32, #33 oder anderen Issues;
+- Firmware, ESP-IDF-Adapter, Composition Root, Generator oder Validator;
+- Produktionsfreigabe, Aktorfreigabe, Firmware-Build oder Hardwarelauf;
+- eine Behauptung von confirmed_test.
 
-Der #126-Softwarevertrag bleibt exakt getrennt:
+Die im Folgenden beschriebene Matrix ist im Plan die verbindliche
+Umsetzungsgrundlage dieses Scopes. Nach Freigabe wird sie in die Boardprofil-
+Quelle überführt; sie wird nicht zusätzlich als unabhängige Matrixdatei
+angelegt.
 
-```text
-physical_family=DS3231
-delivered_variant=TBD_DELIVERY
-software_supported_variant=DS3231SN
-```
+## 3. Owner-Entscheidungen und Revisionsdelta
 
-Die Matrix ist für die Familie elektrisch variantenneutral:
+Alte Issues, alte Planstände und historische Präferenzen sind für konkrete
+GPIO-Zahlen, Pegel und Pull-Widerstände nicht autoritativ. Die technische
+Autorität wird mit der Umsetzung dieses Plans auf das versionierte
+R1-Boardprofil unter config/board_profiles/esp32_32e_r1.yaml verlagert.
 
-```text
-3.3 V -> VCC/+
-GND   -> GND/-
-GPIO21 <-> SDA/D
-GPIO22  -> SCL/C
-INT/SQW -> R1 unbenutzt
-```
+Gegenüber dem Vorgängerplan gelten insbesondere diese Änderungen:
 
-Eine gelieferte DS3231M-Variante löst einen eigenen Register-/Software-
-Kompatibilitätsscope aus; dieser PR ändert weder `DS3231SN`, `ITimeSource`,
-OSF-/EOSC-Vertrauen noch den #124-Recoveryvertrag.
+- Das Boardprofil wird die einzige handgepflegte Quelle für konkrete R1-GPIO-
+  Zahlen.
+- Eine vollständige zweite GPIO-Matrix in config/pins.example.yaml ist
+  unzulässig; vor der Umsetzung wird der Pfad nochmals auf Vertragsnutzung
+  geprüft und anschließend auf einen kleinen, ausdrücklich
+  nichtautoritativen Profilverweis reduziert oder entfernt.
+- config/hardware.example.yaml verweist nur noch auf
+  controller.board_profile: esp32_32e_r1 und dupliziert keine Pinzahlen.
+- Die externen Widerstände aus Abschnitt 7 sind Designbestandteil und keine
+  spätere Messoption.
+- GPIO32 trägt den gemeinsamen internen Multidrop-Bus für Schrankluft und
+  Kühlkörper; GPIO33 bleibt der eigene abnehmbare Produktfühler-Bus.
+- GPIO4 wird für Backlight-PWM verwendet; die verbindliche lokale
+  Helligkeits-/Dimmfunktion wird nicht durch always-on 3,3 V ersetzt.
+- TFT_RESET folgt EN/CHIP_PU über ein direktes gemeinsames active-low
+  Reset-Netz. Die im Vorgängerplan vorgesehene einseitige Entkopplungsstufe
+  ist damit verworfen. Eine zusätzliche Stufe ist nur zulässig, wenn das
+  veröffentlichte MSP2807-Schaltbild und das reale Modul einen elektrischen
+  Widerspruch nachweisen.
+- Issue-Synchronisierung erfolgt erst nach Freigabe dieses Plans und legt
+  keine neuen GPIO-Zahlen in den einzelnen Issues fest.
 
-## 6. Spätere Dokumentationsumsetzung nach Planfreigabe
+## 4. Primärquellen- und Real-Hardware-Prüfung
 
-### 6.1 Pin- und Hardware-YAML
+Vor der Implementierung werden die folgenden Fragen gegen vorhandene lokale
+Quellen, konkrete PCB-/Modulunterlagen und Herstellerquellen beantwortet. Die
+Planphase behauptet damit noch keine reale elektrische Bestätigung.
 
-`config/pins.example.yaml` bildet die vollständige Tabelle als eindeutige
-R1-Zielbeschreibung ab. Die beiden festen Sensorrollen referenzieren denselben
-Bus `fixed_internal` auf GPIO32 mit genau einem 4,7-kΩ-Pull-up; der
-Produktbus `product_external` auf GPIO33 erhält einen eigenen Pull-up. Die
-BTS7960-Rollen zeigen GPIO13/14/25, wobei `R_EN` und `L_EN` bewusst gemeinsam
-auf GPIO25 liegen. GPIO34/35 werden nicht aktiviert.
+| Prüfobjekt | Zu belegende Punkte | Ergebnisstatus in dieser Planphase |
+|---|---|---|
+| ESP32-WROOM-32E/32UE und Espressif GPIO-/Hardware-Guidelines | EN/CHIP_PU, GPIO0/GPIO2/GPIO12/GPIO15-Straps, GPIO6..11 Flash, Input-only GPIO34..39, nicht herausgeführte Pins, Boot-Pegel und UART0 | geplant, noch kein Hardwaretest |
+| MSP2807-Schaltbild und reales Modul | ILI9341 RESET als Eingang, Signalrichtung, LED-Polarität, CS/DC/SPI/Touch-Signale, R4 tatsächlich 10 kOhm nach 3,3 V für T_IRQ | geplant; R4 bleibt bis zum Nachweis nicht als real bestätigt |
+| ILI9341-Datenblatt | RESET- und SPI-Pegel sowie gemeinsame Reset-Netzverträglichkeit | geplant |
+| DS18B20-Datenblatt und reale Sensorverdrahtung | 3-Leiter-Betrieb, Multidrop/ROM-ID, Pull-up je Bus, CRC/Hot-Plug-Verhalten | geplant |
+| gelieferte DS3231-Platine und DS3231-Familienunterlagen | SDA/SCL-Pull-ups stromlos identifizieren, VCC=3,3 V verifizieren, INT/SQW unbenutzt, delivered_variant getrennt von Softwarefreigabe dokumentieren | geplant |
+| Infineon BTS7960-/konkrete IBT-2-Unterlagen | RPWM/LPWM/EN-Pegel, R_IS/L_IS-Verhalten, Eingangsbuffer, Versorgung und 3,3-V-HIGH-Kompatibilität | geplant; konkrete Buffer-Variante, z. B. 74HC244D, nicht geraten |
+| TI-74HC244-Unterlage, falls auf dem realen Modul vorhanden | Logikpegel und Versorgung des tatsächlichen Eingangsbuffers | geplant |
+| FTDI FT232R-Unterlage und Espressif Auto-Reset-Unterlage | 3,3-V-UART-I/O, DTR/RTS nur über die vorgesehene Auto-Reset-Logik, kein zusätzlicher Versorgungsweg | geplant |
 
-Display/Touch referenzieren den gemeinsamen SPI-Bus GPIO18/19/23, CS/DC
-GPIO5/2, Touch-CS/IRQ GPIO15/39 und Backlight GPIO4. Pull-ups, Pulldowns,
-GPIO2-Strapregel und ein benannter Resetpfad von `EN / CHIP_PU` werden als
-Verdrahtungsregeln festgehalten. TFT-RESET erhält keinen frei programmierbaren
-GPIO.
+Vorrang haben die bereits im Repository vorhandenen Dateien unter
+references/datasheets/ und die konkrete lokale PCB-/Moduldokumentation,
+insbesondere:
 
-Die vier PCB-festen MOSFET-Kanäle werden GPIO16/17/26/27 zugeordnet. Aktive
-Pegel, Verbraucherwerte und Bootwirkung bleiben elektrische
-Verifikationsfelder. Optionale Zukunftsressourcen wie 12-V-ADC, Türkontakt und
-Lüfter-Tacho werden nicht vorgezogen.
+- references/datasheets/Display/MSP2807-2.8-SPI.pdf;
+- references/datasheets/Display/2.8inch_SPI_Module_MSP2807_User_Manual_EN.pdf;
+- references/datasheets/Display/ILI9341 Datasheet.pdf;
+- references/datasheets/esp32-32e-quad-mosfet-board-supplier.pdf;
+- references/datasheets/bts7960-infineon.pdf;
+- references/datasheets/ds18b20.pdf;
+- references/datasheets/ft232rl-adapter-supplier.pdf.
 
-`config/hardware.example.yaml` wird dazu ohne Sicherheitslockerung
-abgeglichen: `fixed_internal`/`product_external`, UI-Signale, BTS7960,
-MOSFET-Rollen, UART/FT232RL und die getrennten DS3231-Felder werden konsistent
-referenziert. `preferred_bus_topology` darf nicht als konkurrierende R1-
-Zielentscheidung stehen bleiben. Profile, Hardwarezustände und
-`real_actuators_enabled: false` bleiben unverändert.
+Die bei der Umsetzung tatsächlich vorhandenen Dateinamen werden vor der
+Quellenprüfung mit rg/find verifiziert; ein nicht vorhandener Dateiname wird
+nicht als Quelle behauptet. Fehlende Herstellerquellen werden nur im
+notwendigen Umfang in references/LINKS.md ergänzt. Eine Quelle gilt nicht als
+Bestätigung einer realen Platinenbestückung; diese wird bei der
+Hardwareabnahme separat protokolliert.
 
-### 6.2 `docs/HARDWARE.md`
+Vorgesehene Herstellerreferenzen:
 
-Die Datei erhält die vollständige Matrix, das Statusmodell, die Begründung für
-GPIO4 als Backlight-PWM und die konkrete Zwei-Bus-Topologie. Sie dokumentiert
-gemeinsame SPI-Signale, Boot-/Strapbedingungen, DS3231-Familienneutralität,
-BTS7960-Safe-Off, FT232-Richtung und die Verifikationsreihenfolge. Kein
-Abschnitt bezeichnet einen Zielstatus als `confirmed_test`.
+- Espressif ESP32-WROOM-32E/32UE Datasheet und ESP32 Hardware Design
+  Guidelines;
+- Analog Devices DS18B20 und DS3231-Familie;
+- Infineon BTS7960;
+- TI 74HC244, falls der konkrete IBT-2-Buffer dies erfordert;
+- LCDWiki MSP2807, lokales MSP2807-Schaltbild und ILI9341-Datenblatt;
+- FTDI FT232R.
 
-### 6.3 TFT-RESET-Gate
+## 5. Kanonisches Boardprofil nach Freigabe
 
-Die Zielschaltung ist kein harter Netztie:
+Die nach Freigabe anzulegende Datei lautet:
 
-```text
-ESP32 EN / CHIP_PU
-        |
-        +--> einseitige, low-aktive Entkopplung --> MSP2807 TFT_RESET
-                                                     |
-                                                     +--> definierte 3,3-V-HIGH-Vorspannung
-```
+    config/board_profiles/esp32_32e_r1.yaml
 
-Die konkrete Bauteilwahl wird nur festgeschrieben, wenn lokale
-MSP2807-/ILI9341-Unterlagen und Espressif-EN-/Reset-Unterlagen eindeutig
-belegen, dass `TFT_RESET` ein Displayeingang ist, ein Low auf EN zuverlässig
-Low am Display erzeugt, EN bei Freigabe High bleibt, die Displayseite EN nicht
-zurücktreibt und Pegel sowie Resetzeiten passen. Eine nichtinvertierende
-Open-Drain-/Open-Collector- oder gleichwertig einseitige low-aktive Lösung ist
-zulässig. Ohne eindeutigen Nachweis bleiben Bauteilwahl und konkrete
-Schaltungsdimensionierung `pending_hardware_verification`; es wird weder
-geraten noch `EN == TFT_RESET` eingetragen.
+Sie ist die einzige handgepflegte Quelle für konkrete R1-GPIO-Zahlen. Das
+Profil enthält mindestens:
 
-### 6.4 Boot, Input-only, BTS7960 und FT232
+- profile.id: esp32_32e_r1;
+- profile.mcu_module: ESP32-WROOM-32E;
+- profile.release: r1;
+- profile.verification_state: planned_not_confirmed;
+- pro Pin Funktion, optionale Anwendungsrolle, Richtung bzw. input_only,
+  elektrische aktive Ebene nur bei sinnvoller Semantik, externe Bias-
+  Metadaten, sicheren Boot-/Reset-Pegel, Assignment-Status und
+  Verifikationshinweise;
+- buses für absichtliches SPI-, I2C-, UART- und 1-Wire-Sharing;
+- nets für gemeinsame Signale wie EN/TFT_RESET und BTS-Enable;
+- eine resistor_policy mit fest verbauten und konditional nicht zu
+  duplizierenden Widerständen;
+- eine klare Trennung von Designzustand, Board-Fixierung und realem
+  Messzustand.
 
-Die Umsetzungsprüfung gleicht alle GPIOs 0..39 gegen ESP32-WROOM-32E-
-Pinbeschreibung und Boardunterlage ab: GPIO0 bleibt Download-Strap, GPIO2
-wird nicht gegen HIGH erzwungen, GPIO5/15 bleiben deselected, GPIO12 bleibt
-ohne R1-Funktion, GPIO34/35/36/39 werden nur input-only-konform verwendet und
-GPIO6..11 bleiben Flash-reserviert. GPIO25, GPIO32 und der SPI-Bus werden als
-absichtliche gemeinsame Netze geprüft. Nicht bonded/nicht herausgeführte
-Nummern erhalten keine neue Rolle.
+Die Feldnamen und Statuswerte werden deterministisch und ohne YAML-Laufzeit-
+interpretation auf dem ESP32 verwendet. Wo eine elektrische aktive Ebene
+keinen Sinn ergibt, wird active_level weggelassen; SPI, I2C, UART und
+bidirektionale 1-Wire-Daten erhalten stattdessen Busrolle und Richtung.
 
-Für BTS7960 bleiben Pulldowns an 13/14/25, LOW bei Boot/Reset/Fehler,
-break-before-make und der unzulässige Zustand
-`RPWM=HIGH && LPWM=HIGH` sichtbar. R_IS/L_IS werden nicht roh an 34/35
-angeschlossen. Der konkrete `74HC244D` beziehungsweise Buffer und seine
-Versorgung werden geprüft; 3,3-V-HIGH an 5-V-HC-Logik wird nicht ohne Nachweis
-behauptet. FT232RL bleibt auf GPIO1/3 mit 3,3-V-Kompatibilitäts- und DTR/RTS-
-Auto-Reset-Gate sowie ohne angenommenen Fermenter-Versorgungsweg.
+Vorgesehene Statussemantik:
 
-## 7. Commit-Schnitte nach Ownerfreigabe
+- planned: Designzuordnung akzeptiert, am realen Aufbau noch nicht vollständig
+  gemessen;
+- board_fixed_pending_electrical_verification: PCB-seitig fest verdrahtete
+  Zuordnung, elektrische Pegel, Bootwirkung und Verbraucherwirkung noch nicht
+  bestätigt;
+- reserved_disabled: reserviert bzw. deaktiviert, keine produktive Funktion;
+- forbidden: für R1 verboten, insbesondere Flash-/Strap-Konflikt;
+- unavailable_not_exposed: nicht verfügbar oder am ESP32-WROOM-32E nicht
+  herausgeführt, niemals free;
+- free: elektrisch frei und input-only, ohne R1-Zuordnung;
+- confirmed_test: erst nach realer Kontinuität, Pegel-, Boot-/Reset- und
+  Funktionsmessung am konkreten Aufbau. Diese Stufe wird nicht durch
+  Dokumentation erzeugt.
 
-Vor der Planfreigabe wird ausschließlich dieser Plan und die minimale
-Roadmap-Synchronisierung committed. Danach ist ein kleiner
-Dokumentationsschnitt vorgesehen:
+## 6. Vollständiges R1-GPIO-Inventar als Zielinhalt
 
-1. `config/pins.example.yaml`, `config/hardware.example.yaml` und
-   `docs/HARDWARE.md` gemeinsam aktualisieren;
-2. `references/LINKS.md` nur bei real benötigten fehlenden Herstellerquellen
-   minimal ergänzen;
-3. YAML-, Link-, Konsistenz- und Diff-Nachweise ausführen;
-4. PR-Body und Roadmap nur mit realen Status- und Nachweisdaten aktualisieren.
+Die folgende Tabelle ist der vollständige Scope für das Profil und die
+lesbare Darstellung in docs/HARDWARE.md. Sie wird nach Freigabe nicht als
+zweite handgepflegte Quelle stehen bleiben. Alle Zahlen und Statuswerte müssen
+zwischen Profil, Hardwaredokumentation und späterem Generator aus derselben
+Profilquelle stammen.
 
-Bei einer materiellen Abweichung an Schaltung, Statusmodell, Hardwarerolle,
-Softwarevariantenvertrag oder Teststrategie wird angehalten, der vollständige
-Plan revidiert committed und eine neue exakte Ownerfreigabe eingeholt.
+| Pin | R1-Zielrolle | Richtung / elektrische Metadaten | Bias / sicherer Zustand | Assignment-Status |
+|---|---|---|---|---|
+| EN / CHIP_PU | ESP32-Hardware-Reset und Quelle für TFT_RESET | ESP32-Resetnetz, active-low | definierte ESP32-EN-Schaltung; direktes gemeinsames Resetnetz | planned_not_confirmed |
+| GPIO0 | BOOT / ROM-Download | Strap; keine R1-Peripherie | Bootstrapping unverändert; keine Zusatzlast, die Download verhindert | reserved |
+| GPIO1 | UART0 TX | output; ESP32 TX -> FT232RL RXD | UART-Verbindung, keine Aktorrolle | planned |
+| GPIO2 | TFT D/C bzw. DC/RS | output; D/C-Signal ohne allgemeine aktive Ebene | keine externe Beschaltung, die beim Reset HIGH erzwingt; schwacher Pulldown zulässig | planned |
+| GPIO3 | UART0 RX | input; FT232RL TXD -> ESP32 RX | 3,3-V-I/O-Kompatibilität verifizieren | planned |
+| GPIO4 | TFT-Backlight PWM / MSP2807 LED | output, active-high | externer 10-kOhm Pulldown nach GND; safe_boot_level low, Backlight AUS | planned |
+| GPIO5 | TFT CS | output, active-low | externer 10-kOhm Pull-up nach 3,3 V; safe_boot_level high/deselected | planned |
+| GPIO6 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO7 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO8 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO9 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO10 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO11 | SPI-Flash | reserved system function | nicht verwenden | forbidden |
+| GPIO12 | VDD_SDIO-Strap | reserved strap | keine R1-Funktion; nicht verwenden | forbidden |
+| GPIO13 | BTS7960 RPWM | output, active-high | externer 10-kOhm Pulldown nach GND; safe_boot_level low | planned |
+| GPIO14 | BTS7960 LPWM | output, active-high | externer 10-kOhm Pulldown nach GND; safe_boot_level low | planned |
+| GPIO15 | Touch CS / XPT2046 T_CS | output, active-low | externer 10-kOhm Pull-up nach 3,3 V; safe_boot_level high/deselected | planned |
+| GPIO16 | Onboard-MOSFET 1, Innenlüfter | output; active_level TBD_HARDWARE | external_bias TBD_BOARD_CIRCUIT; kein erfundener Zusatz-Pulldown | board_fixed_pending_electrical_verification |
+| GPIO17 | Onboard-MOSFET 2, Aussen-/Kühlkörperlüfter | output; active_level TBD_HARDWARE | external_bias TBD_BOARD_CIRCUIT; kein erfundener Zusatz-Pulldown | board_fixed_pending_electrical_verification |
+| GPIO18 | SPI SCK, TFT SCK + Touch T_CLK | output; shared bus clock | SPI-Busrolle, keine allgemeine active_level-Angabe | planned |
+| GPIO19 | SPI MISO, TFT SDO/MISO + Touch T_DO | input; shared bus data | SPI-Busrolle, keine allgemeine active_level-Angabe | planned |
+| GPIO20 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO21 | I2C SDA, DS3231 SDA/D | bidirectional; I2C data | Modul-Pull-up-Entscheid nach stromloser Prüfung, siehe Abschnitt 7 | planned |
+| GPIO22 | I2C SCL, DS3231 SCL/C | output/open-drain bus role; I2C clock | Modul-Pull-up-Entscheid nach stromloser Prüfung, siehe Abschnitt 7 | planned |
+| GPIO23 | SPI MOSI, TFT SDI/MOSI + Touch T_DIN | output; shared bus data | SPI-Busrolle, keine allgemeine active_level-Angabe | planned |
+| GPIO24 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO25 | BTS7960 R_EN + L_EN gemeinsam | output, active-high; central fail-low enable | externer 10-kOhm Pulldown nach GND; safe_boot_level low | planned |
+| GPIO26 | Onboard-MOSFET 3, aktiver Summer | output; active_level TBD_HARDWARE | external_bias TBD_BOARD_CIRCUIT; kein erfundener Zusatz-Pulldown | board_fixed_pending_electrical_verification |
+| GPIO27 | Onboard-MOSFET 4, Reserve | output; active_level TBD_HARDWARE | external_bias TBD_BOARD_CIRCUIT; kein erfundener Zusatz-Pulldown | board_fixed_pending_electrical_verification |
+| GPIO28 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO29 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO30 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO31 | unavailable | nicht verfügbar / nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO32 | interner 1-Wire-Bus: Schrankluft + Kühlkörper | bidirectional data; gemeinsamer Multidrop-Bus | 4,7-kOhm Pull-up nach 3,3 V; 3-Leiter-Betrieb; Rollen per ROM-ID | planned |
+| GPIO33 | externer 1-Wire-Bus: abnehmbarer Produktfühler | bidirectional data; eigener Hot-Plug-Bus | eigener 4,7-kOhm Pull-up nach 3,3 V; 3-Leiter-Betrieb | planned |
+| GPIO34 | BTS7960 R_IS Reserve / disabled | input_only, ADC1_CH6; nicht roh anschließen | ris_lis_enabled=false; keine produktive Nutzung; Schutz-/Teiler-/RC-/Clamp-Schaltung erst nach Pegelmessung | reserved_disabled |
+| GPIO35 | BTS7960 L_IS Reserve / disabled | input_only, ADC1_CH7; nicht roh anschließen | ris_lis_enabled=false; keine produktive Nutzung; Schutz-/Teiler-/RC-/Clamp-Schaltung erst nach Pegelmessung | reserved_disabled |
+| GPIO36 | frei / input-only; DS3231 INT/SQW bleibt unbenutzt | input_only; keine R1-Zuordnung | nicht als Ausgang verwenden | free |
+| GPIO37 | unavailable / nicht auf ESP32-WROOM-32E herausgeführt | nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO38 | unavailable / nicht auf ESP32-WROOM-32E herausgeführt | nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
+| GPIO39 | Touch IRQ / XPT2046 T_IRQ | input_only, active-low; Pegel pollen | MSP2807 R4 als 10-kOhm Pull-up nach 3,3 V am realen Modul verifizieren; kein zusätzlicher Pull-up, wenn bestätigt | planned |
 
-## 8. Nachweise und Abschluss
+Die vier fest verdrahteten Onboard-MOSFET-Kanäle werden als board_fixed
+behandelt, aber weder aktive Polarität noch Gate-/Treiberbias werden aus einer
+alten Issue-Annahme abgeleitet. GPIO34/35 bleiben bis zu einer separaten
+Mess- und Schutzbewertung mit ris_lis_enabled=false deaktiviert. Die
+input-only-Eigenschaft von GPIO34 bis GPIO39 wird im späteren Validator
+ausdrücklich geprüft.
 
-### Planphase
+## 7. Busse, gemeinsame Netze und Widerstandspolitik
 
-Zulässige Prüfungen sind:
+### 7.1 Explizite Busdefinitionen
 
-```bash
-git diff --check
-python3 scripts/check_secrets.py
-python3 scripts/check_architecture_boundaries.py
-```
+Das Profil erhält mindestens diese Busobjekte:
 
-Geänderte Markdown-Links, lokale Referenzpfade, Planstruktur, PR-Basis und
-Arbeitsbaum werden zusätzlich manuell geprüft. Ein projektspezifischer
-Markdown-/Link-Validator ist in der Baseline nicht vorhanden; fehlende
-Automatisierung wird nicht als PASS ausgegeben.
+    buses:
+      display_touch_spi:
+        sck_gpio: 18
+        mosi_gpio: 23
+        miso_gpio: 19
+        members:
+          - MSP2807_SCK
+          - MSP2807_SDI_MOSI
+          - MSP2807_SDO_MISO
+          - XPT2046_T_CLK
+          - XPT2046_T_DIN
+          - XPT2046_T_DO
+      one_wire_internal:
+        gpio: 32
+        roles:
+          - chamber_air
+          - heatsink
+        pullup_ohm: 4700
+        topology: multidrop
+        wiring: three_wire
+      one_wire_product:
+        gpio: 33
+        roles:
+          - product
+        pullup_ohm: 4700
+        topology: dedicated_removable_bus
+        wiring: three_wire
+      ds3231_i2c:
+        sda_gpio: 21
+        scl_gpio: 22
+        int_sqw: unused_r1
+      uart0_programming:
+        tx_gpio: 1
+        rx_gpio: 3
 
-Nicht ausgeführt und daher nicht bestätigt:
+Gemeinsames SPI-Sharing ist absichtlich und keine Doppelbelegung:
+GPIO18 -> SCK + T_CLK, GPIO23 -> SDI/MOSI + T_DIN und GPIO19 <-
+SDO/MISO + T_DO. TFT_CS und T_CS bleiben getrennte Deselect-Signale.
 
-```text
-FIRMWARE_BUILD=NOT_RUN
-NATIVE_TESTS=NOT_RUN
-ESP_IDF_TESTS=NOT_RUN
-HARDWARE_RUN=NOT_RUN
-FLASH_UART_RESET=NOT_RUN
-GPIO_LEVEL_MEASUREMENTS=NOT_RUN
-DISPLAY_TOUCH_FUNCTION=NOT_RUN
-ACTUATOR_OR_PELTIER_TEST=NOT_RUN
-```
+Die beiden festen DS18B20 teilen sich bewusst GPIO32 über ROM-ID-Rollen. Der
+abnehmbare Produktfühler bleibt wegen Hot-Plug-/Fehlerisolation auf GPIO33.
+Ein Fehler des gemeinsamen festen Busses muss in der späteren Fachlogik
+weiterhin fail-closed für die Peltierfreigabe wirken.
 
-### Implementierungsphase
+### 7.2 Gemeinsame Netze
 
-Nach Ownerfreigabe folgen YAML-Syntaxvalidierung, Link-/Pfadprüfung,
-Konsistenzprüfung zwischen beiden YAML-Dateien, `docs/HARDWARE.md`, Roadmap
-und #29/#30/#31/#32/#33 sowie die systematische GPIO-Inventur 0..39 auf
-Doppelbelegung, absichtliche gemeinsame Busse, Strap-Konflikte, Input-only-
-Verwendung und Flash-Pins. Kein Beispielwert darf eine Produktivfreigabe
-erzeugen.
+Das Profil erhält mindestens:
 
-Reale Kontinuität, Widerstände, Pegel, Boot-/Resetverhalten, Modulidentität,
-Verbraucherreaktion, SPI-/Touchfunktion, ROM-IDs, Hot-Plug-Isolation und
-begrenzte BTS7960-/Aktorprüfungen bleiben den owning Hardware-Issues
-vorbehalten.
+    nets:
+      display_reset:
+        source: EN_CHIP_PU
+        target: MSP2807_RESET
+        topology: direct_active_low_shared_reset
+        additional_stage: none_unless_primary_source_conflict
+      bts_enable:
+        source_gpio: 25
+        targets:
+          - BTS7960_R_EN
+          - BTS7960_L_EN
+        topology: shared_fail_low_enable
 
-Nach Plan-Commit, Push und PR-Update gelten exakt:
+TFT_RESET ist ein Eingang des Displays und kein Ausgang, der EN zurücktreiben
+darf. Die direkte gemeinsame active-low Verbindung wird gegen MSP2807-
+Schaltbild, reale Modulbestückung und EN-Schaltung geprüft. Die bestehende
+ESP32-EN-/Auto-Reset-Schaltung bleibt unverändert. Kein GPIO0, kein zusätzlicher
+GPIO und keine Diode, Inverter-, Buffer- oder Open-Drain-Stufe wird im R1-Ziel
+vorgesehen, solange kein realer elektrischer Widerspruch nachgewiesen ist.
 
-```text
-IMPLEMENTATION=NOT_STARTED
-GPIO_MATRIX=PLANNED_NOT_CONFIRMED
-HARDWARE_RUN=NOT_RUN
-OWNER_PLAN_REVIEW_REQUIRED=YES
-MERGE=NO
-```
+### 7.3 Verbindliche externe Widerstände
 
-Der nächste Schritt ist ausschließlich die Ownerprüfung der exakten Plan-SHA.
-Ohne diese Freigabe werden keine kanonischen Hardware-/YAML-Dateien geändert,
-keine Firmware- oder Hardwaretests gestartet und keine weitere PR-Reife
+Diese Widerstände werden im Profil als Designbestandteil mit Netz, Wert,
+Zweck und sicherem Zustand erfasst und nach Planfreigabe im realen Aufbau
+verbaut:
+
+| Netz | Widerstand | Zweck |
+|---|---:|---|
+| GPIO32 / OneWire internal DATA nach 3,3 V | 4,7 kOhm | Pull-up des gemeinsamen festen 1-Wire-Multidrop-Busses |
+| GPIO33 / OneWire product DATA nach 3,3 V | 4,7 kOhm | Pull-up des abnehmbaren Produktfühler-Busses |
+| GPIO13 / BTS RPWM nach GND | 10 kOhm | Fail-low bei Boot, Reset und Fehler |
+| GPIO14 / BTS LPWM nach GND | 10 kOhm | Fail-low bei Boot, Reset und Fehler |
+| GPIO25 / gemeinsames BTS R_EN/L_EN nach GND | 10 kOhm | zentrale fail-low Freigabe |
+| GPIO5 / TFT_CS nach 3,3 V | 10 kOhm | TFT beim Boot/Reset sicher deselected |
+| GPIO15 / Touch_CS nach 3,3 V | 10 kOhm | Touch beim Boot/Reset sicher deselected |
+| GPIO4 / TFT_BL nach GND | 10 kOhm | Backlight beim Boot/Reset AUS |
+
+Die BTS-Steuerung bleibt softwareseitig zusätzlich safe-off:
+EN=LOW, RPWM=LOW und LPWM=LOW bei Boot/Reset/Fehler; Richtungswechsel
+break-before-make; RPWM=HIGH und LPWM=HIGH ist unzulässig.
+
+### 7.4 Keine unnötige Doppelbeschaltung
+
+- GPIO39/T_IRQ erhält keinen zusätzlichen externen Pull-up, wenn das reale
+  MSP2807 R4 tatsächlich 10 kOhm nach 3,3 V bestätigt. Bis dahin ist die
+  Modulbestückung ein Hardware-Verifikationsgate, nicht eine bestätigte
+  Messung.
+- GPIO21/22 erhalten keinen zusätzlichen I2C-Pull-up, wenn die stromlose
+  Prüfung des gelieferten DS3231-Moduls je Leitung ungefähr 4,7 kOhm nach
+  Modul-VCC und Modul-VCC=3,3 V nachweist. Andernfalls werden SDA und SCL
+  jeweils mit 4,7 kOhm nach 3,3 V vorgesehen.
+- GPIO16, GPIO17, GPIO26 und GPIO27 erhalten keinen zusätzlichen
+  MOSFET-Steuerwiderstand oder Pulldown, bevor die reale Onboard-Schaltung
+  einschließlich direkter/invertierter Ansteuerung, Gate-/Treiberbias und
+  Verbraucherwirkung bekannt ist.
+
+## 8. Komponenten- und Schnittstellenverträge
+
+### Display und Touch
+
+Der gemeinsame SPI-Bus lautet:
+
+    GPIO18 -> SCK + T_CLK
+    GPIO23 -> SDI/MOSI + T_DIN
+    GPIO19 <- SDO/MISO + T_DO
+    GPIO5  -> TFT_CS
+    GPIO2  -> TFT_DC/RS
+    GPIO15 -> T_CS
+    GPIO39 <- T_IRQ
+    GPIO4  -> LED / Backlight PWM
+
+TFT_CS und T_CS müssen durch die externen Pull-ups während Boot/Reset HIGH
+und damit deselected sein. GPIO2 darf keinen Boot-Strap-Konflikt durch eine
+externe HIGH-Erzwingung erhalten. T_IRQ wird standardmäßig als Pegel gepollt;
+die reale Modulbeschaltung und der IRQ-Pegel werden in #31 verifiziert.
+
+### DS18B20
+
+Der interne Bus GPIO32 enthält die Rollen Schrankluft und Kühlkörper. Beide
+Sensoren laufen im 3-Leiter-Betrieb an einem 1-Wire-Multidrop-Bus und werden
+über ROM-ID unterschieden. Der externe Produktfühler bleibt im 3-Leiter-
+Betrieb auf GPIO33 mit eigenem Pull-up und eigener Fehler-/Hot-Plug-Isolation.
+Treiber, CRC, ROM-Zuordnung und reale Busfunktion gehören in Issue #30 und
+werden dort nicht durch eine neue GPIO-Entscheidung ersetzt.
+
+### DS3231 mini
+
+Die Matrix ist variantenneutral:
+
+    3,3 V -> VCC/+
+    GND   -> GND/-
+    GPIO21 <-> SDA/D
+    GPIO22  -> SCL/C
+    INT/SQW -> R1 unbenutzt
+
+Das Profil führt physical_family=DS3231 und
+delivered_variant=TBD_DELIVERY getrennt. Der bereits gemergte Softwarevertrag
+aus #126 wird nicht still umgeschrieben. Solange die produktive Software nur
+DS3231SN freigibt, wird das als aktuelle Softwareunterstützung dokumentiert.
+Falls DS3231M geliefert wird, ist Kompatibilitäts-/Registerarbeit ein eigener
+Follow-up-Scope und keine GPIO-Änderung.
+
+### BTS7960 / IBT-2
+
+Die Steuerung lautet:
+
+    GPIO13 -> RPWM
+    GPIO14 -> LPWM
+    GPIO25 -> R_EN + L_EN
+
+RPWM, LPWM und das gemeinsame EN erhalten die externen 10-kOhm-Pulldowns.
+R_IS/L_IS werden nicht roh an GPIO34/35 angeschlossen. Die konkrete
+IBT-2-/BTS7960-Variante, der sichtbare 74HC244D oder ein anderer
+Eingangsbuffer, dessen Versorgung, Logikpegel, Richtung, Ausgangspolarität
+und die Nutzbarkeit der Strommessausgänge werden in #33 real verifiziert.
+Eine 3,3-V-ESP32-HIGH-Kompatibilität bei 5-V-HC-Logik wird nicht ohne Nachweis
 behauptet.
+
+### FT232RL / Programmierung
+
+    ESP32 GPIO1 / U0TXD -> FT232RL RXD
+    ESP32 GPIO3 / U0RXD <- FT232RL TXD
+    ESP32 GND            -  FT232RL GND
+
+UART-I/O muss 3,3-V-kompatibel sein. GPIO0 bleibt BOOT/Download-Strap und EN
+bleibt Reset/CHIP_PU. DTR/RTS dürfen ausschließlich über die von Espressif
+vorgesehene Auto-Reset-Logik auf EN/GPIO0 wirken, nicht als rohe Direkt-
+verbindung. Der FT232 ist kein zusätzlicher Versorgungsweg für den
+Fermenter, sofern der reale Aufbau dies nicht ausdrücklich verifiziert.
+
+## 9. Geplante Dateien und SSOT-Migration nach Freigabe
+
+Die Implementierung folgt nach Ownerfreigabe in einem vollständigen Diff gegen
+diesen Plan:
+
+1. config/board_profiles/esp32_32e_r1.yaml anlegen und die Matrix, Metadaten,
+   Busse, Netze und Widerstandspolitik gemäß Abschnitt 5 bis 7 eintragen.
+2. Vor der Änderung erneut mit rg prüfen, ob pins.example.yaml inzwischen von
+   Script, CI oder Dokumentation als fester Vertragspfad verwendet wird.
+3. config/pins.example.yaml entweder entfernen oder auf einen kleinen,
+   ausdrücklich nichtautoritativen Verweis reduzieren, zum Beispiel mit
+   profile_id: esp32_32e_r1. Keine vollständigen GPIO-Zahlen duplizieren.
+4. config/hardware.example.yaml um
+   controller.board_profile: esp32_32e_r1 ergänzen und konkrete Pinzahlen
+   daraus entfernen. Produkt-/Komponentendaten bleiben dort erhalten.
+5. docs/HARDWARE.md mit dem eindeutigen Hinweis aktualisieren:
+
+       Electrical/design SSOT for the R1 pin assignment:
+       config/board_profiles/esp32_32e_r1.yaml
+
+   Das Dokument erklärt Inventar, Matrix, Widerstandspolitik und
+   Verifikationsstatus lesbar, ist aber keine unabhängig gepflegte
+   Konkurrenzquelle.
+6. references/LINKS.md nur für tatsächlich fehlende Hersteller-/Schaltungs-
+   quellen ergänzen.
+7. docs/ROADMAP.md nur mit Status, Planreferenz und Gate synchronisieren; die
+   Anforderungen werden dort nicht kopiert.
+
+Die spätere produktive Nutzung darf keine handgepflegte Ersatzmatrix in
+Firmwareheadern einführen.
+
+## 10. Synchronisierung der offenen Hardware-Issues nach Freigabe
+
+In der aktuellen Planrevision werden keine Issue-Bodies geändert. Nach
+ausdrücklicher Freigabe dieses Plans werden die relevanten offenen Issues
+geprüft und nur bei echter Relevanz auf die SSOT verwiesen. In jedem
+betroffenen Issue wird sinngemäß dieser Satz verwendet:
+
+    Konkrete GPIO-Zahlen, Pull-Beschaltungen und gemeinsame Bus-/Netzzuordnungen
+    werden nicht in diesem Issue neu festgelegt. Maßgebend ist das versionierte
+    R1-Boardprofil unter config/board_profiles/esp32_32e_r1.yaml. Änderungen
+    am Boardprofil benötigen einen eigenen nachvollziehbaren Plan-/
+    Owner-Gate-Scope.
+
+Zielsemantik der einzelnen Issues:
+
+| Issue | Eigentümerschaft nach Synchronisierung |
+|---|---|
+| #29 | Bring-up, Boot-/Strap-/Reset- und reale elektrische Basisnachweise. Das Boardprofil ist der Soll-/Designzustand; #29 prüft die Vereinbarkeit des realen Boards damit und vergibt keine produktiven Pins neu. Alte Formulierungen, die eine erneute Pinmatrix-Ermittlung in #29 verlangen, werden präzisiert oder entfernt. |
+| #30 | DS18B20-Treiber, ROM-ID-Rollen, CRC, Hot-Plug und reale Busfunktion. Die kanonische R1-Zwei-Bus-Topologie kommt aus dem Boardprofil; die alte Präferenz eines separaten Busses je Sensor darf sie nicht überschreiben. |
+| #31 | Verifikation des realen Display-/Touch-Controllers, MSP2807-Bestückung, gemeinsamem SPI, CS-Bias, Backlight, IRQ und direkten Resetnetzes. Pins und Resettopologie kommen aus dem Boardprofil; keine Neuvergabe. |
+| #32 | Verifikation der PCB-festen MOSFET-Kanäle, aktiven Pegel, realen Boardbeschaltung, Boot-/Reset-Wirkung und Verbraucherwirkung. Rollen und GPIO-Zuordnung kommen aus dem Boardprofil; keine neue Zuordnung. |
+| #33 | Verifikation der konkreten IBT-2-/BTS7960-Variante, Buffer-Versorgung, 3,3-V-HIGH-Kompatibilität, Richtung, Ausgangspolarität und R_IS/L_IS. RPWM/LPWM/EN und Fail-low-Pulldowns kommen aus dem Boardprofil; eine abweichende GPIO-Zuordnung erfordert bei echtem Widerspruch einen eigenen Boardprofil-Änderungsscope. |
+
+Andere offene Issues werden nach konkreten alten GPIO-Annahmen durchsucht.
+Nur technisch betroffene Issues werden synchronisiert; eine erneute Matrix in
+jedem Issue ist unzulässig.
+
+## 11. Späterer Firmware- und Generatorvertrag
+
+Das Boardprofil ist zunächst die kanonische Hardwarebeschreibung. Bevor ein
+produktiver Hardwareadapter konkrete GPIO-Zahlen verwendet, müssen diese
+Werte aus derselben Quelle abgeleitet werden. Der bevorzugte Pfad ist:
+
+    config/board_profiles/esp32_32e_r1.yaml
+                 |
+                 v
+    deterministischer Build-Time-Generator
+                 |
+                 v
+    generierter board_profile.hpp
+                 |
+                 v
+    Composition Root -> generischer ESP-IDF-Adapter
+
+board_profile.hpp ist generiert und nicht handgepflegt. Eine zweite Liste mit
+GPIO_NUM_13, GPIO_NUM_14 oder vergleichbaren konkreten Zahlen ist unzulässig.
+YAML wird nicht zur Laufzeit auf dem ESP32 interpretiert. fermentation_app
+bleibt frei von konkreten GPIO-Zahlen; device_platform erhält keine
+anwendungsspezifische GPIO-Matrix; konkrete Zuordnung wird ausschließlich in
+der ESP-IDF-Composition bereitgestellt.
+
+Falls ein Generator bei der ersten Adapterintegration unverhältnismäßig wäre,
+wird vor jeder Implementierung ein einfacher gleichwertiger Single-Source-
+Mechanismus als eigener Owner-Gate-Scope vorgeschlagen. Zwei unabhängig
+gepflegte Pinlisten sind in keinem Fall zulässig. Generator und Adapter sind
+nicht Teil dieser Planphase.
+
+## 12. Automatische Konsistenzprüfung als späterer Scope
+
+Spätestens bei produktiver Nutzung des Profils wird ein kleiner deterministi-
+scher Repository-Validator oder Profiltest vorgesehen. Er prüft mindestens:
+
+- forbidden und unavailable GPIOs sind nicht als Peripherie belegt;
+- input-only GPIOs sind nicht als Output definiert;
+- GPIO6..11 und GPIO12 werden nicht produktiv verwendet;
+- GPIO0 bleibt BOOT/ROM-Download;
+- unbeabsichtigte Doppelbelegung wird abgelehnt;
+- beabsichtigtes Bus-/Netz-Sharing ist explizit unter buses oder nets
+  deklariert;
+- BTS-RPWM, BTS-LPWM und gemeinsames BTS-EN besitzen den externen fail-low
+  Bias;
+- board_fixed bleibt von confirmed_test getrennt;
+- confirmed_test kann nicht durch eine reine Dokumentationsänderung
+  entstehen.
+
+Der Validator ist kein Runtime-Safety-Ersatz und wird in dieser Runde nicht
+implementiert. Er darf keine Aktorfreigabe erzeugen.
+
+## 13. Architektur-, Safety- und Statusgrenzen
+
+Das Boardprofil und die Beispiele beschreiben den Ziel-/Designzustand. Sie
+erzeugen keine produktive Aktorfreigabe. Bei Boot, Reset, Fehler, unbekanntem
+Zustand, unbestätigter Hardware oder offenem Safety-Gate bleibt die
+Freigabe fail-closed. Die offenen Hardwaregates #29 bis #33 werden durch
+diesen PR nicht als bestanden markiert.
+
+Die vier Onboard-MOSFET-Kanäle bleiben bis zur realen elektrischen Prüfung
+board_fixed_pending_electrical_verification. GPIO34/35 bleiben
+reserved_disabled. R_IS/L_IS werden nicht roh angeschlossen. Die
+Software-/Hardwareverifikation des BTS-Enable- und PWM-Safe-Offs wird erst
+im jeweiligen Verifikationsscope ausgewiesen.
+
+Statusregeln:
+
+- planned ist ein akzeptierter Zielentwurf ohne vollständige reale Messung;
+- board_fixed bedeutet PCB-seitige Zuordnung mit offenen elektrischen
+  Pegel-/Boot-/Verbrauchergates;
+- confirmed_test erfordert reale Kontinuität, Pegel, Boot-/Resetverhalten und
+  Funktion am konkreten Aufbau;
+- Build-, Markdown-, Link- oder Architekturchecks sind kein
+  Hardware-Nachweis;
+- historische Logs oder frühere Issue-Aussagen sind kein aktueller
+  confirmed_test.
+
+## 14. Commit- und Prüfplan nach Ownerfreigabe
+
+Nach Freigabe der exakten Plan-SHA wird die Umsetzung in nachvollziehbaren
+Commits durchgeführt:
+
+1. Boardprofil, SSOT-Migration der Konfigurationsbeispiele und
+   docs/HARDWARE.md gegen diesen Plan.
+2. Nur notwendige Quellenlinks und minimale Roadmap-Synchronisierung.
+3. Relevante Issue-Body-Synchronisierung auf das Boardprofil.
+4. Ein später separat freizugebender Generator-/Validator-/Adapter-Scope,
+   falls für produktive Nutzung erforderlich.
+
+Bei jedem materiellen Widerspruch zwischen Profil, realem PCB/Modul und
+Primärquelle wird angehalten. Die Matrix wird dann nicht still umgedeutet;
+stattdessen wird der Plan beziehungsweise das Boardprofil mit einem eigenen
+Owner-Gate-Scope revidiert. Es gibt keinen Force-Push und keine
+Historienrekonstruktion.
+
+Für die aktuelle Planphase sind nur diese gezielten Nachweise vorgesehen:
+
+    git diff --check
+    python3 scripts/check_secrets.py
+    python3 scripts/check_architecture_boundaries.py
+
+YAML-Validierung, Firmware-/ESP-IDF-Build, Generator-/Validatorlauf,
+Firmwaretests und Hardwaretests sind in dieser Runde NOT_RUN, weil noch
+keine YAML-, Firmware- oder Hardwareimplementierung erfolgt. Ein
+Markdown-/Linkcheck darf nur nach den im Repository verbindlichen
+Qualitätsregeln ausgeführt und mit seinem tatsächlichen Status ausgewiesen
+werden.
+
+## 15. Stop-Zustand und Übergabe
+
+Nach Commit und Push dieses Plans werden der Draft-PR #131, die neue exakte
+Plan-SHA und genau ein aktuelles SESSION HANDOVER synchronisiert. Danach
+wartet der Agent auf die ausdrückliche Ownerfreigabe der exakten Plan-SHA.
+
+Die Übergabe muss mindestens ausweisen:
+
+    IMPLEMENTATION=NOT_STARTED
+    GPIO_MATRIX=PLANNED_NOT_CONFIRMED
+    HARDWARE_RUN=NOT_RUN
+    OWNER_PLAN_REVIEW_REQUIRED=YES
+    MERGE=NO
+
+Es wird weder auf Ready for review gesetzt noch gemergt, auto-gemergt, ein
+Issue geschlossen, ein Branch gelöscht oder ein Hardwarelauf gestartet.
