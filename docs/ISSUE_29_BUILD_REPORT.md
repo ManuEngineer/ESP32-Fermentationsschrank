@@ -1,9 +1,11 @@
 # Issue #29 Build- und Ressourcenbericht
 
-Dieser Bericht gehört zu Issue #29 und ist dem finalen Firmware-Source-Commit
-`3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (B2-Fix) zugeordnet. Der frühere
-Firmwarestand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` ist nur die
-Pre-Fix-Provenienz. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
+Dieser Bericht gehört zu Issue #29. Die historische Firmware-Provenienz
+`3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (B2-Fix) und der frühere
+Pre-Fix-Stand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` bleiben unten
+dokumentiert. Der aktuelle digitale 96-KiB-Diagnosebuild ist separat dem
+Firmware-Source-Commit `3d7b02260e18dd203cd609d97cc66fa96e435cdf`
+zugeordnet. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
 ## Historischer KISS-Pivot V1 (SUPERSEDED_BY_KISS_V2)
@@ -113,6 +115,98 @@ Der dekodierte erste Backtrace fällt wieder in die bekannte Kette
 Das bestätigt die Reproduktion auf der aktuellen Baseline, aber nicht die
 Root Cause. Der private 96-KiB-Kausaltest bleibt ein separates
 Owner-Review-Gate; bis dahin bleibt `ROOT_CAUSE=UNRESOLVED`.
+
+## 96-KiB-Diagnose-Stack – digitaler Implementierungsnachweis (2026-08-31)
+
+Der Current-base-Kontrollpanic bleibt die akzeptierte Kausalbaseline. Der
+folgende Nachweis ändert ausschließlich den privaten Diagnose-Stack des
+Bring-up-Probes; er enthält keinen Flash, keinen Hardwareboot und keine
+Pegelmessung.
+
+```text
+APPROVED_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_FILE_CHANGED=NO
+CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+CONTROL_BOOT_SOURCE_SHA=7edda30de1d39d5a4945137146ab16da530c5dc6
+CONTROL_BOOT_1=PANIC_REPRODUCED
+CURRENT_BASELINE_PANIC_CONFIRMED=YES
+
+STACK96_IMPLEMENTATION_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+OLD_PROBE_TASK_STACK_BYTES=67584
+NEW_PROBE_TASK_STACK_BYTES=98304
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
+ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=PRIVATE_DIAGNOSTIC_STACK_SIZE
+PRODUCT_TASK_STACK_CHANGED=NO
+PRODUCT_MAIN_TASK_STACK_CHANGED=NO
+PROBE_LOGIC_CHANGED=NO
+HEAP_API_CHANGED=NO
+FAULT_SEAM_CHANGED=NO
+PERSISTENCE_CHANGED=NO
+GPIO_SSOT_CHANGED=NO
+
+kMeasuredCallPathBytes=62928
+kMeasuredCallPathSafetyBufferBytes=4096
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_GLOBAL_UPPER_BOUND=NO
+STATIC_ANALYSIS_ROLE=DIAGNOSTIC_EVIDENCE_NOT_GLOBAL_UPPER_BOUND
+
+SOURCE_TREE_CLEAN=YES
+ESP_IDF_BRINGUP_BUILD=PASS
+ESP_IDF_RELEASE_BUILD=PASS
+FULL_NATIVE_BUILD=PASS
+FULL_NATIVE_TESTS=PASS (1081/1081)
+ESP_CLANG_BRINGUP=PASS
+ESP_CLANG_RELEASE=PASS
+ARCHITECTURE_GATES=PASS
+SECRET_SCAN=PASS
+QUALITY_GATES=PASS
+CI_ARTIFACT_SCAN_COVERAGE=PASS
+GENERATED_ARTIFACT_SCAN=PASS (CI-runner-path-normalized content check)
+GIT_DIFF_CHECK=PASS
+
+BRINGUP_HAS_ISSUE29_PROBE=YES
+RELEASE_HAS_ISSUE29_PROBE=NO
+NATIVE_HAS_ISSUE29_PROBE=NO
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO
+
+BUILD_LINK=PASS
+FLASH_FIT=PASS
+PARTITION_FIT=PASS
+ESP32_BRINGUP_BUILD_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+ESP32_RELEASE_BUILD_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+APP_EMBEDDED_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
+ESP32_BRINGUP_ELF_SHA256=5ded6891c753678eef0157e7e857f782562d5d50b777251dc16c25c37ef3e6f8
+ESP32_BRINGUP_BIN_SHA256=7f8889109f39c4405d5b0b4ea82f5fb8c056427e056b232f8c2cbbe4c01e15fa
+ESP32_RELEASE_ELF_SHA256=8a5240b4711ddeb3509c69aa557915fd50e895e5864361f0497da700672f6fc4
+ESP32_RELEASE_BIN_SHA256=8b811b0ea70b774dc8d7eba68a5e82016f44742291bf3f7f8c0c9bed934cbfc7
+ESP_IDF_TAG=v6.0.2
+ESP_IDF_COMMIT=7101770dc6db2667b3c477cc31365dd1acd6db4e
+
+GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+GPIO_SSOT_CHANGED=NO
+GPIO_MATRIX_STATUS=PLANNED_NOT_CONFIRMED
+ELECTRICAL_VERIFICATION=PENDING
+CONFIRMED_TEST=NO
+ACTUATOR_RELEASE=NO
+
+ROOT_CAUSE=UNRESOLVED
+96_KIB_STACK_IMPLEMENTED=YES
+96_KIB_BUILD_GATES=PASS
+96_KIB_HARDWARE_RUN=NOT_RUN
+BOOT_REQUALIFICATION=NOT_RUN
+HWM_RESULT=NOT_RUN
+LEVEL_MEASUREMENTS=NOT_RUN
+ISSUE25_STARTED=NO
+MERGE=NO
+OWNER_96K_IMPLEMENTATION_REVIEW_REQUIRED=YES
+```
+
+Die lokale Rohprüfung der unnormalisierten Buildausgaben meldete lediglich
+ephemere `/home/manuel`- und Workspace-Pfade, die der Secret-Checker nur für
+den CI-Runnerpfad `/home/runner/...` toleriert. Der getrackte Scan und die
+inhaltlich identische Artefaktprüfung unter der CI-Pfadkonvention sind PASS;
+dieser Umgebungsunterschied ist kein Secret- oder Firmwarebefund.
 
 Die drei neuen #29-Änderungen in `scripts/analyze_issue_29_stack.py`,
 `main/CMakeLists.txt` und `lib/device_platform/CMakeLists.txt` werden auf
