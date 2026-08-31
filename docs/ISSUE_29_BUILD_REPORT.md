@@ -6,7 +6,7 @@ Firmwarestand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` ist nur die
 Pre-Fix-Provenienz. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
-## Aktueller KISS-Pivot für PR #129
+## Historischer KISS-Pivot V1 (SUPERSEDED_BY_KISS_V2)
 
 Die nachfolgende Implementierungsevidenz aus dem exhaustive Versuch bleibt
 als historische Evidenz erhalten. Sie ist durch die Owner-Korrektur
@@ -15,8 +15,9 @@ Build- oder CI-Gate.
 
 ```text
 PR129=OPEN_DRAFT
-NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
-NEW_PLAN_SHA=42568610611ebffa6ace89e46f3fe3ea568e0e72
+HISTORICAL_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
+PLAN_SHA=42568610611ebffa6ace89e46f3fe3ea568e0e72
+PLAN_STATUS=HISTORICAL_SUPERSEDED
 EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
 ANALYZER_REVERTED=YES (auf 3fbaf32)
 MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
@@ -248,7 +249,7 @@ Runde, sondern ein während der Implementierung entdeckter, plan-relevanter
 Befund: `PLAN_CHANGE_REQUIRED=YES`. Weder (A) noch (B) wurden ohne
 Ownerfreigabe umgesetzt oder umgangen.
 
-## Aktueller Status nach KISS-Korrektur
+## Historischer Status nach KISS-Korrektur V1 (SUPERSEDED_BY_KISS_V2)
 
 ```text
 EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
@@ -275,7 +276,7 @@ Buildprovenienz erneut zu prüfen; nicht ausgeführte Nachweise bleiben
 `NOT_RUN` oder `BLOCKED`.
 
 
-## Nachtrag zur PR-#131-Synchronisierung und KISS-Pivot-V2 (2026-08-31)
+## Aktueller KISS-Pivot V2 nach PR-#131-Synchronisierung (2026-08-31)
 
 Die PR-#129-Historie wurde ohne Rebase und ohne Force-Push per Merge der neuen
 Integrationsbaseline synchronisiert. PR #131 hat keine #29-Firmware-, Stack-
@@ -286,7 +287,10 @@ elektrische #29-Verifikation dennoch verbindlich.
 PR131=MERGED
 PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+CURRENT_BASE_CONTROL_BOOT=NOT_RUN
+CURRENT_BASELINE_PANIC_CONFIRMED=PENDING
 PR131_GPIO_SSOT_PRESERVED=YES
 GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
 
@@ -329,7 +333,7 @@ Neue kanonische Planrevision:
 
 ~~~text
 NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
-NEW_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+CURRENT_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
 PLAN_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 CURRENT_BASE_CONTROL_BOOT_SPECIFIED=YES
 DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304

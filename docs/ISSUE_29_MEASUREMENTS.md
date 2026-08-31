@@ -1,13 +1,14 @@
 # Issue #29 Messprotokoll und Abnahmestatus
 
-**Aktueller Stand (2026-08-30/31):** Der historische `PASS` aus PR #116 (unten
+**Aktueller Stand (2026-08-31):** Der historische `PASS` aus PR #116 (unten
 dokumentiert) ist auf der aktuellen `integration/r1-development`-Baseline
-**nicht mehr aktuell gültig**. Eine frische Requalifikation hat den bekannten
-Panic auf dem normalen `esp32_bringup`-Profil real reproduziert; siehe
-Abschnitt "Aktuelle Requalifikation auf `integration/r1-development`" weiter
-unten. Der folgende historische Status- und Identitätsabschnitt bleibt als
-Provenienz des PR-#116-Standes erhalten und wird nicht rückwirkend
-umgeschrieben.
+nicht als aktuelle Hardwarefreigabe gültig. Die reale Plain-Bring-up-Panic-
+Evidenz stammt aus der vorherigen integrierten Baseline
+`c1f5fbb5f19ab8e7d2c25708fe79777d523217d4`; nach dem Merge von PR #131 steht
+die Integration auf `1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`, wo der einzelne
+Current-base-Kontrollboot noch nicht ausgeführt ist. Der folgende historische
+Status- und Identitätsabschnitt bleibt als Provenienz des PR-#116-Standes
+erhalten und wird nicht rückwirkend umgeschrieben.
 
 ## Historischer Status (PR #116, vor der aktuellen Gesamtbaseline)
 
@@ -404,11 +405,15 @@ dokumentierten Requalifikationsbefund überholt: Die Pegelmessung bleibt
 zusätzlich offen, ist aber nicht der nächste Schritt, solange der
 Bring-up-Boot nicht wieder stabil requalifiziert ist (siehe unten).
 
-## Aktuelle Requalifikation auf `integration/r1-development` (2026-08-30/31)
+## Historische Requalifikation auf vorheriger Integrationsbaseline (SOURCE_SHA=c1f5fbb5..., 2026-08-30/31)
 
-Diese Requalifikation ersetzt den oben dokumentierten historischen `PASS` als
-aktuellen Stand. Der historische Abschnitt bleibt als Provenienz des
-PR-#116-Standes unverändert erhalten.
+Diese Requalifikation dokumentiert den realen Panic auf der vorherigen
+integrierten Baseline `c1f5fbb5f19ab8e7d2c25708fe79777d523217d4` und ersetzt
+den oben dokumentierten historischen `PASS` nur als historische
+Panic-Evidenz. Sie ist kein Hardwarelauf auf der neuen
+Integrationsbaseline `1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`; deren einzelner
+Current-base-Kontrollboot bleibt im KISS-V2-Plan ausstehend. Der historische
+PR-#116-Abschnitt bleibt als Provenienz unverändert erhalten.
 
 ```text
 SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
@@ -747,7 +752,7 @@ Ersatzverfahren für (B) wurde **nicht** vorgenommen; siehe
 `STACK_GATE=BLOCKED` ist der reale, reproduzierbare Endzustand dieser Runde,
 kein Zwischenstand mit fehlender Arbeit.
 
-## Aktueller KISS-Pivot nach Owner-Korrektur (2026-08-31)
+## Historischer KISS-Pivot V1 nach Owner-Korrektur (SUPERSEDED_BY_KISS_V2)
 
 Der exhaustive Analyzer, die neue `main`-Heap-Instrumentierung und die neue
 componentweite `device_platform`-Instrumentierung werden nicht weitergeführt.
@@ -756,8 +761,9 @@ Die drei Implementierungsdateien sind auf den Vor-Implementierungsstand
 
 ```text
 EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
-NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
-NEW_PLAN_SHA=42568610611ebffa6ace89e46f3fe3ea568e0e72
+HISTORICAL_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
+PLAN_SHA=42568610611ebffa6ace89e46f3fe3ea568e0e72
+PLAN_STATUS=HISTORICAL_SUPERSEDED
 FULL_TRANSITIVE_STATIC_CALLGRAPH_CLOSURE=NOT_REQUIRED
 GENERIC_BINARY_CALLGRAPH_ANALYZER=NO
 TRANSITIVE_LIBSTDCXX_BINARY_STACK_PLATFORM=NO
@@ -806,7 +812,7 @@ behauptet; in diesem Fall gilt `DIAGNOSTIC_OVERHEAD_CONFOUNDING=YES` und
 `STOP_OWNER_REVIEW`.
 
 
-## Nachtrag: PR-#131-Synchronisierung und KISS-Pivot-V2 (2026-08-31)
+## Aktueller KISS-Pivot V2 nach PR-#131-Synchronisierung (2026-08-31)
 
 Die historische Analyzer- und Build-Evidenz bleibt erhalten, wird aber nicht
 als aktueller globaler Upper Bound verwendet. PR #131 änderte keine
@@ -815,7 +821,10 @@ jedoch für spätere #29-Pegelmessungen maßgebend.
 
 ~~~text
 INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+CURRENT_INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+CURRENT_BASE_CONTROL_BOOT=NOT_RUN
+CURRENT_BASELINE_PANIC_CONFIRMED=PENDING
 PR131=MERGED
 PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 PR131_GPIO_SSOT_PRESERVED=YES
@@ -860,7 +869,7 @@ Bound. Die aktuelle KISS-Planrevision ist:
 
 ~~~text
 NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
-NEW_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+CURRENT_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
 PLAN_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 CURRENT_BASE_CONTROL_BOOT_SPECIFIED=YES
 DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
