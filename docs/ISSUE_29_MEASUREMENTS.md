@@ -804,3 +804,73 @@ vollständig bestandener Resource-/Fault-Probe unter 96 KiB als
 diesem Diagnose-Overhead nicht automatisch als Produktressourcenfehler
 behauptet; in diesem Fall gilt `DIAGNOSTIC_OVERHEAD_CONFOUNDING=YES` und
 `STOP_OWNER_REVIEW`.
+
+
+## Nachtrag: PR-#131-Synchronisierung und KISS-Pivot-V2 (2026-08-31)
+
+Die historische Analyzer- und Build-Evidenz bleibt erhalten, wird aber nicht
+als aktueller globaler Upper Bound verwendet. PR #131 änderte keine
+#29-Firmware-, Stack- oder Analyzerdatei. Die neue Board-/Wiring-SSOT ist
+jedoch für spätere #29-Pegelmessungen maßgebend.
+
+~~~text
+INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+PR131=MERGED
+PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+PR131_GPIO_SSOT_PRESERVED=YES
+GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+
+EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
+QUALIFIER_FAIL_CLOSED_BUG=FOUND
+INDIRECT_CALL_EDGE_COLLAPSE_RISK=KNOWN
+UNKNOWN_REACHABLE_EDGES=225
+UNRESOLVED_INDIRECT_CALLS=1
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_GLOBAL_UPPER_BOUND=NO
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_COMPLETE_UPPER_BOUND=NO
+OLD_PROBE_TASK_STACK_BYTES=67584
+COMPILED_runProbe_FRAME_BYTES=65712
+OLD_PROBE_TASK_STACK_IS_BELOW_KNOWN_STATIC_PATH=YES
+ROOT_CAUSE=UNRESOLVED
+~~~
+
+Der Qualifier-Befund ist ein historischer Fail-closed-Bug: Das Parsen von
+`NodeInfo.qualifier` reichte nicht aus, weil bei der Traversierung nicht
+jeder Frame auf `qualifier == static` erzwungen wurde. Zusätzlich kollabierte
+die Kantenstruktur `dict[str, set[str]]` mehrere indirekte Kanten desselben
+Callers auf denselben `__indirect_call`-Targetnamen. Ein Caller-basierter
+Whitelistmechanismus ist deshalb keine robuste Garantie für einzelne
+indirekte Call-Sites. Es gibt keine Reparatur dieser Analyzerarchitektur.
+
+Die drei durch die Exhaustive-Runde geänderten Dateien sind funktional auf
+`3fbaf32` zurückgeführt:
+
+~~~text
+ANALYZER_REVERTED=YES
+MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
+DEVICE_PLATFORM_ISSUE29_INSTRUMENTATION_REVERTED=YES
+~~~
+
+Die Werte `OLD_PROBE_TASK_STACK_BYTES=67584`,
+`COMPILED_runProbe_FRAME_BYTES=65712` und
+`CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224` bleiben diagnostische
+Historienwerte. `72224` ist ausdrücklich kein globaler statischer Upper
+Bound. Die aktuelle KISS-Planrevision ist:
+
+~~~text
+NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
+NEW_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+CURRENT_BASE_CONTROL_BOOT_SPECIFIED=YES
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
+HWM_ROOT_CAUSE_DISCRIMINATOR_SPECIFIED=YES
+GPIO_SSOT_LEVEL_GATE_SYNC=YES
+IMPLEMENTATION=NOT_STARTED_KISS_REVISION
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ROOT_CAUSE=UNRESOLVED
+~~~
+
+In diesem Nachtrag wurden kein Build, kein Flash, kein Hardwareboot und keine
+Pegelmessung ausgeführt.

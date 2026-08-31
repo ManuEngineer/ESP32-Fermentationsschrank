@@ -273,3 +273,70 @@ kein globaler Upper Bound. Vor einem späteren Hardwarelauf sind die digitale
 Isolation, ein frischer Issue-90-Harness-Nachweis und die exakte
 Buildprovenienz erneut zu prüfen; nicht ausgeführte Nachweise bleiben
 `NOT_RUN` oder `BLOCKED`.
+
+
+## Nachtrag zur PR-#131-Synchronisierung und KISS-Pivot-V2 (2026-08-31)
+
+Die PR-#129-Historie wurde ohne Rebase und ohne Force-Push per Merge der neuen
+Integrationsbaseline synchronisiert. PR #131 hat keine #29-Firmware-, Stack-
+oder Analyzerdatei verändert; die neue R1-GPIO-/Wiring-SSOT ist für spätere
+elektrische #29-Verifikation dennoch verbindlich.
+
+~~~text
+PR131=MERGED
+PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+PANIC_REPRODUCTION_SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+PR131_GPIO_SSOT_PRESERVED=YES
+GPIO_SSOT_PATH=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+
+EXHAUSTIVE_STATIC_GATE_ATTEMPT=SUPERSEDED_KISS
+QUALIFIER_FAIL_CLOSED_BUG=FOUND
+INDIRECT_CALL_EDGE_COLLAPSE_RISK=KNOWN
+FULL_TRANSITIVE_STATIC_CALLGRAPH_CLOSURE=NOT_REQUIRED
+GENERIC_BINARY_CALLGRAPH_ANALYZER=NO
+TRANSITIVE_LIBSTDCXX_BINARY_STACK_PLATFORM=NO
+STATIC_ANALYSIS_ROLE=DIAGNOSTIC_EVIDENCE_NOT_GLOBAL_UPPER_BOUND
+HARDWARE_HWM_ROLE=PRIMARY_EMPIRICAL_STACK_EVIDENCE
+UNKNOWN_REACHABLE_EDGES=225
+UNRESOLVED_INDIRECT_CALLS=1
+CURRENT_MAX_KNOWN_STATIC_PATH_BYTES=72224
+CURRENT_MAX_KNOWN_STATIC_PATH_IS_GLOBAL_UPPER_BOUND=NO
+ROOT_CAUSE=UNRESOLVED
+
+ANALYZER_REVERTED=YES
+MAIN_CMAKE_ISSUE29_HEAP_INSTRUMENTATION_REVERTED=YES
+DEVICE_PLATFORM_ISSUE29_INSTRUMENTATION_REVERTED=YES
+THREE_FILE_FUNCTIONAL_STATE=3FBAF32
+~~~
+
+`QUALIFIER_FAIL_CLOSED_BUG=FOUND` bezeichnet den historischen
+Implementierungsbefund: Der Analyzer parste `NodeInfo.qualifier`, erzwingt
+aber nicht für jeden traversierten Frame `qualifier == static`. Das bekannte
+`INDIRECT_CALL_EDGE_COLLAPSE_RISK=KNOWN` bezeichnet die Reduktion mehrerer
+GCC-Kanten desselben Callers zu `__indirect_call` in
+`dict[str, set[str]]`; einzelne indirekte Call-Sites sind damit nicht robust
+unterscheidbar. Beide Befunde sind zusätzliche Gründe für den KISS-Pivot und
+werden nicht durch eine neue Analyzerarchitektur repariert.
+
+Die Evidenz aus `a19cd1605fb1e74e6dd31f8b457741e9cf92b2d9` und
+`92f6cf6c3ee16868b95b7ee6a4e9b233d9ffb0c6` bleibt historisch. Die drei
+Exhaustive-Dateien entsprechen funktional `3fbaf32`; ältere #121-Flags und
+die bestehende #29/#90-Compile-Time-Isolation bleiben erhalten. In diesem
+Nachtrag wurden kein Build, kein Flash und kein Hardwarelauf ausgeführt.
+
+Neue kanonische Planrevision:
+
+~~~text
+NEW_PLAN_PATH=docs/tasks/issue-29-panic-requalification-correction-plan.md
+NEW_PLAN_SHA=b7d80de7d6e23fd792c2bd48eaa27052a8c61201
+PLAN_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
+CURRENT_BASE_CONTROL_BOOT_SPECIFIED=YES
+DIAGNOSTIC_PROBE_TASK_STACK_BYTES=98304
+HWM_ROOT_CAUSE_DISCRIMINATOR_SPECIFIED=YES
+GPIO_SSOT_LEVEL_GATE_SYNC=YES
+IMPLEMENTATION=NOT_STARTED_KISS_REVISION
+HARDWARE_RUN=NO
+LEVEL_MEASUREMENTS=NOT_RUN
+ROOT_CAUSE=UNRESOLVED
+~~~
