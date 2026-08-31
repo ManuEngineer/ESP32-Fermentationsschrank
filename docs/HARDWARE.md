@@ -65,7 +65,7 @@ Noch zu messen:
 - Boot-, Reset-, Brownout- und Bootloaderpegel aller verwendeten Signale
 - Verhalten der MOSFET-Ausgaenge ohne und mit angeschlossenen Verbrauchern
 
-Die MOSFET-Zuordnung GPIO16/17/26/27 ist als
+Die vier PCB-festen MOSFET-Kanalzuordnungen sind als
 `board_fixed_pending_electrical_verification` im Boardprofil dokumentiert.
 Die Boardfamilienidentitaet ist bestaetigt, die elektrische Kanalwirkung
 jedoch nicht.
@@ -167,7 +167,7 @@ sondern ausschließlich aus dem Boardprofil gelesen:
 - der abnehmbare Produktfühler bleibt auf dem separaten Bus
   one_wire_product;
 - beide Busse laufen im 3-Leiter-Betrieb und erhalten jeweils den im
-  Boardprofil festgelegten 4,7-kOhm-Pull-up nach 3,3 V;
+  Boardprofil festgelegten Pull-up nach 3,3 V;
 - feste Sensorrollen werden über ROM-ID unterschieden;
 - ein Fehler des gemeinsamen festen Busses wirkt für die Peltierfreigabe
   weiterhin fail-closed;
@@ -222,11 +222,11 @@ Der Summer darf keine Sicherheitsaufgabe blockieren.
 
 ## Display und Touch
 
-Das reale MSP2807/ILI9341-Modul und der resistive XPT2046-Touch verwenden
-den gemeinsamen SPI-Bus gemäß dem Boardprofil. TFT_CS und Touch_CS bleiben
-getrennte Deselect-Signale mit den dort festgelegten 10-kOhm-Pull-ups.
-Backlight wird über den dort festgelegten GPIO4-PWM-Ausgang betrieben und
-erhält den 10-kOhm-Pulldown für AUS bei Boot/Reset.
+Das MSP2807-Display und der resistive Touchpfad verwenden gemäß dem
+Boardprofil den gemeinsamen SPI-Bus. XPT2046 bleibt der zu verifizierende
+Touchcontroller-Kandidat. TFT_CS und Touch_CS bleiben getrennte
+Deselect-Signale; Backlight wird über den im Boardprofil festgelegten
+PWM-Ausgang mit sicherem AUS-Zustand bei Boot/Reset betrieben.
 
 Das Resetnetz ist:
 
@@ -314,7 +314,11 @@ Verbindliche Anforderungen:
 - Onboard-MOSFET-Ausgaenge beim Boot praktisch messen
 - ungeeignete Bootstrapping-Pins nicht fuer sicherheitskritische Freigaben nutzen
 - keine automatische Aktorpruefung beim normalen Boot
-- `esp32_bringup` startet mit `ELECTRICAL_VERIFICATION_PENDING`
+- `esp32_bringup` startet weiterhin mit `HARDWARE_UNVERIFIED` beziehungsweise
+  dem bestehenden fail-closed Bring-up-Vertrag
+- `ELECTRICAL_VERIFICATION_PENDING` bezeichnet hier den Dokument- und
+  Konfigurationsstatus der offenen elektrischen Abnahme und ist kein neuer
+  Firmware-Startup-State
 - Owner-bestaetigte Boardfamilienidentitaet ersetzt keinen Boot- oder
   Pegelnachweis
 

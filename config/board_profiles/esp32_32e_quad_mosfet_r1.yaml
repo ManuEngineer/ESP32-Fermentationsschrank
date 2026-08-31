@@ -360,6 +360,10 @@ pins:
 buses:
   display_touch_spi:
     protocol: spi
+    signal_roles:
+      - sck
+      - mosi
+      - miso
     sck_gpio: 18
     mosi_gpio: 23
     miso_gpio: 19
@@ -376,6 +380,8 @@ buses:
 
   one_wire_internal:
     protocol: one_wire
+    signal_roles:
+      - data
     gpio: 32
     roles:
       - chamber_air
@@ -388,6 +394,8 @@ buses:
 
   one_wire_product:
     protocol: one_wire
+    signal_roles:
+      - data
     gpio: 33
     roles:
       - product
@@ -399,16 +407,26 @@ buses:
 
   uart0_programming:
     protocol: uart0
+    signal_roles:
+      - tx
+      - rx
     tx_gpio: 1
     rx_gpio: 3
     io_voltage: 3.3V
     adapter: FT232RL
 
+  ds3231_i2c:
+    protocol: i2c
+    signal_roles:
+      - sda
+      - scl
+    sda_gpio: 21
+    scl_gpio: 22
+    int_sqw: unused_r1
+
 rtc:
   physical_family: DS3231
-  sda_gpio: 21
-  scl_gpio: 22
-  int_sqw: unused_r1
+  bus: ds3231_i2c
   wiring_compatible_variants:
     - DS3231SN
     - DS3231M

@@ -120,12 +120,9 @@ features:
     status: not_planned_release_1
   rtc:
     required: false
-    physical_family: DS3231
+    wiring_source: board_profile
     delivered_variant: TBD_DELIVERY
     software_supported_variant: DS3231SN
-    wiring_compatible_variants:
-      - DS3231SN
-      - DS3231M
     storage_timezone: UTC
     i2c_address: 0x68
     bus: ds3231_i2c

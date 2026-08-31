@@ -50,6 +50,9 @@ Pegel.
 - DS3231-Familie:
   <https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231.pdf>
   (für die variantenneutrale I2C-Wiring-Prüfung)
+- Analog Devices DS3231M:
+  <https://www.analog.com/en/products/ds3231m.html>
+  (Herstellerbeleg für die Wiring-Kompatibilität der DS3231M-Variante)
 - TI 74HC244:
   <https://www.ti.com/lit/ds/symlink/sn74hc244.pdf>
   (nur relevant, wenn der reale IBT-2 diesen Eingangsbuffer verwendet)
