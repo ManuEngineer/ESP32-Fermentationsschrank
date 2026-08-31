@@ -11,12 +11,19 @@ Die folgende Statuszeile beschreibt den Zustand nach dem Plan-Commit. Die
 exakte neue Plan-SHA wird erst durch diesen Commit festgelegt und danach im
 Draft-PR und im aktuellen SESSION-HANDOVER eingetragen.
 
-    PLAN_REEVALUATION=COMPLETE
+    PLAN_REVISION=COMPLETE
+    OLD_PLAN_SHA=6d165feacfd0a04a04eec2e5ab7785cfe2bf9b26
+    ISSUE130_PLAN_SCOPE_SYNC=PASS
+    POST_MERGE_ISSUE_SYNC=PLANNED
+    PLAN_APPROVED=NO
     GPIO_SSOT=PLANNED
     ISSUE_SYNC=PLANNED
     OLD_ISSUE_PIN_ASSUMPTIONS=NON_AUTHORITATIVE
     EXTERNAL_RESISTORS=OWNER_APPROVED_AS_SPECIFIED
     IMPLEMENTATION=NOT_STARTED
+    SSOT_IMPLEMENTED_IN_PR=NOT_STARTED
+    SSOT_MERGED_TO_INTEGRATION=NO
+    ISSUES_SYNCHRONIZED_POST_MERGE=NOT_STARTED
     GPIO_MATRIX=PLANNED_NOT_CONFIRMED
     HARDWARE_RUN=NOT_RUN
     OWNER_PLAN_REVIEW_REQUIRED=YES
@@ -35,8 +42,8 @@ Roadmap, lokale Agentenregeln und die feste Pfadnutzung geprüft.
 |---|---|
 | Zielbasis | origin/integration/r1-development, c1f5fbb5f19ab8e7d2c25708fe79777d523217d4 |
 | Arbeitsbranch | agent/issue-130-r1-gpio-matrix |
-| PR #131 | OPEN, DRAFT, Base integration/r1-development, Head f85df6127708e69484a0f69d50a6bc5d23978071 |
-| Issue #130 | OPEN, Eigentümer des eigenständigen GPIO-/Verdrahtungsscope |
+| PR #131 | OPEN, DRAFT, Base integration/r1-development, Head 6d165feacfd0a04a04eec2e5ab7785cfe2bf9b26 |
+| Issue #130 | OPEN, Eigentümer des eigenständigen GPIO-/Verdrahtungsscope; beim Start dieser Revision enthielt der Live-Body noch die nun ersetzte Reset-Entkopplungsannahme |
 | PR #129 | OPEN, DRAFT, Head f3725e5557b040dc388a9d9ca9077329b0e5c672; vollständig getrennt |
 | bisheriger Plan | docs/tasks/issue-130-r1-gpio-matrix-plan.md @ f85df6127708e69484a0f69d50a6bc5d23978071; nicht freigegeben |
 | Roadmap | bestehende Issue-130-Zeile; wird nur auf den neuen Planstatus und die SSOT-/Issue-Gate-Semantik synchronisiert |
@@ -63,15 +70,19 @@ Ziel ist ein vollständiger, standalone versionierter Umsetzungsplan für:
 6. einen späteren Generator-/Validatorpfad ohne handgepflegte Firmware-
    Doppelquelle.
 
-In dieser Runde werden ausschließlich dieser Plan, die minimale Roadmap-
-Synchronisierung und der PR-/Handover-Status geändert. Nicht enthalten sind:
+In dieser Runde werden ausschließlich dieser Plan, die minimale Roadmap- und
+PR-/Handover-Synchronisierung sowie die ausdrücklich erlaubte Korrektur des
+Scope-/Plan-Texts von Issue #130 geändert. Nicht enthalten sind:
 
-- Anlage von config/board_profiles/esp32_32e_r1.yaml;
+- Anlage von config/board_profiles/esp32_32e_quad_mosfet_r1.yaml;
 - Migration, Entfernung oder inhaltliche Erweiterung von
   config/pins.example.yaml;
 - Änderung von config/hardware.example.yaml;
 - Änderung von docs/HARDWARE.md oder references/LINKS.md;
 - Änderungen an Issue-Bodies #29, #30, #31, #32, #33 oder anderen Issues;
+  Issue #130 ist die ausdrücklich erlaubte Ausnahme und wird nur auf den
+  aktuellen Plan-/Ownerentscheid korrigiert, ohne eine ungemergte SSOT als
+  bereits autoritativ auszugeben;
 - Firmware, ESP-IDF-Adapter, Composition Root, Generator oder Validator;
 - Produktionsfreigabe, Aktorfreigabe, Firmware-Build oder Hardwarelauf;
 - eine Behauptung von confirmed_test.
@@ -79,14 +90,19 @@ Synchronisierung und der PR-/Handover-Status geändert. Nicht enthalten sind:
 Die im Folgenden beschriebene Matrix ist im Plan die verbindliche
 Umsetzungsgrundlage dieses Scopes. Nach Freigabe wird sie in die Boardprofil-
 Quelle überführt; sie wird nicht zusätzlich als unabhängige Matrixdatei
-angelegt.
+angelegt. Die Korrektur des Issue-#130-Texts in dieser Runde ist ein
+Plan-/Scope-Sync, kein Merge und kein Nachweis einer bereits vorhandenen
+SSOT.
 
 ## 3. Owner-Entscheidungen und Revisionsdelta
 
 Alte Issues, alte Planstände und historische Präferenzen sind für konkrete
 GPIO-Zahlen, Pegel und Pull-Widerstände nicht autoritativ. Die technische
-Autorität wird mit der Umsetzung dieses Plans auf das versionierte
-R1-Boardprofil unter config/board_profiles/esp32_32e_r1.yaml verlagert.
+Autorität wird nach Umsetzung und Merge dieses Plans auf das versionierte
+R1-Boardprofil unter
+config/board_profiles/esp32_32e_quad_mosfet_r1.yaml verlagert. Bis zum Merge
+ist dieser Pfad ein geplanter Zielpfad und keine Live-Quelle auf
+integration/r1-development.
 
 Gegenüber dem Vorgängerplan gelten insbesondere diese Änderungen:
 
@@ -97,7 +113,8 @@ Gegenüber dem Vorgängerplan gelten insbesondere diese Änderungen:
   geprüft und anschließend auf einen kleinen, ausdrücklich
   nichtautoritativen Profilverweis reduziert oder entfernt.
 - config/hardware.example.yaml verweist nur noch auf
-  controller.board_profile: esp32_32e_r1 und dupliziert keine Pinzahlen.
+  controller.board_profile: esp32_32e_quad_mosfet_r1 und dupliziert keine
+  Pinzahlen.
 - Die externen Widerstände aus Abschnitt 7 sind Designbestandteil und keine
   spätere Messoption.
 - GPIO32 trägt den gemeinsamen internen Multidrop-Bus für Schrankluft und
@@ -109,8 +126,12 @@ Gegenüber dem Vorgängerplan gelten insbesondere diese Änderungen:
   ist damit verworfen. Eine zusätzliche Stufe ist nur zulässig, wenn das
   veröffentlichte MSP2807-Schaltbild und das reale Modul einen elektrischen
   Widerspruch nachweisen.
-- Issue-Synchronisierung erfolgt erst nach Freigabe dieses Plans und legt
-  keine neuen GPIO-Zahlen in den einzelnen Issues fest.
+- Issue #130 wird in dieser Planrevision vom veralteten Reset-/Scope-Text
+  bereinigt, ohne die ungemergte Zielquelle als produktiv autoritativ zu
+  behaupten.
+- #29 bis #33 und weitere tatsächlich betroffene Issues werden erst nach dem
+  Merge dieses PR gegen die reale Merge-SHA und das dann existierende
+  Boardprofil synchronisiert; vor dem Merge bleibt ISSUE_SYNC=PLANNED.
 
 ## 4. Primärquellen- und Real-Hardware-Prüfung
 
@@ -162,25 +183,92 @@ Vorgesehene Herstellerreferenzen:
 
 Die nach Freigabe anzulegende Datei lautet:
 
-    config/board_profiles/esp32_32e_r1.yaml
+    config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+
+Der Profilkopf und ein repräsentativer elektrischer Pinvertrag haben
+sinngemäß diese Form:
+
+    profile:
+      id: esp32_32e_quad_mosfet_r1
+      board_family: esp32_32e_quad_mosfet
+      board_revision: TBD_HARDWARE
+      mcu_module: ESP32-WROOM-32E
+      release: r1
+      verification_state: planned_not_confirmed
+
+    pins:
+      gpio13:
+        function: peltier_rpwm
+        direction: output
+        active_level: high
+        external_bias:
+          type: pulldown
+          resistance_ohm: 10000
+          placement: receiver_side_or_ibt2_connector_side
+        safe_boot_level: low
+        assignment_status: planned
+
+      gpio16:
+        function: onboard_mosfet_1
+        application_role: internal_fan
+        direction: output
+        active_level: TBD_HARDWARE
+        external_bias: TBD_BOARD_CIRCUIT
+        assignment_status: board_fixed_pending_electrical_verification
+
+      gpio39:
+        function: touch_irq
+        direction: input_only
+        active_level: low
+        external_bias:
+          type: module_pullup
+          resistance_ohm: 10000
+          source: MSP2807_R4
+          placement: module
+          condition: omit_external_pullup_if_confirmed
+        assignment_status: planned
+
+    buses:
+      display_touch_spi:
+        sck_gpio: 18
+        mosi_gpio: 23
+        miso_gpio: 19
+
+    nets:
+      display_reset:
+        source: EN_CHIP_PU
+        target: MSP2807_RESET
+        topology: direct_active_low_shared_reset
+
+Der Ausschnitt ist nur ein Schema-Beispiel und ersetzt nicht das vollständige
+Inventar in diesem Plan. Die tatsächlich anzulegende Datei enthält alle
+Pins, Busse, Netze und Widerstände aus den folgenden Abschnitten.
 
 Sie ist die einzige handgepflegte Quelle für konkrete R1-GPIO-Zahlen. Das
 Profil enthält mindestens:
 
-- profile.id: esp32_32e_r1;
+- profile.id: esp32_32e_quad_mosfet_r1;
+- profile.board_family: esp32_32e_quad_mosfet;
+- profile.board_revision: TBD_HARDWARE;
 - profile.mcu_module: ESP32-WROOM-32E;
 - profile.release: r1;
 - profile.verification_state: planned_not_confirmed;
 - pro Pin Funktion, optionale Anwendungsrolle, Richtung bzw. input_only,
   elektrische aktive Ebene nur bei sinnvoller Semantik, externe Bias-
-  Metadaten, sicheren Boot-/Reset-Pegel, Assignment-Status und
-  Verifikationshinweise;
+  Metadaten einschließlich Zielplatzierung, sicheren Boot-/Reset-Pegel,
+  Assignment-Status und Verifikationshinweise;
 - buses für absichtliches SPI-, I2C-, UART- und 1-Wire-Sharing;
 - nets für gemeinsame Signale wie EN/TFT_RESET und BTS-Enable;
 - eine resistor_policy mit fest verbauten und konditional nicht zu
-  duplizierenden Widerständen;
+  duplizierenden Widerständen einschließlich der physischen Zielplatzierung;
 - eine klare Trennung von Designzustand, Board-Fixierung und realem
   Messzustand.
+
+Für jedes externe Bias-Netz wird unter external_bias mindestens type,
+resistance_ohm beziehungsweise eine klare Konditionalregel und placement
+geführt. placement beschreibt die vorgesehene physische Lage am
+Empfängereingang, Steckverbinder, Modul oder direkt am Bus; es behauptet
+keine bereits erfolgte Bestückungsprüfung.
 
 Die Feldnamen und Statuswerte werden deterministisch und ohne YAML-Laufzeit-
 interpretation auf dem ESP32 verwendet. Wo eine elektrische aktive Ebene
@@ -194,6 +282,8 @@ Vorgesehene Statussemantik:
 - board_fixed_pending_electrical_verification: PCB-seitig fest verdrahtete
   Zuordnung, elektrische Pegel, Bootwirkung und Verbraucherwirkung noch nicht
   bestätigt;
+- reserved: für eine definierte Boot-/ROM-/Systemrolle reserviert, nicht als
+  R1-Peripherie verwenden;
 - reserved_disabled: reserviert bzw. deaktiviert, keine produktive Funktion;
 - forbidden: für R1 verboten, insbesondere Flash-/Strap-Konflikt;
 - unavailable_not_exposed: nicht verfügbar oder am ESP32-WROOM-32E nicht
@@ -203,17 +293,26 @@ Vorgesehene Statussemantik:
   Funktionsmessung am konkreten Aufbau. Diese Stufe wird nicht durch
   Dokumentation erzeugt.
 
+Die vollständige Assignment-Statusmenge ist damit:
+planned, board_fixed_pending_electrical_verification, reserved,
+reserved_disabled, forbidden, unavailable_not_exposed, free und
+confirmed_test. Der Profilzustand planned_not_confirmed ist davon getrennt
+und darf nicht als Assignment-Status verwendet werden. Für EN gilt
+assignment_status: planned.
+
 ## 6. Vollständiges R1-GPIO-Inventar als Zielinhalt
 
-Die folgende Tabelle ist der vollständige Scope für das Profil und die
-lesbare Darstellung in docs/HARDWARE.md. Sie wird nach Freigabe nicht als
-zweite handgepflegte Quelle stehen bleiben. Alle Zahlen und Statuswerte müssen
-zwischen Profil, Hardwaredokumentation und späterem Generator aus derselben
-Profilquelle stammen.
+Die folgende Tabelle ist der vollständige Scope für das Profil. Sie ist ein
+Planartefakt und keine zusätzliche Repository-Quelle. docs/HARDWARE.md wird
+nach Freigabe keine zweite vollständige handgepflegte Matrix enthalten,
+sondern Statusmodell, Safety-/Verdrahtungsregeln und den Verweis auf die SSOT
+erklären. Ein vollständiger lesbarer Matrixblock wäre nur zulässig, wenn er
+deterministisch aus dem Profil erzeugt und im selben Scope gegen die SSOT
+geprüft wird; das ist nicht die bevorzugte KISS-Variante dieses Plans.
 
 | Pin | R1-Zielrolle | Richtung / elektrische Metadaten | Bias / sicherer Zustand | Assignment-Status |
 |---|---|---|---|---|
-| EN / CHIP_PU | ESP32-Hardware-Reset und Quelle für TFT_RESET | ESP32-Resetnetz, active-low | definierte ESP32-EN-Schaltung; direktes gemeinsames Resetnetz | planned_not_confirmed |
+| EN / CHIP_PU | ESP32-Hardware-Reset und Quelle für TFT_RESET | ESP32-Resetnetz, active-low | definierte ESP32-EN-Schaltung; direktes gemeinsames Resetnetz | planned |
 | GPIO0 | BOOT / ROM-Download | Strap; keine R1-Peripherie | Bootstrapping unverändert; keine Zusatzlast, die Download verhindert | reserved |
 | GPIO1 | UART0 TX | output; ESP32 TX -> FT232RL RXD | UART-Verbindung, keine Aktorrolle | planned |
 | GPIO2 | TFT D/C bzw. DC/RS | output; D/C-Signal ohne allgemeine aktive Ebene | keine externe Beschaltung, die beim Reset HIGH erzwingt; schwacher Pulldown zulässig | planned |
@@ -255,9 +354,10 @@ Profilquelle stammen.
 | GPIO38 | unavailable / nicht auf ESP32-WROOM-32E herausgeführt | nicht verwenden | niemals als free behandeln | unavailable_not_exposed |
 | GPIO39 | Touch IRQ / XPT2046 T_IRQ | input_only, active-low; Pegel pollen | MSP2807 R4 als 10-kOhm Pull-up nach 3,3 V am realen Modul verifizieren; kein zusätzlicher Pull-up, wenn bestätigt | planned |
 
-Die vier fest verdrahteten Onboard-MOSFET-Kanäle werden als board_fixed
-behandelt, aber weder aktive Polarität noch Gate-/Treiberbias werden aus einer
-alten Issue-Annahme abgeleitet. GPIO34/35 bleiben bis zu einer separaten
+Die vier fest verdrahteten Onboard-MOSFET-Kanäle erhalten den Status
+board_fixed_pending_electrical_verification, aber weder aktive Polarität noch
+Gate-/Treiberbias werden aus einer alten Issue-Annahme abgeleitet. GPIO34/35
+bleiben bis zu einer separaten
 Mess- und Schutzbewertung mit ris_lis_enabled=false deaktiviert. Die
 input-only-Eigenschaft von GPIO34 bis GPIO39 wird im späteren Validator
 ausdrücklich geprüft.
@@ -336,6 +436,22 @@ ESP32-EN-/Auto-Reset-Schaltung bleibt unverändert. Kein GPIO0, kein zusätzlich
 GPIO und keine Diode, Inverter-, Buffer- oder Open-Drain-Stufe wird im R1-Ziel
 vorgesehen, solange kein realer elektrischer Widerspruch nachgewiesen ist.
 
+Für die direkte Verbindung sind zusätzlich ausdrücklich zu prüfen und zu
+dokumentieren:
+
+- ESP32 und reales MSP2807 teilen einen gemeinsamen GND;
+- RESET des realen MSP2807 ist tatsächlich ein hochohmiger Eingang zum
+  ILI9341 und kein Ausgang oder aktiv treibender Knoten;
+- kein unabhängiger Modulzustand kann das gemeinsame EN-Netz aktiv treiben;
+- Power- und Logic-Domain des realen Moduls sind mit der direkten Verbindung
+  kompatibel;
+- jede Abweichung des realen Moduls vom veröffentlichten MSP2807-Schaltbild
+  führt zu STOP und einer Boardprofil-/Planrevision.
+
+Eine Entkopplungsstufe wird nicht vorsorglich ergänzt. Der Nachweis muss die
+direkte active-low Zieltopologie tragen; ein unklarer oder widersprüchlicher
+Befund ist kein confirmed_test und keine stillschweigende Freigabe.
+
 ### 7.3 Verbindliche externe Widerstände
 
 Diese Widerstände werden im Profil als Designbestandteil mit Netz, Wert,
@@ -352,6 +468,22 @@ verbaut:
 | GPIO5 / TFT_CS nach 3,3 V | 10 kOhm | TFT beim Boot/Reset sicher deselected |
 | GPIO15 / Touch_CS nach 3,3 V | 10 kOhm | Touch beim Boot/Reset sicher deselected |
 | GPIO4 / TFT_BL nach GND | 10 kOhm | Backlight beim Boot/Reset AUS |
+
+Für die physische Zielplatzierung wird im Profil zusätzlich festgehalten:
+
+- RPWM, LPWM und gemeinsames R_EN/L_EN: placement =
+  receiver_side_or_ibt2_connector_side; der Pulldown liegt bevorzugt am
+  IBT-2-/Empfängereingang oder am Steckverbinder, damit der Eingang auch bei
+  abgezogenem oder hochohmigem Controller LOW bleibt;
+- TFT_CS, Touch_CS und TFT_BL: placement =
+  receiver_input_or_connector_side, soweit der reale Aufbau dies praktisch
+  zulässt;
+- GPIO32 und GPIO33: placement = one_wire_bus_data_net_at_receiver_or_bus;
+  der jeweilige Pull-up liegt elektrisch eindeutig am zugehörigen Bus und
+  wird nicht über den anderen Bus geteilt.
+
+placement beschreibt die Design-/Bestückungsvorgabe und wird erst durch
+Kontinuitäts- und Pegelmessung am realen Aufbau zu einem Hardwarebefund.
 
 Die BTS-Steuerung bleibt softwareseitig zusätzlich safe-off:
 EN=LOW, RPWM=LOW und LPWM=LOW bei Boot/Reset/Fehler; Richtungswechsel
@@ -411,12 +543,15 @@ Die Matrix ist variantenneutral:
     GPIO22  -> SCL/C
     INT/SQW -> R1 unbenutzt
 
-Das Profil führt physical_family=DS3231 und
-delivered_variant=TBD_DELIVERY getrennt. Der bereits gemergte Softwarevertrag
-aus #126 wird nicht still umgeschrieben. Solange die produktive Software nur
-DS3231SN freigibt, wird das als aktuelle Softwareunterstützung dokumentiert.
-Falls DS3231M geliefert wird, ist Kompatibilitäts-/Registerarbeit ein eigener
-Follow-up-Scope und keine GPIO-Änderung.
+Das Boardprofil führt nur physical_family=DS3231 und nach bestätigter
+Primärquellenprüfung wiring_compatible_variants=[DS3231SN, DS3231M]. Die
+elektrische Verdrahtung bleibt damit variantenneutral. delivered_variant ist
+kein statisches Board-Wiring-Metadatum: delivered_variant=TBD_DELIVERY und
+software_supported_variant=DS3231SN gehören in Produkt-/Hardwarekonfiguration
+beziehungsweise Commissioning. Der bereits gemergte Softwarevertrag aus #126
+wird nicht still umgeschrieben. Falls DS3231M geliefert wird, ist
+Kompatibilitäts-/Registerarbeit ein eigener Follow-up-Scope und keine
+GPIO-Änderung.
 
 ### BTS7960 / IBT-2
 
@@ -451,24 +586,35 @@ Fermenter, sofern der reale Aufbau dies nicht ausdrücklich verifiziert.
 Die Implementierung folgt nach Ownerfreigabe in einem vollständigen Diff gegen
 diesen Plan:
 
-1. config/board_profiles/esp32_32e_r1.yaml anlegen und die Matrix, Metadaten,
+1. config/board_profiles/esp32_32e_quad_mosfet_r1.yaml anlegen und die Matrix,
+   Metadaten,
    Busse, Netze und Widerstandspolitik gemäß Abschnitt 5 bis 7 eintragen.
 2. Vor der Änderung erneut mit rg prüfen, ob pins.example.yaml inzwischen von
    Script, CI oder Dokumentation als fester Vertragspfad verwendet wird.
 3. config/pins.example.yaml entweder entfernen oder auf einen kleinen,
    ausdrücklich nichtautoritativen Verweis reduzieren, zum Beispiel mit
-   profile_id: esp32_32e_r1. Keine vollständigen GPIO-Zahlen duplizieren.
+   profile_id: esp32_32e_quad_mosfet_r1. Keine vollständigen GPIO-Zahlen
+   duplizieren.
 4. config/hardware.example.yaml um
-   controller.board_profile: esp32_32e_r1 ergänzen und konkrete Pinzahlen
-   daraus entfernen. Produkt-/Komponentendaten bleiben dort erhalten.
+   controller.board_profile: esp32_32e_quad_mosfet_r1 ergänzen und konkrete
+   Pinzahlen daraus entfernen. Produkt-/Komponentendaten bleiben dort
+   erhalten. physical_family: DS3231 und wiring_compatible_variants kommen
+   in das Produkt-/Wiring-Metadatum, sofern die Primärquellenprüfung die
+   Variantenneutralität bestätigt. delivered_variant: TBD_DELIVERY und
+   software_supported_variant: DS3231SN gehören in Hardwarekonfiguration
+   beziehungsweise Commissioning, nicht in das statische Boardprofil.
 5. docs/HARDWARE.md mit dem eindeutigen Hinweis aktualisieren:
 
        Electrical/design SSOT for the R1 pin assignment:
-       config/board_profiles/esp32_32e_r1.yaml
+       config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
 
-   Das Dokument erklärt Inventar, Matrix, Widerstandspolitik und
-   Verifikationsstatus lesbar, ist aber keine unabhängig gepflegte
-   Konkurrenzquelle.
+   Das Dokument erklärt Statusmodell, Safety-/Verdrahtungsregeln,
+   Reset-/Boot-Randbedingungen und die Verifikationszustände lesbar. Es
+   enthält keine zweite vollständige handgepflegte GPIO-/Widerstandsmatrix.
+   Konkrete Zahlen und Widerstandswerte werden über die SSOT referenziert.
+   Ein vollständiger Markdown-Block ist nur zulässig, wenn er deterministisch
+   aus dem Profil erzeugt und im selben Scope gegen die SSOT geprüft wird;
+   dieses Profilreferenzmodell ist die bevorzugte KISS-Variante.
 6. references/LINKS.md nur für tatsächlich fehlende Hersteller-/Schaltungs-
    quellen ergänzen.
 7. docs/ROADMAP.md nur mit Status, Planreferenz und Gate synchronisieren; die
@@ -477,32 +623,91 @@ diesen Plan:
 Die spätere produktive Nutzung darf keine handgepflegte Ersatzmatrix in
 Firmwareheadern einführen.
 
-## 10. Synchronisierung der offenen Hardware-Issues nach Freigabe
+## 10. Issue-Synchronisierung und sichere Reihenfolge
 
-In der aktuellen Planrevision werden keine Issue-Bodies geändert. Nach
-ausdrücklicher Freigabe dieses Plans werden die relevanten offenen Issues
-geprüft und nur bei echter Relevanz auf die SSOT verwiesen. In jedem
-betroffenen Issue wird sinngemäß dieser Satz verwendet:
+### 10.1 Ausnahme: Issue #130 in dieser Planrevision
+
+Der Live-Body von Issue #130 enthält beim Start dieser Revision noch die
+supersedete Aussage einer einseitigen low-aktiven Entkopplung zwischen
+EN/CHIP_PU und Display-RESET. Dieser Scope-/Plantext wird jetzt korrigiert.
+Die Korrektur ist GitHub-Metadaten-Synchronisierung und behauptet weder
+Hardwareimplementation noch confirmed_test.
+
+Der korrigierte Issue-#130-Text muss mindestens festhalten:
+
+- Die bisherigen elektrischen Detailannahmen des ursprünglichen Issues sind
+  durch die neue Primärquellen-/SSOT-Neubewertung superseded.
+- Der direkte gemeinsame active-low EN/TFT_RESET-Pfad ist die aktuelle
+  Designentscheidung; die alte Entkopplung ist nicht mehr die Zielschaltung.
+- Konkrete GPIO-Zahlen und Widerstände werden erst nach Freigabe der neuen
+  Plan-SHA und anschließendem Merge der SSOT autoritativ.
+- Der geplante Zielpfad ist
+  config/board_profiles/esp32_32e_quad_mosfet_r1.yaml; bis zum Merge ist
+  dieser Pfad auf integration/r1-development noch nicht vorhanden und
+  nicht live autoritativ.
+- PLAN_ONLY, IMPLEMENTATION=NOT_STARTED, GPIO_MATRIX=PLANNED_NOT_CONFIRMED,
+  HARDWARE_RUN=NOT_RUN und kein confirmed_test.
+- PR #129 / Issue #29 bleiben vollständig getrennt.
+
+Issue #130 darf den geplanten SSOT-Pfad also als Ziel- und Planreferenz
+nennen, nicht als bereits gemergte oder produktiv autoritative Quelle. Nach
+dem Merge wird der Body ein letztes Mal auf die tatsächliche Merge-SHA und
+den tatsächlich vorhandenen SSOT-Pfad synchronisiert.
+
+### 10.2 Keine SSOT-Umschaltung in #29 bis #33 vor dem Merge
+
+Issue-Bodies sind GitHub-Metadaten und nicht Teil des mergebaren
+PR-Diffs. #29, #30, #31, #32, #33 sowie weitere betroffene Issues werden in
+dieser Planrevision und während der PR-Implementierung nicht auf eine
+ungemergte Datei als kanonische Wahrheit umgeschaltet. Bis zum Owner-Merge
+bleibt:
+
+    ISSUE_SYNC=PLANNED
+    SSOT_MERGED_TO_INTEGRATION=NO
+    ISSUES_SYNCHRONIZED_POST_MERGE=NOT_STARTED
+
+Sichere Reihenfolge:
+
+1. Owner gibt exakt diese neue Plan-SHA frei.
+2. PR #131 implementiert und reviewt Boardprofil, Konfigurationsmigration
+   und kanonische Repo-Dokumentation gemäß Plan.
+3. Der Owner entscheidet über den Merge von PR #131 in
+   integration/r1-development.
+4. Nach dem Merge wird die reale Merge-SHA verifiziert.
+5. Erst danach werden #29 bis #33 und weitere tatsächlich betroffene Issues
+   gegen den existierenden SSOT-Pfad und die Merge-SHA synchronisiert.
+6. Die Issues erhalten Scope-/Verifikationsverweise, aber keine erneut
+   handgepflegte vollständige GPIO-Matrix.
+
+Die Merge-SHA darf als Provenienz genannt werden. Ein nicht gemergter
+PR-Head oder eine bloße Plan-SHA ersetzt sie nicht.
+
+### 10.3 Post-Merge-Semantik der betroffenen Issues
+
+Nach dem Merge wird in einem gezielten Metadaten-Sync nur bei echtem
+Widerspruch oder konkreter alter GPIO-Annahme korrigiert. Der gemeinsame
+Verweistext lautet dann:
 
     Konkrete GPIO-Zahlen, Pull-Beschaltungen und gemeinsame Bus-/Netzzuordnungen
-    werden nicht in diesem Issue neu festgelegt. Maßgebend ist das versionierte
-    R1-Boardprofil unter config/board_profiles/esp32_32e_r1.yaml. Änderungen
-    am Boardprofil benötigen einen eigenen nachvollziehbaren Plan-/
-    Owner-Gate-Scope.
+    werden nicht in diesem Issue neu festgelegt. Maßgebend ist das gemergte
+    R1-Boardprofil unter config/board_profiles/esp32_32e_quad_mosfet_r1.yaml,
+    Merge-SHA <actual-merge-sha>. Änderungen am Boardprofil benötigen einen
+    eigenen nachvollziehbaren Plan-/Owner-Gate-Scope.
 
 Zielsemantik der einzelnen Issues:
 
 | Issue | Eigentümerschaft nach Synchronisierung |
 |---|---|
-| #29 | Bring-up, Boot-/Strap-/Reset- und reale elektrische Basisnachweise. Das Boardprofil ist der Soll-/Designzustand; #29 prüft die Vereinbarkeit des realen Boards damit und vergibt keine produktiven Pins neu. Alte Formulierungen, die eine erneute Pinmatrix-Ermittlung in #29 verlangen, werden präzisiert oder entfernt. |
-| #30 | DS18B20-Treiber, ROM-ID-Rollen, CRC, Hot-Plug und reale Busfunktion. Die kanonische R1-Zwei-Bus-Topologie kommt aus dem Boardprofil; die alte Präferenz eines separaten Busses je Sensor darf sie nicht überschreiben. |
-| #31 | Verifikation des realen Display-/Touch-Controllers, MSP2807-Bestückung, gemeinsamem SPI, CS-Bias, Backlight, IRQ und direkten Resetnetzes. Pins und Resettopologie kommen aus dem Boardprofil; keine Neuvergabe. |
-| #32 | Verifikation der PCB-festen MOSFET-Kanäle, aktiven Pegel, realen Boardbeschaltung, Boot-/Reset-Wirkung und Verbraucherwirkung. Rollen und GPIO-Zuordnung kommen aus dem Boardprofil; keine neue Zuordnung. |
-| #33 | Verifikation der konkreten IBT-2-/BTS7960-Variante, Buffer-Versorgung, 3,3-V-HIGH-Kompatibilität, Richtung, Ausgangspolarität und R_IS/L_IS. RPWM/LPWM/EN und Fail-low-Pulldowns kommen aus dem Boardprofil; eine abweichende GPIO-Zuordnung erfordert bei echtem Widerspruch einen eigenen Boardprofil-Änderungsscope. |
+| #29 | Die gemergte Board-/Wiring-SSOT definiert den Sollzustand. #29 verifiziert Bring-up, Boot-/Strap-/Resetverhalten und die reale elektrische Vereinbarkeit. Ein realer Widerspruch führt zu einem eigenen Boardprofil-Änderungsscope; #29 vergibt keine Pins neu. |
+| #30 | Die gemergte R1-Zwei-Bus-Topologie bleibt maßgebend; die historische Präferenz separate_bus_per_sensor darf sie nicht wieder öffnen. #30 verifiziert DS18B20-Treiber, ROM-ID-Rollen, CRC, Hot-Plug und reale Busfunktion. |
+| #31 | #31 verifiziert realen Display-/Touch-Controller, Modulbestückung, SPI, CS-Bias, Backlight, IRQ und Resetnetz. Es gibt dort keine neue GPIO-, Reset- oder Backlight-Zuordnung. |
+| #32 | #32 verifiziert PCB-feste MOSFET-Kanäle, aktive Pegel, Treiber-/Gatebeschaltung, Boot-/Resetwirkung und Verbraucherwirkung. Es gibt dort keine neue GPIO-Kanalzuordnung. |
+| #33 | #33 verifiziert konkrete IBT-2-/BTS7960-Variante, Logikschwellen, Buffer-Versorgung, Polarität, Richtung und R_IS/L_IS. Es gibt dort keine neue RPWM-/LPWM-/EN-Zuordnung. Ein realer Widerspruch erfordert einen eigenen Boardprofil-Änderungsscope. |
+| #130 | Nach dem Merge wird Issue #130 abschließend auf den tatsächlichen SSOT-Pfad und die tatsächliche Merge-SHA synchronisiert; die aktuelle Plan-/Scope-Korrektur bleibt von Hardwarebestätigung getrennt. |
 
 Andere offene Issues werden nach konkreten alten GPIO-Annahmen durchsucht.
-Nur technisch betroffene Issues werden synchronisiert; eine erneute Matrix in
-jedem Issue ist unzulässig.
+Nur technisch betroffene Issues werden synchronisiert; unbetroffene Issues
+erhalten keinen Standardtext und keine erneute Matrix.
 
 ## 11. Späterer Firmware- und Generatorvertrag
 
@@ -510,7 +715,7 @@ Das Boardprofil ist zunächst die kanonische Hardwarebeschreibung. Bevor ein
 produktiver Hardwareadapter konkrete GPIO-Zahlen verwendet, müssen diese
 Werte aus derselben Quelle abgeleitet werden. Der bevorzugte Pfad ist:
 
-    config/board_profiles/esp32_32e_r1.yaml
+    config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
                  |
                  v
     deterministischer Build-Time-Generator
@@ -548,7 +753,8 @@ scher Repository-Validator oder Profiltest vorgesehen. Er prüft mindestens:
   deklariert;
 - BTS-RPWM, BTS-LPWM und gemeinsames BTS-EN besitzen den externen fail-low
   Bias;
-- board_fixed bleibt von confirmed_test getrennt;
+- board_fixed_pending_electrical_verification bleibt von confirmed_test
+  getrennt;
 - confirmed_test kann nicht durch eine reine Dokumentationsänderung
   entstehen.
 
@@ -572,8 +778,8 @@ im jeweiligen Verifikationsscope ausgewiesen.
 Statusregeln:
 
 - planned ist ein akzeptierter Zielentwurf ohne vollständige reale Messung;
-- board_fixed bedeutet PCB-seitige Zuordnung mit offenen elektrischen
-  Pegel-/Boot-/Verbrauchergates;
+- board_fixed_pending_electrical_verification bedeutet PCB-seitige Zuordnung
+  mit offenen elektrischen Pegel-/Boot-/Verbrauchergates;
 - confirmed_test erfordert reale Kontinuität, Pegel, Boot-/Resetverhalten und
   Funktion am konkreten Aufbau;
 - Build-, Markdown-, Link- oder Architekturchecks sind kein
@@ -581,16 +787,38 @@ Statusregeln:
 - historische Logs oder frühere Issue-Aussagen sind kein aktueller
   confirmed_test.
 
-## 14. Commit- und Prüfplan nach Ownerfreigabe
+## 14. Zustandsmodell, Commit- und Prüfplan
+
+Die vier Phasen werden ausdrücklich getrennt:
+
+| Phase | Bedeutung |
+|---|---|
+| PLAN_APPROVED | Owner hat exakt die neue Plan-SHA freigegeben; noch keine SSOT- oder Dokumentationsimplementation |
+| SSOT_IMPLEMENTED_IN_PR | Boardprofil, Konfigurationsmigration und kanonische Repo-Dokumentation sind im PR implementiert und gezielt geprüft; PR bleibt bis zur Ownerentscheidung Draft bzw. reviewgesperrt |
+| SSOT_MERGED_TO_INTEGRATION | Owner hat PR #131 gemergt; die tatsächliche Merge-SHA ist verifiziert und die SSOT existiert auf integration/r1-development |
+| ISSUES_SYNCHRONIZED_POST_MERGE | Erst nach dem Merge wurden #29 bis #33 und weitere tatsächlich betroffene Issues gegen Pfad und Merge-SHA synchronisiert; #130 erhält dabei seinen abschließenden Merge-Stand |
+
+Aktueller Zustand dieses Plan-PR:
+
+    PLAN_APPROVED=NO
+    SSOT_IMPLEMENTED_IN_PR=NOT_STARTED
+    SSOT_MERGED_TO_INTEGRATION=NO
+    ISSUE_SYNC=PLANNED
+    ISSUES_SYNCHRONIZED_POST_MERGE=NOT_STARTED
 
 Nach Freigabe der exakten Plan-SHA wird die Umsetzung in nachvollziehbaren
-Commits durchgeführt:
+PR-Commits durchgeführt:
 
 1. Boardprofil, SSOT-Migration der Konfigurationsbeispiele und
-   docs/HARDWARE.md gegen diesen Plan.
+   docs/HARDWARE.md als nichtduplizierende Dokumentation gegen diesen Plan.
 2. Nur notwendige Quellenlinks und minimale Roadmap-Synchronisierung.
-3. Relevante Issue-Body-Synchronisierung auf das Boardprofil.
-4. Ein später separat freizugebender Generator-/Validator-/Adapter-Scope,
+3. Vollständiger Diff, YAML-/Profilprüfung und direkte Konsistenzprüfung;
+   keine Issue-Body-Umschaltung auf die ungemergte SSOT.
+4. Owner-Review und Owner-Merge von PR #131.
+5. Verifikation der tatsächlichen Merge-SHA.
+6. Separater Post-Merge-Sync der tatsächlich betroffenen Issue-Bodies,
+   einschließlich #130-Abschluss auf den gemergten Pfad.
+7. Ein später separat freizugebender Generator-/Validator-/Adapter-Scope,
    falls für produktive Nutzung erforderlich.
 
 Bei jedem materiellen Widerspruch zwischen Profil, realem PCB/Modul und
