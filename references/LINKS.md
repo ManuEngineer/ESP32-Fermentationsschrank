@@ -35,6 +35,9 @@ Pegel.
 - ESP32-WROOM-32E:
   <https://documentation.espressif.com/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.html>
   (abgerufen am 2026-07-25)
+- Espressif ESP32 Hardware Design Guidelines / schematic checklist:
+  <https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/schematic-checklist.html>
+  (für die R1-Board-/Strap-/CHIP_PU-Prüfung)
 - DS18B20:
   <https://www.analog.com/media/en/technical-documentation/data-sheets/ds18b20.pdf>
   (Abrufversuch am 2026-07-25; automatischer Download fehlgeschlagen). Vom
@@ -44,5 +47,11 @@ Pegel.
   <https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf>
   (abgerufen am 2026-07-25). Lokale Kopie:
   [`references/datasheets/bts7960-infineon.pdf`](datasheets/bts7960-infineon.pdf).
+- DS3231-Familie:
+  <https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231.pdf>
+  (für die variantenneutrale I2C-Wiring-Prüfung)
+- TI 74HC244:
+  <https://www.ti.com/lit/ds/symlink/sn74hc244.pdf>
+  (nur relevant, wenn der reale IBT-2 diesen Eingangsbuffer verwendet)
 - FT232RL: <https://ftdichip.com/products/ft232rl/> (Abrufversuch am
   2026-07-25; automatisierter Abruf mit HTTP 403 abgelehnt)
