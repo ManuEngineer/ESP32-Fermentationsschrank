@@ -45,15 +45,24 @@ ausschließlich dieser Plan.
   `device_platform`, `device_platform_esp_idf` bleiben fachlich unverändert.
   Diese Korrektur ist ausschließlich Diagnose-Infrastruktur.
 - **Compile-Time-Isolation aus Release bleibt erhalten** und wird nach jeder
-  Änderung erneut nachgewiesen (Compile-Command-/Symbolprüfung wie in
-  `docs/ISSUE_29_MEASUREMENTS.md`, Abschnitt "Compile-time-Isolation").
+  Änderung erneut als eigenes Ergebnisgate nachgewiesen:
+
+```text
+BRINGUP_HAS_ISSUE29_PROBE=YES
+RELEASE_HAS_ISSUE29_PROBE=NO
+NATIVE_HAS_ISSUE29_PROBE=NO
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO
+```
+
+  (Compile-Command-/Symbolprüfung, Methodik wie in
+  `docs/ISSUE_29_MEASUREMENTS.md`, Abschnitt "Compile-time-Isolation".)
 - **Fault-Seam unverändert**, sofern kein aus Abschnitt 3/4 tatsächlich
-  nachgewiesener Befund ihn betrifft. `main/issue_29_bringup_fault_seam.hpp`
-  (`lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp`) wird nicht
+  nachgewiesener Befund ihn betrifft.
+  `lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp` wird nicht
   vorsorglich angefasst.
 - **Reihenfolge:** Erst 3 unabhängige reale Boots à mindestens 35 s, nachdem
-  das digitale Stack-Gate aus Abschnitt 6.2/6.3 `PASS` ist. Pegelmessungen
-  erst danach (Abschnitt 6.5).
+  das digitale Stack-Gate aus Abschnitt 4.1–4.5 `PASS` ist. Pegelmessungen
+  erst danach (Abschnitt 4.8).
 - **#25 bleibt blockiert**, bis Issue #29 Owner-final entschieden ist.
 
 ### Unbedingtes Stop-Gate
@@ -130,23 +139,27 @@ Aufrufphasen von `probeTask()`/`runProbe()` ergibt:
 | Phase | Pfad (aus dem exakt zugehörigen aktuellen Build statisch hergeleitet) | Kumulierte Bytes | vs. `kProbeTaskStackBytes` (67584) |
 |---|---|---:|---|
 | P0 | `probeTask` Eintritt/Control (`probeTask` 48 + `waitForTaskControl` 32) | 80 | unauffällig |
-| P1 | `runProbe`→`maximalStartRequest`(256)→`maximalProgram`(320)→`repeatedUtf8`(32) | 66368 | −1216 |
-| P2 | `runProbe`→`sampleResources`(32) — **der real abgestürzte Aufruf** | 65792 | −1792 (Rest für `heap_caps_get_largest_free_block`/`heap_caps_get_info`/`multi_heap_get_info_impl`/`tlsf_walk_pool` **unvermessen**, siehe Abschnitt 4) |
+| P1 | `runProbe`→`maximalStartRequest`(256)→`maximalProgram`(320)→`repeatedUtf8`(32) | 66368 (Teilsumme) | **unvollständig, kein PASS-Beleg** — `repeatedUtf8`s `std::string`-Aufbau (Allokation/`_M_construct`/`append`) ist nicht vollständig nachverfolgt; nach 4.1.1 bleibt jede darin noch unaufgelöste Kante `BLOCKED`, bis sie entweder in den bereits instrumentierten `.su`-Daten auftaucht oder als geschlossene Boundary begründet ist |
+| P2 | `runProbe`→`sampleResources`(32) — **der real abgestürzte Aufruf** | 65792 (Teilsumme) | −1792 gegenüber der Teilsumme, aber Rest für `heap_caps_get_largest_free_block`/`heap_caps_get_info`/`multi_heap_get_info_impl`/`tlsf_walk_pool` **unvermessen** (siehe 4.2) — kein PASS-Beleg |
 | P3 | `runProbe`→`decideProgramStart`(32)→`decideProgramStartInto`(3072)→`ActiveRun::start`(3056) | **71920** | **+4336** |
-| P4 | `runProbe`→`applyCandidateForResourceProbe`(32)→`applyRunCommand`(32) | 65824 | −1760 (weitere Verschachtelung unter `applyRunCommand` noch nicht abschließend geprüft) |
+| P4 | `runProbe`→`applyCandidateForResourceProbe`(32)→`applyRunCommand`(32) | 65824 (Teilsumme) | **unvollständig, kein PASS-Beleg** — `applyRunCommand`s eigene `.ci`-Kanten sind noch nicht abschließend geprüft |
 | P5 | `runProbe`→`persistFreshStartCommand`(32)→`orchestrator.persistCommand`(304)→`coordinator.persistCommand`(688)→`coordinator.result`(32) — die bisher einzig geprüfte Kette | 66816 | −768 |
 | P6 | `runProbe`→`unchangedStandbyState`(4816) | **70576** | **+2992** |
 
 (Jede Zeile: `probeTask`(48) + `runProbe`(65712) + die genannte Kette; alle
 Frames `static`, alle zitierten Kanten im `.ci`-Callgraph vorhanden.)
 
-**P3 ist der aktuell bekannte schlechteste Pfad** — 4336 Bytes über der
-kompilierten Diagnose-Taskgröße, ohne dass dafür überhaupt der Heap-Walk
-erreicht werden muss. P6 liegt ebenfalls über der konfigurierten Größe. Diese
-Tabelle ist ausdrücklich **vorläufig und nicht abschließend**: P2 (unvermessener
-Heap-Walk-Anteil) und P4 (nicht vollständig verschachtelt geprüft) können den
-tatsächlichen globalen Maximalpfad noch verschieben. Sie beweist aber bereits
-empirisch, dass ein Zwei-Pfad-Vergleich nicht genügt, und bestätigt
+**P3 ist der aktuell bekannte schlechteste vollständig geschlossene Pfad** —
+4336 Bytes über der kompilierten Diagnose-Taskgröße, ohne dass dafür
+überhaupt der Heap-Walk erreicht werden muss. P6 liegt ebenfalls über der
+konfigurierten Größe. Diese Tabelle ist ausdrücklich **vorläufig und nicht
+abschließend**: P1 (unvollständig verfolgter `std::string`-Aufbau), P2
+(unvermessener Heap-Walk-Anteil) und P4 (nicht vollständig verschachtelt
+geprüft) sind nach der Fail-closed-Politik aus 4.1.1 kein `PASS`-Beleg und
+können den tatsächlichen globalen Maximalpfad noch verschieben. Nur P0, P3,
+P5 und P6 gelten mit den heute vorhandenen Artefakten als vollständig
+geschlossen. Die Tabelle beweist aber bereits empirisch, dass ein
+Zwei-Pfad-Vergleich nicht genügt, und bestätigt
 `PRIMARY_DIAGNOSIS=STALE_ISSUE29_DIAGNOSTIC_STACK_BUDGET` zusätzlich zum
 bereits bekannten P5-Befund.
 
@@ -223,6 +236,81 @@ CURRENT_MAX_PROBE_TASK_CUMULATIVE_BYTES=<bytes>
 Der manuelle Befund aus Abschnitt 3 (P3 = 71920 Bytes) ist die Untergrenze für
 diesen künftigen automatischen Witness, kein Ersatz dafür.
 
+#### 4.1.1 Fail-closed bei unbekannten Callgraph-Grenzen
+
+"Alle Pfade" ist nur dann vollständig, wenn der Analyzer nicht still an einer
+uninstrumentierten oder indirekten Kante endet. Über die in 4.2 konkret
+benannte ESP-IDF-`heap`-Instrumentierung hinaus können beim automatischen
+Traversieren weitere Kanten auf Bibliotheks-/RTOS-/libc-/C++-Runtime-Funktionen
+ohne kompilierten `.su`-Frame treffen (z. B. FreeRTOS-Kernel-Funktionen wie
+`xTaskNotifyWait`/`vTaskDelay`, `esp_get_free_heap_size`,
+`esp_get_minimum_free_heap_size`, `ESP_LOGI`s zugrunde liegende
+Log-/Formatierungskette), ebenso auf virtuelle/indirekte Aufrufe oder
+Callgraph-Zyklen. Der erweiterte Analyzer muss deshalb verbindlich:
+
+```text
+REACHABLE_EDGE_WITHOUT_STACK_FRAME=BLOCKED
+UNRESOLVED_INDIRECT_CALL=BLOCKED
+UNBOUNDED_OR_UNKNOWN_VIRTUAL_TARGET_SET=BLOCKED
+REACHABLE_CALLGRAPH_CYCLE=BLOCKED
+```
+
+durchsetzen. `external target has no .su -> leaf` gilt **nie** stillschweigend
+als vollständiger Pfad. Eine Ausnahme gilt ausschließlich, wenn eine solche
+Grenze **explizit** als analysierte externe Boundary geführt wird und ihre
+Stackwirkung nachvollziehbar begrenzt ist (z. B. durch gezielte, punktuelle
+Instrumentierung dieser konkreten reachable-aber-uninstrumentierten
+Komponente nach demselben Muster wie 4.2 für `heap` — KISS: nicht pauschal
+alle ESP-IDF-/libc-Komponenten instrumentieren, sondern nur die tatsächlich
+als reachable befundenen).
+
+**Geschlossene virtuelle Zielmengen sind kein `UNBOUNDED_OR_UNKNOWN_VIRTUAL_TARGET_SET`:**
+`runProbe()` ruft bereits heute virtuell über drei `device_platform`-
+Schnittstellen auf: `IStateStore::read`/`write` (via `RunPersistenceCoordinator`),
+`IBidirectionalActuatorSink::setForward`/`setReverse` und
+`IBinaryOutputSink::setEnabled` (via `ActuatorPlanSinkDriver`). An jeder
+dieser drei Aufrufstellen ist die Zielmenge **innerhalb dieses Diagnose-Tasks
+geschlossen und vollständig aufzählbar**: `BringupStateStore`,
+`AllOffBidirectionalSink` und `AllOffBinarySink` sind `final`-Klassen, in
+derselben anonymen Namespace-Ebene von `main/issue_29_bringup_probe.cpp`
+definiert wie ihr einziger Konstruktionsort, und keine andere Implementierung
+dieser Schnittstellen wird von `runProbe()` je referenziert. Alle sechs
+Überschreibungen sind bereits als `.su`-Frames vermessen (`write`/`read` je
+32 Bytes, `setForward`/`setReverse` je 32 Bytes, `setEnabled` 32 Bytes). Für
+genau diese drei Aufrufstellen gilt deshalb als analysierte, begrenzte
+Boundary: Stackwirkung = `max(Frame aller aufgezählten Überschreibungen)`
+(hier: 32 Bytes je Aufrufstelle), statt `BLOCKED`. Jede andere virtuelle
+Aufrufstelle, deren Zielmenge nicht auf dieselbe Weise geschlossen und
+vollständig aufzählbar ist, bleibt `UNBOUNDED_OR_UNKNOWN_VIRTUAL_TARGET_SET=
+BLOCKED`.
+
+**Safety-Buffer, präzise abgegrenzt:**
+
+```text
+STATIC_ANALYZED_PATH_BYTES=<vollständig analysierter/bounded Anteil, aus P0-P6>
+SAFETY_BUFFER_BYTES=4096
+SAFETY_BUFFER_PURPOSE=Task-Einstieg/RTOS-Rahmen und kleine Compiler-/
+                       Instrumentierungsvariation (historisch begründet in
+                       docs/ISSUE_29_BUILD_REPORT.md); kein Freipass fuer
+                       unanalysierte oder unbegrenzte externe Frames
+```
+
+`STATIC_ANALYZED_PATH_BYTES` ist dieselbe Größe wie `kMeasuredCallPathBytes`
+(Abschnitt 4.3, die im Quelltext kompilierte Konstante) und wie
+`CURRENT_MAX_PROBE_TASK_CUMULATIVE_BYTES` (oben, die vom erweiterten Skript
+automatisch ermittelte Summe) — drei Namen für dieselbe Zahl in
+unterschiedlichem Kontext (Konzept hier / Quelltextkonstante / Skriptausgabe),
+nicht drei unabhängige Größen. `kMeasuredCallPathSafetyBufferBytes` deckt
+ausschließlich den oben genannten, eng begrenzten Zweck ab. Ein externer
+Aufruf, der weder statisch analysiert noch als geschlossene virtuelle
+Zielmenge (siehe oben) noch anderweitig belastbar begrenzt werden kann, wird
+**nicht** stillschweigend in den Safety-Buffer verrechnet:
+
+```text
+STACK_GATE=BLOCKED
+STOP_OWNER_REVIEW
+```
+
 ### 4.2 ESP-IDF-Heap-Instrumentierung: project-local, kein Vendor-Patch
 
 ```text
@@ -255,7 +343,11 @@ STOP_OWNER_REVIEW
 ```
 
 Ohne diese Instrumentierung bleibt P2 (Abschnitt 3) strukturell unvollständig
-und `4.1`s globaler Witness kann nicht als vollständig gelten.
+und `4.1`s globaler Witness kann nicht als vollständig gelten. `heap` ist die
+aktuell einzige konkret bekannte reachable-aber-uninstrumentierte Komponente;
+die Fail-closed-Politik aus 4.1.1 gilt gleichermaßen für jede weitere
+Komponente, die der erweiterte Analyzer als reachable, aber ohne `.su`-Frame
+befindet.
 
 ### 4.3 Staleness-Gate: beide Konstanten und ihre Ableitung, nicht nur eine Ungleichung
 
@@ -314,13 +406,36 @@ Hardwareschritt.
 
 ### 4.6 Erneute actor-free Hardware-Requalifikation nach dem Fix
 
-Erst nach 4.1–4.5 mit `PASS`:
+Erst nach 4.1–4.5 mit `PASS`.
+
+**Hardware-Provenienz-Gate, vor dem ersten Flash:**
+
+```text
+SOURCE_TREE_CLEAN=YES
+IMPLEMENTATION_SOURCE_SHA=<exact>
+ESP32_BRINGUP_BUILD_SOURCE_SHA=<same exact>
+ELF_SHA256=<exact>
+APP_EMBEDDED_SOURCE_SHA=<same exact>
+```
+
+`ESP32_BRINGUP_BUILD_SOURCE_SHA` und `APP_EMBEDDED_SOURCE_SHA` (aus
+`APP_SOURCE_GIT_SHA`, real im Bootlog als `source git sha:` sichtbar) müssen
+mit `IMPLEMENTATION_SOURCE_SHA` exakt übereinstimmen. Kein Hardware-`PASS`
+auf einem Docs-/Code-Mischstand mit unklarer Firmware-SHA.
 
 1. `esp32_bringup` (ohne #90-Harness) auf demselben unbelasteten Board
    flashen;
 2. mindestens drei voneinander unabhängige reale Boots, je mindestens
-   35-s-Smoke, aktorfrei, ohne 12-V-Verbraucher;
-3. für **jeden** der drei erfolgreichen Boots mindestens dokumentieren:
+   35-s-Smoke, aktorfrei, ohne 12-V-Verbraucher; für **jeden** Boot zusätzlich:
+
+```text
+BOOT_SOURCE_SHA=<same exact implementation sha as above>
+PROFILE=esp32_bringup
+ISSUE90_HARNESS=ABSENT
+```
+
+3. für **jeden** der drei erfolgreichen Boots zusätzlich mindestens
+   dokumentieren:
 
 ```text
 CONFIGURED_PROBE_TASK_STACK_BYTES=
@@ -353,12 +468,65 @@ benannten Befund.
 4. bei erneutem Panic: sofort STOP, Befund dokumentieren, keinen weiteren
    Fixversuch ohne neue Owner-Freigabe.
 
-### 4.7 Pegelmessungen erst nach stabilem 3/3-Smoke
+### 4.7 Root-Cause-Disposition nach der Requalifikation
+
+`ROOT_CAUSE=UNRESOLVED` gilt verbindlich vor jeder Implementierung
+(Abschnitt 2/3). Dieser Abschnitt legt fest, was **nach** dem Stackfix aus
+4.1–4.5 und der erneuten Requalifikation aus 4.6 gilt, unter der Bedingung
+eines einzigen technisch relevanten Runtime-Unterschieds
+(`kProbeTaskStackBytes` aus dem neu validierten, vollständigen Bound; die
+Analyse-Compile-Flags selbst — `-fstack-usage`/`-fcallgraph-info=su` und ihre
+Erweiterung auf `heap` bzw. weitere reachable Komponenten — ändern keine
+Produktsemantik).
+
+**Wenn 3/3 Boots `PASS` sind:**
+
+Nur wenn:
+
+```text
+OLD_BASELINE_PANIC_REPRODUCED=YES
+NEW_VALIDATED_STACK_BUILD=3_OF_3_PASS
+PANIC=NO
+STACK_OVERFLOW=NO
+ACTOR_RELEASE=false
+```
+
+darf die Owner-Abschlussbewertung den Befund als kausal bestätigt einstufen:
+
+```text
+ROOT_CAUSE=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+```
+
+oder, falls die Evidenz trotz 3/3 nur eine Mitigation belegt, ohne den
+ursprünglichen Kausalmechanismus zweifelsfrei zu beweisen:
+
+```text
+ROOT_CAUSE=NOT_FULLY_PROVEN
+MITIGATION=PASS
+OWNER_DECISION_REQUIRED=YES
+```
+
+Issue #29 wird **nicht automatisch geschlossen**, solange
+`ROOT_CAUSE=UNRESOLVED` weitergeführt wird; die Disposition ist eine
+Owner-Entscheidung, keine automatische Ableitung aus 3/3 `PASS` allein.
+
+**Wenn der Panic erneut auftritt:**
+
+```text
+ROOT_CAUSE=UNRESOLVED
+STACK_BUDGET_CORRECTION=INSUFFICIENT
+STOP
+```
+
+Keine weitere Änderung ohne neuen, separat freigegebenen Owner-Review.
+
+### 4.8 Pegelmessungen erst nach stabilem 3/3-Smoke
 
 Die in `docs/tasks/issue-29-implementation-plan.md` offenen Pegelmessungen
 (`POWER_ON`, `RESET_EN`, `BOOTLOADER_IO0`, `ACTOR_FREE_NORMAL_BOOT`) werden
-erst nach `BOOT_REQUALIFICATION=3_OF_3_PASS` gemäß 4.6 abgearbeitet. Sie sind
-kein Ersatz für die Panic-Behebung und werden nicht vorgezogen.
+erst nach `BOOT_REQUALIFICATION=3_OF_3_PASS` gemäß 4.6 und der Disposition
+aus 4.7 abgearbeitet. Sie sind kein Ersatz für die Panic-Behebung und werden
+nicht vorgezogen.
 
 ## 5. Ausdrückliche Nicht-Ziele dieses Korrekturplans
 
@@ -387,12 +555,18 @@ Root-Cause-Nachweis.
   `HEAP_WALK_ROOT_CAUSE=NOT_CLAIMED` bleiben bestehen);
 - vollständige Stackanalysegrenze festgelegt (Abschnitt 4.1, P0–P6, kein
   Zwei-Pfad-Vergleich mehr);
+- Fail-closed-Politik für unbekannte Callgraph-Grenzen und präzise
+  abgegrenzter Safety-Buffer festgelegt (Abschnitt 4.1.1);
 - Instrumentierungspfad für den unvermessenen Heap-Walk-Anteil festgelegt
-  (Abschnitt 4.2, project-local, kein Vendor-Patch);
+  (Abschnitt 4.2, project-local, kein Vendor-Patch, gilt als Muster für jede
+  weitere reachable-aber-uninstrumentierte Komponente);
 - Staleness-Gate vollständig (Abschnitt 4.3: beide Konstanten und ihre
   Ableitung, nicht nur eine Ungleichung);
-- Hardware-Requalifikation eindeutig (Abschnitt 4.6, inklusive Runtime-HWM);
-- Pegelgate eindeutig (Abschnitt 4.7);
+- Hardware-Requalifikation eindeutig (Abschnitt 4.6, inklusive
+  Hardware-Provenienz-Gate und Runtime-HWM);
+- Root-Cause-Disposition für 3/3-`PASS` und erneuten Panic festgelegt
+  (Abschnitt 4.7);
+- Pegelgate eindeutig (Abschnitt 4.8);
 - keine materielle technische Entscheidung offen.
 
 ### 6.2 Implementation / Issue Acceptance (erst nach Ownerfreigabe)
@@ -400,9 +574,11 @@ Root-Cause-Nachweis.
 - digitale Stack-/Build-Gates (4.1–4.5) `PASS`;
 - korrigierter Diagnose-Task (`kMeasuredCallPathBytes`/`kProbeTaskStackBytes`
   aus dem realen, vollständigen `CURRENT_MAX_PROBE_TASK_CUMULATIVE_BYTES`);
+- Hardware-Provenienz-Gate `PASS` vor dem ersten Requalifikationsflash;
 - 3/3 realer Smoke `PASS` (4.6);
 - Runtime-HWM für alle drei Boots dokumentiert;
-- danach Pegelgate (4.7);
+- Root-Cause-Disposition gemäß 4.7 vom Owner getroffen;
+- danach Pegelgate (4.8);
 - Owner Final Review.
 
 ## 7. Owner-Gate
