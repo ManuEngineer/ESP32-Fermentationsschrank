@@ -26,6 +26,11 @@ INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 OLD_96K_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
 OLD_96K_ARTIFACT_STATUS=HISTORICAL_NONQUALIFYING
 CORRECTED_96K_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+IMPLEMENTATION_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+ESP32_BRINGUP_BUILD_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+APP_EMBEDDED_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
+BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
 OLD_PROBE_TASK_STACK_BYTES=67584
 NEW_PROBE_TASK_STACK_BYTES=98304
 ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=STACK_SIZE
@@ -48,11 +53,13 @@ ARCHITECTURE_GATES=PASS
 SECRET_SCAN=PASS
 QUALITY_GATES=PASS
 CI_ARTIFACT_SCAN_COVERAGE=PASS
-EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAIL_PRIVATE_ABSOLUTE_PATHS (14328 findings)
+PLAN_REQUIRED_DIGITAL_GATES=PASS
+EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAILED_PRIVATE_ABSOLUTE_PATHS
+EXACT_LOCAL_GENERATED_ARTIFACT_PRIVATE_PATH_FINDINGS=14328
+EXACT_LOCAL_GENERATED_ARTIFACT_SECRET_FINDINGS=0
 CI_PATH_NORMALIZED_COPY_DIAGNOSTIC=NOT_RUN
 GITHUB_CI_ARTIFACT_SCAN=NOT_RUN_DRAFT
 GIT_DIFF_CHECK=PASS
-CORRECTED_96K_DIGITAL_GATES=PASS_WITH_LOCAL_ARTIFACT_PATH_FINDINGS
 
 BRINGUP_HAS_ISSUE29_PROBE=YES
 RELEASE_HAS_ISSUE29_PROBE=NO
@@ -78,11 +85,13 @@ MERGE=NO
 OWNER_CORRECTION_REVIEW_REQUIRED=YES
 ```
 
-Der exakte lokale Artefakt-Scan wurde ohne Normalisierung auf den erzeugten
-Textartefakten ausgeführt und fand ausschließlich die vom Checker bewusst
-abgewiesenen privaten absoluten lokalen Pfade. Er ist kein PASS. Ein
-normalisierter Kopienscan wurde nicht als Ersatznachweis ausgeführt; die
-tatsächliche GitHub-CI-Artefaktprüfung ist auf dem Draft-PR noch `NOT_RUN`.
+`PLAN_REQUIRED_DIGITAL_GATES=PASS` bezeichnet ausschließlich die im
+freigegebenen KISS-V2-Plan geforderten lokalen Gates dieses Hardware-Schnitts.
+Der exakte lokale Originalartefakt-Scan ist davon getrennt: Er fand 14328
+private absolute Pfade, aber keine Geheimnistreffer, und ist deshalb
+`FAILED_PRIVATE_ABSOLUTE_PATHS`. Ein normalisierter Kopienscan wurde nicht als
+Ersatznachweis ausgeführt; die tatsächliche GitHub-CI-Artefaktprüfung ist auf
+dem Draft-PR noch `NOT_RUN`.
 
 ## Historischer KISS-Pivot V1 (SUPERSEDED_BY_KISS_V2)
 
@@ -387,7 +396,7 @@ Capture-/Reset-Prozedur erforderlich.
 Die vorgelegte Host-Prozedur steht kanonisch im Messprotokoll: Port vor dem
 Öffnen mit DTR/RTS=`false` und ohne Flow-Control vorbereiten, Capture bei
 eindeutiger nichtzählender Bootgrenze öffnen, Puffer leeren und anschließend
-genau einen RTS-Resetpuls auslösen. Im qualifizierenden Fenster ist exakt eine
+genau einen 100-ms-RTS-Resetpuls auslösen. Im qualifizierenden Fenster ist exakt eine
 `rst:`-Sequenz zulässig; jede Vorab-/Zusatzsequenz oder abweichende
 Provenienz invalidiert den Run und stoppt Boot 2/3. Alle drei späteren Boots
 müssen denselben korrigierten ELF-/BIN-Hash verwenden.
@@ -395,9 +404,19 @@ müssen denselben korrigierten ELF-/BIN-Hash verwenden.
 ```text
 CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
 HOST_PROCEDURE_HARDWARE_REVALIDATED=NO
+CANONICAL_RESET_METHOD=RTS_SINGLE_PULSE
+DTR_DURING_RESET=false
+RTS_ASSERTED_LEVEL=true
+RTS_DEASSERTED_LEVEL=false
+RTS_RESET_PULSE_MS=100
+QUALIFYING_WINDOW_BEGINS=AFTER_CAPTURE_READY_BUFFER_CLEARED_AND_CANONICAL_RTS_PULSE
+UART_DATA_BEFORE_QUALIFYING_WINDOW=NOT_COUNTED
+QUALIFYING_RST_SEQUENCE_COUNT=1
 QUALIFYING_WINDOW_EXPECTED_RST_LINES=1
 INVALID_EXTRA_OR_PRECANONICAL_RST=YES
+INVALID_UNEXPECTED_DTR_OR_RTS_TRANSITION=YES
 INVALID_RUN_STOPS_BOOT_2_AND_BOOT_3=YES
+QUALIFYING_BOOT_ARTIFACT_REQUIREMENT=SAME_CORRECTED_ELF_AND_BIN_HASH_FOR_ALL_3
 ```
 
 ## `esp32_bringup`

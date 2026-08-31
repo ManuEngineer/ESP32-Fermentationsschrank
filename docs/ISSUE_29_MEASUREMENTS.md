@@ -28,6 +28,11 @@ INTEGRATION_BASE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 OLD_96K_SOURCE_SHA=3d7b02260e18dd203cd609d97cc66fa96e435cdf
 OLD_96K_ARTIFACT_STATUS=HISTORICAL_NONQUALIFYING
 CORRECTED_96K_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+IMPLEMENTATION_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+ESP32_BRINGUP_BUILD_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+APP_EMBEDDED_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
+BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
 OLD_PROBE_TASK_STACK_BYTES=67584
 NEW_PROBE_TASK_STACK_BYTES=98304
 ONLY_RUNTIME_RELEVANT_PROBE_CHANGE=STACK_SIZE
@@ -40,10 +45,12 @@ FAULT_SEAM_CHANGED=NO
 PERSISTENCE_CHANGED=NO
 GPIO_SSOT_CHANGED=NO
 
-CORRECTED_96K_DIGITAL_GATES=PASS_WITH_LOCAL_ARTIFACT_PATH_FINDINGS
 CORRECTED_96K_ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
 CORRECTED_96K_BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
-EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAIL_PRIVATE_ABSOLUTE_PATHS (14328 findings)
+PLAN_REQUIRED_DIGITAL_GATES=PASS
+EXACT_LOCAL_GENERATED_ARTIFACT_SCAN=FAILED_PRIVATE_ABSOLUTE_PATHS
+EXACT_LOCAL_GENERATED_ARTIFACT_PRIVATE_PATH_FINDINGS=14328
+EXACT_LOCAL_GENERATED_ARTIFACT_SECRET_FINDINGS=0
 CI_PATH_NORMALIZED_COPY_DIAGNOSTIC=NOT_RUN
 GITHUB_CI_ARTIFACT_SCAN=NOT_RUN_DRAFT
 
@@ -61,10 +68,12 @@ MERGE=NO
 OWNER_CORRECTION_REVIEW_REQUIRED=YES
 ```
 
-Der exakte lokale Originalartefakt-Scan ist kein PASS: Er fand die vom
-Checker absichtlich beanstandeten privaten absoluten lokalen Pfade. Es wurde
-kein normalisierter Kopienscan als Ersatz für dieses Ergebnis verwendet.
-GitHub-CI ist auf dem Draft-PR nicht gelaufen.
+`PLAN_REQUIRED_DIGITAL_GATES=PASS` bezeichnet ausschließlich die im
+freigegebenen KISS-V2-Plan geforderten lokalen Gates dieses Hardware-Schnitts.
+Der exakte lokale Originalartefakt-Scan ist davon getrennt und
+`FAILED_PRIVATE_ABSOLUTE_PATHS`: Er fand 14328 private absolute Pfade, aber
+keine Geheimnistreffer. Es wurde kein normalisierter Kopienscan als Ersatz
+verwendet. GitHub-CI ist auf dem Draft-PR nicht gelaufen.
 
 ## Historischer digitaler 96-KiB-Implementierungsnachweis vor erstem Hardwareversuch (2026-08-31, SUPERSEDED_BY_CORRECTED_ARTIFACT)
 
@@ -267,9 +276,11 @@ Testfenster auf genau einen eindeutig ausgelösten Boot begrenzen.
    Vor dem kanonischen Trigger wird der Puffer geleert und es darf keine
    `rst:`-Zeile im qualifizierenden Fenster vorliegen.
 4. Erst wenn Capture, Zeitstempel und Rohlog bereit sind, genau einen
-   kanonischen Reset auslösen: DTR bleibt `false`; RTS wird einmal für die
-   festgelegte Pulsdauer auf `true` und anschließend wieder auf `false`
-   gesetzt. Kein weiterer DTR-/RTS-Wechsel ist zulässig.
+   kanonischen Reset auslösen: DTR bleibt `false`; RTS wird genau 100 ms auf
+   `true` und anschließend auf `false` gesetzt. Dies entspricht der bereits
+   dokumentierten `esptool.reset.HardReset`-Sequenz des verwendeten
+   non-flow-control-FTDI-/ESP32-Autoresetpfads. Kein weiterer DTR-/RTS-Wechsel
+   ist zulässig.
 5. Im qualifizierenden Fenster wird genau eine `rst:`-Sequenz und genau ein
    App-Start mit Profil, Source-SHA, `ACTUATOR_POLICY=LOCKED_FOR_BRINGUP` und
    `REAL_ACTUATORS=DISABLED` erwartet.
@@ -287,8 +298,17 @@ Testfenster auf genau einen eindeutig ausgelösten Boot begrenzen.
 ```text
 CAPTURE_RESET_PROCEDURE=READY_FOR_OWNER_REVIEW
 HOST_PROCEDURE_HARDWARE_REVALIDATED=NO
+CANONICAL_RESET_METHOD=RTS_SINGLE_PULSE
+DTR_DURING_RESET=false
+RTS_ASSERTED_LEVEL=true
+RTS_DEASSERTED_LEVEL=false
+RTS_RESET_PULSE_MS=100
+QUALIFYING_WINDOW_BEGINS=AFTER_CAPTURE_READY_BUFFER_CLEARED_AND_CANONICAL_RTS_PULSE
+UART_DATA_BEFORE_QUALIFYING_WINDOW=NOT_COUNTED
+QUALIFYING_RST_SEQUENCE_COUNT=1
 QUALIFYING_WINDOW_EXPECTED_RST_LINES=1
 INVALID_EXTRA_OR_PRECANONICAL_RST=YES
+INVALID_UNEXPECTED_DTR_OR_RTS_TRANSITION=YES
 INVALID_RUN_STOPS_BOOT_2_AND_BOOT_3=YES
 QUALIFYING_BOOT_ARTIFACT_REQUIREMENT=SAME_CORRECTED_ELF_AND_BIN_HASH_FOR_ALL_3
 ```
