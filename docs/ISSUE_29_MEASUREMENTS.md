@@ -624,6 +624,32 @@ UNRESOLVED_CALLGRAPH_CYCLES=0
 STACK_GATE=BLOCKED
 ```
 
+Der Witness-Pfad wird jetzt über `c++filt` gegen das jeweils gemangelte
+Symbol demangelt statt über die (bei langen Templatesignaturen abgeschnittene
+und dadurch teils nicht unterscheidbare) `.ci`-Pretty-Printer-Zeile
+angezeigt — sonst wäre der Pfad nicht auditierbar gewesen. Vollständiger,
+auditierbarer Pfad:
+
+```text
+probeTask(void*)
+  -> runProbe(ProbeContext&)
+  -> decideProgramStart(const RunCommandState&, const ProgramStartRequest&)
+  -> decideProgramStartInto(..., CommandDecision&)
+  -> ActiveRun::start(const ProgramDocument&, ProgramSourceKind, unsigned long)
+  -> {anonymous}::makeInitialEffectiveRunValues(...)
+  -> validateProgram(const ProgramDocument&, ValidationPurpose)
+  -> {anonymous}::validateOptionalDouble(...)
+  -> {anonymous}::addError(ValidationResult&, ValidationErrorCode, const char*)
+  -> vector<ValidationError,...>::emplace_back<ValidationError>(ValidationError&&)
+  -> vector<ValidationError,...>::_M_realloc_append<ValidationError>(ValidationError&&)
+  -> vector<ValidationError,...>::_M_check_len(unsigned int, const char*) const
+```
+
+`emplace_back` und `_M_realloc_append` sind zwei tatsächlich verschiedene
+Funktionen (verifiziert per gemangeltem Symbol); die vorherige,
+label-basierte Anzeige zeigte sie fälschlich identisch an. Kein Zyklus, die
+72224-Byte-Summe war bereits vor dieser Anzeigekorrektur korrekt.
+
 Der neue, vollständig automatische Witness-Pfad (72224 Bytes) übersteigt
 bereits den in Abschnitt 3 als "worst fully-closed path known" dokumentierten
 P3-Handbefund (71920 Bytes) und bestätigt damit den Plantext ("Der manuelle
@@ -632,6 +658,16 @@ Befund aus Abschnitt 3 ... ist die Untergrenze ..., kein Ersatz dafür.").
 unten aufgeführten unaufgelösten Grenzen abbricht, bevor tiefere Pfade
 (insbesondere durch `operator new`/`std::string`-Reallokation) vollständig
 durchlaufen sind.
+
+**Machbarkeits-Hinweis (nicht blockierend):** Selbst der hypothetische,
+konservativ gerundete Taskgrößenbedarf auf Basis des heutigen (noch
+unvollständigen) Witness — `align_up(72224 + 4096, 1024) = 76800` Bytes —
+liegt deutlich unter dem historisch geloggten
+`before_task_create largest_free_block_bytes=172032` (Boot 1 dieser
+Requalifikation, siehe UART-Auszug oben). Ein Erreichen von `STACK_GATE=PASS`
+würde also, nach heutigem Zwischenstand, aller Voraussicht nach nicht an der
+`xTaskCreate`-Heap-Allokation scheitern — diese Einschätzung bleibt vorläufig,
+da `72224` selbst noch keine vollständige Obergrenze ist.
 
 Die 32 eindeutigen unaufgelösten Zielsymbole gliedern sich wie folgt:
 
@@ -650,28 +686,51 @@ cxx:       __cxa_guard_acquire, __cxa_guard_release
 esp_libc/newlib: __assert_func, strlen
 ```
 
-**(B) Toolchain-vorkompiliert, kein Quellcode im Projekt oder unter
-`$IDF_PATH` verfügbar — strukturell nicht durch das gleiche
-CMake-Instrumentierungsmuster schließbar:**
+**(B) Kein lokal instrumentierbarer Quellcode in einem der drei bereits
+instrumentierten Components — zwei technisch unterschiedliche Unterfälle:**
+
+**(B1) Nicht-Template, garantiert vorkompiliert (`libsupc++`/`picolibc`,
+kein Quellcode im Projekt oder unter `$IDF_PATH`):**
 
 ```text
-libstdc++ (libsupc++/functexcept, precompiled .a):
-  _Znwj, _ZdlPvj, _ZSt17__throw_bad_allocv, _ZSt19__throw_logic_errorPKc,
-  _ZSt20__throw_length_errorPKc, _ZSt28__throw_bad_array_new_lengthv,
-  sowie 10 basic_string-Templatemethoden ohne lokale Instanziierung mit
-  Frame-Daten (_M_construct, _M_create, _M_dispose, _M_assign, reserve,
-  append (x2), swap, _S_copy, Move-Konstruktor/-Zuweisung)
-picolibc (precompiled): __cxa_atexit
+_Znwj, _ZdlPvj, _ZSt17__throw_bad_allocv, _ZSt19__throw_logic_errorPKc,
+_ZSt20__throw_length_errorPKc, _ZSt28__throw_bad_array_new_lengthv,
+__cxa_atexit
 ```
 
 `_Znwj` (`operator new`) ist per objdump bestätigt **nicht** leaf: es ruft
 `malloc` sowie `__wrap___cxa_allocate_exception`/`__wrap___cxa_throw` real
-auf (`callx8`), trotz `CONFIG_COMPILER_CXX_EXCEPTIONS` nicht gesetzt. Eine
-Grenzbestimmung für (B) würde entweder eine transitive
-Binär-Callgraph-Analyse durch mehrere vorkompilierte Bibliotheksebenen
-erfordern (das im Plan ausdrücklich verbotene "neue generische
-Analyseplattform", KISS-widrig) oder bliebe eine Annahme statt eines
-Nachweises — genau das, was "Nicht durch Annahmen umgehen" ausschließt.
+auf (`callx8`), trotz `CONFIG_COMPILER_CXX_EXCEPTIONS` nicht gesetzt. Für
+diese 7 Symbole ist eine Grenzbestimmung ohne Annahme derzeit nicht möglich.
+
+**(B2) 10 `basic_string<char>`-Templatemethoden — Ursache geprüft, nicht
+abschließend geklärt:**
+
+```text
+_M_construct, _M_create, _M_dispose, _M_assign, reserve, append (x2), swap,
+_S_copy, Move-Konstruktor, Move-Zuweisung
+```
+
+Hypothese geprüft: `bits/c++config.h` setzt für diesen (Assertions-/`-Og`-)
+Toolchainbuild `_GLIBCXX_EXTERN_TEMPLATE=-1`, was laut Kommentar dort
+ausdrücklich "disallows extern templates only in basic_string" — d. h. die
+`extern template class basic_string<char>`-Deklaration, die sonst eine
+lokale Instanziierung unterdrückt, ist hier **bewusst deaktiviert** und
+sollte lokale Instanziierung mit echtem `-fstack-usage`-Frame erlauben.
+Empirisch bleibt es dennoch bei `shape: ellipse` (kein Frame) in **jeder**
+der vier TUs, die diese Methoden aufrufen — obwohl eine benachbarte Methode
+derselben Klasse (`_M_dispose`) in denselben TUs korrekt einen lokalen
+32-Byte-Frame bekommt. Der Symbolkörper existiert real im gelinkten ELF
+(`nm`: `W`-Symbol, echte Adresse), Quellcode ist über die
+Toolchain-Header (`bits/basic_string.h`/`.tcc`) einsehbar — beides
+unterscheidet diese 10 Symbole von (B1). Der genaue Mechanismus, der die
+lokale Instanziierung hier dennoch verhindert (z. B. eine weitere,
+methodenspezifische Extern-Deklaration abseits des geprüften Makros, oder
+ein Linker-Vorzug für die vorkompilierte Kopie), wurde in dieser Runde
+**nicht** abschließend isoliert. Diese 10 Symbole pauschal als "genauso
+strukturell unschließbar wie (B1)" zu behandeln wäre eine unbegründete
+Vereinfachung; sie werden hier bewusst als offene technische Teilfrage
+ausgewiesen statt als gleichwertig zu (B1) klassifiziert.
 
 ### Disposition
 

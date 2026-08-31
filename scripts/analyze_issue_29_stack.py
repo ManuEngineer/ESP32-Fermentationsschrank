@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -276,7 +278,39 @@ def main() -> int:
 
     total_bytes, path = longest_from(root)
 
+    # The GCC .ci pretty-printer label truncates long/templated signatures
+    # to a shared prefix (e.g. two distinct std::vector<...> instantiations
+    # both start with ") [with _Args = ..." and become indistinguishable
+    # when only the first line of the label is shown). A witness path must
+    # be auditable, so demangle the actual mangled symbol instead whenever
+    # one is available; fall back to the .ci label only for synthesized
+    # boundary nodes (ROM leaves, whose title already is the plain name).
+    cxxfilt = shutil.which("xtensa-esp32-elf-c++filt") or shutil.which("c++filt")
+    demangle_cache: dict[str, str] = {}
+
+    def mangled_symbol(title: str) -> str:
+        return title.rsplit(":", 1)[-1] if ":" in title and title.startswith("/") else title
+
+    def demangle(symbol: str) -> str | None:
+        if cxxfilt is None:
+            return None
+        if symbol in demangle_cache:
+            return demangle_cache[symbol]
+        try:
+            result = subprocess.run(
+                [cxxfilt], input=symbol, capture_output=True, text=True, timeout=5, check=True
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        demangled = result.stdout.strip()
+        demangle_cache[symbol] = demangled
+        return demangled
+
     def short_name(title: str) -> str:
+        symbol = mangled_symbol(title)
+        demangled = demangle(symbol) if symbol.startswith("_Z") else None
+        if demangled is not None and demangled != symbol:
+            return demangled
         info = nodes.get(title)
         if info is None:
             return title

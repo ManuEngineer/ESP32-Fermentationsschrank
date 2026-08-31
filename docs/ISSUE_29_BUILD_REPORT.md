@@ -120,8 +120,9 @@ unaufgelösten Randbedingungen stehen in
 ### Digitale Gates (kein Hardwarelauf, kein Flash)
 
 ```text
-SOURCE_TREE_CLEAN=NO (main/CMakeLists.txt, lib/device_platform/CMakeLists.txt,
-  scripts/analyze_issue_29_stack.py geaendert, siehe Diff dieser Runde)
+SOURCE_TREE_CLEAN=YES @ a19cd1605fb1e74e6dd31f8b457741e9cf92b2d9 (alle
+  digitalen Gates dieser Runde liefen gegen diesen exakten,
+  firmwarerelevanten Stand; danach nur Markdown-Folgeaenderungen)
 ISSUE29_STACK_ANALYZER=IMPLEMENTED (voll neu geschrieben: P0-P6-Traversierung,
   fail-closed nach 4.1.1, Whitelist fuer 4 verifizierte virtuelle
   Aufrufstellen, ROM-Boundary-Tabelle)
@@ -136,6 +137,9 @@ kMeasuredCallPathBytes=62928 (main/issue_29_bringup_probe.cpp, UNVERAENDERT)
 kProbeTaskStackBytes=67584 (main/issue_29_bringup_probe.cpp, UNVERAENDERT)
 ESP_IDF_BRINGUP_BUILD=PASS
 ESP_IDF_RELEASE_BUILD=PASS
+ESP_IDF_STATIC_ANALYSIS_ESP_CLANG=PASS (beide Profile; bestaetigt, dass die
+  neuen GNU-Guards um die -fstack-usage/-fcallgraph-info=su-Bloecke den
+  esp-clang-Analysepfad unveraendert lassen, statt das nur anzunehmen)
 FULL_NATIVE_BUILD=PASS
 FULL_NATIVE_TESTS=PASS (1081/1081)
 ARCHITECTURE_GATES=PASS (nach Ruecknahme von main PRIV_REQUIRES heap, siehe
@@ -147,8 +151,9 @@ BRINGUP_HAS_ISSUE29_PROBE=YES (ELF-Symbolnachweis: probeTask vorhanden)
 RELEASE_HAS_ISSUE29_PROBE=NO (kein issue_29-Quellcode im Build, kein
   probeTask-Symbol im ELF)
 NATIVE_HAS_ISSUE29_PROBE=NO (kein Verweis unter src/, include/)
-ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NO (main/CMakeLists.txt-Gate unveraendert,
-  gegenseitiger Ausschluss weiterhin strukturell erzwungen)
+ISSUE90_HARNESS_HAS_ISSUE29_PROBE=NOT_RE_RUN (main/CMakeLists.txt-Gate-Logik
+  unveraendert, per git diff belegt; kein neuer Harness-Build in dieser
+  Runde ausgefuehrt, daher keine erneute ELF-Symbolpruefung)
 FAULT_SEAM_UNCHANGED=YES (lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp
   unveraendert)
 PRODUCT_TASK_STACKS_UNCHANGED=YES (nur Diagnose-Konstanten betroffen, und
@@ -176,14 +181,24 @@ eindeutige unaufgelöste Randstellen, davon:
   (`freertos`, `esp_system`/`heap`-Rest, `cxx`, `esp_libc`/newlib) —
   grundsätzlich mit demselben, bereits etablierten CMake-Muster schließbar,
   aber nicht durch Plan 4.2 namentlich freigegeben.
-- **(B)** 20 Symbole toolchain-vorkompiliert (libstdc++/`libsupc++`,
-  picolibc), davon `operator new` objdump-bestätigt **nicht leaf**
-  (ruft real `malloc` sowie die Exception-Allocation-/Throw-Kette auf). Kein
-  Quellcode unter `$IDF_PATH` oder im Projekt verfügbar; eine Grenzbestimmung
-  würde eine transitive Binär-Callgraph-Analyse über mehrere vorkompilierte
+- **(B1)** 7 Symbole nicht-Template, garantiert toolchain-vorkompiliert
+  (`libsupc++`, `picolibc`), kein Quellcode unter `$IDF_PATH` oder im
+  Projekt verfügbar. `operator new` (`_Znwj`) ist objdump-bestätigt
+  **nicht leaf** (ruft real `malloc` sowie die
+  Exception-Allocation-/Throw-Kette auf). Eine Grenzbestimmung würde eine
+  transitive Binär-Callgraph-Analyse über mehrere vorkompilierte
   Bibliotheksebenen erfordern (vom Plan als "neue generische
   Analyseplattform" ausgeschlossen) oder eine unbegründete Annahme
   einführen (durch "Nicht durch Annahmen umgehen" ausgeschlossen).
+- **(B2)** 10 `basic_string<char>`-Templatemethoden: Quellcode liegt in den
+  Toolchain-Headern vor und die dortige `_GLIBCXX_EXTERN_TEMPLATE=-1`-
+  Konfiguration sollte lokale Instanziierung mit echtem Frame erlauben,
+  bleibt aber empirisch in jeder aufrufenden TU frameless, während eine
+  benachbarte Methode derselben Klasse (`_M_dispose`) korrekt lokal
+  instanziiert wird. Ursache nicht abschließend isoliert — siehe
+  `ISSUE_29_MEASUREMENTS.md`. Diese 10 Symbole sind technisch nicht
+  gleichzusetzen mit (B1) und werden dem Owner als offene Teilfrage
+  vorgelegt, nicht als bereits geklärt "strukturell unschließbar".
 
 Damit ist der reale Umfang, um `STACK_GATE=PASS` zu erreichen, größer als in
 Plan 4.2 vorgesehen, und (B) ist mit den im Plan erlaubten Mitteln aktuell
