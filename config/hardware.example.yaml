@@ -126,7 +126,6 @@ features:
     storage_timezone: UTC
     i2c_address: 0x68
     bus: ds3231_i2c
-    int_sqw: unused_r1
     status: optional_r1_unverified
   web_ota:
     enabled: false
