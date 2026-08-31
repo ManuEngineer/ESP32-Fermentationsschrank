@@ -1,5 +1,16 @@
 # Issue #29 Messprotokoll und Abnahmestatus
 
+**Aktueller Stand (2026-08-30/31):** Der historische `PASS` aus PR #116 (unten
+dokumentiert) ist auf der aktuellen `integration/r1-development`-Baseline
+**nicht mehr aktuell gültig**. Eine frische Requalifikation hat den bekannten
+Panic auf dem normalen `esp32_bringup`-Profil real reproduziert; siehe
+Abschnitt "Aktuelle Requalifikation auf `integration/r1-development`" weiter
+unten. Der folgende historische Status- und Identitätsabschnitt bleibt als
+Provenienz des PR-#116-Standes erhalten und wird nicht rückwirkend
+umgeschrieben.
+
+## Historischer Status (PR #116, vor der aktuellen Gesamtbaseline)
+
 Status dieses Protokolls: Software-/Buildnachweise `PASS`. Reale Board-/UART-/
 Flash-/PSRAM-Nachweise sind `PASS`. `esp32_release` und (nach der unten
 dokumentierten Ursachenanalyse und Korrektur) `esp32_bringup` bestehen beide
@@ -8,11 +19,13 @@ Läufen für `esp32_bringup` reproduziert. Offen bleiben ausschließlich die
 sicheren unbelasteten MCU-/Gate-/Bootpegel (kein Messgerät in dieser
 Ausführungsumgebung).
 
-Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`;
-beide Profile bestehen real auf dem Board. Die Issue-Abnahme ist erst
-vollständig, wenn zusätzlich die sicheren unbelasteten MCU-/Gate-/Bootpegel
-real nachgewiesen sind. Die physische PCB-Revision beziehungsweise der
-Silkscreen ist nach Ownerentscheidung kein Abnahmekriterium.
+Implementierungsstatus (historisch, PR #116):
+`SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`; beide Profile
+bestanden real auf dem damaligen Board/Stand. Die Issue-Abnahme war auch
+damals erst vollständig, wenn zusätzlich die sicheren unbelasteten
+MCU-/Gate-/Bootpegel real nachgewiesen sind. Die physische PCB-Revision
+beziehungsweise der Silkscreen ist nach Ownerentscheidung kein
+Abnahmekriterium.
 
 ## Identität und Scope
 
@@ -385,9 +398,123 @@ aktualisierte [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md) und die
 compilerbasierte Stack-Usage-Herleitung sind Build-/Ressourcennachweise, aber
 kein Beleg für ein kanonisches Produktions- oder Parallelbudget.
 
-Nächster Schritt: physische Messung der sicheren unbelasteten
-MCU-/Gate-/Bootpegel (Multimeter/Messaufbau erforderlich). Erst danach ist das
-einzige verbleibende #29-Restgate belegt und die Rückführung in
-`docs/HARDWARE.md`/`docs/OPEN_POINTS.md` sowie eine vollständige
-Issue-Abnahme möglich. Eine fehlende PCB-Revision oder Silkscreen-Bezeichnung
-blockiert diese Abnahme nicht.
+Nächster Schritt (historisch, PR #116): physische Messung der sicheren
+unbelasteten MCU-/Gate-/Bootpegel. Dieser Schritt ist durch den unten
+dokumentierten Requalifikationsbefund überholt: Die Pegelmessung bleibt
+zusätzlich offen, ist aber nicht der nächste Schritt, solange der
+Bring-up-Boot nicht wieder stabil requalifiziert ist (siehe unten).
+
+## Aktuelle Requalifikation auf `integration/r1-development` (2026-08-30/31)
+
+Diese Requalifikation ersetzt den oben dokumentierten historischen `PASS` als
+aktuellen Stand. Der historische Abschnitt bleibt als Provenienz des
+PR-#116-Standes unverändert erhalten.
+
+```text
+SOURCE_SHA=c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+PROFILE=esp32_bringup
+ISSUE90_HARNESS=ABSENT
+ELF_SHA256=3e25a0ad698a4a5102619dfb49e64584b23dd5d21cd348ad0f4489c22fb3b71c
+BIN_SHA256=a5b3426a0d4b893ea912e04145bb441eb9d6d69caf68e0f98b7091e6a3add906
+
+BOOT_1=PANIC_REPRODUCED
+BOOT_2=NOT_RUN_STOP_GATE
+BOOT_3=NOT_RUN_STOP_GATE
+
+PANIC=LoadProhibited
+PANIC_INDUCED_RESET=YES
+PANIC_RESET_REASON=rst:0xc (SW_CPU_RESET)
+UNRELATED_UNEXPECTED_RESET=NO
+WATCHDOG=NO
+BROWNOUT=NO
+ACTOR_RELEASE=false
+
+ROOT_CAUSE=UNRESOLVED
+HEAP_WALK_ROOT_CAUSE=NOT_CLAIMED
+PRIMARY_DIAGNOSIS=STALE_ISSUE29_DIAGNOSTIC_STACK_BUDGET
+```
+
+### Board und Werkzeuge (unverändert gegenüber der historischen Baseline)
+
+- Board: ESP32-D0WD-V3 (Chiprevision v3.1), MAC `20:50:0d:1b:2f:34`
+- Port: `/dev/ttyUSB0`, automatischer DTR/RTS-Reset über IO0/EN
+- Flash: Manufacturer `b3`, Device `4016`, 4 MB (`esptool flash-id`)
+- `esptool v5.3.1`, ESP-IDF `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
+
+### Relevanter UART-Auszug (Boot 1, gekürzt auf den Panic-relevanten Abschnitt)
+
+```text
+I (778) app_main: ESP32-Fermentationsschrank
+I (778) app_main: profile: esp32_bringup
+I (778) app_main: source git sha: c1f5fbb5f19ab8e7d2c25708fe79777d523217d4
+I (788) app_main: hardware state: HARDWARE_UNVERIFIED
+I (788) app_main: actuator policy: LOCKED_FOR_BRINGUP
+I (798) app_main: real actuators: disabled
+I (798) app_main: application: ready
+I (798) app_main: resources: free_heap_bytes=233380 stack_hwm_bytes=8832
+Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
+
+Core  1 register dump:
+PC      : 0x401130d6  PS      : 0x00060533  A0      : 0x80112e5e  A1      : 0x3ffc7e10
+A2      : 0xf077d7dc  A3      : 0x40112ea0  A4      : 0x383857e0  A5      : 0x3ffc7e6c
+A6      : 0x00000000  A7      : 0x3ffc7e50  A8      : 0xb83f8000  A9      : 0x00000001
+A10     : 0x00000001  A11     : 0xb83f8000  A12     : 0x00000001  A13     : 0x3ffc7e50
+A14     : 0x00000000  A15     : 0x00060523  SAR     : 0x0000000f  EXCCAUSE: 0x0000001c
+EXCVADDR: 0xf077d7e0  LBEG    : 0x4000c46c  LEND    : 0x4000c477  LCOUNT  : 0x00000000
+
+Backtrace: 0x401130d3:0x3ffc7e10 0x40112e5b:0x3ffc7e30 0x400d3996:0x3ffc7e50 0x400d39e5:0x3ffc7e90 0x400db120:0x3ffc7ed0 0x400dc5d8:0x3ffc7ef0 0x400dca26:0x3ffd7fa0 0x40110e52:0x3ffd7fd0
+
+ELF file SHA256: 3e25a0ad6...
+
+Rebooting...
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+```
+
+Backtrace, PC-Register und `EXCVADDR` sind über alle 44 vom Panic-Handler
+selbst ausgelösten `rst:0xc`-Neustarts innerhalb des ~40-s-Erfassungsfensters
+byte-identisch (`grep -a` gegen den vollständigen lokalen Rohlog verifiziert).
+Der vollständige Rohlog (nicht committed, siehe unten) bestätigt dies für
+jeden der 44 Zyklen; diese Zyklen sind eine Zusatzbeobachtung, keine eigene
+Boot-Zählung (siehe `BOOT_1`/`BOOT_2`/`BOOT_3` oben).
+
+### Vollständige addr2line-Kette (gegen das exakt geflashte ELF)
+
+```text
+0x401130d6: block_size / block_is_last @ tlsf_block_functions.h:87/98
+  (inlined by) tlsf_walk_pool @ tlsf.c:212
+0x401130d3: block_next @ tlsf_block_functions.h:161 (inlined by) tlsf_walk_pool @ tlsf.c:221
+0x40112e5b: multi_heap_get_info_impl @ multi_heap.c:427
+0x400d3996: heap_caps_get_info @ heap_caps.c:392
+0x400d39e5: heap_caps_get_largest_free_block @ heap_caps.c:321
+0x400db120: fermentation::issue_29_bringup::{anonymous}::sampleResources @ issue_29_bringup_probe.cpp:128
+0x400dc5d8: fermentation::issue_29_bringup::{anonymous}::runProbe @ issue_29_bringup_probe.cpp:326
+0x400dca26: fermentation::issue_29_bringup::{anonymous}::probeTask @ issue_29_bringup_probe.cpp:450
+0x40110e52: vPortTaskWrapper @ port.c:147
+```
+
+### Read-only Stackdiagnose (kein neuer Hardwarelauf, keine Codeänderung)
+
+Gegen den exakt zu Boot 1 gehörenden Build:
+
+```text
+CURRENT_CUMULATIVE_CALL_PATH_BYTES=66816 (persistFreshStartCommand-Kette; historisch dokumentiert 62928)
+CURRENT_REQUIRED_CONFIGURED_TASK_STACK_BYTES=71680
+COMPILED_kMeasuredCallPathBytes=62928
+COMPILED_kProbeTaskStackBytes=67584
+```
+
+Ein zusätzlicher, gezielter Mehrpfadabgleich der bereits vorhandenen
+`.su`/`.ci`-Artefakte (rein lesend) findet einen weiteren, bisher nicht
+geprüften Pfad mit noch höherem Bedarf:
+`runProbe -> decideProgramStart -> decideProgramStartInto -> ActiveRun::start`
+= 71920 Bytes, 4336 Bytes über `kProbeTaskStackBytes`. Vollständige Herleitung,
+Methodik und alle geprüften Pfade stehen im Korrekturplan:
+
+`docs/tasks/issue-29-panic-requalification-correction-plan.md`
+
+### Evidenzablage
+
+Der vollständige Rohlog (UART, unkomprimiert) sowie ELF/BIN-Hashes liegen
+lokal, nicht committed, unter `build/issue29_requalification/` (siehe
+`.gitignore`, `build/`). Dieser Abschnitt hier ist die versionierte,
+kanonische Kurzfassung; keine Megabyte-Rohlogs werden committed.
