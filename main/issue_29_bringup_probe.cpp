@@ -455,10 +455,10 @@ void probeTask(void* argument) {
 
 void logProbeSummary(const ProbeContext& context) {
     ESP_LOGI(kTag,
-             "diagnostic_task_stack_bytes=%zu command_decision_bytes=%zu"
+             "stack_formula_bytes=%zu command_decision_bytes=%zu"
              " run_command_state_bytes=%zu persistence_coordinator_bytes=%zu"
-             " held_object_bytes=%zu historical_call_path_bytes=%zu"
-             " historical_call_path_safety_buffer_bytes=%zu"
+             " held_object_bytes=%zu call_path_bytes=%zu"
+             " call_path_safety_buffer_bytes=%zu"
              " configured_task_stack_bytes=%u",
              kProbeTaskStackBytes, sizeof(CommandDecision),
              sizeof(RunCommandState), sizeof(RunPersistenceCoordinator),
