@@ -10,7 +10,7 @@ ist `b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6`. Die ESP-IDF-Profile wurden
 mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
-## Aktuelle reale 96-KiB-Requalifikation – 3/3 PASS, Owner-Hardware-Review offen (2026-09-01)
+## Aktuelle reale 96-KiB-Requalifikation – 3/3 PASS, Owner-Hardware-Review PASS (2026-09-01)
 
 Das korrigierte Artefakt wurde einmal geflasht und anschließend ohne weiteren
 Flash in drei unabhängigen, aktorfreien Boots geprüft. Der frühere vollständige
@@ -56,16 +56,21 @@ FAULT_PASS=PASS
 STATE_UNCHANGED=PASS
 PERSISTENCE_UNCHANGED=PASS
 SAFETY_FAIL_CLOSED=PASS
-ROOT_CAUSE=UNRESOLVED
-ROOT_CAUSE_RECOMMENDATION=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+ROOT_CAUSE=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+OWNER_96K_HARDWARE_REVIEW=PASS
+OWNER_MULTIMETER_MEASUREMENT_WAIVED=YES
+OWNER_ACCEPTS_UNMEASURED_BOOT_LEVEL_RESIDUAL_RISK=YES
+OWNER_29_ELECTRICAL_LEVEL_MEASUREMENT_WAIVED=YES
+LEVEL_MEASUREMENTS=NOT_RUN_WAIVED_BY_OWNER
+MULTIMETER_REQUIRED=NO
+ISSUE29_CLOSURE_BLOCKED_BY_MULTIMETER=NO
 CAPTURE_RESET_PROCEDURE=EXECUTED_3_OF_3_PASS
 HARDWARE_RUN_CORRECTED_ARTIFACT=3_OF_3_PASS
-LEVEL_MEASUREMENTS=NOT_RUN
 ACTUATOR_RELEASE=NO
 ISSUE25_STARTED=NO
 ISSUE29_CLOSE=NO
 MERGE=NO
-OWNER_96K_HARDWARE_REVIEW_REQUIRED=YES
+OWNER_FINAL_REVIEW_REQUIRED=YES
 ```
 
 Die lokalen Rohlogs der qualifizierenden Boots bleiben unter
@@ -73,8 +78,10 @@ Die lokalen Rohlogs der qualifizierenden Boots bleiben unter
 den SHA-256-Werten `84e0b49e…ec66d3e`, `6e87922c…271325c` und
 `cc94653a…40b2df7`. Jeder Log enthält genau eine `rst:`-Sequenz, die erwartete
 App-Provenienz, `result=PASS` und mindestens 40 Sekunden stabilen Smoke.
-Die Evidenz begründet nur die Empfehlung; der kanonische `ROOT_CAUSE` bleibt
-bis zum Owner-Hardware-Review `UNRESOLVED`.
+Die Evidenz begründete die Empfehlung; der Owner hat sie inzwischen als
+`CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET` bestätigt. Der Verzicht auf
+Pegel-/Multimetermessung bleibt explizit `NOT_RUN_WAIVED_BY_OWNER` und ist
+weder ein elektrischer PASS noch eine Aktorfreigabe.
 
 ## Historischer Preflight-Korrekturstand vor dem qualifizierenden Hardwarelauf (2026-08-31)
 
@@ -193,7 +200,7 @@ ISSUE25_STARTED=NO
 MERGE=NO
 ```
 
-## Current-base-Kontrollboot 1 (2026-08-31)
+## Historischer Current-base-Kontrollboot 1 (2026-08-31)
 
 Der exakt einmal bewusst gestartete Current-base-Kontrollboot wurde mit dem
 unveränderten, bereits geprüften `esp32_bringup`-Artefakt aus

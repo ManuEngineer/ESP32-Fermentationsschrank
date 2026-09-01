@@ -1,6 +1,6 @@
 # Issue #29 Messprotokoll und Abnahmestatus
 
-**Aktueller Stand (2026-08-31):** Der historische `PASS` aus PR #116 (unten
+**Historische Ausgangslage (2026-08-31):** Der historische `PASS` aus PR #116 (unten
 dokumentiert) ist auf der aktuellen `integration/r1-development`-Baseline
 nicht als aktuelle Hardwarefreigabe gültig. Die historische Plain-Bring-up-
 Panic-Evidenz stammt aus der vorherigen integrierten Baseline
@@ -12,7 +12,7 @@ reproduziert. Der folgende historische Status- und Identitätsabschnitt bleibt
 als Provenienz des PR-#116-Standes erhalten und wird nicht rückwirkend
 umgeschrieben.
 
-## Aktuelle reale 96-KiB-Requalifikation – 3/3 PASS, Owner-Hardware-Review offen (2026-09-01)
+## Aktuelle reale 96-KiB-Requalifikation – 3/3 PASS, Owner-Hardware-Review PASS (2026-09-01)
 
 Das korrigierte Artefakt wurde einmal geflasht und anschließend ohne weiteren
 Flash in drei unabhängigen, aktorfreien Boots geprüft. Der frühere vollständige
@@ -58,16 +58,21 @@ FAULT_PASS=PASS
 STATE_UNCHANGED=PASS
 PERSISTENCE_UNCHANGED=PASS
 SAFETY_FAIL_CLOSED=PASS
-ROOT_CAUSE=UNRESOLVED
-ROOT_CAUSE_RECOMMENDATION=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+ROOT_CAUSE=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+OWNER_96K_HARDWARE_REVIEW=PASS
+OWNER_MULTIMETER_MEASUREMENT_WAIVED=YES
+OWNER_ACCEPTS_UNMEASURED_BOOT_LEVEL_RESIDUAL_RISK=YES
+OWNER_29_ELECTRICAL_LEVEL_MEASUREMENT_WAIVED=YES
+LEVEL_MEASUREMENTS=NOT_RUN_WAIVED_BY_OWNER
+MULTIMETER_REQUIRED=NO
+ISSUE29_CLOSURE_BLOCKED_BY_MULTIMETER=NO
 CAPTURE_RESET_PROCEDURE=EXECUTED_3_OF_3_PASS
 HARDWARE_RUN_CORRECTED_ARTIFACT=3_OF_3_PASS
-LEVEL_MEASUREMENTS=NOT_RUN
 ACTUATOR_RELEASE=NO
 ISSUE25_STARTED=NO
 ISSUE29_CLOSE=NO
 MERGE=NO
-OWNER_96K_HARDWARE_REVIEW_REQUIRED=YES
+OWNER_FINAL_REVIEW_REQUIRED=YES
 ```
 
 Die drei qualifizierenden Rohlogs bleiben lokal unter
@@ -76,8 +81,10 @@ Ihre SHA-256-Werte sind `84e0b49e…ec66d3e`, `6e87922c…271325c` und
 `cc94653a…40b2df7`. Je Boot: genau eine `rst:`-Sequenz im qualifizierenden
 Fenster, korrekte App-SHA, Probe-PASS und mindestens 40 Sekunden stabiler
 Smoke. Das HWM-Minimum 25840 B ergibt 72464 B beobachtete Peak-Nutzung und
-überschreitet das alte 67584-B-Budget. Das ist die planmäßige Empfehlung für
-Owner Review, nicht die automatische Schließung oder Root-Cause-Festlegung.
+überschreitet das alte 67584-B-Budget. Der Owner hat die planmäßige
+Root-Cause-Disposition bestätigt. Die nicht ausgeführten Pegelmessungen sind
+bewusst `NOT_RUN_WAIVED_BY_OWNER`; daraus folgt kein elektrischer PASS und
+keine Aktorfreigabe.
 
 ## Historischer Preflight-Korrekturstand vor dem qualifizierenden Hardwarelauf (2026-08-31)
 
@@ -745,7 +752,7 @@ offen, da sie eine physische Ablesung beziehungsweise ein Messgerät vor Ort
 erfordert. Die physische PCB-/Boardrevision beziehungsweise der
 Silkscreen-Aufdruck ist nach Ownerentscheidung kein Abnahmekriterium.
 
-## Dokumentationsrückführung
+## Historische Dokumentationsrückführung (PR #116)
 
 Der `esp32_bringup`-Befund ist inzwischen anhand der gemessenen
 Zyklus-Invarianz eingeordnet, korrigiert und mit zwei unabhängigen realen
@@ -1334,7 +1341,7 @@ bezieht auch alle durch den CI-Artefaktvertrag hochgeladenen Textartefakte
 und die Abdeckungsprüfung ein. Der Kontrollbootstatus dieses historischen
 Abschnitts ist durch den folgenden realen Kontrollboot ersetzt.
 
-## Current-base-Kontrollboot 1 (2026-08-31)
+## Historischer Current-base-Kontrollboot 1 (2026-08-31)
 
 Der exakt einmal bewusst gestartete Current-base-Kontrollboot wurde mit dem
 unveränderten, bereits geprüften `esp32_bringup`-Artefakt aus
