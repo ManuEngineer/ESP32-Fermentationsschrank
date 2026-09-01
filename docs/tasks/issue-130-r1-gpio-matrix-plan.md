@@ -1,5 +1,13 @@
 # Issue #130 – R1-GPIO-SSOT und Synchronisierung der Hardware-Issues
 
+> **Historische Planprovenienz (PR #131 gemergt):** Dieser abgeschlossene
+> Plan beschreibt die Entstehung der R1-SSOT. Die aktuelle Owner-Entscheidung
+> zu R1 ersetzt darin enthaltene generische Spannungs-, Bootpegel- oder
+> Kontinuitaetsmesspflichten durch die in ADR-012, `docs/HARDWARE.md` und den
+> owning Hardware-Issues definierten funktionalen bzw. Adapter-/SSOT-basierten
+> Nachweise. Die SSOT selbst bleibt unveraendert; ein funktionaler
+> `confirmed_test` bestaetigt keine nicht gemessenen Spannungswerte.
+
 ## Planstatus und Owner-Gate
 
 Dieser Plan ist die vollständige Neubewertung von PR #131 / Issue #130. Der

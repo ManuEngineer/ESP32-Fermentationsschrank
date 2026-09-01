@@ -6,7 +6,7 @@
 |---|---|
 | `confirmed_order` | aus der bestellten Produktbeschreibung uebernommen |
 | `confirmed_by_owner_reference_match` | reale Hardware vorhanden und durch den Owner der Repository-Boardreferenz zugeordnet; kein elektrischer Funktionsnachweis |
-| `confirmed_test` | am realen Aufbau gemessen und dokumentiert |
+| `confirmed_test` | durch einen geeigneten realen Test bestaetigt und dokumentiert; bei funktionalen Eigenschaften darf dies ein funktionaler Test sein, ohne nicht gemessene Spannungswerte zu behaupten |
 | `planned` | fuer Release 1 verbindlich vorgesehen, aber noch nicht real bestaetigt |
 | `board_fixed_pending_electrical_verification` | PCB-seitig fest verdrahtete Zuordnung; Pegel, Bootwirkung und Verbraucherwirkung sind noch offen |
 | `candidate` | moegliche Loesung, noch nicht entschieden |
@@ -20,6 +20,17 @@ Ein Designstatus `planned` oder
 `active_levels_confirmed`, `boot_levels_confirmed` oder
 `actuator_release`. Reale Aktoren bleiben bis zu den owning Hardwaregates
 fail-closed.
+
+Der Owner hat fuer R1 die allgemeine Spannungs- und Bootpegel-Messpflicht
+bewusst waived. Das ersetzt keinen realen Funktions- oder Sicherheitsnachweis
+und erzeugt keinen elektrischen PASS:
+
+```text
+MULTIMETER_REQUIRED_FOR_R1_ACCEPTANCE=NO
+BOOT_LEVEL_MEASUREMENT_REQUIRED=NO
+GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
+OWNER_ACCEPTS_UNMEASURED_BOOT_LEVEL_RESIDUAL_RISK=YES
+```
 
 ## Board-/Wiring-SSOT und Identitaet
 
@@ -39,8 +50,9 @@ Damit sind reale Hardware und Boardfamilie identifiziert:
 Diese Identitaetsfeststellung ist kein Nachweis aktiver Pegel, Bootpegel,
 MOSFET-/BTS7960-/Display-/Touch-Funktion, GPIO-Funktionstest oder
 Aktorfreigabe. Konkrete GPIO-Zahlen und Widerstandswerte werden in der SSOT
-als Designzustand gefuehrt; elektrische Abnahme wird erst mit
-`confirmed_test` am konkreten Aufbau dokumentiert.
+als Designzustand gefuehrt. Ein `confirmed_test` am konkreten Aufbau
+bestaetigt nur die jeweils getestete Eigenschaft; nicht gemessene elektrische
+Werte bleiben unbestaetigt.
 
 ## Controllerboard
 
@@ -56,14 +68,20 @@ Design-/Referenzbasis:
 - board_revision bleibt TBD_HARDWARE, falls die Kennzeichnung nicht ermittelt
   werden kann
 
-Noch zu messen:
+Noch real zu verifizieren oder zu dokumentieren:
 
 - exakte Boardrevision und weitere reale Identitaetsmerkmale
 - tatsaechliche Flashgroesse und Partitionseigenschaften
 - PSRAM-Erkennung
-- aktive Pegel und Gate-/Treiberbias der vier PCB-festen MOSFET-Kanaele
-- Boot-, Reset-, Brownout- und Bootloaderpegel aller verwendeten Signale
-- Verhalten der MOSFET-Ausgaenge ohne und mit angeschlossenen Verbrauchern
+- funktionale Kanal-/Verbraucherwirkung der vier PCB-festen MOSFET-Kanaele im
+  owning Hardware-Issue
+- funktionales Boot-/Resetverhalten mit sicher angeschlossenem Einzelverbraucher
+  ohne unkontrollierten relevanten Verbraucherbetrieb
+
+```text
+ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED
+FUNCTIONAL_HARDWARE_VERIFICATION=REQUIRED_WHERE_APPLICABLE
+```
 
 Die vier PCB-festen MOSFET-Kanalzuordnungen sind als
 `board_fixed_pending_electrical_verification` im Boardprofil dokumentiert.
@@ -86,11 +104,14 @@ Geplant:
 Vor dem ersten Peltieranschluss:
 
 1. BTS7960-Logikversorgung und Masse pruefen.
-2. Enable- und Richtungseingaenge unbelastet messen.
-3. Hardware-Pulldowns oder gleichwertige sichere Freigabestufe nachweisen.
-4. H-Brueckenausgang und Polaritaet mit Multimeter messen.
-5. sicherstellen, dass beide Richtungen nie gleichzeitig aktiv werden.
-6. Luefter, Kuehlkoerper, Sensoren und Sicherung vollstaendig montieren.
+2. SSOT-Pulldowns oder eine gleichwertige fail-low Freigabestufe als vorhandenen
+   Aufbau dokumentieren.
+3. den realen Adapter mit fail-closed Initialisierung, Mutual Exclusion und
+   Break-before-make implementieren und auf Command-/GPIO-Ebene testen.
+4. sicherstellen, dass beide Richtungen nie gleichzeitig aktiv ausgegeben werden.
+5. Luefter, Kuehlkoerper, Sensoren und Sicherung vollstaendig montieren.
+6. Heiz-/Kuehlrichtung spaeter ueber kurze, abgesicherte und zeitlich begrenzte
+   Servicepulse funktional bestimmen.
 7. erste reale Freigabe nur als begrenzter Servicepuls.
 
 BTS7960 `R_IS` und `L_IS` werden nur angeschlossen und verwendet, wenn
@@ -201,8 +222,11 @@ Elektrische Anforderungen:
 - besitzt einen zwingenden Nachlauf
 - bleibt bei geeigneten Sicherheitsfehlern zur Restwaermeabfuhr aktiviert
 
-Vor Anschluss werden MOSFET-Ausgang, aktiver Pegel, Stromaufnahme und
-Anlaufverhalten unbelastet beziehungsweise mit einzelnem Verbraucher gemessen.
+Vor der jeweiligen Freigabe werden Kanal-/Verbraucherfunktion sowie das
+Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional geprueft.
+Stromaufnahme und Anlaufdaten werden nur erfasst, wenn dafuer ein geeignetes
+Messmittel vorhanden ist und das konkrete Hardwaregate sie erfordert; daraus
+folgt kein generelles R1-Multimetergate.
 
 Ob ein Tachosignal spaeter ergaenzt wird, bleibt `FUTURE_RELEASE`.
 
@@ -314,7 +338,8 @@ Verbindliche Anforderungen:
 
 - beide BTS7960-Richtungen durch Hardwarebeschaltung inaktiv
 - Peltierfreigabe erst nach vollstaendiger Initialisierung und Validierung
-- Onboard-MOSFET-Ausgaenge beim Boot praktisch messen
+- Onboard-MOSFET-Ausgaenge im owning Hardware-Issue funktional fail-closed
+  pruefen; eine elektrische Boot-Pegelmessung ist fuer R1 nicht erforderlich
 - ungeeignete Bootstrapping-Pins nicht fuer sicherheitskritische Freigaben nutzen
 - keine automatische Aktorpruefung beim normalen Boot
 - `esp32_bringup` startet weiterhin mit `HARDWARE_UNVERIFIED` beziehungsweise
@@ -350,7 +375,8 @@ entsteht.
 
 1. Sichtpruefung, Versorgung, Masse und Sicherungen
 2. Controllerboard ohne Aktoren
-3. GPIO- und Bootpegelmessung
+3. GPIO-/Adapter-/Boot-Fail-Closed-Verifikation ohne vorgeschriebene
+   Spannungsmessung
 4. Sensoren, Display und Touch
 5. Luefter und Summer einzeln
 6. BTS7960 ohne Peltier

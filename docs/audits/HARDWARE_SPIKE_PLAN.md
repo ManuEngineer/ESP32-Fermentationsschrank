@@ -311,10 +311,10 @@ Nur Kandidaten mit `PASS_SMOKE_TEST` erreichen Stufe 3.
 |---|---|
 | Display | genau das gelieferte, als TZT/LCDWiki MSP2807 bestellte Modul; reale Variante in Stufe 0 bestimmen |
 | Controller | vor Test praktisch identifizieren; ILI9341/XPT2046 nicht allein aus Lieferantenangabe als bestaetigt markieren |
-| Versorgung | gemaess gemessener Modulvariante; Spannung und Strom protokollieren |
-| SPI | derselbe Hardware-SPI-Controller und dieselbe gemessene Pinbelegung fuer alle Kandidaten |
-| Chip Select | getrennte Display-/Touch-CS nur nach Boardpruefung; inaktiv sichere Pegel messen |
-| Reset/DC/Backlight | reale Pins, aktive Pegel und Bootzustand messen und als `TBD_HARDWARE` bis dahin offen lassen |
+| Versorgung | gemaess verifizierter Modulvariante; Spannung und Strom nur dokumentieren, soweit ein konkretes Gate und geeignete Mittel dies erfordern |
+| SPI | derselbe Hardware-SPI-Controller und dieselbe am realen Aufbau funktional verifizierte Pinbelegung fuer alle Kandidaten |
+| Chip Select | getrennte Display-/Touch-CS nur nach Boardpruefung; inaktives fail-closed Verhalten funktional pruefen, ohne vorgeschriebene Pegelmessung |
+| Reset/DC/Backlight | reale Pins, SSOT-Zuordnung und funktionales Bootverhalten pruefen; keine vorgeschriebene Spannungs- oder Boot-Pegelmessung, nicht getestete Eigenschaften bleiben `TBD_HARDWARE` |
 | Weitere Verbraucher | Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer getrennt/gesperrt |
 
 Es werden keine Pinzahlen aus einem aehnlichen Board uebernommen. Die

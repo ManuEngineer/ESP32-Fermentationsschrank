@@ -111,7 +111,8 @@ Owner-Gates nicht vorweggenommen werden.
 - ROM-Bootloader- und UART-Recovery nachweisen;
 - Flash, Partition, Heap und Resetursachen erfassen;
 - GPIO- und Businventar erstellen;
-- Boot-, Reset- und Bootloaderpegel unbelastet messen.
+- Boot-, Reset- und Bootloaderverhalten fail-closed funktional pruefen; eine
+  elektrische Pegelmessung ist fuer R1 nicht vorgeschrieben.
 
 ### H2 – Sensoren, Display und Touch
 
@@ -122,17 +123,19 @@ Owner-Gates nicht vorweggenommen werden.
 
 ### H3 – Luefter, Summer und MOSFET-Ausgaenge
 
-- Kanaele und aktive Pegel unbelastet messen;
+- Kanaele und Verbraucherfunktion einzeln funktional pruefen;
 - Verbraucher einzeln anschliessen;
-- Strom, Anlauf, Nachlauf und Bootverhalten dokumentieren;
+- Nachlauf und Bootverhalten dokumentieren; Strom- und Anlaufdaten nur bei
+  tatsaechlichem Gate und geeignetem Messmittel erfassen;
 - Aussenluefter fuer spaetere Peltierpruefung freigeben.
 
 ### H4 – BTS7960 ohne Peltier
 
-- Enable, Richtungen, Pulldowns und Ausgangspolaritaet verifizieren;
+- Enable, Richtungen und Pulldowns/fail-low Beschaltung gegen die SSOT
+  verifizieren;
 - gleichzeitige Richtungsfreigabe ausschliessen;
 - Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen;
-- R_IS/L_IS nur nach Pegel- und Nutzbarkeitsnachweis integrieren.
+- R_IS/L_IS nur nach sicherer Signal- und Nutzbarkeitsbewertung integrieren.
 
 ### H5 – Begrenzte Peltierpruefung
 
@@ -143,7 +146,9 @@ Vor dem ersten realen Peltierpuls muessen alle Gates aus
 - montierte und gepruefte einmalige Temperatursicherung;
 - Kuehlkoerper und funktionsgepruefter Aussenluefter;
 - gueltige Pflichtsensoren;
-- bestaetigte BTS7960-Pinbelegung, AUS-Pegel und Polaritaet;
+- SSOT-konforme BTS7960-Pinbelegung, fail-low AUS-Zustand und nachgewiesener
+  Adapterinterlock; Richtung/Polaritaet wird im begrenzten Servicepuls
+  funktional bestimmt;
 - stabile Versorgung und jederzeitiger Abbruch;
 - validiertes `STANDBY` und geschuetzter Serviceablauf.
 

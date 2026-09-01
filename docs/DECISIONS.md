@@ -181,7 +181,7 @@
 
 ## ADR-012: Software-first mit gemeinsamem Bring-up-Profil
 
-- **Status:** accepted
+- **Status:** accepted; amended by Issue #29/#33 Owner decision
 - **Datum:** 2026-07-21
 - **Kontext:** Die reale Hardware trifft spaeter ein, waehrend der groesste Teil
   des fachlichen Systems vorher entwickelt werden soll.
@@ -193,7 +193,11 @@
   Hardwarezugriff im Kern.
 - **Folgen:** Software-Issues koennen durch native Tests abgeschlossen werden,
   waehrend reale Verifikation separat `BLOCKED_HARDWARE` bleibt. Aktoren werden
-  im Bring-up erst nach unbelasteter Pegelmessung schrittweise freigegeben.
+  erst nach den jeweils owning Hardwaregates schrittweise freigegeben. R1
+  verlangt dafuer keine generelle Multimeter- oder Boot-Pegelmessung.
+  Sicherheitskritische Richtungssteuerungen benoetigen hardwareseitig definierte
+  fail-low Zustaende sowie software-/adapterseitige Interlocks; reale
+  Verbraucher werden spaeter kontrolliert funktional verifiziert.
 
 ## ADR-013: Wiederverwendbare ESP32-Geraeteplattform
 

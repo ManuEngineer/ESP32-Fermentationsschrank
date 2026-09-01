@@ -217,14 +217,26 @@ Mindestens:
 
 Ein Build ist keine Hardwarefreigabe.
 
-### Ebene 4: Elektrische und Hardwaretests
+### Ebene 4: Hardwareabnahme ohne vorgeschriebenes Spannungsmess-Gate
 
 Vor einer thermischen Belastung:
 
-- GPIO-Zuordnung und aktive Pegel
-- Boot-, Reset-, Brownout- und Bootloaderverhalten
+```text
+FUNCTIONAL_HARDWARE_VERIFICATION=REQUIRED_WHERE_APPLICABLE
+DESIGN_SSOT_VERIFICATION=REQUIRED
+SOFTWARE_ADAPTER_SAFETY_VERIFICATION=REQUIRED
+OPTIONAL_ELECTRICAL_MEASUREMENT=ALLOWED_NOT_REQUIRED
+MULTIMETER_REQUIRED_FOR_R1_ACCEPTANCE=NO
+BOOT_LEVEL_MEASUREMENT_REQUIRED=NO
+GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
+```
+
+- GPIO-Zuordnung gegen die SSOT sowie funktionale Kanal-/Verbraucherwirkung
+- funktionales Boot-, Reset-, Brownout- und Bootloaderverhalten ohne
+  unkontrollierten relevanten Verbraucherbetrieb
 - sichere H-Bruecken- und MOSFET-Zustaende
-- BTS7960-Pulldowns, Enable, Richtungen und Abschaltung
+- BTS7960-Pulldowns/fail-low Beschaltung, boot default disabled, Mutual
+  Exclusion, Break-before-make und fail-closed Fehlerpfad
 - drei DS18B20 mit ROM-Zuordnung
 - 1-Wire-Bustopologie und Produkt-Hot-Plug
 - Displaycontroller, Touchcontroller, Rotation und Kalibrierung
@@ -318,15 +330,19 @@ Vor realem Aktorbetrieb:
 - kein Aktortest aus `SAFE_BOOT` erreichbar
 - alle sicherheitsrelevanten automatischen Tests bestanden
 
-### Gate 2A: Elektrische Freigabe ohne Peltier
+### Gate 2A: Hardware- und Adapterfreigabe ohne Peltier
 
 Vor Anschluss beziehungsweise Bestromung des Peltiers:
 
-- GPIOs und aktive Pegel bestaetigt
-- sichere Boot-, Reset- und Bootloaderpegel bestaetigt
+- GPIOs gegen die SSOT zugeordnet und reale Kanal-/Verbraucherfunktion
+  funktional bestaetigt
+- Boot-, Reset- und Bootloaderverhalten funktional fail-closed bestaetigt
 - BTS7960 ohne Peltier geprueft
-- beide Richtungen koennen nie gleichzeitig aktiv sein
-- Ausgang und Polaritaet mit Multimeter bestaetigt
+- Pull-down-/fail-low Beschaltung als vorhandener Aufbau dokumentiert
+- boot default disabled, Mutual Exclusion, Break-before-make und fail-closed
+  Adapterpfad nachgewiesen; beide Richtungen koennen nie gleichzeitig aktiv sein
+- Richtung und Polaritaet werden erst im begrenzten, abgesicherten
+  Peltier-Servicepuls funktional bestimmt
 - Schrankluft- und Kuehlkoerpersensor bestaetigt
 - Aussenluefter und Nachlauf bestaetigt
 - 7,5-A-Ueberstromsicherung installiert
@@ -459,8 +475,9 @@ Jeder relevante Hardwarestand dokumentiert mindestens:
 1. Hardwarekennung und Platinenrevision
 2. Verdrahtungsreferenz und Fotos
 3. Versorgungsspannungen
-4. GPIOs, aktive Pegel und Bootverhalten
-5. BTS7960-Enable, Richtungen und Abschaltung
+4. GPIO-/SSOT-Zuordnung, funktionale Kanalwirkung und Bootverhalten
+5. BTS7960-Pulldowns/fail-low, Enable, Richtungen, Adapterinterlock und
+   Abschaltung
 6. Innen- und Aussenluefter inklusive Nachlauf
 7. Summer
 8. drei DS18B20 mit Rolle und ROM-Adresse
