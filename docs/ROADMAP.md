@@ -6,27 +6,32 @@ Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
 nicht kopiert, sondern verlinkt.
 
+## Abgeschlossen / synchronisiert
+
+| Arbeit | Status |
+|---|---|
+| Issue #29 / PR #129 | `ISSUE29=CLOSED_COMPLETED`; `PR129=MERGED`; `PR129_MERGE_COMMIT=1fc22d693bae8572144bf61d242a2fe6d0b093bc`; `OWNER_FINAL_REVIEW=PASS`; `CI_RUN=996`; `CI_RESULT=PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `ACTUATOR_RELEASE=NO` |
+| Issue #90 / PR #128 | `ISSUE90=CLOSED/COMPLETED`; `PR128=MERGED @ c1f5fbb5f19ab8e7d2c25708fe79777d523217d4`; `OWNER_FINAL_REVIEW=PASS`; `REAL_POWER_CUTS=6_OF_6_PASS`; `PRODUCTION_RESTORE=PASS`; `POST_RESTORE_PRODUCT_BOOT=PASS` |
+| Issue #119 / PR #120 | `ISSUE119=CLOSED/SUPERSEDED`; `PR120=CLOSED_UNMERGED`; `DISPOSITION=FAILED_SUPERSEDED_INTERMEDIATE_APPROACH` |
+| Issue #121 | `ISSUE121=CLOSED/COMPLETED`; `OWNER_FINAL_REVIEW=PASS`; `ISSUE121_IMPLEMENTATION=PASS`; `STEP8_HARDWARE_REQUALIFICATION=PASS`; `INTEGRATION_BASELINE_SHA=e62e35800ad46fe11ec72f9e0b4715ee561c577b0` |
+| Issue #124 / PR #125 | `ISSUE124=CLOSED`; `PR125=MERGED`; `PR125_MERGE=5b8b86b99347bb0bb104dd1c2968040656119440`; `HARDWARE_RUN=NOT_RUN`; `OWNER_DECISIONS_REQUIRED=NONE` |
+| Issue #126 / PR #127 | `ISSUE126=CLOSED`; `PR127=MERGED @ 18fb96b79608914568b98d2ec06694d75ed0402e`; `OWNER_FINAL_IMPLEMENTATION_REVIEW=PASS`; `GITHUB_CI=PASS`; `RTC_HARDWARE=BLOCKED_OWNER_HARDWARE_PENDING`; `NTP_REAL_NETWORK_RUN=NOT_RUN` |
+| Issue #130 / PR #131 | `ISSUE130=CLOSED/COMPLETED`; `PR131=MERGED`; `PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`; `GPIO_SSOT=MERGED`; `GPIO_MATRIX=PLANNED_NOT_CONFIRMED`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `SSOT_CONFORMANCE=PENDING`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `ACTUATOR_RELEASE=NO`; `BOARD_FAMILY_REFERENCE_MATCH=CONFIRMED_BY_OWNER` |
+
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `ISSUE29=OPEN`; `PR129=OPEN_DRAFT`; `CURRENT_INTEGRATION_BASE=integration/r1-development @ 1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`; `CURRENT_BASE_CONTROL_BOOT=PANIC_REPRODUCED`; `ROOT_CAUSE=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET`; `CORRECTED_96K_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6`; `BOOT_REQUALIFICATION=3_OF_3_PASS`; `VALID_96K_BOOT_COUNT=3`; `MIN_OBSERVED_PROBE_TASK_HWM_BYTES=25840`; `PEAK_OBSERVED_PROBE_TASK_STACK_USED_BYTES=72464`; `HWM_THRESHOLD_BYTES=30720`; `HWM_RESULT=3_OF_3_VALID_DISCRIMINATOR_MET`; `RESOURCE_GATE=PASS_CONSERVATIVE`; `OWNER_96K_HARDWARE_REVIEW=PASS`; `OWNER_29_ELECTRICAL_LEVEL_MEASUREMENT_WAIVED=YES`; `LEVEL_MEASUREMENTS=NOT_RUN_WAIVED_BY_OWNER`; `ISSUE29_CLOSURE_BLOCKED_BY_MULTIMETER=NO`; `ACTUATOR_RELEASE=NO`; `ISSUE25_STARTED=NO`; `ISSUE29_CLOSE=NO`; `MERGE=NO`; `GPIO_SSOT=config/board_profiles/esp32_32e_quad_mosfet_r1.yaml`; `GPIO_MATRIX_STATUS=PLANNED_NOT_CONFIRMED`; `ELECTRICAL_VERIFICATION=PENDING`. Details: Issue #29, `docs/ISSUE_29_MEASUREMENTS.md`, `docs/ISSUE_29_BUILD_REPORT.md`, `docs/tasks/issue-29-panic-requalification-correction-plan.md`. | Owner Final Review der vollständigen #29-Abschlussdisposition und des neuen H-Brücken-Codegates. Die Multimeterpflicht blockiert #29 nicht mehr; reale Adapter-/Aktor- und Peltiernachweise bleiben bei #32/#33. Keine Aktorfreigabe, #25-Arbeit oder Merge in PR #129. |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `ISSUE90=CLOSED/COMPLETED`; `PR128=MERGED @ c1f5fbb5f19ab8e7d2c25708fe79777d523217d4` (in `integration/r1-development`); `OWNER_FINAL_REVIEW=PASS`; `REAL_POWER_CUTS=6_OF_6_PASS`; `PRODUCTION_RESTORE=PASS`; `POST_RESTORE_PRODUCT_BOOT=PASS`. Details: Issue #90, PR #128. | Keine offene #90-Arbeit; Issue geschlossen. Der separate #29-Panic-Befund bleibt unabhaengig offen und wurde durch #90 weder geloest noch geschlossen. |
-| 3 | Issue #119 – produktive StateStore-/Application-Composition anbinden und real verifizieren | `ISSUE119=CLOSED/SUPERSEDED`; `PR120=CLOSED_UNMERGED`; `DISPOSITION=FAILED_SUPERSEDED_INTERMEDIATE_APPROACH`; `INCLUDED_IN_CURRENT_INTEGRATION_BASELINE=NO`; der historische Fehlpfad bleibt dokumentiert. | Keine weitere Arbeit auf #119/#120; die aktuelle Implementierung ist in der R1-Integrationsbaseline erhalten. |
-| 4 | Issue #121 – Release-1 Device-/Application-Lifecycle- und Safety-Policy-Vereinfachung | `ISSUE121=CLOSED/COMPLETED`; `OWNER_FINAL_REVIEW=PASS`; `ISSUE121_IMPLEMENTATION=PASS`; `STEP8_HARDWARE_REQUALIFICATION=PASS`; `INTEGRATION_BASELINE_SHA=e62e35800ad46fe11ec72f9e0b4715ee561c577b0`; kanonischer Plan: `docs/tasks/issue-121-lifecycle-safety-simplification-plan.md @ 3fb4d17418d449818b4f941f99e261525e25a54d`. | Keine offenen #121-Kriterien; #29-Pegelmessung ist ownergewaved und kein #121- oder #29-Abschlussgate. #90 ist geschlossen. |
-| 5 | Issue #124 – R1-Stromausfall-Recovery auf einfachen Zeitvertrag konsolidieren | `ISSUE124=CLOSED`; `PR125=MERGED`; `PR125_MERGE=5b8b86b99347bb0bb104dd1c2968040656119440`; `HARDWARE_RUN=NOT_RUN`; `OWNER_DECISIONS_REQUIRED=NONE`; `R1_PHASE_TIMER_CONTINUITY_FIELD=priorBootPhaseElapsed`; `OUTAGE_TIME_IN_OBSERVED_RUN_SECONDS=NO`; `TEMPERATURE_WEIGHTED_RECOVERY_R1=NO`; kanonischer Plan: `docs/tasks/issue-124-r1-power-loss-recovery-plan.md @ 6f4e1a54d521ba60de185f350d571cbefaa23d71`; #18/#24 bleiben historische Provenienz. | Keine weitere #124-Implementierung; PR #125 ist gemergt, die fachliche Recoverysemantik bleibt unverändert. |
-| 6 | Issue #126 – R1-Absolute-Zeitplattform mit DS3231SN und ESP-IDF-SNTP | `ISSUE126=CLOSED`; `PR127=MERGED @ 18fb96b79608914568b98d2ec06694d75ed0402e` (in `integration/r1-development`); `OWNER_FINAL_IMPLEMENTATION_REVIEW=PASS`; `GITHUB_CI=PASS`; `RTC_DEVICE=DS3231SN`; `RTC_HARDWARE_OPTIONAL=YES`; `NTP_ONLY_MODE_SUPPORTED=YES`; `RTC_HARDWARE=BLOCKED_OWNER_HARDWARE_PENDING`; `NTP_REAL_NETWORK_RUN=NOT_RUN`; kanonischer Plan: `docs/tasks/issue-126-absolute-time-rtc-ntp-plan.md @ 52bd69f37e7baac782ebd2fb927f3fa57003f1c7`; #89 bleibt Connectivity-Eigentuemer, #124 bleibt fachlich unveraendert. | Keine offene #126-Implementierungsarbeit; Issue geschlossen, PR gemergt. Reale RTC-Hardware-/NTP-Netzwerknachweise bleiben separate, spaetere Hardware-/Netzwerkgates. |
-| 6a | Issue #130 – R1-GPIO-SSOT und Synchronisierung der Hardware-Issues | `ISSUE130=CLOSED/COMPLETED`; `PR131=MERGED`; `PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`; `GPIO_SSOT=MERGED`; `GPIO_MATRIX=PLANNED_NOT_CONFIRMED`; `ELECTRICAL_VERIFICATION=PENDING`; `CONFIRMED_TEST=NO`; `ACTUATOR_RELEASE=NO`; `BOARD_FAMILY_REFERENCE_MATCH=CONFIRMED_BY_OWNER`. Details: `config/board_profiles/esp32_32e_quad_mosfet_r1.yaml`, Issue #130 und PR #131. | Keine offene Owner-Mergeentscheidung für #131. Elektrische Verifikation bleibt ein separates, späteres Hardwaregate; keine Aktorfreigabe. |
-| 7 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
-| 8 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
-| 9 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
-| 10 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, #29 sowie die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
-| 11 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | Reale Zuordnung, Pegel, Boot-/Reset-, Verbraucher-, Strom-/Anlauf- und Adapter-/Testnachweise ohne produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
-| 12 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. | Begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
-| 13 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
-| 14 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #29/#30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
-| 15 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
-| 16 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
+| 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
+| 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
+| 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
+| 4 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
+| 5 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
+| 6 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind für R1 deaktiviert und `FUTURE_RELEASE`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
+| 7 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
+| 8 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
+| 9 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
+| 10 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 17 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
 ## Naechste fachliche Arbeit
@@ -43,7 +48,7 @@ Lifecycle-/Safety-/Persistenz-Verträge ist in Issue #121 umgesetzt,
 ownerreviewt und in der R1-Integrationsbaseline enthalten. Issue #90 ist nach
 PR-#128-Merge und Owner Final Review geschlossen. Der separate #29-Panic
 (`LoadProhibited` im Bring-up-Probe) ist auf dem normalen `esp32_bringup`-
-Profil real reproduziert und bleibt Prioritaet 1. Der KISS-V2-Plan
+Profil real reproduziert und als abgeschlossene #29-Evidenz historisch dokumentiert. Der KISS-V2-Plan
 `b7d80de7d6e23fd792c2bd48eaa27052a8c61201` ist ownerfreigegeben; der
 Current-base-Kontrollpanic ist bestaetigt. Der frühere 96-KiB-Run ist wegen
 zusätzlicher Runtime-Log-Änderungen und einer Vorab-Resetsequenz historische,
@@ -53,8 +58,9 @@ Completion-HWM von 25840 B ergibt 72464 B beobachtete Peak-Nutzung und
 überschreitet das alte 67584-B-Budget. Der Owner hat
 `ROOT_CAUSE=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET` bestätigt. Die
 #29-Pegelmessung ist bewusst `NOT_RUN_WAIVED_BY_OWNER` und blockiert den
-#29-Abschluss nicht; ein elektrischer PASS oder eine Aktorfreigabe folgt
-daraus nicht.
+#29-Abschluss nicht; kanonisch gilt `ELECTRICAL_LEVEL_MEASUREMENT=
+NOT_REQUIRED_WAIVED`. Ein elektrischer Mess-PASS oder eine Aktorfreigabe
+folgt daraus nicht.
 
 Issue #124 ist die vor #25 eingeschobene, eigenstaendige R1-Recovery-
 Planung. PR #125 ist in die aktuelle R1-Integrationsbaseline gemergt; die
@@ -65,10 +71,11 @@ spaetere Hardware-/Netzwerkgates. #18 und #24 bleiben geschlossen, die
 #121-Architektur bleibt unveraendert und #25 wird in diesem Schritt weder
 implementiert noch geplant.
 
-Die endgültige Priorisierungsrichtung ist:
+Die abgeschlossene Basis und die nächste fachliche Phase sind getrennt:
 
 ```text
-#29 -> #90 -> #121 -> #124 -> #126 -> #25 -> #26 -> #31 -> #30 -> #32 -> #33
+abgeschlossene Basis: #29 -> #90 -> #121 -> #124 -> #126
+nächste fachliche Phase: #25 -> #26 -> #31 -> #30 -> #32 -> #33
   -> erste real bedienbare Fermenter-Hardwareintegration
   -> #106 strukturell -> #34 -> #35 -> #106 produktiv
   -> spätere vollständige Diagnose-/Abnahme-/Releasegates

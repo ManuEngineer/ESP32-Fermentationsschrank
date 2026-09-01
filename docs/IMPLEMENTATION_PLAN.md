@@ -135,7 +135,9 @@ Owner-Gates nicht vorweggenommen werden.
   verifizieren;
 - gleichzeitige Richtungsfreigabe ausschliessen;
 - Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen;
-- R_IS/L_IS nur nach sicherer Signal- und Nutzbarkeitsbewertung integrieren.
+- R_IS/L_IS in R1 nicht anschliessen, nicht messen und nicht implementieren;
+  eine spaetere Nutzung ist `FUTURE_RELEASE` und benoetigt ein eigenes Issue,
+  einen vollstaendigen Plan und ein eigenes Owner-Gate.
 
 ### H5 – Begrenzte Peltierpruefung
 
@@ -204,8 +206,9 @@ Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
 - Ein spaeterer Softwareblock darf einen fehlenden fachlichen oder Safetyvertrag
   nicht still ersetzen.
 - Reale Adapter werden erst nach dem zugehoerigen portseitigen Vertrag gebaut.
-- Produktive Aktorfreigabe verlangt den Fehler-/Safetykern sowie die elektrischen
-  Hardwaregates.
+- Produktive Aktorfreigabe verlangt den Fehler-/Safetykern sowie die owning
+  SSOT-, funktionalen Hardware- und, für #33, Adapter-Safety-Gates. Eine
+  generelle elektrische Pegelmessung ist fuer R1 nicht erforderlich.
 - Thermische Parameter bleiben `TBD_COMMISSIONING`, bis Messnachweise vorliegen.
 - Ressourcenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`, bis reproduzierbare Builds
   und Belastungsmessungen vorliegen.

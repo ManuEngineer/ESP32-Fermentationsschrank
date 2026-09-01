@@ -10,9 +10,6 @@ profile:
   release: r1
   real_hardware_present: true
   board_family_reference_match: confirmed_by_owner
-  verification_state: planned_not_confirmed
-  electrical_verification: pending
-  confirmed_test: false
   actuator_release: false
 
 pins:
@@ -170,7 +167,7 @@ pins:
     active_level: TBD_HARDWARE
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
-    assignment_status: board_fixed_pending_electrical_verification
+    assignment_status: board_fixed_pending_functional_verification
 
   gpio17:
     function: onboard_mosfet_2
@@ -180,7 +177,7 @@ pins:
     active_level: TBD_HARDWARE
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
-    assignment_status: board_fixed_pending_electrical_verification
+    assignment_status: board_fixed_pending_functional_verification
 
   gpio18:
     function: spi_sck
@@ -251,7 +248,7 @@ pins:
     active_level: TBD_HARDWARE
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
-    assignment_status: board_fixed_pending_electrical_verification
+    assignment_status: board_fixed_pending_functional_verification
 
   gpio27:
     function: onboard_mosfet_4
@@ -261,7 +258,7 @@ pins:
     active_level: TBD_HARDWARE
     safe_boot_level: TBD_HARDWARE
     external_bias: TBD_BOARD_CIRCUIT
-    assignment_status: board_fixed_pending_electrical_verification
+    assignment_status: board_fixed_pending_functional_verification
 
   gpio28:
     function: unavailable
@@ -542,15 +539,9 @@ resistor_policy:
 verification:
   board_family_identity: confirmed_by_owner_reference_match
   board_revision: TBD_HARDWARE
-  active_levels_confirmed: false
-  boot_levels_confirmed: false
-  mosfet_electrical_behavior_confirmed: false
-  bts7960_logic_confirmed: false
-  display_touch_electrical_function_confirmed: false
-  gpio_functional_test: false
-  confirmed_test: false
-  actuator_release: false
-  electrical_verification: pending
+  electrical_level_measurement: not_required_waived
+  ssot_conformance: pending
+  functional_hardware_verification: pending
   direct_reset_checks:
     common_ground: required
     reset_input_is_high_impedance: required

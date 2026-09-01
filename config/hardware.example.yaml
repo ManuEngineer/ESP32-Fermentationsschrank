@@ -47,7 +47,7 @@ peltier:
   one_shot_thermal_fuse: true
   thermal_fuse_rating_c: TBD_COMMISSIONING
   thermal_fuse_location: TBD_COMMISSIONING
-  ris_lis_usage: verify_on_real_module
+  ris_lis_usage: FUTURE_RELEASE
 
 sensors:
   conversion_resolution_bit: 12
@@ -138,13 +138,14 @@ features:
     status: FUTURE_RELEASE
 
 hardware_release:
-  state: ELECTRICAL_VERIFICATION_PENDING
+  electrical_level_measurement: not_required_waived
+  ssot_conformance: pending
+  functional_hardware_verification: pending
+  adapter_safety_verification: pending # only the Issue-33 adapter scope
+  actuator_release: false
+  real_peltier_test: not_run
   real_hardware_present: true
   board_family_reference_match: confirmed_by_owner
   board_family: esp32_32e_quad_mosfet
   board_profile: esp32_32e_quad_mosfet_r1
   board_revision: TBD_HARDWARE
-  pins_confirmed: false
-  active_levels_confirmed: false
-  boot_levels_confirmed: false
-  peltier_pulse_test_passed: false

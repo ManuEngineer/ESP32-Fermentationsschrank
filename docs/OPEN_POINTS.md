@@ -49,7 +49,9 @@ Nachverfolgung: #29 und #32
 ### Temperatursensoren
 
 - [ ] Bustopologie festlegen: drei getrennte Busse oder feste Sensoren gemeinsam
-- [ ] Pull-ups und Leitungslaengen bestimmen
+- [ ] Pull-ups und Leitungslaengen aus Verdrahtungs-/Board-SSOT bestimmen;
+      Busfunktion, ROM, CRC, Hot-Plug und Fehlerreaktion pruefen, ohne ein
+      generelles Spannungs- oder Pegelmess-Gate einzufuehren
 - [ ] ROM-Adressen der festen Sensoren dokumentieren
 - [ ] Produktfuehleranschluss waehlen; M8-3, GX12-3 oder andere verriegelbare
       3-polige Loesung vergleichen
@@ -74,7 +76,7 @@ Nachverfolgung: #31
 - [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
 - [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
 - [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
-- [ ] Summer-Spannung, Strom, Kanal und Lautstaerke festlegen
+- [ ] Summerfunktion, Kanal und Lautstaerke festlegen
 - [ ] Nachlaufverhalten auf realer Hardware pruefen
 
 Nachverfolgung: #32
@@ -86,7 +88,9 @@ Nachverfolgung: #32
 - [ ] Pull-down-/fail-low Beschaltung als vorhandenen Aufbau dokumentieren
 - [ ] Adapterinterlock nachweisen
 - [ ] Richtung spaeter ueber begrenzte Servicepulse funktional bestimmen
-- [ ] R_IS/L_IS-Pegel und diagnostische Nutzbarkeit pruefen
+- [ ] R_IS/L_IS bleiben in R1 deaktiviert, nicht angeschlossen und nicht
+      implementiert (`FUTURE_RELEASE`); eine spaetere Bewertung benoetigt ein
+      eigenes Issue, einen vollstaendigen Plan und ein eigenes Owner-Gate
 - [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
 - [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
 

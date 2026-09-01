@@ -458,7 +458,8 @@ sind. Der microSD-/SD-Karten-Slot wird fuer Release 1 ebenfalls nicht
 evaluiert; er erzeugt keinen Spike, Speicherpfad oder Adapter. Der
 230-V-AC-Hauptschalter ist kein Firmwareeingang. Ergebnisartefakte:
 
-- Schaltplan/Fotos des Testaufbaus und gemessene Pin-/Pegelmatrix;
+- Schaltplan/Fotos des Testaufbaus, SSOT-/Verdrahtungsmatrix und funktionale
+  Testergebnisse; optionale Messwerte sind kein R1-Pegelmess-Gate;
 - je Kandidat fixierte Abhaengigkeits- und Konfigurationsdatei;
 - Quellcommit, Lizenzpaket und Buildlog;
 - Screenshots/Fotos, Touchroh- und Kalibrierdaten;
@@ -467,7 +468,7 @@ evaluiert; er erzeugt keinen Spike, Speicherpfad oder Adapter. Der
 - begruendete Ownerentscheidung mit Rueckfallkandidat.
 
 Notwendige Owner-/Hardwareaktion: reale Boardrevision und Modul bereitstellen,
-Verdrahtung nach Messung freigeben und den aus dem identischen Vergleich
+Verdrahtung nach SSOT-/Funktionsnachweis freigeben und den aus dem identischen Vergleich
 hervorgehenden Kandidaten auswaehlen.
 
 ## Spike B: DS18B20 und 1-Wire

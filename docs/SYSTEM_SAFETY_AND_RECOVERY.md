@@ -465,8 +465,9 @@ Verbindliche Regeln:
 - [x] vorhandener zusaetzlicher DS18B20 ersetzt keine unabhaengige Abschaltung
 - [x] BTS7960-Eingaenge durch Hardware-Pulldowns beziehungsweise nachgewiesen
       sichere Beschaltung inaktiv halten
-- [x] Boot-, Reset- und Bootloaderpegel aller verwendeten Ausgaenge praktisch
-      messen
+- [x] Boot-, Reset- und Bootloaderverhalten aller verwendeten Ausgaenge
+      fail-closed funktional pruefen; eine generelle elektrische
+      Pegelmessung ist fuer R1 nicht erforderlich
 - [x] Resetcause diagnostisch auswerten, ohne Neustartakkumulation
 - [x] letzte gueltige Konfigurationsrevision als Rueckfall verwenden
 - [x] niemals automatischen Werksreset wegen Datenfehler ausloesen
@@ -490,7 +491,8 @@ Verbindliche Regeln:
 - thermisch kritischste Montageposition der Temperatursicherung
 - Nachweis der sicheren Unterbrechung des Peltierpfades
 - BTS7960-Pulldowns beziehungsweise externe Freigabestufe auslegen
-- Boot-/Resetpegel aller Ausgaenge messen
+- Boot-/Resetverhalten aller Ausgaenge funktional fail-closed pruefen; keine
+  generelle R1-Pegelmesspflicht
 - E5/Future: konkrete Watchdog-Zeiten und Neustartzaehlergrenzen fuer spaetere
   Hardware-/Betriebsvertraege; nicht #24-R1
 - spaetere Hardware-/Service-Definition des `SAFE_BOOT`-Zugangs; der #24-R1-
