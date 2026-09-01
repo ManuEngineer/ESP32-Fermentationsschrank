@@ -421,9 +421,10 @@ moeglich. Direkte Tests sind waehrend eines aktiven Laufes gesperrt.
 
 ### R_IS und L_IS
 
-Die Signale `R_IS` und `L_IS` sind fuer R1 deaktiviert: Sie werden nicht
-angeschlossen, nicht vermessen und nicht implementiert. Sie sind kein R1-
-Akzeptanzkriterium, kein Required Test und kein Definition-of-Done-Gate.
+Die Signale `R_IS` und `L_IS` sind fuer R1 bewusst unbeschaltet und deaktiviert:
+Sie werden nicht vermessen und nicht implementiert, bleiben aber fuer eine
+moegliche spaetere Integration reserviert und sind nicht verworfen. Sie sind
+kein R1-Akzeptanzkriterium, kein Required Test und kein Definition-of-Done-Gate.
 Eine spaetere Diagnose- oder Strominformation ist `FUTURE_RELEASE` und darf
 nur ueber ein eigenes Issue, einen vollstaendigen Plan und ein eigenes
 Owner-Gate eingefuehrt werden. Ein externer Stromsensor ist fuer das erste

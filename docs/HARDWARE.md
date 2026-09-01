@@ -12,7 +12,7 @@
 | `candidate` | moegliche Loesung, noch nicht entschieden |
 | `TBD_HARDWARE` | reale Komponente, Pin, Pegel oder Verdrahtung muss geprueft werden |
 | `TBD_COMMISSIONING` | thermischer oder regelungstechnischer Wert wird am Schrank bestimmt |
-| `FUTURE_RELEASE` | bewusst nicht Bestandteil von Release 1 |
+| `FUTURE_RELEASE` | bewusst nicht Bestandteil von R1, aber fuer spaetere Integration reserviert und nicht verworfen |
 
 Ein Designstatus `planned` oder
 `board_fixed_pending_functional_verification` ist kein
@@ -115,10 +115,11 @@ Vor dem ersten Peltieranschluss:
    Servicepulse funktional bestimmen.
 7. erste reale Freigabe nur als begrenzter Servicepuls.
 
-`R_IS` und `L_IS` sind in R1 deaktiviert und werden nicht angeschlossen,
-nicht vermessen und nicht implementiert. Ihre spaetere Verwendung ist
-`FUTURE_RELEASE` und benoetigt ein eigenes Issue, einen eigenen vollstaendigen
-Plan und ein eigenes Owner-Gate.
+`R_IS` und `L_IS` sind in R1 bewusst unbeschaltet, deaktiviert, nicht vermessen
+und nicht implementiert. Die reservierten ADC1-GPIOs bleiben fuer eine
+moegliche spaetere Integration reserviert; die Funktion ist deferiert, nicht
+verworfen. `FUTURE_RELEASE` benoetigt ein eigenes Issue, einen eigenen
+vollstaendigen Plan und ein eigenes Owner-Gate.
 
 ## Unabhaengige Schutzkomponenten
 

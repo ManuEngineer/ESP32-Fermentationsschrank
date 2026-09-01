@@ -73,7 +73,9 @@ Nachverfolgung: #31
 
 ### Luefter, Summer und MOSFET-Ausgaenge
 
-- [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
+- [ ] Innen- und Aussenluefterdaten erfassen; Stromaufnahme und Anlaufverhalten
+      nur soweit ein konkretes Hardwaregate dies erfordert und geeignete
+      Mittel vorhanden sind
 - [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
 - [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
 - [ ] Summerfunktion, Kanal und Lautstaerke festlegen
@@ -88,9 +90,10 @@ Nachverfolgung: #32
 - [ ] Pull-down-/fail-low Beschaltung als vorhandenen Aufbau dokumentieren
 - [ ] Adapterinterlock nachweisen
 - [ ] Richtung spaeter ueber begrenzte Servicepulse funktional bestimmen
-- [ ] R_IS/L_IS bleiben in R1 deaktiviert, nicht angeschlossen und nicht
-      implementiert (`FUTURE_RELEASE`); eine spaetere Bewertung benoetigt ein
-      eigenes Issue, einen vollstaendigen Plan und ein eigenes Owner-Gate
+- [x] R_IS/L_IS fuer R1 bewusst unbeschaltet/deaktiviert; GPIO34/GPIO35
+      bleiben als ADC1-Reserve fuer eine moegliche spaetere Integration
+      reserviert (`FUTURE_RELEASE`), nicht verworfen. Keine R1-Mess-,
+      Implementierungs- oder DoD-Pflicht; `R1_BLOCKED_BY_R_IS_L_IS=NO`
 - [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
 - [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
 
