@@ -45,30 +45,28 @@ constexpr std::uint32_t kProbeCleanupEvent = 1U << 4U;
 // The four internal samples therefore use this API through its NULL/current-
 // task form and expose the result as *_bytes.
 
-// This is a diagnostic-task stack formula, not a product setting. The
-// relevant non-inlined frames are summed along the actual deterministic
-// candidate-allocation-failure path. The small script
-// scripts/analyze_issue_29_stack.py verifies the corresponding .su/.ci
-// artefacts and reproduces this result.
+// This is a diagnostic-task stack setting, not a product setting. The
+// following call-path and safety-buffer values are historical, incomplete
+// diagnostic evidence only; they are not a current global static upper bound
+// and do not derive the stack setting below.
 constexpr std::size_t kHeldObjectBytes =
     sizeof(CommandDecision) + sizeof(RunCommandState) +
     sizeof(ProgramStartRequest) + sizeof(RunPersistenceCoordinator) +
     sizeof(TemperatureControlApplicationOrchestrator) +
     sizeof(TemperatureController) + sizeof(ActuatorPlanner) +
     sizeof(TargetQualificationEvaluator) + sizeof(ActuationInterlock);
-// esp32_bringup @ -Og, Xtensa GCC 15.2.0, -fstack-usage and
+// Historical esp32_bringup evidence @ -Og, Xtensa GCC 15.2.0,
+// -fstack-usage and
 // -fcallgraph-info=su: probeTask + runProbe + persistFreshStartCommand +
 // TemperatureControlApplicationOrchestrator::persistCommand +
 // RunPersistenceCoordinator::persistCommand + result() = 62928 bytes.
-// Individual .su values are not a cumulative bound; this value is.
+// Individual .su values are not a cumulative bound, and this historical
+// value is not a complete transitive upper bound.
 constexpr std::size_t kMeasuredCallPathBytes = 62928U;
 constexpr std::size_t kMeasuredCallPathSafetyBufferBytes = 4096U;
-constexpr std::size_t kUnroundedProbeTaskStackBytes =
-    kMeasuredCallPathBytes + kMeasuredCallPathSafetyBufferBytes;
-// Keep the diagnostic allocation on a reproducible 1 KiB boundary after the
-// measured cumulative path and bounded safety buffer have been accounted for.
-constexpr std::size_t kProbeTaskStackBytes =
-    ((kUnroundedProbeTaskStackBytes + 1023U) / 1024U) * 1024U;
+// Explicit private diagnostic experiment size from the owner-approved KISS
+// plan. It is intentionally not presented as a mathematical upper bound.
+constexpr std::size_t kProbeTaskStackBytes = 98304U;
 static_assert(kProbeTaskStackBytes <=
               static_cast<std::size_t>(
                   std::numeric_limits<configSTACK_DEPTH_TYPE>::max()));
@@ -599,11 +597,10 @@ bool run() {
     // do not determine the concrete cause of the residual B0-to-B2 delta.
     // The exact B0 return is therefore not a suitable task-specific cleanup
     // gate. Comparing against B1 instead proves that at least this task's own
-    // configured stack allocation (`kProbeTaskStackBytes`, already derived at
-    // compile time from the measured call path, not an invented constant) was
-    // returned to the heap after deletion. That is a lower bound attributable
-    // to this task; it is not a general proof that every workload allocation
-    // is leak-free.
+    // configured diagnostic stack allocation (`kProbeTaskStackBytes`, the
+    // explicit 98304-byte KISS experiment size) was returned to the heap
+    // after deletion. That is a lower bound attributable to this task; it is
+    // not a general proof that every workload allocation is leak-free.
     // largestFreeBlockBytes remains part of the recorded B2 sample below (it
     // must not be hidden), but is informational rather than a pass/fail gate.
     const TickType_t idleStart = xTaskGetTickCount();

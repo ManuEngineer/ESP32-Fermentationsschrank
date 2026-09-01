@@ -1,5 +1,12 @@
 # Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustände
 
+> **Historische, superseded Planrevision:** Dieser PR-116-Plan ist durch
+> `docs/tasks/issue-29-panic-requalification-correction-plan.md` ersetzt.
+> Aussagen dieses Altplans, die eine allgemeine Multimeter- oder
+> Boot-Pegelmessung verlangen, sind keine aktuelle R1-Pflicht. Die aktuelle
+> Owner-Entscheidung erlaubt funktionale Hardwareabnahme ohne daraus einen
+> elektrischen Mess-PASS abzuleiten.
+
 Diese vollständige Planrevision korrigiert die Planreview-Befunde F1–F7 des
 vorherigen Plan-Commits `b4cc9e367145cb761ba72db731416ec969f798b7`. Sie ersetzt
 die vorherige Planfassung vollständig; ihre neue Commit-SHA ist das erneute

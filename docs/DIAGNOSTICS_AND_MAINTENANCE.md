@@ -205,7 +205,9 @@ Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 - kritischer Speicher gesund
 - Schrankluft- und Kuehlkoerpersensor gueltig
 - Versorgung stabil
-- alle verwendeten GPIO-Pegel und Richtungen fuer die konkrete Hardware bestaetigt
+- SSOT-/Funktionszuordnung der verwendeten GPIOs und Richtungen fuer die
+  konkrete Hardware bestaetigt; keine vorgeschriebene Spannungs- oder
+  Boot-Pegelmessung
 
 Fuer einen Peltier-Puls zusaetzlich zwingend:
 
@@ -214,7 +216,8 @@ Fuer einen Peltier-Puls zusaetzlich zwingend:
 - Montageort der Temperatursicherung dokumentiert
 - Kuehlkoerper korrekt montiert
 - Aussenluefter zuvor erfolgreich getestet
-- BTS7960 ohne Peltier und Polaritaet mit Multimeter verifiziert
+- BTS7960-Adapterinterlock auf Command-/GPIO-Ebene bestanden, Pull-down-/fail-low
+  Beschaltung vorhanden und keine gleichzeitige Gegenrichtungsaktivierung
 
 Rating und Montageort bleiben bis zur Inbetriebnahme `TBD_COMMISSIONING`; die
 Installation vor dem ersten Peltier-Puls ist verbindlich.
@@ -227,7 +230,9 @@ Installation vor dem ersten Peltier-Puls ist verbindlich.
 4. Innenluefter kurz testen
 5. Aussenluefter kurz testen
 6. BTS7960 ohne angeschlossenes Peltier pruefen
-7. Ausgang und Polaritaet mit Multimeter bestaetigen
+7. fail-closed Adapterzustand, Mutual Exclusion und Break-before-make erneut
+   pruefen; Richtung/Polaritaet wird erst im begrenzten Peltier-Servicepuls
+   funktional festgestellt
 8. Sicherheitskomponenten und Freigaben erneut pruefen
 9. begrenzten Peltier-Heizpuls ausfuehren
 10. sicher ausschalten, Mindest-Ausschaltzeit und Totzeit abwarten

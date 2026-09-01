@@ -1,5 +1,10 @@
 # Issue #90 – sauberer Neustart auf korrigierter PR-116-Basis (R5.9)
 
+> **Historische Planprovenienz:** Issue #90 ist abgeschlossen. Verweise in
+> diesem Altplan auf eine als #29-Gate erwartete unbelastete Pegelmessung sind
+> durch die aktuelle Owner-Entscheidung superseded und keine R1-Messpflicht.
+> Sie bleiben ausschliesslich als damaliger Kontext erhalten.
+
 ## Status, Ziel und Owner-Gate
 
 Diese Datei ist die vollständige, eigenständig ausführbare kanonische

@@ -189,7 +189,7 @@ Abgerufen am 2026-07-27.
 | Ressourcen | kleiner GPIO-/Timeradapter; reale Timerbelegung und Builddelta messen |
 | Adapter | `IBidirectionalActuatorSink`-Implementierung mit sicherer Initialisierung; keine Rollenbegriffe im Plattformport |
 | Eigene Logik | gesamte Safety-Freigabe, Mindestzeiten, Totzeit, Fehlerreaktion und Servicebegrenzung |
-| Risiken/Hardwaretest | Lieferantenboard ist nicht identisch mit dem Infineon-Bauteil; Modulschaltung, Enable, Polaritaet und R_IS/L_IS real messen |
+| Risiken/Hardwaretest | Lieferantenboard ist nicht identisch mit dem Infineon-Bauteil; Modulschaltung und Enable gegen reale Modulunterlagen pruefen, Pull-down/fail-low Beschaltung und Adapterinterlock nachweisen, Richtung/Polaritaet erst im begrenzten Servicepuls funktional bestimmen und R_IS/L_IS erst nach sicherer Nutzbarkeitsbewertung aktivieren |
 | Empfehlung/Status | `CONFIGURE_FRAMEWORK` plus eigener Adapter; `BLOCKED_HARDWARE`, keine externe BTS7960-Bibliothek auswaehlen |
 
 ## Luefter und MOSFET-Ausgaenge
@@ -202,7 +202,7 @@ Abgerufen am 2026-07-27.
 | Quelle/Stand/Lizenz | ESP-IDF `6.0.2` (Issue #71 / PR #79, Basis-Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e`), Apache-2.0 |
 | Ressourcen | kleine `IBinaryOutputSink`-Adapter; Timer/PWM nur falls reale Hardware es verlangt |
 | Eigene Logik | Nachlauf, Sicherheitsprioritaet, Meldungsmuster und Rollenbindung |
-| Risiken/Hardwaretest | Kanalbelegung und aktive Pegel der Quad-MOSFET-Platine sind nur `confirmed_order`; Strom, Anlauf und Reset messen |
+| Risiken/Hardwaretest | Kanalbelegung der Quad-MOSFET-Platine ist nur `confirmed_order`; Kanal-/Verbraucherfunktion und fail-closed Boot-/Resetverhalten funktional pruefen. Strom- und Anlaufdaten nur bei konkretem Gate und geeignetem Messmittel erfassen. |
 | Empfehlung/Status | `CONFIGURE_FRAMEWORK`; keine separate Luefterbibliothek; `BLOCKED_HARDWARE` |
 
 Der 230-V-AC-Hauptschalter gehoert nicht zu diesen Ausgaengen und erhaelt auch

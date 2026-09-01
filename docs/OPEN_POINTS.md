@@ -39,10 +39,10 @@ Nachverfolgung: #29
 ### GPIOs und Bootpegel
 
 - [ ] alle verwendeten GPIOs festlegen
-- [ ] Bootstrapping-Eignung pruefen
-- [ ] aktive Pegel der Onboard-MOSFET-Ausgaenge messen
-- [ ] Boot-, Reset-, Brownout- und Bootloaderverhalten messen
-- [ ] nachweisen, dass unbekannte Aktoren beim Boot gesperrt bleiben
+- [ ] Bootstrapping-Eignung gegen dokumentierte ESP32-/Boardanforderungen pruefen
+- [ ] funktional nachweisen, dass relevante Aktoren beim Boot und Reset nicht
+      unkontrolliert betrieben werden
+- [ ] #32: PCB-feste Kanal-/Verbraucherzuordnung funktional bestaetigen
 
 Nachverfolgung: #29 und #32
 
@@ -72,8 +72,8 @@ Nachverfolgung: #31
 ### Luefter, Summer und MOSFET-Ausgaenge
 
 - [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
-- [ ] MOSFET-Kanaele unbelastet messen
-- [ ] Verbraucher einzeln anschliessen und Bootverhalten erneut pruefen
+- [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
+- [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
 - [ ] Summer-Spannung, Strom, Kanal und Lautstaerke festlegen
 - [ ] Nachlaufverhalten auf realer Hardware pruefen
 
@@ -83,8 +83,9 @@ Nachverfolgung: #32
 
 - [ ] genaue Modulvariante und Pinbeschriftung dokumentieren
 - [ ] Enable- und Richtungspins festlegen
-- [ ] Hardware-Pulldowns oder gleichwertige Freigabestufe nachweisen
-- [ ] Ausgangspolaritaet ohne Peltier mit Multimeter messen
+- [ ] Pull-down-/fail-low Beschaltung als vorhandenen Aufbau dokumentieren
+- [ ] Adapterinterlock nachweisen
+- [ ] Richtung spaeter ueber begrenzte Servicepulse funktional bestimmen
 - [ ] R_IS/L_IS-Pegel und diagnostische Nutzbarkeit pruefen
 - [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
 - [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
