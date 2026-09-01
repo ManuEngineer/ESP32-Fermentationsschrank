@@ -2,7 +2,7 @@
 
 ```text
 PLAN_REVISION=FULL_REPLACEMENT
-SUPERSEDES_PLAN_SHA=34b37cb400ca5640b364103fcfd6a4ff128b8514
+SUPERSEDES_PLAN_SHA=1706f8cbe22cd59a6351db50c78138355ba7302b
 APPROVED_PLAN_SHA=PENDING
 OWNER_PLAN_REVIEW_REQUIRED=YES
 IMPLEMENTATION_ALLOWED=NO
@@ -71,14 +71,16 @@ PR131=MERGED
 PR131_MERGE_COMMIT=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d
 ISSUE132=OPEN
 PR133=OPEN_DRAFT
-PR133_HEAD=34b37cb400ca5640b364103fcfd6a4ff128b8514
+PRE_REVISION_PR133_HEAD=1706f8cbe22cd59a6351db50c78138355ba7302b
 ```
 
 Der Arbeitszweig ist
 `agent/issue-132-r1-hardware-gate-cleanup`, abgeleitet von
 `origin/integration/r1-development`. Die vorherige Plan-SHA
-`34b37cb400ca5640b364103fcfd6a4ff128b8514` ist nicht freigegeben und wird
-durch diese Revision superseded.
+`1706f8cbe22cd59a6351db50c78138355ba7302b` ist nicht freigegeben und wird
+durch diese Revision superseded. Die neue Plan-Commit-SHA ist beim Schreiben
+dieser Datei noch nicht bekannt und wird erst nach Commit in PR-Body und
+Handover ausgewiesen.
 
 Live-Quellen, die nach Planfreigabe synchronisiert werden:
 
@@ -140,8 +142,14 @@ betreffenden Scope nicht künstlich als `NOT_APPLICABLE` ergänzt.
 |---|---|---|---|---|---|
 | Boardprofil-Statusmetadaten | `NOT_REQUIRED_WAIVED` | `PENDING` | `PENDING` | nicht verwenden | nicht verwenden |
 | Issue #31 Display/Touch | `NOT_REQUIRED_WAIVED` | `PENDING` | `PENDING` | `NOT_APPLICABLE` | nicht verwenden |
-| Issue #32 MOSFET/Fan/Buzzer | `NOT_REQUIRED_WAIVED` | `PENDING` | `PENDING` | `PENDING` | nicht verwenden |
+| Issue #32 MOSFET/Fan/Buzzer | `NOT_REQUIRED_WAIVED` | `PENDING` | `PENDING` | nicht verwenden | nicht verwenden |
 | Issue #33 BTS7960/Peltier-Adapter | `NOT_REQUIRED_WAIVED` | `PENDING` | `PENDING` | `PENDING` | nicht verwenden |
+
+Für Issue #32 wird `ADAPTER_SAFETY_VERIFICATION` nicht geführt. Der
+produktionsnahe MOSFET-/Fan-/Buzzer-Adapter-/Treiberpfad und seine sichere
+Funktion sind vollständig Bestandteil von
+`FUNCTIONAL_HARDWARE_VERIFICATION`. Ein separates Adapter-Safety-Gate beginnt
+erst im #33-Scope mit dem zwingenden Low-Level-H-Brücken-Interlock.
 
 Issue #29 erhält keinen neuen pauschalen Hardware-Freigabestatus. Seine
 abgeschlossene technische Evidenz bleibt mit den bestehenden
@@ -254,20 +262,28 @@ erzeugt.
 | `hardware_release.pins_confirmed` | `false` | `REMOVE` | Nicht als allgemeines Boolean-Gate weiterführen; Ziel ist `ssot_conformance: PENDING`. |
 | `hardware_release.active_levels_confirmed` | `false` | `REMOVE` | Nicht als Pegelmess-Gate weiterführen; Ziel ist `functional_hardware_verification: PENDING`. |
 | `hardware_release.boot_levels_confirmed` | `false` | `REMOVE` | Keine Bootpegelmesspflicht; funktionales Boot-/Resetverhalten bleibt im Funktionsscope. |
-| `hardware_release.peltier_pulse_test_passed` | `false` | `REPLACE_WITH` | `real_peltier_test: NOT_RUN`; kein elektrischer oder Aktorfreigabe-PASS. |
+| `hardware_release.peltier_pulse_test_passed` | `false` | `REPLACE_WITH` | `real_peltier_test: not_run`; kein elektrischer oder Aktorfreigabe-PASS. |
 
 Der resultierende `hardware_release`-Block lautet sinngemäß und ohne
 zusätzlichen `state`-Sammelstatus:
 
 ```yaml
 hardware_release:
-  electrical_level_measurement: NOT_REQUIRED_WAIVED
-  ssot_conformance: PENDING
-  functional_hardware_verification: PENDING
-  adapter_safety_verification: PENDING
-  actuator_release: NO
-  real_peltier_test: NOT_RUN
+  electrical_level_measurement: not_required_waived
+  ssot_conformance: pending
+  functional_hardware_verification: pending
+  adapter_safety_verification: pending
+  actuator_release: false
+  real_peltier_test: not_run
 ```
+
+Alle vier Nachweisfelder verwenden damit die in Abschnitt 1 festgelegten
+lowercase-YAMLwerte. `actuator_release` ist ein Boolean und hat den exakten
+Wert `false`; `real_peltier_test` ist ein nicht-gating Statusstring mit dem
+exakten Wert `not_run`. Das globale Feld
+`hardware_release.adapter_safety_verification: pending` repräsentiert hier
+ausschließlich den offenen #33-BTS7960-Adapter-Safety-Scope. Es erzeugt kein
+separates #32-Gate; für #32 wird dieses Feld nicht geführt.
 
 `THERMAL_COMMISSIONING` wird im Beispielblock nicht ergänzt, weil thermische
 Inbetriebnahme ein späteres Commissioning-Gate und kein Hardware-/Adapterstatus
