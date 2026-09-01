@@ -22,7 +22,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / Korrektur-PR | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; der neue Korrekturscope basiert auf `integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollstaendigen Korrekturplan von Issue #136 als exakte Plan-SHA ownerfreigeben; Ownerentscheidung `FERMENTER_R1_OFFLINE_NEW_RUN_TIME_SOURCE_POLICY` vor jeder F5-Umsetzung. PR #135 bleibt Draft und nicht Ready. |
+| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturplan | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; `PR137=OPEN_DRAFT`; der Korrekturscope basiert auf `integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollstaendige KISS-Planrevision von Issue #136 als exakte Plan-SHA ownerfreigeben; Ownerentscheidung `FERMENTER_R1_OFFLINE_NEW_RUN_TIME_SOURCE_POLICY` vor F5. PR #135 und PR #137 bleiben Draft und nicht Ready. |
 | 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
 | 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
@@ -46,9 +46,10 @@ PR #135 und fuehrt keine Produkt-, Test-, Build- oder Hardwareimplementation
 aus.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
-abgeschlossen. Der Release-1-Safety-Core bleibt beim bestätigten KISS- und
-fail-closed-Vertrag; Hardware-, reale Aktor-, NVS- und
-Inbetriebnahmenachweise sind dadurch nicht vorweggenommen.
+abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
+`ActuationInterlock` und den zugehoerigen aktuellen Fachvertraegen umgesetzt;
+Hardware-, reale Aktor-, NVS- und Inbetriebnahmenachweise sind dadurch nicht
+vorweggenommen.
 
 Issue #119 / PR #120 sind geschlossen und bleiben als fehlgeschlagener
 Composition-/Diagnosepfad historische Evidenz (neuer `LoadProhibited`-Panic).
@@ -122,8 +123,10 @@ nicht als vorgezogener Parallelvertrag umgesetzt und behält seine Abhängigkeit
 auf #19.
 
 Issue #16 bleibt Trackingcontainer: #54–#57 und das
-`CONFIGURATION_SAFETY_INTEGRATION_GATE` sind abgeschlossen, reale
-NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` sind abgeschlossen. Verbleibende
+reale Hardware-, Ressourcen- und Releasegates stehen mit ihrer aktuellen
+Ownership in `OPEN_POINTS.md` und den offenen Hardware-/Release-Issues; #90
+ist geschlossene historische Persistenzprovenienz.
 
 ## Zulaessige Parallelitaet
 
