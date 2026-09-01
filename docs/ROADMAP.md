@@ -22,7 +22,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturimplementation | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; `PR137=OPEN_DRAFT`; `APPROVED_PLAN_SHA=8cd254013a5a93d535dff72713d0491adea2811d`; F1–F4/F7/F8 sind als aktueller Dokument-/Statusabgleich umgesetzt, F5 Option A dokumentiert und F6 auf drei explizite Allokationsgrenzen begrenzt. Die konkrete DS3231-Variante bleibt `TBD_HARDWARE_CONFIRMATION`; ihr realer Nachweis ist separat `UNASSIGNED`. `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollständige Owner-Implementierungsprüfung des aktuellen PR-#137-HEAD. PR #135 und PR #137 bleiben Draft und nicht Ready; #25 bleibt bis zur erfolgreichen Promotion nicht gestartet. |
+| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturimplementation | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=IMPLEMENTED_PENDING_OWNER_REVIEW`; `PR137=OPEN_DRAFT`; `APPROVED_PLAN_SHA=8cd254013a5a93d535dff72713d0491adea2811d`; F1–F4/F7/F8 sind als aktueller Dokument-/Statusabgleich umgesetzt, F5 Option A dokumentiert und F6 in genau drei Produktcodedateien umgesetzt. Der NVS-Linux-Hosttest verwendet eine test-only CMake-Grenze und zwei deterministische trusted-UTC-Fresh-Start-Testinputs; der vollständige Hosttestpfad ist PASS. Die konkrete DS3231-Variante bleibt `TBD_HARDWARE_CONFIRMATION`; ihr realer Nachweis ist separat `UNASSIGNED`. `HARDWARE_IMPLEMENTATION=NO`; `HARDWARE_TEST=NOT_RUN`; `FULL_BUILD_SUITE=NOT_RUN`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollständige Owner-Implementierungsprüfung des aktuellen PR-#137-HEAD. PR #135 und PR #137 bleiben Draft und nicht Ready; #25 bleibt bis zur erfolgreichen Promotion nicht gestartet. |
 | 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
 | 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
@@ -42,8 +42,11 @@ Der aktuelle Integrationscheckpoint ist Issue #134 / PR #135 auf
 Der kumulative Owner-Review ist `CHANGES_REQUIRED`; `OWNER_READY_GATE=NO`,
 `MERGE=NO` und `ISSUE25_STARTED=NO`. Issue #136 ist der einzige aktive
 Korrekturscope vor einer weiteren Promotion; er entwickelt nicht direkt in
-PR #135 und fuehrt keine Produkt-, Test-, Build- oder Hardwareimplementation
-aus.
+PR #135. Der umgesetzte Scope umfasst genau drei F6-Produktcodedateien, die
+test-only CMake-Grenze des NVS-Linux-Hosttests und zwei trusted-UTC-Fresh-Start-
+Testinputs sowie den Dokument-/Statusabgleich und die F5-Option-A-
+Dokumentation. Hardwareimplementation, Hardwaretest und Full-Build-Suite
+sind nicht Teil dieses Scopes.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
@@ -193,7 +196,9 @@ rückwirkend umgeschrieben.
 - PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt als erhaltener C2-Legacy-/Future-Ausbaupfad;
 - PR #104 / Issue #22: Zeitproportionale PI-Regelung und Luftbegrenzung;
 - PR #105 / Issue #23: Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
-- PR #110 / Issue #24: Release-1 FaultCodes, Disposition, `SAFE_BOOT`, Fehlerinjektion und zentrale fail-closed SafetyCore-Grenze.
+- PR #110 / Issue #24: Release-1 FaultCodes, Disposition, `SAFE_BOOT` und
+  Fehlerinjektion; der aktuelle fail-closed Vertrag liegt im stateless
+  `ActuationInterlock` und den Producer-eigenen Latches.
 - PR #113 / Issue #111: Codex Plan Mode als Planungsmodus ohne Änderung des
   Owner-Gates.
 

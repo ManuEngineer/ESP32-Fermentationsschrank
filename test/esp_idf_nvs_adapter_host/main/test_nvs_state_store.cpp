@@ -979,7 +979,7 @@ void cutHarnessWritesEarlyAndLateArtifacts() {
         CHECK(coordinator
                   .persistCommand(
                       state, start,
-                      fermentation::RunCheckpointTime{100U, std::nullopt})
+                      fermentation::RunCheckpointTime{100U, 1'700'000'000LL})
                   .status == fermentation::RunPersistenceResultStatus::Applied);
         const auto oldHeadRead = store->read(key("rh0"), 256U);
         CHECK(oldHeadRead.status ==
@@ -1324,11 +1324,11 @@ void abruptPowerCutWriterChild(const char* imagePath, const char* metadataPath,
     request.productSensorValid = true;
     const auto start = fermentation::decideProgramStart(state, request);
     CHECK(start.proposed());
-    CHECK(
-        coordinator
-            .persistCommand(state, start,
-                            fermentation::RunCheckpointTime{100U, std::nullopt})
-            .status == fermentation::RunPersistenceResultStatus::Applied);
+    CHECK(coordinator
+              .persistCommand(
+                  state, start,
+                  fermentation::RunCheckpointTime{100U, 1'700'000'000LL})
+              .status == fermentation::RunPersistenceResultStatus::Applied);
     const auto oldHeadRead = store->read(key("rh0"), 256U);
     CHECK(oldHeadRead.status == device_platform::StateStoreReadStatus::Success);
     CHECK(!oldHeadRead.value.empty());
