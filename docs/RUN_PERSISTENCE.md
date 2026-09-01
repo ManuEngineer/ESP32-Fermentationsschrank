@@ -272,8 +272,11 @@ Eine neue atomare Revision entsteht mindestens bei:
 - Abbruch
 - Abschluss
 - einer expliziten, ueber den bestehenden #17-Pfad persistierten
-  Start-/Resume-Entscheidung; automatische Recoveryentscheidungen gehoeren
-  zum C2-Legacy
+  Start-/Resume-Entscheidung; der enge #124-Current-`FERMENTING`-Sonderfall
+  mit exakter Validierung und trusted UTC ist aktueller R1-Vertrag,
+  historische gewichtete/biologische/Charge-/Fallback-Autorecovery ausserhalb
+  dieses Vertrags bleibt C2-Legacy. Automatisches Fallback-Resume und
+  automatische Fallback-Promotion bleiben ausgeschlossen.
 
 Zusammengehoerige Aenderungen duerfen in einer atomaren Revision gebuendelt
 werden. Ein Schritt, der spaeter Aktoren freigeben kann, wird erst angewendet,

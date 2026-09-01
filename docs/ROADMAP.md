@@ -17,12 +17,13 @@ nicht kopiert, sondern verlinkt.
 | Issue #124 / PR #125 | `ISSUE124=CLOSED`; `PR125=MERGED`; `PR125_MERGE=5b8b86b99347bb0bb104dd1c2968040656119440`; `HARDWARE_RUN=NOT_RUN`; `OWNER_DECISIONS_REQUIRED=NONE` |
 | Issue #126 / PR #127 | `ISSUE126=CLOSED`; `PR127=MERGED @ 18fb96b79608914568b98d2ec06694d75ed0402e`; `OWNER_FINAL_IMPLEMENTATION_REVIEW=PASS`; `GITHUB_CI=PASS`; `RTC_HARDWARE=BLOCKED_OWNER_HARDWARE_PENDING`; `NTP_REAL_NETWORK_RUN=NOT_RUN` |
 | Issue #130 / PR #131 | `ISSUE130=CLOSED/COMPLETED`; `PR131=MERGED`; `PR131_MERGE_SHA=1fd8f6af53d1b3c23f3aa46c73c4fc3da7513d6d`; `GPIO_SSOT=MERGED`; `GPIO_MATRIX=PLANNED_NOT_CONFIRMED`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `SSOT_CONFORMANCE=PENDING`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `ACTUATOR_RELEASE=NO`; `BOARD_FAMILY_REFERENCE_MATCH=CONFIRMED_BY_OWNER` |
+| Issue #136 / PR #137 | Technischer Korrekturscope abgeschlossen; `PR137=MERGED`; `PR137_HEAD=4213ce2b16023fe3074703c97942191a3b60e5f1`; `PR137_MERGE_COMMIT=c347875761c6e357b00ca0c2ed0d185766c17846`; `PR137_REVIEW=PASS`; `PR137_LOCAL_VERIFICATION=PASS`; `PR137_GITHUB_CI=PASS` |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturimplementation | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=IMPLEMENTED_PENDING_OWNER_REVIEW`; `PR137=OPEN_DRAFT`; `APPROVED_PLAN_SHA=8cd254013a5a93d535dff72713d0491adea2811d`; F1–F4/F7/F8 sind als aktueller Dokument-/Statusabgleich umgesetzt, F5 Option A dokumentiert und F6 in genau drei Produktcodedateien umgesetzt. Der NVS-Linux-Hosttest verwendet eine test-only CMake-Grenze und zwei deterministische trusted-UTC-Fresh-Start-Testinputs; der vollständige Hosttestpfad ist PASS. Die konkrete DS3231-Variante bleibt `TBD_HARDWARE_CONFIRMATION`; ihr realer Nachweis ist separat `UNASSIGNED`. `HARDWARE_IMPLEMENTATION=NO`; `HARDWARE_TEST=NOT_RUN`; `FULL_BUILD_SUITE=NOT_RUN`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollständige Owner-Implementierungsprüfung des aktuellen PR-#137-HEAD. PR #135 und PR #137 bleiben Draft und nicht Ready; #25 bleibt bis zur erfolgreichen Promotion nicht gestartet. |
+| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint | `CURRENT_INTEGRATION_CHECKPOINT=ISSUE134_PR135`; `PR135=PROMOTION_ONLY`; `CUMULATIVE_OWNER_REVIEW_REQUIRED=YES`; `OWNER_READY_REQUIRED=YES`; `GITHUB_CI_AFTER_READY_REQUIRED=YES`; `OWNER_MERGE_REQUIRED=YES`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO` | Vollständiger kumulativer Ownerreview auf dem exakten aktuellen Integrations-HEAD -> Owner Ready -> GitHub CI -> Owner-Merge nach `main`. |
 | 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
 | 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
@@ -38,15 +39,10 @@ nicht kopiert, sondern verlinkt.
 ## Naechste fachliche Arbeit
 
 Der aktuelle Integrationscheckpoint ist Issue #134 / PR #135 auf
-`integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`.
-Der kumulative Owner-Review ist `CHANGES_REQUIRED`; `OWNER_READY_GATE=NO`,
-`MERGE=NO` und `ISSUE25_STARTED=NO`. Issue #136 ist der einzige aktive
-Korrekturscope vor einer weiteren Promotion; er entwickelt nicht direkt in
-PR #135. Der umgesetzte Scope umfasst genau drei F6-Produktcodedateien, die
-test-only CMake-Grenze des NVS-Linux-Hosttests und zwei trusted-UTC-Fresh-Start-
-Testinputs sowie den Dokument-/Statusabgleich und die F5-Option-A-
-Dokumentation. Hardwareimplementation, Hardwaretest und Full-Build-Suite
-sind nicht Teil dieses Scopes.
+`integration/r1-development`. Vor der Promotion nach `main` erfolgt der
+vollständige kumulative Ownerreview auf dem exakten aktuellen Integrations-HEAD,
+anschliessend Owner Ready, GitHub CI und Owner-Merge. `ISSUE25_STARTED=NO` und
+`ACTUATOR_RELEASE=NO` bleiben bis zur erfolgreichen Promotion bestehen.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
