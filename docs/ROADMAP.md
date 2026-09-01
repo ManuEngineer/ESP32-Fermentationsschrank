@@ -22,6 +22,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
+| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / Korrektur-PR | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; der neue Korrekturscope basiert auf `integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollstaendigen Korrekturplan von Issue #136 als exakte Plan-SHA ownerfreigeben; Ownerentscheidung `FERMENTER_R1_OFFLINE_NEW_RUN_TIME_SOURCE_POLICY` vor jeder F5-Umsetzung. PR #135 bleibt Draft und nicht Ready. |
 | 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
 | 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
@@ -35,6 +36,14 @@ nicht kopiert, sondern verlinkt.
 | 11 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
 ## Naechste fachliche Arbeit
+
+Der aktuelle Integrationscheckpoint ist Issue #134 / PR #135 auf
+`integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`.
+Der kumulative Owner-Review ist `CHANGES_REQUIRED`; `OWNER_READY_GATE=NO`,
+`MERGE=NO` und `ISSUE25_STARTED=NO`. Issue #136 ist der einzige aktive
+Korrekturscope vor einer weiteren Promotion; er entwickelt nicht direkt in
+PR #135 und fuehrt keine Produkt-, Test-, Build- oder Hardwareimplementation
+aus.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-Safety-Core bleibt beim bestätigten KISS- und
