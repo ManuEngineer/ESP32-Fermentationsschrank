@@ -49,7 +49,9 @@ Nachverfolgung: #29 und #32
 ### Temperatursensoren
 
 - [ ] Bustopologie festlegen: drei getrennte Busse oder feste Sensoren gemeinsam
-- [ ] Pull-ups und Leitungslaengen bestimmen
+- [ ] Pull-ups und Leitungslaengen aus Verdrahtungs-/Board-SSOT bestimmen;
+      Busfunktion, ROM, CRC, Hot-Plug und Fehlerreaktion pruefen, ohne ein
+      generelles Spannungs- oder Pegelmess-Gate einzufuehren
 - [ ] ROM-Adressen der festen Sensoren dokumentieren
 - [ ] Produktfuehleranschluss waehlen; M8-3, GX12-3 oder andere verriegelbare
       3-polige Loesung vergleichen
@@ -71,10 +73,12 @@ Nachverfolgung: #31
 
 ### Luefter, Summer und MOSFET-Ausgaenge
 
-- [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
+- [ ] Innen- und Aussenluefterdaten erfassen; Stromaufnahme und Anlaufverhalten
+      nur soweit ein konkretes Hardwaregate dies erfordert und geeignete
+      Mittel vorhanden sind
 - [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
 - [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
-- [ ] Summer-Spannung, Strom, Kanal und Lautstaerke festlegen
+- [ ] Summerfunktion, Kanal und Lautstaerke festlegen
 - [ ] Nachlaufverhalten auf realer Hardware pruefen
 
 Nachverfolgung: #32
@@ -86,7 +90,10 @@ Nachverfolgung: #32
 - [ ] Pull-down-/fail-low Beschaltung als vorhandenen Aufbau dokumentieren
 - [ ] Adapterinterlock nachweisen
 - [ ] Richtung spaeter ueber begrenzte Servicepulse funktional bestimmen
-- [ ] R_IS/L_IS-Pegel und diagnostische Nutzbarkeit pruefen
+- [x] R_IS/L_IS fuer R1 bewusst unbeschaltet/deaktiviert; GPIO34/GPIO35
+      bleiben als ADC1-Reserve fuer eine moegliche spaetere Integration
+      reserviert (`FUTURE_RELEASE`), nicht verworfen. Keine R1-Mess-,
+      Implementierungs- oder DoD-Pflicht; `R1_BLOCKED_BY_R_IS_L_IS=NO`
 - [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
 - [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
 

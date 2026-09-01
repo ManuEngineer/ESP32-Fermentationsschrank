@@ -212,7 +212,8 @@ Mindestens:
 - Web- und lokale UI-Ressourcen
 - keine eingebetteten Geheimnisse
 - keine produktiv verwendeten `TBD`-Werte
-- keine unbestaetigten Pins, Pegel oder Controller als freigegebene Werte
+- keine unbestaetigten Pins, Controller oder Designwerte als freigegebene
+  Werte; nicht gemessene Pegel werden nicht als PASS behauptet
 - Zukunftsfunktionen bleiben deaktiviert
 
 Ein Build ist keine Hardwarefreigabe.
@@ -222,14 +223,22 @@ Ein Build ist keine Hardwarefreigabe.
 Vor einer thermischen Belastung:
 
 ```text
-FUNCTIONAL_HARDWARE_VERIFICATION=REQUIRED_WHERE_APPLICABLE
-DESIGN_SSOT_VERIFICATION=REQUIRED
-SOFTWARE_ADAPTER_SAFETY_VERIFICATION=REQUIRED
-OPTIONAL_ELECTRICAL_MEASUREMENT=ALLOWED_NOT_REQUIRED
+ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED
+SSOT_CONFORMANCE=<PASS/PENDING/NOT_APPLICABLE>
+FUNCTIONAL_HARDWARE_VERIFICATION=<PASS/PENDING/NOT_APPLICABLE>
+ADAPTER_SAFETY_VERIFICATION=<PASS/PENDING/NOT_APPLICABLE>
+THERMAL_COMMISSIONING=<PASS/PENDING/NOT_APPLICABLE>
 MULTIMETER_REQUIRED_FOR_R1_ACCEPTANCE=NO
 BOOT_LEVEL_MEASUREMENT_REQUIRED=NO
 GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
 ```
+
+Die Felder werden nur für den jeweiligen Scope geführt. Der #32-Scope führt
+kein separates `ADAPTER_SAFETY_VERIFICATION`; der produktionsnahe
+MOSFET-/Lüfter-/Summer-Adapterpfad gehört vollständig in
+`FUNCTIONAL_HARDWARE_VERIFICATION`. Das separate Adapter-Safety-Feld ist dem
+#33-H-Brückenvertrag vorbehalten. `THERMAL_COMMISSIONING` bleibt ein späteres
+Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
 
 - GPIO-Zuordnung gegen die SSOT sowie funktionale Kanal-/Verbraucherwirkung
 - funktionales Boot-, Reset-, Brownout- und Bootloaderverhalten ohne
@@ -244,7 +253,10 @@ GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
   PIN-unabhaengigem Vollreset; keine physische Bedienannahme
 - Innen- und Aussenluefter
 - Summer
-- R_IS/L_IS nur bei nachgewiesener Nutzbarkeit
+- R_IS/L_IS sind für R1 nicht angeschlossen, nicht gemessen und nicht
+  implementiert; sie sind kein Akzeptanzkriterium, kein Required Test und kein
+  DoD-Gate. Eine spätere Verwendung erfordert ein eigenes Issue, einen
+  vollständigen Plan und ein eigenes Owner-Gate (`FUTURE_RELEASE`).
 - PIN-unabhaengiger lokaler Vollreset ohne Aktorwirkung
 - UART-Flash- und Recoveryweg
 

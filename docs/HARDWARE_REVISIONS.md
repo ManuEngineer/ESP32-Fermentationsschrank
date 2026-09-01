@@ -33,7 +33,9 @@ bleibt als kurze Aenderungshistorie erhalten und hat keinen Vorrang mehr.
 
 - 7,5-A-Ueberstromsicherung
 - Hardware-Pulldowns oder gleichwertige sichere Freigabestufe
-- R_IS/L_IS nur nach realer Verifikation
+- R_IS/L_IS in R1 deaktiviert, nicht angeschlossen und nicht implementiert;
+  spaetere Nutzung nur als `FUTURE_RELEASE` mit eigenem Issue, Plan und
+  Owner-Gate
 - keine direkte Wiederherstellung von H-Bruecken- oder GPIO-Zustaenden
 
 ### Unabhaengige thermische Abschaltung
@@ -66,7 +68,7 @@ bleibt als kurze Aenderungshistorie erhalten und hat keinen Vorrang mehr.
 
 Reale Hardwarepruefungen:
 
-- #29 ESP32-Bring-up, Partition und Pegel
+- #29 ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende
 - #30 DS18B20-Busse
 - #31 Display und Touch
 - #32 Luefter, Summer und MOSFET-Ausgaenge

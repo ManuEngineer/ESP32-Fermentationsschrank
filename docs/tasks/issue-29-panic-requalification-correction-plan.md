@@ -1,5 +1,12 @@
 # Issue #29 – Panic-Requalifikation und Abschlussdisposition
 
+> **Historischer abgeschlossener Planstatus:** Dieser Plan wurde für die
+> damalige #29-Umsetzung erstellt und ist nach PR #129 / Issue-Abschluss keine
+> aktuelle Statusquelle. Planzeitliche Legacy-Felder wie
+> `ELECTRICAL_VERIFICATION` und `ELECTRICAL_MEASUREMENT_PASS` bleiben als
+> Provenienz erhalten; aktuelle Statuswerte stehen in `docs/ROADMAP.md` und im
+> geschlossenen Live-Issue #29.
+
 Diese vollständige kanonische Revision ersetzt den zuvor ownerfreigegebenen
 KISS-V2-Plan `b7d80de7d6e23fd792c2bd48eaa27052a8c61201`. Sie erhält dessen
 historische Provenienz und alle bereits ausgeführten Nachweise, aktualisiert

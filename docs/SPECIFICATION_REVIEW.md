@@ -152,7 +152,9 @@ Tatsache verwendet werden. Die nachweisgebundene Checkliste steht in
 - batteriegepufferte RTC als Pflicht;
 - Tuerkontakt;
 - Luefter-Tachosignal;
-- externe Strommessung ausser optional verifiziertem R_IS/L_IS;
+- externe Strommessung sowie R_IS/L_IS sind ausserhalb von R1; R_IS/L_IS
+  bleiben `FUTURE_RELEASE` und benoetigen fuer eine spaetere Nutzung ein
+  eigenes Issue, einen vollstaendigen Plan und ein eigenes Owner-Gate;
 - Push- oder Telegram-Benachrichtigungen;
 - eigener WireGuard-Client;
 - automatische Wartungserinnerungen.

@@ -181,7 +181,7 @@ Abgerufen am 2026-07-27.
 | Merkmal | Bewertung |
 |---|---|
 | Aufgabe | H-Brueckenadapter fuer exklusive Vorwaerts-/Rueckwaertsanforderung |
-| Release-1-Anforderung | Boot AUS, beide Richtungen nie gleichzeitig, Pulldowns, Totzeit, begrenzte Servicepulse, optional R_IS/L_IS nach Messung |
+| Release-1-Anforderung | Boot AUS, beide Richtungen nie gleichzeitig, Pulldowns, Totzeit und begrenzte Servicepulse; R_IS/L_IS sind in R1 deaktiviert und `FUTURE_RELEASE` |
 | Kandidaten | ESP-IDF-GPIO/LEDC-Built-ins der fixierten ESP-IDF-`6.0.2`-Toolchain; kein hochstufiger BTS7960-Treiber erforderlich |
 | Herstellerquelle | [Infineon BTS7960-Datenblatt](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf), lokale Kopie unter `references/datasheets/` |
 | Version/Lizenz | ESP-IDF `6.0.2`; Herstellerdatenblatt ist Referenz, kein uebernommener Code |
@@ -189,7 +189,7 @@ Abgerufen am 2026-07-27.
 | Ressourcen | kleiner GPIO-/Timeradapter; reale Timerbelegung und Builddelta messen |
 | Adapter | `IBidirectionalActuatorSink`-Implementierung mit sicherer Initialisierung; keine Rollenbegriffe im Plattformport |
 | Eigene Logik | gesamte Safety-Freigabe, Mindestzeiten, Totzeit, Fehlerreaktion und Servicebegrenzung |
-| Risiken/Hardwaretest | Lieferantenboard ist nicht identisch mit dem Infineon-Bauteil; Modulschaltung und Enable gegen reale Modulunterlagen pruefen, Pull-down/fail-low Beschaltung und Adapterinterlock nachweisen, Richtung/Polaritaet erst im begrenzten Servicepuls funktional bestimmen und R_IS/L_IS erst nach sicherer Nutzbarkeitsbewertung aktivieren |
+| Risiken/Hardwaretest | Lieferantenboard ist nicht identisch mit dem Infineon-Bauteil; Modulschaltung und Enable gegen reale Modulunterlagen pruefen, Pull-down/fail-low Beschaltung und Adapterinterlock nachweisen und Richtung/Polaritaet erst im begrenzten Servicepuls funktional bestimmen; R_IS/L_IS bleiben in R1 unverbunden und werden erst in einem eigenen spaeteren Issue/Plan/Owner-Gate bewertet |
 | Empfehlung/Status | `CONFIGURE_FRAMEWORK` plus eigener Adapter; `BLOCKED_HARDWARE`, keine externe BTS7960-Bibliothek auswaehlen |
 
 ## Luefter und MOSFET-Ausgaenge

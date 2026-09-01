@@ -28,16 +28,22 @@
   PCB-Unterlagen geprueft ist.
 
   Solche Werte tragen `planned` oder
-  `board_fixed_pending_electrical_verification` und stellen noch keinen
-  elektrischen Hardware-PASS dar. PCB-feste Zuordnungen duerfen als
-  `board_fixed_pending_electrical_verification` dokumentiert werden, wenn
+  `board_fixed_pending_functional_verification` und stellen noch keinen
+  funktionalen Hardware-PASS dar. PCB-feste Zuordnungen duerfen als
+  `board_fixed_pending_functional_verification` dokumentiert werden, wenn
   reale Platine und Referenzunterlage in der Boardfamilie uebereinstimmen.
 
-  `confirmed_test` entsteht ausschliesslich durch reale elektrische oder
-  funktionale Verifikation am konkreten Aufbau. Ein geplanter oder
-  board-fester GPIO darf niemals automatisch `pins_confirmed`,
-  `active_levels_confirmed`, `boot_levels_confirmed`, `actuator_release` oder
-  ein anderes Hardware-PASS-Gate setzen.
+  Die allgemeine elektrische Pegelmessung ist fuer R1 ownerseitig nicht
+  erforderlich: `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`. Ein
+  funktionaler Hardwaretest am konkreten Aufbau bleibt davon getrennt und
+  behauptet keinen nicht gemessenen elektrischen Pegel. Ein geplanter oder
+  board-fester GPIO darf niemals automatisch ein elektrisches Mess-PASS,
+  ein historisches Pin-/Pegel-Bestaetigungsbool, `actuator_release` oder ein
+  anderes Hardware-PASS-Gate setzen.
+
+  Die Statusquelle fuer die Boardprofil-Verifikation ist der getrennte
+  Funktionsstatus `FUNCTIONAL_HARDWARE_VERIFICATION`; das historische
+  Sammelfeld `confirmed_test` wird nicht als aktuelles Statusfeld fortgefuehrt.
 
   Safety-relevante Ausgaenge bleiben bis zu ihren owning Hardwaregates
   fail-closed. Historische Issues oder alte Pinannahmen sind keine
@@ -197,7 +203,10 @@
   verlangt dafuer keine generelle Multimeter- oder Boot-Pegelmessung.
   Sicherheitskritische Richtungssteuerungen benoetigen hardwareseitig definierte
   fail-low Zustaende sowie software-/adapterseitige Interlocks; reale
-  Verbraucher werden spaeter kontrolliert funktional verifiziert.
+  Verbraucher werden spaeter kontrolliert funktional verifiziert. R1 verlangt
+  keine GPIO-Spannungs-, Bootpegel- oder Multimetermessung. `R_IS`/`L_IS`
+  bleiben fuer R1 deaktiviert, nicht angeschlossen und nicht implementiert;
+  ihre Verwendung ist `FUTURE_RELEASE` mit eigenem Issue, Plan und Owner-Gate.
 
 ## ADR-013: Wiederverwendbare ESP32-Geraeteplattform
 

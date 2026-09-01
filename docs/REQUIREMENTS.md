@@ -102,8 +102,10 @@ Anforderungen:
   Thermal-/Hardwarefaults bleiben bis #35/E5 deferiert.
 - Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung; eine unabhaengige
   Temperatursicherung bleibt E5/#35/Future und ist kein #24-R1-Producer.
-- R_IS/L_IS werden nur verwendet, wenn das gelieferte BTS7960-Modul praktisch
-  brauchbare und sicher angepasste Signale liefert.
+- R_IS/L_IS sind in Release 1 deaktiviert, nicht angeschlossen und nicht
+  implementiert; sie sind kein R1-Akzeptanz-, Test- oder DoD-Gate. Eine
+  spätere Verwendung ist `FUTURE_RELEASE` und erfordert ein eigenes Issue,
+  einen vollständigen Plan und ein eigenes Owner-Gate.
 
 ## Persistenz und Wiederanlauf
 

@@ -6,19 +6,19 @@
 |---|---|
 | `confirmed_order` | aus der bestellten Produktbeschreibung uebernommen |
 | `confirmed_by_owner_reference_match` | reale Hardware vorhanden und durch den Owner der Repository-Boardreferenz zugeordnet; kein elektrischer Funktionsnachweis |
-| `confirmed_test` | durch einen geeigneten realen Test bestaetigt und dokumentiert; bei funktionalen Eigenschaften darf dies ein funktionaler Test sein, ohne nicht gemessene Spannungswerte zu behaupten |
 | `planned` | fuer Release 1 verbindlich vorgesehen, aber noch nicht real bestaetigt |
-| `board_fixed_pending_electrical_verification` | PCB-seitig fest verdrahtete Zuordnung; Pegel, Bootwirkung und Verbraucherwirkung sind noch offen |
+| `FUNCTIONAL_HARDWARE_VERIFICATION` | funktionale Hardwareeigenschaft durch den owning Hardwaretest bestaetigt; dies behauptet keinen nicht gemessenen elektrischen Pegel |
+| `board_fixed_pending_functional_verification` | PCB-seitig fest verdrahtete Zuordnung; funktionale Kanal-/Verbraucherwirkung und fail-closed Boot-/Resetreaktion sind noch offen |
 | `candidate` | moegliche Loesung, noch nicht entschieden |
 | `TBD_HARDWARE` | reale Komponente, Pin, Pegel oder Verdrahtung muss geprueft werden |
 | `TBD_COMMISSIONING` | thermischer oder regelungstechnischer Wert wird am Schrank bestimmt |
-| `FUTURE_RELEASE` | bewusst nicht Bestandteil von Release 1 |
+| `FUTURE_RELEASE` | bewusst nicht Bestandteil von R1, aber fuer spaetere Integration reserviert und nicht verworfen |
 
 Ein Designstatus `planned` oder
-`board_fixed_pending_electrical_verification` ist kein
-`confirmed_test`. Kein solcher Status setzt `pins_confirmed`,
-`active_levels_confirmed`, `boot_levels_confirmed` oder
-`actuator_release`. Reale Aktoren bleiben bis zu den owning Hardwaregates
+`board_fixed_pending_functional_verification` ist kein
+`FUNCTIONAL_HARDWARE_VERIFICATION=PASS`. Kein solcher Status setzt
+`SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` oder
+`ACTUATOR_RELEASE`. Reale Aktoren bleiben bis zu den owning Hardwaregates
 fail-closed.
 
 Der Owner hat fuer R1 die allgemeine Spannungs- und Bootpegel-Messpflicht
@@ -50,7 +50,7 @@ Damit sind reale Hardware und Boardfamilie identifiziert:
 Diese Identitaetsfeststellung ist kein Nachweis aktiver Pegel, Bootpegel,
 MOSFET-/BTS7960-/Display-/Touch-Funktion, GPIO-Funktionstest oder
 Aktorfreigabe. Konkrete GPIO-Zahlen und Widerstandswerte werden in der SSOT
-als Designzustand gefuehrt. Ein `confirmed_test` am konkreten Aufbau
+als Designzustand gefuehrt. Ein funktionaler Hardwaretest am konkreten Aufbau
 bestaetigt nur die jeweils getestete Eigenschaft; nicht gemessene elektrische
 Werte bleiben unbestaetigt.
 
@@ -79,13 +79,14 @@ Noch real zu verifizieren oder zu dokumentieren:
   ohne unkontrollierten relevanten Verbraucherbetrieb
 
 ```text
-ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED
-FUNCTIONAL_HARDWARE_VERIFICATION=REQUIRED_WHERE_APPLICABLE
+ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED
+SSOT_CONFORMANCE=PENDING
+FUNCTIONAL_HARDWARE_VERIFICATION=PENDING
 ```
 
 Die vier PCB-festen MOSFET-Kanalzuordnungen sind als
-`board_fixed_pending_electrical_verification` im Boardprofil dokumentiert.
-Die Boardfamilienidentitaet ist bestaetigt, die elektrische Kanalwirkung
+`board_fixed_pending_functional_verification` im Boardprofil dokumentiert.
+Die Boardfamilienidentitaet ist bestaetigt, die funktionale Kanalwirkung
 jedoch nicht.
 
 ## Peltier und Leistungspfad
@@ -114,9 +115,11 @@ Vor dem ersten Peltieranschluss:
    Servicepulse funktional bestimmen.
 7. erste reale Freigabe nur als begrenzter Servicepuls.
 
-BTS7960 `R_IS` und `L_IS` werden nur angeschlossen und verwendet, wenn
-Pegelbereich, Beschaltung und diagnostischer Nutzen des gelieferten Moduls
-praktisch bestaetigt wurden.
+`R_IS` und `L_IS` sind in R1 bewusst unbeschaltet, deaktiviert, nicht vermessen
+und nicht implementiert. Die reservierten ADC1-GPIOs bleiben fuer eine
+moegliche spaetere Integration reserviert; die Funktion ist deferiert, nicht
+verworfen. `FUTURE_RELEASE` benoetigt ein eigenes Issue, einen eigenen
+vollstaendigen Plan und ein eigenes Owner-Gate.
 
 ## Unabhaengige Schutzkomponenten
 
@@ -192,8 +195,9 @@ sondern ausschließlich aus dem Boardprofil gelesen:
 - feste Sensorrollen werden über ROM-ID unterschieden;
 - ein Fehler des gemeinsamen festen Busses wirkt für die Peltierfreigabe
   weiterhin fail-closed;
-- die elektrischen Buspegel, ROM-IDs, CRC- und Hot-Plug-Funktion sind noch
-  am realen Aufbau zu verifizieren.
+- Pull-up-/Verdrahtungs-SSOT sowie Buskommunikation, ROM-IDs, CRC, Hot-Plug und
+  Fehlerreaktion sind am realen Aufbau funktional zu verifizieren. Daraus
+  entsteht fuer R1 keine generelle Spannungs- oder Pegelmesspflicht.
 
 Elektrische Anforderungen:
 
@@ -238,8 +242,9 @@ Boardprofil festgelegt.
 
 Noch offen:
 
-- Spannung und Stromaufnahme
-- aktiver Pegel
+- Spannung und Stromaufnahme, soweit ein spaeteres konkretes Gate dies
+  erfordert; kein generelles R1-Messgate
+- aktiver Pegel, funktional im owning Hardwaretest bestimmbar
 - Gate-/Treiberbeschaltung
 - Boot-/Resetwirkung
 - reale Funktion
@@ -261,15 +266,16 @@ Das Resetnetz ist:
 
 Es ist ein direktes gemeinsames active-low Netz. Gemeinsamer GND, der
 hochohmige RESET-Eingang des realen Moduls, keine unabhängige Modul-
-Rücktreibung und kompatible Power-/Logic-Domains bleiben elektrische
-Verifikationsbedingungen. Eine Abweichung des realen Moduls vom
-veröffentlichten Schaltbild führt zu STOP und Boardprofilrevision.
+Rücktreibung und kompatible Power-/Logic-Domains bleiben
+Design-/Modul-/Funktionsanforderungen. Eine Abweichung des realen Moduls vom
+veröffentlichten Schaltbild führt zu STOP und Boardprofilrevision; sie erzeugt
+aber keine automatische Multimeter- oder GPIO-Pegelmesspflicht.
 
 Noch zu verifizieren bleiben Controlleridentität, Roh-Touchwerte,
-Kalibrierung, Boot-/Resetpegel, IRQ-Pull-up und die reale Funktion von
-SPI, Touch und Backlight. Das Statusmodell unterscheidet dabei
-Boardfamilien-Referenzabgleich, planned beziehungsweise
-board_fixed_pending_electrical_verification und confirmed_test.
+Kalibrierung, funktionales Boot-/Resetverhalten, IRQ-/Wiring-Konformität und
+die reale Funktion von SPI, Touch und Backlight. Das Statusmodell unterscheidet
+dabei Boardfamilien-Referenzabgleich, SSOT-Konformität und funktionale
+Hardwareverifikation.
 
 ## Lokale Bedien- und Anzeigeelemente
 
@@ -326,7 +332,7 @@ Ausgang wird deaktiviert; SQW/INT bleibt in R1 ungenutzt.
 - Tuerkontakt
 - verpflichtende 12-V-ADC-Messung
 - Luefter-Tachosignal
-- externe Strommessung zusaetzlich zu optionalem R_IS/L_IS
+- externe Strommessung fuer R1; R_IS/L_IS bleiben `FUTURE_RELEASE`
 - eigenes OTA- oder Recovery-Zusatzmodul
 
 Die Software darf spaetere Ereignisse oder Adapter dafuer vorbereiten, aber keine
@@ -344,11 +350,12 @@ Verbindliche Anforderungen:
 - keine automatische Aktorpruefung beim normalen Boot
 - `esp32_bringup` startet weiterhin mit `HARDWARE_UNVERIFIED` beziehungsweise
   dem bestehenden fail-closed Bring-up-Vertrag
-- `ELECTRICAL_VERIFICATION_PENDING` bezeichnet hier den Dokument- und
-  Konfigurationsstatus der offenen elektrischen Abnahme und ist kein neuer
-  Firmware-Startup-State
-- Owner-bestaetigte Boardfamilienidentitaet ersetzt keinen Boot- oder
-  Pegelnachweis
+- `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` bezeichnet die
+  ownerseitige R1-Ausnahme; funktionale Boot-/Resetverifikation bleibt im
+  owning Hardware-Issue
+- Owner-bestaetigte Boardfamilienidentitaet ersetzt keinen funktionalen
+  Boot-/Resetnachweis; ein nicht gemessener Pegel wird daraus nicht als PASS
+  behauptet
 
 ## Update und Recovery
 
