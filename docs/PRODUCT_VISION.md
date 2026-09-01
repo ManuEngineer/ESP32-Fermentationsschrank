@@ -29,9 +29,9 @@ die normale Nutzung nicht erforderlich sein.
 6. Programme und Bedienoberflaechen werden so gestaltet, dass spaetere
    Erweiterungen moeglich sind, ohne bestehende Programme unbrauchbar zu
    machen.
-7. Ein Wiederanlauf nach Stromausfall darf nicht unbegrenzt auf den Benutzer
-   warten, sondern muss den Prozess automatisch und phasenbezogen sinnvoll
-   weiterfuehren.
+7. Ein Wiederanlauf nach Stromausfall bleibt fail-closed und folgt dem
+   spezialisierten #124-Vertrag: nur ein exakt validierter Current-
+   `FERMENTING`-Run mit trusted UTC wird logisch automatisch fortgesetzt.
 
 ## Zielbenutzer
 
@@ -78,9 +78,11 @@ Das Geraet muss ohne WLAN oder Internet vollstaendig bedienbar bleiben:
 - einfachen manuellen Betrieb verwenden
 
 Netzwerkfunktionen sind Komfort- und Fernbedienfunktionen, aber keine
-Voraussetzung fuer die eigentliche Fermentation. Netzwerkzeit ist fuer eine
-praezisere Wiederanlaufkorrektur vorgesehen; bis sie verfuegbar ist, arbeitet
-das Geraet mit einer sicheren vorlaeufigen Strategie weiter.
+Voraussetzung für die eigentliche Fermentation. NTP bleibt eine zusätzliche
+Zeitquelle der generischen Plattform; im konkreten Fermenter-R1-Profil liefert
+die lokale RTC trusted UTC für Offline-Neustarts. Fehlt sie trotz erforderlicher
+Zeitbasis, bleiben neue Starts gesperrt und ein betroffener Current-
+`FERMENTING`-Run wartet fail-closed auf trusted UTC.
 
 ## Programme
 
@@ -192,47 +194,33 @@ Dadurch kann der Heimserver in einem spaeteren Release das Verschwinden des
 ESP32 anhand eines fehlenden Heartbeats erkennen. Eine solche Benachrichtigung
 ist nicht Bestandteil des ersten Releases.
 
-### Automatisches phasenbezogenes Fortfahren
+### #124-Wiederanlaufvertrag
 
-Nach dem Neustart wartet das Geraet nicht darauf, dass der Benutzer vor dem
-Display steht. Nach erfolgreicher Pruefung von Persistenz, Sensoren und
-Sicherheitsbedingungen wird automatisch eine zur unterbrochenen Phase passende
-Aktion ausgefuehrt:
+Ein vollständig validierter Current-`FERMENTING`-Run mit exakter
+`priorBootPhaseElapsed`-Basis und trusted UTC wird logisch automatisch
+fortgesetzt; der Stromausfall allein verlangt keine Benutzerbestätigung. Daraus
+folgt weder eine Aktorfreigabe noch eine automatische Fallback-Promotion.
 
-- Vorheizen oder Zieltemperatur erneut anfahren
-- Zielqualifikation neu beginnen
-- Fermentationsregelung wieder aufnehmen
-- Kuehlung oder Kuehlhalten fortsetzen
-- manuellen Haltebetrieb fortsetzen
-- einen bereits abgeschlossenen Zustand nur wieder anzeigen
+Fehlt aktuelle trusted UTC, bleibt derselbe Current als
+`RecoveryEvaluation/WaitingForTrustedTime` RAM-only unverändert; das Warten
+schreibt keine Persistenz. Ältere gültige Checkpoints bleiben nicht-
+aktivierende Angebote. `PREHEATING`, `COOLING` und `MANUAL_HOLDING` behalten
+ihre explizite `ResumeOffer`-Semantik, non-resumable trusted Phasen ihre
+`NoActiveRun`-/Discard-Semantik. Gewichtete Zeit-/Progress- und
+Charge-Recovery bleibt C2/#18-Legacy und kein aktueller R1-Produktpfad.
 
-Ein Sicherheitsfehler kann das automatische Fortfahren verhindern und hat
-immer Vorrang.
+### Lokale Zeitquelle für Offline-Neustarts
 
-### Wirkung auf die Fermentationszeit
+Die generische Geräteplattform unterstützt weiterhin sowohl optionale RTC als
+auch NTP-only. Das konkrete Fermenter-R1-Produkt verlangt eine lokale RTC der
+DS3231-Familie, damit ein neuer produktiver Lauf ohne WLAN oder Internet mit
+trusted UTC starten kann. Ohne trusted UTC ist ein solcher Start nicht
+zulässig.
 
-Die Fermentation stoppt bei sinkender Temperatur nicht vollstaendig, sondern
-verlangsamt sich. Deshalb wird die Stromausfallzeit weder pauschal voll
-angerechnet noch pauschal pausiert.
-
-Vorgesehen ist eine temperaturgewichtete Schaetzung. Bei einem
-produktgefuehrten Lauf hat der Produktfuehler Vorrang. Ohne Produktfuehler wird
-die Schranklufttemperatur des fest eingebauten Luftfuehlers verwendet.
-
-Die daraus abgeleitete Verlaengerung wird automatisch angewendet, angezeigt
-und protokolliert. Der Benutzer kann sie spaeter innerhalb sicherer Grenzen
-pruefen und anpassen.
-
-### Netzwerkzeit und spaetere RTC-Option
-
-Im ersten Release ist Netzwerkzeit die primaere Zeitquelle. Weil der ESP32 nach
-einem Stromausfall schneller startet als Router und NTP-Verbindung, beginnt der
-sichere Wiederanlauf sofort. Sobald Netzwerkzeit verfuegbar ist, werden
-Unterbrechungsdauer und Zeitkorrektur nachtraeglich praezisiert.
-
-Die Architektur soll eine spaetere batteriegepufferte Echtzeituhr, zum Beispiel
-ein DS3231-Modul, ermoeglichen. Eine RTC ist fuer das erste Release nicht
-erforderlich.
+Die konkrete Hardwarevariante bleibt bis zur physischen Bestätigung
+`TBD_HARDWARE_CONFIRMATION`; weder `DS3231SN` noch `DS3231M` wird aus der
+Bestellung abgeleitet. Der bestehende DS3231SN-Adapter ist kein Nachweis für
+die reale Variante und wird dafür nicht vorab erweitert.
 
 ## Benachrichtigungen und spaetere Releases
 
@@ -268,7 +256,8 @@ umgehen.
 - Cloud-Abhaengigkeit
 - mehrstufige Temperaturprogramme
 - direkte Aktorsteuerung ausserhalb des Servicemodus
-- verpflichtendes RTC-Modul
+- eine generische RTC-Pflicht für alle Geräteplattformprofile; das konkrete
+  Fermenter-R1-Produkt verlangt seine lokale RTC gemäß obigem Zeitvertrag
 
 ## Akzeptierte Produktentscheidungen
 
@@ -281,11 +270,12 @@ umgehen.
 - [x] Architektur soll spaetere mehrstufige Programme nicht verhindern
 - [x] Verhalten nach Programmende pro Programm konfigurierbar
 - [x] vollstaendige Bedienung ueber die lokale Weboberflaeche
-- [x] automatischer phasenbezogener Wiederanlauf ohne blockierendes Warten auf
-      den Benutzer
-- [x] temperaturgewichtete Verlaengerung nach Stromunterbrechung
-- [x] Netzwerkzeit als primaere Zeitquelle
-- [x] spaetere RTC-Unterstuetzung bleibt moeglich
+- [x] #124-Current-`FERMENTING`-Recovery nur mit exakter Evidenz und trusted
+      UTC automatisch logisch, stets ohne Aktorfreigabe
+- [x] gewichtete Verlängerung nach Stromunterbrechung bleibt C2/#18-Legacy
+- [x] generische Plattform bleibt NTP-only-fähig und RTC-optional
+- [x] konkretes Fermenter-R1-Produkt verlangt lokale DS3231-Familien-RTC für
+      neue Offline-Läufe; Hardwarevariante bleibt zu bestätigen
 - [x] einfacher manueller Zeit-/Temperaturbetrieb
 - [x] manueller Temperatur-Haltebetrieb ohne Timer
 - [x] geschuetzter Servicemodus fuer technische Tests

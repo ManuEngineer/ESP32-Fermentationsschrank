@@ -12,6 +12,12 @@ Dokumente Vorrang.
 - Das Geraet regelt Fermentationsprozesse durch Heizen, neutralen Betrieb und
   Kuehlen.
 - Der Normalbetrieb funktioniert ohne Cloud, Internet, Heimserver oder WLAN.
+- Die generische Zeitplattform bleibt RTC-optional und NTP-only-fähig. Das
+  konkrete Fermenter-R1-Produkt verlangt jedoch eine lokale RTC der
+  DS3231-Familie, damit neue produktive Läufe auch ohne WLAN/Internet eine
+  trusted Zeitquelle haben. Die tatsächliche RTC-Variante bleibt bis zur
+  physischen Bestätigung `TBD_HARDWARE_CONFIRMATION`.
+- Ohne trusted UTC startet kein neuer produktiver Lauf.
 - Touchdisplay und lokale Weboberflaeche bedienen denselben fachlichen Zustand.
 - Die sichere Temperaturregelung bleibt bei Ausfall von Display, Web oder Netzwerk
   erhalten.
@@ -109,23 +115,32 @@ Anforderungen:
 
 ## Persistenz und Wiederanlauf
 
-Fuer #24 wird ein technisch integerer, aber nicht einfach resumefaehiger Run
-als `NoActiveRun` beendet. Technisch untrusted Persistenz bleibt `SAFE_BOOT`;
-es gibt kein automatisches Fallback-Resume, keine automatische Promotion und
-keine Charge-Rettung. Der R5.9-#90-Vertrag darf einen vollstaendig validierten
-aelteren Fallback als nicht-aktivierendes `OLDER_VALID_CHECKPOINT_RESUME`-
-Angebot klassifizieren; daraus folgt beim Boot weder Resume noch `Allowed`.
+Ein vollstaendig validierter Current-`FERMENTING`-Run mit exakter
+`priorBootPhaseElapsed`-Basis und trusted UTC wird nach #124 logisch
+automatisch fortgesetzt; der Stromausfall allein verlangt keine
+Benutzerbestätigung. Diese logische Recovery gibt keine Aktoren frei. Fehlt
+die aktuelle trusted UTC, bleibt derselbe Current unverändert als
+`RecoveryEvaluation/WaitingForTrustedTime` im RAM; das Warten schreibt keine
+Persistenz. Ein technisch integerer Current ohne geltende R1-Qualifikation
+wird über seinen bestehenden kanonischen Pfad behandelt, bei untrusted
+Persistenz bleibt es `SAFE_BOOT`. Es gibt kein automatisches Fallback-Resume,
+keine automatische Promotion und keine Charge-Rettung. Der R5.9-#90-Vertrag
+darf einen vollständig validierten älteren Fallback als nicht-aktivierendes
+`OLDER_VALID_CHECKPOINT_RESUME`-Angebot klassifizieren; daraus folgt beim Boot
+weder Resume noch `Allowed`.
 
 - Konfigurationen und aktive Laufkontrollpunkte sind atomar und versioniert.
 - Die letzte gueltige Revision bleibt als Rueckfall erhalten.
 - Wichtige Laufereignisse werden sofort gespeichert; periodische Kontrollpunkte
   standardmaessig alle 5 Minuten, einstellbar zwischen 1 und 60 Minuten.
 - Direkte GPIO- oder Aktorzustaende werden nie als Wiederanlaufzustand gespeichert.
-- Nach einer Unterbrechung wird nur eine explizit R1-zulaessige Phase als
-  Resume-Angebot projiziert; sonst wird der integer geladene Lauf ueber #17 als
-  `NoActiveRun` beendet.
+- `PREHEATING`, `COOLING` und `MANUAL_HOLDING` behalten ihre bestehenden
+  expliziten `ResumeOffer`-Semantiken; non-resumable trusted Phasen behalten
+  ihre bestehenden `NoActiveRun`-/Discard-Semantiken. Der #124-Current-
+  `FERMENTING`-Sonderfall wird nicht pauschal als `NoActiveRun` beendet.
 - `RECOVERY_EVALUATION` bleibt ohne Aktorfreigabe. Explizites Resume und Fresh
-  Start verwenden den bestehenden Write-before-Apply-Pfad.
+  Start verwenden den bestehenden Write-before-Apply-Pfad; die automatische
+  #124-Logik ist kein Ersatz für diese Aktivierungsevidenz.
 - Ein `OLDER_VALID_CHECKPOINT_RESUME`-Angebot setzt einen unbrauchbaren Current
   sowie vollstaendig validierten Head-, Slot-, CRC-, Schema-, Epoch- und
   Referenzschutz voraus. Erst explizite Resume-Entscheidung, `Applied`, FSM-

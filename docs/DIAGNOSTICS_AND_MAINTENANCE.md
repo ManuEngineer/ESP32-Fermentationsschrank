@@ -72,7 +72,7 @@ Zusaetzlich mindestens:
 - Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
 - erlaubte Exporte
 - Servicepruefungen nur nach Service-PIN und gueltigem Zustand; E5/Future,
-  nicht #24-R1-Safety-Core
+  nicht #24-R1-`ActuationInterlock`
 
 ## Diagnose waehrend eines Laufes
 

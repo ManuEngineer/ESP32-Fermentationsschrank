@@ -219,20 +219,16 @@ Vorgesehen sind:
 
 ### Onboard-MOSFET-Ausgaenge
 
-Die tatsaechlichen Pegel waehrend:
+Für Onboard-MOSFET-Ausgänge ist keine generelle elektrische Pegel-, GPIO-
+Spannungs- oder Multimetermessung ein R1-Gate. Stattdessen wird das
+fail-closed-Verhalten mit sicherem Einzelverbraucher für Einschalten, Reset,
+Brownout, normalen Boot, UART-Bootloader und fehlende Firmware funktional im
+owning Hardware-Scope verifiziert. Ein nicht ausgeführter oder fehlgeschlagener
+funktionaler Nachweis ist kein PASS und gibt keinen Aktor frei.
 
-- Einschalten
-- Reset
-- Brownout
-- normalem Boot
-- UART-Bootloader
-- fehlender Firmware
-
-werden am gelieferten Board praktisch gemessen.
-
-Ist ein fuer Luefter oder Summer verwendeter Ausgang dabei nicht nachweislich
-sicher, wird eine externe Pull-Beschaltung, Invertierung, Freigabestufe oder andere
-Hardwareloesung vorgesehen.
+Zeigt die funktionale Prüfung einen unsicheren Ausgang, wird eine externe
+Pull-Beschaltung, Invertierung, Freigabestufe oder andere Hardwarelösung für
+den betroffenen Scope bewertet.
 
 `setup()` allein gilt nicht als ausreichende Sicherheitsmassnahme, weil die
 Ausgaenge bereits vor Ausfuehrung der Firmware einen Pegel besitzen koennen.

@@ -27,8 +27,9 @@ Die vorhandenen Producer bleiben die einzige Configuration-Safety-Quelle:
 `ConfigurationRecoveryService` liefert `ConfigurationUnavailable` bzw.
 `ConfigurationIntegrityFailure`; `ConfigurationService` liefert unter anderem
 `RuntimeFailure` und `CommitIndeterminate` mit typisierter Detailursache.
-SafetyCore projiziert diese Zustaende auf seine endliche FaultCode-Matrix und
-kopiert keine Konfigurationszustandsmaschine.
+Der stateless `ActuationInterlock` bewertet diese Producerzustaende als aktuelle
+Evidenz gegen seine endliche FaultCode-Menge und kopiert keine
+Konfigurationszustandsmaschine.
 
 Issue #24 fuehrt keinen parallelen Configuration-Safety-Enum, keinen neuen
 Persistenzschluessel, keinen Restart-/Safety-Latch und keine Service-PIN-Logik
@@ -56,7 +57,7 @@ ausgelegt, ohne eine neue oeffentliche Statusfamilie einzufuehren:
   Recovery beobachtbar und fuehren nicht zu stiller Mutation, Loeschung oder
   Factory-Neuanlage.
 - Der vorhandene `ConfigurationRecoveryStatus`-/`ConfigurationCommitStatus`-
-  Vertrag und die SafetyCore-Projektion sind dafuer ausreichend; diese
+  Vertrag und die `ActuationInterlock`-Bewertung sind dafuer ausreichend; diese
   Klarstellung fuehrt keinen neuen Enumwert ein.
 
 Backendcharakterisierung und Produkt-Recovery-Gate sind getrennte Wahrheiten.

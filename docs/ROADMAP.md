@@ -22,7 +22,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturplan | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; `PR137=OPEN_DRAFT`; der Korrekturscope basiert auf `integration/r1-development @ 8e4c52a07a488a41b59d98f6fb11742b0678f52a`; `OWNER_DECISION_ID=FERMENTER_R1_OFFLINE_NEW_RUN_TIME_SOURCE_POLICY`; `OWNER_DECISION=OPTION_A`; `OWNER_DECISION_RECORDED=YES`; konkrete DS3231-Variante weiter `TBD_HARDWARE_CONFIRMATION`; `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollständige Option-A-Planrevision von Issue #136 als exakte Plan-SHA final ownerfreigeben. Der reale RTC-Varianten-/Funktionsnachweis bleibt separat und `UNASSIGNED`; PR #135 und PR #137 bleiben Draft und nicht Ready. |
+| 0 | Issue #134 / PR #135 – kumulativer Integrationscheckpoint; Issue #136 / PR #137 – Korrekturimplementation | `PR135=OPEN_DRAFT`; `CUMULATIVE_OWNER_REVIEW=CHANGES_REQUIRED`; der Integrations-PR bleibt reine Promotion. `ISSUE136=OPEN`; `PR137=OPEN_DRAFT`; `APPROVED_PLAN_SHA=8cd254013a5a93d535dff72713d0491adea2811d`; F1–F4/F7/F8 sind als aktueller Dokument-/Statusabgleich umgesetzt, F5 Option A dokumentiert und F6 auf drei explizite Allokationsgrenzen begrenzt. Die konkrete DS3231-Variante bleibt `TBD_HARDWARE_CONFIRMATION`; ihr realer Nachweis ist separat `UNASSIGNED`. `ISSUE25_STARTED=NO`; `ACTUATOR_RELEASE=NO`. | Vollständige Owner-Implementierungsprüfung des aktuellen PR-#137-HEAD. PR #135 und PR #137 bleiben Draft und nicht Ready; #25 bleibt bis zur erfolgreichen Promotion nicht gestartet. |
 | 1 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. Recovery-Projektion erst gegen den stabilen #124-Zielvertrag. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90/#124/#126 |
 | 2 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 3 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
@@ -177,6 +177,10 @@ ist geschlossene historische Persistenzprovenienz.
 - OTA ist fuer ein spaeteres Release vorgesehen, aber kein Release-1-Scope.
 
 ## Zuletzt abgeschlossene groessere Grundlagen
+
+Die folgenden Einträge sind historische Abschlussprovenienz, keine aktuelle
+Architektur- oder Status-SSOT. Ihre damalige Terminologie wird nicht
+rückwirkend umgeschrieben.
 
 - PR #98: Agentenregeln und Statusquellen konsolidiert und nach `main` gemergt;
 - PR #79: ESP-IDF 6.0.2 als einziger ESP32-Produktionspfad;

@@ -9,9 +9,9 @@ Persistenz und gleichzeitige Fehlerursachen.
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
 Softwarefehler werden in Phase 8B und 8C ergaenzt.
 
-## Issue #24: verbindlicher Release-1-KISS-Vertrag
+## Verbindlicher Release-1-KISS-Interlockvertrag
 
-Fuer den Release-1-Safety-Core gilt dieser Abschnitt vorrangig vor den
+Fuer den Release-1-`ActuationInterlock` gilt dieser Abschnitt vorrangig vor den
 historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
 
 - Der Gate-Default ist `Unresolved`; Boot, Reset und Restore halten den
@@ -19,8 +19,9 @@ historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
 - R1 verwendet nur `Information`, `Blocked/ImmediateStop` und `SAFE_BOOT`.
   Die historische Vierklassenbeschreibung ist fuer #24 keine neue API und
   keine zusätzliche Safety-Wahrheit.
-- SafetyCore verwendet die endliche FaultCode-/Disposition-Matrix aus der
-  Umsetzung. Ack ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
+- Der stateless `ActuationInterlock` bewertet aktuelle Evidenz gegen die
+  endliche, typisierte FaultCode-Menge und liefert daraus die Permission.
+  Ack ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
 - Es gibt in #24 keinen generischen persistenten Safety-Latch, keinen
   Restart-Zaehler, kein Resetzeitfenster, keine Service-PIN-Pflicht und keine
   automatische `SAFETY_RECOVERY`-Gegenrichtung.
@@ -47,7 +48,7 @@ nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
   Fehlerzustandsmaschine.
 - Aktive Ursachen bleiben in einer endlichen, festen FaultCode-Maske
   nachvollziehbar; Historie und Journaling bleiben beim bestehenden
-  `IEventJournal`, nicht im SafetyCore.
+  `IEventJournal`, nicht im `ActuationInterlock`.
 - Sicherheitsreaktionen funktionieren ohne WLAN, Weboberflaeche, Netzwerkzeit
   oder Heimserver.
 - Sicherheitslogik und Fehlerdaten muessen innerhalb der Zielhardware mit 4 MB
@@ -56,7 +57,7 @@ nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
 ## Verbindliche R1-FaultCode- und Lifecycle-Matrix
 
 R1 verwendet keine universelle Fehlerhierarchie. Die folgenden acht Codes sind
-die endliche SafetyCore-Menge; technische Detailursachen bleiben beim
+die endliche `ActuationInterlock`-Menge; technische Detailursachen bleiben beim
 jeweiligen Producer. Alle Codes sind stabile typisierte Wire-Werte und werden
 nicht aus UI-Texten gebildet.
 
@@ -89,8 +90,9 @@ Wiederfreigaben nicht fuer Release 1.
 ## C2-Legacy: historische Fehlerklassen- und Recoveryregeln
 
 Die folgenden Phase-8A-Abschnitte sind fuer spaetere/Legacy-Kontexte erhalten.
-Sie sind kein aktiver #24-R1-Vertrag; im R1-Safety-Core gelten ausschliesslich
-FaultCode, Disposition, bounded Multi-Fault und die kanonischen Producerpfade.
+Sie sind kein aktiver #24-R1-Vertrag; im stateless `ActuationInterlock` gelten
+ausschliesslich die endliche typisierte FaultCode-Menge, aktuelle Producer-
+Evidenz und die daraus abgeleitete Permission.
 
 ## Fehlerklassen
 

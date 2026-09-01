@@ -18,7 +18,7 @@ festlegt.
 
 ## Issue #24 Release-1-Grenze
 
-Der #24-Safety-Core konsumiert aus #20/#21 nur die bestehende
+Der stateless #24-`ActuationInterlock` konsumiert aus #20/#21 nur die bestehende
 Sensorqualitaets- und Auswahlprojektion. Er fuehrt keine zweite Sensor-FSM
 ein. `STALE`/`FAILED` sperrt die Peltierfreigabe beziehungsweise loest
 `ImmediateStop` aus; die Rueckkehr erfolgt ausschliesslich ueber die frische

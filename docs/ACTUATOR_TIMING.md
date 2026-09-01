@@ -21,10 +21,13 @@ Trip fuehrt zu `ImmediateStop`; eine neue Request oder Ack loescht ihn nicht.
 Nur `applyExternalWatchdogFaultReset()` mit frischer Safety-/Planner-Evidenz
 darf ihn im selben Boot zuruecksetzen. Ein Reboot benoetigt keinen neuen
 persistenten Watchdog-Key, startet aber erneut all-off/`Unresolved` und ohne
-automatischen Resume.
+eine Aktorfreigabe allein aus dem Reboot. Die getrennte #124-Current-
+`FERMENTING`-Recovery kann logisch automatisch fortsetzen, bleibt aber bis zu
+frischer Aktivierungsevidenz ebenfalls aktorfrei.
 
-SafetyCore entscheidet vor Planner und Sink. Zeit-/Deadtime-/Fanregeln dieses
-Dokuments bleiben #23-Verantwortung; #24 fuehrt keine thermischen oder
+Der stateless `ActuationInterlock` bewertet frische Evidenz vor Planner und
+Sink; der Planner besitzt den aktuellen Watchdog-Latch. Zeit-/Deadtime-/
+Fanregeln dieses Dokuments bleiben #23-Verantwortung; #24 fuehrt keine thermischen oder
 Hardwarefaults, Grenzwerte oder `SAFETY_RECOVERY`-Gegenrichtung ein.
 
 ## Gemeinsames zeitproportionales Schaltfenster

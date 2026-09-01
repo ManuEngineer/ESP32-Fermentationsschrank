@@ -94,9 +94,10 @@ Alle E3-Ausgaenge bleiben bis E5 abstrakte Aktorbefehle.
 
 ## #24 Release-1-KISS-Abgrenzung
 
-#24 umfasst nur SafetyCore, die vorhandene Producer-Projektion, ResetCause-
-Diagnose, den sicheren #17-`NoActiveRun`-/`SAFE_BOOT`-Pfad und die abstrakte
-Planner-/Sink-Grenze. Nicht Bestandteil sind Service-PIN, Restartakkumulation,
+#24 umfasst den stateless `ActuationInterlock`, die vorhandene
+Producer-Evidenz, ResetCause-Diagnose, den sicheren #17-`NoActiveRun`-/
+`SAFE_BOOT`-Pfad und die abstrakte Planner-/Sink-Grenze. Nicht Bestandteil
+sind Service-PIN, Restartakkumulation,
 allgemeine Safety-Persistenz, automatische `SAFETY_RECOVERY`, Fallback-
 Promotion/Charge-Recovery oder neue Thermal-/Hardwareproducer. Bereits
 gemergte #18-Helfer bleiben nach Entfernung aus dem aktiven Produktpfad als
