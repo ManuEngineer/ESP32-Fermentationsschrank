@@ -12,7 +12,74 @@ reproduziert. Der folgende historische Status- und Identitätsabschnitt bleibt
 als Provenienz des PR-#116-Standes erhalten und wird nicht rückwirkend
 umgeschrieben.
 
-## Aktueller Korrekturstand – qualifizierende 96-KiB-Requalifikation noch nicht gestartet (2026-08-31)
+## Aktuelle reale 96-KiB-Requalifikation – 3/3 PASS, Owner-Hardware-Review offen (2026-09-01)
+
+Das korrigierte Artefakt wurde einmal geflasht und anschließend ohne weiteren
+Flash in drei unabhängigen, aktorfreien Boots geprüft. Der frühere vollständige
+Run bleibt historische, nichtqualifizierende Diagnoseevidenz.
+
+```text
+FLASH=PASS
+FLASH_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+IMPLEMENTATION_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+ESP32_BRINGUP_BUILD_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+APP_EMBEDDED_SOURCE_SHA=b14b5a0d9fa1ef5e1c453a6d8e32072d01dd30e6
+FLASH_ELF_SHA256=071bd5e6024ea7206eb378b6b18f946291726e58fc2d810106516907e3c2b487
+FLASH_BIN_SHA256=a1ab38d8fe60e1aeaa001b57d3c994c419989aa413d11dc750e07a8f2236989c
+PORT=/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A5069RR4-if00-port0
+BOARD_MAC=20:50:0d:1b:2f:34
+PROFILE=esp32_bringup
+BOOT_1=PASS
+BOOT_2=PASS
+BOOT_3=PASS
+VALID_96K_BOOT_COUNT=3
+OBSERVED_NONQUALIFYING_COMPLETE_RUN_COUNT=1
+BOOT_REQUALIFICATION=3_OF_3_PASS
+PANIC=NO
+STACK_OVERFLOW=NO
+WATCHDOG=NO
+BROWNOUT=NO
+UNRELATED_UNEXPECTED_RESET=NO
+ACTOR_RELEASE=false
+BOOT1_READY_TASK_STACK_HWM_BYTES=97840
+BOOT1_COMPLETION_TASK_STACK_HWM_BYTES=25840
+BOOT2_READY_TASK_STACK_HWM_BYTES=97840
+BOOT2_COMPLETION_TASK_STACK_HWM_BYTES=25840
+BOOT3_READY_TASK_STACK_HWM_BYTES=97840
+BOOT3_COMPLETION_TASK_STACK_HWM_BYTES=25840
+MIN_OBSERVED_PROBE_TASK_HWM_BYTES=25840
+PEAK_OBSERVED_PROBE_TASK_STACK_USED_BYTES=72464
+OLD_PROBE_TASK_STACK_BYTES=67584
+HWM_THRESHOLD_BYTES=30720
+HWM_RESULT=3_OF_3_VALID_DISCRIMINATOR_MET
+RESOURCE_GATE=PASS_CONSERVATIVE
+DIAGNOSTIC_OVERHEAD_CONFOUNDING=NO
+FAULT_PASS=PASS
+STATE_UNCHANGED=PASS
+PERSISTENCE_UNCHANGED=PASS
+SAFETY_FAIL_CLOSED=PASS
+ROOT_CAUSE=UNRESOLVED
+ROOT_CAUSE_RECOMMENDATION=CONFIRMED_STALE_DIAGNOSTIC_TASK_STACK_BUDGET
+CAPTURE_RESET_PROCEDURE=EXECUTED_3_OF_3_PASS
+HARDWARE_RUN_CORRECTED_ARTIFACT=3_OF_3_PASS
+LEVEL_MEASUREMENTS=NOT_RUN
+ACTUATOR_RELEASE=NO
+ISSUE25_STARTED=NO
+ISSUE29_CLOSE=NO
+MERGE=NO
+OWNER_96K_HARDWARE_REVIEW_REQUIRED=YES
+```
+
+Die drei qualifizierenden Rohlogs bleiben lokal unter
+`build/issue29_requalification/corrected_96k_boot{1,2,3}_raw_uart.log`.
+Ihre SHA-256-Werte sind `84e0b49e…ec66d3e`, `6e87922c…271325c` und
+`cc94653a…40b2df7`. Je Boot: genau eine `rst:`-Sequenz im qualifizierenden
+Fenster, korrekte App-SHA, Probe-PASS und mindestens 40 Sekunden stabiler
+Smoke. Das HWM-Minimum 25840 B ergibt 72464 B beobachtete Peak-Nutzung und
+überschreitet das alte 67584-B-Budget. Das ist die planmäßige Empfehlung für
+Owner Review, nicht die automatische Schließung oder Root-Cause-Festlegung.
+
+## Historischer Preflight-Korrekturstand vor dem qualifizierenden Hardwarelauf (2026-08-31)
 
 Der beobachtete frühere 96-KiB-Run bleibt Diagnoseevidenz, zählt aber nicht
 als Boot der geplanten 3/3-Serie: Das Artefakt änderte zusätzlich Runtime-
