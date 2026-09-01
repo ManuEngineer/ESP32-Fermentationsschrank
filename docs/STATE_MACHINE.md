@@ -138,8 +138,9 @@ separater fachlicher Kontext und kein Ersatz fuer diese Recovery-Disposition.
 
 ### Zweck
 
-Der ESP32 startet mit ausgeschalteten Aktoren, bewertet die gespeicherte
-Sicherheits- und Laufhistorie und waehlt erst danach den naechsten Zustand.
+Der ESP32 startet mit ausgeschalteten Aktoren, klassifiziert Konfiguration und
+Laufstand und wählt erst danach den nächsten Zustand. Die Klassifikation ist
+von der späteren Aktorpermission getrennt.
 
 ### Verbindliche Reihenfolge
 
@@ -148,12 +149,18 @@ BOOT
   -> Peltier und beide BTS7960-Richtungen AUS
   -> alle schaltbaren Ausgaenge zunaechst AUS
   -> Resetcause nur diagnostisch erfassen; keine Restart-Akkumulation
-  -> Konfiguration und kritischen Speicher validieren
-  -> aktuellen Config-/Persistenzzustand und Transaktionsstatus auswerten
-  -> Sensoren und Hardwarefreigaben grundlegend pruefen
+  -> Konfigurationstrust validieren
+  -> Persistenz laden und Integritaet/Transaktionsstatus auswerten
   -> gespeicherten Laufzustand klassifizieren
+  -> optional Current-FERMENTING gegen den #124-Zeitvertrag bewerten
   -> Netzwerk und Zeitabgleich parallel vorbereiten
 ```
+
+Die spätere Aktorpermission ist kein Boot-Klassifikationsschritt. Sie verlangt
+jeweils frische Konfigurations-, Persistenz-, Sensor- und Planner-Evidenz,
+einen zutreffenden expliziten Aktivierungspfad, die aktuelle stateless
+`ActuationInterlock`-Bewertung sowie, soweit zutreffend, die owning
+Hardware-/Adapter-Gates. Bis dahin bleibt die Permission `Unresolved`.
 
 ### Uebergaenge
 
@@ -171,12 +178,12 @@ gueltiger persistierter Zustand COMPLETED
 gueltiger Current mit R1-qualifizierbarer Phase
   -> RECOVERY_EVALUATION ohne Freigabe
 
-kein aktiver oder abgeschlossener Lauf und alle Bootpruefungen bestanden
+kein aktiver oder abgeschlossener Lauf nach gültiger Klassifikation
   -> STANDBY
 ```
 
 `STANDBY`, `COMPLETED` und `RECOVERY_EVALUATION` sind vor Abschluss der
-Bootpruefungen nicht erreichbar. Ein Neustart ist kein Fehlerreset; R1 fuehrt
+Bootklassifikation nicht erreichbar; daraus folgt keine Aktorpermission. Ein Neustart ist kein Fehlerreset; R1 fuehrt
 keine allgemeine persistente Verriegelung und keine Restart-Akkumulation ein.
 
 ## SAFE_BOOT
@@ -236,7 +243,10 @@ Sicherer Ruhezustand ohne laufenden Prozess.
 
 Ein neuer Lauf startet nur nach vollstaendiger Validierung des
 Programmschnappschusses, der Pflichtsensoren, der Sicherheitsfreigaben und der
-kritischen Persistenz.
+kritischen Persistenz sowie trusted UTC. Im konkreten Fermenter-R1-Profil
+liefert die nachgewiesene lokale DS3231-Familien-RTC diese Zeit auch ohne
+WLAN/Internet; ihre tatsächliche Variante bleibt bis zur Hardwarebestätigung
+offen.
 
 ## PREHEATING
 
@@ -253,7 +263,7 @@ Ziel des leeren Schrankes erfolgreich qualifiziert
 Nach einem Neustart wird ein technisch vertrauenswuerdiger `PREHEATING`-Lauf
 als Resume-Angebot dargestellt. Die Aktorfreigabe bleibt bis zur bewussten
 Bestaetigung und der vollstaendigen frischen Evidenz gesperrt; ein
-automatischer Resume ist in R1 ausgeschlossen.
+automatischer Resume dieser Phase ist in R1 ausgeschlossen.
 
 ## WAITING_FOR_PRODUCT
 
@@ -597,8 +607,9 @@ behandelt oder wegen untrusted Evidenz in `SAFE_BOOT` gehalten wird.
 `FERMENTING`-Current-Recovery kann dabei automatisch logisch fortgesetzt
 werden; eine Aktorfreigabe folgt daraus nicht.
 
-Vor Eintritt wurden aktueller Config-/Persistenzstatus, Transaktionsintegritaet
-und grundlegende Sensor-/Planner-Evidenz geprueft; es gibt keinen allgemeinen
+Vor Eintritt wurden aktueller Config-/Persistenzstatus und
+Transaktionsintegrität klassifiziert; frische Sensor-/Planner-Evidenz wird erst
+bei einer späteren Aktorpermission geprüft. Es gibt keinen allgemeinen
 persistierten Safety-Latch.
 Zusaetzlich werden mindestens bewertet:
 
@@ -674,7 +685,7 @@ Prozess.
 ### Regeln
 
 - Service-PIN, falls fuer spaetere Service-/Hardware-Gates benoetigt, ist
-  nicht Teil des #24-R1-Safety-Cores
+  nicht Teil des #24-R1-`ActuationInterlock`
 - deutlicher Warnhinweis vor Aktortests
 - Peltier- und Lueftertests zeitlich und leistungsmassig begrenzen
 - Richtungswechsel, Mindest-Ausschaltzeit und Totzeit bleiben erzwungen

@@ -55,20 +55,24 @@ bleibt als kurze Aenderungshistorie erhalten und hat keinen Vorrang mehr.
 
 ### Wiederanlauf und Zeitquelle
 
-- NTP ist die primaere absolute Zeitquelle
-- eine spaetere RTC ist optional
-- der sichere phasenbezogene Wiederanlauf beginnt vor beziehungsweise ohne NTP
-- fehlende absolute Zeit allein fuehrt nicht zum Abbruch
-- bis eine verlaessliche Zeit vorliegt, wird konservativ mit niedriger
-  Vertrauensstufe bewertet
-- spaeter eintreffende NTP-Zeit darf die Unterbrechungsdauer und den Fortschritt
-  nachtraeglich korrigieren
+- die generische Zeitplattform bleibt RTC-optional und NTP-only-fähig
+- das konkrete Fermenter-R1-Produkt verlangt eine lokale RTC der
+  DS3231-Familie für neue Offline-Läufe; ihre tatsächliche Variante bleibt
+  `TBD_HARDWARE_CONFIRMATION`
+- ein neuer produktiver Lauf ohne trusted UTC ist nicht zulässig
+- ein exakt validierter Current-`FERMENTING`-Run wird nur mit trusted UTC nach
+  #124 logisch automatisch fortgesetzt; fehlt sie, bleibt er
+  `RecoveryEvaluation/WaitingForTrustedTime` ohne Aktorfreigabe
+- NTP bleibt zusätzliche Zeitquelle und korrigiert keine historische
+  #18-Progressrechnung im aktuellen R1-Pfad
 
 ## Nachverfolgung
 
 Reale Hardwarepruefungen:
 
-- #29 ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende
+- #29 ist geschlossene historische ESP32-Bring-up-/Ressourcen-Evidenz;
+  verbleibende allgemeine Board-/Ressourcennachweise sind `UNASSIGNED`, bis
+  der Owner einen passenden späteren Hardware- oder Release-Scope bestimmt
 - #30 DS18B20-Busse
 - #31 Display und Touch
 - #32 Luefter, Summer und MOSFET-Ausgaenge

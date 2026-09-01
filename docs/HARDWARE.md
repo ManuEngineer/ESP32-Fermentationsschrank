@@ -303,25 +303,33 @@ nicht bestueckt (`FUTURE_RELEASE`).
 Versorgungsspannungen, Reglerleistung, Leitungsquerschnitte, Sicherungshalter und
 Stecker werden am realen Aufbau dokumentiert.
 
-## Optionale R1-RTC
+## Fermenter-R1-RTC
 
-Die RTC-Wiring-Familie ist DS3231, I2C-Adresse `0x68`, mit SDA/SCL und
-INT/SQW gemäß Boardprofil. Die elektrische Verdrahtung ist für DS3231SN und
-DS3231M vorgesehen, sofern die Primärquellenprüfung diese Variantenneutralität
-trägt. Die tatsächlich gelieferte Variante bleibt davon getrennt:
+Die generische Zeitplattform bleibt RTC-optional und NTP-only-fähig. Für das
+konkrete Fermenter-R1-Produkt ist jedoch eine lokale RTC als trusted Zeitquelle
+für neue produktive Offline-Läufe erforderlich:
 
-    delivered_variant: TBD_DELIVERY
-    software_supported_variant: DS3231SN
+```text
+GENERIC_TIME_PLATFORM_RTC_OPTIONAL=YES
+GENERIC_DEVICE_PLATFORM_NTP_ONLY_SUPPORTED=YES
+FERMENTER_R1_CONCRETE_PRODUCT_PROFILE_RTC_REQUIRED=YES
+FERMENTER_R1_NEW_RUN_OFFLINE_SUPPORTED=YES
+NEW_RUN_WITHOUT_TRUSTED_UTC=NO
+FERMENTER_R1_RTC_FAMILY=DS3231
+FERMENTER_R1_RTC_VARIANT=TBD_HARDWARE_CONFIRMATION
+```
 
-Die RTC ist optional: `present=false` ist ein gültiges R1-Produktprofil und
-führt in den NTP-only-Modus. Eine trusted RTC ermöglicht sofortige
-Offline-Recovery; ohne trusted RTC wartet die Anwendung auf NTP und startet
-keinen neuen produktiven Lauf ohne trusted UTC.
+Die RTC-Wiring-Familie verwendet die DS3231-I2C-Adresse `0x68`; SDA/SCL und
+INT/SQW bleiben Boardprofil-Designdaten. Das bestellte Modul ist physisch noch
+nicht als `DS3231SN` oder `DS3231M` bestätigt. Weder konkrete Variante darf
+angenommen noch eine Multi-RTC- oder generische Providerarchitektur vorgebaut
+werden. Der bestehende Issue-#126-DS3231SN-Adapter bleibt unveränderte
+historische/digitale Evidenz, keine Behauptung über das gelieferte Modul.
 
 Pull-ups, Versorgung, Batterie-/Ladepfad, physischer IC-Aufdruck,
 I2C-Erreichbarkeit, OSF-/EOSC-Verhalten und Power-Loss-Zeitretention müssen
-am realen Aufbau nachgewiesen werden. Die Wiring-Zuordnung ist ein
-Boardprofil-Designstatus, kein `confirmed_test`.
+am realen Aufbau für die tatsächlich bestätigte Variante nachgewiesen werden.
+Die Wiring-Zuordnung ist ein Boardprofil-Designstatus, kein `confirmed_test`.
 
 Die Software akzeptiert RTC-Zeit nur nach Rohregister-, BCD-, Kalender-,
 OSF-, EOSC-, EN32kHz- und R1-Jahresbereichprüfung. Der ungenutzte 32-kHz-

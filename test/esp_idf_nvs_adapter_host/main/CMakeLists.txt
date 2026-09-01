@@ -1,10 +1,20 @@
+set(DEVICE_PLATFORM_ESP_IDF_SOURCE_DIR
+    "${CMAKE_CURRENT_LIST_DIR}/../../../lib/device_platform_esp_idf/src"
+)
+
+# The Linux NVS host test uses these target-neutral production sources directly.
+# It deliberately does not require the complete ESP-IDF adapter component,
+# whose RTC/I2C dependencies support ESP32 targets only.
 idf_component_register(
     SRCS
         "test_nvs_state_store.cpp"
         "bdl_ramdisk.cpp"
+        "${DEVICE_PLATFORM_ESP_IDF_SOURCE_DIR}/nvs_state_store.cpp"
+        "${DEVICE_PLATFORM_ESP_IDF_SOURCE_DIR}/esp_time_zone_resolver.cpp"
     INCLUDE_DIRS
         "."
-    REQUIRES device_platform_esp_idf fermentation_app
+        "${DEVICE_PLATFORM_ESP_IDF_SOURCE_DIR}"
+    REQUIRES device_platform fermentation_app nvs_flash
     PRIV_REQUIRES esp_blockdev
 )
 

@@ -1,5 +1,6 @@
 #include "nvs_state_store.hpp"
 
+#include <new>
 #include <utility>
 
 namespace device_platform_esp_idf {
@@ -71,8 +72,13 @@ NvsStateStoreOpenResult NvsStateStore::open(const NvsStateStoreConfig& config) {
     if (status != ESP_OK) {
         return NvsStateStoreOpenResult{status, nullptr};
     }
-    return NvsStateStoreOpenResult{
-        ESP_OK, std::unique_ptr<NvsStateStore>(new NvsStateStore(handle))};
+    auto store = std::unique_ptr<NvsStateStore>(new (std::nothrow)
+                                                    NvsStateStore(handle));
+    if (store == nullptr) {
+        nvs_close(handle);
+        return NvsStateStoreOpenResult{ESP_ERR_NO_MEM, nullptr};
+    }
+    return NvsStateStoreOpenResult{ESP_OK, std::move(store)};
 }
 
 NvsStateStore::~NvsStateStore() { nvs_close(handle_); }

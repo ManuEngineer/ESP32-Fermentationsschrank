@@ -1,5 +1,6 @@
 #include <cinttypes>
 #include <memory>
+#include <new>
 #include <utility>
 
 #include "app_config.hpp"
@@ -83,8 +84,17 @@ class NvsOwningContext final {
             return nullptr;
         }
 
-        return std::unique_ptr<NvsOwningContext>(
-            new NvsOwningContext(std::move(*config), std::move(opened.store)));
+        auto context = std::unique_ptr<NvsOwningContext>(
+            new (std::nothrow)
+                NvsOwningContext(std::move(*config), std::move(opened.store)));
+        if (context == nullptr) {
+            ESP_LOGE(kTag, "state-store owning-context allocation failed");
+            opened.store.reset();
+            static_cast<void>(
+                nvs_flash_deinit_partition(config->partitionLabel().c_str()));
+            return nullptr;
+        }
+        return context;
     }
 
     ~NvsOwningContext() {

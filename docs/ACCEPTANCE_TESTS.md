@@ -71,7 +71,7 @@ real charakterisierter NVS-/BDL-Cut-Zustand
 -> Generation/Root/Manifest/Fallback bzw. rc0/rc1/rh0
 -> Prepared/Orphan/Indeterminate-Klassifikation
 -> Produkt-Recovery-Outcome
--> SafetyCore / Safe-Boot / logischer Actuator-Gate
+-> stateless ActuationInterlock / Safe-Boot / logischer Actuator-Gate
 ```
 
 Ein Simulator-PASS plus separat dokumentierte reale Backendcharakterisierung
@@ -127,13 +127,13 @@ Mindestens:
   dem bestehenden Gesamtstatus `Applied`, FSM-Anwendung und frischer Evidenz
   freigeschaltet
 - echter Fresh-Start-Bridge vom Start-Command ueber den #17-Gesamtstatus bis
-  SafetyCore `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
+  zur `ActuationInterlock`-Permission `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
   `CommitOutcomeUnknown` bleiben `Unresolved`
 - normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
   zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
 - Aufbewahrung und Bereinigung
 - physische Vollreset-/Service-PIN-Tests gehoeren zu spaeteren E4/E5-/Service-
-  Gates und sind kein #24-R1-Safety-Core-Gate
+  Gates und sind kein #24-R1-`ActuationInterlock`-Gate
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
   und sichtbaren leeren Slots
 - gemeinsame rendererunabhaengige View-Modelle, Commands, strukturierte
@@ -166,10 +166,16 @@ Mindestens:
   zwischenzeitlicher erneuter Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
-- jede Resetcause: all-off/`Unresolved`, vollstaendige Revalidierung, kein
-  automatischer Resume und keine Restart-Akkumulation
-- Resume-Phasenmatrix: nur eindeutig fortsetzbare Phasen als Angebot, alle
-  zeit-/progressabhaengigen R1-Faelle als `NoActiveRun`
+- jede Resetcause: all-off/`Unresolved`, vollständige Revalidierung, keine
+  Restart-Akkumulation und keine Aktorfreigabe allein aus Recovery
+- #124-Current-`FERMENTING`: bei exakter gültiger Current-Evidenz und trusted
+  UTC automatische logische Recovery ohne Benutzerbestätigung; ohne aktuelle
+  UTC `RecoveryEvaluation/WaitingForTrustedTime` RAM-only, ohne
+  Persistenzmutation und mit verweigerter Aktorpermission
+- Resume-Phasenmatrix: `PREHEATING`, `COOLING` und `MANUAL_HOLDING` behalten
+  `ResumeOffer`; non-resumable trusted Phasen behalten `NoActiveRun`.
+  Ältere gültige Checkpoints bleiben nicht-aktivierende Angebote und werden
+  weder automatisch resumed noch promotet.
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
 - kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
   Abschaltung und bestehender #17-Coordinator-/unknown-safe-Zustand; kein
@@ -332,8 +338,10 @@ Vor realem Aktorbetrieb:
 - der bestehende #23-Current-Boot-Watchdog-Latch wird nur ueber den
   vorhandenen expliziten Resetpfad mit frischer Evidenz geloescht
 - Recoveryangebot, Resume und Fresh Start bleiben vor `Applied`/FSM/frischer
-  Evidenz `Unresolved`; ein Fresh Start wird ueber den echten Application-Bridge
-  bis SafetyCore nachgewiesen
+  Evidenz `Unresolved`; ein Fresh Start wird über die echte Application-Bridge
+  bis zur `ActuationInterlock`-Permission nachgewiesen. Die automatische
+  #124-Current-`FERMENTING`-Recovery bleibt bis zu derselben frischen
+  Aktivierungsevidenz aktorfrei
 - normale Config-Ablehnungen mit gueltigem Operational-Runtime erzeugen keinen
   Safety-Fault; echte Producer-/Integrity-/Indeterminate-Signale bleiben
   fail-closed
@@ -478,7 +486,7 @@ Vor Release 1:
 - konfliktierende Display- und Webaktion
 - alle Stopoptionen
 - Service-PIN- und Vollreset-Tests gehoeren zu den spaeteren Service-/Hardware-
-  Gates, nicht zum #24-R1-Safety-Core
+  Gates, nicht zum #24-R1-`ActuationInterlock`
 
 ## Hardware-Abnahme
 

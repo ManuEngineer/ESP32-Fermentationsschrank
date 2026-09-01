@@ -68,9 +68,11 @@ Grenzwerte werden nicht geraten.
 - unveraenderlicher Programmschnappschuss je Lauf;
 - Zieltemperatur und Restdauer nur als ausdrueckliche, validierte und
   protokollierte Laufanpassung;
-- phasenbezogener sicherer Wiederanlauf nach Unterbrechung;
-- kein erfundener Fortschritt bei unbekannter Ausfallzeit;
-- spaeter bestimmte Ausfallzeit als Unsicherheitsintervall.
+- #124-Current-`FERMENTING`-Recovery mit exakter Evidenz und trusted UTC als
+  automatische logische Fortsetzung ohne Aktorfreigabe;
+- bei fehlender trusted UTC `RecoveryEvaluation/WaitingForTrustedTime`
+  RAM-only und ohne Persistenzmutation; kein erfundener Fortschritt, keine
+  automatische Fallback-Promotion oder Charge-Recovery.
 
 ### Bedienung und Konnektivitaet
 
@@ -78,6 +80,9 @@ Grenzwerte werden nicht geraten.
 - lokale responsive Weboberflaeche;
 - Deutsch, Spanisch und Englisch;
 - Betrieb ohne Cloud, Internet, Heimserver oder funktionierendes WLAN;
+- generische Zeitplattform RTC-optional und NTP-only-fähig; konkretes
+  Fermenter-R1-Profil mit lokaler DS3231-Familien-RTC für neue Offline-Läufe,
+  deren tatsächliche Variante `TBD_HARDWARE_CONFIRMATION` bleibt;
 - gemeinsame fachliche Kommandos fuer Touch und Web;
 - PIN-unabhaengiger lokaler Vollreset als Recoveryweg bei vergessener
   Service-PIN.

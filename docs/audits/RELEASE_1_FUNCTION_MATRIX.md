@@ -4,13 +4,24 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 
 ## Lesart
 
+```text
+SNAPSHOT_CLASSIFICATION=HISTORICAL_NON_CURRENT_STATUS
+SNAPSHOT_DATE=2026-07-27
+SNAPSHOT_BASE_COMMIT=7713a66cbf51eb078bd0f5e43c1163d1e0f47e1f
+CURRENT_STATUS_SSOT=docs/ROADMAP.md
+CURRENT_NORMATIVE_SSOT=docs/SPECIFICATION_REVIEW.md and specialized contracts
+```
+
 Stand: 2026-07-27 (Original-Audit), Basis-Commit
 `7713a66cbf51eb078bd0f5e43c1163d1e0f47e1f`. Synchronisiert am 2026-08-05
 gemaess der Espressif-first-Regel (`docs/ENGINEERING_PRINCIPLES.md`) nach dem
 Wechsel der Produktionstoolchain auf ESP-IDF `6.0.2` (Issue #71 / PR #79,
 Basis-Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e`). Die Matrix
-konsolidiert die akzeptierte Release-1-Grenze; sie aendert weder Anforderungen
-noch Issues. Die Behandlungskategorien sind Vorschlaege zur Umsetzung.
+konsolidiert diesen historischen Auditstand; sie ist weder aktuelle Status-
+noch normative Quelle und ihre Zeilen werden nicht rückwirkend modernisiert.
+Aktuelle Entscheidungen stehen in `ROADMAP.md` beziehungsweise den
+spezialisierten Fachverträgen. Die Behandlungskategorien sind Vorschläge zur
+damaligen Umsetzung.
 Technische Kandidaten stehen in
 [`COMPONENT_EVALUATIONS.md`](COMPONENT_EVALUATIONS.md).
 

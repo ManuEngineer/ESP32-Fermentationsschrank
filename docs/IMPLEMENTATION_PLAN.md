@@ -70,7 +70,10 @@ unbestaetigte Hardware niemals freigeben.
 - Regelsensorauswahl, Ersatzbetrieb und Rueckkehr;
 - PI-Regelung und Luftbegrenzung;
 - Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
-- Fehlerklassen, persistente Verriegelungen und `SAFE_BOOT`;
+- endliche typisierte `FaultCode`s und Producer-Evidenz; stateless
+  `ActuationInterlock`, RAM-Watchdog-Latch im `ActuatorPlanner` und
+  fail-closed `SAFE_BOOT` als bestehende Load-/Lifecycle-Disposition, wo
+  fachlich zutreffend – kein generischer persistenter Safety-Latch;
 - reproduzierbare Fehlerinjektionen.
 
 Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
@@ -206,9 +209,11 @@ Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
 - Ein spaeterer Softwareblock darf einen fehlenden fachlichen oder Safetyvertrag
   nicht still ersetzen.
 - Reale Adapter werden erst nach dem zugehoerigen portseitigen Vertrag gebaut.
-- Produktive Aktorfreigabe verlangt den Fehler-/Safetykern sowie die owning
-  SSOT-, funktionalen Hardware- und, für #33, Adapter-Safety-Gates. Eine
-  generelle elektrische Pegelmessung ist fuer R1 nicht erforderlich.
+- Produktive Aktorfreigabe verlangt frische Producer-Evidenz am stateless
+  `ActuationInterlock`, den RAM-Watchdog-Latch des `ActuatorPlanner` sowie die
+  owning SSOT-, funktionalen Hardware- und, für #33, Adapter-Safety-Gates;
+  ein generischer persistenter Safety-Latch ist kein R1-Vertrag. Eine generelle
+  elektrische Pegelmessung ist fuer R1 nicht erforderlich.
 - Thermische Parameter bleiben `TBD_COMMISSIONING`, bis Messnachweise vorliegen.
 - Ressourcenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`, bis reproduzierbare Builds
   und Belastungsmessungen vorliegen.

@@ -1,6 +1,7 @@
 #include "ds3231_sn_rtc_adapter.hpp"
 
 #include <ctime>
+#include <new>
 
 #include "ds3231.h"
 #include "i2cdev.h"
@@ -45,7 +46,13 @@ esp_err_t Ds3231SnRtcAdapter::initialize(
         return ESP_ERR_INVALID_ARG;
     portClaimed_ = true;
 
-    auto descriptor = std::make_unique<RtcDevice>();
+    auto descriptor =
+        std::unique_ptr<RtcDevice>(new (std::nothrow) RtcDevice());
+    if (descriptor == nullptr) {
+        i2c_.releasePort(config_.bus, config_.sdaPin, config_.sclPin);
+        portClaimed_ = false;
+        return ESP_ERR_NO_MEM;
+    }
     const auto initStatus = ds3231_init_desc(
         &descriptor->value, static_cast<i2c_port_t>(config_.bus),
         static_cast<gpio_num_t>(config_.sdaPin),

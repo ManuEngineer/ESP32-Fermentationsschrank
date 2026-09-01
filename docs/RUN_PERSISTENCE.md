@@ -65,8 +65,8 @@ Partial-, Mixed-, Corrupt- und indeterminierte Zustaende bleiben
 Recovery-/Abort-required und fail-closed.
 
 Die vorhandenen `RunPersistenceLoadStatus`,
-`RunPersistenceCoordinatorState`, `RunPersistenceResultStatus` und
-`SafetyCore`-Projektionen sind dafuer ausreichend. Recoverystatus bleibt als
+`RunPersistenceCoordinatorState`, `RunPersistenceResultStatus` und die
+stateless `ActuationInterlock`-Bewertung sind dafuer ausreichend. Recoverystatus bleibt als
 technische/produktliche Beobachtung erhalten (`RECOVERY_STATUS_OBSERVABLE`),
 ohne UI- oder Aktorfreigabe zu implizieren. Die logische Freigabe bleibt bis
 zu vollstaendig validiertem Graph, `Applied`, FSM-Anwendung und frischer
@@ -89,7 +89,7 @@ explizite Resume-Entscheidung
 -> Gesamtstatus Applied
 -> FSM-Anwendung
 -> frische Config-/Sensor-/Planner-/Persistenzevidenz
--> erneute SafetyCore-Pruefung
+-> erneute `ActuationInterlock`-Bewertung mit frischer Evidenz
 -> erst dann eventuell ActuatorSafetyGateStatus::Allowed
 ```
 

@@ -12,10 +12,10 @@ zur Inbetriebnahme beziehungsweise bis zu den Phasen
 
 ## Issue #24 Release-1-Meldungs- und Safety-Grenze
 
-Die stabile R1-FaultCode- und Lifecycle-Matrix wird durch SafetyCore und
-`SAFETY_AND_FAULTS.md` vorgegeben. Dieses Dokument liefert keine zweite
-Fehlerklassifikation. Ack quittiert nur Anzeige/Akustik; Safety-Gate, Fault-
-Clear und `Allowed` bleiben davon unberuehrt. Journal- oder
+Die stabile R1-FaultCode- und Lifecycle-Matrix wird durch den stateless
+`ActuationInterlock` und `SAFETY_AND_FAULTS.md` vorgegeben. Dieses Dokument
+liefert keine zweite Fehlerklassifikation. Ack quittiert nur Anzeige/Akustik;
+Permission, Fault-Clear und `Allowed` bleiben davon unberuehrt. Journal- oder
 Notificationfehler duerfen eine Abschaltung nie verhindern.
 
 ## Rollen der Luefter
@@ -180,4 +180,4 @@ Verhalten:
 - konkrete Summermuster und Wiederholungsintervalle
 - technische Moeglichkeit einer Lautstaerkeregelung
 - UI-Meldungstexte und Prioritaetsdarstellung; die stabilen #24-FaultCodes
-  kommen aus dem SafetyCore-Vertrag
+  kommen aus dem `ActuationInterlock`-Vertrag
