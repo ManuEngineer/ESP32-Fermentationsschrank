@@ -24,19 +24,22 @@ esp32_release
 Das Umschalten des Buildprofils darf unbestaetigte Hardware nicht automatisch
 freigeben.
 
-## Issue #24 Release-1-Safetygrenze
+## Release-1-Interlockgrenze
 
-Der produktive abstrakte Pfad ist `SafetyCore -> ActuatorPlanner -> Sink`.
-`ActuatorSafetyGateStatus::Unresolved` ist der Boot-/Fehler-Default; ein
-Aufrufer darf `Allowed` nicht als eigene Safety-Wahrheit einschleusen. Jeder
-aktorfähige Orchestrator wird konstruktiv mit `SafetyCore&` erzeugt und
-`tickActuatorPlan()` besitzt kein caller-supplied finales Gate.
+Der produktive abstrakte Pfad bewertet aktuelle Evidenz mit dem stateless
+`ActuationInterlock`, bevor `ActuatorPlanner` und Sink einen Aktorplan
+verarbeiten. `ActuatorSafetyGateStatus::Unresolved` ist der Boot-/Fehler-
+Default; `Allowed` entsteht nur aus einer vollständigen frischen
+`ActuationEvidence`, nicht aus einer zweiten Gate-Wahrheit eines Aufrufers.
+Der `ActuatorPlanner` besitzt den aktuellen Watchdog-Latch; der Interlock
+liest ihn nur als Eingabe und besitzt weder aktive oder quittierte Fehler noch
+Fehlerhistorie.
 
 Issue #24 enthaelt keine GPIO-, BTS7960-, MOSFET-, Luefter- oder
 Thermal-Hardwareimplementierung und umgeht nicht #106. ResetCause wird ueber
 den anwendungsneutralen Device-Platform-Port gelesen; der Adapter ist kein
-Aktoradapter. SafetyCore besitzt keine allgemeine persistente Fehlerhistorie,
-keinen Restartakkumulator und keine Charge-Recovery-Plattform.
+Aktoradapter. Der stateless `ActuationInterlock` besitzt keine persistente
+Fehlerhistorie, keinen Restartakkumulator und keine Charge-Recovery-Plattform.
 
 ### Umgesetzte Projektgrundlage
 
@@ -209,7 +212,7 @@ Er enthaelt:
 - `SAFE_BOOT`
 
 Thermal-/Hardware-Grenzen und spaetere automatische Recovery bleiben
-E5/#35/Future und sind keine SafetyCore-Produzenten in #24-R1.
+E5/#35/Future und sind keine `ActuationInterlock`-Producer in #24-R1.
 
 ### Persistenz
 
@@ -347,12 +350,14 @@ Netzwerkmodule umfassen:
 - lokalen Webserver
 - Anmeldung und Sitzungen
 - lokale Lese-API
-- NTP als primaere absolute Zeitquelle
+- app-neutrale absolute Zeitplattform mit optionaler RTC und NTP-only-Modus;
+  der bestehende DS3231SN-Adapter ist der historische/digitale Issue-#126-
+  Vertrag, WLAN/Connectivity bleibt bei Issue #89
 
 Kein Cloudzwang, kein automatischer Firmwaredownload und keine offizielle externe
 Schreib-API in Release 1.
 
-## Diagnose und spaeterer Service (nicht #24-R1-Safety-Core)
+## Diagnose und spaeterer Service (nicht #24-R1-`ActuationInterlock`)
 
 Diagnose liest strukturierte Zustandsmodelle und keine beliebigen globalen
 Variablen.
@@ -371,16 +376,36 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 ## Zeit und Wiederanlauf
 
 - monotone Zeit steuert aktive Ablaufe
-- UTC/NTP dient Kalenderzeit; historische Unterbrechungs-/Progress-Recovery ist
+- `device_platform::ITimeSource` ist der einzige Zeitport des
+  `fermentation_app`; die App kennt weder eine konkrete RTC-Variante noch SNTP
+- `monotonicMillis()` bleibt bootlokal monoton und wird durch RTC/NTP nicht
+  korrigiert
+- `unixTimeSeconds()` liefert nur trusted ESP-System-UTC und bleibt bis zur
+  erfolgreichen RTC- oder NTP-Etablierung `nullopt`; ein bootlokales
+  High-Water-Gate publiziert keine retrograde UTC
+- Die generische Plattform bleibt RTC-optional und NTP-only-fähig. Das
+  konkrete Fermenter-R1-Produkt verlangt dagegen eine lokale RTC der
+  DS3231-Familie; ihre tatsächliche Variante ist
+  `TBD_HARDWARE_CONFIRMATION`. Trusted RTC-Zeit darf erst nach der für den
+  vorhandenen Adapter geltenden I2C-, Rohregister-, Kalender-, OSF-, EOSC-
+  und R1-Jahresbereichprüfung als Bootquelle dienen.
+- UTC dient Kalenderzeit; historische Unterbrechungs-/Progress-Recovery ist
   #18/C2 und kein aktiver #24-R1-Pfad
 - Laufrevisionen speichern eine monotone Epoche. Jede Wiederherstellung
   eroeffnet eine neue Epoche, sodass die Uptime bei null beginnen darf, ohne die
   Reihenfolge der persistierten Revisionen zu verletzen.
 - Ein zwischenzeitlich fehlender UTC-Wert verwirft den letzten bekannten
   UTC-Zeitbezug nicht; spaetere UTC-Werte duerfen dahinter nicht zurueckfallen.
+- Ein neuer produktiver Lauf und jeder neue aktive FERMENTING-Current brauchen
+  trusted UTC; im konkreten Fermenter-R1-Profil stellt die nachgewiesene lokale
+  RTC diese Zeit auch ohne WLAN/Internet bereit. Ohne trusted UTC wird kein
+  neuer Recoveryanker persistiert. Terminale Non-FERMENTING-Pfade bleiben nach
+  ihren bestehenden Verträgen zulässig.
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
 - fehlende NTP-Zeit erzeugt in #24-R1 keine Charge-Rettung oder Aktorfreigabe
-- eine spaetere batteriegepufferte RTC passt hinter dieselbe Zeitquellenschnittstelle
+- NTP-Synchronisierung folgt der offiziellen ESP-IDF-SNTP-Semantik. Nach
+  abgeschlossener Konvergenz wird die RTC nachgeführt; Quellenverlust allein
+  entwertet die bereits etablierte lokale Systemzeit nicht.
 
 ## Ressourcenmodell
 
@@ -401,7 +426,8 @@ Architektonisch moeglich, aber nicht aktiv implementiert:
 - PID-Autotuning
 - Web-OTA mit signierten Paketen und Rollback
 - benutzeraktivierbare UART-Diagnose
-- RTC
+- konkrete RTC-Variantenprüfung nach der realen Hardwarebestätigung; kein
+  vorsorglicher Multi-RTC-Ausbau
 - 12-V-ADC-Messung
 - Tuerkontakt
 - Push-/Telegram-Benachrichtigungen

@@ -374,10 +374,9 @@ struct RunCommandState {
 };
 
 // Liefert die fuer die Fermenting-Dauerentscheidung wirksame Vorzeitbasis.
-// Die bestaetigte nominale Korrektur bleibt dabei strukturell getrennt von
-// `priorBootPhaseElapsed` und wird nur fuer diese fachliche Auswertung
-// addiert. Ein inkonsistenter Kandidat wird fail-closed als `nullopt`
-// zurueckgegeben.
+// R1 verwendet ausschliesslich den neutralen, exakt getaggten
+// `priorBootPhaseElapsed`-Offset. Historische nominalRecoveryAdjustment-Daten
+// bleiben codec-kompatibel, erzeugen aber keine R1-Zeitgutschrift.
 [[nodiscard]] std::optional<PriorBootPhaseElapsed>
 effectivePriorElapsedForFermenting(const RunCommandState& current);
 
@@ -422,6 +421,20 @@ struct CommandDecision {
         return status == CommandStatus::Proposed;
     }
 };
+
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                CommandKind kind, CommandStatus status,
+                CommandDecision& destination);
+void beginDecisionInto(const RunCommandState& current,
+                       const CommandEnvelope& envelope, CommandKind kind,
+                       CommandDecision& destination);
+
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecision& destination);
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecision& destination);
 
 [[nodiscard]] CommandDecision decideProgramStart(
     const RunCommandState& current, const ProgramStartRequest& request);

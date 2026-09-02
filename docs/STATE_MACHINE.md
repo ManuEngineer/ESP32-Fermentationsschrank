@@ -23,13 +23,15 @@ Release 1. Ergaenzende Detailregeln stehen in
   ein gespeichertes Programm.
 - Direkte Aktortests sind ausschliesslich im geschuetzten `SERVICE_MODE` aus
   validiertem `STANDBY` zulaessig.
-- Die Bootklassifikation wartet nicht auf Netzwerkzeit oder NTP. Ein
-  tatsaechliches Resume ist in R1 jedoch niemals automatisch: Es erfordert eine
-  bewusste explizite Benutzerbestaetigung, den bestehenden
-  #17-Write-before-Apply-Pfad mit `Applied`, die FSM-Anwendung und frische
-  Evidenz. Bis dahin bleibt die Entscheidung ungeklaert; nicht resumefaehige
-  vertrauenswuerdige Phasen werden als `NoActiveRun` beendet und untrusted
-  Persistenz bleibt `SAFE_BOOT`.
+- Die Bootklassifikation wartet nicht blockierend auf Netzwerkzeit oder NTP.
+  Ein vollstaendig validierter Current-`FERMENTING`-Run wird nach dem #124-
+  Zeitvertrag automatisch logisch fortgesetzt; dafuer ist keine
+  Benutzerbestaetigung allein wegen des Stromausfalls erforderlich. Das ist
+  keine Aktorfreigabe: Write-before-Apply, FSM-Anwendung und frische
+  Configuration-/Sensor-/Hardware-/Safety-/Planner-Evidenz bleiben vor jeder
+  Freigabe erforderlich. Fehlt UTC, bleibt `RecoveryEvaluation` mit der
+  RAM-Disposition `WaitingForTrustedTime` bestehen; untrusted Persistenz
+  bleibt `SAFE_BOOT`.
 - Ein echter Sicherheitsfehler hat immer Vorrang vor automatischem Fortfahren.
 
 ## Grenze des fachlichen Zustandsautomaten
@@ -71,17 +73,33 @@ Kritische Fehler werden vor Bedienereignissen und normalen Phasenfortschritten
 ausgewertet. In `WAITING_FOR_PRODUCT` hat der belastbar erreichte Zeitablauf
 Vorrang vor einer gleichzeitig eintreffenden Produktbestaetigung.
 
-## Issue #24 Release-1-Resume-Grenze
+## Issue #124 Release-1-Recovery-Grenze
 
-`RECOVERY_EVALUATION` ist in R1 ausschliesslich ein nicht freigebendes
-Resume-Angebot: kein `Allowed`, kein Aktorcommand und kein automatischer
-Resume. Ein Ablehnen, Timeout oder technisch integerer, semantisch nicht
-resumefaehiger Lauf wird ueber den bestehenden Write-before-Apply-Pfad als
-`NoActiveRun`/`STANDBY` beendet. Technisch untrusted Persistenz bleibt
-`SAFE_BOOT` und wird nicht durch eine neue Tombstone-Mutation verdeckt.
+`RECOVERY_EVALUATION` ist der technische FSM-Zustand fuer die
+Recoverybewertung. Fuer einen Current-`FERMENTING`-Run gibt es darunter die
+Application-Disposition `WaitingForTrustedTime`,
+`CurrentRunRecoverable` oder `RecoveryRejectedOrFailClosed`. Die Disposition
+ist kein neuer FSM-Hauptzustand und wird nicht persistiert.
+
+Bei exakter `priorBootPhaseElapsed`-Basis, gueltigem Checkpointgraph und
+vertrauenswuerdiger UTC wird die Wall-Clock seit dem Checkpoint zur aktuellen
+Fermentationszeit gerechnet. Unterhalb der nominellen Dauer wird der
+Current-Run logisch automatisch als `FERMENTING` weitergefuehrt; bei erreichter
+Dauer verwendet die FSM die normale `FermentationCompleted`-Semantik.
+`runProgress.observedRunSeconds` bleibt davon getrennt und enthaelt nur
+beobachtete Laufzeit. Die UTC-Differenz ist keine hergeleitete exakte
+physische Ausfalldauer.
+
+Fehlt UTC unmittelbar nach Boot, bleibt die geladene Evidenz unveraendert in
+`RecoveryEvaluation/WaitingForTrustedTime`; es gibt keinen Tombstone und
+keinen Persistenzschreibvorgang nur fuer das Warten. Eine spaetere Bewertung
+verwendet dieselbe Revision; stale Evidenz wird fail-closed abgelehnt.
+Technisch untrusted Persistenz bleibt `SAFE_BOOT` und wird nicht durch eine
+neue Tombstone-Mutation verdeckt. Automatische Fallback-Promotion bleibt
+ausgeschlossen.
 
 Historische komplexe Recoverykontexte bleiben als #17/#18-Legacy dokumentiert,
-sind aber kein aktiver #24-R1-Produktpfad.
+sind aber kein aktiver #124-R1-Produktpfad.
 
 ## Kanonische Zustandsnamen
 
@@ -110,16 +128,19 @@ RECOVERY_TIME_PENDING
 WARNING_REQUIRES_ACTION
 ```
 
-`RECOVERY_TIME_PENDING` und `WARNING_REQUIRES_ACTION` koennen einem normalen
-Prozesszustand ueberlagert sein und sind nicht zwingend eigene blockierende
-Hauptzustaende.
+`RECOVERY_TIME_PENDING` ist im aktuellen #124-Vertrag die semantische
+Application-Disposition `WaitingForTrustedTime` unter
+`RECOVERY_EVALUATION`; es ist kein neuer persistierter Prozesszustand und
+ueberlagert keinen laufenden Regelzustand. `WARNING_REQUIRES_ACTION` ist ein
+separater fachlicher Kontext und kein Ersatz fuer diese Recovery-Disposition.
 
 ## BOOT
 
 ### Zweck
 
-Der ESP32 startet mit ausgeschalteten Aktoren, bewertet die gespeicherte
-Sicherheits- und Laufhistorie und waehlt erst danach den naechsten Zustand.
+Der ESP32 startet mit ausgeschalteten Aktoren, klassifiziert Konfiguration und
+Laufstand und wählt erst danach den nächsten Zustand. Die Klassifikation ist
+von der späteren Aktorpermission getrennt.
 
 ### Verbindliche Reihenfolge
 
@@ -128,12 +149,18 @@ BOOT
   -> Peltier und beide BTS7960-Richtungen AUS
   -> alle schaltbaren Ausgaenge zunaechst AUS
   -> Resetcause nur diagnostisch erfassen; keine Restart-Akkumulation
-  -> Konfiguration und kritischen Speicher validieren
-  -> aktuellen Config-/Persistenzzustand und Transaktionsstatus auswerten
-  -> Sensoren und Hardwarefreigaben grundlegend pruefen
+  -> Konfigurationstrust validieren
+  -> Persistenz laden und Integritaet/Transaktionsstatus auswerten
   -> gespeicherten Laufzustand klassifizieren
+  -> optional Current-FERMENTING gegen den #124-Zeitvertrag bewerten
   -> Netzwerk und Zeitabgleich parallel vorbereiten
 ```
+
+Die spätere Aktorpermission ist kein Boot-Klassifikationsschritt. Sie verlangt
+jeweils frische Konfigurations-, Persistenz-, Sensor- und Planner-Evidenz,
+einen zutreffenden expliziten Aktivierungspfad, die aktuelle stateless
+`ActuationInterlock`-Bewertung sowie, soweit zutreffend, die owning
+Hardware-/Adapter-Gates. Bis dahin bleibt die Permission `Unresolved`.
 
 ### Uebergaenge
 
@@ -151,12 +178,12 @@ gueltiger persistierter Zustand COMPLETED
 gueltiger Current mit R1-qualifizierbarer Phase
   -> RECOVERY_EVALUATION ohne Freigabe
 
-kein aktiver oder abgeschlossener Lauf und alle Bootpruefungen bestanden
+kein aktiver oder abgeschlossener Lauf nach gültiger Klassifikation
   -> STANDBY
 ```
 
 `STANDBY`, `COMPLETED` und `RECOVERY_EVALUATION` sind vor Abschluss der
-Bootpruefungen nicht erreichbar. Ein Neustart ist kein Fehlerreset; R1 fuehrt
+Bootklassifikation nicht erreichbar; daraus folgt keine Aktorpermission. Ein Neustart ist kein Fehlerreset; R1 fuehrt
 keine allgemeine persistente Verriegelung und keine Restart-Akkumulation ein.
 
 ## SAFE_BOOT
@@ -216,7 +243,10 @@ Sicherer Ruhezustand ohne laufenden Prozess.
 
 Ein neuer Lauf startet nur nach vollstaendiger Validierung des
 Programmschnappschusses, der Pflichtsensoren, der Sicherheitsfreigaben und der
-kritischen Persistenz.
+kritischen Persistenz sowie trusted UTC. Im konkreten Fermenter-R1-Profil
+liefert die nachgewiesene lokale DS3231-Familien-RTC diese Zeit auch ohne
+WLAN/Internet; ihre tatsächliche Variante bleibt bis zur Hardwarebestätigung
+offen.
 
 ## PREHEATING
 
@@ -233,7 +263,7 @@ Ziel des leeren Schrankes erfolgreich qualifiziert
 Nach einem Neustart wird ein technisch vertrauenswuerdiger `PREHEATING`-Lauf
 als Resume-Angebot dargestellt. Die Aktorfreigabe bleibt bis zur bewussten
 Bestaetigung und der vollstaendigen frischen Evidenz gesperrt; ein
-automatischer Resume ist in R1 ausgeschlossen.
+automatischer Resume dieser Phase ist in R1 ausgeschlossen.
 
 ## WAITING_FOR_PRODUCT
 
@@ -383,10 +413,30 @@ Fermentationsziel erreicht, aktives Kuehlen vorgesehen
 
 ### Neustartverhalten in R1
 
-`FERMENTING` ist in R1 nicht resumefaehig. Ein technisch vertrauenswuerdiger
-`Current` wird nach dem Neustart als `NoActiveRun` beendet; Fermentations-
-fortschritt und Restdauer werden nicht fortgesetzt oder neu abgeleitet.
-`RECOVERY_TIME_PENDING` ist dafuer kein Freigabe- oder Fortsetzungspfad.
+Ein vollstaendig validierter Current-`FERMENTING`-Run ist nach #124
+recoveryfaehig. Die Phasenzeit am Checkpoint ist der exakte
+`priorBootPhaseElapsed`-Offset plus der sicher beobachtete Live-Abschnitt.
+Danach wird `wall_clock_since_checkpoint_seconds` aus der vertrauenswuerdigen
+aktuellen UTC und der UTC des exakt validierten Checkpointrecords addiert.
+Alle Operationen und das Narrowing sind checked; nicht exakte Bounds,
+`PartialUnknownHistory`, falsche Zeitordnung oder untrusted Evidenz fuehren
+fail-closed zu `RecoveryRejectedOrFailClosed`.
+
+Unterhalb der Dauer wird der Run mit neuem `stateEnteredAtMillis` und dem
+exakten wiederhergestellten `priorBootPhaseElapsed` logisch als `FERMENTING`
+fortgesetzt. Die laufende FSM addiert diesen Priorwert zum neuen Live-Abschnitt
+und wartet dadurch nicht nochmals die bereits verstrichene Zeit ab. Die
+beobachtete Laufzeit wird separat nur um den Checkpoint-Live-Abschnitt
+erhoeht. Erreicht die Phasenzeit die Dauer, gilt die normale
+`FermentationCompleted`-Semantik: `FinishWithoutCooling` nach `COMPLETED`,
+alle drei Kuehlmodi nach `COOLING`.
+
+`RECOVERY_TIME_PENDING` beziehungsweise
+`RecoveryEvaluation/WaitingForTrustedTime` ist kein blockierender Bootloop
+und keine Aktorfreigabe. Aktoren bleiben AUS, bis die bestehenden frischen
+Safetygates erfolgreich sind. Ohne frische Sensor-Evidenz wird weder
+`CoolingTargetReached` behauptet noch Zeit auf einen noch nicht begonnenen
+`COOL_HOLDING`-Timer angerechnet.
 
 ## COOLING
 
@@ -431,8 +481,9 @@ kritischer Fehler
 
 Bei unsicherer Ausfallzeit wird kein automatisches Ende aus einem einzelnen
 Schaetzwert abgeleitet. Ein technisch vertrauenswuerdiger `COOL_HOLDING`-
-Checkpoint wird in R1 als `NoActiveRun` beendet; weder Haltezeit noch
-`RECOVERY_TIME_PENDING` setzen die Regelung fort.
+Checkpoint wird in R1 weiterhin nicht automatisch aktiviert; weder
+Haltezeit noch `RECOVERY_TIME_PENDING` setzen die Regelung ohne den geltenden
+expliziten Pfad und frische Evidenz fort.
 
 ## MANUAL_HOLDING
 
@@ -520,10 +571,11 @@ Sicherheitslogik dies erlaubt. Sie werden sichtbar angezeigt und protokolliert.
 
 `WARNING_REQUIRES_ACTION` wird verwendet, wenn eine fachliche Entscheidung offen
 ist, etwa bei einem ausgefallenen optionalen Produktfuehler gemaess #21. Eine
-nicht eindeutig aufloesbare alte Recovery-Zeit ist kein R1-Fall fuer eine
-fortgesetzte Regelaktion: Zeit- oder progressabhaengige, nicht resumefaehige
-Phasen werden als `NoActiveRun` beendet; technisch untrusted Persistenz fuehrt
-zu `SAFE_BOOT`.
+fehlende aktuelle UTC im Current-`FERMENTING`-Fall ist dagegen kein
+Benutzerentscheid und kein `NoActiveRun`: Sie fuehrt zu
+`RecoveryEvaluation/WaitingForTrustedTime`. Nicht eindeutig aufloesbare
+Persistenz- oder Zeitbelege werden `RecoveryRejectedOrFailClosed` und bleiben
+fail-closed; technisch untrusted Persistenz fuehrt zu `SAFE_BOOT`.
 
 ## FAULT
 
@@ -549,12 +601,15 @@ Beispiele:
 
 ### Zweck
 
-Nach `BOOT` unverzueglich bestimmen, ob ein unterbrochener Lauf lediglich als
-Resume-Angebot angezeigt, als `NoActiveRun` verworfen oder wegen untrusted
-Evidenz in `SAFE_BOOT` gehalten wird. Keine automatische Fortsetzung.
+Nach `BOOT` unverzueglich bestimmen, ob ein unterbrochener Lauf nach einem
+geltenden R1-Vertrag logisch fortgesetzt, als nicht-aktivierendes Angebot
+behandelt oder wegen untrusted Evidenz in `SAFE_BOOT` gehalten wird.
+`FERMENTING`-Current-Recovery kann dabei automatisch logisch fortgesetzt
+werden; eine Aktorfreigabe folgt daraus nicht.
 
-Vor Eintritt wurden aktueller Config-/Persistenzstatus, Transaktionsintegritaet
-und grundlegende Sensor-/Planner-Evidenz geprueft; es gibt keinen allgemeinen
+Vor Eintritt wurden aktueller Config-/Persistenzstatus und
+Transaktionsintegrität klassifiziert; frische Sensor-/Planner-Evidenz wird erst
+bei einer späteren Aktorpermission geprüft. Es gibt keinen allgemeinen
 persistierten Safety-Latch.
 Zusaetzlich werden mindestens bewertet:
 
@@ -562,7 +617,8 @@ Zusaetzlich werden mindestens bewertet:
 - Phase des unterbrochenen Laufes
 - aktueller und letzter gueltiger Sensorstatus
 - aktuelle und letzte bekannte Temperaturen
-- nur die explizite R1-Phasenmatrix; keine alte Zeit-/Progressgutschrift
+- die explizite R1-Phasenmatrix mit dem #124-Wall-Clock-Vertrag fuer Current-
+  `FERMENTING`; keine gewichtete oder biologische Zeit-/Progressgutschrift
 - aktive Warnungen und Fehler
 - sichere phasenbezogene Aktoraktion
 
@@ -572,16 +628,22 @@ Zusaetzlich werden mindestens bewertet:
 NoPersistedRun / NoActiveRun
   -> STANDBY, Gate Unresolved
 
-technisch integerer Current mit eindeutiger R1-Qualifikation
-  -> RECOVERY_EVALUATION, Gate Unresolved, Resume-Angebot
+technisch integerer Current-FERMENTING mit exakter Evidenz und UTC
+  -> bestehender Write-before-Apply-Recoverykern
+  -> logisch FERMENTING oder normale FermentationCompleted-Semantik
 
-technisch integerer Current ohne einfache R1-Qualifikation
-  -> kanonischer NoActiveRun-Abschluss ueber #17, danach STANDBY
+technisch integerer Current-FERMENTING ohne aktuelle UTC
+  -> RECOVERY_EVALUATION / WaitingForTrustedTime, RAM-only
+
+technisch integerer Current ohne geltende R1-Qualifikation
+  -> nur ueber den jeweiligen bestehenden kanonischen Pfad behandeln
+  -> keine stillschweigende Umetikettierung unklarer Evidenz
 
 technisch untrusted Load
   -> SAFE_BOOT, keine Tombstone-Mutation und kein Resume
 
-expliziter Fresh Start oder bestaetigtes Resume
+expliziter Fresh Start oder bestaetigtes Resume, soweit der jeweilige Pfad
+dies erfordert
   -> bestehender Write-before-Apply-Pfad
   -> nach Gesamtstatus Applied, FSM-Anwendung und frischer Evidenz ggf. Allowed
 ```
@@ -596,16 +658,22 @@ Readback.
 
 ### Zweck
 
-`RECOVERY_TIME_PENDING` ist im #24-R1-Pfad kein Freigabekontext. Historische
-NTP-/Ausfallintervall- und Progressrechnung bleibt #18/C2-Legacy und darf
-keinen Resume- oder Aktorentscheid erzeugen.
+`RECOVERY_TIME_PENDING` beziehungsweise die Application-Disposition
+`WaitingForTrustedTime` ist im #124-R1-Pfad kein Freigabekontext und kein
+neuer persistierter Prozesszustand. Historische NTP-/Ausfallintervall- und
+Progressrechnung bleibt #18/C2-Legacy; der aktuelle #124-Vertrag verwendet
+stattdessen nur die Wall-Clock seit dem exakt validierten Checkpoint.
 
 ### Verhalten
 
 - Aktoren bleiben `Idle/Stop` und das Gate `Unresolved`.
-- Kein altes Zeit-, UTC- oder gewichtetes Progressfeld wird gutgeschrieben.
-- Ein Zustand ohne einfache frische Fortsetzung wird als `NoActiveRun`
-  beendet; technische Persistenzunsicherheit fuehrt zu `SAFE_BOOT`.
+- Kein gewichtetes, temperaturbasiertes oder biologisches Recoveryfeld wird
+  gutgeschrieben. Der neutrale exakte `priorBootPhaseElapsed`-Offset darf
+  fuer die R1-Phasenkontinuitaet wiederverwendet werden.
+- Ohne aktuelle UTC wird nichts gutgeschrieben und nichts persistiert; die
+  Anwendung wartet RAM-only auf dieselbe vertrauenswuerdige Evidenz.
+- Technische Persistenzunsicherheit fuehrt zu `SAFE_BOOT`; unklare Recovery-
+  Evidenz wird nicht als `NoActiveRun` umetikettiert.
 
 ## SERVICE_MODE
 
@@ -617,7 +685,7 @@ Prozess.
 ### Regeln
 
 - Service-PIN, falls fuer spaetere Service-/Hardware-Gates benoetigt, ist
-  nicht Teil des #24-R1-Safety-Cores
+  nicht Teil des #24-R1-`ActuationInterlock`
 - deutlicher Warnhinweis vor Aktortests
 - Peltier- und Lueftertests zeitlich und leistungsmassig begrenzen
 - Richtungswechsel, Mindest-Ausschaltzeit und Totzeit bleiben erzwungen
@@ -656,6 +724,10 @@ Tuerinformation als vorhandene Sicherheits- oder Prozessbedingung voraussetzen.
 - [x] `SERVICE_MODE` nur aus validiertem `STANDBY`; physische Service-/Reset-
       Geraete bleiben E5/Future
 - [x] Produktfuehlerausfall fuehrt nicht zu stillem Sensorwechsel
-- [x] R1 verwendet keine automatische NTP-/Progress-Recovery und keine
-      universelle Fehlerklassen-FSM
+- [x] R1 verwendet keine automatische Netzwerk-/NTP-Abhaengigkeit und keine
+      gewichtete/biologische Recovery; ein vollstaendig vertrauenswuerdiger
+      Current-`FERMENTING`-Run nutzt den einfachen #124-Wall-Clock-Vertrag
+- [x] `RecoveryEvaluation/WaitingForTrustedTime` bleibt RAM-only und
+      aktorfrei; automatische logische Recovery gibt allein keine
+      Aktorfreigabe
 - [x] kein Tuerkontakt in Release 1

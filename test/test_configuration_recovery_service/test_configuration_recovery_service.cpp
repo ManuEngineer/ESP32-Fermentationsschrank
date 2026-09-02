@@ -198,6 +198,14 @@ class Resolver final : public device_platform::ITimeZoneResolver {
     }
 };
 
+void eraseConfigurationGraphRecords(LocalStore& store) {
+    for (const char* key :
+         {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2", "sc3",
+          "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2"}) {
+        store.erase(key);
+    }
+}
+
 struct Fixture {
     LocalStore store;
     Resolver resolver;
@@ -351,6 +359,33 @@ void test_existing_bytes_without_bootstrap_are_not_factory_initialized() {
                              ConfigurationIntegrityFailure),
         static_cast<int>(result.status));
     TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
+}
+
+void test_rootless_same_epoch_generation_is_integrity_failure() {
+    Fixture fixture;
+    std::string bytes;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {fermentation::configuration_storage_contract::
+                              kUserConfigurationRecordType,
+                          1U, device_platform::StorageEpoch{1U}, 1U,
+                          std::nullopt, "orphaned-user-record"},
+                         bytes, 128U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    fixture.store.put("uc0", bytes);
+
+    const auto result = fixture.recovery->boot();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationIntegrityFailure),
+        static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                             ConfigurationIntegrityFailure),
+        static_cast<int>(*result.safetyProducer));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::NoRuntime),
+        static_cast<int>(fixture.service.mode()));
 }
 
 void test_reboot_loads_initialized_graph() {
@@ -569,7 +604,7 @@ void test_authorized_reset_without_runtime_recovers_missing_graph() {
                                  FactoryInitializationCompleted),
             static_cast<int>(recovery->boot().status));
     }
-    store.erase("cr0");
+    eraseConfigurationGraphRecords(store);
     fermentation::ConfigurationMutationCoordinator coordinator;
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationGraphStore graph(store, resolver);
@@ -730,7 +765,7 @@ void test_no_runtime_reset_busy_carries_producer() {
                                  FactoryInitializationCompleted),
             static_cast<int>(recovery->boot().status));
     }
-    store.erase("cr0");
+    eraseConfigurationGraphRecords(store);
     fermentation::ConfigurationMutationCoordinator coordinator;
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationGraphStore graph(store, resolver);
@@ -1281,7 +1316,7 @@ void test_reset_write_safe_failure_without_runtime_gets_producer() {
                                  FactoryInitializationCompleted),
             static_cast<int>(recovery->boot().status));
     }
-    store.erase("cr0");
+    eraseConfigurationGraphRecords(store);
     fermentation::ConfigurationMutationCoordinator coordinator;
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationGraphStore graph(store, resolver);
@@ -1363,7 +1398,7 @@ void test_reset_eligibility_is_reproven_on_every_call() {
                                      FactoryInitializationCompleted),
                 static_cast<int>(recovery->boot().status));
         }
-        store.erase("cr0");
+        eraseConfigurationGraphRecords(store);
         fermentation::ConfigurationMutationCoordinator coordinator;
         fermentation::ConfigurationBootstrapStore bootstrap(store);
         fermentation::ConfigurationGraphStore graph(store, resolver);
@@ -1414,7 +1449,7 @@ void test_reset_eligibility_reproof_still_succeeds_when_unchanged() {
                                  FactoryInitializationCompleted),
             static_cast<int>(recovery->boot().status));
     }
-    store.erase("cr0");
+    eraseConfigurationGraphRecords(store);
     fermentation::ConfigurationMutationCoordinator coordinator;
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationGraphStore graph(store, resolver);
@@ -1842,6 +1877,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_factory_boot_uses_exactly_one_factory_read_per_known_key);
     RUN_TEST(test_existing_bytes_without_bootstrap_are_not_factory_initialized);
+    RUN_TEST(test_rootless_same_epoch_generation_is_integrity_failure);
     RUN_TEST(test_reboot_loads_initialized_graph);
     RUN_TEST(test_factory_reset_advances_epoch_and_preserves_touch_key);
     RUN_TEST(

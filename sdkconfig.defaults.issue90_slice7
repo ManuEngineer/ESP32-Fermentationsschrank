@@ -1,0 +1,5 @@
+# Issue #90 Slice-7 harness overlay. This file is used only by the dedicated
+# bring-up harness build and never by the normal bring-up or release profiles.
+# It selects the harness label for the same physical flash range as the
+# production state_store; pre-harness backup and full restore are mandatory.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store_test.csv"

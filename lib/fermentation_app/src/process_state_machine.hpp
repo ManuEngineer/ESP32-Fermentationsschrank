@@ -49,6 +49,9 @@ struct ProcessRunSnapshot {
 [[nodiscard]] bool validateProcessRunSnapshot(
     const ProcessRunSnapshot& snapshot);
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
+    const RunProgramSnapshot& runSnapshot,
+    const EffectiveRunValues& effectiveValues);
+[[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
 [[nodiscard]] bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
                                            const ProcessRunSnapshot& right);
@@ -201,6 +204,12 @@ struct PriorBootPhaseElapsed {
 [[nodiscard]] bool applyProcessTransition(
     ProcessRuntimeState& current, const TransitionDecision& decision,
     const ProcessRunSnapshot* runSnapshot);
+
+// Der Domain-Bootpfad etabliert den einzigen gueltigen BootCompleted-
+// Uebergang nach Standby. Die Transition-Projektion und ihre Anwendung
+// bleiben damit vollstaendig in der Process-State-Machine.
+[[nodiscard]] bool establishBootCompletedStandby(ProcessRuntimeState& current,
+                                                 std::uint64_t monotonicMillis);
 
 // Oeffentlich fuer Recovery-Orchestrierung ausserhalb dieser
 // Uebersetzungseinheit

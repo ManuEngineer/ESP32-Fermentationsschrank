@@ -72,7 +72,7 @@ Zusaetzlich mindestens:
 - Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
 - erlaubte Exporte
 - Servicepruefungen nur nach Service-PIN und gueltigem Zustand; E5/Future,
-  nicht #24-R1-Safety-Core
+  nicht #24-R1-`ActuationInterlock`
 
 ## Diagnose waehrend eines Laufes
 
@@ -145,7 +145,9 @@ Mindestens sichtbar:
 - Totzeit
 - Alter der Regelanforderung
 - tatsaechliche Aktorfreigabe und Sperrgrund
-- R_IS/L_IS nur nach realer Verifikation
+- R_IS/L_IS sind in R1 deaktiviert und werden nicht angeschlossen, gemessen
+  oder implementiert; eine spätere Nutzung ist `FUTURE_RELEASE` mit eigenem
+  Issue, Plan und Owner-Gate
 
 ## Passiver Boot-Selbsttest
 
@@ -205,7 +207,9 @@ Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 - kritischer Speicher gesund
 - Schrankluft- und Kuehlkoerpersensor gueltig
 - Versorgung stabil
-- alle verwendeten GPIO-Pegel und Richtungen fuer die konkrete Hardware bestaetigt
+- SSOT-/Funktionszuordnung der verwendeten GPIOs und Richtungen fuer die
+  konkrete Hardware bestaetigt; keine vorgeschriebene Spannungs- oder
+  Boot-Pegelmessung
 
 Fuer einen Peltier-Puls zusaetzlich zwingend:
 
@@ -214,7 +218,8 @@ Fuer einen Peltier-Puls zusaetzlich zwingend:
 - Montageort der Temperatursicherung dokumentiert
 - Kuehlkoerper korrekt montiert
 - Aussenluefter zuvor erfolgreich getestet
-- BTS7960 ohne Peltier und Polaritaet mit Multimeter verifiziert
+- BTS7960-Adapterinterlock auf Command-/GPIO-Ebene bestanden, Pull-down-/fail-low
+  Beschaltung vorhanden und keine gleichzeitige Gegenrichtungsaktivierung
 
 Rating und Montageort bleiben bis zur Inbetriebnahme `TBD_COMMISSIONING`; die
 Installation vor dem ersten Peltier-Puls ist verbindlich.
@@ -227,12 +232,14 @@ Installation vor dem ersten Peltier-Puls ist verbindlich.
 4. Innenluefter kurz testen
 5. Aussenluefter kurz testen
 6. BTS7960 ohne angeschlossenes Peltier pruefen
-7. Ausgang und Polaritaet mit Multimeter bestaetigen
+7. fail-closed Adapterzustand, Mutual Exclusion und Break-before-make erneut
+   pruefen; Richtung/Polaritaet wird erst im begrenzten Peltier-Servicepuls
+   funktional festgestellt
 8. Sicherheitskomponenten und Freigaben erneut pruefen
 9. begrenzten Peltier-Heizpuls ausfuehren
 10. sicher ausschalten, Mindest-Ausschaltzeit und Totzeit abwarten
 11. begrenzten Peltier-Kuehlpuls ausfuehren
-12. thermische Reaktion und gegebenenfalls R_IS/L_IS auswerten
+12. thermische Reaktion auswerten; R_IS/L_IS werden in R1 nicht ausgewertet
 13. Servicebericht speichern
 
 Jeder Schritt besitzt Vorbedingungen, maximale Leistung, maximale Dauer,
@@ -322,7 +329,7 @@ Formate: JSON und geeignete CSV-Tabellen.
 - Sensor- und Aktordaten
 - Pulsleistung, Dauer und Richtung
 - thermische Reaktion
-- R_IS/L_IS nur falls verifiziert
+- R_IS/L_IS: in R1 nicht angeschlossen und nicht ausgewertet
 - Warnungen, Abbrueche, Fehler und Ergebnis
 
 Moegliche Ergebnisse:

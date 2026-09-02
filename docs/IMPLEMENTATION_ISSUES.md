@@ -94,9 +94,10 @@ Alle E3-Ausgaenge bleiben bis E5 abstrakte Aktorbefehle.
 
 ## #24 Release-1-KISS-Abgrenzung
 
-#24 umfasst nur SafetyCore, die vorhandene Producer-Projektion, ResetCause-
-Diagnose, den sicheren #17-`NoActiveRun`-/`SAFE_BOOT`-Pfad und die abstrakte
-Planner-/Sink-Grenze. Nicht Bestandteil sind Service-PIN, Restartakkumulation,
+#24 umfasst den stateless `ActuationInterlock`, die vorhandene
+Producer-Evidenz, ResetCause-Diagnose, den sicheren #17-`NoActiveRun`-/
+`SAFE_BOOT`-Pfad und die abstrakte Planner-/Sink-Grenze. Nicht Bestandteil
+sind Service-PIN, Restartakkumulation,
 allgemeine Safety-Persistenz, automatische `SAFETY_RECOVERY`, Fallback-
 Promotion/Charge-Recovery oder neue Thermal-/Hardwareproducer. Bereits
 gemergte #18-Helfer bleiben nach Entfernung aus dem aktiven Produktpfad als
@@ -133,7 +134,7 @@ Touch- und Netzwerkadapter bleiben E5.
 #9/#10/#11 -> #29
 #20/#21/#29 -> #30
 #25/#26/#29 -> #31
-#23/#24/#28/#29 -> #32
+#23/#24/#29 -> #32
 #23/#24/#29/#30/#32 -> #33
 #29/#57 -> #89
 #29/#54 -> #90
@@ -142,6 +143,10 @@ Touch- und Netzwerkadapter bleiben E5.
 #29 liefert zuerst eine aktorfreie Hardware- und Ressourcenbaseline. Produktive
 Aktoradapter und belastete Ausgangstests verlangen zusaetzlich den Safetykern
 und die jeweiligen elektrischen Gates.
+
+#32 besitzt nach #23/#24/#29 einen eigenstaendig abschliessbaren
+Hardware-/Adapterscope. #28 bleibt das spaetere Diagnose-/Service-/Exportgate
+und keine #32-Abschlussvoraussetzung.
 
 #89 evaluiert browserbasiertes WLAN-Onboarding ergebnisoffen nach
 Espressif-first und Adopt-or-build. #90 implementiert ausschliesslich den

@@ -14,18 +14,48 @@
 - **Folgen:** Der Arduino-Produktionspfad wurde mit PR #79 entfernt. Das Ziel
   bestaetigt weiterhin keine konkrete Boardrevision oder Pinbelegung.
 
-## ADR-002: Keine GPIO-Zuweisung vor Hardwarebestaetigung
+## ADR-002: GPIO-Designzuweisung und reale Hardwarefreigabe sind getrennte Gates
 
-- **Status:** accepted
+- **Status:** accepted; amended by Issue #130 / PR #131
 - **Datum:** 2026-07-20
-- **Kontext:** Importierte Komponentenangaben enthalten keine verifizierte
-  Anschlussbelegung oder aktive Pegel.
-- **Entscheidung:** Die Firmware verwendet keine Kandidatenpins. Zahlenwerte
-  duerfen nur in Beispiel- oder lokaler Hardwarekonfiguration mit explizitem
-  Status `TBD_HARDWARE` beziehungsweise `confirmed_test` dokumentiert werden.
-  Die lokale bestaetigte `config/pins.yaml` bleibt ignoriert.
-- **Alternativen:** Plausible Standardpins als Kandidaten in Firmware verwenden.
-- **Folgen:** Reale Aktoren bleiben bis zur Hardwareverifikation gesperrt.
+- **Kontext:** Die reale ESP32-WROOM-32E-Quad-MOSFET-Boardfamilie ist durch
+  Owner-Referenzabgleich identifiziert. Design-/Verdrahtungszuweisung und
+  elektrische Funktionsverifikation bleiben dennoch unterschiedliche Gates.
+- **Entscheidung:** Konkrete GPIO-Zahlen duerfen als versionierter
+  Design-/Sollzustand in einer getrackten Board-/Wiring-SSOT festgelegt
+  werden, sobald die zugrunde liegende Board-/Modulfamilie hinreichend
+  identifiziert und die Zuordnung gegen belastbare Schalt-, Hersteller- und
+  PCB-Unterlagen geprueft ist.
+
+  Solche Werte tragen `planned` oder
+  `board_fixed_pending_functional_verification` und stellen noch keinen
+  funktionalen Hardware-PASS dar. PCB-feste Zuordnungen duerfen als
+  `board_fixed_pending_functional_verification` dokumentiert werden, wenn
+  reale Platine und Referenzunterlage in der Boardfamilie uebereinstimmen.
+
+  Die allgemeine elektrische Pegelmessung ist fuer R1 ownerseitig nicht
+  erforderlich: `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`. Ein
+  funktionaler Hardwaretest am konkreten Aufbau bleibt davon getrennt und
+  behauptet keinen nicht gemessenen elektrischen Pegel. Ein geplanter oder
+  board-fester GPIO darf niemals automatisch ein elektrisches Mess-PASS,
+  ein historisches Pin-/Pegel-Bestaetigungsbool, `actuator_release` oder ein
+  anderes Hardware-PASS-Gate setzen.
+
+  Die Statusquelle fuer die Boardprofil-Verifikation ist der getrennte
+  Funktionsstatus `FUNCTIONAL_HARDWARE_VERIFICATION`; das historische
+  Sammelfeld `confirmed_test` wird nicht als aktuelles Statusfeld fortgefuehrt.
+
+  Safety-relevante Ausgaenge bleiben bis zu ihren owning Hardwaregates
+  fail-closed. Historische Issues oder alte Pinannahmen sind keine
+  elektrische Autoritaet, wenn sie der gemergten Board-/Wiring-SSOT oder
+  belastbaren Primaerquellen widersprechen. Eine zweite unabhaengig
+  handgepflegte Pinmatrix bleibt verboten.
+- **Alternativen:** Plausible Standardpins als Kandidaten in Firmware
+  verwenden oder Designzuweisung und Hardwarefreigabe in einem Gate
+  vermischen.
+- **Folgen:** Die konkrete R1-Board-/Wiring-SSOT ist
+  config/board_profiles/esp32_32e_quad_mosfet_r1.yaml. Reale Aktoren
+  bleiben bis zur Hardwareverifikation gesperrt.
 
 ## ADR-003: Spezifikation vor Fermentationssteuerung
 
@@ -157,7 +187,7 @@
 
 ## ADR-012: Software-first mit gemeinsamem Bring-up-Profil
 
-- **Status:** accepted
+- **Status:** accepted; amended by Issue #29/#33 Owner decision
 - **Datum:** 2026-07-21
 - **Kontext:** Die reale Hardware trifft spaeter ein, waehrend der groesste Teil
   des fachlichen Systems vorher entwickelt werden soll.
@@ -169,7 +199,14 @@
   Hardwarezugriff im Kern.
 - **Folgen:** Software-Issues koennen durch native Tests abgeschlossen werden,
   waehrend reale Verifikation separat `BLOCKED_HARDWARE` bleibt. Aktoren werden
-  im Bring-up erst nach unbelasteter Pegelmessung schrittweise freigegeben.
+  erst nach den jeweils owning Hardwaregates schrittweise freigegeben. R1
+  verlangt dafuer keine generelle Multimeter- oder Boot-Pegelmessung.
+  Sicherheitskritische Richtungssteuerungen benoetigen hardwareseitig definierte
+  fail-low Zustaende sowie software-/adapterseitige Interlocks; reale
+  Verbraucher werden spaeter kontrolliert funktional verifiziert. R1 verlangt
+  keine GPIO-Spannungs-, Bootpegel- oder Multimetermessung. `R_IS`/`L_IS`
+  bleiben fuer R1 deaktiviert, nicht angeschlossen und nicht implementiert;
+  ihre Verwendung ist `FUTURE_RELEASE` mit eigenem Issue, Plan und Owner-Gate.
 
 ## ADR-013: Wiederverwendbare ESP32-Geraeteplattform
 

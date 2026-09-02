@@ -40,6 +40,48 @@ sind keine #24-R1-Testfaelle. Historische Testpunkte dazu bleiben fuer ihre
 spaeteren Issues/Hardware-Gates gekennzeichnet und gelten nicht als #24-
 Abnahmekriterium.
 
+## Issue #90 R5.9: getrennte Nachweise
+
+Fuer die spaetere #90-Persistenz-/Recoveryverifikation werden technische
+Backendcharakterisierung und das hoehere Produkt-Recovery-Gate getrennt und
+maschinenlesbar ausgewiesen:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als sichtbare
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
+ist kein Backend-PASS. Slice 2 darf mit dem
+`SimulatedPersistentStateStore` erwartete Produktoutcomes deterministisch im
+Produktorakel pruefen. Ein finaler #90-Produkt-Recovery-PASS ist jedoch nur
+zulaessig, wenn zusaetzlich jeder relevante real aus der gepinnten
+NVS-/BDL-Charakterisierung hervorgehende Cut-/Recoveryzustand durch die
+hoehere Produktions-Recovery laeuft:
+
+```text
+real charakterisierter NVS-/BDL-Cut-Zustand
+-> Reinitialisierung / Reboot
+-> vollstaendiges Reload
+-> Record-/Envelope-/CRC-/Schema-/StorageEpoch-Pruefung
+-> Generation/Root/Manifest/Fallback bzw. rc0/rc1/rh0
+-> Prepared/Orphan/Indeterminate-Klassifikation
+-> Produkt-Recovery-Outcome
+-> stateless ActuationInterlock / Safe-Boot / logischer Actuator-Gate
+```
+
+Ein Simulator-PASS plus separat dokumentierte reale Backendcharakterisierung
+reicht nicht fuer den finalen Produkt-PASS, solange die realen Zustaende nicht
+auf Produktebene geprueft wurden. Callback 12 darf Backend-FAIL / Known
+Limitation bleiben und zugleich zu einem sicheren Produkt-Recovery-PASS
+fuehren, wenn die hoehere Ebene den realen Zustand korrekt erkennt und
+fail-closed behandelt. Die gesamte Verifikation bleibt actor-free; UI und
+physische Aktorsicherheit sind kein #90-Gate.
+
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests
@@ -85,13 +127,13 @@ Mindestens:
   dem bestehenden Gesamtstatus `Applied`, FSM-Anwendung und frischer Evidenz
   freigeschaltet
 - echter Fresh-Start-Bridge vom Start-Command ueber den #17-Gesamtstatus bis
-  SafetyCore `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
+  zur `ActuationInterlock`-Permission `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
   `CommitOutcomeUnknown` bleiben `Unresolved`
 - normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
   zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
 - Aufbewahrung und Bereinigung
 - physische Vollreset-/Service-PIN-Tests gehoeren zu spaeteren E4/E5-/Service-
-  Gates und sind kein #24-R1-Safety-Core-Gate
+  Gates und sind kein #24-R1-`ActuationInterlock`-Gate
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
   und sichtbaren leeren Slots
 - gemeinsame rendererunabhaengige View-Modelle, Commands, strukturierte
@@ -124,10 +166,16 @@ Mindestens:
   zwischenzeitlicher erneuter Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
-- jede Resetcause: all-off/`Unresolved`, vollstaendige Revalidierung, kein
-  automatischer Resume und keine Restart-Akkumulation
-- Resume-Phasenmatrix: nur eindeutig fortsetzbare Phasen als Angebot, alle
-  zeit-/progressabhaengigen R1-Faelle als `NoActiveRun`
+- jede Resetcause: all-off/`Unresolved`, vollständige Revalidierung, keine
+  Restart-Akkumulation und keine Aktorfreigabe allein aus Recovery
+- #124-Current-`FERMENTING`: bei exakter gültiger Current-Evidenz und trusted
+  UTC automatische logische Recovery ohne Benutzerbestätigung; ohne aktuelle
+  UTC `RecoveryEvaluation/WaitingForTrustedTime` RAM-only, ohne
+  Persistenzmutation und mit verweigerter Aktorpermission
+- Resume-Phasenmatrix: `PREHEATING`, `COOLING` und `MANUAL_HOLDING` behalten
+  `ResumeOffer`; non-resumable trusted Phasen behalten `NoActiveRun`.
+  Ältere gültige Checkpoints bleiben nicht-aktivierende Angebote und werden
+  weder automatisch resumed noch promotet.
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
 - kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
   Abschaltung und bestehender #17-Coordinator-/unknown-safe-Zustand; kein
@@ -137,7 +185,11 @@ Mindestens:
 - `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
   und erst nach `Applied` Standby anwenden
 - korrupter Kontrollpunkt -> bestehender technischer #17-Speichervertrag und
-  `FallbackRecovered -> SAFE_BOOT`; kein Fallback-Resume und keine Promotion
+  fail-closed Recovery. Ein vollstaendig validierter aelterer Fallback darf im
+  #90-Orakel als `OLDER_VALID_CHECKPOINT_RESUME`-Angebot klassifiziert werden,
+  aber nicht automatisch resume, promoten oder `Allowed` werden; erst
+  explizites Resume, `Applied`, FSM und frische Safety-Evidenz oeffnen den
+  weiteren Gatepfad
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset
@@ -166,19 +218,40 @@ Mindestens:
 - Web- und lokale UI-Ressourcen
 - keine eingebetteten Geheimnisse
 - keine produktiv verwendeten `TBD`-Werte
-- keine unbestaetigten Pins, Pegel oder Controller als freigegebene Werte
+- keine unbestaetigten Pins, Controller oder Designwerte als freigegebene
+  Werte; nicht gemessene Pegel werden nicht als PASS behauptet
 - Zukunftsfunktionen bleiben deaktiviert
 
 Ein Build ist keine Hardwarefreigabe.
 
-### Ebene 4: Elektrische und Hardwaretests
+### Ebene 4: Hardwareabnahme ohne vorgeschriebenes Spannungsmess-Gate
 
 Vor einer thermischen Belastung:
 
-- GPIO-Zuordnung und aktive Pegel
-- Boot-, Reset-, Brownout- und Bootloaderverhalten
+```text
+ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED
+SSOT_CONFORMANCE=<PASS/PENDING/NOT_APPLICABLE>
+FUNCTIONAL_HARDWARE_VERIFICATION=<PASS/PENDING/NOT_APPLICABLE>
+ADAPTER_SAFETY_VERIFICATION=<PASS/PENDING/NOT_APPLICABLE>
+THERMAL_COMMISSIONING=<PASS/PENDING/NOT_APPLICABLE>
+MULTIMETER_REQUIRED_FOR_R1_ACCEPTANCE=NO
+BOOT_LEVEL_MEASUREMENT_REQUIRED=NO
+GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
+```
+
+Die Felder werden nur für den jeweiligen Scope geführt. Der #32-Scope führt
+kein separates `ADAPTER_SAFETY_VERIFICATION`; der produktionsnahe
+MOSFET-/Lüfter-/Summer-Adapterpfad gehört vollständig in
+`FUNCTIONAL_HARDWARE_VERIFICATION`. Das separate Adapter-Safety-Feld ist dem
+#33-H-Brückenvertrag vorbehalten. `THERMAL_COMMISSIONING` bleibt ein späteres
+Commissioning-Gate und ist kein Ersatz für die funktionale Hardwareprüfung.
+
+- GPIO-Zuordnung gegen die SSOT sowie funktionale Kanal-/Verbraucherwirkung
+- funktionales Boot-, Reset-, Brownout- und Bootloaderverhalten ohne
+  unkontrollierten relevanten Verbraucherbetrieb
 - sichere H-Bruecken- und MOSFET-Zustaende
-- BTS7960-Pulldowns, Enable, Richtungen und Abschaltung
+- BTS7960-Pulldowns/fail-low Beschaltung, boot default disabled, Mutual
+  Exclusion, Break-before-make und fail-closed Fehlerpfad
 - drei DS18B20 mit ROM-Zuordnung
 - 1-Wire-Bustopologie und Produkt-Hot-Plug
 - Displaycontroller, Touchcontroller, Rotation und Kalibrierung
@@ -186,7 +259,10 @@ Vor einer thermischen Belastung:
   PIN-unabhaengigem Vollreset; keine physische Bedienannahme
 - Innen- und Aussenluefter
 - Summer
-- R_IS/L_IS nur bei nachgewiesener Nutzbarkeit
+- R_IS/L_IS sind für R1 nicht angeschlossen, nicht gemessen und nicht
+  implementiert; sie sind kein Akzeptanzkriterium, kein Required Test und kein
+  DoD-Gate. Eine spätere Verwendung erfordert ein eigenes Issue, einen
+  vollständigen Plan und ein eigenes Owner-Gate (`FUTURE_RELEASE`).
 - PIN-unabhaengiger lokaler Vollreset ohne Aktorwirkung
 - UART-Flash- und Recoveryweg
 
@@ -262,8 +338,10 @@ Vor realem Aktorbetrieb:
 - der bestehende #23-Current-Boot-Watchdog-Latch wird nur ueber den
   vorhandenen expliziten Resetpfad mit frischer Evidenz geloescht
 - Recoveryangebot, Resume und Fresh Start bleiben vor `Applied`/FSM/frischer
-  Evidenz `Unresolved`; ein Fresh Start wird ueber den echten Application-Bridge
-  bis SafetyCore nachgewiesen
+  Evidenz `Unresolved`; ein Fresh Start wird über die echte Application-Bridge
+  bis zur `ActuationInterlock`-Permission nachgewiesen. Die automatische
+  #124-Current-`FERMENTING`-Recovery bleibt bis zu derselben frischen
+  Aktivierungsevidenz aktorfrei
 - normale Config-Ablehnungen mit gueltigem Operational-Runtime erzeugen keinen
   Safety-Fault; echte Producer-/Integrity-/Indeterminate-Signale bleiben
   fail-closed
@@ -272,15 +350,19 @@ Vor realem Aktorbetrieb:
 - kein Aktortest aus `SAFE_BOOT` erreichbar
 - alle sicherheitsrelevanten automatischen Tests bestanden
 
-### Gate 2A: Elektrische Freigabe ohne Peltier
+### Gate 2A: Hardware- und Adapterfreigabe ohne Peltier
 
 Vor Anschluss beziehungsweise Bestromung des Peltiers:
 
-- GPIOs und aktive Pegel bestaetigt
-- sichere Boot-, Reset- und Bootloaderpegel bestaetigt
+- GPIOs gegen die SSOT zugeordnet und reale Kanal-/Verbraucherfunktion
+  funktional bestaetigt
+- Boot-, Reset- und Bootloaderverhalten funktional fail-closed bestaetigt
 - BTS7960 ohne Peltier geprueft
-- beide Richtungen koennen nie gleichzeitig aktiv sein
-- Ausgang und Polaritaet mit Multimeter bestaetigt
+- Pull-down-/fail-low Beschaltung als vorhandener Aufbau dokumentiert
+- boot default disabled, Mutual Exclusion, Break-before-make und fail-closed
+  Adapterpfad nachgewiesen; beide Richtungen koennen nie gleichzeitig aktiv sein
+- Richtung und Polaritaet werden erst im begrenzten, abgesicherten
+  Peltier-Servicepuls funktional bestimmt
 - Schrankluft- und Kuehlkoerpersensor bestaetigt
 - Aussenluefter und Nachlauf bestaetigt
 - 7,5-A-Ueberstromsicherung installiert
@@ -404,7 +486,7 @@ Vor Release 1:
 - konfliktierende Display- und Webaktion
 - alle Stopoptionen
 - Service-PIN- und Vollreset-Tests gehoeren zu den spaeteren Service-/Hardware-
-  Gates, nicht zum #24-R1-Safety-Core
+  Gates, nicht zum #24-R1-`ActuationInterlock`
 
 ## Hardware-Abnahme
 
@@ -413,8 +495,9 @@ Jeder relevante Hardwarestand dokumentiert mindestens:
 1. Hardwarekennung und Platinenrevision
 2. Verdrahtungsreferenz und Fotos
 3. Versorgungsspannungen
-4. GPIOs, aktive Pegel und Bootverhalten
-5. BTS7960-Enable, Richtungen und Abschaltung
+4. GPIO-/SSOT-Zuordnung, funktionale Kanalwirkung und Bootverhalten
+5. BTS7960-Pulldowns/fail-low, Enable, Richtungen, Adapterinterlock und
+   Abschaltung
 6. Innen- und Aussenluefter inklusive Nachlauf
 7. Summer
 8. drei DS18B20 mit Rolle und ROM-Adresse

@@ -133,6 +133,18 @@ struct RunAdjustmentResult {
 
 class ActiveRun {
    public:
+    struct RestoreConstructionTag {
+       private:
+        constexpr RestoreConstructionTag() = default;
+        friend class ActiveRun;
+    };
+
+    // Der Tag ist absichtlich nur innerhalb von ActiveRun erzeugbar. Er
+    // erlaubt std::optional eine direkte Konstruktion ohne einen
+    // stack-schweren ActiveRun-Temporary.
+    ActiveRun(RestoreConstructionTag restoreTag, RunProgramSnapshot snapshot,
+              EffectiveRunValues initialValues);
+
     [[nodiscard]] static std::optional<ActiveRun> start(
         const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
         std::uint32_t sourceProgramRevision);
@@ -141,6 +153,15 @@ class ActiveRun {
         const RunProgramSnapshot& snapshot,
         const std::array<RunRevision, kMaximumRunRevisions>& revisions,
         std::size_t revisionCount);
+
+    // Validiert die persistierte ProgramRun-Projektion und liefert die daraus
+    // resultierenden effektiven Laufwerte, ohne einen ActiveRun zu
+    // rekonstruieren. Der Produkt-Restore verwendet dies als gemeinsamen,
+    // stack-leichten Validierungskern.
+    [[nodiscard]] static bool restoreInto(
+        const RunProgramSnapshot& snapshot,
+        const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+        std::size_t revisionCount, std::optional<ActiveRun>& destination);
 
     [[nodiscard]] RunAdjustmentDecision decideAdjustment(
         const RunAdjustmentRequest& request,
@@ -164,5 +185,12 @@ class ActiveRun {
     std::size_t revisionCount_{0U};
     std::uint32_t monotonicEpoch_{0U};
 };
+
+// Gemeinsamer Validierungs-/Projektionskern fuer Persistenzvertrag und
+// ActiveRun::restoreInto(). `effectiveValues` wird nur bei Erfolg beschrieben.
+[[nodiscard]] bool validateRunProgramSnapshotInto(
+    const RunProgramSnapshot& snapshot,
+    const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+    std::size_t revisionCount, EffectiveRunValues& effectiveValues);
 
 }  // namespace fermentation

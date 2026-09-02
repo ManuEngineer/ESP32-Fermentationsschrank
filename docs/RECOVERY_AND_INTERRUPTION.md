@@ -10,25 +10,34 @@ Die persistierten Felder, die atomare Buchung und die Anzeigeprojektion sind
 hier und in [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md) konsistent beschrieben;
 es gibt keine parallele Statusquelle.
 
-## Issue #24 Release-1-Abbruch statt Charge-Recovery
+## Issue #124 Release-1-Current-Recovery statt Charge-Recovery
 
 R1 beginnt jeden Neustart mit all-off/`Unresolved` und vollstaendiger frischer
-Validierung. Ein technisch integerer, aber nicht einfach resumefaehiger Run
-wird als `NoActiveRun` ueber den bestehenden #17-Write-before-Apply-Pfad
-beendet. Technisch untrusted Load bleibt `SAFE_BOOT`; kein Tombstone verbirgt
-einen unbestimmten Zustand.
+Validierung. Technisch untrusted Load bleibt `SAFE_BOOT`; kein Tombstone
+verbirgt einen unbestimmten Zustand. Ein vollstaendig validierter Current-
+`FERMENTING`-Run wird dagegen ueber den neuen #124-Vertrag logisch automatisch
+fortgesetzt, sofern exakte Phasenzeit und vertrauenswuerdige aktuelle UTC
+vorliegen. Dafuer ist keine Benutzerbestaetigung allein wegen des
+Stromausfalls erforderlich.
 
-Es gibt in #24 keinen automatischen Resume, kein Fallback-Resume, keine
-Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung und keine neue
-persistente Safety-Sperre. Die bestehenden #18-Recoveryregeln bleiben als
-C2-Legacy dokumentiert, werden aber nicht vom aktiven #24-R1-Pfad aufgerufen.
+Die Recovery ist reine Wall-Clock-Phasenrechnung, keine biologische
+Rekonstruktion. `priorBootPhaseElapsed` ist der exakte, boot-unabhaengige
+Phasen-Timeroffset; `runProgress.observedRunSeconds` bleibt die separat
+gefuehrte beobachtete Laufzeit. `weightedProgress`, Temperatur-Evidenz,
+`nominalRecoveryAdjustment` und historische biologische Recoverydaten erzeugen
+keine R1-Ausfallgutschrift. Die bestehende #90-Fallbackklassifikation bleibt
+ein nicht-aktivierendes Angebot; automatische Promotion und Aktivierung sind
+ausgeschlossen.
 
-## Grundsatz: fail-closed, aber nicht automatisch
+## Grundsatz: fail-closed mit automatischer logischer Current-Recovery
 
-R1 wartet fuer die Sicherheitsentscheidung weder auf Netzwerk noch auf NTP,
-behauptet aber auch keinen automatischen Wiederanlauf. Die Anwendung bewertet
-den aktuellen #17-Load, Config-/Sensor-/Planner-Evidenz und den bestehenden
-FaultCode-Pfad lokal und fail-closed.
+R1 wartet fuer die Sicherheits- und Persistenzentscheidung weder blockierend
+auf Netzwerk noch auf NTP. Die Anwendung bewertet den aktuellen #17-Load,
+Config-/Sensor-/Planner-Evidenz und den bestehenden FaultCode-Pfad lokal und
+fail-closed. Fehlt die vertrauenswuerdige UTC unmittelbar nach Boot, bleibt
+`RecoveryEvaluation` mit der RAM-Disposition `WaitingForTrustedTime` bestehen
+und wird bei spaeter verfuegbarer UTC gegen dieselbe revisionsgebundene
+Evidenz erneut bewertet.
 
 Deshalb gilt:
 
@@ -37,12 +46,21 @@ Deshalb gilt:
   Aktorfreigabe geprueft; Bootschleifen und persistierte allgemeine
   Verriegelungen sind keine #24-R1-Zustaende.
 - Der letzte elektrische Aktorzustand wird nie wiederhergestellt.
-- Ein eindeutig resumefaehiger Current wird nur als nicht freigebendes Angebot
-  projiziert; eine nicht einfache Phase wird als `NoActiveRun` ueber #17
-  beendet, ein untrusted Load bleibt `SAFE_BOOT`.
-- Keine Aktorfreigabe erfolgt vor explizitem Resume/Fresh Start, bestehendem
-  #17-Gesamtstatus `Applied`, FSM-Anwendung und frischer Safety-Evidenz.
-- Vorhandene NTP-/Zeit-/Progressdaten erzeugen keine R1-Gutschrift.
+- Ein exakt rekonstruierbarer Current-`FERMENTING`-Run wird ohne
+  Benutzerentscheidung logisch weitergefuehrt; ein unklarer oder nicht
+  vertrauenswuerdiger Zustand wird nicht umetikettiert und bleibt
+  fail-closed.
+- Jede Recoverykandidatenmutation folgt dem bestehenden
+  #17-Write-before-Apply-Pfad mit Gesamtstatus `Applied` und anschliessendem
+  FSM-Handoff. Ein unbekannter Schreibausgang bleibt blockiert.
+- Auch nach erfolgreicher logischer Recovery bleiben die Aktoren AUS, bis
+  bestehende frische Configuration-/Sensor-/Hardware-/Safety-/Planner-Gates
+  erfolgreich sind. Der letzte elektrische Aktorzustand wird nie
+  wiederhergestellt.
+- Fuer die Phasenrechnung wird nur
+  `trusted_current_utc - checkpoint_record_utc` als
+  `wall_clock_since_checkpoint_seconds` verwendet. Eine exakte physische
+  Ausfalldauer wird daraus weder abgeleitet noch behauptet.
 
 ## Kein Tuerkontakt in Release 1
 
@@ -100,7 +118,7 @@ Die vollstaendige Auswahl-, Ersatzbetriebs- und Rueckkehrlogik (alle drei
 Strategien, gleichzeitiger Schrankluft-/Kuehlkoerperausfall, manuelle
 Aktionen) ist in Issue #21 und PR #99 umgesetzt. Die tatsaechliche
 Reaktivierung eines geladenen aktiven Laufs durch PR #102 gehoert zum
-`#18/C2-Legacy`-Vertrag; sie ist kein normaler #24-R1-Pfad. Die historische
+`#18/C2-Legacy`-Vertrag; sie ist kein normaler #124-R1-Pfad. Die historische
 Beschreibung steht in `docs/RUN_PERSISTENCE.md` unter dem entsprechend
 markierten C2-Abschnitt.
 
@@ -138,13 +156,15 @@ Laufbeendende Beispiele:
 Ein Neustart setzt solche Fehler nicht zurueck und loescht keine aktuelle
 unknown-safe Persistenz-/Producerlage.
 
-## Exakte R1-Resume-Phasenmatrix
+## Exakte R1-Recovery-Phasenmatrix
 
-Ein `Current` wird nur als Resume-Angebot projiziert, wenn die Phase ohne alte
-Zeit- oder Progressgutschrift eindeutig mit frischer Evidenz fortsetzbar ist.
-Das Angebot bleibt `RECOVERY_EVALUATION`/`Unresolved`; erst ein expliziter
-Resume-Befehl, der bestehende #17-Gesamtstatus `Applied`, die FSM-Anwendung und
-eine neue Safety-Pruefung koennen spaeter `Allowed` ergeben.
+Ein `Current` wird gemaess Phase und geltendem R1-Vertrag bewertet. Der
+Current-`FERMENTING`-Fall kann nach #124 automatisch logisch fortgesetzt
+werden, wenn seine Zeitbasis exakt und die aktuelle UTC vertrauenswuerdig ist.
+Andere zulaessige Resume-Angebote bleiben `RECOVERY_EVALUATION`/`Unresolved`;
+erst der jeweils vorgesehene explizite Pfad, der bestehende #17-Gesamtstatus
+`Applied`, die FSM-Anwendung und eine neue Safety-Pruefung koennen spaeter
+`Allowed` ergeben.
 
 | Phase | R1-Angebot | Ziel nach bestaetigtem Resume | Bootlokale Zeitbasis | Alte Zeit-/Progressdaten |
 |---|---|---|---|---|
@@ -152,20 +172,94 @@ eine neue Safety-Pruefung koennen spaeter `Allowed` ergeben.
 | `WAITING_FOR_PRODUCT` | nein | `NoActiveRun` | keine | Wartezeit waere erforderlich; verwerfen |
 | `REACHING_TARGET` | nein | `NoActiveRun` | neu starten waere nicht beweissicher | alter Reach-Timer erforderlich; verwerfen |
 | `QUALIFYING_TARGET` | nein | `NoActiveRun` | Qualifikation neu starten waere ein neuer Laufpfad | alte Qualifikationszeit verwerfen |
-| `FERMENTING` | nein | `NoActiveRun` | keine alte Restdauer ableiten | `PriorBootPhaseElapsed`/Progress nicht verwenden |
+| `FERMENTING` | ja, bei vollstaendig vertrauenswuerdiger Evidenz | `FERMENTING` unter der Dauer; bei erreichter Dauer normale `FermentationCompleted`-Semantik | exakter `priorBootPhaseElapsed`-Offset plus Wall-Clock seit Checkpoint; bei fehlender UTC `RecoveryEvaluation/WaitingForTrustedTime` | `observedRunSeconds` bleibt beobachtete Laufzeit; gewichtete/biologische Felder erzeugen keine R1-Gutschrift |
 | `COOLING` | ja | `COOLING` | frische ziel-/sensorbasierte Regelung | keine alte Zeitgutschrift |
 | `COOL_HOLDING` | nein | `NoActiveRun` | Haltedauer waere historisch zeitabhaengig | alte Haltedauer verwerfen |
 | `MANUAL_HOLDING` | ja | `MANUAL_HOLDING` | keine automatische Dauerbasis; frisch pruefen | alte Dauer nicht verwenden |
 
 `COMPLETED` wird als Completed-Projektion ohne Aktorfreigabe geladen. Ein
 persistierter `Fault` bleibt terminal/diagnostisch und wird nicht aktiviert.
-Keiner dieser Faelle verwendet Fallback-Promotion, Rollback-Resume, gewichteten
-Progress oder UTC-Ausfallrechnung.
+Der Current-`FERMENTING`-Pfad verwendet die exakte R1-Wall-Clock-Rechnung und
+keine biologische Ausfallrekonstruktion. Ein #90-Fallback-Angebot bleibt bis
+zu expliziter Auswahl, `Applied`, FSM-Anwendung und frischer Safety-Evidenz
+nicht-aktivierend; #124 erfindet dafuer keinen neuen Produkt-Command und keine
+UI.
 
-## C2-Legacy – historische Zeit-/Recoverybeschreibung, nicht #24-R1
+## Exakter R1-Phasenvertrag fuer Current-`FERMENTING`
+
+Die UTC des exakt validierten Checkpointrecords ist der einzige absolute
+Record-Anker. Die Bindung von Checkpointpayload, Revision, monotonem
+Checkpointzeitpunkt und `utcUnixSeconds` wird als gemeinsamer Recordgraph
+validiert. Die Rechnung lautet:
+
+```text
+prior_phase_elapsed_seconds =
+    0, falls priorBootPhaseElapsed fehlt
+    exact lowerBoundSeconds, falls taggedState == FERMENTING und
+        lowerBoundSeconds == upperBoundSeconds
+
+current_live_segment_to_checkpoint =
+    (checkpointMonotonicMillis - processState.stateEnteredAtMillis) / 1000
+
+phase_elapsed_at_checkpoint =
+    prior_phase_elapsed_seconds
+    + current_live_segment_to_checkpoint
+
+wall_clock_since_checkpoint_seconds =
+    trusted_current_utc - checkpoint_record_utc
+
+recovered_phase_elapsed =
+    phase_elapsed_at_checkpoint
+    + wall_clock_since_checkpoint_seconds
+```
+
+Jede Subtraktion, Addition und Verengung auf die bestehenden Feldbreiten ist
+checked. Ein negativer UTC-Abstand, ein falscher Prior-Tag, nicht exakte Bounds,
+`PartialUnknownHistory`, eine ungueltige Zeitordnung oder ein ungueltiger
+Record-/Revisions-/CRC-/Epoch-/Referenzgraph fuehren zu
+`RecoveryRejectedOrFailClosed`; es wird nicht geraten. Der Ausdruck bezeichnet
+die Wandzeit seit dem Checkpoint und ist ausdruecklich keine hergeleitete
+exakte physische Ausfalldauer.
+
+`observedRunSeconds` bleibt davon getrennt und erhaelt nur den sicher
+beobachteten Live-Abschnitt dieses Boots:
+
+```text
+observedRunSeconds =
+    previous_observedRunSeconds + current_live_segment_to_checkpoint
+```
+
+Die Wiederverankerung setzt den exakten wiederhergestellten Phasenwert als
+`priorBootPhaseElapsed` und `stateEnteredAtMillis` auf den aktuellen
+monotonen Bootzeitpunkt. Die FSM verwendet danach den bestehenden
+`priorElapsed`-Parameter; sie liest weder Persistenz noch UTC oder
+`ITimeSource`. Mehrfachboots addieren deshalb keinen Ausfall doppelt und
+vermischen Phasenzeit nicht mit beobachteter Laufzeit.
+
+Erreicht oder ueberschreitet die wiederhergestellte Phasenzeit die nominelle
+Fermentationsdauer, gilt die normale FSM-Semantik: `FinishWithoutCooling`
+fuehrt nach `Completed`, alle drei Kuehlmodi nach `Cooling`. Eine
+`CoolingTargetReached`-Beobachtung oder ein Cool-Holding-Timer wird ohne
+frische Sensor-/Signalevidenz waehrend des Stromausfalls nie behauptet oder
+gutgeschrieben. Ein Stromausfall erzeugt keinen eigenen
+`CompletionPending`-Zustand und keine zusaetzliche Bestaetigungspflicht.
+
+## R1-Warten auf vertrauenswuerdige UTC
+
+Fehlt `unixTimeSeconds()` unmittelbar nach Boot, bleibt der technische
+Hauptzustand `RecoveryEvaluation` und die Application-Disposition
+`WaitingForTrustedTime`. Dieser Zustand ist RAM-only: Aktoren bleiben AUS, es
+gibt keinen Resume-Claim, keinen Tombstone und keinen Persistenzschreibvorgang
+nur wegen des Wartens. WLAN-/NTP-Produktion bleibt ausserhalb von #124; ein
+später verfuegbarer Wert wird asynchron ueber den bestehenden `ITimeSource`-
+Vertrag geliefert. Die erneute Bewertung verwendet dieselbe geladene
+Revision; eine zwischenzeitlich veraenderte Evidenzbasis wird fail-closed
+abgelehnt.
+
+## C2-Legacy – historische Zeit-/Recoverybeschreibung, nicht #124-R1
 
 Die folgenden Abschnitte bleiben nur als Referenz fuer bestehende #17/#18-
-Artefakte erhalten. Sie sind fuer den #24-R1-Produktpfad nicht normativ und
+Artefakte erhalten. Sie sind fuer den #124-R1-Produktpfad nicht normativ und
 duerfen weder Resume, Promotion, Gutschrift noch Aktorfreigabe ausloesen.
 
 ## Fehlende Messwerte waehrend des Stromausfalls
@@ -343,7 +437,7 @@ ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
 ## C2-Legacy: historische akzeptierte Entscheidungen
 
 Die folgenden Entscheidungen gehoeren zum historischen #18-/C2-Modell. Sie
-sind fuer #24-R1 nicht normativ; dort gilt die oben stehende exakte R1-Matrix.
+sind fuer #124-R1 nicht normativ; dort gilt die oben stehende exakte R1-Matrix.
 
 - [x] kein Tuerkontakt in Release 1
 - [x] kein stiller Wechsel vom Produkt- zum Luftfuehler

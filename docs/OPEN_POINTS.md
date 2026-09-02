@@ -34,22 +34,44 @@ Die vollstaendige Abgrenzung zu Zukunftsfunktionen steht ausschliesslich in
 - [ ] freien Heap, niedrigsten Heap und groessten freien Block erfassen
 - [ ] UART-/FT232RL-Flash- und Recoveryweg bestaetigen
 
-Nachverfolgung: #29
+Nachverfolgung: `UNASSIGNED`; #29 ist geschlossene historische Plattform-
+und Bring-up-Evidenz. Der Owner ordnet verbleibende reale Board-/Ressourcen-
+Nachweise einem späteren passenden Hardware- oder Release-Scope zu.
 
 ### GPIOs und Bootpegel
 
-- [ ] alle verwendeten GPIOs festlegen
-- [ ] Bootstrapping-Eignung pruefen
-- [ ] aktive Pegel der Onboard-MOSFET-Ausgaenge messen
-- [ ] Boot-, Reset-, Brownout- und Bootloaderverhalten messen
-- [ ] nachweisen, dass unbekannte Aktoren beim Boot gesperrt bleiben
+- [x] GPIO-Designzuordnung und Bootstrapping-Vorbewertung im Boardprofil-SSOT
+      aus #130 festgelegt (`PLANNED_NOT_CONFIRMED`)
+- [ ] Bootstrapping-Eignung der real verwendeten Anschlüsse gegen das konkrete
+      ESP32-/Board bestätigen
+- [ ] funktional nachweisen, dass relevante Aktoren beim Boot und Reset nicht
+      unkontrolliert betrieben werden
+- [ ] #32: PCB-feste Kanal-/Verbraucherzuordnung funktional bestaetigen
 
-Nachverfolgung: #29 und #32
+Nachverfolgung: Design-SSOT #130 (geschlossen); funktionale Hardware-
+Nachweise liegen bei den jeweiligen offenen owning Scopes #30, #31, #32 und
+#33. Kein Designstatus ist dadurch ein funktionaler PASS.
+
+### Lokale RTC für das konkrete Fermenter-R1-Profil
+
+- [ ] tatsächliche DS3231-Variante am gelieferten Modul physisch bestätigen;
+      `DS3231SN` und `DS3231M` werden vorher nicht angenommen
+- [ ] I2C-Erreichbarkeit, OSF-/EOSC-Verhalten, Batterieretention und trusted
+      UTC für die bestätigte Variante funktional nachweisen
+- [ ] Offline-Start eines neuen produktiven Laufs mit der nachgewiesenen
+      lokalen trusted RTC funktional nachweisen
+
+Nachverfolgung: `UNASSIGNED`; #126 ist geschlossene historische/digitale
+Adapter-Evidenz. Der Owner entscheidet später über den tatsächlichen
+Hardware-Tracking-Scope. Diese offenen Nachweise sind kein Anlass für ein
+neues RTC-Issue oder einen RTC-PR in #136.
 
 ### Temperatursensoren
 
 - [ ] Bustopologie festlegen: drei getrennte Busse oder feste Sensoren gemeinsam
-- [ ] Pull-ups und Leitungslaengen bestimmen
+- [ ] Pull-ups und Leitungslaengen aus Verdrahtungs-/Board-SSOT bestimmen;
+      Busfunktion, ROM, CRC, Hot-Plug und Fehlerreaktion pruefen, ohne ein
+      generelles Spannungs- oder Pegelmess-Gate einzufuehren
 - [ ] ROM-Adressen der festen Sensoren dokumentieren
 - [ ] Produktfuehleranschluss waehlen; M8-3, GX12-3 oder andere verriegelbare
       3-polige Loesung vergleichen
@@ -71,10 +93,12 @@ Nachverfolgung: #31
 
 ### Luefter, Summer und MOSFET-Ausgaenge
 
-- [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
-- [ ] MOSFET-Kanaele unbelastet messen
-- [ ] Verbraucher einzeln anschliessen und Bootverhalten erneut pruefen
-- [ ] Summer-Spannung, Strom, Kanal und Lautstaerke festlegen
+- [ ] Innen- und Aussenluefterdaten erfassen; Stromaufnahme und Anlaufverhalten
+      nur soweit ein konkretes Hardwaregate dies erfordert und geeignete
+      Mittel vorhanden sind
+- [ ] Kanal-/Verbraucherfunktion kontrolliert einzeln pruefen
+- [ ] Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional beobachten
+- [ ] Summerfunktion, Kanal und Lautstaerke festlegen
 - [ ] Nachlaufverhalten auf realer Hardware pruefen
 
 Nachverfolgung: #32
@@ -83,9 +107,13 @@ Nachverfolgung: #32
 
 - [ ] genaue Modulvariante und Pinbeschriftung dokumentieren
 - [ ] Enable- und Richtungspins festlegen
-- [ ] Hardware-Pulldowns oder gleichwertige Freigabestufe nachweisen
-- [ ] Ausgangspolaritaet ohne Peltier mit Multimeter messen
-- [ ] R_IS/L_IS-Pegel und diagnostische Nutzbarkeit pruefen
+- [ ] Pull-down-/fail-low Beschaltung als vorhandenen Aufbau dokumentieren
+- [ ] Adapterinterlock nachweisen
+- [ ] Richtung spaeter ueber begrenzte Servicepulse funktional bestimmen
+- [x] R_IS/L_IS fuer R1 bewusst unbeschaltet/deaktiviert; GPIO34/GPIO35
+      bleiben als ADC1-Reserve fuer eine moegliche spaetere Integration
+      reserviert (`FUTURE_RELEASE`), nicht verworfen. Keine R1-Mess-,
+      Implementierungs- oder DoD-Pflicht; `R1_BLOCKED_BY_R_IS_L_IS=NO`
 - [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
 - [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
 
@@ -149,7 +177,8 @@ Nachverfolgung: #36
 - [ ] NVS-Partitionsgroesse fuer Konfiguration, Slots und Secrets bestimmen
       (Backend gemaess ADR-016)
 
-Nachverfolgung: #9, #10, #19, #28, #29 und #90
+Nachverfolgung: #9, #10, #19 und #28; #29/#90 bleiben geschlossene
+historische Nachweise, keine offenen Owner.
 
 ### RAM und Laufzeit
 
@@ -167,9 +196,9 @@ Nachverfolgung: #9, #10, #19, #28, #29 und #90
 - [ ] Betriebszaehler je nach verbleibendem Budget vollstaendig, reduziert oder
       nicht persistent umsetzen
 
-Nachverfolgung: #10, #28, #29 und #37; das spezifische
-`CommandDecision`-Ressourcengate aus PR #53 wird in #29 erstmals auf realer
-ESP32-Hardware nachgewiesen und in #37 unter Last abschliessend bestaetigt.
+Nachverfolgung: #10, #28 und #37; #29 dokumentiert hierzu historische reale
+ESP32-Evidenz, ist aber kein offener Owner. #37 bestätigt unter Last
+abschließend, soweit sein späterer Scope dies verlangt.
 
 ### Aufbewahrung
 

@@ -1295,6 +1295,20 @@ void test_backward_time_and_invalid_events_do_not_change_state() {
         fermentation::equalProcessRuntimeState(state, standbyState()));
 }
 
+void test_boot_completed_standby_is_established_by_domain_api() {
+    ProcessRuntimeState state;
+
+    TEST_ASSERT_TRUE(fermentation::establishBootCompletedStandby(state, 123U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(state.state));
+    TEST_ASSERT_EQUAL_UINT32(1U, state.transitionSequence);
+    TEST_ASSERT_EQUAL_UINT64(123U, state.stateEnteredAtMillis);
+
+    const auto before = state;
+    TEST_ASSERT_FALSE(fermentation::establishBootCompletedStandby(state, 124U));
+    TEST_ASSERT_TRUE(fermentation::equalProcessRuntimeState(state, before));
+}
+
 }  // namespace
 
 int main() {
@@ -1343,5 +1357,6 @@ int main() {
     RUN_TEST(test_prior_boot_phase_elapsed_waiting_for_product_boundary);
     RUN_TEST(test_prior_boot_phase_elapsed_cool_holding_boundary);
     RUN_TEST(test_backward_time_and_invalid_events_do_not_change_state);
+    RUN_TEST(test_boot_completed_standby_is_established_by_domain_api);
     return UNITY_END();
 }

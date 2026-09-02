@@ -18,7 +18,7 @@ festlegt.
 
 ## Issue #24 Release-1-Grenze
 
-Der #24-Safety-Core konsumiert aus #20/#21 nur die bestehende
+Der stateless #24-`ActuationInterlock` konsumiert aus #20/#21 nur die bestehende
 Sensorqualitaets- und Auswahlprojektion. Er fuehrt keine zweite Sensor-FSM
 ein. `STALE`/`FAILED` sperrt die Peltierfreigabe beziehungsweise loest
 `ImmediateStop` aus; die Rueckkehr erfolgt ausschliesslich ueber die frische
@@ -421,20 +421,14 @@ moeglich. Direkte Tests sind waehrend eines aktiven Laufes gesperrt.
 
 ### R_IS und L_IS
 
-Die Signale `R_IS` und `L_IS` werden am gelieferten BTS7960-Modul praktisch
-geprueft.
-
-Sie werden nur als Diagnose- oder Strominformation verwendet, wenn:
-
-- die konkrete Modulbeschaltung dokumentiert ist,
-- Signalpegel und Skalierung fuer den ESP32 sicher angepasst sind,
-- Nullpunkt, Rauschen und Richtungszuordnung reproduzierbar sind,
-- eine brauchbare Unterscheidung zwischen AUS, normalem Strom und Fehlerzustand
-  moeglich ist.
-
-Sind die Signale am gelieferten Modul nicht brauchbar, wird keine erfundene
-Stromdiagnose implementiert. Ein externer Stromsensor ist fuer das erste Release
-nicht zwingend, bleibt aber eine spaetere Option.
+Die Signale `R_IS` und `L_IS` sind fuer R1 bewusst unbeschaltet und deaktiviert:
+Sie werden nicht vermessen und nicht implementiert, bleiben aber fuer eine
+moegliche spaetere Integration reserviert und sind nicht verworfen. Sie sind
+kein R1-Akzeptanzkriterium, kein Required Test und kein Definition-of-Done-Gate.
+Eine spaetere Diagnose- oder Strominformation ist `FUTURE_RELEASE` und darf
+nur ueber ein eigenes Issue, einen vollstaendigen Plan und ein eigenes
+Owner-Gate eingefuehrt werden. Ein externer Stromsensor ist fuer das erste
+Release nicht zwingend und bleibt ebenfalls eine spaetere Option.
 
 ### Sofort verriegelnde Aktorfehler
 
@@ -511,7 +505,7 @@ hinreichender Peltierfehlernachweis.
 - [x] abnehmbarer Produktfuehler auf getrenntem 1-Wire-Bus
 - [x] Aussen- und Innenluefterfehler verriegeln den Peltierbetrieb
 - [x] ohne Tachometer keine falsche Behauptung eines laufenden Luefters
-- [x] R_IS/L_IS nur nach praktischer Verifikation verwenden
+- [x] R_IS/L_IS fuer R1 deaktiviert, nicht angeschlossen und nicht implementiert
 - [x] keine externe Strommessung als Pflicht fuer das erste Release
 - [x] gleichzeitige Richtungen, Strom ohne Freigabe und unzulaessige
       H-Brueckenzustaende verriegeln
@@ -529,6 +523,7 @@ hinreichender Peltierfehlernachweis.
 - konkrete Montageposition des Kuehlkoerpersensors
 - finaler 1-Wire-Pinplan
 - thermische Erkennungsschwellen fuer Aussen- und Innenluefterfehler
-- Nutzbarkeit, Skalierung und sichere Pegelanpassung von R_IS/L_IS
+- spaetere Nutzbarkeit, Skalierung und sichere Pegelanpassung von R_IS/L_IS
+  nur in einem eigenen `FUTURE_RELEASE`-Issue/Plan/Owner-Gate
 - Fehlerreaktion bei unzuverlaessiger 12-V- oder 5-V-Versorgung
 - Verhalten bei Softwaretask-, Watchdog-, Speicher- und Bootfehlern

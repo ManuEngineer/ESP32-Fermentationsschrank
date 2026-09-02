@@ -5,36 +5,89 @@
 | Kennzeichnung | Bedeutung |
 |---|---|
 | `confirmed_order` | aus der bestellten Produktbeschreibung uebernommen |
-| `confirmed_test` | am realen Aufbau gemessen und dokumentiert |
+| `confirmed_by_owner_reference_match` | reale Hardware vorhanden und durch den Owner der Repository-Boardreferenz zugeordnet; kein elektrischer Funktionsnachweis |
 | `planned` | fuer Release 1 verbindlich vorgesehen, aber noch nicht real bestaetigt |
+| `FUNCTIONAL_HARDWARE_VERIFICATION` | funktionale Hardwareeigenschaft durch den owning Hardwaretest bestaetigt; dies behauptet keinen nicht gemessenen elektrischen Pegel |
+| `board_fixed_pending_functional_verification` | PCB-seitig fest verdrahtete Zuordnung; funktionale Kanal-/Verbraucherwirkung und fail-closed Boot-/Resetreaktion sind noch offen |
 | `candidate` | moegliche Loesung, noch nicht entschieden |
 | `TBD_HARDWARE` | reale Komponente, Pin, Pegel oder Verdrahtung muss geprueft werden |
 | `TBD_COMMISSIONING` | thermischer oder regelungstechnischer Wert wird am Schrank bestimmt |
-| `FUTURE_RELEASE` | bewusst nicht Bestandteil von Release 1 |
+| `FUTURE_RELEASE` | bewusst nicht Bestandteil von R1, aber fuer spaetere Integration reserviert und nicht verworfen |
 
-Kein Kandidat und kein `TBD_HARDWARE` darf als bestaetigte Verdrahtung in die
-Releasefirmware uebernommen werden.
+Ein Designstatus `planned` oder
+`board_fixed_pending_functional_verification` ist kein
+`FUNCTIONAL_HARDWARE_VERIFICATION=PASS`. Kein solcher Status setzt
+`SSOT_CONFORMANCE`, `FUNCTIONAL_HARDWARE_VERIFICATION` oder
+`ACTUATOR_RELEASE`. Reale Aktoren bleiben bis zu den owning Hardwaregates
+fail-closed.
+
+Der Owner hat fuer R1 die allgemeine Spannungs- und Bootpegel-Messpflicht
+bewusst waived. Das ersetzt keinen realen Funktions- oder Sicherheitsnachweis
+und erzeugt keinen elektrischen PASS:
+
+```text
+MULTIMETER_REQUIRED_FOR_R1_ACCEPTANCE=NO
+BOOT_LEVEL_MEASUREMENT_REQUIRED=NO
+GPIO_VOLTAGE_MEASUREMENT_REQUIRED=NO
+OWNER_ACCEPTS_UNMEASURED_BOOT_LEVEL_RESIDUAL_RISK=YES
+```
+
+## Board-/Wiring-SSOT und Identitaet
+
+Electrical/design SSOT for the R1 pin assignment:
+config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+
+Die reale Controllerplatine ist vorhanden und wurde vom Owner mit der im
+Repository hinterlegten ESP32-WROOM-32E-Quad-MOSFET-Boardreferenz abgeglichen.
+Damit sind reale Hardware und Boardfamilie identifiziert:
+
+- real hardware present: yes
+- board family: esp32_32e_quad_mosfet
+- MCU module: ESP32-WROOM-32E
+- board family matched to repository reference: confirmed by owner
+- board revision: TBD_HARDWARE, solange keine eindeutige Kennung vorliegt
+
+Diese Identitaetsfeststellung ist kein Nachweis aktiver Pegel, Bootpegel,
+MOSFET-/BTS7960-/Display-/Touch-Funktion, GPIO-Funktionstest oder
+Aktorfreigabe. Konkrete GPIO-Zahlen und Widerstandswerte werden in der SSOT
+als Designzustand gefuehrt. Ein funktionaler Hardwaretest am konkreten Aufbau
+bestaetigt nur die jeweils getestete Eigenschaft; nicht gemessene elektrische
+Werte bleiben unbestaetigt.
 
 ## Controllerboard
 
-Planungsbasis:
+Design-/Referenzbasis:
 
-- ESP32-WROOM-32E beziehungsweise bestellte ESP32-32E-Boardvariante
+- ESP32-WROOM-32E auf der Boardfamilie esp32_32e_quad_mosfet
 - 4 MB Flash laut bestellter Produktbeschreibung
 - keine vorausgesetzte PSRAM
 - vier Onboard-MOSFET-Ausgaenge
 - 3,3-V-Logik
 - Programmierung und Wiederherstellung ueber FT232RL/UART
+- konkrete R1-GPIO-/Wiring-Zuordnung ausschliesslich aus dem Boardprofil
+- board_revision bleibt TBD_HARDWARE, falls die Kennzeichnung nicht ermittelt
+  werden kann
 
-Noch zu messen:
+Noch real zu verifizieren oder zu dokumentieren:
 
-- exakte Boardrevision und Modulbeschriftung
+- exakte Boardrevision und weitere reale Identitaetsmerkmale
 - tatsaechliche Flashgroesse und Partitionseigenschaften
 - PSRAM-Erkennung
-- verfuegbare GPIOs
-- Zuordnung und aktive Pegel der vier MOSFET-Kanaele
-- Boot-, Reset-, Brownout- und Bootloaderpegel aller verwendeten Signale
-- Verhalten der MOSFET-Ausgaenge ohne und mit angeschlossenen Verbrauchern
+- funktionale Kanal-/Verbraucherwirkung der vier PCB-festen MOSFET-Kanaele im
+  owning Hardware-Issue
+- funktionales Boot-/Resetverhalten mit sicher angeschlossenem Einzelverbraucher
+  ohne unkontrollierten relevanten Verbraucherbetrieb
+
+```text
+ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED
+SSOT_CONFORMANCE=PENDING
+FUNCTIONAL_HARDWARE_VERIFICATION=PENDING
+```
+
+Die vier PCB-festen MOSFET-Kanalzuordnungen sind als
+`board_fixed_pending_functional_verification` im Boardprofil dokumentiert.
+Die Boardfamilienidentitaet ist bestaetigt, die funktionale Kanalwirkung
+jedoch nicht.
 
 ## Peltier und Leistungspfad
 
@@ -52,16 +105,21 @@ Geplant:
 Vor dem ersten Peltieranschluss:
 
 1. BTS7960-Logikversorgung und Masse pruefen.
-2. Enable- und Richtungseingaenge unbelastet messen.
-3. Hardware-Pulldowns oder gleichwertige sichere Freigabestufe nachweisen.
-4. H-Brueckenausgang und Polaritaet mit Multimeter messen.
-5. sicherstellen, dass beide Richtungen nie gleichzeitig aktiv werden.
-6. Luefter, Kuehlkoerper, Sensoren und Sicherung vollstaendig montieren.
+2. SSOT-Pulldowns oder eine gleichwertige fail-low Freigabestufe als vorhandenen
+   Aufbau dokumentieren.
+3. den realen Adapter mit fail-closed Initialisierung, Mutual Exclusion und
+   Break-before-make implementieren und auf Command-/GPIO-Ebene testen.
+4. sicherstellen, dass beide Richtungen nie gleichzeitig aktiv ausgegeben werden.
+5. Luefter, Kuehlkoerper, Sensoren und Sicherung vollstaendig montieren.
+6. Heiz-/Kuehlrichtung spaeter ueber kurze, abgesicherte und zeitlich begrenzte
+   Servicepulse funktional bestimmen.
 7. erste reale Freigabe nur als begrenzter Servicepuls.
 
-BTS7960 `R_IS` und `L_IS` werden nur angeschlossen und verwendet, wenn
-Pegelbereich, Beschaltung und diagnostischer Nutzen des gelieferten Moduls
-praktisch bestaetigt wurden.
+`R_IS` und `L_IS` sind in R1 bewusst unbeschaltet, deaktiviert, nicht vermessen
+und nicht implementiert. Die reservierten ADC1-GPIOs bleiben fuer eine
+moegliche spaetere Integration reserviert; die Funktion ist deferiert, nicht
+verworfen. `FUTURE_RELEASE` benoetigt ein eigenes Issue, einen eigenen
+vollstaendigen Plan und ein eigenes Owner-Gate.
 
 ## Unabhaengige Schutzkomponenten
 
@@ -125,16 +183,21 @@ Der erste Aufbau verwendet drei DS18B20.
 
 ### 1-Wire-Topologie
 
-Bevorzugt:
+Die verbindliche R1-Zieltopologie wird nicht mehr pro Issue neu erfunden,
+sondern ausschließlich aus dem Boardprofil gelesen:
 
-- separater GPIO je Sensor
-
-Zulaessiger Rueckfall bei GPIO-Knappheit:
-
-- beide festen Sensoren auf einem internen Bus
-- abnehmbarer Produktfuehler auf eigenem externen Bus
-
-Die tatsaechlichen GPIOs bleiben `TBD_HARDWARE`.
+- Schrankluft und Kühlkörper teilen sich den internen Multidrop-Bus
+  one_wire_internal;
+- der abnehmbare Produktfühler bleibt auf dem separaten Bus
+  one_wire_product;
+- beide Busse laufen im 3-Leiter-Betrieb und erhalten jeweils den im
+  Boardprofil festgelegten Pull-up nach 3,3 V;
+- feste Sensorrollen werden über ROM-ID unterschieden;
+- ein Fehler des gemeinsamen festen Busses wirkt für die Peltierfreigabe
+  weiterhin fail-closed;
+- Pull-up-/Verdrahtungs-SSOT sowie Buskommunikation, ROM-IDs, CRC, Hot-Plug und
+  Fehlerreaktion sind am realen Aufbau funktional zu verifizieren. Daraus
+  entsteht fuer R1 keine generelle Spannungs- oder Pegelmesspflicht.
 
 Elektrische Anforderungen:
 
@@ -163,46 +226,56 @@ Elektrische Anforderungen:
 - besitzt einen zwingenden Nachlauf
 - bleibt bei geeigneten Sicherheitsfehlern zur Restwaermeabfuhr aktiviert
 
-Vor Anschluss werden MOSFET-Ausgang, aktiver Pegel, Stromaufnahme und
-Anlaufverhalten unbelastet beziehungsweise mit einzelnem Verbraucher gemessen.
+Vor der jeweiligen Freigabe werden Kanal-/Verbraucherfunktion sowie das
+Boot-/Resetverhalten mit sicherem Einzelverbraucher funktional geprueft.
+Stromaufnahme und Anlaufdaten werden nur erfasst, wenn dafuer ein geeignetes
+Messmittel vorhanden ist und das konkrete Hardwaregate sie erfordert; daraus
+folgt kein generelles R1-Multimetergate.
 
 Ob ein Tachosignal spaeter ergaenzt wird, bleibt `FUTURE_RELEASE`.
 
 ## Summer
 
-Geplant ist ein aktiver 5-V- oder 12-V-Summer ueber einen geeigneten
-MOSFET-/Treiberkanal.
+Geplant ist ein aktiver Summer über den im Boardprofil festgelegten
+PCB-festen Buzzer-/MOSFET-Kanal. Die R1-Designzuordnung ist damit im
+Boardprofil festgelegt.
 
 Noch offen:
 
-- Spannung und Stromaufnahme
-- konkrete Kanalzuordnung
-- aktiver Pegel
+- Spannung und Stromaufnahme, soweit ein spaeteres konkretes Gate dies
+  erfordert; kein generelles R1-Messgate
+- aktiver Pegel, funktional im owning Hardwaretest bestimmbar
+- Gate-/Treiberbeschaltung
+- Boot-/Resetwirkung
+- reale Funktion
 - akustische Lautstaerke und Montageort
 
 Der Summer darf keine Sicherheitsaufgabe blockieren.
 
 ## Display und Touch
 
-Bestellt beziehungsweise geplant:
+Das MSP2807-Display und der resistive Touchpfad verwenden gemäß dem
+Boardprofil den gemeinsamen SPI-Bus. XPT2046 bleibt der zu verifizierende
+Touchcontroller-Kandidat. TFT_CS und Touch_CS bleiben getrennte
+Deselect-Signale; Backlight wird über den im Boardprofil festgelegten
+PWM-Ausgang mit sicherem AUS-Zustand bei Boot/Reset betrieben.
 
-- TZT MSP2807, 2,8 Zoll
-- 320 x 240 Pixel
-- SPI
-- ILI9341 als Displaycontroller laut Produktbeschreibung
-- resistiver Touch
-- XPT2046 als wahrscheinlicher, aber praktisch zu bestaetigender Touchcontroller
-- Querformat
+Das Resetnetz ist:
 
-Noch zu pruefen:
+    ESP32 EN / CHIP_PU -------- MSP2807 TFT_RESET
 
-- Pinbelegung und SPI-Bus
-- Controlleridentitaet
-- Displayrotation
-- Touchrohwerte und Kalibrierung
-- Reset- und Bootverhalten
-- Hintergrundbeleuchtung und Dimmung
-- moegliche Konflikte mit Bootstrapping-Pins
+Es ist ein direktes gemeinsames active-low Netz. Gemeinsamer GND, der
+hochohmige RESET-Eingang des realen Moduls, keine unabhängige Modul-
+Rücktreibung und kompatible Power-/Logic-Domains bleiben
+Design-/Modul-/Funktionsanforderungen. Eine Abweichung des realen Moduls vom
+veröffentlichten Schaltbild führt zu STOP und Boardprofilrevision; sie erzeugt
+aber keine automatische Multimeter- oder GPIO-Pegelmesspflicht.
+
+Noch zu verifizieren bleiben Controlleridentität, Roh-Touchwerte,
+Kalibrierung, funktionales Boot-/Resetverhalten, IRQ-/Wiring-Konformität und
+die reale Funktion von SPI, Touch und Backlight. Das Statusmodell unterscheidet
+dabei Boardfamilien-Referenzabgleich, SSOT-Konformität und funktionale
+Hardwareverifikation.
 
 ## Lokale Bedien- und Anzeigeelemente
 
@@ -230,13 +303,44 @@ nicht bestueckt (`FUTURE_RELEASE`).
 Versorgungsspannungen, Reglerleistung, Leitungsquerschnitte, Sicherungshalter und
 Stecker werden am realen Aufbau dokumentiert.
 
+## Fermenter-R1-RTC
+
+Die generische Zeitplattform bleibt RTC-optional und NTP-only-fähig. Für das
+konkrete Fermenter-R1-Produkt ist jedoch eine lokale RTC als trusted Zeitquelle
+für neue produktive Offline-Läufe erforderlich:
+
+```text
+GENERIC_TIME_PLATFORM_RTC_OPTIONAL=YES
+GENERIC_DEVICE_PLATFORM_NTP_ONLY_SUPPORTED=YES
+FERMENTER_R1_CONCRETE_PRODUCT_PROFILE_RTC_REQUIRED=YES
+FERMENTER_R1_NEW_RUN_OFFLINE_SUPPORTED=YES
+NEW_RUN_WITHOUT_TRUSTED_UTC=NO
+FERMENTER_R1_RTC_FAMILY=DS3231
+FERMENTER_R1_RTC_VARIANT=TBD_HARDWARE_CONFIRMATION
+```
+
+Die RTC-Wiring-Familie verwendet die DS3231-I2C-Adresse `0x68`; SDA/SCL und
+INT/SQW bleiben Boardprofil-Designdaten. Das bestellte Modul ist physisch noch
+nicht als `DS3231SN` oder `DS3231M` bestätigt. Weder konkrete Variante darf
+angenommen noch eine Multi-RTC- oder generische Providerarchitektur vorgebaut
+werden. Der bestehende Issue-#126-DS3231SN-Adapter bleibt unveränderte
+historische/digitale Evidenz, keine Behauptung über das gelieferte Modul.
+
+Pull-ups, Versorgung, Batterie-/Ladepfad, physischer IC-Aufdruck,
+I2C-Erreichbarkeit, OSF-/EOSC-Verhalten und Power-Loss-Zeitretention müssen
+am realen Aufbau für die tatsächlich bestätigte Variante nachgewiesen werden.
+Die Wiring-Zuordnung ist ein Boardprofil-Designstatus, kein `confirmed_test`.
+
+Die Software akzeptiert RTC-Zeit nur nach Rohregister-, BCD-, Kalender-,
+OSF-, EOSC-, EN32kHz- und R1-Jahresbereichprüfung. Der ungenutzte 32-kHz-
+Ausgang wird deaktiviert; SQW/INT bleibt in R1 ungenutzt.
+
 ## Nicht vorgesehene Hardware in Release 1
 
 - Tuerkontakt
-- verpflichtende batteriegepufferte RTC
 - verpflichtende 12-V-ADC-Messung
 - Luefter-Tachosignal
-- externe Strommessung zusaetzlich zu optionalem R_IS/L_IS
+- externe Strommessung fuer R1; R_IS/L_IS bleiben `FUTURE_RELEASE`
 - eigenes OTA- oder Recovery-Zusatzmodul
 
 Die Software darf spaetere Ereignisse oder Adapter dafuer vorbereiten, aber keine
@@ -248,10 +352,18 @@ Verbindliche Anforderungen:
 
 - beide BTS7960-Richtungen durch Hardwarebeschaltung inaktiv
 - Peltierfreigabe erst nach vollstaendiger Initialisierung und Validierung
-- Onboard-MOSFET-Ausgaenge beim Boot praktisch messen
+- Onboard-MOSFET-Ausgaenge im owning Hardware-Issue funktional fail-closed
+  pruefen; eine elektrische Boot-Pegelmessung ist fuer R1 nicht erforderlich
 - ungeeignete Bootstrapping-Pins nicht fuer sicherheitskritische Freigaben nutzen
 - keine automatische Aktorpruefung beim normalen Boot
-- `esp32_bringup` startet mit `HARDWARE_UNVERIFIED`
+- `esp32_bringup` startet weiterhin mit `HARDWARE_UNVERIFIED` beziehungsweise
+  dem bestehenden fail-closed Bring-up-Vertrag
+- `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` bezeichnet die
+  ownerseitige R1-Ausnahme; funktionale Boot-/Resetverifikation bleibt im
+  owning Hardware-Issue
+- Owner-bestaetigte Boardfamilienidentitaet ersetzt keinen funktionalen
+  Boot-/Resetnachweis; ein nicht gemessener Pegel wird daraus nicht als PASS
+  behauptet
 
 ## Update und Recovery
 
@@ -278,7 +390,8 @@ entsteht.
 
 1. Sichtpruefung, Versorgung, Masse und Sicherungen
 2. Controllerboard ohne Aktoren
-3. GPIO- und Bootpegelmessung
+3. GPIO-/Adapter-/Boot-Fail-Closed-Verifikation ohne vorgeschriebene
+   Spannungsmessung
 4. Sensoren, Display und Touch
 5. Luefter und Summer einzeln
 6. BTS7960 ohne Peltier

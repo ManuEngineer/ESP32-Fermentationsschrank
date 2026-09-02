@@ -5,7 +5,12 @@
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "mock_reset_cause_source.hpp"
+#include "mock_time_zone_resolver.hpp"
 #include "fermentation_application.hpp"
+#include "run_commands.hpp"
+#include "run_persistence_coordinator.hpp"
+#include "standard_program_catalog.hpp"
+#include "simulated_persistent_state_store.hpp"
 
 void test_project_metadata() {
     TEST_ASSERT_EQUAL_STRING("ESP32-Fermentationsschrank",
@@ -118,8 +123,130 @@ void test_application_accepts_const_reset_cause_source() {
 
     TEST_ASSERT_TRUE(platform.begin(startupContext));
     TEST_ASSERT_TRUE(application.begin(platform, &resetCauseSource));
-    TEST_ASSERT_TRUE(application.safetyCore().resetCause() ==
+    TEST_ASSERT_TRUE(application.presentationState().resetCause.has_value());
+    TEST_ASSERT_TRUE(*application.presentationState().resetCause ==
                      device_platform::ResetCause::PowerOn);
+}
+
+void test_product_application_composes_against_abstract_ports() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    const device_platform::PlatformStartupContext startupContext{true};
+
+    TEST_ASSERT_TRUE(platform.begin(startupContext));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ApplicationLifecycleState::Ready),
+        static_cast<int>(application.lifecycleState()));
+    const auto published = application.publishedProcessState();
+    TEST_ASSERT_TRUE(published.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::ProcessState::Standby),
+                          static_cast<int>(published->state));
+    TEST_ASSERT_EQUAL_INT(1, static_cast<int>(published->transitionSequence));
+}
+
+void test_product_application_rejects_unready_platform_before_lifecycle() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_FALSE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ApplicationLifecycleState::Initializing),
+        static_cast<int>(application.lifecycleState()));
+    TEST_ASSERT_FALSE(application.publishedProcessState().has_value());
+}
+
+void test_product_application_requires_service_when_runtime_lease_is_denied() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    timeZoneResolver.setStatus(
+        device_platform::TimeZonePrepareStatus::PreparationFailed);
+    fermentation::FermentationApplication application;
+    const device_platform::PlatformStartupContext startupContext{true};
+
+    TEST_ASSERT_TRUE(platform.begin(startupContext));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_FALSE(application.ready());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ApplicationLifecycleState::ServiceRequired),
+        static_cast<int>(application.lifecycleState()));
+    TEST_ASSERT_FALSE(application.publishedProcessState().has_value());
+    TEST_ASSERT_FALSE(
+        application.presentationState().applicationAllocationFailure);
+}
+
+void test_product_application_keeps_resume_offer_after_begin_returns() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    fermentation::RunPersistenceCoordinator seed(
+        store, device_platform::StorageEpoch(1U),
+        fermentation::RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(seed.loadAndInitialize().status));
+
+    auto document = fermentation::FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    document->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
+    document->program.fermentationStages.front().durationMinutes = 120U;
+    document->program.targetQualification.bandCelsius = 0.5;
+    document->program.targetQualification.durationMinutes = 10U;
+    document->program.maximumTargetReachMinutes = 180U;
+    document->program.preheat = true;
+    document->program.maximumProductWaitMinutes = 30U;
+    TEST_ASSERT_TRUE(fermentation::validateProgram(*document).valid());
+    fermentation::RunCommandState state;
+    state.processState.state = fermentation::ProcessState::Standby;
+    fermentation::ProgramStartRequest request;
+    request.envelope = {42U,
+                        fermentation::CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "resume-offer";
+    request.program = *document;
+    request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
+    request.sourceProgramRevision = 1U;
+    request.sensorMode = fermentation::RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    const auto decision = fermentation::decideProgramStart(state, request);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(seed.persistCommand(state, decision,
+                                             fermentation::RunCheckpointTime{
+                                                 100U, 1'700'000'000LL})
+                             .status));
+    store.restart();
+
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ApplicationLifecycleState::Ready),
+        static_cast<int>(application.lifecycleState()));
+    TEST_ASSERT_FALSE(application.publishedProcessState().has_value());
+    TEST_ASSERT_TRUE(application.presentationState().faultCode ==
+                     fermentation::FaultCode::None);
 }
 
 int main() {
@@ -134,5 +261,11 @@ int main() {
     RUN_TEST(test_platform_rejects_unsafe_startup_context);
     RUN_TEST(test_application_starts_through_platform_interface);
     RUN_TEST(test_application_accepts_const_reset_cause_source);
+    RUN_TEST(test_product_application_composes_against_abstract_ports);
+    RUN_TEST(
+        test_product_application_rejects_unready_platform_before_lifecycle);
+    RUN_TEST(
+        test_product_application_requires_service_when_runtime_lease_is_denied);
+    RUN_TEST(test_product_application_keeps_resume_offer_after_begin_returns);
     return UNITY_END();
 }

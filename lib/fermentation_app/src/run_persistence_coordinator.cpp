@@ -7,11 +7,28 @@
 #include "run_persistence_codec.hpp"
 #include "run_progress_weighting.hpp"
 #include "run_recovery_time.hpp"
+#include "boot_classification.hpp"
 #include "control_context.hpp"
 #include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
 
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+#include "issue_29_bringup_fault_seam.hpp"
+#endif
+
 namespace fermentation {
+
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+namespace issue_29_bringup {
+
+CommandStatus applyCandidateForResourceProbe(
+    RunCommandState& candidate, const CommandDecision& decision) noexcept {
+    return applyRunCommand(candidate, decision);
+}
+
+}  // namespace issue_29_bringup
+#endif
+
 namespace {
 
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
@@ -32,6 +49,80 @@ std::optional<std::uint32_t> checkedToUint32(std::uint64_t value) {
         return std::nullopt;
     }
     return static_cast<std::uint32_t>(value);
+}
+
+std::optional<std::uint64_t> checkedUtcDelta(std::int64_t current,
+                                             std::int64_t checkpoint) {
+    if (current < checkpoint) return std::nullopt;
+    if (checkpoint >= 0 || current < 0) {
+        // In this branch the signed subtraction cannot overflow: either both
+        // values are non-negative or both are negative and current >=
+        // checkpoint.
+        return static_cast<std::uint64_t>(current - checkpoint);
+    }
+
+    // current is non-negative and checkpoint is negative. Build the distance
+    // without negating INT64_MIN and keep the final addition checked.
+    const auto negativeMagnitude =
+        static_cast<std::uint64_t>(-(checkpoint + 1)) + 1U;
+    return checkedAdd(static_cast<std::uint64_t>(current), negativeMagnitude);
+}
+
+std::optional<std::uint32_t> exactPriorFermentingSeconds(
+    const RunCommandState& current) {
+    if (!current.priorBootPhaseElapsed.has_value()) return 0U;
+    const auto& tagged = *current.priorBootPhaseElapsed;
+    if (tagged.taggedState != ProcessState::Fermenting ||
+        !tagged.elapsed.upperBoundSeconds.has_value() ||
+        *tagged.elapsed.upperBoundSeconds != tagged.elapsed.lowerBoundSeconds) {
+        return std::nullopt;
+    }
+    return tagged.elapsed.lowerBoundSeconds;
+}
+
+bool sameCheckpointReference(const RunCheckpointReference& left,
+                             const RunCheckpointReference& right) {
+    return left.slot == right.slot &&
+           left.schemaVersion == right.schemaVersion &&
+           left.storageEpoch == right.storageEpoch &&
+           left.checkpointRevision == right.checkpointRevision &&
+           left.payloadLength == right.payloadLength &&
+           left.payloadCrc == right.payloadCrc && left.variant == right.variant;
+}
+
+bool currentMatchesLoadedRecord(
+    const RunCommandState& current, const RunPersistenceRawRecord& record,
+    const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
+    std::size_t idCount) {
+    RunPersistenceSnapshot projection;
+    const RunCheckpointTime checkpointTime{
+        record.snapshot.checkpointMonotonicMillis, record.utcUnixSeconds};
+    if (!makeRunPersistenceSnapshotInto(
+            current, ids, idCount, record.snapshot.trigger, checkpointTime,
+            record.snapshot.intervalMinutes, projection)) {
+        return false;
+    }
+    std::string projectedBytes;
+    std::string loadedBytes;
+    return encodeRunPersistenceSnapshot(projection, projectedBytes) ==
+               RunPersistenceCodecStatus::Success &&
+           encodeRunPersistenceSnapshot(record.snapshot, loadedBytes) ==
+               RunPersistenceCodecStatus::Success &&
+           projectedBytes == loadedBytes;
+}
+
+bool isActiveFermentingSnapshot(const RunPersistenceSnapshot& snapshot) {
+    const bool activeVariant =
+        snapshot.variant == RunCheckpointVariant::ProgramRun ||
+        snapshot.variant == RunCheckpointVariant::ManualRun;
+    return activeVariant &&
+           snapshot.processState.state == ProcessState::Fermenting;
+}
+
+bool isActiveFermentingCurrent(const RunCommandState& current) {
+    return (current.activeProgramRun.has_value() ||
+            current.activeManualRun.has_value()) &&
+           current.processState.state == ProcessState::Fermenting;
 }
 
 RoleTemperatureEvidence toRoleTemperatureEvidence(
@@ -254,9 +345,15 @@ RunPersistenceResult RunPersistenceCoordinator::unavailableResult() const {
     return result(RunPersistenceResultStatus::Blocked);
 }
 
-RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
+void RunPersistenceCoordinator::loadAndInitializeInto(
+    RunPersistenceLoadResult& destination) {
+    destination.status = RunPersistenceLoadStatus::ReadFailed;
+    destination.snapshot.reset();
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
     if (state_ != RunPersistenceCoordinatorState::Uninitialized) {
-        return {RunPersistenceLoadStatus::AlreadyInitialized, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::AlreadyInitialized;
+        return;
     }
     // Monotonic time is boot-local.  An injected schedule may already be
     // armed by its caller, but that state must never cross the boot boundary.
@@ -281,43 +378,51 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 continue;
             }
             enterBlockedIndeterminate();
-            return {probe.status ==
-                            device_platform::StateStoreReadStatus::CapacityError
-                        ? RunPersistenceLoadStatus::CapacityExceeded
-                        : RunPersistenceLoadStatus::ReadFailed,
-                    std::nullopt};
+            destination.status =
+                probe.status ==
+                        device_platform::StateStoreReadStatus::CapacityError
+                    ? RunPersistenceLoadStatus::CapacityExceeded
+                    : RunPersistenceLoadStatus::ReadFailed;
+            return;
         }
         if (!slotPresent) {
             state_ = RunPersistenceCoordinatorState::ReadyEmpty;
-            return {RunPersistenceLoadStatus::NoPersistedRun, std::nullopt};
+            destination.status = RunPersistenceLoadStatus::NoPersistedRun;
+            return;
         }
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::NotReconstructibleOrphanedState,
-                std::nullopt};
+        destination.status =
+            RunPersistenceLoadStatus::NotReconstructibleOrphanedState;
+        return;
     }
     if (read.status == device_platform::StateStoreReadStatus::CapacityError) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::CapacityExceeded, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::CapacityExceeded;
+        return;
     }
     if (read.status != device_platform::StateStoreReadStatus::Success) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::ReadFailed, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::ReadFailed;
+        return;
     }
     const auto headEnvelope = device_platform::decodeEnvelope(read.value);
     if (headEnvelope.envelope.has_value() &&
         headEnvelope.envelope->storageEpoch != epoch_) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::ForeignEpoch, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::ForeignEpoch;
+        return;
     }
     if (headEnvelope.envelope.has_value() &&
         !knownRunPersistenceSchema(headEnvelope.envelope->schemaVersion)) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::UnsupportedSchema, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::UnsupportedSchema;
+        return;
     }
     auto head = decodeRunPersistenceHead(read.value, epoch_);
     if (!head.has_value()) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::NotReconstructible, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::NotReconstructible;
+        return;
     }
     currentHead_ = std::move(*head);
     nextHeadRevision_ =
@@ -326,59 +431,60 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
             : currentHead_->revision + 1U;
     if (currentHead_->state == RunPersistenceHeadState::Prepared) {
         enterBlockedIndeterminate();
-        return {RunPersistenceLoadStatus::PreparedInterrupted, std::nullopt};
+        destination.status = RunPersistenceLoadStatus::PreparedInterrupted;
+        return;
     }
     const auto loadReference = [this](const RunCheckpointReference& reference,
-                                      RunPersistenceLoadStatus& status)
-        -> std::optional<RunPersistenceRawRecord> {
+                                      RunPersistenceLoadStatus& status) {
         const auto slot = reference.slot;
         const auto slotRead =
             store_.readSlot(slot, kMaximumCheckpointRecordBytes);
         if (slotRead.status ==
             device_platform::StateStoreReadStatus::NotFound) {
             status = RunPersistenceLoadStatus::NotReconstructible;
-            return std::nullopt;
+            return false;
         }
         if (slotRead.status ==
             device_platform::StateStoreReadStatus::CapacityError) {
             status = RunPersistenceLoadStatus::CapacityExceeded;
-            return std::nullopt;
+            return false;
         }
         if (slotRead.status != device_platform::StateStoreReadStatus::Success) {
             status = RunPersistenceLoadStatus::ReadFailed;
-            return std::nullopt;
+            return false;
         }
         const auto envelope = device_platform::decodeEnvelope(slotRead.value);
         if (envelope.envelope.has_value() &&
             envelope.envelope->storageEpoch != epoch_) {
             status = RunPersistenceLoadStatus::ForeignEpoch;
-            return std::nullopt;
+            return false;
         }
         if (envelope.envelope.has_value() &&
             !knownRunPersistenceSchema(envelope.envelope->schemaVersion)) {
             status = RunPersistenceLoadStatus::UnsupportedSchema;
-            return std::nullopt;
+            return false;
         }
-        auto record = decodeRunPersistenceRecord(slotRead.value, epoch_);
-        if (!record.has_value() ||
-            !runCheckpointReferenceMatches(reference, *record, slot)) {
+        if (!decodeRunPersistenceRecordInto(slotRead.value, epoch_,
+                                            workingSet_.record) ||
+            !runCheckpointReferenceMatches(reference, workingSet_.record,
+                                           slot)) {
             status = RunPersistenceLoadStatus::NotReconstructible;
-            return std::nullopt;
+            return false;
         }
         status = RunPersistenceLoadStatus::Current;
-        return record;
+        return true;
     };
     RunPersistenceLoadStatus currentStatus = RunPersistenceLoadStatus::Current;
-    const auto currentRecord =
+    const bool currentRecord =
         loadReference(currentHead_->current, currentStatus);
-    if (currentRecord.has_value()) {
-        slots_[currentHead_->current.slot] = *currentRecord;
-        const auto& snap = currentRecord->snapshot;
+    if (currentRecord) {
+        slots_[currentHead_->current.slot] = workingSet_.record;
+        const auto& snap = workingSet_.record.snapshot;
         nextCheckpointRevision_ =
-            currentRecord->checkpointRevision ==
+            workingSet_.record.checkpointRevision ==
                     std::numeric_limits<std::uint64_t>::max()
                 ? 0U
-                : currentRecord->checkpointRevision + 1U;
+                : workingSet_.record.checkpointRevision + 1U;
         persistedIds_ = snap.persistedRunCommandIds;
         persistedIdCount_ = snap.persistedRunCommandCount;
         // The head is the only source of the recoverable state.  A valid
@@ -390,7 +496,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         for (std::size_t slot = 0U; slot < 2U; ++slot) {
             std::string physicalBytes;
             if (slot == currentHead_->current.slot) {
-                physicalBytes = currentRecord->bytes;
+                physicalBytes = workingSet_.record.bytes;
             } else {
                 const auto physical =
                     store_.readSlot(slot, kMaximumCheckpointRecordBytes);
@@ -401,13 +507,15 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 if (physical.status ==
                     device_platform::StateStoreReadStatus::CapacityError) {
                     enterBlockedIndeterminate();
-                    return {RunPersistenceLoadStatus::CapacityExceeded,
-                            std::nullopt};
+                    destination.status =
+                        RunPersistenceLoadStatus::CapacityExceeded;
+                    return;
                 }
                 if (physical.status !=
                     device_platform::StateStoreReadStatus::Success) {
                     enterBlockedIndeterminate();
-                    return {RunPersistenceLoadStatus::ReadFailed, std::nullopt};
+                    destination.status = RunPersistenceLoadStatus::ReadFailed;
+                    return;
                 }
                 physicalBytes = physical.value;
             }
@@ -421,8 +529,9 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 physicalEnvelope.envelope->storageEpoch != epoch_ ||
                 physicalEnvelope.envelope->versionValue == 0U) {
                 enterBlockedIndeterminate();
-                return {RunPersistenceLoadStatus::NotReconstructible,
-                        std::nullopt};
+                destination.status =
+                    RunPersistenceLoadStatus::NotReconstructible;
+                return;
             }
             if (physicalEnvelope.envelope->versionValue ==
                 std::numeric_limits<std::uint64_t>::max()) {
@@ -438,18 +547,22 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         }
         if (snap.variant == RunCheckpointVariant::NoActiveRun) {
             state_ = RunPersistenceCoordinatorState::ReadyEmpty;
-            return {RunPersistenceLoadStatus::NoActiveRun, snap};
+            destination.status = RunPersistenceLoadStatus::NoActiveRun;
+            destination.snapshot = snap;
+            return;
         }
         state_ = RunPersistenceCoordinatorState::LoadedActiveRun;
-        return {RunPersistenceLoadStatus::Current, snap};
+        destination.status = RunPersistenceLoadStatus::Current;
+        destination.snapshot = snap;
+        return;
     }
     if (currentHead_->fallback.has_value()) {
         RunPersistenceLoadStatus fallbackStatus =
             RunPersistenceLoadStatus::Current;
-        const auto fallbackRecord =
+        const bool fallbackRecord =
             loadReference(*currentHead_->fallback, fallbackStatus);
-        if (fallbackRecord.has_value()) {
-            if (fallbackRecord->snapshot.variant ==
+        if (fallbackRecord) {
+            if (workingSet_.record.snapshot.variant ==
                 RunCheckpointVariant::NoActiveRun) {
                 // A tombstone is a valid fallback reference for an active
                 // current, but it cannot reconstruct that current after the
@@ -457,10 +570,11 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 // fail-closed instead of exposing a non-resumable snapshot as
                 // FallbackRecoveryPending to the later recovery API.
                 enterBlockedIndeterminate();
-                return {RunPersistenceLoadStatus::NotReconstructible,
-                        std::nullopt};
+                destination.status =
+                    RunPersistenceLoadStatus::NotReconstructible;
+                return;
             }
-            slots_[currentHead_->fallback->slot] = *fallbackRecord;
+            slots_[currentHead_->fallback->slot] = workingSet_.record;
             const auto raiseCheckpointHighWatermark =
                 [this](std::uint64_t checkpointRevision) {
                     if (nextCheckpointRevision_ == 0U ||
@@ -472,28 +586,37 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                     nextCheckpointRevision_ = std::max(nextCheckpointRevision_,
                                                        checkpointRevision + 1U);
                 };
-            raiseCheckpointHighWatermark(fallbackRecord->checkpointRevision);
+            raiseCheckpointHighWatermark(workingSet_.record.checkpointRevision);
             raiseCheckpointHighWatermark(
                 currentHead_->current.checkpointRevision);
             raiseCheckpointHighWatermark(
                 currentHead_->fallback->checkpointRevision);
-            persistedIds_ = fallbackRecord->snapshot.persistedRunCommandIds;
+            persistedIds_ = workingSet_.record.snapshot.persistedRunCommandIds;
             persistedIdCount_ =
-                fallbackRecord->snapshot.persistedRunCommandCount;
+                workingSet_.record.snapshot.persistedRunCommandCount;
             state_ = RunPersistenceCoordinatorState::FallbackRecoveryPending;
-            return {RunPersistenceLoadStatus::FallbackRecovered,
-                    fallbackRecord->snapshot};
+            destination.status = RunPersistenceLoadStatus::FallbackRecovered;
+            destination.snapshot = workingSet_.record.snapshot;
+            return;
         }
         if (fallbackStatus == RunPersistenceLoadStatus::ReadFailed ||
             fallbackStatus == RunPersistenceLoadStatus::CapacityExceeded ||
             fallbackStatus == RunPersistenceLoadStatus::ForeignEpoch ||
             fallbackStatus == RunPersistenceLoadStatus::UnsupportedSchema) {
             enterBlockedIndeterminate();
-            return {fallbackStatus, std::nullopt};
+            destination.status = fallbackStatus;
+            return;
         }
     }
     enterBlockedIndeterminate();
-    return {currentStatus, std::nullopt};
+    destination.status = currentStatus;
+    destination.snapshot.reset();
+}
+
+RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
+    RunPersistenceLoadResult destination;
+    loadAndInitializeInto(destination);
+    return destination;
 }
 
 RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
@@ -755,6 +878,311 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         candidate.recoveryBootAnchorMonotonicMillis.reset();
     }
     return commitCandidate(candidate);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
+    RunCommandState& current, const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+        !currentHead_.has_value() ||
+        !slots_[currentHead_->current.slot].has_value()) {
+        return unavailableResult();
+    }
+
+    // These terminal states follow the exact RAM-only restoration precedent
+    // of activateLoadedRun(). They do not require live sensor evidence and do
+    // not create a process transition.
+    if (current.processState.state == ProcessState::Fault) {
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto restored = result(RunPersistenceResultStatus::Applied,
+                               RunPersistenceStep::RamApply,
+                               RunPersistenceTechnicalReason::None,
+                               RunPersistenceDurability::Unchanged);
+        restored.coordinatorState = state_;
+        return restored;
+    }
+
+    if (current.processState.state == ProcessState::Completed) {
+        current.processState.stateEnteredAtMillis = time.monotonicMillis;
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto restored = result(RunPersistenceResultStatus::Applied,
+                               RunPersistenceStep::RamApply,
+                               RunPersistenceTechnicalReason::None,
+                               RunPersistenceDurability::Unchanged);
+        restored.coordinatorState = state_;
+        return restored;
+    }
+
+    const auto& loadedSnapshot = slots_[currentHead_->current.slot]->snapshot;
+    if (!boot_classification::isR1ResumeEligible(loadedSnapshot) ||
+        current.processState.state != loadedSnapshot.processState.state ||
+        liveSensorEvidence == nullptr) {
+        return result(RunPersistenceResultStatus::NotEligible,
+                      RunPersistenceStep::CandidateApply);
+    }
+
+    workingSet_.candidate = current;
+    workingSet_.candidate.processState =
+        rebasedRecoveredState(current.processState, time.monotonicMillis);
+
+    if (!workingSet_.candidate.sensorSelection.has_value() ||
+        !workingSet_.candidate.activeRunSensorMode.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto recommendation = computeRestartSensorSelection(
+        *workingSet_.candidate.sensorSelection,
+        *workingSet_.candidate.activeRunSensorMode,
+        recoverySensorSelectionProgramContext(workingSet_.candidate),
+        *liveSensorEvidence);
+    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
+        return result(RunPersistenceResultStatus::NotEligible,
+                      RunPersistenceStep::CandidateApply);
+    }
+    workingSet_.candidate.sensorSelectionRuntime = recommendation.runtime;
+    workingSet_.candidate.activeRunSensorMode = recommendation.activeMode;
+    if (workingSet_.candidate.activeManualRun.has_value()) {
+        workingSet_.candidate.activeManualRun->values.sensorMode =
+            recommendation.activeMode;
+    }
+
+    if (!makeRunPersistenceSnapshotInto(
+            workingSet_.candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            workingSet_.snapshot)) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+
+    const auto persisted =
+        writeSnapshotCore(workingSet_.snapshot, time, false, current,
+                          RunPersistenceMutationKind::Recovery, std::nullopt,
+                          std::nullopt, RunPersistenceFallbackDirective{},
+                          RunPersistenceCoordinatorState::LoadedActiveRun);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return persisted;
+    }
+
+    current = workingSet_.candidate;
+    return persisted;
+}
+
+R1RecoveryEvaluation
+RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
+    RunCommandState& current, const RunCheckpointTime& time) {
+    const auto rejected =
+        [this](RunPersistenceResultStatus status,
+               RunPersistenceStep step = RunPersistenceStep::CandidateApply,
+               RunPersistenceTechnicalReason reason =
+                   RunPersistenceTechnicalReason::InvalidProjection) {
+            pendingR1CheckpointRevision_.reset();
+            pendingR1RunRevision_.reset();
+            return R1RecoveryEvaluation{
+                RecoveryDisposition::RecoveryRejectedOrFailClosed,
+                result(status, step, reason)};
+        };
+
+    if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+        !currentHead_.has_value() ||
+        !slots_[currentHead_->current.slot].has_value()) {
+        return rejected(state_ == RunPersistenceCoordinatorState::Ready
+                            ? RunPersistenceResultStatus::StaleDecision
+                            : RunPersistenceResultStatus::NotEligible);
+    }
+
+    const auto& loadedRecord = *slots_[currentHead_->current.slot];
+    // Re-read the head and current slot before each evaluation. Waiting for
+    // UTC must not turn an externally advanced persistence revision into a
+    // decision based on stale in-memory evidence.
+    const auto liveHeadRead = store_.readHead(kMaximumHeadRecordBytes);
+    if (liveHeadRead.status != device_platform::StateStoreReadStatus::Success) {
+        enterBlockedIndeterminate();
+        return rejected(RunPersistenceResultStatus::PersistenceIndeterminate,
+                        RunPersistenceStep::LoadHead,
+                        RunPersistenceTechnicalReason::StoreReadError);
+    }
+    const auto liveHead = decodeRunPersistenceHead(liveHeadRead.value, epoch_);
+    if (!liveHead.has_value() ||
+        !sameCheckpointReference(liveHead->current, currentHead_->current)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision,
+                        RunPersistenceStep::LoadHead);
+    }
+    const auto liveSlotRead = store_.readSlot(currentHead_->current.slot,
+                                              kMaximumCheckpointRecordBytes);
+    if (liveSlotRead.status != device_platform::StateStoreReadStatus::Success) {
+        enterBlockedIndeterminate();
+        return rejected(RunPersistenceResultStatus::PersistenceIndeterminate,
+                        RunPersistenceStep::LoadCurrent,
+                        RunPersistenceTechnicalReason::StoreReadError);
+    }
+    RunPersistenceRawRecord liveRecord;
+    if (!decodeRunPersistenceRecordInto(liveSlotRead.value, epoch_,
+                                        liveRecord) ||
+        !runCheckpointReferenceMatches(currentHead_->current, liveRecord,
+                                       currentHead_->current.slot) ||
+        !currentMatchesLoadedRecord(current, liveRecord, persistedIds_,
+                                    persistedIdCount_)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision,
+                        RunPersistenceStep::LoadCurrent);
+    }
+
+    if (current.processState.state != ProcessState::Fermenting ||
+        current.runProgress.basis != RunProgressBasis::KnownTotal ||
+        !current.processRunSnapshot.has_value() ||
+        !current.processRunSnapshot->fermentationDurationMinutes.has_value() ||
+        loadedRecord.checkpointRevision !=
+            currentHead_->current.checkpointRevision ||
+        !currentMatchesLoadedRecord(current, loadedRecord, persistedIds_,
+                                    persistedIdCount_)) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+
+    if (pendingR1CheckpointRevision_.has_value() &&
+        (*pendingR1CheckpointRevision_ != loadedRecord.checkpointRevision ||
+         !pendingR1RunRevision_.has_value() ||
+         *pendingR1RunRevision_ != current.runRevision)) {
+        return rejected(RunPersistenceResultStatus::StaleDecision);
+    }
+    pendingR1CheckpointRevision_ = loadedRecord.checkpointRevision;
+    pendingR1RunRevision_ = current.runRevision;
+
+    if (!loadedRecord.utcUnixSeconds.has_value()) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    // Missing current UTC is a non-terminal asynchronous state only after
+    // the persisted checkpoint UTC has been proven present. Without that
+    // record anchor, a later RTC/NTP value cannot make the wall-clock term
+    // reconstructible. The loaded checkpoint remains untouched and can be
+    // evaluated again by the same coordinator when trusted UTC is available.
+    if (!time.utcUnixSeconds.has_value()) {
+        return R1RecoveryEvaluation{
+            RecoveryDisposition::WaitingForTrustedTime,
+            result(RunPersistenceResultStatus::RecoveryPending,
+                   RunPersistenceStep::CandidateApply)};
+    }
+
+    const auto prior = exactPriorFermentingSeconds(current);
+    if (!prior.has_value() || loadedRecord.snapshot.checkpointMonotonicMillis <
+                                  current.processState.stateEnteredAtMillis) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    const auto liveSegment =
+        checkedToUint32((loadedRecord.snapshot.checkpointMonotonicMillis -
+                         current.processState.stateEnteredAtMillis) /
+                        1000U);
+    if (!liveSegment.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
+    const auto wallClockSinceCheckpoint =
+        checkedUtcDelta(*time.utcUnixSeconds, *loadedRecord.utcUnixSeconds);
+    if (!phaseAtCheckpoint.has_value() ||
+        !wallClockSinceCheckpoint.has_value()) {
+        return rejected(RunPersistenceResultStatus::InvalidDecision);
+    }
+    const auto recoveredPhase =
+        checkedAdd(*phaseAtCheckpoint, *wallClockSinceCheckpoint);
+    if (!recoveredPhase.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto fermentationDuration = checkedToUint32(
+        static_cast<std::uint64_t>(
+            *current.processRunSnapshot->fermentationDurationMinutes) *
+        60U);
+    if (!fermentationDuration.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    const auto recoveredPrior = checkedToUint32(*recoveredPhase);
+    if (!recoveredPrior.has_value()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+
+    auto candidate = current;
+    if (!foldObservedRunSeconds(candidate, *liveSegment)) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+
+    if (*recoveredPhase < *fermentationDuration) {
+        // Use the existing RecoveryEvaluation -> RecoveryResume topology in
+        // RAM to obtain the same FSM invariants as every other recovery
+        // handoff. Only the final candidate is persisted.
+        const auto hop1 = propose(
+            candidate.processState, ProcessState::RecoveryEvaluation,
+            TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
+        if (!hop1.proposed() ||
+            !applyProcessTransition(candidate.processState, hop1,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        auto recoveredState = current.processState;
+        recoveredState.state = ProcessState::Fermenting;
+        recoveredState.stateEnteredAtMillis = time.monotonicMillis;
+        recoveredState.qualificationValidSinceMillis.reset();
+        recoveredState.targetReachStartedAtMillis = 0U;
+        recoveredState.targetReachWarningIssued = false;
+        const auto hop2 = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryResume, recoveredState},
+            time.monotonicMillis,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior});
+        if (!hop2.proposed() ||
+            !applyProcessTransition(candidate.processState, hop2,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
+    } else {
+        const auto completion =
+            completeTimedRun(current.processState, *current.processRunSnapshot,
+                             time.monotonicMillis);
+        if (!completion.proposed() ||
+            !applyProcessTransition(candidate.processState, completion,
+                                    &*candidate.processRunSnapshot)) {
+            return rejected(RunPersistenceResultStatus::InvalidDecision);
+        }
+        // A prior offset is meaningful only for the phase it times. The
+        // normal FermentationCompleted transition consumes it; Cooling and
+        // Completed must not carry a FERMENTING tag.
+        candidate.priorBootPhaseElapsed.reset();
+    }
+
+    if (candidate.runRevision == std::numeric_limits<std::uint32_t>::max()) {
+        return rejected(RunPersistenceResultStatus::CounterOverflow);
+    }
+    ++candidate.runRevision;
+    const auto persisted = persistRecoveryCandidate(current, candidate, time);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        pendingR1CheckpointRevision_.reset();
+        pendingR1RunRevision_.reset();
+        return R1RecoveryEvaluation{
+            RecoveryDisposition::RecoveryRejectedOrFailClosed, persisted};
+    }
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
+    return R1RecoveryEvaluation{RecoveryDisposition::CurrentRunRecoverable,
+                                persisted};
+}
+
+bool RunPersistenceCoordinator::prepareRecoveryEvaluationState(
+    RunCommandState& current, std::uint64_t monotonicMillis) const {
+    auto candidate = current;
+    const auto transition =
+        propose(candidate.processState, ProcessState::RecoveryEvaluation,
+                TransitionReason::RecoveryReentryRequired, monotonicMillis);
+    if (!transition.proposed() ||
+        !applyProcessTransition(candidate.processState, transition,
+                                candidate.processRunSnapshot.has_value()
+                                    ? &*candidate.processRunSnapshot
+                                    : nullptr)) {
+        return false;
+    }
+    current = std::move(candidate);
+    return true;
 }
 
 RecoveryActivationOutcome
@@ -1420,41 +1848,42 @@ RunPersistenceResult RunPersistenceCoordinator::discardAsNoActiveRun(
                       RunPersistenceStep::CandidateApply);
     }
 
-    auto candidate = current;
+    workingSet_.candidate = current;
     const auto discard =
-        propose(candidate.processState, ProcessState::Standby,
+        propose(workingSet_.candidate.processState, ProcessState::Standby,
                 TransitionReason::RecoveryRejected, time.monotonicMillis);
     if (!discard.proposed() ||
-        !applyProcessTransition(candidate.processState, discard,
-                                candidate.processRunSnapshot.has_value()
-                                    ? &*candidate.processRunSnapshot
-                                    : nullptr)) {
+        !applyProcessTransition(
+            workingSet_.candidate.processState, discard,
+            workingSet_.candidate.processRunSnapshot.has_value()
+                ? &*workingSet_.candidate.processRunSnapshot
+                : nullptr)) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
-    clearActiveRunState(candidate);
-    ++candidate.runRevision;
+    clearActiveRunState(workingSet_.candidate);
+    ++workingSet_.candidate.runRevision;
 
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, persistedIds_, persistedIdCount_,
-        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
-    if (!snapshot.has_value()) {
+    if (!makeRunPersistenceSnapshotInto(
+            workingSet_.candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            workingSet_.snapshot)) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto rollbackState = state_;
     const auto persisted = writeSnapshotCore(
-        *snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
-        std::nullopt, std::nullopt,
+        workingSet_.snapshot, time, false, current,
+        RunPersistenceMutationKind::Recovery, std::nullopt, std::nullopt,
         RunPersistenceFallbackDirective{
             RunPersistenceFallbackMode::ClearFallback, std::nullopt},
         rollbackState);
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         return persisted;
     }
-    current = candidate;
+    current = workingSet_.candidate;
     return persisted;
 }
 
@@ -1465,6 +1894,17 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     std::optional<std::size_t> targetSlotOverride,
     RunPersistenceFallbackDirective fallbackDirective,
     RunPersistenceCoordinatorState rollbackState) {
+    // R1 write invariant: an active FERMENTING Current is the recovery anchor
+    // consumed by #124 and therefore must carry trusted UTC.  This check is
+    // deliberately before schedule/counter/state mutation and is shared by
+    // command, transition, sensor-selection, periodic, and recovery writes.
+    if (isActiveFermentingSnapshot(snapshot) &&
+        !time.utcUnixSeconds.has_value()) {
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
     if (nextCheckpointRevision_ == 0U || nextHeadRevision_ == 0U ||
         (!periodic &&
          nextHeadRevision_ == std::numeric_limits<std::uint64_t>::max()))
@@ -1552,9 +1992,12 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
                       RunPersistenceStep::CheckpointSlot,
                       RunPersistenceTechnicalReason::CodecError);
     }
-    RunPersistenceRawRecord record{
-        targetBytes, snapshot, nextCheckpointRevision_, time.utcUnixSeconds};
-    const auto ref = makeRunCheckpointReference(target, record, epoch_);
+    workingSet_.record.bytes = targetBytes;
+    workingSet_.record.snapshot = snapshot;
+    workingSet_.record.checkpointRevision = nextCheckpointRevision_;
+    workingSet_.record.utcUnixSeconds = time.utcUnixSeconds;
+    const auto ref =
+        makeRunCheckpointReference(target, workingSet_.record, epoch_);
     RunPersistenceHead prepared;
     RunPersistenceHead committed;
     std::optional<std::string> preparedBytes;
@@ -1680,12 +2123,12 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
             return writeFailure(slotWrite, RunPersistenceStep::CheckpointSlot,
                                 RunPersistenceDurability::Unchanged);
         }
-        slots_[target] = record;
+        slots_[target] = workingSet_.record;
         nextCheckpointRevision_ =
-            record.checkpointRevision ==
+            workingSet_.record.checkpointRevision ==
                     std::numeric_limits<std::uint64_t>::max()
                 ? 0U
-                : record.checkpointRevision + 1U;
+                : workingSet_.record.checkpointRevision + 1U;
         const auto headWrite = store_.writeHeadExact(*committedBytes, oldHead,
                                                      kMaximumHeadRecordBytes);
         if (headWrite != RunPersistenceStoreWriteResult::Written) {
@@ -1713,12 +2156,12 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
             return writeFailure(slotWrite, RunPersistenceStep::CheckpointSlot,
                                 RunPersistenceDurability::Changed);
         }
-        slots_[target] = record;
+        slots_[target] = workingSet_.record;
         nextCheckpointRevision_ =
-            record.checkpointRevision ==
+            workingSet_.record.checkpointRevision ==
                     std::numeric_limits<std::uint64_t>::max()
                 ? 0U
-                : record.checkpointRevision + 1U;
+                : workingSet_.record.checkpointRevision + 1U;
         const auto committedWrite = store_.writeHeadExact(
             *committedBytes, std::optional<std::string>{prepared.bytes},
             kMaximumHeadRecordBytes);
@@ -1731,7 +2174,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
         committed.bytes = *committedBytes;
         currentHead_ = std::move(committed);
     }
-    slots_[target] = std::move(record);
+    slots_[target] = workingSet_.record;
     nextHeadRevision_ =
         currentHead_->revision == std::numeric_limits<std::uint64_t>::max()
             ? 0U
@@ -1778,6 +2221,18 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
         if (persistedIds_[i] == decision.envelope.id)
             return result(RunPersistenceResultStatus::AlreadyPersisted);
+    const bool freshProductiveStart =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    if (freshProductiveStart && !time.utcUnixSeconds.has_value()) {
+        // The application/domain boundary uses the existing honest Blocked
+        // result.  No candidate Apply, durable write, or RAM Apply is allowed
+        // to happen before trusted absolute time exists.
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
     // #21, 9.7-Korrektur (letzter Abschlussblocker): AppliedRamOnly ist per
     // Plan-Vertrag nicht persistierbar - der manuelle Sensorselektionspfad
     // wendet diese Entscheidung ausschliesslich im RAM an, stale-geprueft
@@ -1816,15 +2271,27 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         ramResult.effectCount = decision.effectCount;
         return ramResult;
     }
-    auto candidate = current;
-    const auto apply = applyRunCommand(candidate, decision);
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+    // The probe names this existing candidate-copy boundary as its
+    // allocation-failure seam. No production allocator or public error
+    // contract is introduced; release/native builds do not compile this
+    // branch at all.
+    if (issue_29_bringup::consumeCandidateAllocationFailure()) {
+        return result(RunPersistenceResultStatus::Blocked,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection,
+                      RunPersistenceDurability::Unchanged);
+    }
+#endif
+    workingSet_.candidate = current;
+    const auto apply = applyRunCommand(workingSet_.candidate, decision);
     if (apply != CommandStatus::Applied)
         return result(apply == CommandStatus::StaleState
                           ? RunPersistenceResultStatus::StaleDecision
                           : RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply);
     if (liveSensorEvidence != nullptr)
-        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
+        applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);
     auto ids = persistedIds_;
     auto count = persistedIdCount_;
     if (count < ids.size())
@@ -1835,16 +2302,15 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     }
     if (nextCheckpointRevision_ == 0U)
         return result(RunPersistenceResultStatus::CounterOverflow);
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, ids, count, RunCheckpointTrigger::Command, time,
-        schedule_.intervalMinutes());
-    if (!snapshot.has_value())
+    if (!makeRunPersistenceSnapshotInto(
+            workingSet_.candidate, ids, count, RunCheckpointTrigger::Command,
+            time, schedule_.intervalMinutes(), workingSet_.snapshot))
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted = writeSnapshot(*snapshot, time, false, current,
-                                         RunPersistenceMutationKind::Command,
-                                         decision.envelope.id);
+    const auto persisted = writeSnapshot(
+        workingSet_.snapshot, time, false, current,
+        RunPersistenceMutationKind::Command, decision.envelope.id);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (applyRunCommand(current, decision) != CommandStatus::Applied) {
@@ -1891,22 +2357,25 @@ RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, persistedIds_, persistedIdCount_,
-        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
-    if (!snapshot.has_value()) {
+    if (!makeRunPersistenceSnapshotInto(
+            candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            workingSet_.snapshot)) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto rollbackState = state_;
-    const auto persisted = writeSnapshotCore(
-        *snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
-        std::nullopt, std::nullopt, fallbackDirective, rollbackState);
+    const auto persisted =
+        writeSnapshotCore(workingSet_.snapshot, time, false, current,
+                          RunPersistenceMutationKind::Recovery, std::nullopt,
+                          std::nullopt, fallbackDirective, rollbackState);
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         return persisted;
     }
     current = candidate;
+    pendingR1CheckpointRevision_.reset();
+    pendingR1RunRevision_.reset();
     auto applied = persisted;
     applied.step = RunPersistenceStep::RamApply;
     applied.durability = RunPersistenceDurability::Changed;
@@ -1928,7 +2397,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
                       RunPersistenceTechnicalReason::InvalidProjection);
     if (time.monotonicMillis != decision.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
-    auto candidate = current;
+    workingSet_.candidate = current;
     std::optional<std::uint32_t> observedFermentingDelta;
     const bool foldsObservedFermentingTime =
         current.processState.state == ProcessState::Fermenting &&
@@ -1940,37 +2409,40 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
             return result(RunPersistenceResultStatus::InvalidDecision,
                           RunPersistenceStep::CandidateApply);
         }
-        if (!foldObservedRunSeconds(candidate, *observedFermentingDelta)) {
+        if (!foldObservedRunSeconds(workingSet_.candidate,
+                                    *observedFermentingDelta)) {
             return result(RunPersistenceResultStatus::CounterOverflow,
                           RunPersistenceStep::CandidateApply);
         }
     }
-    if (!candidate.processRunSnapshot.has_value() ||
-        !applyProcessTransition(candidate.processState, decision,
-                                &*candidate.processRunSnapshot))
+    if (!workingSet_.candidate.processRunSnapshot.has_value() ||
+        !applyProcessTransition(workingSet_.candidate.processState, decision,
+                                &*workingSet_.candidate.processRunSnapshot))
         return result(RunPersistenceResultStatus::StaleDecision,
                       RunPersistenceStep::CandidateApply);
     if (decision.reason == TransitionReason::ProductWaitExpired)
-        clearActiveRunState(candidate);
-    if (candidate.lastRecoveryEpisodeEvidence.has_value() &&
-        candidate.processState.state != current.processState.state) {
+        clearActiveRunState(workingSet_.candidate);
+    if (workingSet_.candidate.lastRecoveryEpisodeEvidence.has_value() &&
+        workingSet_.candidate.processState.state !=
+            current.processState.state) {
         supersedeUnbookedWeightedSegment(
-            candidate.runProgress,
-            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
-        candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
-            .reset();
+            workingSet_.candidate.runProgress,
+            workingSet_.candidate.lastRecoveryEpisodeEvidence
+                ->weightedProgressSegmentId);
+        workingSet_.candidate.lastRecoveryEpisodeEvidence
+            ->weightedProgressSegmentId.reset();
     }
     if (liveSensorEvidence != nullptr)
-        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, persistedIds_, persistedIdCount_,
-        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
-    if (!snapshot.has_value())
+        applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);
+    if (!makeRunPersistenceSnapshotInto(
+            workingSet_.candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            workingSet_.snapshot))
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     const auto persisted =
-        writeSnapshot(*snapshot, time, false, current,
+        writeSnapshot(workingSet_.snapshot, time, false, current,
                       RunPersistenceMutationKind::Transition);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
@@ -2043,14 +2515,15 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto& confirmed = slots_[currentHead_->current.slot]->snapshot;
-    const auto expected = makeRunPersistenceSnapshot(
+    RunPersistenceSnapshot expectedSnapshot;
+    const bool expectedValid = makeRunPersistenceSnapshotInto(
         current, persistedIds_, persistedIdCount_, confirmed.trigger,
         RunCheckpointTime{confirmed.checkpointMonotonicMillis, std::nullopt},
-        confirmed.intervalMinutes);
+        confirmed.intervalMinutes, expectedSnapshot);
     std::string expectedBytes;
     std::string confirmedBytes;
-    if (!expected.has_value() ||
-        encodeRunPersistenceSnapshot(*expected, expectedBytes) !=
+    if (!expectedValid ||
+        encodeRunPersistenceSnapshot(expectedSnapshot, expectedBytes) !=
             RunPersistenceCodecStatus::Success ||
         encodeRunPersistenceSnapshot(confirmed, confirmedBytes) !=
             RunPersistenceCodecStatus::Success ||
@@ -2064,17 +2537,28 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         return result(RunPersistenceResultStatus::NotDue);
     if (due != RunCheckpointScheduleStatus::Success)
         return result(RunPersistenceResultStatus::TimeWentBackwards);
-    auto candidate = current;
+    if (isActiveFermentingCurrent(current) &&
+        !time.utcUnixSeconds.has_value()) {
+        // No copy, schedule confirmation, or RAM change occurs for this
+        // skipped checkpoint.  The existing Current remains the last valid
+        // UTC-bearing recovery anchor.
+        return result(
+            RunPersistenceResultStatus::Blocked,
+            RunPersistenceStep::CandidateApply,
+            RunPersistenceTechnicalReason::TrustedAbsoluteTimeRequired);
+    }
+    workingSet_.candidate = current;
     if (liveSensorEvidence != nullptr)
-        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, persistedIds_, persistedIdCount_,
-        RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes());
+        applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);
+    const bool snapshotValid = makeRunPersistenceSnapshotInto(
+        workingSet_.candidate, persistedIds_, persistedIdCount_,
+        RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes(),
+        workingSet_.snapshot);
     // mutationKind is inert here: a periodic write only ever produces a
     // Committed head, which carries no mutation-kind field
     // (validCommittedHead).
-    return snapshot.has_value()
-               ? writeSnapshot(*snapshot, time, true, current,
+    return snapshotValid
+               ? writeSnapshot(workingSet_.snapshot, time, true, current,
                                RunPersistenceMutationKind::Transition)
                : result(RunPersistenceResultStatus::InvalidDecision,
                         RunPersistenceStep::CandidateApply,
@@ -2153,42 +2637,42 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     const auto beforePermission = current.sensorSelectionRuntime.permission;
     const auto beforeMode = *current.activeRunSensorMode;
     const auto beforeProcessState = current.processState.state;
-    auto candidate = current;
+    workingSet_.candidate = current;
     // Korrekturauftrag Befund 1 (zweiter Punkt): gemeinsamer mechanischer
     // Mutationshelfer mit dem manuellen Pfad (run_commands.cpp::
     // decideApplySensorSelectionAction) - das schliesst die zuvor fehlende
     // Uebernahme von mutation.runtime (sensorSelectionRuntime blieb bislang
     // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
     // duplizierten Sensormodus konsistent.
-    applySensorSelectionMutation(candidate, mutation);
+    applySensorSelectionMutation(workingSet_.candidate, mutation);
     if (mutation.event.has_value() &&
         resolveControlSensorRoleTransition(
             beforeProcessState, current.activeRunSensorMode,
-            candidate.processState.state, candidate.activeRunSensorMode)
+            workingSet_.candidate.processState.state,
+            workingSet_.candidate.activeRunSensorMode)
             .has_value() &&
-        !applySensorRoleChangeQualificationReset(candidate,
+        !applySensorRoleChangeQualificationReset(workingSet_.candidate,
                                                  time.monotonicMillis)) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     if (liveSensorEvidence != nullptr)
-        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
-    const auto snapshot =
-        makeRunPersistenceSnapshot(candidate, persistedIds_, persistedIdCount_,
-                                   RunCheckpointTrigger::SensorSelection, time,
-                                   schedule_.intervalMinutes());
-    if (!snapshot.has_value())
+        applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);
+    if (!makeRunPersistenceSnapshotInto(
+            workingSet_.candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::SensorSelection, time,
+            schedule_.intervalMinutes(), workingSet_.snapshot))
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     const auto persisted =
-        writeSnapshot(*snapshot, time, false, current,
+        writeSnapshot(workingSet_.snapshot, time, false, current,
                       RunPersistenceMutationKind::SensorSelection);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     applySensorSelectionMutation(current, mutation);
-    current.processState = candidate.processState;
+    current.processState = workingSet_.candidate.processState;
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     RunPersistenceResult out{};

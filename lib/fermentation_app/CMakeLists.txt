@@ -8,3 +8,41 @@ idf_component_register(
 # haelt gnu++17 (siehe platformio.ini und
 # docs/tasks/issue-72-implementation-plan.md, Abschnitt 5).
 target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
+
+# The #121 static product-stack gate reuses the existing GCC stack-usage and
+# callgraph artefacts for the product-reachable lifecycle and persistence
+# paths.  These flags are analysis-only and do not alter product semantics,
+# profile selection, or the configured task stack.  Clang's separate ESP-IDF
+# analysis build does not accept GCC's callgraph option.  The complete
+# component is instrumented so the configuration composition preceding the
+# persistence paths is covered as well.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(${COMPONENT_LIB} PRIVATE
+        -fstack-usage
+        -fcallgraph-info=su
+    )
+endif()
+
+# Der #29-Fehler-Seam bleibt ein privates, bring-up-only Compile-Artefakt.
+# Native und esp32_release erhalten weder die Definition noch den privaten
+# Include-Pfad; die Fachkomponente behaelt damit ihre portable oeffentliche
+# Oberflaeche und keine ESP-IDF-/Profilabhaengigkeit.
+if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        APP_ISSUE_29_BRINGUP_PROBE=1
+    )
+    target_include_directories(${COMPONENT_LIB} PRIVATE "private")
+endif()
+
+# The Slice-7 application bridge is private to the dedicated bring-up
+# harness.  It is absent from the release and native compilation units.
+if(APP_ISSUE_90_SLICE7_HARNESS)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #90 Slice-7 application bridge is bring-up-only"
+        )
+    endif()
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        APP_ISSUE_90_SLICE7_HARNESS=1
+    )
+endif()

@@ -1,97 +1,12 @@
-# VORLAEUFIGE GPIO-ROLLEN – KEINE BESTAETIGTE VERDRAHTUNG
+# Nichtautoritativ: Kompatibilitaetshinweis.
 #
-# Alle GPIOs und aktiven Pegel bleiben bis Issue #29 bis #33 TBD_HARDWARE.
-# Diese Datei beschreibt nur benoetigte Rollen. Kein Zahlenwert darf vor der
-# realen Messung als produktive Aktorbelegung verwendet werden.
+# Konkrete R1-GPIO-Zahlen stehen ausschliesslich in der Board-/Wiring-SSOT:
+# config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+#
+# Diese Datei ist kein vollstaendiges Pinmapping und darf keine zweite
+# handgepflegte Pinwahrheit werden.
 
-hardware_profile:
-  id: ESP32_32E_4MB_UNVERIFIED
-  state: HARDWARE_UNVERIFIED
-  board_revision: TBD_HARDWARE
-  pins_confirmed: false
-  active_levels_confirmed: false
-  boot_levels_confirmed: false
-
-one_wire:
-  chamber_air:
-    gpio: TBD_HARDWARE
-    pullup_ohm: TBD_HARDWARE
-    external_connector: false
-  product:
-    gpio: TBD_HARDWARE
-    pullup_ohm: TBD_HARDWARE
-    external_connector: true
-  heatsink:
-    gpio: TBD_HARDWARE
-    pullup_ohm: TBD_HARDWARE
-    external_connector: false
-  fallback_topology:
-    fixed_sensors_shared_gpio: TBD_HARDWARE
-    product_must_remain_separate: true
-
-bts7960:
-  rpwm_gpio: TBD_HARDWARE
-  lpwm_gpio: TBD_HARDWARE
-  r_en_gpio: TBD_HARDWARE
-  l_en_gpio: TBD_HARDWARE
-  r_is_adc_gpio: TBD_HARDWARE
-  l_is_adc_gpio: TBD_HARDWARE
-  ris_lis_enabled: false
-  hardware_pulldowns_verified: false
-  active_level: TBD_HARDWARE
-  safe_boot_state: both_directions_disabled
-
-onboard_mosfet_channels:
-  channel_1:
-    gpio: TBD_HARDWARE
-    role: internal_fan_candidate
-    active_level: TBD_HARDWARE
-  channel_2:
-    gpio: TBD_HARDWARE
-    role: external_fan_candidate
-    active_level: TBD_HARDWARE
-  channel_3:
-    gpio: TBD_HARDWARE
-    role: buzzer_candidate
-    active_level: TBD_HARDWARE
-  channel_4:
-    gpio: TBD_HARDWARE
-    role: spare
-    active_level: TBD_HARDWARE
-
-spi_display:
-  sck_gpio: TBD_HARDWARE
-  mosi_gpio: TBD_HARDWARE
-  miso_gpio: TBD_HARDWARE
-  cs_gpio: TBD_HARDWARE
-  dc_gpio: TBD_HARDWARE
-  reset_gpio: TBD_HARDWARE
-  backlight_gpio: TBD_HARDWARE
-  controller: ILI9341
-  controller_status: confirmed_order
-
-spi_touch:
-  shared_bus_with_display: TBD_HARDWARE
-  cs_gpio: TBD_HARDWARE
-  irq_gpio: TBD_HARDWARE
-  controller: TBD_HARDWARE
-  candidate_controller: XPT2046
-  candidate_status: unverified_order_description
-  controller_status: TBD_HARDWARE
-
-uart_programming:
-  tx_gpio: default_rom_uart_TBD_HARDWARE
-  rx_gpio: default_rom_uart_TBD_HARDWARE
-  adapter: FT232RL
-
-optional_future:
-  external_12v_adc_gpio: TBD_HARDWARE
-  door_contact_gpio: not_allocated
-  fan_tach_gpio: not_allocated
-
-verification:
-  measure_unloaded_before_connecting_consumers: true
-  verify_boot_reset_and_bootloader_levels: true
-  connect_fans_individually: true
-  verify_bts7960_without_peltier: true
-  first_peltier_enable_service_pulse_only: true
+profile_id: esp32_32e_quad_mosfet_r1
+profile_source: config/board_profiles/esp32_32e_quad_mosfet_r1.yaml
+authority: non_authoritative_pointer
+status: superseded_by_board_profile

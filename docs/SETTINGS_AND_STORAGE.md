@@ -339,7 +339,9 @@ Anforderungen:
 - nach Root-Commit nur nicht allokierenden, nicht fehlschlagenden Runtime-
   Snapshot veroeffentlichen
 - `CommitOutcomeUnknown` nur nach vollstaendigem Root-/Graph-Readback als
-  eindeutig alt oder neu aufloesen
+  eindeutig alter oder neuer kanonischer Generation aufloesen; daraus folgt
+  keine technische Einzel-Record- oder Same-Key-OLD/NEW-Garantie und ein
+  unklarer Readback bleibt recovery-required
 - bei nicht abschliessbarem Readback stabil typisiert fail closed bleiben:
   kein Snapshot-Publish, keine normale Runtime, keine weitere Mutation oder
   Slotwiederverwendung, kein Rollback und kein Factory-Fallback

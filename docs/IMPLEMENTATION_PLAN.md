@@ -70,7 +70,10 @@ unbestaetigte Hardware niemals freigeben.
 - Regelsensorauswahl, Ersatzbetrieb und Rueckkehr;
 - PI-Regelung und Luftbegrenzung;
 - Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
-- Fehlerklassen, persistente Verriegelungen und `SAFE_BOOT`;
+- endliche typisierte `FaultCode`s und Producer-Evidenz; stateless
+  `ActuationInterlock`, RAM-Watchdog-Latch im `ActuatorPlanner` und
+  fail-closed `SAFE_BOOT` als bestehende Load-/Lifecycle-Disposition, wo
+  fachlich zutreffend – kein generischer persistenter Safety-Latch;
 - reproduzierbare Fehlerinjektionen.
 
 Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
@@ -111,7 +114,8 @@ Owner-Gates nicht vorweggenommen werden.
 - ROM-Bootloader- und UART-Recovery nachweisen;
 - Flash, Partition, Heap und Resetursachen erfassen;
 - GPIO- und Businventar erstellen;
-- Boot-, Reset- und Bootloaderpegel unbelastet messen.
+- Boot-, Reset- und Bootloaderverhalten fail-closed funktional pruefen; eine
+  elektrische Pegelmessung ist fuer R1 nicht vorgeschrieben.
 
 ### H2 – Sensoren, Display und Touch
 
@@ -122,17 +126,21 @@ Owner-Gates nicht vorweggenommen werden.
 
 ### H3 – Luefter, Summer und MOSFET-Ausgaenge
 
-- Kanaele und aktive Pegel unbelastet messen;
+- Kanaele und Verbraucherfunktion einzeln funktional pruefen;
 - Verbraucher einzeln anschliessen;
-- Strom, Anlauf, Nachlauf und Bootverhalten dokumentieren;
+- Nachlauf und Bootverhalten dokumentieren; Strom- und Anlaufdaten nur bei
+  tatsaechlichem Gate und geeignetem Messmittel erfassen;
 - Aussenluefter fuer spaetere Peltierpruefung freigeben.
 
 ### H4 – BTS7960 ohne Peltier
 
-- Enable, Richtungen, Pulldowns und Ausgangspolaritaet verifizieren;
+- Enable, Richtungen und Pulldowns/fail-low Beschaltung gegen die SSOT
+  verifizieren;
 - gleichzeitige Richtungsfreigabe ausschliessen;
 - Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen;
-- R_IS/L_IS nur nach Pegel- und Nutzbarkeitsnachweis integrieren.
+- R_IS/L_IS in R1 nicht anschliessen, nicht messen und nicht implementieren;
+  eine spaetere Nutzung ist `FUTURE_RELEASE` und benoetigt ein eigenes Issue,
+  einen vollstaendigen Plan und ein eigenes Owner-Gate.
 
 ### H5 – Begrenzte Peltierpruefung
 
@@ -143,7 +151,9 @@ Vor dem ersten realen Peltierpuls muessen alle Gates aus
 - montierte und gepruefte einmalige Temperatursicherung;
 - Kuehlkoerper und funktionsgepruefter Aussenluefter;
 - gueltige Pflichtsensoren;
-- bestaetigte BTS7960-Pinbelegung, AUS-Pegel und Polaritaet;
+- SSOT-konforme BTS7960-Pinbelegung, fail-low AUS-Zustand und nachgewiesener
+  Adapterinterlock; Richtung/Polaritaet wird im begrenzten Servicepuls
+  funktional bestimmt;
 - stabile Versorgung und jederzeitiger Abbruch;
 - validiertes `STANDBY` und geschuetzter Serviceablauf.
 
@@ -199,8 +209,11 @@ Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
 - Ein spaeterer Softwareblock darf einen fehlenden fachlichen oder Safetyvertrag
   nicht still ersetzen.
 - Reale Adapter werden erst nach dem zugehoerigen portseitigen Vertrag gebaut.
-- Produktive Aktorfreigabe verlangt den Fehler-/Safetykern sowie die elektrischen
-  Hardwaregates.
+- Produktive Aktorfreigabe verlangt frische Producer-Evidenz am stateless
+  `ActuationInterlock`, den RAM-Watchdog-Latch des `ActuatorPlanner` sowie die
+  owning SSOT-, funktionalen Hardware- und, für #33, Adapter-Safety-Gates;
+  ein generischer persistenter Safety-Latch ist kein R1-Vertrag. Eine generelle
+  elektrische Pegelmessung ist fuer R1 nicht erforderlich.
 - Thermische Parameter bleiben `TBD_COMMISSIONING`, bis Messnachweise vorliegen.
 - Ressourcenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`, bis reproduzierbare Builds
   und Belastungsmessungen vorliegen.

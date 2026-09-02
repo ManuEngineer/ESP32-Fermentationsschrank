@@ -1,8 +1,9 @@
 idf_component_register(
     SRC_DIRS "src"
     INCLUDE_DIRS "src"
-    REQUIRES device_platform
-    PRIV_REQUIRES esp_timer
+    REQUIRES device_platform nvs_flash
+    PRIV_REQUIRES esp_timer esp_netif lwip esp-idf-lib__ds3231
+                  esp-idf-lib__i2cdev
 )
 
 # ESP-IDF 6.0.2 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt

@@ -31,6 +31,45 @@ thermische `SAFETY_RECOVERY` bleiben ausserhalb des #24-R1-Produktpfads.
 Hardware- und thermische Nachweise gehoeren zu E5 und den dort genannten
 Inbetriebnahme-Gates.
 
+Issue #124 ersetzt die historische #24-Entscheidung fuer den eng begrenzten
+Current-`FERMENTING`-Fall: Ist der aktuelle Run-/Checkpointgraph vollstaendig
+validiert, `priorBootPhaseElapsed` exakt fuer `FERMENTING` getaggt und eine
+vertrauenswuerdige aktuelle UTC vorhanden, wird die Phase mit der Wandzeit
+seit dem Checkpoint logisch automatisch fortgesetzt. Das ist keine
+Benutzerentscheidung und keine Aktorfreigabe. Die Aktoren bleiben nach jedem
+Boot AUS, bis die bestehenden frischen Config-/Sensor-/Hardware-/Safety- und
+Planner-Gates erfolgreich sind.
+
+Fehlt UTC unmittelbar nach Boot, bleibt der FSM-Zustand
+`RecoveryEvaluation` mit der RAM-Disposition `WaitingForTrustedTime`. Es
+werden weder Tombstone noch Recoverykandidat nur fuer das Warten persistiert;
+die gleiche revisionsgebundene Evidenz wird spaeter erneut bewertet. Eine
+negative UTC-Differenz, nicht exakte Zeitbasis oder untrusted Persistenz bleibt
+fail-closed. `wall_clock_since_checkpoint_seconds` bezeichnet Wandzeit seit
+dem Record und wird nicht als exakte physische Ausfalldauer ausgegeben.
+
+### R5.9-Produkt-Recovery-Gate und Backendcharakterisierung
+
+Die technische Backendcharakterisierung ist keine Produktfreigabe. Fuer
+Issue #90 bleiben beide Ebenen getrennt und beobachtbar:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` sichtbar.
+Ein Backend-FAIL oder eine bekannte Limitation darf nur dann mit einem
+Produkt-Recovery-PASS koexistieren, wenn die hoehere Recoverylogik den
+Record-/Generations-/Runzustand vollstaendig validiert, unklare Zustaende
+korrekt klassifiziert und fail-closed bis zum logischen Gate bleibt. Kein
+Recoverystatus, keine Projektion und keine UI erzeugt daraus allein eine
+physische Aktorfreigabe; #90 bleibt actor-free.
+
 ## Versorgungskonzept des ersten Releases
 
 ### Verbindliche Basis
@@ -180,20 +219,16 @@ Vorgesehen sind:
 
 ### Onboard-MOSFET-Ausgaenge
 
-Die tatsaechlichen Pegel waehrend:
+Für Onboard-MOSFET-Ausgänge ist keine generelle elektrische Pegel-, GPIO-
+Spannungs- oder Multimetermessung ein R1-Gate. Stattdessen wird das
+fail-closed-Verhalten mit sicherem Einzelverbraucher für Einschalten, Reset,
+Brownout, normalen Boot, UART-Bootloader und fehlende Firmware funktional im
+owning Hardware-Scope verifiziert. Ein nicht ausgeführter oder fehlgeschlagener
+funktionaler Nachweis ist kein PASS und gibt keinen Aktor frei.
 
-- Einschalten
-- Reset
-- Brownout
-- normalem Boot
-- UART-Bootloader
-- fehlender Firmware
-
-werden am gelieferten Board praktisch gemessen.
-
-Ist ein fuer Luefter oder Summer verwendeter Ausgang dabei nicht nachweislich
-sicher, wird eine externe Pull-Beschaltung, Invertierung, Freigabestufe oder andere
-Hardwareloesung vorgesehen.
+Zeigt die funktionale Prüfung einen unsicheren Ausgang, wird eine externe
+Pull-Beschaltung, Invertierung, Freigabestufe oder andere Hardwarelösung für
+den betroffenen Scope bewertet.
 
 `setup()` allein gilt nicht als ausreichende Sicherheitsmassnahme, weil die
 Ausgaenge bereits vor Ausfuehrung der Firmware einen Pegel besitzen koennen.
@@ -333,10 +368,10 @@ kann, wird erst angewendet, nachdem Transaktionsabsicht und neue Revision
 erfolgreich persistiert wurden. Ein unvollstaendiger oder nicht eindeutig
 aufgeloester Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`.
 
-Vor jeder Resume- oder Fresh-Start-Freigabe muessen die bestehende
-Write-before-Apply-Transaktion den Gesamtstatus `Applied`, die anschliessende
-FSM-Anwendung und frische Config-/Sensor-/Planner-Evidenz liefern. Ein
-kanonisches `Success` benoetigt keinen zweiten Readback; nur
+Vor jeder Recoverykandidaten-, Resume- oder Fresh-Start-Freigabe muessen die
+bestehende Write-before-Apply-Transaktion den Gesamtstatus `Applied`, die
+anschliessende FSM-Anwendung und frische Config-/Sensor-/Planner-Evidenz
+liefern. Ein kanonisches `Success` benoetigt keinen zweiten Readback; nur
 `CommitOutcomeUnknown` wird nach dem vorhandenen `writeExact()`-Vertrag durch
 Readback aufgeloest. Nach `PreparedHead` oder Slot-Teilmutation bleibt der
 Coordinator bei `BlockedIndeterminate`/unknown-safe.
@@ -404,10 +439,15 @@ Verbindliche Regeln:
   nicht akkumuliert.
 - Ein Neustart erzeugt keine implizite Freigabe und keinen neuen persistenten
   Safety-Latch.
-- Eine nicht eindeutig einfache R1-Fortsetzung wird als `NoActiveRun` beendet;
-  Charge-Rettung und gewichteter Ausfallfortschritt sind nicht #24-R1.
-- Ist die Lauf- oder Sicherheitslage nicht eindeutig, wird nicht automatisch
-  fortgesetzt.
+- Ein exakt rekonstruierbarer Current-`FERMENTING`-Run wird nach #124 logisch
+  automatisch fortgesetzt; der Stromausfall allein verlangt keine
+  Benutzerbestaetigung und gibt keine Aktoren frei.
+- Fehlt fuer diesen Pfad die aktuelle UTC, bleibt
+  `RecoveryEvaluation/WaitingForTrustedTime` RAM-only bestehen. Ist die Lauf-
+  oder Sicherheitslage anderweitig nicht eindeutig, wird fail-closed weder
+  fortgesetzt noch als `NoActiveRun` umetikettiert.
+- Charge-Rettung, temperaturgewichteter Ausfallfortschritt und automatische
+  Fallback-Promotion sind nicht #124-R1.
 - Der Neustart selbst gilt nicht als Ursachenbehebung.
 
 ## Akzeptierte Entscheidungen aus Phase 8C
@@ -421,8 +461,9 @@ Verbindliche Regeln:
 - [x] vorhandener zusaetzlicher DS18B20 ersetzt keine unabhaengige Abschaltung
 - [x] BTS7960-Eingaenge durch Hardware-Pulldowns beziehungsweise nachgewiesen
       sichere Beschaltung inaktiv halten
-- [x] Boot-, Reset- und Bootloaderpegel aller verwendeten Ausgaenge praktisch
-      messen
+- [x] Boot-, Reset- und Bootloaderverhalten aller verwendeten Ausgaenge
+      fail-closed funktional pruefen; eine generelle elektrische
+      Pegelmessung ist fuer R1 nicht erforderlich
 - [x] Resetcause diagnostisch auswerten, ohne Neustartakkumulation
 - [x] letzte gueltige Konfigurationsrevision als Rueckfall verwenden
 - [x] niemals automatischen Werksreset wegen Datenfehler ausloesen
@@ -446,7 +487,8 @@ Verbindliche Regeln:
 - thermisch kritischste Montageposition der Temperatursicherung
 - Nachweis der sicheren Unterbrechung des Peltierpfades
 - BTS7960-Pulldowns beziehungsweise externe Freigabestufe auslegen
-- Boot-/Resetpegel aller Ausgaenge messen
+- Boot-/Resetverhalten aller Ausgaenge funktional fail-closed pruefen; keine
+  generelle R1-Pegelmesspflicht
 - E5/Future: konkrete Watchdog-Zeiten und Neustartzaehlergrenzen fuer spaetere
   Hardware-/Betriebsvertraege; nicht #24-R1
 - spaetere Hardware-/Service-Definition des `SAFE_BOOT`-Zugangs; der #24-R1-

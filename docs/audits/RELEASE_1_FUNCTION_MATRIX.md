@@ -4,13 +4,24 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 
 ## Lesart
 
+```text
+SNAPSHOT_CLASSIFICATION=HISTORICAL_NON_CURRENT_STATUS
+SNAPSHOT_DATE=2026-07-27
+SNAPSHOT_BASE_COMMIT=7713a66cbf51eb078bd0f5e43c1163d1e0f47e1f
+CURRENT_STATUS_SSOT=docs/ROADMAP.md
+CURRENT_NORMATIVE_SSOT=docs/SPECIFICATION_REVIEW.md and specialized contracts
+```
+
 Stand: 2026-07-27 (Original-Audit), Basis-Commit
 `7713a66cbf51eb078bd0f5e43c1163d1e0f47e1f`. Synchronisiert am 2026-08-05
 gemaess der Espressif-first-Regel (`docs/ENGINEERING_PRINCIPLES.md`) nach dem
 Wechsel der Produktionstoolchain auf ESP-IDF `6.0.2` (Issue #71 / PR #79,
 Basis-Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e`). Die Matrix
-konsolidiert die akzeptierte Release-1-Grenze; sie aendert weder Anforderungen
-noch Issues. Die Behandlungskategorien sind Vorschlaege zur Umsetzung.
+konsolidiert diesen historischen Auditstand; sie ist weder aktuelle Status-
+noch normative Quelle und ihre Zeilen werden nicht rückwirkend modernisiert.
+Aktuelle Entscheidungen stehen in `ROADMAP.md` beziehungsweise den
+spezialisierten Fachverträgen. Die Behandlungskategorien sind Vorschläge zur
+damaligen Umsetzung.
 Technische Kandidaten stehen in
 [`COMPONENT_EVALUATIONS.md`](COMPONENT_EVALUATIONS.md).
 
@@ -18,7 +29,7 @@ Technische Kandidaten stehen in
 |---|---|---|---|---|---|---|---|---|
 | Temperaturmessung | Plattformport/Mocks vorhanden; reale Adapter fehlen | zwingend: Produktfuehler optional und primaer, wenn verwendbar, darf in Stillstand/zulaessigem Lauf fehlen; Raum-/Luftsensor regulaerer Ersatz; Kuehlkoerper-/Peltier-Schutzsensor fest und verpflichtend, fehlend/ungueltig/veraltet/nicht vertrauenswuerdig sperrt ausserhalb des Treibers | `ITemperatureSource`, Mock und thermische Simulation | schmaler technischer Busadapter; Qualitaet, Rollenprioritaet und Peltierfreigabe separat im Fach-/Safety-Kern | hoch: Busse, Pull-ups, Leitungen, ROMs, Trennungs-/Wiederkehrverhalten | `ADAPTER_EXISTING_LIBRARY` nach Sensorstufen 1–3 direkt nach minimaler Hardwarebaseline; jeden Stack identisch auf Topologie A/B testen, Software- und Topologiewahl trennen; Produktbus separat, A bevorzugt, B pinabhaengiger Rueckfall, C ausgeschlossen; parallel zu #20–#24 | 1-Wire-Protokoll nicht neu schreiben; Adapter liefert Bus-ID, ROM, Mess-/Zeit-/Aufloesungs-, CRC-, Anwesenheits-, Timeout- und Fehlerstatus, keine Rollen/Freigaben; Anschlussausfuehrung bleibt eine spaetere Hardwareentscheidung | OD-03a Stack; OD-03b A oder begruendeter Rueckfall B nach GPIO-/Fehlerisolationsmessung; keine drei GPIOs vorreservieren |
 | Peltier/BTS7960 | abstrakter bidirektionaler Port/Mock vorhanden | zwingend | `IBidirectionalActuatorSink`; Infineon-Datenblatt | kleiner GPIO-/Enable-Adapter und gesamte Safety-/Timinglogik | sehr hoch | `CONFIGURE_FRAMEWORK` + `CUSTOM_SAFETY_CORE`, Gate #33 | Hardwaretreiber ist klein, Freigabepolitik projektspezifisch | reale Modulvariante, Pins, Pegel, Polaritaet, R_IS/L_IS |
-| Luefter | binaerer Port/Mock vorhanden | zwingend | `IBinaryOutputSink` | Rollenbindung, Innen-/Aussenlogik und Nachlauf | hoch | `CONFIGURE_FRAMEWORK`, Gate #32 | kein Nutzen einer eigenen Luefterbibliothek | Kanaele, aktive Pegel, Strom und Anlauf |
+| Luefter | binaerer Port/Mock vorhanden | zwingend | `IBinaryOutputSink` | Rollenbindung, Innen-/Aussenlogik und Nachlauf | hoch | `CONFIGURE_FRAMEWORK`, Gate #32 | kein Nutzen einer eigenen Luefterbibliothek | funktionale Kanal-/Verbraucherwirkung, Boot-/Reset-Fail-Closed-Verhalten sowie Strom/Anlauf nur bei konkretem Gate und geeignetem Messmittel |
 | Safety-Core | Teilinvarianten, Zustands-/Kommandokern vorhanden; systemweiter Kern fehlt | zwingend | deterministische Modelle, virtuelle Zeit, Testports | Sensor-/Aktorfreigabe, Fehlerklassen, Verriegelung, `SAFE_BOOT`, Injektionen | Software parallel zu minimaler Baseline und aktorfreien Spikes; reale Aktorgates spaeter | `CUSTOM_SAFETY_CORE` | externe Treiber kennen Projektinvarianten nicht; Bibliothekstypen und reale GPIOs bleiben ausserhalb | keine Bibliothekswahl; Grenzwerte erst #35 |
 | Minimale ESP32-Hardwarebaseline | noch nicht real nachgewiesen | zwingend vor Display-/Touch- und Sensorspikes, nicht vom Abschluss #20–#24 abhaengig | fixierte ESP-IDF-`6.0.2`-Toolchain, Bring-up-Profil `esp32_bringup`, UART/esptool | Board/UART/Flash/Boot/Reset/Versorgung dokumentieren; kein PSRAM, Ressourcenbaseline und GPIO-/Businventar bestaetigen; alle Aktorpfade trennen oder inaktiv halten | hoch, aber ohne Aktorbetrieb | `BLOCKED_HARDWARE`; kleinsten Baseline-Anteil von #29 spaeter getrennt planen | sicheres Mess- und Flashfundament ohne finale Pins, Partitionierung, Bibliotheken, Adapter oder Parameter | reale Boardrevision und Hardwarezugang |
 | Display | nur UI-Spezifikation, kein Treiber | zwingend; einzige lokale Anzeigeoberflaeche | View-Anforderungen und Hardwarequellen | Displayadapter und schlanke Renderinggrenze | hoch | `ADAPTER_EXISTING_LIBRARY` nach gestuftem Vergleich direkt nach minimaler Baseline; Stufe 0 Hardware, alle vier gleichrangigen Kandidatengruppen Stufe 1, ausreichende Kandidaten Smoke-Test, nur dessen Erfolge Vollmatrix, danach Stufe-4-Auswahl; parallel zu #20–#24 | ILI9341-Treiber nicht neu schreiben; Reservekandidaten nur bei dokumentiertem Ausloeser, keine zweite lokale Anzeige und keine Aktorwirkung | ESP-IDF `esp_lcd`/`esp_lcd_ili9341`/`esp_lcd_touch` als Espressif-first-Erstkandidaten sowie LovyanGFX, TFT_eSPI oder LCDWiki als ergebnisoffene Evaluationskandidaten; bedingte Reserven; bevorzugter und Rueckfallkandidat in Stufe 4 |

@@ -147,9 +147,19 @@ struct RunPersistenceRawRecord {
     std::size_t idCount, RunCheckpointTrigger trigger,
     const RunCheckpointTime& time, std::uint16_t intervalMinutes);
 
+[[nodiscard]] bool makeRunPersistenceSnapshotInto(
+    const RunCommandState& state,
+    const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
+    std::size_t idCount, RunCheckpointTrigger trigger,
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes,
+    RunPersistenceSnapshot& destination);
+
 // Technical restoration only: reconstructs exactly the run projection. It
 // does not make recovery, boot, fault or safety decisions.
 [[nodiscard]] std::optional<RunCommandState> restoreRunPersistenceSnapshot(
     const RunPersistenceSnapshot& snapshot);
+
+[[nodiscard]] bool restoreRunPersistenceSnapshotInto(
+    const RunPersistenceSnapshot& snapshot, RunCommandState& destination);
 
 }  // namespace fermentation

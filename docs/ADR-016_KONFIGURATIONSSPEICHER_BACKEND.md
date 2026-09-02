@@ -35,10 +35,13 @@ Ein verlustfreier Adapter zwischen dem aktuellen Port und NVS existiert nicht:
   Bootstrap gelesen werden muss. Das erzeugt genau in #57 eine zirkulaere
   Abhaengigkeit.
 
-Zusaetzlich bietet NVS bereits eine Pruefsumme je Eintrag, atomares Ersetzen je
-Eintrag, Wear-Leveling und Bereinigung geloeschter Eintraege. Ohne benannte
-Backendentscheidung ist nicht bewertbar, welche Envelope-Felder notwendige
-Ergaenzung und welche Verdopplung sind.
+Zusaetzlich bietet NVS eine Pruefsumme je Eintrag, einen Eintrags-
+Schreibmechanismus, Wear-Leveling und Bereinigung geloeschter Eintraege. Das
+belegt keine technische OLD/NEW-Garantie fuer einen unterbrochenen Write: Der
+Readback kann danach auch `NotFound`, `ReadError`, `CapacityError` oder einen
+anderen bestehenden Readstatus liefern. Ohne benannte Backendentscheidung ist
+nicht bewertbar, welche Envelope-Felder notwendige Ergaenzung und welche
+Verdopplung sind.
 
 Die Entscheidung muss vor Issue #55 fallen, weil dort die konkreten Dokument-,
 Manifest- und Root-Schluessel definiert werden.
@@ -55,11 +58,13 @@ Manifest- und Root-Schluessel definiert werden.
 | Ressourcenbedarf | eine NVS-Partition, Groesse in #29 zu bestimmen |
 | Plattformtauglichkeit | hoch; 15-Zeichen-ASCII ist der kleinste gemeinsame Nenner plausibler Backends |
 
-**Vorteile:** Atomizitaet, Integritaet und Flashlebensdauer sind geloest, ohne
-sie selbst zu implementieren. Der `IStateStore`-Vertrag einschliesslich
-`CommitOutcomeUnknown` bildet das reale NVS-Verhalten korrekt ab. Werte werden
-als Blob gespeichert und bleiben binaersicher; nur der Schluesselraum wird
-eingeschraenkt.
+**Vorteile:** Integritaet und Flashlebensdauer werden genutzt, ohne sie selbst
+zu implementieren. Der `IStateStore`-Vertrag einschliesslich
+`CommitOutcomeUnknown` bildet das reale NVS-Verhalten konservativ ab: Ein
+erfolgreich zurueckgekehrter Write bestaetigt den neuen Wert, ein unklarer
+Write wird erst durch hoeheren Readback-/Recoverykontext bewertet. Werte
+werden als Blob gespeichert und bleiben binaersicher; nur der Schluesselraum
+wird eingeschraenkt.
 
 **Nachteile:** Schluessel muessen kurz und in einem eingeschraenkten Zeichensatz
 gewaehlt werden. Die Groesse der NVS-Partition wird zu einem eigenen
@@ -118,6 +123,21 @@ Variante A.
    41 auf 37 Bytes ohne UTC und von 49 auf 45 Bytes mit UTC. `StorageEpoch`
    bleibt im Envelope, weil eine Werksreset-Generation eine plattformseitige
    Eigenschaft des Speichers ist.
+
+### Release-1-Produktgrenze
+
+Ein erfolgreich zurueckgekehrter Write bestaetigt den vollstaendig und
+dauerhaft gespeicherten neuen Wert. Fuer einen unklaren oder unterbrochenen
+Write gibt es dagegen keine technische Einzel-Record- oder Same-Key-OLD/NEW-
+Garantie. Ein spaeterer Read kann einen vollstaendig lesbaren Record,
+`NotFound`, `ReadError`, `CapacityError` oder einen anderen bestehenden
+Readstatus liefern. `CommitOutcomeUnknown` bleibt unbekannt und wird nicht
+geraten; ein spaeterer Readbackfehler oder ein waehrend einer begonnenen
+Readphase verlorener Record ist nicht dasselbe wie ein urspruenglich fehlender
+Key. Erst die owning-context-Ebene darf nach vollstaendiger Envelope-,
+Generations-, Referenz- und Root-/Manifestgraphvalidierung einen
+Produktzustand ableiten. Diese Klarstellung aendert weder den schmalen
+`IStateStore`-Port noch die NVS-Defaultentscheidung.
 
 ## Folgen
 

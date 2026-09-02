@@ -181,38 +181,60 @@ bool validRevisionMetadata(const RunRevision& revision) {
                                           revision.targetTemperatureChanged);
 }
 
+bool makeInitialEffectiveRunValues(const ProgramDocument& sourceProgram,
+                                   ProgramSourceKind sourceKind,
+                                   std::uint32_t sourceProgramRevision,
+                                   EffectiveRunValues& destination) {
+    if (sourceProgramRevision == 0U ||
+        !sourceMatchesProgram(sourceProgram, sourceKind) ||
+        !validateProgram(sourceProgram, ValidationPurpose::Runnable).valid()) {
+        return false;
+    }
+    const auto& initialStage = sourceProgram.program.fermentationStages.front();
+    if (!initialStage.targetTemperatureCelsius.has_value() ||
+        !initialStage.durationMinutes.has_value()) {
+        return false;
+    }
+    destination = {*initialStage.targetTemperatureCelsius,
+                   *initialStage.durationMinutes};
+    return true;
+}
+
 }  // namespace
 
 ActiveRun::ActiveRun(RunProgramSnapshot snapshot,
                      EffectiveRunValues initialValues)
     : snapshot_(std::move(snapshot)), effectiveValues_(initialValues) {}
 
+ActiveRun::ActiveRun(RestoreConstructionTag restoreTag,
+                     RunProgramSnapshot snapshot,
+                     EffectiveRunValues initialValues)
+    : ActiveRun(std::move(snapshot), initialValues) {
+    static_cast<void>(restoreTag);
+}
+
 std::optional<ActiveRun> ActiveRun::start(const ProgramDocument& sourceProgram,
                                           ProgramSourceKind sourceKind,
                                           std::uint32_t sourceProgramRevision) {
-    if (sourceProgramRevision == 0U ||
-        !sourceMatchesProgram(sourceProgram, sourceKind) ||
-        !validateProgram(sourceProgram, ValidationPurpose::Runnable).valid()) {
-        return std::nullopt;
-    }
-    const auto& initialStage = sourceProgram.program.fermentationStages.front();
-    if (!initialStage.targetTemperatureCelsius.has_value() ||
-        !initialStage.durationMinutes.has_value()) {
+    EffectiveRunValues initialValues;
+    if (!makeInitialEffectiveRunValues(sourceProgram, sourceKind,
+                                       sourceProgramRevision, initialValues)) {
         return std::nullopt;
     }
     return ActiveRun{{sourceProgram, sourceKind, sourceProgramRevision},
-                     {*initialStage.targetTemperatureCelsius,
-                      *initialStage.durationMinutes}};
+                     initialValues};
 }
 
-std::optional<ActiveRun> ActiveRun::restore(
+bool validateRunProgramSnapshotInto(
     const RunProgramSnapshot& snapshot,
     const std::array<RunRevision, kMaximumRunRevisions>& revisions,
-    std::size_t revisionCount) {
-    auto restored = start(snapshot.sourceProgram, snapshot.sourceKind,
-                          snapshot.sourceProgramRevision);
-    if (!restored.has_value() || revisionCount > kMaximumRunRevisions) {
-        return std::nullopt;
+    std::size_t revisionCount, EffectiveRunValues& effectiveValues) {
+    EffectiveRunValues current;
+    if (!makeInitialEffectiveRunValues(
+            snapshot.sourceProgram, snapshot.sourceKind,
+            snapshot.sourceProgramRevision, current) ||
+        revisionCount > kMaximumRunRevisions) {
+        return false;
     }
 
     std::optional<std::int64_t> latestUnixTimestamp;
@@ -222,7 +244,7 @@ std::optional<ActiveRun> ActiveRun::restore(
             !validMonotonicEpoch(revisions, index) ||
             revision.stageIndex >=
                 snapshot.sourceProgram.program.fermentationStages.size() ||
-            !equalValues(revision.before, restored->effectiveValues_) ||
+            !equalValues(revision.before, current) ||
             !validRevisionMetadata(revision) ||
             !validTargetTemperature(snapshot, revision.stageIndex,
                                     revision.after.targetTemperatureCelsius) ||
@@ -234,21 +256,47 @@ std::optional<ActiveRun> ActiveRun::restore(
                                revisions[index - 1U].monotonicEpoch)) ||
             unixTimestampWentBackwards(revision.timestamp,
                                        latestUnixTimestamp)) {
-            return std::nullopt;
+            return false;
         }
 
-        restored->revisions_[index] = revision;
-        restored->effectiveValues_ = revision.after;
-        ++restored->revisionCount_;
+        current = revision.after;
         if (revision.timestamp.unixTimeSeconds.has_value()) {
             latestUnixTimestamp = revision.timestamp.unixTimeSeconds;
         }
     }
-    if (revisionCount > 0U) {
-        restored->monotonicEpoch_ =
-            revisions[revisionCount - 1U].monotonicEpoch + 1U;
+    effectiveValues = current;
+    return true;
+}
+
+std::optional<ActiveRun> ActiveRun::restore(
+    const RunProgramSnapshot& snapshot,
+    const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+    std::size_t revisionCount) {
+    std::optional<ActiveRun> restored;
+    if (!restoreInto(snapshot, revisions, revisionCount, restored)) {
+        return std::nullopt;
     }
     return restored;
+}
+
+bool ActiveRun::restoreInto(
+    const RunProgramSnapshot& snapshot,
+    const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+    std::size_t revisionCount, std::optional<ActiveRun>& destination) {
+    EffectiveRunValues effectiveValues;
+    if (!validateRunProgramSnapshotInto(snapshot, revisions, revisionCount,
+                                        effectiveValues)) {
+        return false;
+    }
+    destination.emplace(RestoreConstructionTag{}, snapshot, effectiveValues);
+    for (std::size_t index = 0U; index < revisionCount; ++index) {
+        destination->revisions_[index] = revisions[index];
+    }
+    destination->revisionCount_ = revisionCount;
+    destination->monotonicEpoch_ =
+        revisionCount > 0U ? revisions[revisionCount - 1U].monotonicEpoch + 1U
+                           : 0U;
+    return true;
 }
 
 RunAdjustmentDecision ActiveRun::decideAdjustment(

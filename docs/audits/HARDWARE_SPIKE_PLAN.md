@@ -311,10 +311,10 @@ Nur Kandidaten mit `PASS_SMOKE_TEST` erreichen Stufe 3.
 |---|---|
 | Display | genau das gelieferte, als TZT/LCDWiki MSP2807 bestellte Modul; reale Variante in Stufe 0 bestimmen |
 | Controller | vor Test praktisch identifizieren; ILI9341/XPT2046 nicht allein aus Lieferantenangabe als bestaetigt markieren |
-| Versorgung | gemaess gemessener Modulvariante; Spannung und Strom protokollieren |
-| SPI | derselbe Hardware-SPI-Controller und dieselbe gemessene Pinbelegung fuer alle Kandidaten |
-| Chip Select | getrennte Display-/Touch-CS nur nach Boardpruefung; inaktiv sichere Pegel messen |
-| Reset/DC/Backlight | reale Pins, aktive Pegel und Bootzustand messen und als `TBD_HARDWARE` bis dahin offen lassen |
+| Versorgung | gemaess verifizierter Modulvariante; Spannung und Strom nur dokumentieren, soweit ein konkretes Gate und geeignete Mittel dies erfordern |
+| SPI | derselbe Hardware-SPI-Controller und dieselbe am realen Aufbau funktional verifizierte Pinbelegung fuer alle Kandidaten |
+| Chip Select | getrennte Display-/Touch-CS nur nach Boardpruefung; inaktives fail-closed Verhalten funktional pruefen, ohne vorgeschriebene Pegelmessung |
+| Reset/DC/Backlight | reale Pins, SSOT-Zuordnung und funktionales Bootverhalten pruefen; keine vorgeschriebene Spannungs- oder Boot-Pegelmessung, nicht getestete Eigenschaften bleiben `TBD_HARDWARE` |
 | Weitere Verbraucher | Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer getrennt/gesperrt |
 
 Es werden keine Pinzahlen aus einem aehnlichen Board uebernommen. Die
@@ -458,7 +458,8 @@ sind. Der microSD-/SD-Karten-Slot wird fuer Release 1 ebenfalls nicht
 evaluiert; er erzeugt keinen Spike, Speicherpfad oder Adapter. Der
 230-V-AC-Hauptschalter ist kein Firmwareeingang. Ergebnisartefakte:
 
-- Schaltplan/Fotos des Testaufbaus und gemessene Pin-/Pegelmatrix;
+- Schaltplan/Fotos des Testaufbaus, SSOT-/Verdrahtungsmatrix und funktionale
+  Testergebnisse; optionale Messwerte sind kein R1-Pegelmess-Gate;
 - je Kandidat fixierte Abhaengigkeits- und Konfigurationsdatei;
 - Quellcommit, Lizenzpaket und Buildlog;
 - Screenshots/Fotos, Touchroh- und Kalibrierdaten;
@@ -467,7 +468,7 @@ evaluiert; er erzeugt keinen Spike, Speicherpfad oder Adapter. Der
 - begruendete Ownerentscheidung mit Rueckfallkandidat.
 
 Notwendige Owner-/Hardwareaktion: reale Boardrevision und Modul bereitstellen,
-Verdrahtung nach Messung freigeben und den aus dem identischen Vergleich
+Verdrahtung nach SSOT-/Funktionsnachweis freigeben und den aus dem identischen Vergleich
 hervorgehenden Kandidaten auswaehlen.
 
 ## Spike B: DS18B20 und 1-Wire

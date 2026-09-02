@@ -768,10 +768,11 @@ InitialWriteReadbackStatus writeInitialDocumentAndReadBack(
             metadata.metadata->versionValue == prior.versionValue &&
             metadata.metadata->payloadLength == prior.payloadLength &&
             read.value.size() == prior.recordLength) {
-            // IStateStore guarantees old-or-new for CommitOutcomeUnknown. The
-            // descriptor only verifies that the non-new value is the bound
-            // pre-write class; it is deliberately not a collision-prone byte
-            // identity substitute.
+            // This higher-level descriptor only classifies the non-new value
+            // against the bound pre-write class. It must not be read as an
+            // IStateStore OLD/NEW guarantee for an interrupted write; any
+            // status or bytes that do not pass the higher-level validation
+            // remain indeterminate and recovery-required.
             return InitialWriteReadbackStatus::OldValue;
         }
     }
@@ -1020,6 +1021,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         } else if (rootOtherEpochSlots != 0U) {
             result.status = ConfigurationGraphLoadStatus::
                 ConfigurationGraphUnavailableOtherEpoch;
+        } else if (!users.records.empty() || !services.records.empty() ||
+                   !catalogs.records.empty() || !manifests.records.empty()) {
+            result.status = ConfigurationGraphLoadStatus::
+                ConfigurationGraphIntegrityFailure;
         } else {
             result.status =
                 ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable;

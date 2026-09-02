@@ -10,10 +10,24 @@ Die Zielhardware besitzt 4 MB Flash. PSRAM darf nicht vorausgesetzt werden.
 Release 1 verwendet UART als verbindlichen Update- und Wiederherstellungsweg und
 muss deshalb keine OTA-Slots reservieren.
 
+Der allgemeine Engineering-Grundsatz fuer Ressourcenbudgets ist in
+`docs/ENGINEERING_PRINCIPLES.md` kanonisch festgelegt. Dieses Dokument
+konkretisiert nur die dort eingeordneten Detailregeln zu Speicherpflege,
+Flashverschleiss und Wartungsumfang.
+
+```text
+EARLY_SUBSYSTEM_BUDGETS=PLANNING_AND_WARNING_VALUES
+HARD_LIMIT_REQUIRES_PRODUCT_OR_HARDWARE_BASIS=YES
+HARD_LIMIT_REQUIRES_MEASUREMENT_AND_OWNER_APPROVAL=YES
+FINAL_SYSTEM_RESOURCE_QUALIFICATION_AFTER_INTEGRATION=YES
+FRAMEWORK_DEFAULT_IS_PRODUCT_BUDGET=NO
+```
+
 ## Grundsaetze
 
-- Ressourcenknappheit soll durch feste Budgets und automatische Bereinigung
-  verhindert werden, nicht erst durch spaete Fehlermeldungen behandelt werden.
+- Ressourcenknappheit soll durch begrenzte Strukturen, angemessene
+  Planungs-/Warnwerte und automatische Bereinigung verhindert werden, nicht
+  erst durch spaete Fehlermeldungen behandelt werden.
 - Kritische Daten duerfen nie zugunsten von Komfortdaten geloescht werden.
 - RAM-Knappheit und Flash-/Dateisystemknappheit werden getrennt bewertet.
 - Regelung, Sicherheitslogik und kritische Laufpersistenz haben Vorrang vor
@@ -23,11 +37,25 @@ muss deshalb keine OTA-Slots reservieren.
 - Ein vorhandener Zahlenwert darf nicht mit einer behaupteten Bauteillebensdauer
   verwechselt werden.
 
-Der Release-1-SafetyCore hat eine endliche Compile-Time-FaultCode-Menge und
-feste bzw. enum-indexierte aktive/acknowledged Faultdaten. Er besitzt keine
-unbegrenzt wachsende Fault-Historie und keine dynamischen Faulttexte als
-Safety-Wahrheit; Journaling bleibt beim vorhandenen Event-Journal. Kein Fault-
-Ereignis darf im Safetykern Heapwachstum pro Ereignis verursachen.
+Der Release-1-Interlock ist `ActuationInterlock`. Er ist stateless und wertet
+die aktuelle `ActuationEvidence` gegen die endliche Compile-Time-
+`FaultCode`-Menge aus. `ActuationEvidence` und `ActuationInterlock` besitzen
+keinen interlock-eigenen active-/acknowledged-Fault-State und keine
+Fault-Historie. Dynamische Faulttexte sind keine Interlock-Wahrheit; eine
+Interlock-Evaluation darf kein unbegrenztes Heapwachstum pro Auswertung
+verursachen. Die bestehende Trennung von Interlock-Auswertung und
+Journaling/Diagnose bleibt erhalten; daraus wird keine Interlock-eigene
+Fault-Historie abgeleitet.
+
+```text
+RELEASE1_INTERLOCK=ActuationInterlock
+INTERLOCK_STATELESS=YES
+FAULT_CODE_SET=FINITE_COMPILE_TIME
+INTERLOCK_OWNS_ACTIVE_ACKNOWLEDGED_FAULT_STATE=NO
+INTERLOCK_OWNS_FAULT_HISTORY=NO
+DYNAMIC_FAULT_TEXT_AS_INTERLOCK_TRUTH=NO
+UNBOUNDED_HEAP_GROWTH_PER_INTERLOCK_EVALUATION=NO
+```
 
 ## Ueberwachte Ressourcen
 
@@ -188,8 +216,10 @@ Diagrammen, aber nicht vor nachweisbarer Sicherheits- oder Wiederherstellbarkeit
 
 ## Flashbudget und Prioritaeten
 
-Vor der eigentlichen Implementierung wird ein verbindliches Maximalbudget fuer
-jede Hauptfunktion erstellt.
+Vor der eigentlichen Implementierung wird fuer jede Hauptfunktion ein
+angemessener Planungs-/Warnrahmen erstellt. Ein verbindliches Maximalbudget
+wird erst aus realer Produkt-/Hardwarebasis, Messung und Ownerfreigabe
+festgelegt.
 
 Prioritaetsreihenfolge:
 
@@ -207,7 +237,8 @@ Release 1 reserviert keine dualen OTA-Slots. Ein realer Build muss dennoch einen
 freien Sicherheitsabstand behalten. Historie darf nicht den gesamten verbleibenden
 Flash ausnutzen.
 
-Vor Freigabe der Implementierung werden mindestens gemessen:
+Vor einer Implementierungs- oder Freigabeentscheidung werden die fuer den
+jeweiligen Integrationsstand bestimmbaren Ressourcen gemessen:
 
 - Firmwaregroesse des Releasebuilds
 - statischer RAM-Verbrauch
@@ -218,7 +249,13 @@ Vor Freigabe der Implementierung werden mindestens gemessen:
 - Flashbelegung bei maximaler vorgesehener Lauf- und Journalhistorie
 - Ressourcenbedarf eines Exports
 
-Grenzwerte bleiben bis zu diesen Messungen `TBD_IMPLEMENTATION_BUDGET`.
+Fuer noch nicht integrierte Subsysteme, insbesondere Web und Display, bleiben
+die entsprechenden Werte bis zur Integration Planungs-/Warnwerte. Die
+Messung der integrierten Gesamtlast und die finale Systemqualifikation
+erfolgen nach der jeweiligen Integration. Nicht begruendete harte Grenzwerte
+bleiben bis zu realer Produkt-/Hardwarebasis, Messung und Ownerfreigabe
+`TBD_IMPLEMENTATION_BUDGET`; ein Planungs-/Warnwert ist keine solche harte
+Grenze.
 
 ## Flashverschleiss
 

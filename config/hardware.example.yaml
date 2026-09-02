@@ -9,8 +9,12 @@ project:
 
 controller:
   family: esp32
-  module: ESP32-32E
-  module_status: confirmed_order
+  module: ESP32-WROOM-32E
+  module_status: confirmed_by_owner_reference_match
+  board_family: esp32_32e_quad_mosfet
+  board_profile: esp32_32e_quad_mosfet_r1
+  board_revision: TBD_HARDWARE
+  board_identity_status: confirmed_by_owner_reference_match
   flash_mb: 4
   flash_status: confirmed_order
   require_psram: false
@@ -43,7 +47,7 @@ peltier:
   one_shot_thermal_fuse: true
   thermal_fuse_rating_c: TBD_COMMISSIONING
   thermal_fuse_location: TBD_COMMISSIONING
-  ris_lis_usage: verify_on_real_module
+  ris_lis_usage: FUTURE_RELEASE
 
 sensors:
   conversion_resolution_bit: 12
@@ -54,23 +58,22 @@ sensors:
       type: DS18B20
       required_for_peltier: true
       removable: false
-      bus: TBD_HARDWARE
+      bus: one_wire_internal
       rom_address: TBD_HARDWARE
     product:
       type: DS18B20
       required_for_peltier: false
       removable: true
-      bus: product_external
+      bus: one_wire_product
       connector: TBD_HARDWARE
       rom_address: runtime_or_commissioning
     heatsink:
       type: DS18B20
       required_for_peltier: true
       removable: false
-      bus: TBD_HARDWARE
+      bus: one_wire_internal
       rom_address: TBD_HARDWARE
-  preferred_bus_topology: separate_bus_per_sensor
-  minimum_bus_topology: fixed_sensors_shared_product_separate
+  bus_topology_source: board_profile
 
 fans:
   internal:
@@ -87,7 +90,7 @@ fans:
 buzzer:
   type: active
   voltage_v: TBD_HARDWARE
-  driver_channel: TBD_HARDWARE
+  driver_source: board_profile
 
 ui:
   display:
@@ -117,7 +120,13 @@ features:
     status: not_planned_release_1
   rtc:
     required: false
-    status: FUTURE_RELEASE
+    wiring_source: board_profile
+    delivered_variant: TBD_DELIVERY
+    software_supported_variant: DS3231SN
+    storage_timezone: UTC
+    i2c_address: 0x68
+    bus: ds3231_i2c
+    status: optional_r1_unverified
   web_ota:
     enabled: false
     status: FUTURE_RELEASE
@@ -129,8 +138,14 @@ features:
     status: FUTURE_RELEASE
 
 hardware_release:
-  state: HARDWARE_UNVERIFIED
-  pins_confirmed: false
-  active_levels_confirmed: false
-  boot_levels_confirmed: false
-  peltier_pulse_test_passed: false
+  electrical_level_measurement: not_required_waived
+  ssot_conformance: pending
+  functional_hardware_verification: pending
+  adapter_safety_verification: pending # only the Issue-33 adapter scope
+  actuator_release: false
+  real_peltier_test: not_run
+  real_hardware_present: true
+  board_family_reference_match: confirmed_by_owner
+  board_family: esp32_32e_quad_mosfet
+  board_profile: esp32_32e_quad_mosfet_r1
+  board_revision: TBD_HARDWARE

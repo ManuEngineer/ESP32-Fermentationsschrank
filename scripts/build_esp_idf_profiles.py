@@ -148,8 +148,18 @@ def orchestrate(
     profiles: list[str],
     build_fn=build_profile,
     validate_fn=run_profile_contract_validation,
+    *,
+    require_clean_source_tree: bool = False,
 ) -> None:
     """Build -> reale Profil-/Herkunftspruefung -> erst dann Erfolg melden."""
+    if require_clean_source_tree:
+        try:
+            check_build_profiles.require_clean_source_tree(repo_root())
+        except RuntimeError as error:
+            raise BuildDriverError(
+                "+".join(profiles), "source-cleanliness", str(error)
+            ) from error
+        print("SOURCE_TREE_CLEAN=YES")
     for profile in profiles:
         print(f"=== Baue Profil {esp_idf_contract.build_dir_name(profile)} ===")
         build_fn(profile)
@@ -222,6 +232,14 @@ def main() -> int:
         "--selftest", action="store_true",
         help="Prueft die Guard-Integration selbst, ohne echte ESP-IDF-Builds.",
     )
+    parser.add_argument(
+        "--require-clean-source-tree",
+        action="store_true",
+        help=(
+            "fordert fuer beweisfuehrende Release-/Bring-up-Artefakte "
+            "einen sauberen Git-Baum"
+        ),
+    )
     arguments = parser.parse_args()
 
     if arguments.selftest:
@@ -236,7 +254,9 @@ def main() -> int:
 
     try:
         verify_idf_environment()
-        orchestrate(profiles)
+        orchestrate(
+            profiles, require_clean_source_tree=arguments.require_clean_source_tree
+        )
     except BuildDriverError as error:
         print(f"FEHLGESCHLAGEN: {error}", file=sys.stderr)
         return 1

@@ -1,8 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
+#include <optional>
 
 #include "time_source.hpp"
+
+#include "absolute_time_internal.hpp"
 
 namespace device_platform_esp_idf {
 
@@ -18,8 +22,21 @@ class EspTimerTimeSource final : public device_platform::ITimeSource {
     [[nodiscard]] uint64_t monotonicMillis() const override;
     [[nodiscard]] std::optional<int64_t> unixTimeSeconds() const override;
 
+    // Sets the ESP system clock without making it visible through the port.
+    // The caller establishes trust only after the source-specific validation
+    // has completed.
+    [[nodiscard]] static bool setSystemTimeUtc(int64_t utcUnixSeconds) noexcept;
+
+    // Latches that the ESP system clock has been established by a validated
+    // RTC seed or a completed SNTP synchronization.  Source reachability is
+    // deliberately not part of this latch: the local system clock continues
+    // to be the current boot's source after a later connectivity loss.
+    [[nodiscard]] bool markAbsoluteTimeTrusted() const noexcept;
+
    private:
     int64_t baselineMicros_;
+    mutable std::mutex trustMutex_;
+    mutable internal::UtcHighWaterPublicationGate publicationGate_;
 };
 
 }  // namespace device_platform_esp_idf
