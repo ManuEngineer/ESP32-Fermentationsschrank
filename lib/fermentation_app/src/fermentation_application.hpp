@@ -9,6 +9,7 @@
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "reset_cause.hpp"
+#include "sensor_selection.hpp"
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
 
@@ -78,9 +79,12 @@ class FermentationApplication {
     // app-owned confirmation/revision contract; fresh sensor/planner evidence
     // is supplied by the owning application/orchestrator boundary, never by
     // a UI transport.
+    // The orchestrator publishes fresh owning evidence at the application
+    // boundary. UI/Web commands never carry sensor, planner or safety data.
+    void publishOwningRecoveryEvidence(
+        const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] RunPersistenceResult resumeFallback(
-        const FermentationUiResumeFallbackCommand& command,
-        const CrossRolePlausibilityContext& owningLiveSensorEvidence);
+        const FermentationUiResumeFallbackCommand& command);
 
    private:
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -126,6 +130,7 @@ class FermentationApplication {
     std::unique_ptr<RunCommandState> pendingResume_;
     std::unique_ptr<RunCommandState> pendingFallbackResume_;
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
+    std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
     std::optional<RecoveryDisposition> recoveryDisposition_;

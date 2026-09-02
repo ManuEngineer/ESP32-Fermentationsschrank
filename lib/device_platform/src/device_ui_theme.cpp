@@ -12,6 +12,10 @@ bool isCompleteTheme(const ThemeDescriptor& descriptor) {
         ThemeToken::TextPrimary,     ThemeToken::TextSecondary,
         ThemeToken::StatusInformation, ThemeToken::StatusWarning,
         ThemeToken::StatusError,     ThemeToken::Overlay,
+        ThemeToken::OnCanvas,        ThemeToken::OnSurface,
+        ThemeToken::OnPrimaryAction, ThemeToken::OnSecondaryAction,
+        ThemeToken::OnStatusInformation, ThemeToken::OnStatusWarning,
+        ThemeToken::OnStatusError,   ThemeToken::OnOverlay,
     };
     return std::all_of(
         std::begin(required), std::end(required),

@@ -160,6 +160,9 @@ struct ConfigurationPreviewView {
     ConfigurationActivationEffect activationEffect{
         ConfigurationActivationEffect::Immediate};
     bool noChange{false};
+    // Owning user-record revision captured by this preview.  UI confirmation
+    // compares this typed value before delegating to the service commit path.
+    UserConfigurationRevision expectedUserConfigurationRevision;
 };
 
 class ConfigurationPreviewBuildLease {

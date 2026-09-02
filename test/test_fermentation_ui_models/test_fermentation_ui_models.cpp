@@ -27,14 +27,13 @@ void test_projector_builds_shared_snapshot_without_surface_state() {
     RuntimeMessage message;
     message.id = 9U;
     message.revision = 3U;
-    input.messages.push_back({message});
+    state.messages[0] = message;
+    state.messageCount = 1U;
     input.semanticActions.push_back(
         {device_platform::TextNamespace{"fermentation"}, "start"});
     input.primaryAction =
         device_platform::TextKey{device_platform::TextNamespace{"fermentation"},
                                  "start"};
-    input.semanticPublicationRevision = 11U;
-
     const auto snapshot = FermentationUiProjector::project(input);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
                           static_cast<int>(snapshot.home.mode));
@@ -57,20 +56,62 @@ void test_projector_marks_fallback_only_from_canonical_pending_state() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RecoveryViewMode::FallbackSelectionRequired),
         static_cast<int>(snapshot.recovery.mode));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Recovery),
+                          static_cast<int>(snapshot.home.mode));
+}
+
+void test_projector_marks_recovery_home_from_canonical_disposition() {
+    RunCommandState state;
+    FermentationUiProjectionInput input;
+    input.runState = &state;
+    input.recoveryDisposition = RecoveryDisposition::WaitingForTrustedTime;
+    const auto snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Recovery),
+                          static_cast<int>(snapshot.home.mode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RecoveryViewMode::WaitingForTrustedTime),
+        static_cast<int>(snapshot.recovery.mode));
+}
+
+void test_projector_maps_canonical_messages_temperatures_and_recovery_modes() {
+    RunCommandState state;
+    RuntimeMessage message;
+    message.id = 42U;
+    message.active = true;
+    state.messages[0] = message;
+    state.messageCount = 1U;
+    FermentationUiProjectionInput input;
+    input.runState = &state;
+    input.temperatures.push_back(
+        {FermentationTemperatureRole::Product, 18.0, quality(18.0)});
+
+    auto snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_UINT32(1U, snapshot.messages.size());
+    TEST_ASSERT_EQUAL_UINT32(42U, snapshot.messages.front().message.id);
+    TEST_ASSERT_TRUE(snapshot.temperatures.front().quality.quality ==
+                     device_platform::SensorQuality::Valid);
+
+    state.processState.state = ProcessState::Cooling;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RecoveryViewMode::Cooling),
+                          static_cast<int>(snapshot.recovery.mode));
+    state.processState.state = ProcessState::Completed;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RecoveryViewMode::Completed),
+                          static_cast<int>(snapshot.recovery.mode));
 }
 
 void test_refresh_revision_changes_only_on_new_publication() {
     RunCommandState state;
-    device_platform::UiRefreshRevisionTracker tracker;
+    FermentationUiRefreshRevisionTracker tracker;
     FermentationUiProjectionInput input;
     input.runState = &state;
     input.refreshTracker = &tracker;
-    input.semanticPublicationRevision = 1U;
     const auto first = FermentationUiProjector::project(input);
     const auto readAgain = FermentationUiProjector::project(input);
     TEST_ASSERT_EQUAL_UINT64(first.refreshRevision->value,
                              readAgain.refreshRevision->value);
-    input.semanticPublicationRevision = 2U;
+    input.revisions.expectedStateSequence = 1U;
     const auto changed = FermentationUiProjector::project(input);
     TEST_ASSERT_TRUE(changed.refreshRevision->value > first.refreshRevision->value);
 }
@@ -84,6 +125,8 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_projector_builds_shared_snapshot_without_surface_state);
     RUN_TEST(test_projector_marks_fallback_only_from_canonical_pending_state);
+    RUN_TEST(test_projector_marks_recovery_home_from_canonical_disposition);
+    RUN_TEST(test_projector_maps_canonical_messages_temperatures_and_recovery_modes);
     RUN_TEST(test_refresh_revision_changes_only_on_new_publication);
     return UNITY_END();
 }

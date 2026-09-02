@@ -273,6 +273,7 @@ void test_loads_complete_active_graph() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
     seedGraph(store);
+    const auto writesBefore = store.writeCount();
     fermentation::ConfigurationGraphStore graphStore(store, resolver);
     const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(loaded.status ==
@@ -283,8 +284,15 @@ void test_loads_complete_active_graph() {
     TEST_ASSERT_EQUAL_STRING(
         "Fermentationsschrank",
         loaded.graph->active.userConfiguration->deviceName.c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "manuengineer-dark",
+        loaded.graph->active.userConfiguration->activeThemeId.c_str());
     TEST_ASSERT_EQUAL_UINT32(
         4U, loaded.graph->active.programCatalog->programs.size());
+    const auto scan = graphStore.validationScan(*loaded.graph);
+    TEST_ASSERT_TRUE(scan.status ==
+                     fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, store.writeCount());
 }
 
 void test_root_read_error_has_priority_over_valid_older_root() {
@@ -350,6 +358,37 @@ void test_invalid_active_branch_promotes_complete_fallback() {
     TEST_ASSERT_FALSE(loaded.graph->fallback.has_value());
     TEST_ASSERT_TRUE(loaded.graph->active.manifestReference ==
                      seeded.manifestReference);
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(fermentation::UserConfigurationSchema::Version1),
+        loaded.graph->active.manifest.userConfiguration.schemaVersion);
+    TEST_ASSERT_EQUAL_STRING(
+        "manuengineer-dark",
+        loaded.graph->active.userConfiguration->activeThemeId.c_str());
+}
+
+void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);  // active graph references a canonical V1 user record
+    const fermentation::UserConfiguration v2{
+        "en", "Europe/Zurich", "V2-Orphan", "manuengineer-dark"};
+    std::string payload;
+    TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                         v2,
+                         static_cast<std::uint32_t>(
+                             fermentation::UserConfigurationSchema::Version2),
+                         resolver, payload) ==
+                     fermentation::ConfigurationCodecStatus::Success);
+    store.put("uc1", envelope(fermentation::configuration_storage_contract::
+                                  kUserConfigurationRecordType,
+                              2U, 2U, payload));
+
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.graph.has_value());
+    const auto scan = graphStore.validationScan(*loaded.graph);
+    TEST_ASSERT_TRUE(scan.status == fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT64(2U, scan.highWater.userConfiguration.value());
 }
 
 void test_different_bytes_under_same_document_revision_fail_closed() {
@@ -786,6 +825,10 @@ void test_five_commits_rotate_active_and_exact_previous_fallback() {
         TEST_ASSERT_TRUE(loaded.graph.has_value());
         TEST_ASSERT_TRUE(loaded.graph->fallback.has_value());
         TEST_ASSERT_TRUE(loaded.graph->fallback->manifestReference == previous);
+        TEST_ASSERT_EQUAL_UINT32(
+            static_cast<std::uint32_t>(
+                fermentation::UserConfigurationSchema::Version2),
+            loaded.graph->active.manifest.userConfiguration.schemaVersion);
         TEST_ASSERT_EQUAL_UINT64(index + 2U,
                                  loaded.graph->rootSequence.value());
     }
@@ -1526,6 +1569,9 @@ void test_initial_graph_plan_uses_safe_slots_and_fixed_epoch_identities() {
             fermentation::InitialConfigurationPrepareStatus::Success),
         static_cast<int>(initial.status));
     TEST_ASSERT_TRUE(initial.prepared.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kCurrentUserConfigurationSchemaVersion,
+        initial.prepared->graph.active.manifest.userConfiguration.schemaVersion);
     TEST_ASSERT_EQUAL_UINT32(0U, initial.prepared->slotPlan.rootSlot.value());
     TEST_ASSERT_EQUAL_UINT64(1U,
                              initial.prepared->slotPlan.rootSequence.value());
@@ -1616,6 +1662,7 @@ int main() {
     RUN_TEST(
         test_referenced_record_read_error_does_not_fall_back_to_older_root);
     RUN_TEST(test_invalid_active_branch_promotes_complete_fallback);
+    RUN_TEST(test_mixed_v1_v2_user_generations_remain_structurally_valid);
     RUN_TEST(test_different_bytes_under_same_document_revision_fail_closed);
     RUN_TEST(test_equal_root_sequence_with_different_bytes_has_no_tiebreak);
     RUN_TEST(test_orphan_high_water_is_used_for_next_revision);

@@ -93,6 +93,8 @@ bool FermentationApplication::beginPersistent(
     configurationRecoveryStatus_.reset();
 #endif
     pendingResume_.reset();
+    pendingFallbackResume_.reset();
+    owningRecoveryEvidence_.reset();
     pendingRecoverySource_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
@@ -319,9 +321,36 @@ bool FermentationApplication::processTerminalClassification(
 
 void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
 
+void FermentationApplication::publishOwningRecoveryEvidence(
+    const CrossRolePlausibilityContext& evidence) {
+    owningRecoveryEvidence_ = evidence;
+}
+
 RunPersistenceResult FermentationApplication::resumeFallback(
-    const FermentationUiResumeFallbackCommand& command,
-    const CrossRolePlausibilityContext& owningLiveSensorEvidence) {
+    const FermentationUiResumeFallbackCommand& command) {
+    if (pendingFallbackResume_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        RunPersistenceResult unavailable;
+        unavailable.status = RunPersistenceResultStatus::NotInitialized;
+        return unavailable;
+    }
+    const auto& state = *pendingFallbackResume_;
+    if (command.expected.expectedStateSequence !=
+        state.processState.transitionSequence ||
+        (command.expected.expectedRunRevision.has_value() &&
+         *command.expected.expectedRunRevision != state.runRevision) ||
+        (command.expected.expectedMessageRevision.has_value() &&
+         *command.expected.expectedMessageRevision != state.messageRevision) ||
+        (command.expected.expectedFaultRevision.has_value() &&
+         *command.expected.expectedFaultRevision != state.faultRevision) ||
+        (command.expected.expectedRecoveryEpisodeRevision.has_value() &&
+         *command.expected.expectedRecoveryEpisodeRevision !=
+             state.recoveryEpisodeRevision)) {
+        RunPersistenceResult stale;
+        stale.status = RunPersistenceResultStatus::StaleDecision;
+        stale.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
+        return stale;
+    }
     if (!command.confirmed) {
         RunPersistenceResult pending;
         pending.status = RunPersistenceResultStatus::RecoveryPending;
@@ -329,14 +358,16 @@ RunPersistenceResult FermentationApplication::resumeFallback(
             RunPersistenceCoordinatorState::FallbackRecoveryPending;
         return pending;
     }
-    if (pendingFallbackResume_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+    if (!owningRecoveryEvidence_.has_value()) {
         RunPersistenceResult unavailable;
-        unavailable.status = RunPersistenceResultStatus::NotInitialized;
+        unavailable.status = RunPersistenceResultStatus::RecoveryPending;
+        unavailable.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
         return unavailable;
     }
     const auto outcome = runPersistenceCoordinator_->activateFallbackRecoveredRun(
         *pendingFallbackResume_, currentCheckpointTime(),
-        owningLiveSensorEvidence);
+        *owningRecoveryEvidence_);
     if (outcome.persistenceResult.status == RunPersistenceResultStatus::Applied) {
         // The coordinator's resultingState is the exact candidate that was
         // durably committed.  Adopt that value, rather than the pre-commit
@@ -356,8 +387,15 @@ RunPersistenceResult FermentationApplication::resumeFallback(
             return failed;
         }
         pendingFallbackResume_.reset();
-        loadDisposition_ = RunLoadDisposition::ResumeOffer;
-        persistenceLoadStatus_ = RunPersistenceLoadStatus::Current;
+        if (outcome.resultingState.activeProgramRun.has_value() ||
+            outcome.resultingState.activeManualRun.has_value()) {
+            loadDisposition_ = RunLoadDisposition::ResumeOffer;
+            persistenceLoadStatus_ = RunPersistenceLoadStatus::Current;
+        } else {
+            loadDisposition_ = RunLoadDisposition::NoActiveRun;
+            persistenceLoadStatus_ = RunPersistenceLoadStatus::NoActiveRun;
+            recoveryDisposition_.reset();
+        }
     }
     return outcome.persistenceResult;
 }

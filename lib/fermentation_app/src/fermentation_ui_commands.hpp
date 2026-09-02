@@ -10,6 +10,8 @@
 
 namespace fermentation {
 
+class FermentationApplication;
+
 enum class FermentationUiAction : std::uint8_t {
     StartProgram,
     StartManualHolding,
@@ -54,19 +56,43 @@ struct FermentationUiResumeFallbackCommand {
     bool confirmed{false};
 };
 
-using FermentationUiCommandPayload = std::variant<
+// Message acknowledgement and acoustic mute share the existing owning
+// MessageCommandRequest, but remain distinct alternatives at the UI boundary
+// so an action tag can never disagree with its payload.
+struct FermentationUiAcknowledgeMessageCommand {
+    MessageCommandRequest request;
+};
+
+struct FermentationUiMuteMessageCommand {
+    MessageCommandRequest request;
+};
+
+// CommandEnvelope-owned operations are tagged by their payload type. There is
+// deliberately no second free-standing action tag that could disagree with
+// the payload. Configuration and fallback operations remain outside the
+// envelope because their owning contracts have no CommandEnvelope/idempotency
+// semantics.
+using FermentationUiEnvelopePayload = std::variant<
     ProgramStartRequest, ManualStartRequest, StopRequest, CompletionRequest,
     RunAdjustmentCommandRequest, ApplyRecoveryTimeCorrectionRequest,
-    MessageCommandRequest, FaultResetRequest, SensorSelectionCommandRequest,
-    FermentationUiConfigurationCommitCommand,
-    FermentationUiResumeFallbackCommand>;
+    FermentationUiAcknowledgeMessageCommand,
+    FermentationUiMuteMessageCommand, FaultResetRequest,
+    SensorSelectionCommandRequest>;
+
+struct FermentationUiEnvelopeCommand {
+    device_platform::UiRequestId requestId;
+    FermentationUiExpectedRevisions expected;
+    bool confirmed{false};
+    FermentationUiEnvelopePayload payload;
+};
 
 struct FermentationUiCommand {
     device_platform::UiSurface surface{device_platform::UiSurface::LocalDisplay};
-    device_platform::UiRequestId requestId;
     std::uint64_t monotonicMillis{0U};
-    FermentationUiAction action{FermentationUiAction::StartProgram};
-    FermentationUiCommandPayload payload;
+    std::variant<FermentationUiEnvelopeCommand,
+                 FermentationUiConfigurationCommitCommand,
+                 FermentationUiResumeFallbackCommand>
+        operation;
 };
 
 enum class FermentationUiDetailStatus : std::uint8_t {
@@ -164,6 +190,20 @@ class FermentationUiCommandBridge {
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
         RunPersistenceResultStatus status);
+
+    // Owning configuration path: expected user revision is checked before
+    // confirmation is surfaced, and the existing service performs the
+    // authoritative preview/commit validation.
+    [[nodiscard]] static FermentationUiCommandResult commitConfiguration(
+        ConfigurationService& service,
+        const FermentationUiConfigurationCommitCommand& command,
+        const std::optional<FermentationUiConfirmationRequest>& confirmation =
+            std::nullopt);
+    [[nodiscard]] static FermentationUiCommandResult resumeFallback(
+        FermentationApplication& application,
+        const FermentationUiResumeFallbackCommand& command,
+        const std::optional<FermentationUiConfirmationRequest>& confirmation =
+            std::nullopt);
 };
 
 }  // namespace fermentation

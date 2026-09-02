@@ -57,7 +57,11 @@ ThemeDescriptor completeDefaultTheme() {
              ThemeToken::PrimaryAction, ThemeToken::SecondaryAction,
              ThemeToken::TextPrimary, ThemeToken::TextSecondary,
              ThemeToken::StatusInformation, ThemeToken::StatusWarning,
-             ThemeToken::StatusError, ThemeToken::Overlay}};
+             ThemeToken::StatusError, ThemeToken::Overlay,
+             ThemeToken::OnCanvas, ThemeToken::OnSurface,
+             ThemeToken::OnPrimaryAction, ThemeToken::OnSecondaryAction,
+             ThemeToken::OnStatusInformation, ThemeToken::OnStatusWarning,
+             ThemeToken::OnStatusError, ThemeToken::OnOverlay}};
 }
 
 void test_build_catalog_and_clock_contract_remain_renderer_independent() {

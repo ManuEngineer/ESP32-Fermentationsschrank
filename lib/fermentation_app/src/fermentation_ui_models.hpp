@@ -102,6 +102,36 @@ struct FermentationUiSnapshot {
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 
+struct FermentationUiTemperatureInput {
+    FermentationTemperatureRole role{FermentationTemperatureRole::CabinetAir};
+    std::optional<double> valueCelsius;
+    device_platform::SensorQualitySnapshot quality;
+};
+
+struct FermentationUiServiceSource {
+    bool available{false};
+    bool confirmationRequired{false};
+    bool serviceAuthorizationRequired{false};
+    std::optional<device_platform::TextKey> unavailableReason;
+};
+
+class FermentationUiRefreshRevisionTracker {
+   public:
+    [[nodiscard]] device_platform::UiRefreshRevision publish(
+        const FermentationUiSnapshot& snapshot);
+    [[nodiscard]] device_platform::UiRefreshRevision current() const noexcept {
+        return revision_;
+    }
+
+   private:
+    std::optional<FermentationUiSnapshot> published_;
+    device_platform::UiRefreshRevision revision_{};
+};
+
+[[nodiscard]] bool equalFermentationUiSemanticSnapshot(
+    const FermentationUiSnapshot& left,
+    const FermentationUiSnapshot& right) noexcept;
+
 [[nodiscard]] device_platform::DeviceUiBuildCatalog
 makeFermentationR1DeviceUiBuildCatalog();
 [[nodiscard]] std::vector<device_platform::ThemeDescriptor>

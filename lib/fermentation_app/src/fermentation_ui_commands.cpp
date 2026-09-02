@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "fermentation_application.hpp"
+
 namespace fermentation {
 namespace {
 
@@ -169,6 +171,48 @@ FermentationUiCommandBridge::fromConfigurationCommit(
 FermentationUiCommandResult FermentationUiCommandBridge::fromFallbackResult(
     RunPersistenceResultStatus status) {
     return fromRunPersistenceResult(status);
+}
+
+FermentationUiCommandResult FermentationUiCommandBridge::commitConfiguration(
+    ConfigurationService& service,
+    const FermentationUiConfigurationCommitCommand& command,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    const auto preview = service.visiblePreview();
+    if (!preview.has_value()) {
+        return fromConfigurationCommit(ConfigurationCommitStatus::PreviewNotFound);
+    }
+    if (preview->handle != command.previewHandle) {
+        return fromConfigurationCommit(
+            ConfigurationCommitStatus::PreviewSuperseded);
+    }
+    // Preserve the owning configuration revision/conflict decision before
+    // confirmation. An unconfirmed request cannot mask a stale preview.
+    if (preview->expectedUserConfigurationRevision !=
+        command.expectedUserConfigurationRevision) {
+        return fromConfigurationCommit(
+            ConfigurationCommitStatus::ConfigurationConflictFailure);
+    }
+    if (!command.confirmed) {
+        auto result = makeResult(Category::ConfirmationRequired,
+                                 ConfigurationPreviewStatus::Success);
+        result.confirmation = confirmation;
+        return result;
+    }
+    return fromConfigurationCommit(service.confirmPreview(command.previewHandle).status);
+}
+
+FermentationUiCommandResult FermentationUiCommandBridge::resumeFallback(
+    FermentationApplication& application,
+    const FermentationUiResumeFallbackCommand& command,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    const auto outcome = application.resumeFallback(command);
+    if (!command.confirmed &&
+        outcome.status == RunPersistenceResultStatus::RecoveryPending) {
+        auto result = makeResult(Category::ConfirmationRequired, outcome.status);
+        result.confirmation = confirmation;
+        return result;
+    }
+    return fromFallbackResult(outcome.status);
 }
 
 FermentationUiCommandResult

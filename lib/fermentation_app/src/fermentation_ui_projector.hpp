@@ -4,23 +4,22 @@
 
 namespace fermentation {
 
-// The owners provide all canonical values. Projection deliberately copies
-// them into the renderer-independent snapshot and never recomputes safety,
-// recovery or sensor decisions.
+// The owners provide canonical values. Projection constructs the
+// renderer-independent view models and never recomputes safety, recovery or
+// sensor decisions.
 struct FermentationUiProjectionInput {
     const RunCommandState* runState{nullptr};
     FermentationUiExpectedRevisions revisions;
-    std::vector<TemperatureView> temperatures;
-    std::vector<MessageView> messages;
+    std::vector<FermentationUiTemperatureInput> temperatures;
     std::optional<RecoveryDisposition> recoveryDisposition;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus;
     std::optional<RunPersistenceCoordinatorState> coordinatorState;
-    ApplicationStatusView status;
-    ServiceAvailabilityView service;
+    PresentationState presentation;
+    bool applicationReady{false};
+    FermentationUiServiceSource service;
     std::optional<device_platform::TextKey> primaryAction;
     std::vector<device_platform::TextKey> semanticActions;
-    std::uint64_t semanticPublicationRevision{0U};
-    device_platform::UiRefreshRevisionTracker* refreshTracker{nullptr};
+    FermentationUiRefreshRevisionTracker* refreshTracker{nullptr};
 };
 
 class FermentationUiProjector {

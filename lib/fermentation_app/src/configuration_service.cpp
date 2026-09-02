@@ -781,7 +781,7 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
         handle,  buildLease.expectedActive_,
         changes, integrity,
         summary, ConfigurationActivationEffect::Immediate,
-        noChange};
+        noChange, activeRuntime_->userConfigurationRevision()};
     if (!noChange) {
         auto immutableCandidate =
             std::make_shared<ConfigurationPreviewBuildLease::Candidate>();

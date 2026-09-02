@@ -19,6 +19,14 @@ enum class ThemeToken : std::uint8_t {
     StatusWarning,
     StatusError,
     Overlay,
+    OnCanvas,
+    OnSurface,
+    OnPrimaryAction,
+    OnSecondaryAction,
+    OnStatusInformation,
+    OnStatusWarning,
+    OnStatusError,
+    OnOverlay,
 };
 
 struct ThemeDescriptor {
