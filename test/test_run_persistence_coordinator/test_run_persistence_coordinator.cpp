@@ -6899,6 +6899,7 @@ void test_activate_fallback_rejects_non_r1_reaching_target_state() {
         static_cast<int>(loaded.status));
     const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
+    const auto writesBefore = store.writeCount();
     const auto outcome = recovered.activateFallbackRecoveredRun(
         *restored, trustedCheckpointTime(700000U),
         recoveryPlausibility(700000U));
@@ -6908,6 +6909,10 @@ void test_activate_fallback_rejects_non_r1_reaching_target_state() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
 }
 
 void test_activate_fallback_rejects_non_r1_standby_state() {
@@ -6943,6 +6948,7 @@ void test_activate_fallback_rejects_non_r1_standby_state() {
         static_cast<int>(loaded.status));
     const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
+    const auto writesBefore = store.writeCount();
     const auto outcome = recovered.activateFallbackRecoveredRun(
         *restored, trustedCheckpointTime(700000U),
         recoveryPlausibility(700000U, false));
@@ -6951,6 +6957,10 @@ void test_activate_fallback_rejects_non_r1_standby_state() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
 }
 
 void test_activate_fallback_rejects_completed_state_without_r1_resume_rule() {
@@ -6989,6 +6999,7 @@ void test_activate_fallback_rejects_completed_state_without_r1_resume_rule() {
         static_cast<int>(loaded.status));
     const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
+    const auto writesBefore = store.writeCount();
     const auto outcome = recovered.activateFallbackRecoveredRun(
         *restored, trustedCheckpointTime(400U),
         recoveryPlausibility(400U, false));
@@ -6997,6 +7008,10 @@ void test_activate_fallback_rejects_completed_state_without_r1_resume_rule() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
 }
 
 RunCommandState checkpointCurrentFermenting(
