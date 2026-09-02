@@ -31,16 +31,16 @@ void test_projector_builds_shared_snapshot_without_surface_state() {
     state.messageCount = 1U;
     input.semanticActions.push_back(
         {device_platform::TextNamespace{"fermentation"}, "start"});
-    input.primaryAction =
-        device_platform::TextKey{device_platform::TextNamespace{"fermentation"},
-                                 "start"};
+    input.primaryAction = device_platform::TextKey{
+        device_platform::TextNamespace{"fermentation"}, "start"};
     input.application.ready = true;
     const auto snapshot = FermentationUiProjector::project(input);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
                           static_cast<int>(snapshot.home.mode));
     TEST_ASSERT_EQUAL_STRING("shared-run", snapshot.home.activeRunId.c_str());
     TEST_ASSERT_EQUAL_UINT32(1U, snapshot.temperatures.size());
-    TEST_ASSERT_EQUAL_DOUBLE(21.5, snapshot.temperatures.front().valueCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        21.5, snapshot.temperatures.front().valueCelsius.value());
     TEST_ASSERT_EQUAL_UINT32(1U, snapshot.messages.size());
     TEST_ASSERT_EQUAL_UINT32(7U, snapshot.revisions.expectedStateSequence);
     TEST_ASSERT_TRUE(snapshot.status.ready);
@@ -53,7 +53,8 @@ void test_projector_marks_fallback_only_from_canonical_pending_state() {
     FermentationUiProjectionInput input;
     input.runState = &state;
     input.persistenceLoadStatus = RunPersistenceLoadStatus::FallbackRecovered;
-    input.coordinatorState = RunPersistenceCoordinatorState::FallbackRecoveryPending;
+    input.coordinatorState =
+        RunPersistenceCoordinatorState::FallbackRecoveryPending;
     const auto snapshot = FermentationUiProjector::project(input);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RecoveryViewMode::FallbackSelectionRequired),
@@ -115,7 +116,8 @@ void test_refresh_revision_changes_only_on_new_publication() {
                              readAgain.refreshRevision->value);
     input.revisions.expectedStateSequence = 1U;
     const auto changed = FermentationUiProjector::project(input);
-    TEST_ASSERT_TRUE(changed.refreshRevision->value > first.refreshRevision->value);
+    TEST_ASSERT_TRUE(changed.refreshRevision->value >
+                     first.refreshRevision->value);
 
     // The tracker owns the publication comparison; a caller-maintained
     // counter is neither needed nor sufficient. A semantic message change
@@ -140,7 +142,8 @@ int main(int, char**) {
     RUN_TEST(test_projector_builds_shared_snapshot_without_surface_state);
     RUN_TEST(test_projector_marks_fallback_only_from_canonical_pending_state);
     RUN_TEST(test_projector_marks_recovery_home_from_canonical_disposition);
-    RUN_TEST(test_projector_maps_canonical_messages_temperatures_and_recovery_modes);
+    RUN_TEST(
+        test_projector_maps_canonical_messages_temperatures_and_recovery_modes);
     RUN_TEST(test_refresh_revision_changes_only_on_new_publication);
     return UNITY_END();
 }

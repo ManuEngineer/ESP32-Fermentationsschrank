@@ -33,8 +33,8 @@ bool hasExactlyFourVisibleSlots(const LocalDeviceShellState& state) noexcept {
                        [](const BottomSlot& slot) { return slot.visible(); });
 }
 
-std::vector<UiSectionDescriptor>
-StaticUiExtensionCatalog::orderedSections() const {
+std::vector<UiSectionDescriptor> StaticUiExtensionCatalog::orderedSections()
+    const {
     std::vector<UiSectionDescriptor> ordered = sections_;
     std::stable_sort(
         ordered.begin(), ordered.end(),

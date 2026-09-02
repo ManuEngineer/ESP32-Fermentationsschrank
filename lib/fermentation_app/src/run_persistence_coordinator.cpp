@@ -976,15 +976,14 @@ RunPersistenceCoordinator::activateR1ExactFermentingCore(
     RunPersistenceFallbackDirective fallbackDirective,
     RunPersistenceCoordinatorState rollbackState,
     bool selectedFallbackCompletionToNoActiveRun) {
-    const auto invalid = [this, &current](
-                             RunPersistenceResultStatus status =
-                                 RunPersistenceResultStatus::InvalidDecision) {
-        return RecoveryActivationOutcome{
-            result(status,
-                   RunPersistenceStep::CandidateApply,
-                   RunPersistenceTechnicalReason::InvalidProjection),
-            current};
-    };
+    const auto invalid =
+        [this, &current](RunPersistenceResultStatus status =
+                             RunPersistenceResultStatus::InvalidDecision) {
+            return RecoveryActivationOutcome{
+                result(status, RunPersistenceStep::CandidateApply,
+                       RunPersistenceTechnicalReason::InvalidProjection),
+                current};
+        };
     if (current.processState.state != ProcessState::Fermenting ||
         current.runProgress.basis != RunProgressBasis::KnownTotal ||
         !current.processRunSnapshot.has_value() ||
@@ -998,10 +997,10 @@ RunPersistenceCoordinator::activateR1ExactFermentingCore(
                                   current.processState.stateEnteredAtMillis) {
         return invalid();
     }
-    const auto liveSegment = checkedToUint32(
-        (loadedRecord.snapshot.checkpointMonotonicMillis -
-         current.processState.stateEnteredAtMillis) /
-        1000U);
+    const auto liveSegment =
+        checkedToUint32((loadedRecord.snapshot.checkpointMonotonicMillis -
+                         current.processState.stateEnteredAtMillis) /
+                        1000U);
     if (!liveSegment.has_value())
         return invalid(RunPersistenceResultStatus::CounterOverflow);
     const auto phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
@@ -1054,10 +1053,9 @@ RunPersistenceCoordinator::activateR1ExactFermentingCore(
             ProcessState::Fermenting,
             PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
     } else {
-        const auto completion =
-            completeTimedRun(candidate.processState,
-                             *candidate.processRunSnapshot,
-                             time.monotonicMillis);
+        const auto completion = completeTimedRun(candidate.processState,
+                                                 *candidate.processRunSnapshot,
+                                                 time.monotonicMillis);
         if (!completion.proposed() ||
             !applyProcessTransition(candidate.processState, completion,
                                     &*candidate.processRunSnapshot))
@@ -1086,10 +1084,10 @@ RunPersistenceCoordinator::activateR1ExactFermentingCore(
     }
     ++candidate.runRevision;
     RunPersistenceSnapshot snapshot;
-    if (!makeRunPersistenceSnapshotInto(
-            candidate, persistedIds_, persistedIdCount_,
-            RunCheckpointTrigger::Transition, time,
-            schedule_.intervalMinutes(), snapshot))
+    if (!makeRunPersistenceSnapshotInto(candidate, persistedIds_,
+                                        persistedIdCount_,
+                                        RunCheckpointTrigger::Transition, time,
+                                        schedule_.intervalMinutes(), snapshot))
         return invalid();
     const auto persisted = writeSnapshotCore(
         snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
@@ -1269,7 +1267,8 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     }
     const auto liveFallbackRead =
         store_.readSlot(fallbackReference.slot, kMaximumCheckpointRecordBytes);
-    if (liveFallbackRead.status != device_platform::StateStoreReadStatus::Success) {
+    if (liveFallbackRead.status !=
+        device_platform::StateStoreReadStatus::Success) {
         return invalid(current);
     }
     RunPersistenceRawRecord liveRecord;
@@ -1289,7 +1288,8 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         }
         if (!time.utcUnixSeconds.has_value()) {
             return {result(RunPersistenceResultStatus::RecoveryPending,
-                           RunPersistenceStep::CandidateApply), current};
+                           RunPersistenceStep::CandidateApply),
+                    current};
         }
         return activateR1ExactFermentingCore(
             current, loadedRecord, time, targetSlot,
@@ -1306,8 +1306,8 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     RunPersistenceSnapshot snapshot;
     if (!makeRunPersistenceSnapshotInto(
             candidate, persistedIds_, persistedIdCount_,
-            RunCheckpointTrigger::Transition, time,
-            schedule_.intervalMinutes(), snapshot)) {
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            snapshot)) {
         return invalid(current);
     }
     const auto persisted = writeSnapshotCore(

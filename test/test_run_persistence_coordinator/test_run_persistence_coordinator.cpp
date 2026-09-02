@@ -6904,13 +6904,16 @@ void test_activate_fallback_rejects_non_r1_reaching_target_state() {
         *restored, trustedCheckpointTime(700000U),
         recoveryPlausibility(700000U));
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
-                          static_cast<int>(outcome.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
-                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(outcome.resultingState.processState.state));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
 }
@@ -6952,13 +6955,16 @@ void test_activate_fallback_rejects_non_r1_standby_state() {
     const auto outcome = recovered.activateFallbackRecoveredRun(
         *restored, trustedCheckpointTime(700000U),
         recoveryPlausibility(700000U, false));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
-                          static_cast<int>(outcome.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
-                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(outcome.resultingState.processState.state));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
 }
@@ -7003,13 +7009,16 @@ void test_activate_fallback_rejects_completed_state_without_r1_resume_rule() {
     const auto outcome = recovered.activateFallbackRecoveredRun(
         *restored, trustedCheckpointTime(400U),
         recoveryPlausibility(400U, false));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
-                          static_cast<int>(outcome.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
-                          static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(outcome.resultingState.processState.state));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
 }
@@ -7028,19 +7037,21 @@ void test_selected_fermenting_fallback_uses_r1_exact_time_core() {
     RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
                                    RunCheckpointSchedule{1U});
     static_cast<void>(seed.loadAndInitialize());
-    static_cast<void>(checkpointCurrentFermenting(seed, 1290U, 120U,
-                                                  1'700'000'120LL));
+    static_cast<void>(
+        checkpointCurrentFermenting(seed, 1290U, 120U, 1'700'000'120LL));
     const auto currentReference =
         RunPersistenceCoordinatorTestAccess::currentReference(seed);
     store.backing().injectCorruption(
-        slotKey(currentReference.slot == 0U ? "rc0" : "rc1"), "damaged-r1-current");
+        slotKey(currentReference.slot == 0U ? "rc0" : "rc1"),
+        "damaged-r1-current");
     store.restart();
 
     RunPersistenceCoordinator recovered(
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{1U});
     const auto loaded = recovered.loadAndInitialize();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
-                          static_cast<int>(loaded.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(loaded.status));
     const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
@@ -7055,7 +7066,8 @@ void test_selected_fermenting_fallback_uses_r1_exact_time_core() {
         static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
         static_cast<int>(waiting.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
@@ -7064,8 +7076,9 @@ void test_selected_fermenting_fallback_uses_r1_exact_time_core() {
         recoveryPlausibility(130'000U));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(outcome.persistenceResult.status));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
-                          static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(recovered.state()));
     TEST_ASSERT_FALSE(outcome.resultingState.activeProgramRun.has_value());
     TEST_ASSERT_FALSE(outcome.resultingState.activeManualRun.has_value());
     TEST_ASSERT_TRUE(outcome.resultingState.processState.state !=
@@ -7079,13 +7092,13 @@ void test_selected_r1_eligible_fallback_uses_existing_resume_rules() {
                                    RunCheckpointSchedule{});
     static_cast<void>(seed.loadAndInitialize());
     auto state = persistedPreheatingRun(seed, 1291U);
-    const auto mutation = modeChangeMutation(
-        state, RunSensorMode::Air, SensorSelectionDecisionCause::FallbackToAir,
-        200U);
+    const auto mutation =
+        modeChangeMutation(state, RunSensorMode::Air,
+                           SensorSelectionDecisionCause::FallbackToAir, 200U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
         static_cast<int>(seed.persistSensorSelection(
-                             state, mutation, trustedCheckpointTime(200U))
+                                 state, mutation, trustedCheckpointTime(200U))
                              .status));
     const auto currentReference =
         RunPersistenceCoordinatorTestAccess::currentReference(seed);
@@ -7103,10 +7116,12 @@ void test_selected_r1_eligible_fallback_uses_existing_resume_rules() {
         *restored, trustedCheckpointTime(400U), recoveryPlausibility(400U));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(outcome.persistenceResult.status));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
-                          static_cast<int>(outcome.resultingState.processState.state));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCoordinatorState::Ready),
-                          static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Preheating),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(recovered.state()));
 }
 
 void test_selected_fallback_rereads_live_source_before_mutation() {
@@ -7115,8 +7130,8 @@ void test_selected_fallback_rereads_live_source_before_mutation() {
                                    RunCheckpointSchedule{});
     static_cast<void>(seed.loadAndInitialize());
     auto seededState = persistedPreheatingRun(seed, 1292U);
-    static_cast<void>(seed.checkpointPeriodic(seededState,
-                                              trustedCheckpointTime(300200U)));
+    static_cast<void>(
+        seed.checkpointPeriodic(seededState, trustedCheckpointTime(300200U)));
     const auto currentReference =
         RunPersistenceCoordinatorTestAccess::currentReference(seed);
     const auto fallbackReference =
@@ -7143,7 +7158,8 @@ void test_selected_fallback_rereads_live_source_before_mutation() {
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
 }
 
@@ -7176,12 +7192,14 @@ void test_selected_r1_fallback_write_cutpoints_are_exercised_on_allowed_path() {
                          RunPersistenceResultStatus::Applied);
         TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore + offset),
                                static_cast<unsigned>(store.writeCount()));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
-                              static_cast<int>(outcome.resultingState.processState.state));
-        TEST_ASSERT_TRUE(recovered.state() ==
-                         (offset == 1U
-                              ? RunPersistenceCoordinatorState::FallbackRecoveryPending
-                              : RunPersistenceCoordinatorState::BlockedIndeterminate));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Preheating),
+            static_cast<int>(outcome.resultingState.processState.state));
+        TEST_ASSERT_TRUE(
+            recovered.state() ==
+            (offset == 1U
+                 ? RunPersistenceCoordinatorState::FallbackRecoveryPending
+                 : RunPersistenceCoordinatorState::BlockedIndeterminate));
     }
 
     for (const auto offset : {1U, 2U, 3U}) {
@@ -7215,10 +7233,12 @@ void test_selected_r1_fallback_write_cutpoints_are_exercised_on_allowed_path() {
         TEST_ASSERT_TRUE(outcome.persistenceResult.status !=
                          RunPersistenceResultStatus::Applied);
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
             static_cast<int>(recovered.state()));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
-                              static_cast<int>(outcome.resultingState.processState.state));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Preheating),
+            static_cast<int>(outcome.resultingState.processState.state));
     }
 }
 
@@ -7268,12 +7288,14 @@ void test_fallback_completed_selection_is_rejected_without_write() {
         static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
         static_cast<int>(outcome.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(coordinator.state()));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
-                          static_cast<int>(outcome.persistenceResult.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::Unchanged),
+        static_cast<int>(outcome.persistenceResult.durability));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceStep::CandidateApply),
                           static_cast<int>(outcome.persistenceResult.step));
 }
@@ -9738,12 +9760,12 @@ int main(int, char**) {
     RUN_TEST(test_selected_fermenting_fallback_uses_r1_exact_time_core);
     RUN_TEST(test_selected_r1_eligible_fallback_uses_existing_resume_rules);
     RUN_TEST(test_selected_fallback_rereads_live_source_before_mutation);
-    RUN_TEST(test_selected_r1_fallback_write_cutpoints_are_exercised_on_allowed_path);
     RUN_TEST(
-        test_activate_fallback_rejects_non_r1_standby_state);
-    RUN_TEST(test_activate_fallback_rejects_completed_state_without_r1_resume_rule);
+        test_selected_r1_fallback_write_cutpoints_are_exercised_on_allowed_path);
+    RUN_TEST(test_activate_fallback_rejects_non_r1_standby_state);
     RUN_TEST(
-        test_fallback_completed_selection_is_rejected_without_write);
+        test_activate_fallback_rejects_completed_state_without_r1_resume_rule);
+    RUN_TEST(test_fallback_completed_selection_is_rejected_without_write);
     RUN_TEST(test_resolve_recovery_outcome_waiting_assume_still_valid_resumes);
     RUN_TEST(test_resolve_recovery_outcome_rejects_gate_as_no_active_run);
     RUN_TEST(test_waiting_definitely_expired_tombstones_before_sensor_gate);

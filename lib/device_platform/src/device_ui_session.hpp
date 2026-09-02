@@ -47,8 +47,7 @@ class ServiceSessionLease {
             return true;
         }
         return policy_.absoluteTimeoutMillis.has_value() &&
-               nowMillis - grantedAtMillis_ >=
-                   *policy_.absoluteTimeoutMillis;
+               nowMillis - grantedAtMillis_ >= *policy_.absoluteTimeoutMillis;
     }
     void observe(ServiceSessionEvent event, std::uint64_t nowMillis) noexcept {
         if (!active_) return;

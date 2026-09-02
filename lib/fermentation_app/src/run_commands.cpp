@@ -869,8 +869,7 @@ void decideManualStartInto(const RunCommandState& current,
     }
 
     auto candidate = decision.before;
-    if (!installManualRun(candidate, decision.envelope,
-                          std::move(*plan))) {
+    if (!installManualRun(candidate, decision.envelope, std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
         return;
     }

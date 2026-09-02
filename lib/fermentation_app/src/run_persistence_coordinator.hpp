@@ -312,8 +312,7 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RecoveryActivationOutcome activateR1ExactFermentingCore(
         const RunCommandState& current,
         const RunPersistenceRawRecord& loadedRecord,
-        const RunCheckpointTime& time,
-        std::optional<std::size_t> targetSlot,
+        const RunCheckpointTime& time, std::optional<std::size_t> targetSlot,
         RunPersistenceFallbackDirective fallbackDirective,
         RunPersistenceCoordinatorState rollbackState,
         bool selectedFallbackCompletionToNoActiveRun = false);

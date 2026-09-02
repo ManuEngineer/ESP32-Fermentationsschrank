@@ -130,8 +130,7 @@ bool isPlausible(const ConfigurationManifest& manifest) {
                           1U, 1U, 0U, 0U) &&
            validReference(
                manifest.programCatalog, kProgramCatalogRecordType,
-               configuration_limits::kConfigurationDocumentSlotCount, 1U,
-               1U,
+               configuration_limits::kConfigurationDocumentSlotCount, 1U, 1U,
                configuration_limits::kMaximumProgramCatalogPayloadBytes) &&
            manifest.userConfiguration.storageEpoch ==
                manifest.serviceConfiguration.storageEpoch &&

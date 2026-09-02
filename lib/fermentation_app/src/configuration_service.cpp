@@ -148,9 +148,8 @@ ConfigurationChangeSummary summarizeChanges(
     summary.displayLanguageChanged =
         candidate.userConfiguration->displayLanguageId !=
         candidate.baseUserConfiguration->displayLanguageId;
-    summary.activeThemeChanged =
-        candidate.userConfiguration->activeThemeId !=
-        candidate.baseUserConfiguration->activeThemeId;
+    summary.activeThemeChanged = candidate.userConfiguration->activeThemeId !=
+                                 candidate.baseUserConfiguration->activeThemeId;
     summary.timeZoneChanged = candidate.userConfiguration->timeZoneId !=
                               candidate.baseUserConfiguration->timeZoneId;
     summary.deviceNameChanged = candidate.userConfiguration->deviceName !=
@@ -191,9 +190,9 @@ bool calculateCandidateIntegrity(
     const device_platform::ITimeZoneResolver& resolver,
     ConfigurationCandidateIntegrity& integrity) {
     std::string payload;
-    if (encodeUserConfigurationPayload(
-            *candidate.userConfiguration,
-            kCurrentUserConfigurationSchemaVersion, resolver, payload) !=
+    if (encodeUserConfigurationPayload(*candidate.userConfiguration,
+                                       kCurrentUserConfigurationSchemaVersion,
+                                       resolver, payload) !=
         ConfigurationCodecStatus::Success) {
         return false;
     }
@@ -783,9 +782,9 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
             activeRuntime_->userConfigurationRevision();
     }
     const ConfigurationPreviewView view{
-        handle,  buildLease.expectedActive_,
-        changes, integrity,
-        summary, ConfigurationActivationEffect::Immediate,
+        handle,   buildLease.expectedActive_,
+        changes,  integrity,
+        summary,  ConfigurationActivationEffect::Immediate,
         noChange, expectedUserConfigurationRevision};
     if (!noChange) {
         auto immutableCandidate =
@@ -880,8 +879,8 @@ ConfigurationPreviewStatus ConfigurationService::cancelPreview(
 ConfigurationCommitStatus
 ConfigurationService::validatePreviewForConfirmationLocked(
     std::uint64_t handle,
-    UserConfigurationRevision expectedUserConfigurationRevision) const
-    noexcept {
+    UserConfigurationRevision expectedUserConfigurationRevision)
+    const noexcept {
     if (mode_ == ConfigurationServiceMode::CommitInProgress ||
         capturedPreview_) {
         return ConfigurationCommitStatus::ConfigurationMutationBusy;
@@ -948,7 +947,8 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
             handle, visiblePreview_->view.expectedUserConfigurationRevision);
         if (validation != ConfigurationCommitStatus::ReadyForConfirmation) {
             if (visiblePreview_->view.noChange &&
-                validation == ConfigurationCommitStatus::ConfigurationConflictFailure) {
+                validation ==
+                    ConfigurationCommitStatus::ConfigurationConflictFailure) {
                 clearPreviewLocked();
             }
             return {validation};

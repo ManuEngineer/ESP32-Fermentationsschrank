@@ -9,10 +9,10 @@ namespace {
 
 using Category = device_platform::DeviceUiCommandOutcomeCategory;
 
-FermentationUiCommandResult makeResult(Category category,
-                                       FermentationUiCommandDetail detail,
-                                       FermentationUiCommandPhase phase =
-                                           FermentationUiCommandPhase::OwningOutcome) {
+FermentationUiCommandResult makeResult(
+    Category category, FermentationUiCommandDetail detail,
+    FermentationUiCommandPhase phase =
+        FermentationUiCommandPhase::OwningOutcome) {
     return {device_platform::safeOutcomeCategory(category), std::move(detail),
             phase, std::nullopt, std::nullopt};
 }
@@ -193,12 +193,14 @@ FermentationUiCommandResult FermentationUiCommandBridge::commitConfiguration(
         return fromConfigurationCommit(validation.status);
     }
     if (!command.confirmed) {
-        auto result = makeResult(Category::ConfirmationRequired,
-                                 ConfigurationCommitStatus::ReadyForConfirmation);
+        auto result =
+            makeResult(Category::ConfirmationRequired,
+                       ConfigurationCommitStatus::ReadyForConfirmation);
         result.confirmation = confirmation;
         return result;
     }
-    return fromConfigurationCommit(service.confirmPreview(command.previewHandle).status);
+    return fromConfigurationCommit(
+        service.confirmPreview(command.previewHandle).status);
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::resumeFallback(
@@ -208,7 +210,8 @@ FermentationUiCommandResult FermentationUiCommandBridge::resumeFallback(
     const auto outcome = application.resumeFallback(command);
     if (!command.confirmed &&
         outcome.status == RunPersistenceResultStatus::RecoveryPending) {
-        auto result = makeResult(Category::ConfirmationRequired, outcome.status);
+        auto result =
+            makeResult(Category::ConfirmationRequired, outcome.status);
         result.confirmation = confirmation;
         return result;
     }
@@ -225,22 +228,22 @@ FermentationUiCommandResult FermentationUiCommandBridge::decideProgramStart(
     const RunCommandState& current, ProgramStartRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const ProgramStartRequest& input) {
-                      return ::fermentation::decideProgramStart(state, input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const ProgramStartRequest& input) {
+            return ::fermentation::decideProgramStart(state, input);
+        });
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decideManualStart(
     const RunCommandState& current, ManualStartRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const ManualStartRequest& input) {
-                      return ::fermentation::decideManualStart(state, input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const ManualStartRequest& input) {
+            return ::fermentation::decideManualStart(state, input);
+        });
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decideStop(
@@ -257,15 +260,14 @@ FermentationUiCommandResult FermentationUiCommandBridge::decideCompletion(
     const RunCommandState& current, CompletionRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const CompletionRequest& input) {
-                      return ::fermentation::decideCompletion(state, input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const CompletionRequest& input) {
+            return ::fermentation::decideCompletion(state, input);
+        });
 }
 
-FermentationUiCommandResult
-FermentationUiCommandBridge::decideRunAdjustment(
+FermentationUiCommandResult FermentationUiCommandBridge::decideRunAdjustment(
     const RunCommandState& current, RunAdjustmentCommandRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
@@ -294,34 +296,33 @@ FermentationUiCommandBridge::decideAcknowledgeMessage(
     const RunCommandState& current, MessageCommandRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const MessageCommandRequest& input) {
-                      return ::fermentation::decideAcknowledgeMessage(state,
-                                                                        input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const MessageCommandRequest& input) {
+            return ::fermentation::decideAcknowledgeMessage(state, input);
+        });
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decideMuteMessage(
     const RunCommandState& current, MessageCommandRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const MessageCommandRequest& input) {
-                      return ::fermentation::decideMuteMessage(state, input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const MessageCommandRequest& input) {
+            return ::fermentation::decideMuteMessage(state, input);
+        });
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decideFaultReset(
     const RunCommandState& current, FaultResetRequest request,
     const FermentationUiCommandContext& context,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    return decide(current, std::move(request), context, confirmation,
-                  [](const RunCommandState& state,
-                     const FaultResetRequest& input) {
-                      return ::fermentation::decideFaultReset(state, input);
-                  });
+    return decide(
+        current, std::move(request), context, confirmation,
+        [](const RunCommandState& state, const FaultResetRequest& input) {
+            return ::fermentation::decideFaultReset(state, input);
+        });
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decideSensorSelection(
@@ -330,8 +331,8 @@ FermentationUiCommandResult FermentationUiCommandBridge::decideSensorSelection(
     const CrossRolePlausibilityContext& owningPlausibility,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
     request.envelope = makeEnvelope(context);
-    const auto decision = decideApplySensorSelectionAction(
-        current, request, owningPlausibility);
+    const auto decision =
+        decideApplySensorSelectionAction(current, request, owningPlausibility);
     return fromCommandStatus(decision.status, confirmation);
 }
 

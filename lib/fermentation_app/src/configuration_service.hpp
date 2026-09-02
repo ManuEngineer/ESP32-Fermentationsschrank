@@ -360,8 +360,8 @@ class ConfigurationService {
     [[nodiscard]] ConfigurationCommitStatus
     validatePreviewForConfirmationLocked(
         std::uint64_t handle,
-        UserConfigurationRevision expectedUserConfigurationRevision) const
-        noexcept;
+        UserConfigurationRevision expectedUserConfigurationRevision)
+        const noexcept;
     [[nodiscard]] const ConfigurationMutationCoordinator*
     mutationCoordinatorIdentity() const {
         return &mutationCoordinator_;

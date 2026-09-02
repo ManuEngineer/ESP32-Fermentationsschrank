@@ -62,8 +62,9 @@ void test_fallback_recovered_requires_explicit_selection() {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunLoadDisposition::FallbackSelectionRequired),
             static_cast<int>(classifyRunLoad(status, snapshot)));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(BootClassification::FallbackSelectionRequired),
-                              static_cast<int>(classify(status, snapshot)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(BootClassification::FallbackSelectionRequired),
+            static_cast<int>(classify(status, snapshot)));
     }
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunLoadDisposition::SafeBoot),
                           static_cast<int>(classifyRunLoad(status, nullptr)));

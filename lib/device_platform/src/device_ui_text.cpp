@@ -6,15 +6,14 @@ namespace device_platform {
 namespace {
 
 const std::string* findTranslation(const std::vector<TextPackManifest>& packs,
-                                   const LocaleId& locale,
-                                   const TextKey& key) {
+                                   const LocaleId& locale, const TextKey& key) {
     for (const auto& pack : packs) {
         if (pack.nameSpace != key.nameSpace || pack.locale != locale) continue;
-        const auto found = std::find_if(
-            pack.translations.begin(), pack.translations.end(),
-            [&key](const TextTranslation& translation) {
-                return translation.key == key;
-            });
+        const auto found =
+            std::find_if(pack.translations.begin(), pack.translations.end(),
+                         [&key](const TextTranslation& translation) {
+                             return translation.key == key;
+                         });
         if (found != pack.translations.end() && !found->value.empty()) {
             return &found->value;
         }
@@ -42,7 +41,8 @@ std::vector<TextPackManifest> composeTextPacks(
     std::vector<TextPackManifest> result;
     result.reserve(platformPacks.size() + applicationPacks.size());
     result.insert(result.end(), platformPacks.begin(), platformPacks.end());
-    result.insert(result.end(), applicationPacks.begin(), applicationPacks.end());
+    result.insert(result.end(), applicationPacks.begin(),
+                  applicationPacks.end());
     return result;
 }
 

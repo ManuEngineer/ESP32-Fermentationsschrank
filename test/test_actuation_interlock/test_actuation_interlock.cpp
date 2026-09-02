@@ -943,7 +943,8 @@ void teardown() {}
 void setup_suite() {
     UNITY_BEGIN();
     RUN_TEST(test_missing_boot_evidence_is_safe_boot);
-    RUN_TEST(test_fallback_selection_required_never_allows_even_with_complete_evidence);
+    RUN_TEST(
+        test_fallback_selection_required_never_allows_even_with_complete_evidence);
     RUN_TEST(test_no_active_run_is_standby_without_actuator_allow);
     RUN_TEST(test_no_active_run_load_is_not_a_resume_offer);
     RUN_TEST(test_recovery_evaluation_actuation_is_blocked);

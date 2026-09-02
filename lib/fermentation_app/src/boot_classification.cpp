@@ -62,8 +62,9 @@ RunLoadDisposition classifyRunLoad(
                        ? RunLoadDisposition::ResumeOffer
                        : RunLoadDisposition::NoActiveRun;
         case RunPersistenceLoadStatus::FallbackRecovered:
-            return snapshot == nullptr ? RunLoadDisposition::SafeBoot
-                                       : RunLoadDisposition::FallbackSelectionRequired;
+            return snapshot == nullptr
+                       ? RunLoadDisposition::SafeBoot
+                       : RunLoadDisposition::FallbackSelectionRequired;
         case RunPersistenceLoadStatus::PreparedInterrupted:
         case RunPersistenceLoadStatus::NotReconstructible:
         case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:

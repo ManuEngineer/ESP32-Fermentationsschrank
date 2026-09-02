@@ -243,7 +243,8 @@ bool FermentationApplication::prepareFallbackSelection(
     pendingFallbackResume_ =
         std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
     if (pendingFallbackResume_ == nullptr ||
-        !restoreRunPersistenceSnapshotInto(*snapshot, *pendingFallbackResume_)) {
+        !restoreRunPersistenceSnapshotInto(*snapshot,
+                                           *pendingFallbackResume_)) {
         pendingFallbackResume_.reset();
         requireService(FaultCode::RunPersistenceUntrusted);
         return false;
@@ -328,14 +329,15 @@ void FermentationApplication::publishOwningRecoveryEvidence(
 
 RunPersistenceResult FermentationApplication::resumeFallback(
     const FermentationUiResumeFallbackCommand& command) {
-    if (pendingFallbackResume_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+    if (pendingFallbackResume_ == nullptr ||
+        runPersistenceCoordinator_ == nullptr) {
         RunPersistenceResult unavailable;
         unavailable.status = RunPersistenceResultStatus::NotInitialized;
         return unavailable;
     }
     const auto& state = *pendingFallbackResume_;
     if (command.expected.expectedStateSequence !=
-        state.processState.transitionSequence ||
+            state.processState.transitionSequence ||
         (command.expected.expectedRunRevision.has_value() &&
          *command.expected.expectedRunRevision != state.runRevision) ||
         (command.expected.expectedMessageRevision.has_value() &&
@@ -370,10 +372,11 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     // trusted-time result can replay the same sensor/plausibility snapshot.
     auto evidence = std::move(owningRecoveryEvidence_);
     owningRecoveryEvidence_.reset();
-    const auto outcome = runPersistenceCoordinator_->activateFallbackRecoveredRun(
-        *pendingFallbackResume_, currentCheckpointTime(),
-        *evidence);
-    if (outcome.persistenceResult.status == RunPersistenceResultStatus::Applied) {
+    const auto outcome =
+        runPersistenceCoordinator_->activateFallbackRecoveredRun(
+            *pendingFallbackResume_, currentCheckpointTime(), *evidence);
+    if (outcome.persistenceResult.status ==
+        RunPersistenceResultStatus::Applied) {
         // The coordinator's resultingState is the exact candidate that was
         // durably committed.  Adopt that value, rather than the pre-commit
         // retained fallback copy, so RAM/FSM cannot diverge from storage.
@@ -385,7 +388,8 @@ RunPersistenceResult FermentationApplication::resumeFallback(
             failed.status =
                 RunPersistenceResultStatus::PersistenceCommittedApplyFailed;
             failed.step = RunPersistenceStep::RamApply;
-            failed.technicalReason = RunPersistenceTechnicalReason::InvalidProjection;
+            failed.technicalReason =
+                RunPersistenceTechnicalReason::InvalidProjection;
             failed.durability = RunPersistenceDurability::MayHaveChanged;
             failed.coordinatorState =
                 RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;

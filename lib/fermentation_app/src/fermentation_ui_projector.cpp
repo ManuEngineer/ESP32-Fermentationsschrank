@@ -25,8 +25,8 @@ FermentationUiSnapshot FermentationUiProjector::project(
     output.service.serviceAuthorizationRequired =
         input.service.serviceAuthorizationRequired;
     output.service.unavailableReason = input.service.unavailableReason;
-    output.home.primaryAction = input.primaryAction.value_or(
-        device_platform::TextKey{});
+    output.home.primaryAction =
+        input.primaryAction.value_or(device_platform::TextKey{});
 
     if (input.runState != nullptr) {
         const auto& state = *input.runState;
@@ -56,7 +56,8 @@ FermentationUiSnapshot FermentationUiProjector::project(
                 output.recovery.mode = RecoveryViewMode::CurrentRunRecovered;
                 break;
             case RecoveryDisposition::RecoveryRejectedOrFailClosed:
-                output.recovery.mode = RecoveryViewMode::RecoveryRejectedOrFailClosed;
+                output.recovery.mode =
+                    RecoveryViewMode::RecoveryRejectedOrFailClosed;
                 break;
         }
     }
@@ -74,17 +75,19 @@ FermentationUiSnapshot FermentationUiProjector::project(
         }
     }
     if (input.persistenceLoadStatus.has_value() &&
-        *input.persistenceLoadStatus == RunPersistenceLoadStatus::FallbackRecovered &&
+        *input.persistenceLoadStatus ==
+            RunPersistenceLoadStatus::FallbackRecovered &&
         input.coordinatorState.has_value() &&
-        *input.coordinatorState == RunPersistenceCoordinatorState::FallbackRecoveryPending) {
+        *input.coordinatorState ==
+            RunPersistenceCoordinatorState::FallbackRecoveryPending) {
         output.recovery.mode = RecoveryViewMode::FallbackSelectionRequired;
     }
     // Recovery is an owning application state, not a renderer route.  Keep
     // the home projection in Recovery whenever the canonical recovery
     // disposition/evaluation or the selected-fallback gate is active.
     if (input.recoveryDisposition.has_value() ||
-        (input.runState != nullptr &&
-         input.runState->processState.state == ProcessState::RecoveryEvaluation) ||
+        (input.runState != nullptr && input.runState->processState.state ==
+                                          ProcessState::RecoveryEvaluation) ||
         output.recovery.mode == RecoveryViewMode::FallbackSelectionRequired) {
         output.home.mode = FermentationHomeMode::Recovery;
     }

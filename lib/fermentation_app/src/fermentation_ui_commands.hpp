@@ -28,7 +28,8 @@ enum class FermentationUiAction : std::uint8_t {
 };
 
 struct FermentationUiCommandContext {
-    device_platform::UiSurface surface{device_platform::UiSurface::LocalDisplay};
+    device_platform::UiSurface surface{
+        device_platform::UiSurface::LocalDisplay};
     device_platform::UiRequestId requestId;
     std::uint64_t monotonicMillis{0U};
     FermentationUiExpectedRevisions expected;
@@ -124,7 +125,8 @@ struct FermentationUiEnvelopeCommand {
 };
 
 struct FermentationUiCommand {
-    device_platform::UiSurface surface{device_platform::UiSurface::LocalDisplay};
+    device_platform::UiSurface surface{
+        device_platform::UiSurface::LocalDisplay};
     std::uint64_t monotonicMillis{0U};
     std::variant<FermentationUiEnvelopeCommand,
                  FermentationUiConfigurationCommitCommand,
@@ -163,11 +165,10 @@ class FermentationUiCommandBridge {
    public:
     [[nodiscard]] static CommandEnvelope makeEnvelope(
         const FermentationUiCommandContext& context) noexcept;
-    [[nodiscard]] static FermentationUiConfirmationRequest
-    confirmationRequest(const FermentationUiCommandContext& context,
-                        FermentationUiAction action,
-                        device_platform::TextKey title,
-                        device_platform::TextKey summary);
+    [[nodiscard]] static FermentationUiConfirmationRequest confirmationRequest(
+        const FermentationUiCommandContext& context,
+        FermentationUiAction action, device_platform::TextKey title,
+        device_platform::TextKey summary);
 
     [[nodiscard]] static FermentationUiCommandResult fromCommandStatus(
         CommandStatus status,
@@ -208,7 +209,8 @@ class FermentationUiCommandBridge {
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult
     decideApplyRecoveryTimeCorrection(
-        const RunCommandState& current, ApplyRecoveryTimeCorrectionRequest request,
+        const RunCommandState& current,
+        ApplyRecoveryTimeCorrectionRequest request,
         const FermentationUiCommandContext& context,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
@@ -228,8 +230,7 @@ class FermentationUiCommandBridge {
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideSensorSelection(
-        const RunCommandState& current,
-        SensorSelectionCommandRequest request,
+        const RunCommandState& current, SensorSelectionCommandRequest request,
         const FermentationUiCommandContext& context,
         const CrossRolePlausibilityContext& owningPlausibility,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =

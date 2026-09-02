@@ -37,8 +37,8 @@ struct ConfigurationDecodeResult {
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
     return encodeUserConfigurationPayload(
         configuration,
-        static_cast<std::uint32_t>(UserConfigurationSchema::Version1),
-        resolver, out);
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version1), resolver,
+        out);
 }
 
 [[nodiscard]] ConfigurationDecodeResult<UserConfiguration>

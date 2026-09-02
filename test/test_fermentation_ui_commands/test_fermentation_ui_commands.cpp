@@ -28,7 +28,8 @@ ProgramStartRequest validProgramStart() {
     if (program->program.preheat) {
         program->program.maximumProductWaitMinutes = 30U;
     }
-    if (program->program.completion.mode != CompletionMode::FinishWithoutCooling) {
+    if (program->program.completion.mode !=
+        CompletionMode::FinishWithoutCooling) {
         program->program.completion.coolingTargetCelsius = 8.0;
     }
     TEST_ASSERT_TRUE(validateProgram(*program).valid());
@@ -52,7 +53,8 @@ FermentationUiCommandContext context(const RunCommandState& state,
     value.surface = device_platform::UiSurface::LocalDisplay;
     value.requestId.value = 42U;
     value.monotonicMillis = 100U;
-    value.expected.expectedStateSequence = state.processState.transitionSequence;
+    value.expected.expectedStateSequence =
+        state.processState.transitionSequence;
     value.expected.expectedRunRevision = state.runRevision;
     value.expected.expectedMessageRevision = state.messageRevision;
     value.expected.expectedFaultRevision = state.faultRevision;
@@ -94,8 +96,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
         state, validProgramStart(), unconfirmedContext,
         confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            device_platform::DeviceUiCommandOutcomeCategory::ConfirmationRequired),
+        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
+                             ConfirmationRequired),
         static_cast<int>(unconfirmed.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
                           static_cast<int>(commandDetail(unconfirmed)));
@@ -106,7 +108,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     const auto stale = FermentationUiCommandBridge::decideProgramStart(
         state, validProgramStart(), staleContext, confirmation(staleContext));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(stale.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::StaleState),
                           static_cast<int>(commandDetail(stale)));
@@ -117,7 +120,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     const auto invalidResult = FermentationUiCommandBridge::decideProgramStart(
         state, invalid, unconfirmedContext, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(invalidResult.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                           static_cast<int>(commandDetail(invalidResult)));
@@ -128,7 +132,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     const auto unsafeResult = FermentationUiCommandBridge::decideProgramStart(
         state, unsafe, unconfirmedContext, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(unsafeResult.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                           static_cast<int>(commandDetail(unsafeResult)));
@@ -139,7 +144,8 @@ void test_command_result_preserves_typed_app_details() {
     const auto accepted = FermentationUiCommandBridge::fromCommandStatus(
         CommandStatus::AlreadyProcessed);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Accepted),
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Accepted),
         static_cast<int>(accepted.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::AlreadyProcessed),
                           static_cast<int>(commandDetail(accepted)));
@@ -151,7 +157,8 @@ void test_command_result_preserves_typed_app_details() {
         std::holds_alternative<RunPersistenceResultStatus>(persisted.detail));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
-        static_cast<int>(std::get<RunPersistenceResultStatus>(persisted.detail)));
+        static_cast<int>(
+            std::get<RunPersistenceResultStatus>(persisted.detail)));
 
     const auto preview = FermentationUiCommandBridge::fromConfigurationPreview(
         ConfigurationPreviewStatus::PreviewSuperseded);
@@ -183,8 +190,8 @@ void test_ui_payloads_are_intents_and_not_owning_evidence() {
     start.programId = "water-kefir";
     start.sensorMode = RunSensorMode::Product;
     FermentationUiEnvelopePayload payload = start;
-    TEST_ASSERT_TRUE(std::holds_alternative<FermentationUiStartProgramIntent>(
-        payload));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<FermentationUiStartProgramIntent>(payload));
     TEST_ASSERT_EQUAL_STRING(
         "water-kefir",
         std::get<FermentationUiStartProgramIntent>(payload).programId.c_str());
@@ -192,15 +199,16 @@ void test_ui_payloads_are_intents_and_not_owning_evidence() {
     FermentationUiSensorSelectionIntent selection;
     selection.action = SensorSelectionUserAction::RecheckProduct;
     payload = selection;
-    TEST_ASSERT_TRUE(std::holds_alternative<FermentationUiSensorSelectionIntent>(
-        payload));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<FermentationUiSensorSelectionIntent>(payload));
 }
 
 void test_proposed_decision_is_not_reported_as_applied() {
-    const auto proposed = FermentationUiCommandBridge::fromCommandStatus(
-        CommandStatus::Proposed);
+    const auto proposed =
+        FermentationUiCommandBridge::fromCommandStatus(CommandStatus::Proposed);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Accepted),
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Accepted),
         static_cast<int>(proposed.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Proposed),
                           static_cast<int>(commandDetail(proposed)));

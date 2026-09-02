@@ -656,8 +656,8 @@ bool encodeDocumentRecord(device_platform::RecordTypeId recordType,
                           const std::string& payload, std::size_t maxBytes,
                           std::string& out) {
     return device_platform::encodeEnvelope(
-               {recordType, schemaVersion, epoch, version.value(),
-                std::nullopt, payload},
+               {recordType, schemaVersion, epoch, version.value(), std::nullopt,
+                payload},
                out, maxBytes) == device_platform::EnvelopeEncodeStatus::Success;
 }
 
@@ -988,8 +988,7 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
     auto users = scanGroupMetadata(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         configuration_storage_contract::kUserConfigurationRecordType,
-        kCurrentUserConfigurationSchemaVersion,
-        storageEpoch,
+        kCurrentUserConfigurationSchemaVersion, storageEpoch,
         configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
         result.diagnostics);
     auto services = scanGroupMetadata(
@@ -1473,8 +1472,7 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         if (encodeUserConfigurationPayload(
                 *candidate.userConfiguration,
                 kCurrentUserConfigurationSchemaVersion, timeZoneResolver_,
-                payload) !=
-            ConfigurationCodecStatus::Success) {
+                payload) != ConfigurationCodecStatus::Success) {
             return {ConfigurationCommitPrepareStatus::InvalidCandidate,
                     std::nullopt};
         }
@@ -1607,11 +1605,14 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::
     if (prepared.changes.userConfiguration) {
         if (encodeUserConfigurationPayload(
                 *prepared.newGraph.active.userConfiguration,
-                prepared.newGraph.active.manifest.userConfiguration.schemaVersion,
-                timeZoneResolver_, payload) != ConfigurationCodecStatus::Success ||
+                prepared.newGraph.active.manifest.userConfiguration
+                    .schemaVersion,
+                timeZoneResolver_,
+                payload) != ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
                 configuration_storage_contract::kUserConfigurationRecordType,
-                prepared.newGraph.active.manifest.userConfiguration.schemaVersion,
+                prepared.newGraph.active.manifest.userConfiguration
+                    .schemaVersion,
                 requiredPlannedValue(
                     prepared.slotPlan.userConfigurationRevision),
                 epoch, payload,
@@ -1661,8 +1662,7 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::
                 *prepared.newGraph.active.programCatalog, payload) !=
                 ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
-                configuration_storage_contract::kProgramCatalogRecordType,
-                1U,
+                configuration_storage_contract::kProgramCatalogRecordType, 1U,
                 requiredPlannedValue(prepared.slotPlan.programCatalogRevision),
                 epoch, payload,
                 configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
@@ -1851,8 +1851,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     std::string record;
     if (encodeUserConfigurationPayload(
             *user, kCurrentUserConfigurationSchemaVersion, timeZoneResolver_,
-            payload) !=
-            ConfigurationCodecStatus::Success ||
+            payload) != ConfigurationCodecStatus::Success ||
         !encodeDocumentRecord(
             configuration_storage_contract::kUserConfigurationRecordType,
             kCurrentUserConfigurationSchemaVersion,
@@ -1865,8 +1864,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto userSlot = selectInitialSlot(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         epoch, configuration_storage_contract::kUserConfigurationRecordType,
-        kCurrentUserConfigurationSchemaVersion,
-        record,
+        kCurrentUserConfigurationSchemaVersion, record,
         configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
         false, knownEmpty);
     if (userSlot.status != InitialConfigurationPrepareStatus::Success) {
@@ -1888,8 +1886,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (encodeServiceConfigurationPayload(*service, payload) !=
             ConfigurationCodecStatus::Success ||
         !encodeDocumentRecord(
-            configuration_storage_contract::kServiceConfigurationRecordType,
-            1U,
+            configuration_storage_contract::kServiceConfigurationRecordType, 1U,
             ServiceConfigurationRevision{1U}, epoch, payload, 45U, record)) {
         return {InitialConfigurationPrepareStatus::InvalidCandidate,
                 std::nullopt};
@@ -1917,8 +1914,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (encodeProgramCatalogPayload(*catalog, payload) !=
             ConfigurationCodecStatus::Success ||
         !encodeDocumentRecord(
-            configuration_storage_contract::kProgramCatalogRecordType,
-            1U,
+            configuration_storage_contract::kProgramCatalogRecordType, 1U,
             ProgramCatalogRevision{1U}, epoch, payload,
             configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
             record)) {
@@ -2151,8 +2147,8 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
              ConfigurationCodecStatus::Success ||
          !encodeDocumentRecord(
              configuration_storage_contract::kServiceConfigurationRecordType,
-             1U,
-             ServiceConfigurationRevision{1U}, epoch, payload, 45U, record))) {
+             1U, ServiceConfigurationRevision{1U}, epoch, payload, 45U,
+             record))) {
         return {ConfigurationCommitExecutionStatus::CapacityFailure,
                 ConfigurationCommitFailurePhase::ServiceDocument};
     }
@@ -2176,8 +2172,7 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
                                      payload) !=
              ConfigurationCodecStatus::Success ||
          !encodeDocumentRecord(
-             configuration_storage_contract::kProgramCatalogRecordType,
-             1U,
+             configuration_storage_contract::kProgramCatalogRecordType, 1U,
              ProgramCatalogRevision{1U}, epoch, payload,
              configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
              record))) {

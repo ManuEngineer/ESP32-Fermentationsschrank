@@ -359,7 +359,8 @@ void test_invalid_active_branch_promotes_complete_fallback() {
     TEST_ASSERT_TRUE(loaded.graph->active.manifestReference ==
                      seeded.manifestReference);
     TEST_ASSERT_EQUAL_UINT32(
-        static_cast<std::uint32_t>(fermentation::UserConfigurationSchema::Version1),
+        static_cast<std::uint32_t>(
+            fermentation::UserConfigurationSchema::Version1),
         loaded.graph->active.manifest.userConfiguration.schemaVersion);
     TEST_ASSERT_EQUAL_STRING(
         "manuengineer-dark",
@@ -370,8 +371,8 @@ void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
     const auto seeded = seedGraph(store);  // canonical V1 branch
-    const fermentation::UserConfiguration v2{
-        "en", "Europe/Zurich", "V2-Active", "manuengineer-dark"};
+    const fermentation::UserConfiguration v2{"en", "Europe/Zurich", "V2-Active",
+                                             "manuengineer-dark"};
     std::string userPayload;
     TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
                          v2,
@@ -389,16 +390,16 @@ void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
     // artifact.
     // Reuse the exact service/catalog reference bytes from the V1 manifest;
     // only the user reference changes schema and generation.
-    const auto loadedSeed = fermentation::ConfigurationGraphStore(
-        store, resolver).loadCanonicalGraph(StorageEpoch{1U});
+    const auto loadedSeed =
+        fermentation::ConfigurationGraphStore(store, resolver)
+            .loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(loadedSeed.graph.has_value());
     fermentation::ConfigurationManifest v2Manifest{
         fermentation::decodeChangeOrigin(1U),
         fermentation::decodeChangeOperation(2U),
         reference(fermentation::configuration_storage_contract::
                       kUserConfigurationRecordType,
-                  1U, fermentation::UserConfigurationRevision{2U},
-                  userPayload),
+                  1U, fermentation::UserConfigurationRevision{2U}, userPayload),
         loadedSeed.graph->active.manifest.serviceConfiguration,
         loadedSeed.graph->active.manifest.programCatalog};
     v2Manifest.userConfiguration.schemaVersion = 2U;
@@ -409,19 +410,18 @@ void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
     const auto v2ManifestReference = reference(
         fermentation::configuration_storage_contract::
             kConfigurationManifestRecordType,
-        1U, fermentation::ConfigurationManifestGeneration{2U},
-        manifestPayload);
+        1U, fermentation::ConfigurationManifestGeneration{2U}, manifestPayload);
     store.put(fermentation::configuration_storage_contract::
                   kConfigurationManifestSlotKeys[1U],
               envelope(fermentation::configuration_storage_contract::
                            kConfigurationManifestRecordType,
                        1U, 2U, manifestPayload));
-    fermentation::ConfigurationRootRecord mixedRoot{
-        v2ManifestReference, seeded.root.active};
+    fermentation::ConfigurationRootRecord mixedRoot{v2ManifestReference,
+                                                    seeded.root.active};
     std::string rootPayload;
-    TEST_ASSERT_TRUE(fermentation::encodeConfigurationRootPayload(
-                         mixedRoot, rootPayload) ==
-                     fermentation::ConfigurationGraphCodecStatus::Success);
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(mixedRoot, rootPayload) ==
+        fermentation::ConfigurationGraphCodecStatus::Success);
     store.put(fermentation::configuration_storage_contract::
                   kConfigurationRootSlotKeys[1U],
               envelope(fermentation::configuration_storage_contract::
@@ -431,14 +431,17 @@ void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
     fermentation::ConfigurationGraphStore graphStore(store, resolver);
     const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(loaded.graph.has_value());
-    TEST_ASSERT_EQUAL_UINT32(2U, loaded.graph->active.manifest.userConfiguration.schemaVersion);
+    TEST_ASSERT_EQUAL_UINT32(
+        2U, loaded.graph->active.manifest.userConfiguration.schemaVersion);
     TEST_ASSERT_TRUE(loaded.graph->fallback.has_value());
-    TEST_ASSERT_EQUAL_UINT32(1U,
-                             loaded.graph->fallback->manifest.userConfiguration.schemaVersion);
-    TEST_ASSERT_EQUAL_STRING("V2-Active",
-                             loaded.graph->active.userConfiguration->deviceName.c_str());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, loaded.graph->fallback->manifest.userConfiguration.schemaVersion);
+    TEST_ASSERT_EQUAL_STRING(
+        "V2-Active",
+        loaded.graph->active.userConfiguration->deviceName.c_str());
     const auto scan = graphStore.validationScan(*loaded.graph);
-    TEST_ASSERT_TRUE(scan.status == fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_TRUE(scan.status ==
+                     fermentation::ConfigurationScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT64(2U, scan.highWater.userConfiguration.value());
 }
 
@@ -1622,7 +1625,8 @@ void test_initial_graph_plan_uses_safe_slots_and_fixed_epoch_identities() {
     TEST_ASSERT_TRUE(initial.prepared.has_value());
     TEST_ASSERT_EQUAL_UINT32(
         fermentation::kCurrentUserConfigurationSchemaVersion,
-        initial.prepared->graph.active.manifest.userConfiguration.schemaVersion);
+        initial.prepared->graph.active.manifest.userConfiguration
+            .schemaVersion);
     TEST_ASSERT_EQUAL_UINT32(0U, initial.prepared->slotPlan.rootSlot.value());
     TEST_ASSERT_EQUAL_UINT64(1U,
                              initial.prepared->slotPlan.rootSequence.value());

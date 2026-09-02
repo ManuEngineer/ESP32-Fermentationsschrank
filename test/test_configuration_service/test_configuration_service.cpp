@@ -362,9 +362,8 @@ fermentation::ConfigurationRecordReference<Version> reference(
 fermentation::LoadedConfigurationGraph seedGraphWithCatalog(
     LocalStore& store, const Resolver& resolver,
     const fermentation::ProgramCatalog& catalog,
-    fermentation::UserConfiguration user =
-        fermentation::UserConfiguration{"de", "Europe/Zurich",
-                                        "Fermentationsschrank"}) {
+    fermentation::UserConfiguration user = fermentation::UserConfiguration{
+        "de", "Europe/Zurich", "Fermentationsschrank"}) {
     const fermentation::ServiceConfiguration service;
     std::string userPayload;
     std::string servicePayload;
@@ -696,16 +695,15 @@ void test_ui_configuration_confirmation_uses_current_owning_basis() {
 
     const auto ready = fixture.service.validatePreviewForConfirmation(
         command.previewHandle, command.expectedUserConfigurationRevision);
-    TEST_ASSERT_TRUE(ready.status ==
-                     fermentation::ConfigurationCommitStatus::
-                         ReadyForConfirmation);
+    TEST_ASSERT_TRUE(
+        ready.status ==
+        fermentation::ConfigurationCommitStatus::ReadyForConfirmation);
     const auto unconfirmed =
         fermentation::FermentationUiCommandBridge::commitConfiguration(
             fixture.service, command);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            device_platform::DeviceUiCommandOutcomeCategory::
-                ConfirmationRequired),
+        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
+                             ConfirmationRequired),
         static_cast<int>(unconfirmed.category));
 
     // Advancing the owning service basis after preview installation must be
@@ -719,13 +717,14 @@ void test_ui_configuration_confirmation_uses_current_owning_basis() {
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(stale.category));
-    TEST_ASSERT_TRUE(std::holds_alternative<
-                     fermentation::ConfigurationCommitStatus>(stale.detail));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<fermentation::ConfigurationCommitStatus>(
+            stale.detail));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationCommitStatus::
                              ConfigurationConflictFailure),
-        static_cast<int>(std::get<fermentation::ConfigurationCommitStatus>(
-            stale.detail)));
+        static_cast<int>(
+            std::get<fermentation::ConfigurationCommitStatus>(stale.detail)));
 }
 
 void test_theme_only_preview_is_visible_and_commits_v2() {
@@ -753,17 +752,17 @@ void test_theme_only_preview_is_visible_and_commits_v2() {
     TEST_ASSERT_FALSE(installed.preview->changes.serviceConfiguration);
     TEST_ASSERT_FALSE(installed.preview->changes.programCatalog);
 
-    const auto committed = fixture.service.confirmPreview(
-        installed.preview->handle);
+    const auto committed =
+        fixture.service.confirmPreview(installed.preview->handle);
     TEST_ASSERT_TRUE(committed.status ==
                      fermentation::ConfigurationCommitStatus::Activated);
     auto runtime = fixture.service.acquireRuntime();
     TEST_ASSERT_TRUE(runtime.lease.valid());
-    TEST_ASSERT_EQUAL_STRING("manuengineer-dark",
-                             runtime.lease->userConfiguration()
-                                 .activeThemeId.c_str());
-    TEST_ASSERT_EQUAL_UINT64(2U,
-                             runtime.lease->userConfigurationRevision().value());
+    TEST_ASSERT_EQUAL_STRING(
+        "manuengineer-dark",
+        runtime.lease->userConfiguration().activeThemeId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, runtime.lease->userConfigurationRevision().value());
 }
 
 void test_pre_root_write_failure_keeps_old_runtime_and_no_partial_publish() {
