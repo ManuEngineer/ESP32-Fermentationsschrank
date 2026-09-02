@@ -14,7 +14,7 @@ aeltere Planfassung heranzuziehen.
     BASE_BRANCH=integration/r1-development
     BASE_SHA=86e55499d9f0dd4dbd2d9fbc95d04549df4d429c
     ROADMAP_COMMIT=e6c051e69eb84d578f6a662033548ff2cacc7771
-    SUPERSEDES_PLAN_SHA=49c7b86f600f9a79cd348030c3d4e68af2d5cbe6
+    SUPERSEDES_PLAN_SHA=d206c94828b0c9ec1e63e71a5a5262d592f0e8d6
     PLAN_COMMIT=THIS_COMMIT
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_REVIEW_REQUIRED=YES
@@ -48,13 +48,17 @@ docs/DECISIONS.md sowie:
 - docs/LOCAL_UI.md und docs/LOCAL_UI_SETTINGS_SERVICE.md;
 - docs/WEB_UI.md;
 - docs/SETTINGS_AND_STORAGE.md und die aktuelle Konfigurationsimplementierung;
+- docs/RUN_COMMANDS.md sowie die direkten decide-, CommandEnvelope- und
+  Persistenzvertraege;
 - die #121/#124/#126-Vertraege in docs/ARCHITECTURE.md,
   docs/REQUIREMENTS.md, docs/SYSTEM_SAFETY_AND_RECOVERY.md,
   docs/RECOVERY_AND_INTERRUPTION.md, docs/RUN_PERSISTENCE.md und
   docs/STATE_MACHINE.md;
 - die aktuellen device_platform- und fermentation_app-Header, deren direkte
-  Implementierungen und die vorhandenen nativen Command-, Persistenz-,
-  Bootklassifikations-, Interlock- und Konfigurationstests.
+  Implementierungen, einschliesslich RunPersistenceCoordinator,
+  configuration_graph, configuration_graph_store und configuration_service,
+  sowie die vorhandenen nativen Command-, Persistenz-, Bootklassifikations-,
+  Interlock- und Konfigurationstests.
 
 ## 2. Ziel, Scope und Nicht-Ziele
 
@@ -128,6 +132,12 @@ KISS-Konsolidierung:
     SECOND_PERSISTENCE=NO
     SECOND_RECOVERY_LOGIC=NO
     PLUGIN_WIDGET_DISCOVERY_PLATFORM=NO
+    SECOND_CONFIRMATION_ENGINE=NO
+    SECOND_RECOVERY_COORDINATOR=NO
+    C2_RECOVERY_REACTIVATED=NO
+    SECOND_CONFIG_PERSISTENCE=NO
+    GENERIC_APP_STATUS_REGISTRY=NO
+    DEVICE_PLATFORM_DEPENDS_ON_FERMENTATION_APP=NO
 
 ## 3. Bestehende Architektur und Reuse-Befund
 
@@ -284,15 +294,12 @@ device_platform enthaelt nur die generischen Commandbausteine:
     UiSurface
     UiRequestId
     UiRefreshRevision
-    GenericConfirmationMetadata
     DeviceUiCommandOutcomeCategory
-    DeviceUiCommandResult
 
 DeviceUiCommandOutcomeCategory hat genau Accepted, Rejected,
-ConfirmationRequired, Busy und Unavailable. DeviceUiCommandResult transportiert
-ausserdem stabilen technischen Grund, optionale generische
-ConfirmationMetadata und einen optionalen Refreshhinweis, aber keine
-Fermentationsrevisionen oder Fachcommandvarianten.
+ConfirmationRequired, Busy und Unavailable. Sie ist die einzige gemeinsame
+Resultsemantik. device_platform enthaelt weder Confirmation mit Fachrevisionen
+noch kanonische technische Details, weil diese stets Anwendungstypen sind.
 
 FermentationUiExpectedRevisions gehoert in fermentation_app. Es modelliert nur
 die fuer die konkrete Variante erforderlichen bestehenden kanonischen
@@ -327,23 +334,62 @@ hat genau diesen einen Consumer. Eine Mutation ohne vorhandenen
 CommandEnvelope-Vertrag traegt keine UiRequestId, statt einen zweiten
 CommandEnvelope-Vertrag zu erfinden.
 
-Ein kanonischer Pfad ohne CommandEnvelope, etwa die vorhandene
-activateFallbackRecoveredRun-Operation, erhaelt keinen kuenstlichen zweiten
-Envelope oder Requestspeicher. Er bleibt beim bereits owning
-Recovery-/Persistenzvertrag. Die UI legt auch dort keine Retryregistry an.
+FermentationUiCommandResult ist app-owned und besteht aus
+DeviceUiCommandOutcomeCategory, einer vollstaendig typisierten
+FermentationUiCommandDetail-Variante, optionaler
+FermentationUiConfirmationRequest und optionaler UiRefreshRevision.
+FermentationUiCommandDetail bewahrt vorhandene kanonische Werte wie
+CommandStatus, RunPersistenceResultStatus, ConfigurationPreviewStatus,
+ConfigurationCommitStatus und die schmale Fallback-/Recoveryresultatform
+verlustfrei. Eine appseitige Confirmation enthaelt nur die zugehoerige
+semantische FermentationAction, TextKey, Zielbeschreibung und
+FermentationUiExpectedRevisions. Weder ein String-Grundregister noch eine
+generische dynamische Variant- oder Domainregistry wird eingefuehrt.
 
-Eine gefaehrdete Mutation wird beim ersten unbestaetigten Aufruf vor jeder
-owning Mutation mit ConfirmationRequired beantwortet. Metadata bindet
-semantische ActionId, TextKey, Zielbeschreibung und die appseitig geforderten
-Revisionswerte. Die bestaetigte Wiederholung derselben envelopebasierten
-Aktion verwendet dieselbe UiRequestId und damit dieselbe CommandEnvelope::id,
-setzt nur das bestehende confirmed-Feld und durchlaeuft danach den kanonischen
-Pfad. NotConfirmed mutiert nicht; ein echter Duplicate fuehrt nach dem
-bestehenden AlreadyProcessed/AlreadyPersisted-Vertrag zu keiner zweiten
-Nebenwirkung. Das strukturierte Ergebnis bewahrt den kanonischen
-Detailstatus; ein bereits erfolgreich angewendeter Duplicate kann als Accepted
-mit der expliziten Detailangabe AlreadyApplied dargestellt werden, nicht als
-neuer Erfolg.
+    GENERIC_APP_STATUS_REGISTRY=NO
+    DEVICE_PLATFORM_DEPENDS_ON_FERMENTATION_APP=NO
+
+Fuer jede CommandEnvelope-basierte Fachmutation baut die Bridge den
+vorhandenen Request mit derselben UiRequestId-zu-CommandEnvelope::id-Abbildung,
+setzt confirmed exakt aus dem UI-Aufruf und ruft zuerst die vorhandene
+kanonische decide*-Funktion auf:
+
+    Envelope
+        -> relevante Revisionen
+        -> Zustand
+        -> Safety
+        -> Eingabe und vollstaendige Fachvalidierung
+        -> CommandStatus::NotConfirmed, falls nur die Bestaetigung fehlt
+        -> bestehender Persistenz-/Applypfad
+
+    UI_PRECONFIRMATION_GATE=NO
+    CANONICAL_DECIDE_FIRST=YES
+    CANONICAL_NOT_CONFIRMED -> ConfirmationRequired
+
+Nur der kanonische Status NotConfirmed wird auf die UI-Oberkategorie
+ConfirmationRequired und die appseitige Confirmation abgebildet. InvalidInput,
+StaleState, SafetyRejected, NotAllowedInState, ContextMissing,
+CapacityReached und weitere kanonische Ablehnungen bleiben Rejected mit ihrem
+typisierten appseitigen Detail, auch wenn confirmed false ist. Die Bridge
+maskiert keine Fachvalidierung mit einem generischen UI-Precheck.
+
+Beim bestaetigten Replay bleiben UiRequestId und CommandEnvelope::id identisch,
+und die vollstaendige kanonische Validierung laeuft erneut. NotConfirmed
+verbraucht keine Command-ID und mutiert nicht. Ein echter Duplicate behaelt die
+bestehenden AlreadyProcessed/AlreadyPersisted-Semantiken und bewirkt keine
+zweite Nebenwirkung. Seine UI-Oberkategorie darf Accepted mit der appseitigen
+Detailangabe AlreadyApplied sein, behauptet aber keine neue Ausfuehrung.
+
+    SAME_UI_REQUEST_ID=YES
+    SAME_COMMAND_ENVELOPE_ID=YES
+    CANONICAL_VALIDATION_RUNS_AGAIN=YES
+    SECOND_IDEMPOTENCY_LAYER=NO
+
+Config-Preview/Commit und der ausgewaehlte Fallback verwenden nur ihre jeweils
+vorhandene owning Bestaetigungs- und Conflict-/Stale-/Availabilitylogik. Auch
+dort gibt es keinen generischen UI-Precheck vor der kanonischen Validierung und
+keinen kuenstlichen CommandEnvelope oder Requestspeicher fuer einen Pfad, der
+ihn nicht besitzt.
 
 Reine lokale Shellnavigation und Webnavigation erzeugen weder UiRequestId noch
 CommandEnvelope:
@@ -365,7 +411,7 @@ Touch oder Web entgegen.
 | DeviceUiBuildCatalog | statisch enthaltene Brandings, Locales und Themes sowie aktives Buildbranding |
 | DeviceShellHeader, ClockViewInput, BottomSlot, ShellRoute und LocalShellNavigation | lokaler Device-Shellvertrag ohne Renderer oder Fachroute |
 | StaticUiExtensionCatalog, UiSectionDescriptor und UiSectionAvailability | feste Plattform-vor-App-Reihenfolge und Fehlerisolation |
-| UiSurface, UiRequestId, UiRefreshRevision, GenericConfirmationMetadata, DeviceUiCommandOutcomeCategory und DeviceUiCommandResult | generische Transport-, Bestaetigungs- und Ergebnistypen; keine Fachrevisionen |
+| UiSurface, UiRequestId, UiRefreshRevision und DeviceUiCommandOutcomeCategory | generische Transport- und die fuenf gemeinsamen Oberkategorien; weder Fachdetails noch fachliche Confirmation |
 | TextPackManifest, TextLookupResult und resolveText | Namespaces, statische Packs und deterministischer Fallback |
 | ThemeToken, ThemeDescriptor und resolveTheme | semantische Tokens, Vollstaendigkeit und Standardfallback |
 | ServiceSessionPolicy, ServiceSessionLease und ServiceSessionEvent | reine Zeit-/Invalidierungslogik ohne Credential, Login oder Safetybewertung |
@@ -388,9 +434,9 @@ klarer ist; eine leere cpp nur zur Symmetrie wird nicht angelegt.
 | RecoveryView | Normal, WaitingForTrustedTime, CurrentRunRecovered, FallbackSelectionRequired, RecoveryRejectedOrFailClosed, Completed oder Cooling ausschliesslich aus kanonischen Quellen |
 | ApplicationStatusView und ServiceAvailabilityView | Lifecycle, PresentationState, Fault, Resetursache, vorhandene Gate-/Berechtigungsprojektion; kein neues Gate |
 | FermentationUiProjector | reine Projektion explizit uebergebener owning Application-/Coordinatorwerte |
-| FermentationUiCommand und FermentationUiCommandBridge | appseitige Varianten, Revisionsauswahl und verlustfreie Delegation an bestehende Pfade |
+| FermentationUiCommand, FermentationUiCommandBridge, FermentationUiConfirmationRequest und FermentationUiCommandResult | appseitige Varianten, Revisionsauswahl, typed Detail-/Confirmationownership und verlustfreie Delegation an bestehende Pfade |
 | fermentation_ui_text | fermentationseigene TextKeys und deren DE/EN/ES-Uebersetzungen |
-| BootClassification, RunLoadDisposition und FermentationApplication | die nach Abschnitt 6.3 beschriebene R5.9-Fallback-Conformance-Korrektur |
+| BootClassification, RunLoadDisposition, FermentationApplication und RunPersistenceCoordinator | die nach Abschnitt 6.3 beschriebene R5.9-Fallback-Conformance-Korrektur ohne C2-Aufrufgraph |
 
 FermentationUiProjector hat keinen globalen Zustand, keinen ESP-IDF-Zugriff und
 keine Abhaengigkeit auf device_platform_test_support. FermentationApplication
@@ -450,9 +496,53 @@ Persistente ID-Geltung, Buildinclusion, Auswahl und Aufloesung sind getrennt:
 | DISPLAY_RESOLUTION | Ein bekannter, aber in einem anderen reduzierten Build ausgeschlossener Wert korrumpiert UserConfiguration nicht; die Anzeige faellt ohne Write auf Englisch beziehungsweise das vollstaendige Standardtheme zurueck. |
 
 UserConfiguration wird von V1 auf V2 erweitert: activeThemeId wird im
-bestehenden Dokument, Codec, Validierungs-, Migrations-, Manifest-, Preview-
-und atomaren Commitpfad gefuehrt. V1 wird auf manuengineer-dark migriert. Es
-entsteht kein neuer Konfigurationsrecord, Root, Slot, Service oder NVS-Bereich.
+bestehenden Dokument, Codec, Validierungs-, Migrations-, Graph-, Store-,
+Manifest-, Preview- und atomaren Commitpfad gefuehrt. Es entsteht kein neuer
+Konfigurationsrecord, Root, Slot, Service oder NVS-Bereich.
+
+    USER_CONFIGURATION_SCHEMA_V1=SUPPORTED_OLD
+    USER_CONFIGURATION_SCHEMA_V2=CURRENT
+    USER_CONFIGURATION_SCHEMA_GT_V2=UNSUPPORTED_NEWER_FAIL_CLOSED
+    NEW_USER_CONFIGURATION_WRITES=V2
+    NEW_FACTORY_INITIAL_CONFIGURATION=V2
+
+UserConfigurationSchema erhaelt Version2. Ein V1-Record wird beim Lesen mit
+dem festen activeThemeId manuengineer-dark in ein in-memory
+UserConfiguration-Modell normalisiert. Dieser Bootread verursacht keinen
+Write. Erst eine tatsaechliche UserConfiguration-Mutation verwendet den
+bestehenden atomaren Preview-/Commitpfad und schreibt V2. Es wird kein
+automatischer Boot-Migrationscommit oder weiterer Persistenzpfad eingefuehrt.
+
+Alle schemaabhängigen Stellen werden am User-Reference-/Envelopewert
+ausgerichtet:
+
+- configuration_graph.cpp akzeptiert fuer UserConfigurationReference genau
+  V1 oder V2, waehrend Service-, Program-, Manifest- und Rootschemata
+  unveraendert bleiben.
+- configuration_graph_store.cpp scannt Userrecords bis zum aktuellen V2 und
+  klassifiziert groesser als V2 fail-closed als UnsupportedNewer. Es prueft
+  sowohl aktive als auch Fallback-References, verwendet V2 fuer neue
+  References, Documentenvelopes, Initialgraph und Factoryinitialisierung und
+  respektiert V1/V2 beim Slot- und High-Water-Scan.
+- configuration_document_codec.hpp/.cpp erhaelt einen schemaexpliziten
+  Canonical-Encodepfad. V1-Validation re-encodiert das normalisierte Modell in
+  die exakten kanonischen V1-Bytes ohne Themefeld; V2 serialisiert
+  activeThemeId. Decode, Canonicalvergleich und Payload-CRC bleiben stets an
+  den tatsaechlichen Referenz-/Envelope-Schemawert gebunden.
+- configuration_graph_store.cpp verwendet diese schema-aware Re-Encodepruefung
+  in Semantic- und Validation-Scans. Eine V1-Reference wird nie still gegen
+  einen V2-Payload verglichen oder in V2 umgedeutet.
+- configuration_documents.* und firmware_configuration_catalog.* validieren
+  activeThemeId als stabile bekannte ID. configurationContentEquals und
+  ConfigurationChangeMask beruecksichtigen sie als echte Useraenderung.
+- configuration_service.hpp/.cpp ergaenzt ConfigurationChangeSummary um
+  activeThemeChanged; eine reine Themeaenderung ist im Preview sichtbar.
+
+Bootstrap- und Recoverycode werden nur an ihren tatsaechlich betroffenen
+Schemaaufrufen angepasst: neue Factoryinitialisierung schreibt den
+V2-Userrecord; die vorhandene Recovery-/Graphsuche akzeptiert V1 und V2 und
+bleibt bei V3 und hoeher fail-closed. Es wird kein separates
+Migrations- oder Recoverypersistenzprotokoll eingefuehrt.
 
 ## 6. Daten-, Command-, Snapshot- und Recoveryfluesse
 
@@ -483,9 +573,10 @@ keine Servicelease.
 
     Touch or Web domain mutation
         -> FermentationUiCommand with FermentationUiExpectedRevisions
-        -> command-specific canonical revision check
-        -> confirmation check when required
-        -> existing run/configuration/recovery/service owner
+        -> build existing owning request with confirmed value from surface
+        -> existing canonical decide*/preview/recovery validation
+        -> NotConfirmed only after otherwise valid CommandEnvelope validation
+        -> owning persistence/apply path
         -> Accepted | Rejected | ConfirmationRequired | Busy | Unavailable
         -> optional refresh hint; consumer reads complete snapshot
 
@@ -502,7 +593,13 @@ behauptet keine Aktorfreigabe. ConfirmationRequired mutiert nicht. Die
 existierenden Stale-, Safety-, Persistenz- und unknown-safe-Orakel bleiben
 Autoritaet.
 
-### 6.3 R5.9-Fallback: vollstaendige Conformance-Korrektur
+Fuer CommandEnvelope-Commands gilt insbesondere: unbestaetigt und sonst
+gueltig wird ConfirmationRequired; unbestaetigt plus stale, ungueltig oder
+safety-abgelehnt bleibt Rejected mit dem kanonischen Detail. Das bestaetigte
+Replay verwendet dieselbe ID, laeuft aber erneut durch die komplette
+kanonische Validierung, bevor es eine Wirkung erreichen kann.
+
+### 6.3 R5.9-Fallback: ausgewählter enger R1-Contract
 
 Der heutige technische Befund ist:
 
@@ -535,7 +632,7 @@ FallbackRecoveryPending.
 Die sichtbaren Aktionen sind vollstaendig begrenzt:
 
 - ResumeFallback ist die einzige fachlich mutierende Aktion. Sie ist
-  bestaetigungspflichtig.
+  bestaetigungspflichtig und passiert zuerst ihre owning Validation.
 - Back, Home oder das Verlassen der Ansicht sind reine Navigation und lassen
   pendingFallbackResume, Persistenz und den unresolved Zustand unveraendert.
 - Es gibt keinen Discard-, Abort-, Tombstone- oder Auto-Promotion-Button.
@@ -550,36 +647,93 @@ FallbackRecoveryPending. Ein zusaetzlicher persistenter Discardpfad waere eine
 neue Recovermutation und ist ausserhalb von #25; ein entsprechender Bedarf
 stoppt die Umsetzung fuer eine Ownerentscheidung.
 
+Fuer ResumeFallback wird Variante A ausgewaehlt:
+
+    FALLBACK_R1_VARIANT=A
+    activateFallbackRecoveredRun()=REFactor_TO_SELECTED_R1_CONTRACT
+    R1_ACTIVE_CALL_GRAPH_TO_WEIGHTED_RECOVERY=NONE
+    R1_ACTIVE_CALL_GRAPH_TO_BIOLOGICAL_MODEL=NONE
+    C2_RECOVERY_REACTIVATED=NO
+
+RunPersistenceCoordinator::activateFallbackRecoveredRun wird gezielt auf den
+neuen R1-selected-fallback-Vertrag verschmaelert. Die bisherige
+C2-Implementierung mit
+PendingRecoveryAnchor, recoveryBootAnchorMonotonicMillis,
+recoveryEpisodeRevision, lastRecoveryEpisodeEvidence,
+weightedProgressSegmentId, deriveRecoveryTimeContext,
+accumulatedPriorForResume und ihrem C2-RecoveryTraversal wird aus diesem
+produktiven R1-Aufrufgraphen entfernt. Der bestehende #124-FSM-Handoff bleibt
+nur innerhalb des neuen Exact-Time-Kerns erhalten. Der spaetere #25-Pfad ruft
+ausschliesslich die auf diesen R1-Vertrag verschmaelerte Methode auf; die
+vorherige C2-Implementierung wird weder direkt noch durch eine UI-Facade
+reaktiviert.
+
+Stattdessen extrahiert run_persistence_coordinator.cpp einen kleinen privaten
+gemeinsamen R1-Exact-Recovery-Kern. Der bestehende #124-Current-FERMENTING-Pfad
+ruft ihn mit dem vollstaendig validierten Currentrecord auf. Der bestaetigt
+ausgewaehlte Fallbackpfad ruft denselben Kern erst nach erneuter Validierung des
+geladenen Heads, der Fallbackreference, des Fallbackslots und der
+Fallbacksnapshotidentitaet auf. Der Kern verwendet nur Checkpoint-UTC,
+trusted aktuelle UTC, priorBootPhaseElapsed, den vorhandenen
+FERMENTING-Livesegmentwert und die bestehende FSM-/Write-before-Apply-Topologie.
+Er benutzt weder gewichtete noch temperaturgewichtete, biologische oder
+C2-Recoverywerte zur R1-Entscheidung.
+
+Die bestehende writeSnapshotCore-Transaktion bleibt der einzige Persistenzkern.
+Fuer den validierten Fallback benutzt der schmale Pfad ausschliesslich den
+bereits vorgesehenen Recovery-Same-Slot-Fall aus FallbackRecoveryPending mit
+passender expliziter Fallbackreference. Es entsteht weder ein zweiter
+Coordinator noch ein zweiter Recovery- oder Persistenzkern.
+
+Der ausgewahlte Fallback folgt genau dieser Matrix:
+
+| Fallbackzustand nach expliziter Auswahl | R1-Vertrag |
+|---|---|
+| FERMENTING, Record-UTC oder trusted aktuelle UTC fehlt, oder der exakte Anker fehlt | WaitingForTrustedTime beziehungsweise fail-closed; kein Write, kein Applied, kein Allowed und keine gespeicherte Auswahlanweisung. Eine spaetere Aktion muss erneut durch die sichtbare ResumeFallback-Validation laufen. |
+| FERMENTING, vollstaendige exakte R1-Zeitbasis und trusted UTC | derselbe #124-Exact-Time-Kern wie Current; candidate erst Write-before-Apply; erst Applied darf die Application den FSM-Handoff ausfuehren. |
+| Nicht-FERMENTING und nach bestehender isR1ResumeEligible-Regel zulaessig | dieselbe bestehende R1-Resume-Semantik mit frischer owning-app Sensorevidenz, ohne C2-Felder oder Zeitbounds. |
+| Jeder andere Zustand | Rejected oder fail-closed; keine Promotion, kein Tombstone und keine Aktorfreigabe. |
+
 Nach bestaetigtem ResumeFallback entnimmt nur FermentationApplication die
 retained Snapshotquelle, aktuelle Checkpointzeit und frische owning-app
-Config-, Sensor-, Planner- und sonstige erforderliche Evidenz. Sie delegiert
-an den vorhandenen RunPersistenceCoordinator::activateFallbackRecoveredRun-
-Write-before-Apply-Pfad. Die UI liefert keine dieser Evidenzen. Bei jedem
-anderen Ergebnis als Applied bleiben RAM und das Angebot fail-closed
+Config-, Sensor- und Plannerevidenz. Die UI liefert keine dieser Evidenzen.
+Bei jedem Ergebnis ausser Applied bleiben RAM und Angebot fail-closed
 unveraendert oder der vorhandene Coordinatorstatus ist sichtbar.
 
-Nur bei Applied uebernimmt die Application den vom Coordinator
-zurueckgegebenen Kandidaten in die bestehende FSM-/Application-Anwendung,
-loescht die pending-Aufbewahrung und publiziert die aus dem jetzt
-kanonisch-committeten Zustand abgeleitete vorhandene Disposition. Sie behaelt
-die Bootdiagnose FallbackRecovered nicht ueber Applied hinaus, sondern leitet
-den passenden Post-Commit-Loadstatus Current oder NoActiveRun und den vom
-bestehenden Write-before-Apply-Pfad gelieferten Coordinatorstatus Ready oder
-ReadyEmpty aus dem committeten Ergebnis ab. Erst danach wird
-ActuationInterlock mit frischer owning-app Evidenz erneut und unveraendert
-ausgewertet. FallbackSelectionRequired selbst ist eine ausdrueckliche
-deny-Disposition; ActuationInterlock bekommt keine neue Allow-Regel. Ein
-spaeteres Allowed kann ausschliesslich durch die bereits vorhandenen
-Resume-/Fresh-Evidence, Applied, FSM-Anwendung und die bestehende Interlocklogik
-entstehen.
+Der erfolgreiche explizite R1-Resume-Handoff ist exakt:
+
+    before Applied or while FallbackRecoveryPending
+        persistenceLoadStatus=FallbackRecovered
+        coordinatorState=FallbackRecoveryPending
+        loadDisposition=FallbackSelectionRequired
+        ActuationInterlock=UNRESOLVED
+
+    selected fallback resume after Applied and existing FSM handoff
+        persistenceLoadStatus=Current
+        coordinatorState=Ready
+        loadDisposition=ResumeOffer
+        activationKind=Resume
+        activationPersistenceResult=Applied
+        processActivationApplied=true
+        freshConfigurationEvidence=required
+        freshSensorEvidence=required
+        freshPlannerEvidence=required
+        -> existing ActuationInterlock evaluation
+
+Ein durch den R1-Kern korrekt beendeter Lauf bleibt stattdessen NoActiveRun,
+ReadyEmpty und nicht als Resume aktivierbar. FallbackSelectionRequired ist
+immer eine deny-Disposition; ActuationInterlock bekommt keine neue Allow-Regel.
+Erst der oben genannte bestehende Resume-Handoff kann mit vollstaendiger
+frischer Evidenz Allowed ergeben.
 
     FallbackRecovered / FallbackRecoveryPending
         -> FallbackSelectionRequired, unresolved and all-off
         -> explicit confirmed ResumeFallback
-        -> existing activateFallbackRecoveredRun
+        -> selected R1 exact-recovery or R1-eligible-resume path
+        -> existing write-before-apply
         -> Applied
         -> existing FSM application
-        -> fresh evidence and existing ActuationInterlock evaluation
+        -> existing Resume evidence and ActuationInterlock evaluation
 
 Das ist keine automatische Aktivierung, keine automatische Promotion, keine
 C2-Gutschrift und keine neue Safety- oder Recoveryentscheidung.
@@ -688,15 +842,20 @@ Display-, Touch-, GPIO-, RTC-, WLAN-, NTP- oder Browsertests fuer #25.
 | Refresh | UiRefreshRevision steigt nur bei geaendertem veroeffentlichten Inhalt, nicht pro Read; verlorene/zusammengefasste Hints sind erlaubt; Fullsnapshot ist autoritativ |
 | Kein globales Stale-Gate | CLOCK_OR_NETWORK_ONLY_UI_CHANGE plus unveraenderte Domainrevisionen akzeptiert den Domaincommand; nur relevante kanonische Revisionen koennen StaleDomainRevision ausloesen |
 | Fachrevisionen | jede Commandvariante prueft nur ihre typisierten bestehenden State-, Run-, Message-, Fault-, Recovery- oder Konfigurationsrevisionen; keine dynamische Revisionregistry |
-| Ergebnisse | Accepted, Rejected, ConfirmationRequired, Busy und Unavailable einschliesslich stabiler Gruende und ohne neue Aktorfreigabe |
-| Bestaetigung/ID | unbestaetigter Command mutiert nicht; bestaetigte Wiederholung nutzt dieselbe UiRequestId zu CommandEnvelope::id-Abbildung; echter Duplicate erzeugt keine zweite Nebenwirkung und bewahrt den bestehenden AlreadyProcessed/AlreadyPersisted-Ausgang |
+| Ergebnisse | alle fuenf Oberkategorien; CommandStatus-, RunPersistenceResultStatus- und ConfigurationPreview/Commit-Details bleiben appseitig typisiert erhalten; unbekanntes Plattformresultat ist generisch Unavailable, unbekanntes Appdetail eine appseitige typisierte Ablehnung ohne Stringregister |
+| Bestaetigung/ID | unbestaetigt plus sonst gueltig ergibt kanonisches NotConfirmed zu ConfirmationRequired; unbestaetigt plus stale, invalid oder SafetyRejected bleibt Rejected mit kanonischem Detail; bestaetigtes Replay nutzt dieselbe UiRequestId zu CommandEnvelope::id-Abbildung und durchlaeuft die komplette canonical validation erneut |
+| Duplicate | echter Duplicate erzeugt keine zweite Nebenwirkung und bewahrt den bestehenden AlreadyProcessed/AlreadyPersisted-Ausgang; Accepted/AlreadyApplied ist nur die Oberflaechenprojektion des appseitig erhaltenen Ursprungsdetails |
+| Confirmation ownership | FermentationUiConfirmationRequest traegt Action, TextKey und FermentationUiExpectedRevisions ohne device_platform-zu-fermentation_app-Abhaengigkeit |
 | Navigation | lokale und Webnavigation erzeugen keinen CommandEnvelope und keine persistierte ID |
 | Text | Plattform- und Apptypen/Packs sind physisch getrennt; alle #25-Keys DE/EN/ES; aktive Locale zu Englisch zu sichtbarem Key |
 | Build und Theme | ManuEngineer ist enthaltenes aktives Branding; R1 hat de/en/es und manuengineer-dark; Auswahl nur aus Buildinclusion; English und vollstaendiges Standardtheme immer verfuegbar; bekannt-ausgeschlossenes Fixture korrumpiert keine Konfiguration und schreibt keinen Fallback |
-| Konfiguration | V1-zu-V2-Defaulttheme, V2-Roundtrip, strukturell/echt unbekannte ID abgelehnt, vorhandener Manifest-/Preview-/Commitpfad, keine zweite Persistenzquelle |
+| Konfiguration V1/V2 | V1 Active und V1 Fallback laden; ein gemischter gueltiger V1/V2-Graph bleibt strukturell gueltig; V1 erhaelt manuengineer-dark nur im RAM und ein Read schreibt nichts; naechste echte Usermutation und neue Factoryinitialisierung schreiben V2; V2-Roundtrip; V3 bleibt fail-closed unsupported-newer |
+| Konfigurationscanonicality | V1 Semantic-Revalidation vergleicht canonical V1, nicht V2-Bits; Graph-/Store-Scans akzeptieren V1/V2 und rejecten groesser V2; reine Themeaenderung setzt activeThemeChanged und erscheint im Preview |
 | Sessions | Touch 10 Minuten relevante Inaktivitaet ohne Absolutlimit; Ende bei Restart, Logout und ownergemeldeter Safetyinvalidierung; Web 5/15 getrennt; normale Weblogin-30/12 unveraendert |
 | Fallbackklassifikation | FallbackRecovered und FallbackRecoveryPending werden zu FallbackSelectionRequired, retained und unresolved; FallbackSelectionRequired kann nie Allowed sein |
-| Fallbackaktion | nur bestaetigtes ResumeFallback ruft activateFallbackRecoveredRun mit frischer owning-app-Evidenz; vor Applied keine RAM-/FSM-/Aktoraktivierung; Applied vor FSM; danach frische bestehende Interlockevaluation |
+| Fallbackaktion | activateFallbackRecoveredRun ist auf selected-R1 refaktoriert; vor Applied keine RAM-/FSM-/Aktoraktivierung; der alte C2-/weighted-/biologische Graph wird nie aufgerufen; Applied vor FSM; danach nur der bestehende Resume-Handoff und frische Interlockevaluation |
+| Fallback R1 exact time | selected FERMENTING ohne trusted UTC oder exakten Anker bleibt WaitingForTrustedTime ohne Write und ohne Allowed; mit trusted exact UTC gelten dieselben #124-Rechnung, Write-before-Apply und anschliessende Resumeevidenz wie bei Current |
+| Fallback R1 phases | nur bestehend R1-resumefaehige Nicht-FERMENTING-Phasen verwenden die vorhandene R1-Resume-Semantik; nicht zulaessige Phasen sind Rejected/fail-closed; FallbackPending bleibt auch mit scheinbar vollstaendiger Sensorevidenz nie Allowed |
 | Fallbacknavigation | Back/Home/Verlassen mutiert nichts; kein Discard/Abortpfad; vorhandenes discardAsNoActiveRun wird nicht bei FallbackRecoveryPending aufgerufen |
 | Regression | Bootklassifikation, RunPersistenceCoordinator und ActuationInterlock testen die angepasste Disposition; Current-FERMENTING, WaitingForTrustedTime, SafeBoot und alle bisherigen Allow-Gates bleiben unveraendert |
 | Keine Neuinterpretation | kein Test darf aus UIwerten Sensor-, Safety- oder Recoveryevidenz ableiten, Fallback automatisch aktivieren oder #124-Current-FERMENTING anders klassifizieren |
@@ -706,9 +865,11 @@ Nach freigegebener Umsetzung werden mindestens die neuen Contracttests und die
 direkt beruehrten vorhandenen Tests in test/test_boot_classification,
 test/test_actuation_interlock, test/test_run_persistence_coordinator,
 test/test_run_commands, test/test_configuration_documents,
-test/test_configuration_codecs, test/test_configuration_migration und
-test/test_configuration_service gezielt nativ ausgefuehrt. Der konkrete Befehl
-wird nach dem finalen Diff gemaess docs/CI_AND_QUALITY_GATES.md als
+test/test_configuration_codecs, test/test_configuration_graph_codecs,
+test/test_configuration_graph_store, test/test_configuration_bootstrap_store,
+test/test_configuration_migration, test/test_configuration_recovery_service
+und test/test_configuration_service gezielt nativ ausgefuehrt. Der konkrete
+Befehl wird nach dem finalen Diff gemaess docs/CI_AND_QUALITY_GATES.md als
 pio test -e native mit den betroffenen Filtern dokumentiert. Daneben folgen
 git diff --check, scripts/check_architecture_boundaries.py und
 scripts/check_secrets.py. Vollstaendige native oder ESP-IDF-Laeufe und
@@ -719,22 +880,26 @@ Owneranweisung.
 
 | Datei | Geplante Verantwortung |
 |---|---|
-| lib/device_platform/src/device_ui_contracts.hpp und bei nicht-trivialer Implementierung device_ui_contracts.cpp | generische IDs, UiSurface, UiRefreshRevision, ConfirmationMetadata, Ergebniswerte und Buildkatalog ohne Fachrevisionen |
+| lib/device_platform/src/device_ui_contracts.hpp und bei nicht-trivialer Implementierung device_ui_contracts.cpp | generische IDs, UiSurface, UiRefreshRevision und ausschliesslich die fuenf DeviceUiCommandOutcomeCategory-Oberkategorien ohne Fachdetails oder Confirmation; kein DeviceUiCommandResult |
 | lib/device_platform/src/device_ui_shell.hpp und bei Bedarf device_ui_shell.cpp | ClockViewInput, lokaler Shellheader, vier Slots, lokale Navigation, statischer Extensioncatalog und Fehlerisolation |
 | lib/device_platform/src/device_ui_text.hpp/.cpp | generische Namespace-/Pack-/Resolvertypen plus nur platform-owned Texte |
 | lib/device_platform/src/device_ui_theme.hpp/.cpp | semantische Themewerte, Buildinclusion und vollstaendiger Standardfallback |
 | lib/device_platform/src/device_ui_session.hpp | reine Policy-/Lease-/Invalidierungslogik; header-only soweit einfacher |
 | lib/fermentation_app/src/fermentation_ui_models.hpp/.cpp | FermentationUiSnapshot, Teilmodelle und FermentationUiExpectedRevisions |
 | lib/fermentation_app/src/fermentation_ui_projector.hpp/.cpp | reine kanonische Application-/Run-/Config-/Recoveryprojektion |
-| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | fachliche Varianten, Confirmationfluss, UiRequestId-zu-CommandEnvelope-Abbildung und Delegation |
+| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | fachliche Varianten, FermentationUiCommandResult/-Detail/-ConfirmationRequest, UiRequestId-zu-CommandEnvelope-Abbildung sowie canonical decide*-first-Delegation ohne UI-Precheck |
 | lib/fermentation_app/src/fermentation_ui_text.hpp/.cpp | fermentation-owned TextKeys und DE/EN/ES-Packs |
 | lib/fermentation_app/src/boot_classification.hpp/.cpp | FallbackSelectionRequired in RunLoadDisposition und BootClassification |
 | lib/fermentation_app/src/fermentation_application.hpp/.cpp | retained pendingFallbackResume, prepare/resume handoff und app-owned frische Evidenzgrenze |
+| lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp | Variante A: activateFallbackRecoveredRun auf den selected-R1-Entry verschmaelern; privater gemeinsamer Current-/Fallback-Exact-Time-Kern, bestehende writeSnapshotCore-Transaktion und kein C2-Aufrufgraph |
 | lib/fermentation_app/src/actuation_interlock.hpp/.cpp | neue FallbackSelectionRequired-Disposition explizit deny behandeln, ohne Allow-Regel |
-| lib/fermentation_app/src/configuration_documents.hpp/.cpp, configuration_document_codec.*, configuration_migration.*, configuration_limits.hpp und firmware_configuration_catalog.* | UserConfiguration V2, activeThemeId, Validierung, Migration und vorhandene Katalog-/Manifestintegration |
+| lib/fermentation_app/src/configuration_documents.hpp/.cpp, configuration_document_codec.*, configuration_migration.*, configuration_limits.hpp und firmware_configuration_catalog.* | UserConfiguration V2, activeThemeId, known-vs-included-Validierung, V1-normalisierte Readmigration und schemaexplizites Canonical-Encoding |
+| lib/fermentation_app/src/configuration_graph.cpp und configuration_graph_store.cpp | Userreference V1/V2 plausibel und scanbar machen, active/fallback semantisch jeweils im Referenzschema re-encodieren sowie neue References, Envelopes und Factoryinitialisierung in V2 schreiben |
+| lib/fermentation_app/src/configuration_service.hpp/.cpp | activeThemeChanged in ConfigurationChangeSummary und Preview; neue echte Usermutation schreibt im bestehenden Commitpfad V2 |
 | test/test_device_ui_contracts/test_device_ui_contracts.cpp | generische Shell-, Text-, Theme-, Session-, Refresh- und Commandcontracttests |
 | test/test_fermentation_ui_models/test_fermentation_ui_models.cpp | fachliche Snapshot-/Touch-Web-/Revisions-/Command-/Fallbackprojektion |
-| test/test_boot_classification, test/test_actuation_interlock, test/test_run_persistence_coordinator, test/test_run_commands und Konfigurationstests | direkt erforderliche Regressionen fuer Fallback, IDs, V2 und bestehende Safety-/Persistenzvertraege |
+| test/test_boot_classification/test_boot_classification.cpp, test/test_actuation_interlock/test_actuation_interlock.cpp, test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp und test/test_run_commands/test_run_commands.cpp | direkt erforderliche Regressionen fuer selected-R1-Fallback, Resume-Handoff, IDs und bestehende Safety-/Persistenzvertraege |
+| test/test_configuration_graph_codecs/test_configuration_graph_codecs.cpp, test/test_configuration_graph_store/test_configuration_graph_store.cpp, test/test_configuration_bootstrap_store/test_configuration_bootstrap_store.cpp, test/test_configuration_recovery_service/test_configuration_recovery_service.cpp und test/test_configuration_service/test_configuration_service.cpp | V1/V2-Graph-/Store-/Bootstrap-/Recovery-/Previewregressionen einschliesslich canonical V1-Bytes, V3 fail-closed, no-boot-write und activeThemeChanged |
 
 Nur tatsaechlich benoetigte cpp-Dateien werden angelegt. platformio.ini,
 ESP-IDF-Komponenten, dependencies.lock, CMake-Abhaengigkeiten, Boardprofile,
@@ -746,18 +911,25 @@ Renderer-/Assetdateien und Hardwareadapter bleiben unveraendert.
    Slots, ClockViewInput, statischer Extensioncatalog, Text-/Themegrundtypen,
    Refreshhint und reine Sessionlease.
 2. Text-, Theme- und Konfigurationsschnitt: physisch getrennte Packs,
-   Buildinclusion, Resolverfallback und UserConfiguration V2 ausschliesslich
-   ueber bestehenden Configuration-Graph/Migrationspfad.
+   Buildinclusion und Resolverfallback sowie UserConfiguration V1/V2 durch den
+   bestehenden Configuration-Graph-/Store-/Preview-/Commitpfad; V1 wird nur im
+   RAM normalisiert, V1-Bytes bleiben bei der Revalidation V1 und jede neue
+   echte Usermutation beziehungsweise Factoryinitialisierung schreibt V2.
 3. Appprojektion: gemeinsamer FermentationUiSnapshot ohne Locale/Route,
    surfaceeigener Shellcomposer, appseitige ExpectedRevisions und
    Touch/Web-Gleichheit.
-4. Commandbridge: command-spezifische kanonische Revisionpruefung,
-   Confirmation-Replay und exakte UiRequestId-zu-CommandEnvelope-Abbildung,
-   ohne Navigation oder zweiten Idempotenzspeicher.
+4. Commandbridge: app-owned typisierte Detail-/Confirmationresultate,
+   exakte UiRequestId-zu-CommandEnvelope-Abbildung und canonical
+   decide*-first-Validierung; nur kanonisches NotConfirmed ergibt
+   ConfirmationRequired, ohne Navigation, UI-Precheck oder zweiten
+   Idempotenzspeicher.
 5. R5.9-Conformance-Korrektur: FallbackSelectionRequired,
-   pendingFallbackResume, bestaetigtes ResumeFallback über den vorhandenen
-   Coordinator, unveraenderter Interlock-Deny vor Applied und direkte
-   Boot-/Persistence-/Interlockregressionen.
+   pendingFallbackResume und Variante A im vorhandenen Coordinator; Current
+   und selected Fallback teilen nur einen kleinen R1-Exact-Time-Kern,
+   write-before-apply und den bestehenden Resume-Handoff. Vor Applied bleibt
+   der Interlock deny; C2-/weighted-/biologische Recovery bleibt ausserhalb
+   des R1-Aufrufgraphs. Direkte Boot-/Persistence-/Interlockregressionen
+   beweisen die Grenze.
 6. Gezieltes Abschlussreview und die nach CI_AND_QUALITY_GATES erlaubten
    betroffenen nativen Nachweise. Alle Schnitte verbleiben im selben Draft-PR
    #142 und werden weder zu neuen Plan-, Roadmap- noch Feature-PRs.
@@ -771,7 +943,10 @@ Renderer-/Assetdateien und Hardwareadapter bleiben unveraendert.
 | Touchshell koennte Webnavigation oder Locale erzwingen. | Gemeinsamer Fachsnapshot ohne Route/Locale; LocalDeviceShellState und Websession bleiben getrennt. |
 | UTC ohne Zone oder falscher Resolververtrag. | ClockViewInput enthaelt beide Werte; keine Konvertierungsbehauptung oder Adapterimplementierung. |
 | UI-IDs koennten Replay/Persistenz duplizieren. | Verlustfreie Abbildung nur auf bestehenden CommandEnvelope; keine neue Registry, Persistenz oder Envelope-Surrogate. |
-| Fallback koennte als Freigabe missverstanden werden. | Retained unresolved Angebot, Resume nur bestaetigt, Applied vor FSM und anschliessend unveraenderte frische Interlockevaluation. |
+| Fehlende Bestaetigung koennte stale, ungueltige oder safety-abgelehnte Commands maskieren. | Kein UI-Preconfirmation-Gate: der kanonische decide*-Pfad validiert zuerst; nur sein NotConfirmed wird ConfirmationRequired. |
+| Appdetails koennten als generische Plattformtypen in ADR-013 brechen. | device_platform liefert nur fuenf Oberkategorien; FermentationUiCommandResult, -Detail und -ConfirmationRequest bleiben vollstaendig app-owned. |
+| V1-Records koennten beim Revalidate still als V2 serialisiert oder beim Boot geschrieben werden. | Schema des References/Envelopes steuert das Canonical-Encoding; V1 bleibt V1-Bytes, Normalisierung ist nur RAM und eine Mutation schreibt erst danach V2. |
+| Fallback koennte als Freigabe oder den alten C2-Pfad missverstanden werden. | Retained unresolved Angebot, Variante-A-R1-Exact-Time-Kern ohne C2/weighted/Biologie, Resume nur bestaetigt, Applied vor FSM und anschliessend unveraenderte frische Interlockevaluation. |
 | Ein Discard waere unbemerkt neue Recoverypolicy. | Kein Discard in #25; Bedarf an neuem persistierenden Pfad stoppt fuer Ownerentscheidung. |
 | Theme- oder Localefallback koennte Konfiguration still umschreiben. | Known-vs-included getrennt; Anzeigefallback ohne Write im bestehenden V2-Pfad. |
 
@@ -804,8 +979,9 @@ Lizenz, Ressourcenmessung, Integrationsgrenze und Ownerentscheidung.
 - PR #142 bleibt der eine Draft-PR mit Roadmap-Sync, dieser freigegebenen
   Planrevision und erst danach der Implementation.
 - device_platform enthaelt nur generische Shell-, Text-, Theme-, Session-,
-  Refresh- und Ergebnistypen; fermentation_app besitzt alle
-  Fermentationssnapshots, Fachrevisionen, Fachcommands und Apptexte.
+  Refresh- sowie fuenf Ergebnisoberkategorien; fermentation_app besitzt alle
+  Fermentationssnapshots, Fachrevisionen, Fachcommands, typisierten
+  Commanddetails/-Confirmations und Apptexte.
 - Die lokale Shell zeigt Header und exakt vier sichtbare Slots, samt
   Home/Back, leeren Slots, Plattform-vor-App und Fehlerisolation, ohne
   Browsernavigation oder Pixelvertrag zu erzwingen.
@@ -816,8 +992,10 @@ Lizenz, Ressourcenmessung, Integrationsgrenze und Ownerentscheidung.
   Commandgate; alle Staleentscheidungen beruhen nur auf relevanten bestehenden
   kanonischen Domainrevisionen.
 - UiRequestId erzeugt bei CommandEnvelope-Pfaden keine zweite Idempotenz,
-  sondern exakt dessen ID; Confirmation, NotConfirmed, AlreadyProcessed und
-  Persistenz haben keine doppelte Nebenwirkung.
+  sondern exakt dessen ID. Der kanonische decide*-Pfad prueft Revisions-,
+  Zustands-, Safety- und Eingaberegeln vor Confirmation; nur NotConfirmed wird
+  ConfirmationRequired, und NotConfirmed, AlreadyProcessed sowie Persistenz
+  haben keine doppelte Nebenwirkung.
 - ManuEngineer, DE/EN/ES, aktive Locale zu Englisch zu sichtbarem Key,
   getrennte Textpacks, known-vs-included, dark-only R1 und fail-closed
   Standardtheme sind nativ nachweisbar.
@@ -825,9 +1003,14 @@ Lizenz, Ressourcenmessung, Integrationsgrenze und Ownerentscheidung.
   Konverter-/Rendererimplementierung.
 - Touch-Service 10 Minuten ohne Absolutlimit und getrennte Web-Service-5/15
   sind produktkonkret composed; normale Weblogin-30/12 bleibt unveraendert.
+- V1 bleibt lesbar und wird ohne Bootwrite im RAM auf manuengineer-dark
+  normalisiert; V1/V2-Graph-/Store-/Previewvalidierung ist schema-aware, neue
+  Userwrites und Factoryinitialisierung sind V2, V3 und hoeher fail-closed.
 - FallbackRecovered/FallbackRecoveryPending wird korrekt als
-  FallbackSelectionRequired retained, bis Applied all-off; nur bestaetigtes
-  ResumeFallback nutzt den bestehenden Write-before-Apply-Pfad, und
+  FallbackSelectionRequired retained, bis Applied all-off. Nur bestaetigtes
+  ResumeFallback verwendet die Variante-A-Refaktorierung mit dem gemeinsamen
+  R1-Exact-Time-Kern und dem bestehenden Write-before-Apply-/Resume-Handoff;
+  C2-/weighted-/biologische Recovery bleibt unaufgerufen und
   ActuationInterlock gewinnt keine neue Allow-Regel.
 - Keine Renderer-, HTML-, Hardware-, GPIO-, Asset-, Font-, Plugin-,
   Bibliotheks-, neue Safety-/Recovery-/Sensor-/Auth- oder zweite
