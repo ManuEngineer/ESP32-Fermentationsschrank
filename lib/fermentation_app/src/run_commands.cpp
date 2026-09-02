@@ -784,26 +784,28 @@ void decideProgramStartInto(const RunCommandState& current,
             request.sensorMode, resolution.effectiveMode, previewRevision};
     }
 
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return;
-    }
-
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return;
     }
 
-    if (!applyTransition(decision.after, ProcessEvent::StartRun,
+    auto candidate = decision.before;
+    if (!applyTransition(candidate, ProcessEvent::StartRun,
                          request.envelope.monotonicMillis, &*snapshot)) {
         decision.status = CommandStatus::InvalidInput;
         return;
     }
 
-    decision.after.activeRunId = request.runId;
-    decision.after.activeRunSensorMode = resolution.effectiveMode;
-    decision.after.activeProgramRun = std::move(run);
-    decision.after.activeManualRun.reset();
-    decision.after.processRunSnapshot = *snapshot;
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return;
+    }
+
+    candidate.activeRunId = request.runId;
+    candidate.activeRunSensorMode = resolution.effectiveMode;
+    candidate.activeProgramRun = std::move(run);
+    candidate.activeManualRun.reset();
+    candidate.processRunSnapshot = *snapshot;
+    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     const auto outcome = startSensorSelectionOutcome(
@@ -862,20 +864,21 @@ void decideManualStartInto(const RunCommandState& current,
         ProcessKind::ManualHolding,
     };
 
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return;
-    }
-
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return;
     }
 
-    if (!installManualRun(decision.after, decision.envelope,
+    auto candidate = decision.before;
+    if (!installManualRun(candidate, decision.envelope,
                           std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
         return;
     }
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return;
+    }
+    decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
     // #21, 6.8: kein automatischer Ersatz bei manuellem Start - substituted
@@ -938,10 +941,6 @@ CommandDecision decideStop(const RunCommandState& current,
     if (!requireRunRevision(decision)) {
         return decision;
     }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return decision;
-    }
     if (!activeProcessState(current.processState.state) ||
         !current.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
@@ -982,6 +981,11 @@ CommandDecision decideStop(const RunCommandState& current,
         !installManualRun(candidate, decision.envelope,
                           std::move(*coolingPlan))) {
         decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
 
@@ -1027,10 +1031,6 @@ CommandDecision decideCompletion(const RunCommandState& current,
     if (!requireRunRevision(decision)) {
         return decision;
     }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return decision;
-    }
     if (current.processState.state != ProcessState::Completed) {
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
@@ -1071,6 +1071,11 @@ CommandDecision decideCompletion(const RunCommandState& current,
         return decision;
     }
 
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return decision;
+    }
+
     decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
@@ -1099,10 +1104,6 @@ CommandDecision decideRunAdjustment(
     auto decision =
         beginDecision(current, request.envelope, CommandKind::AdjustRun);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
     if (!adjustmentAllowedIn(current.processState.state) ||
@@ -1203,6 +1204,11 @@ CommandDecision decideRunAdjustment(
         }
     }
 
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return decision;
+    }
+
     decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
@@ -1227,15 +1233,12 @@ CommandDecision decideApplyRecoveryTimeCorrection(
         !requireRecoveryEpisodeRevision(decision)) {
         return decision;
     }
-    if (!request.envelope.confirmed ||
-        current.processState.state != ProcessState::Fermenting ||
+    if (current.processState.state != ProcessState::Fermenting ||
         !current.priorBootPhaseElapsed.has_value() ||
         current.priorBootPhaseElapsed->taggedState !=
             ProcessState::Fermenting ||
         !current.priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value()) {
-        decision.status = request.envelope.confirmed
-                              ? CommandStatus::NotAllowedInState
-                              : CommandStatus::NotConfirmed;
+        decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
 
@@ -1265,6 +1268,11 @@ CommandDecision decideApplyRecoveryTimeCorrection(
         newCumulative;
     if (lower > *current.priorBootPhaseElapsed->elapsed.upperBoundSeconds) {
         decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
 
@@ -1337,10 +1345,6 @@ CommandDecision decideFaultReset(const RunCommandState& current,
     if (!requireFaultRevision(decision)) {
         return decision;
     }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return decision;
-    }
     const auto& evaluation = request.evaluation;
     if (evaluation.faultRevision != current.faultRevision) {
         decision.status = CommandStatus::StaleState;
@@ -1354,6 +1358,10 @@ CommandDecision decideFaultReset(const RunCommandState& current,
         return decision;
     }
     if (!requireRevisionCapacity(decision, decision.before.faultRevision)) {
+        return decision;
+    }
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
     beginMutation(decision);
@@ -1370,10 +1378,6 @@ CommandDecision decideApplySensorSelectionAction(
     auto decision = beginDecision(current, request.envelope,
                                   CommandKind::ApplySensorSelectionAction);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
     if (!current.activeProgramRun.has_value() &&
@@ -1451,6 +1455,10 @@ CommandDecision decideApplySensorSelectionAction(
                 !applySensorRoleChangeQualificationReset(
                     candidate, request.envelope.monotonicMillis)) {
                 decision.status = CommandStatus::InvalidInput;
+                return decision;
+            }
+            if (!request.envelope.confirmed) {
+                decision.status = CommandStatus::NotConfirmed;
                 return decision;
             }
             decision.after = std::move(candidate);

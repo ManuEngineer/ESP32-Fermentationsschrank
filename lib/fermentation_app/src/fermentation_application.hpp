@@ -73,6 +73,12 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
+    // Explicit R1 selected-fallback action.  No persistence is touched when
+    // confirmed is false; the caller must present the structured confirmation
+    // before invoking the mutating path.
+    [[nodiscard]] RunPersistenceResult resumeFallback(
+        bool confirmed, const CrossRolePlausibilityContext& liveSensorEvidence);
+
    private:
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
@@ -91,6 +97,8 @@ class FermentationApplication {
         const RunPersistenceSnapshot* snapshot,
         const RunCheckpointTime& bootTime);
     [[nodiscard]] bool prepareResumeOffer(
+        const RunPersistenceSnapshot* snapshot);
+    [[nodiscard]] bool prepareFallbackSelection(
         const RunPersistenceSnapshot* snapshot);
     [[nodiscard]] bool evaluateCurrentRecovery(
         const RunPersistenceSnapshot* snapshot,
@@ -113,6 +121,7 @@ class FermentationApplication {
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
+    std::unique_ptr<RunCommandState> pendingFallbackResume_;
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};

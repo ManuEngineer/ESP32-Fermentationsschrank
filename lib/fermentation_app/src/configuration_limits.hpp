@@ -7,6 +7,8 @@ namespace fermentation::configuration_limits {
 
 inline constexpr std::size_t kMinimumLanguageIdBytes = 2U;
 inline constexpr std::size_t kMaximumLanguageIdBytes = 16U;
+inline constexpr std::size_t kMinimumThemeIdBytes = 1U;
+inline constexpr std::size_t kMaximumThemeIdBytes = 48U;
 inline constexpr std::size_t kMinimumTimeZoneIdBytes = 1U;
 inline constexpr std::size_t kMaximumTimeZoneIdBytes = 64U;
 inline constexpr std::size_t kMinimumProgramIdBytes = 1U;

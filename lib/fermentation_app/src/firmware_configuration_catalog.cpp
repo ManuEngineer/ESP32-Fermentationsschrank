@@ -21,4 +21,8 @@ bool containsTimeZoneId(const std::string& identifier) {
         [&identifier](const auto* value) { return identifier == value; });
 }
 
+bool containsThemeId(const std::string& identifier) {
+    return identifier == kFactoryThemeId;
+}
+
 }  // namespace fermentation::firmware_configuration_catalog

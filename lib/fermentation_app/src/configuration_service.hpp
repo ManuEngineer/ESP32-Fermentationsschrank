@@ -143,6 +143,7 @@ struct ConfigurationCandidateIntegrity {
 
 struct ConfigurationChangeSummary {
     bool displayLanguageChanged{false};
+    bool activeThemeChanged{false};
     bool timeZoneChanged{false};
     bool deviceNameChanged{false};
     std::uint16_t programsAdded{0U};

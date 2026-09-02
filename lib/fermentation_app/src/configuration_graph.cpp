@@ -11,12 +11,14 @@ template <typename Version>
 bool validReference(
     const ConfigurationRecordReference<Version>& reference,
     device_platform::RecordTypeId expectedRecordType, std::size_t slotCount,
-    std::uint32_t expectedSchema, std::size_t maximumPayloadBytes,
+    std::uint32_t minimumSchema, std::uint32_t maximumSchema,
+    std::size_t maximumPayloadBytes,
     std::optional<std::size_t> exactPayloadBytes = std::nullopt) {
     return reference.recordType == expectedRecordType &&
            reference.slot.value() < slotCount &&
            reference.version.value() != 0U &&
-           reference.schemaVersion == expectedSchema &&
+           reference.schemaVersion >= minimumSchema &&
+           reference.schemaVersion <= maximumSchema &&
            reference.payloadLength <= maximumPayloadBytes &&
            (!exactPayloadBytes.has_value() ||
             reference.payloadLength == *exactPayloadBytes) &&
@@ -120,14 +122,16 @@ bool isPlausible(const ConfigurationManifest& manifest) {
            validReference(
                manifest.userConfiguration, kUserConfigurationRecordType,
                configuration_limits::kConfigurationDocumentSlotCount, 1U,
+               kCurrentUserConfigurationSchemaVersion,
                configuration_limits::kMaximumUserConfigurationPayloadBytes) &&
            validReference(manifest.serviceConfiguration,
                           kServiceConfigurationRecordType,
                           configuration_limits::kConfigurationDocumentSlotCount,
-                          1U, 0U, 0U) &&
+                          1U, 1U, 0U, 0U) &&
            validReference(
                manifest.programCatalog, kProgramCatalogRecordType,
                configuration_limits::kConfigurationDocumentSlotCount, 1U,
+               1U,
                configuration_limits::kMaximumProgramCatalogPayloadBytes) &&
            manifest.userConfiguration.storageEpoch ==
                manifest.serviceConfiguration.storageEpoch &&
@@ -141,6 +145,7 @@ bool isPlausible(const ConfigurationRootRecord& root) {
             root.active, kConfigurationManifestRecordType,
             configuration_limits::kConfigurationManifestSlotCount,
             kConfigurationManifestSchemaVersion1,
+            kConfigurationManifestSchemaVersion1,
             configuration_limits::kConfigurationManifestPayloadBytes,
             configuration_limits::kConfigurationManifestPayloadBytes)) {
         return false;
@@ -151,6 +156,7 @@ bool isPlausible(const ConfigurationRootRecord& root) {
     return validReference(
                *root.fallback, kConfigurationManifestRecordType,
                configuration_limits::kConfigurationManifestSlotCount,
+               kConfigurationManifestSchemaVersion1,
                kConfigurationManifestSchemaVersion1,
                configuration_limits::kConfigurationManifestPayloadBytes,
                configuration_limits::kConfigurationManifestPayloadBytes) &&

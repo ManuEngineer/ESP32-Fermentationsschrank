@@ -364,6 +364,40 @@ void test_user_configuration_full_envelope_golden_bytes_has_no_old_fields() {
     TEST_ASSERT_EQUAL_UINT32(37U, encoded.size() - payload.size());
 }
 
+void test_user_configuration_v1_v2_schema_contract() {
+    MockTimeZoneResolver resolver;
+    auto configuration = validUserConfiguration();
+    configuration.activeThemeId = "manuengineer-dark";
+    std::string v1;
+    TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                         configuration, 1U, resolver, v1) ==
+                     ConfigurationCodecStatus::Success);
+    const auto decodedV1 =
+        fermentation::decodeUserConfigurationPayload(1U, v1, resolver);
+    TEST_ASSERT_TRUE(decodedV1.document.has_value());
+    TEST_ASSERT_EQUAL_STRING("manuengineer-dark",
+                             decodedV1.document->activeThemeId.c_str());
+
+    std::string v2;
+    TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                         configuration, 2U, resolver, v2) ==
+                     ConfigurationCodecStatus::Success);
+    const auto decodedV2 =
+        fermentation::decodeUserConfigurationPayload(2U, v2, resolver);
+    TEST_ASSERT_TRUE(decodedV2.document.has_value());
+    TEST_ASSERT_EQUAL_STRING(configuration.displayLanguageId.c_str(),
+                             decodedV2.document->displayLanguageId.c_str());
+    TEST_ASSERT_EQUAL_STRING(configuration.timeZoneId.c_str(),
+                             decodedV2.document->timeZoneId.c_str());
+    TEST_ASSERT_EQUAL_STRING(configuration.deviceName.c_str(),
+                             decodedV2.document->deviceName.c_str());
+    TEST_ASSERT_EQUAL_STRING(configuration.activeThemeId.c_str(),
+                             decodedV2.document->activeThemeId.c_str());
+    TEST_ASSERT_TRUE(fermentation::decodeUserConfigurationPayload(
+                         3U, v2, resolver)
+                         .status == ConfigurationCodecStatus::UnsupportedSchema);
+}
+
 void test_user_codec_rejects_missing_extra_and_oversized_payloads() {
     MockTimeZoneResolver resolver;
     std::string encoded;
@@ -382,7 +416,7 @@ void test_user_codec_rejects_missing_extra_and_oversized_payloads() {
                          1U, std::string(257U, 'x'), resolver)
                          .status == ConfigurationCodecStatus::CapacityExceeded);
     TEST_ASSERT_TRUE(
-        fermentation::decodeUserConfigurationPayload(2U, encoded, resolver)
+        fermentation::decodeUserConfigurationPayload(3U, encoded, resolver)
             .status == ConfigurationCodecStatus::UnsupportedSchema);
 }
 
@@ -753,6 +787,7 @@ int main() {
     RUN_TEST(test_user_configuration_payload_golden_bytes_and_round_trip);
     RUN_TEST(
         test_user_configuration_full_envelope_golden_bytes_has_no_old_fields);
+    RUN_TEST(test_user_configuration_v1_v2_schema_contract);
     RUN_TEST(test_user_codec_rejects_missing_extra_and_oversized_payloads);
     RUN_TEST(
         test_payload_capacity_boundaries_are_independent_from_field_validation);

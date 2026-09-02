@@ -1308,15 +1308,16 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
 void test_run_revision_capacity_does_not_mask_prior_domain_results() {
     const std::uint32_t max = std::numeric_limits<std::uint32_t>::max();
 
-    // Ein gueltiger Start liefert auch an der Revisionsgrenze zuerst die
-    // Vorschau/Bestaetigungsantwort; ungueltige Daten behalten ihre Diagnose.
+    // Vollstaendige kanonische Validierung (einschliesslich Kapazitaet) geht
+    // einer Bestaetigungsantwort voran; ungueltige Daten behalten ihre
+    // Diagnose.
     {
         auto state = standbyState();
         state.runRevision = max;
         auto request = programStart(state, 1U);
         request.envelope.confirmed = false;
         const auto unconfirmed = decideProgramStart(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(unconfirmed.status));
         TEST_ASSERT_TRUE(unconfirmed.startSummary.has_value());
         assertRejectedWithoutStateMutation(unconfirmed);
@@ -1340,12 +1341,12 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
         auto request = manualStart(state, 1U, manualPlan("hold"));
         request.envelope.confirmed = false;
         const auto decision = decideManualStart(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_TRUE(decision.startSummary.has_value());
         assertRejectedWithoutStateMutation(decision);
     }
-    // Stop und Abschluss pruefen Bestaetigung und Zustand vor der Kapazitaet.
+    // Stop und Abschluss pruefen Zustand und Kapazitaet vor der Bestaetigung.
     {
         auto state = startedProgramState();
         state.runRevision = max;
@@ -1353,7 +1354,7 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
                             std::nullopt, false};
         request.envelope.confirmed = false;
         const auto unconfirmed = decideStop(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(unconfirmed.status));
         assertRejectedWithoutStateMutation(unconfirmed);
 
@@ -1376,7 +1377,7 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
                                   false};
         request.envelope.confirmed = false;
         const auto unconfirmed = decideCompletion(completed, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(unconfirmed.status));
         assertRejectedWithoutStateMutation(unconfirmed);
 
@@ -1389,14 +1390,15 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
             static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
     }
-    // Laufanpassungen behalten NotConfirmed, NoChange und InvalidInput.
+    // Laufanpassungen pruefen Kapazitaet, NoChange und InvalidInput vor einer
+    // moeglichen Bestaetigung.
     {
         auto state = startedProgramState();
         state.runRevision = max;
         auto request = targetChange(state, 2U, 39.0, 200U);
         request.envelope.confirmed = false;
         const auto unconfirmed = decideRunAdjustment(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(unconfirmed.status));
         assertRejectedWithoutStateMutation(unconfirmed);
 

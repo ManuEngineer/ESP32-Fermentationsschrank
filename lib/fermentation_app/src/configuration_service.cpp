@@ -148,6 +148,9 @@ ConfigurationChangeSummary summarizeChanges(
     summary.displayLanguageChanged =
         candidate.userConfiguration->displayLanguageId !=
         candidate.baseUserConfiguration->displayLanguageId;
+    summary.activeThemeChanged =
+        candidate.userConfiguration->activeThemeId !=
+        candidate.baseUserConfiguration->activeThemeId;
     summary.timeZoneChanged = candidate.userConfiguration->timeZoneId !=
                               candidate.baseUserConfiguration->timeZoneId;
     summary.deviceNameChanged = candidate.userConfiguration->deviceName !=
@@ -188,12 +191,13 @@ bool calculateCandidateIntegrity(
     const device_platform::ITimeZoneResolver& resolver,
     ConfigurationCandidateIntegrity& integrity) {
     std::string payload;
-    if (encodeUserConfigurationPayload(*candidate.userConfiguration, resolver,
-                                       payload) !=
+    if (encodeUserConfigurationPayload(
+            *candidate.userConfiguration,
+            kCurrentUserConfigurationSchemaVersion, resolver, payload) !=
         ConfigurationCodecStatus::Success) {
         return false;
     }
-    integrity.userSchema = 1U;
+    integrity.userSchema = kCurrentUserConfigurationSchemaVersion;
     integrity.userPayloadLength = static_cast<std::uint32_t>(payload.size());
     integrity.userPayloadCrc = device_platform::computeCrc32IsoHdlc(payload);
     payload.clear();

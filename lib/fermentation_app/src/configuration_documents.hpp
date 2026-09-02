@@ -11,7 +11,13 @@
 
 namespace fermentation {
 
-enum class UserConfigurationSchema : std::uint8_t { Version1 = 1U };
+enum class UserConfigurationSchema : std::uint8_t {
+    Version1 = 1U,
+    Version2 = 2U,
+};
+
+inline constexpr std::uint32_t kCurrentUserConfigurationSchemaVersion =
+    static_cast<std::uint32_t>(UserConfigurationSchema::Version2);
 enum class ServiceConfigurationSchema : std::uint8_t { Version1 = 1U };
 enum class ProgramCatalogSchema : std::uint8_t { Version1 = 1U };
 
@@ -34,6 +40,9 @@ struct UserConfiguration {
     std::string displayLanguageId;
     std::string timeZoneId;
     std::string deviceName;
+    // V1 records are normalized to this stable R1 default while being read.
+    // New persistent records carry this value in the V2 payload.
+    std::string activeThemeId{"manuengineer-dark"};
 };
 
 struct ServiceConfiguration {};
@@ -46,6 +55,8 @@ enum class UserConfigurationStatus : std::uint8_t {
     Success,
     InvalidLanguageId,
     UnknownLanguageId,
+    InvalidThemeId,
+    UnknownThemeId,
     InvalidTimeZoneId,
     UnknownTimeZoneId,
     TimeZoneRejected,

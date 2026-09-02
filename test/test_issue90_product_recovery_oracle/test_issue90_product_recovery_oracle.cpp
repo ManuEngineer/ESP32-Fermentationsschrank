@@ -2932,6 +2932,8 @@ const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
             return "RESUME_OFFER";
         case fermentation::RunLoadDisposition::RecoveryEvaluation:
             return "RECOVERY_EVALUATION";
+        case fermentation::RunLoadDisposition::FallbackSelectionRequired:
+            return "FALLBACK_SELECTION_REQUIRED";
         case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
         case fermentation::RunLoadDisposition::Completed:
@@ -3186,15 +3188,9 @@ ProductionActual runRunProduction(const OracleCase& item,
         }
     } else if (result.status ==
                fermentation::RunPersistenceLoadStatus::FallbackRecovered) {
-        const auto loadDisposition =
-            fermentation::boot_classification::classifyRunLoad(
-                result.status,
-                result.snapshot.has_value() ? &*result.snapshot : nullptr);
-        if (loadDisposition == fermentation::RunLoadDisposition::SafeBoot) {
-            actual.productOutcome = "RUN_RECOVERY_REQUIRED";
-        } else {
-            actual.productOutcome = "OLDER_VALID_CHECKPOINT_RESUME";
-        }
+        // Fallback selection is intentionally a recovery-required product
+        // state until the explicit R1 resume action commits successfully.
+        actual.productOutcome = "RUN_RECOVERY_REQUIRED";
         actual.recordClassification = "FullyValidFallback";
     } else {
         actual.productOutcome = "RUN_RECOVERY_REQUIRED";

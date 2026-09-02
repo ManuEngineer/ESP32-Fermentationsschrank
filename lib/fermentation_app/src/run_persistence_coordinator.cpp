@@ -1189,6 +1189,9 @@ RecoveryActivationOutcome
 RunPersistenceCoordinator::activateFallbackRecoveredRun(
     const RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
+    // R1 selected-fallback path.  The historical implementation below used
+    // the C2 weighted/biological recovery anchors; it is deliberately no
+    // longer reachable from the product path.
     const auto invalid = [this](const RunCommandState& state) {
         return RecoveryActivationOutcome{
             result(RunPersistenceResultStatus::InvalidDecision,
@@ -1196,6 +1199,142 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
                    RunPersistenceTechnicalReason::InvalidProjection),
             state};
     };
+    {
+    if (state_ != RunPersistenceCoordinatorState::FallbackRecoveryPending ||
+        !currentHead_.has_value() || !currentHead_->fallback.has_value()) {
+        return {unavailableResult(), current};
+    }
+    const auto fallbackReference = *currentHead_->fallback;
+    const auto targetSlot = currentHead_->current.slot;
+    if (targetSlot > 1U || fallbackReference.slot > 1U ||
+        targetSlot == fallbackReference.slot ||
+        !slots_[fallbackReference.slot].has_value() ||
+        !current.processRunSnapshot.has_value()) {
+        return invalid(current);
+    }
+    const auto& loadedRecord = *slots_[fallbackReference.slot];
+    // The restored argument is the exact fallback snapshot returned by the
+    // load contract.  The coordinator has already bound its reference and
+    // persisted-id window during load; no second projection is allowed to
+    // invent a separate command/recovery identity gate here.
+    const auto commitCandidate =
+        [&](const RunCommandState& candidate) -> RecoveryActivationOutcome {
+        const auto snapshot = makeRunPersistenceSnapshot(
+            candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time,
+            schedule_.intervalMinutes());
+        if (!snapshot.has_value()) return invalid(current);
+        const auto persisted = writeSnapshotCore(
+            *snapshot, time, false, current,
+            RunPersistenceMutationKind::Recovery, std::nullopt, targetSlot,
+            RunPersistenceFallbackDirective{
+                RunPersistenceFallbackMode::SetExplicitReference,
+                fallbackReference},
+            RunPersistenceCoordinatorState::FallbackRecoveryPending);
+        if (persisted.status != RunPersistenceResultStatus::Applied) {
+            return {persisted, current};
+        }
+        return {persisted, candidate};
+    };
+
+    // Only the exact R1 resume-eligible states may use this selected-fallback
+    // handoff.  FERMENTING is the one state requiring the #124 exact-time
+    // calculation below; no C2 or weighted recovery value participates.
+    if (current.processState.state != ProcessState::Fermenting) {
+        if (!boot_classification::isR1ResumeEligible(loadedRecord.snapshot)) {
+            return invalid(current);
+        }
+        auto candidate = current;
+        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+        return commitCandidate(candidate);
+    }
+    if (current.runProgress.basis != RunProgressBasis::KnownTotal ||
+        !current.processRunSnapshot->fermentationDurationMinutes.has_value() ||
+        !loadedRecord.utcUnixSeconds.has_value()) {
+        return invalid(current);
+    }
+    if (!time.utcUnixSeconds.has_value()) {
+        return {result(RunPersistenceResultStatus::RecoveryPending,
+                       RunPersistenceStep::CandidateApply), current};
+    }
+    const auto prior = exactPriorFermentingSeconds(current);
+    if (!prior.has_value() || loadedRecord.snapshot.checkpointMonotonicMillis <
+                                  current.processState.stateEnteredAtMillis) {
+        return invalid(current);
+    }
+    const auto liveSegment = checkedToUint32(
+        (loadedRecord.snapshot.checkpointMonotonicMillis -
+         current.processState.stateEnteredAtMillis) /
+        1000U);
+    std::optional<std::uint64_t> phaseAtCheckpoint;
+    if (liveSegment.has_value()) {
+        phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
+    }
+    const auto wallClockSinceCheckpoint =
+        checkedUtcDelta(*time.utcUnixSeconds, *loadedRecord.utcUnixSeconds);
+    if (!phaseAtCheckpoint.has_value() ||
+        !wallClockSinceCheckpoint.has_value()) {
+        return invalid(current);
+    }
+    const auto recoveredPhase =
+        checkedAdd(*phaseAtCheckpoint, *wallClockSinceCheckpoint);
+    const auto fermentationDuration = checkedToUint32(
+        static_cast<std::uint64_t>(
+            *current.processRunSnapshot->fermentationDurationMinutes) *
+        60U);
+    const auto recoveredPrior =
+        recoveredPhase.has_value() ? checkedToUint32(*recoveredPhase)
+                                   : std::optional<std::uint32_t>{};
+    if (!recoveredPhase.has_value() || !fermentationDuration.has_value() ||
+        !recoveredPrior.has_value()) {
+        return invalid(current);
+    }
+
+    auto candidate = current;
+    if (!liveSegment.has_value() || !foldObservedRunSeconds(candidate, *liveSegment) ||
+        candidate.runRevision == std::numeric_limits<std::uint32_t>::max()) {
+        return invalid(current);
+    }
+    if (*recoveredPhase < *fermentationDuration) {
+        auto recoveredState = candidate.processState;
+        recoveredState.state = ProcessState::Fermenting;
+        recoveredState.stateEnteredAtMillis = time.monotonicMillis;
+        recoveredState.qualificationValidSinceMillis.reset();
+        recoveredState.targetReachStartedAtMillis = 0U;
+        recoveredState.targetReachWarningIssued = false;
+        const auto hop = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryResume, recoveredState},
+            time.monotonicMillis,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior});
+        if (!hop.proposed() ||
+            !applyProcessTransition(candidate.processState, hop,
+                                    &*candidate.processRunSnapshot)) {
+            return invalid(current);
+        }
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
+    } else {
+        const auto completion =
+            completeTimedRun(candidate.processState,
+                             *candidate.processRunSnapshot,
+                             time.monotonicMillis);
+        if (!completion.proposed() ||
+            !applyProcessTransition(candidate.processState, completion,
+                                    &*candidate.processRunSnapshot)) {
+            return invalid(current);
+        }
+        candidate.priorBootPhaseElapsed.reset();
+    }
+    ++candidate.runRevision;
+    applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+    return commitCandidate(candidate);
+    }
+
+    // Legacy C2 implementation retained only as source history until removed
+    // in the focused coordinator refactor; no R1 caller can reach it.
     if (state_ != RunPersistenceCoordinatorState::FallbackRecoveryPending ||
         !currentHead_.has_value() || !currentHead_->fallback.has_value()) {
         return {unavailableResult(), current};

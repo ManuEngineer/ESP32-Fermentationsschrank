@@ -229,6 +229,7 @@ ActuationEvaluation ActuationInterlock::evaluate(
                 result.permission = ActuatorSafetyGateStatus::Allowed;
             break;
         case RunLoadDisposition::RecoveryEvaluation:
+        case RunLoadDisposition::FallbackSelectionRequired:
         case RunLoadDisposition::NoActiveRun:
         case RunLoadDisposition::Completed:
         case RunLoadDisposition::TerminalFault:

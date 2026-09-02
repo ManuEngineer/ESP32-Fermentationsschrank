@@ -195,6 +195,8 @@ bool FermentationApplication::processBootClassification(
             return prepareResumeOffer(snapshot);
         case BootClassification::RecoveryEvaluation:
             return evaluateCurrentRecovery(snapshot, bootTime);
+        case BootClassification::FallbackSelectionRequired:
+            return prepareFallbackSelection(snapshot);
         case BootClassification::DiscardableRun:
         case BootClassification::CompletedRun:
         case BootClassification::TerminalRunFault:
@@ -226,6 +228,26 @@ bool FermentationApplication::prepareResumeOffer(
         requireService(FaultCode::RunPersistenceUntrusted);
         return false;
     }
+    return true;
+}
+
+bool FermentationApplication::prepareFallbackSelection(
+    const RunPersistenceSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    pendingFallbackResume_ =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (pendingFallbackResume_ == nullptr ||
+        !restoreRunPersistenceSnapshotInto(*snapshot, *pendingFallbackResume_)) {
+        pendingFallbackResume_.reset();
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    // The unresolved fallback is retained for an explicit user choice.  It
+    // is never published as an active runtime state and therefore cannot
+    // satisfy the actuator interlock before a successful persistence apply.
     return true;
 }
 
@@ -295,6 +317,30 @@ bool FermentationApplication::processTerminalClassification(
 }
 
 void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
+
+RunPersistenceResult FermentationApplication::resumeFallback(
+    bool confirmed, const CrossRolePlausibilityContext& liveSensorEvidence) {
+    if (!confirmed) {
+        RunPersistenceResult pending;
+        pending.status = RunPersistenceResultStatus::RecoveryPending;
+        pending.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
+        return pending;
+    }
+    if (pendingFallbackResume_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        RunPersistenceResult unavailable;
+        unavailable.status = RunPersistenceResultStatus::NotInitialized;
+        return unavailable;
+    }
+    const auto outcome = runPersistenceCoordinator_->activateFallbackRecoveredRun(
+        *pendingFallbackResume_, currentCheckpointTime(), liveSensorEvidence);
+    if (outcome.persistenceResult.status == RunPersistenceResultStatus::Applied) {
+        runtimeRunState_ = std::move(pendingFallbackResume_);
+        loadDisposition_ = RunLoadDisposition::ResumeOffer;
+        persistenceLoadStatus_ = RunPersistenceLoadStatus::Current;
+    }
+    return outcome.persistenceResult;
+}
 
 RunCheckpointTime FermentationApplication::currentCheckpointTime()
     const noexcept {

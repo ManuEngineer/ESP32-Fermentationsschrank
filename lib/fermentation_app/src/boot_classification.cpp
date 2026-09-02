@@ -62,7 +62,8 @@ RunLoadDisposition classifyRunLoad(
                        ? RunLoadDisposition::ResumeOffer
                        : RunLoadDisposition::NoActiveRun;
         case RunPersistenceLoadStatus::FallbackRecovered:
-            return RunLoadDisposition::SafeBoot;
+            return snapshot == nullptr ? RunLoadDisposition::SafeBoot
+                                       : RunLoadDisposition::FallbackSelectionRequired;
         case RunPersistenceLoadStatus::PreparedInterrupted:
         case RunPersistenceLoadStatus::NotReconstructible:
         case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
@@ -85,6 +86,8 @@ BootClassification classify(RunPersistenceLoadStatus status,
             return BootClassification::ResumeOffer;
         case RunLoadDisposition::RecoveryEvaluation:
             return BootClassification::RecoveryEvaluation;
+        case RunLoadDisposition::FallbackSelectionRequired:
+            return BootClassification::FallbackSelectionRequired;
         case RunLoadDisposition::NoActiveRun:
             return BootClassification::DiscardableRun;
         case RunLoadDisposition::Completed:
