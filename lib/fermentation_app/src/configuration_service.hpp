@@ -224,6 +224,9 @@ enum class ConfigurationCommitStatus : std::uint8_t {
     CapacityFailure,
     ConfigurationCommitIndeterminate,
     ConfigurationRuntimeFailure,
+    // The owning service has validated the current preview basis and the
+    // caller may now request the existing confirmation/commit step.
+    ReadyForConfirmation,
 };
 
 struct ConfigurationCommitResult {
@@ -281,6 +284,9 @@ class ConfigurationService {
         std::uint64_t handle);
     [[nodiscard]] ConfigurationCommitResult confirmPreview(
         std::uint64_t handle);
+    [[nodiscard]] ConfigurationCommitResult validatePreviewForConfirmation(
+        std::uint64_t handle,
+        UserConfigurationRevision expectedUserConfigurationRevision) const;
     [[nodiscard]] ConfigurationCommitResolutionStatus resolveIndeterminate();
     [[nodiscard]] ConfigurationCommitResolutionStatus recoverRuntimeFailure();
     [[nodiscard]] std::optional<ConfigurationCommitIndeterminateCause>
@@ -351,6 +357,11 @@ class ConfigurationService {
     [[nodiscard]] bool cancelRecovery();
     void failRecovery(ConfigurationRuntimeFailureCause cause);
     [[nodiscard]] bool initializeForTest(const LoadedConfigurationGraph& graph);
+    [[nodiscard]] ConfigurationCommitStatus
+    validatePreviewForConfirmationLocked(
+        std::uint64_t handle,
+        UserConfigurationRevision expectedUserConfigurationRevision) const
+        noexcept;
     [[nodiscard]] const ConfigurationMutationCoordinator*
     mutationCoordinatorIdentity() const {
         return &mutationCoordinator_;

@@ -14,8 +14,7 @@ struct FermentationUiProjectionInput {
     std::optional<RecoveryDisposition> recoveryDisposition;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus;
     std::optional<RunPersistenceCoordinatorState> coordinatorState;
-    PresentationState presentation;
-    bool applicationReady{false};
+    FermentationUiApplicationSource application;
     FermentationUiServiceSource service;
     std::optional<device_platform::TextKey> primaryAction;
     std::vector<device_platform::TextKey> semanticActions;

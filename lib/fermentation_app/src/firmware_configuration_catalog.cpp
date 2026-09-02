@@ -7,6 +7,8 @@ namespace fermentation::firmware_configuration_catalog {
 namespace {
 constexpr std::array<const char*, 3> kLanguages{{"de", "es", "en"}};
 constexpr std::array<const char*, 1> kTimeZones{{"Europe/Zurich"}};
+constexpr std::array<const char*, 2> kKnownThemes{{
+    kFactoryThemeId, kKnownFutureLightThemeId}};
 }  // namespace
 
 bool containsLanguageId(const std::string& identifier) {
@@ -22,7 +24,10 @@ bool containsTimeZoneId(const std::string& identifier) {
 }
 
 bool containsThemeId(const std::string& identifier) {
-    return identifier == kFactoryThemeId;
+    return std::any_of(kKnownThemes.begin(), kKnownThemes.end(),
+                       [&identifier](const auto* value) {
+                           return identifier == value;
+                       });
 }
 
 }  // namespace fermentation::firmware_configuration_catalog

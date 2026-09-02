@@ -56,15 +56,52 @@ struct FermentationUiResumeFallbackCommand {
     bool confirmed{false};
 };
 
-// Message acknowledgement and acoustic mute share the existing owning
-// MessageCommandRequest, but remain distinct alternatives at the UI boundary
-// so an action tag can never disagree with its payload.
-struct FermentationUiAcknowledgeMessageCommand {
-    MessageCommandRequest request;
+// The renderer-independent UI contract carries intent only.  In particular,
+// these payloads never carry a ProgramDocument, safety/sensor/planner
+// evidence, or an owning decision object.  The later application boundary
+// resolves the IDs and supplies its own current evidence before entering the
+// existing canonical command path.
+struct FermentationUiStartProgramIntent {
+    std::string runId;
+    std::string programId;
+    RunSensorMode sensorMode{RunSensorMode::Air};
 };
 
-struct FermentationUiMuteMessageCommand {
-    MessageCommandRequest request;
+struct FermentationUiStartManualHoldingIntent {
+    ManualRunPlanRequest plan;
+};
+
+struct FermentationUiStopRunIntent {
+    StopOption option{StopOption::Back};
+    std::optional<ManualRunPlanRequest> coolingPlan;
+};
+
+struct FermentationUiCompleteRunIntent {
+    bool startCooling{false};
+    std::optional<ManualRunPlanRequest> coolingPlan;
+};
+
+struct FermentationUiAdjustRunIntent {
+    std::optional<double> targetTemperatureCelsius;
+    std::optional<std::uint32_t> remainingDurationMinutes;
+};
+
+struct FermentationUiRecoveryTimeCorrectionIntent {
+    std::uint32_t secondsDelta{0U};
+};
+
+struct FermentationUiAcknowledgeMessageIntent {
+    std::uint32_t messageId{0U};
+};
+
+struct FermentationUiMuteMessageIntent {
+    std::uint32_t messageId{0U};
+};
+
+struct FermentationUiResetFaultIntent {};
+
+struct FermentationUiSensorSelectionIntent {
+    SensorSelectionUserAction action{SensorSelectionUserAction::RecheckProduct};
 };
 
 // CommandEnvelope-owned operations are tagged by their payload type. There is
@@ -73,11 +110,11 @@ struct FermentationUiMuteMessageCommand {
 // envelope because their owning contracts have no CommandEnvelope/idempotency
 // semantics.
 using FermentationUiEnvelopePayload = std::variant<
-    ProgramStartRequest, ManualStartRequest, StopRequest, CompletionRequest,
-    RunAdjustmentCommandRequest, ApplyRecoveryTimeCorrectionRequest,
-    FermentationUiAcknowledgeMessageCommand,
-    FermentationUiMuteMessageCommand, FaultResetRequest,
-    SensorSelectionCommandRequest>;
+    FermentationUiStartProgramIntent, FermentationUiStartManualHoldingIntent,
+    FermentationUiStopRunIntent, FermentationUiCompleteRunIntent,
+    FermentationUiAdjustRunIntent, FermentationUiRecoveryTimeCorrectionIntent,
+    FermentationUiAcknowledgeMessageIntent, FermentationUiMuteMessageIntent,
+    FermentationUiResetFaultIntent, FermentationUiSensorSelectionIntent>;
 
 struct FermentationUiEnvelopeCommand {
     device_platform::UiRequestId requestId;
@@ -99,6 +136,14 @@ enum class FermentationUiDetailStatus : std::uint8_t {
     UnsupportedAppDetail,
 };
 
+// A canonical Proposed decision is not an owning apply/persist outcome.  The
+// phase makes that distinction explicit to every renderer without introducing
+// another execution engine.
+enum class FermentationUiCommandPhase : std::uint8_t {
+    OwningOutcome,
+    DecisionOnly,
+};
+
 using FermentationUiCommandDetail =
     std::variant<CommandStatus, RunPersistenceResultStatus,
                  ConfigurationPreviewStatus, ConfigurationCommitStatus,
@@ -109,6 +154,7 @@ struct FermentationUiCommandResult {
         device_platform::DeviceUiCommandOutcomeCategory::Unavailable};
     FermentationUiCommandDetail detail{
         FermentationUiDetailStatus::UnsupportedAppDetail};
+    FermentationUiCommandPhase phase{FermentationUiCommandPhase::OwningOutcome};
     std::optional<FermentationUiConfirmationRequest> confirmation;
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };

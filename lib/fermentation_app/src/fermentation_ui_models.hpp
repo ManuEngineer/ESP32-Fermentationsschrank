@@ -115,6 +115,13 @@ struct FermentationUiServiceSource {
     std::optional<device_platform::TextKey> unavailableReason;
 };
 
+// Owning application state supplied to the projector. This is deliberately
+// not an ApplicationStatusView; the projector alone creates that UI model.
+struct FermentationUiApplicationSource {
+    PresentationState presentation;
+    bool ready{false};
+};
+
 class FermentationUiRefreshRevisionTracker {
    public:
     [[nodiscard]] device_platform::UiRefreshRevision publish(

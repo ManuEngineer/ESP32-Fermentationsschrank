@@ -369,23 +369,74 @@ void test_invalid_active_branch_promotes_complete_fallback() {
 void test_mixed_v1_v2_user_generations_remain_structurally_valid() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
-    seedGraph(store);  // active graph references a canonical V1 user record
+    const auto seeded = seedGraph(store);  // canonical V1 branch
     const fermentation::UserConfiguration v2{
-        "en", "Europe/Zurich", "V2-Orphan", "manuengineer-dark"};
-    std::string payload;
+        "en", "Europe/Zurich", "V2-Active", "manuengineer-dark"};
+    std::string userPayload;
     TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
                          v2,
                          static_cast<std::uint32_t>(
                              fermentation::UserConfigurationSchema::Version2),
-                         resolver, payload) ==
+                         resolver, userPayload) ==
                      fermentation::ConfigurationCodecStatus::Success);
     store.put("uc1", envelope(fermentation::configuration_storage_contract::
                                   kUserConfigurationRecordType,
-                              2U, 2U, payload));
+                              2U, 2U, userPayload));
+
+    // The newer manifest is a real active branch, while the older manifest
+    // remains the root's valid fallback.  Both references therefore
+    // participate in one graph; the V2 record is not an orphan high-water
+    // artifact.
+    // Reuse the exact service/catalog reference bytes from the V1 manifest;
+    // only the user reference changes schema and generation.
+    const auto loadedSeed = fermentation::ConfigurationGraphStore(
+        store, resolver).loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loadedSeed.graph.has_value());
+    fermentation::ConfigurationManifest v2Manifest{
+        fermentation::decodeChangeOrigin(1U),
+        fermentation::decodeChangeOperation(2U),
+        reference(fermentation::configuration_storage_contract::
+                      kUserConfigurationRecordType,
+                  1U, fermentation::UserConfigurationRevision{2U},
+                  userPayload),
+        loadedSeed.graph->active.manifest.serviceConfiguration,
+        loadedSeed.graph->active.manifest.programCatalog};
+    v2Manifest.userConfiguration.schemaVersion = 2U;
+    std::string manifestPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestPayload(
+                         v2Manifest, manifestPayload) ==
+                     fermentation::ConfigurationGraphCodecStatus::Success);
+    const auto v2ManifestReference = reference(
+        fermentation::configuration_storage_contract::
+            kConfigurationManifestRecordType,
+        1U, fermentation::ConfigurationManifestGeneration{2U},
+        manifestPayload);
+    store.put(fermentation::configuration_storage_contract::
+                  kConfigurationManifestSlotKeys[1U],
+              envelope(fermentation::configuration_storage_contract::
+                           kConfigurationManifestRecordType,
+                       1U, 2U, manifestPayload));
+    fermentation::ConfigurationRootRecord mixedRoot{
+        v2ManifestReference, seeded.root.active};
+    std::string rootPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeConfigurationRootPayload(
+                         mixedRoot, rootPayload) ==
+                     fermentation::ConfigurationGraphCodecStatus::Success);
+    store.put(fermentation::configuration_storage_contract::
+                  kConfigurationRootSlotKeys[1U],
+              envelope(fermentation::configuration_storage_contract::
+                           kConfigurationRootRecordType,
+                       1U, 2U, rootPayload));
 
     fermentation::ConfigurationGraphStore graphStore(store, resolver);
     const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(loaded.graph.has_value());
+    TEST_ASSERT_EQUAL_UINT32(2U, loaded.graph->active.manifest.userConfiguration.schemaVersion);
+    TEST_ASSERT_TRUE(loaded.graph->fallback.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U,
+                             loaded.graph->fallback->manifest.userConfiguration.schemaVersion);
+    TEST_ASSERT_EQUAL_STRING("V2-Active",
+                             loaded.graph->active.userConfiguration->deviceName.c_str());
     const auto scan = graphStore.validationScan(*loaded.graph);
     TEST_ASSERT_TRUE(scan.status == fermentation::ConfigurationScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT64(2U, scan.highWater.userConfiguration.value());

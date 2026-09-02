@@ -10,9 +10,11 @@ namespace {
 using Category = device_platform::DeviceUiCommandOutcomeCategory;
 
 FermentationUiCommandResult makeResult(Category category,
-                                       FermentationUiCommandDetail detail) {
+                                       FermentationUiCommandDetail detail,
+                                       FermentationUiCommandPhase phase =
+                                           FermentationUiCommandPhase::OwningOutcome) {
     return {device_platform::safeOutcomeCategory(category), std::move(detail),
-            std::nullopt, std::nullopt};
+            phase, std::nullopt, std::nullopt};
 }
 
 Category categoryFor(CommandStatus status) {
@@ -87,6 +89,7 @@ Category categoryFor(ConfigurationCommitStatus status) {
     switch (status) {
         case ConfigurationCommitStatus::Activated:
         case ConfigurationCommitStatus::NoChange:
+        case ConfigurationCommitStatus::ReadyForConfirmation:
             return Category::Accepted;
         case ConfigurationCommitStatus::ConfigurationMutationBusy:
             return Category::Busy;
@@ -143,7 +146,10 @@ FermentationUiCommandBridge::confirmationRequest(
 FermentationUiCommandResult FermentationUiCommandBridge::fromCommandStatus(
     CommandStatus status,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    auto result = makeResult(categoryFor(status), status);
+    const auto phase = status == CommandStatus::Proposed
+                           ? FermentationUiCommandPhase::DecisionOnly
+                           : FermentationUiCommandPhase::OwningOutcome;
+    auto result = makeResult(categoryFor(status), status, phase);
     if (status == CommandStatus::NotConfirmed && confirmation.has_value()) {
         result.confirmation = confirmation;
     }
@@ -177,24 +183,18 @@ FermentationUiCommandResult FermentationUiCommandBridge::commitConfiguration(
     ConfigurationService& service,
     const FermentationUiConfigurationCommitCommand& command,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    const auto preview = service.visiblePreview();
-    if (!preview.has_value()) {
-        return fromConfigurationCommit(ConfigurationCommitStatus::PreviewNotFound);
-    }
-    if (preview->handle != command.previewHandle) {
-        return fromConfigurationCommit(
-            ConfigurationCommitStatus::PreviewSuperseded);
-    }
-    // Preserve the owning configuration revision/conflict decision before
-    // confirmation. An unconfirmed request cannot mask a stale preview.
-    if (preview->expectedUserConfigurationRevision !=
-        command.expectedUserConfigurationRevision) {
-        return fromConfigurationCommit(
-            ConfigurationCommitStatus::ConfigurationConflictFailure);
+    // ConfigurationService is the sole owner of preview basis, active
+    // binding, current revision, and conflict validation.  It must run before
+    // a UI confirmation response so stale state cannot be masked by an
+    // unconfirmed request.
+    const auto validation = service.validatePreviewForConfirmation(
+        command.previewHandle, command.expectedUserConfigurationRevision);
+    if (validation.status != ConfigurationCommitStatus::ReadyForConfirmation) {
+        return fromConfigurationCommit(validation.status);
     }
     if (!command.confirmed) {
         auto result = makeResult(Category::ConfirmationRequired,
-                                 ConfigurationPreviewStatus::Success);
+                                 ConfigurationCommitStatus::ReadyForConfirmation);
         result.confirmation = confirmation;
         return result;
     }

@@ -34,6 +34,7 @@ void test_projector_builds_shared_snapshot_without_surface_state() {
     input.primaryAction =
         device_platform::TextKey{device_platform::TextNamespace{"fermentation"},
                                  "start"};
+    input.application.ready = true;
     const auto snapshot = FermentationUiProjector::project(input);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
                           static_cast<int>(snapshot.home.mode));
@@ -42,6 +43,7 @@ void test_projector_builds_shared_snapshot_without_surface_state() {
     TEST_ASSERT_EQUAL_DOUBLE(21.5, snapshot.temperatures.front().valueCelsius.value());
     TEST_ASSERT_EQUAL_UINT32(1U, snapshot.messages.size());
     TEST_ASSERT_EQUAL_UINT32(7U, snapshot.revisions.expectedStateSequence);
+    TEST_ASSERT_TRUE(snapshot.status.ready);
     TEST_ASSERT_TRUE(snapshot.navigation.semanticActions.front().valid());
     TEST_ASSERT_TRUE(snapshot.home.primaryAction.valid());
 }
@@ -114,6 +116,18 @@ void test_refresh_revision_changes_only_on_new_publication() {
     input.revisions.expectedStateSequence = 1U;
     const auto changed = FermentationUiProjector::project(input);
     TEST_ASSERT_TRUE(changed.refreshRevision->value > first.refreshRevision->value);
+
+    // The tracker owns the publication comparison; a caller-maintained
+    // counter is neither needed nor sufficient. A semantic message change
+    // advances the hint even when domain revision fields stay unchanged.
+    state.messages[0].revision = 2U;
+    state.messageCount = 1U;
+    const auto messageChanged = FermentationUiProjector::project(input);
+    TEST_ASSERT_TRUE(messageChanged.refreshRevision->value >
+                     changed.refreshRevision->value);
+    const auto readAfterMessage = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_UINT64(messageChanged.refreshRevision->value,
+                             readAfterMessage.refreshRevision->value);
 }
 
 }  // namespace

@@ -18,8 +18,8 @@ FermentationUiSnapshot FermentationUiProjector::project(
         }
     }
     output.navigation.semanticActions = input.semanticActions;
-    output.status.presentation = input.presentation;
-    output.status.ready = input.applicationReady;
+    output.status.presentation = input.application.presentation;
+    output.status.ready = input.application.ready;
     output.service.available = input.service.available;
     output.service.confirmationRequired = input.service.confirmationRequired;
     output.service.serviceAuthorizationRequired =

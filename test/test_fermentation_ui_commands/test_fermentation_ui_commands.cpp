@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include <type_traits>
 #include <variant>
 
 #include "fermentation_ui_commands.hpp"
@@ -169,6 +170,45 @@ void test_command_result_preserves_typed_app_details() {
         static_cast<int>(std::get<ConfigurationCommitStatus>(commit.detail)));
 }
 
+void test_ui_payloads_are_intents_and_not_owning_evidence() {
+    static_assert(!std::is_constructible_v<FermentationUiEnvelopePayload,
+                                           ProgramStartRequest>);
+    static_assert(!std::is_constructible_v<FermentationUiEnvelopePayload,
+                                           ManualStartRequest>);
+    static_assert(!std::is_constructible_v<FermentationUiEnvelopePayload,
+                                           SensorSelectionCommandRequest>);
+
+    FermentationUiStartProgramIntent start;
+    start.runId = "ui-run";
+    start.programId = "water-kefir";
+    start.sensorMode = RunSensorMode::Product;
+    FermentationUiEnvelopePayload payload = start;
+    TEST_ASSERT_TRUE(std::holds_alternative<FermentationUiStartProgramIntent>(
+        payload));
+    TEST_ASSERT_EQUAL_STRING(
+        "water-kefir",
+        std::get<FermentationUiStartProgramIntent>(payload).programId.c_str());
+
+    FermentationUiSensorSelectionIntent selection;
+    selection.action = SensorSelectionUserAction::RecheckProduct;
+    payload = selection;
+    TEST_ASSERT_TRUE(std::holds_alternative<FermentationUiSensorSelectionIntent>(
+        payload));
+}
+
+void test_proposed_decision_is_not_reported_as_applied() {
+    const auto proposed = FermentationUiCommandBridge::fromCommandStatus(
+        CommandStatus::Proposed);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::Accepted),
+        static_cast<int>(proposed.category));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Proposed),
+                          static_cast<int>(commandDetail(proposed)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::DecisionOnly),
+        static_cast<int>(proposed.phase));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -179,5 +219,7 @@ int main(int, char**) {
     RUN_TEST(test_ui_request_id_is_the_existing_command_id);
     RUN_TEST(test_canonical_validation_precedes_ui_confirmation);
     RUN_TEST(test_command_result_preserves_typed_app_details);
+    RUN_TEST(test_ui_payloads_are_intents_and_not_owning_evidence);
+    RUN_TEST(test_proposed_decision_is_not_reported_as_applied);
     return UNITY_END();
 }

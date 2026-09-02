@@ -756,6 +756,7 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
                           !changes.programCatalog;
     const auto summary = summarizeChanges(*candidate);
     std::uint64_t handle = 0U;
+    UserConfigurationRevision expectedUserConfigurationRevision;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
         if (previewBuildReservation_ != buildLease.reservationId_ ||
@@ -776,12 +777,16 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
             return result;
         }
         handle = nextPreviewHandle_++;
+        // Capture the user revision from the same validated, locked active
+        // basis that supplied expectedActive and expectedStateRevision.
+        expectedUserConfigurationRevision =
+            activeRuntime_->userConfigurationRevision();
     }
     const ConfigurationPreviewView view{
         handle,  buildLease.expectedActive_,
         changes, integrity,
         summary, ConfigurationActivationEffect::Immediate,
-        noChange, activeRuntime_->userConfigurationRevision()};
+        noChange, expectedUserConfigurationRevision};
     if (!noChange) {
         auto immutableCandidate =
             std::make_shared<ConfigurationPreviewBuildLease::Candidate>();
@@ -813,7 +818,9 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
             mode_ != ConfigurationServiceMode::Operational ||
             stateRevision_ != buildLease.expectedStateRevision_ ||
             !activeRuntime_ ||
-            activeRuntime_->manifestReference_ != buildLease.expectedActive_) {
+            activeRuntime_->manifestReference_ != buildLease.expectedActive_ ||
+            activeRuntime_->userConfigurationRevision() !=
+                expectedUserConfigurationRevision) {
             result.status = ConfigurationPreviewStatus::StateChanged;
             return result;
         }
@@ -870,6 +877,49 @@ ConfigurationPreviewStatus ConfigurationService::cancelPreview(
     return ConfigurationPreviewStatus::Success;
 }
 
+ConfigurationCommitStatus
+ConfigurationService::validatePreviewForConfirmationLocked(
+    std::uint64_t handle,
+    UserConfigurationRevision expectedUserConfigurationRevision) const
+    noexcept {
+    if (mode_ == ConfigurationServiceMode::CommitInProgress ||
+        capturedPreview_) {
+        return ConfigurationCommitStatus::ConfigurationMutationBusy;
+    }
+    if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_ ||
+        !activeRuntime_) {
+        return ConfigurationCommitStatus::ConfigurationRuntimeFailure;
+    }
+    if (!visiblePreview_) {
+        return ConfigurationCommitStatus::PreviewNotFound;
+    }
+    if (visiblePreview_->view.handle != handle) {
+        return ConfigurationCommitStatus::PreviewSuperseded;
+    }
+    const auto& view = visiblePreview_->view;
+    // The expected user revision is part of the same active basis as the
+    // preview handle.  Check both the caller's value and the value captured
+    // at installation so an unconfirmed request cannot mask a conflict.
+    if (view.expectedUserConfigurationRevision !=
+            expectedUserConfigurationRevision ||
+        activeRuntime_->userConfigurationRevision() !=
+            expectedUserConfigurationRevision ||
+        stateRevision_ != visiblePreview_->installationStateRevision ||
+        currentGraph_->active.manifestReference != view.expectedActive ||
+        activeRuntime_->manifestReference() != view.expectedActive) {
+        return ConfigurationCommitStatus::ConfigurationConflictFailure;
+    }
+    return ConfigurationCommitStatus::ReadyForConfirmation;
+}
+
+ConfigurationCommitResult ConfigurationService::validatePreviewForConfirmation(
+    std::uint64_t handle,
+    UserConfigurationRevision expectedUserConfigurationRevision) const {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    return {validatePreviewForConfirmationLocked(
+        handle, expectedUserConfigurationRevision)};
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationCommitResult ConfigurationService::confirmPreview(
     std::uint64_t handle) {
@@ -887,23 +937,28 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         if (!visiblePreview_) {
             return {ConfigurationCommitStatus::PreviewNotFound};
         }
-        if (visiblePreview_->view.handle != handle) {
-            return {ConfigurationCommitStatus::PreviewSuperseded};
+        if (!visiblePreview_->view.noChange &&
+            !stateRevisionHasHeadroomLocked(2U)) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        const auto validation = validatePreviewForConfirmationLocked(
+            handle, visiblePreview_->view.expectedUserConfigurationRevision);
+        if (validation != ConfigurationCommitStatus::ReadyForConfirmation) {
+            if (visiblePreview_->view.noChange &&
+                validation == ConfigurationCommitStatus::ConfigurationConflictFailure) {
+                clearPreviewLocked();
+            }
+            return {validation};
         }
         captured = visiblePreview_;
         if (captured->view.noChange) {
-            const bool stale =
-                stateRevision_ != captured->installationStateRevision ||
-                currentGraph_->active.manifestReference !=
-                    captured->view.expectedActive ||
-                activeRuntime_->manifestReference() !=
-                    captured->view.expectedActive;
             if (visiblePreview_ == captured) {
                 clearPreviewLocked();
             }
-            return {
-                stale ? ConfigurationCommitStatus::ConfigurationConflictFailure
-                      : ConfigurationCommitStatus::NoChange};
+            return {ConfigurationCommitStatus::NoChange};
         }
         visiblePreview_.reset();
         capturedPreview_ = captured;
