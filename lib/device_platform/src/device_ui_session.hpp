@@ -50,7 +50,9 @@ class ServiceSessionLease {
                nowMillis - grantedAtMillis_ >= *policy_.absoluteTimeoutMillis;
     }
     void observe(ServiceSessionEvent event, std::uint64_t nowMillis) noexcept {
-        if (!active_) return;
+        if (!active_) {
+            return;
+        }
         if (event == ServiceSessionEvent::RelevantUserActivity) {
             // Expiry is terminal.  Activity delivered at or after the
             // inactivity/absolute boundary must never resurrect a lease.
@@ -65,7 +67,9 @@ class ServiceSessionLease {
             lastActivityAtMillis_ = nowMillis;
             return;
         }
-        if (event != ServiceSessionEvent::RelevantUserActivity) active_ = false;
+        if (event != ServiceSessionEvent::RelevantUserActivity) {
+            active_ = false;
+        }
     }
 
    private:

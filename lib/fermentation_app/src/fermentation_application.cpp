@@ -370,11 +370,11 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     // Evidence is a point-in-time owning observation.  Consume it before the
     // mutating coordinator attempt so neither a failed write nor a pending
     // trusted-time result can replay the same sensor/plausibility snapshot.
-    auto evidence = std::move(owningRecoveryEvidence_);
+    const auto evidence = *owningRecoveryEvidence_;
     owningRecoveryEvidence_.reset();
     const auto outcome =
         runPersistenceCoordinator_->activateFallbackRecoveredRun(
-            *pendingFallbackResume_, currentCheckpointTime(), *evidence);
+            *pendingFallbackResume_, currentCheckpointTime(), evidence);
     if (outcome.persistenceResult.status ==
         RunPersistenceResultStatus::Applied) {
         // The coordinator's resultingState is the exact candidate that was
