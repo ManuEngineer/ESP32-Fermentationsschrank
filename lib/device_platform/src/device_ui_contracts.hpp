@@ -82,6 +82,31 @@ struct UiRefreshRevision {
     }
 };
 
+// Small owner-side publication counter.  The caller supplies the canonical
+// semantic publication revision; reads and platform-only refreshes do not
+// advance it.  This is intentionally neither a hash/cache nor an event bus.
+class UiRefreshRevisionTracker {
+   public:
+    [[nodiscard]] UiRefreshRevision publish(
+        std::uint64_t semanticPublicationRevision) noexcept {
+        if (!published_ || semanticPublicationRevision != lastSemantic_) {
+            if (revision_.value != UINT64_MAX) ++revision_.value;
+            lastSemantic_ = semanticPublicationRevision;
+            published_ = true;
+        }
+        return revision_;
+    }
+
+    [[nodiscard]] UiRefreshRevision current() const noexcept {
+        return revision_;
+    }
+
+   private:
+    bool published_{false};
+    std::uint64_t lastSemantic_{0U};
+    UiRefreshRevision revision_{};
+};
+
 enum class DeviceUiCommandOutcomeCategory : std::uint8_t {
     Accepted,
     Rejected,

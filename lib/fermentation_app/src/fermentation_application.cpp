@@ -8,6 +8,7 @@
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "fermentation_ui_commands.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -319,8 +320,9 @@ bool FermentationApplication::processTerminalClassification(
 void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
 
 RunPersistenceResult FermentationApplication::resumeFallback(
-    bool confirmed, const CrossRolePlausibilityContext& liveSensorEvidence) {
-    if (!confirmed) {
+    const FermentationUiResumeFallbackCommand& command,
+    const CrossRolePlausibilityContext& owningLiveSensorEvidence) {
+    if (!command.confirmed) {
         RunPersistenceResult pending;
         pending.status = RunPersistenceResultStatus::RecoveryPending;
         pending.coordinatorState =
@@ -333,9 +335,27 @@ RunPersistenceResult FermentationApplication::resumeFallback(
         return unavailable;
     }
     const auto outcome = runPersistenceCoordinator_->activateFallbackRecoveredRun(
-        *pendingFallbackResume_, currentCheckpointTime(), liveSensorEvidence);
+        *pendingFallbackResume_, currentCheckpointTime(),
+        owningLiveSensorEvidence);
     if (outcome.persistenceResult.status == RunPersistenceResultStatus::Applied) {
-        runtimeRunState_ = std::move(pendingFallbackResume_);
+        // The coordinator's resultingState is the exact candidate that was
+        // durably committed.  Adopt that value, rather than the pre-commit
+        // retained fallback copy, so RAM/FSM cannot diverge from storage.
+        runtimeRunState_ = std::unique_ptr<RunCommandState>{
+            new (std::nothrow) RunCommandState(outcome.resultingState)};
+        if (runtimeRunState_ == nullptr) {
+            requireService(FaultCode::None, true);
+            RunPersistenceResult failed;
+            failed.status =
+                RunPersistenceResultStatus::PersistenceCommittedApplyFailed;
+            failed.step = RunPersistenceStep::RamApply;
+            failed.technicalReason = RunPersistenceTechnicalReason::InvalidProjection;
+            failed.durability = RunPersistenceDurability::MayHaveChanged;
+            failed.coordinatorState =
+                RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
+            return failed;
+        }
+        pendingFallbackResume_.reset();
         loadDisposition_ = RunLoadDisposition::ResumeOffer;
         persistenceLoadStatus_ = RunPersistenceLoadStatus::Current;
     }

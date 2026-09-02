@@ -6,6 +6,7 @@
 
 #include "configuration_service.hpp"
 #include "fermentation_ui_models.hpp"
+#include "sensor_selection.hpp"
 
 namespace fermentation {
 
@@ -37,6 +38,35 @@ struct FermentationUiConfirmationRequest {
     device_platform::TextKey title;
     device_platform::TextKey summary;
     FermentationUiExpectedRevisions expected;
+};
+
+// App-owned command payload.  The variant is deliberately closed: each
+// mutation enters its existing owning contract, while pure shell/web
+// navigation is not represented here at all.
+struct FermentationUiConfigurationCommitCommand {
+    std::uint64_t previewHandle{0U};
+    UserConfigurationRevision expectedUserConfigurationRevision;
+    bool confirmed{false};
+};
+
+struct FermentationUiResumeFallbackCommand {
+    FermentationUiExpectedRevisions expected;
+    bool confirmed{false};
+};
+
+using FermentationUiCommandPayload = std::variant<
+    ProgramStartRequest, ManualStartRequest, StopRequest, CompletionRequest,
+    RunAdjustmentCommandRequest, ApplyRecoveryTimeCorrectionRequest,
+    MessageCommandRequest, FaultResetRequest, SensorSelectionCommandRequest,
+    FermentationUiConfigurationCommitCommand,
+    FermentationUiResumeFallbackCommand>;
+
+struct FermentationUiCommand {
+    device_platform::UiSurface surface{device_platform::UiSurface::LocalDisplay};
+    device_platform::UiRequestId requestId;
+    std::uint64_t monotonicMillis{0U};
+    FermentationUiAction action{FermentationUiAction::StartProgram};
+    FermentationUiCommandPayload payload;
 };
 
 enum class FermentationUiDetailStatus : std::uint8_t {
@@ -125,6 +155,15 @@ class FermentationUiCommandBridge {
         const FermentationUiCommandContext& context,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
+    [[nodiscard]] static FermentationUiCommandResult decideSensorSelection(
+        const RunCommandState& current,
+        SensorSelectionCommandRequest request,
+        const FermentationUiCommandContext& context,
+        const CrossRolePlausibilityContext& owningPlausibility,
+        const std::optional<FermentationUiConfirmationRequest>& confirmation =
+            std::nullopt);
+    [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
+        RunPersistenceResultStatus status);
 };
 
 }  // namespace fermentation

@@ -168,6 +168,26 @@ void test_touch_and_web_session_policies_remain_separate() {
     TEST_ASSERT_FALSE(invalidated.activeAt(1U));
 }
 
+void test_expired_session_activity_cannot_resurrect_or_move_backwards() {
+    constexpr std::uint64_t minute = 60U * 1000U;
+    ServiceSessionLease touch{{10U * minute, std::nullopt}, 100U};
+    touch.observe(ServiceSessionEvent::RelevantUserActivity, 10U * minute + 100U);
+    TEST_ASSERT_FALSE(touch.activeAt(10U * minute + 100U));
+    touch.observe(ServiceSessionEvent::RelevantUserActivity, 11U * minute);
+    TEST_ASSERT_FALSE(touch.activeAt(11U * minute));
+
+    ServiceSessionLease web{{5U * minute, 15U * minute}, 100U};
+    web.observe(ServiceSessionEvent::RelevantUserActivity, 14U * minute);
+    web.observe(ServiceSessionEvent::RelevantUserActivity, 15U * minute);
+    TEST_ASSERT_FALSE(web.activeAt(15U * minute));
+
+    ServiceSessionLease backwards{{10U * minute, std::nullopt}, 1000U};
+    backwards.observe(ServiceSessionEvent::RelevantUserActivity, 900U);
+    TEST_ASSERT_FALSE(backwards.activeAt(1000U));
+    backwards.observe(ServiceSessionEvent::RelevantUserActivity, 2000U);
+    TEST_ASSERT_FALSE(backwards.activeAt(2000U));
+}
+
 void test_command_outcome_categories_stay_bounded() {
     constexpr std::array<DeviceUiCommandOutcomeCategory, 5U> categories{
         DeviceUiCommandOutcomeCategory::Accepted,
@@ -191,6 +211,7 @@ int main(int, char**) {
     RUN_TEST(test_shell_has_exactly_four_slots_and_home_back_hierarchy);
     RUN_TEST(test_platform_sections_precede_isolated_application_sections);
     RUN_TEST(test_touch_and_web_session_policies_remain_separate);
+    RUN_TEST(test_expired_session_activity_cannot_resurrect_or_move_backwards);
     RUN_TEST(test_command_outcome_categories_stay_bounded);
     return UNITY_END();
 }

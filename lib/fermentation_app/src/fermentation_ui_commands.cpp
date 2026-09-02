@@ -166,6 +166,11 @@ FermentationUiCommandBridge::fromConfigurationCommit(
     return makeResult(categoryFor(status), status);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::fromFallbackResult(
+    RunPersistenceResultStatus status) {
+    return fromRunPersistenceResult(status);
+}
+
 FermentationUiCommandResult
 FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,
@@ -273,6 +278,17 @@ FermentationUiCommandResult FermentationUiCommandBridge::decideFaultReset(
                      const FaultResetRequest& input) {
                       return ::fermentation::decideFaultReset(state, input);
                   });
+}
+
+FermentationUiCommandResult FermentationUiCommandBridge::decideSensorSelection(
+    const RunCommandState& current, SensorSelectionCommandRequest request,
+    const FermentationUiCommandContext& context,
+    const CrossRolePlausibilityContext& owningPlausibility,
+    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    request.envelope = makeEnvelope(context);
+    const auto decision = decideApplySensorSelectionAction(
+        current, request, owningPlausibility);
+    return fromCommandStatus(decision.status, confirmation);
 }
 
 }  // namespace fermentation

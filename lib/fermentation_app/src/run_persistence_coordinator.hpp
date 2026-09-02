@@ -276,6 +276,20 @@ class RunPersistenceCoordinator {
         const RunCheckpointTime& time,
         RunPersistenceFallbackDirective fallbackDirective = {});
 
+    // Shared R1 exact-time core for the loaded Current and an explicitly
+    // selected fallback.  It contains no C2/weighted/biological recovery
+    // semantics; the caller owns source/identity validation.
+    [[nodiscard]] RecoveryActivationOutcome activateR1ExactFermentingCore(
+        const RunCommandState& current,
+        const RunPersistenceRawRecord& loadedRecord,
+        const RunCheckpointTime& time,
+        std::optional<std::size_t> targetSlot,
+        RunPersistenceFallbackDirective fallbackDirective,
+        RunPersistenceCoordinatorState rollbackState);
+    [[nodiscard]] RecoveryActivationOutcome legacyActivateFallbackRecoveredRun(
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
+
    private:
     friend class RunPersistenceCoordinatorTestAccess;
 

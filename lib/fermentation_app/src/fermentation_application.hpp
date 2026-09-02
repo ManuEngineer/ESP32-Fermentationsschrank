@@ -20,6 +20,7 @@ class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
 class ConfigurationService;
 class RunPersistenceCoordinator;
+struct FermentationUiResumeFallbackCommand;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -73,11 +74,13 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
-    // Explicit R1 selected-fallback action.  No persistence is touched when
-    // confirmed is false; the caller must present the structured confirmation
-    // before invoking the mutating path.
+    // Explicit R1 selected-fallback action.  The command carries only the
+    // app-owned confirmation/revision contract; fresh sensor/planner evidence
+    // is supplied by the owning application/orchestrator boundary, never by
+    // a UI transport.
     [[nodiscard]] RunPersistenceResult resumeFallback(
-        bool confirmed, const CrossRolePlausibilityContext& liveSensorEvidence);
+        const FermentationUiResumeFallbackCommand& command,
+        const CrossRolePlausibilityContext& owningLiveSensorEvidence);
 
    private:
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
