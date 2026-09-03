@@ -718,7 +718,8 @@ fermentation::RunPersistenceSnapshot runSnapshot(bool resumeEligible,
         program.completion.coolingTargetCelsius = 8.0;
     }
     const auto run = fermentation::ActiveRun::start(
-        *document, fermentation::ProgramSourceKind::FactoryCatalog, 1U);
+        *document, fermentation::ProgramSourceKind::FactoryCatalog,
+        fermentation::RunProgramSourceRevision{1U});
     TEST_ASSERT_TRUE(run.has_value());
     fermentation::RunCommandState state;
     state.processState.state = resumeEligible
@@ -2820,6 +2821,8 @@ const char* configurationRecoveryStatusName(
             return "ConfigurationRecordOutcomeIndeterminate";
         case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
             return "ConfigurationCommitIndeterminate";
+        case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
+            return "RunPersistenceHandoffUnavailable";
     }
     return "UnknownConfigurationRecoveryStatus";
 }

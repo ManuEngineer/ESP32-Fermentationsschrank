@@ -181,11 +181,11 @@ bool validRevisionMetadata(const RunRevision& revision) {
                                           revision.targetTemperatureChanged);
 }
 
-bool makeInitialEffectiveRunValues(const ProgramDocument& sourceProgram,
-                                   ProgramSourceKind sourceKind,
-                                   std::uint32_t sourceProgramRevision,
-                                   EffectiveRunValues& destination) {
-    if (sourceProgramRevision == 0U ||
+bool makeInitialEffectiveRunValues(
+    const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
+    RunProgramSourceRevision sourceProgramRevision,
+    EffectiveRunValues& destination) {
+    if (sourceProgramRevision.value() == 0U ||
         !sourceMatchesProgram(sourceProgram, sourceKind) ||
         !validateProgram(sourceProgram, ValidationPurpose::Runnable).valid()) {
         return false;
@@ -213,9 +213,9 @@ ActiveRun::ActiveRun(RestoreConstructionTag restoreTag,
     static_cast<void>(restoreTag);
 }
 
-std::optional<ActiveRun> ActiveRun::start(const ProgramDocument& sourceProgram,
-                                          ProgramSourceKind sourceKind,
-                                          std::uint32_t sourceProgramRevision) {
+std::optional<ActiveRun> ActiveRun::start(
+    const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
+    RunProgramSourceRevision sourceProgramRevision) {
     EffectiveRunValues initialValues;
     if (!makeInitialEffectiveRunValues(sourceProgram, sourceKind,
                                        sourceProgramRevision, initialValues)) {

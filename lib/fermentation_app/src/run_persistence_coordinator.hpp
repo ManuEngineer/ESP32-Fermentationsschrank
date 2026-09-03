@@ -201,6 +201,15 @@ class RunPersistenceCoordinator {
 
     [[nodiscard]] RunPersistenceLoadResult loadAndInitialize();
     void loadAndInitializeInto(RunPersistenceLoadResult& destination);
+    // Returns the committed identity high-water value. A proven empty store
+    // is represented by the logical value 0; an absent legacy value remains
+    // unavailable and is returned as nullopt.
+    [[nodiscard]] std::optional<CommandId> commandIdHighWater() const noexcept;
+    // Completes the one authorized configuration-epoch handoff before this
+    // coordinator is initialized. Both slots are retired through the existing
+    // store port before the new committed head is written.
+    [[nodiscard]] RunPersistenceResult completeAuthorizedEpochHandoff(
+        const AuthorizedRunEpochHandoffProof& proof);
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,

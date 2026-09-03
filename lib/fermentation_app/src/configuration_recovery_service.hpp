@@ -32,6 +32,7 @@ enum class ConfigurationRecoveryStatus : std::uint8_t {
     BootstrapCommitIndeterminate,
     ConfigurationRecordOutcomeIndeterminate,
     ConfigurationCommitIndeterminate,
+    RunPersistenceHandoffUnavailable,
 };
 
 enum class ConfigurationSafetyProducer : std::uint8_t {
@@ -63,6 +64,7 @@ struct ConfigurationRecoveryResult {
             case ConfigurationRecoveryStatus::
                 ConfigurationRecordOutcomeIndeterminate:
             case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+            case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
             case ConfigurationRecoveryStatus::RuntimePreparationFailure:
                 safetyProducer =
                     ConfigurationSafetyProducer::ConfigurationUnavailable;

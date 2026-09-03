@@ -42,7 +42,8 @@ RunCommandState projectedProgramState(ProcessState phase) {
                                           : std::nullopt;
     TEST_ASSERT_TRUE(validateProgram(*document).valid());
     const auto run =
-        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog, 1U);
+        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{1U});
     TEST_ASSERT_TRUE(run.has_value());
 
     RunCommandState state;

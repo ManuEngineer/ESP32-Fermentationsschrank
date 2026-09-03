@@ -38,7 +38,8 @@ ProgramStartRequest validProgramStart() {
     request.runId = "ui-run";
     request.program = *program;
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision = 1U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;
@@ -116,7 +117,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     TEST_ASSERT_FALSE(stale.confirmation.has_value());
 
     auto invalid = validProgramStart();
-    invalid.sourceProgramRevision = 0U;
+    invalid.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{0U};
     const auto invalidResult = FermentationUiCommandBridge::decideProgramStart(
         state, invalid, unconfirmedContext, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
@@ -186,7 +188,6 @@ void test_ui_payloads_are_intents_and_not_owning_evidence() {
                                            SensorSelectionCommandRequest>);
 
     FermentationUiStartProgramIntent start;
-    start.runId = "ui-run";
     start.programId = "water-kefir";
     start.sensorMode = RunSensorMode::Product;
     FermentationUiEnvelopePayload payload = start;

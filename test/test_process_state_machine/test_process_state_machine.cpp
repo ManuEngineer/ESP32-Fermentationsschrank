@@ -55,7 +55,8 @@ ProgramDocument commissionFactoryProgram(const char* id) {
 ProcessRunSnapshot makeFactorySnapshot(const char* id) {
     const auto document = commissionFactoryProgram(id);
     const auto run =
-        ActiveRun::start(document, ProgramSourceKind::FactoryCatalog, 1U);
+        ActiveRun::start(document, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{1U});
     TEST_ASSERT_TRUE(run.has_value());
     const auto snapshot = fermentation::makeProcessRunSnapshot(*run);
     TEST_ASSERT_TRUE(snapshot.has_value());

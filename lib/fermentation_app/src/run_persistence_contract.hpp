@@ -27,7 +27,9 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // TaggedPriorBootPhaseElapsed, NominalRecoveryAdjustmentState,
 // recoveryEpisodeRevision (5.28). RunCheckpointTrigger moved to
 // run_recovery_types.hpp, transitively still visible here.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 3U;
+// Schema 4 (#144): lossless 64-bit neutral run-source provenance and the
+// committed command-id high-water field in RunPersistenceHead.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 4U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {
@@ -76,11 +78,25 @@ struct RunPersistenceHead {
     RunPersistenceMutationKind mutationKind{
         RunPersistenceMutationKind::Command};
     std::optional<CommandId> commandId;
+    // Present for established schema-4 identity spaces. It is absent for
+    // legacy heads and remains absent when such a head is passively rewritten;
+    // the coordinator, not the isolated codec, owns historical monotonicity.
+    std::optional<CommandId> commandIdHighWater;
     std::uint32_t oldRunRevision{0U};
     std::uint32_t newRunRevision{0U};
     std::uint32_t oldTransitionSequence{0U};
     std::uint32_t newTransitionSequence{0U};
     std::string bytes;
+};
+
+// Application-owned proof that the configuration recovery owner completed
+// the immediately preceding StorageEpoch reset.  It deliberately carries no
+// reset token, run data, command identity, or caller-selected foreign epoch;
+// the application constructs it only from the existing FactoryResetCompleted
+// result and the old runtime epoch.
+struct AuthorizedRunEpochHandoffProof {
+    device_platform::StorageEpoch previousEpoch;
+    device_platform::StorageEpoch currentEpoch;
 };
 
 // Deliberately only the run-domain projection. Messages, fault/safety state,

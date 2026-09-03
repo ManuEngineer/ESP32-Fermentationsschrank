@@ -63,23 +63,35 @@ struct FermentationUiResumeFallbackCommand {
 // resolves the IDs and supplies its own current evidence before entering the
 // existing canonical command path.
 struct FermentationUiStartProgramIntent {
-    std::string runId;
     std::string programId;
     RunSensorMode sensorMode{RunSensorMode::Air};
 };
 
+// Identity-free UI values. The application adds the owning run identity once
+// at the existing request boundary; adapters cannot inject a run or command
+// identifier through this candidate.
+struct FermentationUiManualRunPlanValues {
+    double targetTemperatureCelsius{0.0};
+    RunSensorMode sensorMode{RunSensorMode::Air};
+    bool preheatEnabled{false};
+    std::optional<std::uint32_t> maximumProductWaitMinutes;
+    double qualificationBandCelsius{0.0};
+    std::uint32_t qualificationDurationMinutes{0U};
+    std::uint32_t maximumTargetReachMinutes{0U};
+};
+
 struct FermentationUiStartManualHoldingIntent {
-    ManualRunPlanRequest plan;
+    FermentationUiManualRunPlanValues plan;
 };
 
 struct FermentationUiStopRunIntent {
     StopOption option{StopOption::Back};
-    std::optional<ManualRunPlanRequest> coolingPlan;
+    std::optional<FermentationUiManualRunPlanValues> coolingPlan;
 };
 
 struct FermentationUiCompleteRunIntent {
     bool startCooling{false};
-    std::optional<ManualRunPlanRequest> coolingPlan;
+    std::optional<FermentationUiManualRunPlanValues> coolingPlan;
 };
 
 struct FermentationUiAdjustRunIntent {

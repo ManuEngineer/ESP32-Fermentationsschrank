@@ -6,8 +6,17 @@
 #include <optional>
 
 #include "program_model.hpp"
+#include "storage_types.hpp"
 
 namespace fermentation {
+
+namespace detail {
+struct RunProgramSourceRevisionTag {};
+}  // namespace detail
+
+using RunProgramSourceRevision =
+    device_platform::StrongId<detail::RunProgramSourceRevisionTag,
+                              std::uint64_t>;
 
 inline constexpr std::size_t kMaximumRunRevisions = 32U;
 
@@ -40,7 +49,7 @@ struct EffectiveRunValues {
 struct RunProgramSnapshot {
     ProgramDocument sourceProgram;
     ProgramSourceKind sourceKind{ProgramSourceKind::UserProgram};
-    std::uint32_t sourceProgramRevision{0U};
+    RunProgramSourceRevision sourceProgramRevision;
 };
 
 // Phasenkontext einer Laufanpassung, absichtlich unabhaengig von
@@ -147,7 +156,7 @@ class ActiveRun {
 
     [[nodiscard]] static std::optional<ActiveRun> start(
         const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
-        std::uint32_t sourceProgramRevision);
+        RunProgramSourceRevision sourceProgramRevision);
 
     [[nodiscard]] static std::optional<ActiveRun> restore(
         const RunProgramSnapshot& snapshot,

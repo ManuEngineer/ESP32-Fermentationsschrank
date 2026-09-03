@@ -126,13 +126,16 @@ void test_start_accepts_standard_and_user_programs() {
     const auto user = makeCommissionedUserProgram();
 
     const auto standardRun =
-        ActiveRun::start(standard, ProgramSourceKind::FactoryCatalog, 7U);
+        ActiveRun::start(standard, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{7U});
     const auto userRun =
-        ActiveRun::start(user, ProgramSourceKind::UserProgram, 3U);
+        ActiveRun::start(user, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{3U});
 
     TEST_ASSERT_TRUE(standardRun.has_value());
     TEST_ASSERT_TRUE(userRun.has_value());
-    TEST_ASSERT_EQUAL_UINT32(7U, standardRun->snapshot().sourceProgramRevision);
+    TEST_ASSERT_EQUAL_UINT64(
+        7U, standardRun->snapshot().sourceProgramRevision.value());
     TEST_ASSERT_EQUAL_STRING(
         "Joghurt mild",
         standardRun->snapshot().sourceProgram.program.name.c_str());
@@ -147,18 +150,23 @@ void test_start_rejects_uncommissioned_or_mismatched_sources() {
     const auto user = makeCommissionedUserProgram();
 
     TEST_ASSERT_FALSE(
-        ActiveRun::start(uncommissioned, ProgramSourceKind::FactoryCatalog, 1U)
+        ActiveRun::start(uncommissioned, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{1U})
             .has_value());
     TEST_ASSERT_FALSE(
-        ActiveRun::start(user, ProgramSourceKind::FactoryCatalog, 1U)
+        ActiveRun::start(user, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{1U})
             .has_value());
     TEST_ASSERT_FALSE(
-        ActiveRun::start(user, ProgramSourceKind::UserProgram, 0U).has_value());
+        ActiveRun::start(user, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{0U})
+            .has_value());
 }
 
 void test_source_program_changes_do_not_change_run_snapshot() {
     auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
 
     source.program.name = "Spaeter geaendert";
@@ -179,7 +187,8 @@ void test_source_program_changes_do_not_change_run_snapshot() {
 
 void test_target_adjustment_records_complete_revision() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
 
     const auto result = decideAndApply(*run, targetAdjustment(40.0, 1000U),
@@ -213,7 +222,8 @@ void test_target_adjustment_records_complete_revision() {
 
 void test_fermenting_phase_context_continues_without_requalification() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
 
     auto fermentingContext = adjustableContext();
@@ -244,7 +254,8 @@ void test_fermenting_phase_context_continues_without_requalification() {
 
 void test_restore_rejects_contradictory_adjustment_effect_metadata() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -273,7 +284,8 @@ void test_restore_rejects_contradictory_adjustment_effect_metadata() {
 
 void test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
 
     const auto discarded = run->decideAdjustment(targetAdjustment(40.0, 100U),
@@ -301,7 +313,8 @@ void test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected() {
 
 void test_duration_and_combined_adjustments_are_atomic() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
 
     RunAdjustmentRequest durationRequest;
@@ -337,7 +350,8 @@ void test_duration_and_combined_adjustments_are_atomic() {
 
 void test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{4U});
     TEST_ASSERT_TRUE(run.has_value());
     const auto initialValues = run->effectiveValues();
 
@@ -368,7 +382,8 @@ void test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected() {
 
 void test_restore_replays_snapshot_and_revision_history() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -402,11 +417,13 @@ void test_restore_replays_snapshot_and_revision_history() {
 
 void test_restore_into_matches_legacy_and_handles_zero_revisions() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
 
     std::optional<ActiveRun> destination =
-        ActiveRun::start(source, ProgramSourceKind::UserProgram, 10U);
+        ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{10U});
     TEST_ASSERT_TRUE(destination.has_value());
     TEST_ASSERT_TRUE(ActiveRun::restoreInto(run->snapshot(), run->revisions(),
                                             run->revisionCount(), destination));
@@ -424,7 +441,8 @@ void test_restore_into_matches_legacy_and_handles_zero_revisions() {
     TEST_ASSERT_EQUAL_UINT32(0U, destination->revisionCount());
 
     auto adjusted =
-        ActiveRun::start(source, ProgramSourceKind::UserProgram, 11U);
+        ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{11U});
     TEST_ASSERT_TRUE(adjusted.has_value());
     TEST_ASSERT_TRUE(decideAndApply(*adjusted, targetAdjustment(40.0, 100U),
                                     adjustableContext())
@@ -439,7 +457,8 @@ void test_restore_into_matches_legacy_and_handles_zero_revisions() {
 
 void test_restore_into_replays_multiple_revisions() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -466,7 +485,8 @@ void test_restore_into_replays_multiple_revisions() {
 
 void test_restore_keeps_unused_revision_tail_default_for_into_and_legacy() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -522,14 +542,16 @@ void test_restore_keeps_unused_revision_tail_default_for_into_and_legacy() {
 
 void test_restore_into_rejects_invalid_revision_without_replacing_destination() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
             .applied());
 
     std::optional<ActiveRun> destination =
-        ActiveRun::start(source, ProgramSourceKind::UserProgram, 10U);
+        ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{10U});
     TEST_ASSERT_TRUE(destination.has_value());
     auto invalidRevisions = run->revisions();
     invalidRevisions[0].sequence = 2U;
@@ -544,7 +566,8 @@ void test_restore_into_rejects_invalid_revision_without_replacing_destination() 
 
 void test_restore_rejects_corrupt_or_reordered_revision_history() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -572,7 +595,8 @@ void test_restore_rejects_corrupt_or_reordered_revision_history() {
 
 void test_timestamp_and_revision_capacity_are_enforced() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
 
     for (std::size_t index = 0U; index < fermentation::kMaximumRunRevisions;
@@ -593,7 +617,8 @@ void test_timestamp_and_revision_capacity_are_enforced() {
             run->decideAdjustment(request, adjustableContext()).status));
 
     auto shortRun =
-        ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+        ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                         ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(shortRun.has_value());
     TEST_ASSERT_TRUE(decideAndApply(*shortRun, targetAdjustment(40.0, 200U),
                                     adjustableContext())
@@ -609,7 +634,8 @@ void test_timestamp_and_revision_capacity_are_enforced() {
 
 void test_unix_timestamp_going_backwards_is_rejected() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
 
     auto first = targetAdjustment(40.0, 200U);
@@ -642,7 +668,8 @@ void test_unix_timestamp_going_backwards_is_rejected() {
 
 void test_restore_rejects_decreasing_unix_timestamp() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
 
     auto first = targetAdjustment(40.0, 100U);
@@ -673,7 +700,8 @@ void test_restore_rejects_decreasing_unix_timestamp() {
 
 void test_restore_rejects_invalid_monotonic_epochs() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
         decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
@@ -705,7 +733,8 @@ void test_restore_rejects_invalid_monotonic_epochs() {
 
 void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(decideAndApply(*run, targetAdjustment(40.0, 500000U),
                                     adjustableContext())
@@ -744,7 +773,8 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
 
 void test_noop_and_invalid_metadata_do_not_create_revisions() {
     const auto source = makeCommissionedUserProgram();
-    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram,
+                                ::fermentation::RunProgramSourceRevision{9U});
     TEST_ASSERT_TRUE(run.has_value());
 
     RunAdjustmentRequest noChange;

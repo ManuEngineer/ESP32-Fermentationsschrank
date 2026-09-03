@@ -290,6 +290,261 @@ RunPersistenceCoordinator::RunPersistenceCoordinator(
     RunCheckpointSchedule schedule) noexcept
     : store_(store), epoch_(epoch), schedule_(std::move(schedule)) {}
 
+std::optional<CommandId> RunPersistenceCoordinator::commandIdHighWater()
+    const noexcept {
+    const bool committedState =
+        state_ == RunPersistenceCoordinatorState::Ready ||
+        state_ == RunPersistenceCoordinatorState::ReadyEmpty ||
+        state_ == RunPersistenceCoordinatorState::LoadedActiveRun ||
+        state_ == RunPersistenceCoordinatorState::FallbackRecoveryPending;
+    if (committedState && currentHead_.has_value() &&
+        currentHead_->state == RunPersistenceHeadState::Committed) {
+        return currentHead_->commandIdHighWater;
+    }
+    if (state_ == RunPersistenceCoordinatorState::ReadyEmpty &&
+        !currentHead_.has_value()) {
+        return CommandId{0U};
+    }
+    return std::nullopt;
+}
+
+RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
+    const AuthorizedRunEpochHandoffProof& proof) {
+    const auto reject = [this](RunPersistenceStep step,
+                               RunPersistenceTechnicalReason reason) {
+        return result(RunPersistenceResultStatus::Blocked, step, reason,
+                      RunPersistenceDurability::Unchanged);
+    };
+    if (state_ != RunPersistenceCoordinatorState::Uninitialized ||
+        epoch_.value() == 0U || proof.previousEpoch.value() == 0U ||
+        proof.currentEpoch != epoch_ ||
+        proof.previousEpoch.value() ==
+            std::numeric_limits<std::uint64_t>::max() ||
+        proof.previousEpoch.value() + 1U != proof.currentEpoch.value()) {
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+
+    const auto headRead = store_.readHead(kMaximumHeadRecordBytes);
+    if (headRead.status == device_platform::StateStoreReadStatus::CapacityError)
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::StoreReadError);
+    if (headRead.status == device_platform::StateStoreReadStatus::ReadError)
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::StoreReadError);
+    if (headRead.status != device_platform::StateStoreReadStatus::Success &&
+        headRead.status != device_platform::StateStoreReadStatus::NotFound)
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::StoreReadError);
+
+    std::array<device_platform::StateStoreReadResult, 2U> slotReads{};
+    for (std::size_t slot = 0U; slot < slotReads.size(); ++slot) {
+        slotReads[slot] = store_.readSlot(slot, kMaximumCheckpointRecordBytes);
+        if (slotReads[slot].status ==
+                device_platform::StateStoreReadStatus::CapacityError ||
+            slotReads[slot].status ==
+                device_platform::StateStoreReadStatus::ReadError) {
+            return reject(RunPersistenceStep::LoadCurrent,
+                          RunPersistenceTechnicalReason::StoreReadError);
+        }
+    }
+
+    const bool emptyStore =
+        headRead.status == device_platform::StateStoreReadStatus::NotFound &&
+        slotReads[0].status ==
+            device_platform::StateStoreReadStatus::NotFound &&
+        slotReads[1].status == device_platform::StateStoreReadStatus::NotFound;
+
+    // A completed handoff may be observed again after an interrupted caller
+    // path. Recognize only the exact new-epoch, schema-4, two-slot empty
+    // shape; no arbitrary ForeignEpoch record is treated as empty.
+    if (!emptyStore &&
+        headRead.status == device_platform::StateStoreReadStatus::Success) {
+        const auto envelope = device_platform::decodeEnvelope(headRead.value);
+        if (!envelope.envelope.has_value()) {
+            return reject(RunPersistenceStep::LoadHead,
+                          RunPersistenceTechnicalReason::CodecError);
+        }
+        if (envelope.envelope->storageEpoch == proof.currentEpoch) {
+            const auto head = decodeRunPersistenceHead(headRead.value, epoch_);
+            if (!head.has_value() ||
+                head->state != RunPersistenceHeadState::Committed ||
+                head->current.variant != RunCheckpointVariant::NoActiveRun ||
+                head->current.schemaVersion != kCurrentRunPersistenceSchema ||
+                !head->commandIdHighWater.has_value() ||
+                *head->commandIdHighWater != 0U || head->fallback.has_value()) {
+                return reject(RunPersistenceStep::LoadHead,
+                              RunPersistenceTechnicalReason::InvalidProjection);
+            }
+            for (std::size_t slot = 0U; slot < slotReads.size(); ++slot) {
+                if (slotReads[slot].status !=
+                    device_platform::StateStoreReadStatus::Success) {
+                    return reject(
+                        RunPersistenceStep::LoadCurrent,
+                        RunPersistenceTechnicalReason::InvalidProjection);
+                }
+                RunPersistenceRawRecord record;
+                if (!decodeRunPersistenceRecordInto(slotReads[slot].value,
+                                                    epoch_, record) ||
+                    record.snapshot.variant !=
+                        RunCheckpointVariant::NoActiveRun ||
+                    device_platform::decodeEnvelope(slotReads[slot].value)
+                            .envelope->schemaVersion !=
+                        kCurrentRunPersistenceSchema) {
+                    return reject(RunPersistenceStep::LoadCurrent,
+                                  RunPersistenceTechnicalReason::CodecError);
+                }
+                if (slot == head->current.slot &&
+                    !runCheckpointReferenceMatches(head->current, record,
+                                                   slot)) {
+                    return reject(
+                        RunPersistenceStep::LoadCurrent,
+                        RunPersistenceTechnicalReason::InvalidProjection);
+                }
+            }
+            return result(RunPersistenceResultStatus::Applied,
+                          RunPersistenceStep::CommittedHead,
+                          RunPersistenceTechnicalReason::None,
+                          RunPersistenceDurability::Unchanged);
+        }
+        if (envelope.envelope->storageEpoch != proof.previousEpoch) {
+            return reject(RunPersistenceStep::LoadHead,
+                          RunPersistenceTechnicalReason::InvalidProjection);
+        }
+    } else if (!emptyStore) {
+        // A headless store with a slot is an orphan, not proof of an empty
+        // epoch. The old committed graph is required for an authorized reset.
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+
+    if (!emptyStore) {
+        const auto oldHead =
+            decodeRunPersistenceHead(headRead.value, proof.previousEpoch);
+        if (!oldHead.has_value() ||
+            oldHead->state != RunPersistenceHeadState::Committed) {
+            return reject(RunPersistenceStep::LoadHead,
+                          RunPersistenceTechnicalReason::CodecError);
+        }
+        const auto validateReferenced = [&](const RunCheckpointReference& ref) {
+            if (ref.slot > 1U ||
+                slotReads[ref.slot].status !=
+                    device_platform::StateStoreReadStatus::Success) {
+                return false;
+            }
+            RunPersistenceRawRecord record;
+            return decodeRunPersistenceRecordInto(slotReads[ref.slot].value,
+                                                  proof.previousEpoch,
+                                                  record) &&
+                   runCheckpointReferenceMatches(ref, record, ref.slot);
+        };
+        if (!validateReferenced(oldHead->current) ||
+            (oldHead->fallback.has_value() &&
+             !validateReferenced(*oldHead->fallback))) {
+            return reject(RunPersistenceStep::LoadCurrent,
+                          RunPersistenceTechnicalReason::CodecError);
+        }
+        for (std::size_t slot = 0U; slot < slotReads.size(); ++slot) {
+            if (slotReads[slot].status ==
+                device_platform::StateStoreReadStatus::Success) {
+                RunPersistenceRawRecord record;
+                if (!decodeRunPersistenceRecordInto(
+                        slotReads[slot].value, proof.previousEpoch, record)) {
+                    return reject(RunPersistenceStep::LoadCurrent,
+                                  RunPersistenceTechnicalReason::CodecError);
+                }
+            }
+        }
+    }
+
+    RunCommandState emptyState;
+    if (!establishBootCompletedStandby(emptyState.processState, 0U)) {
+        return reject(RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    RunPersistenceSnapshot emptySnapshot;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> noIds{};
+    if (!makeRunPersistenceSnapshotInto(
+            emptyState, noIds, 0U, RunCheckpointTrigger::Command,
+            RunCheckpointTime{0U, std::nullopt}, schedule_.intervalMinutes(),
+            emptySnapshot)) {
+        return reject(RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    std::string payload;
+    if (encodeRunPersistenceSnapshot(emptySnapshot, payload) !=
+        RunPersistenceCodecStatus::Success) {
+        return reject(RunPersistenceStep::CheckpointSlot,
+                      RunPersistenceTechnicalReason::CodecError);
+    }
+
+    std::array<RunPersistenceRawRecord, 2U> newRecords{};
+    for (std::size_t slot = 0U; slot < newRecords.size(); ++slot) {
+        device_platform::StorageEnvelope envelope{
+            kCheckpointRecordType,
+            kCurrentRunPersistenceSchema,
+            epoch_,
+            static_cast<std::uint64_t>(slot + 1U),
+            std::nullopt,
+            payload};
+        if (device_platform::encodeEnvelope(envelope, newRecords[slot].bytes,
+                                            kMaximumCheckpointRecordBytes) !=
+            device_platform::EnvelopeEncodeStatus::Success) {
+            return reject(RunPersistenceStep::CheckpointSlot,
+                          RunPersistenceTechnicalReason::CodecError);
+        }
+        newRecords[slot].snapshot = emptySnapshot;
+        newRecords[slot].checkpointRevision = slot + 1U;
+        newRecords[slot].utcUnixSeconds = std::nullopt;
+    }
+    RunPersistenceHead newHead;
+    newHead.state = RunPersistenceHeadState::Committed;
+    newHead.revision = 1U;
+    newHead.current = makeRunCheckpointReference(0U, newRecords[0], epoch_);
+    newHead.commandIdHighWater = CommandId{0U};
+    const auto encodedHead = encodeRunPersistenceHead(newHead, epoch_);
+    if (!encodedHead.has_value()) {
+        return reject(RunPersistenceStep::CommittedHead,
+                      RunPersistenceTechnicalReason::CodecError);
+    }
+
+    const auto oldHeadBytes =
+        headRead.status == device_platform::StateStoreReadStatus::Success
+            ? std::optional<std::string>{headRead.value}
+            : std::nullopt;
+    for (std::size_t slot = 0U; slot < newRecords.size(); ++slot) {
+        const auto oldSlot =
+            slotReads[slot].status ==
+                    device_platform::StateStoreReadStatus::Success
+                ? std::optional<std::string>{slotReads[slot].value}
+                : std::nullopt;
+        const auto written =
+            store_.writeSlotExact(slot, newRecords[slot].bytes, oldSlot,
+                                  kMaximumCheckpointRecordBytes);
+        if (written != RunPersistenceStoreWriteResult::Written) {
+            enterBlockedIndeterminate();
+            return reject(
+                RunPersistenceStep::CheckpointSlot,
+                written == RunPersistenceStoreWriteResult::Indeterminate
+                    ? RunPersistenceTechnicalReason::StoreOutcomeUnknown
+                    : RunPersistenceTechnicalReason::StoreWriteError);
+        }
+    }
+    const auto headWritten = store_.writeHeadExact(*encodedHead, oldHeadBytes,
+                                                   kMaximumHeadRecordBytes);
+    if (headWritten != RunPersistenceStoreWriteResult::Written) {
+        enterBlockedIndeterminate();
+        return reject(
+            RunPersistenceStep::CommittedHead,
+            headWritten == RunPersistenceStoreWriteResult::Indeterminate
+                ? RunPersistenceTechnicalReason::StoreOutcomeUnknown
+                : RunPersistenceTechnicalReason::StoreWriteError);
+    }
+    return result(
+        RunPersistenceResultStatus::Applied, RunPersistenceStep::CommittedHead,
+        RunPersistenceTechnicalReason::None, RunPersistenceDurability::Changed);
+}
+
 void applyLiveRecoveryEvidence(
     RunCommandState& current,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
@@ -1808,6 +2063,32 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     if (timeStatus != RunCheckpointScheduleStatus::Success) {
         return result(RunPersistenceResultStatus::InvalidDecision);
     }
+    std::optional<CommandId> previousCommandIdHighWater;
+    if (currentHead_.has_value()) {
+        previousCommandIdHighWater = currentHead_->commandIdHighWater;
+    } else if (state_ == RunPersistenceCoordinatorState::ReadyEmpty) {
+        previousCommandIdHighWater = CommandId{0U};
+    }
+    if (commandId.has_value()) {
+        if (!previousCommandIdHighWater.has_value() || *commandId == 0U) {
+            return result(RunPersistenceResultStatus::Blocked,
+                          RunPersistenceStep::CandidateApply,
+                          RunPersistenceTechnicalReason::InvalidProjection);
+        }
+        if (*previousCommandIdHighWater ==
+            std::numeric_limits<CommandId>::max()) {
+            return result(RunPersistenceResultStatus::CounterOverflow,
+                          RunPersistenceStep::CandidateApply);
+        }
+        if (*previousCommandIdHighWater != 0U &&
+            *commandId <= *previousCommandIdHighWater) {
+            return result(RunPersistenceResultStatus::Blocked,
+                          RunPersistenceStep::CandidateApply,
+                          RunPersistenceTechnicalReason::InvalidProjection);
+        }
+        previousCommandIdHighWater =
+            std::max(*previousCommandIdHighWater, *commandId);
+    }
     state_ = RunPersistenceCoordinatorState::Busy;
     const std::size_t target =
         targetSlotOverride.has_value()
@@ -1898,6 +2179,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
         committed.state = RunPersistenceHeadState::Committed;
         committed.revision = nextHeadRevision_;
         committed.current = ref;
+        committed.commandIdHighWater = previousCommandIdHighWater;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
             if (fallbackDirective.mode ==
@@ -1934,6 +2216,8 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
         committed.state = RunPersistenceHeadState::Committed;
         committed.revision = prepared.revision + 1U;
         committed.current = ref;
+        prepared.commandIdHighWater = previousCommandIdHighWater;
+        committed.commandIdHighWater = previousCommandIdHighWater;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
             if (fallbackDirective.mode ==
@@ -2113,6 +2397,11 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
         if (persistedIds_[i] == decision.envelope.id)
             return result(RunPersistenceResultStatus::AlreadyPersisted);
+    if (!commandIdHighWater().has_value()) {
+        return result(RunPersistenceResultStatus::Blocked,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
     const bool freshProductiveStart =
         decision.kind == CommandKind::StartProgram ||
         decision.kind == CommandKind::StartManualHolding;

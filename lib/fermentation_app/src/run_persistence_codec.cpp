@@ -141,6 +141,11 @@ bool readOptionalUint64(ByteReader& reader, std::optional<std::uint64_t>& out) {
     return true;
 }
 
+bool writeRunProgramSourceRevision(ByteWriter& writer,
+                                   RunProgramSourceRevision value) {
+    return be::writeUint64(writer, value.value());
+}
+
 // Stable schema-1 enum mapping: no C++ enum representation is serialized
 // implicitly. The matching readers below reject every unassigned wire value.
 bool writeEnum(ByteWriter& w, RunCheckpointVariant v) {
@@ -1101,7 +1106,8 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
              encodeProgramDocumentPayload(snapshot.program->sourceProgram,
                                           program) ==
                  ConfigurationCodecStatus::Success &&
-             be::writeUint32(writer, snapshot.program->sourceProgramRevision) &&
+             writeRunProgramSourceRevision(
+                 writer, snapshot.program->sourceProgramRevision) &&
              writeEnum(writer, snapshot.program->sourceKind) &&
              writeString(writer, program) &&
              be::writeUint8(writer,
@@ -1205,11 +1211,23 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
         RunProgramSnapshot p;
         std::string program;
         std::uint8_t count = 0U;
-        if (!be::readUint32(reader, p.sourceProgramRevision) ||
+        std::uint64_t sourceProgramRevision = 0U;
+        if (schemaVersion >= 4U) {
+            if (!be::readUint64(reader, sourceProgramRevision))
+                return RunPersistenceCodecStatus::Truncated;
+        } else {
+            std::uint32_t legacySourceProgramRevision = 0U;
+            if (!be::readUint32(reader, legacySourceProgramRevision))
+                return RunPersistenceCodecStatus::Truncated;
+            sourceProgramRevision = legacySourceProgramRevision;
+        }
+        if (sourceProgramRevision == 0U ||
             !readProgramSource(reader, p.sourceKind) ||
             !readString(reader, kMaximumCheckpointPayloadBytes, program) ||
             !be::readUint8(reader, count) || count > kMaximumRunRevisions)
             return RunPersistenceCodecStatus::Truncated;
+        p.sourceProgramRevision =
+            RunProgramSourceRevision{sourceProgramRevision};
         const auto decoded = decodeProgramDocumentPayload(program);
         if (!decoded.document.has_value())
             return RunPersistenceCodecStatus::InvalidWireValue;
@@ -1368,6 +1386,26 @@ bool writeMutationKind(ByteWriter& writer, RunPersistenceMutationKind kind) {
     return false;
 }
 
+bool writeOptionalCommandHighWater(ByteWriter& writer,
+                                   const std::optional<CommandId>& value) {
+    return be::writeOptionalTag(writer, value.has_value()) &&
+           (!value.has_value() || be::writeUint64(writer, *value));
+}
+
+bool readOptionalCommandHighWater(ByteReader& reader,
+                                  std::optional<CommandId>& value) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        value.reset();
+        return true;
+    }
+    CommandId id = 0U;
+    if (!be::readUint64(reader, id)) return false;
+    value = id;
+    return true;
+}
+
 bool readMutationKind(ByteReader& reader, std::uint32_t schemaVersion,
                       RunPersistenceMutationKind& kind) {
     std::uint8_t value = 0U;
@@ -1467,13 +1505,15 @@ std::optional<std::string> encodeRunPersistenceHead(
              be::writeUint32(payload, head.oldTransitionSequence) &&
              be::writeUint32(payload, head.newTransitionSequence) &&
              head.newRunRevision >= head.oldRunRevision &&
-             head.newTransitionSequence >= head.oldTransitionSequence;
+             head.newTransitionSequence >= head.oldTransitionSequence &&
+             writeOptionalCommandHighWater(payload, head.commandIdHighWater);
     } else if (head.state == RunPersistenceHeadState::Committed) {
         ok = ok && validCommittedHead(head, epoch) &&
              writeReference(payload, head.current) &&
              be::writeOptionalTag(payload, head.fallback.has_value()) &&
              (!head.fallback.has_value() ||
-              writeReference(payload, *head.fallback));
+              writeReference(payload, *head.fallback)) &&
+             writeOptionalCommandHighWater(payload, head.commandIdHighWater);
     } else {
         ok = false;
     }
@@ -1538,6 +1578,10 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
             !validPreparedHead(head, epoch)) {
             return std::nullopt;
         }
+        if (envelope.envelope->schemaVersion >= 4U &&
+            !readOptionalCommandHighWater(reader, head.commandIdHighWater)) {
+            return std::nullopt;
+        }
     } else if (head.state == RunPersistenceHeadState::Committed) {
         if (!readReference(reader, head.current) ||
             !be::readOptionalTag(reader, present)) {
@@ -1547,6 +1591,10 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
             RunCheckpointReference reference;
             if (!readReference(reader, reference)) return std::nullopt;
             head.fallback = reference;
+        }
+        if (envelope.envelope->schemaVersion >= 4U &&
+            !readOptionalCommandHighWater(reader, head.commandIdHighWater)) {
+            return std::nullopt;
         }
     } else {
         return std::nullopt;

@@ -42,6 +42,11 @@ bool FermentationApplication::begin(
 
     platformServices_ = &platformServices;
     timeSource_ = nullptr;
+    stateStore_ = nullptr;
+    storageEpoch_.reset();
+    runIdentity_.reset();
+    configurationRecoveryService_.reset();
+    runPersistenceCoordinator_.reset();
     recoveryDisposition_.reset();
     lifecycleState_ = ApplicationLifecycleState::Ready;
     presentationState_ = PresentationState{};
@@ -82,6 +87,9 @@ bool FermentationApplication::beginPersistent(
 
     platformServices_ = &platformServices;
     timeSource_ = timeSource;
+    stateStore_ = &store;
+    storageEpoch_.reset();
+    runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
     presentationState_ = PresentationState{};
     presentationState_.resetCause = resetCauseSource == nullptr
@@ -99,6 +107,7 @@ bool FermentationApplication::beginPersistent(
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
     runPersistenceCoordinator_.reset();
+    configurationRecoveryService_.reset();
     configurationService_.reset();
     graphStore_.reset();
     mutationCoordinator_.reset();
@@ -141,17 +150,18 @@ bool FermentationApplication::beginPersistent(
         return true;
     }
 
-    const auto configurationResult = recovery->boot();
+    configurationRecoveryService_ = std::move(recovery);
+    const auto configurationResult = configurationRecoveryService_->boot();
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     configurationRecoveryStatus_ = configurationResult.status;
 #endif
-    recovery.reset();
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         requireService(configurationFault(configurationResult.status));
         return true;
     }
     const auto epoch = runtime.lease.get().storageEpoch();
+    storageEpoch_ = epoch;
 
     runPersistenceCoordinator_ = std::unique_ptr<RunPersistenceCoordinator>{
         new (std::nothrow)
@@ -168,6 +178,21 @@ bool FermentationApplication::beginPersistent(
         return true;
     }
     runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
+
+    if (const auto highWater = runPersistenceCoordinator_->commandIdHighWater();
+        highWater.has_value()) {
+        auto identity = ApplicationRunIdentity::create(epoch, highWater);
+        if (!identity.has_value()) {
+            requireService(FaultCode::RunPersistenceUntrusted);
+            return true;
+        }
+        runIdentity_ = std::unique_ptr<ApplicationRunIdentity>{
+            new (std::nothrow) ApplicationRunIdentity(std::move(*identity))};
+        if (runIdentity_ == nullptr) {
+            requireService(FaultCode::None, true);
+            return true;
+        }
+    }
 
     persistenceLoadStatus_ = loadResult->status;
     const RunPersistenceSnapshot* snapshot = nullptr;
@@ -407,6 +432,124 @@ RunPersistenceResult FermentationApplication::resumeFallback(
         }
     }
     return outcome.persistenceResult;
+}
+
+std::optional<device_platform::UiRequestId>
+FermentationApplication::allocateUiRequestId() noexcept {
+    if (runIdentity_ == nullptr) return std::nullopt;
+    return runIdentity_->allocateUiRequestId();
+}
+
+std::optional<CommandId> FermentationApplication::allocateCommandId() noexcept {
+    if (runIdentity_ == nullptr) return std::nullopt;
+    return runIdentity_->allocateCommandId();
+}
+
+std::optional<std::string> FermentationApplication::makeRunId(
+    CommandId startCommandId) const {
+    if (runIdentity_ == nullptr) return std::nullopt;
+    return runIdentity_->makeRunId(startCommandId);
+}
+
+ConfigurationRecoveryResult
+FermentationApplication::beginAuthorizedFactoryReset() {
+    ConfigurationRecoveryResult unavailable{
+        ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
+    if (configurationRecoveryService_ == nullptr ||
+        configurationService_ == nullptr || stateStore_ == nullptr ||
+        !storageEpoch_.has_value()) {
+        return unavailable;
+    }
+
+    const auto previousEpoch = *storageEpoch_;
+    const auto reset =
+        configurationRecoveryService_->beginAuthorizedFactoryReset();
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    configurationRecoveryStatus_ = reset.status;
+#endif
+    if (reset.status != ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        return reset;
+    }
+
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        requireService(FaultCode::ConfigurationUnavailable);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    const auto currentEpoch = runtime.lease.get().storageEpoch();
+    if (currentEpoch.value() == 0U || currentEpoch == previousEpoch) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+
+    auto coordinator = std::unique_ptr<RunPersistenceCoordinator>{
+        new (std::nothrow) RunPersistenceCoordinator(*stateStore_, currentEpoch,
+                                                     RunCheckpointSchedule{})};
+    if (coordinator == nullptr) {
+        requireService(FaultCode::None, true);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    const AuthorizedRunEpochHandoffProof proof{previousEpoch, currentEpoch};
+    const auto handoff = coordinator->completeAuthorizedEpochHandoff(proof);
+    if (handoff.status != RunPersistenceResultStatus::Applied) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    runPersistenceCoordinator_ = std::move(coordinator);
+    storageEpoch_ = currentEpoch;
+    runIdentity_.reset();
+    pendingResume_.reset();
+    pendingFallbackResume_.reset();
+    pendingRecoverySource_.reset();
+    owningRecoveryEvidence_.reset();
+    recoveryDisposition_.reset();
+    runtimeRunState_.reset();
+
+    auto loadResult = std::unique_ptr<RunPersistenceLoadResult>{
+        new (std::nothrow) RunPersistenceLoadResult{}};
+    if (loadResult == nullptr) {
+        requireService(FaultCode::None, true);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
+    persistenceLoadStatus_ = loadResult->status;
+    if (const auto highWater = runPersistenceCoordinator_->commandIdHighWater();
+        highWater.has_value()) {
+        auto identity = ApplicationRunIdentity::create(currentEpoch, highWater);
+        if (!identity.has_value()) {
+            requireService(FaultCode::RunPersistenceUntrusted);
+            return {
+                ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+        }
+        runIdentity_ = std::unique_ptr<ApplicationRunIdentity>{
+            new (std::nothrow) ApplicationRunIdentity(std::move(*identity))};
+        if (runIdentity_ == nullptr) {
+            requireService(FaultCode::None, true);
+            return {
+                ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+        }
+    }
+    const RunPersistenceSnapshot* snapshot =
+        loadResult->snapshot.has_value() ? &*loadResult->snapshot : nullptr;
+    loadDisposition_ =
+        boot_classification::classifyRunLoad(loadResult->status, snapshot);
+    const auto classification =
+        boot_classification::classify(loadResult->status, snapshot);
+    if (!processBootClassification(classification, snapshot,
+                                   currentCheckpointTime())) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    lifecycleState_ = ApplicationLifecycleState::Ready;
+    return reset;
 }
 
 RunCheckpointTime FermentationApplication::currentCheckpointTime()

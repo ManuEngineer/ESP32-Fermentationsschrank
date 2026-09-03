@@ -3,15 +3,18 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "reset_cause.hpp"
+#include "state_store.hpp"
 #include "sensor_selection.hpp"
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
+#include "application_run_identity.hpp"
 
 namespace fermentation {
 
@@ -19,6 +22,7 @@ class ConfigurationBootstrapStore;
 class ConfigurationGraphStore;
 class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
+struct ConfigurationRecoveryResult;
 class ConfigurationService;
 class RunPersistenceCoordinator;
 struct FermentationUiResumeFallbackCommand;
@@ -75,6 +79,19 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
+    // Application-owned identity source for local and future Web adapters.
+    // Adapters receive IDs from here; they do not create command or run IDs.
+    [[nodiscard]] std::optional<device_platform::UiRequestId>
+    allocateUiRequestId() noexcept;
+    [[nodiscard]] std::optional<CommandId> allocateCommandId() noexcept;
+    [[nodiscard]] std::optional<std::string> makeRunId(
+        CommandId startCommandId) const;
+
+    // Existing configuration recovery remains the authorization owner. This
+    // application entry point composes its FactoryResetCompleted result with
+    // the run-persistence epoch handoff before publishing the new runtime.
+    [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
+
     // Explicit R1 selected-fallback action.  The command carries only the
     // app-owned confirmation/revision contract; fresh sensor/planner evidence
     // is supplied by the owning application/orchestrator boundary, never by
@@ -125,7 +142,11 @@ class FermentationApplication {
     std::unique_ptr<ConfigurationMutationCoordinator> mutationCoordinator_;
     std::unique_ptr<ConfigurationGraphStore> graphStore_;
     std::unique_ptr<ConfigurationService> configurationService_;
+    std::unique_ptr<ConfigurationRecoveryService> configurationRecoveryService_;
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
+    std::unique_ptr<ApplicationRunIdentity> runIdentity_;
+    device_platform::IStateStore* stateStore_{nullptr};
+    std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
     std::unique_ptr<RunCommandState> pendingFallbackResume_;
