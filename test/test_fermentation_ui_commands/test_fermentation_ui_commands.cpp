@@ -6,6 +6,17 @@
 #include "fermentation_ui_commands.hpp"
 #include "standard_program_catalog.hpp"
 
+namespace fermentation {
+
+class ApplicationRunIdentityTestAccess {
+   public:
+    static ApplicationCommandIdentity allocate(ApplicationRunIdentity& value) {
+        return *value.allocateForApplication().identity;
+    }
+};
+
+}  // namespace fermentation
+
 namespace {
 
 using namespace fermentation;
@@ -52,7 +63,6 @@ FermentationUiCommandContext context(const RunCommandState& state,
                                      bool confirmed = false) {
     FermentationUiCommandContext value;
     value.surface = device_platform::UiSurface::LocalDisplay;
-    value.requestId.value = 42U;
     value.monotonicMillis = 100U;
     value.expected.expectedStateSequence =
         state.processState.transitionSequence;
@@ -78,12 +88,24 @@ CommandStatus commandDetail(const FermentationUiCommandResult& result) {
     return std::get<CommandStatus>(result.detail);
 }
 
+void assertDecisionOnly(const FermentationUiCommandResult& result) {
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::DecisionOnly),
+        static_cast<int>(result.phase));
+}
+
 void test_ui_request_id_is_the_existing_command_id() {
     const auto state = standbyState();
     const auto value = context(state);
-    const auto envelope = FermentationUiCommandBridge::makeEnvelope(value);
+    auto identity = ApplicationRunIdentity::create(
+        device_platform::StorageEpoch{1U}, CommandId{0U});
+    TEST_ASSERT_TRUE(identity.has_value());
+    auto commandIdentity =
+        ApplicationRunIdentityTestAccess::allocate(*identity);
+    const auto envelope =
+        FermentationUiCommandBridge::makeEnvelope(value, commandIdentity);
 
-    TEST_ASSERT_EQUAL_UINT64(value.requestId.value, envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(commandIdentity.commandId(), envelope.id);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandSource::LocalDisplay),
                           static_cast<int>(envelope.source));
     TEST_ASSERT_FALSE(envelope.confirmed);
@@ -92,9 +114,14 @@ void test_ui_request_id_is_the_existing_command_id() {
 void test_canonical_validation_precedes_ui_confirmation() {
     const auto state = standbyState();
     const auto unconfirmedContext = context(state, false);
+    auto identity = ApplicationRunIdentity::create(
+        device_platform::StorageEpoch{1U}, CommandId{0U});
+    TEST_ASSERT_TRUE(identity.has_value());
+    auto commandIdentity =
+        ApplicationRunIdentityTestAccess::allocate(*identity);
 
     const auto unconfirmed = FermentationUiCommandBridge::decideProgramStart(
-        state, validProgramStart(), unconfirmedContext,
+        state, validProgramStart(), unconfirmedContext, commandIdentity,
         confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
@@ -102,43 +129,50 @@ void test_canonical_validation_precedes_ui_confirmation() {
         static_cast<int>(unconfirmed.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
                           static_cast<int>(commandDetail(unconfirmed)));
+    assertDecisionOnly(unconfirmed);
     TEST_ASSERT_TRUE(unconfirmed.confirmation.has_value());
 
     auto staleContext = unconfirmedContext;
     staleContext.expected.expectedRunRevision = 1U;
     const auto stale = FermentationUiCommandBridge::decideProgramStart(
-        state, validProgramStart(), staleContext, confirmation(staleContext));
+        state, validProgramStart(), staleContext, commandIdentity,
+        confirmation(staleContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(stale.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::StaleState),
                           static_cast<int>(commandDetail(stale)));
+    assertDecisionOnly(stale);
     TEST_ASSERT_FALSE(stale.confirmation.has_value());
 
     auto invalid = validProgramStart();
     invalid.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{0U};
     const auto invalidResult = FermentationUiCommandBridge::decideProgramStart(
-        state, invalid, unconfirmedContext, confirmation(unconfirmedContext));
+        state, invalid, unconfirmedContext, commandIdentity,
+        confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(invalidResult.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                           static_cast<int>(commandDetail(invalidResult)));
+    assertDecisionOnly(invalidResult);
     TEST_ASSERT_FALSE(invalidResult.confirmation.has_value());
 
     auto unsafe = validProgramStart();
     unsafe.safetyAllowsStart = false;
     const auto unsafeResult = FermentationUiCommandBridge::decideProgramStart(
-        state, unsafe, unconfirmedContext, confirmation(unconfirmedContext));
+        state, unsafe, unconfirmedContext, commandIdentity,
+        confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
         static_cast<int>(unsafeResult.category));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                           static_cast<int>(commandDetail(unsafeResult)));
+    assertDecisionOnly(unsafeResult);
     TEST_ASSERT_FALSE(unsafeResult.confirmation.has_value());
 }
 
@@ -161,6 +195,13 @@ void test_command_result_preserves_typed_app_details() {
         static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
         static_cast<int>(
             std::get<RunPersistenceResultStatus>(persisted.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(persisted.phase));
+
+    const auto unsupported =
+        FermentationUiCommandBridge::unsupportedAppDetail();
+    assertDecisionOnly(unsupported);
 
     const auto preview = FermentationUiCommandBridge::fromConfigurationPreview(
         ConfigurationPreviewStatus::PreviewSuperseded);
@@ -177,6 +218,7 @@ void test_command_result_preserves_typed_app_details() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ConfigurationCommitStatus::ConfigurationMutationBusy),
         static_cast<int>(std::get<ConfigurationCommitStatus>(commit.detail)));
+    assertDecisionOnly(commit);
 }
 
 void test_ui_payloads_are_intents_and_not_owning_evidence() {

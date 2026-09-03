@@ -11,6 +11,36 @@
 
 namespace fermentation {
 
+enum class ApplicationRunIdentityStatus : std::uint8_t {
+    Allocated,
+    NotInitialized,
+    Overflow,
+    Unavailable,
+};
+
+// A command identity is minted only by ApplicationRunIdentity. Its public
+// accessors let the application bind one value to both UI correlation and
+// CommandEnvelope::id, while adapters cannot construct or replace it.
+class ApplicationCommandIdentity {
+   public:
+    [[nodiscard]] CommandId commandId() const noexcept { return commandId_; }
+    [[nodiscard]] device_platform::UiRequestId uiRequestId() const noexcept {
+        return device_platform::UiRequestId{commandId_};
+    }
+
+   private:
+    friend class ApplicationRunIdentity;
+    explicit ApplicationCommandIdentity(CommandId commandId) noexcept
+        : commandId_(commandId) {}
+    CommandId commandId_{0U};
+};
+
+struct ApplicationCommandIdentityResult {
+    ApplicationRunIdentityStatus status{
+        ApplicationRunIdentityStatus::NotInitialized};
+    std::optional<ApplicationCommandIdentity> identity;
+};
+
 // Application-owned identity allocator shared by every local or remote
 // adapter. The committed high-water value is supplied by the canonical run
 // persistence head; a logical empty store is represented by zero.
@@ -26,12 +56,6 @@ class ApplicationRunIdentity {
         device_platform::StorageEpoch epoch,
         std::optional<CommandId> committedHighWater) noexcept;
 
-    [[nodiscard]] std::optional<CommandId> allocateCommandId() noexcept;
-    [[nodiscard]] std::optional<device_platform::UiRequestId>
-    allocateUiRequestId() noexcept;
-    [[nodiscard]] std::optional<std::string> makeRunId(
-        CommandId startCommandId) const;
-
     [[nodiscard]] device_platform::StorageEpoch storageEpoch() const noexcept {
         return epoch_;
     }
@@ -41,6 +65,14 @@ class ApplicationRunIdentity {
     }
 
    private:
+    friend class FermentationApplication;
+    friend class ApplicationRunIdentityTestAccess;
+
+    [[nodiscard]] ApplicationCommandIdentityResult
+    allocateForApplication() noexcept;
+    [[nodiscard]] std::optional<std::string> makeRunId(
+        CommandId startCommandId) const;
+
     ApplicationRunIdentity(device_platform::StorageEpoch epoch,
                            CommandId nextCommandId) noexcept
         : epoch_(epoch), nextCommandId_(nextCommandId) {}

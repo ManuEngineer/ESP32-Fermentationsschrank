@@ -4,6 +4,7 @@
 #include <string>
 #include <variant>
 
+#include "application_run_identity.hpp"
 #include "configuration_service.hpp"
 #include "fermentation_ui_models.hpp"
 #include "sensor_selection.hpp"
@@ -30,7 +31,6 @@ enum class FermentationUiAction : std::uint8_t {
 struct FermentationUiCommandContext {
     device_platform::UiSurface surface{
         device_platform::UiSurface::LocalDisplay};
-    device_platform::UiRequestId requestId;
     std::uint64_t monotonicMillis{0U};
     FermentationUiExpectedRevisions expected;
     bool confirmed{false};
@@ -94,6 +94,32 @@ struct FermentationUiCompleteRunIntent {
     std::optional<FermentationUiManualRunPlanValues> coolingPlan;
 };
 
+enum class FermentationApplicationRequestStatus : std::uint8_t {
+    Prepared,
+    NotInitialized,
+    Unavailable,
+    Overflow,
+    StaleProgramCatalog,
+    ProgramUnavailable,
+    InvalidInput,
+};
+
+using FermentationApplicationPreparedRequest =
+    std::variant<ProgramStartRequest, ManualStartRequest, StopRequest,
+                 CompletionRequest>;
+
+// The application returns an already identity-bound request. Confirmation
+// reuses this value; a renderer never supplies a replacement ID or run ID.
+struct FermentationApplicationRequestResult {
+    FermentationApplicationRequestStatus status{
+        FermentationApplicationRequestStatus::Unavailable};
+    std::optional<FermentationApplicationPreparedRequest> request;
+    // Retained with the prepared request so confirmation/replay can reuse the
+    // exact same envelope and any runId derived from it. Adapters cannot
+    // construct a replacement identity.
+    std::optional<ApplicationCommandIdentity> identity;
+};
+
 struct FermentationUiAdjustRunIntent {
     std::optional<double> targetTemperatureCelsius;
     std::optional<std::uint32_t> remainingDurationMinutes;
@@ -130,7 +156,6 @@ using FermentationUiEnvelopePayload = std::variant<
     FermentationUiResetFaultIntent, FermentationUiSensorSelectionIntent>;
 
 struct FermentationUiEnvelopeCommand {
-    device_platform::UiRequestId requestId;
     FermentationUiExpectedRevisions expected;
     bool confirmed{false};
     FermentationUiEnvelopePayload payload;
@@ -168,7 +193,7 @@ struct FermentationUiCommandResult {
         device_platform::DeviceUiCommandOutcomeCategory::Unavailable};
     FermentationUiCommandDetail detail{
         FermentationUiDetailStatus::UnsupportedAppDetail};
-    FermentationUiCommandPhase phase{FermentationUiCommandPhase::OwningOutcome};
+    FermentationUiCommandPhase phase{FermentationUiCommandPhase::DecisionOnly};
     std::optional<FermentationUiConfirmationRequest> confirmation;
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
@@ -176,7 +201,8 @@ struct FermentationUiCommandResult {
 class FermentationUiCommandBridge {
    public:
     [[nodiscard]] static CommandEnvelope makeEnvelope(
-        const FermentationUiCommandContext& context) noexcept;
+        const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity) noexcept;
     [[nodiscard]] static FermentationUiConfirmationRequest confirmationRequest(
         const FermentationUiCommandContext& context,
         FermentationUiAction action, device_platform::TextKey title,
@@ -191,32 +217,39 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult fromConfigurationPreview(
         ConfigurationPreviewStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromConfigurationCommit(
-        ConfigurationCommitStatus status);
+        ConfigurationCommitStatus status,
+        FermentationUiCommandPhase phase =
+            FermentationUiCommandPhase::DecisionOnly);
     [[nodiscard]] static FermentationUiCommandResult unsupportedAppDetail();
 
     [[nodiscard]] static FermentationUiCommandResult decideProgramStart(
         const RunCommandState& current, ProgramStartRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideManualStart(
         const RunCommandState& current, ManualStartRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideStop(
         const RunCommandState& current, StopRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideCompletion(
         const RunCommandState& current, CompletionRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideRunAdjustment(
         const RunCommandState& current, RunAdjustmentCommandRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult
@@ -224,26 +257,31 @@ class FermentationUiCommandBridge {
         const RunCommandState& current,
         ApplyRecoveryTimeCorrectionRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideAcknowledgeMessage(
         const RunCommandState& current, MessageCommandRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideMuteMessage(
         const RunCommandState& current, MessageCommandRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideFaultReset(
         const RunCommandState& current, FaultResetRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
     [[nodiscard]] static FermentationUiCommandResult decideSensorSelection(
         const RunCommandState& current, SensorSelectionCommandRequest request,
         const FermentationUiCommandContext& context,
+        const ApplicationCommandIdentity& identity,
         const CrossRolePlausibilityContext& owningPlausibility,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);

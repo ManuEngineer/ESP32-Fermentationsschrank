@@ -58,6 +58,24 @@ std::string schemaTwoActivePayload() {
     return payload;
 }
 
+// Independent schema-3 active-program golden. Its source revision is the
+// historical 32-bit field; schema-3 recovery/progress fields are present and
+// decode must widen the value without assigning it catalog-revision meaning.
+std::string schemaThreeActivePayload() {
+    return bytesFromHex(
+        "01010000000000000064000500000001000e636865636b706f696e742d72756e010101"
+        "02"
+        "000000011234567801005d00000006000000000001ffff000b77617465722d6b656669"
+        "72"
+        "000b5761737365726b656669720000010101010101000201010000001e030101404300"
+        "00"
+        "000000000100000078013fe0000000000000010000000a01000000b400010000000100"
+        "01"
+        "0000000a000000b4000100000078000600000000000000000000000000000000000000"
+        "00"
+        "0000010000000000000063000000020002000200000000000000010000000000");
+}
+
 std::string schemaOneNoActivePayload() {
     return bytesFromHex(
         "03020000000000000064000500000000000003000000000000000000000000000"
@@ -197,6 +215,34 @@ void test_schema_four_preserves_64_bit_neutral_run_provenance() {
     TEST_ASSERT_EQUAL_UINT64(
         0x1'0000'0000ULL + 7U,
         decoded.snapshot->program->sourceProgramRevision.value());
+}
+
+void test_schema_three_active_program_golden_migrates_without_reinterpretation() {
+    const auto legacy =
+        decodeRunPersistenceSnapshot(schemaThreeActivePayload(), 3U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(legacy.status));
+    TEST_ASSERT_TRUE(legacy.snapshot.has_value());
+    TEST_ASSERT_TRUE(legacy.snapshot->program.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        0x12345678U, legacy.snapshot->program->sourceProgramRevision.value());
+    TEST_ASSERT_TRUE(legacy.snapshot->processRunSnapshot.has_value());
+
+    std::string schemaFour;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(encodeRunPersistenceSnapshot(
+                              *legacy.snapshot, schemaFour)));
+    const auto migrated = decodeRunPersistenceSnapshot(schemaFour, 4U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(migrated.status));
+    TEST_ASSERT_TRUE(migrated.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        0x12345678U, migrated.snapshot->program->sourceProgramRevision.value());
+    TEST_ASSERT_EQUAL_STRING(legacy.snapshot->activeRunId.c_str(),
+                             migrated.snapshot->activeRunId.c_str());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(legacy.snapshot->processState.state),
+        static_cast<int>(migrated.snapshot->processState.state));
 }
 
 // Hardcoded schema-1/2 bytes are the legacy-compatibility oracle. The direct
@@ -1573,6 +1619,8 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
     RUN_TEST(test_schema_four_preserves_64_bit_neutral_run_provenance);
+    RUN_TEST(
+        test_schema_three_active_program_golden_migrates_without_reinterpretation);
     RUN_TEST(
         test_schema_one_two_fixtures_cover_legacy_compatibility_and_into_core);
     RUN_TEST(test_record_envelope_failure_leaves_destination_unmodified);

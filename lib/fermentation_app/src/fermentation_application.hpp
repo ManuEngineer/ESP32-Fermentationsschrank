@@ -15,6 +15,7 @@
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
 #include "application_run_identity.hpp"
+#include "fermentation_ui_commands.hpp"
 
 namespace fermentation {
 
@@ -25,7 +26,6 @@ class ConfigurationRecoveryService;
 struct ConfigurationRecoveryResult;
 class ConfigurationService;
 class RunPersistenceCoordinator;
-struct FermentationUiResumeFallbackCommand;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -38,6 +38,17 @@ enum class ApplicationLifecycleState : std::uint8_t {
     Initializing,
     Ready,
     ServiceRequired,
+};
+
+// Already evaluated evidence supplied by the owning application/orchestrator
+// boundary. This is a composition input, not a UI-controlled safety or
+// sensor decision and contains no fallback policy.
+struct FermentationApplicationOwningEvidence {
+    bool safetyAllowsStart{false};
+    bool safetyAllowsCooling{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
 };
 
 class FermentationApplication {
@@ -79,13 +90,27 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
-    // Application-owned identity source for local and future Web adapters.
-    // Adapters receive IDs from here; they do not create command or run IDs.
-    [[nodiscard]] std::optional<device_platform::UiRequestId>
-    allocateUiRequestId() noexcept;
-    [[nodiscard]] std::optional<CommandId> allocateCommandId() noexcept;
-    [[nodiscard]] std::optional<std::string> makeRunId(
-        CommandId startCommandId) const;
+    // These composition points are shared by local and future Web adapters.
+    // They allocate identity, resolve current configuration, and return an
+    // already application-bound owning request. The adapter supplies values
+    // and expected revisions only.
+    [[nodiscard]] FermentationApplicationRequestResult prepareStartProgram(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartProgramIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareStartManualHolding(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartManualHoldingIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareStop(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStopRunIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareCompletion(
+        const FermentationUiCommandContext& context,
+        const FermentationUiCompleteRunIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
 
     // Existing configuration recovery remains the authorization owner. This
     // application entry point composes its FactoryResetCompleted result with

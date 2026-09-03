@@ -51,6 +51,12 @@ class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
 
 class RunPersistenceCoordinatorTestAccess {
    public:
+    static AuthorizedRunEpochHandoffProof epochHandoffProof(
+        device_platform::StorageEpoch previous,
+        device_platform::StorageEpoch current) {
+        return AuthorizedRunEpochHandoffProof(previous, current);
+    }
+
     static RunPersistenceResult writeSnapshotCore(
         RunPersistenceCoordinator& coordinator,
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
@@ -100,11 +106,19 @@ class RunPersistenceCoordinatorTestAccess {
         return coordinator.persistedIds_[index];
     }
 };
+
+class ApplicationRunIdentityTestAccess {
+   public:
+    static ApplicationCommandIdentity allocate(ApplicationRunIdentity& value) {
+        return *value.allocateForApplication().identity;
+    }
+};
 }  // namespace fermentation
 
 namespace {
 
 using namespace fermentation;
+using fermentation::ApplicationRunIdentityTestAccess;
 
 RunCheckpointTime trustedCheckpointTime(const std::uint64_t monotonicMillis) {
     return {monotonicMillis, 1'700'000'000LL + static_cast<std::int64_t>(
@@ -9697,7 +9711,8 @@ void test_issue144_empty_store_allocates_hwm_and_restarts_after_one() {
         ApplicationRunIdentity::create(epoch, restarted.commandIdHighWater());
     TEST_ASSERT_TRUE(next.has_value());
     auto allocator = std::move(*next);
-    TEST_ASSERT_EQUAL_UINT64(2U, *allocator.allocateCommandId());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, ApplicationRunIdentityTestAccess::allocate(allocator).commandId());
 }
 
 void test_issue144_legacy_hwm_unknown_blocks_new_command() {
@@ -9855,9 +9870,17 @@ void test_issue144_authorized_epoch_handoff_restarts_identity_at_one() {
 
     RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
     const auto applied = handoff.completeAuthorizedEpochHandoff(
-        AuthorizedRunEpochHandoffProof{oldEpoch, newEpoch});
+        RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                               newEpoch));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(applied.status));
+    const auto repeated = handoff.completeAuthorizedEpochHandoff(
+        RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                               newEpoch));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(repeated.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(repeated.durability));
     const auto loaded = handoff.loadAndInitialize();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
@@ -9868,7 +9891,8 @@ void test_issue144_authorized_epoch_handoff_restarts_identity_at_one() {
         ApplicationRunIdentity::create(newEpoch, handoff.commandIdHighWater());
     TEST_ASSERT_TRUE(identity.has_value());
     auto allocator = std::move(*identity);
-    TEST_ASSERT_EQUAL_UINT64(1U, *allocator.allocateCommandId());
+    TEST_ASSERT_EQUAL_UINT64(
+        1U, ApplicationRunIdentityTestAccess::allocate(allocator).commandId());
 }
 
 void test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed() {
@@ -9902,7 +9926,8 @@ void test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed() {
         device_platform_test_support::SimulatedPersistentStateStore::
             WriteFault::FailBeforeBegin);
     const auto failure = failed.completeAuthorizedEpochHandoff(
-        AuthorizedRunEpochHandoffProof{oldEpoch, newEpoch});
+        RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                               newEpoch));
     TEST_ASSERT_NOT_EQUAL(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(failure.status));
     store.restart();
@@ -9913,6 +9938,128 @@ void test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed() {
         static_cast<int>(RunPersistenceLoadStatus::ForeignEpoch),
         static_cast<int>(afterFailureLoad.status));
     TEST_ASSERT_FALSE(afterFailure.commandIdHighWater().has_value());
+}
+
+void seedHandoffSource(SequencedWriteStore& store,
+                       device_platform::StorageEpoch oldEpoch) {
+    RunPersistenceCoordinator source(store, oldEpoch, RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(source.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto committed = source.persistCommand(
+        state, startDecision(state, 19U, 100U), trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    store.restart();
+}
+
+void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
+    using Fault = SequencedWriteStore::WriteFault;
+    const auto oldEpoch = device_platform::StorageEpoch{70U};
+    const auto newEpoch = device_platform::StorageEpoch{71U};
+
+    for (const auto& failure : std::array<std::pair<std::size_t, Fault>, 3>{
+             std::pair{1U, Fault::FailBeforeBegin},
+             std::pair{2U, Fault::FailBeforeBegin},
+             std::pair{3U, Fault::FailBeforeBegin}}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        store.faultAt(failure.first, failure.second);
+        const auto result = handoff.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(failure.first == 1U
+                                 ? RunPersistenceDurability::Unchanged
+                                 : RunPersistenceDurability::Changed),
+            static_cast<int>(result.durability));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        const auto resumed = retry.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.status));
+    }
+}
+
+void test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write() {
+    using Fault = SequencedWriteStore::WriteFault;
+    const auto oldEpoch = device_platform::StorageEpoch{74U};
+    const auto newEpoch = device_platform::StorageEpoch{75U};
+    for (const auto powerCutWrite : {2U, 3U}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        store.faultAt(powerCutWrite, Fault::PowerCutBeforeCommit);
+        const auto interrupted = handoff.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(interrupted.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceDurability::Changed),
+            static_cast<int>(interrupted.durability));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        const auto resumed = retry.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.status));
+    }
+}
+
+void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
+    const auto oldEpoch = device_platform::StorageEpoch{72U};
+    const auto newEpoch = device_platform::StorageEpoch{73U};
+    for (const auto unknownWrite : {1U, 2U, 3U}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        store.unknownWithoutCommitAt(unknownWrite);
+        store.readFaultAt(unknownWrite,
+                          SequencedWriteStore::ReadFault::ReadError);
+        const auto result = handoff.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceDurability::MayHaveChanged),
+            static_cast<int>(result.durability));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(handoff.state()));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        const auto resumed = retry.completeAuthorizedEpochHandoff(
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.status));
+    }
 }
 
 }  // namespace
@@ -10135,5 +10282,11 @@ int main(int, char**) {
         test_issue144_periodic_checkpoint_keeps_committed_hwm_not_fifo_max);
     RUN_TEST(test_issue144_authorized_epoch_handoff_restarts_identity_at_one);
     RUN_TEST(test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed);
+    RUN_TEST(
+        test_issue144_epoch_handoff_durability_matches_each_write_cutpoint);
+    RUN_TEST(
+        test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write);
+    RUN_TEST(
+        test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable);
     return UNITY_END();
 }

@@ -10,6 +10,7 @@
 #include "configuration_graph_store.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_service.hpp"
+#include "run_persistence_contract.hpp"
 #include "state_store.hpp"
 
 namespace fermentation {
@@ -106,6 +107,10 @@ class ConfigurationRecoveryService {
 
     [[nodiscard]] ConfigurationRecoveryResult boot();
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
+    // Minted only after canonical reset completion and consumed once by the
+    // application when it hands the new epoch to run persistence.
+    [[nodiscard]] std::optional<AuthorizedRunEpochHandoffProof>
+    takeAuthorizedRunEpochHandoffProof() noexcept;
     [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>
     lastResourcePeaks() const {
         return lastResourcePeaks_;
@@ -157,6 +162,8 @@ class ConfigurationRecoveryService {
     [[nodiscard]] ConfigurationRecoveryStatus verifyFactoryEmpty() const;
     [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
         ConfigurationBootstrapScanStatus status);
+    void armAuthorizedRunEpochHandoff(
+        device_platform::StorageEpoch currentEpoch) noexcept;
 
     device_platform::IStateStore& store_;
     ConfigurationBootstrapStore& bootstrapStore_;
@@ -164,6 +171,7 @@ class ConfigurationRecoveryService {
     ConfigurationService& configurationService_;
     ConfigurationMutationCoordinator& mutationCoordinator_;
     std::optional<PendingRootResolution> pendingRoot_;
+    std::optional<AuthorizedRunEpochHandoffProof> pendingRunEpochHandoff_;
     std::optional<ConfigurationRecoveryResourcePeaks> lastResourcePeaks_;
 };
 

@@ -320,6 +320,10 @@ ConfigurationRecoveryService::classifyBootstrapFinalization(
                     ServiceStateInvariantViolation);
             return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
         }
+        if (successStatus ==
+            ConfigurationRecoveryStatus::FactoryResetCompleted) {
+            armAuthorizedRunEpochHandoff(finalized.loaded->record.storageEpoch);
+        }
         return {successStatus, {}};
     }
     if (isBootstrapIndeterminate(finalized.status)) {
@@ -338,6 +342,23 @@ ConfigurationRecoveryService::classifyBootstrapFinalization(
     configurationService_.failRecovery(
         mapBootstrapWriteFailureCause(finalized.status));
     return makeUnavailableResult(mapBootstrapWriteFailure(finalized.status));
+}
+
+void ConfigurationRecoveryService::armAuthorizedRunEpochHandoff(
+    device_platform::StorageEpoch currentEpoch) noexcept {
+    if (currentEpoch.value() <= 1U) {
+        pendingRunEpochHandoff_.reset();
+        return;
+    }
+    pendingRunEpochHandoff_ = AuthorizedRunEpochHandoffProof(
+        device_platform::StorageEpoch{currentEpoch.value() - 1U}, currentEpoch);
+}
+
+std::optional<AuthorizedRunEpochHandoffProof>
+ConfigurationRecoveryService::takeAuthorizedRunEpochHandoffProof() noexcept {
+    auto proof = std::move(pendingRunEpochHandoff_);
+    pendingRunEpochHandoff_.reset();
+    return proof;
 }
 
 ConfigurationRecoveryResult
@@ -692,6 +713,10 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
             return makeResult(
                 ConfigurationRecoveryStatus::RuntimePreparationFailure,
                 loaded.diagnostics);
+        }
+        if (loaded.graph->active.manifest.operation.kind ==
+            ChangeOperationKind::FactoryReset) {
+            armAuthorizedRunEpochHandoff(bootstrap.loaded->record.storageEpoch);
         }
         return {ConfigurationRecoveryStatus::RuntimeReady, loaded.diagnostics};
     }

@@ -90,13 +90,30 @@ struct RunPersistenceHead {
 };
 
 // Application-owned proof that the configuration recovery owner completed
-// the immediately preceding StorageEpoch reset.  It deliberately carries no
-// reset token, run data, command identity, or caller-selected foreign epoch;
-// the application constructs it only from the existing FactoryResetCompleted
-// result and the old runtime epoch.
-struct AuthorizedRunEpochHandoffProof {
-    device_platform::StorageEpoch previousEpoch;
-    device_platform::StorageEpoch currentEpoch;
+// the immediately preceding StorageEpoch reset. It deliberately carries no
+// reset token, run data, command identity, or caller-selected foreign epoch.
+// Construction is private: only ConfigurationRecoveryService can mint this
+// capability from canonical configuration-reset evidence. The coordinator
+// still validates the epoch relation and the complete run-store graph.
+class AuthorizedRunEpochHandoffProof {
+   public:
+    [[nodiscard]] device_platform::StorageEpoch previousEpoch() const noexcept {
+        return previousEpoch_;
+    }
+    [[nodiscard]] device_platform::StorageEpoch currentEpoch() const noexcept {
+        return currentEpoch_;
+    }
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class RunPersistenceCoordinatorTestAccess;
+
+    AuthorizedRunEpochHandoffProof(device_platform::StorageEpoch previousEpoch,
+                                   device_platform::StorageEpoch currentEpoch)
+        : previousEpoch_(previousEpoch), currentEpoch_(currentEpoch) {}
+
+    device_platform::StorageEpoch previousEpoch_;
+    device_platform::StorageEpoch currentEpoch_;
 };
 
 // Deliberately only the run-domain projection. Messages, fault/safety state,

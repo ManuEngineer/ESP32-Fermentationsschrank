@@ -615,10 +615,17 @@ void test_authorized_reset_without_runtime_recovers_missing_graph() {
         static_cast<int>(fermentation::ConfigurationRecoveryStatus::
                              ConfigurationUnavailable),
         static_cast<int>(recovery->boot().status));
+    const auto reset = recovery->beginAuthorizedFactoryReset();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
-        static_cast<int>(recovery->beginAuthorizedFactoryReset().status));
+        static_cast<int>(reset.status));
+    const auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+    TEST_ASSERT_TRUE(proof.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, proof->previousEpoch().value());
+    TEST_ASSERT_EQUAL_UINT64(2U, proof->currentEpoch().value());
+    TEST_ASSERT_FALSE(
+        recovery->takeAuthorizedRunEpochHandoffProof().has_value());
     auto runtime = service.acquireRuntime();
     TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
 }
@@ -910,6 +917,10 @@ void test_reset_root_unknown_is_resolved_new_on_later_call() {
         static_cast<int>(
             fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
         static_cast<int>(second.status));
+    const auto proof = fixture.recovery->takeAuthorizedRunEpochHandoffProof();
+    TEST_ASSERT_TRUE(proof.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, proof->previousEpoch().value());
+    TEST_ASSERT_EQUAL_UINT64(2U, proof->currentEpoch().value());
     auto runtime = fixture.service.acquireRuntime();
     TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
 }

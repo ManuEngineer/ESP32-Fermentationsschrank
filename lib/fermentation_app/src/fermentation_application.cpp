@@ -29,9 +29,220 @@ FaultCode configurationFault(ConfigurationRecoveryStatus status) {
     }
 }
 
+FermentationApplicationRequestResult requestFailure(
+    FermentationApplicationRequestStatus status) {
+    return {status, std::nullopt, std::nullopt};
+}
+
+FermentationApplicationRequestStatus mapIdentityStatus(
+    ApplicationRunIdentityStatus status) {
+    switch (status) {
+        case ApplicationRunIdentityStatus::Allocated:
+            return FermentationApplicationRequestStatus::Prepared;
+        case ApplicationRunIdentityStatus::NotInitialized:
+            return FermentationApplicationRequestStatus::NotInitialized;
+        case ApplicationRunIdentityStatus::Overflow:
+            return FermentationApplicationRequestStatus::Overflow;
+        case ApplicationRunIdentityStatus::Unavailable:
+            return FermentationApplicationRequestStatus::Unavailable;
+    }
+    return FermentationApplicationRequestStatus::Unavailable;
+}
+
+ManualRunPlanRequest makeManualRunPlanRequest(
+    const FermentationUiManualRunPlanValues& values, const std::string& runId) {
+    ManualRunPlanRequest request;
+    request.runId = runId;
+    request.targetTemperatureCelsius = values.targetTemperatureCelsius;
+    request.sensorMode = values.sensorMode;
+    request.preheatEnabled = values.preheatEnabled;
+    request.maximumProductWaitMinutes = values.maximumProductWaitMinutes;
+    request.qualificationBandCelsius = values.qualificationBandCelsius;
+    request.qualificationDurationMinutes = values.qualificationDurationMinutes;
+    request.maximumTargetReachMinutes = values.maximumTargetReachMinutes;
+    return request;
+}
+
 }  // namespace
 
 FermentationApplication::~FermentationApplication() = default;
+
+FermentationApplicationRequestResult
+FermentationApplication::prepareStartProgram(
+    const FermentationUiCommandContext& context,
+    const FermentationUiStartProgramIntent& intent,
+    const FermentationApplicationOwningEvidence& evidence) {
+    if (configurationService_ == nullptr || runIdentity_ == nullptr) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::NotInitialized);
+    }
+    if (!context.expected.expectedProgramCatalogRevision.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::InvalidInput);
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    const auto& snapshot = runtime.lease.get();
+    if (*context.expected.expectedProgramCatalogRevision !=
+        snapshot.programCatalogRevision()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::StaleProgramCatalog);
+    }
+    std::optional<ProgramDocument> program;
+    for (const auto& candidate : snapshot.programCatalog().programs) {
+        if (candidate.program.id == intent.programId) {
+            program = candidate;
+            break;
+        }
+    }
+    if (!program.has_value() || !program->program.installed) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::ProgramUnavailable);
+    }
+    const auto sourceRevision =
+        makeRunProgramSourceRevision(snapshot.programCatalogRevision());
+    if (!sourceRevision.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    const auto identity = runIdentity_->allocateForApplication();
+    if (!identity.identity.has_value()) {
+        return requestFailure(mapIdentityStatus(identity.status));
+    }
+    const auto runId = runIdentity_->makeRunId(identity.identity->commandId());
+    if (!runId.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    ProgramStartRequest request;
+    request.envelope =
+        FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+    request.runId = *runId;
+    request.program = std::move(*program);
+    request.sourceKind = request.program.program.factoryCatalogEntry
+                             ? ProgramSourceKind::FactoryCatalog
+                             : ProgramSourceKind::UserProgram;
+    request.sourceProgramRevision = *sourceRevision;
+    request.sensorMode = intent.sensorMode;
+    request.safetyAllowsStart = evidence.safetyAllowsStart;
+    request.airSensorValid = evidence.airSensorValid;
+    request.coolingSensorValid = evidence.coolingSensorValid;
+    request.productSensorValid = evidence.productSensorValid;
+    return {FermentationApplicationRequestStatus::Prepared,
+            FermentationApplicationPreparedRequest{std::move(request)},
+            identity.identity};
+}
+
+FermentationApplicationRequestResult
+FermentationApplication::prepareStartManualHolding(
+    const FermentationUiCommandContext& context,
+    const FermentationUiStartManualHoldingIntent& intent,
+    const FermentationApplicationOwningEvidence& evidence) {
+    if (runIdentity_ == nullptr) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::NotInitialized);
+    }
+    const auto identity = runIdentity_->allocateForApplication();
+    if (!identity.identity.has_value()) {
+        return requestFailure(mapIdentityStatus(identity.status));
+    }
+    const auto runId = runIdentity_->makeRunId(identity.identity->commandId());
+    if (!runId.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    ManualStartRequest request;
+    request.envelope =
+        FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+    request.plan = makeManualRunPlanRequest(intent.plan, *runId);
+    request.safetyAllowsStart = evidence.safetyAllowsStart;
+    request.airSensorValid = evidence.airSensorValid;
+    request.coolingSensorValid = evidence.coolingSensorValid;
+    request.productSensorValid = evidence.productSensorValid;
+    return {FermentationApplicationRequestStatus::Prepared,
+            FermentationApplicationPreparedRequest{std::move(request)},
+            identity.identity};
+}
+
+FermentationApplicationRequestResult FermentationApplication::prepareStop(
+    const FermentationUiCommandContext& context,
+    const FermentationUiStopRunIntent& intent,
+    const FermentationApplicationOwningEvidence& evidence) {
+    if (runIdentity_ == nullptr) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::NotInitialized);
+    }
+    if (intent.option == StopOption::AbortAndCool &&
+        !intent.coolingPlan.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::InvalidInput);
+    }
+    const auto identity = runIdentity_->allocateForApplication();
+    if (!identity.identity.has_value()) {
+        return requestFailure(mapIdentityStatus(identity.status));
+    }
+    StopRequest request;
+    request.envelope =
+        FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+    request.option = intent.option;
+    request.safetyAllowsCooling = evidence.safetyAllowsCooling;
+    request.airSensorValid = evidence.airSensorValid;
+    request.coolingSensorValid = evidence.coolingSensorValid;
+    if (intent.option == StopOption::AbortAndCool) {
+        const auto runId =
+            runIdentity_->makeRunId(identity.identity->commandId());
+        if (!runId.has_value()) {
+            return requestFailure(
+                FermentationApplicationRequestStatus::Unavailable);
+        }
+        request.coolingPlan =
+            makeManualRunPlanRequest(*intent.coolingPlan, *runId);
+    }
+    return {FermentationApplicationRequestStatus::Prepared,
+            FermentationApplicationPreparedRequest{std::move(request)},
+            identity.identity};
+}
+
+FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
+    const FermentationUiCommandContext& context,
+    const FermentationUiCompleteRunIntent& intent,
+    const FermentationApplicationOwningEvidence& evidence) {
+    if (runIdentity_ == nullptr) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::NotInitialized);
+    }
+    if (intent.startCooling && !intent.coolingPlan.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::InvalidInput);
+    }
+    const auto identity = runIdentity_->allocateForApplication();
+    if (!identity.identity.has_value()) {
+        return requestFailure(mapIdentityStatus(identity.status));
+    }
+    CompletionRequest request;
+    request.envelope =
+        FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+    request.startCooling = intent.startCooling;
+    request.safetyAllowsCooling = evidence.safetyAllowsCooling;
+    request.airSensorValid = evidence.airSensorValid;
+    request.coolingSensorValid = evidence.coolingSensorValid;
+    if (intent.startCooling) {
+        const auto runId =
+            runIdentity_->makeRunId(identity.identity->commandId());
+        if (!runId.has_value()) {
+            return requestFailure(
+                FermentationApplicationRequestStatus::Unavailable);
+        }
+        request.coolingPlan =
+            makeManualRunPlanRequest(*intent.coolingPlan, *runId);
+    }
+    return {FermentationApplicationRequestStatus::Prepared,
+            FermentationApplicationPreparedRequest{std::move(request)},
+            identity.identity};
+}
 
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
@@ -155,6 +366,8 @@ bool FermentationApplication::beginPersistent(
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     configurationRecoveryStatus_ = configurationResult.status;
 #endif
+    auto authorizedRunEpochHandoff =
+        configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         requireService(configurationFault(configurationResult.status));
@@ -178,6 +391,32 @@ bool FermentationApplication::beginPersistent(
         return true;
     }
     runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
+
+    if (loadResult->status == RunPersistenceLoadStatus::ForeignEpoch &&
+        authorizedRunEpochHandoff.has_value()) {
+        runPersistenceCoordinator_.reset();
+        runPersistenceCoordinator_ = std::unique_ptr<RunPersistenceCoordinator>{
+            new (std::nothrow) RunPersistenceCoordinator(
+                store, epoch, RunCheckpointSchedule{})};
+        if (runPersistenceCoordinator_ == nullptr) {
+            requireService(FaultCode::None, true);
+            return true;
+        }
+        const auto handoff =
+            runPersistenceCoordinator_->completeAuthorizedEpochHandoff(
+                *authorizedRunEpochHandoff);
+        if (handoff.status != RunPersistenceResultStatus::Applied) {
+            requireService(FaultCode::RunPersistenceUntrusted);
+            return true;
+        }
+        loadResult = std::unique_ptr<RunPersistenceLoadResult>{
+            new (std::nothrow) RunPersistenceLoadResult{}};
+        if (loadResult == nullptr) {
+            requireService(FaultCode::None, true);
+            return true;
+        }
+        runPersistenceCoordinator_->loadAndInitializeInto(*loadResult);
+    }
 
     if (const auto highWater = runPersistenceCoordinator_->commandIdHighWater();
         highWater.has_value()) {
@@ -434,23 +673,6 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     return outcome.persistenceResult;
 }
 
-std::optional<device_platform::UiRequestId>
-FermentationApplication::allocateUiRequestId() noexcept {
-    if (runIdentity_ == nullptr) return std::nullopt;
-    return runIdentity_->allocateUiRequestId();
-}
-
-std::optional<CommandId> FermentationApplication::allocateCommandId() noexcept {
-    if (runIdentity_ == nullptr) return std::nullopt;
-    return runIdentity_->allocateCommandId();
-}
-
-std::optional<std::string> FermentationApplication::makeRunId(
-    CommandId startCommandId) const {
-    if (runIdentity_ == nullptr) return std::nullopt;
-    return runIdentity_->makeRunId(startCommandId);
-}
-
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
     ConfigurationRecoveryResult unavailable{
@@ -470,6 +692,9 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     if (reset.status != ConfigurationRecoveryStatus::FactoryResetCompleted) {
         return reset;
     }
+
+    auto authorizedRunEpochHandoff =
+        configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
 
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
@@ -492,8 +717,15 @@ FermentationApplication::beginAuthorizedFactoryReset() {
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
                 reset.diagnostics};
     }
-    const AuthorizedRunEpochHandoffProof proof{previousEpoch, currentEpoch};
-    const auto handoff = coordinator->completeAuthorizedEpochHandoff(proof);
+    if (!authorizedRunEpochHandoff.has_value() ||
+        authorizedRunEpochHandoff->previousEpoch() != previousEpoch ||
+        authorizedRunEpochHandoff->currentEpoch() != currentEpoch) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+    }
+    const auto handoff =
+        coordinator->completeAuthorizedEpochHandoff(*authorizedRunEpochHandoff);
     if (handoff.status != RunPersistenceResultStatus::Applied) {
         requireService(FaultCode::RunPersistenceUntrusted);
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,

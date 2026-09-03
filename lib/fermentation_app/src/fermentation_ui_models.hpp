@@ -23,6 +23,7 @@ struct FermentationUiExpectedRevisions {
     std::optional<std::uint32_t> expectedFaultRevision;
     std::optional<std::uint32_t> expectedRecoveryEpisodeRevision;
     std::optional<UserConfigurationRevision> expectedUserConfigurationRevision;
+    std::optional<ProgramCatalogRevision> expectedProgramCatalogRevision;
 };
 
 enum class FermentationHomeMode : std::uint8_t {

@@ -23,20 +23,17 @@ std::optional<ApplicationRunIdentity> ApplicationRunIdentity::create(
     return ApplicationRunIdentity(epoch, highWater + 1U);
 }
 
-std::optional<CommandId> ApplicationRunIdentity::allocateCommandId() noexcept {
-    if (nextCommandId_ == 0U) return std::nullopt;
+ApplicationCommandIdentityResult
+ApplicationRunIdentity::allocateForApplication() noexcept {
+    if (nextCommandId_ == 0U) {
+        return {ApplicationRunIdentityStatus::Overflow, std::nullopt};
+    }
     const auto allocated = nextCommandId_;
     nextCommandId_ = allocated == std::numeric_limits<CommandId>::max()
                          ? 0U
                          : allocated + 1U;
-    return allocated;
-}
-
-std::optional<device_platform::UiRequestId>
-ApplicationRunIdentity::allocateUiRequestId() noexcept {
-    const auto id = allocateCommandId();
-    if (!id.has_value()) return std::nullopt;
-    return device_platform::UiRequestId{*id};
+    return {ApplicationRunIdentityStatus::Allocated,
+            ApplicationCommandIdentity{allocated}};
 }
 
 std::optional<std::string> ApplicationRunIdentity::makeRunId(
