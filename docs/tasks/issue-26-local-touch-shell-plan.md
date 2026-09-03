@@ -18,7 +18,7 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
     PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS
-    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
+    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
     PREDECESSOR_ISSUE=25
@@ -1558,7 +1558,7 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die Planprovenienz dieses PRs besteht aus genau acht eigenen Commits:
+Die Planprovenienz dieses PRs besteht aus genau neun eigenen Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
@@ -1572,7 +1572,9 @@ Die Planprovenienz dieses PRs besteht aus genau acht eigenen Commits:
    3de1d86180413896294f09bcfddb447df8c1e898;
 7. Roadmap-Synchronisierung für den konkreten Pflichtvorgänger #144
    7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714;
-8. diese F1-F6-Letztkorrektur mit exakter SHA nach dem Commit.
+8. die vorherige verbraucherorientierte Issue-#144-Vertragskorrektur
+   055617653b8692b7ff7dba3dce7d9659fd20fbf4;
+9. diese F1-F6-Letztkorrektur mit exakter SHA nach dem Commit.
 
 Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
 Basis. Issue #144 ist der konkrete Roadmap-geführte Pflichtvorgänger; für die
@@ -1581,7 +1583,7 @@ Referenzen:
 
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
+    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     PR_HEAD=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
@@ -1597,7 +1599,7 @@ docs/AGENT_WORKFLOW.md geführten Handover referenziert:
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<exakte PR-HEAD-SHA nach Planpush>
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
-    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
+    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
