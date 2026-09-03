@@ -17,7 +17,7 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
-    PLAN_REVISION=F1_F6_FINAL_INTEGRATION
+    PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS
     SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
@@ -66,7 +66,7 @@ Kontextnachweis:
     CONTEXT_HEAD_SHA=3de1d86180413896294f09bcfddb447df8c1e898
     CONTEXT_PLAN_SHA=3de1d86180413896294f09bcfddb447df8c1e898
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=F1-F6 final Issue26 integration blockers after Full Review
+    CONTEXT_DELTA=F1-F6 post-3de predecessor and contract corrections after Full Review
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
