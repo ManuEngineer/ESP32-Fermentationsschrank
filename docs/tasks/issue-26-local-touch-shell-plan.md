@@ -18,7 +18,7 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
     PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS
-    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
+    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
     PREDECESSOR_ISSUE=25
@@ -63,8 +63,8 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=3de1d86180413896294f09bcfddb447df8c1e898
-    CONTEXT_PLAN_SHA=3de1d86180413896294f09bcfddb447df8c1e898
+    CONTEXT_HEAD_SHA=170a3bd04f9193912201bdbdf8a5b38af1d395e9
+    CONTEXT_PLAN_SHA=170a3bd04f9193912201bdbdf8a5b38af1d395e9
     CONTEXT_REFRESH_MODE=FULL
     CONTEXT_DELTA=F1-F6 post-3de predecessor and contract corrections after Full Review
     SOURCE_OF_TRUTH_CONFLICT=NONE
@@ -713,11 +713,28 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
 - StaleState, InvalidInput, SafetyRejected, NotAllowedInState,
   ContextMissing, Busy, Unavailable und vergleichbare Zustände werden nicht
   durch ein UI-Precheck oder eine fehlende Bestätigung maskiert.
+- `FermentationUiCommandBridge::commitConfiguration()` behandelt das Ergebnis
+  von `validatePreviewForConfirmation()` vollständig als Pre-Apply-Pfad:
+  `ReadyForConfirmation` bei noch nicht bestätigtem Command sowie dort
+  erkannte Stale-, Conflict- oder Validation-Ergebnisse werden als
+  `DecisionOnly` zurückgegeben und rufen `ConfigurationService::confirmPreview()`
+  nicht auf. Erst dessen tatsächlich ausgeführtes Ergebnis ist
+  `OwningOutcome`.
+- `FermentationApplication::resumeFallback()` behandelt ein unbestätigtes
+  `RecoveryPending` vor dem mutierenden Fallback-Aktivierungspfad als
+  `DecisionOnly`. Nur das tatsächlich aufgerufene owning Fallback-Ergebnis
+  darf `OwningOutcome` sein; `fromFallbackResult()` darf diese Phase nicht
+  allein aus dem Status ableiten.
 - Bridge- oder UI-seitige Ablehnungen ohne ausgeführten owning Mutationspfad,
   einschließlich `UnsupportedAppDetail`, sind ebenfalls
   `FermentationUiCommandPhase::DecisionOnly`. `makeResult()` darf dafür
   keinen Default-`OwningOutcome` liefern. Es gibt keinen dritten Phasenwert
   und keine neue Ergebnisfamilie.
+- Der sichere Default von `FermentationUiCommandResult::phase` und von
+  `makeResult()` ist `DecisionOnly`. Owning-Adapter setzen
+  `OwningOutcome` ausschließlich explizit nach ausgeführtem
+  Apply-/Persistenz-/Commitpfad; die Phase wird nicht implizit aus einem
+  Statusnamen erraten.
 - Bei erneuter Bestätigung bleiben UiRequestId und, wo vorhanden,
   CommandEnvelope::id identisch. Es gibt keinen zweiten Requestspeicher.
 - Ein echter Duplicate erhält die bestehende AlreadyProcessed- oder
@@ -1433,6 +1450,10 @@ Nachweise:
 | SIM-26-59 | Die Kombination `ApplicationLifecycleState::ServiceRequired` plus verbliebene Recoverydaten projiziert deterministisch `Restricted`, nicht `Recovery`; bei `Ready` wird derselbe Recoverydatensatz als `Recovery` projiziert |
 | SIM-26-60 | `UnsupportedAppDetail` und jede andere bridge-eigene Ablehnung ohne owning Mutation werden als `DecisionOnly` projiziert; `makeResult()` liefert dafür keinen `OwningOutcome` und es gibt keinen dritten Phasenwert |
 | SIM-26-61 | StartProgram, StartManualHolding, AbortAndCool und CoolAfterCompletion erhalten ihre Lauf-ID ausschließlich an der Application-Grenze; die vier UI-Intents tragen nur erlaubte Werte, keine `runId`/`CommandId`, und Confirmation-Replay behält die vorbereitete Identität |
+| SIM-26-62 | Unbestätigtes Configuration-`ReadyForConfirmation` aus `validatePreviewForConfirmation()` wird als `DecisionOnly` projiziert und ruft `confirmPreview()` nicht auf |
+| SIM-26-63 | Ein Stale-/Conflict-/Validation-Ergebnis der Configuration-Vorprüfung bleibt vor `confirmPreview()` `DecisionOnly`, erzeugt keinen Commit und wird nicht durch `fromCommandStatus()` als owning markiert |
+| SIM-26-64 | Das tatsächlich aufgerufene `ConfigurationService::confirmPreview()`-Ergebnis wird als `OwningOutcome` traciert; die bestehende Configuration-Ownership bleibt unverändert |
+| SIM-26-65 | Unbestätigtes Fallback-`RunPersistenceResultStatus::RecoveryPending` aus `resumeFallback()` bleibt vor der Aktivierung `DecisionOnly`; der mutierende Fallbackpfad wird nicht aufgerufen |
 
 Vor der #26-Implementation wird ausschließlich die externe
 Vertragsabhängigkeit geprüft:
@@ -1558,7 +1579,10 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die Planprovenienz dieses PRs besteht aus genau neun eigenen Commits:
+Die Review-Basis dieses PRs bestand aus genau zehn eigenen Commits. Die
+folgende Korrektur ist ein elfter, nicht historienverändernder Commit; die
+vollständige Provenienz des PRs besteht nach diesem Commit aus genau elf
+Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
@@ -1574,7 +1598,11 @@ Die Planprovenienz dieses PRs besteht aus genau neun eigenen Commits:
    7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714;
 8. die vorherige verbraucherorientierte Issue-#144-Vertragskorrektur
    055617653b8692b7ff7dba3dce7d9659fd20fbf4;
-9. diese F1-F6-Letztkorrektur mit exakter SHA nach dem Commit.
+9. die vorherige Revisionskennungs-Korrektur
+   f99354edee8448768c1734d6df86d18c17a16a98;
+10. der Review-HEAD und vorherige Plan-Commit
+    170a3bd04f9193912201bdbdf8a5b38af1d395e9;
+11. diese Integritätskorrektur mit exakter SHA nach dem Commit.
 
 Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
 Basis. Issue #144 ist der konkrete Roadmap-geführte Pflichtvorgänger; für die
@@ -1583,7 +1611,7 @@ Referenzen:
 
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
+    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     PR_HEAD=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
@@ -1599,7 +1627,7 @@ docs/AGENT_WORKFLOW.md geführten Handover referenziert:
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<exakte PR-HEAD-SHA nach Planpush>
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
-    SUPERSEDES_PLAN_COMMIT=055617653b8692b7ff7dba3dce7d9659fd20fbf4
+    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
