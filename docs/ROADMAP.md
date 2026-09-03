@@ -25,26 +25,29 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING`; `ISSUE26_STARTED=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Roadmap-Sync und vollständigen Issue-#26-Plan im Draft-PR erstellen; danach für den exakten Plan-Commit anhalten |
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
-| 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
-| 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
-| 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
-| 5 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
-| 6 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
-| 7 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
-| 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
-| 9 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
+| 0 | Issue #144 – Run-Identity und neutrale Run-Provenienz vor Issue #26 | `ISSUE144_STATUS=PLANNED_SPEC_PENDING`; `BLOCKS_ISSUE26=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`. | Eigenen vollständigen Plan erstellen, vor #26 umsetzen, ownerreviewen und mergen; danach #26 auf den exakten Merge-HEAD synchronisieren |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem nachgelagerten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Merge-HEAD von #144 abwarten, den #26-Plan auf diese Provenienz aktualisieren und erst danach für den exakten Plan-Commit anhalten |
+| 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
+| 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
+| 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
+| 5 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
+| 6 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
+| 7 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
+| 8 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
+| 9 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
+| 10 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
 ## Naechste fachliche Arbeit
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. `integration/r1-development` ist auf dem neuen `main`-Stand
-wiederhergestellt. Die aktuelle fachliche Arbeit ist Issue #26: Der
-Roadmap-Sync und vollständige Plan bleiben bewusst im selben Draft-PR; die
-nach exakter Ownerfreigabe folgende Implementation ist ein späterer Schritt.
-`ISSUE26_STATUS=PLANNING`, `ISSUE26_STARTED=YES`, `IMPLEMENTATION=NOT_STARTED`
-und `ACTUATOR_RELEASE=NO` gelten ab diesem Roadmap-Commit.
+wiederhergestellt. Die aktuelle fachliche Arbeit ist zunächst Issue #144 für
+den Run-Identity-/Provenienzvertrag. Issue #26 bleibt bis zum Merge dieses
+Pflichtvorgängers ausdrücklich blockiert; seine nachgelagerte Implementation
+ist ein späterer Schritt nach Planfreigabe. `ISSUE144_STATUS=PLANNED_SPEC_PENDING`,
+`BLOCKS_ISSUE26=YES`, `ISSUE26_STATUS=PLANNING`,
+`BLOCKED_BY_ISSUE144=YES`, `IMPLEMENTATION=NOT_STARTED` und
+`ACTUATOR_RELEASE=NO` gelten ab diesem Roadmap-Commit.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
@@ -86,7 +89,7 @@ Die abgeschlossene Basis und die nächste fachliche Phase sind getrennt:
 
 ```text
 abgeschlossene Basis: #29 -> #90 -> #121 -> #124 -> #126
-nächste fachliche Phase: #26 -> #31 -> #30 -> #32 -> #33
+nächste fachliche Phase: #144 -> #26 -> #31 -> #30 -> #32 -> #33
   -> erste real bedienbare Fermenter-Hardwareintegration
   -> #106 strukturell -> #34 -> #35 -> #106 produktiv
   -> spätere vollständige Diagnose-/Abnahme-/Releasegates
@@ -95,10 +98,11 @@ nächste fachliche Phase: #26 -> #31 -> #30 -> #32 -> #33
 #29 und #90 liefern zuerst reale Plattform-, Ressourcen- und Persistenzbasis.
 #126 vervollstaendigt davor den app-neutralen Zeitvertrag, ohne #89-Connectivity
 zu duplizieren oder #124 fachlich zu aendern. #25/#26 bilden darauf die
-wiederverwendbare Device Shell und den
-Fermentations-Workspace; #31 bringt dieselben rendererunabhängigen Contracts
-auf reales Display und Touch. #30, #32 und #33 werden danach über die bis dahin
-vorhandenen produktionsnahen Bedien-, Service- und Diagnosepfade integriert.
+wiederverwendbare Device Shell und den Fermentations-Workspace; #144 stellt
+davor den neutralen Run-Identity-/Provenienzvertrag für #26 bereit. #31 bringt
+danach dieselben rendererunabhängigen Contracts auf reales Display und Touch.
+#30, #32 und #33 werden danach über die bis dahin vorhandenen
+produktionsnahen Bedien-, Service- und Diagnosepfade integriert.
 
 Es entsteht keine separate Wegwerf-Testsoftware und kein zweiter temporärer
 Bedien- oder Diagnosevertrag. Schmale Low-Level-Nachweise bleiben zulässig,
@@ -137,8 +141,12 @@ ist geschlossene historische Persistenzprovenienz.
   RTC-/NTP-Implementierung dupliziert #89-Connectivity nicht und ändert den
   fachlichen #124-Vertrag nicht. Reale RTC-/Netzwerk- und
   Power-Cycle-Nachweise bleiben separate Hardware-/Netzwerk-Gates.
-- #29 und #90 bilden die erste reale Plattformbasis; danach folgen #26 und #31
-  für die echte Device Shell, App und Bedienung auf dem gemergten #25-Vertrag.
+- #29 und #90 bilden die erste reale Plattformbasis; danach folgen #144, #26
+  und #31 für die echte Device Shell, App und Bedienung auf dem gemergten
+  #25-Vertrag.
+- #144 ist ein verpflichtender vorgelagerter Run-Identity-/Provenienzscope;
+  #26 bleibt bis zu seinem Merge blockiert und verbraucht danach nur den
+  garantierten Vertrag.
 - #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
   integriert. Low-Level-Hardwaretests bleiben schmal und erzeugen keine
   separate Wegwerf-Testanwendung.
@@ -161,6 +169,9 @@ ist geschlossene historische Persistenzprovenienz.
 
 ## Blocker und spaetere Gates
 
+- Issue #144 ist der verpflichtende vorgelagerte Run-Identity-/Provenienzscope
+  für #26. Bis zu seinem Merge bleibt #26 blockiert; danach wird der #26-Plan
+  auf den exakten Merge-HEAD aktualisiert.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
