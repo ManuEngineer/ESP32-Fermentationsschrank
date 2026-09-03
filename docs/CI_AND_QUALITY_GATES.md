@@ -29,7 +29,10 @@ vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt.
 
 Nur wenn:
 
-- das vollstaendige Review keine offenen Befunde mehr hat;
+- der vollstaendige Independent Full Review abgeschlossen ist
+  (`FULL_REVIEW_COMPLETE`);
+- `OPEN_BLOCKERS=0` gilt; klassifizierte `FOLLOW-UP` und `NO-ACTION` blockieren
+  den Lauf nicht;
 - der zu pruefende `HEAD` final ist;
 - der Owner den Lauf ausdruecklich anordnet.
 
@@ -51,16 +54,20 @@ reviewten Head. Jeder spaetere semantische Push auf einen Nicht-Draft-PR startet
 sie erneut und verwirft den vorherigen Firmware-Pruefnachweis.
 
 Markdown-only- und Kommentaraenderungen sind durch `paths-ignore` von der
-Firmware-CI ausgenommen. Das bedeutet nicht, dass ihr Reviewnachweis automatisch
-gueltig bleibt: Jede semantische Aenderung, auch an normativer Dokumentation,
-verlangt ein erneutes vollstaendiges Review. Nur rein redaktionelle Korrekturen
-ohne Bedeutungs-, Scope-, Vertrags- oder Akzeptanzwirkung duerfen den
-Reviewnachweis behalten.
+Firmware-CI ausgenommen. Fuer den Reviewnachweis gilt bei semantischen
+Aenderungen die Materialitaetsregel: Eine lokal begrenzte Korrektur wird durch
+Fix Verification und den erforderlichen Regression Check verifiziert; eine
+materielle Aenderung oder ein breiter neuer Diff erfordert einen neuen Full
+Review. Rein redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags- oder
+Akzeptanzwirkung duerfen den bisherigen Reviewnachweis behalten.
 
 Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
 Korrektur. Nur der Owner entscheidet ueber eine Rueckstufung auf Draft. Nach
-Korrektur, direkt abhaengigen Tests und erneutem vollstaendigem Review fuehrt
-nur der Owner den neuen Wechsel auf `Ready for review` aus.
+einer CI-Korrektur gilt dieselbe Fix-Verification-/Materialitaetsregel: Der
+Korrekturdiff, zuvor offene Blocker sowie direkt betroffene Vertraege und
+Regressionen werden geprueft; nur bei materieller Aenderung oder breitem neuem
+Diff ist ein neuer Full Review erforderlich. Den neuen Wechsel auf `Ready for
+review` fuehrt nur der Owner aus.
 
 Es gibt keinen `push`-Trigger und damit keinen automatischen identischen
 Wiederholungslauf nach dem Merge.
