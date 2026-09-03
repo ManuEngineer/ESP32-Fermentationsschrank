@@ -203,8 +203,8 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() /
 ConfigurationRecoveryService::boot()
     -> FactoryResetCompleted mit neuem Runtime-StorageEpoch
     -> FermentationApplication
-       -> RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
-              vorherige StorageEpoch)
+       -> application-owned AuthorizedRunEpochHandoffProof
+       -> RunPersistenceCoordinator::completeAuthorizedEpochHandoff(proof)
        -> loadAndInitialize() / ReadyEmpty oder Ready
 ```
 
@@ -413,14 +413,23 @@ autorisierten Reset-/Boot-Finalisierungspfads in
 `FermentationApplication`, bevor der neue
 Runtimezustand als `Ready` weiterverwendet wird.
 
-`FermentationApplication` gibt dafuer dem bereits mit der neuen Epoche
-konstruierten `RunPersistenceCoordinator` den alten Epochwert als
-Application-owned Resetabschlussnachweis. Die schmale
-`completeAuthorizedEpochHandoff(previousEpoch)`-Operation:
+`FermentationApplication` erzeugt dafuer nur nach dem bestehenden
+`FactoryResetCompleted`-Ergebnis einen application-owned
+`AuthorizedRunEpochHandoffProof` mit `previousEpoch` und `currentEpoch`. Die
+schmale `completeAuthorizedEpochHandoff(proof)`-Operation nimmt diesen Proof
+entgegen und:
 
-1. akzeptiert den Nachweis nur bei einem kanonischen
-   `FactoryResetCompleted` derselben Application und bei
-   `previousEpoch + 1 == currentEpoch`;
+Der kleine Proof ist rendererunabhaengig und traegt nur
+`previousEpoch`/`currentEpoch`; er enthaelt keine Command-ID, Lauf-ID,
+Persistenzdaten oder frei waehlbare Foreign-Epoch. Seine Erzeugung ist an der
+Application-Grenze auf das bestehende `FactoryResetCompleted`-Ergebnis
+begrenzt. Der Coordinator prueft die Epochbeziehung nochmals selbst, statt
+dem Aufrufer oder dem Codec zu vertrauen.
+
+1. akzeptiert den Nachweis nur, wenn er aus diesem kanonischen
+   `FactoryResetCompleted`-Pfad stammt, `previousEpoch + 1 == currentEpoch`
+   checked gilt und `currentEpoch` exakt der Epoche des Coordinators
+   entspricht;
 2. liest `rh0`, `rc0` und `rc1` vor jeder Mutation und akzeptiert nur einen
    vollstaendig lesbaren alten Committed-Graphen aus exakt `previousEpoch`
    oder den nachweislich leeren Store; Prepared-, Orphan-, Corrupt-,
@@ -601,7 +610,8 @@ bestimmt:
   Safe-Boot ohne vertrauenswuerdigen Head initialisieren den Allocator nicht.
   Ein fehlender Head ist nur dann zulaessig, wenn der Coordinator
   ausschliesslich `NoPersistedRun`/`ReadyEmpty` bewiesen hat oder der
-  autorisierte Epoch-Handoff bereits vollstaendig erfolgreich war. Neue
+  autorisierte Epoch-Handoff mit gueltigem Proof bereits vollstaendig
+  erfolgreich war. Neue
   Fachrequests und neue Runs liefern sonst typisiert
   `Unavailable`/fail-closed.
 
@@ -734,7 +744,7 @@ Die spaetere Umsetzung erfolgt in diesem engen Scope:
    Schema-1/2/3 erhalten keinen neuen Writer. Der Codec behauptet keine
    historische Monotonie, die nur der Coordinator beweisen kann.
 3. Den bestehenden `RunPersistenceCoordinator` um den kleinen
-   `completeAuthorizedEpochHandoff(previousEpoch)`-Pfad ergaenzen. Die
+   `completeAuthorizedEpochHandoff(proof)`-Pfad ergaenzen. Die
    Application ruft ihn nur nach `FactoryResetCompleted` und vor `Ready` auf;
    der Pfad validiert den alten Graphen, ueberschreibt beide alten Slots mit
    neuen Schema-4-`NoActiveRun`-Records und schreibt danach den Committed-Head
@@ -850,6 +860,11 @@ Autorisierung und den kanonischen `FactoryResetCompleted`-Status. Der
 Handoff wird nicht in diesem Service dupliziert, sondern von der bereits
 uebergeordneten `FermentationApplication` mit dem bestehenden Coordinator
 komponiert.
+
+Der `AuthorizedRunEpochHandoffProof` wird als kleiner Typ im bestehenden
+Run-Persistence-Vertragsbereich verankert. Er enthaelt ausschliesslich alte
+und neue `StorageEpoch`; eine generische Reset-, Token- oder
+Provenienzregistry entsteht nicht.
 
 ### Kleiner neuer Identity-Baustein
 
