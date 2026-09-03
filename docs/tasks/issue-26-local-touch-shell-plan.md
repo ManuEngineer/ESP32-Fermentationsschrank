@@ -14,12 +14,13 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     WORKFLOW=PLAN_FIRST_SINGLE_PR
     BASE_BRANCH=integration/r1-development
     BASE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
+    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
     PLAN_REVISION=F1_F6_FINAL_INTEGRATION
-    SUPERSEDES_PLAN_COMMIT=dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9
+    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
+    RUN_IDENTITY_PREDECESSOR_ISSUE=144
     PREDECESSOR_ISSUE=25
     PREDECESSOR_PR=142
     PREDECESSOR_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f
@@ -34,7 +35,7 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ESP_IDF_BUILD=NOT_RUN
     HARDWARE_TEST=NOT_RUN
     ISSUE25_GITHUB_STATE=CLOSED
-    ROADMAP_F1_ACTION=NO_CHANGE_OWNER_CLOSED
+    ROADMAP_SYNC=ISSUE144_PREDECESSOR_BLOCKER
 
 Vor diesem Plan-Commit wurden live geprüft:
 
@@ -43,9 +44,9 @@ Vor diesem Plan-Commit wurden live geprüft:
   Vorgaben, und GitHub-CI #1015 ist PASS;
 - Issue #26 ist offen mit dem Titel und der Scope-/Akzeptanzspezifikation
   dieses Auftrags;
-- Issue #25 ist live CLOSED; deshalb ist der bestehende
-  ISSUE25_STATUS=CLOSED_COMPLETED-Eintrag der Roadmap für F1 korrekt und
-  bleibt unverändert;
+- Issue #25 ist live CLOSED und liefert den gemergten UI-Vertrag als Basis;
+- Issue #144 ist live OPEN und als konkreter Run-Identity-/Provenienz-
+  Pflichtvorgänger vor #26 in der Roadmap eingetragen;
 - der revidierte Plan basiert auf dem bisherigen Plan-Commit
   SUPERSEDES_PLAN_COMMIT; der Branch enthält davor den Roadmap-Sync, den
   ursprünglichen Plan und die bisherigen Planrevisionen, aber keine
@@ -62,8 +63,8 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9
-    CONTEXT_PLAN_SHA=dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9
+    CONTEXT_HEAD_SHA=3de1d86180413896294f09bcfddb447df8c1e898
+    CONTEXT_PLAN_SHA=3de1d86180413896294f09bcfddb447df8c1e898
     CONTEXT_REFRESH_MODE=FULL
     CONTEXT_DELTA=F1-F6 final Issue26 integration blockers after Full Review
     SOURCE_OF_TRUTH_CONFLICT=NONE
@@ -74,8 +75,9 @@ c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; darauf folgten die F1/F2-Revision
 2fbe85f41c2461575331c4c3afed73a447302d43, die F1-F10-Revision
 d8a0a70983a6641e1edf27be08d655572164d995d und die Restkorrektur
 dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9. Diese finale Integrationskorrektur
-ist eine weitere versionierte Planrevision. Da Issue #25 live geschlossen ist, bleibt
-der Roadmap-Eintrag unverändert. Bis zu einer ausdrücklichen Freigabe der
+ist eine weitere versionierte Planrevision. Issue #144 ist nun der konkrete
+Pflichtvorgänger für den Run-Identity-/Provenienzvertrag; #26 bleibt bis zu
+seinem Merge blockiert. Bis zu einer ausdrücklichen Freigabe der
 exakten revidierten PLAN_COMMIT bleibt die Implementation NOT_STARTED.
 
 ## 2. Ziel und Definition der Umsetzung
@@ -259,66 +261,48 @@ Touchpunkt eine Kalibrierung.
   FallbackSelectionRequired bleiben aktorfrei. Kein Simulatorergebnis setzt
   ActuationInterlock::Allowed.
 
-### 4.4 Vorgelagerter Run-Identity-/Provenienz-Scope
+### 4.4 Verbrauchervertrag des vorgelagerten Run-Identity-Scope
 
-Die technische Entscheidung für Programm-Provenienz und Application-Identität
-ist für #26 festgelegt, die Wireformatänderung gehört aber in einen kleinen
-separaten Vorgänger-Scope mit eigener Issue-/Branch-/Draft-PR-Provenienz:
+Issue #144 ist der konkrete, verpflichtende Pflichtvorgänger für den kleinen
+Run-Identity-/Provenienzvertrag. Seine Schemaänderung, Codec-/Recoverytests,
+konkreten Dateien und Allocatorimplementation gehören ausschließlich in den
+eigenen Issue-#144-Plan. #26 beschreibt nur die nach dem Merge garantierten
+Schnittstellen und Invarianten:
 
-    RUN_IDENTITY_PROVENANCE_DECISION=FIXED_BEFORE_26_APPROVAL
-    RUN_IDENTITY_PREDECESSOR_SCOPE=REQUIRED_BEFORE_26_IMPLEMENTATION
-    PROGRAM_SOURCE_PROVENANCE=RESOLVED_BY_PREDECESSOR_CONTRACT
+    RUN_IDENTITY_PREDECESSOR_ISSUE=144
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=REQUIRED_BEFORE_26_IMPLEMENTATION
+    PROGRAM_SOURCE_PROVENANCE=NEUTRAL_RUN_SOURCE_REVISION
+    RUN_PROGRAM_FIELD=sourceProgramRevision
 
-Dieser Scope ändert `RunProgramSnapshot` von dem frei interpretierbaren
-`std::uint32_t sourceProgramRevision` auf das eindeutig benannte Feld
-`ProgramCatalogRevision sourceProgramCatalogRevision`. Es wird keine
-per-program Revision eingeführt. Beim normalen Start übernimmt die App den
-Wert unverändert aus der bereits gegen
-`RuntimeConfigurationSnapshot::programCatalogRevision()` geprüften Quelle;
-der vollständige `ProgramDocument` mit next-run-only-Overrides bleibt die
-unveränderliche tatsächliche Laufkopie. `ProgramStartRequest` und
-`ActiveRun::start` verwenden denselben starken Provenienztyp. #26 ändert diese
-Ownerverträge nicht still mit.
+- `RunProgramSnapshot::sourceProgramRevision` ist nach #144 ein neutraler,
+  eindeutig benannter starker 64-Bit-Typ wie `RunProgramSourceRevision`.
+  Neue Starts erzeugen ihn an der Application-Grenze exakt aus der aktuell
+  validierten `ProgramCatalogRevision`; diese Umwandlung behauptet keine
+  per-program Revision.
+- Schema 4 schreibt diesen neutralen 64-Bit-Wert. Unterstützte Schemas 1–3
+  bleiben lesbar und erweitern ihren historischen 32-Bit-Wert nur numerisch
+  verlustfrei in den neutralen Typ; #26 etikettiert Legacy-Werte nicht als
+  `ProgramCatalogRevision`, dekodiert und migriert sie aber auch nicht selbst.
+  Unbekannte neuere Schemas bleiben fail-closed.
+- Der vollständige `ProgramDocument` im Run-Snapshot bleibt die unveränderliche
+  tatsächlich verwendete Laufkopie einschließlich next-run-only-Overrides.
+  Die lokale UI-/Editor-Staleness verwendet davon unabhängig ausschließlich
+  die echte `RuntimeConfigurationSnapshot::programCatalogRevision()`.
+- Die Application-Grenze stellt den gemeinsamen monotonen `CommandId`-
+  Allocator für Touch und später Web bereit. Pro Fachrequest gilt
+  `UiRequestId.value == CommandEnvelope::id`; neue Requests erhalten neue
+  fortlaufende IDs, ein Confirmation-Replay behält exakt dieselbe ID.
+- Jede Erzeugung eines neuen aktiven Runs bezieht die Lauf-ID ausschließlich
+  dort. Das umfasst `StartProgram`, `StartManualHolding`, `AbortAndCool` und
+  `CoolAfterCompletion`; alle verwenden dieselbe Ableitung aus
+  `StorageEpoch + StartCommandId` im bestehenden 1..48-Byte-Limit. UI-
+  Payloads liefern weder `runId` noch `CommandId`.
 
-Der bestehende Run-Persistence-Vertrag wird dafür abwärtskompatibel erweitert:
-
-- neue Writes verwenden `kCurrentRunPersistenceSchema = 4` und schreiben die
-  64-Bit-Provenienz;
-- Schemas 1, 2 und 3 bleiben lesbar, wobei ihr bisheriges 32-Bit-Feld beim
-  Decode ausschließlich verlustfrei auf den neuen 64-Bit-Wert erweitert wird;
-  es wird nicht als neue per-program oder Katalogrevision interpretiert;
-- Schema-Gating bleibt an der tatsächlichen umschließenden Schema-Version
-  gebunden; unbekannte neuere Schemas bleiben fail-closed;
-- Golden-, Encode/Decode-Roundtrip- und Recoverytests decken die alten
-  Schemas sowie das neue Schema 4 ab.
-
-Der gleiche kleine Vorgänger-Scope besitzt an der Application-Grenze einen
-monotonen `CommandId`-Allocator für Touch und später Web. Er initialisiert
-nach Boot den letzten Wert als Maximum der gültigen, eligible persistierten
-Einträge aus dem geladenen `RunPersistenceSnapshot::persistedRunCommandIds`-
-Fenster; bei leerem Fenster beginnt die nächste Vergabe mit 1. Die nächste
-Vergabe ist jeweils `last + 1`; `UINT64_MAX` beziehungsweise eine ungültige
-Basis wird fail-closed als typisiertes Unavailable/Overflow abgelehnt. Das
-vorhandene persistierte ID-Fenster bleibt damit die einzige High-Water-Basis;
-ein zweiter persistierter Zähler, lokaler Touch-Zähler oder eine Registry
-entsteht nicht. Die Application-Grenze bezieht daraus die `UiRequestId` und
-die identische `CommandEnvelope::id`; ein Confirmation-Replay behält dieselbe
-ID.
-
-Für Programm- und Manual-Start erzeugt dieselbe Grenze die Lauf-ID in einem
-stabilen, kanonischen Format `e<StorageEpoch>-c<StartCommandId>` ohne führende
-Nullen. Das Format bleibt mit höchstens 43 Bytes innerhalb des bestehenden
-1..48-Byte-Limits und ist durch Storage-Epoch plus Start-CommandId über
-Neustarts eindeutig. Die UI liefert weder `runId` noch CommandId; Quelle,
-Zeit und aktuelle owning Evidenz ergänzt die App beim Aufbau des bestehenden
-`ProgramStartRequest` beziehungsweise `ManualStartRequest`.
-
-Der Vorgänger-Scope umfasst ausschließlich diese Run-Identity-/Codec-/Owner-
-Vertragsänderung und die dazugehörigen Golden-/Roundtrip-/Recoverytests. Er
-führt keine neue UI-Plattform, keinen Dispatcher und keine parallele
-Persistenzlogik ein. Vor der #26-Implementation wird dieser Scope gemergt und
-der #26-Plan auf dessen Merge-HEAD aktualisiert; danach ist der normale
-Programstart ohne Provenienz- oder Identitäts-Ownerblocker ausführbar.
+Vor der #26-Implementation muss Issue #144 einen eigenen Plan-/Review-/Merge-
+Nachweis besitzen. Danach wird dieser #26-Plan auf dessen exakten Merge-HEAD
+aktualisiert. Erst dann ist der normale Programmstart ohne Provenienz- oder
+Identitäts-Ownerblocker ausführbar; #26 implementiert keinen Teil des
+Vorgängerscope erneut.
 
 ## 5. Minimale Zielarchitektur
 
@@ -684,8 +668,12 @@ Detail-Variante additiv um den bereits vorhandenen Typ DecisionStatus
 ergänzt wird, etwa über einen fromTransitionDecision-Bridgehelfer. Jeder
 FSM-Entscheidungsstatus bleibt auf diesem reinen Decide-Pfad
 `DecisionOnly`, unabhängig davon, ob er `NoTransition`, `Rejected`,
-`InvalidInput`, `TimeWentBackwards`, `NotConfirmed`, `SafetyRejected`,
-`NotAllowedInState` oder `Proposed` lautet. Jeder nicht-proposed FSM-Status
+`InvalidInput`, `TimeWentBackwards` oder `Proposed` lautet. Diese fünf Werte
+sind die vollständige kanonische `TransitionDecision::status`-Menge. Die
+`CommandStatus`-Werte `NotConfirmed`, `SafetyRejected` und
+`NotAllowedInState` gehören ausschließlich in den allgemeinen
+Command-/`fromCommandStatus`-Pfad und werden nicht als FSM-Status eingeführt.
+Jeder nicht-proposed FSM-Status
 beendet den Pfad ohne Aufruf von
 TemperatureControlApplicationOrchestrator. Erst ein `Proposed` darf an
 TemperatureControlApplicationOrchestrator::persistTransition übergeben
@@ -725,6 +713,11 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
 - StaleState, InvalidInput, SafetyRejected, NotAllowedInState,
   ContextMissing, Busy, Unavailable und vergleichbare Zustände werden nicht
   durch ein UI-Precheck oder eine fehlende Bestätigung maskiert.
+- Bridge- oder UI-seitige Ablehnungen ohne ausgeführten owning Mutationspfad,
+  einschließlich `UnsupportedAppDetail`, sind ebenfalls
+  `FermentationUiCommandPhase::DecisionOnly`. `makeResult()` darf dafür
+  keinen Default-`OwningOutcome` liefern. Es gibt keinen dritten Phasenwert
+  und keine neue Ergebnisfamilie.
 - Bei erneuter Bestätigung bleiben UiRequestId und, wo vorhanden,
   CommandEnvelope::id identisch. Es gibt keinen zweiten Requestspeicher.
 - Ein echter Duplicate erhält die bestehende AlreadyProcessed- oder
@@ -778,6 +771,16 @@ den vollständigen bestehenden `ProgramStartRequest` beziehungsweise
 `ManualStartRequest` mit Commandquelle, Zeit und aktueller owning Evidenz
 aufbaut.
 
+Dieselbe Identitätsinvariante gilt für jede weitere Aktion, die einen neuen
+aktiven Lauf erzeugt: `AbortAndCool` und `CoolAfterCompletion` ergänzen die
+Lauf-ID ebenfalls erst an der Application-Grenze beim Aufbau des bestehenden
+`StopRequest` beziehungsweise `CompletionRequest`. Die zugehörigen UI-
+Intents tragen beim Kühlersatz nur die bereits erlaubten editierbaren
+Cooling-/Manual-Werte, niemals `runId` oder `CommandId`. Für alle vier Pfade
+gilt dieselbe Ableitung aus `StorageEpoch + StartCommandId`; eine zweite
+Cooling-ID-Logik entsteht nicht. Eine Confirmation-Wiederholung verwendet
+dieselbe Command-ID und damit denselben vorbereiteten Laufidentitätswert.
+
 Der owning Ablauf ist strikt:
 
 1. Die UI trägt Programm-ID, echte
@@ -803,21 +806,23 @@ Zurücksetzen verwirft nur den flüchtigen Kandidaten. Eine gültige Auswahl
 führt von Programm wählen deterministisch zur Startzusammenfassung; ohne
 explizite Auswahl wird kein letzter oder erfundener Datensatz verwendet.
 
-Die Provenienzbindung ist nach dem vorgelagerten Scope ein fester
-Voraussetzungsvertrag und kein offenes #26-Gate:
+Die Provenienzbindung ist nach dem vorgelagerten Issue #144 ein fester
+Verbrauchervertrag und kein offenes #26-Gate:
 
-    PROGRAM_SOURCE_PROVENANCE=RESOLVED_BY_PREDECESSOR_CONTRACT
-    RUN_PROGRAM_FIELD=sourceProgramCatalogRevision
+    PROGRAM_SOURCE_PROVENANCE=NEUTRAL_RUN_SOURCE_REVISION
+    RUN_PROGRAM_FIELD=sourceProgramRevision
 
-`RuntimeConfigurationSnapshot::programCatalogRevision()` bleibt die starke
-verlustfreie 64-Bit-`ProgramCatalogRevision` für lokale Stale-Grenzen und wird
-beim Start exakt in `RunProgramSnapshot::sourceProgramCatalogRevision`
-übernommen. `ProgramCatalog` erhält keine per-program-Revision. Die
-abwärtskompatible Decode-Regel für ältere Run-Schemas und der neue Writepfad
-stehen ausschließlich in Abschnitt 4.4; #26 verwendet nach dem Merge des
-Vorgängers den neuen Vertrag. Die lokale Start- und
-Bearbeitungsstaleness verwendet unabhängig davon immer die echte
-`ProgramCatalogRevision`.
+`RunProgramSnapshot::sourceProgramRevision` ist nach #144 ein neutraler,
+verlustfreier 64-Bit-`RunProgramSourceRevision`. Neue Starts erzeugen ihn an
+der Application-Grenze aus der aktuell validierten
+`RuntimeConfigurationSnapshot::programCatalogRevision()`; diese Erzeugung
+behauptet keine per-program Revision. Unterstützte Legacy-Schemas liefern
+historische Werte nur in derselben neutralen Provenienzform, ohne sie als
+Katalogrevision zu etikettieren; #26 dekodiert oder migriert diese Schemas
+nicht selbst. Der vollständige `ProgramDocument` bleibt die unveränderliche
+tatsächliche Laufkopie. Die lokale Start- und Bearbeitungsstaleness verwendet
+unabhängig davon immer die echte `ProgramCatalogRevision` und missbraucht die
+Run-Provenienz nicht als späteres Stale-Gate.
 
 ### 7.4.1 Vollständige lokale Programmverwaltung
 
@@ -841,9 +846,15 @@ Die lokalen Pfade sind:
 - Zurücksetzen eines Standardprogramms ersetzt dessen gespeicherte
   Arbeitskopie über den bestehenden Configuration-/Factory-Resetpfad durch
   die unveränderliche Factory-Vorlage;
-- Neu erzeugt einen leeren Benutzerentwurf. Solange Name, Werte oder
-  Programmvalidierung nicht den owning Vertrag erfüllen, bleibt der Entwurf
-  sichtbar, aber als nicht startbereit mit typisiertem Sperrgrund gesperrt;
+- Neu beginnt mit einem flüchtigen leeren Benutzerentwurf. Dauerhaftes
+  Speichern ist zulässig, sobald `validateProgram(...,
+  ValidationPurpose::CatalogTemplate)` den Katalogentwurf akzeptiert. Ein
+  gültiges CatalogTemplate kann wegen fehlender Commissioning-/Laufwerte
+  weiterhin nicht runnable sein: `START` bleibt bis zum erfolgreichen
+  `validateProgram(..., ValidationPurpose::Runnable)` typisiert gesperrt.
+  Beide Prüfungen und der Commit laufen über den bestehenden
+  ConfigurationPreview-/ConfigurationService-Pfad; es gibt keinen Draft-
+  Record, keine Draft-Persistenz und kein zweites Programmmodell;
 - Löschen verwendet die bestehende zweistufige Bestätigung. Ein aktuell
   verwendetes oder laufendes Programm ist als nicht löschbar markiert und
   erzeugt keinen Commit;
@@ -1181,26 +1192,32 @@ Adapterannahme.
 
 ## 11. Geplante Dateien und Ownership
 
-### 11.0 Vorgelagerter Run-Identity-/Provenienz-Scope (separate Änderung)
+### 11.0 Externe Vertragsabhängigkeit: Issue #144
 
-Diese Dateien gehören nicht zum #26-Diff, sondern zu dem vor #26 zu
-erstellenden eigenen Run-Identity-/Provenienz-Scope:
+Issue #144 ist der konkrete, vor #26 zu planende und zu mergende
+Run-Identity-/Provenienzvorgänger. Der #26-Diff enthält keine Dateien,
+Schemaänderungen, Codec-/Recoverytests oder Allocatorimplementation dieses
+Issues. #26 konsumiert nach dem Merge ausschließlich diese Invarianten:
 
-| bestehende Datei / kleiner Zusatz | vorgelagerte Verantwortung |
-|---|---|
-| lib/fermentation_app/src/run_snapshot.hpp/.cpp | `ProgramCatalogRevision sourceProgramCatalogRevision` als verlustfreie Run-Provenienz; `ActiveRun`-Start/Restore ohne freien 32-Bit-Ersatzwert |
-| lib/fermentation_app/src/run_commands.hpp/.cpp | Startanforderungen und Snapshotaufbau mit starkem Provenienztyp; App-Identität wird nicht aus der UI übernommen |
-| lib/fermentation_app/src/run_persistence_contract.hpp/.cpp | Run-Persistence-Schema 4, bekannte Schemata 1..4 und schemaabhängige Validierung |
-| lib/fermentation_app/src/run_persistence_codec.hpp/.cpp | Schema-4-64-Bit-Encoding sowie verlustfreies 32-zu-64-Bit-Decoding der unterstützten Legacy-Schemas; unbekannte neuere Schemas fail-closed |
-| kleiner app-owned ApplicationCommandId-Allocator unter lib/fermentation_app/src | gemeinsamer monotoner Touch-/Web-Allocator, Bootinitialisierung aus dem vorhandenen persistierten ID-Fenster, Overflow-/Unavailable-Ergebnis und kanonische UiRequestId-/CommandEnvelope-ID-Abbildung |
-| test/test_run_checkpoint_codec, test/test_run_persistence_coordinator, test/test_run_commands | Golden-, Roundtrip-, Legacy-/Schema-4-, Recovery-, High-Water-, Overflow-, Lauf-ID- und Confirmation-Replay-Nachweise |
+- `RunProgramSnapshot::sourceProgramRevision` ist der neutrale starke
+  `RunProgramSourceRevision`-Typ; neue Starts erhalten ihn an der
+  Application-Grenze aus der aktuellen `ProgramCatalogRevision`, während
+  Legacy-Provenienz historisch neutral bleibt und unbekannte neuere Schemas
+  fail-closed behandelt werden;
+- derselbe app-owned `CommandId`-Allocator versorgt Touch und später Web;
+  pro Fachrequest sind `UiRequestId.value` und `CommandEnvelope::id`
+  identisch, neue Requests unterscheiden sich, und Replays behalten ihre
+  Identität;
+- alle neuen aktiven Runs, einschließlich `StartProgram`,
+  `StartManualHolding`, `AbortAndCool` und `CoolAfterCompletion`, erhalten
+  ihre Lauf-ID an der Application-Grenze aus
+  `StorageEpoch + StartCommandId`; UI-Payloads liefern keine Identität.
 
-`run_persistence_coordinator` und
-`TemperatureControlApplicationOrchestrator` bleiben dabei die vorhandenen
-owning Grenzen. Der Vorgänger-Diff propagiert ausschließlich den neuen
-gemeinsamen Provenienz-/Schema-Typ und die daraus nötigen bestehenden
-Call-Signaturen; er ändert nicht die Orchestrator-Topologie und führt keinen
-neuen Run-/Safety-Owner ein. Der #26-Diff selbst ändert keine dieser Dateien.
+Die owning Run-, Persistence-, Safety-, Recovery- und FSM-Grenzen bleiben
+unverändert. Die exakte `Issue #144`-Merge-HEAD-Provenienz wird vor der
+#26-Implementation in dieser Planfassung nachgetragen; erst danach beginnt
+der #26-Diff. Der vollständige Vorgängerplan und seine konkreten Dateien und
+Nachweise bleiben ausschließlich in Issue #144.
 
 ### 11.1 Generische Plattform
 
@@ -1286,11 +1303,11 @@ Die Schnitte beschreiben die technische Reihenfolge der späteren #26-Arbeit.
 Jeder Schnitt erhält die in der Akzeptanzmatrix benannten gezielten Nachweise;
 fachliche Abweichungen werden als neue Planprovenienz behandelt.
 
-Vor Schnitt 1 muss der separate Run-Identity-/Provenienz-Scope aus Abschnitt
-4.4 auf einem eigenen Merge-HEAD abgeschlossen sein. Danach wird dieser Plan
-auf genau diesen Merge-HEAD aktualisiert; erst dann beginnt die #26-
-Implementation. Das ist eine festgelegte technische Abhängigkeit, keine offene
-fachliche Entscheidung innerhalb des normalen Programmstarts.
+Vor Schnitt 1 muss Issue #144 auf einem eigenen Merge-HEAD abgeschlossen sein.
+Danach wird dieser Plan auf genau diesen Merge-HEAD aktualisiert; erst dann
+beginnt die #26-Implementation. Das ist eine festgelegte technische
+Abhängigkeit, keine offene fachliche Entscheidung innerhalb des normalen
+Programmstarts.
 
 1. Generische Interaktion: semantische Targets, vier Slotindices,
    VerticalPager, Pressfeedback, Feedbackintents und additive Shellprüfung.
@@ -1380,7 +1397,7 @@ getrennt ausweisen:
 | SIM-26-34 | Ein Replay nach erfolgreichem ProductInsertedConfirmed erzeugt wegen der verbrauchten Zustandsrevision oder der kanonischen Zustandsablehnung keine zweite Nebenwirkung |
 | SIM-26-35 | Der Workspace enthält keinen direkten Aufruf von RunPersistenceCoordinator::persistTransition; Architektur-/Diffprüfung bestätigt den Application-Orchestrator als einzige Run-Mutationsgrenze |
 | SIM-26-36 | CommandStatus::Proposed und DecisionStatus::Proposed erscheinen zunächst ausschließlich als DecisionOnly ohne Apply; erst das getrennte Ergebnis von persistCommand, persistFreshStartCommand, persistTransition oder persistSensorSelection erscheint als OwningOutcome |
-| SIM-26-48 | Passende Revision mit kanonisch abgelehntem ProductInsertedConfirmed-Übergang bewahrt den exakten TransitionDecision::status als DecisionOnly und ruft keine persistTransition-Funktion auf |
+| SIM-26-48 | Passende Revision mit kanonisch abgelehntem ProductInsertedConfirmed-Übergang bewahrt exakt einen der zulässigen `TransitionDecision::status`-Werte `Proposed`, `NoTransition`, `Rejected`, `InvalidInput` oder `TimeWentBackwards` als DecisionOnly und ruft bei jedem nicht-proposed Wert keine persistTransition-Funktion auf |
 
 Weitere #26-Pfade werden deterministisch separat geprüft:
 
@@ -1391,7 +1408,7 @@ Weitere #26-Pfade werden deterministisch separat geprüft:
 | SIM-26-39 | NumericEditModel unterstützt Plus/Minus, direkte Ziffern, Dezimaltrennzeichen, Backspace, Clear, Cancel und Commit; Grenzen und Gültigkeit kommen ausschließlich vom owning Validator |
 | SIM-26-40 | TextEditModel unterstützt Zeichen-/Modusaktionen, Rückschritt, Löschen, Abbrechen und Übernehmen für Programmname und kurze Notiz; kein Keyboardframework wird benötigt |
 | SIM-26-41 | Bearbeiten einer Standard-Arbeitskopie und eines Benutzerprogramms verwendet flüchtige Kandidaten und ConfigurationPreview/ConfigurationService für den dauerhaften Commit; active RunProgramSnapshot und unveränderliche Factory-Vorlage bleiben unverändert |
-| SIM-26-42 | Standard- und Benutzerprogramm können kopiert werden; Zurücksetzen ersetzt nur die Standard-Arbeitskopie durch die Factory-Vorlage; Neu erzeugt einen leeren, sichtbar nicht startbereiten Entwurf mit Sperrgrund; die vier reservierten Factory-Einträge bleiben im Katalog |
+| SIM-26-42 | Standard- und Benutzerprogramm können kopiert werden; Zurücksetzen ersetzt nur die Standard-Arbeitskopie durch die Factory-Vorlage; Neu speichert ein gültiges, aber noch nicht `Runnable`-fähiges `CatalogTemplate` über den bestehenden ConfigurationService-Pfad sichtbar nicht startbereit, sperrt `START` typisiert und wird nach Vervollständigung über denselben Pfad startfähig; die vier reservierten Factory-Einträge bleiben im Katalog |
 | SIM-26-43 | Löschen erfordert zwei Bestätigungen; ein aktuell verwendetes oder laufendes Programm ist nicht löschbar und erzeugt keinen Commit; Standard-Deinstallation entfernt weder Factory-ID noch reservierten Eintrag physisch, setzt die bestehende installed/userDeletable-Semantik um, blendet `installed == false` aus der aktiven Liste aus und sperrt den Start |
 | SIM-26-44 | Echte ProgramCatalogRevision zwischen Lesen und Commit ergibt StateChanged, PreviewSuperseded oder PreviewNotFound typisiert; kein stilles Überschreiben und kein UI-Refresh-Surrogat |
 | SIM-26-45 | PIN-Service ist ausschließlich bei Ready + validiertem ProcessState::Standby + owning Servicefreigabe erreichbar; Completed, Boot, Recovery, ServiceRequired, aktiver Lauf, Fault und SAFE_BOOT bleiben gesperrt, Status/Diagnose bleiben passiv erreichbar |
@@ -1407,24 +1424,23 @@ Nachweise:
 | SIM-26-50 | ProductInsertedConfirmed mit stale expectedStateSequence liefert das gemeinsame `CommandStatus::StaleState` als `DecisionOnly`; passende Revision plus kanonisch abgelehnter `TransitionDecision::status` bleibt `DecisionOnly`; nur `Proposed` darf `persistTransition` erreichen und dessen Ergebnis erscheint getrennt als `OwningOutcome` |
 | SIM-26-51 | Ein Persistenzfehler nach `DecisionStatus::Proposed` lässt RAM-/Prozesszustand unverändert beziehungsweise fail-closed; ein Replay nach erfolgreichem Apply erzeugt keine zweite Nebenwirkung |
 | SIM-26-52 | Ein gültiger next-run-only-Kandidat löst Programm-ID und echte Katalogrevision aus dem aktuellen Snapshot auf, validiert die Overrides und erzeugt erst über den bestehenden Start-/Orchestratorpfad den Run-Snapshot; Quellprogramm und aktiver Katalog bleiben unverändert |
-| SIM-26-53 | Unveränderter Katalog akzeptiert gültige Overrides, geänderte `ProgramCatalogRevision` wird stale abgelehnt und ungültige Overrides verwenden das owning InvalidInput-/Sperrresultat; `sourceProgramCatalogRevision` wird exakt aus der Katalogrevision übernommen, ohne Cast/Truncation/Surrogat oder per-program Revision |
+| SIM-26-53 | Unveränderter Katalog akzeptiert gültige Overrides, geänderte `ProgramCatalogRevision` wird stale abgelehnt und ungültige Overrides verwenden das owning InvalidInput-/Sperrresultat; der neutrale `RunProgramSourceRevision`-Wert wird für neue Starts an der Application-Grenze exakt aus der aktuellen Katalogrevision erzeugt, ohne Legacy-Umdeutung, Cast/Truncation/Surrogat oder per-program Revision |
 | SIM-26-54 | Die deterministische ID-Allokation für Kopieren/Neu liefert eine gültige freie Benutzer-ID ohne editierbares ID-Feld; Kollision, ungültige Katalogbasis oder Kapazitätsende liefern typisiertes Unavailable/Capacity ohne Überschreiben oder persistierten Zähler, und eine geänderte Kataloggeneration wird stale abgelehnt |
 | SIM-26-55 | NumericEditModel und TextEditModel decken alle vorgesehenen Plus/Minus-, Ziffern-/Dezimal-, Zeichen-/Modus-, Rückschritt-, Löschen-, Abbrechen- und Übernehmen-Aktionen ab; nur der owning Validator entscheidet Grenzen und Commit |
 | SIM-26-56 | Der secretsfreie PIN-Test-Seam projiziert Pending und RetryWait sowie Accepted/Rejected; normaler Servicezugang entsteht nur aus validiertem Standby, PIN-Erfolg verändert keine Safety-/Aktorfreigabe |
 | SIM-26-57 | ManualHolding durchläuft den bestehenden owning Startpfad; der fehlende Zeit-/Temperaturlauf zeigt die beiden OPEN_OWNER_DECISION-Optionen und bleibt unavailable; SafeBoot und FallbackSelectionRequired behalten ihre getrennten ausführbaren beziehungsweise unavailable Ziele |
 | SIM-26-58 | Ein Editor aus Katalogrevision A wird nach Änderung auf B unmittelbar vor `beginPreview()` als typisierter Stale-/Conflictfall abgelehnt; die neue Arbeitskopie bleibt unverändert und es entsteht keine Preview-Mutation |
 | SIM-26-59 | Die Kombination `ApplicationLifecycleState::ServiceRequired` plus verbliebene Recoverydaten projiziert deterministisch `Restricted`, nicht `Recovery`; bei `Ready` wird derselbe Recoverydatensatz als `Recovery` projiziert |
+| SIM-26-60 | `UnsupportedAppDetail` und jede andere bridge-eigene Ablehnung ohne owning Mutation werden als `DecisionOnly` projiziert; `makeResult()` liefert dafür keinen `OwningOutcome` und es gibt keinen dritten Phasenwert |
+| SIM-26-61 | StartProgram, StartManualHolding, AbortAndCool und CoolAfterCompletion erhalten ihre Lauf-ID ausschließlich an der Application-Grenze; die vier UI-Intents tragen nur erlaubte Werte, keine `runId`/`CommandId`, und Confirmation-Replay behält die vorbereitete Identität |
 
-Die vorgelagerte Identitäts-/Provenienzänderung erhält eigene Nachweise und
-wird vor der #26-Implementation auf ihrem separaten Merge-HEAD ausgeführt:
+Vor der #26-Implementation wird ausschließlich die externe
+Vertragsabhängigkeit geprüft:
 
 | ID | Nachweis |
 |---|---|
-| PRE-26-01 | Schema-1/2/3-Goldenpayloads bleiben lesbar; ihr bisheriger 32-Bit-Provenienzwert wird numerisch verlustfrei in `sourceProgramCatalogRevision` übernommen, während neue Writes ausschließlich Schema 4 mit 64-Bit-Provenienz verwenden |
-| PRE-26-02 | Schema-4-Roundtrip und neue Run-Starts speichern die echte `RuntimeConfigurationSnapshot::programCatalogRevision()`; unbekannte neuere Schemas bleiben fail-closed und es existiert keine per-program Revision, kein Hash und kein UI-Refresh-Surrogat |
-| PRE-26-03 | Der Application-CommandId-Allocator startet nach Boot bei `max(persistedRunCommandIds) + 1`, bei leerem Fenster bei 1, lehnt ungültige/`UINT64_MAX`-Basen typisiert ab und führt keinen zweiten persistierten Zähler ein |
-| PRE-26-04 | Touch und Web erhalten an derselben Application-Grenze identische `UiRequestId`-/`CommandEnvelope::id`-Werte; Confirmation-Replay verwendet dieselbe ID und erzeugt keine lokale Touch-Identität |
-| PRE-26-05 | Programm- und Manual-Start erzeugen an derselben Grenze eine gültige `e<StorageEpoch>-c<StartCommandId>`-Lauf-ID innerhalb 1..48 Bytes; UI-Payloads können keine `runId` einschleusen |
+| DEP-26-01 | Issue #144 ist gemergt, und der exakte Merge-HEAD ist als `RUN_IDENTITY_PREDECESSOR_MERGE_HEAD` in der aktualisierten #26-Planprovenienz eingetragen; der neutrale `RunProgramSourceRevision`- und kompatible Run-Persistence-Vertrag ist verfügbar |
+| DEP-26-02 | Die Application-Grenze stellt den gemeinsamen Command-/Run-Identity-Vertrag für alle vier neuen Runpfade bereit; UI-Payloads können weder `CommandId` noch `runId` einschleusen, und #26 enthält keinen Vorgänger-Allocator oder Codecpfad |
 
 Zusätzlich werden die in docs/ACCEPTANCE_TESTS.md bereits geforderten
 zustands- und safetybezogenen Simulationen gezielt wiederverwendet:
@@ -1530,9 +1546,9 @@ Issue-spezifische technische Grenzen:
    SAFE_BOOT-UI-Aufrufe bleiben OWNER_PATH_MISSING/Unavailable.
 5. Der bestehende Application-Orchestrator, ConfigurationService und
    Recovery-/Safetyowner bleiben unveränderte Ownergrenzen. Run-Identität und
-   verlustfreie `sourceProgramCatalogRevision`-Provenienz sind im separaten
-   vorgelagerten Run-Identity-/Provenienz-Scope verbindlich festgelegt und
-   werden vor #26-Implementation gemergt; #26 verändert diesen persistierten
+   neutrale `RunProgramSourceRevision`-Provenienz sind im separaten
+   vorgelagerten Issue #144 verbindlich festgelegt und werden vor #26-
+   Implementation gemergt; #26 verändert diesen persistierten
    Vertrag nicht und verwendet keinen Cast, kein Surrogat und keinen stillen
    Ersatzpfad.
 
@@ -1542,7 +1558,7 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die Planprovenienz dieses PRs besteht aus genau sechs eigenen Commits:
+Die Planprovenienz dieses PRs besteht aus genau acht eigenen Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
@@ -1552,15 +1568,20 @@ Die Planprovenienz dieses PRs besteht aus genau sechs eigenen Commits:
 4. vorherige F1-F10-Planrevision d8a0a70983a6641e1edf27be08d655572164d995d;
 5. die vorherige F1-F10-Restkorrektur
    dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9;
-6. diese F1-F6-Letztkorrektur mit exakter SHA nach dem Commit.
+6. die vorherige F1-F6-Letztkorrektur
+   3de1d86180413896294f09bcfddb447df8c1e898;
+7. Roadmap-Synchronisierung für den konkreten Pflichtvorgänger #144
+   7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714;
+8. diese F1-F6-Letztkorrektur mit exakter SHA nach dem Commit.
 
-Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert. Für
-die Planprovenienz von Draft-PR #143 gelten die folgenden issue-spezifischen
+Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
+Basis. Issue #144 ist der konkrete Roadmap-geführte Pflichtvorgänger; für die
+Planprovenienz von Draft-PR #143 gelten die folgenden issue-spezifischen
 Referenzen:
 
-    ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
+    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9
+    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     PR_HEAD=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
@@ -1575,8 +1596,8 @@ docs/AGENT_WORKFLOW.md geführten Handover referenziert:
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<exakte PR-HEAD-SHA nach Planpush>
-    ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
-    SUPERSEDES_PLAN_COMMIT=dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9
+    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
+    SUPERSEDES_PLAN_COMMIT=3de1d86180413896294f09bcfddb447df8c1e898
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
@@ -1612,12 +1633,13 @@ gepflegt.
   Workspace ruft keinen RunPersistenceCoordinator direkt auf.
 - Startänderungen tragen nur den kleinen next-run-only-Kandidaten mit
   Programm-ID, echter ProgramCatalogRevision und erlaubten Overrides; der
-  aktive Katalog bleibt unverändert. Der vorgelagerte Run-Identity-/
-  Provenienz-Scope ist vor der #26-Implementation gemergt; der Run-Snapshot
-  übernimmt die echte `sourceProgramCatalogRevision` verlustfrei aus dem
-  verwendeten Katalogstand, ohne per-program Revision, Cast oder Surrogat.
-  Die alten unterstützten Run-Schemas bleiben lesbar und unbekannte neuere
-  Schemas fail-closed.
+  aktive Katalog bleibt unverändert. Der Run-Identity-/Provenienzvertrag aus
+  Issue #144 ist vor der #26-Implementation gemergt; der Run-Snapshot
+  verwendet den neutralen `RunProgramSourceRevision`-Vertrag, neue Starts
+  leiten ihn an der Application-Grenze aus dem verwendeten
+  `ProgramCatalogRevision`-Stand ab, ohne per-program Revision, Cast oder
+  Surrogat. Die alten unterstützten Run-Schemas bleiben lesbar und unbekannte
+  neuere Schemas fail-closed.
 - Standardprogramme sind bearbeitbare Katalog-Arbeitskopien; Factory-Vorlage,
   Zurücksetzen, Kopieren, Neu, Deinstallation und Löschung folgen den
   bestehenden installed-/userDeletable- und ConfigurationService-Verträgen.
