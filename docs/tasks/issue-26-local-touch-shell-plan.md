@@ -17,6 +17,8 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
+    PLAN_REVISION=F1_F2_PLAN_FINDINGS
+    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
     PREDECESSOR_ISSUE=25
     PREDECESSOR_PR=142
     PREDECESSOR_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f
@@ -30,6 +32,8 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     NATIVE_TESTS=NOT_RUN
     ESP_IDF_BUILD=NOT_RUN
     HARDWARE_TEST=NOT_RUN
+    ISSUE25_GITHUB_STATE=CLOSED
+    ROADMAP_F1_ACTION=NO_CHANGE_OWNER_CLOSED
 
 Vor diesem Plan-Commit wurden live geprüft:
 
@@ -38,8 +42,12 @@ Vor diesem Plan-Commit wurden live geprüft:
   Vorgaben, und GitHub-CI #1015 ist PASS;
 - Issue #26 ist offen mit dem Titel und der Scope-/Akzeptanzspezifikation
   dieses Auftrags;
-- der neue Branch basiert auf BASE_SHA und enthält als einzigen bisherigen
-  Commit den Roadmap-Sync ROADMAP_COMMIT;
+- Issue #25 ist live CLOSED; deshalb ist der bestehende
+  ISSUE25_STATUS=CLOSED_COMPLETED-Eintrag der Roadmap für F1 korrekt und
+  bleibt unverändert;
+- der revidierte Plan basiert auf dem bisherigen Plan-Commit
+  SUPERSEDES_PLAN_COMMIT; der Branch enthält davor genau den Roadmap-Sync und
+  den ursprünglichen Plan, aber keine Implementation;
 - PR #143 ist als Draft angelegt und zielt auf
   integration/r1-development;
 - der neueste veröffentlichte SESSION HANDOVER des Vorgänger-PRs nennt
@@ -52,15 +60,19 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=28a35b610020513460690d4b05e90bdec88e81d8
-    CONTEXT_PLAN_SHA=NONE_BEFORE_THIS_COMMIT
+    CONTEXT_HEAD_SHA=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    CONTEXT_PLAN_SHA=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=PR142 merge, merged #25 contracts, Roadmap sync
+    CONTEXT_DELTA=Issue25 owner close, F1 Roadmap verification, F2 Application-Handoff correction
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
-Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Dieser
-Plan-Commit ist der zweite Commit. Bis zu einer ausdrücklichen Freigabe der
-exakten PLAN_COMMIT bleibt die Implementation NOT_STARTED.
+Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
+ursprüngliche vollständige Plan war der zweite Commit
+c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9. Diese F1/F2-Korrektur ist eine
+weitere versionierte Planrevision. Da Issue #25 live geschlossen ist, bleibt
+der Roadmap-Eintrag unverändert; ein Agent schließt kein Issue. Bis zu einer
+ausdrücklichen Freigabe der exakten revidierten PLAN_COMMIT bleibt die
+Implementation NOT_STARTED.
 
 ## 2. Ziel und Definition der Umsetzung
 
@@ -185,6 +197,10 @@ freigegebenen Plan geprüft:
   docs/RUN_COMMANDS.md, docs/RUN_PERSISTENCE.md und
   docs/SYSTEM_SAFETY_AND_RECOVERY.md für die kanonischen Ownerverträge;
 - docs/RECOVERY_AND_INTERRUPTION.md für den #124-R1-Recoverypfad;
+- lib/fermentation_app/src/temperature_control_orchestrator.hpp/.cpp,
+  process_state_machine.hpp/.cpp und run_persistence_coordinator.hpp/.cpp
+  für die bestehende Application-Handoff-Grenze und die getrennten
+  Decision-/Persistenzpfade;
 - docs/AGENT_WORKFLOW.md und docs/CI_AND_QUALITY_GATES.md für Plan-, Test-,
   Draft- und Owner-Gates;
 - ADR-013_REUSABLE_DEVICE_PLATFORM.md und die aktuelle
@@ -205,7 +221,7 @@ Folgende Typen und Regeln werden verwendet, nicht parallel nachgebaut:
 | FermentationUiSnapshot und FermentationUiProjector | gemeinsame fachliche Wahrheit für Touch und spätere Weboberfläche |
 | FermentationUiExpectedRevisions | fachcommandbezogener Stalenesschutz |
 | FermentationUiCommand, FermentationUiCommandBridge und Resulttypen | bestehende Commands, Confirmation und kanonische Ergebnisse |
-| CommandEnvelope und UiRequestId-Abbildung | dieselbe Command-ID und bestehende Duplicate-/Idempotenzsemantik |
+| CommandEnvelope und UiRequestId-Abbildung | dieselbe Command-ID und bestehende Duplicate-/Idempotenzsemantik für Envelope-Commands; ProductInsertedConfirmed erhält keine künstliche Envelope-/Idempotenzsemantik |
 | resolveText, getrennte Platform-/Fermentation-Textpacks | DE/EN/ES, Fallback und kein Textliteral in Fachlogik |
 | ThemeDescriptor, ThemeToken und resolveTheme | semantisches ManuEngineer-Dark-Theme und sicherer Fallback |
 | ServiceSessionPolicy, ServiceSessionLease und ServiceSessionEvent | lokale 10-Minuten-Lease ohne R1-Absolutlimit und explizite Invalidierung |
@@ -299,6 +315,14 @@ Der Workspace hält nur flüchtige Route-, Editor-, Dialog-, PIN- und
 Pagerzustände. Er hält keine Domainwahrheit, keinen zweiten Snapshot, keine
 persistente UI-Queue und keine zweite Revisionsquelle.
 
+Jede mutierende Appaktion verlässt den Workspace über ihren bestehenden
+Application-Handoff. Für Run-Mutationen ist
+TemperatureControlApplicationOrchestrator die einzige Grenze:
+persistCommand beziehungsweise persistFreshStartCommand,
+persistTransition oder persistSensorSelection übernehmen Apply,
+Persistenz und Post-Commit-/Lifecycle-Handoff. Der Workspace ruft keinen
+RunPersistenceCoordinator direkt auf.
+
 ### 5.3 Simulation
 
 Die Testsimulation komponiert:
@@ -308,11 +332,14 @@ Die Testsimulation komponiert:
         -> FermentationTouchWorkspace
         -> generic LocalDeviceShellState
         -> SimulatedDeviceShell
+        -> existing Application-Handoff for mutating app actions
         -> deterministic frame/layout/feedback trace
 
-Der Testtreiber wendet akzeptierte Fachentscheidungen ausschließlich über die
-bestehenden Domainfunktionen und deren Test-/Persistenzpfade an. Er erfindet
-keine vereinfachte Safety- oder Recoveryregel. Der Simulator kennt keine
+Der Testtreiber führt mutierende Szenarien über die bestehenden
+Domainentscheidungen und den TemperatureControlApplicationOrchestrator mit
+seinen Test-/Persistenzpfaden. Er erfindet keine vereinfachte Safety- oder
+Recoveryregel und baut keinen zweiten Dispatcher, Command-Bus,
+Persistenzkoordinator oder Lifecycle-Handoff. Der Simulator kennt keine
 Displaybytes und keine Aktor-GPIOs.
 
 ## 6. Semantische Zustands- und Seitenverträge
@@ -434,32 +461,69 @@ sichtbare Kontextaktionen, aber keine fünf neuen Fachautomaten.
 
 ### 7.2 Bestehende Commandpfade
 
-Die appseitige Workspaceaktion wird auf die vorhandenen Pfade abgebildet:
+Die appseitige Workspaceaktion trennt stets die kanonische Entscheidung vom
+tatsächlichen Application-Handoff und vom Persistenz-/Apply-Ergebnis:
 
-| Workspaceaktion | Owning-Pfad |
-|---|---|
-| Programmstart/Vorheizen | FermentationUiStartProgramIntent und decideProgramStart |
-| manueller Lauf | FermentationUiStartManualHoldingIntent und decideManualStart |
-| Stop ausschalten/kühlen | FermentationUiStopRunIntent und decideStop |
-| Abschluss/OK/Jetzt kühlen | FermentationUiCompleteRunIntent und decideCompletion |
-| Laufwerte nur für diesen Lauf | FermentationUiAdjustRunIntent und decideRunAdjustment |
-| Produkt eingesetzt bestätigen | schmale UI-Transition über ProcessEvent::ProductInsertedConfirmed und den bestehenden persistTransition-Pfad |
-| Meldung quittieren | FermentationUiAcknowledgeMessageIntent und decideAcknowledgeMessage |
-| Akustik stummschalten | FermentationUiMuteMessageIntent und decideMuteMessage |
-| Fehlerreset | FermentationUiResetFaultIntent und decideFaultReset |
-| Sensorentscheidung | FermentationUiSensorSelectionIntent und decideSensorSelection mit owning Evidenz |
-| Recovery-Zeitkorrektur | FermentationUiRecoveryTimeCorrectionIntent und decideApplyRecoveryTimeCorrection |
-| Fallback fortsetzen | bestehendes ResumeFallback mit FallbackSelectionRequired |
-| Konfigurations-/Rezeptcommit | bestehendes ConfigurationPreview-/ConfigurationService- und commitConfiguration |
+| Workspaceaktion | Entscheidung, ohne Mutation | tatsächlicher owning Apply-/Persistenzpfad |
+|---|---|---|
+| Programmstart/Vorheizen | FermentationUiStartProgramIntent -> decideProgramStart | TemperatureControlApplicationOrchestrator::persistFreshStartCommand; bei einem nicht als Fresh Start qualifizierten Pfad gilt der passende bestehende persistCommand-Aufruf |
+| manueller Lauf | FermentationUiStartManualHoldingIntent -> decideManualStart | TemperatureControlApplicationOrchestrator::persistFreshStartCommand |
+| Stop ausschalten/kühlen | FermentationUiStopRunIntent -> decideStop | TemperatureControlApplicationOrchestrator::persistCommand |
+| Abschluss/OK/Jetzt kühlen | FermentationUiCompleteRunIntent -> decideCompletion | TemperatureControlApplicationOrchestrator::persistCommand |
+| Laufwerte nur für diesen Lauf | FermentationUiAdjustRunIntent -> decideRunAdjustment | TemperatureControlApplicationOrchestrator::persistCommand |
+| Produkt eingesetzt bestätigen | FermentationUiProductInsertedConfirmedIntent; erwartete Zustandsrevision prüfen, dann decideProcessTransition mit ProcessEvent::ProductInsertedConfirmed | TemperatureControlApplicationOrchestrator::persistTransition; der Workspace ruft keinen RunPersistenceCoordinator direkt auf |
+| Meldung quittieren | FermentationUiAcknowledgeMessageIntent -> decideAcknowledgeMessage | TemperatureControlApplicationOrchestrator::persistCommand |
+| Akustik stummschalten | FermentationUiMuteMessageIntent -> decideMuteMessage | TemperatureControlApplicationOrchestrator::persistCommand |
+| Fehlerreset | FermentationUiResetFaultIntent -> decideFaultReset | TemperatureControlApplicationOrchestrator::persistCommand |
+| Sensorentscheidung | FermentationUiSensorSelectionIntent -> decideSensorSelection beziehungsweise canonical decideApplySensorSelectionAction | TemperatureControlApplicationOrchestrator::persistSensorSelection |
+| Recovery-Zeitkorrektur | FermentationUiRecoveryTimeCorrectionIntent -> decideApplyRecoveryTimeCorrection | TemperatureControlApplicationOrchestrator::persistCommand |
+| Fallback fortsetzen | bestehendes ResumeFallback mit FallbackSelectionRequired | bestehender FermentationApplication-/Recovery-Handoff, nicht der Workspace und nicht ein neuer Dispatcher |
+| Konfigurations-/Rezeptcommit | bestehendes Preview-/ConfigurationService-Validation- und Confirmationmodell | bestehender ConfigurationService-Commitpfad |
 
-Für ProductInsertedConfirmed wird nur der fehlende schmale UI-Einstieg
-ergänzt: Er baut eine bestehende TransitionRequest, ruft
-decideProcessTransition auf und delegiert die resultierende Transition an
-RunPersistenceCoordinator::persistTransition. Er implementiert keine
-Transitiontopologie, kein eigenes Stale-Modell und keinen eigenen
-Persistenzpfad. Das appseitige Resultdetail bewahrt DecisionStatus, falls
-dieser Einstieg benötigt wird; es entsteht kein generischer
-device_platform-Resulttyp.
+Eine decide*-Funktion erzeugt ausschließlich eine kanonische Entscheidung.
+Insbesondere ist CommandStatus::Proposed beziehungsweise
+DecisionStatus::Proposed nur DecisionOnly und niemals ein Apply- oder
+Persistenznachweis. Erst das passende
+TemperatureControlApplicationOrchestrator-Handoff darf ein tatsächliches
+RunPersistenceResultStatus-Ergebnis mit OwningOutcome liefern. Die
+Post-Commit-/Lifecycle-Handoffs bleiben vollständig im Orchestrator.
+
+### 7.2.1 Gemeinsamer ProductInsertedConfirmed-UI-Contract
+
+Der Workspace erhält in fermentation_app einen kleinen, typisierten und
+rendererunabhängigen Contract:
+
+    struct FermentationUiProductInsertedConfirmedIntent {
+        std::uint32_t expectedStateSequence;
+    };
+
+Die Typdefinition selbst beschreibt die Benutzerabsicht. Sie trägt nur die
+notwendige erwartete kanonische Zustandsrevision. Sie trägt keine
+CommandEnvelope-, UiRequestId-, Idempotenz-, Safety-, Sensor-, Planner- oder
+Recoveryevidenz. Weil der bestehende ProcessEvent-/TransitionRequest-Vertrag
+keine CommandEnvelope-/Idempotenzsemantik besitzt, wird dafür keine künstliche
+zweite Semantik erfunden.
+
+Der appseitige Bridgepfad prüft expectedStateSequence gegen den aktuellen
+kanonischen ProcessRuntimeState, bevor eine Mutation begonnen wird. Bei
+Abweichung liefert er ein typisiertes stale Ergebnis und ruft weder
+decideProcessTransition noch den Orchestrator-Applypfad mit einer mutierenden
+Entscheidung auf. Bei passender Revision erzeugt er ausschließlich die
+bestehende TransitionRequest mit
+ProcessEvent::ProductInsertedConfirmed und ruft
+decideProcessTransition auf. Ein DecisionStatus::Proposed wird als
+DecisionOnly in den Trace übernommen; nur danach darf
+TemperatureControlApplicationOrchestrator::persistTransition aufgerufen
+werden. Das persistierte Ergebnis wird getrennt als OwningOutcome
+aufgezeichnet.
+
+Ein Replay desselben UI-Contracts nach dem erfolgreichen Übergang verwendet
+die bereits verbrauchte erwartete Revision und wird vor einer zweiten
+Mutation abgelehnt; falls zusätzlich die kanonische Zustandsprüfung greift,
+bleibt auch deren bestehende Ablehnung erhalten. Es gibt keinen privaten
+Workspace-Sonderpfad, keinen zweiten Dispatcher, keinen zweiten
+Command-Bus, keinen zweiten Persistenzkoordinator und keinen zweiten
+Lifecycle-Handoff.
 
 Die UI liefert für eine Start- oder Recoveryaktion niemals ProgramDocument,
 Sensorqualitäts-, Planner-, Safety- oder Recoveryevidenz. Die Anwendung löst
@@ -478,6 +542,11 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
   CommandEnvelope::id identisch. Es gibt keinen zweiten Requestspeicher.
 - Ein echter Duplicate erhält die bestehende AlreadyProcessed- oder
   AlreadyPersisted-Semantik und erzeugt keine zweite Nebenwirkung.
+- ProductInsertedConfirmed ist kein Envelope-Command und erhält daher keine
+  künstliche UiRequestId- oder Duplicate-Semantik. Der app-owned
+  expectedStateSequence-Vergleich verhindert stale Wiederholung vor
+  persistTransition; ein bereits erfolgreicher Übergang kann so keine zweite
+  Mutation erzeugen.
 - Ein Press bleibt sichtbar, während die Antwort Busy/Pending ist; derselbe
   Slot ist bis zur Antwort nicht erneut ausführbar.
 - Eine Navigation, ein Pagerwechsel, ein Headerziel, ein Wake-Touch und ein
@@ -732,13 +801,14 @@ device_platform_test_support.
 | lib/fermentation_app/src/fermentation_ui_models.hpp/.cpp | additive Home-Modi Waiting/Completed/Restricted sowie kleine Workspace-/Programmlisten-/Detailmodelle, ohne zweiten Domainzustand |
 | lib/fermentation_app/src/fermentation_ui_projector.hpp/.cpp | vollständige Home-/Recovery-/Message-/Temperatur-/Statusprojektion aus canonical Ownerwerten; keine Rohwertentscheidung |
 | lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen |
-| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | nur erforderliche ProductInsertedConfirmed-Transitionbrücke und typisiertes DecisionStatus-Detail; vorhandene Command-/ID-/Confirmationsemantik bleibt unverändert |
+| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängiger ProductInsertedConfirmed-Intent mit erwarteter Zustandsrevision, getrennte DecisionOnly-/OwningOutcome-Ergebnisse und Bridge über den bestehenden Application-Orchestrator; keine künstliche Envelope-/Idempotenzsemantik |
 | lib/fermentation_app/src/fermentation_ui_text.hpp/.cpp | zusätzliche fermentation-owned TextKeys für Rezepte, Phasen, Aktionen, Status, Service, PIN, Feedback und Sperrgründe in DE/EN/ES |
 
-FermentationApplication, ConfigurationService, RunPersistenceCoordinator,
-Process-State-Machine, Sensor-, Recovery- und Safetyimplementierungen werden
-nur angepasst, wenn der konkrete Workspace-Einstieg einen bereits vorhandenen
-Ownerpfad benötigt. Keine private UI-Fachlogik wird in diese Owner verschoben.
+TemperatureControlApplicationOrchestrator, FermentationApplication,
+ConfigurationService, RunPersistenceCoordinator, Process-State-Machine,
+Sensor-, Recovery- und Safetyimplementierungen werden nur angepasst, wenn der
+konkrete Workspace-Einstieg einen bereits vorhandenen Ownerpfad benötigt.
+Keine private UI-Fachlogik wird in diese Owner verschoben.
 
 ### 11.3 Deterministischer Testsupport
 
@@ -795,8 +865,11 @@ und der Plan neu versioniert.
    isolierte App-Erweiterungen. TextKeys statt sichtbarer Literale.
 4. Kontextaktionen: Slot-0-Matrix für Vorheizen/Start/Stop/
    Fortsetzen/Bestätigen/Abschluss, Rezepte-Slot, strukturierte Dialoge,
-   Sperrgründe sowie die schmale ProductInsertedConfirmed-Bridge über den
-   bestehenden Transition-/Persistenzpfad.
+   Sperrgründe sowie den app-owned ProductInsertedConfirmed-Contract über
+   decideProcessTransition und
+   TemperatureControlApplicationOrchestrator::persistTransition. Für alle
+   mutierenden Commands werden DecisionOnly und Application-Apply getrennt
+   getestet.
 5. Rezepte und Laufdetails: Startzusammenfassung, next-run-only-Werte,
    unveränderlicher Run-Snapshot, Programmliste, Pager, Prozess-/Technikseite,
    Meldungs-/Quittier-/Mute-/Stop- und Abschlussabläufe über bestehende
@@ -830,7 +903,7 @@ ausgeführter Fall bleibt NOT_RUN und ist kein PASS.
 | SIM-26-05 | Home/Back-Hierarchie: erste Unterebene Home, tiefere Ebene Back, genau ein Segment pro Back, ExitRequirement verhindert stilles Verwerfen |
 | SIM-26-06 | Rezepte-Listen verwenden große Einträge und Pager; Standardprogramme vor Benutzerprogrammen, ungültige Programme gesperrt und mit Grund sichtbar |
 | SIM-26-07 | Programmzeile öffnet Startzusammenfassung; next-run-only-Änderungen überschreiben weder Katalog noch aktiven Schnappschuss; Reset verwirft nur den Kandidaten |
-| SIM-26-08 | Vorheizen/Start verwendet den bestehenden ProgramStart-Pfad; Produkt eingesetzt verwendet ProductInsertedConfirmed und persistTransition ohne zweite FSM |
+| SIM-26-08 | Vorheizen/Start verwendet den bestehenden ProgramStart-Pfad; Produkt eingesetzt verwendet den app-owned ProductInsertedConfirmed-Contract, decideProcessTransition und den TemperatureControlApplicationOrchestrator ohne zweite FSM |
 | SIM-26-09 | Aktiver Lauf zeigt Stop im ersten Slot, Rezepte im zweiten, Prozess-/Technikdetails und aktuelle Snapshotwerte; Stop bietet Ausschalten oder Kühlen |
 | SIM-26-10 | Abschluss zeigt OK/Details und optional Jetzt kühlen; Kühlen erzeugt nur über den bestehenden Completion-Pfad einen neuen manuellen Lauf |
 | SIM-26-11 | Meldungsbanner zeigt höchste Priorität; Quittieren beseitigt Ursache nicht, Stummschalten beendet nur akustisches Signal, Faultreset bleibt getrennt |
@@ -853,6 +926,19 @@ ausgeführter Fall bleibt NOT_RUN und ist kein PASS.
 | SIM-26-28 | stale, invalid, safety-rejected, busy, unavailable und duplicate Ergebnisse bleiben typisiert; fehlende Confirmation maskiert keine kanonische Ablehnung |
 | SIM-26-29 | UI-Reads, Navigation, Pager, Header und Wake erzeugen keine UiRequestId, keinen CommandEnvelope und keine Persistenzmutation |
 | SIM-26-30 | Laufende Prozesse, persistierte COMPLETED-Zustände, Sensorersatz, Stopoptionen, Quittierung, Abschluss und Fehlerreset werden über canonical projections dargestellt; kein Screen berechnet Fachzustand aus Rohwerten |
+
+Die folgenden F2-Regressionsfälle sind zusätzlich verpflichtend und müssen im
+Simulationstrace die Entscheidung und den tatsächlichen Apply-/Persistenzpfad
+getrennt ausweisen:
+
+| ID | Nachweis |
+|---|---|
+| SIM-26-31 | WaitingForProduct -> ProductInsertedConfirmed -> ReachingTarget läuft über den app-owned Intent, decideProcessTransition und TemperatureControlApplicationOrchestrator::persistTransition |
+| SIM-26-32 | Ein Fehler aus persistTransition lässt RAM-/Prozesszustand unverändert beziehungsweise fail-closed; es gibt keinen vorgezogenen Lifecycle-Handoff |
+| SIM-26-33 | Eine stale erwartete Zustandsrevision wird vor der Mutation abgelehnt und erzeugt keinen Persistenzschreibvorgang |
+| SIM-26-34 | Ein Replay nach erfolgreichem ProductInsertedConfirmed erzeugt wegen der verbrauchten Zustandsrevision oder der kanonischen Zustandsablehnung keine zweite Nebenwirkung |
+| SIM-26-35 | Der Workspace enthält keinen direkten Aufruf von RunPersistenceCoordinator::persistTransition; Architektur-/Diffprüfung bestätigt den Application-Orchestrator als einzige Run-Mutationsgrenze |
+| SIM-26-36 | CommandStatus::Proposed und DecisionStatus::Proposed erscheinen als DecisionOnly; erst das getrennte Ergebnis von persistCommand, persistFreshStartCommand, persistTransition oder persistSensorSelection erscheint als OwningOutcome |
 
 Zusätzlich werden die in docs/ACCEPTANCE_TESTS.md bereits geforderten
 zustands- und safetybezogenen Simulationen gezielt wiederverwendet:
@@ -933,7 +1019,9 @@ ausdrücklicher Owneranweisung. GitHub-Firmware-CI bleibt im Draft
 | Layout könnte still einen späteren Renderer vorwegnehmen | nur SimulationRect/Frame-Deskriptor, designreferenzierte Headergeometrie und 320 x 240; kein Pixelbuffer, DMA oder Widgetbaum |
 | Home-Modus könnte aus Einzelwerten geraten werden | additive Projector-Matrix aus ProcessState, RecoveryDisposition, Lifecycle und bestehender Message-/Serviceprojektion |
 | Confirmation könnte stale oder Safetyfehler maskieren | canonical decide*/Preview-/Recoveryvalidierung zuerst; nur NotConfirmed/ReadyForConfirmation wird zur ConfirmationRequired-Projektion |
-| ProductInserted könnte eine zweite FSM werden | genau eine TransitionRequest über decideProcessTransition und persistTransition; keine eigene Topologie |
+| ProductInserted könnte eine zweite FSM oder ein direkter Persistenzpfad werden | kleiner app-owned Intent mit erwarteter Zustandsrevision; genau eine TransitionRequest über decideProcessTransition und TemperatureControlApplicationOrchestrator::persistTransition; kein direkter RunPersistenceCoordinator-Aufruf, keine eigene Topologie |
+| UI könnte Proposed als ausgeführte Mutation melden | Resultphase trennt DecisionOnly von OwningOutcome; Simulation und UI dürfen Proposed nie als Persistenz-/Apply-Nachweis markieren |
+| UI könnte die Application-Handoff-Grenze umgehen | Workspace-Contract und Architekturprüfung erlauben Run-Mutationen nur über persistCommand/persistFreshStartCommand, persistTransition und persistSensorSelection des TemperatureControlApplicationOrchestrator |
 | Rezepte könnten active snapshots ändern | IDs und Kandidaten nur über bestehende ConfigurationService-/Start-/Snapshotpfade; aktiver Snapshot bleibt read-only |
 | PIN-UI könnte Authentisierung vorwegnehmen | nur masked PinEntryModel und secretsfreier Ergebnis-Seam; kein Credential-, Hash- oder Persistenzvertrag |
 | Session könnte vom Hintergrund verlängert werden | nur RelevantUserActivity aus geschützter Touchbedienung; Restart, Logout und Ownerinvalidierung terminal |
@@ -958,17 +1046,22 @@ Zwingende Owner-Gates:
 
 ## 16. Commit-, PR- und Handover-Vertrag
 
-Der initiale PR-Stand ist exakt:
+Der PR enthält nach dieser Befundkorrektur genau drei eigene Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
-2. dieser vollständige Plan-Commit mit exakter SHA nach dem Commit.
+2. ursprünglicher vollständiger Plan-Commit
+   c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9;
+3. diese F1/F2-Planrevision mit exakter SHA nach dem Commit.
 
-Nach dem zweiten Commit wird der Draft-PR #143 mit folgenden Feldern
-aktualisiert:
+Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert und
+es wird kein Issue durch den Agenten geschlossen. Der Draft-PR #143 wird nach
+dem dritten Commit mit den folgenden Feldern aktualisiert:
 
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    PLAN_COMMIT=<exakte zweite Commit-SHA>
+    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    PLAN_COMMIT=<exakte revidierte Commit-SHA>
+    PR_HEAD=<exakte revidierte Commit-SHA>
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_APPROVAL_REQUIRED=YES
     ACTUATOR_RELEASE=NO
@@ -981,16 +1074,20 @@ offenen Draft-PR erstellt. Er enthält:
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<PR-HEAD nach Planpush>
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
-    PLAN_COMMIT=<exakte zweite Commit-SHA>
+    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    PLAN_COMMIT=<exakte revidierte Commit-SHA>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
     ACTUATOR_RELEASE=NO
     OPEN_GATE=OWNER_APPROVAL_OF_EXACT_PLAN_COMMIT
     NEXT_STEP=Owner prüft und gibt exakt PLAN_COMMIT frei; danach erst Umsetzung
 
-Der Handover nennt die beiden exakten Commit-SHAs und den PR-HEAD, kopiert
-aber weder Diff noch Plan. Danach hält der Agent an. Es wird kein Ready,
-Merge, Auto-Merge, Issue-Close, Force-Push oder Branch-Löschen ausgeführt.
+Der Handover nennt die beiden maßgeblichen exakten Commit-SHAs
+ROADMAP_COMMIT und die revidierte PLAN_COMMIT sowie den PR-HEAD; die
+überschriebene Vorgänger-Plan-SHA bleibt zusätzlich als Provenienz genannt.
+Er kopiert weder Diff noch Plan. Danach hält der Agent an. Es wird kein
+Ready, Merge, Auto-Merge, Issue-Close, Force-Push oder Branch-Löschen
+ausgeführt.
 
 ## 17. Definition of Done für die spätere #26-Umsetzung
 
@@ -1005,7 +1102,12 @@ Merge, Auto-Merge, Issue-Close, Force-Push oder Branch-Löschen ausgeführt.
   sind nativ reproduzierbar geprüft.
 - Rezepte, Startzusammenfassung, next-run-only-Werte, Stop-/Completion-/
   Message-/Recoveryaktionen und Status-/Service-Erweiterungen verwenden die
-  bestehenden Fach- und ConfigurationServicepfade.
+  bestehenden Fach-, Application- und ConfigurationServicepfade; Proposed
+  Entscheidungen sind nicht als ausgeführte Mutationen markiert.
+- ProductInsertedConfirmed verwendet den app-owned Contract mit erwarteter
+  Zustandsrevision, decideProcessTransition und ausschließlich
+  TemperatureControlApplicationOrchestrator::persistTransition; der
+  Workspace ruft keinen RunPersistenceCoordinator direkt auf.
 - der erste Wake-Touch führt keinen Command aus; reine Navigation und Reads
   mutieren nichts; ein aktiver Run-Snapshot bleibt unverändert.
 - lokale Servicelease ist 10 Minuten inaktivitätsbegrenzt, ohne absolute
