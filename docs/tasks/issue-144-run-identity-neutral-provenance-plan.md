@@ -293,9 +293,13 @@ neues Feld im bestehenden `RunPersistenceHead`:
 
     std::optional<CommandId> commandIdHighWater
 
-Schema 4 schreibt dieses Feld sowohl in den Prepared- als auch in den
-Committed-Head. Bei einem neuen Schema-4-Commit wird der Wert atomar mit dem
-bereits bestehenden Head-/Snapshot-Commit fortgeschrieben:
+Fuer einen etablierten neuen Schema-4-Identitaetsraum schreibt Schema 4 dieses
+Feld sowohl in den Prepared- als auch in den Committed-Head. Bei einem neuen
+Schema-4-Commit wird der Wert atomar mit dem bereits bestehenden
+Head-/Snapshot-Commit fortgeschrieben. Ein regulaeres Re-Write eines aus
+Schema 1 bis 3 dekodierten Legacy-Zustands darf das Presence-Feld dagegen
+bewusst als `Unknown`/nicht vorhanden erhalten; dadurch wird kein historischer
+High Water erfunden:
 
 - bei einer neuen eligible Run-Command-ID ist der neue Wert das Maximum aus
   dem bisherigen Wert und dieser Command-ID;
