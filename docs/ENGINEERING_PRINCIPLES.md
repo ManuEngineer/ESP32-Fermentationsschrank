@@ -87,6 +87,20 @@ Vereinfachung von Safety, Security, Recovery, Testbarkeit oder dokumentierten
 Vertraegen. Bewusste Abweichungen werden im freigegebenen Plan konkret
 begruendet und im Review gegen den tatsaechlichen Diff bewertet.
 
+## Konvergenz, YAGNI und proportionales Engineering
+
+Correctness, Safety und verbindliche Vertraege werden nicht zugunsten von
+Geschwindigkeit geopfert. Innerhalb dieser Grenzen wird die einfachste
+ausreichend robuste Loesung bevorzugt.
+
+SOLID und DRY rechtfertigen keine spekulative Abstraktion. Zukuenftige
+Erweiterbarkeit wird nur dort vorbereitet, wo eine reale Anforderung oder
+stabile Architekturgrenze sie bereits rechtfertigt.
+
+Entwicklungszeit und Compute sind technische Ressourcen; zusaetzlicher Aufwand
+muss einen konkreten Nutzen haben. Ein bereits korrekt erfuellter Scope wird
+nicht wegen rein optionaler Verbesserungen erweitert.
+
 ## Ressourcenbudgets aus Messung und Produktkontext
 
 Harte Ressourcenlimits benoetigen eine reale Hardware- oder

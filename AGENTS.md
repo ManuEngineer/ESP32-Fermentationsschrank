@@ -68,6 +68,12 @@ Nicht triviale Arbeit folgt `docs/AGENT_WORKFLOW.md`:
 4. Erst nach Freigabe des exakten Plan-Commits umsetzen.
 5. Bei materieller Abweichung Plan aktualisieren und erneut freigeben lassen.
 
+Der ausführende Agent ist der Builder; der formale Full Review erfolgt
+grundsätzlich unabhängig vom Builder. Nach dem Builder-Self-Check hält der
+Agent für den Independent Review an. Nach lokal begrenzten Korrekturen gilt
+Fix Verification statt eines erneuten Full Review, solange keine materielle
+Änderung vorliegt. Details stehen ausschließlich in `docs/AGENT_WORKFLOW.md`.
+
 Ein nativer Planungsmodus ist nur das Arbeitsmittel zur Planerstellung. Er
 ersetzt weder den versionierten Markdown-Plan noch die Ownerfreigabe der exakten
 Plan-SHA. Ist kein nativer Planungsmodus verfuegbar, gilt derselbe Planvertrag
