@@ -18,7 +18,7 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
     PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS
-    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
+    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
     PREDECESSOR_ISSUE=25
@@ -63,8 +63,8 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=170a3bd04f9193912201bdbdf8a5b38af1d395e9
-    CONTEXT_PLAN_SHA=170a3bd04f9193912201bdbdf8a5b38af1d395e9
+    CONTEXT_HEAD_SHA=36891dfc28d22bc0ca3fb0e8a19505ad69986917
+    CONTEXT_PLAN_SHA=36891dfc28d22bc0ca3fb0e8a19505ad69986917
     CONTEXT_REFRESH_MODE=FULL
     CONTEXT_DELTA=F1-F6 post-3de predecessor and contract corrections after Full Review
     SOURCE_OF_TRUTH_CONFLICT=NONE
@@ -1579,9 +1579,9 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die Review-Basis dieses PRs bestand aus genau zehn eigenen Commits. Die
-folgende Korrektur ist ein elfter, nicht historienverändernder Commit; die
-vollständige Provenienz des PRs besteht nach diesem Commit aus genau elf
+Die Review-Basis dieses PRs bestand aus genau elf eigenen Commits. Die
+folgende Korrektur ist ein zwölfter, nicht historienverändernder Commit; die
+vollständige Provenienz des PRs besteht nach diesem Commit aus genau zwölf
 Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
@@ -1602,7 +1602,9 @@ Commits:
    f99354edee8448768c1734d6df86d18c17a16a98;
 10. der Review-HEAD und vorherige Plan-Commit
     170a3bd04f9193912201bdbdf8a5b38af1d395e9;
-11. diese Integritätskorrektur mit exakter SHA nach dem Commit.
+11. der vollständig geprüfte vorherige Plan-/Review-HEAD
+    36891dfc28d22bc0ca3fb0e8a19505ad69986917;
+12. diese reine Planprovenienzkorrektur mit exakter SHA nach dem Commit.
 
 Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
 Basis. Issue #144 ist der konkrete Roadmap-geführte Pflichtvorgänger; für die
@@ -1611,7 +1613,7 @@ Referenzen:
 
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
+    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     PR_HEAD=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
@@ -1627,7 +1629,7 @@ docs/AGENT_WORKFLOW.md geführten Handover referenziert:
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<exakte PR-HEAD-SHA nach Planpush>
     ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
-    SUPERSEDES_PLAN_COMMIT=f99354edee8448768c1734d6df86d18c17a16a98
+    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
