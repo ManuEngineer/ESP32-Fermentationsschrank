@@ -153,23 +153,92 @@ Nur die direkt betroffenen Dokumentations-/Konfigurationsnachweise werden
 ausgeführt:
 
 1. Prüfen, dass der freigegebene Ziel-HEAD weiterhin der erwarteten Branch- und
-   Planbaseline entspricht.
-2. Vor dem Konfigurationscommit mit der installierten Codex-Version
-   `codex --version` und einer strikt validierenden, projektlokalen
-   `codex --strict-config --cd <checkout> --help`-Ausführung nachweisen, dass
-   alle fünf Schlüssel akzeptiert werden. Bei einem unbekannten Schlüssel oder
-   nicht auflösbarem Modell nicht committen, sondern anhalten.
-3. TOML-Syntax und die exakten fünf Konfigurationswerte prüfen; keine
-   zusätzlichen projektlokalen Codex-Schlüssel zulassen.
-4. `git diff --check` ausführen.
-5. Mit gezielter Textprüfung sicherstellen, dass die alte Pflicht zum
-   vollständigen Review nach jeder lokalen Korrektur und nach jedem CI-Fix
-   nicht mehr besteht, der unabhängige Full Review vollständig bleibt, die
-   drei Finding-Klassen und ihre Abgrenzung eindeutig sind und das
-   Convergence-/Eskalations-Gate vorhanden ist.
-6. Prüfen, dass nur Plan-/Roadmap-/Governance-/Konfigurationsdateien geändert
+   Planbaseline entspricht. Für die Codex-Prüfung muss `<checkout>` der
+   tatsächlich verwendete Repository-Checkout sein und von Codex als
+   vertrauenswürdiger Projektkontext behandelt werden. Ein `/tmp`-Worktree
+   oder ein anderer Pfad ohne aktiven Project-Trust ist für diesen Nachweis
+   nicht zulässig.
+2. Die projektlokale `.codex/config.toml` mit ausschließlich den fünf
+   geplanten Werten in `<checkout>` anlegen und vor dem Commit einen
+   kontrollierten Project-Layer-Negativtest ausführen. Dazu ausschließlich
+   uncommitted und temporär den unbekannten Schlüssel
+   `__issue145_project_layer_probe = true` ergänzen und den tatsächlich
+   config-ladenden Befehl ausführen:
+
+   ```text
+   codex exec --strict-config --json --ephemeral --sandbox read-only \
+     -C <checkout> "Respond with exactly PROJECT_LAYER_PROBE_MUST_NOT_START."
+   ```
+
+   Der Befehl muss mit einem Strict-Config-Fehler zum genau temporären
+   unbekannten Schlüssel enden. `exit=0`, ein Fehlen des erwarteten
+   unbekannten Feldes oder ein Ergebnis, das nur die User-Config validiert,
+   ist `PROJECT_CONFIG_LAYER=FAIL`; dann wird der Project-Trust nicht als
+   aktiv angenommen und die `.codex/config.toml` nicht erfolgreich gemeldet.
+   Den temporären Schlüssel anschließend vollständig entfernen. Dieser
+   Negativtest darf nicht committed werden und darf keinen Modellstart
+   auslösen.
+3. Mit der bereinigten Datei und demselben effektiven Projektkontext den
+   Strict-Config-Pfad tatsächlich laden, nicht `--help` oder nur `doctor`
+   verwenden:
+
+   ```text
+   codex exec --strict-config --json --ephemeral --sandbox read-only \
+     -C <checkout> "Respond with exactly CONFIG_SCHEMA_PROBE_OK."
+   ```
+
+   Der Exitstatus muss `0` sein und darf keinen Config-Parse-, unbekannten
+   Schlüssel- oder Unsupported-Value-Fehler enthalten. Gemeinsam mit dem
+   erfolgreichen Negativtest aus Schritt 2 gilt dann
+   `CONFIG_SCHEMA_VALID=PASS` und `PROJECT_CONFIG_LAYER=ENABLED`. Ein
+   Strict-Config-Fehler, deaktivierter Project-Layer oder ein nicht
+   nachvollziehbarer Layerstatus ist FAIL und stoppt den Commit.
+4. Die tatsächliche Builder-Auflösung unabhängig von der User-Config prüfen.
+   Dazu keinen `-m`-Override und keinen `model`-/Reasoning-Override setzen,
+   die User-Config für diesen isolierten Probe-Start ignorieren und nur für
+   den konkret geprüften Checkout den Trust per CLI setzen:
+
+   ```text
+   codex exec --strict-config --ignore-user-config --json --ephemeral \
+     --sandbox read-only \
+     -c 'projects."<checkout>".trust_level="trusted"' \
+     -C <checkout> "Respond with exactly BUILDER_MODEL_PROBE_OK."
+   ```
+
+   Die JSON-Ausgabe muss einen erfolgreich abgeschlossenen Agenten-Reply mit
+   genau `BUILDER_MODEL_PROBE_OK` und Exitstatus `0` zeigen. Da der Probe
+   weder Modell noch Reasoning per CLI überschreibt und die User-Config
+   ignoriert, stammen `model = "gpt-5.6-luna"` und
+   `model_reasoning_effort = "xhigh"` aus der projektlokalen Datei. Bei
+   Authentifizierungs-, Auflösungs-, Start- oder sonstigem Laufzeitfehler gilt
+   `BUILDER_MODEL_RESOLUTION=FAIL`; die `.codex/config.toml` wird nicht als
+   erfolgreich implementiert gemeldet.
+5. Den temporären Probe-Schlüssel vollständig entfernt sowie TOML-Syntax,
+   exakte fünf Konfigurationswerte und das Fehlen weiterer projektlokaler
+   Codex-Schlüssel prüfen. Die installierte Version mit `codex --version`
+   dokumentieren; für diesen Plan ist `0.153.0` der verifizierte CLI-Stand.
+6. `git diff --check` ausführen. Mit gezielter Textprüfung sicherstellen, dass
+   die alte Pflicht zum vollständigen Review nach jeder lokalen Korrektur und
+   nach jedem CI-Fix nicht mehr besteht, der unabhängige Full Review
+   vollständig bleibt, die drei Finding-Klassen und ihre Abgrenzung eindeutig
+   sind und das Convergence-/Eskalations-Gate vorhanden ist.
+7. Prüfen, dass nur Plan-/Roadmap-/Governance-/Konfigurationsdateien geändert
    wurden und kein Produktionscode, Test, Buildsystem oder CI-Workflow im Diff
    liegt.
+
+Die drei Konfigurationsnachweise werden getrennt im Implementierungs- und
+Handover-Evidence festgehalten:
+
+```text
+CONFIG_SCHEMA_VALID=PASS
+PROJECT_CONFIG_LAYER=ENABLED
+BUILDER_MODEL_RESOLUTION=PASS
+```
+
+Bei einem `FAIL`, einem deaktivierten Project-Layer oder einem nicht
+auflösbaren beziehungsweise nicht startfähigen Modell wird die
+`.codex/config.toml` nicht als erfolgreich implementiert gemeldet. Die
+temporäre Negativkontrolle ist ein lokaler Nachweis und bleibt uncommitted.
 
 Ein Firmware-Build, vollständiger lokaler Lauf, Hardwarelauf und Firmware-CI
 sind für diese Draft-Phase nicht angeordnet und werden als `NOT_RUN` geführt.
