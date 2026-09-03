@@ -2,11 +2,33 @@
 
 ## Status
 
-`PLAN_ONLY_OWNER_APPROVAL_PENDING`
+`PLAN_REVISION_OWNER_APPROVAL_PENDING`
 
-Dies ist die vollständige versionierte Planfassung für Issue #145. Der Plan
-ist erst nach ausdrücklicher Ownerfreigabe dieser exakten Commit-SHA eine
-Umsetzungserlaubnis. Der Draft-PR bleibt bis zum Owner-Schritt Draft.
+Dies ist die vollständige revidierte Planfassung für Issue #145. Sie revidiert
+den freigegebenen Plan-Commit
+`de6f5ddef42324244d9d4bba4362ed6e0cc1580f` ausschließlich um die nach dem
+Independent Full Review erforderliche Governance-/Statuskonsistenz. Diese
+Planrevision ist erst nach ausdrücklicher Ownerfreigabe ihrer exakten Commit-
+SHA eine Umsetzungserlaubnis. Der Draft-PR bleibt bis zum Owner-Schritt Draft.
+
+Die bisherige Implementation auf `f8f8f963eca68ee346d693cfb1656e39bf7a9962`
+bleibt die verifizierte Ausgangsbasis. Die Korrekturimplementation dieses
+revidierten Plans ist bis zur neuen Ownerfreigabe nicht autorisiert.
+
+## Planrevision nach Independent Full Review
+
+Der unabhängige Full Review des aktuellen PR-HEAD hat offene Review-Blocker
+festgestellt. Die Korrektur ist auf die dafür notwendige Konsistenz begrenzt:
+
+- `docs/CI_AND_QUALITY_GATES.md` wird an `OPEN_BLOCKERS=0`, die Finding-Klassen
+  und die Fix-Verification-/Materialitätsregel angeglichen;
+- die gleichbedeutenden widersprüchlichen Reviewnachweis-Formulierungen in
+  Root-`AGENTS.md` und `docs/AGENT_WORKFLOW.md` werden präzisiert;
+- `docs/ROADMAP.md` erhält den tatsächlichen Issue-#145-Status von freigegebenem
+  Plan und abgeschlossener Implementation mit offenen Review-Blockern.
+
+Es werden keine weiteren Scope-, Governance-, Produkt-, Test-, Build-, CI-,
+Safety-, Hardware- oder Releaseänderungen aufgenommen.
 
 ## Ziel
 
@@ -34,26 +56,29 @@ Hardware- und Releaseentscheidungen werden nicht geändert.
 ISSUE=145
 BASE_BRANCH=integration/r1-development
 CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-CONTEXT_HEAD_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-CONTEXT_PLAN_SHA=NONE
-CONTEXT_REFRESH_MODE=FULL
-CONTEXT_DELTA=Live main/integration/PR/Issue/Checkout geprüft; AGENTS.md,
-  docs/AGENT_WORKFLOW.md, docs/ENGINEERING_PRINCIPLES.md,
-  docs/ROADMAP.md und docs/tasks/README.md gelesen
-SOURCE_OF_TRUTH_CONFLICT=NONE für Issue #145; der bekannte Workflowwiderspruch
-  ist in diesem Plan als Korrekturumfang abgegrenzt
+CONTEXT_HEAD_SHA=f8f8f963eca68ee346d693cfb1656e39bf7a9962
+CONTEXT_PLAN_SHA=de6f5ddef42324244d9d4bba4362ed6e0cc1580f
+CONTEXT_REFRESH_MODE=INCREMENTAL
+CONTEXT_DELTA=Live main/integration/PR/Issue/Checkout, Erstimplementation und
+  Independent-Review-Stand geprüft; AGENTS.md, docs/AGENT_WORKFLOW.md,
+  docs/CI_AND_QUALITY_GATES.md, docs/ENGINEERING_PRINCIPLES.md,
+  docs/ROADMAP.md und der freigegebene Plan gezielt gelesen
+SOURCE_OF_TRUTH_CONFLICT=B1: drei veraltete CI-/Reviewregeln und zusätzlich
+  gleichbedeutende Reviewnachweis-Formulierungen in Root/Workflow; B2: veralteter
+  Roadmap-Status. Die Korrekturen sind in diesem Plan abgegrenzt.
 ```
 
-Live geprüft wurden der saubere, zu Issue #26 gehörende Ausgangscheckout sowie
-PR #143. Dieser PR bleibt vollständig außerhalb des Scopes. Der Arbeitszweig
-für Issue #145 basiert stattdessen auf dem aktuellen
-`integration/r1-development` und wird nicht auf den bestehenden Issue-26-PR
-gestapelt. Issue #145 hat keinen fachlichen Vorgänger und ändert keine
-fachliche Reihenfolge.
+Live geprüft wurden PR #146, Issue #145, der aktuelle Branch
+`docs/issue-145-builder-review-governance`, der Implementierungs-HEAD
+`f8f8f963eca68ee346d693cfb1656e39bf7a9962` und der einzige aktuelle Handover.
+Der PR bleibt Draft; Owner-Review, Ready, CI, Merge und Issue-Abschluss bleiben
+außerhalb der Agentenrechte.
 
-Die kanonischen Quellen bleiben Root-`AGENTS.md`,
-`docs/AGENT_WORKFLOW.md` und `docs/ENGINEERING_PRINCIPLES.md`; die Roadmap
-erhält nur einen knappen Statusverweis und keine zweite Detailbeschreibung.
+Die kanonischen Governancequellen bleiben Root-`AGENTS.md`,
+`docs/AGENT_WORKFLOW.md` und `docs/ENGINEERING_PRINCIPLES.md`;
+`docs/CI_AND_QUALITY_GATES.md` bleibt die kanonische Quelle für Befehle und
+Quality-Gates. Die Roadmap erhält nur einen knappen Statusverweis und keine
+zweite Detailbeschreibung.
 Die Auftragsschablone `Agent-Auftraege/Auftrag.md` wird nicht mit diesem
 Auftrag wiederholt oder geändert.
 
@@ -61,86 +86,61 @@ Auftrag wiederholt oder geändert.
 
 ### Plan-/Status-Schnitt
 
-1. Diese vollständige Plan-Datei unter `docs/tasks/` versionieren.
-2. `docs/ROADMAP.md` mit einem kurzen Issue-#145-Statusverweis als begonnene
-   parallele Governance-Arbeit aktualisieren. Keine Anforderungen und keine
-   Detailklassifikation in die Roadmap kopieren.
-3. Den Plan committen, pushen und im Draft-PR den exakten Planpfad und die
-   exakte Plan-SHA ausweisen.
-4. Umsetzung bis zur ausdrücklichen Ownerfreigabe genau dieser Plan-SHA
+1. Diese vollständige revidierte Plan-Datei unter `docs/tasks/` versionieren.
+2. Den revidierten Plan committen, pushen und im Draft-PR den exakten Planpfad
+   und die neue exakte Plan-SHA ausweisen.
+3. Umsetzung bis zur ausdrücklichen Ownerfreigabe genau dieser neuen Plan-SHA
    anhalten.
 
 ### Implementierung nach Planfreigabe
 
-Die Umsetzung bleibt auf genau diese vorhandenen Governance-/Konfigurations-
-quellen und die minimal erforderliche neue Konfigurationsdatei begrenzt:
+Die Korrekturimplementation bleibt nach Planfreigabe auf genau diese vier
+vorhandenen Governance-/Statusquellen begrenzt. `.codex/config.toml` und
+`docs/ENGINEERING_PRINCIPLES.md` werden in dieser Korrekturrunde nicht geändert:
 
-- `.codex/config.toml` neu anlegen, falls sie auf dem freigegebenen Ziel-HEAD
-  nicht existiert, mit ausschließlich:
-
-  ```toml
-  model = "gpt-5.6-luna"
-  model_reasoning_effort = "xhigh"
-  plan_mode_reasoning_effort = "xhigh"
-  model_verbosity = "low"
-  review_model = "gpt-5.6-luna"
-  ```
-
-  Die Datei ist nur der kostenbewusste Builder-Default. Ein Codex-Review bleibt
-  höchstens Self-Check bzw. Zusatzreview und ersetzt nicht den unabhängigen
-  Reviewkanal. Keine weiteren Codex-Schlüssel ohne konkreten Bedarf.
-- `docs/AGENT_WORKFLOW.md` konsolidieren, nicht durch einen parallelen Abschnitt
-  ergänzen:
-  - Codex/ausführender Agent als Builder mit Plan-, Umsetzungs-, Diagnose-,
-    Test-, Evidence- und PR-Aufgaben;
-  - angemessener Implementation Self-Check vor Übergabe und ausdrücklicher
-    Halt für Owner/Independent Review;
-  - unabhängiger Full Review gegen Plan, Issue, Anforderungen, ADRs,
-    Fachverträge, Architektur, Correctness/Fehlerfälle, Safety, Security,
-    Recovery, Tests/Evidence, SOLID/DRY/KISS, Ressourcen, Hardware, Lizenzen,
-    Dokumentationskonsistenz, unbeabsichtigte Dateien, Secrets und lokale
-    Pfade;
-  - operative Einordnung des aktuellen normalen ChatGPT-Kanals mit GPT-5.6
-    Sol als Owner-Einstellung, ohne dauerhafte Architekturabhängigkeit;
-  - verbindliche Finding-Klassen `BLOCKER`, `FOLLOW-UP`, `NO-ACTION` mit
-    eindeutiger Sperrwirkung nur für erfüllungs-, Vertrags-, Sicherheits-,
-    Regressions-, Test-, Quality-Gate- oder Scopefehler;
-  - `FOLLOW-UP` nur für reale technische Schuld, konkreten zukünftigen Nutzen,
-    bekanntes Risiko oder absehbare Anforderung; rein theoretische
-    Verbesserungen als `NO-ACTION` ohne neues Issue;
-  - Fix Verification nach lokal begrenzten Korrekturen: alle offenen Blocker
-    verifizieren, Korrekturdiff prüfen, direkt betroffene Verträge und
-    Regressionen prüfen sowie materielle Scopewirkung bewerten;
-  - Full Review nach der Korrektur nur bei materieller Veränderung von Scope,
-    Architektur, öffentlichen Verträgen, Persistenz/Wireformat,
-    Safety/Security/Recovery oder Laufzeitverhalten oder bei breitem neuem
-    Diff; dieselbe Regel nach CI-Korrekturen;
-  - explizites Convergence Gate bei erfülltem genehmigtem Scope, bestandenen
-    Pflichttests/-nachweisen/Quality Gates und `OPEN_BLOCKERS=0`; verbleibende
-    `FOLLOW-UP`/`NO-ACTION` halten den PR nicht offen;
-  - Standard-Builder als projektlokale Konfiguration und proportionaler,
-    begründeter, Owner-vorgeschlagener Eskalations-Gate für deutlich teurere
-    Modelle, insbesondere Terra, ohne eigenmächtigen Modellwechsel oder
-    Modell-Hopping; nach dem Problemumfang Rückkehr zum Standard.
-- `docs/ENGINEERING_PRINCIPLES.md` um genau eine kurze allgemeine Regel zu
-  Konvergenz, YAGNI und proportionalem Engineering ergänzen. Keine
-  Workflowdetails und keine Modellnamen duplizieren.
-- Root-`AGENTS.md` nur um die früh sichtbare Kurzregel ergänzen: ausführender
-  Agent = Builder, Full Review grundsätzlich unabhängig, Halt nach Self-Check,
-  Fix Verification nach begrenzter Korrektur sofern keine materielle Änderung;
-  Details ausschließlich im Workflow. Bestehende Ownerrechte und Gates bleiben
-  unverändert.
+- `docs/CI_AND_QUALITY_GATES.md`:
+  - den Gate für den vollständigen lokalen Lauf auf abgeschlossenes
+    Independent Full Review mit `OPEN_BLOCKERS=0`, finalem `HEAD` und
+    ausdrücklicher Owner-Anordnung ausrichten;
+  - klarstellen, dass `FOLLOW-UP` und `NO-ACTION` diesen Lauf nicht blockieren;
+  - die pauschale Regel ersetzen, nach jeder semantischen Änderung erneut einen
+    vollständigen Review zu verlangen: lokal begrenzte Korrektur bedeutet Fix
+    Verification plus erforderlichen Regression Check, materielle Änderung
+    oder breiter neuer Diff bedeutet neuer Full Review;
+  - nach CI-Korrekturen dieselbe Fix-Verification-/Materialitätsregel anwenden.
+- `docs/AGENT_WORKFLOW.md`:
+  - die Formulierung zum vollständigen lokalen Lauf auf abgeschlossenes Review
+    mit `OPEN_BLOCKERS=0` präzisieren;
+  - die pauschale Verwerfung des Reviewnachweises bei jeder semantischen
+    Änderung durch die bestehende Fix-Verification-/Materialitätsregel
+    ersetzen. Die bereits definierte vollständige Independent-Review-Prüfung,
+    Finding-Klassifikation, Convergence Gate und CI-Korrekturregel bleiben
+    ansonsten unverändert.
+- Root-`AGENTS.md`:
+  - die Formulierung „Review ohne offene Befunde“ auf abgeschlossenes
+    Independent Full Review mit `OPEN_BLOCKERS=0` präzisieren;
+  - den Reviewnachweis bei semantischen Änderungen nur gemäß der im Workflow
+    definierten Fix-Verification-/Materialitätsregel verwerfen, ohne die
+    Detailklassifikation zu duplizieren.
+- `docs/ROADMAP.md`:
+  - die bestehende Issue-#145-Zeile knapp auf
+    `PLAN_APPROVED=YES`, `IMPLEMENTATION=COMPLETE`,
+    `INDEPENDENT_REVIEW=OPEN_BLOCKERS` und `PRODUCTION_CODE_CHANGE=NO`
+    aktualisieren;
+  - als nächstes Gate ausschließlich die Ownerfreigabe dieser Planrevision
+    ausweisen. Keine Anforderungen und keine Workflowdetails kopieren.
 
 Keine weitere Datei, kein neuer Agentenauftrag, keine neue ADR und kein
-technischer Vertrag wird erzeugt.
+technischer Vertrag wird erzeugt. `.codex/config.toml` und
+`docs/ENGINEERING_PRINCIPLES.md` bleiben gegenüber dem Implementierungs-HEAD
+unverändert.
 
 ## Umsetzungsschnitte und Owner-Gates
 
-Nach Planfreigabe werden die vier Zieländerungen und die Konfigurationsprüfung
-als ein kleiner, nachvollziehbarer Governance-Implementierungsschnitt erstellt.
-Vor dem Commit wird der projektlokale Codex-Stand erneut geprüft. Danach werden
-die gezielten Nachweise ausgeführt, der Diff vollständig gegen diesen Plan
-geprüft und der Builder-Self-Check dokumentiert.
+Nach Planfreigabe werden die vier Korrekturdateien als ein kleiner,
+nachvollziehbarer Governance-/Status-Implementierungsschnitt aktualisiert. Vor
+dem Commit werden die gezielten Text- und Diff-Nachweise ausgeführt, der Diff
+vollständig gegen diesen Plan geprüft und der Builder-Self-Check dokumentiert.
 
 Der PR bleibt Draft. Nur der Owner entscheidet über `Ready for review`, führt
 den unabhängigen Full Review im normalen ChatGPT-Kanal durch, entscheidet über
@@ -149,101 +149,65 @@ schließt Issue #145. Der Agent nimmt keinen dieser Owner-Schritte vor.
 
 ## Nachweise und Konsistenzprüfungen
 
-Nur die direkt betroffenen Dokumentations-/Konfigurationsnachweise werden
-ausgeführt:
+Nur die direkt betroffenen Dokumentations-/Statusnachweise werden ausgeführt:
 
-1. Prüfen, dass der freigegebene Ziel-HEAD weiterhin der erwarteten Branch- und
-   Planbaseline entspricht. Für die Codex-Prüfung muss `<checkout>` der
-   tatsächlich verwendete Repository-Checkout sein und von Codex als
-   vertrauenswürdiger Projektkontext behandelt werden. Ein `/tmp`-Worktree
-   oder ein anderer Pfad ohne aktiven Project-Trust ist für diesen Nachweis
-   nicht zulässig.
-2. Die projektlokale `.codex/config.toml` mit ausschließlich den fünf
-   geplanten Werten in `<checkout>` anlegen und vor dem Commit einen
-   kontrollierten Project-Layer-Negativtest ausführen. Dazu ausschließlich
-   uncommitted und temporär den unbekannten Schlüssel
-   `__issue145_project_layer_probe = true` ergänzen und den tatsächlich
-   config-ladenden Befehl ausführen:
+1. Prüfen, dass der aktuelle Implementierungs-HEAD, die Branch, der PR-Status
+   und der freigegebene Plan-Commit weiterhin der Ausgangslage entsprechen.
+   Die Korrekturimplementation darf erst nach Ownerfreigabe der neuen exakten
+   Plan-SHA beginnen.
+2. In `docs/CI_AND_QUALITY_GATES.md` gezielt prüfen, dass der vollständige
+   lokale Lauf nur nach abgeschlossenem Independent Full Review mit
+   `OPEN_BLOCKERS=0`, finalem `HEAD` und ausdrücklicher Owner-Anordnung
+   zulässig ist und dass `FOLLOW-UP` sowie `NO-ACTION` diesen Lauf nicht
+   blockieren.
+3. In `docs/CI_AND_QUALITY_GATES.md` gezielt prüfen, dass semantische
+   Änderungen nach Materialität behandelt werden: lokal begrenzte Korrektur
+   führt zu Fix Verification plus erforderlichem Regression Check; materielle
+   Änderung oder breiter neuer Diff führt zu neuem Full Review. Nach
+   CI-Korrekturen muss dieselbe Regel ausdrücklich gelten.
+4. In Root-`AGENTS.md` und `docs/AGENT_WORKFLOW.md` gezielt prüfen, dass keine
+   Formulierung „Review ohne offene Befunde“ als eigenes Gate verbleibt,
+   sondern der vollständige lokale Lauf an abgeschlossenes Review mit
+   `OPEN_BLOCKERS=0` gebunden ist. Die Workflowregel darf weiterhin weder
+   lokale Korrekturen pauschal zum Full Review hochstufen noch den vollständigen
+   Independent Review verkürzen.
+5. Den vollständigen Independent-Review-Abschnitt, die drei Finding-Klassen,
+   das Convergence Gate und die Compute-Eskalationsregel auf unbeabsichtigte
+   Widersprüche prüfen. Der Full Review muss vollständig bleiben und darf
+   keine Salamitaktik ermöglichen.
+6. Die kanonischen Workflow-/CI-Dokumente gezielt nach der alten pauschalen
+   Full-Review-Wiederholung und der alten „keine offenen Befunde“-Sperre
+   durchsuchen. Es darf keine weitere kanonische Workflow-/CI-Datei mit dem
+   alten aktuellen Vertrag verbleiben; historische Plantexte werden nicht als
+   aktuelle Regel interpretiert.
+7. Prüfen, dass `docs/ROADMAP.md` die bestehende Issue-#145-Zeile knapp mit
+   `PLAN_APPROVED=YES`, `IMPLEMENTATION=COMPLETE`,
+   `INDEPENDENT_REVIEW=OPEN_BLOCKERS` und `PRODUCTION_CODE_CHANGE=NO` führt
+   und als nächstes Gate nur die Ownerfreigabe dieser Planrevision nennt.
+8. `git diff --check` sowie eine Dateiliste ausführen. Es dürfen nur
+   `docs/tasks/issue-145-builder-review-governance-plan.md`,
+   `docs/CI_AND_QUALITY_GATES.md`, `docs/AGENT_WORKFLOW.md`, Root-`AGENTS.md`
+   und `docs/ROADMAP.md` geändert sein. Produktionscode, Tests, Buildsystem,
+   CI-Workflow, `.codex/config.toml`, Engineering Principles, ADRs und
+   Fachverträge bleiben unverändert.
 
-   ```text
-   codex exec --strict-config --json --ephemeral --sandbox read-only \
-     -C <checkout> "Respond with exactly PROJECT_LAYER_PROBE_MUST_NOT_START."
-   ```
-
-   Der Befehl muss mit einem Strict-Config-Fehler zum genau temporären
-   unbekannten Schlüssel enden. `exit=0`, ein Fehlen des erwarteten
-   unbekannten Feldes oder ein Ergebnis, das nur die User-Config validiert,
-   ist `PROJECT_CONFIG_LAYER=FAIL`; dann wird der Project-Trust nicht als
-   aktiv angenommen und die `.codex/config.toml` nicht erfolgreich gemeldet.
-   Den temporären Schlüssel anschließend vollständig entfernen. Dieser
-   Negativtest darf nicht committed werden und darf keinen Modellstart
-   auslösen.
-3. Mit der bereinigten Datei und demselben effektiven Projektkontext den
-   Strict-Config-Pfad tatsächlich laden, nicht `--help` oder nur `doctor`
-   verwenden:
-
-   ```text
-   codex exec --strict-config --json --ephemeral --sandbox read-only \
-     -C <checkout> "Respond with exactly CONFIG_SCHEMA_PROBE_OK."
-   ```
-
-   Der Exitstatus muss `0` sein und darf keinen Config-Parse-, unbekannten
-   Schlüssel- oder Unsupported-Value-Fehler enthalten. Gemeinsam mit dem
-   erfolgreichen Negativtest aus Schritt 2 gilt dann
-   `CONFIG_SCHEMA_VALID=PASS` und `PROJECT_CONFIG_LAYER=ENABLED`. Ein
-   Strict-Config-Fehler, deaktivierter Project-Layer oder ein nicht
-   nachvollziehbarer Layerstatus ist FAIL und stoppt den Commit.
-4. Die tatsächliche Builder-Auflösung unabhängig von der User-Config prüfen.
-   Dazu keinen `-m`-Override und keinen `model`-/Reasoning-Override setzen,
-   die User-Config für diesen isolierten Probe-Start ignorieren und nur für
-   den konkret geprüften Checkout den Trust per CLI setzen:
-
-   ```text
-   codex exec --strict-config --ignore-user-config --json --ephemeral \
-     --sandbox read-only \
-     -c 'projects."<checkout>".trust_level="trusted"' \
-     -C <checkout> "Respond with exactly BUILDER_MODEL_PROBE_OK."
-   ```
-
-   Die JSON-Ausgabe muss einen erfolgreich abgeschlossenen Agenten-Reply mit
-   genau `BUILDER_MODEL_PROBE_OK` und Exitstatus `0` zeigen. Da der Probe
-   weder Modell noch Reasoning per CLI überschreibt und die User-Config
-   ignoriert, stammen `model = "gpt-5.6-luna"` und
-   `model_reasoning_effort = "xhigh"` aus der projektlokalen Datei. Bei
-   Authentifizierungs-, Auflösungs-, Start- oder sonstigem Laufzeitfehler gilt
-   `BUILDER_MODEL_RESOLUTION=FAIL`; die `.codex/config.toml` wird nicht als
-   erfolgreich implementiert gemeldet.
-5. Den temporären Probe-Schlüssel vollständig entfernt sowie TOML-Syntax,
-   exakte fünf Konfigurationswerte und das Fehlen weiterer projektlokaler
-   Codex-Schlüssel prüfen. Die installierte Version mit `codex --version`
-   dokumentieren; für diesen Plan ist `0.153.0` der verifizierte CLI-Stand.
-6. `git diff --check` ausführen. Mit gezielter Textprüfung sicherstellen, dass
-   die alte Pflicht zum vollständigen Review nach jeder lokalen Korrektur und
-   nach jedem CI-Fix nicht mehr besteht, der unabhängige Full Review
-   vollständig bleibt, die drei Finding-Klassen und ihre Abgrenzung eindeutig
-   sind und das Convergence-/Eskalations-Gate vorhanden ist.
-7. Prüfen, dass nur Plan-/Roadmap-/Governance-/Konfigurationsdateien geändert
-   wurden und kein Produktionscode, Test, Buildsystem oder CI-Workflow im Diff
-   liegt.
-
-Die drei Konfigurationsnachweise werden getrennt im Implementierungs- und
-Handover-Evidence festgehalten:
+Die Korrekturkonsistenz wird im Implementierungs- und Handover-Evidence
+getrennt festgehalten:
 
 ```text
-CONFIG_SCHEMA_VALID=PASS
-PROJECT_CONFIG_LAYER=ENABLED
-BUILDER_MODEL_RESOLUTION=PASS
+FULL_REVIEW_GATE=FULL_REVIEW_COMPLETE+OPEN_BLOCKERS=0
+FOLLOW_UP_NO_ACTION_BLOCKING=NO
+LOCAL_CORRECTION=FIX_VERIFICATION+REGRESSION_CHECK
+MATERIAL_CHANGE_OR_BROAD_DIFF=NEW_FULL_REVIEW
+CI_CORRECTION=SAME_FIX_VERIFICATION_MATERIALITY_RULE
+ROADMAP_STATUS=PLAN_APPROVED+IMPLEMENTATION_COMPLETE+OPEN_BLOCKERS
+PRODUCTION_CODE_CHANGED=NO
 ```
-
-Bei einem `FAIL`, einem deaktivierten Project-Layer oder einem nicht
-auflösbaren beziehungsweise nicht startfähigen Modell wird die
-`.codex/config.toml` nicht als erfolgreich implementiert gemeldet. Die
-temporäre Negativkontrolle ist ein lokaler Nachweis und bleibt uncommitted.
 
 Ein Firmware-Build, vollständiger lokaler Lauf, Hardwarelauf und Firmware-CI
 sind für diese Draft-Phase nicht angeordnet und werden als `NOT_RUN` geführt.
-Markdown-only ändert nicht die Pflicht zum unabhängigen Review; semantische
-normative Dokumentänderungen verwerfen den bisherigen Reviewnachweis.
+Nach der Korrektur bleibt der PR bis zum unabhängigen Review und den
+unveränderten Owner-Gates Draft.
 
 ## Review- und Abschlusskriterien
 
@@ -274,7 +238,9 @@ PRODUCTION_CODE_CHANGED=NO
 
 ## Nicht-Ziele
 
-- keine Firmware-, Test-, Build- oder CI-Änderung;
+- keine Firmware-, Test-, Build- oder CI-Workflow-Änderung; die notwendige
+  Dokumentationskorrektur in `docs/CI_AND_QUALITY_GATES.md` ist der einzige
+  zusätzliche Konsistenzumfang;
 - keine ADR, Produkt-, Safety-, Hardware- oder Releaseentscheidung;
 - kein automatisches Modellrouting oder Agent-Orchestrator;
 - kein technischer Aufruf des externen ChatGPT-Reviewkanals aus Codex;
