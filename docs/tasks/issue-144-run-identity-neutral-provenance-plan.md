@@ -16,6 +16,8 @@ Fermentations-Workspace aus Issue #26.
     BASE_SHA=f5aca945c3009408c091a8f03b000e8309af6bcf
     ROADMAP_COMMIT=3ecf9ad9edc223c7af731600d54a857d5e2f8c9f
     PLAN_PATH=docs/tasks/issue-144-run-identity-neutral-provenance-plan.md
+    PLAN_REVISION=CORRECTION_1
+    SUPERSEDES_PLAN_COMMIT=0cccc031917b6ebc9e9a1fdd6ffbde378f3cb790
     PLAN_COMMIT=THIS_COMMIT
     IMPLEMENTATION=NOT_STARTED
     NATIVE_TESTS=NOT_RUN_PLANNING_ONLY
@@ -64,6 +66,9 @@ Nach erfolgreichem Merge garantiert #144 fuer #26 die folgenden Invarianten:
   unveraenderliche Laufkopie;
 - ein neues Fachrequest erhaelt seine `CommandId` an der
   Application-Grenze, und `UiRequestId.value == CommandEnvelope::id`;
+- die Neustartbasis fuer diese ID ist der committed
+  `commandIdHighWater` im bestehenden kanonischen `RunPersistenceHead`, nicht
+  das begrenzte Replayfenster;
 - ein neuer aktiver Lauf erhaelt seine `runId` nur an dieser Grenze;
 - Touch- und spaetere Web-Adapter liefern keine Lauf- oder Command-Identitaet
   als Benutzereingabe;
@@ -127,10 +132,15 @@ Der relevante Codebefund auf `BASE_SHA` ist:
   bekannte Schemas sind 1, 2 und 3;
 - `CommandId` ist bereits ein `uint64_t`, aber es gibt noch keinen
   produktiven app-owned Erzeuger;
-- `RunPersistenceSnapshot::persistedRunCommandIds` ist das bestehende
-  begrenzte, kanonisch persistierte Fenster fuer eligible Run-Command-IDs;
-  der aktuelle `RunPersistenceCoordinator` schreibt dieses Fenster mit dem
-  bestehenden Run-Snapshot und bewahrt es auch bei `NoActiveRun`;
+- `RunPersistenceSnapshot::persistedRunCommandIds` ist nur das bestehende
+  begrenzte FIFO-/Replayfenster fuer eligible Run-Command-IDs. Bei voller
+  Kapazitaet wird die aelteste ID entfernt; der historische Vertrag beweist
+  weder globale Monotonie noch, dass das Fenstermaximum alle frueheren IDs
+  uebersteigt;
+- `RunPersistenceHead` wird mit dem bestehenden Run-Commit persistiert, hat
+  aber noch keinen committed High-Water-Wert. Der bestehende Coordinator
+  bewahrt das ID-Fenster bei `NoActiveRun`, was allein keine sichere
+  Identitaetsbasis ist;
 - `ProgramStartRequest`, `ManualRunPlanRequest`, `StopRequest` und
   `CompletionRequest` enthalten heute owning Run- beziehungsweise Cooling-
   Felder, darunter `runId`; diese Felder bleiben fuer den Fachowner
@@ -275,7 +285,97 @@ zuliesst. Schema 4 ist die einzige neue bekannte Version. Ein unbekanntes
 neueres Schema bleibt im bestehenden Load-/Decodepfad fail-closed und darf
 weder einen Run noch einen Allocator-Hochwasserstand freigeben.
 
-### 6.2 Codec- und Validierungsregeln
+### 6.2 Kanonische Command-High-Water-Ankerung
+
+Das vorhandene 32er-Fenster ist kein High-Water-Vertrag und wird nicht zu
+einem solchen umgedeutet. Die kleinste korrekte Erweiterung ist ein einziges
+neues Feld im bestehenden `RunPersistenceHead`:
+
+    std::optional<CommandId> commandIdHighWater
+
+Schema 4 schreibt dieses Feld sowohl in den Prepared- als auch in den
+Committed-Head. Bei einem neuen Schema-4-Commit wird der Wert atomar mit dem
+bereits bestehenden Head-/Snapshot-Commit fortgeschrieben:
+
+- bei einer neuen eligible Run-Command-ID ist der neue Wert das Maximum aus
+  dem bisherigen Wert und dieser Command-ID;
+- bei Transition-, Sensor- oder Recovery-Commits ohne neue Command-ID wird
+  der bisherige High Water unveraendert weitergegeben;
+- ein frisch etablierter Schema-4-Identitaetsraum darf den Wert `0` als
+  explizit vorhandenen Anfangswert tragen;
+- ein Schema-4-Head mit bereits etabliertem Identitaetsraum muss das Feld
+  tragen, und der Wert darf nicht kleiner als der vorherige committed Wert
+  werden;
+- bei Write-Fehler, Apply-Fehler oder indeterminierter Persistenz gilt die
+  bestehende Write-before-Apply-/fail-closed-Semantik. Ein bereits
+  committed High Water wird niemals zurueckgesetzt oder aus einem
+  Snapshot-Fenster rekonstruiert.
+
+`commandIdHighWater` im committed Head ist damit die einzige kanonische
+Neustartbasis innerhalb einer `StorageEpoch`. Es ist kein zweiter Zaehler,
+keine zweite Registry und kein zusaetzliches Persistenzrecord. Das weiterhin
+persistierte `persistedRunCommandIds`-Array bleibt unveraendert das begrenzte
+Replay-/AlreadyProcessed-Fenster. Sein Maximum wird niemals als High Water
+verwendet.
+
+Bei Schema 1 bis 3 existiert dieses Head-Feld historisch nicht. Der Decoder
+setzt deshalb den High Water auf `Unknown`/nicht vorhanden. Die Legacy-ID-
+Folge wird nicht als monoton angenommen, und auch ein hoher Wert im alten
+Fenster wird nicht als Untergrenze oder High Water verwendet. Legacy-Records
+bleiben lesbar und fuer die bestehende passive beziehungsweise fail-closed
+Recovery auswertbar; ein neuer eligible Command oder ein neuer Run darf in
+dieser alten `StorageEpoch` jedoch nicht allokiert werden.
+
+Die vorhandene autorisierte Factory-Reset-Grenze ist der einzige
+Identitaetsraumwechsel: Sie erzeugt ueber den bestehenden
+`ConfigurationRecoveryService` eine neue `StorageEpoch`; alte Run-Records
+sind dann foreign zur neuen Epoche, und ein frischer Schema-4-Head startet
+mit High Water `0`. #144 fuehrt dafuer weder eine neue Resetaktion noch eine
+Migrationsebene ein. Ohne diesen bestehenden Epochwechsel bleibt ein
+Legacy-Identitaetsraum fuer neue Commands typisiert `Unavailable`.
+
+### 6.3 Current-, NoActiveRun- und Fallback-Auswahl
+
+Die High-Water-Auswahl folgt der kanonischen committed Head-Information und
+nicht der Auswahl eines moeglicherweise aelteren Snapshots:
+
+1. Ein gueltiger Schema-4-`Committed`-Head mit vorhandenem High Water ist
+   die einzige Basis fuer den Allocator. Der referenzierte Current-
+   Snapshot kann `ProgramRun`, `ManualRun` oder `NoActiveRun` sein.
+2. Ein `NoActiveRun`-Snapshot veraendert den High Water nicht. Ein neuer
+   Start setzt deshalb nach `commandIdHighWater + 1` fort.
+3. Ist Current unbrauchbar, aber ein Fallback formal gueltig, wird der
+   Allocator niemals aus dem aelteren Fallback-Fenster initialisiert. Der
+   bestehende Recoverypfad darf den Fallback weiterhin nach seiner eigenen
+   kanonischen Entscheidung anzeigen beziehungsweise recovern; solange kein
+   gueltiger committed Head mit etabliertem High Water fuer die Epoche
+   vorliegt, bleiben neue Commands und Runs `Unavailable`.
+4. Ist der committed Head gueltig und traegt er einen etablierten High Water,
+   bleibt dieser Wert auch bei einer Fallback-/Recoveryansicht als obere
+   Identitaetsgrenze erhalten. Eine neue Mutation wird trotzdem nur nach den
+   bestehenden Recovery-/Process-Zulassungen weitergereicht; die
+   Fallbackauswahl darf den High Water nicht aelter machen. Der normale
+   Startpfad bleibt waehrend einer nicht abgeschlossenen Recoveryansicht
+   gesperrt; die reine HWM-Verfuegbarkeit ersetzt keine bestehende
+   Recovery-/Standby-Freigabe.
+5. Fehlen Head, High Water, Epochbindung oder eindeutige Persistenzbelege,
+   wird fail-closed angehalten. Kein aelterer Fallback und kein
+   Replayfenster darf diese Luecke ueberbruecken.
+
+Der bestehende `RunPersistenceCoordinator` beziehungsweise sein vorhandener
+Application-Handoff reicht dem Allocator deshalb neben dem bestehenden
+`RunPersistenceLoadStatus` genau den optionalen High-Water-Wert aus dem
+validierten committed Head weiter. Dieser Handoff exponiert keinen zweiten
+Store und keine neue Recoveryentscheidung; er macht nur die bereits
+kanonisch entschiedene Head-Identitaet fuer die Application sichtbar.
+
+Damit kann ein spaeterer Neustart weder vom Current- auf den Fallback-
+Snapshot zurueckspringen noch eine bereits relevante persistierte
+Command-/Run-Identitaet erneut ausgeben. Die Kombination aus
+`StorageEpoch` und dem nicht ruecklaeufigen committed High Water ist die
+beweisbare Identitaetsbasis; der FIFO-Replaybestand bleibt davon getrennt.
+
+### 6.4 Codec- und Validierungsregeln
 
 - `kCurrentRunPersistenceSchema` wird auf 4 angehoben;
 - `knownRunPersistenceSchema()` akzeptiert 1, 2, 3 und 4;
@@ -283,6 +383,10 @@ weder einen Run noch einen Allocator-Hochwasserstand freigeben.
   und `readUint64` bei Schema >=4;
 - Encode von Schema 4 verwendet den vorhandenen Big-Endian-Codec und schreibt
   den vollstaendigen 64-Bit-Wert, ohne Cast oder Trunkierung;
+- Schema-4-Head-Encode/Decode schreibt beziehungsweise liest
+  `commandIdHighWater` mit explizitem Presence-Tag und validiert die
+  Monotonie-/Epochbindung. Schema 1 bis 3 dekodieren dieses Feld als
+  `Unknown`; es wird kein alter Head-Writer erzeugt;
 - Head-, Slot-, CRC-, Epoch-, Referenz-, Laengen-, Trailing-Byte- und
   Zustandsvalidierungen bleiben die bestehenden Validierungen;
 - ein ungueltiger Wert, eine abgeschnittene 64-Bit-Zahl oder ein unbekanntes
@@ -290,7 +394,7 @@ weder einen Run noch einen Allocator-Hochwasserstand freigeben.
 - es gibt keine zweite Run-Persistenz, keinen Paralleldecoder und keine
   Rueckmigration in ein anderes Provenienzregister.
 
-### 6.3 Nachweise
+### 6.5 Nachweise
 
 Die Implementation ergaenzt die bestehenden nativen Suites, statt ein neues
 Testframework aufzubauen:
@@ -309,16 +413,23 @@ Mindestens folgende feste Nachweise sind erforderlich:
 
 1. Golden-Payloads fuer mindestens je einen aktiven Programmrun der Schemas
    1, 2 und 3 dekodieren bytegetreu den alten numerischen Wert als neutralen
-   64-Bit-Wert.
+   64-Bit-Wert und ergeben einen Legacy-Snapshot ohne beweisbaren High Water.
 2. Ein Schema-4-Golden-Payload schreibt und liest den vollstaendigen
-   64-Bit-Wert ohne Veraenderung.
-3. Schema-1/2/3- und Schema-4-Roundtrips bewahren Programm-Dokument,
-   Source-Kind, Provenienz und alle schemaabhaengigen Recoveryfelder.
-4. Trunkierung, Trailing Bytes, unbekanntes Schema 5 und ungueltige
+   64-Bit-Provenienzwert sowie den expliziten High Water ohne Veraenderung.
+3. Fuer Legacy gibt es keinen Schema-1/2/3-Writer: Der Nachweis lautet
+   `Legacy decode -> kanonischer In-Memory-Snapshot -> Schema-4 encode ->
+   Schema-4 decode -> semantische Gleichheit der unterstuetzten Felder`.
+   Der Legacy-High-Water bleibt dabei `Unknown`, bis ein neuer
+   `StorageEpoch` etabliert ist.
+4. Schema 4 erhaelt den eigentlichen Encode-/Decode-Roundtrip in seinem
+   eigenen Wireformat; ein alter Snapshot wird bei regulaerer erneuter
+   Persistenz ausschliesslich als Schema 4 geschrieben.
+5. Trunkierung, Trailing Bytes, unbekanntes Schema 5 und ungueltige
    Referenzen laden fail-closed.
-5. Current-, Fallback- und `NoActiveRun`-Recovery mit alten und neuen
+6. Current-, Fallback- und `NoActiveRun`-Recovery mit alten und neuen
    Records erzeugt dieselbe bestehende Run-/Recoveryentscheidung; ein
-   Legacywert wird dabei nirgends als echte Katalogrevision ausgewertet.
+   Legacywert wird dabei nirgends als echte Katalogrevision ausgewertet und
+   ein Fallback erzeugt keinen neuen High Water.
 
 ## 7. Gemeinsame Application-Command-Identitaet
 
@@ -334,34 +445,39 @@ vertrauenswuerdig vorliegen:
 
 1. der Configuration-Recoverypfad liefert einen gueltigen
    `RuntimeConfigurationSnapshot` mit gueltigem `StorageEpoch`;
-2. der vorhandene `RunPersistenceCoordinator` hat den aktuellen oder
-   gueltigen Fallback-/No-Active-Run-Snapshot geladen.
+2. der vorhandene `RunPersistenceCoordinator` hat den kanonischen
+   committed Head und den aktuellen beziehungsweise bestehenden
+   Recoverystatus geladen.
 
-Aus dem geladenen Snapshot wird die sichere High-Water-Basis bestimmt:
+Aus dem kanonischen committed Head wird die sichere High-Water-Basis
+bestimmt:
 
-- aus `persistedRunCommandIds[0..persistedRunCommandCount)` werden nur die
-  bereits vom bestehenden Vertrag als eligible persistierten, von null
-  verschiedenen, eindeutigen IDs verwendet;
-- der groesste Wert ist der High Water Mark;
-- `NoPersistedRun` oder ein gueltiger Snapshot ohne IDs bedeutet
-  High Water `0`, die erste neue ID ist `1`;
-- Current, NoActiveRun und gueltig geladener Fallback verwenden die IDs des
-  tatsaechlich gewaehlt geladenen Snapshots; der bestehende Coordinator
-  bewahrt sie bei `NoActiveRun` bereits ueber den Runwechsel;
-- `ReadFailed`, `UnsupportedSchema`, `ForeignEpoch`, invalides ID-Fenster,
-  unklare beziehungsweise indeterminierte Persistenz oder Safe-Boot ohne
-  vertrauenswuerdigen Snapshot initialisieren den Allocator nicht. Neue
-  Fachrequests und neue Runs liefern dann typisiert `Unavailable`/fail-closed.
+- ein etablierter Schema-4-Head liefert seinen explizit persistierten
+  `commandIdHighWater`; `0` ist der gueltige Anfangswert eines neuen
+  Identitaetsraums;
+- das bestehende `persistedRunCommandIds`-Fenster wird nur fuer Replay-
+  beziehungsweise AlreadyProcessed-Semantik verwendet und niemals fuer die
+  High-Water-Berechnung;
+- ein gueltiger Schema-4-`NoActiveRun`-Head behaelt denselben High Water; die
+  erste neue ID eines leeren neuen Raums ist `1`, ansonsten folgt sie auf
+  `commandIdHighWater`;
+- ein gueltiger Fallback wird fuer Recovery nach bestehenden Regeln gelesen,
+  aber nicht als High-Water-Quelle verwendet. Der committed Head bleibt die
+  obere Identitaetsgrenze;
+- `ReadFailed`, `UnsupportedSchema`, `ForeignEpoch`, ein nicht etablierter
+  Legacy-High-Water, fehlender oder inkonsistenter Head, indeterminierte
+  Persistenz oder Safe-Boot ohne vertrauenswuerdigen Head initialisieren den
+  Allocator nicht. Neue Fachrequests und neue Runs liefern dann typisiert
+  `Unavailable`/fail-closed.
 
-Es wird kein zweiter persistierter Zaehler eingefuehrt. Die bestehende
-Persistenz des eligible ID-Fensters ist ausreichend: eligible Run-Command-IDs
-werden vom vorhandenen Coordinator erst mit dem owning Write-before-Apply in
-den Snapshot aufgenommen, und der aktuelle Pfad bewahrt dieses Fenster auch
-ohne aktiven Run. Da neue IDs ab der groessten vorhandenen ID fortlaufend
-reserviert werden, ist dessen groesster Wert die sichere Basis fuer die
-naechste erfolgreiche persistierte Run-Command-ID. Eine nur reservierte ID,
-deren owning Persistenz nie erfolgreich war, beschreibt keinen ausgefuehrten
-Run und darf nach Neustart nicht als ausgefuehrte Mutation gelten.
+Es wird kein zweiter persistierter Zaehler eingefuehrt. Das neue Feld ist die
+einzige High-Water-Information im bereits vorhandenen Head-/Commitvertrag.
+Bei jedem erfolgreichen owning Commit wird es zusammen mit dem Head atomar
+auf den neuen Wert gebracht; eine nur reservierte ID, deren owning Persistenz
+nie erfolgreich war, wird nicht als ausgefuehrte Mutation behandelt. Sobald
+eine Command-ID im bestehenden owning Commit relevant geworden ist, ist sie
+im committed High Water enthalten und kann nach Neustart nicht erneut
+ausgegeben werden, auch wenn sie spaeter aus dem 32er-Replayfenster faellt.
 
 Diese Garantie bezieht sich bewusst auf die bestehende eligible Run-
 Persistenz- und Replaysemantik. Nicht eligible Message-/Komfortkommandos
@@ -373,7 +489,8 @@ Historie ein.
 
 Der Allocator liefert einen kleinen typisierten lokalen Outcome, zum Beispiel
 mit den Zustandswerten `Allocated`, `NotInitialized`, `InvalidPersistedBase`,
-`Overflow` und `Unavailable`. Dies ist kein neuer `CommandStatus`, kein
+`LegacyHighWaterUnknown`, `CurrentStateNotCanonical`, `Overflow` und
+`Unavailable`. Dies ist kein neuer `CommandStatus`, kein
 zweiter Replayvertrag und keine Fachentscheidung.
 
 Bei `allocate()` gilt:
@@ -384,6 +501,8 @@ Bei `allocate()` gilt:
 - eine ausgegebene ID wird im RAM als naechste Basis vorgemerkt und innerhalb
   dieses Boots nicht recycelt, auch wenn die Vorpruefung oder der Benutzer
   spaeter abbricht;
+- der Allocator liest keinen High Water aus dem Fallback-Snapshot, dem
+  `persistedRunCommandIds`-Fenster oder einem Legacy-32-Bit-Wert;
 - ein bestehender bestaetigungspflichtiger Request besitzt nur eine
   Reservierung; seine Wiederholung ruft `allocate()` nicht nochmals auf;
 - ein uninitialisierter oder untrusted Allocator blockiert den Aufbau des
@@ -472,10 +591,13 @@ Die spaetere Umsetzung erfolgt in diesem engen Scope:
    Startvertraegen verankern. Alle impliziten `uint32_t`-Annahmen und
    verlustbehafteten Casts entfernen.
 2. Den bestehenden Run-Codec auf Schema 4 erweitern und die vorhandenen
-   Head-/Slot-/Recoveryvalidierungen unveraendert weiterverwenden.
+   Head-/Slot-/Recoveryvalidierungen unveraendert weiterverwenden. Das
+   `commandIdHighWater` wird im bestehenden Head-Commit atomar mitgefuehrt;
+   Schema-1/2/3 erhalten keinen neuen Writer.
 3. `ApplicationRunIdentity` an der bestehenden Application-Grenze instanzieren
-   und mit dem geladenen Snapshot, dem validierten `StorageEpoch` und dem
-   bestehenden `persistedRunCommandIds`-Fenster verbinden.
+   und mit dem validierten committed Head, dem `StorageEpoch` und dem
+   bestehenden Recoverystatus verbinden. Das
+   `persistedRunCommandIds`-Fenster bleibt ausschliesslich Replayzustand.
 4. Den vorhandenen UI-/Application-Requestaufbau so schliessen, dass
    `UiRequestId` vom Allocator stammt und die Envelope-ID exakt gespiegelt
    wird. Die bestehenden `decide*`-, Persistenz- und Lifecyclepfade bleiben
@@ -507,18 +629,21 @@ beobachtbar nachzuweisen:
 | RP-03 | Katalogrevision `UINT64_MAX` beziehungsweise null/invalid | keine implizite Konvertierung; gueltige/invaliden Grenzen werden fail-closed behandelt |
 | RP-04 | Schema-1-, Schema-2- und Schema-3-Golden mit freiem Legacy-`uint32_t` | Decode liefert numerisch denselben neutralen 64-Bit-Wert; keine `ProgramCatalogRevision`-Behauptung |
 | RP-05 | Schema-4-Golden mit hohem 64-Bit-Wert | Encode/Decode ist verlustfrei; kein Cast, keine Trunkierung |
-| RP-06 | Roundtrip aller vier bekannten Schemas mit ihren bestehenden optionalen Feldern | Dokument, Source-Kind, Provenienz und Recoverydaten bleiben erhalten |
+| RP-06 | Legacy decode -> kanonischer In-Memory-Snapshot -> Schema-4 encode -> Schema-4 decode | semantische Gleichheit der unterstuetzten Felder; kein Schema-1/2/3-Writer und Legacy-High-Water bleibt `Unknown` |
+| RP-06b | Schema-4 encode -> Schema-4 decode im eigenen Wireformat | Dokument, Source-Kind, neutrale Provenienz, `commandIdHighWater` und Recoverydaten bleiben erhalten |
 | RP-07 | unbekanntes Schema 5, abgeschnittenes Feld, Trailing Bytes, falsche Referenz/Epoch | bestehender Loadpfad bleibt fail-closed; kein Run und kein Allocator wird freigegeben |
-| RP-08 | Current-, Fallback- und `NoActiveRun`-Recovery mit Legacy und Schema 4 | bestehende Recoveryklassifikation bleibt gleich; Legacyprovenienz wird nicht als Katalogrevision verwendet |
-| ID-01 | leerer gueltiger Persistenzzustand | Allocator initialisiert mit High Water 0; erste ID ist 1 |
-| ID-02 | gueltiger Snapshot mit unsortiertem eligible ID-Fenster | groesstes nichtnulles ID ist Basis; naechste Ausgabe ist exakt `max + 1` |
-| ID-03 | `NoActiveRun` nach vorherigem owning Run-Commit | bestehende IDs bleiben Basis; keine Wiederverwendung einer bereits persistierten ID |
-| ID-04 | `ReadFailed`, unbekanntes Schema, Foreign Epoch, invalid/dupliziertes Fenster oder unklare Persistenz | typisiertes `Unavailable`/fail-closed; kein Request und kein Run wird erzeugt |
-| ID-05 | High Water `UINT64_MAX` | typisiertes `Overflow`; kein Wraparound und keine ID 0 |
-| ID-06 | zwei neue Requests ueber denselben Application-Aufrufpfad | verschiedene fortlaufende IDs; `UiRequestId.value == CommandEnvelope::id` je Request |
-| ID-07 | Touch und Web als zwei Quellen | beide verwenden denselben Allocator; keine Quellenprioritaet, keine getrennten Zaehler |
-| ID-08 | unbestaetigtes bestaetigungspflichtiges Request und Confirmation-Replay | erste Entscheidung und Replay behalten exakt dieselbe Command-ID und denselben vorbereiteten Request; kein zweiter Allocatoraufruf |
-| ID-09 | Pre-Apply-Abbruch einer reservierten ID, danach neue Anfrage im selben Boot | neue Anfrage recycelt die ID nicht |
+| RP-08 | Current-, Fallback- und `NoActiveRun`-Recovery mit Legacy und Schema 4 | bestehende Recoveryklassifikation bleibt gleich; High Water kommt nur aus dem committed Head, nie aus dem aelteren Fallbackfenster |
+| ID-01 | frischer Schema-4-Identitaetsraum mit leerem `NoActiveRun` | expliziter High Water 0; erste ID ist 1 |
+| ID-02 | Legacy-Historie mit frueher hoeherer ID, die aus dem 32er-Fenster verdraengt wurde | alter Head ohne High Water wird als `Unknown` behandelt; kein Start/Command in derselben Epoche statt unsicherer Wiederverwendung |
+| ID-03 | mehr als 32 erfolgreiche eligible Commands und Neustart | aktueller committed High Water bleibt groesser als alle zuvor committed IDs; keine Wiederverwendung der verdraengten ID |
+| ID-04 | gueltiger Schema-4-Head mit `NoActiveRun` nach vorherigem owning Run-Commit | High Water bleibt erhalten; neue ID ist exakt High Water + 1 |
+| ID-05 | Current unbrauchbar, aelterer Fallback formal gueltig | Allocator springt nicht auf das Fallbackfenster zurueck; nur committed Head-HWM oder `Unavailable`, keine neue ID aus dem Fallback |
+| ID-06 | `ReadFailed`, unbekanntes Schema, Foreign Epoch, Legacy-High-Water-Unknown, fehlender/inkonsistenter Head oder unklare Persistenz | typisiertes `Unavailable`/fail-closed; kein Request und kein Run wird erzeugt |
+| ID-07 | High Water `UINT64_MAX` | typisiertes `Overflow`; kein Wraparound und keine ID 0 |
+| ID-08 | zwei neue Requests ueber denselben Application-Aufrufpfad | verschiedene fortlaufende IDs; `UiRequestId.value == CommandEnvelope::id` je Request |
+| ID-09 | Touch und Web als zwei Quellen | beide verwenden denselben Allocator; keine Quellenprioritaet, keine getrennten Zaehler |
+| ID-10 | unbestaetigtes bestaetigungspflichtiges Request und Confirmation-Replay | erste Entscheidung und Replay behalten exakt dieselbe Command-ID und denselben vorbereiteten Request; kein zweiter Allocatoraufruf |
+| ID-11 | Pre-Apply-Abbruch einer reservierten ID, danach neue Anfrage im selben Boot | neue Anfrage recycelt die ID nicht |
 | RUN-01 | `StartProgram` | UI liefert keine Identitaet; Application erzeugt Command-ID und `e<epoch>-c<id>` und ruft bestehenden Startpfad auf |
 | RUN-02 | `StartManualHolding` | nur vorhandene Manual-Holding-Werte kommen vom UI; Application erzeugt `runId`; owning Vertrag bleibt ManualHolding |
 | RUN-03 | `AbortAndCool` mit neuem Cooling-Run | Cooling-Payload enthaelt UI-seitig keine ID; Application verwendet die Stop-Command-ID als `StartCommandId` |
@@ -526,6 +651,7 @@ beobachtbar nachzuweisen:
 | RUN-05 | Stop/Completion ohne neuen Cooling-Run | keine Run-ID-Reservierung und kein Cooling-Plan |
 | RUN-06 | alle vier Pfade mit maximalen Epoch-/ID-Dezimalwerten | Run-ID bleibt innerhalb 48 Bytes; ungueltige Basis/Laenge wird unavailable |
 | RUN-07 | spaetere Confirmation oder Replay eines Cooling-Requests | dieselbe Command-ID und derselbe vorbereitete Cooling-`runId`; keine zweite Nebenwirkung |
+| RUN-08 | neuer Programmstart nach Neustart mit vorherigem Run `e<epoch>-c<id>` und zwischenzeitlich verdraengtem Replayfenster | committed Head-HWM liefert `id + 1`; der neue Run ist `e<epoch>-c<id+1>` und der alte Run-Identifier wird nicht wieder ausgegeben |
 | OWN-01 | Startentscheid und anschliessender Apply | `decide*` bleibt reine Entscheidung; owning Persistenz geht ausschliesslich ueber den vorhandenen Application-/Orchestratorpfad |
 | OWN-02 | Persistenzfehler nach Proposed/Startvorbereitung | kein RAM-/Run-Apply und keine neue Aktorfreigabe; Identitaetsreservierung wird nicht als ausgefuehrte Mutation dargestellt |
 | OWN-03 | statische Scopepruefung | kein neuer Dispatcher, Command-Bus, Persistence-Coordinator, Recovery-/Safety-/Lifecyclepfad oder UI-/Renderer-Scope |
