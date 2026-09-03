@@ -17,8 +17,8 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
-    PLAN_REVISION=F1_F10_PLAN_FINDINGS
-    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
+    PLAN_REVISION=F1_F10_REST_FINDINGS
+    SUPERSEDES_PLAN_COMMIT=d8a0a70983a6641e1edf27be08d655572164d995d
     PREDECESSOR_ISSUE=25
     PREDECESSOR_PR=142
     PREDECESSOR_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f
@@ -46,8 +46,9 @@ Vor diesem Plan-Commit wurden live geprüft:
   ISSUE25_STATUS=CLOSED_COMPLETED-Eintrag der Roadmap für F1 korrekt und
   bleibt unverändert;
 - der revidierte Plan basiert auf dem bisherigen Plan-Commit
-  SUPERSEDES_PLAN_COMMIT; der Branch enthält davor genau den Roadmap-Sync und
-  den ursprünglichen Plan, aber keine Implementation;
+  SUPERSEDES_PLAN_COMMIT; der Branch enthält davor den Roadmap-Sync, den
+  ursprünglichen Plan und die bisherigen Planrevisionen, aber keine
+  Implementation;
 - PR #143 ist als Draft angelegt und zielt auf
   integration/r1-development;
 - der neueste veröffentlichte SESSION HANDOVER des Vorgänger-PRs nennt
@@ -60,16 +61,17 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=2fbe85f41c2461575331c4c3afed73a447302d43
-    CONTEXT_PLAN_SHA=2fbe85f41c2461575331c4c3afed73a447302d43
+    CONTEXT_HEAD_SHA=d8a0a70983a6641e1edf27be08d655572164d995d
+    CONTEXT_PLAN_SHA=d8a0a70983a6641e1edf27be08d655572164d995d
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=Issue25 owner close, F1-F10 Issue26 plan finding corrections
+    CONTEXT_DELTA=F1-F10 Issue26 rest corrections after Full Review
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
 ursprüngliche vollständige Plan war der zweite Commit
-c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; die vorige F1/F2-Revision war
-2fbe85f41c2461575331c4c3afed73a447302d43. Diese F1-F10-Korrektur ist eine
+c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; darauf folgten die F1/F2-Revision
+2fbe85f41c2461575331c4c3afed73a447302d43 und die vorherige F1-F10-Revision
+d8a0a70983a6641e1edf27be08d655572164d995d. Diese Restkorrektur ist eine
 weitere versionierte Planrevision. Da Issue #25 live geschlossen ist, bleibt
 der Roadmap-Eintrag unverändert. Bis zu einer ausdrücklichen Freigabe der
 exakten revidierten PLAN_COMMIT bleibt die Implementation NOT_STARTED.
@@ -352,12 +354,14 @@ ApplicationLifecycleState explizit mit:
     FermentationUiApplicationSource {
         ApplicationLifecycleState lifecycleState;
         PresentationState presentation;
-        canonical service source;
     }
 
 FermentationApplication::lifecycleState() wird unverändert in diese Quelle
-übergeben. Ein boolesches ready-Feld, eine Faultdarstellung oder eine andere
-indirekte UI-Ableitung ist keine Eingabe für die Home-Projektion. Die
+übergeben. `FermentationUiProjectionInput` führt daneben unverändert die
+separate `FermentationUiServiceSource service`; Serviceavailability wird nicht
+in `FermentationUiApplicationSource` dupliziert. Ein boolesches ready-Feld,
+eine Faultdarstellung oder eine andere indirekte UI-Ableitung ist keine
+Eingabe für die Home-Projektion. Die
 ApplicationStatusView darf ready höchstens als exakt abgeleitete
 Darstellung von lifecycleState == Ready führen; die Projektionsentscheidung
 verwendet den Enumwert selbst.
@@ -521,13 +525,16 @@ ProcessKind::ManualHolding; der aktive Lauf bleibt unveränderlich.
 Die Produktanforderung eines manuellen Zeit-/Temperaturlaufs ist im aktuellen
 Baseline-Code von #26 dagegen nicht durch einen eigenen vollständigen
 CommandKind-, Decide- und Application-Persistenzvertrag abgedeckt.
-Der Plan kennzeichnet diesen Unterschied als
-MANUAL_TIME_TEMPERATURE_OWNER_CONTRACT=BLOCKED_PREDECESSOR. #26 darf keinen
-zweiten manuellen Modus simuliert als funktionsfähig darstellen. Die lokale
-Auswahl zeigt ihn typisiert als Unavailable mit dem Grund
-OWNER_CONTRACT_MISSING; die Umsetzung beschränkt sich auf den vorhandenen
-manuellen Haltebetrieb und legt keinen neuen Fach-, Safety- oder
-Persistenzpfad an.
+Der Plan kennzeichnet dies ausdrücklich als
+MANUAL_TIME_TEMPERATURE_OWNER_CONTRACT=OPEN_OWNER_DECISION und
+UNOWNED_R1_GAP, nicht als bereits vorhandenen Vorgänger- oder Ownerpfad.
+Als Ownerentscheidung bleiben genau zwei Optionen sichtbar: (1) ein eigener
+owning Fachscope wird vor produktiver R1-Fertigstellung eingeplant oder (2)
+die Produktanforderung wird ausdrücklich aus R1 verschoben. Bis dahin zeigt
+#26 diesen zweiten manuellen Modus typisiert als Unavailable mit dem Grund
+OWNER_CONTRACT_MISSING und verbucht ihn nicht als R1-erledigt. Die Umsetzung
+beschränkt sich auf den vorhandenen manuellen Haltebetrieb und legt keinen
+neuen Fach-, Safety- oder Persistenzpfad an.
 
 ### 7.2 Bestehende Commandpfade
 
@@ -551,12 +558,21 @@ tatsächlichen Application-Handoff und vom Persistenz-/Apply-Ergebnis:
 | Konfigurations-/Rezeptcommit | bestehendes Preview-/ConfigurationService-Validation- und Confirmationmodell | bestehender ConfigurationService-Commitpfad |
 
 Eine decide*-Funktion erzeugt ausschließlich eine kanonische Entscheidung.
-Insbesondere ist CommandStatus::Proposed beziehungsweise
-DecisionStatus::Proposed nur DecisionOnly und niemals ein Apply- oder
-Persistenznachweis. Erst das passende
-TemperatureControlApplicationOrchestrator-Handoff darf ein tatsächliches
-RunPersistenceResultStatus-Ergebnis mit OwningOutcome liefern. Die
-Post-Commit-/Lifecycle-Handoffs bleiben vollständig im Orchestrator.
+Der bestehende `fromCommandStatus`-Vertrag aus #25 ist dafür in #26 als
+Reuse-Punkt zu korrigieren: Die Phase wird nach dem tatsächlich ausgeführten
+Pfad bestimmt, nicht nach dem Statusnamen. Jede Rückgabe eines reinen
+decide*-Pfads ist `FermentationUiCommandPhase::DecisionOnly`, einschließlich
+`NotConfirmed`, `StaleState`, `InvalidInput`, `SafetyRejected`,
+`NotAllowedInState`, `ContextMissing`, `CapacityReached`, `NoChange`,
+`AlreadyProcessed`, `Proposed` und weiterer `CommandStatus`-Werte. Auch eine
+akzeptierte oder abgelehnte Entscheidung ist damit noch kein Apply- oder
+Persistenznachweis. Ein `AlreadyProcessed` aus einer reinen Entscheidung ist
+von einem gleichnamigen Ergebnis des owning Persistenzpfads zu unterscheiden.
+Ein `OwningOutcome` darf erst die Rückgabe des tatsächlich owning
+Apply-/Persistenz-/Commitpfads markieren; ein etwaiges `Applied` wird daher
+nicht über den reinen Decide-Adapter vorweggenommen. Es entsteht keine zweite
+Ergebnisfamilie. Die Post-Commit-/Lifecycle-Handoffs bleiben vollständig im
+zuständigen bestehenden Owner.
 
 ### 7.2.1 Gemeinsamer ProductInsertedConfirmed-UI-Contract
 
@@ -583,13 +599,14 @@ Entscheidung und führt keinen neuen FSM-Status ein.
 Bei Abweichung verwendet der Guard das bestehende gemeinsame
 FermentationUiCommandResult mit
 DeviceUiCommandOutcomeCategory::Rejected, dem bereits definierten
-CommandStatus::StaleState als Detail und der bereits definierten
-FermentationUiCommandPhase::DecisionOnly. Dafür wird ein kleiner
-fromAppStaleGuard-Bridgehelfer mit dem bestehenden Resultvertrag verwendet,
-damit die normale fromCommandStatus-Abbildung den Guard nicht fälschlich als
-OwningOutcome markiert. Er erfindet keinen DecisionStatus::Stale und ruft
-weder decideProcessTransition noch den Orchestrator-Applypfad mit einer
-mutierenden Entscheidung auf.
+CommandStatus::StaleState als Detail und der korrigierten
+FermentationUiCommandPhase::DecisionOnly. Der bestehende
+fromCommandStatus-Adapter wird dafür mit seinem Pfadvertrag wiederverwendet;
+er erfindet keinen `DecisionStatus::Stale` und ruft weder
+decideProcessTransition noch den Orchestrator-Applypfad mit einer mutierenden
+Entscheidung auf. Der reine app-owned Revisionsvergleich ist hier nur ein
+enger Concurrency-Guard für den nicht-envelope-basierten Übergang, kein
+Ersatz für die kanonische Entscheidung.
 
 Bei passender Revision erzeugt er ausschließlich die bestehende
 TransitionRequest mit ProcessEvent::ProductInsertedConfirmed und ruft
@@ -597,15 +614,16 @@ decideProcessTransition auf. Das kanonische
 TransitionDecision::status wird unverändert in das gemeinsame
 FermentationUiCommandResult übernommen, indem dessen bestehende
 Detail-Variante additiv um den bereits vorhandenen Typ DecisionStatus
-ergänzt wird, etwa über einen fromTransitionDecision-Bridgehelfer. Für jeden
-nicht-proposed FSM-Status
-(NoTransition, Rejected, InvalidInput oder TimeWentBackwards) bleibt die
-Phase DecisionOnly und TemperatureControlApplicationOrchestrator wird nicht
-aufgerufen. Ein DecisionStatus::Proposed wird ebenfalls als DecisionOnly in
-den Trace übernommen; erst danach darf
-TemperatureControlApplicationOrchestrator::persistTransition aufgerufen
-werden. Dessen RunPersistenceResultStatus wird über denselben bestehenden
-FermentationUiCommandPhase-Wert als OwningOutcome aufgezeichnet.
+ergänzt wird, etwa über einen fromTransitionDecision-Bridgehelfer. Jeder
+FSM-Entscheidungsstatus bleibt auf diesem reinen Decide-Pfad
+`DecisionOnly`, unabhängig davon, ob er `NoTransition`, `Rejected`,
+`InvalidInput`, `TimeWentBackwards`, `NotConfirmed`, `SafetyRejected`,
+`NotAllowedInState` oder `Proposed` lautet. Jeder nicht-proposed FSM-Status
+beendet den Pfad ohne Aufruf von
+TemperatureControlApplicationOrchestrator. Erst ein `Proposed` darf an
+TemperatureControlApplicationOrchestrator::persistTransition übergeben
+werden; ausschließlich dessen tatsächliches RunPersistenceResultStatus-
+Ergebnis wird als `OwningOutcome` aufgezeichnet.
 
 Ein Replay desselben UI-Contracts nach dem erfolgreichen Übergang verwendet
 die bereits verbrauchte erwartete Revision und wird vor einer zweiten
@@ -628,6 +646,13 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
   bei passender Revision folgt trotzdem immer zuerst
   decideProcessTransition. Der Guard darf keinen kanonischen
   DecisionStatus simulieren oder die FSM-Entscheidung ersetzen.
+- `fromCommandStatus` liefert für jeden reinen Decide-Aufruf
+  `FermentationUiCommandPhase::DecisionOnly`, nicht nur für
+  `CommandStatus::Proposed`. Das gilt mindestens für
+  `NotConfirmed`, `StaleState`, `InvalidInput`, `SafetyRejected`,
+  `NotAllowedInState`, `ContextMissing`, `CapacityReached`, `NoChange`,
+  `AlreadyProcessed` und `Proposed`; erst der jeweilige bestehende owning
+  Apply-/Persistenz-/Commitadapter darf `OwningOutcome` liefern.
 - Nur ein kanonisches NotConfirmed beziehungsweise
   ReadyForConfirmation erzeugt ConfirmationRequired.
 - StaleState, InvalidInput, SafetyRejected, NotAllowedInState,
@@ -652,62 +677,143 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
   Fach-/Konfigurationsvertrag und wird nicht als allgemeiner Dialogmotor
   dupliziert.
 
-### 7.4 Programmschnappschuss
+### 7.4 Programmschnappschuss und next-run-only-Kandidat
 
 Die Rezeptliste und Startzusammenfassung lesen die aktuelle kanonische
-Programmliste. Die UI-Intentform trägt nur Programm-ID, Lauf-ID und
-ausgewählte fachlich erlaubte Optionen. Die App löst daraus am
-Anwendungsrand den aktuellen Programmdatensatz und die gültige
-Quellrevision auf.
+Programmliste. Dafür wird ein kleiner app-owned, rendererunabhängiger
+Startkandidatenvertrag verwendet:
 
-Änderungen auf der Startzusammenfassung:
+    struct FermentationUiStartCandidate {
+        std::string programId;
+        ProgramCatalogRevision expectedProgramCatalogRevision;
+        std::optional<double> targetTemperatureCelsius;
+        std::optional<std::uint32_t> fermentationDurationMinutes;
+        std::optional<bool> preheatEnabled;
+        std::optional<RunSensorMode> sensorMode;
+        std::optional<CompletionMode> completionMode;
+        std::optional<double> coolingTargetCelsius;
+        std::optional<std::uint32_t> holdDurationMinutes;
+    };
 
-- Zieltemperatur, Dauer, Vorheizen, Sensorbetrieb, Abschluss- und Kühlziel
-  werden als Kennzeichnung für den nächsten Lauf dargestellt;
-- Zurücksetzen verwirft nur den flüchtigen Kandidaten;
-- Start erzeugt über den bestehenden Pfad den unveränderlichen
-  Programmschnappschuss;
-- Bearbeiten speichert dauerhaft nur über ConfigurationPreview und
-  bestätigten ConfigurationService-Commit;
-- eine laufende Rezeptrevision und ein aktiver Run-Snapshot werden niemals
-  durch die Rezeptseite verändert;
-- nach einer konkurrierenden Änderung wird die bestehende Revision als
-  Konflikt/Stale angezeigt, nicht still überschrieben.
+Die Felder sind ausschließlich die bereits erlaubten next-run-only-
+Änderungen: Zieltemperatur, Fermentationsdauer, Vorheizen, Sensorbetrieb,
+Abschlussverhalten sowie Kühlziel und die dazu bereits erlaubte
+Abschlussdauer. Es gibt kein frei geliefertes ProgramDocument, kein
+generisches Patch-/Property-/Formularmodell und keine zweite Programmlogik.
+Die bestehende FermentationUiStartProgramIntent wird dafür auf diesen kleinen
+Kandidateninhalt erweitert beziehungsweise abgebildet; ein Lauf-ID-Wert wird
+weiterhin an der bestehenden App-/Startgrenze erzeugt oder aus dem bestehenden
+Vertrag übernommen, nicht als freie Programmdokumenteingabe aus der UI
+akzeptiert.
+
+Der owning Ablauf ist strikt:
+
+1. Die UI trägt Programm-ID, echte
+   `ProgramCatalogRevision` und die expliziten Overrides.
+2. Die App liest das Programm aus dem aktuellen
+   `RuntimeConfigurationSnapshot` auf.
+3. Die App vergleicht `expectedProgramCatalogRevision` mit
+   `RuntimeConfigurationSnapshot::programCatalogRevision()`; eine Abweichung
+   liefert das bestehende typisierte Stale-/Konfliktergebnis und mutiert nichts.
+4. Die Overrides werden nur auf einen flüchtigen Run-Kandidaten angewendet;
+   der aktive `ProgramCatalog` bleibt unverändert.
+5. Der vollständige Kandidat durchläuft `validateProgram` und die bestehende
+   ProgramStart-Validierung mit ihren vorhandenen Sensor-, Safety- und
+   Laufregeln. Ungültige Werte verwenden deren bestehendes typisiertes
+   InvalidInput-/Sperrresultat.
+6. Erst ein gültiger Kandidat wird am bestehenden Start-/Orchestratorpfad in
+   den unveränderlichen `RunProgramSnapshot` überführt.
+7. Der tatsächliche Command bleibt bis zum owning
+   `TemperatureControlApplicationOrchestrator`-Apply-/Persistenzpfad
+   `DecisionOnly`; der Katalog wird durch diesen Start nicht geschrieben.
+
+Zurücksetzen verwirft nur den flüchtigen Kandidaten. Eine gültige Auswahl
+führt von Programm wählen deterministisch zur Startzusammenfassung; ohne
+explizite Auswahl wird kein letzter oder erfundener Datensatz verwendet.
+
+Die Provenienzgrenze ist unabhängig von der Stale-Prüfung ausdrücklich offen:
+
+    PROGRAM_SOURCE_PROVENANCE=UNOWNED_R1_GAP
+    PROGRAM_SOURCE_PROVENANCE_DECISION=OPEN_OWNER_DECISION
+
+`RuntimeConfigurationSnapshot::programCatalogRevision()` ist die starke
+verlustfreie 64-Bit-`ProgramCatalogRevision` für lokale Stale-Grenzen.
+`RunProgramSnapshot::sourceProgramRevision` ist dagegen im Baseline-Code ein
+separater 32-Bit-Wert, und `ProgramCatalog` besitzt keine per-program-
+Revision. #26 darf die Katalogrevision deshalb weder casten noch truncieren
+und nicht durch `1`, Schema-Version, UI-Refreshrevision oder einen anderen
+Surrogatwert als `sourceProgramRevision` eintragen. Vor der Umsetzung muss
+entweder ein bestehender kanonischer Vertrag nachgewiesen werden, der die
+Herkunft verlustfrei bindet, oder der Startpfad bleibt bis zu einer
+vorgelagerten Ownerentscheidung mit `SOURCE_PROVENANCE_UNRESOLVED` typisiert
+blockiert. Eine Änderung des persistierten Run-Vertrags oder eine neue
+per-program-Revision gehört nicht still in #26. Die lokale Start- und
+Bearbeitungsstaleness verwendet davon unabhängig immer die echte
+`ProgramCatalogRevision`.
 
 ### 7.4.1 Vollständige lokale Programmverwaltung
 
-Die Programmliste übernimmt die Reihenfolge des kanonischen ProgramCatalog:
-die vier Standardprogramme stehen vor den Benutzerprogrammen. Die
-Factory-Vorlage und ihre resettable-/builtIn-Marker bleiben von jeder
-Benutzeraktion getrennt. Ein Standardprogramm wird nicht direkt bearbeitet;
-die lokale Aktion verwendet nur den bestehenden Kopierpfad und erzeugt
-daraus einen Benutzerkandidaten. Die FactoryCatalog-Quelle wird nie durch
-die UI mutiert.
+Die Programmliste übernimmt die Reihenfolge des kanonischen `ProgramCatalog`:
+die vier Standardprogramme stehen vor den Benutzerprogrammen. Die vier
+Standardprogramme im aktiven Katalog sind gespeicherte, bearbeitbare
+Arbeitskopien. Ein Editieren eines Standardprogramms ändert diese Arbeitskopie
+über den bestehenden ConfigurationPreview-/ConfigurationService-Pfad; es
+wird nicht zwangsweise in einen Benutzer-Copy-Pfad umgeleitet. Die
+unveränderliche Firmware-Factory-Vorlage bleibt davon getrennt und wird durch
+Bearbeiten niemals geändert.
 
 Die lokalen Pfade sind:
 
-- Bearbeiten öffnet einen flüchtigen ProgramDocument-Kandidaten. Ein
-  dauerhafter Commit läuft ausschließlich über den bestehenden
-  ConfigurationPreview-/ConfigurationService-Pfad;
-- Kopieren funktioniert für Standard- und Benutzerprogramme und erzeugt
-  eine neue Benutzer-ID im bestehenden Kandidaten-/Configvertrag;
+- Bearbeiten öffnet für Standard- und Benutzerprogramme einen flüchtigen
+  ProgramDocument-Kandidaten. Der dauerhafte Commit läuft ausschließlich über
+  den bestehenden ConfigurationPreview-/ConfigurationService-Pfad;
+- Kopieren ist für Standard- und Benutzerprogramme ein eigener
+  Benutzer-Copy-Pfad und verwendet den kleinen deterministischen
+  app-owned ID-Allocator aus Abschnitt 7.4.2;
+- Zurücksetzen eines Standardprogramms ersetzt dessen gespeicherte
+  Arbeitskopie über den bestehenden Configuration-/Factory-Resetpfad durch
+  die unveränderliche Factory-Vorlage;
 - Neu erzeugt einen leeren Benutzerentwurf. Solange Name, Werte oder
   Programmvalidierung nicht den owning Vertrag erfüllen, bleibt der Entwurf
   sichtbar, aber als nicht startbereit mit typisiertem Sperrgrund gesperrt;
 - Löschen verwendet die bestehende zweistufige Bestätigung. Ein aktuell
   verwendetes oder laufendes Programm ist als nicht löschbar markiert und
   erzeugt keinen Commit;
+- „Aus aktiver Liste löschen“ darf bei einem der vier reservierten
+  Factory-Einträge die Factory-ID oder den Eintrag nicht physisch aus dem
+  `ProgramCatalog` entfernen. Die bestehende `installed`-/`userDeletable`-
+  Semantik bestimmt die zulässige Deinstallation beziehungsweise Sperre;
 - spätere Änderung oder Löschung einer Quelle verändert nie den aktiven
-  RunProgramSnapshot;
-- bei Katalog-/Programmrevision zwischen Lesen und Commit liefert der
+  `RunProgramSnapshot`;
+- bei Katalogrevision zwischen Lesen und Commit liefert der
   ConfigurationService-/Previewpfad einen typisierten Konflikt, insbesondere
   StateChanged, PreviewSuperseded oder PreviewNotFound, statt still zu
   überschreiben.
 
-Die UI erfindet weder ID-, Validierungs-, Reserved-Factory- noch
-Löschregeln. Ein Factory-Reset bleibt der bestehende owning
-ConfigurationRecoveryService-/ConfigurationService-Pfad; die
-Benutzeraktion darf keine Factory-Vorlage direkt mutieren.
+Die UI erfindet weder Validierungs-, Reserved-Factory- noch Löschregeln. Die
+Factory-Vorlage bleibt von Benutzeraktionen getrennt; es entsteht keine neue
+Factory- oder Programmpersistenz.
+
+### 7.4.2 Kleine deterministische Benutzerprogramm-ID
+
+Für Kopieren und Neu plant #26 eine einzige kleine app-owned Hilfsfunktion,
+beispielsweise `allocateNextUserProgramId(const ProgramCatalog&)`. Ihre
+Eingabe ist der aktuelle kanonische Katalog beziehungsweise die daraus
+aufgelöste Menge der Benutzer-IDs; ihre Ausgabe ist genau eine katalogweit
+freie, nach dem bestehenden ID-Validator gültige Benutzer-ID. Die
+Kandidatenfolge ist deterministisch: ein fester zulässiger Benutzerpräfix mit
+der kleinsten noch freien fortlaufenden Basis-36-Ordinalkennung wird gewählt;
+Factory-IDs bleiben reserviert. Der technische Wert ist kein editierbares
+UI-Feld.
+
+Eine belegte Kandidaten-ID wird niemals überschrieben. Kollision, ungültige
+Katalogbasis oder ausgeschöpfte Kapazität liefert ein typisiertes
+Unavailable-/Capacity-Ergebnis ohne Fallback. Zwischen Allokation und Commit
+gilt die erwartete echte `ProgramCatalogRevision`; eine geänderte Generation
+wird als Stale-/Konfliktergebnis abgelehnt. Die Persistenz bleibt vollständig
+im bestehenden ConfigurationPreview-/ConfigurationService-Pfad. Es gibt
+keine UUID-Bibliothek, globale ID-Registry, persistierten Zähler oder
+generischen ID-Service.
 
 ### 7.5 Minimale lokale Feld-Eingabeverträge
 
@@ -866,13 +972,17 @@ produktiven Credential- oder Hashvertrag. Der spätere Auth-/Webscope bleibt
 bei seinem owning Issue. SAFE_BOOT verwendet die PIN-UI nicht als normalen
 Servicezugang.
 
-Die lokale Schutzmatrix wird aus kanonischen Application-, Process- und
-Servicewerten projiziert:
+Die lokale Schutzmatrix wird aus kanonischen Application-, Process- und der
+separaten Servicequelle projiziert. Normaler PIN-Service ist nur nach dem
+exakten kanonischen Eintrittszustand erreichbar:
+`ApplicationLifecycleState::Ready + ProcessState::Standby + owning
+Servicefreigabe`. „Kein aktiver Lauf“ allein ist keine Freigabe.
 
 | kanonische Quelle | normaler PIN-Service | Status/Diagnose |
 |---|---|---|
-| ApplicationLifecycleState::Ready, kein aktiver Lauf, Serviceowner erlaubt | verfügbar nach PIN-Eingabe | verfügbar |
-| Initializing oder ApplicationLifecycleState::ServiceRequired | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
+| ApplicationLifecycleState::Ready + ProcessState::Standby + owning Servicefreigabe | verfügbar nach PIN-Eingabe | verfügbar |
+| ApplicationLifecycleState::Ready außerhalb ProcessState::Standby, einschließlich Completed | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
+| Initializing, Boot, Recovery oder ApplicationLifecycleState::ServiceRequired | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
 | aktiver Lauf inklusive ManualHolding | gesperrt/unavailable | verfügbar |
 | ProcessState::Fault | gesperrt/unavailable | verfügbar |
 | ProcessState::SafeBoot | gesperrt/unavailable | passive Diagnose/Recovery verfügbar |
@@ -916,7 +1026,7 @@ Die folgenden kanonischen Werte werden sichtbar projiziert:
 - RecoveryEvaluation und WaitingForTrustedTime;
 - CurrentRunRecovered;
 - RecoveryRejectedOrFailClosed;
-- FallbackSelectionRequired;
+- FallbackSelectionRequired als eigene Recovery-/Bootklassifikation;
 - SAFE_BOOT und RunPersistence-untrusted;
 - Completed nach Neustart.
 
@@ -928,15 +1038,22 @@ Die Anzeige darf dabei:
 - passive Diagnose anbieten;
 - Back/Home als reine Navigation ausführen.
 
-Semantische SAFE_BOOT-Ziele werden wie folgt behandelt:
+`FallbackSelectionRequired` ist kein SAFE_BOOT-Unterfall. `ResumeFallback`
+wird ausschließlich in der dafür kanonisch projizierten
+FallbackSelectionRequired-Recoveryansicht angeboten. Ein echter
+`ProcessState::SafeBoot` erhält daraus keine Fallback-Resume-Aktion und bleibt
+auf den reduzierten aktorfreien Diagnose-/Recoveryumfang begrenzt.
 
-| Ziel | #26-Darstellung |
+Semantische Ziele der beiden Ansichten werden getrennt behandelt:
+
+| kanonische Ansicht / Ziel | #26-Darstellung |
 |---|---|
-| passive Diagnose, Persistenz-/Recoverystatus | ausführbar als Read, wenn der bestehende Presentation-/Recoverypfad den Wert liefert |
-| bestehendes Fallback-Resume | ausführbar ausschließlich über FermentationApplication::resumeFallback und die bestehende Bestätigung, wenn FallbackSelectionRequired kanonisch anliegt |
-| PIN-Service und Aktortest | immer gesperrt/unavailable; kein Backendpfad |
-| Vollreset, Netzwerk-Recovery, Export | nur ausführbar, wenn beim Planabgleich ein bestehender owning Application-/Platform-Aufruf mit seinem Ergebnisvertrag nachgewiesen ist; im aktuellen Baseline-Code ist kein solcher SAFE_BOOT-UI-Pfad öffentlich nachgewiesen, daher zunächst typisiert Unavailable mit OWNER_PATH_MISSING |
-| Raw-Touch-Recovery, Kalibrierung, physische Trigger | außerhalb #26 und weiterhin #31/TBD_HARDWARE |
+| `SafeBoot`: passive Diagnose, Persistenz-/Recoverystatus | ausführbar als Read, wenn der bestehende Presentation-/Recoverypfad den Wert liefert |
+| `FallbackSelectionRequired`: bestehendes Fallback-Resume | ausführbar ausschließlich über `FermentationApplication::resumeFallback` und die bestehende Bestätigung |
+| `SafeBoot`: ResumeFallback | nicht angeboten; kein Fallback-Resume aus SAFE_BOOT |
+| beide Ansichten: PIN-Service und Aktortest | immer gesperrt/unavailable; kein Backendpfad |
+| beide Ansichten: Vollreset, Netzwerk-Recovery, Export | nur ausführbar, wenn ein bestehender owning Application-/Platform-Aufruf mit Ergebnisvertrag nachgewiesen ist; im aktuellen Baseline-Code ist kein solcher SAFE_BOOT-UI-Pfad öffentlich nachgewiesen, daher typisiert Unavailable mit `OWNER_PATH_MISSING` |
+| beide Ansichten: Raw-Touch-Recovery, Kalibrierung, physische Trigger | außerhalb #26 und weiterhin #31/TBD_HARDWARE |
 
 SAFE_BOOT darf nicht:
 
@@ -944,7 +1061,7 @@ SAFE_BOOT darf nicht:
 - ohne trusted UTC eine Dauer oder lokale Uhrzeit erfinden;
 - eine Aktorpermission oder ein Sensorvertrauen aus einer UI-Auswahl
   ableiten;
-- discardAsNoActiveRun für FallbackSelectionRequired wiederverwenden;
+- `discardAsNoActiveRun` für FallbackSelectionRequired wiederverwenden;
 - einen Aktortest oder normalen PIN-Service aus SAFE_BOOT anbieten;
 - durch Quittieren eine Fehlerursache oder Sperre beseitigen.
 
@@ -991,8 +1108,8 @@ device_platform_test_support.
 | lib/fermentation_app/src/fermentation_ui_models.hpp/.cpp | additive Home-Modi Waiting/Completed/Restricted sowie kleine Workspace-/Programmlisten-/Detailmodelle, ohne zweiten Domainzustand |
 | lib/fermentation_app/src/fermentation_ui_projector.hpp/.cpp | vollständige Home-/Recovery-/Message-/Temperatur-/Statusprojektion aus canonical Ownerwerten; keine Rohwertentscheidung |
 | lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen; kein direkter Owner- oder Persistenzaufruf |
-| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängiger ProductInsertedConfirmed-Intent mit erwarteter Zustandsrevision, Wiederverwendung von FermentationUiCommandPhase, DecisionStatus-/Stale-/Persistenzresultaten und Bridge über den bestehenden Application-Orchestrator; keine künstliche Envelope-/Idempotenzsemantik |
-| lib/fermentation_app/src/fermentation_ui_editing.hpp/.cpp | minimale NumericEditModel-/TextEditModel-Aktionen für Rezeptname, Notiz und Werte; nur flüchtige Kandidaten, keine Validierungs- oder Keyboardplattform |
+| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängige ProductInsertedConfirmed- und Startkandidatenverträge mit echter Katalogrevision, Wiederverwendung von FermentationUiCommandPhase und DecisionOnly-/OwningOutcome-Abbildung über die bestehenden Application-Handoffs; keine künstliche Envelope-/Idempotenzsemantik |
+| lib/fermentation_app/src/fermentation_ui_editing.hpp/.cpp | minimale NumericEditModel-/TextEditModel-Aktionen für Rezeptname, Notiz und Werte sowie deterministische freie Benutzerprogramm-ID-Allokation; nur flüchtige Kandidaten, keine Validierungs- oder Keyboardplattform |
 | lib/fermentation_app/src/fermentation_ui_text.hpp/.cpp | zusätzliche fermentation-owned TextKeys für Rezepte, Phasen, Aktionen, Status, Service, PIN, Feedback und Sperrgründe in DE/EN/ES |
 
 Die vorhandenen Ownerpfade werden als unveränderte Abhängigkeiten verwendet:
@@ -1003,9 +1120,12 @@ Programmkatalog und Configuration-Commit, sowie die bestehende
 Process-State-Machine-, Sensor-, Recovery- und Safetylogik. #26 plant keine
 Änderung dieser Ownerimplementierungen und keinen direkten Zugriff des
 Workspace auf den RunPersistenceCoordinator. Die konkrete Lücke für den
-manuellen Zeit-/Temperaturlauf sowie die fehlenden SAFE_BOOT-UI-Aufrufe bleibt
-als vorgelagerte Ownerlücke BLOCKED/Unavailable und wird nicht in #26
-aufgelöst.
+manuellen Zeit-/Temperaturlauf bleibt als `OPEN_OWNER_DECISION` /
+`UNOWNED_R1_GAP` und die fehlenden SAFE_BOOT-UI-Aufrufe bleiben als
+vorgelagerte Ownerlücke `OWNER_PATH_MISSING`/Unavailable; beides wird nicht in
+#26 aufgelöst. Insbesondere ist eine fehlende owning Grenze kein Anlass für
+eine offene Erlaubnis, Fach-, Safety- oder Persistenceimplementierungen zu
+ändern.
 
 ### 11.3 Deterministischer Testsupport
 
@@ -1098,12 +1218,12 @@ ausgeführter Fall bleibt NOT_RUN und ist kein PASS.
 | ID | Nachweis |
 |---|---|
 | SIM-26-01 | Home ohne expliziten Kandidaten zeigt genau vier Slots; Slot 0 öffnet Programm wählen, startet nicht das letzte Programm und erfindet keinen Datensatz |
-| SIM-26-02 | Lifecycle-/Recovery-/ProcessState-/decisionRequired-Priorität ergibt exakt Standby/Bereit, ActiveRun, Waiting, Completed, Restricted und Recovery; Unavailable bleibt technischer Fallback |
-| SIM-26-03 | Initializing zeigt Splash/kompakten nichtblockierenden Startstatus, Ready ohne Lauf zeigt Standby/Bereit und ServiceRequired wird ausschließlich als Restricted projiziert |
+| SIM-26-02 | Expliziter ApplicationLifecycleState hat Vorrang vor Recovery-, ProcessState- und der eng definierten offenen decisionRequired-Quelle: die Matrix ergibt deterministisch Standby/Bereit, ActiveRun, Waiting, Completed, Restricted und Recovery; Unavailable bleibt technischer Fallback |
+| SIM-26-03 | Initializing zeigt Splash/kompakten nichtblockierenden Startstatus, Ready plus Standby zeigt Standby/Bereit und ServiceRequired wird ausschließlich als Restricted projiziert; kein Modus wird aus ready oder Faulttext erraten |
 | SIM-26-04 | Headerflächen für Sprache, WLAN und Uhrzeit sind nicht überlappend; Sprache nutzt enthaltene Locale, WLAN den Statusindikator und Uhr die ClockViewInput ohne erfundene Lokalzeit |
 | SIM-26-05 | Home/Back-Hierarchie: erste Unterebene Home, tiefere Ebene Back, genau ein Segment pro Back, ExitRequirement verhindert stilles Verwerfen |
 | SIM-26-06 | Rezepte-Listen verwenden große Einträge und Pager; Standardprogramme stehen vor Benutzerprogrammen, ungültige Programme sind mit Grund gesperrt |
-| SIM-26-07 | Ohne Kandidat führt Programm wählen deterministisch zur Liste, ein gültiger Kandidat zur Startzusammenfassung und erst danach zu Vorheizen/Start |
+| SIM-26-07 | Ohne expliziten Kandidaten führt Programm wählen deterministisch zur Liste, eine Auswahl mit echter ProgramCatalogRevision zur Startzusammenfassung und erst danach zu Vorheizen/Start; kein letzter oder impliziter Datensatz wird gestartet |
 | SIM-26-08 | Vorheizen/Start verwendet den bestehenden ProgramStart-Pfad; Produkt eingesetzt verwendet den app-owned ProductInsertedConfirmed-Contract, decideProcessTransition und den TemperatureControlApplicationOrchestrator ohne zweite FSM |
 | SIM-26-09 | Aktiver Lauf zeigt Stop im ersten Slot, Rezepte im zweiten, Prozess-/Technikdetails und aktuelle Snapshotwerte; Stop bietet Ausschalten oder Kühlen |
 | SIM-26-10 | Abschluss zeigt OK/Details und optional Jetzt kühlen; Kühlen erzeugt nur über den bestehenden Completion-Pfad einen neuen manuellen Lauf |
@@ -1117,8 +1237,8 @@ ausgeführter Fall bleibt NOT_RUN und ist kein PASS.
 | SIM-26-18 | Lokale Servicelease läuft nach 10 Minuten Inaktivität ab, ohne absolute Maximaldauer; ExplicitSignOut, DeviceRestart und SafetyStateInvalidated sperren sie sofort |
 | SIM-26-19 | Web-5/15-Servicepolicy bleibt von Touch-10/ohne-Absolutlimit und normalem Weblogin getrennt |
 | SIM-26-20 | WaitingForTrustedTime bleibt RAM-only und actor-free; Current-Recovery zeigt keine erfundene Dauer oder Zeit und Fallback bleibt Auswahlangebot |
-| SIM-26-21 | FallbackSelectionRequired erlaubt nur die bestehende bestätigte ResumeFallback-Aktion; Back/Home und Quittieren mutieren weder Persistenz noch Recoveryangebot |
-| SIM-26-22 | SAFE_BOOT zeigt passive Diagnose/Recoveryhinweise; Fallback-Resume bleibt nur über den vorhandenen Application-Pfad ausführbar, fehlende Vollreset-/Netzwerk-/Exportpfade erscheinen als Unavailable, PIN-Service/Aktortest bleiben gesperrt |
+| SIM-26-21 | Die eigene FallbackSelectionRequired-Ansicht erlaubt nur die bestehende bestätigte ResumeFallback-Aktion; Back/Home und Quittieren mutieren weder Persistenz noch Recoveryangebot |
+| SIM-26-22 | Ein tatsächlicher SAFE_BOOT zeigt passive Diagnose/Recoveryhinweise ohne ResumeFallback; fehlende Vollreset-/Netzwerk-/Exportpfade erscheinen als Unavailable, PIN-Service/Aktortest bleiben gesperrt |
 | SIM-26-23 | Recovery, PIN-Erfolg, Headeraktion, WLANstatus, UI-Ruhe und Pressfeedback können nie ActuationInterlock::Allowed erzeugen |
 | SIM-26-24 | Vollständiger 320-x-240-Frame: Viewport, Header, Content, Footer, vier gleich breite Slots, Pagerbereich und Nichtüberlappung werden deterministisch geprüft |
 | SIM-26-25 | Splashrahmen ist proportional/zentriert modelliert, statisch fallbackfähig und ohne Asset-, Renderer- oder Framebufferimplementierung |
@@ -1147,16 +1267,31 @@ Weitere #26-Pfade werden deterministisch separat geprüft:
 | ID | Nachweis |
 |---|---|
 | SIM-26-37 | ManualHolding ist über Manueller Betrieb, ManualRunPlanRequest, decideManualStart und TemperatureControlApplicationOrchestrator::persistFreshStartCommand bedienbar; es wird kein direkter Aktorpfad erzeugt |
-| SIM-26-38 | Der in REQUIREMENTS.md genannte manuelle Zeit-/Temperaturlauf ist als OWNER_CONTRACT_MISSING/Unavailable sichtbar und wird nicht als funktionierender zweiter manueller Modus simuliert |
+| SIM-26-38 | ManualHolding ist owning bedienbar, der in REQUIREMENTS.md genannte manuelle Zeit-/Temperaturlauf bleibt als OPEN_OWNER_DECISION/UNOWNED_R1_GAP mit OWNER_CONTRACT_MISSING/Unavailable sichtbar und wird weder simuliert noch als R1-erledigt verbucht |
 | SIM-26-39 | NumericEditModel unterstützt Plus/Minus, direkte Ziffern, Dezimaltrennzeichen, Backspace, Clear, Cancel und Commit; Grenzen und Gültigkeit kommen ausschließlich vom owning Validator |
 | SIM-26-40 | TextEditModel unterstützt Zeichen-/Modusaktionen, Rückschritt, Löschen, Abbrechen und Übernehmen für Programmname und kurze Notiz; kein Keyboardframework wird benötigt |
-| SIM-26-41 | Bearbeiten verwendet flüchtige Kandidaten und ConfigurationPreview/ConfigurationService für den dauerhaften Commit; active RunProgramSnapshot bleibt unverändert |
-| SIM-26-42 | Standard- und Benutzerprogramm können kopiert werden; Neu erzeugt einen leeren, sichtbar nicht startbereiten Entwurf mit Sperrgrund; Factory-Vorlage bleibt getrennt |
-| SIM-26-43 | Löschen erfordert zwei Bestätigungen; ein aktuell verwendetes oder laufendes Programm ist nicht löschbar und erzeugt keinen Commit |
-| SIM-26-44 | Katalog-/Programmrevision zwischen Lesen und Commit ergibt StateChanged, PreviewSuperseded oder PreviewNotFound typisiert; kein stilles Überschreiben |
-| SIM-26-45 | PIN-Service ist nur bei Ready, keinem aktiven Lauf und kanonischer Servicefreigabe erreichbar; aktiver Lauf, Fault und SAFE_BOOT bleiben gesperrt, Status/Diagnose bleiben passiv erreichbar |
+| SIM-26-41 | Bearbeiten einer Standard-Arbeitskopie und eines Benutzerprogramms verwendet flüchtige Kandidaten und ConfigurationPreview/ConfigurationService für den dauerhaften Commit; active RunProgramSnapshot und unveränderliche Factory-Vorlage bleiben unverändert |
+| SIM-26-42 | Standard- und Benutzerprogramm können kopiert werden; Zurücksetzen ersetzt nur die Standard-Arbeitskopie durch die Factory-Vorlage; Neu erzeugt einen leeren, sichtbar nicht startbereiten Entwurf mit Sperrgrund; die vier reservierten Factory-Einträge bleiben im Katalog |
+| SIM-26-43 | Löschen erfordert zwei Bestätigungen; ein aktuell verwendetes oder laufendes Programm ist nicht löschbar und erzeugt keinen Commit; Standard-Deinstallation entfernt weder Factory-ID noch reservierten Eintrag physisch und nutzt installed/userDeletable |
+| SIM-26-44 | Echte ProgramCatalogRevision zwischen Lesen und Commit ergibt StateChanged, PreviewSuperseded oder PreviewNotFound typisiert; kein stilles Überschreiben und kein UI-Refresh-Surrogat |
+| SIM-26-45 | PIN-Service ist ausschließlich bei Ready + validiertem ProcessState::Standby + owning Servicefreigabe erreichbar; Completed, Boot, Recovery, ServiceRequired, aktiver Lauf, Fault und SAFE_BOOT bleiben gesperrt, Status/Diagnose bleiben passiv erreichbar |
 | SIM-26-46 | PIN-Accepted eröffnet nur die lokale ServiceSessionLease; keine Safety-/Aktorfreigabe und keine Veränderung von ActuationInterlock |
-| SIM-26-47 | SAFE_BOOT-Ziele werden einzeln als Read, bestehendes Fallback-Resume oder OWNER_PATH_MISSING/Unavailable nachgewiesen; Raw-Touch, Kalibrierung und physische Trigger bleiben außerhalb #26 |
+| SIM-26-47 | SAFE_BOOT und FallbackSelectionRequired werden getrennt nachgewiesen: SafeBoot bietet Read beziehungsweise OWNER_PATH_MISSING/Unavailable, aber kein ResumeFallback; nur FallbackSelectionRequired bietet den bestehenden Resume-Pfad; Raw-Touch, Kalibrierung und physische Trigger bleiben außerhalb #26 |
+
+Die Restkorrekturen erhalten zusätzlich folgende direkte, beobachtbare
+Nachweise:
+
+| ID | Nachweis |
+|---|---|
+| SIM-26-49 | Der korrigierte `fromCommandStatus`-Reusepfad weist `NotConfirmed`, `StaleState`, `InvalidInput`, `SafetyRejected`, `NotAllowedInState`, `ContextMissing`, `CapacityReached`, `NoChange`, `AlreadyProcessed` und `Proposed` aus einem reinen Decide-Aufruf sämtlich als `DecisionOnly` nach; kein Statusname wird als Apply missverstanden |
+| SIM-26-50 | ProductInsertedConfirmed mit stale expectedStateSequence liefert das gemeinsame `CommandStatus::StaleState` als `DecisionOnly`; passende Revision plus kanonisch abgelehnter `TransitionDecision::status` bleibt `DecisionOnly`; nur `Proposed` darf `persistTransition` erreichen und dessen Ergebnis erscheint getrennt als `OwningOutcome` |
+| SIM-26-51 | Ein Persistenzfehler nach `DecisionStatus::Proposed` lässt RAM-/Prozesszustand unverändert beziehungsweise fail-closed; ein Replay nach erfolgreichem Apply erzeugt keine zweite Nebenwirkung |
+| SIM-26-52 | Ein gültiger next-run-only-Kandidat löst Programm-ID und echte Katalogrevision aus dem aktuellen Snapshot auf, validiert die Overrides und erzeugt erst über den bestehenden Start-/Orchestratorpfad den Run-Snapshot; Quellprogramm und aktiver Katalog bleiben unverändert |
+| SIM-26-53 | Unveränderter Katalog akzeptiert gültige Overrides, geänderte `ProgramCatalogRevision` wird stale abgelehnt und ungültige Overrides verwenden das owning InvalidInput-/Sperrresultat; kein Cast oder Surrogat wird als `sourceProgramRevision` geschrieben, die offene Provenienzgrenze bleibt sichtbar |
+| SIM-26-54 | Die deterministische ID-Allokation für Kopieren/Neu liefert eine gültige freie Benutzer-ID ohne editierbares ID-Feld; Kollision, ungültige Katalogbasis oder Kapazitätsende liefern typisiertes Unavailable/Capacity ohne Überschreiben oder persistierten Zähler, und eine geänderte Kataloggeneration wird stale abgelehnt |
+| SIM-26-55 | NumericEditModel und TextEditModel decken alle vorgesehenen Plus/Minus-, Ziffern-/Dezimal-, Zeichen-/Modus-, Rückschritt-, Löschen-, Abbrechen- und Übernehmen-Aktionen ab; nur der owning Validator entscheidet Grenzen und Commit |
+| SIM-26-56 | Der secretsfreie PIN-Test-Seam projiziert Pending und RetryWait sowie Accepted/Rejected; normaler Servicezugang entsteht nur aus validiertem Standby, PIN-Erfolg verändert keine Safety-/Aktorfreigabe |
+| SIM-26-57 | ManualHolding durchläuft den bestehenden owning Startpfad; der fehlende Zeit-/Temperaturlauf zeigt die beiden OPEN_OWNER_DECISION-Optionen und bleibt unavailable; SafeBoot und FallbackSelectionRequired behalten ihre getrennten ausführbaren beziehungsweise unavailable Ziele |
 
 Zusätzlich werden die in docs/ACCEPTANCE_TESTS.md bereits geforderten
 zustands- und safetybezogenen Simulationen gezielt wiederverwendet:
@@ -1257,58 +1392,63 @@ Issue-spezifische technische Grenzen:
 3. Kein normaler Auth-/Credential-Backend und kein zweiter
    Application-/Persistence-/Safety-/Recoverypfad wird in #26 eingeführt.
 4. Der manuelle Zeit-/Temperaturlauf bleibt als
+   OPEN_OWNER_DECISION/UNOWNED_R1_GAP und
    OWNER_CONTRACT_MISSING/Unavailable vorgelagert; die fehlenden
    SAFE_BOOT-UI-Aufrufe bleiben OWNER_PATH_MISSING/Unavailable.
 5. Der bestehende Application-Orchestrator, ConfigurationService und
-   Recovery-/Safetyowner bleiben unveränderte Ownergrenzen.
+   Recovery-/Safetyowner bleiben unveränderte Ownergrenzen. Die offene
+   `sourceProgramRevision`-Provenienzbindung ist ebenfalls vorgelagert und
+   wird nicht durch Cast, Surrogat oder einen stillen Vertrag in #26 gelöst.
 
 Die allgemeine Workflow-, Review-, Ready-, Merge-, CI- und Handover-Governance
 wird nicht im Issue-Plan dupliziert; sie bleibt in den kanonischen
 AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
-## 16. Commit-, PR- und Handover-Vertrag
+## 16. Planprovenienz und PR-Referenzen
 
-Der PR enthält nach dieser Befundkorrektur genau vier eigene Commits:
+Die Planprovenienz dieses PRs besteht aus genau fünf eigenen Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
    c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9;
 3. vorige F1/F2-Planrevision
    2fbe85f41c2461575331c4c3afed73a447302d43;
-4. diese F1-F10-Planrevision mit exakter SHA nach dem Commit.
+4. vorherige F1-F10-Planrevision d8a0a70983a6641e1edf27be08d655572164d995d;
+5. diese F1-F10-Restkorrektur mit exakter SHA nach dem Commit.
 
-Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert. Der
-Draft-PR #143 führt für diese Planprovenienz die folgenden Felder:
+Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert. Für
+die Planprovenienz von Draft-PR #143 gelten die folgenden issue-spezifischen
+Referenzen:
 
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
-    PLAN_COMMIT=<exakte revidierte Commit-SHA>
-    PR_HEAD=<exakte revidierte Commit-SHA>
+    SUPERSEDES_PLAN_COMMIT=d8a0a70983a6641e1edf27be08d655572164d995d
+    PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
+    PR_HEAD=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_APPROVAL_REQUIRED=YES
     ACTUATOR_RELEASE=NO
 
-Für den Handover dieses PRs sind folgende issue-spezifischen Referenzen zu
-führen:
+Der aktuelle PR-HEAD und der aktuelle Plan-Commit werden nach dem Push mit
+ihren exakten SHAs in der PR-Provenienz und im gemäß
+docs/AGENT_WORKFLOW.md geführten Handover referenziert:
 
     ISSUE=26
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
-    HEAD=<PR-HEAD nach Planpush>
+    HEAD=<exakte PR-HEAD-SHA nach Planpush>
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
-    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
-    PLAN_COMMIT=<exakte revidierte Commit-SHA>
+    SUPERSEDES_PLAN_COMMIT=d8a0a70983a6641e1edf27be08d655572164d995d
+    PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
     ACTUATOR_RELEASE=NO
     OPEN_GATE=OWNER_APPROVAL_OF_EXACT_PLAN_COMMIT
-    NEXT_STEP=Owner prüft und gibt exakt PLAN_COMMIT frei; danach erst Umsetzung
 
-Der Handover referenziert für diese Planrevision ROADMAP_COMMIT,
-SUPERSEDES_PLAN_COMMIT, PLAN_COMMIT und HEAD sowie den Teststatus und die
-Issue-spezifischen offenen Grenzen. Das Handover-Format und die übrige
-Prozessgovernance stammen aus docs/AGENT_WORKFLOW.md.
+Die allgemeine Handover-Formatierung, Draft-/Ready-/Merge- und
+Issue-Schluss-Governance sowie die übrigen Workflowregeln bleiben ausschließlich
+in docs/AGENT_WORKFLOW.md und werden hier nicht als zweite Prozesswahrheit
+gepflegt.
 
 ## 17. Definition of Done für die spätere #26-Umsetzung
 
@@ -1324,13 +1464,32 @@ Prozessgovernance stammen aus docs/AGENT_WORKFLOW.md.
 - Rezepte, Startzusammenfassung, next-run-only-Werte, Stop-/Completion-/
   Message-/Recoveryaktionen und Status-/Service-Erweiterungen verwenden die
   bestehenden Fach-, Application- und ConfigurationServicepfade; Proposed
-  Entscheidungen sind nicht als ausgeführte Mutationen markiert.
+  sowie alle sonstigen reinen Decide-Ergebnisse sind nicht als ausgeführte
+  Mutationen markiert; der gemeinsame `fromCommandStatus`-Pfad weist sie als
+  `DecisionOnly` aus und erst owning Apply-/Persistenz-/Commitresultate als
+  `OwningOutcome`.
 - ProductInsertedConfirmed verwendet den app-owned Contract mit erwarteter
   Zustandsrevision, decideProcessTransition und ausschließlich
   TemperatureControlApplicationOrchestrator::persistTransition; der
   Workspace ruft keinen RunPersistenceCoordinator direkt auf.
+- Startänderungen tragen nur den kleinen next-run-only-Kandidaten mit
+  Programm-ID, echter ProgramCatalogRevision und erlaubten Overrides; der
+  aktive Katalog bleibt unverändert. Eine fehlende verlustfreie Bindung von
+  `sourceProgramRevision` bleibt als vorgelagerte
+  `OPEN_OWNER_DECISION`/`UNOWNED_R1_GAP` sichtbar.
+- Standardprogramme sind bearbeitbare Katalog-Arbeitskopien; Factory-Vorlage,
+  Zurücksetzen, Kopieren, Neu, Deinstallation und Löschung folgen den
+  bestehenden installed-/userDeletable- und ConfigurationService-Verträgen.
+  Kopieren/Neu verwenden eine deterministische freie Benutzer-ID ohne
+  Zählerpersistenz oder Registry.
 - der erste Wake-Touch führt keinen Command aus; reine Navigation und Reads
   mutieren nichts; ein aktiver Run-Snapshot bleibt unverändert.
+- Der normale PIN-Service ist ausschließlich an
+  Ready + validiertes ProcessState::Standby + owning Servicefreigabe gebunden;
+  SAFE_BOOT und FallbackSelectionRequired bleiben getrennte actor-free Pfade.
+- ManualHolding ist bedienbar; der manuelle Zeit-/Temperaturlauf bleibt bis zur
+  Ownerentscheidung als `UNOWNED_R1_GAP` unavailable und wird nicht als R1-
+  Funktion gezählt.
 - lokale Servicelease ist 10 Minuten inaktivitätsbegrenzt, ohne absolute
   R1-Maximaldauer, und wird bei Logout, Restart und Ownerinvalidierung
   verworfen; Websession bleibt getrennt.
