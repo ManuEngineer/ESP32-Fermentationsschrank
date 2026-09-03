@@ -16,8 +16,8 @@ Fermentations-Workspace aus Issue #26.
     BASE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
     ROADMAP_COMMIT=3ecf9ad9edc223c7af731600d54a857d5e2f8c9f
     PLAN_PATH=docs/tasks/issue-144-run-identity-neutral-provenance-plan.md
-    PLAN_REVISION=BLOCKER_CORRECTION_1
-    SUPERSEDES_PLAN_COMMIT=8cf02beb0d56dd84d3884867e935cbb69e84977e
+    PLAN_REVISION=BLOCKER_CORRECTION_2
+    SUPERSEDES_PLAN_COMMIT=c24789f2a7ff370f78ca3fa8abe66aac71463a9e
     PLAN_COMMIT=THIS_COMMIT
     IMPLEMENTATION=NOT_STARTED
     NATIVE_TESTS=NOT_RUN_PLANNING_ONLY
@@ -30,6 +30,14 @@ Fermentations-Workspace aus Issue #26.
     DOWNSTREAM_PR=143
     DOWNSTREAM_APPROVED_PLAN=aea6acb2e51147c6452d728a5a45840236ab1fdf
 
+    CONTEXT_BASELINE_BRANCH=main
+    CONTEXT_BASELINE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
+    CONTEXT_HEAD_SHA=e46e56a7ae4ba6c3453b835f1ce52a3e068b3e11
+    CONTEXT_PLAN_SHA=c24789f2a7ff370f78ca3fa8abe66aac71463a9e
+    CONTEXT_REFRESH_MODE=INCREMENTAL
+    CONTEXT_DELTA=Fix Verification: durable one-time epoch-handoff authorization and empty-store partial-load delegation
+    SOURCE_OF_TRUTH_CONFLICT=NONE
+
 Die aktuelle PR-Basis ist `main@e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`.
 PR #149 / Issue #148 hat die bereits reviewten PRs #142 und #146 von der
 frueheren Integrationsbasis unveraendert nach `main` uebernommen und `main`
@@ -39,7 +47,9 @@ keine Ancestry durch Rebase oder zusaetzlichen Mergecommit veraendert.
 
 Die Roadmap wurde in diesem PR als erster Commit auf Issue #144 als aktuellen
 fachlichen Pflichtvorgaenger und auf die Blockierung von #26 synchronisiert.
-Dieser aktuelle Planstand ist die neue versionierte Baseline-Provenienz.
+Dieser Korrekturstand behandelt die bisher nur RAM-seitige
+Handoff-Autorisierung als materiellen Persistenz-/Recoverybefund; die Roadmap-
+Reihenfolge bleibt unveraendert.
 
 Vor dieser Planerstellung wurden ausserdem live verifiziert:
 
@@ -201,19 +211,24 @@ einmaligen Handoff an derselben Application-Kompositionsgrenze:
 ```text
 ConfigurationRecoveryService::beginAuthorizedFactoryReset() /
 ConfigurationRecoveryService::boot()
-    -> FactoryResetCompleted mit neuem Runtime-StorageEpoch
+    -> persistenter Pending-Handoff-Zustand mit neuem Runtime-StorageEpoch
     -> FermentationApplication
-       -> application-owned AuthorizedRunEpochHandoffProof
-       -> RunPersistenceCoordinator::completeAuthorizedEpochHandoff(proof)
+       -> private Proof/Continuation aus kanonischer Configuration-Evidenz
+       -> bestehender RunPersistenceCoordinator: Slots validieren/schreiben
+       -> ConfigurationRecoveryService: Pending -> Committed persistieren
+       -> Coordinator: exakten Committed-Head schreiben
+       -> ConfigurationRecoveryService: Committed -> Consumed persistieren
        -> loadAndInitialize() / ReadyEmpty oder Ready
 ```
 
-`FactoryResetCompleted` ist dabei kein allgemeines `ForeignEpoch`-Ignore-
-Signal. Die Application uebergibt es nur fuer den gerade von der bestehenden
-`ConfigurationRecoveryService` abgeschlossenen autorisierten Reset; der
-Coordinator prueft zusaetzlich den exakt vorherigen Epochwert und den
-vollstaendigen alten Run-Recordgraphen. Dieser schmale Handoff ist kein neuer
-Resetdienst und keine zweite Recovery- oder Persistenzlogik.
+`FactoryResetCompleted` ist dabei nur der Configuration-Erfolgsausgang, der
+den persistierten `Pending`-Zustand bindet; er ist kein allgemeines
+`ForeignEpoch`-Ignore-Signal. Nach `Consumed` mintet die Configuration-
+Recovery bei spaeteren Boots keinen Proof mehr, auch wenn die letzte
+Manifestoperation weiterhin `FactoryReset` lautet. Der Coordinator prueft
+zusaetzlich den exakt vorherigen Epochwert und den vollstaendigen alten
+Run-Recordgraphen. Dieser schmale Handoff ist kein neuer Resetdienst und keine
+zweite Recovery- oder Persistenzlogik.
 
 Der Identity-Baustein ruft keine `decide*`-Funktion und keinen
 `RunPersistenceCoordinator` direkt fuer eine Mutation auf. Er liefert nur die
@@ -222,12 +237,14 @@ mutierende Ausfuehrung bleibt beim bestehenden
 `TemperatureControlApplicationOrchestrator`; dessen Handoffs und die
 Write-before-Apply-Reihenfolge werden nicht dupliziert.
 
-`FermentationUiCommandBridge::makeEnvelope()` darf weiterhin die vom
-Application-Aufrufer gelieferte `UiRequestId` exakt in
-`CommandEnvelope::id` abbilden. Die Quelle, der monotone Zeitwert, aktuelle
-Evidenz und erwartete Revisionen werden ebenfalls von der bestehenden
-Application-Komposition geliefert. Es entsteht kein neuer Dispatcher und
-kein zweiter Command-Bus.
+`FermentationUiCommandBridge::makeEnvelope()` erhaelt ausschliesslich die von
+der Application gemintete, nicht frei konstruierbare
+`ApplicationCommandIdentity` und spiegelt deren `CommandId` in
+`CommandEnvelope::id`. Adapterwerte koennen weder `UiRequestId` noch
+`CommandId` ersetzen. Die Quelle, der monotone Zeitwert, aktuelle Evidenz und
+erwartete Revisionen werden ebenfalls von der bestehenden Application-
+Komposition geliefert. Es entsteht kein neuer Dispatcher und kein zweiter
+Command-Bus.
 
 ## 5. Neutrale Run-Provenienz
 
@@ -392,7 +409,7 @@ bleiben lesbar und fuer die bestehende passive beziehungsweise fail-closed
 Recovery auswertbar; ein neuer eligible Command oder ein neuer Run darf in
 dieser alten `StorageEpoch` jedoch nicht allokiert werden.
 
-#### Leerer Store und autorisierter Epoch-Handoff
+#### Persistenter einmaliger Epoch-Handoff
 
 Ein Head- und slotfreier Store wird nicht wie ein fehlender/unklarer Head
 behandelt. Wenn der bestehende Coordinator vollstaendig
@@ -407,59 +424,123 @@ Ein alter oder Legacy-Head derselben Epoche bleibt dagegen `Unknown` und fuer
 neue Vergabe unavailable. Der bestehende
 `ConfigurationRecoveryService::beginAuthorizedFactoryReset()` ist allein
 noch kein Run-Handoff: Er aendert die Konfigurations-Epoche und besitzt
-keinen Run-Coordinator. Deshalb erfolgt der einzige erlaubte Epoch-Handoff
-direkt nach dem bestehenden `FactoryResetCompleted`-Ergebnis des
-autorisierten Reset-/Boot-Finalisierungspfads in
-`FermentationApplication`, bevor der neue
-Runtimezustand als `Ready` weiterverwendet wird.
+keinen Run-Coordinator. Der Handoff wird deshalb nur ueber die bestehende
+Configuration-/Application-/Run-Persistence-Komposition fortgesetzt.
 
-`FermentationApplication` erzeugt dafuer nur nach dem bestehenden
-`FactoryResetCompleted`-Ergebnis einen application-owned
-`AuthorizedRunEpochHandoffProof` mit `previousEpoch` und `currentEpoch`. Die
-schmale `completeAuthorizedEpochHandoff(proof)`-Operation nimmt diesen Proof
-entgegen und:
+Die Reset-Autorisierung wird als kleiner, additiver Zustand im bestehenden
+kanonischen `ConfigurationBootstrapRecord` persistiert; es entsteht weder
+ein zweites Reset-Record noch eine Registry. Der Bootstrap-Datensatz erhaelt
+eine versionierte, streng validierte Bindung:
 
-Der kleine Proof ist rendererunabhaengig und traegt nur
-`previousEpoch`/`currentEpoch`; er enthaelt keine Command-ID, Lauf-ID,
-Persistenzdaten oder frei waehlbare Foreign-Epoch. Seine Erzeugung ist an der
-Application-Grenze auf das bestehende `FactoryResetCompleted`-Ergebnis
-begrenzt. Der Coordinator prueft die Epochbeziehung nochmals selbst, statt
-dem Aufrufer oder dem Codec zu vertrauen.
+    RunEpochHandoffState = None | Pending | Committed | Consumed
+    previousEpoch
+    currentEpoch
 
-1. akzeptiert den Nachweis nur, wenn er aus diesem kanonischen
-   `FactoryResetCompleted`-Pfad stammt, `previousEpoch + 1 == currentEpoch`
-   checked gilt und `currentEpoch` exakt der Epoche des Coordinators
-   entspricht;
-2. liest `rh0`, `rc0` und `rc1` vor jeder Mutation und akzeptiert nur einen
-   vollstaendig lesbaren alten Committed-Graphen aus exakt `previousEpoch`
-   oder den nachweislich leeren Store; Prepared-, Orphan-, Corrupt-,
-   Mixed-Epoch-, Read- und Write-Indeterminate-Zustaende bleiben
-   `Unavailable`/fail-closed;
-3. erzeugt mit dem bestehenden Snapshot-/Head-Codec zwei gueltige neue
-   Schema-4-`NoActiveRun`-Slotrecords der aktuellen Epoche und schreibt beide
-   vorhandenen Run-Slots ueber den bestehenden `RunPersistenceStore`-Port;
-4. schreibt erst nach zwei eindeutig erfolgreichen Slot-Writes den neuen
-   Committed-Head der aktuellen Epoche mit explizitem High Water `0` und
-   validiert dessen Write wie beim bestehenden Head-Commit;
-5. laesst den Coordinator erst nach vollstaendigem Handoff laden. Danach
-   liefert `loadAndInitialize()` den kanonischen neuen leeren Stand, von dem
-   ID `1` ausgegeben werden kann.
+Fuer diesen additiven Bootstrap-Vertrag wird die Envelope-Schemaversion 2
+verwendet. Schema 1 bleibt lesbar und wird beim Decode als `None` ohne
+Handoff-Bindung behandelt; neue Bootstrap-Writes verwenden ausschliesslich
+Schema 2. Ein unbekanntes neueres Bootstrap-Schema bleibt wie bisher
+fail-closed. Bei `None` sind die beiden Epochfelder nicht vorhanden. Bei
+`Pending`, `Committed` und `Consumed` muessen beide Felder vorhanden,
+ungueltige Nullwerte ausgeschlossen und die checked Epochbeziehung nachweisbar
+sein. Die Configuration-Storage-Formatversion bleibt davon getrennt und
+unveraendert.
 
-Dieser Handoff fuehrt keinen zweiten Resetdienst, keinen zweiten Coordinator
-und keinen neuen Recordtyp ein. Der alte Head bleibt bis zum letzten neuen
-Committed-Head bestehen. Faellt ein Slot- oder Head-Write aus oder wird
-indeterminiert, bleibt der alte beziehungsweise teilweise neue Graph fuer
-den neuen Epoch-Loader unbrauchbar und damit fail-closed; kein Allocator wird
-initialisiert. Ein neuer aktueller Head wird erst nach beiden Slot-Writes
-geschrieben. Ein bereits gemergter, vollstaendiger Handoff ist idempotent
-als sauberer Schema-4-`NoActiveRun`-Stand erkennbar; ein unvollstaendiger
-Handoff wird nicht als leerer Speicher ignoriert.
+`Pending` wird zusammen mit dem kanonischen `Initialized`-Nachfolger des
+Factory-Reset-Graphen geschrieben. Das gilt sowohl fuer den direkten
+`FactoryResetCompleted`-Ausgang als auch fuer die spaetere
+`boot()`-Finalisierung nach einem zuvor indeterminierten Configuration-Reset.
+Die Bindung ist nur gueltig, wenn `currentEpoch` exakt die Bootstrap-Epoche,
+`previousEpoch + 1 == currentEpoch` ohne Overflow und der Configuration-
+Resetpfad selbst kanonisch abgeschlossen ist. Die blosse letzte
+Manifestoperation `FactoryReset`, ein `ForeignEpoch`-Befund oder
+`old + 1 == current` erzeugen keinen Proof. Alte Bootstrap-Schemas ohne
+diese Bindung bleiben lesbar, liefern aber keine Handoff-Autorisierung.
 
-Ohne diesen expliziten autorisierten Handoff bleibt ein
-`ForeignEpoch`-Befund fail-closed. Insbesondere wird ein fremder oder nicht
-exakt als vorheriger Resetstand bewiesener Epochrest nicht pauschal als
-leer behandelt. Abgebrochene oder indeterminierte Epochwechsel geben keine
-neue ID frei.
+Die Zustandsuebergaenge sind der persistente Linearisierungsvertrag:
+
+1. `Pending` ist die einmalige, offen rekonstruierbare Autorisierung fuer
+   genau die gebundene Epoche. Die ConfigurationRecoveryService erzeugt
+   daraus eine nicht frei konstruierbare
+   `AuthorizedRunEpochHandoffProof`. RAM-Verbrauch des Proofs veraendert den
+   persistenten Zustand nicht.
+2. Der bestehende `RunPersistenceCoordinator` liest Head und beide Slots und
+   validiert Epochbeziehung, alten Committed-Graphen beziehungsweise den
+   vollstaendig leeren Store sowie die exakten Targetbytes selbst. Er schreibt
+   die beiden neuen Schema-4-`NoActiveRun`-Slots. Erst wenn beide Slotwrites
+   sicher erfolgreich waren, fordert die Application beim Configuration-
+   Owner den persistenten Uebergang `Pending -> Committed` an.
+3. `Committed` bedeutet: beide Target-Slots sind sicher vorhanden, der neue
+   Committed-Head ist aber noch nicht als final geschrieben bestaetigt. Dieser
+   Zustand ist keine neue Autorisierung und niemals ein Grund, einen
+   beliebigen alten oder fremden Graphen zu ueberschreiben. Der Coordinator
+   darf daraus nur den exakt vorbereiteten Target-Head finalisieren.
+4. Danach schreibt der Coordinator den neuen Committed-Head der aktuellen
+   Epoche mit HWM `0`. Erst bei sicher bestaetigtem Target-Head persistiert
+   der Configuration-Owner `Committed -> Consumed`. `Consumed` bleibt als
+   gebundene historische Tatsache erhalten und erzeugt bei spaeteren Boots
+   weder Proof noch Fortsetzungsfreigabe.
+
+Die Phasen sind bewusst so geordnet, dass ein einzelner per-Key-Write keine
+erneute Autorisierung ermoeglicht: Ein Stromausfall nach Slot 0 oder Slot 1,
+aber vor `Committed`, laesst `Pending` bestehen und erlaubt die exakte
+Fortsetzung. Ein Stromausfall nach `Pending -> Committed` laesst nur die
+Finalisierung des exakt belegten Target-Graphs zu. Ein Stromausfall nach
+dem neuen Head, aber vor `Consumed`, findet weiterhin `Committed` vor und
+verifiziert den exakten Target-Head, bevor `Consumed` wiederholt wird. Ein
+alter Epoch-Graph mit `Committed` wird nicht erneut ueberschrieben, sondern
+fail-closed.
+
+Ein indeterminierter Write des Configuration-Markers oder des Run-Heads
+loest dieselbe konservative Regel aus: Readback muss den vollstaendigen,
+gebundenen alten beziehungsweise neuen Zustand eindeutig bestaetigen; ein
+gemischter, alter, korrupt/unlesbarer oder nicht entscheidbarer Zustand
+bleibt unavailable. Insbesondere darf ein `Pending`-Marker nach einem
+bereits persistierten `Consumed`-Zustand nicht durch Rollback der Run-Slots
+rekonstruiert werden; `Consumed` in der kanonischen Configuration-Evidenz
+verhindert jede neue Autorisierung innerhalb dieser `StorageEpoch`.
+
+Der kleine Proof beziehungsweise die Fortsetzungscapability traegt nur die
+gebundenen Epochen und den persistenten Handoff-Zustand; sie enthaelt keine
+Command-ID, Lauf-ID, Persistenzdaten oder frei waehlbare Foreign-Epoch. Nur
+der ConfigurationRecoveryService mintet diese privaten Typen aus seiner
+kanonischen Bootstrap-Evidenz. Die Application komponiert die Phasen mit dem
+bestehenden Coordinator; der Coordinator prueft Epoch-, Slot-, Head- und
+Targetbytes nochmals selbst. Es gibt keinen zweiten Resetdienst,
+Persistenzkoordinator, allgemeinen Transaction- oder ForeignEpoch-Repair-
+Pfad.
+
+#### Bootdelegation fuer leere und partielle Run-Stores
+
+Die Application interpretiert keinen `RunPersistenceLoadStatus` selbst als
+Legitimation. Liegt eine gueltige offene `Pending`- oder
+`Committed`-Handoff-Bindung vor, darf sie den bestehenden Coordinator jedoch
+auch bei den genau dafuer zulaessigen Loadformen aufrufen:
+
+- vollstaendig leerer Store / `NoPersistedRun` / `ReadyEmpty`;
+- `ForeignEpoch` eines vollstaendig validierbaren alten Graphen;
+- `NotReconstructibleOrphanedState`, wenn die Run-Persistenz nur den exakten
+  waehrend dieses Handoffs geschriebenen Target-Teilzustand enthaelt.
+
+Die Application reicht dabei nur die vom Configuration-Owner ausgegebene
+private Capability weiter. Der Coordinator ist alleiniger Owner der
+Entscheidung, ob alter Graph, leerer Store, exakte Targetbytes,
+PreparedInterrupted, Orphan, Korruption oder Mixed-Epoch vorliegen. Ein
+allgemeines `NotReconstructibleOrphanedState -> reset`-Mapping existiert
+nicht. Ein Handoff mit `Committed` darf nur einen exakten vorbereiteten
+Target-Teilzustand beziehungsweise den exakt gebundenen Target-Head
+finalisieren; ein alter formal gueltiger Previous-Epoch-Graph bleibt auch
+dann fail-closed.
+
+Nach erfolgreichem `Consumed`-Commit laedt die Application den normalen
+aktuellen Coordinatorstand. Erst dann wird `Ready` mit HWM `0` beziehungsweise
+dem daraus folgenden HWM veroeffentlicht. Die erste neue ID im neuen Raum ist
+`1`.
+
+Ohne `Pending`-/`Committed`-Nachweis bleibt jeder `ForeignEpoch`-Befund
+fail-closed. Ein alter oder Legacy-Head, ein nicht autorisierter leerer
+Teilstore, ein abgebrochener/indeterminierter Handoff oder eine bereits
+`Consumed` gebundene Autorisierung gibt keine neue ID frei.
 
 ### 6.3 Current-, NoActiveRun- und Fallback-Auswahl
 
@@ -488,11 +569,13 @@ nicht der Auswahl eines moeglicherweise aelteren Snapshots:
    Startpfad bleibt waehrend einer nicht abgeschlossenen Recoveryansicht
    gesperrt; die reine HWM-Verfuegbarkeit ersetzt keine bestehende
    Recovery-/Standby-Freigabe.
-6. Ein `FactoryResetCompleted` ohne erfolgreichen
-   `completeAuthorizedEpochHandoff()` und jeder fehlende, Legacy-Unknown,
-   fremde, inkonsistente oder indeterminierte Nachweis wird fail-closed
-   angehalten. Kein aelterer Fallback und kein Replayfenster darf diese
-   Luecke ueberbruecken.
+6. Ein `FactoryResetCompleted` ohne gebundene persistente
+   `Pending`-/`Committed`-/`Consumed`-Evidenz und jeder fehlende,
+   Legacy-Unknown, fremde, inkonsistente oder indeterminierte Nachweis wird
+   fail-closed angehalten. `Pending` und `Committed` duerfen nur den exakt
+   gebundenen Handoff fortsetzen; `Consumed` bezeichnet den bereits
+   abgeschlossenen Handoff und mintet keinen neuen Proof. Kein aelterer
+   Fallback und kein Replayfenster darf diese Bindung ersetzen.
 
 Der bestehende `RunPersistenceCoordinator` beziehungsweise sein vorhandener
 Application-Handoff reicht dem Allocator deshalb neben dem bestehenden
@@ -610,8 +693,8 @@ bestimmt:
   Safe-Boot ohne vertrauenswuerdigen Head initialisieren den Allocator nicht.
   Ein fehlender Head ist nur dann zulaessig, wenn der Coordinator
   ausschliesslich `NoPersistedRun`/`ReadyEmpty` bewiesen hat oder der
-  autorisierte Epoch-Handoff mit gueltigem Proof bereits vollstaendig
-  erfolgreich war. Neue
+  autorisierte Epoch-Handoff den persistierten `Consumed`-Zustand erreicht
+  hat. Bei `Pending`/`Committed` wird der Handoff zuerst fortgesetzt; neue
   Fachrequests und neue Runs liefern sonst typisiert
   `Unavailable`/fail-closed.
 
@@ -743,30 +826,39 @@ Die spaetere Umsetzung erfolgt in diesem engen Scope:
    `commandIdHighWater` wird im bestehenden Head-Commit atomar mitgefuehrt;
    Schema-1/2/3 erhalten keinen neuen Writer. Der Codec behauptet keine
    historische Monotonie, die nur der Coordinator beweisen kann.
-3. Den bestehenden `RunPersistenceCoordinator` um den kleinen
-   `completeAuthorizedEpochHandoff(proof)`-Pfad ergaenzen. Die
-   Application ruft ihn nur nach `FactoryResetCompleted` und vor `Ready` auf;
-   der Pfad validiert den alten Graphen, ueberschreibt beide alten Slots mit
-   neuen Schema-4-`NoActiveRun`-Records und schreibt danach den Committed-Head
-   mit HWM `0`. Jede Unsicherheit bleibt fail-closed. Ein wirklich leerer
-   `NoPersistedRun`-Store geht dagegen ohne Vorab-Write in `ReadyEmpty`.
-4. `ApplicationRunIdentity` an der bestehenden Application-Grenze instanzieren
+3. Den bestehenden Configuration-Bootstrap-Codec und -Store um die kleine
+   gebundene `Pending`/`Committed`/`Consumed`-Handoff-Evidenz ergaenzen. Die
+   neue Bootstrap-Schemaversion bleibt mit dem alten Schema lesbar; alte
+   Records ohne Bindung minten keinen Proof. Der ConfigurationRecoveryService
+   gibt nur private, phasenbezogene Proof-/Fortsetzungscapabilities aus und
+   persistiert `Consumed` erst nach bestaetigtem Run-Head.
+4. Den bestehenden `RunPersistenceCoordinator` um den schmalen, phasengeteilten
+   Handoff-Pfad ergaenzen. Die Application ruft ihn nur mit der Configuration-
+   Capability auf; der Pfad validiert den alten Graphen, den leeren Store oder
+   den exakten Target-Teilzustand, schreibt die beiden neuen Schema-4-
+   `NoActiveRun`-Records und meldet erst danach `Pending -> Committed` an den
+   Configuration-Owner. Anschliessend wird der exakt vorbereitete
+   Committed-Head mit HWM `0` geschrieben. Jede Unsicherheit bleibt
+   fail-closed. Ein wirklich leerer `NoPersistedRun`-Store darf ohne
+   Vorab-Head logisch `ReadyEmpty` bilden, muss bei offenem Reset-Handoff aber
+   dennoch den gebundenen Handoff vollstaendig konsumieren.
+5. `ApplicationRunIdentity` an der bestehenden Application-Grenze instanzieren
    und mit dem validierten committed Head, dem leeren Store-Urteil oder dem
    erfolgreichen Epoch-Handoff, dem `StorageEpoch` und dem bestehenden
    Recoverystatus verbinden. Das `persistedRunCommandIds`-Fenster bleibt
    ausschliesslich Replayzustand.
-5. Den vorhandenen UI-/Application-Requestaufbau so schliessen, dass
+6. Den vorhandenen UI-/Application-Requestaufbau so schliessen, dass
    `UiRequestId` vom Allocator stammt und die Envelope-ID exakt gespiegelt
    wird. Die bestehenden `decide*`-, Persistenz- und Lifecyclepfade bleiben
    die einzigen owning Pfade.
-6. Den app-owned Run-ID-Aufbau fuer alle vier neuen Runpfade in die
+7. Den app-owned Run-ID-Aufbau fuer alle vier neuen Runpfade in die
    bestehenden Program-, Manual-, Stop- und Completion-Requests integrieren.
    Stop und Completion allokieren auch ohne Cooling genau einmal; der
    Cooling-Zweig verwendet dieselbe Command-ID als `StartCommandId`.
-7. Die identitaetsfreien Adapterwerte fuer Manual-/Cooling-Eingaben auf den
+8. Die identitaetsfreien Adapterwerte fuer Manual-/Cooling-Eingaben auf den
    bestehenden owning Request abbilden, ohne einen zweiten Plan- oder
    Commandvertrag einzufuehren.
-8. Die gezielten nativen Regressionen aus Abschnitt 10 ausfuehren und alle
+9. Die gezielten nativen Regressionen aus Abschnitt 10 ausfuehren und alle
    neuen/angepassten Dateien gegen den exakten Planumfang pruefen.
 
 Die konkrete Persistenzmutation bleibt beim bestehenden
@@ -812,6 +904,13 @@ beobachtbar nachzuweisen:
 | EPOCH-02 | Slot-/Head-Write des Handoffs sicher fehlgeschlagen oder indeterminiert | neuer Epochraum bleibt unavailable; kein Allocator und keine teilweise als leer behandelte Foreign-Epoch |
 | EPOCH-03 | abgebrochener/indeterminierter Epochwechsel beim naechsten Boot | ohne vollstaendigen autorisierten Handoff bleibt `ForeignEpoch`/Prepared/Mixed-State fail-closed |
 | EPOCH-04 | fremde Epoche ohne passenden autorisierten `FactoryResetCompleted`-Nachweis | nicht als leer akzeptiert; keine neue ID und kein neuer Run |
+| EPOCH-05 | Configuration-Reset erfolgreich, Stromausfall vor dem ersten Run-Write | persistierter `Pending`-Marker rekonstruiert exakt dieselbe Epoche; kein Proof aus der letzten Manifestoperation allein |
+| EPOCH-06 | Stromausfall nach Slot 0 oder Slot 1, aber vor `Pending -> Committed` | `Pending` bleibt offen; nur der exakte Target-Teilzustand wird fortgesetzt, kein beliebiger Orphan wird geloescht |
+| EPOCH-07 | beide Run-Slots sicher geschrieben, `Pending -> Committed`, danach Stromausfall vor dem neuen Head | `Committed` sperrt eine neue Autorisierung; der exakt vorbereitete Target-Head darf fertiggeschrieben werden |
+| EPOCH-08 | neuer Head sicher geschrieben, Stromausfall vor `Committed -> Consumed` | `Committed` wird gegen den exakten Target-Head bestaetigt und danach dauerhaft `Consumed`; keine zweite Handoff-Mutation |
+| EPOCH-09 | nach `Consumed` HWM/Run-Identitaet der neuen Epoche und spaeter formal gueltiger Previous-Epoch-Graph | kein Proof und kein Handoff; `ForeignEpoch`/Rollback bleibt fail-closed, HWM und `e<epoch>-c<id>` werden nicht wiederverwendet |
+| EPOCH-10 | `Pending`/`Committed`-Marker, Run-Head oder Slot-Read/Write indeterminiert beziehungsweise gemischt | Readback muss die gebundene Phase und den exakten Graphen bestaetigen; andernfalls unavailable/fail-closed |
+| EPOCH-11 | vollstaendig leerer alter Run-Store, Reset offen, erster neuer Slot vorhanden | normaler Loader darf `NotReconstructibleOrphanedState` liefern; Application delegiert nur mit Capability, Coordinator beendet den exakten Handoff bei HWM `0`, erste ID `1` |
 | RUN-01 | `StartProgram` | UI liefert keine Identitaet; Application erzeugt Command-ID und `e<epoch>-c<id>` und ruft bestehenden Startpfad auf |
 | RUN-02 | `StartManualHolding` | nur vorhandene Manual-Holding-Werte kommen vom UI; Application erzeugt `runId`; owning Vertrag bleibt ManualHolding |
 | RUN-03 | `AbortAndCool` mit neuem Cooling-Run | ein neues Stop-Request allokiert genau eine Command-ID; Cooling-`runId` nutzt exakt diese ID als `StartCommandId`; kein zweiter Allocate-Aufruf |
@@ -854,12 +953,21 @@ Pfad. #144 fuehrt dafuer keine zweite Ergebnisfamilie ein.
 - `lib/fermentation_app/src/run_persistence_coordinator.cpp`, nur soweit
   fuer den bestehenden Schema-/High-Water-Handoff und den schmalen
   autorisierten Epoch-Handoff erforderlich
+- `lib/fermentation_app/src/configuration_bootstrap.hpp`
+- `lib/fermentation_app/src/configuration_bootstrap_codec.hpp`
+- `lib/fermentation_app/src/configuration_bootstrap_codec.cpp`
+- `lib/fermentation_app/src/configuration_bootstrap_store.hpp`
+- `lib/fermentation_app/src/configuration_bootstrap_store.cpp`
+- `lib/fermentation_app/src/configuration_recovery_service.hpp`
+- `lib/fermentation_app/src/configuration_recovery_service.cpp`, nur fuer
+  die persistente Handoff-Phasenbindung und ihre autorisierte Konsumierung
 
-`ConfigurationRecoveryService` bleibt dabei unveraendert der Owner fuer die
-Autorisierung und den kanonischen `FactoryResetCompleted`-Status. Der
-Handoff wird nicht in diesem Service dupliziert, sondern von der bereits
-uebergeordneten `FermentationApplication` mit dem bestehenden Coordinator
-komponiert.
+`ConfigurationRecoveryService` bleibt der Owner fuer die kanonische
+FactoryReset-Autorisierung, die persistente `Pending`/`Committed`/`Consumed`-
+Evidenz und die gebundenen privaten Proof-/Fortsetzungscapabilities. Der
+Handoff wird nicht als zweiter Resetpfad in diesem Service implementiert,
+sondern von der bereits uebergeordneten `FermentationApplication` mit dem
+bestehenden `RunPersistenceCoordinator` komponiert.
 
 Der `AuthorizedRunEpochHandoffProof` wird als kleiner Typ im bestehenden
 Run-Persistence-Vertragsbereich verankert. Er enthaelt ausschliesslich alte
@@ -880,6 +988,8 @@ verwendeten starken Plattformtypen. Falls der bestehende Build die
 
 - `test/test_run_snapshots/test_run_snapshots.cpp`
 - `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`
+- `test/test_configuration_bootstrap_codec/test_configuration_bootstrap_codec.cpp`
+- `test/test_configuration_bootstrap_store/test_configuration_bootstrap_store.cpp`
 - `test/test_fermentation_ui_commands/test_fermentation_ui_commands.cpp`
 - `test/test_issue90_product_recovery_oracle/...` fuer den bestehenden
   Application-/Factory-Reset-/Recovery-Handoff, soweit dieser Harness den
@@ -888,6 +998,12 @@ verwendeten starken Plattformtypen. Falls der bestehende Build die
   `test/test_issue144_run_identity/`, nur falls die vorhandene Teststruktur
   fuer den Application-Allocator keinen passenden bestehenden Einstieg
   besitzt; kein neues Testframework
+- `test/test_configuration_recovery_service/test_configuration_recovery_service.cpp`
+  fuer die persistente Handoff-Phasenfolge und die Rekonstruktion nach
+  Reset-/Boot-Cuts;
+- `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`
+  fuer exakte Pending-/Committed-Fortsetzung, leeren partiellen Store und
+  die fail-closed-Abgrenzung gegen einen spaeteren Previous-Epoch-Graphen
 
 Keine Firmware-, Hardware-, Display-, Touch-, Netzwerk- oder
 Produktionsdatei ausserhalb dieser schmalen Identitaets-/Run-Contractgrenze
