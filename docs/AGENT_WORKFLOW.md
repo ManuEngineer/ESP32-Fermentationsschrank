@@ -140,33 +140,104 @@ Kleine redaktionelle oder rein mechanische Anpassungen innerhalb des
 freigegebenen Vertrags werden im Plan-/PR-Nachweis dokumentiert, ohne einen
 Parallelvertrag zu erzeugen.
 
-## 7. Vollstaendiges Review
+## 7. Builder und unabhängiger Full Review
 
-Vor dem Abschluss wird der gesamte aktuelle Diff gegen freigegebenen Plan,
-Issue, Anforderungen, relevante ADRs, Fachvertraege, Tests und Dokumentation
-geprueft.
+Codex beziehungsweise der ausführende Repository-Agent ist der Builder. Zu
+seinen Aufgaben gehören Planerstellung, Implementierung, gezielte Tests,
+notwendige Diagnose, CI- und Evidence-Aufbereitung sowie die Aktualisierung
+des PR.
 
-Das Review umfasst mindestens:
+Vor der Übergabe führt der Builder einen angemessenen Implementation
+Self-Check durch. Dieser Self-Check prüft die Umsetzung gegen den freigegebenen
+Plan und die unmittelbar betroffenen Nachweise, ist aber kein unabhängiger Full
+Review. Danach hält der Builder für den externen Owner-/Reviewer-Schritt an.
 
-- funktionale Vollstaendigkeit und Fehlerfaelle;
-- Safety-, Security- und Recoverygrenzen;
-- Architektur- und Abhaengigkeitsrichtung;
-- SOLID, DRY und KISS gegen den tatsaechlichen Diff;
-- Testorakel, fehlende Grenzfaelle und nicht ausgefuehrte Nachweise;
-- Ressourcen-, Hardware- und Lizenzwirkung;
-- veraltete, doppelte oder widerspruechliche Dokumentation;
-- Geheimnisse, lokale Pfade und unbeabsichtigte Dateien.
+Der formale Independent Review erfolgt grundsätzlich unabhängig vom Builder.
+Der aktuelle Owner-Reviewkanal liegt ausserhalb von ChatGPT Work/Codex; aktuell
+wird dafür normales ChatGPT mit GPT-5.6 Sol verwendet. Diese konkrete
+Modellauswahl ist eine operative Owner-Einstellung und keine dauerhafte
+Architekturabhängigkeit.
 
-Ein Review endet nicht nach den auffaelligsten Befunden. Nach Korrekturen wird
-der vollstaendige verbleibende Diff erneut geprueft.
+Der Independent Reviewer prüft den gesamten relevanten aktuellen PR gegen den
+freigegebenen Plan und das Issue sowie gegen Anforderungen und relevante ADRs
+und Fachverträge. Das vollständige Review umfasst mindestens:
 
-## 8. Tests und GitHub-CI
+- Architektur, Correctness und Fehlerfälle;
+- Safety, Security und Recovery, soweit betroffen;
+- Tests und Evidence;
+- SOLID, DRY und KISS;
+- Ressourcen-, Hardware- und Lizenzwirkung, soweit betroffen;
+- Dokumentationskonsistenz;
+- unbeabsichtigte Dateien, Secrets und lokale Pfade.
+
+Der Review endet nicht beim ersten oder auffälligsten Befund.
+
+Für den unabhängigen Review gelten verbindlich drei Finding-Klassen:
+
+- `BLOCKER`: Ein Finding sperrt den aktuellen PR nur, wenn ein Acceptance
+  Criterion nicht erfüllt ist, nachweislich falsches Verhalten oder eine
+  Regression vorliegt, ein Safety-, Security- oder Datenintegritätsproblem
+  besteht, ein verbindlicher Architektur-, ADR-, API-, Persistenz-, Wireformat-
+  oder sonstiger Vertragsverstoss vorliegt, ein erforderlicher Test oder
+  Nachweis fehlt, ein Pflicht-Build, CI- oder Quality Gate fehlschlägt oder der
+  genehmigte Scope nicht korrekt umgesetzt ist.
+- `FOLLOW-UP`: Reale technische Schuld, konkreter zukünftiger Nutzen, ein
+  bekanntes Risiko oder eine absehbare Anforderung, die den aktuellen PR nicht
+  als Blocker sperrt.
+- `NO-ACTION`: Rein theoretische Verbesserungen, Stilpräferenzen und
+  hypothetische Zukunftserweiterungen. Sie erzeugen kein neues Issue.
+
+Nach lokal begrenzten Korrekturen erfolgt grundsätzlich Fix Verification:
+
+1. Verifikation aller zuvor offenen Blocker;
+2. Review des Korrekturdiffs;
+3. Prüfung direkt betroffener Verträge und Regressionen;
+4. Bewertung, ob die Korrektur materiell über den bisherigen Reviewumfang
+   hinausgeht.
+
+Ein neuer Full Review ist nur erforderlich, wenn die Korrektur Scope,
+Architektur, öffentliche Verträge, Persistenz/Wireformat,
+Safety/Security/Recovery oder Laufzeitverhalten materiell verändert oder einen
+breiten neuen Diff erzeugt. Die gleiche Regel gilt nach einer CI-Korrektur.
+
+## 8. Convergence Gate
+
+Ein PR erhält aus Review-Sicht `GO`, sobald alle genehmigten Acceptance
+Criteria erfüllt sind, alle für diesen Stand erforderlichen Tests, Nachweise
+und Quality Gates bestanden sind und `OPEN_BLOCKERS=0` gilt.
+
+Nach Erreichen dieses Zustands dürfen `FOLLOW-UP` oder `NO-ACTION` den
+aktuellen PR nicht offenhalten. Das bestehende Owner-Gate für `Ready for
+review`, Merge und Issue-Abschluss bleibt unverändert.
+
+## 9. Modell-/Compute-Governance
+
+Der Standard-Builder ist die projektlokale Codex-Konfiguration. Ein deutlich
+kostenintensiveres Builder-Modell, insbesondere Terra, ist kein normaler
+nächster Schritt und darf nicht vorsorglich verlangt werden.
+
+Eine Eskalation darf dem Owner vorgeschlagen werden, wenn der Standard-Builder
+wiederholt am gleichen klar abgegrenzten technischen Problem scheitert, ein
+reproduzierbarer Fehler trotz geeigneter Diagnose ungeklärt bleibt, eine
+aussergewöhnlich schwierige und weitreichende technische Entscheidung ansteht
+oder ein kritisches Safety-, Security-, Concurrency- oder Recovery-Problem
+zusätzliche Modellleistung rechtfertigt.
+
+Vor einer Eskalation ist zu prüfen, ob bessere Eingrenzung, bessere Evidence
+oder ein präziserer Auftrag ausreichen. Der Agent wechselt das
+kostenintensivere Modell nicht eigenmächtig, sondern legt dem Owner den
+Eskalationsgrund vor. Eine genehmigte Eskalation gilt nur für den konkreten
+Problemumfang; danach gilt wieder der Standard-Builder.
+
+## 10. Tests und GitHub-CI
 
 Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
 Die konkreten Befehle und Werkzeuge stehen in `CI_AND_QUALITY_GATES.md`.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Review ohne
-offene Befunde, auf dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
+Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Independent
+Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+ausdruecklicher Owner-Anweisung. Klassifizierte `FOLLOW-UP` und `NO-ACTION`
+blockieren den Lauf nicht.
 
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
 den PR nach dem Review auf `Ready for review`; dadurch startet der vollstaendige
@@ -174,18 +245,22 @@ CI-Lauf. Spaetere semantische Pushes auf einen nicht als Draft markierten PR
 starten CI erneut.
 
 Markdown-only- und Kommentaraenderungen bleiben von der Firmware-CI ausgenommen.
-Das ist keine Ausnahme vom Review: Jede semantische Aenderung, auch an
-normativer Dokumentation, verwirft den bisherigen Reviewnachweis. Nur rein
-redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags- oder
-Akzeptanzwirkung duerfen den Reviewnachweis behalten.
+Fuer den Reviewnachweis gilt bei semantischen Aenderungen die
+Fix-Verification-/Materialitaetsregel: Eine lokal begrenzte Korrektur wird mit
+Fix Verification und dem erforderlichen Regression Check abgeschlossen; eine
+materielle Aenderung oder ein breiter neuer Diff erfordert einen neuen Full
+Review. Nur rein redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags-
+oder Akzeptanzwirkung duerfen den bisherigen Reviewnachweis behalten.
 
 Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
 Korrektur. Nur der Owner entscheidet, ob der PR wieder als Draft gefuehrt wird.
-Nach Korrektur und direkt abhaengigen Tests folgt erneut ein vollstaendiges
-Review; den neuen Wechsel auf `Ready for review` fuehrt ebenfalls nur der Owner
-aus.
+Nach einer CI-Korrektur werden die zuvor offenen Blocker, der
+Korrekturdiff sowie direkt betroffene Vertraege und Regressionen per Fix
+Verification geprueft. Ein neuer Full Review ist nur nach einer materiellen
+Aenderung oder einem breiten neuen Diff erforderlich; den neuen Wechsel auf
+`Ready for review` fuehrt ebenfalls nur der Owner aus.
 
-## 9. Handover
+## 11. Handover
 
 Vor Sessionende, Kontextreset oder Agentenwechsel wird bei offenem PR genau ein
 aktueller `SESSION HANDOVER`-Kommentar erstellt und danach angehalten.
@@ -202,7 +277,7 @@ Der neueste Handover ersetzt fruehere. Diffs, Plaene und Logs werden
 referenziert, nicht kopiert. Ist kein PR-Kommentar moeglich, wird der fertige
 Text im Chat als nicht veroeffentlicht ausgegeben.
 
-## 10. Abschluss und Ownerrechte
+## 12. Abschluss und Ownerrechte
 
 Der Agent aktualisiert Nachweise und haelt fuer das Ownerreview an. Er setzt
 einen PR nicht selbst auf `Ready for review` oder Draft, mergt nicht, aktiviert

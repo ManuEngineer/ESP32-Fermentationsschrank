@@ -68,6 +68,12 @@ Nicht triviale Arbeit folgt `docs/AGENT_WORKFLOW.md`:
 4. Erst nach Freigabe des exakten Plan-Commits umsetzen.
 5. Bei materieller Abweichung Plan aktualisieren und erneut freigeben lassen.
 
+Der ausführende Agent ist der Builder; der formale Full Review erfolgt
+grundsätzlich unabhängig vom Builder. Nach dem Builder-Self-Check hält der
+Agent für den Independent Review an. Nach lokal begrenzten Korrekturen gilt
+Fix Verification statt eines erneuten Full Review, solange keine materielle
+Änderung vorliegt. Details stehen ausschließlich in `docs/AGENT_WORKFLOW.md`.
+
 Ein nativer Planungsmodus ist nur das Arbeitsmittel zur Planerstellung. Er
 ersetzt weder den versionierten Markdown-Plan noch die Ownerfreigabe der exakten
 Plan-SHA. Ist kein nativer Planungsmodus verfuegbar, gilt derselbe Planvertrag
@@ -90,13 +96,17 @@ Ein Review prueft den vollstaendigen aktuellen Diff gegen Plan, Anforderungen,
 Architektur, Tests, Dokumentation sowie SOLID, DRY und KISS; es endet nicht bei
 den auffaelligsten Befunden.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach Review ohne offene Befunde, auf
-dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
+Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Independent
+Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+ausdruecklicher Owner-Anweisung; `FOLLOW-UP` und `NO-ACTION` blockieren ihn
+nicht.
 
 GitHub-Firmware-CI laeuft nicht im Draft. Der Owner setzt nach dem Review auf
 `Ready for review`; spaetere semantische Pushes eines Nicht-Draft-PR starten CI
-erneut. Markdown-only loest keine Firmware-CI aus. Jede semantische Aenderung,
-auch in normativer Dokumentation, verwirft jedoch den Reviewnachweis.
+erneut. Markdown-only loest keine Firmware-CI aus. Bei semantischen Aenderungen
+gilt die im Workflow definierte Fix-Verification-/Materialitaetsregel; ein
+neuer Full Review ist nur bei materieller Aenderung oder breitem neuem Diff
+erforderlich.
 
 Nach CI-Fehler legt der Agent Befund und Korrekturplan vor; nur der Owner
 entscheidet ueber eine Rueckstufung auf Draft und den erneuten

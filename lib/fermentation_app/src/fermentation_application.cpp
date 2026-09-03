@@ -8,6 +8,7 @@
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "fermentation_ui_commands.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -92,6 +93,8 @@ bool FermentationApplication::beginPersistent(
     configurationRecoveryStatus_.reset();
 #endif
     pendingResume_.reset();
+    pendingFallbackResume_.reset();
+    owningRecoveryEvidence_.reset();
     pendingRecoverySource_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
@@ -195,6 +198,8 @@ bool FermentationApplication::processBootClassification(
             return prepareResumeOffer(snapshot);
         case BootClassification::RecoveryEvaluation:
             return evaluateCurrentRecovery(snapshot, bootTime);
+        case BootClassification::FallbackSelectionRequired:
+            return prepareFallbackSelection(snapshot);
         case BootClassification::DiscardableRun:
         case BootClassification::CompletedRun:
         case BootClassification::TerminalRunFault:
@@ -226,6 +231,27 @@ bool FermentationApplication::prepareResumeOffer(
         requireService(FaultCode::RunPersistenceUntrusted);
         return false;
     }
+    return true;
+}
+
+bool FermentationApplication::prepareFallbackSelection(
+    const RunPersistenceSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    pendingFallbackResume_ =
+        std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState{}};
+    if (pendingFallbackResume_ == nullptr ||
+        !restoreRunPersistenceSnapshotInto(*snapshot,
+                                           *pendingFallbackResume_)) {
+        pendingFallbackResume_.reset();
+        requireService(FaultCode::RunPersistenceUntrusted);
+        return false;
+    }
+    // The unresolved fallback is retained for an explicit user choice.  It
+    // is never published as an active runtime state and therefore cannot
+    // satisfy the actuator interlock before a successful persistence apply.
     return true;
 }
 
@@ -295,6 +321,93 @@ bool FermentationApplication::processTerminalClassification(
 }
 
 void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
+
+void FermentationApplication::publishOwningRecoveryEvidence(
+    const CrossRolePlausibilityContext& evidence) {
+    owningRecoveryEvidence_ = evidence;
+}
+
+RunPersistenceResult FermentationApplication::resumeFallback(
+    const FermentationUiResumeFallbackCommand& command) {
+    if (pendingFallbackResume_ == nullptr ||
+        runPersistenceCoordinator_ == nullptr) {
+        RunPersistenceResult unavailable;
+        unavailable.status = RunPersistenceResultStatus::NotInitialized;
+        return unavailable;
+    }
+    const auto& state = *pendingFallbackResume_;
+    if (command.expected.expectedStateSequence !=
+            state.processState.transitionSequence ||
+        (command.expected.expectedRunRevision.has_value() &&
+         *command.expected.expectedRunRevision != state.runRevision) ||
+        (command.expected.expectedMessageRevision.has_value() &&
+         *command.expected.expectedMessageRevision != state.messageRevision) ||
+        (command.expected.expectedFaultRevision.has_value() &&
+         *command.expected.expectedFaultRevision != state.faultRevision) ||
+        (command.expected.expectedRecoveryEpisodeRevision.has_value() &&
+         *command.expected.expectedRecoveryEpisodeRevision !=
+             state.recoveryEpisodeRevision)) {
+        RunPersistenceResult stale;
+        stale.status = RunPersistenceResultStatus::StaleDecision;
+        stale.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
+        return stale;
+    }
+    if (!command.confirmed) {
+        RunPersistenceResult pending;
+        pending.status = RunPersistenceResultStatus::RecoveryPending;
+        pending.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
+        return pending;
+    }
+    if (!owningRecoveryEvidence_.has_value()) {
+        RunPersistenceResult unavailable;
+        unavailable.status = RunPersistenceResultStatus::RecoveryPending;
+        unavailable.coordinatorState =
+            RunPersistenceCoordinatorState::FallbackRecoveryPending;
+        return unavailable;
+    }
+    // Evidence is a point-in-time owning observation.  Consume it before the
+    // mutating coordinator attempt so neither a failed write nor a pending
+    // trusted-time result can replay the same sensor/plausibility snapshot.
+    const auto evidence = *owningRecoveryEvidence_;
+    owningRecoveryEvidence_.reset();
+    const auto outcome =
+        runPersistenceCoordinator_->activateFallbackRecoveredRun(
+            *pendingFallbackResume_, currentCheckpointTime(), evidence);
+    if (outcome.persistenceResult.status ==
+        RunPersistenceResultStatus::Applied) {
+        // The coordinator's resultingState is the exact candidate that was
+        // durably committed.  Adopt that value, rather than the pre-commit
+        // retained fallback copy, so RAM/FSM cannot diverge from storage.
+        runtimeRunState_ = std::unique_ptr<RunCommandState>{
+            new (std::nothrow) RunCommandState(outcome.resultingState)};
+        if (runtimeRunState_ == nullptr) {
+            requireService(FaultCode::None, true);
+            RunPersistenceResult failed;
+            failed.status =
+                RunPersistenceResultStatus::PersistenceCommittedApplyFailed;
+            failed.step = RunPersistenceStep::RamApply;
+            failed.technicalReason =
+                RunPersistenceTechnicalReason::InvalidProjection;
+            failed.durability = RunPersistenceDurability::MayHaveChanged;
+            failed.coordinatorState =
+                RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
+            return failed;
+        }
+        pendingFallbackResume_.reset();
+        if (outcome.resultingState.activeProgramRun.has_value() ||
+            outcome.resultingState.activeManualRun.has_value()) {
+            loadDisposition_ = RunLoadDisposition::ResumeOffer;
+            persistenceLoadStatus_ = RunPersistenceLoadStatus::Current;
+        } else {
+            loadDisposition_ = RunLoadDisposition::NoActiveRun;
+            persistenceLoadStatus_ = RunPersistenceLoadStatus::NoActiveRun;
+            recoveryDisposition_.reset();
+        }
+    }
+    return outcome.persistenceResult;
+}
 
 RunCheckpointTime FermentationApplication::currentCheckpointTime()
     const noexcept {

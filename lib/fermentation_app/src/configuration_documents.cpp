@@ -79,6 +79,15 @@ UserConfigurationValidationResult validateUserConfiguration(
             configuration.displayLanguageId)) {
         return {UserConfigurationStatus::UnknownLanguageId, std::nullopt};
     }
+    if (validateLowercaseIdentifier(
+            configuration.activeThemeId, kMinimumThemeIdBytes,
+            kMaximumThemeIdBytes) != ConfigurationTextStatus::Success) {
+        return {UserConfigurationStatus::InvalidThemeId, std::nullopt};
+    }
+    if (!firmware_configuration_catalog::containsThemeId(
+            configuration.activeThemeId)) {
+        return {UserConfigurationStatus::UnknownThemeId, std::nullopt};
+    }
     if (validateTimeZoneIdentifierStructure(configuration.timeZoneId) !=
         ConfigurationTextStatus::Success) {
         return {UserConfigurationStatus::InvalidTimeZoneId, std::nullopt};
@@ -149,7 +158,8 @@ bool configurationContentEquals(const UserConfiguration& left,
                                 const UserConfiguration& right) {
     return left.displayLanguageId == right.displayLanguageId &&
            left.timeZoneId == right.timeZoneId &&
-           left.deviceName == right.deviceName;
+           left.deviceName == right.deviceName &&
+           left.activeThemeId == right.activeThemeId;
 }
 
 bool configurationContentEquals(const ServiceConfiguration& /*left*/,

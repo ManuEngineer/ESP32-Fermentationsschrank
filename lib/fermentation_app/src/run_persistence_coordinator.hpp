@@ -304,6 +304,18 @@ class RunPersistenceCoordinator {
         RunPersistenceFallbackDirective fallbackDirective,
         RunPersistenceCoordinatorState rollbackState);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
+
+    // Shared R1 exact-time core for the loaded Current and an explicitly
+    // selected fallback. This is an implementation detail: callers only use
+    // the owning Current/Fallback entry points above. It contains no
+    // C2/weighted/biological recovery semantics.
+    [[nodiscard]] RecoveryActivationOutcome activateR1ExactFermentingCore(
+        const RunCommandState& current,
+        const RunPersistenceRawRecord& loadedRecord,
+        const RunCheckpointTime& time, std::optional<std::size_t> targetSlot,
+        RunPersistenceFallbackDirective fallbackDirective,
+        RunPersistenceCoordinatorState rollbackState,
+        bool selectedFallbackCompletionToNoActiveRun = false);
     [[nodiscard]] RunPersistenceResult result(
         RunPersistenceResultStatus status,
         RunPersistenceStep step = RunPersistenceStep::None,

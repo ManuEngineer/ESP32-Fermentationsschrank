@@ -969,6 +969,137 @@ RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
     return persisted;
 }
 
+RecoveryActivationOutcome
+RunPersistenceCoordinator::activateR1ExactFermentingCore(
+    const RunCommandState& current, const RunPersistenceRawRecord& loadedRecord,
+    const RunCheckpointTime& time, std::optional<std::size_t> targetSlot,
+    RunPersistenceFallbackDirective fallbackDirective,
+    RunPersistenceCoordinatorState rollbackState,
+    bool selectedFallbackCompletionToNoActiveRun) {
+    const auto invalid =
+        [this, &current](RunPersistenceResultStatus status =
+                             RunPersistenceResultStatus::InvalidDecision) {
+            return RecoveryActivationOutcome{
+                result(status, RunPersistenceStep::CandidateApply,
+                       RunPersistenceTechnicalReason::InvalidProjection),
+                current};
+        };
+    if (current.processState.state != ProcessState::Fermenting ||
+        current.runProgress.basis != RunProgressBasis::KnownTotal ||
+        !current.processRunSnapshot.has_value() ||
+        !current.processRunSnapshot->fermentationDurationMinutes.has_value() ||
+        !loadedRecord.utcUnixSeconds.has_value() ||
+        !time.utcUnixSeconds.has_value()) {
+        return invalid();
+    }
+    const auto prior = exactPriorFermentingSeconds(current);
+    if (!prior.has_value() || loadedRecord.snapshot.checkpointMonotonicMillis <
+                                  current.processState.stateEnteredAtMillis) {
+        return invalid();
+    }
+    const auto liveSegment =
+        checkedToUint32((loadedRecord.snapshot.checkpointMonotonicMillis -
+                         current.processState.stateEnteredAtMillis) /
+                        1000U);
+    if (!liveSegment.has_value())
+        return invalid(RunPersistenceResultStatus::CounterOverflow);
+    const auto phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
+    const auto wallClockSinceCheckpoint =
+        checkedUtcDelta(*time.utcUnixSeconds, *loadedRecord.utcUnixSeconds);
+    if (!phaseAtCheckpoint.has_value() || !wallClockSinceCheckpoint.has_value())
+        return invalid(RunPersistenceResultStatus::CounterOverflow);
+    const auto recoveredPhase =
+        checkedAdd(*phaseAtCheckpoint, *wallClockSinceCheckpoint);
+    const auto duration = checkedToUint32(
+        static_cast<std::uint64_t>(
+            *current.processRunSnapshot->fermentationDurationMinutes) *
+        60U);
+    const auto recoveredPrior = recoveredPhase.has_value()
+                                    ? checkedToUint32(*recoveredPhase)
+                                    : std::optional<std::uint32_t>{};
+    if (!recoveredPhase.has_value() || !duration.has_value() ||
+        !recoveredPrior.has_value())
+        return invalid(RunPersistenceResultStatus::CounterOverflow);
+
+    auto candidate = current;
+    if (!foldObservedRunSeconds(candidate, *liveSegment) ||
+        candidate.runRevision == std::numeric_limits<std::uint32_t>::max())
+        return invalid(RunPersistenceResultStatus::CounterOverflow);
+    if (*recoveredPhase < *duration) {
+        const auto hop1 = propose(
+            candidate.processState, ProcessState::RecoveryEvaluation,
+            TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
+        if (!hop1.proposed() ||
+            !applyProcessTransition(candidate.processState, hop1,
+                                    &*candidate.processRunSnapshot))
+            return invalid();
+        auto recoveredState = current.processState;
+        recoveredState.state = ProcessState::Fermenting;
+        recoveredState.stateEnteredAtMillis = time.monotonicMillis;
+        recoveredState.qualificationValidSinceMillis.reset();
+        recoveredState.targetReachStartedAtMillis = 0U;
+        recoveredState.targetReachWarningIssued = false;
+        const auto hop = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryResume, recoveredState},
+            time.monotonicMillis,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior});
+        if (!hop.proposed() ||
+            !applyProcessTransition(candidate.processState, hop,
+                                    &*candidate.processRunSnapshot))
+            return invalid();
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting,
+            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
+    } else {
+        const auto completion = completeTimedRun(candidate.processState,
+                                                 *candidate.processRunSnapshot,
+                                                 time.monotonicMillis);
+        if (!completion.proposed() ||
+            !applyProcessTransition(candidate.processState, completion,
+                                    &*candidate.processRunSnapshot))
+            return invalid();
+        // A selected fallback that was already complete during the outage is
+        // committed as the existing acknowledged-terminal/no-active shape.
+        // This uses the canonical completion acknowledgement transition and
+        // the shared clear helper; it does not add an interlock allow rule or
+        // a second recovery policy.
+        if (selectedFallbackCompletionToNoActiveRun &&
+            candidate.processState.state == ProcessState::Completed) {
+            const auto acknowledgement = decideProcessTransition(
+                candidate.processState, &*candidate.processRunSnapshot,
+                ProcessSignals{},
+                TransitionRequest{ProcessEvent::AcknowledgeCompletion,
+                                  std::nullopt},
+                time.monotonicMillis, PriorBootPhaseElapsed{});
+            if (!acknowledgement.proposed() ||
+                !applyProcessTransition(candidate.processState, acknowledgement,
+                                        &*candidate.processRunSnapshot)) {
+                return invalid();
+            }
+            clearActiveRunState(candidate);
+        }
+        candidate.priorBootPhaseElapsed.reset();
+    }
+    ++candidate.runRevision;
+    RunPersistenceSnapshot snapshot;
+    if (!makeRunPersistenceSnapshotInto(candidate, persistedIds_,
+                                        persistedIdCount_,
+                                        RunCheckpointTrigger::Transition, time,
+                                        schedule_.intervalMinutes(), snapshot))
+        return invalid();
+    const auto persisted = writeSnapshotCore(
+        snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
+        std::nullopt, targetSlot, fallbackDirective, rollbackState);
+    if (persisted.status != RunPersistenceResultStatus::Applied)
+        return {persisted, current};
+    auto applied = persisted;
+    applied.step = RunPersistenceStep::RamApply;
+    applied.coordinatorState = state_;
+    return {applied, std::move(candidate)};
+}
+
 R1RecoveryEvaluation
 RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
     RunCommandState& current, const RunCheckpointTime& time) {
@@ -1051,117 +1182,29 @@ RunPersistenceCoordinator::evaluateCurrentFermentingRecovery(
     if (!loadedRecord.utcUnixSeconds.has_value()) {
         return rejected(RunPersistenceResultStatus::InvalidDecision);
     }
-    // Missing current UTC is a non-terminal asynchronous state only after
-    // the persisted checkpoint UTC has been proven present. Without that
-    // record anchor, a later RTC/NTP value cannot make the wall-clock term
-    // reconstructible. The loaded checkpoint remains untouched and can be
-    // evaluated again by the same coordinator when trusted UTC is available.
     if (!time.utcUnixSeconds.has_value()) {
         return R1RecoveryEvaluation{
             RecoveryDisposition::WaitingForTrustedTime,
             result(RunPersistenceResultStatus::RecoveryPending,
                    RunPersistenceStep::CandidateApply)};
     }
-
-    const auto prior = exactPriorFermentingSeconds(current);
-    if (!prior.has_value() || loadedRecord.snapshot.checkpointMonotonicMillis <
-                                  current.processState.stateEnteredAtMillis) {
-        return rejected(RunPersistenceResultStatus::InvalidDecision);
-    }
-    const auto liveSegment =
-        checkedToUint32((loadedRecord.snapshot.checkpointMonotonicMillis -
-                         current.processState.stateEnteredAtMillis) /
-                        1000U);
-    if (!liveSegment.has_value()) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-    const auto phaseAtCheckpoint = checkedAdd(*prior, *liveSegment);
-    const auto wallClockSinceCheckpoint =
-        checkedUtcDelta(*time.utcUnixSeconds, *loadedRecord.utcUnixSeconds);
-    if (!phaseAtCheckpoint.has_value() ||
-        !wallClockSinceCheckpoint.has_value()) {
-        return rejected(RunPersistenceResultStatus::InvalidDecision);
-    }
-    const auto recoveredPhase =
-        checkedAdd(*phaseAtCheckpoint, *wallClockSinceCheckpoint);
-    if (!recoveredPhase.has_value()) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-    const auto fermentationDuration = checkedToUint32(
-        static_cast<std::uint64_t>(
-            *current.processRunSnapshot->fermentationDurationMinutes) *
-        60U);
-    if (!fermentationDuration.has_value()) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-    const auto recoveredPrior = checkedToUint32(*recoveredPhase);
-    if (!recoveredPrior.has_value()) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-
-    auto candidate = current;
-    if (!foldObservedRunSeconds(candidate, *liveSegment)) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-
-    if (*recoveredPhase < *fermentationDuration) {
-        // Use the existing RecoveryEvaluation -> RecoveryResume topology in
-        // RAM to obtain the same FSM invariants as every other recovery
-        // handoff. Only the final candidate is persisted.
-        const auto hop1 = propose(
-            candidate.processState, ProcessState::RecoveryEvaluation,
-            TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
-        if (!hop1.proposed() ||
-            !applyProcessTransition(candidate.processState, hop1,
-                                    &*candidate.processRunSnapshot)) {
-            return rejected(RunPersistenceResultStatus::InvalidDecision);
-        }
-        auto recoveredState = current.processState;
-        recoveredState.state = ProcessState::Fermenting;
-        recoveredState.stateEnteredAtMillis = time.monotonicMillis;
-        recoveredState.qualificationValidSinceMillis.reset();
-        recoveredState.targetReachStartedAtMillis = 0U;
-        recoveredState.targetReachWarningIssued = false;
-        const auto hop2 = decideProcessTransition(
-            candidate.processState, &*candidate.processRunSnapshot,
-            ProcessSignals{},
-            TransitionRequest{ProcessEvent::RecoveryResume, recoveredState},
-            time.monotonicMillis,
-            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior});
-        if (!hop2.proposed() ||
-            !applyProcessTransition(candidate.processState, hop2,
-                                    &*candidate.processRunSnapshot)) {
-            return rejected(RunPersistenceResultStatus::InvalidDecision);
-        }
-        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
-            ProcessState::Fermenting,
-            PriorBootPhaseElapsed{*recoveredPrior, *recoveredPrior}};
-    } else {
-        const auto completion =
-            completeTimedRun(current.processState, *current.processRunSnapshot,
-                             time.monotonicMillis);
-        if (!completion.proposed() ||
-            !applyProcessTransition(candidate.processState, completion,
-                                    &*candidate.processRunSnapshot)) {
-            return rejected(RunPersistenceResultStatus::InvalidDecision);
-        }
-        // A prior offset is meaningful only for the phase it times. The
-        // normal FermentationCompleted transition consumes it; Cooling and
-        // Completed must not carry a FERMENTING tag.
-        candidate.priorBootPhaseElapsed.reset();
-    }
-
-    if (candidate.runRevision == std::numeric_limits<std::uint32_t>::max()) {
-        return rejected(RunPersistenceResultStatus::CounterOverflow);
-    }
-    ++candidate.runRevision;
-    const auto persisted = persistRecoveryCandidate(current, candidate, time);
+    // Missing current UTC is a non-terminal asynchronous state only after
+    // the persisted checkpoint UTC has been proven present. Without that
+    // record anchor, a later RTC/NTP value cannot make the wall-clock term
+    // reconstructible. The loaded checkpoint remains untouched and can be
+    // evaluated again by the same coordinator when trusted UTC is available.
+    const auto outcome = activateR1ExactFermentingCore(
+        current, loadedRecord, time, std::nullopt,
+        RunPersistenceFallbackDirective{},
+        RunPersistenceCoordinatorState::LoadedActiveRun);
+    const auto persisted = outcome.persistenceResult;
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         pendingR1CheckpointRevision_.reset();
         pendingR1RunRevision_.reset();
         return R1RecoveryEvaluation{
             RecoveryDisposition::RecoveryRejectedOrFailClosed, persisted};
     }
+    current = outcome.resultingState;
     pendingR1CheckpointRevision_.reset();
     pendingR1RunRevision_.reset();
     return R1RecoveryEvaluation{RecoveryDisposition::CurrentRunRecoverable,
@@ -1200,238 +1243,87 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         !currentHead_.has_value() || !currentHead_->fallback.has_value()) {
         return {unavailableResult(), current};
     }
-
+    const auto fallbackReference = *currentHead_->fallback;
     const auto targetSlot = currentHead_->current.slot;
-    const auto& fallbackReference = *currentHead_->fallback;
     if (targetSlot > 1U || fallbackReference.slot > 1U ||
         targetSlot == fallbackReference.slot ||
-        !slots_[fallbackReference.slot].has_value()) {
+        !slots_[fallbackReference.slot].has_value() ||
+        !current.processRunSnapshot.has_value()) {
         return invalid(current);
     }
-    if (!current.processRunSnapshot.has_value()) {
+    // The retained load copy is only an offer. Re-read both the head and the
+    // physical fallback slot immediately before any selected mutation so a
+    // changed/corrupt source can never be written through stale RAM evidence.
+    const auto liveHeadRead = store_.readHead(kMaximumHeadRecordBytes);
+    if (liveHeadRead.status != device_platform::StateStoreReadStatus::Success) {
         return invalid(current);
     }
-
-    const auto commitCandidate =
-        [&](const RunCommandState& toCommit,
-            const RunPersistenceFallbackDirective& fallbackDirective)
-        -> RecoveryActivationOutcome {
-        const auto snapshot = makeRunPersistenceSnapshot(
-            toCommit, persistedIds_, persistedIdCount_,
-            RunCheckpointTrigger::Transition, time,
-            schedule_.intervalMinutes());
-        if (!snapshot.has_value()) return invalid(current);
-        const auto persisted = writeSnapshotCore(
-            *snapshot, time, false, current,
-            RunPersistenceMutationKind::Recovery, std::nullopt, targetSlot,
-            fallbackDirective,
-            RunPersistenceCoordinatorState::FallbackRecoveryPending);
-        if (persisted.status != RunPersistenceResultStatus::Applied) {
-            return {persisted, current};
-        }
-        return {persisted, toCommit};
-    };
-
-    if (current.processState.state == ProcessState::Completed) {
-        auto candidate = current;
-        candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
-        return commitCandidate(
-            candidate, RunPersistenceFallbackDirective{
-                           RunPersistenceFallbackMode::SetExplicitReference,
-                           fallbackReference});
+    const auto liveHead = decodeRunPersistenceHead(liveHeadRead.value, epoch_);
+    if (!liveHead.has_value() || liveHead->revision != currentHead_->revision ||
+        !liveHead->fallback.has_value() ||
+        !sameCheckpointReference(liveHead->current, currentHead_->current) ||
+        !sameCheckpointReference(*liveHead->fallback, fallbackReference)) {
+        return invalid(current);
     }
-
-    const auto& loadedRecord = *slots_[fallbackReference.slot];
-
-    // A fallback snapshot can itself be a persisted Hop-1-only episode. It
-    // receives the same refresh treatment as a loaded current snapshot, but
-    // the replacement is written to the damaged current slot.
-    if (current.processState.state == ProcessState::RecoveryEvaluation) {
-        if (!current.pendingRecoveryAnchor.has_value() ||
-            !current.recoveryBootAnchorMonotonicMillis.has_value() ||
-            current.recoveryEpisodeRevision ==
-                std::numeric_limits<std::uint32_t>::max()) {
+    const auto liveFallbackRead =
+        store_.readSlot(fallbackReference.slot, kMaximumCheckpointRecordBytes);
+    if (liveFallbackRead.status !=
+        device_platform::StateStoreReadStatus::Success) {
+        return invalid(current);
+    }
+    RunPersistenceRawRecord liveRecord;
+    if (!decodeRunPersistenceRecordInto(liveFallbackRead.value, epoch_,
+                                        liveRecord) ||
+        !runCheckpointReferenceMatches(fallbackReference, liveRecord,
+                                       fallbackReference.slot) ||
+        !currentMatchesLoadedRecord(current, liveRecord, persistedIds_,
+                                    persistedIdCount_) ||
+        liveRecord.bytes != slots_[fallbackReference.slot]->bytes) {
+        return invalid(current);
+    }
+    const auto& loadedRecord = liveRecord;
+    if (current.processState.state == ProcessState::Fermenting) {
+        if (!loadedRecord.utcUnixSeconds.has_value()) {
             return invalid(current);
         }
-        auto candidate = current;
-        updateLastKnownEvidence(candidate.recoveryTemperatureEvidence,
-                                liveSensorEvidence);
-        ++candidate.recoveryEpisodeRevision;
-        candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
-        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-        return commitCandidate(
-            candidate, RunPersistenceFallbackDirective{
-                           RunPersistenceFallbackMode::SetExplicitReference,
-                           fallbackReference});
-    }
-
-    const auto originalProcessState = current.processState;
-    if (!stateUsesRunSnapshot(originalProcessState.state) ||
-        current.recoveryEpisodeRevision ==
-            std::numeric_limits<std::uint32_t>::max()) {
-        return invalid(current);
-    }
-
-    auto candidate = current;
-    const auto anchor = makePendingRecoveryAnchor(candidate, loadedRecord,
-                                                  originalProcessState);
-    if (!anchor.has_value()) return invalid(current);
-    candidate.pendingRecoveryAnchor = anchor->anchor;
-    if (originalProcessState.state == ProcessState::Fermenting &&
-        !foldObservedRunSeconds(candidate,
-                                anchor->thisHopAltBootLocalSeconds)) {
-        return invalid(current);
-    }
-    candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
-    ++candidate.recoveryEpisodeRevision;
-    if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
-        supersedeUnbookedWeightedSegment(
-            candidate.runProgress,
-            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
-    }
-    candidate.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{
-        current.recoveryTemperatureEvidence.lastKnown,
-        FirstAfterRestartEvidence{}, candidate.recoveryEpisodeRevision};
-    updateLastKnownEvidence(candidate.recoveryTemperatureEvidence,
-                            liveSensorEvidence);
-
-    const auto hop1 = propose(
-        originalProcessState, ProcessState::RecoveryEvaluation,
-        TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
-    if (!hop1.proposed() ||
-        !applyProcessTransition(candidate.processState, hop1,
-                                &*candidate.processRunSnapshot)) {
-        return invalid(current);
-    }
-    applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-
-    const auto timeContext = deriveRecoveryTimeContext(
-        *candidate.pendingRecoveryAnchor, time.utcUnixSeconds,
-        time.monotonicMillis, *candidate.recoveryBootAnchorMonotonicMillis);
-    if (!timeContext.has_value()) return invalid(current);
-
-    if (originalProcessState.state == ProcessState::WaitingForProduct) {
-        const auto verdict = evaluateRecoveryTimeVerdict(
-            timeContext->elapsed,
-            *candidate.processRunSnapshot->maximumProductWaitMinutes * 60U);
-        if (verdict == RecoveryTimeVerdict::DefinitelyExpired) {
-            const auto tombstone =
-                propose(candidate.processState, ProcessState::Standby,
-                        TransitionReason::RecoveryEndedByExpiredWait,
-                        time.monotonicMillis);
-            if (!tombstone.proposed() ||
-                !applyProcessTransition(candidate.processState, tombstone,
-                                        &*candidate.processRunSnapshot)) {
-                return invalid(current);
-            }
-            applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-            clearActiveRunState(candidate);
-            return commitCandidate(
-                candidate,
-                RunPersistenceFallbackDirective{
-                    RunPersistenceFallbackMode::ClearFallback, std::nullopt});
+        if (!time.utcUnixSeconds.has_value()) {
+            return {result(RunPersistenceResultStatus::RecoveryPending,
+                           RunPersistenceStep::CandidateApply),
+                    current};
         }
-        if (verdict == RecoveryTimeVerdict::Uncertain) {
-            return commitCandidate(
-                candidate, RunPersistenceFallbackDirective{
-                               RunPersistenceFallbackMode::SetExplicitReference,
-                               fallbackReference});
-        }
-    }
-
-    if (!candidate.sensorSelection.has_value() ||
-        !candidate.activeRunSensorMode.has_value()) {
-        return invalid(current);
-    }
-    const auto recommendation = computeRestartSensorSelection(
-        *candidate.sensorSelection, *candidate.activeRunSensorMode,
-        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
-    candidate.sensorSelectionRuntime = recommendation.runtime;
-    candidate.activeRunSensorMode = recommendation.activeMode;
-    if (candidate.activeManualRun.has_value()) {
-        candidate.activeManualRun->values.sensorMode =
-            recommendation.activeMode;
-    }
-    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
-        const auto rejected = decideProcessTransition(
-            candidate.processState, &*candidate.processRunSnapshot,
-            ProcessSignals{},
-            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
-            time.monotonicMillis);
-        if (!rejected.proposed() ||
-            !applyProcessTransition(candidate.processState, rejected,
-                                    &*candidate.processRunSnapshot)) {
-            return invalid(current);
-        }
-        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
-            supersedeUnbookedWeightedSegment(
-                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
-                                           ->weightedProgressSegmentId);
-            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
-                .reset();
-        }
-        candidate.pendingRecoveryAnchor.reset();
-        candidate.recoveryBootAnchorMonotonicMillis.reset();
-        candidate.priorBootPhaseElapsed.reset();
-        clearActiveRunState(candidate);
-        return commitCandidate(
-            candidate,
+        return activateR1ExactFermentingCore(
+            current, loadedRecord, time, targetSlot,
             RunPersistenceFallbackDirective{
-                RunPersistenceFallbackMode::ClearFallback, std::nullopt});
+                RunPersistenceFallbackMode::SetExplicitReference,
+                fallbackReference},
+            RunPersistenceCoordinatorState::FallbackRecoveryPending, true);
     }
-
-    if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);
-    const auto accumulated = accumulatedPriorForResume(
-        *candidate.pendingRecoveryAnchor, *timeContext);
-    if (!accumulated.has_value()) return invalid(current);
-
-    PriorBootPhaseElapsed priorForDecision = *accumulated;
-    if (originalProcessState.state == ProcessState::WaitingForProduct) {
-        if (!timeContext->elapsed.totalSecondsUpperBound.has_value()) {
-            return invalid(current);
-        }
-        const auto upper =
-            checkedToUint32(*timeContext->elapsed.totalSecondsUpperBound);
-        if (!upper.has_value()) return invalid(current);
-        priorForDecision = PriorBootPhaseElapsed{*upper, *upper};
+    if (!boot_classification::isR1ResumeEligible(loadedRecord.snapshot)) {
+        return invalid(current);
     }
-
-    const auto recovered =
-        rebasedRecoveredState(originalProcessState, time.monotonicMillis);
-    const auto hop2 = decideProcessTransition(
-        candidate.processState, &*candidate.processRunSnapshot,
-        ProcessSignals{},
-        TransitionRequest{ProcessEvent::RecoveryResume, recovered},
-        time.monotonicMillis, priorForDecision);
-    if (!hop2.proposed() ||
-        !applyProcessTransition(candidate.processState, hop2,
-                                &*candidate.processRunSnapshot)) {
-        return originalProcessState.state == ProcessState::WaitingForProduct
-                   ? commitCandidate(
-                         candidate,
-                         RunPersistenceFallbackDirective{
-                             RunPersistenceFallbackMode::SetExplicitReference,
-                             fallbackReference})
-                   : invalid(current);
-    }
-
-    if (candidate.processState.state == ProcessState::WaitingForProduct ||
-        candidate.processState.state == ProcessState::Fermenting ||
-        candidate.processState.state == ProcessState::CoolHolding) {
-        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
-            candidate.processState.state, *accumulated};
-    } else {
-        candidate.priorBootPhaseElapsed.reset();
-    }
+    auto candidate = current;
     applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-    if (recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)) {
-        candidate.pendingRecoveryAnchor.reset();
-        candidate.recoveryBootAnchorMonotonicMillis.reset();
+    RunPersistenceSnapshot snapshot;
+    if (!makeRunPersistenceSnapshotInto(
+            candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes(),
+            snapshot)) {
+        return invalid(current);
     }
-    return commitCandidate(candidate,
-                           RunPersistenceFallbackDirective{
-                               RunPersistenceFallbackMode::SetExplicitReference,
-                               fallbackReference});
+    const auto persisted = writeSnapshotCore(
+        snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
+        std::nullopt, targetSlot,
+        RunPersistenceFallbackDirective{
+            RunPersistenceFallbackMode::SetExplicitReference,
+            fallbackReference},
+        RunPersistenceCoordinatorState::FallbackRecoveryPending);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return {persisted, current};
+    }
+    auto applied = persisted;
+    applied.step = RunPersistenceStep::RamApply;
+    applied.coordinatorState = state_;
+    return {applied, std::move(candidate)};
 }
 
 RunPersistenceResult RunPersistenceCoordinator::reevaluateRecoveryEvaluation(
