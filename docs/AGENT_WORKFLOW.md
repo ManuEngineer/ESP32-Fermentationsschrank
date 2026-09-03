@@ -234,8 +234,10 @@ Problemumfang; danach gilt wieder der Standard-Builder.
 Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
 Die konkreten Befehle und Werkzeuge stehen in `CI_AND_QUALITY_GATES.md`.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Review ohne
-offene Befunde, auf dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
+Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Independent
+Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+ausdruecklicher Owner-Anweisung. Klassifizierte `FOLLOW-UP` und `NO-ACTION`
+blockieren den Lauf nicht.
 
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
 den PR nach dem Review auf `Ready for review`; dadurch startet der vollstaendige
@@ -243,10 +245,12 @@ CI-Lauf. Spaetere semantische Pushes auf einen nicht als Draft markierten PR
 starten CI erneut.
 
 Markdown-only- und Kommentaraenderungen bleiben von der Firmware-CI ausgenommen.
-Das ist keine Ausnahme vom Review: Jede semantische Aenderung, auch an
-normativer Dokumentation, verwirft den bisherigen Reviewnachweis. Nur rein
-redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags- oder
-Akzeptanzwirkung duerfen den Reviewnachweis behalten.
+Fuer den Reviewnachweis gilt bei semantischen Aenderungen die
+Fix-Verification-/Materialitaetsregel: Eine lokal begrenzte Korrektur wird mit
+Fix Verification und dem erforderlichen Regression Check abgeschlossen; eine
+materielle Aenderung oder ein breiter neuer Diff erfordert einen neuen Full
+Review. Nur rein redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags-
+oder Akzeptanzwirkung duerfen den bisherigen Reviewnachweis behalten.
 
 Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
 Korrektur. Nur der Owner entscheidet, ob der PR wieder als Draft gefuehrt wird.

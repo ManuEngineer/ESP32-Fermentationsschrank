@@ -38,7 +38,7 @@ nicht kopiert, sondern verlinkt.
 
 ## Parallele Governance-Arbeit
 
-- Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLANNING`; `IMPLEMENTATION=NOT_STARTED`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die ausdrückliche Ownerfreigabe des exakten versionierten Plan-Commits.
+- Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLAN_APPROVED=YES`; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_REVIEW=OPEN_BLOCKERS`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die Independent Fix Verification der Review-Blocker, anschließend das reguläre Owner-/Ready-Gate.
 
 ## Naechste fachliche Arbeit
 
