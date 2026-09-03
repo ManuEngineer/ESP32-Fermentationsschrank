@@ -52,7 +52,7 @@ void test_current_fermenting_enters_r1_recovery_evaluation() {
                               RunPersistenceLoadStatus::Current, &snapshot)));
 }
 
-void test_fallback_recovered_never_resumes_or_discards() {
+void test_fallback_recovered_requires_explicit_selection() {
     const auto active = snapshotFor(ProcessState::Preheating);
     const auto completed = snapshotFor(ProcessState::Completed);
     const auto fault = snapshotFor(ProcessState::Fault);
@@ -60,10 +60,11 @@ void test_fallback_recovered_never_resumes_or_discards() {
 
     for (const auto* snapshot : {&active, &completed, &fault}) {
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(RunLoadDisposition::SafeBoot),
+            static_cast<int>(RunLoadDisposition::FallbackSelectionRequired),
             static_cast<int>(classifyRunLoad(status, snapshot)));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(BootClassification::SafeBoot),
-                              static_cast<int>(classify(status, snapshot)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(BootClassification::FallbackSelectionRequired),
+            static_cast<int>(classify(status, snapshot)));
     }
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunLoadDisposition::SafeBoot),
                           static_cast<int>(classifyRunLoad(status, nullptr)));
@@ -125,7 +126,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_resume_eligibility_keeps_the_r1_phase_matrix);
     RUN_TEST(test_current_fermenting_enters_r1_recovery_evaluation);
-    RUN_TEST(test_fallback_recovered_never_resumes_or_discards);
+    RUN_TEST(test_fallback_recovered_requires_explicit_selection);
     RUN_TEST(test_all_load_outcomes_map_to_the_r1_boot_classification);
     RUN_TEST(test_legacy_boot_and_safeboot_snapshots_are_rejected_as_invalid);
     RUN_TEST(test_legacy_process_state_enum_order_is_unchanged);

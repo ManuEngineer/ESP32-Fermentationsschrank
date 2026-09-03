@@ -22,6 +22,7 @@
 #include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
+#include "fermentation_ui_commands.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "storage_envelope.hpp"
@@ -360,9 +361,9 @@ fermentation::ConfigurationRecordReference<Version> reference(
 
 fermentation::LoadedConfigurationGraph seedGraphWithCatalog(
     LocalStore& store, const Resolver& resolver,
-    const fermentation::ProgramCatalog& catalog) {
-    const fermentation::UserConfiguration user{"de", "Europe/Zurich",
-                                               "Fermentationsschrank"};
+    const fermentation::ProgramCatalog& catalog,
+    fermentation::UserConfiguration user = fermentation::UserConfiguration{
+        "de", "Europe/Zurich", "Fermentationsschrank"}) {
     const fermentation::ServiceConfiguration service;
     std::string userPayload;
     std::string servicePayload;
@@ -461,6 +462,15 @@ struct Fixture {
 
     explicit Fixture(const fermentation::ProgramCatalog& catalog)
         : initialGraph(seedGraphWithCatalog(store, resolver, catalog)) {
+        TEST_ASSERT_TRUE(
+            fermentation::ConfigurationServiceTestAccess::initialize(
+                service, initialGraph));
+    }
+
+    explicit Fixture(fermentation::UserConfiguration user)
+        : initialGraph(seedGraphWithCatalog(
+              store, resolver, fermentation::makeFactoryProgramCatalog(),
+              std::move(user))) {
         TEST_ASSERT_TRUE(
             fermentation::ConfigurationServiceTestAccess::initialize(
                 service, initialGraph));
@@ -673,6 +683,86 @@ void test_confirmed_preview_commits_root_then_publishes_runtime() {
         "Neuer Schrank", runtime.lease->userConfiguration().deviceName.c_str());
     TEST_ASSERT_EQUAL_UINT64(
         2U, runtime.lease->manifestReference().version.value());
+}
+
+void test_ui_configuration_confirmation_uses_current_owning_basis() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "UI-Basis");
+    fermentation::FermentationUiConfigurationCommitCommand command;
+    command.previewHandle = preview.handle;
+    command.expectedUserConfigurationRevision =
+        preview.expectedUserConfigurationRevision;
+
+    const auto ready = fixture.service.validatePreviewForConfirmation(
+        command.previewHandle, command.expectedUserConfigurationRevision);
+    TEST_ASSERT_TRUE(
+        ready.status ==
+        fermentation::ConfigurationCommitStatus::ReadyForConfirmation);
+    const auto unconfirmed =
+        fermentation::FermentationUiCommandBridge::commitConfiguration(
+            fixture.service, command);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
+                             ConfirmationRequired),
+        static_cast<int>(unconfirmed.category));
+
+    // Advancing the owning service basis after preview installation must be
+    // observed before the UI bridge can offer confirmation.
+    fermentation::ConfigurationServiceTestAccess::setStateRevision(
+        fixture.service, fixture.service.stateRevision() + 1U);
+    const auto stale =
+        fermentation::FermentationUiCommandBridge::commitConfiguration(
+            fixture.service, command);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(stale.category));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<fermentation::ConfigurationCommitStatus>(
+            stale.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationCommitStatus::
+                             ConfigurationConflictFailure),
+        static_cast<int>(
+            std::get<fermentation::ConfigurationCommitStatus>(stale.detail)));
+}
+
+void test_theme_only_preview_is_visible_and_commits_v2() {
+    // The stable light identifier is known to the configuration schema but is
+    // intentionally not included in the R1 renderer build.  It provides a
+    // real persisted-ID-versus-build-inclusion transition without adding a
+    // second R1 theme descriptor.
+    Fixture fixture(fermentation::UserConfiguration{
+        "de", "Europe/Zurich", "Theme-Test", "manuengineer-light"});
+    auto build = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(build.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    build.lease.userConfiguration().activeThemeId = "manuengineer-dark";
+    const auto installed = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(installed.preview.has_value());
+    TEST_ASSERT_TRUE(installed.preview->summary.activeThemeChanged);
+    TEST_ASSERT_FALSE(installed.preview->summary.displayLanguageChanged);
+    TEST_ASSERT_FALSE(installed.preview->summary.timeZoneChanged);
+    TEST_ASSERT_FALSE(installed.preview->summary.deviceNameChanged);
+    TEST_ASSERT_TRUE(installed.preview->changes.userConfiguration);
+    TEST_ASSERT_FALSE(installed.preview->changes.serviceConfiguration);
+    TEST_ASSERT_FALSE(installed.preview->changes.programCatalog);
+
+    const auto committed =
+        fixture.service.confirmPreview(installed.preview->handle);
+    TEST_ASSERT_TRUE(committed.status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_TRUE(runtime.lease.valid());
+    TEST_ASSERT_EQUAL_STRING(
+        "manuengineer-dark",
+        runtime.lease->userConfiguration().activeThemeId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, runtime.lease->userConfigurationRevision().value());
 }
 
 void test_pre_root_write_failure_keeps_old_runtime_and_no_partial_publish() {
@@ -1611,7 +1701,7 @@ void test_preview_reports_schema_bound_integrity_and_redacted_summary() {
         fermentation::decodeChangeOperation(1U));
     TEST_ASSERT_TRUE(installed.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.userSchema);
+    TEST_ASSERT_EQUAL_UINT32(2U, installed.preview->integrity.userSchema);
     TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.serviceSchema);
     TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.programSchema);
     TEST_ASSERT_TRUE(installed.preview->summary.deviceNameChanged);
@@ -1699,6 +1789,8 @@ int main() {
         test_invalid_new_request_does_not_replace_visible_no_change_preview);
     RUN_TEST(test_abandoned_build_lease_releases_model_budget);
     RUN_TEST(test_confirmed_preview_commits_root_then_publishes_runtime);
+    RUN_TEST(test_ui_configuration_confirmation_uses_current_owning_basis);
+    RUN_TEST(test_theme_only_preview_is_visible_and_commits_v2);
     RUN_TEST(
         test_pre_root_write_failure_keeps_old_runtime_and_no_partial_publish);
     RUN_TEST(test_unknown_root_commit_with_verified_new_graph_activates);

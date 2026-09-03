@@ -459,7 +459,7 @@ void test_reset_prepare_failure_keeps_operational_runtime_without_producer() {
         {"uc0",
          fermentation::configuration_storage_contract::
              kUserConfigurationRecordType,
-         2U,
+         3U,
          fermentation::ConfigurationRecoveryStatus::
              UnsupportedNewerConfigurationSchema},
     };

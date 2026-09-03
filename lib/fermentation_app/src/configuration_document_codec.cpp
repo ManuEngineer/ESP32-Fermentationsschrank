@@ -733,8 +733,14 @@ configuration_codec_internal::decodeSingleProgramDocumentPayload(
 }
 
 ConfigurationCodecStatus encodeUserConfigurationPayload(
-    const UserConfiguration& configuration,
+    const UserConfiguration& configuration, std::uint32_t schemaVersion,
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
+    if (schemaVersion !=
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
+        schemaVersion !=
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
+        return ConfigurationCodecStatus::UnsupportedSchema;
+    }
     if (validateUserConfiguration(configuration, resolver).status !=
         UserConfigurationStatus::Success) {
         return ConfigurationCodecStatus::InvalidDocument;
@@ -743,7 +749,10 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
         configuration_limits::kMaximumUserConfigurationPayloadBytes);
     if (!writeString(writer, configuration.displayLanguageId) ||
         !writeString(writer, configuration.timeZoneId) ||
-        !writeString(writer, configuration.deviceName)) {
+        !writeString(writer, configuration.deviceName) ||
+        (schemaVersion ==
+             static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
+         !writeString(writer, configuration.activeThemeId))) {
         return ConfigurationCodecStatus::CapacityExceeded;
     }
     auto encoded = writer.takeBytes();
@@ -755,7 +764,9 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
     std::uint32_t schemaVersion, const std::string& payload,
     const device_platform::ITimeZoneResolver& resolver) {
     if (schemaVersion !=
-        static_cast<std::uint32_t>(UserConfigurationSchema::Version1)) {
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
+        schemaVersion !=
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
         return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
     }
     if (payload.size() >
@@ -769,7 +780,11 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
         !readString(reader, configuration_limits::kMaximumTimeZoneIdBytes,
                     candidate.timeZoneId) ||
         !readString(reader, configuration_limits::kMaximumVisibleNameBytes,
-                    candidate.deviceName)) {
+                    candidate.deviceName) ||
+        (schemaVersion ==
+             static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
+         !readString(reader, configuration_limits::kMaximumThemeIdBytes,
+                     candidate.activeThemeId))) {
         return {ConfigurationCodecStatus::Truncated, std::nullopt};
     }
     if (reader.remaining() != 0U) {

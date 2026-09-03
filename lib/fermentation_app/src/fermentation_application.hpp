@@ -9,6 +9,7 @@
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "reset_cause.hpp"
+#include "sensor_selection.hpp"
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
 
@@ -20,6 +21,7 @@ class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
 class ConfigurationService;
 class RunPersistenceCoordinator;
+struct FermentationUiResumeFallbackCommand;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -73,6 +75,17 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
+    // Explicit R1 selected-fallback action.  The command carries only the
+    // app-owned confirmation/revision contract; fresh sensor/planner evidence
+    // is supplied by the owning application/orchestrator boundary, never by
+    // a UI transport.
+    // The orchestrator publishes fresh owning evidence at the application
+    // boundary. UI/Web commands never carry sensor, planner or safety data.
+    void publishOwningRecoveryEvidence(
+        const CrossRolePlausibilityContext& evidence);
+    [[nodiscard]] RunPersistenceResult resumeFallback(
+        const FermentationUiResumeFallbackCommand& command);
+
    private:
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
@@ -91,6 +104,8 @@ class FermentationApplication {
         const RunPersistenceSnapshot* snapshot,
         const RunCheckpointTime& bootTime);
     [[nodiscard]] bool prepareResumeOffer(
+        const RunPersistenceSnapshot* snapshot);
+    [[nodiscard]] bool prepareFallbackSelection(
         const RunPersistenceSnapshot* snapshot);
     [[nodiscard]] bool evaluateCurrentRecovery(
         const RunPersistenceSnapshot* snapshot,
@@ -113,7 +128,9 @@ class FermentationApplication {
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
+    std::unique_ptr<RunCommandState> pendingFallbackResume_;
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
+    std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
     std::optional<RecoveryDisposition> recoveryDisposition_;

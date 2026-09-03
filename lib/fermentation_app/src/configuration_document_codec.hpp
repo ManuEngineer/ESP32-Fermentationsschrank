@@ -26,8 +26,20 @@ struct ConfigurationDecodeResult {
 };
 
 [[nodiscard]] ConfigurationCodecStatus encodeUserConfigurationPayload(
-    const UserConfiguration& configuration,
+    const UserConfiguration& configuration, std::uint32_t schemaVersion,
     const device_platform::ITimeZoneResolver& resolver, std::string& out);
+
+// Compatibility helper for explicit V1 fixtures and V1 semantic
+// revalidation. New production writes pass
+// kCurrentUserConfigurationSchemaVersion explicitly.
+[[nodiscard]] inline ConfigurationCodecStatus encodeUserConfigurationPayload(
+    const UserConfiguration& configuration,
+    const device_platform::ITimeZoneResolver& resolver, std::string& out) {
+    return encodeUserConfigurationPayload(
+        configuration,
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version1), resolver,
+        out);
+}
 
 [[nodiscard]] ConfigurationDecodeResult<UserConfiguration>
 decodeUserConfigurationPayload(

@@ -149,6 +149,7 @@ ActuationEvaluation ActuationInterlock::evaluate(
                 break;
             case ConfigurationCommitStatus::Activated:
             case ConfigurationCommitStatus::NoChange:
+            case ConfigurationCommitStatus::ReadyForConfirmation:
             case ConfigurationCommitStatus::PreviewNotFound:
             case ConfigurationCommitStatus::PreviewSuperseded:
             case ConfigurationCommitStatus::ConfigurationMutationBusy:
@@ -229,6 +230,7 @@ ActuationEvaluation ActuationInterlock::evaluate(
                 result.permission = ActuatorSafetyGateStatus::Allowed;
             break;
         case RunLoadDisposition::RecoveryEvaluation:
+        case RunLoadDisposition::FallbackSelectionRequired:
         case RunLoadDisposition::NoActiveRun:
         case RunLoadDisposition::Completed:
         case RunLoadDisposition::TerminalFault:
@@ -319,6 +321,7 @@ bool ActuationInterlock::isKnown(ConfigurationCommitStatus status) noexcept {
     switch (status) {
         case ConfigurationCommitStatus::Activated:
         case ConfigurationCommitStatus::NoChange:
+        case ConfigurationCommitStatus::ReadyForConfirmation:
         case ConfigurationCommitStatus::PreviewNotFound:
         case ConfigurationCommitStatus::PreviewSuperseded:
         case ConfigurationCommitStatus::ConfigurationMutationBusy:
