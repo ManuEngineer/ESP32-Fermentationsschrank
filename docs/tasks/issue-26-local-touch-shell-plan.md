@@ -17,8 +17,8 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
-    PLAN_REVISION=F1_F2_PLAN_FINDINGS
-    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    PLAN_REVISION=F1_F10_PLAN_FINDINGS
+    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
     PREDECESSOR_ISSUE=25
     PREDECESSOR_PR=142
     PREDECESSOR_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f
@@ -60,19 +60,19 @@ Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=integration/r1-development
     CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
-    CONTEXT_PLAN_SHA=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    CONTEXT_HEAD_SHA=2fbe85f41c2461575331c4c3afed73a447302d43
+    CONTEXT_PLAN_SHA=2fbe85f41c2461575331c4c3afed73a447302d43
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=Issue25 owner close, F1 Roadmap verification, F2 Application-Handoff correction
+    CONTEXT_DELTA=Issue25 owner close, F1-F10 Issue26 plan finding corrections
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
 ursprüngliche vollständige Plan war der zweite Commit
-c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9. Diese F1/F2-Korrektur ist eine
+c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; die vorige F1/F2-Revision war
+2fbe85f41c2461575331c4c3afed73a447302d43. Diese F1-F10-Korrektur ist eine
 weitere versionierte Planrevision. Da Issue #25 live geschlossen ist, bleibt
-der Roadmap-Eintrag unverändert; ein Agent schließt kein Issue. Bis zu einer
-ausdrücklichen Freigabe der exakten revidierten PLAN_COMMIT bleibt die
-Implementation NOT_STARTED.
+der Roadmap-Eintrag unverändert. Bis zu einer ausdrücklichen Freigabe der
+exakten revidierten PLAN_COMMIT bleibt die Implementation NOT_STARTED.
 
 ## 2. Ziel und Definition der Umsetzung
 
@@ -346,27 +346,71 @@ Displaybytes und keine Aktor-GPIOs.
 
 ### 6.1 Home-Modi
 
-FermentationHomeMode wird additiv so vervollständigt, dass die sechs
-geforderten sichtbaren Modi eindeutig unterscheidbar sind. Der bestehende
-Standby-Begriff bleibt der kanonische interne Ready-Modus; eine Umbenennung
-des bestehenden Fachzustands ist nicht erforderlich.
+Die Projektionsquelle führt den bestehenden kanonischen
+ApplicationLifecycleState explizit mit:
 
-| Kanonische Quelle | sichtbarer Home-Modus | Primäraktion |
-|---|---|---|
-| validierter Standby ohne Lauf | Standby / Bereit | Vorheizen oder Start, abhängig vom aufgelösten Programm |
-| Preheating, ReachingTarget, QualifyingTarget, Fermenting, Cooling, CoolHolding oder ManualHolding | ActiveRun / Aktiv | Stop |
-| WaitingForProduct oder fachlich offene UserDecisionRequired-Meldung | Waiting / Wartet | Weiter, Bestätigen oder Quittieren entsprechend dem kanonischen Kontext |
-| Completed | Completed / Abgeschlossen | OK, Abschluss bestätigen oder Jetzt kühlen |
-| SafeBoot, Fault, ServiceRequired oder fehlende normale Freigabe | Restricted / Eingeschränkt | Diagnose, Fehlerdetails oder zulässige Recoveryaktion |
-| RecoveryEvaluation, WaitingForTrustedTime oder FallbackSelectionRequired | Recovery | nur die vom Recoveryvertrag angebotene Info-/Resumeaktion |
-| fehlende App-/Plattformbereitschaft ohne Recoveryangebot | Unavailable | keine Fachaktion |
+    FermentationUiApplicationSource {
+        ApplicationLifecycleState lifecycleState;
+        PresentationState presentation;
+        canonical service source;
+    }
 
-Die Projektionsfunktion verwendet canonical ProcessState,
-RecoveryDisposition, Lifecycle- und Servicewerte. Sie leitet keinen Zustand
-aus Temperaturrohwerten, Farben, einer einzelnen Meldung oder einer
-Touchaktion ab. Warning-/DecisionRequired-Kontexte bleiben in Banner und
-Detaildaten erhalten, ohne einen zweiten parallel gepflegten Domainzustand zu
-erzeugen.
+FermentationApplication::lifecycleState() wird unverändert in diese Quelle
+übergeben. Ein boolesches ready-Feld, eine Faultdarstellung oder eine andere
+indirekte UI-Ableitung ist keine Eingabe für die Home-Projektion. Die
+ApplicationStatusView darf ready höchstens als exakt abgeleitete
+Darstellung von lifecycleState == Ready führen; die Projektionsentscheidung
+verwendet den Enumwert selbst.
+
+Die exakten FermentationHomeMode-Werte nach #26 sind:
+
+    Standby       // sichtbares Label: Ready/Bereit
+    ActiveRun     // sichtbares Label: Aktiv
+    Waiting       // sichtbares Label: Wartet
+    Completed     // sichtbares Label: Abgeschlossen
+    Restricted    // sichtbares Label: Eingeschränkt
+    Recovery      // sichtbares Label: Recovery
+    Unavailable   // technischer Fallback, kein siebter sichtbarer Home-Modus
+
+Standby bleibt als bestehender Codewert erhalten und wird nicht in einen
+zweiten Fachzustand Ready umbenannt. FermentationHomeMode::ServiceRequired
+wird aus dem Home-Enum entfernt; ApplicationLifecycleState::ServiceRequired
+ist ausschließlich die kanonische Lifecyclequelle und wird zu
+FermentationHomeMode::Restricted projiziert. Damit konkurrieren
+ServiceRequired und Restricted nicht als zwei sichtbare Begriffe.
+Unavailable bleibt außerhalb der sechs geforderten sichtbaren Modi und wird
+nur bei fehlender oder technisch nicht verfügbarer Projektionsquelle
+verwendet, nicht als Ersatz für Fault oder Recovery.
+
+Die deterministische Priorität lautet:
+
+1. ApplicationLifecycleState::Initializing -> Unavailable und
+   nichtblockierender Startstatus;
+2. aktiver kanonischer RecoveryDisposition-,
+   RecoveryEvaluation- oder FallbackSelectionRequired-Zustand ->
+   Recovery;
+3. ApplicationLifecycleState::ServiceRequired -> Restricted;
+4. ProcessState::SafeBoot, Fault, Boot oder ServiceMode -> Restricted;
+5. ProcessState::Completed -> Completed;
+6. ProcessState::WaitingForProduct -> Waiting;
+7. eine kanonische offene decisionRequired-Meldung -> Waiting, aber nur wenn
+   RuntimeMessage aktiv, nicht aufgelöst, mit decisionRequired=true und für
+   den aktuellen Prozesskontext vom Fachowner zulässig;
+8. andere laufende kanonische Phasen
+   Preheating/ReachingTarget/QualifyingTarget/Fermenting/Cooling/
+   CoolHolding/ManualHolding -> ActiveRun;
+9. ProcessState::Standby bei ApplicationLifecycleState::Ready und ohne Lauf
+   -> Standby;
+10. fehlende oder nicht auswertbare kanonische Quelle -> Unavailable.
+
+Die EntscheidungRequired-Ausnahme ist absichtlich eng: Sie verwendet das
+kanonische Feld RuntimeMessage::decisionRequired zusammen mit active,
+resolved und dem Ownerkontext. Eine beliebige Meldung, ein Textschlüssel,
+eine Farbe oder ein UI-Fehler darf keinen Home-Modus ändern. Alle anderen
+Warnungen bleiben Banner-/Detaildaten. So ist Waiting entweder durch
+ProcessState::WaitingForProduct oder durch diesen ausdrücklich kanonischen
+offenen Entscheidungsstatus begründet und wird nicht aus einer einzelnen
+beliebigen Meldung erraten.
 
 ### 6.2 Feste vier Slots
 
@@ -441,9 +485,14 @@ wiederverwendet. Es entsteht kein allgemeines Widgetframework.
 Der Workspace zeigt den vollständigen kanonischen Zustand und wählt die
 Beschriftung des Slot 0 über stabile TextKeys:
 
-- bei einem vorheizenden Programm: Vorheizen; fachlich ist dies der
+- ohne explizit gewählten Startkandidaten: Programm wählen; Slot 0 öffnet
+  deterministisch die kanonische Programmliste und startet weder das letzte
+  Programm noch einen erfundenen Datensatz;
+- nach Auswahl eines gültigen Kandidaten: Startzusammenfassung; erst dort
+  wird ein expliziter ProgramStartIntent erzeugt;
+- bei einem vorheizenden Kandidaten: Vorheizen; fachlich ist dies der
   bestehende StartProgram-Pfad und kein neuer Vorheizautomat;
-- bei einem unmittelbar startbaren Programm: Start;
+- bei einem unmittelbar startbaren Kandidaten: Start;
 - im aktiven Lauf: Stop; die Auswahl zwischen Ausschalten und Kühlen erfolgt
   im bestehenden Stop-Vertrag;
 - bei WaitingForProduct: Weiter beziehungsweise Produkt eingesetzt
@@ -458,6 +507,27 @@ Beschriftung des Slot 0 über stabile TextKeys:
 
 Vorheizen, Start, Stop, Fortsetzen, Bestätigen und Abschluss sind damit
 sichtbare Kontextaktionen, aber keine fünf neuen Fachautomaten.
+
+Der normale lokale Einstieg in den manuellen Betrieb liegt in der
+Programmliste beziehungsweise Startauswahl als semantische Aktion
+Manueller Betrieb. Er öffnet einen kleinen ManualRunPlan-Kandidaten mit den
+bereits vorhandenen Feldern Zieltemperatur, Sensorbetrieb, optionalem
+Vorheizen, Qualifikationsdaten und Lauf-ID. Nach fachlicher Prüfung ruft
+die App decideManualStart und nach Bestätigung
+TemperatureControlApplicationOrchestrator::persistFreshStartCommand auf.
+Der vorhandene owning Fachvertrag unterstützt dabei
+ProcessKind::ManualHolding; der aktive Lauf bleibt unveränderlich.
+
+Die Produktanforderung eines manuellen Zeit-/Temperaturlaufs ist im aktuellen
+Baseline-Code von #26 dagegen nicht durch einen eigenen vollständigen
+CommandKind-, Decide- und Application-Persistenzvertrag abgedeckt.
+Der Plan kennzeichnet diesen Unterschied als
+MANUAL_TIME_TEMPERATURE_OWNER_CONTRACT=BLOCKED_PREDECESSOR. #26 darf keinen
+zweiten manuellen Modus simuliert als funktionsfähig darstellen. Die lokale
+Auswahl zeigt ihn typisiert als Unavailable mit dem Grund
+OWNER_CONTRACT_MISSING; die Umsetzung beschränkt sich auf den vorhandenen
+manuellen Haltebetrieb und legt keinen neuen Fach-, Safety- oder
+Persistenzpfad an.
 
 ### 7.2 Bestehende Commandpfade
 
@@ -505,17 +575,37 @@ keine CommandEnvelope-/Idempotenzsemantik besitzt, wird dafür keine künstliche
 zweite Semantik erfunden.
 
 Der appseitige Bridgepfad prüft expectedStateSequence gegen den aktuellen
-kanonischen ProcessRuntimeState, bevor eine Mutation begonnen wird. Bei
-Abweichung liefert er ein typisiertes stale Ergebnis und ruft weder
-decideProcessTransition noch den Orchestrator-Applypfad mit einer mutierenden
-Entscheidung auf. Bei passender Revision erzeugt er ausschließlich die
-bestehende TransitionRequest mit
-ProcessEvent::ProductInsertedConfirmed und ruft
-decideProcessTransition auf. Ein DecisionStatus::Proposed wird als
-DecisionOnly in den Trace übernommen; nur danach darf
+kanonischen ProcessRuntimeState, bevor eine Mutation begonnen wird. Diese
+Prüfung ist nur ein enger app-owned Concurrency-Guard für diesen
+nicht-envelope-basierten Contract; sie ersetzt keine kanonische
+Entscheidung und führt keinen neuen FSM-Status ein.
+
+Bei Abweichung verwendet der Guard das bestehende gemeinsame
+FermentationUiCommandResult mit
+DeviceUiCommandOutcomeCategory::Rejected, dem bereits definierten
+CommandStatus::StaleState als Detail und der bereits definierten
+FermentationUiCommandPhase::DecisionOnly. Dafür wird ein kleiner
+fromAppStaleGuard-Bridgehelfer mit dem bestehenden Resultvertrag verwendet,
+damit die normale fromCommandStatus-Abbildung den Guard nicht fälschlich als
+OwningOutcome markiert. Er erfindet keinen DecisionStatus::Stale und ruft
+weder decideProcessTransition noch den Orchestrator-Applypfad mit einer
+mutierenden Entscheidung auf.
+
+Bei passender Revision erzeugt er ausschließlich die bestehende
+TransitionRequest mit ProcessEvent::ProductInsertedConfirmed und ruft
+decideProcessTransition auf. Das kanonische
+TransitionDecision::status wird unverändert in das gemeinsame
+FermentationUiCommandResult übernommen, indem dessen bestehende
+Detail-Variante additiv um den bereits vorhandenen Typ DecisionStatus
+ergänzt wird, etwa über einen fromTransitionDecision-Bridgehelfer. Für jeden
+nicht-proposed FSM-Status
+(NoTransition, Rejected, InvalidInput oder TimeWentBackwards) bleibt die
+Phase DecisionOnly und TemperatureControlApplicationOrchestrator wird nicht
+aufgerufen. Ein DecisionStatus::Proposed wird ebenfalls als DecisionOnly in
+den Trace übernommen; erst danach darf
 TemperatureControlApplicationOrchestrator::persistTransition aufgerufen
-werden. Das persistierte Ergebnis wird getrennt als OwningOutcome
-aufgezeichnet.
+werden. Dessen RunPersistenceResultStatus wird über denselben bestehenden
+FermentationUiCommandPhase-Wert als OwningOutcome aufgezeichnet.
 
 Ein Replay desselben UI-Contracts nach dem erfolgreichen Übergang verwendet
 die bereits verbrauchte erwartete Revision und wird vor einer zweiten
@@ -531,8 +621,13 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
 
 ### 7.3 Confirmation, Staleness und Doppelauslösung
 
-- Die bestehende canonical decide*- oder Preview-/Commitvalidierung läuft
-  zuerst.
+- Für Envelope-Commands läuft die bestehende kanonische decide*- oder
+  Preview-/Commitvalidierung zuerst. Beim ProductInsertedConfirmed-Contract
+  ist der Vergleich von expectedStateSequence nur der enge app-owned
+  Concurrency-Guard, der die Übergabe eines veralteten UI-Angebots verhindert;
+  bei passender Revision folgt trotzdem immer zuerst
+  decideProcessTransition. Der Guard darf keinen kanonischen
+  DecisionStatus simulieren oder die FSM-Entscheidung ersetzen.
 - Nur ein kanonisches NotConfirmed beziehungsweise
   ReadyForConfirmation erzeugt ConfirmationRequired.
 - StaleState, InvalidInput, SafetyRejected, NotAllowedInState,
@@ -578,6 +673,69 @@ Quellrevision auf.
   durch die Rezeptseite verändert;
 - nach einer konkurrierenden Änderung wird die bestehende Revision als
   Konflikt/Stale angezeigt, nicht still überschrieben.
+
+### 7.4.1 Vollständige lokale Programmverwaltung
+
+Die Programmliste übernimmt die Reihenfolge des kanonischen ProgramCatalog:
+die vier Standardprogramme stehen vor den Benutzerprogrammen. Die
+Factory-Vorlage und ihre resettable-/builtIn-Marker bleiben von jeder
+Benutzeraktion getrennt. Ein Standardprogramm wird nicht direkt bearbeitet;
+die lokale Aktion verwendet nur den bestehenden Kopierpfad und erzeugt
+daraus einen Benutzerkandidaten. Die FactoryCatalog-Quelle wird nie durch
+die UI mutiert.
+
+Die lokalen Pfade sind:
+
+- Bearbeiten öffnet einen flüchtigen ProgramDocument-Kandidaten. Ein
+  dauerhafter Commit läuft ausschließlich über den bestehenden
+  ConfigurationPreview-/ConfigurationService-Pfad;
+- Kopieren funktioniert für Standard- und Benutzerprogramme und erzeugt
+  eine neue Benutzer-ID im bestehenden Kandidaten-/Configvertrag;
+- Neu erzeugt einen leeren Benutzerentwurf. Solange Name, Werte oder
+  Programmvalidierung nicht den owning Vertrag erfüllen, bleibt der Entwurf
+  sichtbar, aber als nicht startbereit mit typisiertem Sperrgrund gesperrt;
+- Löschen verwendet die bestehende zweistufige Bestätigung. Ein aktuell
+  verwendetes oder laufendes Programm ist als nicht löschbar markiert und
+  erzeugt keinen Commit;
+- spätere Änderung oder Löschung einer Quelle verändert nie den aktiven
+  RunProgramSnapshot;
+- bei Katalog-/Programmrevision zwischen Lesen und Commit liefert der
+  ConfigurationService-/Previewpfad einen typisierten Konflikt, insbesondere
+  StateChanged, PreviewSuperseded oder PreviewNotFound, statt still zu
+  überschreiben.
+
+Die UI erfindet weder ID-, Validierungs-, Reserved-Factory- noch
+Löschregeln. Ein Factory-Reset bleibt der bestehende owning
+ConfigurationRecoveryService-/ConfigurationService-Pfad; die
+Benutzeraktion darf keine Factory-Vorlage direkt mutieren.
+
+### 7.5 Minimale lokale Feld-Eingabeverträge
+
+Für Rezept- und next-run-only-Editoren ergänzt fermentation_app nur zwei
+kleine rendererunabhängige UI-Modelle, keine Form-, Widget- oder
+Keyboardplattform:
+
+    NumericEditAction =
+        Plus | Minus | Digit | DecimalSeparator |
+        Backspace | Clear | Cancel | Commit
+
+    TextEditAction =
+        Character | Mode | Backspace | Clear | Cancel | Commit
+
+NumericEditModel hält ausschließlich einen flüchtigen Kandidaten,
+einschließlich direkter Ziffernfolge und Dezimaltrennzeichen. Plus und Minus
+sind sichtbare semantische Feldaktionen; Digit und DecimalSeparator erlauben
+die direkte Eingabe. TextEditModel hält für Programmname und kurze Notiz
+einen flüchtigen Textkandidaten. Character trägt ein semantisches Zeichen,
+Mode wechselt zwischen den enthaltenen Zeichenmodi, und beide Modelle
+unterstützen Rückschritt, Löschen, Abbrechen und Übernehmen.
+
+Die Modelle besitzen keine Feldgrenzen, Programmvalidität, ID-Regeln,
+Locale-Keyboardlogik oder Commitentscheidung. Diese bleiben bei
+validateProgram, ConfigurationPreview, ConfigurationService und den
+bestehenden Start-/Run-Contracts. Cancel verwirft nur den Kandidaten,
+Commit übergibt ihn zur owning Validierung. Es entsteht kein allgemeines
+Keyboard-, Formular- oder Widgetframework.
 
 ## 8. Header, Splash und Layoutvertrag
 
@@ -692,18 +850,37 @@ Die Plattform erhält ein kleines UI-only PinEntryModel:
   Übernehmen;
 - exakt vier Eingabestellen für die normale lokale Service-PIN-Anzeige;
 - maskierte Darstellung ohne Klartext;
-- sichtbare Zustände Empty, Incomplete, Pending, Rejected und Accepted;
-- Sperr-/Retryhinweis kommt als Ergebnis des owning Verifiers und wird nur
-  angezeigt;
+- sichtbare Zustände Empty, Incomplete, Pending, RetryWait, Rejected und
+  Accepted;
+- Retry-/Wartehinweis und gegebenenfalls ein ownergelieferter TextKey kommen
+  als Ergebnis des owning Verifiers und werden nur dargestellt;
 - PIN-Daten werden nicht persistiert, exportiert, geloggt oder in einem
   Snapshot abgelegt.
 
 Für die native Simulation liefert ein deterministischer, secretsfreier
-Testverifier nur ein vorgegebenes Ergebnis Accepted oder Rejected. #26
-implementiert damit die normale PIN-Eingabe und ihre Bedienpfade, aber keinen
+Test-Seam alle ownergelieferten Anzeigezustände Empty/Incomplete/Pending/
+RetryWait/Rejected/Accepted. Er berechnet keine Wartezeit, keinen Backoff und
+keine Credentialentscheidung. #26 implementiert damit die normale
+PIN-Eingabe und die Darstellung des owning Retrypfads, aber keinen
 produktiven Credential- oder Hashvertrag. Der spätere Auth-/Webscope bleibt
 bei seinem owning Issue. SAFE_BOOT verwendet die PIN-UI nicht als normalen
 Servicezugang.
+
+Die lokale Schutzmatrix wird aus kanonischen Application-, Process- und
+Servicewerten projiziert:
+
+| kanonische Quelle | normaler PIN-Service | Status/Diagnose |
+|---|---|---|
+| ApplicationLifecycleState::Ready, kein aktiver Lauf, Serviceowner erlaubt | verfügbar nach PIN-Eingabe | verfügbar |
+| Initializing oder ApplicationLifecycleState::ServiceRequired | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
+| aktiver Lauf inklusive ManualHolding | gesperrt/unavailable | verfügbar |
+| ProcessState::Fault | gesperrt/unavailable | verfügbar |
+| ProcessState::SafeBoot | gesperrt/unavailable | passive Diagnose/Recovery verfügbar |
+
+Die Tabelle ist eine Projektion bestehender Ownerentscheidungen. #26
+klassifiziert keinen Fault und hebt keine Sperre durch PIN-Erfolg auf.
+Erfolgreiche PIN-Prüfung erzeugt ausschließlich die lokale
+ServiceSessionLease und niemals Safety- oder Aktorfreigabe.
 
 ### 9.4 Lokale Servicesitzung
 
@@ -748,10 +925,20 @@ Die Anzeige darf dabei:
 - den Recoverygrund, trusted-UTC-Wartezustand und verfügbare nächste Aktion
   zeigen;
 - den bestehenden Fallback-Resume-Dialog darstellen;
-- passive Diagnose und zulässigen Export anbieten;
+- passive Diagnose anbieten;
 - Back/Home als reine Navigation ausführen.
 
-Sie darf nicht:
+Semantische SAFE_BOOT-Ziele werden wie folgt behandelt:
+
+| Ziel | #26-Darstellung |
+|---|---|
+| passive Diagnose, Persistenz-/Recoverystatus | ausführbar als Read, wenn der bestehende Presentation-/Recoverypfad den Wert liefert |
+| bestehendes Fallback-Resume | ausführbar ausschließlich über FermentationApplication::resumeFallback und die bestehende Bestätigung, wenn FallbackSelectionRequired kanonisch anliegt |
+| PIN-Service und Aktortest | immer gesperrt/unavailable; kein Backendpfad |
+| Vollreset, Netzwerk-Recovery, Export | nur ausführbar, wenn beim Planabgleich ein bestehender owning Application-/Platform-Aufruf mit seinem Ergebnisvertrag nachgewiesen ist; im aktuellen Baseline-Code ist kein solcher SAFE_BOOT-UI-Pfad öffentlich nachgewiesen, daher zunächst typisiert Unavailable mit OWNER_PATH_MISSING |
+| Raw-Touch-Recovery, Kalibrierung, physische Trigger | außerhalb #26 und weiterhin #31/TBD_HARDWARE |
+
+SAFE_BOOT darf nicht:
 
 - einen Lauf automatisch aus einem alten Fallback aktivieren;
 - ohne trusted UTC eine Dauer oder lokale Uhrzeit erfinden;
@@ -764,7 +951,10 @@ Sie darf nicht:
 ResumeFallback bleibt die bestehende bestätigte Appaktion. Vor Applied
 bleiben FallbackRecoveryPending, RAM-/FSM-Aktivierung und Aktorpermission
 unresolved. Erst der bestehende Write-before-Apply-/FSM-/Fresh-Evidence-
-Pfad kann die spätere Interlockbewertung erreichen.
+Pfad kann die spätere Interlockbewertung erreichen. Für jedes Ziel ohne
+nachgewiesenen owning Pfad zeigt die Shell einen typisierten
+OWNER_PATH_MISSING-/Unavailable-Grund statt einer scheinbaren ausführbaren
+Aktion.
 
 ### 10.2 Aktor- und Safetygrenze
 
@@ -800,15 +990,22 @@ device_platform_test_support.
 |---|---|
 | lib/fermentation_app/src/fermentation_ui_models.hpp/.cpp | additive Home-Modi Waiting/Completed/Restricted sowie kleine Workspace-/Programmlisten-/Detailmodelle, ohne zweiten Domainzustand |
 | lib/fermentation_app/src/fermentation_ui_projector.hpp/.cpp | vollständige Home-/Recovery-/Message-/Temperatur-/Statusprojektion aus canonical Ownerwerten; keine Rohwertentscheidung |
-| lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen |
-| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängiger ProductInsertedConfirmed-Intent mit erwarteter Zustandsrevision, getrennte DecisionOnly-/OwningOutcome-Ergebnisse und Bridge über den bestehenden Application-Orchestrator; keine künstliche Envelope-/Idempotenzsemantik |
+| lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen; kein direkter Owner- oder Persistenzaufruf |
+| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängiger ProductInsertedConfirmed-Intent mit erwarteter Zustandsrevision, Wiederverwendung von FermentationUiCommandPhase, DecisionStatus-/Stale-/Persistenzresultaten und Bridge über den bestehenden Application-Orchestrator; keine künstliche Envelope-/Idempotenzsemantik |
+| lib/fermentation_app/src/fermentation_ui_editing.hpp/.cpp | minimale NumericEditModel-/TextEditModel-Aktionen für Rezeptname, Notiz und Werte; nur flüchtige Kandidaten, keine Validierungs- oder Keyboardplattform |
 | lib/fermentation_app/src/fermentation_ui_text.hpp/.cpp | zusätzliche fermentation-owned TextKeys für Rezepte, Phasen, Aktionen, Status, Service, PIN, Feedback und Sperrgründe in DE/EN/ES |
 
-TemperatureControlApplicationOrchestrator, FermentationApplication,
-ConfigurationService, RunPersistenceCoordinator, Process-State-Machine,
-Sensor-, Recovery- und Safetyimplementierungen werden nur angepasst, wenn der
-konkrete Workspace-Einstieg einen bereits vorhandenen Ownerpfad benötigt.
-Keine private UI-Fachlogik wird in diese Owner verschoben.
+Die vorhandenen Ownerpfade werden als unveränderte Abhängigkeiten verwendet:
+TemperatureControlApplicationOrchestrator für Run-Apply/Persistenz und
+Lifecycle-Handoff, FermentationApplication für ApplicationLifecycleState und
+Recoveryaktionen, ConfigurationService/ConfigurationPreview für den
+Programmkatalog und Configuration-Commit, sowie die bestehende
+Process-State-Machine-, Sensor-, Recovery- und Safetylogik. #26 plant keine
+Änderung dieser Ownerimplementierungen und keinen direkten Zugriff des
+Workspace auf den RunPersistenceCoordinator. Die konkrete Lücke für den
+manuellen Zeit-/Temperaturlauf sowie die fehlenden SAFE_BOOT-UI-Aufrufe bleibt
+als vorgelagerte Ownerlücke BLOCKED/Unavailable und wird nicht in #26
+aufgelöst.
 
 ### 11.3 Deterministischer Testsupport
 
@@ -819,6 +1016,7 @@ Keine private UI-Fachlogik wird in diese Owner verschoben.
 | test/test_device_ui_contracts/test_device_ui_contracts.cpp | additive Tests für neue generische Interaktions-, Idle- und PIN-Verträge |
 | test/test_fermentation_ui_models/test_fermentation_ui_models.cpp | Home-Modus-, Workspace- und Projektionstests |
 | test/test_fermentation_ui_commands/test_fermentation_ui_commands.cpp | Transitionbrücke, Confirmationreihenfolge, Staleness, Duplicate und keine Navigation-IDs |
+| test/test_fermentation_ui_editing/test_fermentation_ui_editing.cpp | NumericEditModel-/TextEditModel-Aktionen, Kandidatenlebensdauer und keine Validierungsduplikation |
 
 Nur wenn der gemeinsame Testtreiber tatsächlich eine getrennte wiederverwendbare
 Hilfe benötigt, darf eine kleine weitere Datei unter test/ entstehen. Eine
@@ -850,43 +1048,46 @@ Unverändert bleiben:
 
 ## 12. Logische Umsetzungsschnitte
 
-Alle Schnitte bleiben nach der Ownerfreigabe im selben Draft-PR #143. Jeder
-Schnitt erhält gezielte Tests; bei einer materiellen Abweichung wird angehalten
-und der Plan neu versioniert.
+Die Schnitte beschreiben die technische Reihenfolge der späteren #26-Arbeit.
+Jeder Schnitt erhält die in der Akzeptanzmatrix benannten gezielten Nachweise;
+fachliche Abweichungen werden als neue Planprovenienz behandelt.
 
 1. Generische Interaktion: semantische Targets, vier Slotindices,
    VerticalPager, Pressfeedback, Feedbackintents und additive Shellprüfung.
    Kein Commandaufruf in device_platform.
 2. Idle und PIN: monotonic UI-Idle mit WakeOnly-Ersttouch, semantische
    Systemweckung, maskiertes vierstelliges PinEntryModel und
-   secretsfreier Testverifier. ServiceSessionLease bleibt die #25-Autorität.
-3. Workspace-Projektion: Home-Modusmatrix, gemeinsame Snapshotnutzung,
+   secretsfreier Testverifier mit Pending-/RetryWait-Projektion.
+   ServiceSessionLease bleibt die #25-Autorität.
+3. Workspace-Projektion: expliziter ApplicationLifecycleState,
+   deterministische Home-Moduspriorität, gemeinsame Snapshotnutzung,
    vollständige lokale Routen, Status-/Service-Plattformbereiche und
    isolierte App-Erweiterungen. TextKeys statt sichtbarer Literale.
-4. Kontextaktionen: Slot-0-Matrix für Vorheizen/Start/Stop/
-   Fortsetzen/Bestätigen/Abschluss, Rezepte-Slot, strukturierte Dialoge,
-   Sperrgründe sowie den app-owned ProductInsertedConfirmed-Contract über
-   decideProcessTransition und
-   TemperatureControlApplicationOrchestrator::persistTransition. Für alle
-   mutierenden Commands werden DecisionOnly und Application-Apply getrennt
-   getestet.
-5. Rezepte und Laufdetails: Startzusammenfassung, next-run-only-Werte,
-   unveränderlicher Run-Snapshot, Programmliste, Pager, Prozess-/Technikseite,
-   Meldungs-/Quittier-/Mute-/Stop- und Abschlussabläufe über bestehende
-   Commands und ConfigurationPreview.
+4. Kontextaktionen: Slot-0-Matrix ohne implizite Programmauswahl,
+   ManualHolding-Einstieg, ProductInsertedConfirmed-Contract,
+   DecisionOnly-vs-Application-Apply, bestehende Orchestrator-Handoffs und
+   strukturierte Dialoge/Sperrgründe.
+5. Rezepte und Laufdetails: Startzusammenfassung, numerische und textuelle
+   Kandidateneditoren, next-run-only-Werte, unveränderlicher Run-Snapshot,
+   Bearbeiten, Kopieren, Neu, zweistufiges Löschen, Programmliste, Pager,
+   Prozess-/Technikseite, Meldungs-/Quittier-/Mute-/Stop- und
+   Abschlussabläufe über bestehende Commands und ConfigurationPreview.
 6. Recovery, Header und Start: Splash/Startstatus, Headerziele,
-   actor-free Recovery, FallbackSelectionRequired, WaitingForTrustedTime,
-   SAFE_BOOT und sichtbare Restricted-Sperrgründe.
+   actor-free Recovery, ausführbare versus unavailable SAFE_BOOT-Ziele,
+   FallbackSelectionRequired, WaitingForTrustedTime und sichtbare
+   Restricted-Sperrgründe.
 7. Simulation und Nachweis: generic test-support shell, 320-x-240-Frame,
-   vollständige appseitige Szenarien, Layout-/Text-/Locale-/Theme- und
-   Fehlbedienungsorakel; keine Hardwarepfade.
-8. Gezielte Dokumentation und Review: SIM-Matrix, vollständiger Diff-
-   Review gegen Issue/#25-Vertrag/ADR-013, Architektur-/Secret-/Diffchecks
-   und Aktualisierung des Draft-PR-Nachweises.
+   vollständige appseitige Szenarien einschließlich aller Ownerlücken,
+   Layout-/Text-/Locale-/Theme- und Fehlbedienungsorakel; keine
+   Hardwarepfade.
+8. Issue-spezifische Dokumentation: SIM-Matrix und notwendige
+   Architektur-/Secret-/Diffchecks gegen Issue, #25-Vertrag, ADR-013 und
+   die bestehende Ownergrenze.
 
-Der konkrete spätere Implementierungs-Commit-Schnitt darf diese Reihenfolge
-mechanisch auf mehrere Commits verteilen, erzeugt aber keinen weiteren PR,
-keine weitere Roadmap-Planwahrheit und kein vorgezogenes #31.
+Die konkrete spätere Implementierung bleibt auf diese fachlichen Pfade
+begrenzt. Fehlende Ownerverträge werden als BLOCKED/Unavailable
+nachgewiesen und nicht durch einen zusätzlichen Dispatcher- oder Fachpfad
+ersetzt.
 
 ## 13. Simulations- und Akzeptanzmatrix
 
@@ -896,28 +1097,28 @@ ausgeführter Fall bleibt NOT_RUN und ist kein PASS.
 
 | ID | Nachweis |
 |---|---|
-| SIM-26-01 | Ready/Standby zeigt genau vier Slots: primäre Startaktion, Rezepte, Status, Service; Header und leere Slots bleiben sichtbar |
-| SIM-26-02 | Home-Modusmatrix ergibt eindeutig Bereit, Aktiv, Wartet, Abgeschlossen, Eingeschränkt und Recovery aus canonical states |
-| SIM-26-03 | Splash läuft ungefähr drei Sekunden ohne blockierenden Tick; ready führt Home, langsamer Start den kompakten Startstatus und kritischer Startfehler actor-free in Restricted/Recovery |
+| SIM-26-01 | Home ohne expliziten Kandidaten zeigt genau vier Slots; Slot 0 öffnet Programm wählen, startet nicht das letzte Programm und erfindet keinen Datensatz |
+| SIM-26-02 | Lifecycle-/Recovery-/ProcessState-/decisionRequired-Priorität ergibt exakt Standby/Bereit, ActiveRun, Waiting, Completed, Restricted und Recovery; Unavailable bleibt technischer Fallback |
+| SIM-26-03 | Initializing zeigt Splash/kompakten nichtblockierenden Startstatus, Ready ohne Lauf zeigt Standby/Bereit und ServiceRequired wird ausschließlich als Restricted projiziert |
 | SIM-26-04 | Headerflächen für Sprache, WLAN und Uhrzeit sind nicht überlappend; Sprache nutzt enthaltene Locale, WLAN den Statusindikator und Uhr die ClockViewInput ohne erfundene Lokalzeit |
 | SIM-26-05 | Home/Back-Hierarchie: erste Unterebene Home, tiefere Ebene Back, genau ein Segment pro Back, ExitRequirement verhindert stilles Verwerfen |
-| SIM-26-06 | Rezepte-Listen verwenden große Einträge und Pager; Standardprogramme vor Benutzerprogrammen, ungültige Programme gesperrt und mit Grund sichtbar |
-| SIM-26-07 | Programmzeile öffnet Startzusammenfassung; next-run-only-Änderungen überschreiben weder Katalog noch aktiven Schnappschuss; Reset verwirft nur den Kandidaten |
+| SIM-26-06 | Rezepte-Listen verwenden große Einträge und Pager; Standardprogramme stehen vor Benutzerprogrammen, ungültige Programme sind mit Grund gesperrt |
+| SIM-26-07 | Ohne Kandidat führt Programm wählen deterministisch zur Liste, ein gültiger Kandidat zur Startzusammenfassung und erst danach zu Vorheizen/Start |
 | SIM-26-08 | Vorheizen/Start verwendet den bestehenden ProgramStart-Pfad; Produkt eingesetzt verwendet den app-owned ProductInsertedConfirmed-Contract, decideProcessTransition und den TemperatureControlApplicationOrchestrator ohne zweite FSM |
 | SIM-26-09 | Aktiver Lauf zeigt Stop im ersten Slot, Rezepte im zweiten, Prozess-/Technikdetails und aktuelle Snapshotwerte; Stop bietet Ausschalten oder Kühlen |
 | SIM-26-10 | Abschluss zeigt OK/Details und optional Jetzt kühlen; Kühlen erzeugt nur über den bestehenden Completion-Pfad einen neuen manuellen Lauf |
 | SIM-26-11 | Meldungsbanner zeigt höchste Priorität; Quittieren beseitigt Ursache nicht, Stummschalten beendet nur akustisches Signal, Faultreset bleibt getrennt |
-| SIM-26-12 | Status und Service zeigen Plattformseiten vor App-Erweiterungen; eine unavailable Appsection isoliert Plattformstatus und andere Appsections |
+| SIM-26-12 | Status und Service zeigen Plattformseiten vor App-Erweiterungen; eine unavailable Appsection isoliert Plattformstatus und andere Appsections; SAFE_BOOT bietet keinen normalen PIN-Service |
 | SIM-26-13 | Lange Listen/Informationen navigieren ausschließlich über sichtbare Auf-/Ab-Ziele; kein Wischen, keine horizontale Route und keine Domainmutation |
 | SIM-26-14 | Pressfeedback wird für jedes erkannte Ziel sichtbar; disabled action zeigt Sperrgrund; kritische Aktionen verlangen strukturierte Confirmation und sind nicht doppelt auslösbar |
 | SIM-26-15 | Erster Touch im Dimmed/Asleep-Zustand erzeugt WakeOnly und kein Command; zweiter Touch kann erst danach das Ziel auslösen |
 | SIM-26-16 | Hintergrundupdates und Refreshrevisionen verlängern keine Lease und lösen keinen Command aus; relevante Servicebedienung verlängert nur die lokale Lease |
-| SIM-26-17 | PIN-UI maskiert vier Stellen, akzeptiert Ziffern/Backspace/Clear/Cancel/Submit, zeigt Pending/Rejected/Accepted und speichert keinen Secretwert |
+| SIM-26-17 | PIN-UI maskiert vier Stellen, akzeptiert Ziffern/Backspace/Clear/Cancel/Submit, zeigt Pending/RetryWait/Rejected/Accepted und speichert keinen Secretwert |
 | SIM-26-18 | Lokale Servicelease läuft nach 10 Minuten Inaktivität ab, ohne absolute Maximaldauer; ExplicitSignOut, DeviceRestart und SafetyStateInvalidated sperren sie sofort |
 | SIM-26-19 | Web-5/15-Servicepolicy bleibt von Touch-10/ohne-Absolutlimit und normalem Weblogin getrennt |
 | SIM-26-20 | WaitingForTrustedTime bleibt RAM-only und actor-free; Current-Recovery zeigt keine erfundene Dauer oder Zeit und Fallback bleibt Auswahlangebot |
 | SIM-26-21 | FallbackSelectionRequired erlaubt nur die bestehende bestätigte ResumeFallback-Aktion; Back/Home und Quittieren mutieren weder Persistenz noch Recoveryangebot |
-| SIM-26-22 | SAFE_BOOT zeigt passive Diagnose/Recoveryhinweise, aber keinen normalen PIN-Service, Aktortest oder Aktorfreigabe |
+| SIM-26-22 | SAFE_BOOT zeigt passive Diagnose/Recoveryhinweise; Fallback-Resume bleibt nur über den vorhandenen Application-Pfad ausführbar, fehlende Vollreset-/Netzwerk-/Exportpfade erscheinen als Unavailable, PIN-Service/Aktortest bleiben gesperrt |
 | SIM-26-23 | Recovery, PIN-Erfolg, Headeraktion, WLANstatus, UI-Ruhe und Pressfeedback können nie ActuationInterlock::Allowed erzeugen |
 | SIM-26-24 | Vollständiger 320-x-240-Frame: Viewport, Header, Content, Footer, vier gleich breite Slots, Pagerbereich und Nichtüberlappung werden deterministisch geprüft |
 | SIM-26-25 | Splashrahmen ist proportional/zentriert modelliert, statisch fallbackfähig und ohne Asset-, Renderer- oder Framebufferimplementierung |
@@ -933,12 +1134,29 @@ getrennt ausweisen:
 
 | ID | Nachweis |
 |---|---|
-| SIM-26-31 | WaitingForProduct -> ProductInsertedConfirmed -> ReachingTarget läuft über den app-owned Intent, decideProcessTransition und TemperatureControlApplicationOrchestrator::persistTransition |
-| SIM-26-32 | Ein Fehler aus persistTransition lässt RAM-/Prozesszustand unverändert beziehungsweise fail-closed; es gibt keinen vorgezogenen Lifecycle-Handoff |
-| SIM-26-33 | Eine stale erwartete Zustandsrevision wird vor der Mutation abgelehnt und erzeugt keinen Persistenzschreibvorgang |
+| SIM-26-31 | Passende Revision: WaitingForProduct -> ProductInsertedConfirmed -> ReachingTarget läuft über den app-owned Intent, decideProcessTransition und TemperatureControlApplicationOrchestrator::persistTransition |
+| SIM-26-32 | DecisionStatus::Proposed wird als DecisionOnly traciert; ein anschließender Fehler aus persistTransition lässt RAM-/Prozesszustand unverändert beziehungsweise fail-closed und erzeugt keinen vorgezogenen Lifecycle-Handoff |
+| SIM-26-33 | Stale expectedStateSequence liefert CommandStatus::StaleState im gemeinsamen FermentationUiCommandResult mit Phase DecisionOnly und erzeugt keinen Decide- oder Persistenzaufruf |
 | SIM-26-34 | Ein Replay nach erfolgreichem ProductInsertedConfirmed erzeugt wegen der verbrauchten Zustandsrevision oder der kanonischen Zustandsablehnung keine zweite Nebenwirkung |
 | SIM-26-35 | Der Workspace enthält keinen direkten Aufruf von RunPersistenceCoordinator::persistTransition; Architektur-/Diffprüfung bestätigt den Application-Orchestrator als einzige Run-Mutationsgrenze |
-| SIM-26-36 | CommandStatus::Proposed und DecisionStatus::Proposed erscheinen als DecisionOnly; erst das getrennte Ergebnis von persistCommand, persistFreshStartCommand, persistTransition oder persistSensorSelection erscheint als OwningOutcome |
+| SIM-26-36 | CommandStatus::Proposed und DecisionStatus::Proposed erscheinen zunächst ausschließlich als DecisionOnly ohne Apply; erst das getrennte Ergebnis von persistCommand, persistFreshStartCommand, persistTransition oder persistSensorSelection erscheint als OwningOutcome |
+| SIM-26-48 | Passende Revision mit kanonisch abgelehntem ProductInsertedConfirmed-Übergang bewahrt den exakten TransitionDecision::status als DecisionOnly und ruft keine persistTransition-Funktion auf |
+
+Weitere #26-Pfade werden deterministisch separat geprüft:
+
+| ID | Nachweis |
+|---|---|
+| SIM-26-37 | ManualHolding ist über Manueller Betrieb, ManualRunPlanRequest, decideManualStart und TemperatureControlApplicationOrchestrator::persistFreshStartCommand bedienbar; es wird kein direkter Aktorpfad erzeugt |
+| SIM-26-38 | Der in REQUIREMENTS.md genannte manuelle Zeit-/Temperaturlauf ist als OWNER_CONTRACT_MISSING/Unavailable sichtbar und wird nicht als funktionierender zweiter manueller Modus simuliert |
+| SIM-26-39 | NumericEditModel unterstützt Plus/Minus, direkte Ziffern, Dezimaltrennzeichen, Backspace, Clear, Cancel und Commit; Grenzen und Gültigkeit kommen ausschließlich vom owning Validator |
+| SIM-26-40 | TextEditModel unterstützt Zeichen-/Modusaktionen, Rückschritt, Löschen, Abbrechen und Übernehmen für Programmname und kurze Notiz; kein Keyboardframework wird benötigt |
+| SIM-26-41 | Bearbeiten verwendet flüchtige Kandidaten und ConfigurationPreview/ConfigurationService für den dauerhaften Commit; active RunProgramSnapshot bleibt unverändert |
+| SIM-26-42 | Standard- und Benutzerprogramm können kopiert werden; Neu erzeugt einen leeren, sichtbar nicht startbereiten Entwurf mit Sperrgrund; Factory-Vorlage bleibt getrennt |
+| SIM-26-43 | Löschen erfordert zwei Bestätigungen; ein aktuell verwendetes oder laufendes Programm ist nicht löschbar und erzeugt keinen Commit |
+| SIM-26-44 | Katalog-/Programmrevision zwischen Lesen und Commit ergibt StateChanged, PreviewSuperseded oder PreviewNotFound typisiert; kein stilles Überschreiben |
+| SIM-26-45 | PIN-Service ist nur bei Ready, keinem aktiven Lauf und kanonischer Servicefreigabe erreichbar; aktiver Lauf, Fault und SAFE_BOOT bleiben gesperrt, Status/Diagnose bleiben passiv erreichbar |
+| SIM-26-46 | PIN-Accepted eröffnet nur die lokale ServiceSessionLease; keine Safety-/Aktorfreigabe und keine Veränderung von ActuationInterlock |
+| SIM-26-47 | SAFE_BOOT-Ziele werden einzeln als Read, bestehendes Fallback-Resume oder OWNER_PATH_MISSING/Unavailable nachgewiesen; Raw-Touch, Kalibrierung und physische Trigger bleiben außerhalb #26 |
 
 Zusätzlich werden die in docs/ACCEPTANCE_TESTS.md bereits geforderten
 zustands- und safetybezogenen Simulationen gezielt wiederverwendet:
@@ -973,11 +1191,12 @@ Der Planstatus bleibt:
 
 ### 14.2 Gezielte Umsetzungstests
 
-Nach Ownerfreigabe und je Implementierungsschnitt:
+Die konkreten #26-Testziele sind:
 
     pio test -e native --filter test_device_ui_contracts
     pio test -e native --filter test_fermentation_ui_models
     pio test -e native --filter test_fermentation_ui_commands
+    pio test -e native --filter test_fermentation_ui_editing
     pio test -e native --filter test_local_touch_ui
 
 Die tatsächliche Filterform wird gegen die PlatformIO-Testnamen im finalen
@@ -999,19 +1218,18 @@ Zusätzliche gezielte Prüfungen nach docs/CI_AND_QUALITY_GATES.md:
 
 Die neue generische Plattform bleibt ohne fermentation_app-Abhängigkeit, der
 Workspace bleibt ohne konkrete Adapterabhängigkeit und der Testsupport bleibt
-ohne Produktionsabhängigkeit. Architektur- und Secretchecks sind deshalb
-Teil des gezielten Nachweises.
+ohne Produktionsabhängigkeit. Architektur- und Secretchecks beziehen sich
+daher insbesondere auf diese #26-Grenzen.
 
 ### 14.3 Nicht ausgeführte Nachweise
 
-Während des Drafts werden keine vollständigen nativen Läufe, ESP-IDF-
-bringup/release Builds, Hardware-Smokes, Display-/Touchtests, WLAN-/RTC-Tests
-oder physische PIN-/Kalibrierungstests als PASS bezeichnet. Ein vollständiger
-lokaler Lauf erfolgt nur nach vollständigem Review, finalem HEAD und
-ausdrücklicher Owneranweisung. GitHub-Firmware-CI bleibt im Draft
-übersprungen; der Owner entscheidet später über Ready for review.
+In dieser Planrevision bleiben native Volltests, ESP-IDF-bringup/release,
+Hardware-Smokes, Display-/Touchtests, WLAN-/RTC-Tests und physische
+PIN-/Kalibrierungstests NOT_RUN. Sie werden nicht als PASS behauptet. Die
+zugehörige allgemeine Test- und Review-Governance steht ausschließlich in
+docs/CI_AND_QUALITY_GATES.md und docs/AGENT_WORKFLOW.md.
 
-## 15. Risiken, offene Grenzen und Owner-Gates
+## 15. Risiken und issue-spezifische Grenzen
 
 | Risiko/Grenze | Planbehandlung |
 |---|---|
@@ -1030,51 +1248,56 @@ ausdrücklicher Owneranweisung. GitHub-Firmware-CI bleibt im Draft
 | Text- und Themewerte könnten dupliziert werden | bestehende getrennte Packs, resolver- und theme-Fallback; keine screenlokalen Literale oder Hexwerte |
 | Simulation könnte Hardware-PASS vortäuschen | Testtrace erlaubt nur abstrakte Beobachtung; Hardware-/elektrische-/thermische Ergebnisse bleiben NOT_RUN/PENDING/BLOCKED |
 
-Zwingende Owner-Gates:
+Issue-spezifische technische Grenzen:
 
-1. ausdrückliche Freigabe genau der PLAN_COMMIT-SHA;
-2. keine Implementation vor dieser Freigabe;
-3. keine Renderer-, Treiber-, Touch-, Kalibrierungs-, Asset-, GPIO- oder
-   Backlightentscheidung in #26;
-4. kein normaler Auth-/Credential-Backend in #26;
-5. jede Änderung an Safety-, Recovery-, Persistenz-, Command-,
-   Architektur- oder Testvertrag als materielle Planabweichung stoppen und
-   neu planen;
-6. vollständiges Review vor einem eventuellen Ready-Gate;
-7. Ready, Merge, Issue-Close, CI-Gateentscheidung und Aktorfreigabe bleiben
-   Ownerrechte.
+1. Die Implementation bleibt bis zur Freigabe der exakten PLAN_COMMIT
+   NOT_STARTED.
+2. Keine Renderer-, Treiber-, Touch-, Kalibrierungs-, Asset-, GPIO- oder
+   Backlightentscheidung wird in #26 eingeführt.
+3. Kein normaler Auth-/Credential-Backend und kein zweiter
+   Application-/Persistence-/Safety-/Recoverypfad wird in #26 eingeführt.
+4. Der manuelle Zeit-/Temperaturlauf bleibt als
+   OWNER_CONTRACT_MISSING/Unavailable vorgelagert; die fehlenden
+   SAFE_BOOT-UI-Aufrufe bleiben OWNER_PATH_MISSING/Unavailable.
+5. Der bestehende Application-Orchestrator, ConfigurationService und
+   Recovery-/Safetyowner bleiben unveränderte Ownergrenzen.
+
+Die allgemeine Workflow-, Review-, Ready-, Merge-, CI- und Handover-Governance
+wird nicht im Issue-Plan dupliziert; sie bleibt in den kanonischen
+AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Commit-, PR- und Handover-Vertrag
 
-Der PR enthält nach dieser Befundkorrektur genau drei eigene Commits:
+Der PR enthält nach dieser Befundkorrektur genau vier eigene Commits:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
    c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9;
-3. diese F1/F2-Planrevision mit exakter SHA nach dem Commit.
+3. vorige F1/F2-Planrevision
+   2fbe85f41c2461575331c4c3afed73a447302d43;
+4. diese F1-F10-Planrevision mit exakter SHA nach dem Commit.
 
-Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert und
-es wird kein Issue durch den Agenten geschlossen. Der Draft-PR #143 wird nach
-dem dritten Commit mit den folgenden Feldern aktualisiert:
+Issue #25 ist live CLOSED; deshalb bleibt der Roadmap-Sync unverändert. Der
+Draft-PR #143 führt für diese Planprovenienz die folgenden Felder:
 
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
     PLAN_COMMIT=<exakte revidierte Commit-SHA>
     PR_HEAD=<exakte revidierte Commit-SHA>
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_APPROVAL_REQUIRED=YES
     ACTUATOR_RELEASE=NO
 
-Vor Sessionende wird genau ein aktueller SESSION HANDOVER-Kommentar im
-offenen Draft-PR erstellt. Er enthält:
+Für den Handover dieses PRs sind folgende issue-spezifischen Referenzen zu
+führen:
 
     ISSUE=26
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<PR-HEAD nach Planpush>
     ROADMAP_COMMIT=28a35b610020513460690d4b05e90bdec88e81d8
-    SUPERSEDES_PLAN_COMMIT=c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9
+    SUPERSEDES_PLAN_COMMIT=2fbe85f41c2461575331c4c3afed73a447302d43
     PLAN_COMMIT=<exakte revidierte Commit-SHA>
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
@@ -1082,12 +1305,10 @@ offenen Draft-PR erstellt. Er enthält:
     OPEN_GATE=OWNER_APPROVAL_OF_EXACT_PLAN_COMMIT
     NEXT_STEP=Owner prüft und gibt exakt PLAN_COMMIT frei; danach erst Umsetzung
 
-Der Handover nennt die beiden maßgeblichen exakten Commit-SHAs
-ROADMAP_COMMIT und die revidierte PLAN_COMMIT sowie den PR-HEAD; die
-überschriebene Vorgänger-Plan-SHA bleibt zusätzlich als Provenienz genannt.
-Er kopiert weder Diff noch Plan. Danach hält der Agent an. Es wird kein
-Ready, Merge, Auto-Merge, Issue-Close, Force-Push oder Branch-Löschen
-ausgeführt.
+Der Handover referenziert für diese Planrevision ROADMAP_COMMIT,
+SUPERSEDES_PLAN_COMMIT, PLAN_COMMIT und HEAD sowie den Teststatus und die
+Issue-spezifischen offenen Grenzen. Das Handover-Format und die übrige
+Prozessgovernance stammen aus docs/AGENT_WORKFLOW.md.
 
 ## 17. Definition of Done für die spätere #26-Umsetzung
 
@@ -1121,6 +1342,7 @@ ausgeführt.
 - keine Renderer-, Treiber-, Touchrohwert-, Kalibrierungs-, DMA-,
   Framebuffer-, Backlight-, Bibliotheks-, GPIO-, Hardware- oder
   Produktionsassetänderung ist enthalten.
-- vollständiges Review gegen Issue, diesen Plan, #25-Vertrag, ADR-013,
-  Safety-/Recovery-/Persistenzverträge, Tests und Dokumentation ist PASS;
-  erst danach entscheidet der Owner über den Ready-Gate.
+- alle issue-spezifischen SIM-, Ownerpfad- und Architekturgrenzen sind im
+  Implementierungsnachweis eindeutig als PASS, BLOCKED, PENDING oder
+  NOT_RUN dokumentiert; die allgemeine Review-/Ready-Governance bleibt in
+  den kanonischen Workflow-Dokumenten.
