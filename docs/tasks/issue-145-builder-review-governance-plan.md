@@ -123,12 +123,16 @@ vorhandenen Governance-/Statusquellen begrenzt. `.codex/config.toml` und
     definierten Fix-Verification-/Materialitätsregel verwerfen, ohne die
     Detailklassifikation zu duplizieren.
 - `docs/ROADMAP.md`:
+  - während die Planrevision ungeprüft ist, die bestehende Roadmap
+    unverändert lassen;
   - die bestehende Issue-#145-Zeile knapp auf
     `PLAN_APPROVED=YES`, `IMPLEMENTATION=COMPLETE`,
     `INDEPENDENT_REVIEW=OPEN_BLOCKERS` und `PRODUCTION_CODE_CHANGE=NO`
     aktualisieren;
-  - als nächstes Gate ausschließlich die Ownerfreigabe dieser Planrevision
-    ausweisen. Keine Anforderungen und keine Workflowdetails kopieren.
+  - nach dieser Aktualisierung als nächstes Gate die Independent Fix
+    Verification der Review-Blocker und anschließend das reguläre
+    Owner-/Ready-Gate ausweisen. Keine Anforderungen und keine Workflowdetails
+    kopieren.
 
 Keine weitere Datei, kein neuer Agentenauftrag, keine neue ADR und kein
 technischer Vertrag wird erzeugt. `.codex/config.toml` und
@@ -141,11 +145,15 @@ Nach Planfreigabe werden die vier Korrekturdateien als ein kleiner,
 nachvollziehbarer Governance-/Status-Implementierungsschnitt aktualisiert. Vor
 dem Commit werden die gezielten Text- und Diff-Nachweise ausgeführt, der Diff
 vollständig gegen diesen Plan geprüft und der Builder-Self-Check dokumentiert.
+Danach hält der Builder für die Independent Fix Verification an. Ein neuer
+Full Review wird nur bei materieller Abweichung vom genehmigten Korrekturscope
+oder bei einem breiten neuen Diff erforderlich.
 
-Der PR bleibt Draft. Nur der Owner entscheidet über `Ready for review`, führt
-den unabhängigen Full Review im normalen ChatGPT-Kanal durch, entscheidet über
-Korrekturen, setzt den PR auf `Ready for review`, nimmt einen Merge vor und
-schließt Issue #145. Der Agent nimmt keinen dieser Owner-Schritte vor.
+Der PR bleibt Draft. Der Owner führt die Independent Fix Verification der
+Review-Blocker durch. Nur bei materieller Abweichung oder breitem neuem Diff
+führt der Owner anschließend einen neuen unabhängigen Full Review durch. Über
+`Ready for review`, Merge und Issue-Abschluss entscheidet weiterhin nur der
+Owner; der Agent nimmt keinen dieser Owner-Schritte vor.
 
 ## Nachweise und Konsistenzprüfungen
 
@@ -183,7 +191,8 @@ Nur die direkt betroffenen Dokumentations-/Statusnachweise werden ausgeführt:
 7. Prüfen, dass `docs/ROADMAP.md` die bestehende Issue-#145-Zeile knapp mit
    `PLAN_APPROVED=YES`, `IMPLEMENTATION=COMPLETE`,
    `INDEPENDENT_REVIEW=OPEN_BLOCKERS` und `PRODUCTION_CODE_CHANGE=NO` führt
-   und als nächstes Gate nur die Ownerfreigabe dieser Planrevision nennt.
+   und danach als nächstes Gate die Independent Fix Verification der
+   Review-Blocker sowie anschließend das reguläre Owner-/Ready-Gate nennt.
 8. `git diff --check` sowie eine Dateiliste ausführen. Es dürfen nur
    `docs/tasks/issue-145-builder-review-governance-plan.md`,
    `docs/CI_AND_QUALITY_GATES.md`, `docs/AGENT_WORKFLOW.md`, Root-`AGENTS.md`
@@ -201,25 +210,35 @@ LOCAL_CORRECTION=FIX_VERIFICATION+REGRESSION_CHECK
 MATERIAL_CHANGE_OR_BROAD_DIFF=NEW_FULL_REVIEW
 CI_CORRECTION=SAME_FIX_VERIFICATION_MATERIALITY_RULE
 ROADMAP_STATUS=PLAN_APPROVED+IMPLEMENTATION_COMPLETE+OPEN_BLOCKERS
+ROADMAP_NEXT_GATE=INDEPENDENT_FIX_VERIFICATION+OWNER_READY
 PRODUCTION_CODE_CHANGED=NO
 ```
 
 Ein Firmware-Build, vollständiger lokaler Lauf, Hardwarelauf und Firmware-CI
 sind für diese Draft-Phase nicht angeordnet und werden als `NOT_RUN` geführt.
-Nach der Korrektur bleibt der PR bis zum unabhängigen Review und den
+Nach der Korrektur bleibt der PR bis zur Independent Fix Verification und den
 unveränderten Owner-Gates Draft.
 
 ## Review- und Abschlusskriterien
 
-Der Builder prüft vor Übergabe den vollständigen aktuellen Diff gegen diesen
-Plan und führt den Implementation Self-Check aus. Dieser Self-Check ist kein
-unabhängiger Full Review. Der Independent Reviewer prüft den gesamten
-relevanten aktuellen PR vollständig gegen alle im Workflow genannten Quellen
-und Dimensionen und endet nicht beim ersten Befund.
+Der bereits durchgeführte Independent Full Review des Ausgangsstands prüfte den
+gesamten relevanten PR gegen alle im Workflow genannten Quellen und Dimensionen
+und endete nicht beim ersten Befund. Der Builder prüft vor Übergabe der
+Korrektur den vollständigen aktuellen Korrekturdiff gegen diesen Plan und führt
+den Implementation Self-Check aus. Dieser Self-Check ist kein unabhängiger
+Review.
 
-Korrekturen folgen der im konsolidierten Workflow definierten
-Fix-Verification-Regel. Nur bei materieller Änderung ist ein neuer Full Review
-erforderlich. Der PR kann aus Review-Sicht `GO` erhalten, sobald alle
+Nach Umsetzung dieser Korrektur ist standardmäßig Independent Fix Verification
+vorgesehen:
+
+- den bisherigen Review-Blocker B1 verifizieren;
+- den bisherigen Review-Blocker B2 verifizieren;
+- den Korrekturdiff prüfen;
+- die direkt betroffenen Governance-/CI-Verträge auf Regression prüfen.
+
+Ein neuer Full Review ist nur erforderlich, wenn die Korrekturimplementation
+materiell über den genehmigten Korrekturscope hinausgeht oder einen breiten
+neuen Diff erzeugt. Der PR kann aus Review-Sicht `GO` erhalten, sobald alle
 genehmigten Acceptance Criteria erfüllt, alle erforderlichen Nachweise und
 Quality Gates bestanden und `OPEN_BLOCKERS=0` erreicht sind. `FOLLOW-UP` und
 `NO-ACTION` dürfen diesen Zustand nicht künstlich offenhalten.
