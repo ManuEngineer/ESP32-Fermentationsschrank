@@ -21,6 +21,7 @@ nicht kopiert, sondern verlinkt.
 | Issue #134 / PR #135 | `PR135=MERGED`; `PR135_SOURCE_HEAD=5fc476dcf912a4d95cf837a42b8f69d0e183dd17`; `PR135_MERGE_COMMIT=86e55499d9f0dd4dbd2d9fbc95d04549df4d429c`; `CUMULATIVE_OWNER_REVIEW=PASS`; `GITHUB_CI_RUN=1007`; `GITHUB_CI=PASS`; `MERGE_TREE_EQUALS_REVIEWED_SOURCE_TREE=YES`; `ACTUATOR_RELEASE=NO` |
 | Issue #25 / PR #142 | `ISSUE25_STATUS=CLOSED_COMPLETED`; `PR142=MERGED`; `PR142_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f`; `PR142_MERGE_COMMIT=87bd668e45ab71a20ceb24ce65fcb5d1440725a8`; `OWNER_FULL_REVIEW=PASS`; `GITHUB_CI_RUN=1015`; `GITHUB_CI=PASS`; `ACTUATOR_RELEASE=NO` |
 | Issue #145 / PR #146 | `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `PR146_SOURCE_HEAD=790be691150ddceeeedec8394e1bc66bcad90c57`; `PR146_MERGE_COMMIT=f5aca945c3009408c091a8f03b000e8309af6bcf`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO` |
+| Issue #148 / PR #149 | `ISSUE148_STATUS=CLOSED_COMPLETED`; `PR149=MERGED`; `PR149_SOURCE_HEAD=f5aca945c3009408c091a8f03b000e8309af6bcf`; `PR149_MERGE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`; `MAIN_RESTORED_AS_NORMAL_DEVELOPMENT_BASE=YES` |
 
 ## Aktuelle Arbeit
 
@@ -41,8 +42,9 @@ nicht kopiert, sondern verlinkt.
 ## Naechste fachliche Arbeit
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
-`main` promoted. `integration/r1-development` ist auf dem neuen `main`-Stand
-wiederhergestellt. Die aktuelle fachliche Arbeit ist zunächst Issue #144 für
+`main` promoted. PR #149 / Issue #148 hat `main` als normale
+Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
+mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit ist zunaechst Issue #144 fuer
 den Run-Identity-/Provenienzvertrag. Issue #26 bleibt bis zum Merge dieses
 Pflichtvorgängers ausdrücklich blockiert; seine nachgelagerte Implementation
 ist ein späterer Schritt nach Planfreigabe. `ISSUE144_STATUS=PLANNED_SPEC_PENDING`,

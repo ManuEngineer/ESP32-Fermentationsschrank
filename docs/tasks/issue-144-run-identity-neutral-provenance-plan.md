@@ -12,12 +12,12 @@ Fermentations-Workspace aus Issue #26.
     PR=147_DRAFT
     BRANCH=feature/issue-144-run-identity-provenance
     WORKFLOW=PLAN_FIRST_SINGLE_PR
-    BASE_BRANCH=integration/r1-development
-    BASE_SHA=f5aca945c3009408c091a8f03b000e8309af6bcf
+    BASE_BRANCH=main
+    BASE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
     ROADMAP_COMMIT=3ecf9ad9edc223c7af731600d54a857d5e2f8c9f
     PLAN_PATH=docs/tasks/issue-144-run-identity-neutral-provenance-plan.md
-    PLAN_REVISION=CORRECTION_1
-    SUPERSEDES_PLAN_COMMIT=c79bdf9f8f10659df455fb98c973a71f498908bd
+    PLAN_REVISION=BASELINE_SYNC_1
+    SUPERSEDES_PLAN_COMMIT=18e094bb6df34594974ca90102b61c578aa967cf
     PLAN_COMMIT=THIS_COMMIT
     IMPLEMENTATION=NOT_STARTED
     NATIVE_TESTS=NOT_RUN_PLANNING_ONLY
@@ -30,15 +30,21 @@ Fermentations-Workspace aus Issue #26.
     DOWNSTREAM_PR=143
     DOWNSTREAM_APPROVED_PLAN=aea6acb2e51147c6452d728a5a45840236ab1fdf
 
-Die Baseline ist der live verifizierte Merge-HEAD von PR #146. Die Roadmap
-wurde in diesem PR als erster Commit auf Issue #144 als aktuellen
+Die aktuelle PR-Basis ist `main@e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`.
+PR #149 / Issue #148 hat die bereits reviewten PRs #142 und #146 von der
+frueheren Integrationsbasis unveraendert nach `main` uebernommen und `main`
+als normale Entwicklungsbasis wiederhergestellt. PR #147 ist auf diese
+kanonische `main`-Basis retargetet; fuer diese Dokumentationskorrektur wird
+keine Ancestry durch Rebase oder zusaetzlichen Mergecommit veraendert.
+
+Die Roadmap wurde in diesem PR als erster Commit auf Issue #144 als aktuellen
 fachlichen Pflichtvorgaenger und auf die Blockierung von #26 synchronisiert.
-Der Plan ist der zweite inhaltliche Commit dieses PR.
+Dieser aktuelle Planstand ist die neue versionierte Baseline-Provenienz.
 
 Vor dieser Planerstellung wurden ausserdem live verifiziert:
 
 - Issue #144 ist offen und traegt den Run-Identity-/Provenienzscope;
-- PR #147 ist offen und Draft auf `integration/r1-development`;
+- PR #147 ist offen und Draft auf `main`;
 - PR #143 ist weiterhin offen und Draft, mit dem freigegebenen #26-Plan auf
   `aea6acb2e51147c6452d728a5a45840236ab1fdf`;
 - PR #143 wird weder gemergt noch geschlossen, und seine #26-Implementation
