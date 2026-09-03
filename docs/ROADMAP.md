@@ -36,6 +36,10 @@ nicht kopiert, sondern verlinkt.
 | 9 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 10 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
+## Parallele Governance-Arbeit
+
+- Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLANNING`; `IMPLEMENTATION=NOT_STARTED`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die ausdrückliche Ownerfreigabe des exakten versionierten Plan-Commits.
+
 ## Naechste fachliche Arbeit
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
