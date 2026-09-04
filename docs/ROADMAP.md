@@ -41,8 +41,8 @@ nicht kopiert, sondern verlinkt.
 
 ## Parallele Governance-Arbeit
 
-- Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLAN_APPROVED=YES`; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_REVIEW=OPEN_BLOCKERS`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die Independent Fix Verification der Review-Blocker, anschließend das reguläre Owner-/Ready-Gate.
-- Issue #150 – Pre-Ready-CI-Parity-Gate vor `Ready for review`: `ISSUE150_STATUS=PLANNING`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`. Nächstes Gate ist die Ownerfreigabe des versionierten Plans; danach folgt ein eigener Governance-/Build-Tooling-PR.
+- Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.
+- Issue #150 / PR #151 – Pre-Ready-CI-Parity-Gate vor `Ready for review` abgeschlossen: `ISSUE150_STATUS=CLOSED_COMPLETED`; `PR151=MERGED`; `PR151_MERGE_COMMIT=913f4c90084b77684ba37674e9070d288b22f5c1`; `IMPLEMENTATION=COMPLETE`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`.
 
 ## Naechste fachliche Arbeit
 
