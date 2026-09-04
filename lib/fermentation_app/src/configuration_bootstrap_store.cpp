@@ -171,9 +171,8 @@ ConfigurationBootstrapWriteResult
 ConfigurationBootstrapStore::writeHandoffSuccessor(
     const LoadedConfigurationBootstrap& expected,
     RunEpochHandoffState targetHandoff) {
-    return writeSuccessorWithHandoff(expected,
-                                     ConfigurationBootstrapState::Initialized,
-                                     targetHandoff);
+    return writeSuccessorWithHandoff(
+        expected, ConfigurationBootstrapState::Initialized, targetHandoff);
 }
 
 ConfigurationBootstrapWriteResult
@@ -227,8 +226,12 @@ ConfigurationBootstrapStore::writeSuccessorWithHandoff(
     }
     const ConfigurationBootstrapRecord target{
         ConfigurationBootstrapSequence{expected.record.sequence.value() + 1U},
-        expected.record.storageFormatVersion, epoch, targetState,
-        kConfigurationBootstrapSchemaVersion2, targetHandoff, previousEpoch,
+        expected.record.storageFormatVersion,
+        epoch,
+        targetState,
+        kConfigurationBootstrapSchemaVersion2,
+        targetHandoff,
+        previousEpoch,
         currentEpoch};
     if (!isAllowedBootstrapSuccessor(expected.record, target)) {
         return {ConfigurationBootstrapWriteStatus::InvalidTransition,

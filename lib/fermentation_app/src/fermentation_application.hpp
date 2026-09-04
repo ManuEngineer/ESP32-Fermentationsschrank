@@ -121,8 +121,7 @@ class FermentationApplication {
     // Confirmation reuses the already application-bound request.  It only
     // changes the existing envelope confirmation bit; it never allocates a
     // new CommandId or derives a replacement runId.
-    [[nodiscard]] static FermentationApplicationRequestResult
-    confirmPrepared(
+    [[nodiscard]] static FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared) noexcept;
 
     // Existing configuration recovery remains the authorization owner. This

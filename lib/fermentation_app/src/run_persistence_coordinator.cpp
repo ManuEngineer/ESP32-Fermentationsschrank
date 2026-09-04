@@ -79,9 +79,9 @@ std::optional<AuthorizedEpochHandoffTarget> makeAuthorizedEpochHandoffTarget(
             static_cast<std::uint64_t>(slot + 1U),
             std::nullopt,
             payload};
-        if (device_platform::encodeEnvelope(
-                envelope, target.records[slot].bytes,
-                kMaximumCheckpointRecordBytes) !=
+        if (device_platform::encodeEnvelope(envelope,
+                                            target.records[slot].bytes,
+                                            kMaximumCheckpointRecordBytes) !=
             device_platform::EnvelopeEncodeStatus::Success) {
             return std::nullopt;
         }
@@ -543,7 +543,7 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
                    RunPersistenceStep::CheckpointSlot,
                    RunPersistenceTechnicalReason::None, durability),
             AuthorizedRunEpochHandoffSlotsPrepared(proof.previousEpoch(),
-                                                    proof.currentEpoch())};
+                                                   proof.currentEpoch())};
 }
 
 RunEpochHandoffHeadFinalizedResult
@@ -575,7 +575,8 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto headRead = store_.readHead(kMaximumHeadRecordBytes);
-    if (headRead.status == device_platform::StateStoreReadStatus::CapacityError ||
+    if (headRead.status ==
+            device_platform::StateStoreReadStatus::CapacityError ||
         headRead.status == device_platform::StateStoreReadStatus::ReadError) {
         return reject(RunPersistenceStep::LoadHead,
                       RunPersistenceTechnicalReason::StoreReadError);
@@ -588,7 +589,8 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
 
     for (std::size_t slot = 0U; slot < target->records.size(); ++slot) {
         const auto read = store_.readSlot(slot, kMaximumCheckpointRecordBytes);
-        if (read.status == device_platform::StateStoreReadStatus::CapacityError ||
+        if (read.status ==
+                device_platform::StateStoreReadStatus::CapacityError ||
             read.status == device_platform::StateStoreReadStatus::ReadError) {
             return reject(RunPersistenceStep::LoadCurrent,
                           RunPersistenceTechnicalReason::StoreReadError);
@@ -620,8 +622,7 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
             const auto previousEnvelope =
                 device_platform::decodeEnvelope(headRead.value);
             const auto previousHead =
-                decodeRunPersistenceHead(headRead.value,
-                                         proof.previousEpoch());
+                decodeRunPersistenceHead(headRead.value, proof.previousEpoch());
             if (!previousEnvelope.envelope.has_value() ||
                 previousEnvelope.envelope->storageEpoch !=
                     proof.previousEpoch() ||
@@ -642,23 +643,22 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
         headRead.status == device_platform::StateStoreReadStatus::Success
             ? std::optional<std::string>{headRead.value}
             : std::nullopt;
-    const auto written = store_.writeHeadExact(
-        target->headBytes, expectedHead, kMaximumHeadRecordBytes);
+    const auto written = store_.writeHeadExact(target->headBytes, expectedHead,
+                                               kMaximumHeadRecordBytes);
     if (written != RunPersistenceStoreWriteResult::Written) {
         enterBlockedIndeterminate();
         if (written == RunPersistenceStoreWriteResult::Indeterminate &&
             durability == RunPersistenceDurability::Unchanged) {
             durability = RunPersistenceDurability::MayHaveChanged;
         }
-        return reject(
-            RunPersistenceStep::CommittedHead,
-            written == RunPersistenceStoreWriteResult::Indeterminate
-                ? RunPersistenceTechnicalReason::StoreOutcomeUnknown
-            : written == RunPersistenceStoreWriteResult::CapacityError
-                ? RunPersistenceTechnicalReason::StoreCapacityError
-            : written == RunPersistenceStoreWriteResult::NotWritten
-                ? RunPersistenceTechnicalReason::StoreNotWritten
-                : RunPersistenceTechnicalReason::StoreWriteError);
+        return reject(RunPersistenceStep::CommittedHead,
+                      written == RunPersistenceStoreWriteResult::Indeterminate
+                          ? RunPersistenceTechnicalReason::StoreOutcomeUnknown
+                      : written == RunPersistenceStoreWriteResult::CapacityError
+                          ? RunPersistenceTechnicalReason::StoreCapacityError
+                      : written == RunPersistenceStoreWriteResult::NotWritten
+                          ? RunPersistenceTechnicalReason::StoreNotWritten
+                          : RunPersistenceTechnicalReason::StoreWriteError);
     }
     durability = RunPersistenceDurability::Changed;
     const auto verified = store_.readHead(kMaximumHeadRecordBytes);

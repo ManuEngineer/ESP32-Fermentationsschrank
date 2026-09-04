@@ -129,12 +129,12 @@ class FermentationApplicationPreparedRequest {
     struct PreparedMuteMessage {
         MessageCommandRequest request;
     };
-    using Storage = std::variant<
-        ProgramStartRequest, ManualStartRequest, StopRequest,
-        CompletionRequest, RunAdjustmentCommandRequest,
-        ApplyRecoveryTimeCorrectionRequest, PreparedAcknowledgeMessage,
-        PreparedMuteMessage, FaultResetRequest,
-        SensorSelectionCommandRequest>;
+    using Storage =
+        std::variant<ProgramStartRequest, ManualStartRequest, StopRequest,
+                     CompletionRequest, RunAdjustmentCommandRequest,
+                     ApplyRecoveryTimeCorrectionRequest,
+                     PreparedAcknowledgeMessage, PreparedMuteMessage,
+                     FaultResetRequest, SensorSelectionCommandRequest>;
 
     FermentationApplicationPreparedRequest(
         Storage storage,

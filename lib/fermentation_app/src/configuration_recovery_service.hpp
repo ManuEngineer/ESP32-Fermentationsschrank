@@ -115,15 +115,13 @@ class ConfigurationRecoveryService {
     takeAuthorizedRunEpochHandoffProof() noexcept;
     // Persists Pending -> Committed only after the coordinator has prepared
     // and verified both exact target slots. A proof alone is insufficient.
-    [[nodiscard]] ConfigurationRecoveryResult
-    commitAuthorizedRunEpochHandoff(
+    [[nodiscard]] ConfigurationRecoveryResult commitAuthorizedRunEpochHandoff(
         AuthorizedRunEpochHandoffProof& proof,
         const AuthorizedRunEpochHandoffSlotsPrepared& prepared);
     // Persists Committed -> Consumed only after the coordinator has finalized
     // and verified the exact target head. Pending/Committed may be retried
     // after a crash; Consumed never mints another capability.
-    [[nodiscard]] ConfigurationRecoveryResult
-    consumeAuthorizedRunEpochHandoff(
+    [[nodiscard]] ConfigurationRecoveryResult consumeAuthorizedRunEpochHandoff(
         AuthorizedRunEpochHandoffProof& proof,
         const AuthorizedRunEpochHandoffHeadFinalized& finalized);
     [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>

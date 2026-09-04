@@ -275,8 +275,7 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedManual.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, preparedManual.request->commandId());
     TEST_ASSERT_TRUE(preparedManual.request->runId().has_value());
-    TEST_ASSERT_EQUAL_STRING("e1-c1",
-                             preparedManual.request->runId()->c_str());
+    TEST_ASSERT_EQUAL_STRING("e1-c1", preparedManual.request->runId()->c_str());
 
     fermentation::FermentationUiStopRunIntent stop;
     stop.option = fermentation::StopOption::AbortAndTurnOff;
@@ -312,9 +311,8 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_EQUAL_UINT64(5U,
                              preparedCoolingCompletion.request->commandId());
     TEST_ASSERT_TRUE(preparedCoolingCompletion.request->runId().has_value());
-    TEST_ASSERT_EQUAL_STRING("e1-c5",
-                             preparedCoolingCompletion.request->runId()
-                                 ->c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "e1-c5", preparedCoolingCompletion.request->runId()->c_str());
 }
 
 void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
@@ -363,18 +361,20 @@ void test_application_prepares_every_envelope_action_with_one_identity() {
     evidence.faultResetEvaluation = fermentation::FaultResetEvaluation{};
     evidence.sensorPlausibility = fermentation::CrossRolePlausibilityContext{};
 
-    const auto prepare = [&application, &context, &evidence](const auto& intent) {
+    const auto prepare = [&application, &context,
+                          &evidence](const auto& intent) {
         return application.prepareEnvelope(
             context, fermentation::FermentationUiEnvelopePayload{intent},
             evidence);
     };
     const auto adjustment =
         prepare(fermentation::FermentationUiAdjustRunIntent{});
-    const auto correction = prepare(
-        fermentation::FermentationUiRecoveryTimeCorrectionIntent{12U});
-    const auto acknowledgement = prepare(
-        fermentation::FermentationUiAcknowledgeMessageIntent{7U});
-    const auto mute = prepare(fermentation::FermentationUiMuteMessageIntent{7U});
+    const auto correction =
+        prepare(fermentation::FermentationUiRecoveryTimeCorrectionIntent{12U});
+    const auto acknowledgement =
+        prepare(fermentation::FermentationUiAcknowledgeMessageIntent{7U});
+    const auto mute =
+        prepare(fermentation::FermentationUiMuteMessageIntent{7U});
     const auto reset = prepare(fermentation::FermentationUiResetFaultIntent{});
     const auto sensor =
         prepare(fermentation::FermentationUiSensorSelectionIntent{});
@@ -487,15 +487,14 @@ void seedCommittedHandoffWithFinalizedHead(
     fermentation::ConfigurationMutationCoordinator mutationCoordinator;
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationGraphStore graph(store, timeZoneResolver);
-    fermentation::ConfigurationService configuration(
-        mutationCoordinator, graph, timeZoneResolver);
+    fermentation::ConfigurationService configuration(mutationCoordinator, graph,
+                                                     timeZoneResolver);
     auto recovery = fermentation::ConfigurationRecoveryService::create(
         store, bootstrap, graph, configuration, mutationCoordinator);
     TEST_ASSERT_TRUE(recovery != nullptr);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            fermentation::ConfigurationRecoveryStatus::
-                FactoryInitializationCompleted),
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
         static_cast<int>(recovery->boot().status));
     const auto reset = recovery->beginAuthorizedFactoryReset();
     TEST_ASSERT_EQUAL_INT(
@@ -508,16 +507,16 @@ void seedCommittedHandoffWithFinalizedHead(
     fermentation::RunPersistenceCoordinator runPersistence(
         store, device_platform::StorageEpoch{2U},
         fermentation::RunCheckpointSchedule{});
-    const auto prepared =
-        runPersistence.prepareAuthorizedEpochHandoff(*proof);
+    const auto prepared = runPersistence.prepareAuthorizedEpochHandoff(*proof);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
         static_cast<int>(prepared.persistenceResult.status));
     TEST_ASSERT_TRUE(prepared.evidence.has_value());
-    const auto committed = recovery->commitAuthorizedRunEpochHandoff(
-        *proof, *prepared.evidence);
+    const auto committed =
+        recovery->commitAuthorizedRunEpochHandoff(*proof, *prepared.evidence);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
         static_cast<int>(committed.status));
     const auto finalized =
         runPersistence.finalizeAuthorizedEpochHandoff(*proof);
@@ -574,13 +573,13 @@ void test_application_resumes_empty_partial_handoff_before_allocator() {
         static_cast<int>(fermentation::ConfigurationRecoveryStatus::
                              RunPersistenceHandoffUnavailable),
         static_cast<int>(interrupted.status));
-    const auto head = store.read(
-        *device_platform::StateStoreKey::create("rh0").key, 256U);
+    const auto head =
+        store.read(*device_platform::StateStoreKey::create("rh0").key, 256U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::StateStoreReadStatus::NotFound),
         static_cast<int>(head.status));
-    const auto firstSlot = store.read(
-        *device_platform::StateStoreKey::create("rc0").key, 8240U);
+    const auto firstSlot =
+        store.read(*device_platform::StateStoreKey::create("rc0").key, 8240U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::StateStoreReadStatus::Success),
         static_cast<int>(firstSlot.status));
@@ -589,8 +588,7 @@ void test_application_resumes_empty_partial_handoff_before_allocator() {
     device_platform::DevicePlatform rebootedPlatform;
     fermentation::FermentationApplication rebooted;
     TEST_ASSERT_TRUE(rebootedPlatform.begin({true}));
-    TEST_ASSERT_TRUE(
-        rebooted.begin(rebootedPlatform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(rebooted.begin(rebootedPlatform, store, timeZoneResolver));
     TEST_ASSERT_TRUE(rebooted.ready());
     fermentation::FermentationUiStartManualHoldingIntent manual;
     const auto prepared = rebooted.prepareStartManualHolding(
@@ -615,8 +613,7 @@ int main(int, char**) {
     RUN_TEST(test_ui_id_is_application_bound_to_existing_command_envelope);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
     RUN_TEST(test_application_reset_hands_off_existing_run_store_to_new_epoch);
-    RUN_TEST(
-        test_application_prepares_every_envelope_action_with_one_identity);
+    RUN_TEST(test_application_prepares_every_envelope_action_with_one_identity);
     RUN_TEST(test_confirmation_reuses_prepared_request_without_reallocation);
     RUN_TEST(test_application_reconstructs_reset_handoff_after_run_write_cut);
     RUN_TEST(test_application_finishes_committed_handoff_before_ready);

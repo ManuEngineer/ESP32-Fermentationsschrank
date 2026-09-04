@@ -219,13 +219,11 @@ class RunPersistenceCoordinator {
     // and writes/verifies only the two exact target slots. No target head is
     // written before the configuration owner persists Pending -> Committed.
     [[nodiscard]] RunEpochHandoffSlotsPreparedResult
-    prepareAuthorizedEpochHandoff(
-        const AuthorizedRunEpochHandoffProof& proof);
+    prepareAuthorizedEpochHandoff(const AuthorizedRunEpochHandoffProof& proof);
     // Committed phase: accepts only the exact target slots and writes/verifies
     // the exact target head. It never rebuilds or repairs an arbitrary graph.
     [[nodiscard]] RunEpochHandoffHeadFinalizedResult
-    finalizeAuthorizedEpochHandoff(
-        const AuthorizedRunEpochHandoffProof& proof);
+    finalizeAuthorizedEpochHandoff(const AuthorizedRunEpochHandoffProof& proof);
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,

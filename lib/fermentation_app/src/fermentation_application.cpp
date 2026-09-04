@@ -75,8 +75,7 @@ FermentationApplication::makePreparedRequest(
         FermentationApplicationPreparedRequest::Storage{std::move(request)},
         std::move(owningPlausibility));
     const auto uiRequestId = prepared.commandEnvelope().id;
-    return {FermentationApplicationRequestStatus::Prepared,
-            std::move(prepared),
+    return {FermentationApplicationRequestStatus::Prepared, std::move(prepared),
             device_platform::UiRequestId{uiRequestId}};
 }
 
@@ -255,14 +254,13 @@ FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
     return makePreparedRequest(std::move(request));
 }
 
-FermentationApplicationRequestResult
-FermentationApplication::prepareEnvelope(
+FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
     const FermentationUiCommandContext& context,
     const FermentationUiEnvelopePayload& payload,
     const FermentationApplicationOwningEvidence& evidence) {
     return std::visit(
-        [this, &context, &evidence](const auto& intent)
-            -> FermentationApplicationRequestResult {
+        [this, &context, &evidence](
+            const auto& intent) -> FermentationApplicationRequestResult {
             using Intent = std::decay_t<decltype(intent)>;
             if constexpr (std::is_same_v<Intent,
                                          FermentationUiStartProgramIntent>) {
@@ -275,12 +273,11 @@ FermentationApplication::prepareEnvelope(
                                                 FermentationUiStopRunIntent>) {
                 return prepareStop(context, intent, evidence);
             } else if constexpr (std::is_same_v<
-                                     Intent,
-                                     FermentationUiCompleteRunIntent>) {
+                                     Intent, FermentationUiCompleteRunIntent>) {
                 return prepareCompletion(context, intent, evidence);
             } else {
                 if constexpr (std::is_same_v<Intent,
-                                              FermentationUiResetFaultIntent>) {
+                                             FermentationUiResetFaultIntent>) {
                     if (!evidence.faultResetEvaluation.has_value()) {
                         return requestFailure(
                             FermentationApplicationRequestStatus::Unavailable);
@@ -301,11 +298,10 @@ FermentationApplication::prepareEnvelope(
                 if (!identity.identity.has_value()) {
                     return requestFailure(mapIdentityStatus(identity.status));
                 }
-                const auto envelope =
-                    FermentationUiCommandBridge::makeEnvelope(
-                        context, *identity.identity);
+                const auto envelope = FermentationUiCommandBridge::makeEnvelope(
+                    context, *identity.identity);
                 if constexpr (std::is_same_v<Intent,
-                                              FermentationUiAdjustRunIntent>) {
+                                             FermentationUiAdjustRunIntent>) {
                     RunAdjustmentCommandRequest request;
                     request.envelope = envelope;
                     request.targetTemperatureCelsius =
@@ -314,23 +310,22 @@ FermentationApplication::prepareEnvelope(
                         intent.remainingDurationMinutes;
                     request.safetyAllowsChange = evidence.safetyAllowsChange;
                     return makePreparedRequest(std::move(request));
-                } else if constexpr (std::is_same_v<
-                                         Intent,
-                                         FermentationUiRecoveryTimeCorrectionIntent>) {
+                } else if constexpr (
+                    std::is_same_v<
+                        Intent, FermentationUiRecoveryTimeCorrectionIntent>) {
                     ApplyRecoveryTimeCorrectionRequest request;
                     request.envelope = envelope;
                     request.secondsDelta = intent.secondsDelta;
                     return makePreparedRequest(std::move(request));
-                } else if constexpr (std::is_same_v<
-                                         Intent,
-                                         FermentationUiAcknowledgeMessageIntent>) {
+                } else if constexpr (
+                    std::is_same_v<Intent,
+                                   FermentationUiAcknowledgeMessageIntent>) {
                     MessageCommandRequest request;
                     request.envelope = envelope;
                     request.messageId = intent.messageId;
                     return makePreparedRequest(
                         FermentationApplicationPreparedRequest::
-                            PreparedAcknowledgeMessage{
-                                std::move(request)});
+                            PreparedAcknowledgeMessage{std::move(request)});
                 } else if constexpr (std::is_same_v<
                                          Intent,
                                          FermentationUiMuteMessageIntent>) {
@@ -338,10 +333,11 @@ FermentationApplication::prepareEnvelope(
                     request.envelope = envelope;
                     request.messageId = intent.messageId;
                     return makePreparedRequest(
-                        FermentationApplicationPreparedRequest::PreparedMuteMessage{
-                            std::move(request)});
+                        FermentationApplicationPreparedRequest::
+                            PreparedMuteMessage{std::move(request)});
                 } else if constexpr (std::is_same_v<
-                                         Intent, FermentationUiResetFaultIntent>) {
+                                         Intent,
+                                         FermentationUiResetFaultIntent>) {
                     FaultResetRequest request;
                     request.envelope = envelope;
                     request.evaluation = *evidence.faultResetEvaluation;
@@ -361,12 +357,12 @@ FermentationApplication::prepareEnvelope(
         payload);
 }
 
-FermentationApplicationRequestResult
-FermentationApplication::confirmPrepared(
+FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     const FermentationApplicationRequestResult& prepared) noexcept {
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
-        return requestFailure(FermentationApplicationRequestStatus::Unavailable);
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
     auto confirmed = prepared;
     confirmed.request->confirm();
@@ -873,7 +869,8 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     }
     const auto prepared =
         coordinator->prepareAuthorizedEpochHandoff(*authorizedRunEpochHandoff);
-    if (prepared.persistenceResult.status != RunPersistenceResultStatus::Applied ||
+    if (prepared.persistenceResult.status !=
+            RunPersistenceResultStatus::Applied ||
         !prepared.evidence.has_value()) {
         requireService(FaultCode::RunPersistenceUntrusted);
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
@@ -889,7 +886,8 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     }
     const auto finalized =
         coordinator->finalizeAuthorizedEpochHandoff(*authorizedRunEpochHandoff);
-    if (finalized.persistenceResult.status != RunPersistenceResultStatus::Applied ||
+    if (finalized.persistenceResult.status !=
+            RunPersistenceResultStatus::Applied ||
         !finalized.evidence.has_value()) {
         requireService(FaultCode::RunPersistenceUntrusted);
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,

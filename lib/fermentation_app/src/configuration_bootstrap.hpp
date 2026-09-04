@@ -59,7 +59,8 @@ struct ConfigurationBootstrapRecord {
         ConfigurationStorageFormatVersion storageFormatVersionValue,
         device_platform::StorageEpoch storageEpochValue,
         ConfigurationBootstrapState stateValue,
-        std::uint32_t schemaVersionValue = kConfigurationBootstrapSchemaVersion2,
+        std::uint32_t schemaVersionValue =
+            kConfigurationBootstrapSchemaVersion2,
         RunEpochHandoffState handoffValue = RunEpochHandoffState::None,
         std::optional<device_platform::StorageEpoch> previousEpochValue =
             std::nullopt,

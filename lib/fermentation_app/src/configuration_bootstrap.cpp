@@ -100,8 +100,7 @@ bool schema2Plausible(const ConfigurationBootstrapRecord& record) {
     }
     if (record.state == ConfigurationBootstrapState::Resetting) {
         return record.handoff == RunEpochHandoffState::None &&
-               noHandoffBinding(record) &&
-               schema2SequencePlausible(record, 0U);
+               noHandoffBinding(record) && schema2SequencePlausible(record, 0U);
     }
     if (record.state != ConfigurationBootstrapState::Initialized) {
         return false;
@@ -126,9 +125,8 @@ bool sameBinding(const ConfigurationBootstrapRecord& left,
            left.storageEpoch == right.storageEpoch;
 }
 
-bool schema1ToSchema2Successor(
-    const ConfigurationBootstrapRecord& previous,
-    const ConfigurationBootstrapRecord& next) {
+bool schema1ToSchema2Successor(const ConfigurationBootstrapRecord& previous,
+                               const ConfigurationBootstrapRecord& next) {
     if (previous.state == ConfigurationBootstrapState::Initializing) {
         return next.state == ConfigurationBootstrapState::Initialized &&
                next.handoff == RunEpochHandoffState::None &&
@@ -150,14 +148,13 @@ bool schema1ToSchema2Successor(
            next.storageEpoch == previous.storageEpoch &&
            next.previousEpoch ==
                std::optional<device_platform::StorageEpoch>{
-                   device_platform::StorageEpoch{
-                       previous.storageEpoch.value() - 1U}} &&
+                   device_platform::StorageEpoch{previous.storageEpoch.value() -
+                                                 1U}} &&
            next.currentEpoch == next.storageEpoch;
 }
 
-bool schema2ToSchema2Successor(
-    const ConfigurationBootstrapRecord& previous,
-    const ConfigurationBootstrapRecord& next) {
+bool schema2ToSchema2Successor(const ConfigurationBootstrapRecord& previous,
+                               const ConfigurationBootstrapRecord& next) {
     if (previous.state == ConfigurationBootstrapState::Initializing) {
         return next.state == ConfigurationBootstrapState::Initialized &&
                next.handoff == RunEpochHandoffState::None &&
@@ -200,7 +197,8 @@ bool schema2ToSchema2Successor(
         }
         return next.state == ConfigurationBootstrapState::Resetting &&
                next.handoff == RunEpochHandoffState::None &&
-               !next.previousEpoch.has_value() && !next.currentEpoch.has_value() &&
+               !next.previousEpoch.has_value() &&
+               !next.currentEpoch.has_value() &&
                next.storageEpoch.value() == nextEpoch;
     }
     return false;
@@ -212,7 +210,8 @@ bool operator==(const ConfigurationBootstrapRecord& left,
                 const ConfigurationBootstrapRecord& right) {
     return left.sequence == right.sequence &&
            left.storageFormatVersion == right.storageFormatVersion &&
-           left.storageEpoch == right.storageEpoch && left.state == right.state &&
+           left.storageEpoch == right.storageEpoch &&
+           left.state == right.state &&
            left.schemaVersion == right.schemaVersion &&
            left.handoff == right.handoff &&
            left.previousEpoch == right.previousEpoch &&

@@ -397,7 +397,8 @@ ConfigurationRecoveryService::commitAuthorizedRunEpochHandoff(
             ConfigurationBootstrapState::Initialized ||
         !bootstrap.loaded->record.previousEpoch.has_value() ||
         !bootstrap.loaded->record.currentEpoch.has_value() ||
-        bootstrap.loaded->record.previousEpoch.value() != proof.previousEpoch() ||
+        bootstrap.loaded->record.previousEpoch.value() !=
+            proof.previousEpoch() ||
         bootstrap.loaded->record.currentEpoch.value() != proof.currentEpoch()) {
         return mapBootstrapFailure(bootstrap.status);
     }
@@ -411,15 +412,15 @@ ConfigurationRecoveryService::commitAuthorizedRunEpochHandoff(
         return current.record.handoff == RunEpochHandoffState::Consumed
                    ? makeRejectedWithValidRuntime(
                          ConfigurationRecoveryStatus::StateTransitionRejected)
-                   : makeUnavailableResult(
-                         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
+                   : makeUnavailableResult(ConfigurationRecoveryStatus::
+                                               ConfigurationIntegrityFailure);
     }
     const auto committed = bootstrapStore_.writeHandoffSuccessor(
         current, RunEpochHandoffState::Committed);
     if (committed.status != ConfigurationBootstrapWriteStatus::Success ||
         !committed.loaded.has_value()) {
-        return makeUnavailableResult(mapBootstrapWriteFailure(
-            committed.status));
+        return makeUnavailableResult(
+            mapBootstrapWriteFailure(committed.status));
     }
     proof.promoteToCommitted();
     return {ConfigurationRecoveryStatus::RuntimeReady, {}};
@@ -449,7 +450,8 @@ ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
             ConfigurationBootstrapState::Initialized ||
         !bootstrap.loaded->record.previousEpoch.has_value() ||
         !bootstrap.loaded->record.currentEpoch.has_value() ||
-        bootstrap.loaded->record.previousEpoch.value() != proof.previousEpoch() ||
+        bootstrap.loaded->record.previousEpoch.value() !=
+            proof.previousEpoch() ||
         bootstrap.loaded->record.currentEpoch.value() != proof.currentEpoch()) {
         return mapBootstrapFailure(bootstrap.status);
     }
@@ -459,8 +461,8 @@ ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
         return current.record.handoff == RunEpochHandoffState::Consumed
                    ? makeRejectedWithValidRuntime(
                          ConfigurationRecoveryStatus::StateTransitionRejected)
-                   : makeUnavailableResult(
-                         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
+                   : makeUnavailableResult(ConfigurationRecoveryStatus::
+                                               ConfigurationIntegrityFailure);
     }
     const auto consumed = bootstrapStore_.writeHandoffSuccessor(
         current, RunEpochHandoffState::Consumed);

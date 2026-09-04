@@ -120,13 +120,11 @@ const CommandEnvelope& FermentationApplicationPreparedRequest::commandEnvelope()
         [](const auto& request) -> const CommandEnvelope& {
             using Request = std::decay_t<decltype(request)>;
             if constexpr (std::is_same_v<
-                              Request,
-                              FermentationApplicationPreparedRequest::
-                                  PreparedAcknowledgeMessage> ||
+                              Request, FermentationApplicationPreparedRequest::
+                                           PreparedAcknowledgeMessage> ||
                           std::is_same_v<
-                              Request,
-                              FermentationApplicationPreparedRequest::
-                                  PreparedMuteMessage>) {
+                              Request, FermentationApplicationPreparedRequest::
+                                           PreparedMuteMessage>) {
                 return request.request.envelope;
             } else {
                 return request.envelope;
@@ -161,13 +159,11 @@ void FermentationApplicationPreparedRequest::confirm() noexcept {
         [](auto& request) {
             using Request = std::decay_t<decltype(request)>;
             if constexpr (std::is_same_v<
-                              Request,
-                              FermentationApplicationPreparedRequest::
-                                  PreparedAcknowledgeMessage> ||
+                              Request, FermentationApplicationPreparedRequest::
+                                           PreparedAcknowledgeMessage> ||
                           std::is_same_v<
-                              Request,
-                              FermentationApplicationPreparedRequest::
-                                  PreparedMuteMessage>) {
+                              Request, FermentationApplicationPreparedRequest::
+                                           PreparedMuteMessage>) {
                 request.request.envelope.confirmed = true;
             } else {
                 request.envelope.confirmed = true;
@@ -308,17 +304,18 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
             using Request = std::decay_t<decltype(prepared)>;
             CommandDecision decision;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
-                decision = ::fermentation::decideProgramStart(current, prepared);
-            } else if constexpr (std::is_same_v<Request,
-                                                ManualStartRequest>) {
+                decision =
+                    ::fermentation::decideProgramStart(current, prepared);
+            } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
                 decision = ::fermentation::decideManualStart(current, prepared);
             } else if constexpr (std::is_same_v<Request, StopRequest>) {
                 decision = ::fermentation::decideStop(current, prepared);
             } else if constexpr (std::is_same_v<Request, CompletionRequest>) {
                 decision = ::fermentation::decideCompletion(current, prepared);
-            } else if constexpr (std::is_same_v<
-                                     Request, RunAdjustmentCommandRequest>) {
-                decision = ::fermentation::decideRunAdjustment(current, prepared);
+            } else if constexpr (std::is_same_v<Request,
+                                                RunAdjustmentCommandRequest>) {
+                decision =
+                    ::fermentation::decideRunAdjustment(current, prepared);
             } else if constexpr (std::is_same_v<
                                      Request,
                                      ApplyRecoveryTimeCorrectionRequest>) {
@@ -335,7 +332,7 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
                                      FermentationApplicationPreparedRequest::
                                          PreparedMuteMessage>) {
                 decision = ::fermentation::decideMuteMessage(current,
-                                                              prepared.request);
+                                                             prepared.request);
             } else if constexpr (std::is_same_v<Request, FaultResetRequest>) {
                 decision = ::fermentation::decideFaultReset(current, prepared);
             } else {

@@ -14,7 +14,8 @@ namespace {
 
 using namespace fermentation;
 
-FermentationApplicationOwningEvidence uiEvidence(bool safetyAllowsStart = true) {
+FermentationApplicationOwningEvidence uiEvidence(
+    bool safetyAllowsStart = true) {
     FermentationApplicationOwningEvidence evidence;
     evidence.safetyAllowsStart = safetyAllowsStart;
     evidence.airSensorValid = true;
@@ -79,14 +80,15 @@ void test_ui_request_id_is_the_existing_command_id() {
     FermentationUiCommandContext value;
     value.surface = device_platform::UiSurface::WebInterface;
     value.monotonicMillis = 100U;
-    const auto prepared = application.prepareStartManualHolding(
-        value, manual, uiEvidence());
+    const auto prepared =
+        application.prepareStartManualHolding(value, manual, uiEvidence());
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
                              prepared.request->commandEnvelope().id);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandSource::WebInterface),
-                          static_cast<int>(prepared.request->commandEnvelope().source));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandSource::WebInterface),
+        static_cast<int>(prepared.request->commandEnvelope().source));
     TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
 }
 
@@ -108,8 +110,7 @@ void test_canonical_validation_precedes_ui_confirmation() {
         unconfirmedContext, manual, uiEvidence());
     TEST_ASSERT_TRUE(unconfirmedPrepared.request.has_value());
     const auto unconfirmed = FermentationUiCommandBridge::decidePrepared(
-        state, *unconfirmedPrepared.request,
-        confirmation(unconfirmedContext));
+        state, *unconfirmedPrepared.request, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
                              ConfirmationRequired),
@@ -268,8 +269,9 @@ void test_prepared_message_actions_remain_bound_to_their_action() {
     value.expected.expectedMessageRevision = state.messageRevision;
     FermentationApplicationOwningEvidence evidence;
     const auto acknowledge = application.prepareEnvelope(
-        value, FermentationUiEnvelopePayload{
-                  FermentationUiAcknowledgeMessageIntent{7U}},
+        value,
+        FermentationUiEnvelopePayload{
+            FermentationUiAcknowledgeMessageIntent{7U}},
         evidence);
     const auto mute = application.prepareEnvelope(
         value,

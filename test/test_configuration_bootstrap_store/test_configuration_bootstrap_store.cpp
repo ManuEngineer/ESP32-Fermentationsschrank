@@ -51,10 +51,11 @@ class FactoryNoveltyProofTestAccess {
 
 namespace {
 
-std::string bootstrapBytes(std::uint64_t epoch, std::uint64_t sequence,
-                           fermentation::ConfigurationBootstrapState state,
-                           std::uint32_t schema =
-                               fermentation::kConfigurationBootstrapSchemaVersion2) {
+std::string bootstrapBytes(
+    std::uint64_t epoch, std::uint64_t sequence,
+    fermentation::ConfigurationBootstrapState state,
+    std::uint32_t schema =
+        fermentation::kConfigurationBootstrapSchemaVersion2) {
     std::string bytes;
     const fermentation::ConfigurationBootstrapRecord record{
         fermentation::ConfigurationBootstrapSequence{sequence},
@@ -68,15 +69,16 @@ std::string bootstrapBytes(std::uint64_t epoch, std::uint64_t sequence,
             payload, record.storageFormatVersion.value()));
         TEST_ASSERT_TRUE(device_platform::big_endian::writeUint8(
             payload, static_cast<std::uint8_t>(record.state)));
-        TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
-                             {fermentation::configuration_storage_contract::
-                                  kConfigurationBootstrapRecordType,
-                              schema, record.storageEpoch,
-                              record.sequence.value(), std::nullopt,
-                             payload.takeBytes()},
-                             bytes, fermentation::configuration_limits::
-                                       kMaximumConfigurationBootstrapSchema1EnvelopeBytes) ==
-                         device_platform::EnvelopeEncodeStatus::Success);
+        TEST_ASSERT_TRUE(
+            device_platform::encodeEnvelope(
+                {fermentation::configuration_storage_contract::
+                     kConfigurationBootstrapRecordType,
+                 schema, record.storageEpoch, record.sequence.value(),
+                 std::nullopt, payload.takeBytes()},
+                bytes,
+                fermentation::configuration_limits::
+                    kMaximumConfigurationBootstrapSchema1EnvelopeBytes) ==
+            device_platform::EnvelopeEncodeStatus::Success);
         return bytes;
     }
     TEST_ASSERT_EQUAL_INT(
@@ -267,14 +269,13 @@ void test_two_slot_history_and_duplicates_are_canonical() {
     LocalStore store;
     store.put(
         "cb0",
-        bootstrapBytes(
-            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
-            fermentation::kConfigurationBootstrapSchemaVersion1));
-    store.put(
-        "cb1",
-        bootstrapBytes(1U, 2U,
-                       fermentation::ConfigurationBootstrapState::Initialized,
+        bootstrapBytes(1U, 1U,
+                       fermentation::ConfigurationBootstrapState::Initializing,
                        fermentation::kConfigurationBootstrapSchemaVersion1));
+    store.put("cb1", bootstrapBytes(
+                         1U, 2U,
+                         fermentation::ConfigurationBootstrapState::Initialized,
+                         fermentation::kConfigurationBootstrapSchemaVersion1));
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     auto scan = bootstrap.scan();
     TEST_ASSERT_EQUAL_INT(
@@ -365,14 +366,13 @@ void test_impossible_history_gap_and_regression_fail_closed() {
     LocalStore store;
     store.put(
         "cb0",
-        bootstrapBytes(
-            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
-            fermentation::kConfigurationBootstrapSchemaVersion1));
-    store.put(
-        "cb1",
-        bootstrapBytes(2U, 4U,
-                       fermentation::ConfigurationBootstrapState::Initialized,
+        bootstrapBytes(1U, 1U,
+                       fermentation::ConfigurationBootstrapState::Initializing,
                        fermentation::kConfigurationBootstrapSchemaVersion1));
+    store.put("cb1", bootstrapBytes(
+                         2U, 4U,
+                         fermentation::ConfigurationBootstrapState::Initialized,
+                         fermentation::kConfigurationBootstrapSchemaVersion1));
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
@@ -505,9 +505,9 @@ void test_factory_novelty_proof_mismatch_falls_back_to_real_scan_without_write()
     LocalStore store;
     store.put(
         "cb0",
-        bootstrapBytes(
-            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
-            fermentation::kConfigurationBootstrapSchemaVersion1));
+        bootstrapBytes(1U, 1U,
+                       fermentation::ConfigurationBootstrapState::Initializing,
+                       fermentation::kConfigurationBootstrapSchemaVersion1));
     fermentation::ConfigurationBootstrapStore bootstrap(store);
     fermentation::ConfigurationMutationCoordinator coordinator;
     auto acquired = coordinator.tryAcquire();

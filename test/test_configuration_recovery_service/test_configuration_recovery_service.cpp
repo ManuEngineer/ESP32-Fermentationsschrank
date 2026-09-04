@@ -55,15 +55,17 @@ std::string legacyBootstrapBytes(
     TEST_ASSERT_TRUE(device_platform::big_endian::writeUint8(
         payload, static_cast<std::uint8_t>(state)));
     std::string bytes;
-    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
-                         {fermentation::configuration_storage_contract::
-                              kConfigurationBootstrapRecordType,
-                          fermentation::kConfigurationBootstrapSchemaVersion1,
-                          device_platform::StorageEpoch{epoch}, sequence,
-                          std::nullopt, payload.takeBytes()},
-                         bytes, fermentation::configuration_limits::
-                                   kMaximumConfigurationBootstrapSchema1EnvelopeBytes) ==
-                     device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConfigurationBootstrapRecordType,
+             fermentation::kConfigurationBootstrapSchemaVersion1,
+             device_platform::StorageEpoch{epoch}, sequence, std::nullopt,
+             payload.takeBytes()},
+            bytes,
+            fermentation::configuration_limits::
+                kMaximumConfigurationBootstrapSchema1EnvelopeBytes) ==
+        device_platform::EnvelopeEncodeStatus::Success);
     return bytes;
 }
 
@@ -673,17 +675,15 @@ void test_consumed_handoff_is_not_reauthorized_after_reboot() {
             static_cast<int>(recovery->boot().status));
         const auto reset = recovery->beginAuthorizedFactoryReset();
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(
-                fermentation::ConfigurationRecoveryStatus::
-                    FactoryResetCompleted),
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryResetCompleted),
             static_cast<int>(reset.status));
         auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
         TEST_ASSERT_TRUE(proof.has_value());
         fermentation::RunPersistenceCoordinator runPersistence(
             store, device_platform::StorageEpoch{2U},
             fermentation::RunCheckpointSchedule{});
-        auto prepared =
-            runPersistence.prepareAuthorizedEpochHandoff(*proof);
+        auto prepared = runPersistence.prepareAuthorizedEpochHandoff(*proof);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
             static_cast<int>(prepared.persistenceResult.status));
@@ -691,10 +691,10 @@ void test_consumed_handoff_is_not_reauthorized_after_reboot() {
         const auto committed = recovery->commitAuthorizedRunEpochHandoff(
             *proof, *prepared.evidence);
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+            static_cast<int>(
+                fermentation::ConfigurationRecoveryStatus::RuntimeReady),
             static_cast<int>(committed.status));
-        auto finalized =
-            runPersistence.finalizeAuthorizedEpochHandoff(*proof);
+        auto finalized = runPersistence.finalizeAuthorizedEpochHandoff(*proof);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
             static_cast<int>(finalized.persistenceResult.status));
@@ -702,8 +702,8 @@ void test_consumed_handoff_is_not_reauthorized_after_reboot() {
         const auto consumed = recovery->consumeAuthorizedRunEpochHandoff(
             *proof, *finalized.evidence);
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
-                                 RuntimeReady),
+            static_cast<int>(
+                fermentation::ConfigurationRecoveryStatus::RuntimeReady),
             static_cast<int>(consumed.status));
         const auto scan = bootstrap.scan();
         TEST_ASSERT_TRUE(scan.loaded.has_value());
@@ -1235,7 +1235,8 @@ void test_schema1_epoch_overflow_blocks_before_graph_or_factory_model() {
     const auto modelsBefore = fixture.service.fullModelGenerationCount();
     const auto epoch = std::numeric_limits<std::uint64_t>::max() / 2U;
     const auto bytes = legacyBootstrapBytes(
-        epoch, epoch * 2U, fermentation::ConfigurationBootstrapState::Initialized);
+        epoch, epoch * 2U,
+        fermentation::ConfigurationBootstrapState::Initialized);
     fixture.store.erase("cb1");
     fixture.store.put("cb0", bytes);
     const auto reads = fixture.store.readCount();

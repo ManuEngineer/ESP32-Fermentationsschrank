@@ -9888,8 +9888,9 @@ void test_issue144_authorized_epoch_handoff_restarts_identity_at_one() {
     const auto repeated = handoff.finalizeAuthorizedEpochHandoff(proof);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(repeated.persistenceResult.status));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
-                          static_cast<int>(repeated.persistenceResult.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::Unchanged),
+        static_cast<int>(repeated.persistenceResult.durability));
     const auto loaded = handoff.loadAndInitialize();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
@@ -9974,12 +9975,12 @@ std::string makePreparedHeadForTest(device_platform::StorageEpoch epoch) {
     state.processState.state = ProcessState::Standby;
     // A non-periodic mutation writes PreparedHead before its checkpoint slot.
     // Stop at the slot so the store retains a codec-valid Prepared head.
-    store.faultAt(
-        2U, SequencedWriteStore::WriteFault::FailBeforeBegin);
+    store.faultAt(2U, SequencedWriteStore::WriteFault::FailBeforeBegin);
     const auto interrupted = source.persistCommand(
         state, startDecision(state, 23U, 100U), trustedCheckpointTime(100U));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::WriteFailed),
-                          static_cast<int>(interrupted.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(interrupted.status));
     const auto head = store.read(slotKey("rh0"), 256U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::StateStoreReadStatus::Success),
@@ -9997,14 +9998,12 @@ void test_issue144_committed_handoff_rejects_previous_prepared_head() {
     SequencedWriteStore store;
     seedHandoffSource(store, oldEpoch);
 
-    RunPersistenceCoordinator handoff(store, newEpoch,
-                                      RunCheckpointSchedule{});
+    RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
     auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
         oldEpoch, newEpoch);
     const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceResultStatus::Applied),
-        static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(prepared.persistenceResult.status));
     TEST_ASSERT_TRUE(prepared.evidence.has_value());
     RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
 
@@ -10017,9 +10016,8 @@ void test_issue144_committed_handoff_rejects_previous_prepared_head() {
     store.restart();
 
     const auto finalized = handoff.finalizeAuthorizedEpochHandoff(proof);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceResultStatus::Blocked),
-        static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Blocked),
+                          static_cast<int>(finalized.persistenceResult.status));
     TEST_ASSERT_FALSE(finalized.evidence.has_value());
     const auto head = store.read(slotKey("rh0"), 256U);
     TEST_ASSERT_EQUAL_INT(
@@ -10046,19 +10044,17 @@ void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
         store.faultAt(failure.first, failure.second);
         RunPersistenceResult result;
         if (failure.first <= 2U) {
-            const auto prepared =
-                handoff.prepareAuthorizedEpochHandoff(proof);
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
             result = prepared.persistenceResult;
         } else {
-            const auto prepared =
-                handoff.prepareAuthorizedEpochHandoff(proof);
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
             TEST_ASSERT_EQUAL_INT(
                 static_cast<int>(RunPersistenceResultStatus::Applied),
                 static_cast<int>(prepared.persistenceResult.status));
             TEST_ASSERT_TRUE(prepared.evidence.has_value());
             RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
-            result = handoff.finalizeAuthorizedEpochHandoff(proof)
-                         .persistenceResult;
+            result =
+                handoff.finalizeAuthorizedEpochHandoff(proof).persistenceResult;
         }
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Blocked),
@@ -10072,8 +10068,9 @@ void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
         store.restart();
         RunPersistenceCoordinator retry(store, newEpoch,
                                         RunCheckpointSchedule{});
-        auto retryProof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
-            oldEpoch, newEpoch);
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
         if (failure.first <= 2U) {
             const auto resumed =
                 retry.prepareAuthorizedEpochHandoff(retryProof);
@@ -10081,13 +10078,16 @@ void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
                 static_cast<int>(RunPersistenceResultStatus::Applied),
                 static_cast<int>(resumed.persistenceResult.status));
             TEST_ASSERT_TRUE(resumed.evidence.has_value());
-            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(retryProof);
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
         } else {
-            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(retryProof);
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
         }
         const auto resumed = retry.finalizeAuthorizedEpochHandoff(retryProof);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
-                              static_cast<int>(resumed.persistenceResult.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.persistenceResult.status));
     }
 }
 
@@ -10116,8 +10116,9 @@ void test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write() {
         store.restart();
         RunPersistenceCoordinator retry(store, newEpoch,
                                         RunCheckpointSchedule{});
-        auto retryProof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
-            oldEpoch, newEpoch);
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
         const auto resumed = retry.prepareAuthorizedEpochHandoff(retryProof);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -10146,18 +10147,17 @@ void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
             oldEpoch, newEpoch);
         RunPersistenceResult result;
         if (unknownWrite <= 2U) {
-            result = handoff.prepareAuthorizedEpochHandoff(proof)
-                         .persistenceResult;
+            result =
+                handoff.prepareAuthorizedEpochHandoff(proof).persistenceResult;
         } else {
-            const auto prepared =
-                handoff.prepareAuthorizedEpochHandoff(proof);
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
             TEST_ASSERT_EQUAL_INT(
                 static_cast<int>(RunPersistenceResultStatus::Applied),
                 static_cast<int>(prepared.persistenceResult.status));
             TEST_ASSERT_TRUE(prepared.evidence.has_value());
             RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
-            result = handoff.finalizeAuthorizedEpochHandoff(proof)
-                         .persistenceResult;
+            result =
+                handoff.finalizeAuthorizedEpochHandoff(proof).persistenceResult;
         }
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Blocked),
@@ -10175,17 +10175,21 @@ void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
         store.restart();
         RunPersistenceCoordinator retry(store, newEpoch,
                                         RunCheckpointSchedule{});
-        auto retryProof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
-            oldEpoch, newEpoch);
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
         if (unknownWrite <= 2U) {
-            const auto prepared = retry.prepareAuthorizedEpochHandoff(retryProof);
+            const auto prepared =
+                retry.prepareAuthorizedEpochHandoff(retryProof);
             TEST_ASSERT_EQUAL_INT(
                 static_cast<int>(RunPersistenceResultStatus::Applied),
                 static_cast<int>(prepared.persistenceResult.status));
             TEST_ASSERT_TRUE(prepared.evidence.has_value());
-            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(retryProof);
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
         } else {
-            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(retryProof);
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
         }
         const auto resumed = retry.finalizeAuthorizedEpochHandoff(retryProof);
         TEST_ASSERT_EQUAL_INT(

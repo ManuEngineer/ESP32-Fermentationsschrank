@@ -20,11 +20,10 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
         return ConfigurationBootstrapCodecStatus::InvalidModel;
     }
 
-    const auto payloadSize = record.handoff == RunEpochHandoffState::None
-                                 ? configuration_limits::
-                                       kConfigurationBootstrapPayloadBytes
-                                 : configuration_limits::
-                                       kConfigurationBootstrapBoundPayloadBytes;
+    const auto payloadSize =
+        record.handoff == RunEpochHandoffState::None
+            ? configuration_limits::kConfigurationBootstrapPayloadBytes
+            : configuration_limits::kConfigurationBootstrapBoundPayloadBytes;
     device_platform::ByteWriter payload(payloadSize);
     if (!device_platform::big_endian::writeUint32(
             payload, record.storageFormatVersion.value()) ||
@@ -35,7 +34,8 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
         return ConfigurationBootstrapCodecStatus::CapacityExceeded;
     }
     if (record.handoff != RunEpochHandoffState::None &&
-        (!record.previousEpoch.has_value() || !record.currentEpoch.has_value() ||
+        (!record.previousEpoch.has_value() ||
+         !record.currentEpoch.has_value() ||
          !device_platform::big_endian::writeUint64(
              payload, record.previousEpoch->value()) ||
          !device_platform::big_endian::writeUint64(
@@ -98,8 +98,7 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
     }
     const auto expectedPayloadSize =
         envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1
-            ? configuration_limits::
-                  kConfigurationBootstrapSchema1PayloadBytes
+            ? configuration_limits::kConfigurationBootstrapSchema1PayloadBytes
             : configuration_limits::kConfigurationBootstrapPayloadBytes;
     if (envelope.payload.size() != expectedPayloadSize &&
         envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1) {
@@ -151,10 +150,13 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
 
     ConfigurationBootstrapRecord record{
         ConfigurationBootstrapSequence{envelope.versionValue},
-        ConfigurationStorageFormatVersion{format}, envelope.storageEpoch,
+        ConfigurationStorageFormatVersion{format},
+        envelope.storageEpoch,
         static_cast<ConfigurationBootstrapState>(state),
         envelope.schemaVersion,
-        static_cast<RunEpochHandoffState>(handoff), previousEpoch, currentEpoch};
+        static_cast<RunEpochHandoffState>(handoff),
+        previousEpoch,
+        currentEpoch};
     if (!isPlausible(record)) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }

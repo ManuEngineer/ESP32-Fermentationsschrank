@@ -25,24 +25,24 @@ fermentation::ConfigurationBootstrapRecord record(
 void test_schema1_history_is_closed() {
     constexpr auto schema1 =
         fermentation::kConfigurationBootstrapSchemaVersion1;
-    TEST_ASSERT_TRUE(fermentation::isPlausible(record(
-        1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
-        schema1)));
-    TEST_ASSERT_TRUE(fermentation::isPlausible(record(
-        1U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
-        schema1)));
-    TEST_ASSERT_TRUE(fermentation::isPlausible(record(
-        2U, 3U, fermentation::ConfigurationBootstrapState::Resetting,
-        schema1)));
-    TEST_ASSERT_TRUE(fermentation::isPlausible(record(
-        2U, 4U, fermentation::ConfigurationBootstrapState::Initialized,
-        schema1)));
-    TEST_ASSERT_FALSE(fermentation::isPlausible(record(
-        2U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
-        schema1)));
-    TEST_ASSERT_FALSE(fermentation::isPlausible(record(
-        1U, 3U, fermentation::ConfigurationBootstrapState::Resetting,
-        schema1)));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(
+        record(1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
+               schema1)));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(
+        record(1U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
+               schema1)));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(
+        record(2U, 3U, fermentation::ConfigurationBootstrapState::Resetting,
+               schema1)));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(
+        record(2U, 4U, fermentation::ConfigurationBootstrapState::Initialized,
+               schema1)));
+    TEST_ASSERT_FALSE(fermentation::isPlausible(
+        record(2U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
+               schema1)));
+    TEST_ASSERT_FALSE(fermentation::isPlausible(
+        record(1U, 3U, fermentation::ConfigurationBootstrapState::Resetting,
+               schema1)));
 }
 
 void test_schema2_accepts_only_the_defined_schema1_migrations() {
@@ -50,36 +50,36 @@ void test_schema2_accepts_only_the_defined_schema1_migrations() {
         fermentation::kConfigurationBootstrapSchemaVersion1;
     constexpr auto schema2 =
         fermentation::kConfigurationBootstrapSchemaVersion2;
-    const auto schema1Initializing = record(
-        1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
-        schema1);
-    const auto schema2Initialized = record(
-        1U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
-        schema2);
+    const auto schema1Initializing =
+        record(1U, 1U, fermentation::ConfigurationBootstrapState::Initializing,
+               schema1);
+    const auto schema2Initialized =
+        record(1U, 2U, fermentation::ConfigurationBootstrapState::Initialized,
+               schema2);
     TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(
         schema1Initializing, schema2Initialized));
 
-    const auto schema1Initialized = record(
-        3U, 6U, fermentation::ConfigurationBootstrapState::Initialized,
-        schema1);
+    const auto schema1Initialized =
+        record(3U, 6U, fermentation::ConfigurationBootstrapState::Initialized,
+               schema1);
     const auto schema2Resetting = record(
-        4U, 7U, fermentation::ConfigurationBootstrapState::Resetting,
-        schema2);
+        4U, 7U, fermentation::ConfigurationBootstrapState::Resetting, schema2);
     TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(
         schema1Initialized, schema2Resetting));
 
     const auto schema1Resetting = record(
-        3U, 5U, fermentation::ConfigurationBootstrapState::Resetting,
-        schema1);
+        3U, 5U, fermentation::ConfigurationBootstrapState::Resetting, schema1);
     const auto schema2Pending = fermentation::ConfigurationBootstrapRecord{
         fermentation::ConfigurationBootstrapSequence{6U},
         fermentation::kConfigurationStorageFormatVersion1,
         device_platform::StorageEpoch{3U},
-        fermentation::ConfigurationBootstrapState::Initialized, schema2,
+        fermentation::ConfigurationBootstrapState::Initialized,
+        schema2,
         fermentation::RunEpochHandoffState::Pending,
-        device_platform::StorageEpoch{2U}, device_platform::StorageEpoch{3U}};
-    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(
-        schema1Resetting, schema2Pending));
+        device_platform::StorageEpoch{2U},
+        device_platform::StorageEpoch{3U}};
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(schema1Resetting,
+                                                               schema2Pending));
 
     TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(
         schema1Initializing,
@@ -96,8 +96,7 @@ void test_schema2_roundtrip_uses_new_wire_size() {
             fermentation::ConfigurationBootstrapCodecStatus::Success),
         static_cast<int>(
             fermentation::encodeConfigurationBootstrapRecord(expected, bytes)));
-    TEST_ASSERT_EQUAL_UINT32(43U,
-                             bytes.size());
+    TEST_ASSERT_EQUAL_UINT32(43U, bytes.size());
     const auto decoded =
         fermentation::decodeConfigurationBootstrapRecord(bytes);
     TEST_ASSERT_EQUAL_INT(
@@ -151,19 +150,22 @@ void test_schema2_bound_handoff_roundtrips_without_utc() {
         fermentation::ConfigurationBootstrapState::Initialized,
         fermentation::kConfigurationBootstrapSchemaVersion2,
         fermentation::RunEpochHandoffState::Pending,
-        device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}};
+        device_platform::StorageEpoch{1U},
+        device_platform::StorageEpoch{2U}};
     std::string bytes;
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::Success),
-        static_cast<int>(fermentation::encodeConfigurationBootstrapRecord(
-            expected, bytes)));
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapCodecStatus::Success),
+        static_cast<int>(
+            fermentation::encodeConfigurationBootstrapRecord(expected, bytes)));
     TEST_ASSERT_EQUAL_UINT32(fermentation::configuration_limits::
                                  kMaximumConfigurationBootstrapEnvelopeBytes,
                              bytes.size());
     const auto decoded =
         fermentation::decodeConfigurationBootstrapRecord(bytes);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::Success),
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapCodecStatus::Success),
         static_cast<int>(decoded.status));
     TEST_ASSERT_TRUE(decoded.value.has_value());
     TEST_ASSERT_TRUE(*decoded.value == expected);
@@ -261,10 +263,12 @@ void test_schema2_independent_wire_goldens_cover_all_handoff_states() {
         std::size_t payloadSize;
     };
     const Fixture fixtures[] = {
-        {"445052460001000600000002000000000000000100000000000000020000000600a2fc3e26000000010200",
+        {"445052460001000600000002000000000000000100000000000000020000000600a2f"
+         "c3e26000000010200",
          record(1U, 2U, fermentation::ConfigurationBootstrapState::Initialized),
          6U},
-        {"445052460001000600000002000000000000000200000000000000040000001600d98442ea00000001020100000000000000010000000000000002",
+        {"445052460001000600000002000000000000000200000000000000040000001600d98"
+         "442ea00000001020100000000000000010000000000000002",
          {fermentation::ConfigurationBootstrapSequence{4U},
           fermentation::kConfigurationStorageFormatVersion1,
           device_platform::StorageEpoch{2U},
@@ -273,7 +277,8 @@ void test_schema2_independent_wire_goldens_cover_all_handoff_states() {
           fermentation::RunEpochHandoffState::Pending,
           device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}},
          22U},
-        {"4450524600010006000000020000000000000002000000000000000500000016008babe47300000001020200000000000000010000000000000002",
+        {"4450524600010006000000020000000000000002000000000000000500000016008ba"
+         "be47300000001020200000000000000010000000000000002",
          {fermentation::ConfigurationBootstrapSequence{5U},
           fermentation::kConfigurationStorageFormatVersion1,
           device_platform::StorageEpoch{2U},
@@ -282,7 +287,8 @@ void test_schema2_independent_wire_goldens_cover_all_handoff_states() {
           fermentation::RunEpochHandoffState::Committed,
           device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}},
          22U},
-        {"4450524600010006000000020000000000000002000000000000000600000016000ed3281700000001020300000000000000010000000000000002",
+        {"4450524600010006000000020000000000000002000000000000000600000016000ed"
+         "3281700000001020300000000000000010000000000000002",
          {fermentation::ConfigurationBootstrapSequence{6U},
           fermentation::kConfigurationStorageFormatVersion1,
           device_platform::StorageEpoch{2U},
@@ -298,7 +304,8 @@ void test_schema2_independent_wire_goldens_cover_all_handoff_states() {
         const auto decoded =
             fermentation::decodeConfigurationBootstrapRecord(bytes);
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::Success),
+            static_cast<int>(
+                fermentation::ConfigurationBootstrapCodecStatus::Success),
             static_cast<int>(decoded.status));
         TEST_ASSERT_TRUE(decoded.value.has_value());
         TEST_ASSERT_TRUE(*decoded.value == fixture.expected);
