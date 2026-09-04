@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <optional>
-#include <utility>
 
 #include "configuration_mutation_coordinator.hpp"
 #include "state_store.hpp"
@@ -72,8 +71,8 @@ struct ConfigurationBootstrapRecord {
           state(stateValue),
           schemaVersion(schemaVersionValue),
           handoff(handoffValue),
-          previousEpoch(std::move(previousEpochValue)),
-          currentEpoch(std::move(currentEpochValue)) {}
+          previousEpoch(previousEpochValue),
+          currentEpoch(currentEpochValue) {}
 };
 
 inline constexpr ConfigurationStorageFormatVersion

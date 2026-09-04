@@ -51,6 +51,7 @@ class ApplicationRunIdentity {
     ApplicationRunIdentity(ApplicationRunIdentity&&) noexcept = default;
     ApplicationRunIdentity& operator=(ApplicationRunIdentity&&) noexcept =
         default;
+    ~ApplicationRunIdentity() = default;
 
     [[nodiscard]] static std::optional<ApplicationRunIdentity> create(
         device_platform::StorageEpoch epoch,
@@ -60,7 +61,9 @@ class ApplicationRunIdentity {
         return epoch_;
     }
     [[nodiscard]] std::optional<CommandId> nextCommandId() const noexcept {
-        if (nextCommandId_ == 0U) return std::nullopt;
+        if (nextCommandId_ == 0U) {
+            return std::nullopt;
+        }
         return nextCommandId_;
     }
 

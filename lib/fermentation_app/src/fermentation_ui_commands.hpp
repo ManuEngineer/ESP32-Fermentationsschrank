@@ -117,6 +117,7 @@ class FermentationApplicationPreparedRequest {
         FermentationApplicationPreparedRequest&&) noexcept = default;
     FermentationApplicationPreparedRequest& operator=(
         FermentationApplicationPreparedRequest&&) noexcept = default;
+    ~FermentationApplicationPreparedRequest() = default;
 
     [[nodiscard]] CommandId commandId() const noexcept;
     [[nodiscard]] const CommandEnvelope& commandEnvelope() const noexcept;
