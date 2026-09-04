@@ -524,7 +524,8 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
                                   kMaximumCheckpointRecordBytes);
         if (written != RunPersistenceStoreWriteResult::Written) {
             enterBlockedIndeterminate();
-            if (written == RunPersistenceStoreWriteResult::Indeterminate) {
+            if (written == RunPersistenceStoreWriteResult::Indeterminate &&
+                durability == RunPersistenceDurability::Unchanged) {
                 durability = RunPersistenceDurability::MayHaveChanged;
             }
             return reject(
@@ -543,7 +544,8 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
                                                    kMaximumHeadRecordBytes);
     if (headWritten != RunPersistenceStoreWriteResult::Written) {
         enterBlockedIndeterminate();
-        if (headWritten == RunPersistenceStoreWriteResult::Indeterminate) {
+        if (headWritten == RunPersistenceStoreWriteResult::Indeterminate &&
+            durability == RunPersistenceDurability::Unchanged) {
             durability = RunPersistenceDurability::MayHaveChanged;
         }
         return reject(

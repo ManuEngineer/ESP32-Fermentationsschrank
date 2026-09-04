@@ -236,22 +236,11 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     const auto preparedProgram =
         application.prepareStartProgram(context, startProgram, evidence);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(fermentation::FermentationApplicationRequestStatus::
+                             ProgramUnavailable),
         static_cast<int>(preparedProgram.status));
-    TEST_ASSERT_TRUE(preparedProgram.request.has_value());
-    TEST_ASSERT_TRUE(std::holds_alternative<fermentation::ProgramStartRequest>(
-        *preparedProgram.request));
-    TEST_ASSERT_TRUE(preparedProgram.identity.has_value());
-    const auto& programRequest =
-        std::get<fermentation::ProgramStartRequest>(*preparedProgram.request);
-    TEST_ASSERT_EQUAL_UINT64(1U, programRequest.envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(preparedProgram.identity->commandId(),
-                             programRequest.envelope.id);
-    TEST_ASSERT_EQUAL_STRING("e1-c1", programRequest.runId.c_str());
-    TEST_ASSERT_EQUAL_UINT64(1U, programRequest.sourceProgramRevision.value());
-    TEST_ASSERT_EQUAL_STRING("water-kefir",
-                             programRequest.program.program.id.c_str());
+    TEST_ASSERT_FALSE(preparedProgram.request.has_value());
+    TEST_ASSERT_FALSE(preparedProgram.identity.has_value());
 
     auto staleContext = context;
     staleContext.expected.expectedProgramCatalogRevision =
@@ -272,8 +261,8 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedManual.request.has_value());
     const auto& manualRequest =
         std::get<fermentation::ManualStartRequest>(*preparedManual.request);
-    TEST_ASSERT_EQUAL_UINT64(2U, manualRequest.envelope.id);
-    TEST_ASSERT_EQUAL_STRING("e1-c2", manualRequest.plan.runId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(1U, manualRequest.envelope.id);
+    TEST_ASSERT_EQUAL_STRING("e1-c1", manualRequest.plan.runId.c_str());
 
     fermentation::FermentationUiStopRunIntent stop;
     stop.option = fermentation::StopOption::AbortAndTurnOff;
@@ -281,7 +270,7 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedStop.request.has_value());
     const auto& stopRequest =
         std::get<fermentation::StopRequest>(*preparedStop.request);
-    TEST_ASSERT_EQUAL_UINT64(3U, stopRequest.envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(2U, stopRequest.envelope.id);
     TEST_ASSERT_FALSE(stopRequest.coolingPlan.has_value());
 
     fermentation::FermentationUiCompleteRunIntent complete;
@@ -290,7 +279,7 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedComplete.request.has_value());
     const auto& completionRequest =
         std::get<fermentation::CompletionRequest>(*preparedComplete.request);
-    TEST_ASSERT_EQUAL_UINT64(4U, completionRequest.envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(3U, completionRequest.envelope.id);
     TEST_ASSERT_FALSE(completionRequest.coolingPlan.has_value());
 
     stop.option = fermentation::StopOption::AbortAndCool;
@@ -301,9 +290,9 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedCoolingStop.identity.has_value());
     const auto& coolingStop =
         std::get<fermentation::StopRequest>(*preparedCoolingStop.request);
-    TEST_ASSERT_EQUAL_UINT64(5U, coolingStop.envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(4U, coolingStop.envelope.id);
     TEST_ASSERT_TRUE(coolingStop.coolingPlan.has_value());
-    TEST_ASSERT_EQUAL_STRING("e1-c5", coolingStop.coolingPlan->runId.c_str());
+    TEST_ASSERT_EQUAL_STRING("e1-c4", coolingStop.coolingPlan->runId.c_str());
 
     complete.startCooling = true;
     complete.coolingPlan = coolingValues();
@@ -313,9 +302,9 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedCoolingCompletion.identity.has_value());
     const auto& coolingCompletion = std::get<fermentation::CompletionRequest>(
         *preparedCoolingCompletion.request);
-    TEST_ASSERT_EQUAL_UINT64(6U, coolingCompletion.envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(5U, coolingCompletion.envelope.id);
     TEST_ASSERT_TRUE(coolingCompletion.coolingPlan.has_value());
-    TEST_ASSERT_EQUAL_STRING("e1-c6",
+    TEST_ASSERT_EQUAL_STRING("e1-c5",
                              coolingCompletion.coolingPlan->runId.c_str());
 }
 
@@ -348,6 +337,106 @@ void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
         std::get<fermentation::ManualStartRequest>(*prepared.request);
     TEST_ASSERT_EQUAL_UINT64(1U, request.envelope.id);
     TEST_ASSERT_EQUAL_STRING("e2-c1", request.plan.runId.c_str());
+}
+
+void test_application_prepares_every_envelope_action_with_one_identity() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+
+    fermentation::FermentationUiCommandContext context;
+    context.monotonicMillis = 100U;
+    fermentation::FermentationApplicationOwningEvidence evidence;
+    evidence.safetyAllowsChange = true;
+    evidence.faultResetEvaluation = fermentation::FaultResetEvaluation{};
+    evidence.sensorPlausibility = fermentation::CrossRolePlausibilityContext{};
+
+    const auto prepare = [&application, &context, &evidence](const auto& intent) {
+        return application.prepareEnvelope(
+            context, fermentation::FermentationUiEnvelopePayload{intent},
+            evidence);
+    };
+    const auto adjustment =
+        prepare(fermentation::FermentationUiAdjustRunIntent{});
+    const auto correction = prepare(
+        fermentation::FermentationUiRecoveryTimeCorrectionIntent{12U});
+    const auto acknowledgement = prepare(
+        fermentation::FermentationUiAcknowledgeMessageIntent{7U});
+    const auto mute = prepare(fermentation::FermentationUiMuteMessageIntent{7U});
+    const auto reset = prepare(fermentation::FermentationUiResetFaultIntent{});
+    const auto sensor =
+        prepare(fermentation::FermentationUiSensorSelectionIntent{});
+
+    TEST_ASSERT_EQUAL_UINT64(
+        1U,
+        std::get<fermentation::RunAdjustmentCommandRequest>(
+                *adjustment.request)
+            .envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(
+        2U,
+        std::get<fermentation::ApplyRecoveryTimeCorrectionRequest>(
+                *correction.request)
+            .envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(
+        3U,
+        std::get<fermentation::MessageCommandRequest>(*acknowledgement.request)
+            .envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(
+        4U,
+        std::get<fermentation::MessageCommandRequest>(*mute.request).envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(
+        5U,
+        std::get<fermentation::FaultResetRequest>(*reset.request).envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(
+        6U,
+        std::get<fermentation::SensorSelectionCommandRequest>(*sensor.request)
+            .envelope.id);
+    TEST_ASSERT_TRUE(sensor.owningPlausibility.has_value());
+}
+
+void test_confirmation_reuses_prepared_request_without_reallocation() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    fermentation::FermentationUiStartManualHoldingIntent manual;
+    const auto prepared = application.prepareStartManualHolding(
+        fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(prepared.status));
+    const auto confirmed =
+        fermentation::FermentationApplication::confirmPrepared(prepared);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(confirmed.status));
+    const auto& original =
+        std::get<fermentation::ManualStartRequest>(*prepared.request);
+    const auto& replay =
+        std::get<fermentation::ManualStartRequest>(*confirmed.request);
+    TEST_ASSERT_EQUAL_UINT64(original.envelope.id, replay.envelope.id);
+    TEST_ASSERT_EQUAL_STRING(original.plan.runId.c_str(),
+                             replay.plan.runId.c_str());
+    TEST_ASSERT_FALSE(original.envelope.confirmed);
+    TEST_ASSERT_TRUE(replay.envelope.confirmed);
+
+    const auto next = application.prepareStartManualHolding(
+        fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
+    TEST_ASSERT_EQUAL_UINT64(original.envelope.id + 1U,
+                             std::get<fermentation::ManualStartRequest>(
+                                 *next.request)
+                                 .envelope.id);
 }
 
 void test_application_reconstructs_reset_handoff_after_run_write_cut() {
@@ -402,6 +491,9 @@ int main(int, char**) {
     RUN_TEST(test_ui_id_is_application_bound_to_existing_command_envelope);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
     RUN_TEST(test_application_reset_hands_off_existing_run_store_to_new_epoch);
+    RUN_TEST(
+        test_application_prepares_every_envelope_action_with_one_identity);
+    RUN_TEST(test_confirmation_reuses_prepared_request_without_reallocation);
     RUN_TEST(test_application_reconstructs_reset_handoff_after_run_write_cut);
     return UNITY_END();
 }

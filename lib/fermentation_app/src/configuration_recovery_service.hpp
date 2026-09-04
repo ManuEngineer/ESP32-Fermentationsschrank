@@ -111,6 +111,12 @@ class ConfigurationRecoveryService {
     // application when it hands the new epoch to run persistence.
     [[nodiscard]] std::optional<AuthorizedRunEpochHandoffProof>
     takeAuthorizedRunEpochHandoffProof() noexcept;
+    // Persistently advances the already authorized run handoff after the run
+    // coordinator has confirmed the exact target graph.  Pending/Committed
+    // may be retried after a crash; Consumed never mints another capability.
+    [[nodiscard]] ConfigurationRecoveryResult
+    consumeAuthorizedRunEpochHandoff(
+        const AuthorizedRunEpochHandoffProof& proof);
     [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>
     lastResourcePeaks() const {
         return lastResourcePeaks_;
@@ -163,7 +169,7 @@ class ConfigurationRecoveryService {
     [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
         ConfigurationBootstrapScanStatus status);
     void armAuthorizedRunEpochHandoff(
-        device_platform::StorageEpoch currentEpoch) noexcept;
+        const ConfigurationBootstrapRecord& record) noexcept;
 
     device_platform::IStateStore& store_;
     ConfigurationBootstrapStore& bootstrapStore_;

@@ -8,8 +8,6 @@
 
 namespace fermentation {
 
-inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion1 = 1U;
-
 enum class ConfigurationBootstrapCodecStatus : std::uint8_t {
     Success,
     InvalidModel,

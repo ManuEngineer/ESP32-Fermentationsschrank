@@ -10043,7 +10043,9 @@ void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
             static_cast<int>(RunPersistenceResultStatus::Blocked),
             static_cast<int>(result.status));
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(RunPersistenceDurability::MayHaveChanged),
+            static_cast<int>(unknownWrite == 1U
+                                 ? RunPersistenceDurability::MayHaveChanged
+                                 : RunPersistenceDurability::Changed),
             static_cast<int>(result.durability));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(

@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "big_endian_codec.hpp"
+#include "byte_buffer.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_bootstrap_codec.hpp"
 #include "configuration_graph_codec.hpp"
@@ -40,6 +42,29 @@ class ConfigurationServiceTestAccess {
 }  // namespace fermentation
 
 namespace {
+
+std::string legacyBootstrapBytes(
+    std::uint64_t epoch, std::uint64_t sequence,
+    fermentation::ConfigurationBootstrapState state) {
+    device_platform::ByteWriter payload(
+        fermentation::configuration_limits::
+            kConfigurationBootstrapSchema1PayloadBytes);
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint32(
+        payload, fermentation::kConfigurationStorageFormatVersion1.value()));
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint8(
+        payload, static_cast<std::uint8_t>(state)));
+    std::string bytes;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {fermentation::configuration_storage_contract::
+                              kConfigurationBootstrapRecordType,
+                          fermentation::kConfigurationBootstrapSchemaVersion1,
+                          device_platform::StorageEpoch{epoch}, sequence,
+                          std::nullopt, payload.takeBytes()},
+                         bytes, fermentation::configuration_limits::
+                                   kMaximumConfigurationBootstrapSchema1EnvelopeBytes) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    return bytes;
+}
 
 class LocalStore final : public device_platform::IStateStore {
    public:
@@ -630,6 +655,58 @@ void test_authorized_reset_without_runtime_recovers_missing_graph() {
     TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
 }
 
+void test_consumed_handoff_is_not_reauthorized_after_reboot() {
+    LocalStore store;
+    Resolver resolver;
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(recovery->boot().status));
+        const auto reset = recovery->beginAuthorizedFactoryReset();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationRecoveryStatus::
+                    FactoryResetCompleted),
+            static_cast<int>(reset.status));
+        const auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+        TEST_ASSERT_TRUE(proof.has_value());
+        const auto consumed =
+            recovery->consumeAuthorizedRunEpochHandoff(*proof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 RuntimeReady),
+            static_cast<int>(consumed.status));
+        const auto scan = bootstrap.scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RunEpochHandoffState::Consumed),
+            static_cast<int>(scan.loaded->record.handoff));
+    }
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+            static_cast<int>(recovery->boot().status));
+        TEST_ASSERT_FALSE(
+            recovery->takeAuthorizedRunEpochHandoffProof().has_value());
+    }
+}
+
 void test_split_store_and_coordinator_composition_is_rejected() {
     LocalStore store;
     LocalStore otherStore;
@@ -1136,17 +1213,8 @@ void test_schema1_epoch_overflow_blocks_before_graph_or_factory_model() {
     const auto writesBefore = fixture.store.writeCount();
     const auto modelsBefore = fixture.service.fullModelGenerationCount();
     const auto epoch = std::numeric_limits<std::uint64_t>::max() / 2U;
-    fermentation::ConfigurationBootstrapRecord record{
-        fermentation::ConfigurationBootstrapSequence{epoch * 2U},
-        fermentation::kConfigurationStorageFormatVersion1,
-        device_platform::StorageEpoch{epoch},
-        fermentation::ConfigurationBootstrapState::Initialized};
-    std::string bytes;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            fermentation::ConfigurationBootstrapCodecStatus::Success),
-        static_cast<int>(
-            fermentation::encodeConfigurationBootstrapRecord(record, bytes)));
+    const auto bytes = legacyBootstrapBytes(
+        epoch, epoch * 2U, fermentation::ConfigurationBootstrapState::Initialized);
     fixture.store.erase("cb1");
     fixture.store.put("cb0", bytes);
     const auto reads = fixture.store.readCount();
@@ -1898,6 +1966,7 @@ int main() {
     RUN_TEST(test_initialization_resumes_after_each_definite_write_cut);
     RUN_TEST(test_root_unknown_old_requires_bound_resolution_before_retry);
     RUN_TEST(test_authorized_reset_without_runtime_recovers_missing_graph);
+    RUN_TEST(test_consumed_handoff_is_not_reauthorized_after_reboot);
     RUN_TEST(test_split_store_and_coordinator_composition_is_rejected);
     RUN_TEST(test_reset_resumes_after_each_definite_write_cut);
     RUN_TEST(

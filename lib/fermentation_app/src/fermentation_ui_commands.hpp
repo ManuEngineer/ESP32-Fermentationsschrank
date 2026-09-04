@@ -106,7 +106,9 @@ enum class FermentationApplicationRequestStatus : std::uint8_t {
 
 using FermentationApplicationPreparedRequest =
     std::variant<ProgramStartRequest, ManualStartRequest, StopRequest,
-                 CompletionRequest>;
+                 CompletionRequest, RunAdjustmentCommandRequest,
+                 ApplyRecoveryTimeCorrectionRequest, MessageCommandRequest,
+                 FaultResetRequest, SensorSelectionCommandRequest>;
 
 // The application returns an already identity-bound request. Confirmation
 // reuses this value; a renderer never supplies a replacement ID or run ID.
@@ -118,6 +120,9 @@ struct FermentationApplicationRequestResult {
     // exact same envelope and any runId derived from it. Adapters cannot
     // construct a replacement identity.
     std::optional<ApplicationCommandIdentity> identity;
+    // Sensor-selection preparation also retains the owning evidence supplied
+    // by the application boundary. It is never transport-controlled.
+    std::optional<CrossRolePlausibilityContext> owningPlausibility;
 };
 
 struct FermentationUiAdjustRunIntent {

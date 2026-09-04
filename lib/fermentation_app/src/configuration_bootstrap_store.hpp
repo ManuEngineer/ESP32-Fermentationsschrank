@@ -77,12 +77,19 @@ class ConfigurationBootstrapStore {
     [[nodiscard]] ConfigurationBootstrapWriteResult writeSuccessor(
         const LoadedConfigurationBootstrap& expected,
         ConfigurationBootstrapState targetState);
+    [[nodiscard]] ConfigurationBootstrapWriteResult writeHandoffSuccessor(
+        const LoadedConfigurationBootstrap& expected,
+        RunEpochHandoffState targetHandoff);
     [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
         return &store_;
     }
     [[nodiscard]] ConfigurationBootstrapWriteResult writeBound(
         const ConfigurationBootstrapScanResult& scan,
         const ConfigurationBootstrapRecord& target);
+    [[nodiscard]] ConfigurationBootstrapWriteResult writeSuccessorWithHandoff(
+        const LoadedConfigurationBootstrap& expected,
+        ConfigurationBootstrapState targetState,
+        RunEpochHandoffState targetHandoff);
 
     device_platform::IStateStore& store_;
 };

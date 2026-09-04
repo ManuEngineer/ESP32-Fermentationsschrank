@@ -322,7 +322,7 @@ ConfigurationRecoveryService::classifyBootstrapFinalization(
         }
         if (successStatus ==
             ConfigurationRecoveryStatus::FactoryResetCompleted) {
-            armAuthorizedRunEpochHandoff(finalized.loaded->record.storageEpoch);
+            armAuthorizedRunEpochHandoff(finalized.loaded->record);
         }
         return {successStatus, {}};
     }
@@ -345,13 +345,22 @@ ConfigurationRecoveryService::classifyBootstrapFinalization(
 }
 
 void ConfigurationRecoveryService::armAuthorizedRunEpochHandoff(
-    device_platform::StorageEpoch currentEpoch) noexcept {
-    if (currentEpoch.value() <= 1U) {
+    const ConfigurationBootstrapRecord& record) noexcept {
+    if (record.schemaVersion != kConfigurationBootstrapSchemaVersion2 ||
+        record.state != ConfigurationBootstrapState::Initialized ||
+        (record.handoff != RunEpochHandoffState::Pending &&
+         record.handoff != RunEpochHandoffState::Committed) ||
+        !record.previousEpoch.has_value() || !record.currentEpoch.has_value() ||
+        record.currentEpoch.value() != record.storageEpoch ||
+        record.previousEpoch->value() == 0U ||
+        record.previousEpoch->value() ==
+            std::numeric_limits<std::uint64_t>::max() ||
+        record.previousEpoch->value() + 1U != record.currentEpoch->value()) {
         pendingRunEpochHandoff_.reset();
         return;
     }
     pendingRunEpochHandoff_ = AuthorizedRunEpochHandoffProof(
-        device_platform::StorageEpoch{currentEpoch.value() - 1U}, currentEpoch);
+        *record.previousEpoch, *record.currentEpoch);
 }
 
 std::optional<AuthorizedRunEpochHandoffProof>
@@ -359,6 +368,56 @@ ConfigurationRecoveryService::takeAuthorizedRunEpochHandoffProof() noexcept {
     auto proof = std::move(pendingRunEpochHandoff_);
     pendingRunEpochHandoff_.reset();
     return proof;
+}
+
+ConfigurationRecoveryResult
+ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
+    const AuthorizedRunEpochHandoffProof& proof) {
+    auto acquired = mutationCoordinator_.tryAcquire();
+    if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
+        return makeUnavailableResult(
+            ConfigurationRecoveryStatus::ConfigurationMutationBusy);
+    }
+    auto bootstrap = bootstrapStore_.scan();
+    if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
+        !bootstrap.loaded.has_value() ||
+        bootstrap.loaded->record.schemaVersion !=
+            kConfigurationBootstrapSchemaVersion2 ||
+        bootstrap.loaded->record.state !=
+            ConfigurationBootstrapState::Initialized ||
+        !bootstrap.loaded->record.previousEpoch.has_value() ||
+        !bootstrap.loaded->record.currentEpoch.has_value() ||
+        bootstrap.loaded->record.previousEpoch.value() != proof.previousEpoch() ||
+        bootstrap.loaded->record.currentEpoch.value() != proof.currentEpoch()) {
+        return mapBootstrapFailure(bootstrap.status);
+    }
+
+    auto current = *bootstrap.loaded;
+    if (current.record.handoff == RunEpochHandoffState::Pending) {
+        const auto committed = bootstrapStore_.writeHandoffSuccessor(
+            current, RunEpochHandoffState::Committed);
+        if (committed.status != ConfigurationBootstrapWriteStatus::Success ||
+            !committed.loaded.has_value()) {
+            return makeUnavailableResult(mapBootstrapWriteFailure(
+                committed.status));
+        }
+        current = *committed.loaded;
+    }
+    if (current.record.handoff != RunEpochHandoffState::Committed) {
+        return current.record.handoff == RunEpochHandoffState::Consumed
+                   ? makeRejectedWithValidRuntime(
+                         ConfigurationRecoveryStatus::StateTransitionRejected)
+                   : makeUnavailableResult(
+                         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
+    }
+    const auto consumed = bootstrapStore_.writeHandoffSuccessor(
+        current, RunEpochHandoffState::Consumed);
+    if (consumed.status != ConfigurationBootstrapWriteStatus::Success ||
+        !consumed.loaded.has_value()) {
+        return makeUnavailableResult(mapBootstrapWriteFailure(consumed.status));
+    }
+    pendingRunEpochHandoff_.reset();
+    return {ConfigurationRecoveryStatus::RuntimeReady, {}};
 }
 
 ConfigurationRecoveryResult
@@ -578,6 +637,7 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                 ConfigurationBootstrapState::Initialized) {
                 if (configurationService_.finalizeRecoveredGraphForBootstrap(
                         bootstrap.loaded->record.storageEpoch)) {
+                    armAuthorizedRunEpochHandoff(bootstrap.loaded->record);
                     return {ConfigurationRecoveryStatus::RuntimeReady, {}};
                 }
                 configurationService_.failRecovery(
@@ -714,10 +774,10 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                 ConfigurationRecoveryStatus::RuntimePreparationFailure,
                 loaded.diagnostics);
         }
-        if (loaded.graph->active.manifest.operation.kind ==
-            ChangeOperationKind::FactoryReset) {
-            armAuthorizedRunEpochHandoff(bootstrap.loaded->record.storageEpoch);
-        }
+        // Only the persisted schema-2 handoff phase can mint the capability.
+        // A historical FactoryReset manifest is not sufficient: after the
+        // handoff reaches Consumed, later boots must not re-authorize it.
+        armAuthorizedRunEpochHandoff(bootstrap.loaded->record);
         return {ConfigurationRecoveryStatus::RuntimeReady, loaded.diagnostics};
     }
     const auto operation = bootstrap.loaded->record.state ==
@@ -781,10 +841,24 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
     // recovery attempt either completes or fails closed.
     const bool oldRuntimeRemainsValid =
         configurationService_.mode() == ConfigurationServiceMode::Operational;
+    if (bootstrap.loaded->record.handoff == RunEpochHandoffState::Pending ||
+        bootstrap.loaded->record.handoff == RunEpochHandoffState::Committed) {
+        // An open run handoff must be resumed and consumed before a later
+        // reset can advance the configuration epoch.  Starting a second
+        // reset would otherwise discard the only persistent authorization
+        // binding for the first handoff.
+        return makeResetPreparationFailure(
+            ConfigurationRecoveryStatus::StateTransitionRejected,
+            oldRuntimeRemainsValid);
+    }
     constexpr auto kMaximumResettableEpoch =
         std::numeric_limits<std::uint64_t>::max() / 2U - 1U;
+    constexpr auto kRequiredHandoffSuccessors = 4U;
     if (bootstrap.loaded->record.storageEpoch.value() >
             kMaximumResettableEpoch ||
+        bootstrap.loaded->record.sequence.value() >
+            std::numeric_limits<std::uint64_t>::max() -
+                kRequiredHandoffSuccessors ||
         bootstrap.loaded->highWater.value() ==
             std::numeric_limits<std::uint64_t>::max()) {
         return makeResetPreparationFailure(

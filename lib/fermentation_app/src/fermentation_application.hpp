@@ -46,9 +46,12 @@ enum class ApplicationLifecycleState : std::uint8_t {
 struct FermentationApplicationOwningEvidence {
     bool safetyAllowsStart{false};
     bool safetyAllowsCooling{false};
+    bool safetyAllowsChange{false};
     bool airSensorValid{false};
     bool coolingSensorValid{false};
     bool productSensorValid{false};
+    std::optional<FaultResetEvaluation> faultResetEvaluation;
+    std::optional<CrossRolePlausibilityContext> sensorPlausibility;
 };
 
 class FermentationApplication {
@@ -111,6 +114,16 @@ class FermentationApplication {
         const FermentationUiCommandContext& context,
         const FermentationUiCompleteRunIntent& intent,
         const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareEnvelope(
+        const FermentationUiCommandContext& context,
+        const FermentationUiEnvelopePayload& payload,
+        const FermentationApplicationOwningEvidence& evidence);
+    // Confirmation reuses the already application-bound request.  It only
+    // changes the existing envelope confirmation bit; it never allocates a
+    // new CommandId or derives a replacement runId.
+    [[nodiscard]] static FermentationApplicationRequestResult
+    confirmPrepared(
+        const FermentationApplicationRequestResult& prepared) noexcept;
 
     // Existing configuration recovery remains the authorization owner. This
     // application entry point composes its FactoryResetCompleted result with
