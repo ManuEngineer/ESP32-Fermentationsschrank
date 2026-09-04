@@ -3,60 +3,30 @@
 #include <type_traits>
 #include <variant>
 
+#include "fermentation_application.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "device_platform.hpp"
+#include "mock_time_zone_resolver.hpp"
+#include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
-
-namespace fermentation {
-
-class ApplicationRunIdentityTestAccess {
-   public:
-    static ApplicationCommandIdentity allocate(ApplicationRunIdentity& value) {
-        return *value.allocateForApplication().identity;
-    }
-};
-
-}  // namespace fermentation
 
 namespace {
 
 using namespace fermentation;
 
+FermentationApplicationOwningEvidence uiEvidence(bool safetyAllowsStart = true) {
+    FermentationApplicationOwningEvidence evidence;
+    evidence.safetyAllowsStart = safetyAllowsStart;
+    evidence.airSensorValid = true;
+    evidence.coolingSensorValid = true;
+    evidence.productSensorValid = true;
+    return evidence;
+}
+
 RunCommandState standbyState() {
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
     return state;
-}
-
-ProgramStartRequest validProgramStart() {
-    auto program = FactoryProgramCatalog::find("water-kefir");
-    TEST_ASSERT_TRUE(program.has_value());
-    program->program.productSensorFailure.fallbackDelaySeconds = 30U;
-    program->program.fermentationStages.front().targetTemperatureCelsius = 38.0;
-    program->program.fermentationStages.front().durationMinutes = 120U;
-    program->program.targetQualification.bandCelsius = 0.5;
-    program->program.targetQualification.durationMinutes = 10U;
-    program->program.maximumTargetReachMinutes = 180U;
-    if (program->program.preheat) {
-        program->program.maximumProductWaitMinutes = 30U;
-    }
-    if (program->program.completion.mode !=
-        CompletionMode::FinishWithoutCooling) {
-        program->program.completion.coolingTargetCelsius = 8.0;
-    }
-    TEST_ASSERT_TRUE(validateProgram(*program).valid());
-
-    ProgramStartRequest request;
-    request.runId = "ui-run";
-    request.program = *program;
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision =
-        ::fermentation::RunProgramSourceRevision{1U};
-    request.sensorMode = RunSensorMode::Product;
-    request.safetyAllowsStart = true;
-    request.airSensorValid = true;
-    request.coolingSensorValid = true;
-    request.productSensorValid = true;
-    return request;
 }
 
 FermentationUiCommandContext context(const RunCommandState& state,
@@ -95,33 +65,50 @@ void assertDecisionOnly(const FermentationUiCommandResult& result) {
 }
 
 void test_ui_request_id_is_the_existing_command_id() {
-    const auto state = standbyState();
-    const auto value = context(state);
-    auto identity = ApplicationRunIdentity::create(
-        device_platform::StorageEpoch{1U}, CommandId{0U});
-    TEST_ASSERT_TRUE(identity.has_value());
-    auto commandIdentity =
-        ApplicationRunIdentityTestAccess::allocate(*identity);
-    const auto envelope =
-        FermentationUiCommandBridge::makeEnvelope(value, commandIdentity);
-
-    TEST_ASSERT_EQUAL_UINT64(commandIdentity.commandId(), envelope.id);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandSource::LocalDisplay),
-                          static_cast<int>(envelope.source));
-    TEST_ASSERT_FALSE(envelope.confirmed);
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    FermentationUiStartManualHoldingIntent manual;
+    manual.plan.targetTemperatureCelsius = 30.0;
+    manual.plan.qualificationBandCelsius = 0.5;
+    manual.plan.qualificationDurationMinutes = 10U;
+    manual.plan.maximumTargetReachMinutes = 60U;
+    FermentationUiCommandContext value;
+    value.surface = device_platform::UiSurface::WebInterface;
+    value.monotonicMillis = 100U;
+    const auto prepared = application.prepareStartManualHolding(
+        value, manual, uiEvidence());
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
+    TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
+                             prepared.request->commandEnvelope().id);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandSource::WebInterface),
+                          static_cast<int>(prepared.request->commandEnvelope().source));
+    TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
 }
 
 void test_canonical_validation_precedes_ui_confirmation() {
     const auto state = standbyState();
     const auto unconfirmedContext = context(state, false);
-    auto identity = ApplicationRunIdentity::create(
-        device_platform::StorageEpoch{1U}, CommandId{0U});
-    TEST_ASSERT_TRUE(identity.has_value());
-    auto commandIdentity =
-        ApplicationRunIdentityTestAccess::allocate(*identity);
-
-    const auto unconfirmed = FermentationUiCommandBridge::decideProgramStart(
-        state, validProgramStart(), unconfirmedContext, commandIdentity,
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    FermentationUiStartManualHoldingIntent manual;
+    manual.plan.targetTemperatureCelsius = 30.0;
+    manual.plan.qualificationBandCelsius = 0.5;
+    manual.plan.qualificationDurationMinutes = 10U;
+    manual.plan.maximumTargetReachMinutes = 60U;
+    const auto unconfirmedPrepared = application.prepareStartManualHolding(
+        unconfirmedContext, manual, uiEvidence());
+    TEST_ASSERT_TRUE(unconfirmedPrepared.request.has_value());
+    const auto unconfirmed = FermentationUiCommandBridge::decidePrepared(
+        state, *unconfirmedPrepared.request,
         confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
@@ -134,9 +121,11 @@ void test_canonical_validation_precedes_ui_confirmation() {
 
     auto staleContext = unconfirmedContext;
     staleContext.expected.expectedRunRevision = 1U;
-    const auto stale = FermentationUiCommandBridge::decideProgramStart(
-        state, validProgramStart(), staleContext, commandIdentity,
-        confirmation(staleContext));
+    const auto stalePrepared = application.prepareStartManualHolding(
+        staleContext, manual, uiEvidence());
+    TEST_ASSERT_TRUE(stalePrepared.request.has_value());
+    const auto stale = FermentationUiCommandBridge::decidePrepared(
+        state, *stalePrepared.request, confirmation(staleContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
@@ -146,12 +135,13 @@ void test_canonical_validation_precedes_ui_confirmation() {
     assertDecisionOnly(stale);
     TEST_ASSERT_FALSE(stale.confirmation.has_value());
 
-    auto invalid = validProgramStart();
-    invalid.sourceProgramRevision =
-        ::fermentation::RunProgramSourceRevision{0U};
-    const auto invalidResult = FermentationUiCommandBridge::decideProgramStart(
-        state, invalid, unconfirmedContext, commandIdentity,
-        confirmation(unconfirmedContext));
+    auto invalidManual = manual;
+    invalidManual.plan.targetTemperatureCelsius = 0.0;
+    const auto invalidPrepared = application.prepareStartManualHolding(
+        unconfirmedContext, invalidManual, uiEvidence());
+    TEST_ASSERT_TRUE(invalidPrepared.request.has_value());
+    const auto invalidResult = FermentationUiCommandBridge::decidePrepared(
+        state, *invalidPrepared.request, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
@@ -161,11 +151,11 @@ void test_canonical_validation_precedes_ui_confirmation() {
     assertDecisionOnly(invalidResult);
     TEST_ASSERT_FALSE(invalidResult.confirmation.has_value());
 
-    auto unsafe = validProgramStart();
-    unsafe.safetyAllowsStart = false;
-    const auto unsafeResult = FermentationUiCommandBridge::decideProgramStart(
-        state, unsafe, unconfirmedContext, commandIdentity,
-        confirmation(unconfirmedContext));
+    const auto unsafePrepared = application.prepareStartManualHolding(
+        unconfirmedContext, manual, uiEvidence(false));
+    TEST_ASSERT_TRUE(unsafePrepared.request.has_value());
+    const auto unsafeResult = FermentationUiCommandBridge::decidePrepared(
+        state, *unsafePrepared.request, confirmation(unconfirmedContext));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             device_platform::DeviceUiCommandOutcomeCategory::Rejected),
@@ -260,6 +250,55 @@ void test_proposed_decision_is_not_reported_as_applied() {
         static_cast<int>(proposed.phase));
 }
 
+void test_prepared_message_actions_remain_bound_to_their_action() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    auto state = standbyState();
+    state.messageCount = 1U;
+    state.messages[0].id = 7U;
+    state.messages[0].acknowledged = true;
+    state.messages[0].acousticMuted = false;
+
+    FermentationUiCommandContext value = context(state, false);
+    value.expected.expectedMessageRevision = state.messageRevision;
+    FermentationApplicationOwningEvidence evidence;
+    const auto acknowledge = application.prepareEnvelope(
+        value, FermentationUiEnvelopePayload{
+                  FermentationUiAcknowledgeMessageIntent{7U}},
+        evidence);
+    const auto mute = application.prepareEnvelope(
+        value,
+        FermentationUiEnvelopePayload{FermentationUiMuteMessageIntent{7U}},
+        evidence);
+    TEST_ASSERT_TRUE(acknowledge.request.has_value());
+    TEST_ASSERT_TRUE(mute.request.has_value());
+
+    const auto confirmedAcknowledge =
+        FermentationApplication::confirmPrepared(acknowledge);
+    const auto confirmedMute = FermentationApplication::confirmPrepared(mute);
+    const auto acknowledgeResult = FermentationUiCommandBridge::decidePrepared(
+        state, *confirmedAcknowledge.request);
+    const auto muteResult = FermentationUiCommandBridge::decidePrepared(
+        state, *confirmedMute.request);
+
+    // The acknowledged message makes Ack a NoChange, while the independent
+    // acoustic flag makes Mute a Proposed decision. If the prepared payload
+    // were reinterpreted by the bridge, these outcomes would be swapped.
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
+                          static_cast<int>(commandDetail(acknowledgeResult)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Proposed),
+                          static_cast<int>(commandDetail(muteResult)));
+    assertDecisionOnly(acknowledgeResult);
+    assertDecisionOnly(muteResult);
+    TEST_ASSERT_NOT_EQUAL(acknowledge.request->commandId(),
+                          mute.request->commandId());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -272,5 +311,6 @@ int main(int, char**) {
     RUN_TEST(test_command_result_preserves_typed_app_details);
     RUN_TEST(test_ui_payloads_are_intents_and_not_owning_evidence);
     RUN_TEST(test_proposed_decision_is_not_reported_as_applied);
+    RUN_TEST(test_prepared_message_actions_remain_bound_to_their_action);
     return UNITY_END();
 }

@@ -6,13 +6,18 @@
 #include <variant>
 
 #include "application_run_identity.hpp"
+#include "configuration_bootstrap_store.hpp"
+#include "configuration_graph_store.hpp"
+#include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
+#include "configuration_service.hpp"
 #include "device_platform.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "state_store.hpp"
+#include "state_store_key.hpp"
 #include "standard_program_catalog.hpp"
 #include "simulated_persistent_state_store.hpp"
 
@@ -43,13 +48,16 @@ using fermentation::ApplicationRunIdentityTestAccess;
 using fermentation::CommandId;
 using fermentation::ProgramCatalogRevision;
 
+fermentation::FermentationApplicationOwningEvidence owningEvidence();
+
 class FailNextRunSlotStore final : public device_platform::IStateStore {
    public:
     device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
-        if (failNextRunSlot_ && key.bytes() == "rc0") {
-            failNextRunSlot_ = false;
+        if (!failNextRunSlotKey_.empty() &&
+            key.bytes() == failNextRunSlotKey_) {
+            failNextRunSlotKey_.clear();
             return device_platform::StateStoreWriteStatus::WriteError;
         }
         return backing_.write(key, value);
@@ -61,12 +69,12 @@ class FailNextRunSlotStore final : public device_platform::IStateStore {
         return backing_.read(key, maxBytes);
     }
 
-    void failNextRunSlot() { failNextRunSlot_ = true; }
+    void failNextRunSlot(const char* key = "rc0") { failNextRunSlotKey_ = key; }
     void restart() { backing_.restart(); }
 
    private:
     device_platform_test_support::SimulatedPersistentStateStore backing_;
-    bool failNextRunSlot_{false};
+    std::string failNextRunSlotKey_;
 };
 
 void test_empty_identity_space_allocates_from_one() {
@@ -125,21 +133,27 @@ void test_catalog_revision_maps_to_neutral_run_provenance_without_truncation() {
 }
 
 void test_ui_id_is_application_bound_to_existing_command_envelope() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
     fermentation::FermentationUiCommandContext context;
     context.surface = device_platform::UiSurface::WebInterface;
     context.monotonicMillis = 100U;
-    auto identity = ApplicationRunIdentity::create(
-        StorageEpoch{4U}, std::optional<CommandId>{0U});
-    TEST_ASSERT_TRUE(identity.has_value());
-    const auto commandIdentity =
-        ApplicationRunIdentityTestAccess::allocate(*identity);
-    const auto envelope =
-        fermentation::FermentationUiCommandBridge::makeEnvelope(
-            context, commandIdentity);
-    TEST_ASSERT_EQUAL_UINT64(commandIdentity.commandId(), envelope.id);
+    fermentation::FermentationUiStartManualHoldingIntent manual;
+    manual.plan.targetTemperatureCelsius = 30.0;
+    const auto prepared = application.prepareStartManualHolding(
+        context, manual, owningEvidence());
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
+    TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
+                             prepared.request->commandEnvelope().id);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::CommandSource::WebInterface),
-        static_cast<int>(envelope.source));
+        static_cast<int>(prepared.request->commandEnvelope().source));
 }
 
 fermentation::FermentationApplicationOwningEvidence owningEvidence() {
@@ -240,7 +254,7 @@ void test_application_composes_all_run_identities_at_one_boundary() {
                              ProgramUnavailable),
         static_cast<int>(preparedProgram.status));
     TEST_ASSERT_FALSE(preparedProgram.request.has_value());
-    TEST_ASSERT_FALSE(preparedProgram.identity.has_value());
+    TEST_ASSERT_FALSE(preparedProgram.uiRequestId.has_value());
 
     auto staleContext = context;
     staleContext.expected.expectedProgramCatalogRevision =
@@ -259,53 +273,48 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     const auto preparedManual =
         application.prepareStartManualHolding(context, manualStart, evidence);
     TEST_ASSERT_TRUE(preparedManual.request.has_value());
-    const auto& manualRequest =
-        std::get<fermentation::ManualStartRequest>(*preparedManual.request);
-    TEST_ASSERT_EQUAL_UINT64(1U, manualRequest.envelope.id);
-    TEST_ASSERT_EQUAL_STRING("e1-c1", manualRequest.plan.runId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(1U, preparedManual.request->commandId());
+    TEST_ASSERT_TRUE(preparedManual.request->runId().has_value());
+    TEST_ASSERT_EQUAL_STRING("e1-c1",
+                             preparedManual.request->runId()->c_str());
 
     fermentation::FermentationUiStopRunIntent stop;
     stop.option = fermentation::StopOption::AbortAndTurnOff;
     const auto preparedStop = application.prepareStop(context, stop, evidence);
     TEST_ASSERT_TRUE(preparedStop.request.has_value());
-    const auto& stopRequest =
-        std::get<fermentation::StopRequest>(*preparedStop.request);
-    TEST_ASSERT_EQUAL_UINT64(2U, stopRequest.envelope.id);
-    TEST_ASSERT_FALSE(stopRequest.coolingPlan.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U, preparedStop.request->commandId());
+    TEST_ASSERT_FALSE(preparedStop.request->runId().has_value());
 
     fermentation::FermentationUiCompleteRunIntent complete;
     const auto preparedComplete =
         application.prepareCompletion(context, complete, evidence);
     TEST_ASSERT_TRUE(preparedComplete.request.has_value());
-    const auto& completionRequest =
-        std::get<fermentation::CompletionRequest>(*preparedComplete.request);
-    TEST_ASSERT_EQUAL_UINT64(3U, completionRequest.envelope.id);
-    TEST_ASSERT_FALSE(completionRequest.coolingPlan.has_value());
+    TEST_ASSERT_EQUAL_UINT64(3U, preparedComplete.request->commandId());
+    TEST_ASSERT_FALSE(preparedComplete.request->runId().has_value());
 
     stop.option = fermentation::StopOption::AbortAndCool;
     stop.coolingPlan = coolingValues();
     const auto preparedCoolingStop =
         application.prepareStop(context, stop, evidence);
     TEST_ASSERT_TRUE(preparedCoolingStop.request.has_value());
-    TEST_ASSERT_TRUE(preparedCoolingStop.identity.has_value());
-    const auto& coolingStop =
-        std::get<fermentation::StopRequest>(*preparedCoolingStop.request);
-    TEST_ASSERT_EQUAL_UINT64(4U, coolingStop.envelope.id);
-    TEST_ASSERT_TRUE(coolingStop.coolingPlan.has_value());
-    TEST_ASSERT_EQUAL_STRING("e1-c4", coolingStop.coolingPlan->runId.c_str());
+    TEST_ASSERT_TRUE(preparedCoolingStop.uiRequestId.has_value());
+    TEST_ASSERT_EQUAL_UINT64(4U, preparedCoolingStop.request->commandId());
+    TEST_ASSERT_TRUE(preparedCoolingStop.request->runId().has_value());
+    TEST_ASSERT_EQUAL_STRING("e1-c4",
+                             preparedCoolingStop.request->runId()->c_str());
 
     complete.startCooling = true;
     complete.coolingPlan = coolingValues();
     const auto preparedCoolingCompletion =
         application.prepareCompletion(context, complete, evidence);
     TEST_ASSERT_TRUE(preparedCoolingCompletion.request.has_value());
-    TEST_ASSERT_TRUE(preparedCoolingCompletion.identity.has_value());
-    const auto& coolingCompletion = std::get<fermentation::CompletionRequest>(
-        *preparedCoolingCompletion.request);
-    TEST_ASSERT_EQUAL_UINT64(5U, coolingCompletion.envelope.id);
-    TEST_ASSERT_TRUE(coolingCompletion.coolingPlan.has_value());
+    TEST_ASSERT_TRUE(preparedCoolingCompletion.uiRequestId.has_value());
+    TEST_ASSERT_EQUAL_UINT64(5U,
+                             preparedCoolingCompletion.request->commandId());
+    TEST_ASSERT_TRUE(preparedCoolingCompletion.request->runId().has_value());
     TEST_ASSERT_EQUAL_STRING("e1-c5",
-                             coolingCompletion.coolingPlan->runId.c_str());
+                             preparedCoolingCompletion.request->runId()
+                                 ->c_str());
 }
 
 void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
@@ -333,10 +342,8 @@ void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
     const auto prepared = application.prepareStartManualHolding(
         context, manual, owningEvidence());
     TEST_ASSERT_TRUE(prepared.request.has_value());
-    const auto& request =
-        std::get<fermentation::ManualStartRequest>(*prepared.request);
-    TEST_ASSERT_EQUAL_UINT64(1U, request.envelope.id);
-    TEST_ASSERT_EQUAL_STRING("e2-c1", request.plan.runId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
 }
 
 void test_application_prepares_every_envelope_action_with_one_identity() {
@@ -372,31 +379,12 @@ void test_application_prepares_every_envelope_action_with_one_identity() {
     const auto sensor =
         prepare(fermentation::FermentationUiSensorSelectionIntent{});
 
-    TEST_ASSERT_EQUAL_UINT64(
-        1U,
-        std::get<fermentation::RunAdjustmentCommandRequest>(
-                *adjustment.request)
-            .envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(
-        2U,
-        std::get<fermentation::ApplyRecoveryTimeCorrectionRequest>(
-                *correction.request)
-            .envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(
-        3U,
-        std::get<fermentation::MessageCommandRequest>(*acknowledgement.request)
-            .envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(
-        4U,
-        std::get<fermentation::MessageCommandRequest>(*mute.request).envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(
-        5U,
-        std::get<fermentation::FaultResetRequest>(*reset.request).envelope.id);
-    TEST_ASSERT_EQUAL_UINT64(
-        6U,
-        std::get<fermentation::SensorSelectionCommandRequest>(*sensor.request)
-            .envelope.id);
-    TEST_ASSERT_TRUE(sensor.owningPlausibility.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, adjustment.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(2U, correction.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(3U, acknowledgement.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(4U, mute.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(5U, reset.request->commandId());
+    TEST_ASSERT_EQUAL_UINT64(6U, sensor.request->commandId());
 }
 
 void test_confirmation_reuses_prepared_request_without_reallocation() {
@@ -408,9 +396,18 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
 
+    fermentation::FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::WebInterface;
+    context.monotonicMillis = 314U;
+    context.expected.expectedStateSequence = 2U;
+    context.expected.expectedRunRevision = 3U;
+    context.expected.expectedMessageRevision = 4U;
+    context.expected.expectedFaultRevision = 5U;
+    context.expected.expectedRecoveryEpisodeRevision = 6U;
+
     fermentation::FermentationUiStartManualHoldingIntent manual;
     const auto prepared = application.prepareStartManualHolding(
-        fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
+        context, manual, owningEvidence());
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),
@@ -421,22 +418,32 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(confirmed.status));
-    const auto& original =
-        std::get<fermentation::ManualStartRequest>(*prepared.request);
-    const auto& replay =
-        std::get<fermentation::ManualStartRequest>(*confirmed.request);
-    TEST_ASSERT_EQUAL_UINT64(original.envelope.id, replay.envelope.id);
-    TEST_ASSERT_EQUAL_STRING(original.plan.runId.c_str(),
-                             replay.plan.runId.c_str());
-    TEST_ASSERT_FALSE(original.envelope.confirmed);
-    TEST_ASSERT_TRUE(replay.envelope.confirmed);
+    TEST_ASSERT_EQUAL_UINT64(prepared.request->commandId(),
+                             confirmed.request->commandId());
+    TEST_ASSERT_EQUAL_STRING(prepared.request->runId()->c_str(),
+                             confirmed.request->runId()->c_str());
+    const auto& before = prepared.request->commandEnvelope();
+    const auto& after = confirmed.request->commandEnvelope();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(before.source),
+                          static_cast<int>(after.source));
+    TEST_ASSERT_EQUAL_UINT64(before.monotonicMillis, after.monotonicMillis);
+    TEST_ASSERT_EQUAL_UINT32(before.expectedStateSequence,
+                             after.expectedStateSequence);
+    TEST_ASSERT_EQUAL_UINT32(before.expectedRunRevision.value(),
+                             after.expectedRunRevision.value());
+    TEST_ASSERT_EQUAL_UINT32(before.expectedMessageRevision.value(),
+                             after.expectedMessageRevision.value());
+    TEST_ASSERT_EQUAL_UINT32(before.expectedFaultRevision.value(),
+                             after.expectedFaultRevision.value());
+    TEST_ASSERT_EQUAL_UINT32(before.expectedRecoveryEpisodeRevision.value(),
+                             after.expectedRecoveryEpisodeRevision.value());
+    TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
+    TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
 
     const auto next = application.prepareStartManualHolding(
         fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
-    TEST_ASSERT_EQUAL_UINT64(original.envelope.id + 1U,
-                             std::get<fermentation::ManualStartRequest>(
-                                 *next.request)
-                                 .envelope.id);
+    TEST_ASSERT_EQUAL_UINT64(prepared.request->commandId() + 1U,
+                             next.request->commandId());
 }
 
 void test_application_reconstructs_reset_handoff_after_run_write_cut() {
@@ -470,10 +477,127 @@ void test_application_reconstructs_reset_handoff_after_run_write_cut() {
     const auto prepared = rebooted.prepareStartManualHolding(
         fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
     TEST_ASSERT_TRUE(prepared.request.has_value());
-    const auto& request =
-        std::get<fermentation::ManualStartRequest>(*prepared.request);
-    TEST_ASSERT_EQUAL_UINT64(1U, request.envelope.id);
-    TEST_ASSERT_EQUAL_STRING("e2-c1", request.plan.runId.c_str());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
+}
+
+void seedCommittedHandoffWithFinalizedHead(
+    device_platform_test_support::SimulatedPersistentStateStore& store,
+    device_platform_test_support::MockTimeZoneResolver& timeZoneResolver) {
+    fermentation::ConfigurationMutationCoordinator mutationCoordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, timeZoneResolver);
+    fermentation::ConfigurationService configuration(
+        mutationCoordinator, graph, timeZoneResolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, configuration, mutationCoordinator);
+    TEST_ASSERT_TRUE(recovery != nullptr);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::
+                FactoryInitializationCompleted),
+        static_cast<int>(recovery->boot().status));
+    const auto reset = recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(reset.status));
+    auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+    TEST_ASSERT_TRUE(proof.has_value());
+
+    fermentation::RunPersistenceCoordinator runPersistence(
+        store, device_platform::StorageEpoch{2U},
+        fermentation::RunCheckpointSchedule{});
+    const auto prepared =
+        runPersistence.prepareAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    const auto committed = recovery->commitAuthorizedRunEpochHandoff(
+        *proof, *prepared.evidence);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(committed.status));
+    const auto finalized =
+        runPersistence.finalizeAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_TRUE(finalized.evidence.has_value());
+    // Deliberately leave the persistent bootstrap record Committed.  The
+    // application must verify the exact target head and consume this phase
+    // before publishing Ready or initializing the command allocator.
+}
+
+void test_application_finishes_committed_handoff_before_ready() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    seedCommittedHandoffWithFinalizedHead(store, timeZoneResolver);
+    store.restart();
+
+    device_platform::DevicePlatform platform;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    const auto scan = bootstrap.scan();
+    TEST_ASSERT_TRUE(scan.loaded.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunEpochHandoffState::Consumed),
+        static_cast<int>(scan.loaded->record.handoff));
+
+    fermentation::FermentationUiStartManualHoldingIntent manual;
+    const auto prepared = application.prepareStartManualHolding(
+        fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
+}
+
+void test_application_resumes_empty_partial_handoff_before_allocator() {
+    FailNextRunSlotStore store;
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+
+    // Empty run store: slot 0 is durably prepared, slot 1 fails.  The head
+    // must still be absent because Pending never writes it.
+    store.failNextRunSlot("rc1");
+    const auto interrupted = application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             RunPersistenceHandoffUnavailable),
+        static_cast<int>(interrupted.status));
+    const auto head = store.read(
+        *device_platform::StateStoreKey::create("rh0").key, 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::NotFound),
+        static_cast<int>(head.status));
+    const auto firstSlot = store.read(
+        *device_platform::StateStoreKey::create("rc0").key, 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(firstSlot.status));
+
+    store.restart();
+    device_platform::DevicePlatform rebootedPlatform;
+    fermentation::FermentationApplication rebooted;
+    TEST_ASSERT_TRUE(rebootedPlatform.begin({true}));
+    TEST_ASSERT_TRUE(
+        rebooted.begin(rebootedPlatform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(rebooted.ready());
+    fermentation::FermentationUiStartManualHoldingIntent manual;
+    const auto prepared = rebooted.prepareStartManualHolding(
+        fermentation::FermentationUiCommandContext{}, manual, owningEvidence());
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
 }
 
 }  // namespace
@@ -495,5 +619,7 @@ int main(int, char**) {
         test_application_prepares_every_envelope_action_with_one_identity);
     RUN_TEST(test_confirmation_reuses_prepared_request_without_reallocation);
     RUN_TEST(test_application_reconstructs_reset_handoff_after_run_write_cut);
+    RUN_TEST(test_application_finishes_committed_handoff_before_ready);
+    RUN_TEST(test_application_resumes_empty_partial_handoff_before_allocator);
     return UNITY_END();
 }

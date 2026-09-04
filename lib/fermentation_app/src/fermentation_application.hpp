@@ -142,6 +142,11 @@ class FermentationApplication {
         const FermentationUiResumeFallbackCommand& command);
 
    private:
+    template <typename Request>
+    [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
+        Request request,
+        std::optional<CrossRolePlausibilityContext> owningPlausibility =
+            std::nullopt);
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
 #endif

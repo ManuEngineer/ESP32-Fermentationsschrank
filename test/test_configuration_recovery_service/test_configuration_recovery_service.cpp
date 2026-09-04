@@ -21,6 +21,7 @@
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
+#include "run_persistence_coordinator.hpp"
 #include "state_store.hpp"
 #include "storage_envelope.hpp"
 #include "time_zone_resolver.hpp"
@@ -676,10 +677,30 @@ void test_consumed_handoff_is_not_reauthorized_after_reboot() {
                 fermentation::ConfigurationRecoveryStatus::
                     FactoryResetCompleted),
             static_cast<int>(reset.status));
-        const auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+        auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
         TEST_ASSERT_TRUE(proof.has_value());
-        const auto consumed =
-            recovery->consumeAuthorizedRunEpochHandoff(*proof);
+        fermentation::RunPersistenceCoordinator runPersistence(
+            store, device_platform::StorageEpoch{2U},
+            fermentation::RunCheckpointSchedule{});
+        auto prepared =
+            runPersistence.prepareAuthorizedEpochHandoff(*proof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+            static_cast<int>(prepared.persistenceResult.status));
+        TEST_ASSERT_TRUE(prepared.evidence.has_value());
+        const auto committed = recovery->commitAuthorizedRunEpochHandoff(
+            *proof, *prepared.evidence);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+            static_cast<int>(committed.status));
+        auto finalized =
+            runPersistence.finalizeAuthorizedEpochHandoff(*proof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+            static_cast<int>(finalized.persistenceResult.status));
+        TEST_ASSERT_TRUE(finalized.evidence.has_value());
+        const auto consumed = recovery->consumeAuthorizedRunEpochHandoff(
+            *proof, *finalized.evidence);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::ConfigurationRecoveryStatus::
                                  RuntimeReady),

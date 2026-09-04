@@ -239,6 +239,72 @@ void test_schema1_rejects_invalid_payload_format_state_and_utc() {
     }
 }
 
+std::string hexBytes(const char* hex) {
+    const auto nibble = [](char value) -> unsigned char {
+        if (value >= '0' && value <= '9')
+            return static_cast<unsigned char>(value - '0');
+        if (value >= 'a' && value <= 'f')
+            return static_cast<unsigned char>(value - 'a' + 10);
+        return static_cast<unsigned char>(value - 'A' + 10);
+    };
+    std::string bytes;
+    for (std::size_t index = 0U; hex[index] != '\0'; index += 2U)
+        bytes.push_back(static_cast<char>((nibble(hex[index]) << 4U) |
+                                          nibble(hex[index + 1U])));
+    return bytes;
+}
+
+void test_schema2_independent_wire_goldens_cover_all_handoff_states() {
+    struct Fixture {
+        const char* hex;
+        fermentation::ConfigurationBootstrapRecord expected;
+        std::size_t payloadSize;
+    };
+    const Fixture fixtures[] = {
+        {"445052460001000600000002000000000000000100000000000000020000000600a2fc3e26000000010200",
+         record(1U, 2U, fermentation::ConfigurationBootstrapState::Initialized),
+         6U},
+        {"445052460001000600000002000000000000000200000000000000040000001600d98442ea00000001020100000000000000010000000000000002",
+         {fermentation::ConfigurationBootstrapSequence{4U},
+          fermentation::kConfigurationStorageFormatVersion1,
+          device_platform::StorageEpoch{2U},
+          fermentation::ConfigurationBootstrapState::Initialized,
+          fermentation::kConfigurationBootstrapSchemaVersion2,
+          fermentation::RunEpochHandoffState::Pending,
+          device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}},
+         22U},
+        {"4450524600010006000000020000000000000002000000000000000500000016008babe47300000001020200000000000000010000000000000002",
+         {fermentation::ConfigurationBootstrapSequence{5U},
+          fermentation::kConfigurationStorageFormatVersion1,
+          device_platform::StorageEpoch{2U},
+          fermentation::ConfigurationBootstrapState::Initialized,
+          fermentation::kConfigurationBootstrapSchemaVersion2,
+          fermentation::RunEpochHandoffState::Committed,
+          device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}},
+         22U},
+        {"4450524600010006000000020000000000000002000000000000000600000016000ed3281700000001020300000000000000010000000000000002",
+         {fermentation::ConfigurationBootstrapSequence{6U},
+          fermentation::kConfigurationStorageFormatVersion1,
+          device_platform::StorageEpoch{2U},
+          fermentation::ConfigurationBootstrapState::Initialized,
+          fermentation::kConfigurationBootstrapSchemaVersion2,
+          fermentation::RunEpochHandoffState::Consumed,
+          device_platform::StorageEpoch{1U}, device_platform::StorageEpoch{2U}},
+         22U}};
+    for (const auto& fixture : fixtures) {
+        const auto bytes = hexBytes(fixture.hex);
+        TEST_ASSERT_EQUAL_UINT32(fixture.payloadSize == 6U ? 43U : 59U,
+                                 bytes.size());
+        const auto decoded =
+            fermentation::decodeConfigurationBootstrapRecord(bytes);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::Success),
+            static_cast<int>(decoded.status));
+        TEST_ASSERT_TRUE(decoded.value.has_value());
+        TEST_ASSERT_TRUE(*decoded.value == fixture.expected);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -252,5 +318,6 @@ int main() {
     RUN_TEST(
         test_test_local_epoch_record_does_not_reinterpret_bootstrap_schema1);
     RUN_TEST(test_schema1_rejects_invalid_payload_format_state_and_utc);
+    RUN_TEST(test_schema2_independent_wire_goldens_cover_all_handoff_states);
     return UNITY_END();
 }

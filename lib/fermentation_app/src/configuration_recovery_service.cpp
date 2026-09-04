@@ -360,7 +360,10 @@ void ConfigurationRecoveryService::armAuthorizedRunEpochHandoff(
         return;
     }
     pendingRunEpochHandoff_ = AuthorizedRunEpochHandoffProof(
-        *record.previousEpoch, *record.currentEpoch);
+        *record.previousEpoch, *record.currentEpoch,
+        record.handoff == RunEpochHandoffState::Pending
+            ? AuthorizedRunEpochHandoffPhase::Pending
+            : AuthorizedRunEpochHandoffPhase::Committed);
 }
 
 std::optional<AuthorizedRunEpochHandoffProof>
@@ -371,8 +374,15 @@ ConfigurationRecoveryService::takeAuthorizedRunEpochHandoffProof() noexcept {
 }
 
 ConfigurationRecoveryResult
-ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
-    const AuthorizedRunEpochHandoffProof& proof) {
+ConfigurationRecoveryService::commitAuthorizedRunEpochHandoff(
+    AuthorizedRunEpochHandoffProof& proof,
+    const AuthorizedRunEpochHandoffSlotsPrepared& prepared) {
+    if (proof.phase() != AuthorizedRunEpochHandoffPhase::Pending ||
+        prepared.previousEpoch() != proof.previousEpoch() ||
+        prepared.currentEpoch() != proof.currentEpoch()) {
+        return makeUnavailableResult(
+            ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable);
+    }
     auto acquired = mutationCoordinator_.tryAcquire();
     if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
         return makeUnavailableResult(
@@ -393,16 +403,58 @@ ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
     }
 
     auto current = *bootstrap.loaded;
-    if (current.record.handoff == RunEpochHandoffState::Pending) {
-        const auto committed = bootstrapStore_.writeHandoffSuccessor(
-            current, RunEpochHandoffState::Committed);
-        if (committed.status != ConfigurationBootstrapWriteStatus::Success ||
-            !committed.loaded.has_value()) {
-            return makeUnavailableResult(mapBootstrapWriteFailure(
-                committed.status));
-        }
-        current = *committed.loaded;
+    if (current.record.handoff == RunEpochHandoffState::Committed) {
+        proof.promoteToCommitted();
+        return {ConfigurationRecoveryStatus::RuntimeReady, {}};
     }
+    if (current.record.handoff != RunEpochHandoffState::Pending) {
+        return current.record.handoff == RunEpochHandoffState::Consumed
+                   ? makeRejectedWithValidRuntime(
+                         ConfigurationRecoveryStatus::StateTransitionRejected)
+                   : makeUnavailableResult(
+                         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
+    }
+    const auto committed = bootstrapStore_.writeHandoffSuccessor(
+        current, RunEpochHandoffState::Committed);
+    if (committed.status != ConfigurationBootstrapWriteStatus::Success ||
+        !committed.loaded.has_value()) {
+        return makeUnavailableResult(mapBootstrapWriteFailure(
+            committed.status));
+    }
+    proof.promoteToCommitted();
+    return {ConfigurationRecoveryStatus::RuntimeReady, {}};
+}
+
+ConfigurationRecoveryResult
+ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
+    AuthorizedRunEpochHandoffProof& proof,
+    const AuthorizedRunEpochHandoffHeadFinalized& finalized) {
+    if (proof.phase() != AuthorizedRunEpochHandoffPhase::Committed ||
+        finalized.previousEpoch() != proof.previousEpoch() ||
+        finalized.currentEpoch() != proof.currentEpoch()) {
+        return makeUnavailableResult(
+            ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable);
+    }
+    auto acquired = mutationCoordinator_.tryAcquire();
+    if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
+        return makeUnavailableResult(
+            ConfigurationRecoveryStatus::ConfigurationMutationBusy);
+    }
+    auto bootstrap = bootstrapStore_.scan();
+    if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
+        !bootstrap.loaded.has_value() ||
+        bootstrap.loaded->record.schemaVersion !=
+            kConfigurationBootstrapSchemaVersion2 ||
+        bootstrap.loaded->record.state !=
+            ConfigurationBootstrapState::Initialized ||
+        !bootstrap.loaded->record.previousEpoch.has_value() ||
+        !bootstrap.loaded->record.currentEpoch.has_value() ||
+        bootstrap.loaded->record.previousEpoch.value() != proof.previousEpoch() ||
+        bootstrap.loaded->record.currentEpoch.value() != proof.currentEpoch()) {
+        return mapBootstrapFailure(bootstrap.status);
+    }
+
+    const auto current = *bootstrap.loaded;
     if (current.record.handoff != RunEpochHandoffState::Committed) {
         return current.record.handoff == RunEpochHandoffState::Consumed
                    ? makeRejectedWithValidRuntime(
@@ -416,6 +468,7 @@ ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
         !consumed.loaded.has_value()) {
         return makeUnavailableResult(mapBootstrapWriteFailure(consumed.status));
     }
+    proof.markConsumed();
     pendingRunEpochHandoff_.reset();
     return {ConfigurationRecoveryStatus::RuntimeReady, {}};
 }

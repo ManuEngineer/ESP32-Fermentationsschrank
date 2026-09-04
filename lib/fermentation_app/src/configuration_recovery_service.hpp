@@ -108,15 +108,24 @@ class ConfigurationRecoveryService {
     [[nodiscard]] ConfigurationRecoveryResult boot();
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
     // Minted only after canonical reset completion and consumed once by the
-    // application when it hands the new epoch to run persistence.
+    // application when it hands the new epoch to run persistence. The phase
+    // reflects the persistent bootstrap handoff state and is advanced only by
+    // the owner methods below.
     [[nodiscard]] std::optional<AuthorizedRunEpochHandoffProof>
     takeAuthorizedRunEpochHandoffProof() noexcept;
-    // Persistently advances the already authorized run handoff after the run
-    // coordinator has confirmed the exact target graph.  Pending/Committed
-    // may be retried after a crash; Consumed never mints another capability.
+    // Persists Pending -> Committed only after the coordinator has prepared
+    // and verified both exact target slots. A proof alone is insufficient.
+    [[nodiscard]] ConfigurationRecoveryResult
+    commitAuthorizedRunEpochHandoff(
+        AuthorizedRunEpochHandoffProof& proof,
+        const AuthorizedRunEpochHandoffSlotsPrepared& prepared);
+    // Persists Committed -> Consumed only after the coordinator has finalized
+    // and verified the exact target head. Pending/Committed may be retried
+    // after a crash; Consumed never mints another capability.
     [[nodiscard]] ConfigurationRecoveryResult
     consumeAuthorizedRunEpochHandoff(
-        const AuthorizedRunEpochHandoffProof& proof);
+        AuthorizedRunEpochHandoffProof& proof,
+        const AuthorizedRunEpochHandoffHeadFinalized& finalized);
     [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>
     lastResourcePeaks() const {
         return lastResourcePeaks_;

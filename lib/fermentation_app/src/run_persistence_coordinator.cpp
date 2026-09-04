@@ -36,12 +36,71 @@ constexpr device_platform::RecordTypeId kHeadRecordType{8U};
 constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
 constexpr std::size_t kMaximumHeadRecordBytes = 256U;
 
+struct AuthorizedEpochHandoffTarget {
+    std::array<RunPersistenceRawRecord, 2U> records{};
+    std::string headBytes;
+};
+
 std::optional<std::uint64_t> checkedAdd(std::uint64_t left,
                                         std::uint64_t right) {
     if (right > std::numeric_limits<std::uint64_t>::max() - left) {
         return std::nullopt;
     }
     return left + right;
+}
+
+std::optional<AuthorizedEpochHandoffTarget> makeAuthorizedEpochHandoffTarget(
+    device_platform::StorageEpoch epoch,
+    const RunCheckpointSchedule& schedule) {
+    RunCommandState emptyState;
+    if (!establishBootCompletedStandby(emptyState.processState, 0U)) {
+        return std::nullopt;
+    }
+    RunPersistenceSnapshot emptySnapshot;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> noIds{};
+    if (!makeRunPersistenceSnapshotInto(
+            emptyState, noIds, 0U, RunCheckpointTrigger::Command,
+            RunCheckpointTime{0U, std::nullopt}, schedule.intervalMinutes(),
+            emptySnapshot)) {
+        return std::nullopt;
+    }
+    std::string payload;
+    if (encodeRunPersistenceSnapshot(emptySnapshot, payload) !=
+        RunPersistenceCodecStatus::Success) {
+        return std::nullopt;
+    }
+
+    AuthorizedEpochHandoffTarget target;
+    for (std::size_t slot = 0U; slot < target.records.size(); ++slot) {
+        device_platform::StorageEnvelope envelope{
+            kCheckpointRecordType,
+            kCurrentRunPersistenceSchema,
+            epoch,
+            static_cast<std::uint64_t>(slot + 1U),
+            std::nullopt,
+            payload};
+        if (device_platform::encodeEnvelope(
+                envelope, target.records[slot].bytes,
+                kMaximumCheckpointRecordBytes) !=
+            device_platform::EnvelopeEncodeStatus::Success) {
+            return std::nullopt;
+        }
+        target.records[slot].snapshot = emptySnapshot;
+        target.records[slot].checkpointRevision = slot + 1U;
+        target.records[slot].utcUnixSeconds = std::nullopt;
+    }
+
+    RunPersistenceHead head;
+    head.state = RunPersistenceHeadState::Committed;
+    head.revision = 1U;
+    head.current = makeRunCheckpointReference(0U, target.records[0], epoch);
+    head.commandIdHighWater = CommandId{0U};
+    const auto encodedHead = encodeRunPersistenceHead(head, epoch);
+    if (!encodedHead.has_value()) {
+        return std::nullopt;
+    }
+    target.headBytes = *encodedHead;
+    return target;
 }
 
 std::optional<std::uint32_t> checkedToUint32(std::uint64_t value) {
@@ -308,17 +367,21 @@ std::optional<CommandId> RunPersistenceCoordinator::commandIdHighWater()
     return std::nullopt;
 }
 
-RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
+RunEpochHandoffSlotsPreparedResult
+RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
     const AuthorizedRunEpochHandoffProof& proof) {
     RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
     const auto reject = [this, &durability](
                             RunPersistenceStep step,
                             RunPersistenceTechnicalReason reason) {
-        return result(RunPersistenceResultStatus::Blocked, step, reason,
-                      durability);
+        return RunEpochHandoffSlotsPreparedResult{
+            result(RunPersistenceResultStatus::Blocked, step, reason,
+                   durability),
+            std::nullopt};
     };
     if (state_ != RunPersistenceCoordinatorState::Uninitialized ||
         epoch_.value() == 0U || proof.previousEpoch().value() == 0U ||
+        proof.phase() != AuthorizedRunEpochHandoffPhase::Pending ||
         proof.currentEpoch() != epoch_ ||
         proof.previousEpoch().value() ==
             std::numeric_limits<std::uint64_t>::max() ||
@@ -357,10 +420,6 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
             device_platform::StateStoreReadStatus::NotFound &&
         slotReads[1].status == device_platform::StateStoreReadStatus::NotFound;
 
-    // A completed handoff may be observed again after an interrupted caller
-    // path. The exact target bytes are checked after they have been built;
-    // no arbitrary current-epoch record is treated as a completed handoff.
-    bool currentHeadCandidate = false;
     if (!emptyStore &&
         headRead.status == device_platform::StateStoreReadStatus::Success) {
         const auto envelope = device_platform::decodeEnvelope(headRead.value);
@@ -368,63 +427,20 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
             return reject(RunPersistenceStep::LoadHead,
                           RunPersistenceTechnicalReason::CodecError);
         }
-        if (envelope.envelope->storageEpoch == proof.currentEpoch()) {
-            currentHeadCandidate = true;
-        } else if (envelope.envelope->storageEpoch != proof.previousEpoch()) {
+        // Pending is strictly the slot-preparation phase. A current-epoch
+        // head, including the exact target head, is not accepted before the
+        // configuration owner records Pending -> Committed.
+        if (envelope.envelope->storageEpoch == proof.currentEpoch() ||
+            envelope.envelope->storageEpoch != proof.previousEpoch()) {
             return reject(RunPersistenceStep::LoadHead,
                           RunPersistenceTechnicalReason::InvalidProjection);
         }
     }
 
-    RunCommandState emptyState;
-    if (!establishBootCompletedStandby(emptyState.processState, 0U)) {
+    const auto target = makeAuthorizedEpochHandoffTarget(epoch_, schedule_);
+    if (!target.has_value()) {
         return reject(RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    }
-    RunPersistenceSnapshot emptySnapshot;
-    std::array<CommandId, kMaximumPersistedRunCommandIds> noIds{};
-    if (!makeRunPersistenceSnapshotInto(
-            emptyState, noIds, 0U, RunCheckpointTrigger::Command,
-            RunCheckpointTime{0U, std::nullopt}, schedule_.intervalMinutes(),
-            emptySnapshot)) {
-        return reject(RunPersistenceStep::CandidateApply,
-                      RunPersistenceTechnicalReason::InvalidProjection);
-    }
-    std::string payload;
-    if (encodeRunPersistenceSnapshot(emptySnapshot, payload) !=
-        RunPersistenceCodecStatus::Success) {
-        return reject(RunPersistenceStep::CheckpointSlot,
-                      RunPersistenceTechnicalReason::CodecError);
-    }
-
-    std::array<RunPersistenceRawRecord, 2U> newRecords{};
-    for (std::size_t slot = 0U; slot < newRecords.size(); ++slot) {
-        device_platform::StorageEnvelope envelope{
-            kCheckpointRecordType,
-            kCurrentRunPersistenceSchema,
-            epoch_,
-            static_cast<std::uint64_t>(slot + 1U),
-            std::nullopt,
-            payload};
-        if (device_platform::encodeEnvelope(envelope, newRecords[slot].bytes,
-                                            kMaximumCheckpointRecordBytes) !=
-            device_platform::EnvelopeEncodeStatus::Success) {
-            return reject(RunPersistenceStep::CheckpointSlot,
-                          RunPersistenceTechnicalReason::CodecError);
-        }
-        newRecords[slot].snapshot = emptySnapshot;
-        newRecords[slot].checkpointRevision = slot + 1U;
-        newRecords[slot].utcUnixSeconds = std::nullopt;
-    }
-    RunPersistenceHead newHead;
-    newHead.state = RunPersistenceHeadState::Committed;
-    newHead.revision = 1U;
-    newHead.current = makeRunCheckpointReference(0U, newRecords[0], epoch_);
-    newHead.commandIdHighWater = CommandId{0U};
-    const auto encodedHead = encodeRunPersistenceHead(newHead, epoch_);
-    if (!encodedHead.has_value()) {
-        return reject(RunPersistenceStep::CommittedHead,
-                      RunPersistenceTechnicalReason::CodecError);
     }
 
     enum class PhysicalKind : std::uint8_t { Absent, Previous, Target };
@@ -435,7 +451,7 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
             physical[slot] = PhysicalKind::Absent;
             continue;
         }
-        if (slotReads[slot].value == newRecords[slot].bytes) {
+        if (slotReads[slot].value == target->records[slot].bytes) {
             physical[slot] = PhysicalKind::Target;
             continue;
         }
@@ -453,19 +469,6 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
                           RunPersistenceTechnicalReason::CodecError);
         }
         physical[slot] = PhysicalKind::Previous;
-    }
-
-    if (currentHeadCandidate) {
-        if (headRead.value != *encodedHead ||
-            physical[0] != PhysicalKind::Target ||
-            physical[1] != PhysicalKind::Target) {
-            return reject(RunPersistenceStep::LoadHead,
-                          RunPersistenceTechnicalReason::InvalidProjection);
-        }
-        return result(RunPersistenceResultStatus::Applied,
-                      RunPersistenceStep::CommittedHead,
-                      RunPersistenceTechnicalReason::None,
-                      RunPersistenceDurability::Unchanged);
     }
 
     if (headRead.status == device_platform::StateStoreReadStatus::NotFound) {
@@ -508,11 +511,7 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
         }
     }
 
-    const auto oldHeadBytes =
-        headRead.status == device_platform::StateStoreReadStatus::Success
-            ? std::optional<std::string>{headRead.value}
-            : std::nullopt;
-    for (std::size_t slot = 0U; slot < newRecords.size(); ++slot) {
+    for (std::size_t slot = 0U; slot < target->records.size(); ++slot) {
         if (physical[slot] == PhysicalKind::Target) continue;
         const auto oldSlot =
             slotReads[slot].status ==
@@ -520,7 +519,7 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
                 ? std::optional<std::string>{slotReads[slot].value}
                 : std::nullopt;
         const auto written =
-            store_.writeSlotExact(slot, newRecords[slot].bytes, oldSlot,
+            store_.writeSlotExact(slot, target->records[slot].bytes, oldSlot,
                                   kMaximumCheckpointRecordBytes);
         if (written != RunPersistenceStoreWriteResult::Written) {
             enterBlockedIndeterminate();
@@ -540,27 +539,141 @@ RunPersistenceResult RunPersistenceCoordinator::completeAuthorizedEpochHandoff(
         }
         durability = RunPersistenceDurability::Changed;
     }
-    const auto headWritten = store_.writeHeadExact(*encodedHead, oldHeadBytes,
-                                                   kMaximumHeadRecordBytes);
-    if (headWritten != RunPersistenceStoreWriteResult::Written) {
+    return {result(RunPersistenceResultStatus::Applied,
+                   RunPersistenceStep::CheckpointSlot,
+                   RunPersistenceTechnicalReason::None, durability),
+            AuthorizedRunEpochHandoffSlotsPrepared(proof.previousEpoch(),
+                                                    proof.currentEpoch())};
+}
+
+RunEpochHandoffHeadFinalizedResult
+RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
+    const AuthorizedRunEpochHandoffProof& proof) {
+    RunPersistenceDurability durability = RunPersistenceDurability::Unchanged;
+    const auto reject = [this, &durability](
+                            RunPersistenceStep step,
+                            RunPersistenceTechnicalReason reason) {
+        return RunEpochHandoffHeadFinalizedResult{
+            result(RunPersistenceResultStatus::Blocked, step, reason,
+                   durability),
+            std::nullopt};
+    };
+    if (state_ != RunPersistenceCoordinatorState::Uninitialized ||
+        epoch_.value() == 0U || proof.previousEpoch().value() == 0U ||
+        proof.phase() != AuthorizedRunEpochHandoffPhase::Committed ||
+        proof.currentEpoch() != epoch_ ||
+        proof.previousEpoch().value() ==
+            std::numeric_limits<std::uint64_t>::max() ||
+        proof.previousEpoch().value() + 1U != proof.currentEpoch().value()) {
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+
+    const auto target = makeAuthorizedEpochHandoffTarget(epoch_, schedule_);
+    if (!target.has_value()) {
+        return reject(RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto headRead = store_.readHead(kMaximumHeadRecordBytes);
+    if (headRead.status == device_platform::StateStoreReadStatus::CapacityError ||
+        headRead.status == device_platform::StateStoreReadStatus::ReadError) {
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::StoreReadError);
+    }
+    if (headRead.status != device_platform::StateStoreReadStatus::Success &&
+        headRead.status != device_platform::StateStoreReadStatus::NotFound) {
+        return reject(RunPersistenceStep::LoadHead,
+                      RunPersistenceTechnicalReason::StoreReadError);
+    }
+
+    for (std::size_t slot = 0U; slot < target->records.size(); ++slot) {
+        const auto read = store_.readSlot(slot, kMaximumCheckpointRecordBytes);
+        if (read.status == device_platform::StateStoreReadStatus::CapacityError ||
+            read.status == device_platform::StateStoreReadStatus::ReadError) {
+            return reject(RunPersistenceStep::LoadCurrent,
+                          RunPersistenceTechnicalReason::StoreReadError);
+        }
+        if (read.status != device_platform::StateStoreReadStatus::Success ||
+            read.value != target->records[slot].bytes) {
+            return reject(RunPersistenceStep::LoadCurrent,
+                          RunPersistenceTechnicalReason::InvalidProjection);
+        }
+    }
+    if (headRead.status == device_platform::StateStoreReadStatus::NotFound ||
+        (headRead.status == device_platform::StateStoreReadStatus::Success &&
+         headRead.value != target->headBytes)) {
+        // Both target slots are a definite prior handoff mutation. Any later
+        // head failure therefore reports at least Changed, never Unchanged.
+        durability = RunPersistenceDurability::Changed;
+    }
+
+    if (headRead.status == device_platform::StateStoreReadStatus::Success) {
+        if (headRead.value == target->headBytes) {
+            return {result(RunPersistenceResultStatus::Applied,
+                           RunPersistenceStep::CommittedHead,
+                           RunPersistenceTechnicalReason::None,
+                           RunPersistenceDurability::Unchanged),
+                    AuthorizedRunEpochHandoffHeadFinalized(
+                        proof.previousEpoch(), proof.currentEpoch())};
+        }
+        {
+            const auto previousEnvelope =
+                device_platform::decodeEnvelope(headRead.value);
+            if (!previousEnvelope.envelope.has_value() ||
+                previousEnvelope.envelope->storageEpoch !=
+                    proof.previousEpoch() ||
+                !decodeRunPersistenceHead(headRead.value,
+                                           proof.previousEpoch()).has_value()) {
+                return reject(RunPersistenceStep::LoadHead,
+                              RunPersistenceTechnicalReason::InvalidProjection);
+            }
+        }
+    }
+
+    // Pending intentionally leaves the previous head in place.  Replacing
+    // that head is therefore an exact compare-and-write, just like the
+    // headless continuation uses an absent expected value.  The expected
+    // bytes are part of the coordinator-owned graph validation above; they
+    // are never supplied by the UI or by the bootstrap proof alone.
+    const auto expectedHead =
+        headRead.status == device_platform::StateStoreReadStatus::Success
+            ? std::optional<std::string>{headRead.value}
+            : std::nullopt;
+    const auto written = store_.writeHeadExact(
+        target->headBytes, expectedHead, kMaximumHeadRecordBytes);
+    if (written != RunPersistenceStoreWriteResult::Written) {
         enterBlockedIndeterminate();
-        if (headWritten == RunPersistenceStoreWriteResult::Indeterminate &&
+        if (written == RunPersistenceStoreWriteResult::Indeterminate &&
             durability == RunPersistenceDurability::Unchanged) {
             durability = RunPersistenceDurability::MayHaveChanged;
         }
         return reject(
             RunPersistenceStep::CommittedHead,
-            headWritten == RunPersistenceStoreWriteResult::Indeterminate
+            written == RunPersistenceStoreWriteResult::Indeterminate
                 ? RunPersistenceTechnicalReason::StoreOutcomeUnknown
-            : headWritten == RunPersistenceStoreWriteResult::CapacityError
+            : written == RunPersistenceStoreWriteResult::CapacityError
                 ? RunPersistenceTechnicalReason::StoreCapacityError
-            : headWritten == RunPersistenceStoreWriteResult::NotWritten
+            : written == RunPersistenceStoreWriteResult::NotWritten
                 ? RunPersistenceTechnicalReason::StoreNotWritten
                 : RunPersistenceTechnicalReason::StoreWriteError);
     }
-    return result(
-        RunPersistenceResultStatus::Applied, RunPersistenceStep::CommittedHead,
-        RunPersistenceTechnicalReason::None, RunPersistenceDurability::Changed);
+    durability = RunPersistenceDurability::Changed;
+    const auto verified = store_.readHead(kMaximumHeadRecordBytes);
+    if (verified.status != device_platform::StateStoreReadStatus::Success) {
+        enterBlockedIndeterminate();
+        return reject(RunPersistenceStep::CommittedHead,
+                      RunPersistenceTechnicalReason::StoreOutcomeUnknown);
+    }
+    if (verified.value != target->headBytes) {
+        enterBlockedIndeterminate();
+        return reject(RunPersistenceStep::CommittedHead,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    return {result(RunPersistenceResultStatus::Applied,
+                   RunPersistenceStep::CommittedHead,
+                   RunPersistenceTechnicalReason::None, durability),
+            AuthorizedRunEpochHandoffHeadFinalized(proof.previousEpoch(),
+                                                   proof.currentEpoch())};
 }
 
 void applyLiveRecoveryEvidence(
