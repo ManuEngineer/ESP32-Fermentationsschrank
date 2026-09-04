@@ -62,6 +62,9 @@ jobs:
           echo "PRE_READY_EXPECTED_HEAD=$PRE_READY_EXPECTED_HEAD" >> "$GITHUB_ENV"
           bash scripts/run_pre_ready_gates.sh host
 
+      - name: GitHub-CI-Quelltext- und Datenschutzpruefung
+        run: python3 scripts/check_secrets.py
+
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -116,6 +119,27 @@ jobs:
           python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
           . "$IDF_PATH/export.sh"
           bash scripts/run_pre_ready_gates.sh esp
+
+      - name: GitHub-CI-Artefakt- und Datenschutzpruefung
+        run: |
+          set -euo pipefail
+          python3 scripts/check_ci_artifact_scan_coverage.py
+          python3 scripts/check_secrets.py \
+            --scan-path build-report.md \
+            --scan-path build/esp32_bringup/artifact-manifest.json \
+            --scan-path build/esp32_release/artifact-manifest.json \
+            --scan-path build/esp32_bringup/build.log \
+            --scan-path build/esp32_release/build.log \
+            --scan-path build/esp32_bringup/sdkconfig \
+            --scan-path build/esp32_release/sdkconfig \
+            --scan-path build/esp32_bringup/compile_commands.json \
+            --scan-path build/esp32_release/compile_commands.json \
+            --scan-path build/esp32_bringup/size.json \
+            --scan-path build/esp32_release/size.json \
+            --scan-path build/esp32_bringup/flasher_args.json \
+            --scan-path build/esp32_release/flasher_args.json \
+            --scan-path build/esp32_bringup/esp32_fermentationsschrank.map \
+            --scan-path build/esp32_release/esp32_fermentationsschrank.map
 
       - name: Groessenbericht sichern
         if: success()

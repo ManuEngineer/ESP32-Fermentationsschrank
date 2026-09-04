@@ -4,9 +4,10 @@
 
 Dieses Dokument ist die kanonische Quelle fuer Ausfuehrungszeitpunkt,
 Buildprofile, Werkzeugvertraege, CI-Ausloesung und die Ergebnisbegriffe
-`PASS`, `FAILED` und `BLOCKED`. Die vollstaendigen ausfuehrbaren Gatebefehle
-und die clang-tidy-Dateiliste stehen ausschliesslich im versionierten Runner
-`scripts/run_pre_ready_gates.sh`.
+`PASS`, `FAILED` und `BLOCKED`. Die vollstaendigen ausfuehrbaren Befehle fuer
+die gemeinsamen portablen Runner-Gates und die clang-tidy-Dateiliste stehen
+ausschliesslich im versionierten Runner
+`scripts/run_pre_ready_gates.sh`; GitHub-CI-only Gates stehen im Workflow.
 
 Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
 verwenden ESP-IDF `v6.0.2` am Commit
@@ -19,6 +20,12 @@ ESP-Phase die bestehende exakte ESP-IDF-/esp-clang-Provenienz. Installation und
 Provisionierung der Werkzeuge bleiben Umgebungsaufgabe; eine Abweichung wird
 vom Runner als `BLOCKED` oder `FAILED` behandelt und kann keinen lokalen
 Pre-Ready-PASS erzeugen.
+
+Der Runner enthaelt ausschliesslich portable Engineering-Gates, die lokal und
+in GitHub-CI denselben Checkout unabhaengig vom GitHub-Artefakttransport pruefen.
+GitHub-, Upload-, Artefakt- und Privacy-Gates bleiben ausschliesslich im
+Workflow. Der lokale Pre-Ready-Lauf emuliert weder GitHub noch den
+Artefakt-Upload.
 
 ## Ausfuehrungszeitpunkt
 
@@ -47,8 +54,8 @@ Nur wenn:
 - der Owner den Lauf ausdruecklich anordnet.
 
 Der autorisierte Lauf wird danach auf demselben finalen `HEAD` in zwei Phasen
-ausgefuehrt. Der Runner ist die einzige Quelle fuer die Gatebefehle und die
-clang-tidy-Dateiliste:
+ausgefuehrt. Der Runner ist die einzige Quelle fuer die gemeinsamen portablen
+Gatebefehle und die clang-tidy-Dateiliste:
 
 ```bash
 export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
@@ -73,11 +80,10 @@ bleibt beim bestehenden Static-Analysis-Owner.
 
 `host` umfasst den vollständigen clang-format-18-Check, nativen Build und
 Ressourcenbericht, komplette native Tests, Compile-Datenbank und den exakten
-clang-tidy-18-Lauf sowie Architekturguard, Secret-Check und
-Quality-Gate-Selbsttests. `esp` umfasst Bring-up-/Release-Build,
-Ressourcenbericht, esp-clang-Static-Analysis, Artefakt-Scanabdeckung und die
-Secretprüfung der erzeugten Textartefakte. Nur wenn beide Aufrufe mit dem
-gleichen `PRE_READY_EXPECTED_HEAD` erfolgreich sind, darf
+clang-tidy-18-Lauf sowie Architekturguard und Quality-Gate-Selbsttests. `esp`
+umfasst Bring-up-/Release-Build, Ressourcenbericht und esp-clang-Static-
+Analysis. Nur wenn beide Aufrufe mit dem gleichen `PRE_READY_EXPECTED_HEAD`
+erfolgreich sind, darf
 `PRE_READY_LOCAL_GATES=PASS` dokumentiert werden. Ein nicht ausgeführter
 Teil bleibt `NOT_RUN`.
 
@@ -137,9 +143,11 @@ Beispiele:
 pio test -e native --filter <test-verzeichnis-oder-muster>
 clang-format --dry-run --Werror <geaenderte-cpp-hpp-h-dateien>
 python3 scripts/check_architecture_boundaries.py
-python3 scripts/check_secrets.py
 git diff --check
 ```
+
+`check_secrets.py` sowie die Artefakt-Scanabdeckung sind keine lokalen
+Pre-Ready-Gates. Ihre Aufrufe stehen ausschliesslich im GitHub-Workflow.
 
 Ein gezielter Lauf muss im PR mit Befehl, Umfang und Ergebnis dokumentiert
 werden.
@@ -162,10 +170,10 @@ bash scripts/run_pre_ready_gates.sh esp
 ```
 
 Der Runner verwendet die bestehenden Owner für Profilbuild,
-Ressourcenbericht, esp-clang-Analyse, Artefakt-Scanabdeckung und
-Artefakt-Secretprüfung. Die lokale Ausführung muss die ESP-IDF-/esp-clang-
-Umgebung vor dem Aufruf bereitstellen; bei fehlender oder abweichender
-Provenienz bleibt der ESP-Teil `NOT_RUN` beziehungsweise `BLOCKED`.
+Ressourcenbericht und esp-clang-Analyse. Die lokale Ausführung muss die
+ESP-IDF-/esp-clang-Umgebung vor dem Aufruf bereitstellen; bei fehlender oder
+abweichender Provenienz bleibt der ESP-Teil `NOT_RUN` beziehungsweise
+`BLOCKED`.
 
 Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
 `ESP_IDF_UPGRADE_CONTRACT.md`.
@@ -188,23 +196,26 @@ Unterdrueckung verwendet ausschliesslich:
 // NOLINT(check-name): konkrete Begruendung
 ```
 
-## Architektur-, Secret- und Gate-Selbsttests
+## Architektur- und Gate-Selbsttests
 
-Diese Prüfungen sind Bestandteile der gemeinsamen `host`- beziehungsweise
-`esp`-Phase. Ihre Gatebefehle werden nicht nochmals hier oder im Workflow
-dupliziert; fuer den vollständigen Lauf genügt der jeweilige Runner-Aufruf.
-`check_ci_artifact_scan_coverage.py` liest die Scanpfade des Workflows und des
-gemeinsamen Runners.
+Architekturguard und Quality-Gate-Selbsttests sind Bestandteile der
+gemeinsamen `host`-Phase. Ihre Gatebefehle werden nicht nochmals hier oder im
+Workflow dupliziert; fuer den lokalen Pre-Ready-Lauf genügt der Runner-Aufruf.
 
 Der Architekturguard erzwingt die in ADR-013 festgelegte Richtung und ersetzt
 kein vollstaendiges Architekturreview.
 
-Die Secretpruefung kontrolliert getrackte Textdateien, lokale Konfigurationen
-und in CI zusaetzlich die erzeugten Artefakte. Beispielkonfigurationen duerfen
-nur klar erkennbare Platzhalter enthalten.
-
 Der Gate-Selbsttest beweist anhand temporaerer fehlerhafter Fixtures, dass die
 Qualitaetspruefungen echte Verstoesse erkennen.
+
+### GitHub-CI-only: Privacy und Artefakte
+
+`check_secrets.py` kontrolliert im GitHub-Workflow getrackte Textdateien,
+lokale Konfigurationen und nach den ESP-Builds die hochzuladenden Textartefakte.
+`check_ci_artifact_scan_coverage.py` prueft dort, dass jeder erfolgreiche
+Textartefakt-Upload durch die im Workflow angegebene Scanmenge abgedeckt ist.
+Diese Gates und ihre Artefaktpfade werden nicht vom gemeinsamen Runner
+ausgefuehrt und sind kein lokaler Pfad-Whitelist-Vertrag.
 
 ## Determinismus und Zeit
 
@@ -244,14 +255,18 @@ Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 2. PlatformIO, clang-format und clang-tidy installieren;
 3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
    Format, Build, Tests oder clang-tidy fail-fast ab;
-4. ESP-IDF `v6.0.2` am exakten Commit installieren und verifizieren;
-5. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
+4. die GitHub-CI-only Quelltext-/Privacy-Pruefung ausfuehren;
+5. ESP-IDF `v6.0.2` am exakten Commit installieren und verifizieren;
+6. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
    Runner in der `esp`-Phase ausfuehren;
-6. Berichte und Buildartefakte sichern.
+7. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
+   ausfuehren;
+8. Berichte und Buildartefakte sichern.
 
 Damit bleiben die billigen Host-Gates vor der teuren ESP-IDF-Provisionierung,
-waehrend der lokale Ownerlauf beide Runner-Phasen auf demselben finalen HEAD
-vollstaendig ausfuehrt.
+waehrend der lokale Ownerlauf beide portablen Runner-Phasen auf demselben
+finalen HEAD vollstaendig ausfuehrt. Die GitHub-CI-only Gates laufen nur im
+Workflow.
 
 `concurrency` bricht einen veralteten Lauf desselben Pull Requests ab, sobald
 ein neuerer Lauf startet.

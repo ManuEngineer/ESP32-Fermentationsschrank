@@ -112,7 +112,6 @@ run_host_gates() {
     run_clang_tidy
 
     python3 scripts/check_architecture_boundaries.py
-    python3 scripts/check_secrets.py
     python3 scripts/selftest_quality_gates.py
 }
 
@@ -132,23 +131,6 @@ run_esp_gates() {
     python3 scripts/build_report.py "${report_arguments[@]}"
 
     python3 scripts/run_esp_idf_static_analysis.py all
-    python3 scripts/check_ci_artifact_scan_coverage.py
-    python3 scripts/check_secrets.py \
-        --scan-path build-report.md \
-        --scan-path build/esp32_bringup/artifact-manifest.json \
-        --scan-path build/esp32_release/artifact-manifest.json \
-        --scan-path build/esp32_bringup/build.log \
-        --scan-path build/esp32_release/build.log \
-        --scan-path build/esp32_bringup/sdkconfig \
-        --scan-path build/esp32_release/sdkconfig \
-        --scan-path build/esp32_bringup/compile_commands.json \
-        --scan-path build/esp32_release/compile_commands.json \
-        --scan-path build/esp32_bringup/size.json \
-        --scan-path build/esp32_release/size.json \
-        --scan-path build/esp32_bringup/flasher_args.json \
-        --scan-path build/esp32_release/flasher_args.json \
-        --scan-path build/esp32_bringup/esp32_fermentationsschrank.map \
-        --scan-path build/esp32_release/esp32_fermentationsschrank.map
 }
 
 if [[ "$phase" == "host" ]]; then
