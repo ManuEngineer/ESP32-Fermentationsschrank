@@ -58,13 +58,19 @@ verify_clang_major() {
     fi
 }
 
+verify_python3() {
+    require_command python3
+}
+
 verify_host_toolchain() {
     verify_platformio
     verify_clang_major clang-format
     verify_clang_major clang-tidy
+    verify_python3
 }
 
 verify_expected_esp_environment() {
+    verify_python3
     if [[ -z "${IDF_PATH:-}" || ! -d "$IDF_PATH" ]]; then
         printf 'BLOCKED: IDF_PATH zeigt auf kein ESP-IDF-Verzeichnis.\n' >&2
         exit 1
@@ -94,22 +100,22 @@ run_host_gates() {
             -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \))
 
     set -o pipefail
-    python scripts/build_report.py --output build-report.md 2>&1 \
+    python3 scripts/build_report.py --output build-report.md 2>&1 \
         | tee platformio-build.log
 
     pio test -e native
     pio run -e native -t compiledb
     run_clang_tidy
 
-    python scripts/check_architecture_boundaries.py
-    python scripts/check_secrets.py
-    python scripts/selftest_quality_gates.py
+    python3 scripts/check_architecture_boundaries.py
+    python3 scripts/check_secrets.py
+    python3 scripts/selftest_quality_gates.py
 }
 
 run_esp_gates() {
     verify_expected_esp_environment
 
-    python scripts/build_esp_idf_profiles.py all
+    python3 scripts/build_esp_idf_profiles.py all
 
     local report_arguments=(
         --output build-report.md
@@ -119,11 +125,11 @@ run_esp_gates() {
     if [[ -n "${SOURCE_GIT_SHA:-}" ]]; then
         report_arguments+=(--source-git-sha "$SOURCE_GIT_SHA")
     fi
-    python scripts/build_report.py "${report_arguments[@]}"
+    python3 scripts/build_report.py "${report_arguments[@]}"
 
-    python scripts/run_esp_idf_static_analysis.py all
-    python scripts/check_ci_artifact_scan_coverage.py
-    python scripts/check_secrets.py \
+    python3 scripts/run_esp_idf_static_analysis.py all
+    python3 scripts/check_ci_artifact_scan_coverage.py
+    python3 scripts/check_secrets.py \
         --scan-path build-report.md \
         --scan-path build/esp32_bringup/artifact-manifest.json \
         --scan-path build/esp32_release/artifact-manifest.json \

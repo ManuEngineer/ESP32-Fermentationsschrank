@@ -44,7 +44,7 @@ jobs:
           python-version: "3.13"
 
       - name: PlatformIO fuer nativen Hostpfad installieren
-        run: python -m pip install platformio==6.1.19
+        run: python3 -m pip install platformio==6.1.19
 
       - name: Format- und Analysewerkzeuge installieren (clang 18)
         run: |
@@ -113,7 +113,7 @@ jobs:
       - name: Gemeinsame Gateausfuehrung (ESP-IDF)
         run: |
           set -euo pipefail
-          python "$IDF_PATH/tools/idf_tools.py" install esp-clang
+          python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
           . "$IDF_PATH/export.sh"
           bash scripts/run_pre_ready_gates.sh esp
 

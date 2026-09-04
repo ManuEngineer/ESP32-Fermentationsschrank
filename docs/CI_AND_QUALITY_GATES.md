@@ -56,7 +56,7 @@ bash scripts/run_pre_ready_gates.sh host
 
 # Danach die kanonische ESP-IDF-6.0.2-/esp-clang-Umgebung bereitstellen und
 # export.sh aktivieren; dies ist Provisionierung, kein zweiter Gatepfad.
-python "$IDF_PATH/tools/idf_tools.py" install esp-clang
+python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
 . "$IDF_PATH/export.sh"
 
 bash scripts/run_pre_ready_gates.sh esp
@@ -127,8 +127,8 @@ Beispiele:
 ```bash
 pio test -e native --filter <test-verzeichnis-oder-muster>
 clang-format --dry-run --Werror <geaenderte-cpp-hpp-h-dateien>
-python scripts/check_architecture_boundaries.py
-python scripts/check_secrets.py
+python3 scripts/check_architecture_boundaries.py
+python3 scripts/check_secrets.py
 git diff --check
 ```
 
