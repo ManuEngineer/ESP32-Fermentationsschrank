@@ -112,6 +112,7 @@ run_host_gates() {
     run_clang_tidy
 
     python3 scripts/check_architecture_boundaries.py
+    python3 scripts/check_secrets.py
     python3 scripts/selftest_quality_gates.py
 }
 

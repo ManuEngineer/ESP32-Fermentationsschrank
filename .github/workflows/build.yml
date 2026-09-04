@@ -62,9 +62,6 @@ jobs:
           echo "PRE_READY_EXPECTED_HEAD=$PRE_READY_EXPECTED_HEAD" >> "$GITHUB_ENV"
           bash scripts/run_pre_ready_gates.sh host
 
-      - name: GitHub-CI-Quelltext- und Datenschutzpruefung
-        run: python3 scripts/check_secrets.py
-
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

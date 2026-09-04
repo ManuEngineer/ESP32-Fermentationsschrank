@@ -7,7 +7,8 @@ Buildprofile, Werkzeugvertraege, CI-Ausloesung und die Ergebnisbegriffe
 `PASS`, `FAILED` und `BLOCKED`. Die vollstaendigen ausfuehrbaren Befehle fuer
 die gemeinsamen portablen Runner-Gates und die clang-tidy-Dateiliste stehen
 ausschliesslich im versionierten Runner
-`scripts/run_pre_ready_gates.sh`; GitHub-CI-only Gates stehen im Workflow.
+`scripts/run_pre_ready_gates.sh`; GitHub-CI-only Artefakt-/Privacy-Gates stehen
+im Workflow.
 
 Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
 verwenden ESP-IDF `v6.0.2` am Commit
@@ -23,9 +24,10 @@ Pre-Ready-PASS erzeugen.
 
 Der Runner enthaelt ausschliesslich portable Engineering-Gates, die lokal und
 in GitHub-CI denselben Checkout unabhaengig vom GitHub-Artefakttransport pruefen.
-GitHub-, Upload-, Artefakt- und Privacy-Gates bleiben ausschliesslich im
-Workflow. Der lokale Pre-Ready-Lauf emuliert weder GitHub noch den
-Artefakt-Upload.
+Der portable Repository-Secret-Check ohne `--scan-path` gehoert dazu.
+GitHub-, Upload-, generierte Artefakt- und zugehoerige Privacy-Gates bleiben
+ausschliesslich im Workflow. Der lokale Pre-Ready-Lauf emuliert weder GitHub
+noch den Artefakt-Upload.
 
 ## Ausfuehrungszeitpunkt
 
@@ -146,8 +148,10 @@ python3 scripts/check_architecture_boundaries.py
 git diff --check
 ```
 
-`check_secrets.py` sowie die Artefakt-Scanabdeckung sind keine lokalen
-Pre-Ready-Gates. Ihre Aufrufe stehen ausschliesslich im GitHub-Workflow.
+Die generierte Artefakt-Scanabdeckung und der `check_secrets.py`-Aufruf mit
+`--scan-path` sind keine lokalen Pre-Ready-Gates. Diese Aufrufe stehen
+ausschliesslich im GitHub-Workflow; der Repository-Secret-Check ohne
+`--scan-path` bleibt Bestandteil der gemeinsamen `host`-Phase.
 
 Ein gezielter Lauf muss im PR mit Befehl, Umfang und Ergebnis dokumentiert
 werden.
@@ -208,14 +212,17 @@ kein vollstaendiges Architekturreview.
 Der Gate-Selbsttest beweist anhand temporaerer fehlerhafter Fixtures, dass die
 Qualitaetspruefungen echte Verstoesse erkennen.
 
-### GitHub-CI-only: Privacy und Artefakte
+### GitHub-CI-only: generierte Artefakte und Privacy
 
-`check_secrets.py` kontrolliert im GitHub-Workflow getrackte Textdateien,
-lokale Konfigurationen und nach den ESP-Builds die hochzuladenden Textartefakte.
+Der gemeinsame `host`-Runner kontrolliert mit `check_secrets.py` ohne
+`--scan-path` portable, getrackte Repositorydateien und lokale
+Konfigurations-/Secret-Verstoesse. Im GitHub-Workflow kontrolliert derselbe
+Owner nach den ESP-Builds zusaetzlich die hochzuladenden Textartefakte mit
+`check_secrets.py --scan-path`.
 `check_ci_artifact_scan_coverage.py` prueft dort, dass jeder erfolgreiche
 Textartefakt-Upload durch die im Workflow angegebene Scanmenge abgedeckt ist.
 Diese Gates und ihre Artefaktpfade werden nicht vom gemeinsamen Runner
-ausgefuehrt und sind kein lokaler Pfad-Whitelist-Vertrag.
+ausgefuehrt; die Artefaktpfade sind kein lokaler Pfad-Whitelist-Vertrag.
 
 ## Determinismus und Zeit
 
@@ -255,13 +262,12 @@ Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 2. PlatformIO, clang-format und clang-tidy installieren;
 3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
    Format, Build, Tests oder clang-tidy fail-fast ab;
-4. die GitHub-CI-only Quelltext-/Privacy-Pruefung ausfuehren;
-5. ESP-IDF `v6.0.2` am exakten Commit installieren und verifizieren;
-6. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
+4. ESP-IDF `v6.0.2` am exakten Commit installieren und verifizieren;
+5. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
    Runner in der `esp`-Phase ausfuehren;
-7. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
+6. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
    ausfuehren;
-8. Berichte und Buildartefakte sichern.
+7. Berichte und Buildartefakte sichern.
 
 Damit bleiben die billigen Host-Gates vor der teuren ESP-IDF-Provisionierung,
 waehrend der lokale Ownerlauf beide portablen Runner-Phasen auf demselben

@@ -10,16 +10,37 @@ Roadmap-Sync: `7e8aea92278e70077bf4fb1b381d8bc12d0007ed`
 Planrevision: `TOOLCHAIN_AND_PHASE_CORRECTION`
 Implementation: `NOT_STARTED`
 ACTUATOR_RELEASE: `NO`
+HISTORICAL_APPROVED_PLAN_COMMIT: `5c97e61fed5399062e95d788ec3a378fb3d3b595`
+OWNER_APPROVED_SCOPE_PRECISION: `FINAL_KISS_PRE_READY_TRENNUNG`
 
 Dieser Plan ist ein eigenstaendiger Governance-/Build-Tooling-Plan. Er ist
 nicht Teil von PR #147 / Issue #144 und aendert weder deren Code noch deren
 Review- oder Ownerstatus.
 
+## Owner-genehmigte Scope-Praezisierung
+
+Die folgende Ausfuehrungsgrenze praezisiert den historisch freigegebenen
+Planstand `5c97e61fed5399062e95d788ec3a378fb3d3b595` und fuehrt keine neue
+Produkt-, Architektur- oder Toolchainentscheidung ein:
+
+- `host` enthaelt den portablen Repository-Secret-Check
+  `python3 scripts/check_secrets.py` ohne `--scan-path`;
+- `esp` endet nach Profilbuild, Ressourcenbericht und esp-clang-Analyse;
+- `check_ci_artifact_scan_coverage.py` sowie
+  `check_secrets.py --scan-path ...` laufen ausschliesslich in GitHub-CI;
+- die generierten Artefakt-Scanpfade stehen nur im GitHub-Workflow neben den
+  Uploads;
+- der lokale Pre-Ready-Lauf emuliert keinen GitHub-Artefakttransport.
+
+Die historische Planfreigabe bleibt als Provenienz erhalten; diese
+Owner-genehmigte Scope-Praezisierung ist die verbindliche Umsetzungsschaerfung
+fuer die finale KISS-Trennung.
+
 ## 1. Ziel und Anlass
 
 Vor `Ready for review` muss der Owner auf dem exakt finalen PR-HEAD einen
-autorisierten lokalen Lauf aller lokal reproduzierbaren CI-Pflicht-Gates
-verifizieren koennen. Der Lauf muss insbesondere denselben
+autorisierten lokalen Lauf aller lokal reproduzierbaren portablen
+Engineering-Gates verifizieren koennen. Der Lauf muss insbesondere denselben
 `clang-format`- und `clang-tidy`-Pfad verwenden wie GitHub-CI, damit ein
 format- oder analysebedingter CI-Fehler nicht erst nach dem Ownerwechsel in
 einer seriellen CI-Schleife entdeckt wird.
@@ -71,11 +92,12 @@ kanonischen Schritte:
 - `clang-format` ueber den vollstaendigen C/C++-Baum;
 - nativer Build ueber `scripts/build_report.py` und nativer Testlauf;
 - native Compile-Datenbank und die feste clang-tidy-Dateiliste;
-- Architekturguard, Secretpruefung und Quality-Gate-Selbsttests;
+- Architekturguard, portabler Repository-Secret-Check und
+  Quality-Gate-Selbsttests;
 - ESP-IDF-6.0.2-Installation und Herkunftspruefung, Bring-up-/Release-Build,
   Ressourcenbericht und esp-clang-Static-Analysis;
-- Artefakt-Scanabdeckungspruefung und Secretpruefung der erzeugten
-  Textartefakte.
+- GitHub-CI-only Artefakt-Scanabdeckungspruefung und Secretpruefung der
+  erzeugten Textartefakte.
 
 Die Workflow-Installation garantiert fuer Format und Analyse nur die
 kanonische Major-Linie 18. Ein Patchlevel wie `18.1.8` ist weder fuer
@@ -92,9 +114,11 @@ Die bestehenden Fach- und Gate-Owner bleiben:
   Profilvalidierung;
 - `scripts/run_esp_idf_static_analysis.py` bleibt Owner fuer den
   esp-clang-/ESP-IDF-Analysepfad;
-- `scripts/check_architecture_boundaries.py`, `check_secrets.py`,
-  `selftest_quality_gates.py` und `check_ci_artifact_scan_coverage.py` bleiben
-  Owner ihrer vorhandenen Pruefvertraege;
+- `scripts/check_architecture_boundaries.py`, `check_secrets.py` ohne
+  `--scan-path` und `selftest_quality_gates.py` bleiben Owner der portablen
+  Engineering-Pruefvertraege;
+- `check_ci_artifact_scan_coverage.py` und `check_secrets.py --scan-path`
+  bleiben Owner der GitHub-CI-only Artefakt-/Privacy-Pruefvertraege;
 - `.clang-tidy` bleibt die alleinige clang-tidy-Konfiguration; nur eine
   veraltete Patchlevel-Kommentarangabe wird auf Major-18-Semantik bereinigt.
 
@@ -125,9 +149,10 @@ ab. Der lokale Gesamtstatus `PRE_READY_LOCAL_GATES=PASS` darf erst nach
 erfolgreichem `host`- und `esp`-Aufruf auf demselben erwarteten HEAD
 dokumentiert werden.
 
-Die Gate-Befehle und die clang-tidy-Dateiliste stehen nur im Runner. Die
-Dokumentation und `.github/workflows/build.yml` rufen dieselbe Datei mit der
-jeweiligen Phase auf und enthalten keine zweite Gatebefehlsliste.
+Die portablen Gate-Befehle und die clang-tidy-Dateiliste stehen nur im Runner.
+Die Dokumentation und `.github/workflows/build.yml` rufen dieselbe Datei mit
+der jeweiligen Phase auf. Die separaten GitHub-CI-only Artefakt-/Privacy-
+Aufrufe bleiben ausschliesslich im Workflow.
 
 ### 4.2 Host-Phase und kanonische Host-Provenienz
 
@@ -161,9 +186,9 @@ Erst nach dieser Verifikation folgen in der Host-Phase:
    clang-tidy-18-Lauf mit der bisherigen Produktionsdateiliste, die
    ausschliesslich in den Runner wandert. `.clang-tidy` bleibt die alleinige
    Checkkonfiguration;
-5. `python scripts/check_architecture_boundaries.py`,
-   `python scripts/check_secrets.py` und
-   `python scripts/selftest_quality_gates.py`.
+5. `python3 scripts/check_architecture_boundaries.py`,
+   `python3 scripts/check_secrets.py` ohne `--scan-path` und
+   `python3 scripts/selftest_quality_gates.py`.
 
 ### 4.3 Phasenhandoff der ESP-IDF-Umgebung
 
@@ -201,21 +226,22 @@ Danach fuehrt der Runner aus:
 3. die vorhandene esp-clang-Provenienzpruefung zusammen mit
    `python scripts/run_esp_idf_static_analysis.py all`. Diese bestaetigt den
    aktivierten ESP-IDF-/esp-clang-Kontext und dessen bestehenden exakten
-   Tool-/Versionsvertrag vor der Analyse;
-4. `python scripts/check_ci_artifact_scan_coverage.py` und die bestehende
-   Secretpruefung fuer alle erfolgreichen CI-Textartefakte.
+   Tool-/Versionsvertrag vor der Analyse.
 
-Die konkreten Artefaktpfade werden einmal im Runner in derselben Menge wie
-die bestehenden erfolgreichen CI-Uploads gepflegt. Binaerdateien bleiben
+Die GitHub-CI-only Artefakt-Scanabdeckung und die Secretpruefung der erzeugten
+Textartefakte laufen erst im Workflow nach diesem Runner und vor den Uploads.
+
+Der gemeinsame `esp`-Runner enthaelt keine Artefaktpfade und emuliert keinen
+GitHub-Artefakttransport. Die konkreten `--scan-path`-Angaben stehen nur im
+Workflow neben der bestehenden Uploadkonfiguration; Binaerdateien bleiben
 entsprechend dem bestehenden Vertrag vom Textscan ausgenommen.
 
 ### 4.5 Artefakt-Scanabdeckung ohne zweite Pfadwahrheit
 
-`check_ci_artifact_scan_coverage.py` wird minimal erweitert: Neben dem
-Workflow liest es die `--scan-path`-Deklarationen des gemeinsamen Runners.
-Damit vergleicht es weiterhin jeden erfolgreichen Textartefakt-Upload aus
-`build.yml` gegen die kanonische Scanmenge, obwohl die Secret-Befehle nicht
-mehr im Workflow dupliziert werden.
+`check_ci_artifact_scan_coverage.py` prueft ausschliesslich im GitHub-Workflow
+die dortige `--scan-path`-Menge gegen die erfolgreichen Textartefakt-Uploads
+aus `build.yml`. Dadurch gibt es keine zweite lokale Scanpfadquelle und keinen
+lokalen GitHub-/Artefakttransport.
 
 Die Uploadpfade muessen fuer die GitHub-Actions-Uploadaktionen weiterhin im
 Workflow stehen; das ist Transportkonfiguration, keine zweite Gatebefehls-
@@ -255,23 +281,26 @@ lokaler Pre-Ready-Lauf praezisiert. Er nennt:
   ESP-IDF-Umgebungshandoff dazwischen;
 - die vorgeschaltete Verifikation von PlatformIO `6.1.19`, clang Major 18,
   ESP-IDF `v6.0.2` und dem aktivierten esp-clang-Kontext;
-- alle Host- und ESP-Gatephasen aus Abschnitt 4.2–4.4, einschliesslich
-  Format, clang-tidy, ESP-IDF-Static-Analysis und Artefakt-Scanabdeckung;
+- alle portablen Host- und ESP-Gatephasen aus Abschnitt 4.2–4.4,
+  einschliesslich Format, clang-tidy und ESP-IDF-Static-Analysis;
 - die getrennten Ergebnisfelder `INDEPENDENT_REVIEW`,
   `PRE_READY_LOCAL_GATES` und `GITHUB_CI`.
 
-Die Datei fuehrt keine zweite Liste der konkreten CI-Befehle. Sie verweist fuer
-die ausfuehrbare Befehlsquelle auf den versionierten Runner und dokumentiert
-nicht ausgefuehrte Teile weiterhin als `NOT_RUN`/`BLOCKED`.
+Die Datei fuehrt keine zweite Liste der portablen Runner-Befehle. Sie verweist
+fuer diese ausfuehrbare Befehlsquelle auf den versionierten Runner und
+dokumentiert die GitHub-CI-only Artefakt-/Privacy-Gates getrennt. Nicht
+ausgefuehrte Teile bleiben `NOT_RUN`/`BLOCKED`.
 
 ### 5.4 `.github/workflows/build.yml`
 
-Die einzelnen Gate-Run-Schritte werden durch zwei Aufrufe des gemeinsamen
-Runners ersetzt: zuerst `bash scripts/run_pre_ready_gates.sh host`, danach
-die bestehende ESP-IDF-Installation/-Verifikation und anschliessend
+Die portablen Gate-Run-Schritte werden durch zwei Aufrufe des gemeinsamen
+Runners ersetzt: zuerst `bash scripts/run_pre_ready_gates.sh host`, danach die
+bestehende ESP-IDF-Installation/-Verifikation und anschliessend
 `bash scripts/run_pre_ready_gates.sh esp`. Die bestehende billige
 Host-fail-fast-Reihenfolge bleibt damit erhalten; ESP-IDF wird nicht vor
-Format, nativer Build-/Testphase und clang-tidy provisioniert.
+Format, nativer Build-/Testphase und clang-tidy provisioniert. Die GitHub-CI-
+only Artefakt-/Privacy-Pruefungen bleiben als Workflow-Schritte vor den
+Uploads bestehen.
 
 Die vorhandene Toolchain-/ESP-IDF-Umgebungsinstallation und die erfolgreichen
 bzw. fehlerbedingten Artefakt-Uploads bleiben erhalten. Die bisherige
@@ -284,8 +313,8 @@ Trigger und keine Owneraktion automatisiert.
 ### Produktionsdateien
 
 - `scripts/run_pre_ready_gates.sh` – neue, schmale gemeinsame Gateausfuehrung;
-- `scripts/check_ci_artifact_scan_coverage.py` – liest die gemeinsame
-  Scanquelle zusaetzlich zum Upload-Workflow;
+- `scripts/check_ci_artifact_scan_coverage.py` – prueft die eine im Workflow
+  gepflegte Scanmenge gegen die erfolgreichen Uploads;
 - `.github/workflows/build.yml` – ruft den Runner auf und entfernt die
   duplizierten Gatebefehle;
 - `.clang-tidy` – korrigiert die veraltete Patchlevel-Kommentarangabe auf
@@ -309,9 +338,8 @@ Frameworks, Registries, Dispatcher oder Buildprofile eingefuehrt.
 ## 7. Umsetzungsschnitte nach Planfreigabe
 
 1. Den gemeinsamen Runner mit getrennten `host`- und `esp`-Phasen erstellen.
-   Die kanonische Host-Toolchainpruefung steht vor allen Host-Gates; die
-   bestehende Artefakt-Scanpruefung wird minimal auf die gemeinsame
-   Scanquelle erweitert.
+   Die kanonische Host-Toolchainpruefung steht vor allen Host-Gates; der
+   portable Repository-Secret-Check bleibt im Runner.
 2. `.github/workflows/build.yml` auf die zwei Runner-Aufrufe umstellen;
    Host-fail-fast, Toolchain-/ESP-IDF-Provisionierung und Artefaktuploads
    erhalten.
@@ -338,12 +366,11 @@ oder dessen Branch erfolgen.
   ESP-IDF-/esp-clang-Major-/Versionssignal wird vor dem jeweiligen Gate
   fail-closed abgelehnt und kann keinen `PRE_READY_LOCAL_GATES=PASS`
   erzeugen;
-- `python scripts/check_ci_artifact_scan_coverage.py --selftest` ist
-  erfolgreich und deckt sowohl Workflow-Uploads als auch Scanpfade aus dem
-  Runner ab;
-- `python scripts/check_ci_artifact_scan_coverage.py` meldet keine reale
-  Upload-/Scanluecke;
-- `python scripts/selftest_quality_gates.py` ist erfolgreich;
+- `python3 scripts/check_ci_artifact_scan_coverage.py --selftest` ist
+  erfolgreich und prueft den GitHub-CI-only Upload-/Scanvertrag;
+- `python3 scripts/check_ci_artifact_scan_coverage.py` meldet in der
+  Workflowdefinition keine reale Upload-/Scanluecke;
+- `python3 scripts/selftest_quality_gates.py` ist erfolgreich;
 - ein statischer Workflow-/Scope-Check bestaetigt, dass die Gatebefehle nicht
   neben dem gemeinsamen Runner in `build.yml` dupliziert sind und dass der
   `host`-Aufruf vor der ESP-IDF-Provisionierung sowie der `esp`-Aufruf danach
@@ -363,13 +390,14 @@ erfolgreich durchlaufen und mindestens folgende beobachtbare Nachweise liefern:
 - die native Build-/Ressourcen- und komplette Testphase besteht;
 - Compile-Datenbank und exakt dieselbe clang-tidy-18-Dateiliste wie in CI
   bestehen;
-- Architekturguard, Secretcheck und Quality-Gate-Selbsttests bestehen;
+- Architekturguard, portabler Repository-Secret-Check und Quality-Gate-
+  Selbsttests bestehen;
 - beide ESP-IDF-Profile sowie esp-clang-Static-Analysis bestehen;
 - die ESP-Provenienz bestaetigt `v6.0.2` am Commit
   `7101770dc6db2667b3c477cc31365dd1acd6db4e` und den aktivierten
   esp-clang-Kontext;
-- alle erfolgreichen Textartefakt-Uploads sind durch die gemeinsame
-  Scanmenge abgedeckt und der Artefakt-Secretcheck besteht;
+- die GitHub-CI-only Artefakt-Scanabdeckung und der Artefakt-Secretcheck
+  laufen im Workflow vor den Uploads;
 - kein Teilgate wird aus Statusgruenden uebersprungen oder als `PASS`
   protokolliert, wenn es `NOT_RUN`, `SKIPPED` oder `BLOCKED` ist.
 
@@ -426,9 +454,10 @@ darf nicht auf einen anderen Compiler, Patchlevelvertrag oder eine andere
 ESP-IDF-Version ausweichen. Ein fehlendes clang-format- oder clang-tidy-18-
 Werkzeug bleibt ebenfalls ein nicht bestandenes Pre-Ready-Gate.
 
-Die Artefakt-Uploadpfade muessen im Workflow aus technischen Gruenden sichtbar
-bleiben. Die minimale Erweiterung der bestehenden Coverage-Pruefung ist daher
-erforderlich, damit daraus keine zweite Scanpfadquelle entsteht.
+Die Artefakt-Uploadpfade und ihre `--scan-path`-Angaben muessen im Workflow
+aus technischen Gruenden sichtbar bleiben. Die Coverage-Pruefung liest diese
+eine CI-Quelle; der gemeinsame Runner fuehrt keinen Artefakt-/Privacy-Check
+und keine lokale Scanpfadliste.
 
 ## 12. Abschlussprovenienz
 
