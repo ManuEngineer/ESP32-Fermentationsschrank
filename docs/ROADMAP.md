@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-02
+Stand: 2026-09-04
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -39,6 +39,7 @@ nicht kopiert, sondern verlinkt.
 ## Parallele Governance-Arbeit
 
 - Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLAN_APPROVED=YES`; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_REVIEW=OPEN_BLOCKERS`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die Independent Fix Verification der Review-Blocker, anschließend das reguläre Owner-/Ready-Gate.
+- Issue #150 – Pre-Ready-CI-Parity-Gate vor `Ready for review`: `ISSUE150_STATUS=PLANNING`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`. Nächstes Gate ist die Ownerfreigabe des versionierten Plans; danach folgt ein eigener Governance-/Build-Tooling-PR.
 
 ## Naechste fachliche Arbeit
 
