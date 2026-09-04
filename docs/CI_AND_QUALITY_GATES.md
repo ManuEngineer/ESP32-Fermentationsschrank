@@ -2,9 +2,11 @@
 
 ## Zweck
 
-Dieses Dokument ist die kanonische Quelle fuer Testbefehle, Buildprofile,
-Werkzeuge, CI-Ausloesung und die Ergebnisbegriffe `PASS`, `FAILED` und
-`BLOCKED`.
+Dieses Dokument ist die kanonische Quelle fuer Ausfuehrungszeitpunkt,
+Buildprofile, Werkzeugvertraege, CI-Ausloesung und die Ergebnisbegriffe
+`PASS`, `FAILED` und `BLOCKED`. Die vollstaendigen ausfuehrbaren Gatebefehle
+und die clang-tidy-Dateiliste stehen ausschliesslich im versionierten Runner
+`scripts/run_pre_ready_gates.sh`.
 
 Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
 verwenden ESP-IDF `v6.0.2` am Commit

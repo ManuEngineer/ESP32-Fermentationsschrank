@@ -38,7 +38,7 @@ verify_platformio() {
     require_command pio
     local version_output
     version_output=$(pio --version 2>&1)
-    if [[ "$version_output" != *"PlatformIO Core, version 6.1.19"* ]]; then
+    if ! grep -Fqx 'PlatformIO Core, version 6.1.19' <<<"$version_output"; then
         printf 'FAILED: PlatformIO 6.1.19 erwartet, gefunden:\n%s\n' \
             "$version_output" >&2
         exit 1

@@ -125,8 +125,11 @@ Nach CI-Fehler legt der Agent Befund und Korrekturplan vor; nur der Owner
 entscheidet ueber eine Rueckstufung auf Draft und den erneuten
 `Ready for review`-Wechsel.
 
-Testbefehle, Profile, Werkzeuge und Ergebnisstatus stehen ausschliesslich in
-`docs/CI_AND_QUALITY_GATES.md`. Nicht ausgefuehrte Tests sind nicht bestanden.
+Zeitpunkt, Voraussetzungen, Profile, Toolvertraege und Ergebnisstatus stehen
+in `docs/CI_AND_QUALITY_GATES.md`. Die vollstaendigen ausfuehrbaren
+Gatebefehle und die clang-tidy-Dateiliste stehen ausschliesslich im dort
+referenzierten `scripts/run_pre_ready_gates.sh`. Nicht ausgefuehrte Tests sind
+nicht bestanden.
 
 ## Session-Handover
 

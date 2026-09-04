@@ -202,9 +202,13 @@ breiten neuen Diff erzeugt. Die gleiche Regel gilt nach einer CI-Korrektur.
 
 ## 8. Convergence Gate
 
-Ein PR erhält aus Review-Sicht `GO`, sobald alle genehmigten Acceptance
-Criteria erfüllt sind, alle für diesen Stand erforderlichen Tests, Nachweise
-und Quality Gates bestanden sind und `OPEN_BLOCKERS=0` gilt.
+Ein Independent Review erhält aus Review-Sicht `GO`, sobald der Review den
+Scope, die Implementation und die fuer die Draft-/Reviewphase erforderlichen
+gezielten Tests und Nachweise bewertet hat, alle dabei relevanten Acceptance
+Criteria erfuellt sind und `OPEN_BLOCKERS=0` gilt. Der vollstaendige
+Pre-Ready-Lauf ist kein Bestandteil dieses Review-GO und keine Voraussetzung
+fuer `INDEPENDENT_REVIEW=PASS`; er ist das naechste, separat autorisierte
+Owner-Gate.
 
 Das ist noch keine Freigabe fuer `Ready for review`. Die verbindliche
 Reihenfolge lautet:
@@ -246,7 +250,12 @@ Problemumfang; danach gilt wieder der Standard-Builder.
 ## 10. Tests und GitHub-CI
 
 Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
-Die konkreten Befehle und Werkzeuge stehen in `CI_AND_QUALITY_GATES.md`.
+Der Independent Review bewertet Scope, Implementation und diese gezielten
+Nachweise; der vollstaendige Pre-Ready-Lauf ist dafuer nicht erforderlich.
+Zeitpunkt, Voraussetzungen und Toolvertraege stehen in
+`CI_AND_QUALITY_GATES.md`; die vollstaendigen ausfuehrbaren Gatebefehle und
+die clang-tidy-Dateiliste stehen ausschliesslich im dort referenzierten
+`scripts/run_pre_ready_gates.sh`.
 
 Ein vollstaendiger lokaler Pre-Ready-Lauf erfolgt nur nach abgeschlossenem
 Independent Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
