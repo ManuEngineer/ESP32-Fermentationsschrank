@@ -9964,6 +9964,70 @@ void seedHandoffSource(SequencedWriteStore& store,
     store.restart();
 }
 
+std::string makePreparedHeadForTest(device_platform::StorageEpoch epoch) {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator source(store, epoch, RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(source.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    // A non-periodic mutation writes PreparedHead before its checkpoint slot.
+    // Stop at the slot so the store retains a codec-valid Prepared head.
+    store.faultAt(
+        2U, SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto interrupted = source.persistCommand(
+        state, startDecision(state, 23U, 100U), trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+                          static_cast<int>(interrupted.status));
+    const auto head = store.read(slotKey("rh0"), 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(head.status));
+    const auto decoded = decodeRunPersistenceHead(head.value, epoch);
+    TEST_ASSERT_TRUE(decoded.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceHeadState::Prepared),
+                          static_cast<int>(decoded->state));
+    return head.value;
+}
+
+void test_issue144_committed_handoff_rejects_previous_prepared_head() {
+    const auto oldEpoch = device_platform::StorageEpoch{76U};
+    const auto newEpoch = device_platform::StorageEpoch{77U};
+    SequencedWriteStore store;
+    seedHandoffSource(store, oldEpoch);
+
+    RunPersistenceCoordinator handoff(store, newEpoch,
+                                      RunCheckpointSchedule{});
+    auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+        oldEpoch, newEpoch);
+    const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+
+    // Model a persisted Committed bootstrap phase with both exact target
+    // slots already present, but a mixed previous-epoch Prepared head.
+    const auto preparedHead = makePreparedHeadForTest(oldEpoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.backing().write(slotKey("rh0"), preparedHead)));
+    store.restart();
+
+    const auto finalized = handoff.finalizeAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Blocked),
+        static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_FALSE(finalized.evidence.has_value());
+    const auto head = store.read(slotKey("rh0"), 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(head.status));
+    TEST_ASSERT_EQUAL_STRING(preparedHead.c_str(), head.value.c_str());
+}
+
 void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
     using Fault = SequencedWriteStore::WriteFault;
     const auto oldEpoch = device_platform::StorageEpoch{70U};
@@ -10356,5 +10420,6 @@ int main(int, char**) {
         test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write);
     RUN_TEST(
         test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable);
+    RUN_TEST(test_issue144_committed_handoff_rejects_previous_prepared_head);
     return UNITY_END();
 }

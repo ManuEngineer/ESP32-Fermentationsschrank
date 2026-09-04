@@ -619,11 +619,14 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
         {
             const auto previousEnvelope =
                 device_platform::decodeEnvelope(headRead.value);
+            const auto previousHead =
+                decodeRunPersistenceHead(headRead.value,
+                                         proof.previousEpoch());
             if (!previousEnvelope.envelope.has_value() ||
                 previousEnvelope.envelope->storageEpoch !=
                     proof.previousEpoch() ||
-                !decodeRunPersistenceHead(headRead.value,
-                                           proof.previousEpoch()).has_value()) {
+                !previousHead.has_value() ||
+                previousHead->state != RunPersistenceHeadState::Committed) {
                 return reject(RunPersistenceStep::LoadHead,
                               RunPersistenceTechnicalReason::InvalidProjection);
             }
