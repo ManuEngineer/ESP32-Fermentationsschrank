@@ -16,8 +16,8 @@ Fermentations-Workspace aus Issue #26.
     BASE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
     ROADMAP_COMMIT=3ecf9ad9edc223c7af731600d54a857d5e2f8c9f
     PLAN_PATH=docs/tasks/issue-144-run-identity-neutral-provenance-plan.md
-    PLAN_REVISION=BLOCKER_CORRECTION_2
-    SUPERSEDES_PLAN_COMMIT=c24789f2a7ff370f78ca3fa8abe66aac71463a9e
+    PLAN_REVISION=BLOCKER_CORRECTION_3
+    SUPERSEDES_PLAN_COMMIT=d014a33f40ee1968bf28811df878b39931ba75b2
     PLAN_COMMIT=THIS_COMMIT
     IMPLEMENTATION=NOT_STARTED
     NATIVE_TESTS=NOT_RUN_PLANNING_ONLY
@@ -32,10 +32,10 @@ Fermentations-Workspace aus Issue #26.
 
     CONTEXT_BASELINE_BRANCH=main
     CONTEXT_BASELINE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
-    CONTEXT_HEAD_SHA=e46e56a7ae4ba6c3453b835f1ce52a3e068b3e11
-    CONTEXT_PLAN_SHA=c24789f2a7ff370f78ca3fa8abe66aac71463a9e
+    CONTEXT_HEAD_SHA=d014a33f40ee1968bf28811df878b39931ba75b2
+    CONTEXT_PLAN_SHA=d014a33f40ee1968bf28811df878b39931ba75b2
     CONTEXT_REFRESH_MODE=INCREMENTAL
-    CONTEXT_DELTA=Fix Verification: durable one-time epoch-handoff authorization and empty-store partial-load delegation
+    CONTEXT_DELTA=Planrevision 3: Bootstrap-Schema-2-Sequence, Successor-, Wire- und Zwei-Slot-Crashvertrag sowie Dateiscope
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Die aktuelle PR-Basis ist `main@e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`.
@@ -47,9 +47,9 @@ keine Ancestry durch Rebase oder zusaetzlichen Mergecommit veraendert.
 
 Die Roadmap wurde in diesem PR als erster Commit auf Issue #144 als aktuellen
 fachlichen Pflichtvorgaenger und auf die Blockierung von #26 synchronisiert.
-Dieser Korrekturstand behandelt die bisher nur RAM-seitige
-Handoff-Autorisierung als materiellen Persistenz-/Recoverybefund; die Roadmap-
-Reihenfolge bleibt unveraendert.
+Dieser Korrekturstand praezisiert den bereits persistierten Handoff um den
+vollstaendigen Schema-2-Sequence-, Successor-, Wire- und Zwei-Slot-Vertrag;
+die Roadmap-Reihenfolge bleibt unveraendert.
 
 Vor dieser Planerstellung wurden ausserdem live verifiziert:
 
@@ -346,7 +346,201 @@ zuliesst. Schema 4 ist die einzige neue bekannte Version. Ein unbekanntes
 neueres Schema bleibt im bestehenden Load-/Decodepfad fail-closed und darf
 weder einen Run noch einen Allocator-Hochwasserstand freigeben.
 
-### 6.2 Kanonische Command-High-Water-Ankerung
+### 6.2 Bootstrap-Schema 2, Sequenz und Handoff-Historie
+
+Das bestehende Bootstrap-Schema 1 bleibt ein unveraenderter Legacyvertrag.
+Schema 1 behaelt seine 5-Byte-Payload, die Zustandswerte
+`Initializing=1`, `Initialized=2` und `Resetting=3`, die geschlossene
+Relation
+
+    Initializing: E=1, S=1
+    Initialized:  S=2*E
+    Resetting:    E>=2, S=2*E-1
+
+und die ausschliessliche Successorfolge mit `next.S = previous.S + 1`.
+Schema-1-Goldens werden bytegenau dekodiert und plausibilisiert. Es wird kein
+Schema-1-Writer eingefuehrt; ein neuer Bootstrap-Write verwendet immer
+Schema 2.
+
+Das In-Memory-Modell erhaelt fuer Schema 2 eine kleine, optionale
+Handoff-Bindung, ohne einen zweiten Record einzufuehren:
+
+    RunEpochHandoffState = None | Pending | Committed | Consumed
+    None       = 0
+    Pending    = 1
+    Committed  = 2
+    Consumed   = 3
+
+`Initializing` und `Resetting` duerfen nur `HandoffState::None` tragen.
+`Initialized` darf `None`, `Pending`, `Committed` oder `Consumed` tragen.
+Bei `Pending`, `Committed` und `Consumed` sind `previousEpoch` und
+`currentEpoch` Teil derselben gebundenen In-Memory-Struktur. Bei `None` sind
+beide nicht vorhanden. Der Decoder beziehungsweise der geladene
+Bootstrapkandidat fuehrt die Envelope-Schemaversion mit, damit Plausibilitaet
+und Successorpruefung Schema 1 und Schema 2 nicht vermischen; sie wird nicht
+als zusaetzliches Payloadfeld dupliziert.
+
+#### Geschlossene Schema-2-Einzelrecordrelation
+
+Schema 2 verwendet weiterhin die bestehende `ConfigurationBootstrapSequence`
+als globale, streng fortgeschriebene Historiennummer. Damit die drei
+gueltigen Schema-1->2-Einstiege auch bei einer bereits hoeheren alten Epoche
+ohne Sonderzaehler moeglich bleiben, bildet Schema 2 eine geschlossene
+Familie moeglicher historischer Anker. Fuer `E>=2` wird checked berechnet:
+
+    B(E) = 2*E - 1
+
+Fuer die vier zusaetzlichen Schema-2-Zustaende gilt der feste Phasenoffset
+`p`:
+
+| Schema-2-Zustand | `p` | Einzelrecordbedingung |
+|---|---:|---|
+| `Resetting/None` | 0 | `S >= B(E)`, `S-B(E)-p` gerade, `k=(S-B(E)-p)/2`, `0 <= k <= E-2` |
+| `Initialized/Pending` | 1 | dieselbe Bedingung mit `p=1` |
+| `Initialized/Committed` | 2 | dieselbe Bedingung mit `p=2` |
+| `Initialized/Consumed` | 3 | dieselbe Bedingung mit `p=3` |
+
+Die Subtraktionen, die Halbierung und die Schranke werden nur nach checked
+Vorbedingungen ausgefuehrt. Damit beschreibt `k` ausschliesslich die Anzahl
+moeglicher bereits abgeschlossener Schema-2-Phasen seit dem letzten
+Schema-1-Anker; es ist kein zusaetzliches persistiertes Feld. Jeder einzelne
+Schema-2-Record muss diese Relation erfuellen und eine gueltige lokale
+Handoffbindung besitzen. Ein CRC-gueltiger, aber mathematisch nicht moeglicher
+Record ist `IntegrityFailure`.
+
+Die beiden Schema-2-Zustaende ohne zusaetzliche Handoffbindung sind nur der
+fabrikneue Einstieg `Initializing/None (E=1,S=1)` und sein direkter Nachfolger
+`Initialized/None (E=1,S=2)`. Ein unveraendert vorgefundener Schema-1-
+`Initialized`-Record wird nicht als gleichsequenter Schema-2-Record
+umgeschrieben; sein erster neuer Successor ist der nachfolgend definierte
+Schema-2-`Resetting`-Record.
+
+Fuer gebundene Records gilt zusaetzlich:
+
+- `currentEpoch` ist exakt gleich dem Envelope-`StorageEpoch`;
+- `previousEpoch` und `currentEpoch` sind vorhanden, beide nicht null und
+  `previousEpoch + 1 == currentEpoch` ist checked beweisbar;
+- `currentEpoch >= 2`, die Envelope- und Payloadwerte sind nicht frei
+  voneinander abweichend;
+- `Pending`, `Committed` und `Consumed` sind nur mit
+  `ConfigurationBootstrapState::Initialized` gueltig;
+- bei `None` fehlen die beiden Epochenfelder vollstaendig.
+
+#### Versionierte Successor-Matrix
+
+Jeder neue Successor erhoeht `ConfigurationBootstrapSequence` checked exakt
+um eins. Die Matrix ist versionsbewusst; ein Schema-2-Record kann keinen
+Schema-1-Record als seinen Nachfolger ausgeben, und eine Schema-1-Abfolge wird
+nicht mit Schema-2-Regeln plausibilisiert:
+
+| Ausgang | Ziel | Schema/State/Handoff | Epochenbindung | Sequence |
+|---|---|---|---|---|
+| fabrikneu | `Initializing` | 2 / `Initializing/None` | `E=1` | `S=1` |
+| `Initializing/None` | `Initialized` | 1->1 oder 2->2 / `Initialized/None` | gleiche Epoche | `S+1` |
+| `Initialized/None` | `Resetting` | 1->2 oder 2->2 / `Resetting/None` | `E+1` checked | `S+1` |
+| `Resetting/None` | `Initialized/Pending` | 1->2 oder 2->2 | `previous=E-1`, `current=E` | `S+1` |
+| `Initialized/Pending` | `Initialized/Committed` | 2->2 | unveraendert | `S+1` |
+| `Initialized/Committed` | `Initialized/Consumed` | 2->2 | unveraendert | `S+1` |
+| `Initialized/Consumed` | `Resetting/None` | 2->2 | `E+1` checked; alte Bindung entfällt | `S+1` |
+
+Die drei Cross-Schema-1->2-Einstiege sind damit explizit:
+
+- Schema-1 `Initializing(E=1,S=1)` -> Schema-2
+  `Initialized/None(E=1,S=2)`;
+- Schema-1 `Initialized(E,S=2*E)` -> Schema-2
+  `Resetting/None(E+1,S+1)`;
+- Schema-1 `Resetting(E,S=2*E-1)` -> Schema-2
+  `Initialized/Pending(E,S+1)`.
+
+Die Schema-2-Einzelrecordrelation ist so bemessen, dass jeder dieser
+Successoren mit `k=0` gueltig ist. Nach einem Schema-2-`Consumed` folgt beim
+naechsten Reset `Resetting/None` mit `S+1`; dadurch steigt `k` checked um eins
+und die Folge bleibt auch nach mehreren Epochen geschlossen. Der Scanner
+ordnet zwei unterschiedliche Records nur dann als Historie, wenn die
+Sequence-Differenz exakt eins ist und die passende versionierte Zeile gilt.
+Schema 1 -> Schema 2 ist nur fuer die drei genannten Zeilen zulaessig,
+Schema 2 -> Schema 1 sowie alle anderen Cross-Schema-/State-Kombinationen
+bleiben `IntegrityFailure`. Gleichsequente Bytes sind nur als byteidentisches
+Duplikat zulaessig.
+
+`Pending` und `Committed` sind keine Reset-Ausgangszustaende. Ein
+Resetversuch waehrend einer offenen dieser Phasen wird vor jedem Write
+abgelehnt. `Initialized/Consumed` darf beim naechsten autorisierten Reset
+durch `Resetting/None` ersetzt werden; die alte `previousEpoch` /
+`currentEpoch`-Bindung wird dabei nicht weitergetragen.
+
+#### Exaktes Schema-2-Wireformat
+
+Der generische Envelope bleibt Version 1 und traegt weiterhin
+`RecordTypeId=6`, die `StorageEpoch` im Envelope-`uint64` und die
+`ConfigurationBootstrapSequence` im Envelope-`versionValue` als `uint64`.
+Alle Mehrbytefelder sind Big Endian. UTC ist fuer Bootstrap ausgeschlossen.
+Die Schema-2-Payload ist:
+
+| Reihenfolge | Feld | Wirebreite |
+|---:|---|---:|
+| 1 | `ConfigurationStorageFormatVersion` | `uint32` Big Endian |
+| 2 | `ConfigurationBootstrapState` | `uint8` |
+| 3 | `RunEpochHandoffState` | `uint8` |
+| 4 | `previousEpoch` bei gebundener Phase | `uint64` Big Endian |
+| 5 | `currentEpoch` bei gebundener Phase | `uint64` Big Endian |
+
+Die Reihenfolge ist strikt. `None` hat exakt 6 Payloadbytes und ein
+37+6=43-Byte-Envelope. `Pending`, `Committed` und `Consumed` haben jeweils
+exakt 22 Payloadbytes und ein 37+22=59-Byte-Envelope. Die neue maximale
+Bootstrap-Envelopegroesse ist daher exakt 59 Bytes; das bestehende
+Schema-1-Limit 42 bleibt als historische Mindest-/Decodegrenze bekannt.
+`configuration_limits.hpp` fuehrt dafuer getrennte Konstanten fuer die
+Schema-1-Payload (5), die Schema-2-`None`-Payload (6), die gebundene
+Schema-2-Payload (22) und das neue Maximum (59); kein Writepfad verwendet
+mehr das alte 5/42-Limit fuer Schema 2.
+`ConfigurationStorageFormatVersion` bleibt exakt 1. Payloads mit UTC-Tag,
+fehlenden oder zusaetzlichen Bytes, unbekannten Zustandswerten oder
+abweichender Laenge werden abgelehnt. Ein unbekanntes Bootstrap-Schema 3 oder
+hoeher bleibt `UnsupportedNewerSchema`/fail-closed.
+
+`previousEpoch`/`currentEpoch` werden nur bei einer gebundenen Phase
+serialisiert. Beim Decode muessen sie die oben definierte checked Relation
+erfuellen, `currentEpoch` muss dem Envelope entsprechen, und die
+Schema-2-Recordrelation muss ebenfalls erfuellt sein. Die Payload wiederholt
+keine UTC-, Zeit-, Manifest-, Run- oder Commandmetadaten.
+
+#### Zwei-Slot- und Crashvertrag
+
+Der bestehende Zwei-Slot-Store schreibt jeden Successor einzeln in den jeweils
+nicht kanonischen Slot und bestaetigt ihn per exaktem Readback. Die
+Schema-1-/Schema-2-Historie wird erst nach Einzelrecord- und
+Successorpruefung akzeptiert. Daraus folgen fuer den Handoff:
+
+- Nach erfolgreich persistiertem `Consumed` liegt im verbleibenden aelteren
+  kanonischen Slot exakt der vorherige `Initialized/Committed`-Record, nicht
+  `Pending`. Das ist eine Folge der vier aufeinanderfolgenden Handoff-
+  Successoren und der Zwei-Slot-Rotation.
+- Fehlt der neueste `Consumed`-Record, bleibt ein einzelner aelterer
+  `Committed`-Record hoechstens die bereits gebundene exakte
+  Target-Fortsetzung. Er ist keine neue freie Reset-Autorisierung. Ist der
+  neueste Slot unlesbar oder widerspruechlich, blockiert der vollstaendige
+  Scan fail-closed; er darf den alten Slot nicht als neuen Resetbeweis
+  auswaehlen.
+- Ein `Committed`-Record darf nur den exakt vorbereiteten Target-Head der
+  gebundenen Handoff-Epoche finalisieren. Ein alter Previous-Epoch-Graph,
+  ein beliebiger Orphan oder ein neuer Reset ist damit niemals zulaessig.
+- Erst nach bestaetigtem Target-Head wird `Committed -> Consumed` geschrieben.
+  Ein Stromausfall davor laesst `Committed` als eng gebundene
+  Fortsetzungserlaubnis bestehen; ein Stromausfall danach laesst die
+  dauerhaft verbrauchte `Consumed`-Tatsache zurueck. Die verlorene oder
+  unlesbare neueste `Consumed`-Kopie erzeugt daher weder einen neuen freien
+  Proof noch einen HWM-/Run-ID-Rollback.
+- Beim naechsten autorisierten Reset wird die alte `Consumed`-Bindung durch
+  den neuen `Resetting/None`-Successor abgeloest. Sie wird nicht in
+  `Pending`/`Committed` des neuen Epochenzyklus kopiert.
+
+Jeder unklare Slot-Write, Readback, CRC-, Sequence-, Schema- oder
+Epochenbefund bleibt `IntegrityFailure`, `Unavailable` oder der bestehende
+indeterminierte Writezustand. Keine Phase wird aus einem einzelnen CRC-
+gueltigen, aber historisch unmoeglichen Record geraten.
+
+### 6.3 Kanonische Command-High-Water-Ankerung
 
 Das vorhandene 32er-Fenster ist kein High-Water-Vertrag und wird nicht zu
 einem solchen umgedeutet. Die kleinste korrekte Erweiterung ist ein einziges
@@ -542,7 +736,7 @@ fail-closed. Ein alter oder Legacy-Head, ein nicht autorisierter leerer
 Teilstore, ein abgebrochener/indeterminierter Handoff oder eine bereits
 `Consumed` gebundene Autorisierung gibt keine neue ID frei.
 
-### 6.3 Current-, NoActiveRun- und Fallback-Auswahl
+### 6.4 Current-, NoActiveRun- und Fallback-Auswahl
 
 Die High-Water-Auswahl folgt der kanonischen committed Head-Information und
 nicht der Auswahl eines moeglicherweise aelteren Snapshots:
@@ -590,7 +784,7 @@ Command-/Run-Identitaet erneut ausgeben. Die Kombination aus
 `StorageEpoch` und dem nicht ruecklaeufigen committed High Water ist die
 beweisbare Identitaetsbasis; der FIFO-Replaybestand bleibt davon getrennt.
 
-### 6.4 Codec- und Validierungsregeln
+### 6.5 Codec- und Validierungsregeln
 
 - `kCurrentRunPersistenceSchema` wird auf 4 angehoben;
 - `knownRunPersistenceSchema()` akzeptiert 1, 2, 3 und 4;
@@ -614,7 +808,7 @@ beweisbare Identitaetsbasis; der FIFO-Replaybestand bleibt davon getrennt.
 - es gibt keine zweite Run-Persistenz, keinen Paralleldecoder und keine
   Rueckmigration in ein anderes Provenienzregister.
 
-### 6.5 Nachweise
+### 6.6 Nachweise
 
 Die Implementation ergaenzt die bestehenden nativen Suites, statt ein neues
 Testframework aufzubauen:
@@ -827,11 +1021,14 @@ Die spaetere Umsetzung erfolgt in diesem engen Scope:
    Schema-1/2/3 erhalten keinen neuen Writer. Der Codec behauptet keine
    historische Monotonie, die nur der Coordinator beweisen kann.
 3. Den bestehenden Configuration-Bootstrap-Codec und -Store um die kleine
-   gebundene `Pending`/`Committed`/`Consumed`-Handoff-Evidenz ergaenzen. Die
-   neue Bootstrap-Schemaversion bleibt mit dem alten Schema lesbar; alte
-   Records ohne Bindung minten keinen Proof. Der ConfigurationRecoveryService
-   gibt nur private, phasenbezogene Proof-/Fortsetzungscapabilities aus und
-   persistiert `Consumed` erst nach bestaetigtem Run-Head.
+   gebundene `Pending`/`Committed`/`Consumed`-Handoff-Evidenz ergaenzen.
+   Schema 1 bleibt mit seiner 5-Byte-Payload und geschlossenen Historien-
+   relation lesbar, Schema 2 bekommt die geschlossene Phasen-/Sequence-
+   relation, Cross-Schema-Successormatrix und das exakt 6/22-Byte-Payload-
+   format. Alte Records ohne Bindung minten keinen Proof. Der
+   ConfigurationRecoveryService gibt nur private, phasenbezogene
+   Proof-/Fortsetzungscapabilities aus und persistiert `Consumed` erst nach
+   bestaetigtem Run-Head.
 4. Den bestehenden `RunPersistenceCoordinator` um den schmalen, phasengeteilten
    Handoff-Pfad ergaenzen. Die Application ruft ihn nur mit der Configuration-
    Capability auf; der Pfad validiert den alten Graphen, den leeren Store oder
@@ -884,6 +1081,17 @@ beobachtbar nachzuweisen:
 | RP-06b | Schema-4 encode -> Schema-4 decode im eigenen Wireformat | Dokument, Source-Kind, neutrale Provenienz, `commandIdHighWater` und Recoverydaten bleiben erhalten |
 | RP-07 | unbekanntes Schema 5, abgeschnittenes Feld, Trailing Bytes, falsche Referenz/Epoch | bestehender Loadpfad bleibt fail-closed; kein Run und kein Allocator wird freigegeben |
 | RP-08 | Current-, Fallback- und `NoActiveRun`-Recovery mit Legacy und Schema 4 | bestehende Recoveryklassifikation bleibt gleich; High Water kommt nur aus dem committed Head, nie aus dem aelteren Fallbackfenster |
+| BOOT-01 | Schema-1-Goldens und Schema-1-Einzel-/Zwei-Slot-Historie | 5-Byte-Payloads bleiben bytegenau lesbar; die alte `2*E`-/`2*E-1`-Relation bleibt unveraendert; kein Schema-1-Writer entsteht |
+| BOOT-02 | Schema-2-Goldens fuer `None`, `Pending`, `Committed` und `Consumed` | exakt 6 beziehungsweise 22 Payloadbytes, 43 beziehungsweise 59 Gesamtbytes, checked Sequence-/Epoch-/Handoff-Plausibilitaet |
+| BOOT-03 | Schema-1 `Initializing`, `Initialized` und `Resetting` als erste Schema-2-Successoren | nur die drei definierten Cross-Schema-Zeilen mit `S+1` werden akzeptiert; alle anderen Mischhistorien bleiben `IntegrityFailure` |
+| BOOT-04 | Schema-2 `Initializing/None -> Initialized/None -> Resetting/None -> Pending -> Committed -> Consumed` ueber alternierende `cb0`/`cb1`-Writes | jeder Successor ist versions- und zustandsgenau, Sequence steigt checked exakt um eins |
+| BOOT-05 | `Consumed -> naechster Reset -> neues Pending` | neue `Resetting/None`-Phase traegt die neue Epoche und keine alte Bindung; danach entsteht ein neues gebundenes `Pending` |
+| BOOT-06 | Resetversuch waehrend `Pending` oder `Committed` | vor jedem Write typisiert abgelehnt; keine neue Epoche und keine neue Handoff-Autorisierung |
+| BOOT-07 | unzulaessige Cross-Schema-, Sequence-, State- oder Epochkombination | Zwei-Slot-Scan ordnet nichts still um und liefert `IntegrityFailure`/fail-closed |
+| BOOT-08 | Sequence-/Epoch-Overflow an allen `2*E`, `E+1` und `S+1`-Stellen | checked Ablehnung vor Write; kein Wraparound und kein gueltiger Nachfolger |
+| BOOT-09 | unbekanntes Bootstrap-Schema 3, abgeschnittene/zusaetzliche Payload, UTC-Tag oder falsche Payloadlaenge | `UnsupportedNewerSchema` beziehungsweise `InvalidModel`; keine partielle Modellrueckgabe und keine Mutation |
+| BOOT-10 | beide Slots: neuester `Consumed`, aelterer `Committed`; Verlust/Unlesbarkeit des neuesten Slots | aelterer Record ist nur exakte gebundene Fortsetzung, niemals freie Resetautorisierung; bei unlesbarem/mixed Scan fail-closed |
+| BOOT-11 | `Committed` mit altem Previous-Epoch-Graph oder beliebigem Target-Head | keine Finalisierung; nur der exakt vorbereitete Target-Head darf fortgesetzt werden |
 | ID-01 | fabrikneuer Head- und slotfreier Store, Coordinator-Ergebnis `NoPersistedRun`/`ReadyEmpty` | gueltige aktuelle Epoche bildet logisch HWM `0`; keine Vorabpersistenz; erste ID ist `1` |
 | ID-02 | erster erfolgreicher eligible Command-Commit aus `ReadyEmpty` | Prepared und Committed tragen den Kandidaten; der erfolgreich geladene Schema-4-Head traegt committed HWM `1` |
 | ID-03 | Neustart nach ID-01/ID-02 | Committed-HWM `1` ist Neustartbasis; naechste ID ist `2` |
@@ -954,6 +1162,8 @@ Pfad. #144 fuehrt dafuer keine zweite Ergebnisfamilie ein.
   fuer den bestehenden Schema-/High-Water-Handoff und den schmalen
   autorisierten Epoch-Handoff erforderlich
 - `lib/fermentation_app/src/configuration_bootstrap.hpp`
+- `lib/fermentation_app/src/configuration_bootstrap.cpp`
+- `lib/fermentation_app/src/configuration_limits.hpp`
 - `lib/fermentation_app/src/configuration_bootstrap_codec.hpp`
 - `lib/fermentation_app/src/configuration_bootstrap_codec.cpp`
 - `lib/fermentation_app/src/configuration_bootstrap_store.hpp`
@@ -961,6 +1171,14 @@ Pfad. #144 fuehrt dafuer keine zweite Ergebnisfamilie ein.
 - `lib/fermentation_app/src/configuration_recovery_service.hpp`
 - `lib/fermentation_app/src/configuration_recovery_service.cpp`, nur fuer
   die persistente Handoff-Phasenbindung und ihre autorisierte Konsumierung
+- `lib/fermentation_app/src/actuation_interlock.cpp`, nur fuer die bereits
+  bestehende Projektion des Configuration-Recovery-Status
+- `lib/fermentation_app/src/fermentation_ui_models.hpp`, nur fuer
+  `expectedProgramCatalogRevision`
+- `lib/fermentation_app/src/fermentation_ui_models.cpp`, nur fuer die
+  semantische Snapshot-Gleichheit und den bestehenden Refresh-Tracker
+- `main/issue_29_bringup_probe.cpp`, nur fuer die Strong-Type-Kompatibilitaet
+  von `RunProgramSourceRevision`
 
 `ConfigurationRecoveryService` bleibt der Owner fuer die kanonische
 FactoryReset-Autorisierung, die persistente `Pending`/`Committed`/`Consumed`-
@@ -1004,11 +1222,17 @@ verwendeten starken Plattformtypen. Falls der bestehende Build die
 - `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`
   fuer exakte Pending-/Committed-Fortsetzung, leeren partiellen Store und
   die fail-closed-Abgrenzung gegen einen spaeteren Previous-Epoch-Graphen
+- `test/test_fermentation_ui_models/test_fermentation_ui_models.cpp` fuer
+  die semantische Gleichheit von `expectedProgramCatalogRevision` und den
+  daraus folgenden Refresh-Revisionsnachweis
 
-Keine Firmware-, Hardware-, Display-, Touch-, Netzwerk- oder
-Produktionsdatei ausserhalb dieser schmalen Identitaets-/Run-Contractgrenze
-wird in #144 benoetigt. `docs/ROADMAP.md` ist bereits im ersten PR-Commit
-synchronisiert; weitere Roadmap-Fachanforderungen werden hier nicht kopiert.
+Keine Firmware-, Hardware-, Display-, Touch- oder Netzwerkdatei ausserhalb
+dieses schmalen Identity-/Run-/Configuration-Contractumfangs wird in #144
+benoetigt. Die genannten bestehenden Interlock-, UI-Modell- und Bring-up-
+Dateien sind nur wegen bereits nachgewiesener Folgeanpassungen enthalten;
+ihre Fach- und Hardwaregrenzen werden nicht erweitert. `docs/ROADMAP.md` ist
+bereits im ersten PR-Commit synchronisiert; weitere Roadmap-Fachanforderungen
+werden hier nicht kopiert.
 
 ## 12. Downstream-Vertrag fuer Issue #26
 
