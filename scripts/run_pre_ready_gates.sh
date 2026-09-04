@@ -75,6 +75,10 @@ verify_expected_esp_environment() {
         printf 'BLOCKED: IDF_PATH zeigt auf kein ESP-IDF-Verzeichnis.\n' >&2
         exit 1
     fi
+    if [[ -z "${IDF_TOOLS_PATH:-}" || ! -d "$IDF_TOOLS_PATH" ]]; then
+        printf 'BLOCKED: IDF_TOOLS_PATH zeigt auf kein ESP-IDF-Tools-Verzeichnis.\n' >&2
+        exit 1
+    fi
     require_command idf.py
 }
 

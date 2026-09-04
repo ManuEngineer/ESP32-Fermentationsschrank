@@ -56,11 +56,20 @@ bash scripts/run_pre_ready_gates.sh host
 
 # Danach die kanonische ESP-IDF-6.0.2-/esp-clang-Umgebung bereitstellen und
 # export.sh aktivieren; dies ist Provisionierung, kein zweiter Gatepfad.
+export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-$HOME/.espressif}"
 python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
 . "$IDF_PATH/export.sh"
 
 bash scripts/run_pre_ready_gates.sh esp
 ```
+
+Bei einer normalen lokalen ESP-IDF-Installation verwendet diese Zuweisung den
+Default `$HOME/.espressif`, ohne einen bereits explizit gesetzten Pfad zu
+ueberschreiben. `IDF_TOOLS_PATH` muss vor `idf_tools.py install esp-clang` auf
+ein vorhandenes Verzeichnis zeigen. Der Runner prueft diesen Pfad gemeinsam
+mit `python3`, `IDF_PATH` und `idf.py` vor dem ersten ESP-Build. Die
+detaillierte esp-clang-Pfad-, Versions-, `tools.json`- und `pyclang`-Pruefung
+bleibt beim bestehenden Static-Analysis-Owner.
 
 `host` umfasst den vollständigen clang-format-18-Check, nativen Build und
 Ressourcenbericht, komplette native Tests, Compile-Datenbank und den exakten
