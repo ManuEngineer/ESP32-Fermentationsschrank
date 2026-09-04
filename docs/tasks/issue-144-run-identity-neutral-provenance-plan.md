@@ -16,10 +16,11 @@ Fermentations-Workspace aus Issue #26.
     BASE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
     ROADMAP_COMMIT=3ecf9ad9edc223c7af731600d54a857d5e2f8c9f
     PLAN_PATH=docs/tasks/issue-144-run-identity-neutral-provenance-plan.md
-    PLAN_REVISION=BLOCKER_CORRECTION_3
-    SUPERSEDES_PLAN_COMMIT=d014a33f40ee1968bf28811df878b39931ba75b2
+    PLAN_REVISION=BLOCKER_CORRECTION_4
+    SUPERSEDES_PLAN_COMMIT=7374cb80641117d3f8de1691dcf3bf682ad1bf9a
     PLAN_COMMIT=THIS_COMMIT
-    IMPLEMENTATION=NOT_STARTED
+    IMPLEMENTATION=EXISTING_PREVIOUS_PLAN_COMMITS
+    CURRENT_IMPLEMENTATION=BLOCKED_PENDING_PLAN_APPROVAL
     NATIVE_TESTS=NOT_RUN_PLANNING_ONLY
     ESP_IDF_BUILD=NOT_RUN
     HARDWARE_TEST=NOT_RUN
@@ -32,10 +33,10 @@ Fermentations-Workspace aus Issue #26.
 
     CONTEXT_BASELINE_BRANCH=main
     CONTEXT_BASELINE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
-    CONTEXT_HEAD_SHA=d014a33f40ee1968bf28811df878b39931ba75b2
-    CONTEXT_PLAN_SHA=d014a33f40ee1968bf28811df878b39931ba75b2
+    CONTEXT_HEAD_SHA=7374cb80641117d3f8de1691dcf3bf682ad1bf9a
+    CONTEXT_PLAN_SHA=7374cb80641117d3f8de1691dcf3bf682ad1bf9a
     CONTEXT_REFRESH_MODE=INCREMENTAL
-    CONTEXT_DELTA=Planrevision 3: Bootstrap-Schema-2-Sequence, Successor-, Wire- und Zwei-Slot-Crashvertrag sowie Dateiscope
+    CONTEXT_DELTA=Planrevision 4: Schema-1-Initializing-zu-Schema-2-Successorprovenienz und Statusprovenienz
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Die aktuelle PR-Basis ist `main@e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`.
@@ -436,12 +437,23 @@ nicht mit Schema-2-Regeln plausibilisiert:
 | Ausgang | Ziel | Schema/State/Handoff | Epochenbindung | Sequence |
 |---|---|---|---|---|
 | fabrikneu | `Initializing` | 2 / `Initializing/None` | `E=1` | `S=1` |
-| `Initializing/None` | `Initialized` | 1->1 oder 2->2 / `Initialized/None` | gleiche Epoche | `S+1` |
+| `Initializing/None` | `Initialized` | 1->1 / Legacy-Historie und Scan only | gleiche Epoche | `S+1` |
+| `Initializing/None` | `Initialized` | 1->2 / neuer Writer aus kanonischem Schema-1-Record | gleiche Epoche | `S+1` |
+| `Initializing/None` | `Initialized` | 2->2 / normaler Schema-2-Successor | gleiche Epoche | `S+1` |
 | `Initialized/None` | `Resetting` | 1->2 oder 2->2 / `Resetting/None` | `E+1` checked | `S+1` |
 | `Resetting/None` | `Initialized/Pending` | 1->2 oder 2->2 | `previous=E-1`, `current=E` | `S+1` |
 | `Initialized/Pending` | `Initialized/Committed` | 2->2 | unveraendert | `S+1` |
 | `Initialized/Committed` | `Initialized/Consumed` | 2->2 | unveraendert | `S+1` |
 | `Initialized/Consumed` | `Resetting/None` | 2->2 | `E+1` checked; alte Bindung entfällt | `S+1` |
+
+Die bestehende Schema-1-Zeile `Initializing/None -> Initialized/None` mit
+`1->1` bleibt ausschliesslich fuer das Lesen einer historischen Schema-1-
+Zwei-Slot-Folge erhalten. Sie ist kein produktiver Writerpfad. Der neue
+Bootstrap-Write aus einem einzelnen beziehungsweise kanonischen Schema-1-
+`Initializing(E=1,S=1)` verwendet dagegen ausschliesslich die separate
+`1->2`-Zeile und erzeugt `Schema-2 Initialized/None(E=1,S=2)`.
+Schema-2 `Initializing/None -> Initialized/None` bleibt als `2->2`-Zeile der
+normale neue Successor.
 
 Die drei Cross-Schema-1->2-Einstiege sind damit explizit:
 
@@ -1083,7 +1095,7 @@ beobachtbar nachzuweisen:
 | RP-08 | Current-, Fallback- und `NoActiveRun`-Recovery mit Legacy und Schema 4 | bestehende Recoveryklassifikation bleibt gleich; High Water kommt nur aus dem committed Head, nie aus dem aelteren Fallbackfenster |
 | BOOT-01 | Schema-1-Goldens und Schema-1-Einzel-/Zwei-Slot-Historie | 5-Byte-Payloads bleiben bytegenau lesbar; die alte `2*E`-/`2*E-1`-Relation bleibt unveraendert; kein Schema-1-Writer entsteht |
 | BOOT-02 | Schema-2-Goldens fuer `None`, `Pending`, `Committed` und `Consumed` | exakt 6 beziehungsweise 22 Payloadbytes, 43 beziehungsweise 59 Gesamtbytes, checked Sequence-/Epoch-/Handoff-Plausibilitaet |
-| BOOT-03 | Schema-1 `Initializing`, `Initialized` und `Resetting` als erste Schema-2-Successoren | nur die drei definierten Cross-Schema-Zeilen mit `S+1` werden akzeptiert; alle anderen Mischhistorien bleiben `IntegrityFailure` |
+| BOOT-03 | Schema-1 `Initializing`, `Initialized` und `Resetting` als erste Schema-2-Successoren | `1->1` wird nur als Legacy-Scanfolge erkannt; der erste neue Write aus Schema-1 `Initializing` ist zwingend `1->2`; nur die drei definierten Cross-Schema-Zeilen mit `S+1` werden akzeptiert |
 | BOOT-04 | Schema-2 `Initializing/None -> Initialized/None -> Resetting/None -> Pending -> Committed -> Consumed` ueber alternierende `cb0`/`cb1`-Writes | jeder Successor ist versions- und zustandsgenau, Sequence steigt checked exakt um eins |
 | BOOT-05 | `Consumed -> naechster Reset -> neues Pending` | neue `Resetting/None`-Phase traegt die neue Epoche und keine alte Bindung; danach entsteht ein neues gebundenes `Pending` |
 | BOOT-06 | Resetversuch waehrend `Pending` oder `Committed` | vor jedem Write typisiert abgelehnt; keine neue Epoche und keine neue Handoff-Autorisierung |
@@ -1260,15 +1272,20 @@ keinen Ersatzdispatcher oder Persistenzpfad bauen. Bis #144 gemergt ist, bleibt
 
 ## 13. Ergebnis und Freigabepunkt
 
-Dieser PR liefert zunaechst nur:
+Diese Planrevision liefert nur:
 
-1. den Roadmap-Sync in `ROADMAP_COMMIT`;
-2. diesen versionierten, vollstaendigen #144-Plan.
+1. die Korrektur der Schema-1-/Schema-2-Successor-Provenienz;
+2. den ehrlichen Dateiscope fuer den bereits genehmigten #144-Vertrag;
+3. diesen versionierten, vollstaendigen Planstand.
 
-Der aktuelle Planstatus bleibt `IMPLEMENTATION=NOT_STARTED`; Tests und
-ESP-IDF-/Hardwarelaeufe sind `NOT_RUN`. Nach Ownerfreigabe des exakten
-Plan-Commits darf der enge Identity-/Codecscope umgesetzt und danach separat
-reviewt werden. Vor dieser Freigabe werden keine Produktionsdateien und keine
-Tests ausgefuehrt; Issue-/PR-Metadaten duerfen fuer die exakte Plan- und
+Der Branch enthaelt bereits Implementierungscommits aus dem vorherigen
+freigegebenen Planstand. Seit der materiellen Planrevision ist keine weitere
+Implementation erfolgt; der aktuelle Implementierungsfortschritt ist deshalb
+`CURRENT_IMPLEMENTATION=BLOCKED_PENDING_PLAN_APPROVAL`. Tests und
+ESP-IDF-/Hardwarelaeufe sind fuer diese Planrevision `NOT_RUN`. Nach
+Ownerfreigabe des exakten neuen Plan-Commits darf die bereits begonnene enge
+Identity-/Codecscope-Umsetzung fortgesetzt und danach separat reviewt werden.
+Vor dieser Freigabe werden keine Produktionsdateien und keine Tests
+ausgefuehrt; Issue-/PR-Metadaten duerfen fuer die exakte Plan- und
 Handover-Provenienz synchronisiert werden. Issue-/PR-Status, Merge und
 Issue-Schluss bleiben beim Owner.
