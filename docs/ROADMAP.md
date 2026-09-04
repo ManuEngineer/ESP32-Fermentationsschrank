@@ -27,7 +27,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #144 – Run-Identity und neutrale Run-Provenienz vor Issue #26 | `ISSUE144_STATUS=PLANNED_SPEC_PENDING`; `BLOCKS_ISSUE26=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Eigenen vollständigen Plan erstellen, vor #26 umsetzen, ownerreviewen und mergen; danach #26 auf den exakten Merge-HEAD synchronisieren |
+| 0 | Issue #144 – Run-Identity und neutrale Run-Provenienz vor Issue #26 | `ISSUE144_STATUS=IMPLEMENTED_PENDING_OWNER_REVIEW`; `BLOCKS_ISSUE26=YES`; `IMPLEMENTATION=IMPLEMENTED_PENDING_OWNER_REVIEW`; `ACTUATOR_RELEASE=NO` | Exakten Implementierungs-HEAD ownerreviewen und mergen; danach #26 auf den exakten Merge-HEAD synchronisieren |
 | 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem vorgelagerten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Merge-HEAD von #144 abwarten, den #26-Plan auf diese Provenienz aktualisieren und erst danach für den exakten Plan-Commit anhalten |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
@@ -47,9 +47,9 @@ Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
 mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit ist zunaechst Issue #144 fuer
 den Run-Identity-/Provenienzvertrag. Issue #26 bleibt bis zum Merge dieses
 Pflichtvorgängers ausdrücklich blockiert; seine nachgelagerte Implementation
-ist ein späterer Schritt nach Planfreigabe. `ISSUE144_STATUS=PLANNED_SPEC_PENDING`,
+ist ein späterer Schritt nach Planfreigabe. `ISSUE144_STATUS=IMPLEMENTED_PENDING_OWNER_REVIEW`,
 `BLOCKS_ISSUE26=YES`, `ISSUE26_STATUS=PLANNING`,
-`BLOCKED_BY_ISSUE144=YES`, `IMPLEMENTATION=NOT_STARTED` und
+`BLOCKED_BY_ISSUE144=YES`, `IMPLEMENTATION=IMPLEMENTED_PENDING_OWNER_REVIEW` und
 `ACTUATOR_RELEASE=NO` gelten ab diesem Roadmap-Commit.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
