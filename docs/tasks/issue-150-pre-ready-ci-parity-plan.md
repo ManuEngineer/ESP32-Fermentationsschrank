@@ -6,7 +6,7 @@ Issue: `#150`
 Pull Request: `#151` (Draft)
 Basis-Branch: `main`
 Basis-SHA: `e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`
-Roadmap-Sync: `7e8aea9d5a7958cb6e7b84e269d9ab89ef8c62cb`
+Roadmap-Sync: `7e8aea92278e70077bf4fb1b381d8bc12d0007ed`
 Implementation: `NOT_STARTED`
 ACTUATOR_RELEASE: `NO`
 
@@ -269,7 +269,8 @@ Owneraktion automatisiert.
 ### Dokumentations-/Statusdateien
 
 - `docs/ROADMAP.md` – bereits im ersten PR-Commit um den parallelen
-  Issue-#150-Status ergaenzt (`7e8aea9...`); fachliche Firmwarereihenfolge
+  Issue-#150-Status ergaenzt (`7e8aea92278e70077bf4fb1b381d8bc12d0007ed`);
+  fachliche Firmwarereihenfolge
   und Issue-#147-Inhalt werden nicht kopiert.
 - `docs/tasks/issue-150-pre-ready-ci-parity-plan.md` – dieses Dokument.
 
@@ -389,9 +390,9 @@ ISSUE=150
 PR=151
 BASE_BRANCH=main
 BASE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90
-ROADMAP_SYNC_COMMIT=7e8aea9d5a7958cb6e7b84e269d9ab89ef8c62cb
-PLAN_REVISION=INITIAL
-SUPERSEDES_PLAN_COMMIT=NONE
+ROADMAP_SYNC_COMMIT=7e8aea92278e70077bf4fb1b381d8bc12d0007ed
+PLAN_REVISION=INITIAL_PROVENANCE_CORRECTION
+SUPERSEDES_PLAN_COMMIT=dedcef6e9b32064ba86d172a2184592d6fd63611
 IMPLEMENTATION=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
