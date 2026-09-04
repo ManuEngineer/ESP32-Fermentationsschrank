@@ -132,6 +132,22 @@ void test_refresh_revision_changes_only_on_new_publication() {
                              readAfterMessage.refreshRevision->value);
 }
 
+void test_catalog_revision_only_change_publishes_new_snapshot() {
+    RunCommandState state;
+    FermentationUiRefreshRevisionTracker tracker;
+    FermentationUiProjectionInput input;
+    input.runState = &state;
+    input.refreshTracker = &tracker;
+    input.revisions.expectedProgramCatalogRevision = ProgramCatalogRevision{1U};
+    const auto first = FermentationUiProjector::project(input);
+    input.revisions.expectedProgramCatalogRevision = ProgramCatalogRevision{2U};
+    const auto changed = FermentationUiProjector::project(input);
+    TEST_ASSERT_TRUE(changed.refreshRevision->value >
+                     first.refreshRevision->value);
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, changed.revisions.expectedProgramCatalogRevision->value());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -145,5 +161,6 @@ int main(int, char**) {
     RUN_TEST(
         test_projector_maps_canonical_messages_temperatures_and_recovery_modes);
     RUN_TEST(test_refresh_revision_changes_only_on_new_publication);
+    RUN_TEST(test_catalog_revision_only_change_publishes_new_snapshot);
     return UNITY_END();
 }

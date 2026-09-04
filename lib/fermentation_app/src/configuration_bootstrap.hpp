@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "configuration_mutation_coordinator.hpp"
 #include "state_store.hpp"
@@ -26,12 +27,52 @@ enum class ConfigurationBootstrapState : std::uint8_t {
     Resetting = 3U,
 };
 
+// Wire values are stable once introduced.  None is the only unbound phase;
+// the other values are tied to the immediately preceding configuration reset.
+enum class RunEpochHandoffState : std::uint8_t {
+    None = 0U,
+    Pending = 1U,
+    Committed = 2U,
+    Consumed = 3U,
+};
+
+inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion1 = 1U;
+inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion2 = 2U;
+
 struct ConfigurationBootstrapRecord {
     ConfigurationBootstrapSequence sequence;
     ConfigurationStorageFormatVersion storageFormatVersion;
     device_platform::StorageEpoch storageEpoch;
-    ConfigurationBootstrapState state{
-        ConfigurationBootstrapState::Initializing};
+    ConfigurationBootstrapState state;
+    // The envelope schema is retained in the decoded model so the scanner can
+    // enforce the versioned successor matrix.  The default is the current
+    // schema for all new in-memory records and aggregate initializers from
+    // the pre-schema-2 code remain source-compatible.
+    std::uint32_t schemaVersion;
+    RunEpochHandoffState handoff;
+    std::optional<device_platform::StorageEpoch> previousEpoch;
+    std::optional<device_platform::StorageEpoch> currentEpoch;
+
+    ConfigurationBootstrapRecord(
+        ConfigurationBootstrapSequence sequenceValue,
+        ConfigurationStorageFormatVersion storageFormatVersionValue,
+        device_platform::StorageEpoch storageEpochValue,
+        ConfigurationBootstrapState stateValue,
+        std::uint32_t schemaVersionValue =
+            kConfigurationBootstrapSchemaVersion2,
+        RunEpochHandoffState handoffValue = RunEpochHandoffState::None,
+        std::optional<device_platform::StorageEpoch> previousEpochValue =
+            std::nullopt,
+        std::optional<device_platform::StorageEpoch> currentEpochValue =
+            std::nullopt)
+        : sequence(sequenceValue),
+          storageFormatVersion(storageFormatVersionValue),
+          storageEpoch(storageEpochValue),
+          state(stateValue),
+          schemaVersion(schemaVersionValue),
+          handoff(handoffValue),
+          previousEpoch(previousEpochValue),
+          currentEpoch(currentEpochValue) {}
 };
 
 inline constexpr ConfigurationStorageFormatVersion

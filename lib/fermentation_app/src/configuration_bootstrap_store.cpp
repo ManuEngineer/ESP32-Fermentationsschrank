@@ -159,6 +159,27 @@ ConfigurationBootstrapStore::writeInitialInitializing(
 ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeSuccessor(
     const LoadedConfigurationBootstrap& expected,
     ConfigurationBootstrapState targetState) {
+    const auto targetHandoff =
+        expected.record.state == ConfigurationBootstrapState::Resetting &&
+                targetState == ConfigurationBootstrapState::Initialized
+            ? RunEpochHandoffState::Pending
+            : RunEpochHandoffState::None;
+    return writeSuccessorWithHandoff(expected, targetState, targetHandoff);
+}
+
+ConfigurationBootstrapWriteResult
+ConfigurationBootstrapStore::writeHandoffSuccessor(
+    const LoadedConfigurationBootstrap& expected,
+    RunEpochHandoffState targetHandoff) {
+    return writeSuccessorWithHandoff(
+        expected, ConfigurationBootstrapState::Initialized, targetHandoff);
+}
+
+ConfigurationBootstrapWriteResult
+ConfigurationBootstrapStore::writeSuccessorWithHandoff(
+    const LoadedConfigurationBootstrap& expected,
+    ConfigurationBootstrapState targetState,
+    RunEpochHandoffState targetHandoff) {
     const auto current = scan();
     if (current.status != ConfigurationBootstrapScanStatus::Available ||
         !current.loaded.has_value()) {
@@ -175,6 +196,11 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeSuccessor(
         return {ConfigurationBootstrapWriteStatus::CounterOverflow,
                 std::nullopt};
     }
+    if (targetHandoff != RunEpochHandoffState::None &&
+        targetState != ConfigurationBootstrapState::Initialized) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
     auto epoch = expected.record.storageEpoch;
     if (targetState == ConfigurationBootstrapState::Resetting) {
         if (epoch.value() == std::numeric_limits<std::uint64_t>::max()) {
@@ -183,9 +209,30 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeSuccessor(
         }
         epoch = device_platform::StorageEpoch{epoch.value() + 1U};
     }
+    std::optional<device_platform::StorageEpoch> previousEpoch;
+    std::optional<device_platform::StorageEpoch> currentEpoch;
+    if (targetHandoff != RunEpochHandoffState::None) {
+        if (expected.record.previousEpoch.has_value() &&
+            expected.record.currentEpoch.has_value()) {
+            previousEpoch = expected.record.previousEpoch;
+            currentEpoch = expected.record.currentEpoch;
+        } else if (epoch.value() > 1U) {
+            previousEpoch = device_platform::StorageEpoch{epoch.value() - 1U};
+            currentEpoch = epoch;
+        } else {
+            return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                    std::nullopt};
+        }
+    }
     const ConfigurationBootstrapRecord target{
         ConfigurationBootstrapSequence{expected.record.sequence.value() + 1U},
-        expected.record.storageFormatVersion, epoch, targetState};
+        expected.record.storageFormatVersion,
+        epoch,
+        targetState,
+        kConfigurationBootstrapSchemaVersion2,
+        targetHandoff,
+        previousEpoch,
+        currentEpoch};
     if (!isAllowedBootstrapSuccessor(expected.record, target)) {
         return {ConfigurationBootstrapWriteStatus::InvalidTransition,
                 std::nullopt};
