@@ -46,7 +46,7 @@ jobs:
       - name: PlatformIO fuer nativen Hostpfad installieren
         run: python -m pip install platformio==6.1.19
 
-      - name: Format- und Analysewerkzeuge installieren (clang 18.1.8)
+      - name: Format- und Analysewerkzeuge installieren (clang 18)
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-format-18 clang-tidy-18
@@ -55,15 +55,12 @@ jobs:
           clang-format --version
           clang-tidy --version
 
-      - name: Formatpruefung
-        run: |
-          clang-format --dry-run --Werror \
-            $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
-
-      - name: Firmware bauen und Groessenbericht erzeugen
+      - name: Gemeinsame Gateausfuehrung (Host)
         run: |
           set -o pipefail
-          python scripts/build_report.py --output build-report.md 2>&1 | tee platformio-build.log
+          export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
+          echo "PRE_READY_EXPECTED_HEAD=$PRE_READY_EXPECTED_HEAD" >> "$GITHUB_ENV"
+          bash scripts/run_pre_ready_gates.sh host
 
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
@@ -72,33 +69,6 @@ jobs:
           name: platformio-build-log
           path: platformio-build.log
           if-no-files-found: ignore
-
-      - name: Native Tests
-        run: pio test -e native
-
-      - name: Static Analysis (clang-tidy)
-        run: |
-          pio run -e native -t compiledb
-          clang-tidy -p . \
-            include/app_config.hpp \
-            lib/device_platform/src/device_platform.cpp \
-            lib/device_platform/src/virtual_time_source.cpp \
-            lib/fermentation_app/src/fermentation_application.cpp \
-            lib/fermentation_app/src/process_state_machine.cpp \
-            lib/fermentation_app/src/program_model.cpp \
-            lib/fermentation_app/src/run_commands.cpp \
-            lib/fermentation_app/src/run_snapshot.cpp \
-            lib/fermentation_app/src/standard_program_catalog.cpp \
-            src/main.cpp
-
-      - name: Architekturgrenzen pruefen
-        run: python scripts/check_architecture_boundaries.py
-
-      - name: Geheimnis- und Lokalkonfigurationspruefung
-        run: python scripts/check_secrets.py
-
-      - name: Qualitaetspruefungen gegen absichtlich fehlerhafte Faelle testen
-        run: python scripts/selftest_quality_gates.py
 
       - name: ESP-IDF installieren (v6.0.2, exakter Commit)
         run: |
@@ -140,61 +110,12 @@ jobs:
 
           "$IDF_PATH/install.sh" esp32
 
-      - name: ESP-IDF-Profile bauen (Bring-up und Release)
+      - name: Gemeinsame Gateausfuehrung (ESP-IDF)
         run: |
           set -euo pipefail
+          python "$IDF_PATH/tools/idf_tools.py" install esp-clang
           . "$IDF_PATH/export.sh"
-
-          IDF_VERSION_OUTPUT=$(idf.py --version)
-          echo "$IDF_VERSION_OUTPUT"
-          case "$IDF_VERSION_OUTPUT" in
-            *v6.0.2*) ;;
-            *)
-              echo "::error::idf.py --version meldet nicht v6.0.2: $IDF_VERSION_OUTPUT"
-              exit 1
-              ;;
-          esac
-
-          python scripts/build_esp_idf_profiles.py all
-
-      - name: ESP-IDF-Ressourcenbericht ergaenzen (finaler Bericht)
-        run: |
-          set -euo pipefail
-          . "$IDF_PATH/export.sh"
-          python scripts/build_report.py --output build-report.md --append \
-            --esp-idf-profiles bringup release \
-            --source-git-sha "$SOURCE_GIT_SHA"
-
-      - name: esp-clang installieren (Static-Analysis-Toolchain)
-        run: python "$IDF_PATH/tools/idf_tools.py" install esp-clang
-
-      - name: ESP-IDF-Static-Analysis (esp-clang, beide Profile)
-        run: |
-          set -euo pipefail
-          . "$IDF_PATH/export.sh"
-          python scripts/run_esp_idf_static_analysis.py all
-
-      - name: CI-Artefakt-Scanabdeckung pruefen
-        run: python scripts/check_ci_artifact_scan_coverage.py
-
-      - name: Secret- und Pfadpruefung generierter Artefakte
-        run: |
-          python scripts/check_secrets.py \
-            --scan-path build-report.md \
-            --scan-path build/esp32_bringup/artifact-manifest.json \
-            --scan-path build/esp32_release/artifact-manifest.json \
-            --scan-path build/esp32_bringup/build.log \
-            --scan-path build/esp32_release/build.log \
-            --scan-path build/esp32_bringup/sdkconfig \
-            --scan-path build/esp32_release/sdkconfig \
-            --scan-path build/esp32_bringup/compile_commands.json \
-            --scan-path build/esp32_release/compile_commands.json \
-            --scan-path build/esp32_bringup/size.json \
-            --scan-path build/esp32_release/size.json \
-            --scan-path build/esp32_bringup/flasher_args.json \
-            --scan-path build/esp32_release/flasher_args.json \
-            --scan-path build/esp32_bringup/esp32_fermentationsschrank.map \
-            --scan-path build/esp32_release/esp32_fermentationsschrank.map
+          bash scripts/run_pre_ready_gates.sh esp
 
       - name: Groessenbericht sichern
         if: success()

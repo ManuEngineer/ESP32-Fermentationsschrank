@@ -96,17 +96,30 @@ Ein Review prueft den vollstaendigen aktuellen Diff gegen Plan, Anforderungen,
 Architektur, Tests, Dokumentation sowie SOLID, DRY und KISS; es endet nicht bei
 den auffaelligsten Befunden.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Independent
-Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
-ausdruecklicher Owner-Anweisung; `FOLLOW-UP` und `NO-ACTION` blockieren ihn
-nicht.
+Die verbindliche Reihenfolge vor einem Ready-Wechsel lautet:
 
-GitHub-Firmware-CI laeuft nicht im Draft. Der Owner setzt nach dem Review auf
-`Ready for review`; spaetere semantische Pushes eines Nicht-Draft-PR starten CI
-erneut. Markdown-only loest keine Firmware-CI aus. Bei semantischen Aenderungen
-gilt die im Workflow definierte Fix-Verification-/Materialitaetsregel; ein
-neuer Full Review ist nur bei materieller Aenderung oder breitem neuem Diff
-erforderlich.
+```text
+Independent Review abgeschlossen
+-> OPEN_BLOCKERS=0
+-> Owner autorisiert finalen lokalen Pre-Ready-Lauf
+-> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> Owner setzt Ready for review
+-> GitHub-CI PASS
+-> Merge-Gate
+```
+
+Ein vollstaendiger lokaler Pre-Ready-Lauf erfolgt nur nach abgeschlossenem
+Independent Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+ausdruecklicher Owner-Anweisung; `FOLLOW-UP` und `NO-ACTION` blockieren ihn
+nicht. `OPEN_BLOCKERS=0` allein erlaubt weder den Lauf noch den Wechsel auf
+`Ready for review`.
+
+GitHub-Firmware-CI laeuft nicht im Draft. Erst nach
+`PRE_READY_LOCAL_GATES=PASS` setzt der Owner auf `Ready for review`; spaetere
+semantische Pushes eines Nicht-Draft-PR starten CI erneut. Markdown-only loest
+keine Firmware-CI aus. Bei semantischen Aenderungen gilt die im Workflow
+definierte Fix-Verification-/Materialitaetsregel; ein neuer Full Review ist
+nur bei materieller Aenderung oder breitem neuem Diff erforderlich.
 
 Nach CI-Fehler legt der Agent Befund und Korrekturplan vor; nur der Owner
 entscheidet ueber eine Rueckstufung auf Draft und den erneuten
