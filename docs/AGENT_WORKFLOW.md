@@ -202,13 +202,31 @@ breiten neuen Diff erzeugt. Die gleiche Regel gilt nach einer CI-Korrektur.
 
 ## 8. Convergence Gate
 
-Ein PR erhält aus Review-Sicht `GO`, sobald alle genehmigten Acceptance
-Criteria erfüllt sind, alle für diesen Stand erforderlichen Tests, Nachweise
-und Quality Gates bestanden sind und `OPEN_BLOCKERS=0` gilt.
+Ein Independent Review erhält aus Review-Sicht `GO`, sobald der Review den
+Scope, die Implementation und die fuer die Draft-/Reviewphase erforderlichen
+gezielten Tests und Nachweise bewertet hat, alle dabei relevanten Acceptance
+Criteria erfuellt sind und `OPEN_BLOCKERS=0` gilt. Der vollstaendige
+Pre-Ready-Lauf ist kein Bestandteil dieses Review-GO und keine Voraussetzung
+fuer `INDEPENDENT_REVIEW=PASS`; er ist das naechste, separat autorisierte
+Owner-Gate.
 
-Nach Erreichen dieses Zustands dürfen `FOLLOW-UP` oder `NO-ACTION` den
-aktuellen PR nicht offenhalten. Das bestehende Owner-Gate für `Ready for
-review`, Merge und Issue-Abschluss bleibt unverändert.
+Das ist noch keine Freigabe fuer `Ready for review`. Die verbindliche
+Reihenfolge lautet:
+
+```text
+Independent Review abgeschlossen
+-> OPEN_BLOCKERS=0
+-> Owner autorisiert finalen lokalen Pre-Ready-Lauf
+-> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> Owner setzt Ready for review
+-> GitHub-CI PASS
+-> Merge-Gate
+```
+
+Nach Erreichen von `OPEN_BLOCKERS=0` dürfen `FOLLOW-UP` oder `NO-ACTION` den
+autorisierten lokalen Lauf nicht blockieren. `Ready for review` bleibt aber
+bis zum bestandenen `PRE_READY_LOCAL_GATES=PASS` ausgeschlossen. Das bestehende
+Owner-Gate für Ready, Merge und Issue-Abschluss bleibt unverändert.
 
 ## 9. Modell-/Compute-Governance
 
@@ -232,17 +250,24 @@ Problemumfang; danach gilt wieder der Standard-Builder.
 ## 10. Tests und GitHub-CI
 
 Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
-Die konkreten Befehle und Werkzeuge stehen in `CI_AND_QUALITY_GATES.md`.
+Der Independent Review bewertet Scope, Implementation und diese gezielten
+Nachweise; der vollstaendige Pre-Ready-Lauf ist dafuer nicht erforderlich.
+Zeitpunkt, Voraussetzungen und Toolvertraege stehen in
+`CI_AND_QUALITY_GATES.md`; die vollstaendigen ausfuehrbaren Gatebefehle und
+die clang-tidy-Dateiliste stehen ausschliesslich im dort referenzierten
+`scripts/run_pre_ready_gates.sh`.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Independent
-Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+Ein vollstaendiger lokaler Pre-Ready-Lauf erfolgt nur nach abgeschlossenem
+Independent Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
 ausdruecklicher Owner-Anweisung. Klassifizierte `FOLLOW-UP` und `NO-ACTION`
-blockieren den Lauf nicht.
+blockieren den Lauf nicht. Der Lauf verwendet die beiden Phasen des gemeinsamen
+versionierten Runners aus `CI_AND_QUALITY_GATES.md`; erst beide Phasen ergeben
+`PRE_READY_LOCAL_GATES=PASS`.
 
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
-den PR nach dem Review auf `Ready for review`; dadurch startet der vollstaendige
-CI-Lauf. Spaetere semantische Pushes auf einen nicht als Draft markierten PR
-starten CI erneut.
+den PR erst nach `PRE_READY_LOCAL_GATES=PASS` auf `Ready for review`; dadurch
+startet der vollstaendige CI-Lauf. Spaetere semantische Pushes auf einen nicht
+als Draft markierten PR starten CI erneut.
 
 Markdown-only- und Kommentaraenderungen bleiben von der Firmware-CI ausgenommen.
 Fuer den Reviewnachweis gilt bei semantischen Aenderungen die
