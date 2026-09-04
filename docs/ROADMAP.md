@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-03
+Stand: 2026-09-04
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -38,6 +38,11 @@ nicht kopiert, sondern verlinkt.
 | 8 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
 | 9 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 10 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
+
+## Parallele Governance-Arbeit
+
+- Issue #145 – Builder-/Reviewer-, Convergence- und Compute-Governance: `PLAN_APPROVED=YES`; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_REVIEW=OPEN_BLOCKERS`; `PRODUCTION_CODE_CHANGE=NO`. Nächstes Gate ist die Independent Fix Verification der Review-Blocker, anschließend das reguläre Owner-/Ready-Gate.
+- Issue #150 – Pre-Ready-CI-Parity-Gate vor `Ready for review`: `ISSUE150_STATUS=PLANNING`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`. Nächstes Gate ist die Ownerfreigabe des versionierten Plans; danach folgt ein eigener Governance-/Build-Tooling-PR.
 
 ## Naechste fachliche Arbeit
 

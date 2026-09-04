@@ -1,6 +1,6 @@
-# Versionierte Static-Analysis-Konfiguration. Gepruefte Werkzeugversion:
-# clang-tidy 18.1.8 (siehe .github/workflows/build.yml und
-# docs/CI_AND_QUALITY_GATES.md).
+# Versionierte Static-Analysis-Konfiguration. Gepruefte Werkzeuglinie:
+# clang-tidy-18 (Major 18; der Patchlevel ist kein Projektvertrag; siehe
+# .github/workflows/build.yml und docs/CI_AND_QUALITY_GATES.md).
 #
 # Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/) ueber
 # die `native`-Kompilierungsdatenbank sowie, seit Issue #74 Commit 4, die
