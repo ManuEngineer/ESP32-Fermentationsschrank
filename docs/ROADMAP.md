@@ -28,7 +28,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #152 – owning Vertrag manueller Zeit-/Temperaturlauf | `ISSUE152_STATUS=PLANNING`; `PR153=OPEN/DRAFT`; `PR153_HEAD=SEE_CURRENT_SESSION_HANDOVER`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `PLAN_FIRST=YES`; `BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `IMPLEMENTATION=NOT_STARTED`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` | Enge Plan-Fix-Verification des korrigierten #152-Plans und Ownerfreigabe des exakten Plan-Commits |
+| 0 | Issue #152 – owning Vertrag manueller Zeit-/Temperaturlauf | `ISSUE152_STATUS=IMPLEMENTATION_DRAFT`; `PR153=OPEN/DRAFT`; `PR153_HEAD=78c3b4bfffca81dcb6ab4bd76216fd9c112b4999`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `PLAN_APPROVED=YES`; `PLAN_FIRST=YES`; `BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `IMPLEMENTATION=COMPLETED_PENDING_INDEPENDENT_REVIEW`; `NATIVE_TESTS=PASS_1142_OF_1142`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` | Unabhaengiger vollstaendiger Review auf dem exakten Implementierungs-HEAD; danach Owner-Gates |
 | 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=YES_FOR_MANUAL_TIMED_SCOPE`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25- und #144-Vertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | #152 owning Vertrag planen, reviewen, ownerfreigeben, umsetzen und mergen; danach #26-Plan/Provenienz auf den exakten Merge-HEAD synchronisieren |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
@@ -57,8 +57,10 @@ abgeschlossenen #144-Vertrag nicht mehr blockiert, bleibt aber fuer diesen
 konkreten R1-Bedienpfad vom #152-Vertrag abhaengig; seine nachgelagerte
 Implementation ist ein spaeterer Schritt nach Planfreigabe.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
-`ISSUE152_STATUS=PLANNING`, `IMPLEMENTATION=NOT_STARTED`,
-`BLOCKED_BY_ISSUE152=YES_FOR_MANUAL_TIMED_SCOPE` und `ACTUATOR_RELEASE=NO`
+`ISSUE152_STATUS=IMPLEMENTATION_DRAFT`,
+`IMPLEMENTATION=COMPLETED_PENDING_INDEPENDENT_REVIEW`,
+`PR153_HEAD=78c3b4bfffca81dcb6ab4bd76216fd9c112b4999`,
+`BLOCKED_BY_ISSUE152=YES_UNTIL_MERGE` und `ACTUATOR_RELEASE=NO`
 gelten ab diesem Roadmap-Commit.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
