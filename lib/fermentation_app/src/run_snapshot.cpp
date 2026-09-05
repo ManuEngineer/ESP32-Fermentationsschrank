@@ -202,7 +202,9 @@ bool validMonotonicEpoch(
 
 bool validTargetTemperature(const RunProgramSnapshot& snapshot,
                             std::size_t stageIndex, double target) {
-    if (stageIndex >= sourceStageCount(snapshot.source)) return false;
+    if (stageIndex >= sourceStageCount(snapshot.source)) {
+        return false;
+    }
     if (const auto* program = storedProgram(snapshot.source)) {
         ProgramDocument candidate = *program;
         candidate.program.fermentationStages[stageIndex]
@@ -217,8 +219,12 @@ bool validTargetTemperature(const RunProgramSnapshot& snapshot,
 bool validRemainingDuration(const RunProgramSnapshot& snapshot,
                             std::size_t stageIndex,
                             std::uint32_t remainingDurationMinutes) {
-    if (stageIndex >= sourceStageCount(snapshot.source)) return false;
-    if (remainingDurationMinutes == 0U) return true;
+    if (stageIndex >= sourceStageCount(snapshot.source)) {
+        return false;
+    }
+    if (remainingDurationMinutes == 0U) {
+        return true;
+    }
     if (const auto* program = storedProgram(snapshot.source)) {
         ProgramDocument candidate = *program;
         candidate.program.fermentationStages[stageIndex].durationMinutes =
@@ -277,7 +283,7 @@ bool makeInitialEffectiveRunValues(
             return false;
         }
     } else {
-        if (!manualTimedSource(source) ||
+        if (manualTimedSource(source) == nullptr ||
             sourceKind != ProgramSourceKind::ManualTimed ||
             sourceProgramRevision.has_value() ||
             !validManualTimedRunSourceImpl(*manualTimedSource(source))) {
@@ -300,11 +306,17 @@ bool makeInitialEffectiveRunValues(
 }  // namespace
 
 ProgramSourceKind programSourceKind(const ProgramRunSource& source) noexcept {
-    return std::holds_alternative<ManualTimedRunSource>(source)
-               ? ProgramSourceKind::ManualTimed
-               : (std::get<ProgramDocument>(source).program.factoryCatalogEntry
-                      ? ProgramSourceKind::FactoryCatalog
-                      : ProgramSourceKind::UserProgram);
+    if (std::get_if<ManualTimedRunSource>(&source) != nullptr) {
+        return ProgramSourceKind::ManualTimed;
+    }
+    const auto* program = std::get_if<ProgramDocument>(&source);
+    if (program == nullptr) {
+        return ProgramSourceKind::UserProgram;
+    }
+    if (program->program.factoryCatalogEntry) {
+        return ProgramSourceKind::FactoryCatalog;
+    }
+    return ProgramSourceKind::UserProgram;
 }
 
 const ProgramDocument* storedProgram(const ProgramRunSource& source) noexcept {

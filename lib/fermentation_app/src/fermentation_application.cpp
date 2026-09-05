@@ -254,7 +254,7 @@ FermentationApplication::prepareStartManualTimed(
     request.envelope =
         FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
     request.runId = *runId;
-    request.program = std::move(source);
+    request.program = source;
     request.sourceProgramRevision.reset();
     request.sensorMode = values.sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
