@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-04
+Stand: 2026-09-05
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -22,13 +22,13 @@ nicht kopiert, sondern verlinkt.
 | Issue #25 / PR #142 | `ISSUE25_STATUS=CLOSED_COMPLETED`; `PR142=MERGED`; `PR142_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f`; `PR142_MERGE_COMMIT=87bd668e45ab71a20ceb24ce65fcb5d1440725a8`; `OWNER_FULL_REVIEW=PASS`; `GITHUB_CI_RUN=1015`; `GITHUB_CI=PASS`; `ACTUATOR_RELEASE=NO` |
 | Issue #145 / PR #146 | `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `PR146_SOURCE_HEAD=790be691150ddceeeedec8394e1bc66bcad90c57`; `PR146_MERGE_COMMIT=f5aca945c3009408c091a8f03b000e8309af6bcf`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO` |
 | Issue #148 / PR #149 | `ISSUE148_STATUS=CLOSED_COMPLETED`; `PR149=MERGED`; `PR149_SOURCE_HEAD=f5aca945c3009408c091a8f03b000e8309af6bcf`; `PR149_MERGE_SHA=e84dfa8abf220220a33e6e21b95dbd0d7bd9ac90`; `MAIN_RESTORED_AS_NORMAL_DEVELOPMENT_BASE=YES` |
+| Issue #144 / PR #147 | `ISSUE144_STATUS=CLOSED_COMPLETED`; `PR147=MERGED`; `PR147_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb`; `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `ACTUATOR_RELEASE=NO` |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #144 – Run-Identity und neutrale Run-Provenienz vor Issue #26 | `ISSUE144_STATUS=IMPLEMENTED_PENDING_OWNER_REVIEW`; `BLOCKS_ISSUE26=YES`; `IMPLEMENTATION=IMPLEMENTED_PENDING_OWNER_REVIEW`; `ACTUATOR_RELEASE=NO` | Exakten Implementierungs-HEAD ownerreviewen und mergen; danach #26 auf den exakten Merge-HEAD synchronisieren |
-| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=YES`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem vorgelagerten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Merge-HEAD von #144 abwarten, den #26-Plan auf diese Provenienz aktualisieren und erst danach für den exakten Plan-Commit anhalten |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `PLAN_REVIEW_BLOCKERS_CORRECTED=YES`; `PLAN_COMMIT=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem gemergten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Exakten aktualisierten #26-Plan-Commit ownerfreigeben; erst danach die #26-Implementation beginnen |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -49,13 +49,19 @@ nicht kopiert, sondern verlinkt.
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
 Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
-mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit ist zunaechst Issue #144 fuer
-den Run-Identity-/Provenienzvertrag. Issue #26 bleibt bis zum Merge dieses
-Pflichtvorgängers ausdrücklich blockiert; seine nachgelagerte Implementation
-ist ein späterer Schritt nach Planfreigabe. `ISSUE144_STATUS=IMPLEMENTED_PENDING_OWNER_REVIEW`,
-`BLOCKS_ISSUE26=YES`, `ISSUE26_STATUS=PLANNING`,
-`BLOCKED_BY_ISSUE144=YES`, `IMPLEMENTATION=IMPLEMENTED_PENDING_OWNER_REVIEW` und
-`ACTUATOR_RELEASE=NO` gelten ab diesem Roadmap-Commit.
+mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
+ist nun die Korrektur der offenen Issue-#26-Planreview-Blocker auf dem bereits
+provenancierten Merge-HEAD des abgeschlossenen Vorgängers #144. Issue #26 ist
+damit planungsbereit und unblocked; seine Implementation bleibt bis zur
+Freigabe des exakten aktualisierten Plan-Commits ungestartet. Der weiterhin
+verbindliche manuelle Zeit-/Temperaturlauf bleibt eine R1-Abhängigkeit des
+separaten Issue #152 und wird nicht in #26 implementiert. Der korrigierte
+Plan-Commit ist `c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0`.
+`ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
+`PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
+`ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`, `BLOCKED_BY_ISSUE144=NO`,
+`IMPLEMENTATION=NOT_STARTED` und `ACTUATOR_RELEASE=NO` gelten ab diesem
+Roadmap-Commit.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
@@ -153,9 +159,9 @@ ist geschlossene historische Persistenzprovenienz.
 - #29 und #90 bilden die erste reale Plattformbasis; danach folgen #144, #26
   und #31 für die echte Device Shell, App und Bedienung auf dem gemergten
   #25-Vertrag.
-- #144 ist ein verpflichtender vorgelagerter Run-Identity-/Provenienzscope;
-  #26 bleibt bis zu seinem Merge blockiert und verbraucht danach nur den
-  garantierten Vertrag.
+- #144 / PR #147 sind abgeschlossen und gemergt; #26 ist für die
+  Planaktualisierung und anschliessende Ownerfreigabe unblocked und verbraucht
+  danach nur den garantierten Vertrag.
 - #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
   integriert. Low-Level-Hardwaretests bleiben schmal und erzeugen keine
   separate Wegwerf-Testanwendung.
@@ -178,9 +184,12 @@ ist geschlossene historische Persistenzprovenienz.
 
 ## Blocker und spaetere Gates
 
-- Issue #144 ist der verpflichtende vorgelagerte Run-Identity-/Provenienzscope
-  für #26. Bis zu seinem Merge bleibt #26 blockiert; danach wird der #26-Plan
-  auf den exakten Merge-HEAD aktualisiert.
+- Issue #144 / PR #147 sind abgeschlossen und gemergt. Der #26-Plan wird auf
+  dem exakten Merge-HEAD um die offenen Planreview-Korrekturen ergänzt; bis zur
+  Ownerfreigabe dieses Plan-Commits bleibt nur die Implementation angehalten.
+  Der manuelle Zeit-/Temperaturlauf bleibt bis zum owning Vertrag aus Issue
+  #152 eine reale R1-Abhängigkeit und ist in #26 nur `Unavailable`. Die
+  aktuelle Planprovenienz ist `PLAN_COMMIT=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0`.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
