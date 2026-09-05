@@ -201,7 +201,8 @@ Snapshot erweitert:
   - Vorheizen und optionale maximale Product-Wartezeit;
   - Zielband, Qualifikationsdauer und maximale Zielerreichungszeit;
   - `CompletionMode`, Cooling-Ziel und optionale Cooling-Haltezeit;
-  - den bestehenden Sensorselektionskontext für den manuellen Pfad;
+  - keinen frei konfigurierbaren Sensor-Policywert; der bestehende feste
+    manuelle Sensorselektionskontext wird source-aware abgeleitet;
 - `RunProgramSnapshot` trägt genau eine dieser Quellen und prüft die
   Übereinstimmung zwischen Source-Variante und `ProgramSourceKind`.
 
@@ -221,8 +222,9 @@ struct ManualTimedRunSource {
     TargetQualification targetQualification;
     std::optional<std::uint32_t> maximumTargetReachMinutes;
     ProgramCompletion completion;
-    SensorPreference sensorPreference;
-    ProductSensorFailure productSensorFailure;
+    // Manual sensor policy is derived, not a user/configuration field:
+    // ProductIfAvailableElseAir, WaitForUser, ManualReturnToProduct,
+    // no fallback delay.
 };
 
 using ProgramRunSource =
@@ -243,6 +245,14 @@ weiterhin: ProgramDocument und nicht-null `RunProgramSourceRevision`. Für
 Kombination wird vor Start, Restore und Encode abgelehnt. Der
 `ManualTimedRunSource` enthält keine `runId`; diese bleibt ausschließlich im
 umgebenden Run-/Command-Vertrag.
+
+Der source-aware Sensor-Kontext-Accessor liefert für `ManualTimed` stets den
+kanonischen festen manuellen Vertrag
+`ProductIfAvailableElseAir` / `WaitForUser` / `ManualReturnToProduct` ohne
+Fallback-Delay. Diese Werte sind keine neuen Benutzerparameter, keine zweite
+Policy und keine zusätzliche persistierte Quelle. Der Accessor wird sowohl
+für die Startauflösung als auch für die späteren manuellen Recheck-/Continue-
+Entscheidungen verwendet.
 
 Die vorhandene `ActiveRun`-Revision- und Adjustment-Logik wird durch schmale
 Source-Accessors wiederverwendet: initiale Ziel-/Dauerwerte, Qualifikation,
@@ -302,18 +312,51 @@ wiederverwendet, nicht eine neue Policy erfunden:
 - Air- und Cooling-Sensor bleiben für jeden Start Pflicht;
 - die angeforderte Air-/Product-Rolle wird nicht aus UI-Werten als Safety-
   Evidenz abgeleitet;
-- ein produktgeführter Start verlangt gültige Produktevidenz; bei fehlender
-  Produktevidenz bleibt die bestehende manuelle `UserDecisionRequired`-/
-  `Blocked`-Semantik erhalten und es entsteht keine Aktorfreigabe;
-- ein manueller Start erhält keinen stillen Product-zu-Air-Fallback;
-- der bestehende Sensorselektionskontext (`WaitForUser` und
-  `ManualReturnToProduct` für den manuellen Pfad) wird aus der typisierten
-  Source gelesen und von der automatischen sowie manuellen
-  Sensorselektionslogik gemeinsam verwendet;
+- gespeicherte Factory-/User-Programme behalten unverändert die bestehende
+  `resolveProgramStartSensorMode()`-Semantik;
+- `ManualTimed` erhält innerhalb derselben bestehenden
+  `decideProgramStart()`-Auflösung einen source-aware Zweig: angefordert
+  `Air` wird effektiv `Air`, angefordert `Product` wird effektiv `Product`;
+- für `ManualTimed` wird bei angefordertem `Product` niemals die generische
+  `ProductIfAvailableElseAir`-Substitution verwendet und der Start wird nicht
+  wegen der Programmpraeferenz vorab abgelehnt. Stattdessen wird die bereits
+  bestehende `startSensorSelectionOutcome()`-Logik mit
+  `substitutedFromProduct = false` aufgerufen. Bei aktuell ungültigem Product
+  entsteht damit die kanonische `UserDecisionRequired`-/`Blocked`-Semantik,
+  ohne Product-zu-Air-Fallback und ohne Aktorfreigabe;
+- der feste source-aware Kontext (`ProductIfAvailableElseAir`, `WaitForUser`,
+  `ManualReturnToProduct`, kein Fallback-Delay) wird über den gemeinsamen
+  Accessor an die automatische und manuelle Recheck-/Continue-Logik gegeben;
 - frische Safety-/Sensor-/Planner-Evidenz kommt weiterhin ausschließlich von
   der owning Application-/Orchestrator-Grenze.
 
-### 4.4 Decision-/Apply-Grenze und Identität
+### 4.4 Source-aware StartSummary
+
+Der bestehende Startentscheid muss auch für `ManualTimed` eine wahrheitsgemäße
+Zusammenfassung vor der Bestätigung liefern. Der bisher zwingende
+`StartSummary::programName`-String wird deshalb source-aware und darf keinen
+leeren Sentinel oder Fake-Namen verwenden:
+
+```cpp
+struct StartSummary {
+    std::string runId;
+    ProgramSourceKind sourceKind;
+    std::optional<std::string> programName;
+    // existing target, duration, sensor, preheat, completion and kind fields
+};
+```
+
+Für `FactoryCatalog` und `UserProgram` enthält `programName` weiterhin den
+echten Namen aus dem `ProgramDocument`. Für `ManualTimed` gilt
+`sourceKind == ProgramSourceKind::ManualTimed` und
+`programName == std::nullopt`; die spätere UI-/Web-Darstellung verwendet den
+bereits vorhandenen lokalisierten TextKey für „manueller
+Zeit-/Temperaturlauf“. Der sichtbare Text wird nicht in der Fachlogik
+hartcodiert und nicht persistiert. Die Summary ist bereits bei
+`DecisionOnly` vor der Bestätigung vorhanden; Confirmation-Replay bewahrt
+SourceKind, optionalen Namen und die vorbereitete Identität unverändert.
+
+### 4.5 Decision-/Apply-Grenze und Identität
 
 Der unveränderte Handoff bleibt:
 
@@ -481,6 +524,13 @@ Testframework und kein Test-Dispatcher eingeführt.
 
 - gültiger Air-geführter ManualTimed-Start;
 - gültiger Product-geführter Start mit erforderlicher Produktevidenz;
+- ManualTimed + Air startet über den bestehenden ProgramStart-Pfad;
+- ManualTimed + Product mit gültiger Produktevidenz bleibt Product;
+- ManualTimed + Product mit ungültigem Product erzeugt
+  `UserDecisionRequired`/`Blocked`, ohne Product-zu-Air-Fallback und ohne
+  Aktorfreigabe;
+- spätere Recheck-, `ContinueWithAir`- und `ReturnToProduct`-Aktionen folgen
+  der bestehenden manuellen #21-Semantik;
 - ungültige Zieltemperatur, 0/ungültige Dauer, ungültige Qualifikations- oder
   Coolingwerte;
 - fehlende trusted UTC blockiert vor Candidate-Apply und vor RAM-/FSM-Mutation;
@@ -496,6 +546,11 @@ Testframework und kein Test-Dispatcher eingeführt.
 - Confirmation-Replay mit derselben vorbereiteten Identität;
 - Duplicate ohne zweite Mutation oder zweite Nebenwirkung;
 - UI-/Anwendungswerte können keine IDs oder Evidence einschleusen.
+- Stored ProgramStart behält `sourceKind` und den echten Programmnamen;
+- ManualTimed-Startsummary enthält `sourceKind=ManualTimed` und keinen
+  erfundenen Programmnamen;
+- die Summary bleibt vor der Bestätigung verfügbar und Confirmation-Replay
+  verändert weder Summary-Quelle noch Identität.
 
 ### Persistenz/Codec/Recovery
 
