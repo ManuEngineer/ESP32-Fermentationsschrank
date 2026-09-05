@@ -444,7 +444,6 @@ CommandDecision startDecision(
                         std::nullopt};
     request.runId = "persisted-run";
     request.program = program.has_value() ? *program : runnableProgram();
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = sensorMode;
@@ -452,6 +451,43 @@ CommandDecision startDecision(
     request.airSensorValid = true;
     request.coolingSensorValid = true;
     request.productSensorValid = true;
+    return decideProgramStart(state, request);
+}
+
+ManualTimedRunSource manualTimedRecoverySource() {
+    ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = 30.0;
+    source.stage.durationMinutes = 60U;
+    source.preheatEnabled = true;
+    source.maximumProductWaitMinutes = 30U;
+    source.targetQualification.bandCelsius = 0.5;
+    source.targetQualification.durationMinutes = 10U;
+    source.maximumTargetReachMinutes = 180U;
+    source.completion.mode = CompletionMode::FinishWithoutCooling;
+    return source;
+}
+
+CommandDecision manualTimedRecoveryStartDecision(const RunCommandState& state,
+                                                 CommandId id,
+                                                 bool productSensorValid) {
+    ProgramStartRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "manual-timed-recovery";
+    request.program = manualTimedRecoverySource();
+    request.sourceProgramRevision.reset();
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = productSensorValid;
     return decideProgramStart(state, request);
 }
 
@@ -2899,7 +2935,7 @@ TargetQualificationInput programTargetQualificationInput(
     const RunCommandState& state, std::uint64_t timestamp) {
     const auto values = state.activeProgramRun->effectiveValues();
     const auto& program =
-        state.activeProgramRun->snapshot().sourceProgram.program;
+        storedProgram(state.activeProgramRun->snapshot().source)->program;
     TargetQualificationInput input;
     input.phase = QualificationPhase::Target;
     input.sampleTimestampMonotonicMillis = timestamp;
@@ -4815,6 +4851,29 @@ RunCommandState readyActiveRunWithSensorSelection(
     return state;
 }
 
+RunCommandState readyActiveManualTimedRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId,
+    bool productSensorValid) {
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state,
+                                manualTimedRecoveryStartDecision(
+                                    state, startId, productSensorValid),
+                                trustedCheckpointTime(100U))
+                .status));
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::ManualTimed),
+        static_cast<int>(state.activeProgramRun->snapshot().sourceKind));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(state.processState.state));
+    return state;
+}
+
 RunCommandState persistedPreheatingRun(RunPersistenceCoordinator& coordinator,
                                        CommandId startId) {
     RunCommandState state;
@@ -5892,6 +5951,67 @@ void test_activate_r1_eligible_resumes_preheating_cooling_and_manual_holding() {
         TEST_ASSERT_EQUAL_UINT64(
             700'000U, rebootedLoad.snapshot->processState.stateEnteredAtMillis);
     }
+}
+
+void test_manual_timed_restore_resume_uses_fail_closed_sensor_gate() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    const auto seeded =
+        readyActiveManualTimedRunWithSensorSelection(seed, 2152U, false);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(seeded.sensorSelectionRuntime.permission));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::ManualTimed),
+        static_cast<int>(restored->activeProgramRun->snapshot().sourceKind));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(restored->sensorSelectionRuntime.permission));
+
+    auto current = *restored;
+    const auto invalidProduct = recoveryPlausibility(700'000U, false);
+    const auto blocked = afterBoot.activateR1EligibleRun(
+        current, trustedCheckpointTime(700'000U), &invalidProduct);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(blocked.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+        static_cast<int>(afterBoot.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(current.sensorSelectionRuntime.permission));
+
+    const auto freshProduct = recoveryPlausibility(700'100U, true);
+    const auto resumed = afterBoot.activateR1EligibleRun(
+        current, trustedCheckpointTime(700'100U), &freshProduct);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(resumed.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(afterBoot.state()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(current.sensorSelectionRuntime.permission));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                          static_cast<int>(*current.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::ManualTimed),
+        static_cast<int>(current.activeProgramRun->snapshot().sourceKind));
 }
 
 void test_activate_r1_eligible_rejects_other_phases_and_missing_sensor_context() {
@@ -8401,7 +8521,6 @@ CommandDecision substitutedStartDecision(const RunCommandState& state,
                         std::nullopt};
     request.runId = "persisted-run";
     request.program = program;
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;
@@ -10326,6 +10445,7 @@ int main(int, char**) {
     RUN_TEST(test_activate_r1_eligible_terminal_branches_are_ram_only);
     RUN_TEST(
         test_activate_r1_eligible_resumes_preheating_cooling_and_manual_holding);
+    RUN_TEST(test_manual_timed_restore_resume_uses_fail_closed_sensor_gate);
     RUN_TEST(
         test_activate_r1_eligible_rejects_other_phases_and_missing_sensor_context);
     RUN_TEST(test_activate_r1_eligible_write_failure_leaves_current_unchanged);

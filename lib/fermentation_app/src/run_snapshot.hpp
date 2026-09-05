@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 #include "program_model.hpp"
 #include "storage_types.hpp"
@@ -23,6 +24,7 @@ inline constexpr std::size_t kMaximumRunRevisions = 32U;
 enum class ProgramSourceKind : std::uint8_t {
     FactoryCatalog,
     UserProgram,
+    ManualTimed,
 };
 
 enum class RunChangeSource : std::uint8_t {
@@ -46,11 +48,34 @@ struct EffectiveRunValues {
     std::uint32_t remainingDurationMinutes{0U};
 };
 
-struct RunProgramSnapshot {
-    ProgramDocument sourceProgram;
-    ProgramSourceKind sourceKind{ProgramSourceKind::UserProgram};
-    RunProgramSourceRevision sourceProgramRevision;
+// A ManualTimed source is a concrete, immutable run source. It deliberately
+// carries no catalog identity, display name, sensor policy or run identity.
+// The fixed manual sensor policy is derived at the command boundary.
+struct ManualTimedRunSource {
+    FermentationStage stage;
+    bool preheatEnabled{false};
+    std::optional<std::uint32_t> maximumProductWaitMinutes;
+    TargetQualification targetQualification;
+    std::optional<std::uint32_t> maximumTargetReachMinutes;
+    ProgramCompletion completion;
 };
+
+using ProgramRunSource = std::variant<ProgramDocument, ManualTimedRunSource>;
+
+struct RunProgramSnapshot {
+    ProgramRunSource source;
+    ProgramSourceKind sourceKind{ProgramSourceKind::UserProgram};
+    std::optional<RunProgramSourceRevision> sourceProgramRevision;
+};
+
+[[nodiscard]] ProgramSourceKind programSourceKind(
+    const ProgramRunSource& source) noexcept;
+[[nodiscard]] const ProgramDocument* storedProgram(
+    const ProgramRunSource& source) noexcept;
+[[nodiscard]] const ManualTimedRunSource* manualTimedSource(
+    const ProgramRunSource& source) noexcept;
+[[nodiscard]] bool validateManualTimedRunSource(
+    const ManualTimedRunSource& source) noexcept;
 
 // Phasenkontext einer Laufanpassung, absichtlich unabhaengig von
 // `ProcessState` (siehe `process_state_machine.hpp`): `ActiveRun` kennt die
@@ -153,6 +178,10 @@ class ActiveRun {
     // stack-schweren ActiveRun-Temporary.
     ActiveRun(RestoreConstructionTag restoreTag, RunProgramSnapshot snapshot,
               EffectiveRunValues initialValues);
+
+    [[nodiscard]] static std::optional<ActiveRun> start(
+        const ProgramRunSource& source,
+        std::optional<RunProgramSourceRevision> sourceProgramRevision);
 
     [[nodiscard]] static std::optional<ActiveRun> start(
         const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,

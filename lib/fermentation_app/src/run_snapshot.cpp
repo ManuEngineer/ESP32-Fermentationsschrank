@@ -1,6 +1,9 @@
 #include "run_snapshot.hpp"
 
+#include <cmath>
 #include <utility>
+
+#include "program_limits.hpp"
 
 namespace fermentation {
 namespace {
@@ -9,6 +12,7 @@ bool validProgramSourceKind(ProgramSourceKind sourceKind) {
     switch (sourceKind) {
         case ProgramSourceKind::FactoryCatalog:
         case ProgramSourceKind::UserProgram:
+        case ProgramSourceKind::ManualTimed:
             return true;
     }
     return false;
@@ -23,6 +27,82 @@ bool sourceMatchesProgram(const ProgramDocument& program,
         return program.program.builtIn && program.program.factoryCatalogEntry;
     }
     return !program.program.builtIn && !program.program.factoryCatalogEntry;
+}
+
+bool validCompletion(const ProgramCompletion& completion) {
+    switch (completion.mode) {
+        case CompletionMode::FinishWithoutCooling:
+            return !completion.coolingTargetCelsius.has_value() &&
+                   !completion.holdDurationMinutes.has_value();
+        case CompletionMode::CoolThenFinish:
+        case CompletionMode::CoolAndHoldUntilManualStop:
+            return completion.coolingTargetCelsius.has_value() &&
+                   std::isfinite(*completion.coolingTargetCelsius) &&
+                   *completion.coolingTargetCelsius >=
+                       program_limits::kMinimumCoolingTargetCelsius &&
+                   *completion.coolingTargetCelsius <=
+                       program_limits::kMaximumCoolingTargetCelsius &&
+                   !completion.holdDurationMinutes.has_value();
+        case CompletionMode::CoolAndHoldForDuration:
+            return completion.coolingTargetCelsius.has_value() &&
+                   std::isfinite(*completion.coolingTargetCelsius) &&
+                   *completion.coolingTargetCelsius >=
+                       program_limits::kMinimumCoolingTargetCelsius &&
+                   *completion.coolingTargetCelsius <=
+                       program_limits::kMaximumCoolingTargetCelsius &&
+                   completion.holdDurationMinutes.has_value() &&
+                   *completion.holdDurationMinutes >=
+                       program_limits::kMinimumHoldDurationMinutes;
+    }
+    return false;
+}
+
+bool validManualTimedRunSourceImpl(const ManualTimedRunSource& source) {
+    const bool validStage =
+        source.stage.targetTemperatureCelsius.has_value() &&
+        std::isfinite(*source.stage.targetTemperatureCelsius) &&
+        *source.stage.targetTemperatureCelsius >=
+            program_limits::kMinimumFermentationTemperatureCelsius &&
+        *source.stage.targetTemperatureCelsius <=
+            program_limits::kMaximumFermentationTemperatureCelsius &&
+        source.stage.durationMinutes.has_value() &&
+        *source.stage.durationMinutes >=
+            program_limits::kMinimumFermentationDurationMinutes &&
+        *source.stage.durationMinutes <=
+            program_limits::kMaximumFermentationDurationMinutes;
+    const bool validQualification =
+        source.targetQualification.bandCelsius.has_value() &&
+        std::isfinite(*source.targetQualification.bandCelsius) &&
+        *source.targetQualification.bandCelsius >=
+            program_limits::kMinimumQualificationBandCelsius &&
+        *source.targetQualification.bandCelsius <=
+            program_limits::kMaximumQualificationBandCelsius &&
+        source.targetQualification.durationMinutes.has_value() &&
+        *source.targetQualification.durationMinutes >=
+            program_limits::kMinimumQualificationDurationMinutes;
+    const bool validReach = source.maximumTargetReachMinutes.has_value() &&
+                            *source.maximumTargetReachMinutes >=
+                                program_limits::kMinimumTargetReachMinutes;
+    const bool waitMatchesPreheat =
+        source.preheatEnabled == source.maximumProductWaitMinutes.has_value();
+    const bool validWait = !source.maximumProductWaitMinutes.has_value() ||
+                           (*source.maximumProductWaitMinutes >=
+                                program_limits::kMinimumProductWaitMinutes &&
+                            *source.maximumProductWaitMinutes <=
+                                program_limits::kMaximumProductWaitMinutes);
+    const bool validHold = !source.completion.holdDurationMinutes.has_value() ||
+                           *source.completion.holdDurationMinutes >=
+                               program_limits::kMinimumHoldDurationMinutes;
+    return validStage && validQualification && validReach &&
+           waitMatchesPreheat && validWait && validHold &&
+           validCompletion(source.completion);
+}
+
+std::size_t sourceStageCount(const ProgramRunSource& source) {
+    if (const auto* program = std::get_if<ProgramDocument>(&source)) {
+        return program->program.fermentationStages.size();
+    }
+    return std::holds_alternative<ManualTimedRunSource>(source) ? 1U : 0U;
 }
 
 bool validChangeSource(RunChangeSource source) {
@@ -122,30 +202,38 @@ bool validMonotonicEpoch(
 
 bool validTargetTemperature(const RunProgramSnapshot& snapshot,
                             std::size_t stageIndex, double target) {
-    if (stageIndex >=
-        snapshot.sourceProgram.program.fermentationStages.size()) {
+    if (stageIndex >= sourceStageCount(snapshot.source)) {
         return false;
     }
-    ProgramDocument candidate = snapshot.sourceProgram;
-    candidate.program.fermentationStages[stageIndex].targetTemperatureCelsius =
-        target;
-    return validateProgram(candidate, ValidationPurpose::Runnable).valid();
+    if (const auto* program = storedProgram(snapshot.source)) {
+        ProgramDocument candidate = *program;
+        candidate.program.fermentationStages[stageIndex]
+            .targetTemperatureCelsius = target;
+        return validateProgram(candidate, ValidationPurpose::Runnable).valid();
+    }
+    auto candidate = *manualTimedSource(snapshot.source);
+    candidate.stage.targetTemperatureCelsius = target;
+    return validManualTimedRunSourceImpl(candidate);
 }
 
 bool validRemainingDuration(const RunProgramSnapshot& snapshot,
                             std::size_t stageIndex,
                             std::uint32_t remainingDurationMinutes) {
-    if (stageIndex >=
-        snapshot.sourceProgram.program.fermentationStages.size()) {
+    if (stageIndex >= sourceStageCount(snapshot.source)) {
         return false;
     }
     if (remainingDurationMinutes == 0U) {
         return true;
     }
-    ProgramDocument candidate = snapshot.sourceProgram;
-    candidate.program.fermentationStages[stageIndex].durationMinutes =
-        remainingDurationMinutes;
-    return validateProgram(candidate, ValidationPurpose::Runnable).valid();
+    if (const auto* program = storedProgram(snapshot.source)) {
+        ProgramDocument candidate = *program;
+        candidate.program.fermentationStages[stageIndex].durationMinutes =
+            remainingDurationMinutes;
+        return validateProgram(candidate, ValidationPurpose::Runnable).valid();
+    }
+    auto candidate = *manualTimedSource(snapshot.source);
+    candidate.stage.durationMinutes = remainingDurationMinutes;
+    return validManualTimedRunSourceImpl(candidate);
 }
 
 // Verlangt eine eindeutige, phasenkorrekte Entsprechung zwischen
@@ -182,15 +270,30 @@ bool validRevisionMetadata(const RunRevision& revision) {
 }
 
 bool makeInitialEffectiveRunValues(
-    const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
-    RunProgramSourceRevision sourceProgramRevision,
+    const ProgramRunSource& source,
+    std::optional<RunProgramSourceRevision> sourceProgramRevision,
     EffectiveRunValues& destination) {
-    if (sourceProgramRevision.value() == 0U ||
-        !sourceMatchesProgram(sourceProgram, sourceKind) ||
-        !validateProgram(sourceProgram, ValidationPurpose::Runnable).valid()) {
-        return false;
+    const auto sourceKind = programSourceKind(source);
+    if (const auto* sourceProgram = storedProgram(source)) {
+        if (!sourceProgramRevision.has_value() ||
+            sourceProgramRevision->value() == 0U ||
+            !sourceMatchesProgram(*sourceProgram, sourceKind) ||
+            !validateProgram(*sourceProgram, ValidationPurpose::Runnable)
+                 .valid()) {
+            return false;
+        }
+    } else {
+        if (manualTimedSource(source) == nullptr ||
+            sourceKind != ProgramSourceKind::ManualTimed ||
+            sourceProgramRevision.has_value() ||
+            !validManualTimedRunSourceImpl(*manualTimedSource(source))) {
+            return false;
+        }
     }
-    const auto& initialStage = sourceProgram.program.fermentationStages.front();
+    const auto& initialStage =
+        storedProgram(source) != nullptr
+            ? storedProgram(source)->program.fermentationStages.front()
+            : manualTimedSource(source)->stage;
     if (!initialStage.targetTemperatureCelsius.has_value() ||
         !initialStage.durationMinutes.has_value()) {
         return false;
@@ -201,6 +304,33 @@ bool makeInitialEffectiveRunValues(
 }
 
 }  // namespace
+
+ProgramSourceKind programSourceKind(const ProgramRunSource& source) noexcept {
+    if (std::get_if<ManualTimedRunSource>(&source) != nullptr) {
+        return ProgramSourceKind::ManualTimed;
+    }
+    const auto* program = std::get_if<ProgramDocument>(&source);
+    if (program == nullptr) {
+        return ProgramSourceKind::UserProgram;
+    }
+    if (program->program.factoryCatalogEntry) {
+        return ProgramSourceKind::FactoryCatalog;
+    }
+    return ProgramSourceKind::UserProgram;
+}
+
+const ProgramDocument* storedProgram(const ProgramRunSource& source) noexcept {
+    return std::get_if<ProgramDocument>(&source);
+}
+
+const ManualTimedRunSource* manualTimedSource(
+    const ProgramRunSource& source) noexcept {
+    return std::get_if<ManualTimedRunSource>(&source);
+}
+
+bool validateManualTimedRunSource(const ManualTimedRunSource& source) noexcept {
+    return validManualTimedRunSourceImpl(source);
+}
 
 ActiveRun::ActiveRun(RunProgramSnapshot snapshot,
                      EffectiveRunValues initialValues)
@@ -214,15 +344,25 @@ ActiveRun::ActiveRun(RestoreConstructionTag restoreTag,
 }
 
 std::optional<ActiveRun> ActiveRun::start(
-    const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
-    RunProgramSourceRevision sourceProgramRevision) {
+    const ProgramRunSource& source,
+    std::optional<RunProgramSourceRevision> sourceProgramRevision) {
     EffectiveRunValues initialValues;
-    if (!makeInitialEffectiveRunValues(sourceProgram, sourceKind,
-                                       sourceProgramRevision, initialValues)) {
+    if (!makeInitialEffectiveRunValues(source, sourceProgramRevision,
+                                       initialValues)) {
         return std::nullopt;
     }
-    return ActiveRun{{sourceProgram, sourceKind, sourceProgramRevision},
+    return ActiveRun{{source, programSourceKind(source), sourceProgramRevision},
                      initialValues};
+}
+
+std::optional<ActiveRun> ActiveRun::start(
+    const ProgramDocument& sourceProgram, ProgramSourceKind sourceKind,
+    RunProgramSourceRevision sourceProgramRevision) {
+    if (sourceKind == ProgramSourceKind::ManualTimed ||
+        sourceKind != programSourceKind(ProgramRunSource{sourceProgram})) {
+        return std::nullopt;
+    }
+    return start(ProgramRunSource{sourceProgram}, sourceProgramRevision);
 }
 
 bool validateRunProgramSnapshotInto(
@@ -230,9 +370,9 @@ bool validateRunProgramSnapshotInto(
     const std::array<RunRevision, kMaximumRunRevisions>& revisions,
     std::size_t revisionCount, EffectiveRunValues& effectiveValues) {
     EffectiveRunValues current;
-    if (!makeInitialEffectiveRunValues(
-            snapshot.sourceProgram, snapshot.sourceKind,
-            snapshot.sourceProgramRevision, current) ||
+    if (snapshot.sourceKind != programSourceKind(snapshot.source) ||
+        !makeInitialEffectiveRunValues(
+            snapshot.source, snapshot.sourceProgramRevision, current) ||
         revisionCount > kMaximumRunRevisions) {
         return false;
     }
@@ -242,8 +382,7 @@ bool validateRunProgramSnapshotInto(
         const auto& revision = revisions[index];
         if (revision.sequence != index + 1U ||
             !validMonotonicEpoch(revisions, index) ||
-            revision.stageIndex >=
-                snapshot.sourceProgram.program.fermentationStages.size() ||
+            revision.stageIndex >= sourceStageCount(snapshot.source) ||
             !equalValues(revision.before, current) ||
             !validRevisionMetadata(revision) ||
             !validTargetTemperature(snapshot, revision.stageIndex,
@@ -315,8 +454,7 @@ RunAdjustmentDecision ActiveRun::decideAdjustment(
     if (!context.safetyAllowsChange) {
         return rejected(RunAdjustmentStatus::SafetyRejected);
     }
-    if (context.activeStageIndex >=
-        snapshot_.sourceProgram.program.fermentationStages.size()) {
+    if (context.activeStageIndex >= sourceStageCount(snapshot_.source)) {
         return rejected(RunAdjustmentStatus::InvalidStage);
     }
     if (context.activeStageIndex < context.completedStageCount) {

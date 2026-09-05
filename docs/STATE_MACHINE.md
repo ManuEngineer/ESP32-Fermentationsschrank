@@ -700,7 +700,20 @@ Prozess.
 
 Wird als temporaeres Programm mit Zieltemperatur, Dauer, Sensorbetrieb,
 optionalem Vorheizen und Abschlussverhalten behandelt. Er nutzt dieselben
-Zustaende und Sicherheitsregeln wie gespeicherte Programme.
+Zustaende und Sicherheitsregeln wie gespeicherte Programme. Der fachliche
+Eingang wird an der Application-Grenze in eine fluechtige, unveraenderliche
+Run-Quelle ueberfuehrt und anschliessend ueber den bestehenden
+ProgramRun-/`ProcessKind::Timed`-Pfad ausgefuehrt; es gibt keinen zweiten
+Dispatcher und kein persistiertes temporaeres Katalogprogramm.
+
+Die Dauer beginnt erst nach erfolgreicher Zielqualifikation, wie bei einem
+gespeicherten zeitgesteuerten Programmlauf. Optionales Vorheizen verwendet
+`PREHEATING -> WAITING_FOR_PRODUCT -> REACHING_TARGET`; ohne Vorheizen beginnt
+der bestehende Timed-Startpfad direkt mit `REACHING_TARGET`. Product ohne
+gueltige Produktevidenz bleibt in der kanonischen manuellen
+`UserDecisionRequired`-/`Blocked`-Semantik und wird nicht still zu Air.
+Completion, `RunAdjustment`, Stop/Abort/Cooling sowie Recovery verwenden die
+bereits bestehenden Ownerpfade.
 
 ### Manueller Temperatur-Haltebetrieb
 

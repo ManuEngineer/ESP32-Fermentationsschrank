@@ -200,7 +200,6 @@ ProgramStartRequest maximalStartRequest() {
                         std::nullopt};
     request.runId = std::string(run_limits::kMaximumRunIdBytes, 'r');
     request.program = maximalProgram();
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Air;

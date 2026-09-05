@@ -11,6 +11,7 @@ namespace {
 
 using fermentation::ActiveRun;
 using fermentation::FactoryProgramCatalog;
+using fermentation::ManualTimedRunSource;
 using fermentation::ProgramDocument;
 using fermentation::ProgramSourceKind;
 using fermentation::RunAdjustmentContext;
@@ -135,10 +136,10 @@ void test_start_accepts_standard_and_user_programs() {
     TEST_ASSERT_TRUE(standardRun.has_value());
     TEST_ASSERT_TRUE(userRun.has_value());
     TEST_ASSERT_EQUAL_UINT64(
-        7U, standardRun->snapshot().sourceProgramRevision.value());
+        7U, standardRun->snapshot().sourceProgramRevision->value());
     TEST_ASSERT_EQUAL_STRING(
         "Joghurt mild",
-        standardRun->snapshot().sourceProgram.program.name.c_str());
+        storedProgram(standardRun->snapshot().source)->program.name.c_str());
     TEST_ASSERT_EQUAL_DOUBLE(
         39.0, userRun->effectiveValues().targetTemperatureCelsius);
     TEST_ASSERT_EQUAL_UINT32(
@@ -174,15 +175,14 @@ void test_source_program_changes_do_not_change_run_snapshot() {
     source.program.fermentationStages.front().durationMinutes = 10U;
 
     TEST_ASSERT_EQUAL_STRING(
-        "Benutzerjoghurt", run->snapshot().sourceProgram.program.name.c_str());
-    TEST_ASSERT_EQUAL_DOUBLE(
-        39.0, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .targetTemperatureCelsius);
-    TEST_ASSERT_EQUAL_UINT32(
-        180U, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .durationMinutes);
+        "Benutzerjoghurt",
+        storedProgram(run->snapshot().source)->program.name.c_str());
+    TEST_ASSERT_EQUAL_DOUBLE(39.0, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(180U, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .durationMinutes);
 }
 
 void test_target_adjustment_records_complete_revision() {
@@ -214,10 +214,9 @@ void test_target_adjustment_records_complete_revision() {
     TEST_ASSERT_EQUAL_UINT64(1000U, revision->timestamp.monotonicMillis);
     TEST_ASSERT_TRUE(revision->timestamp.unixTimeSeconds.has_value());
     TEST_ASSERT_EQUAL_INT64(1784736000, *revision->timestamp.unixTimeSeconds);
-    TEST_ASSERT_EQUAL_DOUBLE(
-        39.0, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_DOUBLE(39.0, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
 }
 
 void test_fermenting_phase_context_continues_without_requalification() {
@@ -250,6 +249,60 @@ void test_fermenting_phase_context_continues_without_requalification() {
     TEST_ASSERT_TRUE(durationResult.applied());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentEffect::None),
                           static_cast<int>(durationResult.effect));
+}
+
+void test_manual_timed_adjustment_keeps_immutable_source() {
+    ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = 30.0;
+    source.stage.durationMinutes = 60U;
+    source.targetQualification.bandCelsius = 0.5;
+    source.targetQualification.durationMinutes = 10U;
+    source.maximumTargetReachMinutes = 180U;
+    source.completion.mode = fermentation::CompletionMode::FinishWithoutCooling;
+
+    fermentation::ProgramRunSource runSource = source;
+    auto run = ActiveRun::start(runSource, std::nullopt);
+    TEST_ASSERT_TRUE(run.has_value());
+    const auto immutableBefore =
+        *fermentation::manualTimedSource(run->snapshot().source);
+
+    RunAdjustmentRequest adjustment;
+    adjustment.targetTemperatureCelsius = 39.0;
+    adjustment.remainingDurationMinutes = 90U;
+    adjustment.confirmed = true;
+    adjustment.timestamp.monotonicMillis = 100U;
+    const auto decision =
+        run->decideAdjustment(adjustment, adjustableContext());
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(run->applyAdjustment(decision).applied());
+    TEST_ASSERT_EQUAL_DOUBLE(39.0,
+                             run->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(90U,
+                             run->effectiveValues().remainingDurationMinutes);
+    TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        30.0, fermentation::manualTimedSource(run->snapshot().source)
+                  ->stage.targetTemperatureCelsius.value());
+    TEST_ASSERT_EQUAL_UINT32(
+        60U, fermentation::manualTimedSource(run->snapshot().source)
+                 ->stage.durationMinutes.value());
+    TEST_ASSERT_TRUE(
+        immutableBefore.stage.targetTemperatureCelsius.has_value());
+    TEST_ASSERT_DOUBLE_WITHIN(
+        0.0001, *immutableBefore.stage.targetTemperatureCelsius,
+        fermentation::manualTimedSource(run->snapshot().source)
+            ->stage.targetTemperatureCelsius.value());
+
+    RunAdjustmentRequest invalid;
+    invalid.targetTemperatureCelsius = 100.0;
+    invalid.confirmed = true;
+    invalid.timestamp.monotonicMillis = 200U;
+    const auto rejected = run->decideAdjustment(invalid, adjustableContext());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentStatus::InvalidValue),
+                          static_cast<int>(rejected.status));
+    TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
+    TEST_ASSERT_EQUAL_DOUBLE(39.0,
+                             run->effectiveValues().targetTemperatureCelsius);
 }
 
 void test_restore_rejects_contradictory_adjustment_effect_metadata() {
@@ -412,7 +465,7 @@ void test_restore_replays_snapshot_and_revision_history() {
     TEST_ASSERT_EQUAL_UINT32(2U, restored->revisionCount());
     TEST_ASSERT_EQUAL_STRING(
         "Benutzerjoghurt",
-        restored->snapshot().sourceProgram.program.name.c_str());
+        storedProgram(restored->snapshot().source)->program.name.c_str());
 }
 
 void test_restore_into_matches_legacy_and_handles_zero_revisions() {
@@ -812,6 +865,7 @@ int main() {
     RUN_TEST(test_source_program_changes_do_not_change_run_snapshot);
     RUN_TEST(test_target_adjustment_records_complete_revision);
     RUN_TEST(test_fermenting_phase_context_continues_without_requalification);
+    RUN_TEST(test_manual_timed_adjustment_keeps_immutable_source);
     RUN_TEST(test_restore_rejects_contradictory_adjustment_effect_metadata);
     RUN_TEST(
         test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected);

@@ -79,7 +79,6 @@ ProgramStartRequest programStart(
     request.envelope = envelope(id, state, source);
     request.runId = "run-15";
     request.program = commissionProgram("water-kefir");
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;
@@ -87,6 +86,37 @@ ProgramStartRequest programStart(
     request.airSensorValid = true;
     request.coolingSensorValid = true;
     request.productSensorValid = true;
+    return request;
+}
+
+ManualTimedRunSource manualTimedSource(bool preheat = false) {
+    ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = 30.0;
+    source.stage.durationMinutes = 60U;
+    source.preheatEnabled = preheat;
+    if (preheat) {
+        source.maximumProductWaitMinutes = 30U;
+    }
+    source.targetQualification.bandCelsius = 0.5;
+    source.targetQualification.durationMinutes = 10U;
+    source.maximumTargetReachMinutes = 180U;
+    source.completion.mode = CompletionMode::FinishWithoutCooling;
+    return source;
+}
+
+ProgramStartRequest manualTimedStart(const RunCommandState& state, CommandId id,
+                                     RunSensorMode sensorMode,
+                                     bool productSensorValid = true,
+                                     bool preheat = false) {
+    ProgramStartRequest request;
+    request.envelope = envelope(id, state);
+    request.runId = "manual-timed";
+    request.program = manualTimedSource(preheat);
+    request.sensorMode = sensorMode;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = productSensorValid;
     return request;
 }
 
@@ -208,8 +238,11 @@ bool equalActiveRuns(const std::optional<ActiveRun>& left,
     }
     const auto& leftSnapshot = left->snapshot();
     const auto& rightSnapshot = right->snapshot();
-    if (!equalProgramDocuments(leftSnapshot.sourceProgram,
-                               rightSnapshot.sourceProgram) ||
+    const auto* leftProgram = storedProgram(leftSnapshot.source);
+    const auto* rightProgram = storedProgram(rightSnapshot.source);
+    if ((leftProgram == nullptr) != (rightProgram == nullptr) ||
+        (leftProgram != nullptr &&
+         !equalProgramDocuments(*leftProgram, *rightProgram)) ||
         leftSnapshot.sourceKind != rightSnapshot.sourceKind ||
         leftSnapshot.sourceProgramRevision !=
             rightSnapshot.sourceProgramRevision ||
@@ -528,6 +561,108 @@ void test_program_start_is_two_stage_and_contains_summary() {
                           static_cast<int>(state.processState.state));
     TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
     TEST_ASSERT_EQUAL_UINT32(1U, state.runRevision);
+}
+
+void test_manual_timed_uses_timed_path_and_fixed_manual_sensor_semantics() {
+    {
+        auto state = standbyState();
+        auto request = manualTimedStart(state, 1U, RunSensorMode::Air);
+        request.envelope.confirmed = false;
+        const auto preview = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(preview.status));
+        TEST_ASSERT_TRUE(preview.startSummary.has_value());
+        TEST_ASSERT_TRUE(preview.startSummary->sourceKind.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProgramSourceKind::ManualTimed),
+            static_cast<int>(*preview.startSummary->sourceKind));
+        TEST_ASSERT_FALSE(preview.startSummary->programName.has_value());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessKind::Timed),
+                              static_cast<int>(preview.startSummary->kind));
+        TEST_ASSERT_FALSE(preview.after.activeProgramRun.has_value());
+
+        request.envelope.confirmed = true;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProgramSourceKind::ManualTimed),
+            static_cast<int>(
+                decision.after.activeProgramRun->snapshot().sourceKind));
+        TEST_ASSERT_FALSE(decision.after.activeProgramRun->snapshot()
+                              .sourceProgramRevision.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessKind::Timed),
+            static_cast<int>(decision.after.processRunSnapshot->kind));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalAir),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorPeltierPermission::Allowed),
+            static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+    }
+
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, manualTimedStart(state, 4U, RunSensorMode::Air, true, true));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Preheating),
+            static_cast<int>(decision.after.processState.state));
+        TEST_ASSERT_TRUE(decision.after.processRunSnapshot.has_value());
+        TEST_ASSERT_TRUE(decision.after.processRunSnapshot
+                             ->maximumProductWaitMinutes.has_value());
+    }
+
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, manualTimedStart(state, 2U, RunSensorMode::Product));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalProduct),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorPeltierPermission::Allowed),
+            static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+    }
+
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, manualTimedStart(state, 3U, RunSensorMode::Product, false));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::UserDecisionRequired),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorPeltierPermission::Blocked),
+            static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+        TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Product),
+            static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_FALSE(decision.after.sensorSelectionRuntime.phase ==
+                          SensorSelectionPhase::AirFallbackActive);
+    }
+}
+
+void test_manual_timed_rejects_invalid_values_without_starting() {
+    auto state = standbyState();
+    auto invalidTarget = manualTimedStart(state, 1U, RunSensorMode::Air);
+    std::get<ManualTimedRunSource>(invalidTarget.program)
+        .stage.targetTemperatureCelsius = 0.0;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, invalidTarget).status));
+
+    auto invalidDuration = manualTimedStart(state, 2U, RunSensorMode::Air);
+    std::get<ManualTimedRunSource>(invalidDuration.program)
+        .stage.durationMinutes = 0U;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, invalidDuration).status));
 }
 
 void test_manual_plans_have_no_duration_and_use_canonical_start_states() {
@@ -1553,7 +1688,8 @@ CrossRolePlausibilityContext plausibilityWith(SensorQualitySnapshot air,
 RunCommandState startedProgramStateWithReturnStrategy(ReturnStrategy strategy) {
     auto state = standbyState();
     auto request = programStart(state, 1U);
-    request.program.program.productSensorFailure.returnStrategy = strategy;
+    std::get<ProgramDocument>(request.program)
+        .program.productSensorFailure.returnStrategy = strategy;
     const auto decision = decideProgramStart(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
@@ -1604,6 +1740,75 @@ SensorSelectionCommandRequest sensorSelectionRequest(
     request.action = action;
     request.safetyAllowsChange = safetyAllowsChange;
     return request;
+}
+
+void test_manual_timed_sensor_follow_up_uses_fixed_manual_context() {
+    auto state = standbyState();
+    auto start = manualTimedStart(state, 120U, RunSensorMode::Product, false);
+    const auto started = decideProgramStart(state, start);
+    TEST_ASSERT_TRUE(started.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::UserDecisionRequired),
+        static_cast<int>(started.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(started.after.sensorSelectionRuntime.permission));
+    TEST_ASSERT_FALSE(started.after.sensorSelectionRuntime.phase ==
+                      SensorSelectionPhase::AirFallbackActive);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
+                          static_cast<int>(applyRunCommand(state, started)));
+
+    const auto invalidProduct =
+        plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
+    const auto continueWithAir = decideApplySensorSelectionAction(
+        state,
+        sensorSelectionRequest(state, 121U,
+                               SensorSelectionUserAction::ContinueWithAir),
+        invalidProduct);
+    TEST_ASSERT_TRUE(continueWithAir.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*continueWithAir.sensorSelectionApplyStatus));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+        static_cast<int>(continueWithAir.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(*continueWithAir.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(
+            continueWithAir.after.sensorSelectionRuntime.permission));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::Applied),
+        static_cast<int>(applyRunCommand(state, continueWithAir)));
+
+    // ManualTimed has the fixed ManualReturnToProduct contract. A fresh,
+    // positive product observation therefore permits the existing return
+    // action without introducing a second policy or an automatic fallback.
+    const auto freshProduct =
+        plausibilityWith(validSnapshot(), validSnapshot(), validSnapshot());
+    const auto returnToProduct = decideApplySensorSelectionAction(
+        state,
+        sensorSelectionRequest(state, 122U,
+                               SensorSelectionUserAction::ReturnToProduct),
+        freshProduct);
+    TEST_ASSERT_TRUE(returnToProduct.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*returnToProduct.sensorSelectionApplyStatus));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::NormalProduct),
+        static_cast<int>(returnToProduct.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(*returnToProduct.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(
+            returnToProduct.after.sensorSelectionRuntime.permission));
 }
 
 void test_sensor_selection_action_continue_with_air_valid_and_invalid_states() {
@@ -2090,19 +2295,20 @@ ProgramStartRequest programStartWithPreference(
     RunSensorMode requestedMode, bool productSensorValid,
     bool airSensorValid = true, bool coolingSensorValid = true) {
     auto request = programStart(state, id);
-    request.program.program.sensorPreference = preference;
+    auto& program = std::get<ProgramDocument>(request.program);
+    program.program.sensorPreference = preference;
     // 6.13 Regel 1/2/3/4: ProductRequired/AirOnly verlangen eine dazu
     // passende Policy/Ruecklaufstrategie, sonst waere schon das
     // ProgramDocument (nicht die Startmatrix) ungueltig.
     if (preference == SensorPreference::ProductRequired) {
-        request.program.program.productSensorFailure.policy =
+        program.program.productSensorFailure.policy =
             ProductSensorFailurePolicy::WaitForUser;
-        request.program.program.productSensorFailure.fallbackDelaySeconds =
+        program.program.productSensorFailure.fallbackDelaySeconds =
             std::nullopt;
     } else if (preference == SensorPreference::AirOnly) {
-        request.program.program.productSensorFailure.returnStrategy =
+        program.program.productSensorFailure.returnStrategy =
             ReturnStrategy::RemainOnAirUntilEnd;
-        request.program.program.productSensorFailure.fallbackDelaySeconds =
+        program.program.productSensorFailure.fallbackDelaySeconds =
             std::nullopt;
     }
     request.sensorMode = requestedMode;
@@ -2492,6 +2698,9 @@ int main() {
     RUN_TEST(
         test_manual_start_summary_is_available_before_confirmation_but_never_masks_rejections);
     RUN_TEST(test_program_start_is_two_stage_and_contains_summary);
+    RUN_TEST(
+        test_manual_timed_uses_timed_path_and_fixed_manual_sensor_semantics);
+    RUN_TEST(test_manual_timed_rejects_invalid_values_without_starting);
     RUN_TEST(test_manual_plans_have_no_duration_and_use_canonical_start_states);
     RUN_TEST(
         test_display_and_web_conflict_is_first_applied_without_source_priority);
@@ -2530,6 +2739,7 @@ int main() {
     RUN_TEST(
         test_sensor_selection_action_no_change_leaves_everything_untouched);
     RUN_TEST(test_sensor_selection_action_safety_pending_matrix);
+    RUN_TEST(test_manual_timed_sensor_follow_up_uses_fixed_manual_context);
     RUN_TEST(test_sensor_selection_action_mirrors_mode_into_manual_run_plan);
     RUN_TEST(
         test_sensor_selection_action_already_processed_repeats_no_second_effect);

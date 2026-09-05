@@ -106,6 +106,10 @@ class FermentationApplication {
         const FermentationUiCommandContext& context,
         const FermentationUiStartManualHoldingIntent& intent,
         const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareStartManualTimed(
+        const FermentationUiCommandContext& context,
+        const ManualTimedRunValues& values,
+        const FermentationApplicationOwningEvidence& evidence);
     [[nodiscard]] FermentationApplicationRequestResult prepareStop(
         const FermentationUiCommandContext& context,
         const FermentationUiStopRunIntent& intent,

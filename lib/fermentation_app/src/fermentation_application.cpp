@@ -97,6 +97,22 @@ ManualRunPlanRequest makeManualRunPlanRequest(
     return request;
 }
 
+ManualTimedRunSource makeManualTimedSource(const ManualTimedRunValues& values) {
+    ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = values.targetTemperatureCelsius;
+    source.stage.durationMinutes = values.durationMinutes;
+    source.preheatEnabled = values.preheatEnabled;
+    source.maximumProductWaitMinutes = values.maximumProductWaitMinutes;
+    source.targetQualification.bandCelsius = values.qualificationBandCelsius;
+    source.targetQualification.durationMinutes =
+        values.qualificationDurationMinutes;
+    source.maximumTargetReachMinutes = values.maximumTargetReachMinutes;
+    source.completion.mode = values.completionMode;
+    source.completion.coolingTargetCelsius = values.coolingTargetCelsius;
+    source.completion.holdDurationMinutes = values.holdDurationMinutes;
+    return source;
+}
+
 }  // namespace
 
 template <typename Request>
@@ -173,9 +189,6 @@ FermentationApplication::prepareStartProgram(
         FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
     request.runId = *runId;
     request.program = std::move(*program);
-    request.sourceKind = request.program.program.factoryCatalogEntry
-                             ? ProgramSourceKind::FactoryCatalog
-                             : ProgramSourceKind::UserProgram;
     request.sourceProgramRevision = *sourceRevision;
     request.sensorMode = intent.sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
@@ -207,6 +220,43 @@ FermentationApplication::prepareStartManualHolding(
     request.envelope =
         FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
     request.plan = makeManualRunPlanRequest(intent.plan, *runId);
+    request.safetyAllowsStart = evidence.safetyAllowsStart;
+    request.airSensorValid = evidence.airSensorValid;
+    request.coolingSensorValid = evidence.coolingSensorValid;
+    request.productSensorValid = evidence.productSensorValid;
+    return makePreparedRequest(std::move(request));
+}
+
+FermentationApplicationRequestResult
+FermentationApplication::prepareStartManualTimed(
+    const FermentationUiCommandContext& context,
+    const ManualTimedRunValues& values,
+    const FermentationApplicationOwningEvidence& evidence) {
+    if (runIdentity_ == nullptr) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::NotInitialized);
+    }
+    auto source = makeManualTimedSource(values);
+    if (!validateManualTimedRunSource(source)) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::InvalidInput);
+    }
+    const auto identity = runIdentity_->allocateForApplication();
+    if (!identity.identity.has_value()) {
+        return requestFailure(mapIdentityStatus(identity.status));
+    }
+    const auto runId = runIdentity_->makeRunId(identity.identity->commandId());
+    if (!runId.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    ProgramStartRequest request;
+    request.envelope =
+        FermentationUiCommandBridge::makeEnvelope(context, *identity.identity);
+    request.runId = *runId;
+    request.program = source;
+    request.sourceProgramRevision.reset();
+    request.sensorMode = values.sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
