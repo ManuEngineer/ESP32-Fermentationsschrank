@@ -425,15 +425,17 @@ SensorSelectionStateView sensorSelectionViewFrom(const RunCommandState& state) {
 SensorSelectionProgramContext sensorSelectionProgramContextFor(
     const RunCommandState& state) {
     if (state.activeProgramRun.has_value()) {
-        const auto& program =
-            state.activeProgramRun->snapshot().sourceProgram.program;
-        SensorSelectionProgramContext context;
-        context.sensorPreference = program.sensorPreference;
-        context.policy = program.productSensorFailure.policy;
-        context.returnStrategy = program.productSensorFailure.returnStrategy;
-        context.fallbackDelaySeconds =
-            program.productSensorFailure.fallbackDelaySeconds;
-        return context;
+        const auto& source = state.activeProgramRun->snapshot().source;
+        if (const auto* program = storedProgram(source)) {
+            SensorSelectionProgramContext context;
+            context.sensorPreference = program->program.sensorPreference;
+            context.policy = program->program.productSensorFailure.policy;
+            context.returnStrategy =
+                program->program.productSensorFailure.returnStrategy;
+            context.fallbackDelaySeconds =
+                program->program.productSensorFailure.fallbackDelaySeconds;
+            return context;
+        }
     }
     SensorSelectionProgramContext context;
     context.sensorPreference = SensorPreference::ProductIfAvailableElseAir;
@@ -733,16 +735,23 @@ void decideProgramStartInto(const RunCommandState& current,
         decision.status = CommandStatus::SafetyRejected;
         return;
     }
-    const auto resolution = resolveProgramStartSensorMode(
-        request.program.program.sensorPreference, request.sensorMode,
-        request.productSensorValid);
+    ProgramStartSensorResolution resolution;
+    if (const auto* program = storedProgram(request.program)) {
+        resolution = resolveProgramStartSensorMode(
+            program->program.sensorPreference, request.sensorMode,
+            request.productSensorValid);
+    } else if (manualTimedSource(request.program) != nullptr) {
+        // ManualTimed deliberately bypasses the stored-program preference
+        // matrix: a requested Product remains Product so the common manual
+        // start-selection outcome can produce UserDecisionRequired/Blocked.
+        resolution = {true, request.sensorMode, false};
+    }
     if (!resolution.valid) {
         decision.status = CommandStatus::InvalidInput;
         return;
     }
 
-    auto run = ActiveRun::start(request.program, request.sourceKind,
-                                request.sourceProgramRevision);
+    auto run = ActiveRun::start(request.program, request.sourceProgramRevision);
     if (!run.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return;
@@ -759,14 +768,24 @@ void decideProgramStartInto(const RunCommandState& current,
     // Bestaetigung"). `before`/`after` bleiben bis hierher identisch mit
     // `current`. `sensorMode` ist ab hier der effektive, bereits gegen die
     // Programmpraeferenz validierte Modus (6.5), nicht mehr der angeforderte.
+    const auto sourceKind = programSourceKind(request.program);
+    const auto* program = storedProgram(request.program);
+    const auto* manual = manualTimedSource(request.program);
+    const bool preheat =
+        program != nullptr ? program->program.preheat : manual->preheatEnabled;
+    const auto completion = program != nullptr
+                                ? program->program.completion.mode
+                                : manual->completion.mode;
     decision.startSummary = StartSummary{
         request.runId,
-        request.program.program.name,
+        sourceKind,
+        program == nullptr ? std::nullopt
+                           : std::optional<std::string>{program->program.name},
         run->effectiveValues().targetTemperatureCelsius,
         run->effectiveValues().remainingDurationMinutes,
         resolution.effectiveMode,
-        request.program.program.preheat,
-        request.program.program.completion.mode,
+        preheat,
+        completion,
         ProcessKind::Timed,
     };
     if (resolution.substituted) {
@@ -855,7 +874,8 @@ void decideManualStartInto(const RunCommandState& current,
     // `after` bis dahin identisch mit `current` bleiben.
     decision.startSummary = StartSummary{
         request.plan.runId,
-        request.plan.runId,
+        std::nullopt,
+        std::nullopt,
         request.plan.targetTemperatureCelsius,
         std::nullopt,
         request.plan.sensorMode,

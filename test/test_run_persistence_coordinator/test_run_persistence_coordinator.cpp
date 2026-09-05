@@ -444,7 +444,6 @@ CommandDecision startDecision(
                         std::nullopt};
     request.runId = "persisted-run";
     request.program = program.has_value() ? *program : runnableProgram();
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = sensorMode;
@@ -2899,7 +2898,7 @@ TargetQualificationInput programTargetQualificationInput(
     const RunCommandState& state, std::uint64_t timestamp) {
     const auto values = state.activeProgramRun->effectiveValues();
     const auto& program =
-        state.activeProgramRun->snapshot().sourceProgram.program;
+        storedProgram(state.activeProgramRun->snapshot().source)->program;
     TargetQualificationInput input;
     input.phase = QualificationPhase::Target;
     input.sampleTimestampMonotonicMillis = timestamp;
@@ -8401,7 +8400,6 @@ CommandDecision substitutedStartDecision(const RunCommandState& state,
                         std::nullopt};
     request.runId = "persisted-run";
     request.program = program;
-    request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;

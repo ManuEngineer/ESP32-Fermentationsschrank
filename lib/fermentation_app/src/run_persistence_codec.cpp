@@ -291,6 +291,8 @@ bool writeEnum(ByteWriter& w, ProgramSourceKind v) {
             return be::writeUint8(w, 1U);
         case ProgramSourceKind::UserProgram:
             return be::writeUint8(w, 2U);
+        case ProgramSourceKind::ManualTimed:
+            return be::writeUint8(w, 3U);
     }
     return false;
 }
@@ -596,9 +598,43 @@ bool readProgramSource(ByteReader& reader, ProgramSourceKind& out) {
         case 2U:
             out = ProgramSourceKind::UserProgram;
             return true;
+        case 3U:
+            out = ProgramSourceKind::ManualTimed;
+            return true;
         default:
             return false;
     }
+}
+
+bool writeManualTimedSource(ByteWriter& writer,
+                            const ManualTimedRunSource& source) {
+    return writeOptionalDouble(writer, source.stage.targetTemperatureCelsius) &&
+           writeOptionalUint32(writer, source.stage.durationMinutes) &&
+           be::writeBool(writer, source.preheatEnabled) &&
+           writeOptionalUint32(writer, source.maximumProductWaitMinutes) &&
+           writeOptionalDouble(writer,
+                               source.targetQualification.bandCelsius) &&
+           writeOptionalUint32(writer,
+                               source.targetQualification.durationMinutes) &&
+           writeOptionalUint32(writer, source.maximumTargetReachMinutes) &&
+           writeEnum(writer, source.completion.mode) &&
+           writeOptionalDouble(writer,
+                               source.completion.coolingTargetCelsius) &&
+           writeOptionalUint32(writer, source.completion.holdDurationMinutes);
+}
+
+bool readManualTimedSource(ByteReader& reader, ManualTimedRunSource& source) {
+    return readOptionalDouble(reader, source.stage.targetTemperatureCelsius) &&
+           readOptionalUint32(reader, source.stage.durationMinutes) &&
+           be::readBool(reader, source.preheatEnabled) &&
+           readOptionalUint32(reader, source.maximumProductWaitMinutes) &&
+           readOptionalDouble(reader, source.targetQualification.bandCelsius) &&
+           readOptionalUint32(reader,
+                              source.targetQualification.durationMinutes) &&
+           readOptionalUint32(reader, source.maximumTargetReachMinutes) &&
+           readCompletion(reader, source.completion.mode) &&
+           readOptionalDouble(reader, source.completion.coolingTargetCelsius) &&
+           readOptionalUint32(reader, source.completion.holdDurationMinutes);
 }
 bool readEffect(ByteReader& reader, RunAdjustmentEffect& out) {
     std::uint8_t value = 0U;
@@ -1101,17 +1137,31 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
                                                  *snapshot.sensorSelection));
     }
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
-        std::string program;
-        ok = ok &&
-             encodeProgramDocumentPayload(snapshot.program->sourceProgram,
-                                          program) ==
-                 ConfigurationCodecStatus::Success &&
-             writeRunProgramSourceRevision(
-                 writer, snapshot.program->sourceProgramRevision) &&
-             writeEnum(writer, snapshot.program->sourceKind) &&
-             writeString(writer, program) &&
-             be::writeUint8(writer,
-                            static_cast<std::uint8_t>(snapshot.revisionCount));
+        if (snapshot.program->sourceKind == ProgramSourceKind::ManualTimed) {
+            ok = ok && writeEnum(writer, snapshot.program->sourceKind) &&
+                 be::writeOptionalTag(
+                     writer,
+                     snapshot.program->sourceProgramRevision.has_value()) &&
+                 (!snapshot.program->sourceProgramRevision.has_value() &&
+                  manualTimedSource(snapshot.program->source) != nullptr) &&
+                 writeManualTimedSource(
+                     writer, *manualTimedSource(snapshot.program->source));
+        } else {
+            std::string program;
+            ok = ok && writeEnum(writer, snapshot.program->sourceKind) &&
+                 be::writeOptionalTag(
+                     writer,
+                     snapshot.program->sourceProgramRevision.has_value()) &&
+                 (snapshot.program->sourceProgramRevision.has_value() &&
+                  writeRunProgramSourceRevision(
+                      writer, *snapshot.program->sourceProgramRevision)) &&
+                 encodeProgramDocumentPayload(
+                     *storedProgram(snapshot.program->source), program) ==
+                     ConfigurationCodecStatus::Success &&
+                 writeString(writer, program);
+        }
+        ok = ok && be::writeUint8(writer, static_cast<std::uint8_t>(
+                                              snapshot.revisionCount));
         for (std::size_t i = 0U; ok && i < snapshot.revisionCount; ++i)
             ok = writeRevision(writer, snapshot.revisions[i]);
     } else if (snapshot.variant == RunCheckpointVariant::ManualRun) {
@@ -1211,27 +1261,62 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
         RunProgramSnapshot p;
         std::string program;
         std::uint8_t count = 0U;
-        std::uint64_t sourceProgramRevision = 0U;
-        if (schemaVersion >= 4U) {
-            if (!be::readUint64(reader, sourceProgramRevision))
-                return RunPersistenceCodecStatus::Truncated;
+        if (schemaVersion >= 5U) {
+            bool revisionPresent = false;
+            if (!readProgramSource(reader, p.sourceKind) ||
+                !be::readOptionalTag(reader, revisionPresent)) {
+                return RunPersistenceCodecStatus::InvalidWireValue;
+            }
+            if (revisionPresent) {
+                std::uint64_t revision = 0U;
+                if (!be::readUint64(reader, revision) || revision == 0U) {
+                    return RunPersistenceCodecStatus::InvalidWireValue;
+                }
+                p.sourceProgramRevision = RunProgramSourceRevision{revision};
+            }
+            if (p.sourceKind == ProgramSourceKind::ManualTimed) {
+                ManualTimedRunSource manual;
+                if (revisionPresent || !readManualTimedSource(reader, manual)) {
+                    return RunPersistenceCodecStatus::InvalidWireValue;
+                }
+                p.source = std::move(manual);
+            } else {
+                if (!revisionPresent ||
+                    !readString(reader, kMaximumCheckpointPayloadBytes,
+                                program)) {
+                    return RunPersistenceCodecStatus::InvalidWireValue;
+                }
+                const auto decoded = decodeProgramDocumentPayload(program);
+                if (!decoded.document.has_value())
+                    return RunPersistenceCodecStatus::InvalidWireValue;
+                p.source = *decoded.document;
+            }
         } else {
-            std::uint32_t legacySourceProgramRevision = 0U;
-            if (!be::readUint32(reader, legacySourceProgramRevision))
-                return RunPersistenceCodecStatus::Truncated;
-            sourceProgramRevision = legacySourceProgramRevision;
+            std::uint64_t sourceProgramRevision = 0U;
+            if (schemaVersion >= 4U) {
+                if (!be::readUint64(reader, sourceProgramRevision))
+                    return RunPersistenceCodecStatus::Truncated;
+            } else {
+                std::uint32_t legacySourceProgramRevision = 0U;
+                if (!be::readUint32(reader, legacySourceProgramRevision))
+                    return RunPersistenceCodecStatus::Truncated;
+                sourceProgramRevision = legacySourceProgramRevision;
+            }
+            if (sourceProgramRevision == 0U ||
+                !readProgramSource(reader, p.sourceKind) ||
+                p.sourceKind == ProgramSourceKind::ManualTimed ||
+                !readString(reader, kMaximumCheckpointPayloadBytes, program)) {
+                return RunPersistenceCodecStatus::InvalidWireValue;
+            }
+            p.sourceProgramRevision =
+                RunProgramSourceRevision{sourceProgramRevision};
+            const auto decoded = decodeProgramDocumentPayload(program);
+            if (!decoded.document.has_value())
+                return RunPersistenceCodecStatus::InvalidWireValue;
+            p.source = *decoded.document;
         }
-        if (sourceProgramRevision == 0U ||
-            !readProgramSource(reader, p.sourceKind) ||
-            !readString(reader, kMaximumCheckpointPayloadBytes, program) ||
-            !be::readUint8(reader, count) || count > kMaximumRunRevisions)
-            return RunPersistenceCodecStatus::Truncated;
-        p.sourceProgramRevision =
-            RunProgramSourceRevision{sourceProgramRevision};
-        const auto decoded = decodeProgramDocumentPayload(program);
-        if (!decoded.document.has_value())
+        if (!be::readUint8(reader, count) || count > kMaximumRunRevisions)
             return RunPersistenceCodecStatus::InvalidWireValue;
-        p.sourceProgram = *decoded.document;
         s.program = std::move(p);
         s.revisionCount = count;
         for (std::size_t i = 0U; i < s.revisionCount; ++i)

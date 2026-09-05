@@ -22,8 +22,13 @@ std::optional<double> qualificationBandForActiveRun(
         return current.activeManualRun->values.qualificationBandCelsius;
     }
     if (current.activeProgramRun.has_value()) {
-        return current.activeProgramRun->snapshot()
-            .sourceProgram.program.targetQualification.bandCelsius;
+        const auto& source = current.activeProgramRun->snapshot().source;
+        if (const auto* program = storedProgram(source)) {
+            return program->program.targetQualification.bandCelsius;
+        }
+        if (const auto* manual = manualTimedSource(source)) {
+            return manual->targetQualification.bandCelsius;
+        }
     }
     return std::nullopt;
 }
@@ -242,9 +247,15 @@ std::optional<EffectiveControlContextInput> projectEffectiveControlContextInput(
             input.completionMode = snapshot.completionMode;
             if (input.phase == ProcessState::Cooling ||
                 input.phase == ProcessState::CoolHolding) {
-                input.completionCoolingTargetCelsius =
-                    current.activeProgramRun->snapshot()
-                        .sourceProgram.program.completion.coolingTargetCelsius;
+                const auto& source =
+                    current.activeProgramRun->snapshot().source;
+                if (const auto* program = storedProgram(source)) {
+                    input.completionCoolingTargetCelsius =
+                        program->program.completion.coolingTargetCelsius;
+                } else if (const auto* manual = manualTimedSource(source)) {
+                    input.completionCoolingTargetCelsius =
+                        manual->completion.coolingTargetCelsius;
+                }
             }
             return input;
         case ProcessKind::ManualHolding:

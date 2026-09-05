@@ -135,10 +135,10 @@ void test_start_accepts_standard_and_user_programs() {
     TEST_ASSERT_TRUE(standardRun.has_value());
     TEST_ASSERT_TRUE(userRun.has_value());
     TEST_ASSERT_EQUAL_UINT64(
-        7U, standardRun->snapshot().sourceProgramRevision.value());
+        7U, standardRun->snapshot().sourceProgramRevision->value());
     TEST_ASSERT_EQUAL_STRING(
         "Joghurt mild",
-        standardRun->snapshot().sourceProgram.program.name.c_str());
+        storedProgram(standardRun->snapshot().source)->program.name.c_str());
     TEST_ASSERT_EQUAL_DOUBLE(
         39.0, userRun->effectiveValues().targetTemperatureCelsius);
     TEST_ASSERT_EQUAL_UINT32(
@@ -174,15 +174,14 @@ void test_source_program_changes_do_not_change_run_snapshot() {
     source.program.fermentationStages.front().durationMinutes = 10U;
 
     TEST_ASSERT_EQUAL_STRING(
-        "Benutzerjoghurt", run->snapshot().sourceProgram.program.name.c_str());
-    TEST_ASSERT_EQUAL_DOUBLE(
-        39.0, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .targetTemperatureCelsius);
-    TEST_ASSERT_EQUAL_UINT32(
-        180U, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .durationMinutes);
+        "Benutzerjoghurt",
+        storedProgram(run->snapshot().source)->program.name.c_str());
+    TEST_ASSERT_EQUAL_DOUBLE(39.0, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(180U, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .durationMinutes);
 }
 
 void test_target_adjustment_records_complete_revision() {
@@ -214,10 +213,9 @@ void test_target_adjustment_records_complete_revision() {
     TEST_ASSERT_EQUAL_UINT64(1000U, revision->timestamp.monotonicMillis);
     TEST_ASSERT_TRUE(revision->timestamp.unixTimeSeconds.has_value());
     TEST_ASSERT_EQUAL_INT64(1784736000, *revision->timestamp.unixTimeSeconds);
-    TEST_ASSERT_EQUAL_DOUBLE(
-        39.0, *run->snapshot()
-                   .sourceProgram.program.fermentationStages.front()
-                   .targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_DOUBLE(39.0, *storedProgram(run->snapshot().source)
+                                        ->program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
 }
 
 void test_fermenting_phase_context_continues_without_requalification() {
@@ -412,7 +410,7 @@ void test_restore_replays_snapshot_and_revision_history() {
     TEST_ASSERT_EQUAL_UINT32(2U, restored->revisionCount());
     TEST_ASSERT_EQUAL_STRING(
         "Benutzerjoghurt",
-        restored->snapshot().sourceProgram.program.name.c_str());
+        storedProgram(restored->snapshot().source)->program.name.c_str());
 }
 
 void test_restore_into_matches_legacy_and_handles_zero_revisions() {
