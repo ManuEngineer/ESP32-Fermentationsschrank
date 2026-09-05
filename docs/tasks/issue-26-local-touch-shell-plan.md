@@ -12,15 +12,23 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
     WORKFLOW=PLAN_FIRST_SINGLE_PR
-    BASE_BRANCH=integration/r1-development
-    BASE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
+    BASE_BRANCH=main
+    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
-    PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS
-    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
+    PR_HEAD=THIS_COMMIT
+    PLAN_REVISION=F1_F6_PREDECESSOR_AND_CONTRACT_CORRECTIONS_ISSUE144_MERGE_SYNC
+    SUPERSEDES_PLAN_COMMIT=aea6acb2e51147c6452d728a5a45840236ab1fdf
+    ISSUE26_STATUS=PLANNING_READY_UNBLOCKED
+    BLOCKED_BY_ISSUE144=NO
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
+    RUN_IDENTITY_PREDECESSOR_PR=147
+    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ISSUE144_GITHUB_STATE=CLOSED
+    PR147_GITHUB_STATE=MERGED
     PREDECESSOR_ISSUE=25
     PREDECESSOR_PR=142
     PREDECESSOR_SOURCE_HEAD=6ff0176651cf5f5dfe8b04d424377efa99ce551f
@@ -35,24 +43,25 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ESP_IDF_BUILD=NOT_RUN
     HARDWARE_TEST=NOT_RUN
     ISSUE25_GITHUB_STATE=CLOSED
-    ROADMAP_SYNC=ISSUE144_PREDECESSOR_BLOCKER
+    ROADMAP_SYNC=ISSUE144_MERGED_UNBLOCKED
+    PLAN_PROVENANCE_SYNC=COMPLETED
 
 Vor diesem Plan-Commit wurden live geprüft:
 
-- der Remote-Branch integration/r1-development steht auf BASE_SHA;
+- `main` steht auf dem vorgegebenen Merge-Commit BASE_SHA;
 - PR #142 ist gemergt, sein Source-HEAD und Merge-Commit entsprechen den
   Vorgaben, und GitHub-CI #1015 ist PASS;
 - Issue #26 ist offen mit dem Titel und der Scope-/Akzeptanzspezifikation
   dieses Auftrags;
 - Issue #25 ist live CLOSED und liefert den gemergten UI-Vertrag als Basis;
-- Issue #144 ist live OPEN und als konkreter Run-Identity-/Provenienz-
-  Pflichtvorgänger vor #26 in der Roadmap eingetragen;
+- Issue #144 ist live CLOSED durch den Merge von PR #147; PR #147 ist MERGED,
+  sein Source-HEAD und sein Merge-Commit entsprechen den vorgegebenen SHAs;
 - der revidierte Plan basiert auf dem bisherigen Plan-Commit
   SUPERSEDES_PLAN_COMMIT; der Branch enthält davor den Roadmap-Sync, den
-  ursprünglichen Plan und die bisherigen Planrevisionen, aber keine
-  Implementation;
-- PR #143 ist als Draft angelegt und zielt auf
-  integration/r1-development;
+  ursprünglichen Plan, die bisherigen Planrevisionen und den #144-Merge, aber
+  keine #26-Implementation;
+- PR #143 ist als Draft angelegt, zielt auf `main` und wurde auf BASE_SHA
+  synchronisiert;
 - der neueste veröffentlichte SESSION HANDOVER des Vorgänger-PRs nennt
   PREDECESSOR_SOURCE_HEAD, Owner Full Review PASS und das damalige CI-Gate;
   nach dem Merge ist der Handover nur Provenienz und kein offener
@@ -61,12 +70,12 @@ Vor diesem Plan-Commit wurden live geprüft:
 
 Kontextnachweis:
 
-    CONTEXT_BASELINE_BRANCH=integration/r1-development
-    CONTEXT_BASELINE_SHA=87bd668e45ab71a20ceb24ce65fcb5d1440725a8
-    CONTEXT_HEAD_SHA=36891dfc28d22bc0ca3fb0e8a19505ad69986917
-    CONTEXT_PLAN_SHA=36891dfc28d22bc0ca3fb0e8a19505ad69986917
+    CONTEXT_BASELINE_BRANCH=feature/issue-26-local-touch-shell
+    CONTEXT_BASELINE_SHA=aea6acb2e51147c6452d728a5a45840236ab1fdf
+    CONTEXT_HEAD_SHA=830b6410b4ca6f4776d89981acf337e2b4706314
+    CONTEXT_PLAN_SHA=aea6acb2e51147c6452d728a5a45840236ab1fdf
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=F1-F6 post-3de predecessor and contract corrections after Full Review
+    CONTEXT_DELTA=PR147 merge into PR143, main sync, and governance-only roadmap conflict resolution
     SOURCE_OF_TRUTH_CONFLICT=NONE
 
 Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
@@ -75,10 +84,11 @@ c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; darauf folgten die F1/F2-Revision
 2fbe85f41c2461575331c4c3afed73a447302d43, die F1-F10-Revision
 d8a0a70983a6641e1edf27be08d655572164d995d und die Restkorrektur
 dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9. Diese finale Integrationskorrektur
-ist eine weitere versionierte Planrevision. Issue #144 ist nun der konkrete
-Pflichtvorgänger für den Run-Identity-/Provenienzvertrag; #26 bleibt bis zu
-seinem Merge blockiert. Bis zu einer ausdrücklichen Freigabe der
-exakten revidierten PLAN_COMMIT bleibt die Implementation NOT_STARTED.
+ist eine weitere versionierte Planrevision. Issue #144 / PR #147 sind nun
+abgeschlossen und gemergt; diese Fassung trägt den exakten Merge-HEAD als
+Verbraucherprovenienz ein und hebt ausschließlich den bisherigen Vorgänger-
+Blocker auf. Bis zu einer ausdrücklichen Freigabe der exakten revidierten
+PLAN_COMMIT bleibt die Implementation NOT_STARTED.
 
 ## 2. Ziel und Definition der Umsetzung
 
@@ -261,16 +271,21 @@ Touchpunkt eine Kalibrierung.
   FallbackSelectionRequired bleiben aktorfrei. Kein Simulatorergebnis setzt
   ActuationInterlock::Allowed.
 
-### 4.4 Verbrauchervertrag des vorgelagerten Run-Identity-Scope
+### 4.4 Verbrauchervertrag des gemergten Run-Identity-Scope
 
-Issue #144 ist der konkrete, verpflichtende Pflichtvorgänger für den kleinen
-Run-Identity-/Provenienzvertrag. Seine Schemaänderung, Codec-/Recoverytests,
-konkreten Dateien und Allocatorimplementation gehören ausschließlich in den
-eigenen Issue-#144-Plan. #26 beschreibt nur die nach dem Merge garantierten
-Schnittstellen und Invarianten:
+Issue #144 / PR #147 sind abgeschlossen und gemergt. Der kleine
+Run-Identity-/Provenienzvertrag ist auf `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`
+verfügbar. Seine Schemaänderung, Codec-/Recoverytests, konkreten Dateien und
+Allocatorimplementation gehören ausschließlich in den eigenen Issue-#144-
+Scope. #26 beschreibt und konsumiert nur die garantierten Schnittstellen und
+Invarianten:
 
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
-    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=REQUIRED_BEFORE_26_IMPLEMENTATION
+    RUN_IDENTITY_PREDECESSOR_PR=147
+    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ISSUE144_GITHUB_STATE=CLOSED
+    PR147_GITHUB_STATE=MERGED
     PROGRAM_SOURCE_PROVENANCE=NEUTRAL_RUN_SOURCE_REVISION
     RUN_PROGRAM_FIELD=sourceProgramRevision
 
@@ -279,30 +294,37 @@ Schnittstellen und Invarianten:
   Neue Starts erzeugen ihn an der Application-Grenze exakt aus der aktuell
   validierten `ProgramCatalogRevision`; diese Umwandlung behauptet keine
   per-program Revision.
-- Schema 4 schreibt diesen neutralen 64-Bit-Wert. Unterstützte Schemas 1–3
-  bleiben lesbar und erweitern ihren historischen 32-Bit-Wert nur numerisch
-  verlustfrei in den neutralen Typ; #26 etikettiert Legacy-Werte nicht als
-  `ProgramCatalogRevision`, dekodiert und migriert sie aber auch nicht selbst.
-  Unbekannte neuere Schemas bleiben fail-closed.
+- Der gemergte Schema-4-/Legacy-Persistenzvertrag schreibt neue Records nur
+  als Schema 4; unterstützte Schemas 1–3 bleiben lesbar und erweitern ihren
+  historischen 32-Bit-Wert nur numerisch verlustfrei in den neutralen Typ.
+  #26 etikettiert Legacy-Werte nicht als `ProgramCatalogRevision`, dekodiert
+  oder migriert sie aber auch nicht selbst. Unbekannte neuere Schemas,
+  abgeschnittene oder unklare Records bleiben fail-closed.
 - Der vollständige `ProgramDocument` im Run-Snapshot bleibt die unveränderliche
   tatsächlich verwendete Laufkopie einschließlich next-run-only-Overrides.
   Die lokale UI-/Editor-Staleness verwendet davon unabhängig ausschließlich
   die echte `RuntimeConfigurationSnapshot::programCatalogRevision()`.
 - Die Application-Grenze stellt den gemeinsamen monotonen `CommandId`-
-  Allocator für Touch und später Web bereit. Pro Fachrequest gilt
-  `UiRequestId.value == CommandEnvelope::id`; neue Requests erhalten neue
-  fortlaufende IDs, ein Confirmation-Replay behält exakt dieselbe ID.
-- Jede Erzeugung eines neuen aktiven Runs bezieht die Lauf-ID ausschließlich
-  dort. Das umfasst `StartProgram`, `StartManualHolding`, `AbortAndCool` und
-  `CoolAfterCompletion`; alle verwenden dieselbe Ableitung aus
-  `StorageEpoch + StartCommandId` im bestehenden 1..48-Byte-Limit. UI-
-  Payloads liefern weder `runId` noch `CommandId`.
+  Allocator für Touch und später Web bereit. Jedes envelope-basierte
+  Fachrequest allokiert dort genau einmal; pro Request gilt
+  `UiRequestId.value == CommandEnvelope::id`. Neue Requests unterscheiden
+  sich, Confirmation-/Replay-Wiederholungen verwenden exakt dieselbe
+  vorbereitete Command-ID und erzeugen keinen zweiten Allocate-Aufruf.
+- Stop und Completion erhalten auch ohne Cooling diese bereits allokierte
+  Command-ID; nur `runId` und `coolingPlan` fehlen dann. Bei `AbortAndCool`
+  oder `CoolAfterCompletion` wird dieselbe Stop-/Completion-ID als
+  `StartCommandId` des neuen Cooling-Runs verwendet. Jede Erzeugung eines
+  neuen aktiven Runs bezieht die Lauf-ID ausschließlich an dieser
+  Application-Grenze. Das umfasst `StartProgram`, `StartManualHolding`,
+  `AbortAndCool` und `CoolAfterCompletion`; alle verwenden dieselbe
+  Ableitung aus `StorageEpoch + StartCommandId` im bestehenden 1..48-Byte-
+  Limit. UI-Payloads liefern weder `runId` noch `CommandId`.
 
-Vor der #26-Implementation muss Issue #144 einen eigenen Plan-/Review-/Merge-
-Nachweis besitzen. Danach wird dieser #26-Plan auf dessen exakten Merge-HEAD
-aktualisiert. Erst dann ist der normale Programmstart ohne Provenienz- oder
-Identitäts-Ownerblocker ausführbar; #26 implementiert keinen Teil des
-Vorgängerscope erneut.
+#26 implementiert keinen Teil des Vorgängerscopes erneut und besitzt keine
+#144-Allocator-, Codec-, Handoff-, Recovery- oder Persistence-Ownership. Die
+bestehenden Application-, Run-, Persistenz- und Recovery-Handoffs bleiben die
+einzigen owning Grenzen. Die Implementation bleibt bis zur ausdrücklichen
+Freigabe der exakten revidierten `PLAN_COMMIT` NOT_STARTED.
 
 ## 5. Minimale Zielarchitektur
 
@@ -1209,12 +1231,17 @@ Adapterannahme.
 
 ## 11. Geplante Dateien und Ownership
 
-### 11.0 Externe Vertragsabhängigkeit: Issue #144
+### 11.0 Gemergter Verbrauchervertrag: Issue #144 / PR #147
 
-Issue #144 ist der konkrete, vor #26 zu planende und zu mergende
-Run-Identity-/Provenienzvorgänger. Der #26-Diff enthält keine Dateien,
-Schemaänderungen, Codec-/Recoverytests oder Allocatorimplementation dieses
-Issues. #26 konsumiert nach dem Merge ausschließlich diese Invarianten:
+Issue #144 / PR #147 sind abgeschlossen und gemergt auf
+`main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`. Der #26-Diff enthält keine
+Dateien, Schemaänderungen, Codec-/Recoverytests oder Allocatorimplementation
+dieses Issues. #26 konsumiert ausschließlich diese Invarianten:
+
+    ISSUE144_GITHUB_STATE=CLOSED
+    PR147_GITHUB_STATE=MERGED
+    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
 
 - `RunProgramSnapshot::sourceProgramRevision` ist der neutrale starke
   `RunProgramSourceRevision`-Typ; neue Starts erhalten ihn an der
@@ -1231,10 +1258,9 @@ Issues. #26 konsumiert nach dem Merge ausschließlich diese Invarianten:
   `StorageEpoch + StartCommandId`; UI-Payloads liefern keine Identität.
 
 Die owning Run-, Persistence-, Safety-, Recovery- und FSM-Grenzen bleiben
-unverändert. Die exakte `Issue #144`-Merge-HEAD-Provenienz wird vor der
-#26-Implementation in dieser Planfassung nachgetragen; erst danach beginnt
-der #26-Diff. Der vollständige Vorgängerplan und seine konkreten Dateien und
-Nachweise bleiben ausschließlich in Issue #144.
+unverändert. Die vollständige Vorgängerprovenienz sowie ihre konkreten Dateien
+und Nachweise bleiben ausschließlich in Issue #144. #26 verwendet nur die
+gemergten Verträge und erzeugt keine parallele Ownership.
 
 ### 11.1 Generische Plattform
 
@@ -1320,11 +1346,12 @@ Die Schnitte beschreiben die technische Reihenfolge der späteren #26-Arbeit.
 Jeder Schnitt erhält die in der Akzeptanzmatrix benannten gezielten Nachweise;
 fachliche Abweichungen werden als neue Planprovenienz behandelt.
 
-Vor Schnitt 1 muss Issue #144 auf einem eigenen Merge-HEAD abgeschlossen sein.
-Danach wird dieser Plan auf genau diesen Merge-HEAD aktualisiert; erst dann
-beginnt die #26-Implementation. Das ist eine festgelegte technische
-Abhängigkeit, keine offene fachliche Entscheidung innerhalb des normalen
-Programmstarts.
+Der #144-Vorgänger ist auf dem eigenen Merge-HEAD abgeschlossen und in dieser
+Planrevision exakt provenanceiert. Vor Schnitt 1 werden diese Provenienz, die
+unveränderten owning Handoffs und die Ownerfreigabe der exakten `PLAN_COMMIT`
+geprüft; erst danach beginnt die #26-Implementation. Das ist eine erfüllte
+technische Vorgängerabhängigkeit und keine offene fachliche Entscheidung
+innerhalb des normalen Programmstarts.
 
 1. Generische Interaktion: semantische Targets, vier Slotindices,
    VerticalPager, Pressfeedback, Feedbackintents und additive Shellprüfung.
@@ -1449,19 +1476,20 @@ Nachweise:
 | SIM-26-58 | Ein Editor aus Katalogrevision A wird nach Änderung auf B unmittelbar vor `beginPreview()` als typisierter Stale-/Conflictfall abgelehnt; die neue Arbeitskopie bleibt unverändert und es entsteht keine Preview-Mutation |
 | SIM-26-59 | Die Kombination `ApplicationLifecycleState::ServiceRequired` plus verbliebene Recoverydaten projiziert deterministisch `Restricted`, nicht `Recovery`; bei `Ready` wird derselbe Recoverydatensatz als `Recovery` projiziert |
 | SIM-26-60 | `UnsupportedAppDetail` und jede andere bridge-eigene Ablehnung ohne owning Mutation werden als `DecisionOnly` projiziert; `makeResult()` liefert dafür keinen `OwningOutcome` und es gibt keinen dritten Phasenwert |
-| SIM-26-61 | StartProgram, StartManualHolding, AbortAndCool und CoolAfterCompletion erhalten ihre Lauf-ID ausschließlich an der Application-Grenze; die vier UI-Intents tragen nur erlaubte Werte, keine `runId`/`CommandId`, und Confirmation-Replay behält die vorbereitete Identität |
+| SIM-26-61 | StartProgram, StartManualHolding, AbortAndCool und CoolAfterCompletion erhalten ihre Lauf-ID ausschließlich an der Application-Grenze; jedes envelope-basierte Fachrequest allokiert genau einmal, Stop/Completion ohne Cooling behält seine Command-ID ohne `runId`/`coolingPlan`, Cooling verwendet dieselbe ID als `StartCommandId`, die vier UI-Intents tragen keine `runId`/`CommandId`, und Confirmation-Replay behält die vorbereitete Identität |
 | SIM-26-62 | Unbestätigtes Configuration-`ReadyForConfirmation` aus `validatePreviewForConfirmation()` wird als `DecisionOnly` projiziert und ruft `confirmPreview()` nicht auf |
 | SIM-26-63 | Ein Stale-/Conflict-/Validation-Ergebnis der Configuration-Vorprüfung bleibt vor `confirmPreview()` `DecisionOnly`, erzeugt keinen Commit und wird nicht durch `fromCommandStatus()` als owning markiert |
 | SIM-26-64 | Das tatsächlich aufgerufene `ConfigurationService::confirmPreview()`-Ergebnis wird als `OwningOutcome` traciert; die bestehende Configuration-Ownership bleibt unverändert |
 | SIM-26-65 | Unbestätigtes Fallback-`RunPersistenceResultStatus::RecoveryPending` aus `resumeFallback()` bleibt vor der Aktivierung `DecisionOnly`; der mutierende Fallbackpfad wird nicht aufgerufen |
 
-Vor der #26-Implementation wird ausschließlich die externe
-Vertragsabhängigkeit geprüft:
+Vor der #26-Implementation werden ausschließlich die gemergte
+#144-Vertragsprovenienz und die Ownerfreigabe dieses exakten Plan-Commits
+geprüft:
 
 | ID | Nachweis |
 |---|---|
 | DEP-26-01 | Issue #144 ist gemergt, und der exakte Merge-HEAD ist als `RUN_IDENTITY_PREDECESSOR_MERGE_HEAD` in der aktualisierten #26-Planprovenienz eingetragen; der neutrale `RunProgramSourceRevision`- und kompatible Run-Persistence-Vertrag ist verfügbar |
-| DEP-26-02 | Die Application-Grenze stellt den gemeinsamen Command-/Run-Identity-Vertrag für alle vier neuen Runpfade bereit; UI-Payloads können weder `CommandId` noch `runId` einschleusen, und #26 enthält keinen Vorgänger-Allocator oder Codecpfad |
+| DEP-26-02 | Die Application-Grenze stellt den gemeinsamen Command-/Run-Identity-Vertrag für alle vier neuen Runpfade bereit; UI-Payloads können weder `CommandId` noch `runId` einschleusen, und #26 enthält keine #144-Allocator-, Codec-, Handoff-, Recovery- oder Persistence-Ownership |
 
 Zusätzlich werden die in docs/ACCEPTANCE_TESTS.md bereits geforderten
 zustands- und safetybezogenen Simulationen gezielt wiederverwendet:
@@ -1579,10 +1607,12 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die Review-Basis dieses PRs bestand aus genau elf eigenen Commits. Die
-folgende Korrektur ist ein zwölfter, nicht historienverändernder Commit; die
-vollständige Provenienz des PRs besteht nach diesem Commit aus genau zwölf
-Commits:
+Die bisherige PR-eigene Planprovenienz endete mit dem bisherigen Plan-/Review-
+HEAD `aea6acb2e51147c6452d728a5a45840236ab1fdf`. Danach wurde der PR-Branch
+mit dem vorgegebenen `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`
+synchronisiert; der nicht historienverändernde Main-Sync-/Konfliktauflösungs-
+Merge ist `830b6410b4ca6f4776d89981acf337e2b4706314`. Diese Fassung ist die
+darauffolgende reine Plan-/Provenienzrevision:
 
 1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
 2. ursprünglicher vollständiger Plan-Commit
@@ -1604,18 +1634,32 @@ Commits:
     170a3bd04f9193912201bdbdf8a5b38af1d395e9;
 11. der vollständig geprüfte vorherige Plan-/Review-HEAD
     36891dfc28d22bc0ca3fb0e8a19505ad69986917;
-12. diese reine Planprovenienzkorrektur mit exakter SHA nach dem Commit.
+12. der bisherige vollständige Plan-/Review-HEAD
+    `aea6acb2e51147c6452d728a5a45840236ab1fdf`;
+13. der Main-Sync-/Konfliktauflösungs-Merge
+    `830b6410b4ca6f4776d89981acf337e2b4706314` mit
+    `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8` als Merge-Basis;
+14. diese reine Plan-/Provenienzrevision mit exakter SHA nach dem Commit.
 
 Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
-Basis. Issue #144 ist der konkrete Roadmap-geführte Pflichtvorgänger; für die
+Basis. Issue #144 / PR #147 sind live abgeschlossen und gemergt; für die
 Planprovenienz von Draft-PR #143 gelten die folgenden issue-spezifischen
 Referenzen:
 
-    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
+    BASE_BRANCH=main
+    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
+    SUPERSEDES_PLAN_COMMIT=aea6acb2e51147c6452d728a5a45840236ab1fdf
+    RUN_IDENTITY_PREDECESSOR_ISSUE=144
+    RUN_IDENTITY_PREDECESSOR_PR=147
+    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ISSUE144_GITHUB_STATE=CLOSED
+    PR147_GITHUB_STATE=MERGED
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
     PR_HEAD=<exakte SHA dieses Plan-Commits>
+    PLAN_PROVENANCE_SYNC=COMPLETED
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_APPROVAL_REQUIRED=YES
     ACTUATOR_RELEASE=NO
@@ -1628,9 +1672,18 @@ docs/AGENT_WORKFLOW.md geführten Handover referenziert:
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
     HEAD=<exakte PR-HEAD-SHA nach Planpush>
-    ROADMAP_COMMIT=7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714
-    SUPERSEDES_PLAN_COMMIT=36891dfc28d22bc0ca3fb0e8a19505ad69986917
+    BASE_BRANCH=main
+    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
+    SUPERSEDES_PLAN_COMMIT=aea6acb2e51147c6452d728a5a45840236ab1fdf
+    RUN_IDENTITY_PREDECESSOR_ISSUE=144
+    RUN_IDENTITY_PREDECESSOR_PR=147
+    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
+    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
+    ISSUE144_GITHUB_STATE=CLOSED
+    PR147_GITHUB_STATE=MERGED
     PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
+    PLAN_PROVENANCE_SYNC=COMPLETED
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
     ACTUATOR_RELEASE=NO
@@ -1672,6 +1725,15 @@ gepflegt.
   `ProgramCatalogRevision`-Stand ab, ohne per-program Revision, Cast oder
   Surrogat. Die alten unterstützten Run-Schemas bleiben lesbar und unbekannte
   neuere Schemas fail-closed.
+- Die gemeinsame Application-Grenze allokiert für jedes envelope-basierte
+  Fachrequest genau eine Command-ID für Touch und später Web; Confirmation und
+  Replay verwenden dieselbe ID. Stop/Completion ohne Cooling erhalten diese ID
+  ohne `runId`/`coolingPlan`, und `AbortAndCool` beziehungsweise
+  `CoolAfterCompletion` verwenden sie als `StartCommandId` des neuen Runs.
+  Alle vier neuen Runpfade leiten die Lauf-ID aus
+  `StorageEpoch + StartCommandId` ab; UI-Payloads liefern weder `CommandId`
+  noch `runId`, und #26 dupliziert keinen #144-Allocator-, Codec-, Handoff-,
+  Recovery- oder Persistencepfad.
 - Standardprogramme sind bearbeitbare Katalog-Arbeitskopien; Factory-Vorlage,
   Zurücksetzen, Kopieren, Neu, Deinstallation und Löschung folgen den
   bestehenden installed-/userDeletable- und ConfigurationService-Verträgen.
