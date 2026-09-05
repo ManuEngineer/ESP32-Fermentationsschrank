@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Verhindert, dass ein in `.github/workflows/build.yml` hochgeladenes
-Textartefakt aus der expliziten `check_secrets.py --scan-path`-Menge
-herausfaellt (docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.7.2/
-7.7.4: "Alle vor actions/upload-artifact hochgeladenen Textartefakte werden
-erfasst").
+Textartefakt aus der im Workflow explizit gepflegten
+`check_secrets.py --scan-path`-Menge herausfaellt
+(docs/tasks/issue-74-implementation-plan.md, Abschnitt
+7.7.2/7.7.4: "Alle vor actions/upload-artifact hochgeladenen Textartefakte
+werden erfasst").
 
 Bewusst kein YAML-Parser und keine neue Abhaengigkeit: die Struktur dieses
 einen Workflows ist stabil und einfach (zwei Zeilenformen fuer `path:`,
@@ -76,8 +77,11 @@ def extract_uploaded_text_paths(step_block: str) -> set[str]:
     }
 
 
-def find_scan_coverage_gaps(workflow_text: str) -> list[tuple[str, str]]:
-    scanned_paths = extract_scanned_paths(workflow_text)
+def find_scan_coverage_gaps(
+    workflow_text: str, scanned_paths: set[str] | None = None,
+) -> list[tuple[str, str]]:
+    if scanned_paths is None:
+        scanned_paths = extract_scanned_paths(workflow_text)
 
     gaps = []
     for step_block in split_into_steps(workflow_text):
@@ -103,7 +107,8 @@ def check_repository() -> int:
         raise SystemExit(f"Workflow-Datei fehlt: {WORKFLOW_PATH}")
 
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-    gaps = find_scan_coverage_gaps(workflow_text)
+    scanned_paths = extract_scanned_paths(workflow_text)
+    gaps = find_scan_coverage_gaps(workflow_text, scanned_paths)
 
     if gaps:
         for step_name, path in gaps:
@@ -170,7 +175,6 @@ jobs:
     renamed_uncovered_workflow = uncovered_workflow.replace(
         "ESP-IDF-Bringup-Artefakte sichern", "Voellig anders benannter Schritt",
     )
-
     checks = [
         (
             "Vollstaendig gescannter Workflow meldet keine Luecke",

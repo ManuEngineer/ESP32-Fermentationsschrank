@@ -112,6 +112,16 @@ struct RunPersistenceResult {
         committedControlContextTransition;
 };
 
+struct RunEpochHandoffSlotsPreparedResult {
+    RunPersistenceResult persistenceResult;
+    std::optional<AuthorizedRunEpochHandoffSlotsPrepared> evidence;
+};
+
+struct RunEpochHandoffHeadFinalizedResult {
+    RunPersistenceResult persistenceResult;
+    std::optional<AuthorizedRunEpochHandoffHeadFinalized> evidence;
+};
+
 // Application-level disposition for the narrow R1 Current-FERMENTING
 // recovery evaluation. This is deliberately not a persisted process state and
 // does not add a second recovery coordinator.
@@ -201,6 +211,19 @@ class RunPersistenceCoordinator {
 
     [[nodiscard]] RunPersistenceLoadResult loadAndInitialize();
     void loadAndInitializeInto(RunPersistenceLoadResult& destination);
+    // Returns the committed identity high-water value. A proven empty store
+    // is represented by the logical value 0; an absent legacy value remains
+    // unavailable and is returned as nullopt.
+    [[nodiscard]] std::optional<CommandId> commandIdHighWater() const noexcept;
+    // Pending phase: validates the prior graph or exact handoff partial state
+    // and writes/verifies only the two exact target slots. No target head is
+    // written before the configuration owner persists Pending -> Committed.
+    [[nodiscard]] RunEpochHandoffSlotsPreparedResult
+    prepareAuthorizedEpochHandoff(const AuthorizedRunEpochHandoffProof& proof);
+    // Committed phase: accepts only the exact target slots and writes/verifies
+    // the exact target head. It never rebuilds or repairs an arbitrary graph.
+    [[nodiscard]] RunEpochHandoffHeadFinalizedResult
+    finalizeAuthorizedEpochHandoff(const AuthorizedRunEpochHandoffProof& proof);
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,

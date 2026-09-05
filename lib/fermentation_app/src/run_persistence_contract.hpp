@@ -27,7 +27,9 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // TaggedPriorBootPhaseElapsed, NominalRecoveryAdjustmentState,
 // recoveryEpisodeRevision (5.28). RunCheckpointTrigger moved to
 // run_recovery_types.hpp, transitively still visible here.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 3U;
+// Schema 4 (#144): lossless 64-bit neutral run-source provenance and the
+// committed command-id high-water field in RunPersistenceHead.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 4U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {
@@ -76,11 +78,115 @@ struct RunPersistenceHead {
     RunPersistenceMutationKind mutationKind{
         RunPersistenceMutationKind::Command};
     std::optional<CommandId> commandId;
+    // Present for established schema-4 identity spaces. It is absent for
+    // legacy heads and remains absent when such a head is passively rewritten;
+    // the coordinator, not the isolated codec, owns historical monotonicity.
+    std::optional<CommandId> commandIdHighWater;
     std::uint32_t oldRunRevision{0U};
     std::uint32_t newRunRevision{0U};
     std::uint32_t oldTransitionSequence{0U};
     std::uint32_t newTransitionSequence{0U};
     std::string bytes;
+};
+
+enum class AuthorizedRunEpochHandoffPhase : std::uint8_t {
+    Pending,
+    Committed,
+    Consumed,
+};
+
+// Application-owned proof that the configuration recovery owner completed
+// the immediately preceding StorageEpoch reset. It deliberately carries no
+// reset token, run data, command identity, or caller-selected foreign epoch.
+// Construction is private: only ConfigurationRecoveryService can mint this
+// capability from canonical configuration-reset evidence. The phase is
+// advanced only by that owner after the corresponding coordinator evidence has
+// been received. The coordinator still validates the epoch relation and the
+// complete run-store graph.
+class AuthorizedRunEpochHandoffProof {
+   public:
+    [[nodiscard]] device_platform::StorageEpoch previousEpoch() const noexcept {
+        return previousEpoch_;
+    }
+    [[nodiscard]] device_platform::StorageEpoch currentEpoch() const noexcept {
+        return currentEpoch_;
+    }
+    [[nodiscard]] AuthorizedRunEpochHandoffPhase phase() const noexcept {
+        return phase_;
+    }
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class RunPersistenceCoordinator;
+    friend class RunPersistenceCoordinatorTestAccess;
+
+    AuthorizedRunEpochHandoffProof(device_platform::StorageEpoch previousEpoch,
+                                   device_platform::StorageEpoch currentEpoch,
+                                   AuthorizedRunEpochHandoffPhase phase)
+        : previousEpoch_(previousEpoch),
+          currentEpoch_(currentEpoch),
+          phase_(phase) {}
+
+    void promoteToCommitted() noexcept {
+        phase_ = AuthorizedRunEpochHandoffPhase::Committed;
+    }
+    void markConsumed() noexcept {
+        phase_ = AuthorizedRunEpochHandoffPhase::Consumed;
+    }
+
+    device_platform::StorageEpoch previousEpoch_;
+    device_platform::StorageEpoch currentEpoch_;
+    AuthorizedRunEpochHandoffPhase phase_{
+        AuthorizedRunEpochHandoffPhase::Pending};
+};
+
+// These evidence values are private capabilities of the existing
+// coordinator/configuration handoff. They cannot be fabricated by an adapter
+// and carry only the epoch binding needed by the next owner phase.
+class AuthorizedRunEpochHandoffSlotsPrepared {
+   public:
+    [[nodiscard]] device_platform::StorageEpoch previousEpoch() const noexcept {
+        return previousEpoch_;
+    }
+    [[nodiscard]] device_platform::StorageEpoch currentEpoch() const noexcept {
+        return currentEpoch_;
+    }
+
+   private:
+    friend class RunPersistenceCoordinator;
+    friend class ConfigurationRecoveryService;
+    friend class RunPersistenceCoordinatorTestAccess;
+
+    AuthorizedRunEpochHandoffSlotsPrepared(
+        device_platform::StorageEpoch previousEpoch,
+        device_platform::StorageEpoch currentEpoch)
+        : previousEpoch_(previousEpoch), currentEpoch_(currentEpoch) {}
+
+    device_platform::StorageEpoch previousEpoch_;
+    device_platform::StorageEpoch currentEpoch_;
+};
+
+class AuthorizedRunEpochHandoffHeadFinalized {
+   public:
+    [[nodiscard]] device_platform::StorageEpoch previousEpoch() const noexcept {
+        return previousEpoch_;
+    }
+    [[nodiscard]] device_platform::StorageEpoch currentEpoch() const noexcept {
+        return currentEpoch_;
+    }
+
+   private:
+    friend class RunPersistenceCoordinator;
+    friend class ConfigurationRecoveryService;
+    friend class RunPersistenceCoordinatorTestAccess;
+
+    AuthorizedRunEpochHandoffHeadFinalized(
+        device_platform::StorageEpoch previousEpoch,
+        device_platform::StorageEpoch currentEpoch)
+        : previousEpoch_(previousEpoch), currentEpoch_(currentEpoch) {}
+
+    device_platform::StorageEpoch previousEpoch_;
+    device_platform::StorageEpoch currentEpoch_;
 };
 
 // Deliberately only the run-domain projection. Messages, fault/safety state,

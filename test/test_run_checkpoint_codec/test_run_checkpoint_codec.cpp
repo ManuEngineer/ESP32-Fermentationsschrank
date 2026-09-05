@@ -58,6 +58,24 @@ std::string schemaTwoActivePayload() {
     return payload;
 }
 
+// Independent schema-3 active-program golden. Its source revision is the
+// historical 32-bit field; schema-3 recovery/progress fields are present and
+// decode must widen the value without assigning it catalog-revision meaning.
+std::string schemaThreeActivePayload() {
+    return bytesFromHex(
+        "01010000000000000064000500000001000e636865636b706f696e742d72756e010101"
+        "02"
+        "000000011234567801005d00000006000000000001ffff000b77617465722d6b656669"
+        "72"
+        "000b5761737365726b656669720000010101010101000201010000001e030101404300"
+        "00"
+        "000000000100000078013fe0000000000000010000000a01000000b400010000000100"
+        "01"
+        "0000000a000000b4000100000078000600000000000000000000000000000000000000"
+        "00"
+        "0000010000000000000063000000020002000200000000000000010000000000");
+}
+
 std::string schemaOneNoActivePayload() {
     return bytesFromHex(
         "03020000000000000064000500000000000003000000000000000000000000000"
@@ -76,7 +94,8 @@ RunPersistenceSnapshot programSnapshot() {
     program.maximumTargetReachMinutes = 180U;
     if (program.preheat) program.maximumProductWaitMinutes = 30U;
     const auto run =
-        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog, 1U);
+        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog,
+                         ::fermentation::RunProgramSourceRevision{1U});
     TEST_ASSERT_TRUE(run.has_value());
     RunCommandState state;
     state.processState.state = program.preheat ? ProcessState::Preheating
@@ -159,13 +178,13 @@ void test_program_checkpoint_round_trip_restores_active_run() {
         static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
     assertGolden(
         encoded,
-        "01010000000000000064000500000001000e636865636b706f696e742d72756e0"
-        "1010102000000010000000101005d00000006000000000001ffff000b77617465"
-        "722d6b65666972000b5761737365726b656669720000010101010101000201010"
-        "000001e03010140430000000000000100000078013fe000000000000001000000"
-        "0a01000000b400010000000100010000000a000000b4000100000078000600000"
-        "00000000000000000000000000000000000000001000000000000006300000002"
-        "0002000200000000000000010000000000");
+        "01010000000000000064000500000001000e636865636b706f696e742d72756e"
+        "0101010200000001000000000000000101005d00000006000000000001ffff00"
+        "0b77617465722d6b65666972000b5761737365726b6566697200000101010101"
+        "01000201010000001e03010140430000000000000100000078013fe000000000"
+        "0000010000000a01000000b400010000000100010000000a000000b400010000"
+        "0078000600000000000000000000000000000000000000000000010000000000"
+        "000063000000020002000200000000000000010000000000");
     const auto decoded =
         decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
@@ -177,6 +196,53 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+}
+
+void test_schema_four_preserves_64_bit_neutral_run_provenance() {
+    auto source = programSnapshot();
+    source.program->sourceProgramRevision =
+        RunProgramSourceRevision{0x1'0000'0000ULL + 7U};
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
+
+    const auto decoded =
+        decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        0x1'0000'0000ULL + 7U,
+        decoded.snapshot->program->sourceProgramRevision.value());
+}
+
+void test_schema_three_active_program_golden_migrates_without_reinterpretation() {
+    const auto legacy =
+        decodeRunPersistenceSnapshot(schemaThreeActivePayload(), 3U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(legacy.status));
+    TEST_ASSERT_TRUE(legacy.snapshot.has_value());
+    TEST_ASSERT_TRUE(legacy.snapshot->program.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        0x12345678U, legacy.snapshot->program->sourceProgramRevision.value());
+    TEST_ASSERT_TRUE(legacy.snapshot->processRunSnapshot.has_value());
+
+    std::string schemaFour;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(encodeRunPersistenceSnapshot(
+                              *legacy.snapshot, schemaFour)));
+    const auto migrated = decodeRunPersistenceSnapshot(schemaFour, 4U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(migrated.status));
+    TEST_ASSERT_TRUE(migrated.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        0x12345678U, migrated.snapshot->program->sourceProgramRevision.value());
+    TEST_ASSERT_EQUAL_STRING(legacy.snapshot->activeRunId.c_str(),
+                             migrated.snapshot->activeRunId.c_str());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(legacy.snapshot->processState.state),
+        static_cast<int>(migrated.snapshot->processState.state));
 }
 
 // Hardcoded schema-1/2 bytes are the legacy-compatibility oracle. The direct
@@ -425,14 +491,14 @@ void test_active_recovery_fault_requires_schema_three() {
     TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 2U));
     TEST_ASSERT_TRUE(validateRunPersistenceSnapshotForSchema(
         fault, kCurrentRunPersistenceSchema));
-    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 4U));
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 5U));
 
     std::string encoded;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(fault, encoded)));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
+        static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(decodeRunPersistenceSnapshot(encoded, 4U).status));
     for (const std::uint32_t legacySchema : {1U, 2U}) {
         TEST_ASSERT_NOT_EQUAL(
@@ -1098,11 +1164,11 @@ void test_prepared_head_binds_full_transaction_contract() {
     TEST_ASSERT_TRUE(encoded.has_value());
     assertGolden(
         *encoded,
-        "44505246000100080000000300000000000000090000000000000014000000770"
-        "0b42ede08010100000000010000000000000009000000000000000a0000000b00"
-        "00000c01010100000001000000000000000900000000000000090000000800000"
-        "0070301000000010000000000000009000000000000000b0000000d0000000e03"
-        "0101000000000000005800000004000000050000000600000007");
+        "44505246000100080000000400000000000000090000000000000014000000780"
+        "08c189a4b010100000000010000000000000009000000000000000a0000000b000"
+        "0000c0101010000000100000000000000090000000000000009000000080000000"
+        "70301000000010000000000000009000000000000000b0000000d0000000e030101"
+        "00000000000000580000000400000005000000060000000700");
     const auto decoded =
         decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(decoded.has_value());
@@ -1299,10 +1365,10 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     TEST_ASSERT_TRUE(committedGolden.has_value());
     assertGolden(
         *committedGolden,
-        "445052460001000800000003000000000000000900000000000000160000003e0"
-        "02051b3310200000000010000000000000009000000000000000a0000000b0000"
+        "445052460001000800000004000000000000000900000000000000160000003f0"
+        "03193fb650200000000010000000000000009000000000000000a0000000b0000"
         "000c0101010000000100000000000000090000000000000009000000080000000"
-        "703");
+        "70300");
 
     committed.fallback = current;
     TEST_ASSERT_FALSE(
@@ -1495,13 +1561,13 @@ void test_no_active_run_migration_from_schema_one_keeps_default_progress() {
 }
 
 // #21, 9.3: readReference/validReference accept exactly the known schema set
-// {1U, 2U} and reject anything else, exercised via the public head codec
-// (encodeRunPersistenceHead stamps kCurrentRunPersistenceSchema on the head
-// envelope itself; the embedded RunCheckpointReference::schemaVersion is
+// {1U, 2U, 3U, 4U} and reject anything else, exercised via the public head
+// codec (encodeRunPersistenceHead stamps kCurrentRunPersistenceSchema on the
+// head envelope itself; the embedded RunCheckpointReference::schemaVersion is
 // independently checked by readReference/validReference).
 void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
     const auto epoch = device_platform::StorageEpoch(9U);
-    for (const std::uint32_t schema : {1U, 2U, 3U}) {
+    for (const std::uint32_t schema : {1U, 2U, 3U, 4U}) {
         RunPersistenceHead committed;
         committed.state = RunPersistenceHeadState::Committed;
         committed.revision = 5U;
@@ -1517,7 +1583,7 @@ void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
     unknownSchema.state = RunPersistenceHeadState::Committed;
     unknownSchema.revision = 5U;
     unknownSchema.current = RunCheckpointReference{
-        0U, 4U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+        0U, 5U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
     TEST_ASSERT_FALSE(
         encodeRunPersistenceHead(unknownSchema, epoch).has_value());
 }
@@ -1552,6 +1618,9 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
+    RUN_TEST(test_schema_four_preserves_64_bit_neutral_run_provenance);
+    RUN_TEST(
+        test_schema_three_active_program_golden_migrates_without_reinterpretation);
     RUN_TEST(
         test_schema_one_two_fixtures_cover_legacy_compatibility_and_into_core);
     RUN_TEST(test_record_envelope_failure_leaves_destination_unmodified);

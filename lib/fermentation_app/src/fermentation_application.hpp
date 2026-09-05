@@ -3,15 +3,19 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
 #include "reset_cause.hpp"
+#include "state_store.hpp"
 #include "sensor_selection.hpp"
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
+#include "application_run_identity.hpp"
+#include "fermentation_ui_commands.hpp"
 
 namespace fermentation {
 
@@ -19,9 +23,9 @@ class ConfigurationBootstrapStore;
 class ConfigurationGraphStore;
 class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
+struct ConfigurationRecoveryResult;
 class ConfigurationService;
 class RunPersistenceCoordinator;
-struct FermentationUiResumeFallbackCommand;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -34,6 +38,20 @@ enum class ApplicationLifecycleState : std::uint8_t {
     Initializing,
     Ready,
     ServiceRequired,
+};
+
+// Already evaluated evidence supplied by the owning application/orchestrator
+// boundary. This is a composition input, not a UI-controlled safety or
+// sensor decision and contains no fallback policy.
+struct FermentationApplicationOwningEvidence {
+    bool safetyAllowsStart{false};
+    bool safetyAllowsCooling{false};
+    bool safetyAllowsChange{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
+    std::optional<FaultResetEvaluation> faultResetEvaluation;
+    std::optional<CrossRolePlausibilityContext> sensorPlausibility;
 };
 
 class FermentationApplication {
@@ -75,6 +93,42 @@ class FermentationApplication {
         return recoveryDisposition_;
     }
 
+    // These composition points are shared by local and future Web adapters.
+    // They allocate identity, resolve current configuration, and return an
+    // already application-bound owning request. The adapter supplies values
+    // and expected revisions only.
+    [[nodiscard]] FermentationApplicationRequestResult prepareStartProgram(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartProgramIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareStartManualHolding(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartManualHoldingIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareStop(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStopRunIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareCompletion(
+        const FermentationUiCommandContext& context,
+        const FermentationUiCompleteRunIntent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
+    [[nodiscard]] FermentationApplicationRequestResult prepareEnvelope(
+        const FermentationUiCommandContext& context,
+        const FermentationUiEnvelopePayload& payload,
+        const FermentationApplicationOwningEvidence& evidence);
+    // Confirmation reuses the already application-bound request.  It only
+    // changes the existing envelope confirmation bit; it never allocates a
+    // new CommandId or derives a replacement runId.
+    [[nodiscard]] static FermentationApplicationRequestResult confirmPrepared(
+        const FermentationApplicationRequestResult& prepared) noexcept;
+
+    // Existing configuration recovery remains the authorization owner. This
+    // application entry point composes its FactoryResetCompleted result with
+    // the run-persistence epoch handoff before publishing the new runtime.
+    [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
+
     // Explicit R1 selected-fallback action.  The command carries only the
     // app-owned confirmation/revision contract; fresh sensor/planner evidence
     // is supplied by the owning application/orchestrator boundary, never by
@@ -87,6 +141,16 @@ class FermentationApplication {
         const FermentationUiResumeFallbackCommand& command);
 
    private:
+    template <typename Request>
+    [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
+        Request request,
+        std::optional<CrossRolePlausibilityContext> owningPlausibility =
+            std::nullopt);
+    template <typename Intent>
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareAdditionalEnvelope(
+        const FermentationUiCommandContext& context, const Intent& intent,
+        const FermentationApplicationOwningEvidence& evidence);
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
 #endif
@@ -125,7 +189,11 @@ class FermentationApplication {
     std::unique_ptr<ConfigurationMutationCoordinator> mutationCoordinator_;
     std::unique_ptr<ConfigurationGraphStore> graphStore_;
     std::unique_ptr<ConfigurationService> configurationService_;
+    std::unique_ptr<ConfigurationRecoveryService> configurationRecoveryService_;
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
+    std::unique_ptr<ApplicationRunIdentity> runIdentity_;
+    device_platform::IStateStore* stateStore_{nullptr};
+    std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
     std::unique_ptr<RunCommandState> pendingFallbackResume_;

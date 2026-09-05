@@ -10,6 +10,7 @@
 #include "configuration_graph_store.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_service.hpp"
+#include "run_persistence_contract.hpp"
 #include "state_store.hpp"
 
 namespace fermentation {
@@ -32,6 +33,7 @@ enum class ConfigurationRecoveryStatus : std::uint8_t {
     BootstrapCommitIndeterminate,
     ConfigurationRecordOutcomeIndeterminate,
     ConfigurationCommitIndeterminate,
+    RunPersistenceHandoffUnavailable,
 };
 
 enum class ConfigurationSafetyProducer : std::uint8_t {
@@ -63,6 +65,7 @@ struct ConfigurationRecoveryResult {
             case ConfigurationRecoveryStatus::
                 ConfigurationRecordOutcomeIndeterminate:
             case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+            case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
             case ConfigurationRecoveryStatus::RuntimePreparationFailure:
                 safetyProducer =
                     ConfigurationSafetyProducer::ConfigurationUnavailable;
@@ -104,6 +107,23 @@ class ConfigurationRecoveryService {
 
     [[nodiscard]] ConfigurationRecoveryResult boot();
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
+    // Minted only after canonical reset completion and consumed once by the
+    // application when it hands the new epoch to run persistence. The phase
+    // reflects the persistent bootstrap handoff state and is advanced only by
+    // the owner methods below.
+    [[nodiscard]] std::optional<AuthorizedRunEpochHandoffProof>
+    takeAuthorizedRunEpochHandoffProof() noexcept;
+    // Persists Pending -> Committed only after the coordinator has prepared
+    // and verified both exact target slots. A proof alone is insufficient.
+    [[nodiscard]] ConfigurationRecoveryResult commitAuthorizedRunEpochHandoff(
+        AuthorizedRunEpochHandoffProof& proof,
+        const AuthorizedRunEpochHandoffSlotsPrepared& prepared);
+    // Persists Committed -> Consumed only after the coordinator has finalized
+    // and verified the exact target head. Pending/Committed may be retried
+    // after a crash; Consumed never mints another capability.
+    [[nodiscard]] ConfigurationRecoveryResult consumeAuthorizedRunEpochHandoff(
+        AuthorizedRunEpochHandoffProof& proof,
+        const AuthorizedRunEpochHandoffHeadFinalized& finalized);
     [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>
     lastResourcePeaks() const {
         return lastResourcePeaks_;
@@ -155,6 +175,8 @@ class ConfigurationRecoveryService {
     [[nodiscard]] ConfigurationRecoveryStatus verifyFactoryEmpty() const;
     [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
         ConfigurationBootstrapScanStatus status);
+    void armAuthorizedRunEpochHandoff(
+        const ConfigurationBootstrapRecord& record) noexcept;
 
     device_platform::IStateStore& store_;
     ConfigurationBootstrapStore& bootstrapStore_;
@@ -162,6 +184,7 @@ class ConfigurationRecoveryService {
     ConfigurationService& configurationService_;
     ConfigurationMutationCoordinator& mutationCoordinator_;
     std::optional<PendingRootResolution> pendingRoot_;
+    std::optional<AuthorizedRunEpochHandoffProof> pendingRunEpochHandoff_;
     std::optional<ConfigurationRecoveryResourcePeaks> lastResourcePeaks_;
 };
 

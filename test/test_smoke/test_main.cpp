@@ -219,7 +219,8 @@ void test_product_application_keeps_resume_offer_after_begin_returns() {
     request.runId = "resume-offer";
     request.program = *document;
     request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision = 1U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = fermentation::RunSensorMode::Product;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;

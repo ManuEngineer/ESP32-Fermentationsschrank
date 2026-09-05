@@ -705,6 +705,10 @@ void test_ui_configuration_confirmation_uses_current_owning_basis() {
         static_cast<int>(device_platform::DeviceUiCommandOutcomeCategory::
                              ConfirmationRequired),
         static_cast<int>(unconfirmed.category));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationUiCommandPhase::DecisionOnly),
+        static_cast<int>(unconfirmed.phase));
 
     // Advancing the owning service basis after preview installation must be
     // observed before the UI bridge can offer confirmation.
@@ -725,6 +729,30 @@ void test_ui_configuration_confirmation_uses_current_owning_basis() {
                              ConfigurationConflictFailure),
         static_cast<int>(
             std::get<fermentation::ConfigurationCommitStatus>(stale.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationUiCommandPhase::DecisionOnly),
+        static_cast<int>(stale.phase));
+
+    Fixture confirmedFixture;
+    const auto confirmedPreview =
+        installChangedPreview(confirmedFixture, "UI-Confirmed");
+    fermentation::FermentationUiConfigurationCommitCommand confirmedCommand;
+    confirmedCommand.previewHandle = confirmedPreview.handle;
+    confirmedCommand.expectedUserConfigurationRevision =
+        confirmedPreview.expectedUserConfigurationRevision;
+    confirmedCommand.confirmed = true;
+    const auto committed =
+        fermentation::FermentationUiCommandBridge::commitConfiguration(
+            confirmedFixture.service, confirmedCommand);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationCommitStatus::Activated),
+        static_cast<int>(std::get<fermentation::ConfigurationCommitStatus>(
+            committed.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(committed.phase));
 }
 
 void test_theme_only_preview_is_visible_and_commits_v2() {

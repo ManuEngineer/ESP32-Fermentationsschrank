@@ -139,7 +139,7 @@ struct ProgramStartRequest {
     std::string runId;
     ProgramDocument program;
     ProgramSourceKind sourceKind{ProgramSourceKind::UserProgram};
-    std::uint32_t sourceProgramRevision{0U};
+    RunProgramSourceRevision sourceProgramRevision;
     RunSensorMode sensorMode{RunSensorMode::Air};
     bool safetyAllowsStart{false};
     bool airSensorValid{false};

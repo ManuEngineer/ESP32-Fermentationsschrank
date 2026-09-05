@@ -73,6 +73,8 @@ bool equalFermentationUiSemanticSnapshot(
             right.revisions.expectedRecoveryEpisodeRevision ||
         left.revisions.expectedUserConfigurationRevision !=
             right.revisions.expectedUserConfigurationRevision ||
+        left.revisions.expectedProgramCatalogRevision !=
+            right.revisions.expectedProgramCatalogRevision ||
         left.home.mode != right.home.mode ||
         left.home.processState != right.home.processState ||
         left.home.activeRunId != right.home.activeRunId ||

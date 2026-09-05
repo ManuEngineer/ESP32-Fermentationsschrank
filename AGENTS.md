@@ -68,6 +68,12 @@ Nicht triviale Arbeit folgt `docs/AGENT_WORKFLOW.md`:
 4. Erst nach Freigabe des exakten Plan-Commits umsetzen.
 5. Bei materieller Abweichung Plan aktualisieren und erneut freigeben lassen.
 
+Der ausführende Agent ist der Builder; der formale Full Review erfolgt
+grundsätzlich unabhängig vom Builder. Nach dem Builder-Self-Check hält der
+Agent für den Independent Review an. Nach lokal begrenzten Korrekturen gilt
+Fix Verification statt eines erneuten Full Review, solange keine materielle
+Änderung vorliegt. Details stehen ausschließlich in `docs/AGENT_WORKFLOW.md`.
+
 Ein nativer Planungsmodus ist nur das Arbeitsmittel zur Planerstellung. Er
 ersetzt weder den versionierten Markdown-Plan noch die Ownerfreigabe der exakten
 Plan-SHA. Ist kein nativer Planungsmodus verfuegbar, gilt derselbe Planvertrag
@@ -90,20 +96,40 @@ Ein Review prueft den vollstaendigen aktuellen Diff gegen Plan, Anforderungen,
 Architektur, Tests, Dokumentation sowie SOLID, DRY und KISS; es endet nicht bei
 den auffaelligsten Befunden.
 
-Ein vollstaendiger lokaler Lauf erfolgt nur nach Review ohne offene Befunde, auf
-dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
+Die verbindliche Reihenfolge vor einem Ready-Wechsel lautet:
 
-GitHub-Firmware-CI laeuft nicht im Draft. Der Owner setzt nach dem Review auf
-`Ready for review`; spaetere semantische Pushes eines Nicht-Draft-PR starten CI
-erneut. Markdown-only loest keine Firmware-CI aus. Jede semantische Aenderung,
-auch in normativer Dokumentation, verwirft jedoch den Reviewnachweis.
+```text
+Independent Review abgeschlossen
+-> OPEN_BLOCKERS=0
+-> Owner autorisiert finalen lokalen Pre-Ready-Lauf
+-> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> Owner setzt Ready for review
+-> GitHub-CI PASS
+-> Merge-Gate
+```
+
+Ein vollstaendiger lokaler Pre-Ready-Lauf erfolgt nur nach abgeschlossenem
+Independent Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
+ausdruecklicher Owner-Anweisung; `FOLLOW-UP` und `NO-ACTION` blockieren ihn
+nicht. `OPEN_BLOCKERS=0` allein erlaubt weder den Lauf noch den Wechsel auf
+`Ready for review`.
+
+GitHub-Firmware-CI laeuft nicht im Draft. Erst nach
+`PRE_READY_LOCAL_GATES=PASS` setzt der Owner auf `Ready for review`; spaetere
+semantische Pushes eines Nicht-Draft-PR starten CI erneut. Markdown-only loest
+keine Firmware-CI aus. Bei semantischen Aenderungen gilt die im Workflow
+definierte Fix-Verification-/Materialitaetsregel; ein neuer Full Review ist
+nur bei materieller Aenderung oder breitem neuem Diff erforderlich.
 
 Nach CI-Fehler legt der Agent Befund und Korrekturplan vor; nur der Owner
 entscheidet ueber eine Rueckstufung auf Draft und den erneuten
 `Ready for review`-Wechsel.
 
-Testbefehle, Profile, Werkzeuge und Ergebnisstatus stehen ausschliesslich in
-`docs/CI_AND_QUALITY_GATES.md`. Nicht ausgefuehrte Tests sind nicht bestanden.
+Zeitpunkt, Voraussetzungen, Profile, Toolvertraege und Ergebnisstatus stehen
+in `docs/CI_AND_QUALITY_GATES.md`. Die vollstaendigen ausfuehrbaren
+Gatebefehle und die clang-tidy-Dateiliste stehen ausschliesslich im dort
+referenzierten `scripts/run_pre_ready_gates.sh`. Nicht ausgefuehrte Tests sind
+nicht bestanden.
 
 ## Session-Handover
 

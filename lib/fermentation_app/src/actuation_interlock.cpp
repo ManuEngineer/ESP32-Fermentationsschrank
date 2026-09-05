@@ -285,6 +285,7 @@ bool ActuationInterlock::isKnown(ConfigurationRecoveryStatus status) noexcept {
         case ConfigurationRecoveryStatus::
             ConfigurationRecordOutcomeIndeterminate:
         case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+        case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
             return true;
     }
     return false;

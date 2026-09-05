@@ -51,6 +51,17 @@ class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
 
 class RunPersistenceCoordinatorTestAccess {
    public:
+    static AuthorizedRunEpochHandoffProof epochHandoffProof(
+        device_platform::StorageEpoch previous,
+        device_platform::StorageEpoch current) {
+        return AuthorizedRunEpochHandoffProof(
+            previous, current, AuthorizedRunEpochHandoffPhase::Pending);
+    }
+
+    static void promoteHandoffProof(AuthorizedRunEpochHandoffProof& proof) {
+        proof.promoteToCommitted();
+    }
+
     static RunPersistenceResult writeSnapshotCore(
         RunPersistenceCoordinator& coordinator,
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
@@ -100,11 +111,19 @@ class RunPersistenceCoordinatorTestAccess {
         return coordinator.persistedIds_[index];
     }
 };
+
+class ApplicationRunIdentityTestAccess {
+   public:
+    static ApplicationCommandIdentity allocate(ApplicationRunIdentity& value) {
+        return *value.allocateForApplication().identity;
+    }
+};
 }  // namespace fermentation
 
 namespace {
 
 using namespace fermentation;
+using fermentation::ApplicationRunIdentityTestAccess;
 
 RunCheckpointTime trustedCheckpointTime(const std::uint64_t monotonicMillis) {
     return {monotonicMillis, 1'700'000'000LL + static_cast<std::int64_t>(
@@ -426,7 +445,8 @@ CommandDecision startDecision(
     request.runId = "persisted-run";
     request.program = program.has_value() ? *program : runnableProgram();
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision = 1U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = sensorMode;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;
@@ -480,6 +500,58 @@ device_platform::StateStoreKey slotKey(const char* name) {
     const auto created = device_platform::StateStoreKey::create(name);
     TEST_ASSERT_TRUE(created.key.has_value());
     return *created.key;
+}
+
+std::string encodeCheckpointForTest(const RunPersistenceSnapshot& snapshot,
+                                    device_platform::StorageEpoch epoch,
+                                    std::uint32_t schema,
+                                    std::uint64_t revision) {
+    std::string payload;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(snapshot, payload)));
+    device_platform::StorageEnvelope envelope{device_platform::RecordTypeId{7U},
+                                              schema,
+                                              epoch,
+                                              revision,
+                                              std::nullopt,
+                                              payload};
+    std::string bytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, bytes, 8240U)));
+    return bytes;
+}
+
+std::string encodeLegacyHeadForTest(const RunCheckpointReference& current,
+                                    device_platform::StorageEpoch epoch) {
+    RunPersistenceHead head;
+    head.state = RunPersistenceHeadState::Committed;
+    head.revision = 1U;
+    head.current = current;
+    const auto modern = encodeRunPersistenceHead(head, epoch);
+    TEST_ASSERT_TRUE(modern.has_value());
+    const auto decoded = device_platform::decodeEnvelope(*modern);
+    TEST_ASSERT_TRUE(decoded.envelope.has_value());
+    TEST_ASSERT_FALSE(decoded.envelope->payload.empty());
+    auto payload = decoded.envelope->payload;
+    // The current head encoder appends the explicit schema-4 HWM presence
+    // byte. Removing its absent tag yields the historical schema-3 payload;
+    // no legacy writer is part of production.
+    payload.pop_back();
+    device_platform::StorageEnvelope envelope{device_platform::RecordTypeId{8U},
+                                              3U,
+                                              epoch,
+                                              1U,
+                                              std::nullopt,
+                                              std::move(payload)};
+    std::string bytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, bytes, 256U)));
+    return bytes;
 }
 
 void commitTombstone(
@@ -4588,6 +4660,7 @@ void test_restart_after_prepared_or_slot_cut_is_interrupted() {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceLoadStatus::PreparedInterrupted),
             static_cast<int>(afterBoot.loadAndInitialize().status));
+        TEST_ASSERT_FALSE(afterBoot.commandIdHighWater().has_value());
     }
 }
 
@@ -4794,6 +4867,8 @@ RunCommandState persistedWaitingForProductRun(
                                                            preheatProgram()),
                                              trustedCheckpointTime(100U))
                              .status));
+    TEST_ASSERT_TRUE(coordinator.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(startId, *coordinator.commandIdHighWater());
     ProcessSignals signals;
     signals.qualificationProgress = QualificationProgress::InBand;
     auto transition =
@@ -4805,6 +4880,7 @@ RunCommandState persistedWaitingForProductRun(
                              .persistTransition(state, transition,
                                                 trustedCheckpointTime(200U))
                              .status));
+    TEST_ASSERT_EQUAL_UINT64(startId, *coordinator.commandIdHighWater());
     signals.qualificationProgress = QualificationProgress::Complete;
     transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
@@ -4816,6 +4892,7 @@ RunCommandState persistedWaitingForProductRun(
                 .persistTransition(state, transition,
                                    RunCheckpointTime{600300U, std::nullopt})
                 .status));
+    TEST_ASSERT_EQUAL_UINT64(startId, *coordinator.commandIdHighWater());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
                           static_cast<int>(state.processState.state));
     return state;
@@ -7122,6 +7199,7 @@ void test_selected_r1_eligible_fallback_uses_existing_resume_rules() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::Ready),
         static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_UINT64(1291U, *recovered.commandIdHighWater());
 }
 
 void test_selected_fallback_rereads_live_source_before_mutation() {
@@ -7792,6 +7870,7 @@ void test_persist_sensor_selection_mode_change_fills_event_and_updates_mode() {
     TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
                           static_cast<int>(*state.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_UINT64(905U, *coordinator.commandIdHighWater());
 }
 
 void test_persist_sensor_selection_mode_change_on_manual_run() {
@@ -8323,7 +8402,8 @@ CommandDecision substitutedStartDecision(const RunCommandState& state,
     request.runId = "persisted-run";
     request.program = program;
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision = 1U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;
@@ -9594,6 +9674,530 @@ void test_r1_application_waits_for_utc_and_rechecks_without_user_confirmation() 
         static_cast<int>(application.publishedProcessState()->state));
 }
 
+void test_issue144_empty_store_allocates_hwm_and_restarts_after_one() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto epoch = device_platform::StorageEpoch{41U};
+    RunPersistenceCoordinator coordinator(store, epoch,
+                                          RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(loaded.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_TRUE(coordinator.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, *coordinator.commandIdHighWater());
+
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto first = startDecision(state, 1U, 100U);
+    const auto applied =
+        coordinator.persistCommand(state, first, trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(applied.status));
+    const auto headBytes = store.read(slotKey("rh0"), 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(headBytes.status));
+    const auto head = decodeRunPersistenceHead(headBytes.value, epoch);
+    TEST_ASSERT_TRUE(head.has_value());
+    TEST_ASSERT_TRUE(head->commandIdHighWater.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, *head->commandIdHighWater);
+
+    store.restart();
+    RunPersistenceCoordinator restarted(store, epoch, RunCheckpointSchedule{});
+    const auto restartedLoad = restarted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(restartedLoad.status));
+    TEST_ASSERT_TRUE(restarted.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, *restarted.commandIdHighWater());
+    auto next =
+        ApplicationRunIdentity::create(epoch, restarted.commandIdHighWater());
+    TEST_ASSERT_TRUE(next.has_value());
+    auto allocator = std::move(*next);
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, ApplicationRunIdentityTestAccess::allocate(allocator).commandId());
+}
+
+void test_issue144_legacy_hwm_unknown_blocks_new_command() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto epoch = device_platform::StorageEpoch{42U};
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    for (std::size_t index = 0U; index < ids.size(); ++index)
+        ids[index] = static_cast<CommandId>(index + 1U);
+    const auto snapshot = makeRunPersistenceSnapshot(
+        state, ids, ids.size(), RunCheckpointTrigger::Command,
+        trustedCheckpointTime(100U), 5U);
+    TEST_ASSERT_TRUE(snapshot.has_value());
+    const auto record = encodeCheckpointForTest(*snapshot, epoch, 3U, 1U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.write(slotKey("rc0"), record)));
+    RunPersistenceRawRecord raw;
+    TEST_ASSERT_TRUE(decodeRunPersistenceRecordInto(record, epoch, raw));
+    const auto reference = makeRunCheckpointReference(0U, raw, epoch);
+    const auto head = encodeLegacyHeadForTest(reference, epoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.write(slotKey("rh0"), head)));
+
+    RunPersistenceCoordinator coordinator(store, epoch,
+                                          RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(loaded.status));
+    TEST_ASSERT_FALSE(coordinator.commandIdHighWater().has_value());
+    const auto rejected = coordinator.persistCommand(
+        state, startDecision(state, 33U, 200U), trustedCheckpointTime(200U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Blocked),
+                          static_cast<int>(rejected.status));
+}
+
+void test_issue144_committed_maximum_hwm_fails_closed_on_next_command() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto epoch = device_platform::StorageEpoch{42U};
+    RunPersistenceCoordinator coordinator(store, epoch,
+                                          RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    constexpr CommandId maximum = std::numeric_limits<CommandId>::max();
+    const auto first =
+        coordinator.persistCommand(state, startDecision(state, maximum, 100U),
+                                   trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(first.status));
+    TEST_ASSERT_TRUE(coordinator.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(maximum, *coordinator.commandIdHighWater());
+
+    StopRequest stopRequest;
+    stopRequest.envelope = {1U,
+                            CommandSource::LocalDisplay,
+                            200U,
+                            state.processState.transitionSequence,
+                            state.runRevision,
+                            std::nullopt,
+                            std::nullopt,
+                            true,
+                            std::nullopt};
+    stopRequest.option = StopOption::AbortAndTurnOff;
+    const auto stopped = decideStop(state, stopRequest);
+    TEST_ASSERT_TRUE(stopped.proposed());
+    const auto rejected =
+        coordinator.persistCommand(state, stopped, trustedCheckpointTime(200U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CounterOverflow),
+        static_cast<int>(rejected.status));
+}
+
+void test_issue144_periodic_checkpoint_keeps_committed_hwm_not_fifo_max() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto epoch = device_platform::StorageEpoch{43U};
+    RunPersistenceCoordinator seed(store, epoch, RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(seed.persistCommand(state,
+                                             startDecision(state, 1000U, 100U),
+                                             trustedCheckpointTime(100U))
+                             .status));
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    for (std::size_t index = 0U; index < 33U; ++index) {
+        const auto commandId = static_cast<CommandId>(1001U + index * 2U);
+        StopRequest stopRequest;
+        stopRequest.envelope = {
+            commandId,         CommandSource::LocalDisplay,
+            200U + index * 2U, state.processState.transitionSequence,
+            state.runRevision, std::nullopt,
+            std::nullopt,      true,
+            std::nullopt};
+        stopRequest.option = StopOption::AbortAndTurnOff;
+        const auto stop = decideStop(state, stopRequest);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Proposed),
+                              static_cast<int>(stop.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, stop,
+                                    trustedCheckpointTime(200U + index * 2U))
+                    .status));
+        const auto nextStartId = static_cast<CommandId>(1002U + index * 2U);
+        const auto start = startDecision(state, nextStartId, 201U + index * 2U);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, start,
+                                    trustedCheckpointTime(201U + index * 2U))
+                    .status));
+    }
+    TEST_ASSERT_TRUE(seed.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(1066U, *seed.commandIdHighWater());
+    TEST_ASSERT_EQUAL_UINT(
+        32U, static_cast<unsigned>(
+                 RunPersistenceCoordinatorTestAccess::persistedIdCount(seed)));
+    TEST_ASSERT_EQUAL_UINT64(
+        1066U, RunPersistenceCoordinatorTestAccess::persistedId(seed, 31U));
+
+    const auto before = seed.commandIdHighWater();
+    const auto periodic =
+        seed.checkpointPeriodic(state, trustedCheckpointTime(300'300U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(periodic.status));
+    TEST_ASSERT_TRUE(before.has_value());
+    TEST_ASSERT_TRUE(seed.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(*before, *seed.commandIdHighWater());
+}
+
+void test_issue144_authorized_epoch_handoff_restarts_identity_at_one() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto oldEpoch = device_platform::StorageEpoch{50U};
+    const auto newEpoch = device_platform::StorageEpoch{51U};
+    RunPersistenceCoordinator oldCoordinator(store, oldEpoch,
+                                             RunCheckpointSchedule{});
+    static_cast<void>(oldCoordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(oldCoordinator
+                             .persistCommand(state,
+                                             startDecision(state, 9U, 100U),
+                                             trustedCheckpointTime(100U))
+                             .status));
+    store.restart();
+
+    RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
+    auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+        oldEpoch, newEpoch);
+    const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+    const auto applied = handoff.finalizeAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(applied.persistenceResult.status));
+    TEST_ASSERT_TRUE(applied.evidence.has_value());
+    const auto repeated = handoff.finalizeAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(repeated.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::Unchanged),
+        static_cast<int>(repeated.persistenceResult.durability));
+    const auto loaded = handoff.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(handoff.commandIdHighWater().has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, *handoff.commandIdHighWater());
+    auto identity =
+        ApplicationRunIdentity::create(newEpoch, handoff.commandIdHighWater());
+    TEST_ASSERT_TRUE(identity.has_value());
+    auto allocator = std::move(*identity);
+    TEST_ASSERT_EQUAL_UINT64(
+        1U, ApplicationRunIdentityTestAccess::allocate(allocator).commandId());
+}
+
+void test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    const auto oldEpoch = device_platform::StorageEpoch{60U};
+    const auto newEpoch = device_platform::StorageEpoch{61U};
+    RunPersistenceCoordinator oldCoordinator(store, oldEpoch,
+                                             RunCheckpointSchedule{});
+    static_cast<void>(oldCoordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(oldCoordinator
+                             .persistCommand(state,
+                                             startDecision(state, 4U, 100U),
+                                             trustedCheckpointTime(100U))
+                             .status));
+    store.restart();
+
+    RunPersistenceCoordinator foreign(store, device_platform::StorageEpoch{62U},
+                                      RunCheckpointSchedule{});
+    const auto foreignLoad = foreign.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::ForeignEpoch),
+        static_cast<int>(foreignLoad.status));
+    TEST_ASSERT_FALSE(foreign.commandIdHighWater().has_value());
+
+    RunPersistenceCoordinator failed(store, newEpoch, RunCheckpointSchedule{});
+    store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto failure = failed.prepareAuthorizedEpochHandoff(
+        RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                               newEpoch));
+    TEST_ASSERT_NOT_EQUAL(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(failure.persistenceResult.status));
+    store.restart();
+    RunPersistenceCoordinator afterFailure(store, newEpoch,
+                                           RunCheckpointSchedule{});
+    const auto afterFailureLoad = afterFailure.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::ForeignEpoch),
+        static_cast<int>(afterFailureLoad.status));
+    TEST_ASSERT_FALSE(afterFailure.commandIdHighWater().has_value());
+}
+
+void seedHandoffSource(SequencedWriteStore& store,
+                       device_platform::StorageEpoch oldEpoch) {
+    RunPersistenceCoordinator source(store, oldEpoch, RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(source.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto committed = source.persistCommand(
+        state, startDecision(state, 19U, 100U), trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    store.restart();
+}
+
+std::string makePreparedHeadForTest(device_platform::StorageEpoch epoch) {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator source(store, epoch, RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(source.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    // A non-periodic mutation writes PreparedHead before its checkpoint slot.
+    // Stop at the slot so the store retains a codec-valid Prepared head.
+    store.faultAt(2U, SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto interrupted = source.persistCommand(
+        state, startDecision(state, 23U, 100U), trustedCheckpointTime(100U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(interrupted.status));
+    const auto head = store.read(slotKey("rh0"), 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(head.status));
+    const auto decoded = decodeRunPersistenceHead(head.value, epoch);
+    TEST_ASSERT_TRUE(decoded.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceHeadState::Prepared),
+                          static_cast<int>(decoded->state));
+    return head.value;
+}
+
+void test_issue144_committed_handoff_rejects_previous_prepared_head() {
+    const auto oldEpoch = device_platform::StorageEpoch{76U};
+    const auto newEpoch = device_platform::StorageEpoch{77U};
+    SequencedWriteStore store;
+    seedHandoffSource(store, oldEpoch);
+
+    RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
+    auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+        oldEpoch, newEpoch);
+    const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+
+    // Model a persisted Committed bootstrap phase with both exact target
+    // slots already present, but a mixed previous-epoch Prepared head.
+    const auto preparedHead = makePreparedHeadForTest(oldEpoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.backing().write(slotKey("rh0"), preparedHead)));
+    store.restart();
+
+    const auto finalized = handoff.finalizeAuthorizedEpochHandoff(proof);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Blocked),
+                          static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_FALSE(finalized.evidence.has_value());
+    const auto head = store.read(slotKey("rh0"), 256U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(head.status));
+    TEST_ASSERT_EQUAL_STRING(preparedHead.c_str(), head.value.c_str());
+}
+
+void test_issue144_epoch_handoff_durability_matches_each_write_cutpoint() {
+    using Fault = SequencedWriteStore::WriteFault;
+    const auto oldEpoch = device_platform::StorageEpoch{70U};
+    const auto newEpoch = device_platform::StorageEpoch{71U};
+
+    for (const auto& failure : std::array<std::pair<std::size_t, Fault>, 3>{
+             std::pair{1U, Fault::FailBeforeBegin},
+             std::pair{2U, Fault::FailBeforeBegin},
+             std::pair{3U, Fault::FailBeforeBegin}}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+            oldEpoch, newEpoch);
+        store.faultAt(failure.first, failure.second);
+        RunPersistenceResult result;
+        if (failure.first <= 2U) {
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+            result = prepared.persistenceResult;
+        } else {
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(prepared.persistenceResult.status));
+            TEST_ASSERT_TRUE(prepared.evidence.has_value());
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+            result =
+                handoff.finalizeAuthorizedEpochHandoff(proof).persistenceResult;
+        }
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(failure.first == 1U
+                                 ? RunPersistenceDurability::Unchanged
+                                 : RunPersistenceDurability::Changed),
+            static_cast<int>(result.durability));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
+        if (failure.first <= 2U) {
+            const auto resumed =
+                retry.prepareAuthorizedEpochHandoff(retryProof);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(resumed.persistenceResult.status));
+            TEST_ASSERT_TRUE(resumed.evidence.has_value());
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
+        } else {
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
+        }
+        const auto resumed = retry.finalizeAuthorizedEpochHandoff(retryProof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.persistenceResult.status));
+    }
+}
+
+void test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write() {
+    using Fault = SequencedWriteStore::WriteFault;
+    const auto oldEpoch = device_platform::StorageEpoch{74U};
+    const auto newEpoch = device_platform::StorageEpoch{75U};
+    for (const auto powerCutWrite : {1U, 2U}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+            oldEpoch, newEpoch);
+        store.faultAt(powerCutWrite, Fault::PowerCutBeforeCommit);
+        const auto interrupted = handoff.prepareAuthorizedEpochHandoff(proof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(interrupted.persistenceResult.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(powerCutWrite == 1U
+                                 ? RunPersistenceDurability::Unchanged
+                                 : RunPersistenceDurability::Changed),
+            static_cast<int>(interrupted.persistenceResult.durability));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
+        const auto resumed = retry.prepareAuthorizedEpochHandoff(retryProof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.persistenceResult.status));
+        TEST_ASSERT_TRUE(resumed.evidence.has_value());
+        RunPersistenceCoordinatorTestAccess::promoteHandoffProof(retryProof);
+        const auto finalized = retry.finalizeAuthorizedEpochHandoff(retryProof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(finalized.persistenceResult.status));
+    }
+}
+
+void test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable() {
+    const auto oldEpoch = device_platform::StorageEpoch{72U};
+    const auto newEpoch = device_platform::StorageEpoch{73U};
+    for (const auto unknownWrite : {1U, 2U, 3U}) {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        store.unknownWithoutCommitAt(unknownWrite);
+        store.readFaultAt(unknownWrite,
+                          SequencedWriteStore::ReadFault::ReadError);
+        auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+            oldEpoch, newEpoch);
+        RunPersistenceResult result;
+        if (unknownWrite <= 2U) {
+            result =
+                handoff.prepareAuthorizedEpochHandoff(proof).persistenceResult;
+        } else {
+            const auto prepared = handoff.prepareAuthorizedEpochHandoff(proof);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(prepared.persistenceResult.status));
+            TEST_ASSERT_TRUE(prepared.evidence.has_value());
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+            result =
+                handoff.finalizeAuthorizedEpochHandoff(proof).persistenceResult;
+        }
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(unknownWrite == 1U
+                                 ? RunPersistenceDurability::MayHaveChanged
+                                 : RunPersistenceDurability::Changed),
+            static_cast<int>(result.durability));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(handoff.state()));
+
+        store.restart();
+        RunPersistenceCoordinator retry(store, newEpoch,
+                                        RunCheckpointSchedule{});
+        auto retryProof =
+            RunPersistenceCoordinatorTestAccess::epochHandoffProof(oldEpoch,
+                                                                   newEpoch);
+        if (unknownWrite <= 2U) {
+            const auto prepared =
+                retry.prepareAuthorizedEpochHandoff(retryProof);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(prepared.persistenceResult.status));
+            TEST_ASSERT_TRUE(prepared.evidence.has_value());
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
+        } else {
+            RunPersistenceCoordinatorTestAccess::promoteHandoffProof(
+                retryProof);
+        }
+        const auto resumed = retry.finalizeAuthorizedEpochHandoff(retryProof);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(resumed.persistenceResult.status));
+    }
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -9807,5 +10411,19 @@ int main(int, char**) {
     RUN_TEST(test_r1_pending_revision_change_is_fail_closed);
     RUN_TEST(
         test_r1_application_waits_for_utc_and_rechecks_without_user_confirmation);
+    RUN_TEST(test_issue144_empty_store_allocates_hwm_and_restarts_after_one);
+    RUN_TEST(test_issue144_legacy_hwm_unknown_blocks_new_command);
+    RUN_TEST(test_issue144_committed_maximum_hwm_fails_closed_on_next_command);
+    RUN_TEST(
+        test_issue144_periodic_checkpoint_keeps_committed_hwm_not_fifo_max);
+    RUN_TEST(test_issue144_authorized_epoch_handoff_restarts_identity_at_one);
+    RUN_TEST(test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed);
+    RUN_TEST(
+        test_issue144_epoch_handoff_durability_matches_each_write_cutpoint);
+    RUN_TEST(
+        test_issue144_epoch_handoff_power_cuts_resume_after_each_partial_write);
+    RUN_TEST(
+        test_issue144_epoch_handoff_indeterminate_write_is_honest_and_resumable);
+    RUN_TEST(test_issue144_committed_handoff_rejects_previous_prepared_head);
     return UNITY_END();
 }

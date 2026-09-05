@@ -276,7 +276,7 @@ bool validRecoveryFieldsForSnapshot(const RunPersistenceSnapshot& snapshot) {
 }  // namespace
 
 bool knownRunPersistenceSchema(std::uint32_t schemaVersion) {
-    return schemaVersion == 1U || schemaVersion == 2U ||
+    return schemaVersion == 1U || schemaVersion == 2U || schemaVersion == 3U ||
            schemaVersion == kCurrentRunPersistenceSchema;
 }
 

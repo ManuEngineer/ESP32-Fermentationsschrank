@@ -80,7 +80,8 @@ ProgramStartRequest programStart(
     request.runId = "run-15";
     request.program = commissionProgram("water-kefir");
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
-    request.sourceProgramRevision = 1U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;
@@ -363,7 +364,8 @@ void test_program_start_requires_confirmation_safety_and_current_context() {
         static_cast<int>(CommandStatus::StaleState),
         static_cast<int>(decideProgramStart(state, request).status));
     request.envelope.expectedStateSequence = 0U;
-    request.sourceProgramRevision = 0U;
+    request.sourceProgramRevision =
+        ::fermentation::RunProgramSourceRevision{0U};
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::InvalidInput),
         static_cast<int>(decideProgramStart(state, request).status));
@@ -432,7 +434,8 @@ void test_start_summary_is_available_before_confirmation_but_never_masks_rejecti
     {
         auto state = standbyState();
         auto request = programStart(state, 1U);
-        request.sourceProgramRevision = 0U;
+        request.sourceProgramRevision =
+            ::fermentation::RunProgramSourceRevision{0U};
         request.envelope.confirmed = false;
         const auto decision = decideProgramStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
@@ -1322,13 +1325,15 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
         TEST_ASSERT_TRUE(unconfirmed.startSummary.has_value());
         assertRejectedWithoutStateMutation(unconfirmed);
 
-        request.sourceProgramRevision = 0U;
+        request.sourceProgramRevision =
+            ::fermentation::RunProgramSourceRevision{0U};
         const auto invalid = decideProgramStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(invalid.status));
         assertRejectedWithoutStateMutation(invalid);
 
-        request.sourceProgramRevision = 1U;
+        request.sourceProgramRevision =
+            ::fermentation::RunProgramSourceRevision{1U};
         request.safetyAllowsStart = false;
         const auto unsafe = decideProgramStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
