@@ -58,6 +58,33 @@ RunCommandState projectedProgramState(ProcessState phase) {
     return state;
 }
 
+RunCommandState projectedManualTimedState(ProcessState phase) {
+    fermentation::ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = 38.0;
+    source.stage.durationMinutes = 120U;
+    source.targetQualification.bandCelsius = 0.5;
+    source.targetQualification.durationMinutes = 10U;
+    source.maximumTargetReachMinutes = 180U;
+    source.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    source.completion.coolingTargetCelsius = 9.0;
+    source.completion.holdDurationMinutes = 30U;
+
+    fermentation::ProgramRunSource runSource = source;
+    const auto run = ActiveRun::start(runSource, std::nullopt);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    RunCommandState state;
+    state.processState.state = phase;
+    state.activeProgramRun = *run;
+    state.activeRunId = "projected-manual-timed";
+    state.activeRunSensorMode = RunSensorMode::Product;
+    state.processRunSnapshot = makeProcessRunSnapshot(*state.activeProgramRun);
+    TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
+    state.runRevision = 4U;
+    state.processState.transitionSequence = 8U;
+    return state;
+}
+
 void test_product_preheating_uses_air_without_changing_run_mode() {
     const auto context =
         resolveEffectiveControlContext(baseInput(ProcessState::Preheating));
@@ -219,6 +246,32 @@ void test_live_state_projection_uses_effective_targets_and_completion_target() {
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 12.0, context.target.targetCelsius);
 }
 
+void test_manual_timed_control_projection_uses_completion_contract() {
+    auto state = projectedManualTimedState(ProcessState::Cooling);
+    TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessKind::Timed),
+                          static_cast<int>(state.processRunSnapshot->kind));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CompletionMode::CoolAndHoldForDuration),
+        static_cast<int>(state.processRunSnapshot->completionMode));
+    TEST_ASSERT_TRUE(state.processRunSnapshot->holdDurationMinutes.has_value());
+    TEST_ASSERT_EQUAL_UINT32(30U,
+                             *state.processRunSnapshot->holdDurationMinutes);
+
+    auto context = resolveEffectiveControlContext(state);
+    TEST_ASSERT_TRUE(context.valid);
+    TEST_ASSERT_TRUE(context.target.targetKind ==
+                     ControlTargetKind::CoolingCompletion);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 9.0, context.target.targetCelsius);
+
+    state.processState.state = ProcessState::CoolHolding;
+    context = resolveEffectiveControlContext(state);
+    TEST_ASSERT_TRUE(context.valid);
+    TEST_ASSERT_TRUE(context.target.targetKind ==
+                     ControlTargetKind::CoolingCompletion);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 9.0, context.target.targetCelsius);
+}
+
 RunCommandState manualRunState(ProcessState phase, bool preheatEnabled) {
     RunCommandState state;
     state.processState.state = phase;
@@ -366,5 +419,6 @@ int main(int argc, char** argv) {
         test_live_state_projection_rejects_stale_snapshot_and_manual_identity);
     RUN_TEST(
         test_live_state_projection_uses_effective_targets_and_completion_target);
+    RUN_TEST(test_manual_timed_control_projection_uses_completion_contract);
     return UNITY_END();
 }

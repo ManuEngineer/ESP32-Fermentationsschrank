@@ -1742,6 +1742,75 @@ SensorSelectionCommandRequest sensorSelectionRequest(
     return request;
 }
 
+void test_manual_timed_sensor_follow_up_uses_fixed_manual_context() {
+    auto state = standbyState();
+    auto start = manualTimedStart(state, 120U, RunSensorMode::Product, false);
+    const auto started = decideProgramStart(state, start);
+    TEST_ASSERT_TRUE(started.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::UserDecisionRequired),
+        static_cast<int>(started.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(started.after.sensorSelectionRuntime.permission));
+    TEST_ASSERT_FALSE(started.after.sensorSelectionRuntime.phase ==
+                      SensorSelectionPhase::AirFallbackActive);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
+                          static_cast<int>(applyRunCommand(state, started)));
+
+    const auto invalidProduct =
+        plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
+    const auto continueWithAir = decideApplySensorSelectionAction(
+        state,
+        sensorSelectionRequest(state, 121U,
+                               SensorSelectionUserAction::ContinueWithAir),
+        invalidProduct);
+    TEST_ASSERT_TRUE(continueWithAir.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*continueWithAir.sensorSelectionApplyStatus));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+        static_cast<int>(continueWithAir.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(*continueWithAir.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(
+            continueWithAir.after.sensorSelectionRuntime.permission));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::Applied),
+        static_cast<int>(applyRunCommand(state, continueWithAir)));
+
+    // ManualTimed has the fixed ManualReturnToProduct contract. A fresh,
+    // positive product observation therefore permits the existing return
+    // action without introducing a second policy or an automatic fallback.
+    const auto freshProduct =
+        plausibilityWith(validSnapshot(), validSnapshot(), validSnapshot());
+    const auto returnToProduct = decideApplySensorSelectionAction(
+        state,
+        sensorSelectionRequest(state, 122U,
+                               SensorSelectionUserAction::ReturnToProduct),
+        freshProduct);
+    TEST_ASSERT_TRUE(returnToProduct.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*returnToProduct.sensorSelectionApplyStatus));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::NormalProduct),
+        static_cast<int>(returnToProduct.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(*returnToProduct.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(
+            returnToProduct.after.sensorSelectionRuntime.permission));
+}
+
 void test_sensor_selection_action_continue_with_air_valid_and_invalid_states() {
     // Gueltig: UserDecisionRequired, Produkt ausgefallen, Luft/Kuehlung
     // gueltig - Blocked -> Allowed loest den Restored-Effekt aus (keine
@@ -2670,6 +2739,7 @@ int main() {
     RUN_TEST(
         test_sensor_selection_action_no_change_leaves_everything_untouched);
     RUN_TEST(test_sensor_selection_action_safety_pending_matrix);
+    RUN_TEST(test_manual_timed_sensor_follow_up_uses_fixed_manual_context);
     RUN_TEST(test_sensor_selection_action_mirrors_mode_into_manual_run_plan);
     RUN_TEST(
         test_sensor_selection_action_already_processed_repeats_no_second_effect);

@@ -76,6 +76,21 @@ std::string schemaThreeActivePayload() {
         "0000010000000000000063000000020002000200000000000000010000000000");
 }
 
+// Fixed schema-4 ProgramRun golden from main@0b8b4cc, captured before the
+// ManualTimed source was introduced.  This must stay independent of the
+// current encoder so the legacy-read assertion cannot silently follow schema
+// 5 writes.
+std::string schemaFourProgramRunGoldenPayload() {
+    return bytesFromHex(
+        "01010000000000000064000500000001000e636865636b706f696e742d72756e"
+        "0101010200000001000000000000000101005d00000006000000000001ffff00"
+        "0b77617465722d6b65666972000b5761737365726b6566697200000101010101"
+        "01000201010000001e03010140430000000000000100000078013fe000000000"
+        "0000010000000a01000000b400010000000100010000000a000000b400010000"
+        "0078000600000000000000000000000000000000000000000000010000000000"
+        "000063000000020002000200000000000000010000000000");
+}
+
 std::string schemaOneNoActivePayload() {
     return bytesFromHex(
         "03020000000000000064000500000000000003000000000000000000000000000"
@@ -198,23 +213,41 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
 }
 
-void test_schema_four_preserves_64_bit_neutral_run_provenance() {
-    auto source = programSnapshot();
-    source.program->sourceProgramRevision =
-        RunProgramSourceRevision{0x1'0000'0000ULL + 7U};
-    std::string encoded;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCodecStatus::Success),
-        static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
-
+void test_schema_four_program_run_golden_restores_without_manual_reinterpretation() {
     const auto decoded =
-        decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
+        decodeRunPersistenceSnapshot(schemaFourProgramRunGoldenPayload(), 4U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_TRUE(decoded.snapshot->program.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::FactoryCatalog),
+        static_cast<int>(decoded.snapshot->program->sourceKind));
+    TEST_ASSERT_TRUE(
+        decoded.snapshot->program->sourceProgramRevision.has_value());
     TEST_ASSERT_EQUAL_UINT64(
-        0x1'0000'0000ULL + 7U,
-        decoded.snapshot->program->sourceProgramRevision->value());
+        1U, decoded.snapshot->program->sourceProgramRevision->value());
+    const auto* document = storedProgram(decoded.snapshot->program->source);
+    TEST_ASSERT_NOT_NULL(document);
+    TEST_ASSERT_EQUAL_STRING("water-kefir", document->program.id.c_str());
+    TEST_ASSERT_EQUAL_STRING("Wasserkefir", document->program.name.c_str());
+    TEST_ASSERT_FALSE(manualTimedSource(decoded.snapshot->program->source) !=
+                      nullptr);
+
+    const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::FactoryCatalog),
+        static_cast<int>(restored->activeProgramRun->snapshot().sourceKind));
+    TEST_ASSERT_TRUE(restored->activeProgramRun->snapshot()
+                         .sourceProgramRevision.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        1U,
+        restored->activeProgramRun->snapshot().sourceProgramRevision->value());
+    TEST_ASSERT_FALSE(
+        manualTimedSource(restored->activeProgramRun->snapshot().source) !=
+        nullptr);
 }
 
 void test_schema_five_round_trips_manual_timed_without_catalog_provenance() {
@@ -253,6 +286,14 @@ void test_schema_five_round_trips_manual_timed_without_catalog_provenance() {
     TEST_ASSERT_NOT_NULL(manualTimedSource(decoded.snapshot->program->source));
     TEST_ASSERT_FALSE(decodeRunPersistenceSnapshot(encoded, 4U).status ==
                       RunPersistenceCodecStatus::Success);
+    const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProgramSourceKind::ManualTimed),
+        static_cast<int>(restored->activeProgramRun->snapshot().sourceKind));
+    TEST_ASSERT_FALSE(restored->activeProgramRun->snapshot()
+                          .sourceProgramRevision.has_value());
 }
 
 void test_schema_three_active_program_golden_migrates_without_reinterpretation() {
@@ -1660,7 +1701,8 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
-    RUN_TEST(test_schema_four_preserves_64_bit_neutral_run_provenance);
+    RUN_TEST(
+        test_schema_four_program_run_golden_restores_without_manual_reinterpretation);
     RUN_TEST(
         test_schema_five_round_trips_manual_timed_without_catalog_provenance);
     RUN_TEST(
