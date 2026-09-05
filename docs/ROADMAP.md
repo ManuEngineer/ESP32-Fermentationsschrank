@@ -28,7 +28,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem gemergten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Exakten aktualisierten #26-Plan-Commit ownerfreigeben; erst danach die #26-Implementation beginnen |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `PLAN_REVIEW_BLOCKERS_CORRECTED=YES`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `ACTUATOR_RELEASE=NO`; baut auf dem gemergten #25-Vertrag und dem gemergten #144-Identitätsvertrag auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Exakten aktualisierten #26-Plan-Commit ownerfreigeben; erst danach die #26-Implementation beginnen |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -50,10 +50,12 @@ Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
 Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
 mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
-ist nun die Aktualisierung des Issue-#26-Plans auf den exakten Merge-HEAD des
-abgeschlossenen Vorgängers #144. Issue #26 ist damit planungsbereit und
-unblocked; seine Implementation bleibt bis zur Freigabe des exakten
-aktualisierten Plan-Commits ungestartet.
+ist nun die Korrektur der offenen Issue-#26-Planreview-Blocker auf dem bereits
+provenancierten Merge-HEAD des abgeschlossenen Vorgängers #144. Issue #26 ist
+damit planungsbereit und unblocked; seine Implementation bleibt bis zur
+Freigabe des exakten aktualisierten Plan-Commits ungestartet. Der weiterhin
+verbindliche manuelle Zeit-/Temperaturlauf bleibt eine R1-Abhängigkeit des
+separaten Issue #152 und wird nicht in #26 implementiert.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`, `BLOCKED_BY_ISSUE144=NO`,
@@ -182,8 +184,10 @@ ist geschlossene historische Persistenzprovenienz.
 ## Blocker und spaetere Gates
 
 - Issue #144 / PR #147 sind abgeschlossen und gemergt. Der #26-Plan wird auf
-  den exakten Merge-HEAD aktualisiert; bis zur Ownerfreigabe dieses Plan-Commits
-  bleibt nur die Implementation angehalten.
+  dem exakten Merge-HEAD um die offenen Planreview-Korrekturen ergänzt; bis zur
+  Ownerfreigabe dieses Plan-Commits bleibt nur die Implementation angehalten.
+  Der manuelle Zeit-/Temperaturlauf bleibt bis zum owning Vertrag aus Issue
+  #152 eine reale R1-Abhängigkeit und ist in #26 nur `Unavailable`.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
