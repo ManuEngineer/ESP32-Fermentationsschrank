@@ -95,13 +95,31 @@ struct ManualRunPlan {
     ProcessKind kind{ProcessKind::ManualHolding};
 };
 
+// Renderer-independent owning input for a timed manual run. It contains only
+// user-facing domain values; ApplicationRunIdentity and all runtime evidence
+// are added at the Application boundary.
+struct ManualTimedRunValues {
+    double targetTemperatureCelsius{0.0};
+    std::uint32_t durationMinutes{0U};
+    RunSensorMode sensorMode{RunSensorMode::Air};
+    bool preheatEnabled{false};
+    std::optional<std::uint32_t> maximumProductWaitMinutes;
+    double qualificationBandCelsius{0.0};
+    std::uint32_t qualificationDurationMinutes{0U};
+    std::uint32_t maximumTargetReachMinutes{0U};
+    CompletionMode completionMode{CompletionMode::FinishWithoutCooling};
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
+};
+
 [[nodiscard]] bool validateManualRunPlan(const ManualRunPlan& plan);
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ManualRunPlan& plan);
 
 struct StartSummary {
     std::string runId;
-    std::string programName;
+    std::optional<ProgramSourceKind> sourceKind;
+    std::optional<std::string> programName;
     double targetTemperatureCelsius{0.0};
     std::optional<std::uint32_t> durationMinutes;
     RunSensorMode sensorMode{RunSensorMode::Air};
@@ -137,9 +155,8 @@ struct StartSummary {
 struct ProgramStartRequest {
     CommandEnvelope envelope;
     std::string runId;
-    ProgramDocument program;
-    ProgramSourceKind sourceKind{ProgramSourceKind::UserProgram};
-    RunProgramSourceRevision sourceProgramRevision;
+    ProgramRunSource program;
+    std::optional<RunProgramSourceRevision> sourceProgramRevision;
     RunSensorMode sensorMode{RunSensorMode::Air};
     bool safetyAllowsStart{false};
     bool airSensorValid{false};

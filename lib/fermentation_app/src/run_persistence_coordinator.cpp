@@ -212,15 +212,17 @@ bool recoveryEvidenceWindowOpen(const RunCommandState& current) {
 SensorSelectionProgramContext recoverySensorSelectionProgramContext(
     const RunCommandState& current) {
     if (current.activeProgramRun.has_value()) {
-        const auto& program =
-            current.activeProgramRun->snapshot().sourceProgram.program;
-        SensorSelectionProgramContext context;
-        context.sensorPreference = program.sensorPreference;
-        context.policy = program.productSensorFailure.policy;
-        context.returnStrategy = program.productSensorFailure.returnStrategy;
-        context.fallbackDelaySeconds =
-            program.productSensorFailure.fallbackDelaySeconds;
-        return context;
+        const auto& source = current.activeProgramRun->snapshot().source;
+        if (const auto* program = storedProgram(source)) {
+            SensorSelectionProgramContext context;
+            context.sensorPreference = program->program.sensorPreference;
+            context.policy = program->program.productSensorFailure.policy;
+            context.returnStrategy =
+                program->program.productSensorFailure.returnStrategy;
+            context.fallbackDelaySeconds =
+                program->program.productSensorFailure.fallbackDelaySeconds;
+            return context;
+        }
     }
     SensorSelectionProgramContext context;
     context.sensorPreference = SensorPreference::ProductIfAvailableElseAir;

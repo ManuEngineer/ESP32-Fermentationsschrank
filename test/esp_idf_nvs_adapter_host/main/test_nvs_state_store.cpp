@@ -967,7 +967,6 @@ void cutHarnessWritesEarlyAndLateArtifacts() {
                             std::nullopt};
         request.runId = "slice5-run";
         request.program = *program;
-        request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
         request.sourceProgramRevision =
             ::fermentation::RunProgramSourceRevision{1U};
         request.sensorMode = fermentation::RunSensorMode::Product;
@@ -1316,7 +1315,6 @@ void abruptPowerCutWriterChild(const char* imagePath, const char* metadataPath,
                         std::nullopt};
     request.runId = "slice5-run";
     request.program = *program;
-    request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = fermentation::RunSensorMode::Product;

@@ -135,6 +135,34 @@ Mindestens enthalten:
 - Revisionsnummer, Schema und Integritaetsinformation
 - Transaktionsstatus fuer sicherheits- und aktorwirksame Zustandsaenderungen
 
+### Schema 5: ManualTimed-Quellvertrag
+
+Schema 5 unterscheidet im `ProgramRun`-Checkpoint explizit zwischen
+gespeicherten Programmen und der katalogunabhaengigen `ManualTimed`-Quelle.
+Gespeicherte Factory-/User-Programme persistieren weiterhin ihr
+`RunProgramSourceRevision` und das unveraenderliche `ProgramDocument`.
+`ManualTimed` persistiert stattdessen nur den validierten fluechtigen
+Laufschnappschuss aus Zieltemperatur, Dauer, Vorheizen, Produktwartezeit,
+Zielqualifikation und Abschlussverhalten; seine Source-Revision ist absent.
+
+Die aktuelle Schema-Semantik wird nicht in Schema 4 hineingepresst: neue
+Writes verwenden Schema 5. Die bestehenden Schema-1-bis-4-Records bleiben
+lesbar und werden als gespeicherte ProgramRun-Quellen mit ihrer echten
+historischen Revision interpretiert. Ein unbekanntes neueres Schema bleibt
+fail-closed. Es gibt keine Migration alter Records nur fuer diesen Fachfall.
+Der gespeicherte ProgramCatalog wird durch einen ManualTimed-Lauf nicht
+geaendert.
+
+Nach dem Decode wird derselbe bestehende ProgramRun-/Timed-
+Recoveryvertrag verwendet. `PREHEATING`, `WAITING_FOR_PRODUCT`,
+`REACHING_TARGET` und `QUALIFYING_TARGET` folgen der bestehenden
+Nicht-resumierbarkeits-/Resume-Matrix; `FERMENTING` verwendet die bestehende
+Current-FERMENTING-/trusted-UTC-Regel einschliesslich
+`WaitingForTrustedTime`, `COOLING`/`COOL_HOLDING` das bestehende
+Completion-Recovery, und `COMPLETED` bleibt terminal. Untrusted Persistenz
+und unqualifizierte/unklare Phasen bleiben fail-closed. Es wird keine zweite
+Recoverypolicy eingefuehrt.
+
 Schema-3-Felder wie UTC-Anker, Recovery-Episode, Boot-Anker, nominale
 Zeitkorrektur und gewichtete Progressbasis bleiben darunter als C2-Legacy
 kompatibel lesbar. `weightedProgress`, Temperatur-Evidenz und

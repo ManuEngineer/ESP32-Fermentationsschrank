@@ -277,7 +277,7 @@ bool validRecoveryFieldsForSnapshot(const RunPersistenceSnapshot& snapshot) {
 
 bool knownRunPersistenceSchema(std::uint32_t schemaVersion) {
     return schemaVersion == 1U || schemaVersion == 2U || schemaVersion == 3U ||
-           schemaVersion == kCurrentRunPersistenceSchema;
+           schemaVersion == 4U || schemaVersion == kCurrentRunPersistenceSchema;
 }
 
 bool isPersistedRunCommand(CommandKind kind) {
@@ -375,6 +375,10 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
 bool validateRunPersistenceSnapshotForSchema(
     const RunPersistenceSnapshot& snapshot, std::uint32_t schemaVersion) {
     if (!knownRunPersistenceSchema(schemaVersion)) return false;
+    if (schemaVersion < 5U && snapshot.program.has_value() &&
+        snapshot.program->sourceKind == ProgramSourceKind::ManualTimed) {
+        return false;
+    }
     if (schemaVersion < kActiveFaultIntroducedInSchema &&
         snapshot.variant != RunCheckpointVariant::NoActiveRun &&
         snapshot.processState.state == ProcessState::Fault) {
