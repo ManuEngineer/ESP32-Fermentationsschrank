@@ -4,6 +4,25 @@
 
 namespace fermentation {
 
+namespace {
+
+bool hasCanonicalDecisionRequiredMessage(const RunCommandState& state) {
+    for (std::size_t i = 0U; i < state.messageCount; ++i) {
+        const auto& message = state.messages[i];
+        if (!message.active || message.resolved || !message.decisionRequired ||
+            message.messageClass != MessageClass::DecisionRequired) {
+            continue;
+        }
+        if (message.code == MessageCode::UserDecisionRequired ||
+            message.code == MessageCode::ProductInsertionRequested) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
 FermentationUiSnapshot FermentationUiProjector::project(
     const FermentationUiProjectionInput& input) {
     FermentationUiSnapshot output;
@@ -95,6 +114,8 @@ FermentationUiSnapshot FermentationUiProjector::project(
         if (recoveryActive) {
             output.home.mode = FermentationHomeMode::Recovery;
         } else {
+            const bool decisionRequired =
+                hasCanonicalDecisionRequiredMessage(*input.runState);
             switch (processState) {
                 case ProcessState::Boot:
                 case ProcessState::SafeBoot:
@@ -114,26 +135,16 @@ FermentationUiSnapshot FermentationUiProjector::project(
                 case ProcessState::Fermenting:
                 case ProcessState::Cooling:
                 case ProcessState::CoolHolding:
+                    output.home.mode = decisionRequired
+                                           ? FermentationHomeMode::Waiting
+                                           : FermentationHomeMode::ActiveRun;
+                    break;
                 case ProcessState::ManualHolding:
-                    output.home.mode = FermentationHomeMode::ActiveRun;
+                    output.home.mode = decisionRequired
+                                           ? FermentationHomeMode::Waiting
+                                           : FermentationHomeMode::ActiveRun;
                     break;
                 case ProcessState::Standby: {
-                    bool decisionRequired = false;
-                    for (std::size_t i = 0U; i < input.runState->messageCount;
-                         ++i) {
-                        const auto& message = input.runState->messages[i];
-                        if (message.active && !message.resolved &&
-                            message.decisionRequired &&
-                            message.messageClass ==
-                                MessageClass::DecisionRequired &&
-                            (message.code ==
-                                 MessageCode::UserDecisionRequired ||
-                             message.code ==
-                                 MessageCode::ProductInsertionRequested)) {
-                            decisionRequired = true;
-                            break;
-                        }
-                    }
                     output.home.mode = decisionRequired
                                            ? FermentationHomeMode::Waiting
                                            : FermentationHomeMode::Standby;

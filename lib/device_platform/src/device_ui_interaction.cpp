@@ -2,6 +2,16 @@
 
 namespace device_platform {
 
+namespace {
+
+bool isNavigationTarget(DeviceUiTargetKind kind) noexcept {
+    return kind == DeviceUiTargetKind::HomeOrBack ||
+           kind == DeviceUiTargetKind::Back ||
+           kind == DeviceUiTargetKind::Cancel;
+}
+
+}  // namespace
+
 DeviceUiInteractionResult selectDeviceUiTarget(
     const DeviceUiInteractionInput& input) noexcept {
     DeviceUiInteractionResult result;
@@ -12,7 +22,11 @@ DeviceUiInteractionResult selectDeviceUiTarget(
         return result;
     }
     if (!input.target.valid()) return result;
-    if (input.exitRequirement != PageExitRequirement::None) {
+    // Exit requirements guard only an actual page exit. Completion and
+    // discard pages must still accept their explicitly allowed confirmation
+    // or action targets on the current page.
+    if (input.exitRequirement != PageExitRequirement::None &&
+        isNavigationTarget(input.target.kind)) {
         result.outcome = DeviceUiInteractionOutcome::Blocked;
         result.feedback = DeviceUiFeedbackIntent::ConfirmationRequired;
         result.visiblePressFeedback = true;

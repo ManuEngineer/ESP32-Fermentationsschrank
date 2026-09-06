@@ -222,6 +222,90 @@ Provenienztests für Run-Identity, ManualTimed-Quelle, Schema-5-Persistenz und
 Recovery. Diese #26-Simulation behauptet keine Display-, Touchcontroller-,
 elektrische oder thermische Hardwareabnahme.
 
+#### Direkter SIM-26-Trace-Index für PR #143
+
+Die folgende Zuordnung ist die ausführbare Planmatrix: Jeder Plan-ID ist ein
+konkreter Test beziehungsweise ein statischer Trace zugeordnet. Die mit
+`existing-owner` markierten Tests bleiben Nachweise der jeweiligen bestehenden
+Ownerverträge; sie werden von #26 nur konsumiert. Die Zuordnung ist kein
+Hardware- oder Pre-Ready-Nachweis.
+
+| Plan-ID | Direkter Test/Trace |
+|---|---|
+| SIM-26-01 | `test_fermentation_ui_models::test_projector_home_modes_follow_lifecycle_and_process_matrix`; `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths` |
+| SIM-26-02 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_device_ui_contracts::test_shell_has_exactly_four_slots_and_home_back_hierarchy` |
+| SIM-26-03 | `test_fermentation_ui_models::test_projector_builds_shared_snapshot_without_surface_state`; `test_local_touch_ui::test_workspace_has_fixed_slots_and_manual_paths_are_separate` |
+| SIM-26-04 | `test_device_ui_contracts::test_build_catalog_and_clock_contract_remain_renderer_independent`; `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries` |
+| SIM-26-05 | `test_local_touch_ui::test_sim_26_navigation_and_non_command_slots`; `test_device_ui_contracts::test_shell_has_exactly_four_slots_and_home_back_hierarchy` |
+| SIM-26-06 | `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership`; `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests` |
+| SIM-26-07 | `test_run_commands::test_program_start_is_two_stage_and_contains_summary`; `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths` |
+| SIM-26-08 | `test_process_state_machine::test_product_confirmation_starts_target_reach` (existing-owner); `test_run_persistence_coordinator::test_product_inserted_commits_before_advancing_and_restores` (existing-owner) |
+| SIM-26-09 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_run_commands::test_stop_back_is_inert_and_abort_off_is_atomic` (existing-owner) |
+| SIM-26-10 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_run_commands::test_completion_can_return_to_standby_or_start_manual_cooling` (existing-owner) |
+| SIM-26-11 | `test_local_touch_ui::test_sim_26_message_sensor_and_recovery_actions`; `test_run_commands::test_message_priority_acknowledgement_and_mute_are_independent` (existing-owner) |
+| SIM-26-12 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_platform_sections_precede_isolated_application_sections` |
+| SIM-26-13 | `test_local_touch_ui::test_sim_26_navigation_and_non_command_slots` |
+| SIM-26-14 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_device_ui_contracts::test_command_outcome_categories_stay_bounded` |
+| SIM-26-15 | `test_local_touch_ui::test_shell_wake_is_first_touch_and_frame_is_deterministic` |
+| SIM-26-16 | `test_fermentation_ui_models::test_refresh_revision_changes_only_on_new_publication`; `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate` |
+| SIM-26-17 | `test_local_touch_ui::test_pin_model_is_masked_and_owner_states_are_display_only` |
+| SIM-26-18 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_expired_session_activity_cannot_resurrect_or_move_backwards` |
+| SIM-26-19 | `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate` |
+| SIM-26-20 | `test_run_persistence_coordinator::test_r1_time_pending_is_ram_only_and_rechecks_same_revision` (existing-owner); `test_local_touch_ui::test_sim_26_message_sensor_and_recovery_actions` |
+| SIM-26-21 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_run_persistence_coordinator::test_fallback_pending_never_allows_before_recovery_apply` (existing-owner) |
+| SIM-26-22 | `test_boot_classification::test_all_load_outcomes_map_to_the_r1_boot_classification` (existing-owner); `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths` |
+| SIM-26-23 | `test_actuation_interlock::test_recovery_evaluation_actuation_is_blocked` (existing-owner); `test_actuation_interlock::test_fallback_selection_required_never_allows_even_with_complete_evidence` (existing-owner) |
+| SIM-26-24 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_shell_has_exactly_four_slots_and_home_back_hierarchy` |
+| SIM-26-25 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries` (`SimulatedDeviceShellFrame::splash`) |
+| SIM-26-26 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_text_resolver_uses_active_then_english_then_visible_key` |
+| SIM-26-27 | `test_fermentation_ui_models::test_refresh_revision_changes_only_on_new_publication`; `test_fermentation_ui_commands::test_canonical_validation_precedes_ui_confirmation` |
+| SIM-26-28 | `test_fermentation_ui_commands::test_canonical_validation_precedes_ui_confirmation`; `test_run_commands::test_apply_run_command_staleness_regression_for_sensor_selection_and_other_commands` (existing-owner) |
+| SIM-26-29 | `test_local_touch_ui::test_sim_26_navigation_and_non_command_slots`; `test_fermentation_ui_commands::test_ui_payloads_are_intents_and_not_owning_evidence` |
+| SIM-26-30 | `test_fermentation_ui_models::test_projector_home_modes_follow_lifecycle_and_process_matrix`; `test_process_state_machine::test_boot_service_recovery_and_completion_topology_is_explicit` (existing-owner) |
+| SIM-26-31 | `test_fermentation_ui_commands::test_product_inserted_decision_uses_state_revision_without_apply`; `test_process_state_machine::test_product_confirmation_starts_target_reach` (existing-owner) |
+| SIM-26-32 | `test_fermentation_ui_commands::test_proposed_decision_is_not_reported_as_applied`; `test_run_persistence_coordinator::test_stale_invalid_and_time_mismatched_transitions_write_nothing` (existing-owner) |
+| SIM-26-33 | `test_fermentation_ui_commands::test_product_inserted_decision_uses_state_revision_without_apply` |
+| SIM-26-34 | `test_run_commands::test_processed_command_ids_form_a_bounded_rolling_window` (existing-owner); `test_run_persistence_coordinator::test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe` (existing-owner) |
+| SIM-26-35 | `TRACE: rg -n 'RunPersistenceCoordinator' lib/fermentation_app/src/fermentation_touch_workspace.*` (zero matches); `python3 scripts/check_architecture_boundaries.py` |
+| SIM-26-36 | `test_fermentation_ui_commands::test_proposed_decision_is_not_reported_as_applied`; `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
+| SIM-26-37 | `test_run_commands::test_manual_start_summary_is_available_before_confirmation_but_never_masks_rejections` (existing-owner); `test_run_persistence_coordinator::test_manual_run_qualification_reaches_holding_via_application_path` (existing-owner) |
+| SIM-26-38 | `test_run_commands::test_manual_timed_uses_timed_path_and_fixed_manual_sensor_semantics` (existing-owner); `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths` |
+| SIM-26-39 | `test_fermentation_ui_editing::test_numeric_edit_model_keeps_actions_transient` |
+| SIM-26-40 | `test_fermentation_ui_editing::test_text_edit_model_has_mode_and_commit_without_validation` |
+| SIM-26-41 | `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership`; `test_configuration_service::test_program_editor_consumes_the_opening_catalog_revision` |
+| SIM-26-42 | `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership`; `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests` |
+| SIM-26-43 | `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests`; `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership` |
+| SIM-26-44 | `test_configuration_service::test_program_catalog_expected_revision_is_checked_under_preview_lock`; `test_configuration_service::test_program_editor_consumes_the_opening_catalog_revision` |
+| SIM-26-45 | `test_local_touch_ui::test_pin_model_is_masked_and_owner_states_are_display_only`; `test_fermentation_ui_models::test_projector_home_modes_follow_lifecycle_and_process_matrix` |
+| SIM-26-46 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate`; `test_actuation_interlock::test_fresh_start_stays_unresolved_until_new_run_is_applied` (existing-owner) |
+| SIM-26-47 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_boot_classification::test_fallback_recovered_requires_explicit_selection` (existing-owner) |
+| SIM-26-48 | `test_fermentation_ui_commands::test_product_inserted_decision_uses_state_revision_without_apply`; `test_run_persistence_coordinator::test_stale_invalid_and_time_mismatched_transitions_write_nothing` (existing-owner) |
+| SIM-26-49 | `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details`; `test_fermentation_ui_commands::test_proposed_decision_is_not_reported_as_applied` |
+| SIM-26-50 | `test_fermentation_ui_commands::test_product_inserted_decision_uses_state_revision_without_apply`; `test_run_persistence_coordinator::test_stale_invalid_and_time_mismatched_transitions_write_nothing` (existing-owner) |
+| SIM-26-51 | `test_run_persistence_coordinator::test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe`; `test_actuation_interlock::test_fresh_start_commit_failure_never_allows` (existing-owner) |
+| SIM-26-52 | `test_issue144_run_identity::test_application_prepares_every_envelope_action_with_one_identity` (existing-owner); `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths` |
+| SIM-26-53 | `test_issue144_run_identity::test_catalog_revision_maps_to_neutral_run_provenance_without_truncation` (existing-owner); `test_run_commands::test_program_start_sensor_matrix_covers_all_eleven_rows` (existing-owner) |
+| SIM-26-54 | `test_fermentation_ui_editing::test_user_program_id_allocation_is_deterministic_and_non_overwriting`; `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership` |
+| SIM-26-55 | `test_fermentation_ui_editing::test_numeric_edit_model_keeps_actions_transient`; `test_fermentation_ui_editing::test_text_edit_model_has_mode_and_commit_without_validation` |
+| SIM-26-56 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_local_touch_ui::test_pin_model_is_masked_and_owner_states_are_display_only`; `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate` |
+| SIM-26-57 | `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths`; `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` (existing-owner) |
+| SIM-26-58 | `test_configuration_service::test_program_editor_consumes_the_opening_catalog_revision` |
+| SIM-26-59 | `test_fermentation_ui_models::test_projector_home_modes_follow_lifecycle_and_process_matrix`; `test_fermentation_ui_models::test_projector_marks_recovery_home_from_canonical_disposition` |
+| SIM-26-60 | `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
+| SIM-26-61 | `test_issue144_run_identity::test_application_composes_all_run_identities_at_one_boundary` (existing-owner); `test_fermentation_ui_commands::test_ui_payloads_are_intents_and_not_owning_evidence` |
+| SIM-26-62 | `test_configuration_service::test_ui_configuration_confirmation_uses_current_owning_basis`; `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
+| SIM-26-63 | `test_configuration_service::test_program_catalog_expected_revision_is_checked_under_preview_lock`; `test_configuration_service::test_persistent_failure_causes_remain_distinct` |
+| SIM-26-64 | `test_configuration_service::test_confirmed_preview_commits_root_then_publishes_runtime`; `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
+| SIM-26-65 | `test_run_persistence_coordinator::test_fallback_pending_never_allows_before_recovery_apply`; `test_actuation_interlock::test_fallback_selection_required_never_allows_even_with_complete_evidence` (existing-owner) |
+| SIM-26-66 | `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths`; `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` (existing-owner) |
+| SIM-26-67 | `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract`; `test_run_commands::test_manual_timed_rejects_invalid_values_without_starting` (existing-owner) |
+| SIM-26-68 | `test_issue144_run_identity::test_application_prepares_manual_timed_with_shared_identity` (existing-owner); `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` |
+| SIM-26-69 | `test_fermentation_ui_commands::test_canonical_validation_precedes_ui_confirmation`; `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` |
+| SIM-26-70 | `test_run_commands::test_program_start_sensor_matrix_covers_all_eleven_rows`; `test_control_context::test_invalid_run_sensor_mode_does_not_fallback_to_air` (existing-owner) |
+| SIM-26-71 | `test_run_persistence_coordinator::test_orchestrator_fresh_start_uses_existing_command_commit_boundary`; `test_run_persistence_coordinator::test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow` (existing-owner) |
+| SIM-26-72 | `test_run_checkpoint_codec::test_schema_five_round_trips_manual_timed_without_catalog_provenance` (existing-owner); `test_run_checkpoint_codec::test_manual_snapshot_and_runtime_shape_must_be_canonical` (existing-owner) |
+| SIM-26-73 | `test_run_persistence_coordinator::test_manual_timed_restore_resume_uses_fail_closed_sensor_gate` (existing-owner); `test_run_persistence_coordinator::test_r1_time_pending_is_ram_only_and_rechecks_same_revision` (existing-owner) |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

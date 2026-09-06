@@ -291,8 +291,8 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     const auto evidence = owningEvidence();
 
     fermentation::FermentationUiStartProgramIntent startProgram;
-    startProgram.programId = "water-kefir";
-    startProgram.sensorMode = fermentation::RunSensorMode::Product;
+    startProgram.candidate.programId = "water-kefir";
+    startProgram.candidate.sensorMode = fermentation::RunSensorMode::Product;
     const auto preparedProgram =
         application.prepareStartProgram(context, startProgram, evidence);
     TEST_ASSERT_EQUAL_INT(

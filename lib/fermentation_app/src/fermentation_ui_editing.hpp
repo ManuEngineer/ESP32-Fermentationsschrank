@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "configuration_documents.hpp"
 #include "configuration_service.hpp"
+#include "device_ui_text.hpp"
 #include "runtime_configuration_snapshot.hpp"
 
 namespace fermentation {
@@ -109,6 +111,64 @@ struct UserProgramIdAllocationResult {
 
 [[nodiscard]] UserProgramIdAllocationResult allocateNextUserProgramId(
     const ProgramCatalog& catalog);
+
+struct FermentationUiProgramListEntry {
+    ProgramDocument program;
+    bool active{false};
+    bool startable{false};
+    std::optional<device_platform::TextKey> blockedReason;
+};
+
+// The list is a read-only projection of the active canonical catalog. It
+// preserves factory-before-user ordering, excludes uninstalled entries, and
+// exposes invalid installed entries with a typed owning lock reason.
+[[nodiscard]] std::vector<FermentationUiProgramListEntry>
+makeFermentationUiProgramList(const ProgramCatalog& catalog);
+
+enum class FermentationUiProgramEditOperation : std::uint8_t {
+    Edit,
+    Copy,
+    New,
+    Reset,
+    Uninstall,
+    Delete,
+};
+
+enum class FermentationUiProgramEditStatus : std::uint8_t {
+    Applied,
+    ConfirmationRequired,
+    NotFound,
+    NotAllowed,
+    InvalidCandidate,
+    CapacityReached,
+};
+
+struct FermentationUiProgramEditRequest {
+    FermentationUiProgramEditOperation operation{
+        FermentationUiProgramEditOperation::Edit};
+    std::string programId;
+    std::optional<ProgramDocument> candidate;
+    std::optional<std::string> name;
+    bool confirmed{false};
+    // The owning run state supplies this; the UI must not infer whether a
+    // program is currently in use.
+    bool inUse{false};
+};
+
+struct FermentationUiProgramEditResult {
+    FermentationUiProgramEditStatus status{
+        FermentationUiProgramEditStatus::InvalidCandidate};
+    std::optional<std::string> affectedProgramId;
+};
+
+// Applies one operation to a preview-bound catalog only. Persistence remains
+// ConfigurationService::installPreview/confirmPreview ownership.
+[[nodiscard]] FermentationUiProgramEditResult applyProgramEdit(
+    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request);
+
+[[nodiscard]] ConfigurationPreviewInstallResult applyProgramEditPreview(
+    ConfigurationService& service, ProgramCatalogRevision expectedRevision,
+    const FermentationUiProgramEditRequest& request);
 
 struct FermentationUiProgramEditSession {
     ProgramDocument candidate;

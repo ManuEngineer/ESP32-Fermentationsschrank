@@ -76,17 +76,10 @@ struct FermentationUiStartCandidate {
 };
 
 struct FermentationUiStartProgramIntent {
-    std::string programId;
-    RunSensorMode sensorMode{RunSensorMode::Air};
-    // Optional values are next-run-only overrides. The Application resolves
-    // and validates them on a transient ProgramDocument copy.
-    std::optional<double> targetTemperatureCelsius;
-    std::optional<std::uint32_t> fermentationDurationMinutes;
-    std::optional<bool> preheatEnabled;
-    std::optional<CompletionMode> completionMode;
-    std::optional<double> coolingTargetCelsius;
-    std::optional<std::uint32_t> holdDurationMinutes;
-    std::optional<FermentationUiStartCandidate> candidate;
+    // The candidate is the single canonical user payload. Keeping the
+    // program identity and all next-run-only overrides in one object prevents
+    // a stale top-level value from disagreeing with a nested candidate.
+    FermentationUiStartCandidate candidate;
 };
 
 struct FermentationUiStartManualTimedIntent {

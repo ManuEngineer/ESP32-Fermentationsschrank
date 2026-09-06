@@ -8,6 +8,8 @@
 
 #include "configuration_limits.hpp"
 #include "configuration_text.hpp"
+#include "fermentation_ui_text.hpp"
+#include "standard_program_catalog.hpp"
 
 namespace fermentation {
 namespace {
@@ -18,6 +20,14 @@ bool hasDecimalSeparator(const std::string& value) {
 
 bool isFactoryProgram(const ProgramDocument& document) {
     return document.program.builtIn && document.program.factoryCatalogEntry;
+}
+
+std::optional<std::size_t> findProgramIndex(const ProgramCatalog& catalog,
+                                            const std::string& id) {
+    for (std::size_t i = 0U; i < catalog.programs.size(); ++i) {
+        if (catalog.programs[i].program.id == id) return i;
+    }
+    return std::nullopt;
 }
 
 char base36(std::size_t value) {
@@ -169,6 +179,203 @@ UserProgramIdAllocationResult allocateNextUserProgramId(
         }
     }
     return {UserProgramIdAllocationStatus::CapacityReached, std::nullopt};
+}
+
+std::vector<FermentationUiProgramListEntry> makeFermentationUiProgramList(
+    const ProgramCatalog& catalog) {
+    std::vector<ProgramDocument> ordered;
+    ordered.reserve(catalog.programs.size());
+    for (const auto& program : catalog.programs) ordered.push_back(program);
+    std::stable_sort(ordered.begin(), ordered.end(),
+                     [](const auto& left, const auto& right) {
+                         return isFactoryProgram(left) &&
+                                !isFactoryProgram(right);
+                     });
+
+    std::vector<FermentationUiProgramListEntry> result;
+    result.reserve(ordered.size());
+    for (auto& document : ordered) {
+        const bool active = document.program.installed;
+        if (!active) continue;
+        const bool startable =
+            active && document.program.enabled &&
+            validateProgram(document, ValidationPurpose::Runnable).valid();
+        std::optional<device_platform::TextKey> blockedReason;
+        if (!document.program.enabled) {
+            blockedReason = fermentationTextKey("program-disabled");
+        } else if (!startable) {
+            blockedReason = fermentationTextKey("program-invalid");
+        }
+        result.push_back(FermentationUiProgramListEntry{
+            std::move(document), active, startable, std::move(blockedReason)});
+    }
+    return result;
+}
+
+FermentationUiProgramEditResult applyProgramEdit(
+    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request) {
+    const auto found = findProgramIndex(catalog, request.programId);
+    switch (request.operation) {
+        case FermentationUiProgramEditOperation::New: {
+            const auto allocation = allocateNextUserProgramId(catalog);
+            if (allocation.status ==
+                UserProgramIdAllocationStatus::CapacityReached)
+                return {FermentationUiProgramEditStatus::CapacityReached,
+                        std::nullopt};
+            if (!allocation.id.has_value())
+                return {FermentationUiProgramEditStatus::InvalidCandidate,
+                        std::nullopt};
+            auto templateProgram = FactoryProgramCatalog::find("water-kefir");
+            if (!templateProgram.has_value())
+                return {FermentationUiProgramEditStatus::InvalidCandidate,
+                        std::nullopt};
+            auto created = request.candidate.has_value()
+                               ? *request.candidate
+                               : std::move(*templateProgram);
+            created.program.id = *allocation.id;
+            if (request.name.has_value()) created.program.name = *request.name;
+            if (created.program.name.empty())
+                created.program.name = "New program";
+            created.program.builtIn = false;
+            created.program.factoryCatalogEntry = false;
+            created.program.resettable = false;
+            created.program.userDeletable = true;
+            created.program.installed = true;
+            if (!request.candidate.has_value()) {
+                created.program.notes.clear();
+                created.program.fermentationStages.front()
+                    .targetTemperatureCelsius.reset();
+                created.program.fermentationStages.front()
+                    .durationMinutes.reset();
+                created.program.targetQualification.bandCelsius.reset();
+                created.program.targetQualification.durationMinutes.reset();
+                created.program.maximumTargetReachMinutes.reset();
+                created.program.maximumProductWaitMinutes.reset();
+                created.program.completion.mode =
+                    CompletionMode::FinishWithoutCooling;
+                created.program.completion.coolingTargetCelsius.reset();
+                created.program.completion.holdDurationMinutes.reset();
+            }
+            catalog.programs.push_back(std::move(created));
+            return {FermentationUiProgramEditStatus::Applied, *allocation.id};
+        }
+        case FermentationUiProgramEditOperation::Copy: {
+            if (!found.has_value())
+                return {FermentationUiProgramEditStatus::NotFound,
+                        std::nullopt};
+            const auto allocation = allocateNextUserProgramId(catalog);
+            if (allocation.status ==
+                UserProgramIdAllocationStatus::CapacityReached)
+                return {FermentationUiProgramEditStatus::CapacityReached,
+                        std::nullopt};
+            if (!allocation.id.has_value())
+                return {FermentationUiProgramEditStatus::InvalidCandidate,
+                        std::nullopt};
+            auto copy = catalog.programs[*found];
+            copy.program.id = *allocation.id;
+            copy.program.name =
+                request.name.value_or(copy.program.name + " copy");
+            copy.program.builtIn = false;
+            copy.program.factoryCatalogEntry = false;
+            copy.program.resettable = false;
+            copy.program.userDeletable = true;
+            copy.program.installed = true;
+            catalog.programs.push_back(std::move(copy));
+            return {FermentationUiProgramEditStatus::Applied, *allocation.id};
+        }
+        case FermentationUiProgramEditOperation::Reset: {
+            if (!found.has_value())
+                return {FermentationUiProgramEditStatus::NotFound,
+                        std::nullopt};
+            if (!isFactoryProgram(catalog.programs[*found]) ||
+                !catalog.programs[*found].program.resettable) {
+                return {FermentationUiProgramEditStatus::NotAllowed,
+                        std::nullopt};
+            }
+            const auto factory = FactoryProgramCatalog::find(request.programId);
+            if (!factory.has_value())
+                return {FermentationUiProgramEditStatus::InvalidCandidate,
+                        std::nullopt};
+            catalog.programs[*found] = *factory;
+            return {FermentationUiProgramEditStatus::Applied,
+                    request.programId};
+        }
+        case FermentationUiProgramEditOperation::Uninstall: {
+            if (!found.has_value())
+                return {FermentationUiProgramEditStatus::NotFound,
+                        std::nullopt};
+            auto& program = catalog.programs[*found].program;
+            if (!isFactoryProgram(catalog.programs[*found]) ||
+                !program.userDeletable || request.inUse) {
+                return {FermentationUiProgramEditStatus::NotAllowed,
+                        std::nullopt};
+            }
+            program.installed = false;
+            return {FermentationUiProgramEditStatus::Applied,
+                    request.programId};
+        }
+        case FermentationUiProgramEditOperation::Delete: {
+            if (!found.has_value())
+                return {FermentationUiProgramEditStatus::NotFound,
+                        std::nullopt};
+            if (!request.confirmed)
+                return {FermentationUiProgramEditStatus::ConfirmationRequired,
+                        request.programId};
+            const auto& program = catalog.programs[*found].program;
+            if (*found < configuration_limits::kFactoryProgramCount ||
+                !program.userDeletable || request.inUse) {
+                return {FermentationUiProgramEditStatus::NotAllowed,
+                        std::nullopt};
+            }
+            catalog.programs.erase(catalog.programs.begin() +
+                                   static_cast<std::ptrdiff_t>(*found));
+            return {FermentationUiProgramEditStatus::Applied,
+                    request.programId};
+        }
+        case FermentationUiProgramEditOperation::Edit: {
+            if (!found.has_value())
+                return {FermentationUiProgramEditStatus::NotFound,
+                        std::nullopt};
+            if (!request.candidate.has_value() ||
+                request.candidate->program.id != request.programId) {
+                return {FermentationUiProgramEditStatus::InvalidCandidate,
+                        std::nullopt};
+            }
+            const auto& current = catalog.programs[*found].program;
+            const auto& candidate = request.candidate->program;
+            if (current.builtIn != candidate.builtIn ||
+                current.factoryCatalogEntry != candidate.factoryCatalogEntry ||
+                current.resettable != candidate.resettable ||
+                current.userDeletable != candidate.userDeletable) {
+                return {FermentationUiProgramEditStatus::NotAllowed,
+                        std::nullopt};
+            }
+            catalog.programs[*found] = *request.candidate;
+            return {FermentationUiProgramEditStatus::Applied,
+                    request.programId};
+        }
+    }
+    return {FermentationUiProgramEditStatus::InvalidCandidate, std::nullopt};
+}
+
+ConfigurationPreviewInstallResult applyProgramEditPreview(
+    ConfigurationService& service, ProgramCatalogRevision expectedRevision,
+    const FermentationUiProgramEditRequest& request) {
+    auto build = service.beginPreview(expectedRevision);
+    if (build.status != ConfigurationPreviewStatus::Success)
+        return {build.status, std::nullopt};
+    const auto mutation =
+        applyProgramEdit(build.lease.programCatalog(), request);
+    if (mutation.status != FermentationUiProgramEditStatus::Applied)
+        return {ConfigurationPreviewStatus::InvalidCandidate, std::nullopt};
+    const ChangeOperation operation{
+        request.operation == FermentationUiProgramEditOperation::Reset
+            ? ChangeOperationKind::StandardProgramReset
+            : ChangeOperationKind::NormalEdit,
+        0U};
+    return service.installPreview(std::move(build.lease),
+                                  {ChangeOriginKind::LocalDisplay, 0U},
+                                  operation);
 }
 
 std::optional<FermentationUiProgramEditSession> openProgramEditSession(

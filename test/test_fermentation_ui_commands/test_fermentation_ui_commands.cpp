@@ -221,14 +221,14 @@ void test_ui_payloads_are_intents_and_not_owning_evidence() {
                                            SensorSelectionCommandRequest>);
 
     FermentationUiStartProgramIntent start;
-    start.programId = "water-kefir";
-    start.sensorMode = RunSensorMode::Product;
+    start.candidate.programId = "water-kefir";
+    start.candidate.sensorMode = RunSensorMode::Product;
     FermentationUiEnvelopePayload payload = start;
     TEST_ASSERT_TRUE(
         std::holds_alternative<FermentationUiStartProgramIntent>(payload));
-    TEST_ASSERT_EQUAL_STRING(
-        "water-kefir",
-        std::get<FermentationUiStartProgramIntent>(payload).programId.c_str());
+    TEST_ASSERT_EQUAL_STRING("water-kefir",
+                             std::get<FermentationUiStartProgramIntent>(payload)
+                                 .candidate.programId.c_str());
 
     FermentationUiSensorSelectionIntent selection;
     selection.action = SensorSelectionUserAction::RecheckProduct;

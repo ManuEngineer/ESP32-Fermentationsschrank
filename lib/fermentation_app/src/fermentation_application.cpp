@@ -154,9 +154,8 @@ FermentationApplication::prepareStartProgram(
         return requestFailure(
             FermentationApplicationRequestStatus::StaleProgramCatalog);
     }
-    const auto programId = intent.candidate.has_value()
-                               ? intent.candidate->programId
-                               : intent.programId;
+    const auto& candidate = intent.candidate;
+    const auto& programId = candidate.programId;
     std::optional<ProgramDocument> program;
     for (const auto& candidate : snapshot.programCatalog().programs) {
         if (candidate.program.id == programId) {
@@ -168,36 +167,17 @@ FermentationApplication::prepareStartProgram(
         return requestFailure(
             FermentationApplicationRequestStatus::ProgramUnavailable);
     }
-    const auto targetTemperature =
-        intent.candidate.has_value()
-            ? intent.candidate->targetTemperatureCelsius
-            : intent.targetTemperatureCelsius;
-    const auto duration = intent.candidate.has_value()
-                              ? intent.candidate->fermentationDurationMinutes
-                              : intent.fermentationDurationMinutes;
-    const auto preheat = intent.candidate.has_value()
-                             ? intent.candidate->preheatEnabled
-                             : intent.preheatEnabled;
-    const auto completion = intent.candidate.has_value()
-                                ? intent.candidate->completionMode
-                                : intent.completionMode;
-    const auto cooling = intent.candidate.has_value()
-                             ? intent.candidate->coolingTargetCelsius
-                             : intent.coolingTargetCelsius;
-    const auto hold = intent.candidate.has_value()
-                          ? intent.candidate->holdDurationMinutes
-                          : intent.holdDurationMinutes;
+    const auto& targetTemperature = candidate.targetTemperatureCelsius;
+    const auto& duration = candidate.fermentationDurationMinutes;
+    const auto& preheat = candidate.preheatEnabled;
+    const auto& completion = candidate.completionMode;
+    const auto& cooling = candidate.coolingTargetCelsius;
+    const auto& hold = candidate.holdDurationMinutes;
     const bool hasNextRunOverride =
         targetTemperature.has_value() || duration.has_value() ||
         preheat.has_value() || completion.has_value() || cooling.has_value() ||
-        hold.has_value() ||
-        (intent.candidate.has_value() &&
-         (intent.candidate->sensorMode.has_value() ||
-          intent.candidate->programId != intent.programId));
-    const auto sensorMode =
-        intent.candidate.has_value() && intent.candidate->sensorMode.has_value()
-            ? *intent.candidate->sensorMode
-            : intent.sensorMode;
+        hold.has_value();
+    const auto sensorMode = candidate.sensorMode.value_or(RunSensorMode::Air);
     auto& definition = program->program;
     if (targetTemperature.has_value() &&
         !definition.fermentationStages.empty()) {

@@ -184,6 +184,38 @@ void test_projector_home_modes_follow_lifecycle_and_process_matrix() {
                           static_cast<int>(snapshot.home.mode));
 }
 
+// SIM-26-02, SIM-26-03, SIM-26-30 and SIM-26-59: Waiting is derived only
+// from the canonical process state or an active unresolved decision message.
+void test_projector_maps_only_canonical_decision_required_to_waiting() {
+    RunCommandState state;
+    state.processState.state = ProcessState::Fermenting;
+    state.messages[0].code = MessageCode::UserDecisionRequired;
+    state.messages[0].messageClass = MessageClass::DecisionRequired;
+    state.messages[0].active = true;
+    state.messages[0].decisionRequired = true;
+    state.messageCount = 1U;
+    FermentationUiProjectionInput input;
+    input.runState = &state;
+    input.application.lifecycleState = ApplicationLifecycleState::Ready;
+
+    auto snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Waiting),
+                          static_cast<int>(snapshot.home.mode));
+    state.messages[0].resolved = true;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
+                          static_cast<int>(snapshot.home.mode));
+    state.messages[0].resolved = false;
+    state.messages[0].messageClass = MessageClass::ProcessWarning;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
+                          static_cast<int>(snapshot.home.mode));
+    state.processState.state = ProcessState::WaitingForProduct;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Waiting),
+                          static_cast<int>(snapshot.home.mode));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -199,5 +231,6 @@ int main(int, char**) {
     RUN_TEST(test_refresh_revision_changes_only_on_new_publication);
     RUN_TEST(test_catalog_revision_only_change_publishes_new_snapshot);
     RUN_TEST(test_projector_home_modes_follow_lifecycle_and_process_matrix);
+    RUN_TEST(test_projector_maps_only_canonical_decision_required_to_waiting);
     return UNITY_END();
 }

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <vector>
 
 #include "device_ui_interaction.hpp"
@@ -21,6 +22,19 @@ struct SimulatedDeviceShellFrame {
     SimulationRect header{0U, 0U, kWidth, 32U};
     SimulationRect content{0U, 32U, kWidth, 168U};
     SimulationRect footer{0U, 200U, kWidth, 40U};
+    SimulationRect branding{4U, 4U, 168U, 24U};
+    // Static proportional splash reference only; this is not a renderer or
+    // framebuffer contract.
+    SimulationRect splash{10U, 55U, 300U, 122U};
+    SimulationRect headerLanguage{176U, 0U, 44U, 32U};
+    SimulationRect headerNetwork{220U, 0U, 44U, 32U};
+    SimulationRect headerClock{264U, 0U, 52U, 32U};
+    std::array<SimulationRect, 4U> bottomSlots{{
+        {0U, 200U, 80U, 40U},
+        {80U, 200U, 80U, 40U},
+        {160U, 200U, 80U, 40U},
+        {240U, 200U, 80U, 40U},
+    }};
     SimulationRect pagerUp{288U, 48U, 32U, 48U};
     SimulationRect pagerDown{288U, 104U, 32U, 48U};
 

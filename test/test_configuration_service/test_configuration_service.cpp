@@ -23,6 +23,7 @@
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_editing.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "storage_envelope.hpp"
@@ -514,6 +515,39 @@ void test_program_catalog_expected_revision_is_checked_under_preview_lock() {
     TEST_ASSERT_TRUE(current.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
     TEST_ASSERT_TRUE(current.lease.valid());
+}
+
+void test_program_editor_consumes_the_opening_catalog_revision() {
+    Fixture fixture;
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_TRUE(
+        runtime.status ==
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+    const auto session = fermentation::openProgramEditSession(
+        runtime.lease.get(), "yogurt-mild");
+    TEST_ASSERT_TRUE(session.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U,
+                             session->expectedProgramCatalogRevision.value());
+
+    auto candidate = session->candidate;
+    candidate.program.name = "Joghurt mild edited";
+    const auto installed = fermentation::applyProgramEditPreview(
+        fixture.service, session->expectedProgramCatalogRevision,
+        {fermentation::FermentationUiProgramEditOperation::Edit, "yogurt-mild",
+         candidate, std::nullopt, true, false});
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(installed.preview.has_value());
+    TEST_ASSERT_TRUE(fixture.service.cancelPreview(installed.preview->handle) ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+
+    const auto stale = fermentation::applyProgramEditPreview(
+        fixture.service, fermentation::ProgramCatalogRevision{2U},
+        {fermentation::FermentationUiProgramEditOperation::Edit, "yogurt-mild",
+         candidate, std::nullopt, true, false});
+    TEST_ASSERT_TRUE(stale.status ==
+                     fermentation::ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_FALSE(stale.preview.has_value());
 }
 
 void maximizeProgramPayload(fermentation::ProgramDocument& document) {
@@ -1882,5 +1916,6 @@ int main() {
     RUN_TEST(test_persistent_failure_causes_remain_distinct);
     RUN_TEST(
         test_program_catalog_expected_revision_is_checked_under_preview_lock);
+    RUN_TEST(test_program_editor_consumes_the_opening_catalog_revision);
     return UNITY_END();
 }
