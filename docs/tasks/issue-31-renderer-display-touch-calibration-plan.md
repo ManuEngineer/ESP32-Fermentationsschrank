@@ -14,6 +14,9 @@
 | Hardware-Spike | `NOT_STARTED` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
 | LVGL-Auswahl | `DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION` |
+| Renderer-Owner-Architektur | `EXISTING_MAIN_COMPONENT` |
+| Neue Produktions-Lib-Komponente | `NO` |
+| ADR-013-Erweiterung | `NOT_REQUIRED_FOR_MAIN_OWNER` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
 | GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PENDING` |
 | Elektrische Messung | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` |
@@ -99,21 +102,24 @@ Produktivauswahl.
 | `fermentation_app` | Besitzt Fachzustand, `FermentationUiSnapshot`, `FermentationUiProjector`, `FermentationTouchWorkspace`, bestehende typed UI commands, Recovery-/Serviceintents und die Semantik von `WakeOnly`. Keine Treibertypen und keine Widget-State-Machine. |
 | `device_platform` | Bleibt bei anwendungsneutralen, schmalen Ports und Diensten. Der aktuelle Repository-Schnitt besitzt noch keinen Display-/Touch-/Backlight-Port; der Builder darf nachgewiesen genau die benoetigten neutralen Hardwareports als additive Luecke ergaenzen, aber keine UI-/Fachtypen, LVGL-Typen, GPIO-Details oder ESP-IDF-Abhaengigkeit einfuehren. |
 | `device_platform_esp_idf` | Implementiert die konkreten ESP-IDF-/Treiberadapter fuer die neutralen Ports, SPI-Panel, Touch-Sampling und Backlight. Keine Abhaengigkeit auf `fermentation_app`, keine Navigation, keine Fach- oder Composition-Root-Logik. |
-| `fermentation_ui_renderer_esp_idf` (neuer, konkreter Owner) | Ein einziges app-spezifisches ESP-IDF-Integrationsmodul kennt `fermentation_app`-Workspace-/Presentation-Modelle und den ausgewaehlten konkreten Renderer. Es besitzt die Projektion in Widgets/Drawables, das Mapping von Touchzielen auf `FermentationTouchWorkspace::press(...)` und die Rueckgabe ueber bestehende typed Command-/Applicationpfade. Keine Fachentscheidung und keine zweite UI-State-Machine. |
-| `main/app_main.cpp` | Bleibt ausschliesslich Composition Root: instanziiert Plattform, App, konkrete Low-Level-Adapter und `fermentation_ui_renderer_esp_idf`, verdrahtet Lebenszyklus/Update und besitzt keine Widget-, Layout-, Renderer- oder Touchlogik. |
+| Bestehende ESP-IDF-Composition-Komponente `main/` | Ist der einzige app-spezifische konkrete Integrationsowner. Kleine lokale Helper-Dateien unter `main/` duerfen `fermentation_app`-Workspace-/Presentation-Modelle und den spaeter ausgewaehlten konkreten Renderer kennen. Sie enthalten keine Fachentscheidung und keine zweite UI-State-Machine. |
+| `main/app_main.cpp` | Bleibt ausschliesslich Composition Root: instanziiert Plattform, App, konkrete Low-Level-Adapter und die lokalen Renderer-/Presentation-Helper, verdrahtet Lebenszyklus/Update und besitzt selbst keine Widget-, Layout-, Renderer- oder Touchlogik. |
 | Test-Support | Renderer- und Adaptertests bleiben von Produktions-App-Abhaengigkeiten getrennt. Hardware-Smoke- und Ressourcennachweise laufen als actor-free, reproduzierbare Profile. |
 
 ### Explizite Boundary-Entscheidung
 
-Der aktuelle Produktionsschnitt wurde geprueft: Es gibt bereits die
-rendererunabhaengigen `FermentationUiSnapshot`-, `FermentationUiProjector`-,
-`FermentationTouchWorkspace`- und `FermentationUiCommandBridge`-Vertraege in
-`fermentation_app`, aber noch kein konkretes Display-/Touch-Integrationsmodul.
-`main/app_main.cpp` ist Composition Root; `device_platform_esp_idf` darf laut
-lokaler Regel keine App- oder Composition-Abhaengigkeit erhalten.
+Der aktuelle Produktionsschnitt und der Guard wurden geprueft: Es gibt bereits
+die rendererunabhaengigen `FermentationUiSnapshot`-,
+`FermentationUiProjector`-, `FermentationTouchWorkspace`- und
+`FermentationUiCommandBridge`-Vertraege in `fermentation_app`, aber noch kein
+konkretes Display-/Touch-Integrationsmodul. `main/app_main.cpp` ist die
+ESP-IDF-Composition Root; `device_platform_esp_idf` darf laut lokaler Regel
+keine App- oder Composition-Abhaengigkeit erhalten. `main/CMakeLists.txt` ist
+bereits die erlaubte konkrete Anwendungskomponente und besitzt die fuer die
+bestehende Composition erforderlichen privaten Abhaengigkeiten.
 
-Daher ist `lib/fermentation_ui_renderer_esp_idf/` die kleinste explizite neue
-Ownergrenze dieses Plans. Die erwarteten Grenzen nach Planfreigabe sind:
+Daher ist `main/` die bestehende und kleinste app-spezifische Ownergrenze
+dieses Plans. Die erwarteten Grenzen nach Planfreigabe sind:
 
 - `lib/device_platform/src/device_ui_hardware_ports.hpp`: nur falls der
   bestaetigte Port-Gap dies benoetigt, die schmalen neutralen Interfaces fuer
@@ -122,33 +128,46 @@ Ownergrenze dieses Plans. Die erwarteten Grenzen nach Planfreigabe sind:
 - `lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.hpp/.cpp`:
   konkrete SPI-/Panel-/Touch-/Backlight-Adapter hinter diesen Ports, ohne
   `fermentation_app`-Include und ohne App-Entscheidungen;
-- `lib/fermentation_ui_renderer_esp_idf/CMakeLists.txt`,
-  `idf_component.yml` und
-  `src/fermentation_ui_renderer_esp_idf.hpp/.cpp`: genau ein
-  app-spezifischer Integrationsowner. Er kennt die #26-Workspace-View, liest
-  den bestehenden Snapshot/Projector, zeichnet den ausgewaehlten
-  repräsentativen Screen und leitet Press-Ergebnisse an vorhandene typed
-  Application-/Commandpfade weiter;
+- `main/fermentation_ui_renderer.hpp` und
+  `main/fermentation_ui_renderer.cpp` (oder eine gleich kleine lokale
+  `main/`-Unterstruktur): genau ein app-spezifischer Integrationsowner. Er
+  kennt die #26-Workspace-View, liest den bestehenden Snapshot/Projector,
+  zeichnet den ausgewaehlten repraesentativen Screen und leitet Press-
+  Ergebnisse an vorhandene typed Application-/Commandpfade weiter;
 - `main/app_main.cpp`: nur Konstruktion, Referenz-/Portverdrahtung und
   `begin`/`update`; keine konkrete Renderlogik.
 
-Der neue Owner ist keine generische Renderer- oder Providerplattform. Seine
-Abhaengigkeiten sind konkret und einseitig: `fermentation_app` fuer die
-bestehenden Modelle/Commands, `device_platform` fuer neutrale Ports und
-`device_platform_esp_idf` fuer die konkrete Hardwareverdrahtung. Die
-ausgewaehlte Rendererbibliothek bleibt innerhalb dieses konkreten Moduls und
-leakt nicht in `fermentation_app` oder `device_platform`. Ein fehlender
-Snapshot-/Application-Zufluss wird, falls der aktuelle oeffentliche App-Schnitt
-ihn nicht vollstaendig liefert, als additive app-eigene Verwendung der
-vorhandenen Projector-/Commandvertraege geschlossen; es wird kein zweiter
-Renderervertrag erfunden.
+`main/CMakeLists.txt` nimmt diese Helper nur als zusaetzliche Quellen derselben
+bereits erlaubten Composition-Komponente auf. Die bestehenden direkten
+Abhaengigkeiten auf `fermentation_app`, `device_platform` und
+`device_platform_esp_idf` sind bereits im Guard abgebildet. Nur falls eine
+spaetere konkrete Auswahl eine neue direkte Registry-/Framework-Abhaengigkeit
+wirklich benoetigt, werden deren CMake-Requirement und die korrespondierende
+Guard-Allowlist nach Stage 4 angepasst.
 
-Der Owner darf `press(...)` aufrufen und die bestehenden typed
+Dieser bestehende `main`-Owner ist keine generische Renderer- oder
+Providerplattform. Seine Abhaengigkeiten sind konkret und einseitig:
+`fermentation_app` fuer die bestehenden Modelle/Commands,
+`device_platform` fuer neutrale Ports und `device_platform_esp_idf` fuer die
+konkrete Hardwareverdrahtung. Die ausgewaehlte Rendererbibliothek bleibt in
+den lokalen `main`-Helpern und leakt nicht in `fermentation_app` oder
+`device_platform`. Ein fehlender Snapshot-/Application-Zufluss wird, falls der
+aktuelle oeffentliche App-Schnitt ihn nicht vollstaendig liefert, als additive
+app-eigene Verwendung der vorhandenen Projector-/Commandvertraege geschlossen;
+es wird kein zweiter Renderer- oder Plattformvertrag erfunden.
+
+Der lokale `main`-Owner darf `press(...)` aufrufen und die bestehenden typed
 `FermentationApplication`-/`FermentationUiCommandBridge`-Pfade verwenden. Er
 besitzt keine zweite Route, Aktion, PIN-Pruefung, Recovery-Policy,
 Fachzustandskopie oder Persistenz. Bei fehlendem Display oder Touch wird nur
 die UI-Faehigkeit degradiert; Regelung, Safety und Aktorfreigabe laufen
 unabhaengig und fail-closed weiter.
+
+Eine Erweiterung von ADR-013, Modulindex oder lokalen Modulregeln ist fuer
+diese `main`-Loesung nicht erforderlich. Sollte sich `main` in der
+Implementierungsplanung nachweislich als ungeeignet erweisen, stoppt der Scope
+vor einer neuen Produktionskomponente und benoetigt zuerst einen expliziten
+Ownerentscheid mit normativer ADR-/Guard-/Modulindex-Revision.
 
 ## 4. Hardware-SSOT und Status ohne Vorwegnahme
 
@@ -441,8 +460,9 @@ In beiden Varianten gilt:
 - `device_platform` exponiert nur die nachgewiesenen neutralen Display-/Touch-/
   Backlightports;
 - der konkrete Low-Level-Adapter lebt in `device_platform_esp_idf`;
-- der app-spezifische konkrete Renderer lebt ausschliesslich in
-  `fermentation_ui_renderer_esp_idf` und kennt die #26-Workspace-View;
+- der app-spezifische konkrete Renderer lebt ausschliesslich in den kleinen
+  lokalen `main/fermentation_ui_renderer.*`-Helpern und kennt die
+  #26-Workspace-View;
 - `main/app_main.cpp` bleibt die Lebenszyklus-/Composition-Grenze und erzeugt
   keine neue Fachzustandsmaschine oder Renderlogik;
 - eine UI-Stoerung setzt nur die UI-/Input-Faehigkeit herab. Die
@@ -555,24 +575,33 @@ Plan nicht materiell ueberschreiten:
 | 3 | Identischer Stage-2-Smoke fuer den offiziellen Stack und begruendete Alternativen | Nur Kandidaten mit bestandenem Stage 0 und Stage 1; keine produktive Navigation oder Auswahl. |
 | 4 | Vollstaendige Stage-3-Matrix inklusive Low-Level-Funktion, Fehler, Raw-Recovery, Ressourcen und Lizenz | Identische Evidence; keine LVGL-Entscheidung und keine Hardware-PASS-Aussage ausserhalb realer Nachweise. |
 | 5 | Stage-4-Auswahl des Low-Level-Display-/Touch-Stacks und eines Rueckfallkandidaten; neutralen Adaptervertrag festschreiben | Genau eine bevorzugte Low-Level-Richtung plus hoechstens ein Rueckfall; danach keine neue Treiberarchitektur. |
-| 6 | App-spezifischen Owner `lib/fermentation_ui_renderer_esp_idf/` mit bestehendem #26-Snapshot-/Workspace-/Commandpfad verdrahten | `device_platform_esp_idf` bleibt app-frei, `fermentation_app` frameworkfrei, `main/app_main.cpp` bleibt reine Verdrahtung. |
+| 6 | Lokale `main/fermentation_ui_renderer.hpp/.cpp` mit bestehendem #26-Snapshot-/Workspace-/Commandpfad verdrahten | Bestehende `main`-Composition-Komponente bleibt Owner; `device_platform_esp_idf` bleibt app-frei, `fermentation_app` frameworkfrei, `main/app_main.cpp` bleibt reine Verdrahtung. |
 | 7 | Identischer repräsentativer #26-Screen: schlanke konkrete Projektion gegen LVGL/`esp_lvgl_port` messen | Erst jetzt Ownerentscheidung: LVGL nur bei klarem gemessenem R1-Vorteil, sonst `DEFER_AFTER_R1`. |
-| 8 | Workspace-/Command-Rueckweg, Backlight/WakeOnly, Kalibrierungs-/Persistenzpfad und Abschlussmatrix | Bestehende #25/#26-/Recoveryvertraege konsumieren; keine parallele Logik; danach Builder-Self-Check und Independent Review. |
+| 8 | Tatsächliche konkrete Dependencies in den bestehenden Komponenten verdrahten und `scripts/check_architecture_boundaries.py` samt Guard-Selbsttests/Regressionnachweis aktualisieren | Nur ausgewählte `esp_lcd`-/Touch-/LVGL-Abhaengigkeiten allowlisten; keine vorsorgliche Allowlist; danach Workspace-/Command-Rueckweg, Backlight/WakeOnly, Kalibrierungs-/Persistenzpfad, Builder-Self-Check und Independent Review. |
 
 Die Dateigrenzen sind fuer die Umsetzung bereits festgelegt: neutraler
 Hardwareport nur bei bestaetigtem Gap unter
 `lib/device_platform/src/device_ui_hardware_ports.hpp`, Low-Level-Adapter unter
-`lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.*`, der
-app-spezifische Owner unter
-`lib/fermentation_ui_renderer_esp_idf/src/fermentation_ui_renderer_esp_idf.*`
-mit `CMakeLists.txt`/`idf_component.yml`, und reine Konstruktion/Verdrahtung in
+`lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.*`, lokale
+app-spezifische Renderer-/Presentation-Helper unter
+`main/fermentation_ui_renderer.hpp/.cpp` und reine Konstruktion/Verdrahtung in
 `main/app_main.cpp`. Dazu kommen gezielte native/ESP-IDF-Tests sowie die
-notwendigen IDF-Komponenten-/Lockdateien. Keine dieser Dateien existiert nach
-diesem Plan-Commit bereits; ihre spaetere Erstellung ist Implementation und
-bleibt bis zur Ownerfreigabe verboten. `device_platform` und
-`fermentation_app` werden nur bei dem jeweils nachgewiesenen neutralen bzw.
-app-eigenen Gap additiv angepasst, nicht um eine zweite UI-Architektur zu
-schaffen.
+notwendigen IDF-Komponenten-/Lockdateien.
+
+Der bestehende Guard `scripts/check_architecture_boundaries.py` wird erst nach
+der tatsächlichen Stage-4-/LVGL-Auswahl gegen den finalen Dependencygraphen
+geprüft und nur bei einer legitimen neuen direkten CMake-Abhaengigkeit
+angepasst. `device_platform_esp_idf` darf dann nur die tatsächlich
+ausgewaehlten `esp_lcd`-/Touch-Komponenten erhalten; `main` darf nur bei einer
+ausgewaehlten LVGL-Richtung deren konkret benoetigte Abhaengigkeit erhalten.
+Die jeweiligen CMake-Allowlisten sowie die bestehenden Guard-Selbsttests und
+der Regressionnachweis werden im selben Umsetzungsschnitt aktualisiert. Vor
+Stage 4 werden keine Komponenten oder Dependencies allowgelistet. Keine
+dieser Produktionsdateien oder Guard-Aenderungen existiert nach diesem
+Plan-Commit; ihre spaetere Erstellung ist Implementation und bleibt bis zur
+Ownerfreigabe verboten. `device_platform` und `fermentation_app` werden nur
+bei dem jeweils nachgewiesenen neutralen bzw. app-eigenen Gap additiv
+angepasst, nicht um eine zweite UI-Architektur zu schaffen.
 
 ## 11. Tests, Nachweise und Governance-Gates
 
@@ -590,6 +619,10 @@ in dieser Phase `NOT_RUN` und werden nicht als bestanden behauptet.
 - gezielte ESP-IDF-Profiltests und actor-free Stage-2-/Stage-3-Evidence;
 - Architektur-/Abhaengigkeitspruefung: kein LVGL/ESP-IDF in
   `fermentation_app`, kein neuer zweiter Contractpfad;
+- `scripts/check_architecture_boundaries.py` auf dem tatsaechlichen finalen
+  Dependencygraphen; CMake-Allowlisten nur fuer konkret ausgewaehlte direkte
+  Abhaengigkeiten aktualisieren und die bestehenden Guard-Selbsttests sowie
+  den Regressionnachweis mitpruefen;
 - Ressourcen-, Lizenz- und Locknachweise auf demselben finalen Kandidaten;
 - Builder-Self-Check und vollstaendiger unabhaengiger Review des aktuellen
   Diffs.
@@ -635,8 +668,8 @@ folgende spaetere Evidence ohne unbelegte Vorannahmen abbildbar ist:
   Plan-/Vorbereitungsrecherche sowie erneut als sequenzielles Stage-1-Gate;
 - offizielle Stackpruefung vor eigener Entwicklung;
 - unveraenderte #25/#26-Contracts und schmale Modulgrenzen;
-- expliziter app-spezifischer Owner in
-  `lib/fermentation_ui_renderer_esp_idf/` ohne Ausweitung von `main` oder
+- expliziter app-spezifischer Owner in der bestehenden `main`-Komponente ohne
+  neue Produktions-Lib und ohne Ausweitung von `main/app_main.cpp` oder
   `device_platform_esp_idf`;
 - konkrete Stage-0-bis-4-Matrix mit actor-free Hardwarebedingungen;
 - Display, Touch, Rotation, Backlight, WakeOnly, Raw-Recovery,
