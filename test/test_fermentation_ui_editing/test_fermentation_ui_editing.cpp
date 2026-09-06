@@ -60,6 +60,8 @@ void test_user_program_id_allocation_is_deterministic_and_non_overwriting() {
 // SIM-26-54: the list is a catalog projection and every mutation retains the
 // canonical factory/user marker and ID rules.
 void test_program_list_and_mutations_use_catalog_ownership() {
+    const auto noUsage =
+        makeFermentationUiProgramUsageEvidence(RunCommandState{});
     auto catalog = makeFactoryProgramCatalog();
     auto& factory = catalog.programs.back().program;
     factory.fermentationStages.front().targetTemperatureCelsius = 25.0;
@@ -93,9 +95,11 @@ void test_program_list_and_mutations_use_catalog_ownership() {
     TEST_ASSERT_TRUE(disabled->blockedReason.has_value());
 
     const auto sourceId = factory.id;
-    const auto copied = applyProgramEdit(
-        catalog, {FermentationUiProgramEditOperation::Copy, sourceId,
-                  std::nullopt, std::string{"Copy"}, true, false});
+    const auto copied =
+        applyProgramEdit(catalog,
+                         {FermentationUiProgramEditOperation::Copy, sourceId,
+                          std::nullopt, std::string{"Copy"}, true},
+                         noUsage);
     TEST_ASSERT_TRUE(copied.status == FermentationUiProgramEditStatus::Applied);
     TEST_ASSERT_EQUAL_STRING("user-00", copied.affectedProgramId->c_str());
     TEST_ASSERT_EQUAL_UINT32(5U, catalog.programs.size());
@@ -106,37 +110,45 @@ void test_program_list_and_mutations_use_catalog_ownership() {
     newCandidate.program.id = "temporary";
     newCandidate.program.name = "New catalog candidate";
     const auto created =
-        applyProgramEdit(catalog, {FermentationUiProgramEditOperation::New, "",
-                                   newCandidate, std::nullopt, true, false});
+        applyProgramEdit(catalog,
+                         {FermentationUiProgramEditOperation::New, "",
+                          newCandidate, std::nullopt, true},
+                         noUsage);
     TEST_ASSERT_TRUE(created.status ==
                      FermentationUiProgramEditStatus::Applied);
     TEST_ASSERT_EQUAL_STRING("user-01", created.affectedProgramId->c_str());
 
     catalog.programs[1].program.name = "changed";
-    const auto reset =
-        applyProgramEdit(catalog, {FermentationUiProgramEditOperation::Reset,
-                                   catalog.programs[1].program.id, std::nullopt,
-                                   std::nullopt, true, false});
+    const auto reset = applyProgramEdit(
+        catalog,
+        {FermentationUiProgramEditOperation::Reset,
+         catalog.programs[1].program.id, std::nullopt, std::nullopt, true},
+        noUsage);
     TEST_ASSERT_TRUE(reset.status == FermentationUiProgramEditStatus::Applied);
     TEST_ASSERT_EQUAL_STRING("Joghurt stichfest",
                              catalog.programs[1].program.name.c_str());
 
     const auto uninstall = applyProgramEdit(
-        catalog, {FermentationUiProgramEditOperation::Uninstall,
-                  catalog.programs[0].program.id, std::nullopt, std::nullopt,
-                  true, false});
+        catalog,
+        {FermentationUiProgramEditOperation::Uninstall,
+         catalog.programs[0].program.id, std::nullopt, std::nullopt, true},
+        noUsage);
     TEST_ASSERT_TRUE(uninstall.status ==
                      FermentationUiProgramEditStatus::Applied);
     TEST_ASSERT_FALSE(catalog.programs[0].program.installed);
 
-    const auto deletion = applyProgramEdit(
-        catalog, {FermentationUiProgramEditOperation::Delete, "user-00",
-                  std::nullopt, std::nullopt, false, false});
+    const auto deletion =
+        applyProgramEdit(catalog,
+                         {FermentationUiProgramEditOperation::Delete, "user-00",
+                          std::nullopt, std::nullopt, false},
+                         noUsage);
     TEST_ASSERT_TRUE(deletion.status ==
                      FermentationUiProgramEditStatus::ConfirmationRequired);
-    const auto deleted = applyProgramEdit(
-        catalog, {FermentationUiProgramEditOperation::Delete, "user-00",
-                  std::nullopt, std::nullopt, true, false});
+    const auto deleted =
+        applyProgramEdit(catalog,
+                         {FermentationUiProgramEditOperation::Delete, "user-00",
+                          std::nullopt, std::nullopt, true},
+                         noUsage);
     TEST_ASSERT_TRUE(deleted.status ==
                      FermentationUiProgramEditStatus::Applied);
     TEST_ASSERT_TRUE(std::none_of(

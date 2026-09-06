@@ -274,7 +274,7 @@ Hardware- oder Pre-Ready-Nachweis.
 | SIM-26-40 | `test_fermentation_ui_editing::test_text_edit_model_has_mode_and_commit_without_validation` |
 | SIM-26-41 | `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership`; `test_configuration_service::test_program_editor_consumes_the_opening_catalog_revision` |
 | SIM-26-42 | `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership`; `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests` |
-| SIM-26-43 | `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests`; `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership` |
+| SIM-26-43 | `test_local_touch_ui::test_sim_26_program_editor_actions_are_real_requests`; `test_local_touch_ui::test_sim_26_program_delete_owner_usage_gate`; `test_local_touch_ui::test_sim_26_standard_delete_uses_two_confirmations`; `test_configuration_service::test_program_delete_in_use_is_rejected_before_preview`; `test_fermentation_ui_editing::test_program_list_and_mutations_use_catalog_ownership` |
 | SIM-26-44 | `test_configuration_service::test_program_catalog_expected_revision_is_checked_under_preview_lock`; `test_configuration_service::test_program_editor_consumes_the_opening_catalog_revision` |
 | SIM-26-45 | `test_local_touch_ui::test_pin_model_is_masked_and_owner_states_are_display_only`; `test_fermentation_ui_models::test_projector_home_modes_follow_lifecycle_and_process_matrix` |
 | SIM-26-46 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate`; `test_actuation_interlock::test_fresh_start_stays_unresolved_until_new_run_is_applied` (existing-owner) |

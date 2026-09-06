@@ -122,6 +122,7 @@ enum class ConfigurationPreviewStatus : std::uint8_t {
     ConfigurationRuntimeUnavailable,
     ConfigurationModelBudgetBusy,
     InvalidCandidate,
+    NotAllowed,
     StateChanged,
     PreviewNotFound,
     PreviewSuperseded,

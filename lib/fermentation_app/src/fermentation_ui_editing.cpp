@@ -30,6 +30,11 @@ std::optional<std::size_t> findProgramIndex(const ProgramCatalog& catalog,
     return std::nullopt;
 }
 
+bool isDeletionOperation(FermentationUiProgramEditOperation operation) {
+    return operation == FermentationUiProgramEditOperation::Delete ||
+           operation == FermentationUiProgramEditOperation::Uninstall;
+}
+
 char base36(std::size_t value) {
     return value < 10U ? static_cast<char>('0' + value)
                        : static_cast<char>('a' + value - 10U);
@@ -212,8 +217,26 @@ std::vector<FermentationUiProgramListEntry> makeFermentationUiProgramList(
     return result;
 }
 
+bool FermentationUiProgramUsageEvidence::isInUse(
+    const std::string& programId) const noexcept {
+    return activeProgramId_.has_value() && *activeProgramId_ == programId;
+}
+
+FermentationUiProgramUsageEvidence makeFermentationUiProgramUsageEvidence(
+    const RunCommandState& runState) {
+    std::optional<std::string> activeProgramId;
+    if (runState.activeProgramRun.has_value()) {
+        if (const auto* program =
+                storedProgram(runState.activeProgramRun->snapshot().source)) {
+            activeProgramId = program->program.id;
+        }
+    }
+    return FermentationUiProgramUsageEvidence{std::move(activeProgramId)};
+}
+
 FermentationUiProgramEditResult applyProgramEdit(
-    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request) {
+    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request,
+    const FermentationUiProgramUsageEvidence& usage) {
     const auto found = findProgramIndex(catalog, request.programId);
     switch (request.operation) {
         case FermentationUiProgramEditOperation::New: {
@@ -305,8 +328,11 @@ FermentationUiProgramEditResult applyProgramEdit(
                 return {FermentationUiProgramEditStatus::NotFound,
                         std::nullopt};
             auto& program = catalog.programs[*found].program;
+            if (!request.confirmed)
+                return {FermentationUiProgramEditStatus::ConfirmationRequired,
+                        request.programId};
             if (!isFactoryProgram(catalog.programs[*found]) ||
-                !program.userDeletable || request.inUse) {
+                !program.userDeletable || usage.isInUse(request.programId)) {
                 return {FermentationUiProgramEditStatus::NotAllowed,
                         std::nullopt};
             }
@@ -323,7 +349,7 @@ FermentationUiProgramEditResult applyProgramEdit(
                         request.programId};
             const auto& program = catalog.programs[*found].program;
             if (*found < configuration_limits::kFactoryProgramCount ||
-                !program.userDeletable || request.inUse) {
+                !program.userDeletable || usage.isInUse(request.programId)) {
                 return {FermentationUiProgramEditStatus::NotAllowed,
                         std::nullopt};
             }
@@ -360,12 +386,17 @@ FermentationUiProgramEditResult applyProgramEdit(
 
 ConfigurationPreviewInstallResult applyProgramEditPreview(
     ConfigurationService& service, ProgramCatalogRevision expectedRevision,
-    const FermentationUiProgramEditRequest& request) {
+    const FermentationUiProgramEditRequest& request,
+    const FermentationUiProgramUsageEvidence& usage) {
+    if (isDeletionOperation(request.operation) &&
+        usage.isInUse(request.programId)) {
+        return {ConfigurationPreviewStatus::NotAllowed, std::nullopt};
+    }
     auto build = service.beginPreview(expectedRevision);
     if (build.status != ConfigurationPreviewStatus::Success)
         return {build.status, std::nullopt};
     const auto mutation =
-        applyProgramEdit(build.lease.programCatalog(), request);
+        applyProgramEdit(build.lease.programCatalog(), request, usage);
     if (mutation.status != FermentationUiProgramEditStatus::Applied)
         return {ConfigurationPreviewStatus::InvalidCandidate, std::nullopt};
     const ChangeOperation operation{

@@ -20,6 +20,7 @@ enum class FermentationUiPage : std::uint8_t {
     ProgramSummary,
     ProgramEdit,
     ProgramDeleteConfirmation,
+    ProgramDeleteFinalConfirmation,
     ProgramActions,
     ManualModeSelection,
     ManualHolding,
@@ -69,6 +70,7 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     NavigateProgramSummary,
     NavigateProgramEdit,
     NavigateProgramDeleteConfirmation,
+    NavigateProgramDeleteFinalConfirmation,
     NavigateProgramActions,
     NavigateManualModeSelection,
     NavigateManualHolding,
@@ -119,6 +121,7 @@ struct FermentationUiWorkspaceView {
     std::array<device_platform::BottomSlot, 4U> bottomSlots{};
     std::array<FermentationUiWorkspaceSlotAction, 4U> slotActions{};
     std::vector<FermentationUiProgramListEntry> programList;
+    std::optional<std::string> confirmationProgramName;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
     // for the explicitly selected action slot.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 #include "device_platform.hpp"
 #include "device_ui_idle.hpp"
@@ -601,6 +602,8 @@ void test_sim_26_shell_locale_and_service_boundaries() {
 // yield the owning edit request, while the actual mutation remains with the
 // catalog/ConfigurationService helper and its expected revision.
 void test_sim_26_program_editor_actions_are_real_requests() {
+    const auto noUsage =
+        makeFermentationUiProgramUsageEvidence(RunCommandState{});
     const auto snapshot =
         snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
     auto catalog = runnableCatalog();
@@ -617,7 +620,7 @@ void test_sim_26_program_editor_actions_are_real_requests() {
     TEST_ASSERT_TRUE(copy.programEdit.has_value());
     TEST_ASSERT_TRUE(copy.programEdit->operation ==
                      FermentationUiProgramEditOperation::Copy);
-    const auto copied = applyProgramEdit(catalog, *copy.programEdit);
+    const auto copied = applyProgramEdit(catalog, *copy.programEdit, noUsage);
     TEST_ASSERT_TRUE(copied.status == FermentationUiProgramEditStatus::Applied);
 
     workspace.setPage(FermentationUiPage::ProgramActions);
@@ -630,7 +633,8 @@ void test_sim_26_program_editor_actions_are_real_requests() {
     TEST_ASSERT_TRUE(newRequest.programEdit.has_value());
     TEST_ASSERT_TRUE(newRequest.programEdit->operation ==
                      FermentationUiProgramEditOperation::New);
-    const auto created = applyProgramEdit(catalog, *newRequest.programEdit);
+    const auto created =
+        applyProgramEdit(catalog, *newRequest.programEdit, noUsage);
     TEST_ASSERT_TRUE(created.status ==
                      FermentationUiProgramEditStatus::Applied);
 
@@ -660,19 +664,174 @@ void test_sim_26_program_editor_actions_are_real_requests() {
     TEST_ASSERT_TRUE(workspace.selectProgram("user-00", catalog));
     TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1), &catalog).navigated);
     TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1), &catalog).navigated);
-    const auto deleteOffer = workspace.press(snapshot, bottom(2), &catalog);
-    TEST_ASSERT_TRUE(deleteOffer.navigated);
+    const auto enterDeleteConfirmation = [&]() {
+        const auto deleteOffer = workspace.press(snapshot, bottom(2), &catalog);
+        TEST_ASSERT_TRUE(deleteOffer.navigated);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationUiPage::ProgramDeleteConfirmation),
+            static_cast<int>(workspace.page()));
+        const auto first = workspace.view(snapshot, &catalog);
+        TEST_ASSERT_TRUE(first.confirmationProgramName.has_value());
+        TEST_ASSERT_EQUAL_STRING("Wasserkefir copy",
+                                 first.confirmationProgramName->c_str());
+    };
+
+    enterDeleteConfirmation();
+    const auto firstCancel = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Cancel, 0U}, &catalog);
+    TEST_ASSERT_TRUE(firstCancel.navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramEdit),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_TRUE(std::any_of(
+        catalog.programs.begin(), catalog.programs.end(),
+        [](const auto& item) { return item.program.id == "user-01"; }));
+
+    enterDeleteConfirmation();
+    const auto firstConfirmed = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
+    TEST_ASSERT_TRUE(firstConfirmed.navigated);
+    TEST_ASSERT_FALSE(firstConfirmed.programEdit.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiPage::ProgramDeleteFinalConfirmation),
+        static_cast<int>(workspace.page()));
+    const auto second = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(second.confirmationProgramName.has_value());
+    TEST_ASSERT_EQUAL_STRING("Wasserkefir copy",
+                             second.confirmationProgramName->c_str());
+
+    const auto secondCancel = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Cancel, 0U}, &catalog);
+    TEST_ASSERT_TRUE(secondCancel.navigated);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationUiPage::ProgramDeleteConfirmation),
         static_cast<int>(workspace.page()));
+    TEST_ASSERT_FALSE(secondCancel.programEdit.has_value());
+
+    const auto secondFirstConfirmed = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
+    TEST_ASSERT_TRUE(secondFirstConfirmed.navigated);
     const auto confirmedDelete = workspace.press(
         snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
     TEST_ASSERT_TRUE(confirmedDelete.programEdit.has_value());
     TEST_ASSERT_TRUE(confirmedDelete.programEdit->confirmed);
     const auto deleted =
-        applyProgramEdit(catalog, *confirmedDelete.programEdit);
+        applyProgramEdit(catalog, *confirmedDelete.programEdit, noUsage);
     TEST_ASSERT_TRUE(deleted.status ==
                      FermentationUiProgramEditStatus::Applied);
+}
+
+// SIM-26-43: owning run-state evidence, not the UI request, protects both
+// user-program deletion and standard-program deinstallation.
+void test_sim_26_program_delete_owner_usage_gate() {
+    auto userCatalog = runnableCatalog();
+    auto user = userCatalog.programs.back();
+    user.program.id = "user-in-use";
+    user.program.name = "In-use user program";
+    user.program.builtIn = false;
+    user.program.factoryCatalogEntry = false;
+    user.program.resettable = false;
+    user.program.userDeletable = true;
+    user.program.installed = true;
+    userCatalog.programs.push_back(user);
+
+    RunCommandState userRun;
+    userRun.processState.state = ProcessState::Fermenting;
+    const auto activeUser = ActiveRun::start(
+        user, ProgramSourceKind::UserProgram, RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(activeUser.has_value());
+    userRun.activeProgramRun = std::move(*activeUser);
+    const auto userUsage = makeFermentationUiProgramUsageEvidence(userRun);
+    const auto userDelete =
+        applyProgramEdit(userCatalog,
+                         {FermentationUiProgramEditOperation::Delete,
+                          "user-in-use", std::nullopt, std::nullopt, true},
+                         userUsage);
+    TEST_ASSERT_TRUE(userDelete.status ==
+                     FermentationUiProgramEditStatus::NotAllowed);
+    TEST_ASSERT_EQUAL_UINT32(5U, userCatalog.programs.size());
+
+    auto standardCatalog = runnableCatalog();
+    const auto standardId = standardCatalog.programs.back().program.id;
+    RunCommandState standardRun;
+    standardRun.processState.state = ProcessState::Fermenting;
+    const auto activeStandard = ActiveRun::start(
+        standardCatalog.programs.back(), ProgramSourceKind::FactoryCatalog,
+        RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(activeStandard.has_value());
+    standardRun.activeProgramRun = std::move(*activeStandard);
+    const auto standardUsage =
+        makeFermentationUiProgramUsageEvidence(standardRun);
+    const auto standardUninstall =
+        applyProgramEdit(standardCatalog,
+                         {FermentationUiProgramEditOperation::Uninstall,
+                          standardId, std::nullopt, std::nullopt, true},
+                         standardUsage);
+    TEST_ASSERT_TRUE(standardUninstall.status ==
+                     FermentationUiProgramEditStatus::NotAllowed);
+    TEST_ASSERT_EQUAL_UINT32(4U, standardCatalog.programs.size());
+    TEST_ASSERT_TRUE(standardCatalog.programs.back().program.installed);
+}
+
+// SIM-26-43: a standard-program deinstallation has the same two observable
+// confirmations as user-program deletion and only then emits Uninstall.
+void test_sim_26_standard_delete_uses_two_confirmations() {
+    const auto noUsage =
+        makeFermentationUiProgramUsageEvidence(RunCommandState{});
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    auto catalog = runnableCatalog();
+    const auto standardId = catalog.programs.back().program.id;
+    const auto standardName = catalog.programs.back().program.name;
+    FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram(standardId, catalog));
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1), &catalog).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1), &catalog).navigated);
+    const auto editor = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(editor.slotActions[2] ==
+                     FermentationUiWorkspaceSlotAction::UninstallProgram);
+    TEST_ASSERT_EQUAL_STRING("delete",
+                             editor.bottomSlots[2].label.value.c_str());
+
+    const auto firstOffer = workspace.press(snapshot, bottom(2), &catalog);
+    TEST_ASSERT_TRUE(firstOffer.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiPage::ProgramDeleteConfirmation),
+        static_cast<int>(workspace.page()));
+    const auto first = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(first.confirmationProgramName.has_value());
+    TEST_ASSERT_EQUAL_STRING(standardName.c_str(),
+                             first.confirmationProgramName->c_str());
+
+    const auto firstConfirmed = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
+    TEST_ASSERT_TRUE(firstConfirmed.navigated);
+    TEST_ASSERT_FALSE(firstConfirmed.programEdit.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiPage::ProgramDeleteFinalConfirmation),
+        static_cast<int>(workspace.page()));
+    const auto second = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(second.confirmationProgramName.has_value());
+    TEST_ASSERT_EQUAL_STRING(standardName.c_str(),
+                             second.confirmationProgramName->c_str());
+
+    const auto final = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
+    TEST_ASSERT_TRUE(final.programEdit.has_value());
+    TEST_ASSERT_TRUE(final.programEdit->operation ==
+                     FermentationUiProgramEditOperation::Uninstall);
+    TEST_ASSERT_TRUE(final.programEdit->confirmed);
+    const auto mutation =
+        applyProgramEdit(catalog, *final.programEdit, noUsage);
+    TEST_ASSERT_TRUE(mutation.status ==
+                     FermentationUiProgramEditStatus::Applied);
+    TEST_ASSERT_EQUAL_UINT32(4U, catalog.programs.size());
+    TEST_ASSERT_TRUE(catalog.programs.back().program.id == standardId);
+    TEST_ASSERT_FALSE(catalog.programs.back().program.installed);
+    const auto activeList = makeFermentationUiProgramList(catalog);
+    TEST_ASSERT_TRUE(std::none_of(
+        activeList.begin(), activeList.end(), [&](const auto& entry) {
+            return entry.program.program.id == standardId;
+        }));
 }
 
 // SIM-26-11, SIM-26-28 and SIM-26-30: existing message, sensor and recovery
@@ -730,6 +889,8 @@ int main(int, char**) {
     RUN_TEST(test_sim_26_manual_and_program_consumer_paths);
     RUN_TEST(test_sim_26_shell_locale_and_service_boundaries);
     RUN_TEST(test_sim_26_program_editor_actions_are_real_requests);
+    RUN_TEST(test_sim_26_program_delete_owner_usage_gate);
+    RUN_TEST(test_sim_26_standard_delete_uses_two_confirmations);
     RUN_TEST(test_sim_26_message_sensor_and_recovery_actions);
     return UNITY_END();
 }

@@ -59,6 +59,8 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::NavigateProgramEdit:
         case FermentationUiWorkspaceSlotAction::
             NavigateProgramDeleteConfirmation:
+        case FermentationUiWorkspaceSlotAction::
+            NavigateProgramDeleteFinalConfirmation:
         case FermentationUiWorkspaceSlotAction::NavigateProgramActions:
         case FermentationUiWorkspaceSlotAction::NavigateManualModeSelection:
         case FermentationUiWorkspaceSlotAction::NavigateManualHolding:
@@ -124,6 +126,12 @@ std::vector<device_platform::TextKey> FermentationTouchWorkspace::routeForPage(
             route.push_back(key("programs"));
             route.push_back(key("details"));
             route.push_back(key("delete"));
+            break;
+        case FermentationUiPage::ProgramDeleteFinalConfirmation:
+            route.push_back(key("programs"));
+            route.push_back(key("details"));
+            route.push_back(key("delete"));
+            route.push_back(key("confirm"));
             break;
         case FermentationUiPage::ManualModeSelection:
             route.push_back(key("programs"));
@@ -213,6 +221,15 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
                                FermentationUiPage::ProgramSummary,
                                FermentationUiPage::ProgramEdit,
                                FermentationUiPage::ProgramDeleteConfirmation});
+            break;
+        case FermentationUiPage::ProgramDeleteFinalConfirmation:
+            pageStack_.insert(
+                pageStack_.end(),
+                {FermentationUiPage::ProgramList,
+                 FermentationUiPage::ProgramSummary,
+                 FermentationUiPage::ProgramEdit,
+                 FermentationUiPage::ProgramDeleteConfirmation,
+                 FermentationUiPage::ProgramDeleteFinalConfirmation});
             break;
         case FermentationUiPage::ProgramActions:
             pageStack_.insert(pageStack_.end(),
@@ -471,6 +488,7 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             bool factoryProgram = false;
             bool resettableProgram = false;
+            bool deletableProgram = selectedProgramId_.has_value();
             if (catalog != nullptr && selectedProgramId_.has_value()) {
                 const auto found = std::find_if(
                     catalog->programs.begin(), catalog->programs.end(),
@@ -480,15 +498,18 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 factoryProgram = found != catalog->programs.end() &&
                                  found->program.factoryCatalogEntry;
                 resettableProgram = factoryProgram && found->program.resettable;
+                deletableProgram = found != catalog->programs.end() &&
+                                   found->program.installed &&
+                                   found->program.userDeletable;
             }
             setSlot(view, 1U, "reset",
                     FermentationUiWorkspaceSlotAction::ResetProgram,
                     selectedProgramId_.has_value() && resettableProgram);
-            setSlot(view, 2U, factoryProgram ? "uninstall" : "delete",
+            setSlot(view, 2U, "delete",
                     factoryProgram
                         ? FermentationUiWorkspaceSlotAction::UninstallProgram
                         : FermentationUiWorkspaceSlotAction::DeleteProgram,
-                    selectedProgramId_.has_value());
+                    deletableProgram);
             setSlot(view, 3U, "save",
                     FermentationUiWorkspaceSlotAction::SaveProgram,
                     programEditOperation_ !=
@@ -497,14 +518,35 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         }
         case FermentationUiPage::ProgramDeleteConfirmation:
+        case FermentationUiPage::ProgramDeleteFinalConfirmation:
             view.title = key("delete");
+            if (catalog != nullptr && selectedProgramId_.has_value()) {
+                const auto found = std::find_if(
+                    catalog->programs.begin(), catalog->programs.end(),
+                    [this](const auto& document) {
+                        return document.program.id == *selectedProgramId_;
+                    });
+                if (found != catalog->programs.end())
+                    view.confirmationProgramName = found->program.name;
+            }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
-            setSlot(view, 2U, "delete",
-                    FermentationUiWorkspaceSlotAction::DeleteProgram,
+            if (page_ == FermentationUiPage::ProgramDeleteConfirmation) {
+                setSlot(view, 2U, "confirm",
+                        FermentationUiWorkspaceSlotAction::
+                            NavigateProgramDeleteFinalConfirmation,
+                        selectedProgramId_.has_value());
+            } else {
+                setSlot(
+                    view, 2U, "delete",
+                    programEditOperation_ ==
+                            FermentationUiProgramEditOperation::Uninstall
+                        ? FermentationUiWorkspaceSlotAction::UninstallProgram
+                        : FermentationUiWorkspaceSlotAction::DeleteProgram,
                     selectedProgramId_.has_value());
+            }
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
@@ -856,6 +898,10 @@ bool FermentationTouchWorkspace::navigate(
             NavigateProgramDeleteConfirmation:
             destination = FermentationUiPage::ProgramDeleteConfirmation;
             break;
+        case FermentationUiWorkspaceSlotAction::
+            NavigateProgramDeleteFinalConfirmation:
+            destination = FermentationUiPage::ProgramDeleteFinalConfirmation;
+            break;
         case FermentationUiWorkspaceSlotAction::NavigateProgramActions:
             destination = FermentationUiPage::ProgramActions;
             break;
@@ -966,39 +1012,38 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             if (selectedProgramId_.has_value()) {
                 result.programEdit = FermentationUiProgramEditRequest{
                     FermentationUiProgramEditOperation::Reset,
-                    *selectedProgramId_,
-                    std::nullopt,
-                    std::nullopt,
-                    false,
-                    false};
+                    *selectedProgramId_, std::nullopt, std::nullopt, true};
             }
             break;
         case FermentationUiWorkspaceSlotAction::UninstallProgram:
             if (selectedProgramId_.has_value()) {
-                result.programEdit = FermentationUiProgramEditRequest{
-                    FermentationUiProgramEditOperation::Uninstall,
-                    *selectedProgramId_,
-                    std::nullopt,
-                    std::nullopt,
-                    true,
-                    false};
+                if (page_ == FermentationUiPage::ProgramEdit) {
+                    programEditOperation_ =
+                        FermentationUiProgramEditOperation::Uninstall;
+                    result.navigated =
+                        navigate(FermentationUiWorkspaceSlotAction::
+                                     NavigateProgramDeleteConfirmation);
+                } else if (page_ ==
+                           FermentationUiPage::ProgramDeleteFinalConfirmation) {
+                    result.programEdit = FermentationUiProgramEditRequest{
+                        FermentationUiProgramEditOperation::Uninstall,
+                        *selectedProgramId_, std::nullopt, std::nullopt, true};
+                }
             }
             break;
         case FermentationUiWorkspaceSlotAction::DeleteProgram:
             if (selectedProgramId_.has_value()) {
                 if (page_ == FermentationUiPage::ProgramEdit) {
+                    programEditOperation_ =
+                        FermentationUiProgramEditOperation::Delete;
                     result.navigated =
                         navigate(FermentationUiWorkspaceSlotAction::
                                      NavigateProgramDeleteConfirmation);
                 } else if (page_ ==
-                           FermentationUiPage::ProgramDeleteConfirmation) {
+                           FermentationUiPage::ProgramDeleteFinalConfirmation) {
                     result.programEdit = FermentationUiProgramEditRequest{
                         FermentationUiProgramEditOperation::Delete,
-                        *selectedProgramId_,
-                        std::nullopt,
-                        std::nullopt,
-                        true,
-                        false};
+                        *selectedProgramId_, std::nullopt, std::nullopt, true};
                 }
             }
             break;
@@ -1007,12 +1052,8 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                     FermentationUiProgramEditOperation::Edit ||
                 programEditCandidate_.has_value()) {
                 result.programEdit = FermentationUiProgramEditRequest{
-                    programEditOperation_,
-                    selectedProgramId_.value_or(""),
-                    programEditCandidate_,
-                    std::nullopt,
-                    true,
-                    false};
+                    programEditOperation_, selectedProgramId_.value_or(""),
+                    programEditCandidate_, std::nullopt, true};
                 programEditDirty_ = false;
             }
             break;
@@ -1214,6 +1255,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                     confirmSlot = 3U;
                     break;
                 case FermentationUiPage::ProgramDeleteConfirmation:
+                case FermentationUiPage::ProgramDeleteFinalConfirmation:
                     confirmSlot = 2U;
                     break;
                 default:

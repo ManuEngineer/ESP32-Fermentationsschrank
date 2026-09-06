@@ -4,11 +4,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "configuration_documents.hpp"
 #include "configuration_service.hpp"
 #include "device_ui_text.hpp"
+#include "run_commands.hpp"
 #include "runtime_configuration_snapshot.hpp"
 
 namespace fermentation {
@@ -125,6 +127,26 @@ struct FermentationUiProgramListEntry {
 [[nodiscard]] std::vector<FermentationUiProgramListEntry>
 makeFermentationUiProgramList(const ProgramCatalog& catalog);
 
+// The current run owner derives this evidence from the canonical
+// RunCommandState. It is deliberately not part of the UI edit request and
+// cannot be authored by the workspace.
+class FermentationUiProgramUsageEvidence {
+   public:
+    [[nodiscard]] bool isInUse(const std::string& programId) const noexcept;
+
+   private:
+    explicit FermentationUiProgramUsageEvidence(
+        std::optional<std::string> activeProgramId)
+        : activeProgramId_(std::move(activeProgramId)) {}
+    friend FermentationUiProgramUsageEvidence
+    makeFermentationUiProgramUsageEvidence(const RunCommandState& runState);
+
+    std::optional<std::string> activeProgramId_;
+};
+
+[[nodiscard]] FermentationUiProgramUsageEvidence
+makeFermentationUiProgramUsageEvidence(const RunCommandState& runState);
+
 enum class FermentationUiProgramEditOperation : std::uint8_t {
     Edit,
     Copy,
@@ -150,9 +172,6 @@ struct FermentationUiProgramEditRequest {
     std::optional<ProgramDocument> candidate;
     std::optional<std::string> name;
     bool confirmed{false};
-    // The owning run state supplies this; the UI must not infer whether a
-    // program is currently in use.
-    bool inUse{false};
 };
 
 struct FermentationUiProgramEditResult {
@@ -164,11 +183,13 @@ struct FermentationUiProgramEditResult {
 // Applies one operation to a preview-bound catalog only. Persistence remains
 // ConfigurationService::installPreview/confirmPreview ownership.
 [[nodiscard]] FermentationUiProgramEditResult applyProgramEdit(
-    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request);
+    ProgramCatalog& catalog, const FermentationUiProgramEditRequest& request,
+    const FermentationUiProgramUsageEvidence& usage);
 
 [[nodiscard]] ConfigurationPreviewInstallResult applyProgramEditPreview(
     ConfigurationService& service, ProgramCatalogRevision expectedRevision,
-    const FermentationUiProgramEditRequest& request);
+    const FermentationUiProgramEditRequest& request,
+    const FermentationUiProgramUsageEvidence& usage);
 
 struct FermentationUiProgramEditSession {
     ProgramDocument candidate;

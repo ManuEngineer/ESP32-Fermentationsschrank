@@ -78,6 +78,7 @@ Category categoryFor(ConfigurationPreviewStatus status) {
         case ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable:
             return Category::Unavailable;
         case ConfigurationPreviewStatus::InvalidCandidate:
+        case ConfigurationPreviewStatus::NotAllowed:
         case ConfigurationPreviewStatus::StateChanged:
         case ConfigurationPreviewStatus::PreviewNotFound:
         case ConfigurationPreviewStatus::PreviewSuperseded:
