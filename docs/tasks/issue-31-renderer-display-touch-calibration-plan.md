@@ -13,7 +13,7 @@
 | Implementation | `NOT_STARTED` |
 | Hardware-Spike | `NOT_STARTED` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
-| LVGL-Auswahl | `EVALUATE_LATER` |
+| LVGL-Auswahl | `DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
 | GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PENDING` |
 | Elektrische Messung | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` |
@@ -97,17 +97,58 @@ Produktivauswahl.
 | Verantwortung | Bestehender Vertrag / spaetere Umsetzung |
 |---|---|
 | `fermentation_app` | Besitzt Fachzustand, `FermentationUiSnapshot`, `FermentationUiProjector`, `FermentationTouchWorkspace`, bestehende typed UI commands, Recovery-/Serviceintents und die Semantik von `WakeOnly`. Keine Treibertypen und keine Widget-State-Machine. |
-| `device_platform` | Bleibt bei anwendungsneutralen, schmalen Ports und Diensten. Neue Typen sind nur zulaessig, wenn ein konkreter neutraler Contract-Gap nachgewiesen ist; keine LVGL-, Display-, Touch-, GPIO- oder ESP-IDF-Abhaengigkeit. |
-| `device_platform_esp_idf` | Konkrete ESP-IDF-Adapter fuer SPI-Panel, Touch-Sampling, Backlight und ggf. ESP-IDF-Komponenten. Keine Fachlogik, keine Navigation, keine App- oder Test-Support-Abhaengigkeit. |
-| Composition-Grenze (`main` bzw. vorhandener Root) | Ein schmaler Binder verbindet vorhandene App-Snapshots/Workspace-Views mit dem konkret gewaehlten Renderer und mapped Press-Ergebnisse zurueck auf vorhandene Commands. Keine neue allgemeine Provider- oder Plugin-Schicht. |
+| `device_platform` | Bleibt bei anwendungsneutralen, schmalen Ports und Diensten. Der aktuelle Repository-Schnitt besitzt noch keinen Display-/Touch-/Backlight-Port; der Builder darf nachgewiesen genau die benoetigten neutralen Hardwareports als additive Luecke ergaenzen, aber keine UI-/Fachtypen, LVGL-Typen, GPIO-Details oder ESP-IDF-Abhaengigkeit einfuehren. |
+| `device_platform_esp_idf` | Implementiert die konkreten ESP-IDF-/Treiberadapter fuer die neutralen Ports, SPI-Panel, Touch-Sampling und Backlight. Keine Abhaengigkeit auf `fermentation_app`, keine Navigation, keine Fach- oder Composition-Root-Logik. |
+| `fermentation_ui_renderer_esp_idf` (neuer, konkreter Owner) | Ein einziges app-spezifisches ESP-IDF-Integrationsmodul kennt `fermentation_app`-Workspace-/Presentation-Modelle und den ausgewaehlten konkreten Renderer. Es besitzt die Projektion in Widgets/Drawables, das Mapping von Touchzielen auf `FermentationTouchWorkspace::press(...)` und die Rueckgabe ueber bestehende typed Command-/Applicationpfade. Keine Fachentscheidung und keine zweite UI-State-Machine. |
+| `main/app_main.cpp` | Bleibt ausschliesslich Composition Root: instanziiert Plattform, App, konkrete Low-Level-Adapter und `fermentation_ui_renderer_esp_idf`, verdrahtet Lebenszyklus/Update und besitzt keine Widget-, Layout-, Renderer- oder Touchlogik. |
 | Test-Support | Renderer- und Adaptertests bleiben von Produktions-App-Abhaengigkeiten getrennt. Hardware-Smoke- und Ressourcennachweise laufen als actor-free, reproduzierbare Profile. |
 
-Der Binder darf die #26-Projektion lesen und `press(...)` mit einem
-vorhandenen `FermentationUiInteraction`-/Commandpfad aufrufen. Er darf keine
-zweite Route, Aktion, PIN-Pruefung, Recovery-Policy oder Fachzustandskopie
-besitzen. Bei fehlendem Display oder Touch wird die UI-Faehigkeit
-degradiert; Regelung, Safety und Aktorfreigabe laufen unabhaengig und
-fail-closed weiter.
+### Explizite Boundary-Entscheidung
+
+Der aktuelle Produktionsschnitt wurde geprueft: Es gibt bereits die
+rendererunabhaengigen `FermentationUiSnapshot`-, `FermentationUiProjector`-,
+`FermentationTouchWorkspace`- und `FermentationUiCommandBridge`-Vertraege in
+`fermentation_app`, aber noch kein konkretes Display-/Touch-Integrationsmodul.
+`main/app_main.cpp` ist Composition Root; `device_platform_esp_idf` darf laut
+lokaler Regel keine App- oder Composition-Abhaengigkeit erhalten.
+
+Daher ist `lib/fermentation_ui_renderer_esp_idf/` die kleinste explizite neue
+Ownergrenze dieses Plans. Die erwarteten Grenzen nach Planfreigabe sind:
+
+- `lib/device_platform/src/device_ui_hardware_ports.hpp`: nur falls der
+  bestaetigte Port-Gap dies benoetigt, die schmalen neutralen Interfaces fuer
+  Display-Flush/Rotation, Raw-Touch und Backlight; keine Widget-, Route-,
+  PIN-, Kalibrierungs- oder ESP-IDF-Typen;
+- `lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.hpp/.cpp`:
+  konkrete SPI-/Panel-/Touch-/Backlight-Adapter hinter diesen Ports, ohne
+  `fermentation_app`-Include und ohne App-Entscheidungen;
+- `lib/fermentation_ui_renderer_esp_idf/CMakeLists.txt`,
+  `idf_component.yml` und
+  `src/fermentation_ui_renderer_esp_idf.hpp/.cpp`: genau ein
+  app-spezifischer Integrationsowner. Er kennt die #26-Workspace-View, liest
+  den bestehenden Snapshot/Projector, zeichnet den ausgewaehlten
+  repräsentativen Screen und leitet Press-Ergebnisse an vorhandene typed
+  Application-/Commandpfade weiter;
+- `main/app_main.cpp`: nur Konstruktion, Referenz-/Portverdrahtung und
+  `begin`/`update`; keine konkrete Renderlogik.
+
+Der neue Owner ist keine generische Renderer- oder Providerplattform. Seine
+Abhaengigkeiten sind konkret und einseitig: `fermentation_app` fuer die
+bestehenden Modelle/Commands, `device_platform` fuer neutrale Ports und
+`device_platform_esp_idf` fuer die konkrete Hardwareverdrahtung. Die
+ausgewaehlte Rendererbibliothek bleibt innerhalb dieses konkreten Moduls und
+leakt nicht in `fermentation_app` oder `device_platform`. Ein fehlender
+Snapshot-/Application-Zufluss wird, falls der aktuelle oeffentliche App-Schnitt
+ihn nicht vollstaendig liefert, als additive app-eigene Verwendung der
+vorhandenen Projector-/Commandvertraege geschlossen; es wird kein zweiter
+Renderervertrag erfunden.
+
+Der Owner darf `press(...)` aufrufen und die bestehenden typed
+`FermentationApplication`-/`FermentationUiCommandBridge`-Pfade verwenden. Er
+besitzt keine zweite Route, Aktion, PIN-Pruefung, Recovery-Policy,
+Fachzustandskopie oder Persistenz. Bei fehlendem Display oder Touch wird nur
+die UI-Faehigkeit degradiert; Regelung, Safety und Aktorfreigabe laufen
+unabhaengig und fail-closed weiter.
 
 ## 4. Hardware-SSOT und Status ohne Vorwegnahme
 
@@ -165,32 +206,62 @@ ESP-IDF-6.0.2-Toolchain und deren exakten Lockdaten bewiesen werden.
 ## 6. Stufenplan und Hardware-Evidence-Matrix
 
 Die bestehende Stufenlogik aus `docs/audits/HARDWARE_SPIKE_PLAN.md` bleibt
-unveraendert. Jede Stufe erzeugt ein reproduzierbares Evidence-Artefakt mit
-`PASS`, `FAIL`, `BLOCKED` oder `NOT_RUN`; fehlende Messungen sind nicht
-bestanden.
+unveraendert und ist eine sequentielle Ausfuehrungskette:
 
-### Stufe 0 – reale Hardware identifizieren
+```text
+Stufe 0: reale Hardware und minimale sichere Hardwarebaseline
+    -> Stufe 1: Quelle/Lizenz/Kompatibilitaet/reproduzierbarer Build
+    -> Stufe 2: kurzer identischer Hardware-Smoke
+    -> Stufe 3: vollstaendige identische Funktions-/Fehler-/Ressourcenmatrix
+    -> Stufe 4: genau eine Low-Level-Produktivrichtung und hoechstens ein Rueckfall
+```
 
-Vor jedem aktiven Hardwaretest legt der Owner die konkrete Modul- und
-Verdrahtungsidentitaet fest:
+Jede Stufe erzeugt ein reproduzierbares Evidence-Artefakt mit `PASS`, `FAIL`,
+`BLOCKED` oder `NOT_RUN`; fehlende Messungen sind nicht bestanden. Die
+Upstream-/Lizenzrecherche in Abschnitt 5 ist ausschliesslich
+Plan-/Vorbereitungsrecherche. Sie ist kein bestandenes Gate und darf keinen
+Stage-1-PASS ersetzen. Ebenso darf ein Build erst als Stage-1-Evidence
+gelten, wenn Stufe 0 einschliesslich der Baseline abgeschlossen ist.
 
-- Boardrevision und exakte MSP2807-/Displaymarkierung, Fotos und
+### Stufe 0 – reale Hardware identifizieren und sichere Baseline nachweisen
+
+Vor jeder Bibliotheksbewertung und vor jedem aktiven Display-/Touchtest wird
+die minimale sichere Hardwarebaseline aus dem kanonischen Spikevertrag
+dokumentiert und nachgewiesen. Das umfasst:
+
+- reale ESP32-Boardrevision und exakte MSP2807-/Displaymarkierung, Fotos und
   Liefer-/Bestellinformationen;
-- praktisch ermittelter Displaycontroller und Touchcontroller; ILI9341 und
+- praktisch ermittelten Displaycontroller und Touchcontroller; ILI9341 und
   XPT2046 bleiben bis dahin Kandidatennamen, nicht PASS;
 - reale TFT-/Touch-CS-, D/C-, Reset-, Backlight-, IRQ-, SPI- und
   Masseverbindungen gegen das Boardprofil;
-- Versorgung und Logikkompatibilitaet als konkrete Modulfrage, kein
-  generisches neues Pegelmessgate;
-- Resetnetz `EN_CHIP_PU -> MSP2807_RESET`, Boot-/Reset-Safe-Zustaende,
-  UART/FT232-Recoverypfad und Trennung aller Aktoren.
+- Versorgung und sichere Einspeisung sowie Logikkompatibilitaet des konkreten
+  Moduls; kein generisches neues Pegelmessgate;
+- reproduzierbare Verbindung ueber UART beziehungsweise FT232RL sowie
+  Flash-, Boot- und Resetablauf;
+- reale Flashgroesse;
+- verwendete und fixierte ESP-IDF-6.0.2-Toolchain mit den Profilen
+  `esp32_bringup`/`esp32_release`;
+- Betrieb ohne PSRAM;
+- Baseline-Firmwaregroesse, statisches RAM, freier Heap und groesster freier
+  Heapblock;
+- verfuegbare GPIOs und grundsaetzlich moegliche Busse gegen die SSOT, ohne
+  eine produktive Belegung neu festzulegen;
+- physische Trennung oder nachweisliche Inaktivitaet von Peltier, BTS7960,
+  Innen-/Aussenlueftern, allen MOSFET-Verbrauchern und Summer;
+- Resetnetz `EN_CHIP_PU -> MSP2807_RESET` und Boot-/Reset-Safe-Zustaende.
 
-Abweichungen vom Boardprofil stoppen #31. Ein Lieferantentext ohne
-praktische Identifikation ist `BLOCKED`, nicht `PASS`.
+Die physische Identitaet und Verdrahtung sind Evidence, keine Owner-
+Bestaetigung. Der Owner stellt Modul, Zugriff und actor-free Testbedingungen
+bereit; der Builder dokumentiert die gemessenen/verifizierten Tatsachen mit
+Quelle, Methode und Status. Ein Lieferantentext ohne praktische Identifikation
+ist `BLOCKED`, nicht `PASS`. Abweichungen vom Boardprofil stoppen #31 und
+erfordern einen separaten SSOT-/Ownerentscheid.
 
 ### Stufe 1 – Quelle, Lizenz, Kompatibilitaet und reproduzierbarer Build
 
-Vor Hardware moeglich und zuerst fuer den offiziellen Stack auszufuehren:
+Erst nach bestandenem Stufe-0-Evidencepaket und fuer den offiziellen Stack
+zuerst auszufuehren:
 
 1. Registry-/Upstreamquelle, exakte Version und aufgeloesten Commit fuer jede
    direkte Komponente erfassen; keine schwebenden Git-Referenzen.
@@ -200,19 +271,22 @@ Vor Hardware moeglich und zuerst fuer den offiziellen Stack auszufuehren:
 3. ESP-IDF 6.0.2, ESP32-32E, C++17, 4 MB Flash und **kein PSRAM** in den
    Kandidatenprofilen reproduzierbar bauen; Build-Warnungen und Konfiguration
    festhalten.
-4. Baseline gegen Kandidat mit denselben Buildflags, Boardprofilen und
+4. Die in Stufe 0 erhobene Baseline gegen den Kandidaten mit denselben
+   Buildflags, Boardprofilen und
    Evidence-Skripten messen. Der Lock-/Manifeststand wird versioniert, sobald
    eine Komponente fuer Umsetzung angenommen wird.
 5. `esp_bsp_generic` nur auf konkrete Mehrwerte und zusaetzliche
    Abhaengigkeiten pruefen; kein BSP-Scaffold nur fuer Bequemlichkeit.
 
-Diese Stufe benoetigt keine echte Displayfunktion. Sie darf als
-quell-/buildseitiger Vorlauf vorbereitet werden, erzeugt aber keinen
-Hardware-PASS.
+Die Quellen-/Lizenzvorpruefung und ein geplanter Buildaufbau durften bereits in
+der Planphase vorbereitet werden; dieses ausgefuehrte Gate steht aber
+sequenziell nach Stufe 0. Ein vorbereiteter oder lokaler Build vor Stufe 0 ist
+kein Stage-1-PASS und kein Grund, Stufe 0 zu ueberspringen.
 
 ### Stufe 2 – kurzer identischer actor-free Hardware-Smoke
 
-Erst nach Stufe 0 und mit allen Aktoren getrennt/inaktiv, fuer jeden ernsthaft
+Erst nach bestandenem Stufe-0-Baselinepaket **und** bestandenem Stage-1-
+Buildgate, mit allen Aktoren getrennt/inaktiv, fuer jeden ernsthaft
 verbleibenden Kandidaten identisch:
 
 - Kaltstart, Reset, Panel-Init, Landschaft 320x240, vier Ecken;
@@ -236,8 +310,12 @@ Alternativen dieselben Tests ausgefuehrt:
 
 - 100 Vollflaechenaktualisierungen je Farbe, DE/EN/ES mit den vorgesehenen
   Fonts, Titel, zwei Temperaturwerte, Status, vier grossen Buttons und Dialog;
-- Raw-Touch an Ecken, Kanten und Mitte inklusive Kontakt-/Druckverlauf;
-- fuenf-Punkt-Kalibrierung, Neustart und Wiederholungsmessung;
+- Raw-Touch an Ecken, Kanten und Mitte inklusive Kontakt-/Druckverlauf. Diese
+  Punkte sind Mess-/Validierungspunkte der Hardwarematrix, nicht automatisch
+  Produktiv-Kalibrierpunkte;
+- Kalibrierung mit der aus dem gewaehlten Transformationsmodell abgeleiteten
+  Anzahl und Lage von Punkten, Neustart und Wiederholungsmessung; eine
+  feste Fuenf-Punkt-Produktivkalibrierung wird nicht vorweggenommen;
 - korrekte Rotation und Touch-Transformation gemeinsam pruefen;
 - 1000 wechselnde Touch-/Draw-/Statuszyklen mit Fehler- und Latenzprotokoll;
 - gemeinsamer SPI-Bus abwechselnd fuer Display und Touch.
@@ -246,10 +324,14 @@ Alternativen dieselben Tests ausgefuehrt:
 
 - erster Touch nach Dimmung/Schlaf ist immer `WakeOnly` und loest keine
   Fachaktion, Navigation oder PIN-/Recoveryaktion aus;
-- Start im fruehen Bootfenster mit fehlender oder ungueltiger Kalibrierung:
-  Raw-Touch-Recovery ist PIN-unabhaengig erreichbar, hat False-Trigger-
-  Schutz, eine definierte Release-/Abbruchbedingung und keine spaete
-  Nachausloesung;
+- Geraet einschalten und Raw-Touch mindestens 10 Sekunden halten: Bei fehlender
+  oder ungueltiger Kalibrierung wird im fruehen Boot-/`SAFE_BOOT`-Fenster
+  ausschliesslich PIN-unabhaengige Kalibrierungs-Recovery gestartet. Der
+  kanonische `>=10 s`-Vertrag wird nicht neu vermessen;
+- Raw-Recovery hat False-Trigger-Schutz, eine definierte Release-/
+  Abbruchbedingung und keine spaete Nachausloesung. Raw-Geste innerhalb des
+  10-Sekunden-Vertrags, Roh-/Kontakt-/Druckgrenzen, Entprellung und
+  Verwechslungsschutz bleiben hardwareabhaengige Evidence;
 - fehlender, unlesbarer oder fehlerhafter Touch darf Regelung, Safety und
   Aktorfreigabe nicht blockieren und nicht freigeben;
 - Display-/Backlight-/SPI-/Touchfehler werden isoliert, geloggt und fuehren
@@ -257,8 +339,14 @@ Alternativen dieselben Tests ausgefuehrt:
   Recoverypfad;
 - Resettests im Idle, bei Darstellung und bei Touch, inklusive Watchdog-/Boot-
   Verhalten und actor-free Wiederanlauf;
+- normaler Kalibrierungsablauf: Service-PIN plus bewusste Bestaetigung;
+- PIN-unabhaengige Raw-Touch-Kalibrierungs-Recovery: ausschliesslich
+  Kalibrierung, actor-free und `>=10 s` Raw-Touch-Halten;
+- PIN-unabhaengiger vollstaendiger Werksreset: eigener eindeutig
+  unterscheidbarer Ablauf;
 - autorisierter Factory Reset behaelt die geraetespezifische Touchkalibrierung
-  gemaess ADR-010; ein Touch-Kalibrierungsreset bleibt davon getrennt.
+  gemaess ADR-010; ein gesonderter Touch-Kalibrierungsreset bleibt davon
+  getrennt und darf die Daten entfernen/invalidieren.
 
 **Ressourcen und Stabilitaet**
 
@@ -278,13 +366,17 @@ Es werden keine willkuerlichen neuen harten Budgets erfunden. Die Messwerte
 werden gegen das Gesamtsystem, die bestehende Reserve und den Owner bewertet;
 bis dahin bleibt `TBD_IMPLEMENTATION_BUDGET` ungueltig als Laufzeitwert.
 
-### Stufe 4 – genau eine bevorzugte Produktivrichtung und ein Rueckfall
+### Stufe 4 – genau eine bevorzugte Low-Level-Produktivrichtung und ein Rueckfall
 
 Erst nach vollstaendiger Stage-3-Matrix, Lizenz-/Herkunftsnachweis und
 unabhaengiger Bewertung wird genau eine bevorzugte Richtung und hoechstens der
 bereits im Audit vorgesehene Rueckfallkandidat dokumentiert. Kriterien sind
 Funktion, Stabilitaet, Ressourcenreserve, Buildreproduzierbarkeit, Lizenz,
 Upstreampflege und Adapter-/Wartungsumfang.
+
+Stufe 4 entscheidet zuerst ausschliesslich den Display-/Touch-Low-Level-Stack
+und dessen schmalen neutralen Adaptervertrag. LVGL nimmt an Stufe 0 bis 4
+nicht teil und wird nicht als vorgezogene Frameworkentscheidung behandelt.
 
 Die heutige Evaluationsreihenfolge ist daher:
 
@@ -302,12 +394,25 @@ Kandidaten voll integriert.
 
 ## 7. Kleine Renderer-/LVGL-Integrationsgrenze
 
-Die Entscheidung zwischen schlanker projektspezifischer Projektion und LVGL
-faellt erst nach Stufe 2 und einem identischen repraesentativen #26-Screen.
-Beide Varianten muessen denselben Display-/Touchtreiber, dieselben DE/EN/ES-
-Texte, dieselben Eingaben und dieselbe Messmethode verwenden.
+Die Reihenfolge nach der Low-Level-Auswahl ist verbindlich:
 
-Wenn LVGL den Vergleich gewinnt, bleibt die Integration klein:
+```text
+Stufe 0 bis 4: Display-/Touch-Low-Level-Stack qualifizieren und auswaehlen
+    -> schmalen neutralen Adaptervertrag festlegen
+    -> einen identischen repraesentativen #26-Screen vorbereiten
+    -> schlanke konkrete Projektion und LVGL/esp_lvgl_port vergleichen
+    -> Ownerentscheidung: LVGL nur bei klarem gemessenem R1-Vorteil,
+       sonst LVGL=DEFER_AFTER_R1
+```
+
+Erst nach der Stage-4-Treiberwahl und der festgelegten Adaptergrenze werden
+beide Varianten mit derselben Hardware, demselben ausgewaehlten Treiberstack,
+denselben DE/EN/ES-Texten, denselben Eingabeelementen und derselben
+Messmethode verglichen. Der Vorabstand von `esp_lvgl_port` und LVGL ist nur
+Desk Research; `LVGL_SELECTION=DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION`.
+
+Wenn LVGL nach diesem Vergleich den Ownerentscheid erhaelt, bleibt die
+Integration klein:
 
 - `esp_lvgl_port` besitzt die LVGL-Initialisierung, Tick-/Timer-Anbindung,
   den seriellen Lock/Unlock-Kontext und den LVGL-Task;
@@ -325,17 +430,21 @@ Wenn LVGL den Vergleich gewinnt, bleibt die Integration klein:
 - Backlight-Dimming ist ein konkreter, fail-closed Composition-/Adapterpfad;
   Boot/Reset startet safe-off. Ein Touch beim Aufwachen bleibt `WakeOnly`.
 
-Wenn die schlanke Projektion gewinnt, wird kein allgemeiner Rendererrahmen
-gebaut: Es gibt nur eine konkrete, lokal gebundene Darstellung fuer die
-vorhandene Workspace-View mit demselben typed Event-Rueckweg.
+Wenn kein klarer gemessener R1-Vorteil vorliegt, lautet die Entscheidung
+`DEFER_AFTER_R1`. Dann wird kein allgemeiner Rendererrahmen gebaut: Es gibt nur
+eine konkrete, lokal gebundene schlanke Darstellung fuer die vorhandene
+Workspace-View mit demselben typed Event-Rueckweg.
 
 In beiden Varianten gilt:
 
 - `fermentation_app` sieht keine LVGL-, ESP-IDF-, Display- oder Touchtypen;
-- der konkrete Adapter lebt in `device_platform_esp_idf`; die Komposition
-  wird am bereits vorhandenen Root verdrahtet;
-- `main/app_main` bleibt die Lebenszyklus-/Composition-Grenze und erzeugt
-  keine neue Fachzustandsmaschine;
+- `device_platform` exponiert nur die nachgewiesenen neutralen Display-/Touch-/
+  Backlightports;
+- der konkrete Low-Level-Adapter lebt in `device_platform_esp_idf`;
+- der app-spezifische konkrete Renderer lebt ausschliesslich in
+  `fermentation_ui_renderer_esp_idf` und kennt die #26-Workspace-View;
+- `main/app_main.cpp` bleibt die Lebenszyklus-/Composition-Grenze und erzeugt
+  keine neue Fachzustandsmaschine oder Renderlogik;
 - eine UI-Stoerung setzt nur die UI-/Input-Faehigkeit herab. Die
   Regelungs-/Safety-Schleife und Aktorfreigabe werden weder auf UI-Callbacks
   angewiesen noch durch UI-Fehler freigegeben;
@@ -348,8 +457,12 @@ In beiden Varianten gilt:
 
 Der Adapter liefert ein neutrales Rohereignis mit mindestens Roh-X, Roh-Y,
 Kontakt-/Druckinformation, Controller-/Samplestatus und monotonem
-Zeitbezug. Exakte Rohgrenzen, Z-Schwellen, Gesten und Transformparameter
-bleiben bis zur Messung `TBD_HARDWARE`.
+Zeitbezug. Der unveraenderte Recoveryvertrag lautet: Geraet einschalten,
+Raw-Touch mindestens 10 Sekunden halten, Beruehrung ohne gespeicherte
+Kalibrierung erkennen und ausschliesslich Kalibrierungs-Recovery starten.
+Exakte Rohgrenzen, Z-Schwellen, die konkrete Raw-Geste innerhalb dieses
+Vertrags, Entprellung/Stabilitaet, Verwechslungs- und Kontaktgrenzen sowie
+Transformparameter bleiben bis zur Messung `TBD_HARDWARE`.
 
 Die Transformationsform wird erst anhand realer Daten festgelegt. Sie darf
 Achstausch, Spiegelung und Rotation abbilden und bei Bedarf ein gemessenes
@@ -373,47 +486,62 @@ Fachaktionen fail-closed, beeinflusst aber nicht Regelung oder Safety. Der
 autorisierte Factory Reset behaelt den Kalibrierungsdatensatz gemaess ADR-010;
 ein expliziter Touch-Kalibrierungsreset darf ihn loeschen oder invalidieren.
 
-### Bedienung und Raw-Touch-Recovery
+### Drei getrennte Kalibrierungs-/Recoverywege
 
-- Der normale Kalibrierungsablauf ist ueber den bestehenden Service-/Workspace-
-  Vertrag erreichbar, benoetigt die vorhandene Bestaetigungs-/Sessionlogik
-  und erzeugt nur nach erfolgreicher Validierung einen persistierbaren Satz.
-- Bei fehlender/ungueltiger Kalibrierung ist ein fruehes, lokales
-  Raw-Touch-Recoveryfenster vorgesehen. Es ist PIN-unabhaengig erreichbar,
-  benoetigt keine brauchbare Normaltransformation und darf nur eine
-  klar begrenzte Recovery-/Kalibrierungsaktion ausloesen.
-- False Trigger im ersten Bootfenster werden durch sichere Bootphase,
-  Kontaktstabilitaet, explizite Release-/Abbruchsemantik und die spaeter
-  gemessenen Roh-/Zeitgrenzen verhindert. Ein gehaltenes Touchsignal erzeugt
-  keine wiederholte spaete Aktion.
-- Fuenf-Punkt-Ablauf, Raw-Grenzen, Druckschwelle, Gesten und Timeout werden
-  erst in Stage 3 aus realen Messungen abgeleitet. Vorher bleiben sie
-  `TBD_HARDWARE`, nicht Defaultwerte.
-- Der erste Touch nach Dimmung/Schlaf ist unabhaengig von Kalibrierung und
-  PIN immer `WakeOnly`; erst ein spaeteres, neues Touchereignis darf die
-  vorhandene Fachaktion erreichen.
+1. **Normale Touchkalibrierung:** ueber den bestehenden Service-/Workspace-
+   Vertrag, mit Service-PIN und bewusster Bestaetigung. Die Anzahl und Lage
+   der Produktivpunkte wird aus dem gewaehlten Transformationsmodell sowie
+   Fehler-/Reproduzierbarkeitsmessungen abgeleitet; keine feste Fuenf-Punkt-
+   Vorgabe.
+2. **PIN-unabhaengige Raw-Touch-Kalibrierungs-Recovery:** beim Einschalten
+   mindestens `10 s` Raw-Touch halten, ohne brauchbare gespeicherte
+   Kalibrierung. Dieser Weg startet ausschliesslich Kalibrierung, bleibt
+   actor-free und darf weder Werksreset noch Fachaktion ausloesen.
+3. **PIN-unabhaengiger vollstaendiger Werksreset:** eigener eindeutig
+   unterscheidbarer Ablauf; er bleibt vom Raw-Touch-Kalibrierungsweg getrennt.
+
+Fuer Weg 2 werden False Trigger durch sichere Bootphase,
+Kontaktstabilitaet, explizite Release-/Abbruchsemantik und die spaeter
+gemessenen Roh-/Zeitgrenzen verhindert. Ein gehaltenes Touchsignal erzeugt
+keine wiederholte spaete Aktion. Der `>=10 s`-Wert ist kanonisch entschieden
+und wird nicht in Stage 3 neu bestimmt; nur die konkrete Geste innerhalb des
+Vertrags sowie Roh-/Kontakt-/Druckgrenzen, Entprellung und
+Verwechslungsschutz bleiben Hardware-Evidence.
+
+Der erste Touch nach Dimmung/Schlaf ist unabhaengig von Kalibrierung und PIN
+immer `WakeOnly`; erst ein spaeteres, neues Touchereignis darf die vorhandene
+Fachaktion erreichen.
 
 ## 9. Owner-Hardwarecheckliste fuer die spaetere Durchfuehrung
 
-Vor Stage 2 benoetigt der Builder vom Owner:
+Vor Stage 0 benoetigt der Builder vom Owner Zugang und Testbedingungen, nicht
+eine Owner-Bestaetigung physischer Tatsachen:
 
-1. Exakte Fotos/Markierungen, Modulvariante, Boardrevision und praktisch
-   bestaetigten Display- sowie Touchcontroller.
-2. Reale Verdrahtung von SCK/MISO/MOSI, TFT-CS, D/C, Reset, Backlight,
-   Touch-CS, IRQ und GND gegen das Boardprofil; Abweichungen zuerst als
-   Ownerentscheidung behandeln.
-3. Bestaetigung der kompatiblen Versorgung-/Logikdomain sowie des
-   `EN_CHIP_PU -> MSP2807_RESET`-Netzes, soweit dies fuer den konkreten offenen
-   Hardwarepunkt erforderlich ist. Kein pauschales Spannungs-/GPIO-Gate.
-4. Aktorfreie Testfreigabe: Peltier, BTS7960, Innen-/Aussenluefter,
+1. Modul, Fotos/Markierungen, Boardrevision, UART/FT232RL-Zugang und die
+   Moeglichkeit, die reale Display-/Touchcontrolleridentitaet praktisch zu
+   ermitteln.
+2. Zugang zur realen Verdrahtung von SCK/MISO/MOSI, TFT-CS, D/C, Reset,
+   Backlight, Touch-CS, IRQ und GND gegen das Boardprofil. Der Builder
+   dokumentiert Konformitaet oder Abweichung als Evidence; eine Abweichung ist
+   kein Owner-PASS und stoppt vor Stage 1.
+3. Sichere Einspeisung und die Moeglichkeit, Versorgung/Logikkompatibilitaet
+   nur fuer den konkret offenen Hardwarepunkt zu pruefen. Kein pauschales
+   Spannungs-/GPIO-Gate.
+4. Aktorfreie Testbedingungen: Peltier, BTS7960, Innen-/Aussenluefter,
    MOSFET-Verbraucher und Summer physisch getrennt oder nachweislich inaktiv;
    kein Test darf eine produktive Aktorfreigabe herstellen.
-5. Verfuegbarer UART/FT232-Recoverypfad, reproduzierbarer Boot-/Resetablauf,
-   reale Flashgroesse und die Moeglichkeit, Logs sowie Reset-/Watchdogdaten
-   mitzuschneiden.
-6. Freigabe fuer die identische Stage-2-/Stage-3-Matrix und die
-   dazugehoerigen actor-free Wiederholungen. Fehlt ein Punkt, wird nur der
-   betroffene Nachweis `BLOCKED`/`NOT_RUN`.
+5. Reproduzierbarer Flash-, Boot- und Resetpfad, reale Flashgroesse,
+   ESP-IDF-6.0.2-Toolchain, kein PSRAM sowie die Moeglichkeit, Baseline-
+   Firmwaregroesse, statisches RAM, freien Heap, groessten Heapblock und
+   Logs/Reset-/Watchdogdaten aufzuzeichnen.
+6. Freigabe fuer die identische Stage-2-/Stage-3-Matrix und actor-free
+   Wiederholungen. Fehlt ein Baselinepunkt, wird Stufe 0 `BLOCKED` und die
+   folgenden Stufen `NOT_RUN`.
+
+Die Owner-Hardwaremitwirkung stellt also Hardware, Zugriff und sichere
+Testbedingungen bereit. Die reale Modul-/Board-/Controlleridentitaet,
+Verdrahtungskonformitaet, Rotation, Raw-Grenzen, Druck-/Kontaktwerte und
+Stabilitaetseigenschaften sind Builder-Evidence, keine Ownerentscheidungen.
 
 ## 10. Spaetere Umsetzungsschnitte nach Planfreigabe
 
@@ -422,21 +550,29 @@ Plan nicht materiell ueberschreiten:
 
 | Schnitt | Inhalt | Ergebnis / Grenze |
 |---:|---|---|
-| 1 | Live-Rebaseline von Quellen, Versionen, Lizenzen und Kandidaten; Stage-0-Aufnahme | Keine Produktivauswahl; Audit-/Komponentenregister nur mit belegten Daten aktualisieren. |
-| 2 | Gepinnte Stage-1-Buildprofile und neutrale Adapter-/Composition-Skizze | Reproduzierbarer ESP-IDF-6.0.2-Build, keine App-/UI-Duplikation, keine Aktoren. |
-| 3 | Identischer Stage-2-Smoke fuer den offiziellen Stack und begruendete Alternativen | Nur Hardware-/Treiberpass; keine produktive Navigation oder Auswahl. |
-| 4 | Eine konkrete Low-Level-Adapterintegration und repraesentativer #26-Screen | `device_platform_esp_idf`/Root-Grenze; `fermentation_app` bleibt frameworkfrei. |
-| 5 | LVGL-vs.-schlanke-Projektion mit identischem Screen und identischer Messung | Ownerentscheidung fuer genau eine Rendererichtung; kein Vorratsframework. |
-| 6 | Workspace-/Command-Rueckweg, Backlight/WakeOnly und Kalibrierungs-/Persistenzpfad | Bestehende #25/#26-/Recoveryvertraege konsumieren; neue parallele Logik verboten. |
-| 7 | Vollstaendige Stage-3-Matrix inklusive Fehler, Raw-Recovery, Ressourcen und Lizenz | Evidence-Matrix, keine Hardware-PASS-Aussage ausserhalb realer Nachweise. |
-| 8 | Stage-4-Auswahl, Dokumentation, Builder-Self-Check und unabhaengiger Review | Genau eine bevorzugte Richtung plus hoechstens ein Rueckfall; danach Owner-Gates. |
+| 1 | Plan-/Vorbereitungsrecherche und Stage-0-Aufnahme | Registry-/Lizenz-/Versionsstand ist nur Desk Research; Stage 0 muss die vollstaendige sichere Hardwarebaseline als Evidence liefern. |
+| 2 | Stage-1-Gate erst nach bestandenem Stage 0: gepinnte Kandidatenbuilds, Quellen, Lizenzen und Kompatibilitaet | Reproduzierbarer ESP-IDF-6.0.2-Build je Kandidat; kein Stage-1-PASS ohne Stage-0-Baseline, keine Aktoren. |
+| 3 | Identischer Stage-2-Smoke fuer den offiziellen Stack und begruendete Alternativen | Nur Kandidaten mit bestandenem Stage 0 und Stage 1; keine produktive Navigation oder Auswahl. |
+| 4 | Vollstaendige Stage-3-Matrix inklusive Low-Level-Funktion, Fehler, Raw-Recovery, Ressourcen und Lizenz | Identische Evidence; keine LVGL-Entscheidung und keine Hardware-PASS-Aussage ausserhalb realer Nachweise. |
+| 5 | Stage-4-Auswahl des Low-Level-Display-/Touch-Stacks und eines Rueckfallkandidaten; neutralen Adaptervertrag festschreiben | Genau eine bevorzugte Low-Level-Richtung plus hoechstens ein Rueckfall; danach keine neue Treiberarchitektur. |
+| 6 | App-spezifischen Owner `lib/fermentation_ui_renderer_esp_idf/` mit bestehendem #26-Snapshot-/Workspace-/Commandpfad verdrahten | `device_platform_esp_idf` bleibt app-frei, `fermentation_app` frameworkfrei, `main/app_main.cpp` bleibt reine Verdrahtung. |
+| 7 | Identischer repräsentativer #26-Screen: schlanke konkrete Projektion gegen LVGL/`esp_lvgl_port` messen | Erst jetzt Ownerentscheidung: LVGL nur bei klarem gemessenem R1-Vorteil, sonst `DEFER_AFTER_R1`. |
+| 8 | Workspace-/Command-Rueckweg, Backlight/WakeOnly, Kalibrierungs-/Persistenzpfad und Abschlussmatrix | Bestehende #25/#26-/Recoveryvertraege konsumieren; keine parallele Logik; danach Builder-Self-Check und Independent Review. |
 
-Geplante Dateien werden erst nach Planfreigabe und gegen den dann live
-verifizierten Schnitt festgelegt. Voraussichtliche Grenzen sind ein konkreter
-Adapter in `lib/device_platform_esp_idf`, der vorhandene Root in `main`,
-gezielte Tests sowie notwendige IDF-Komponenten-/Lockdateien. Aenderungen an
-`device_platform` oder `fermentation_app` sind nur additive, neutrale
-Contract-Gaps und nicht automatisch Teil des Scopes.
+Die Dateigrenzen sind fuer die Umsetzung bereits festgelegt: neutraler
+Hardwareport nur bei bestaetigtem Gap unter
+`lib/device_platform/src/device_ui_hardware_ports.hpp`, Low-Level-Adapter unter
+`lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.*`, der
+app-spezifische Owner unter
+`lib/fermentation_ui_renderer_esp_idf/src/fermentation_ui_renderer_esp_idf.*`
+mit `CMakeLists.txt`/`idf_component.yml`, und reine Konstruktion/Verdrahtung in
+`main/app_main.cpp`. Dazu kommen gezielte native/ESP-IDF-Tests sowie die
+notwendigen IDF-Komponenten-/Lockdateien. Keine dieser Dateien existiert nach
+diesem Plan-Commit bereits; ihre spaetere Erstellung ist Implementation und
+bleibt bis zur Ownerfreigabe verboten. `device_platform` und
+`fermentation_app` werden nur bei dem jeweils nachgewiesenen neutralen bzw.
+app-eigenen Gap additiv angepasst, nicht um eine zweite UI-Architektur zu
+schaffen.
 
 ## 11. Tests, Nachweise und Governance-Gates
 
@@ -469,17 +605,22 @@ Abweichungen gilt die bestehende Fix-Verification-/Materialitaetsregel.
 Der Plan ist erst umsetzungsfreigabefaehig, wenn die exakte Ownerfreigabe vorliegt.
 Die folgenden Punkte sind aktuell offen:
 
-1. **Hardwareidentitaet:** reale Modulvariante, Boardrevision, Display-/
-   Touchcontroller und Verdrahtung gegen die R1-SSOT liefern bzw. bestaetigen.
-2. **Stage-4-Auswahl:** nach den identischen Nachweisen genau eine bevorzugte
-   Treiber-/Rendererichtung und hoechstens ein Rueckfallkandidat bestimmen.
-3. **LVGL oder schlanke Projektion:** erst nach dem identischen Screen-/
-   Ressourcenvergleich entscheiden; LVGL ist aktuell nicht angenommen.
-4. **Hardwareabhaengige Parameter:** Rotation, Raw-Grenzen, Druckschwelle,
-   Transformationsform, Touch-Timeouts und Recovery-Gesten erst nach realer
-   Messung festlegen.
-5. **Widerspruch zum Boardprofil:** bei jeder materiellen Abweichung vor
-   Umsetzung einen separaten SSOT-/Ownerentscheid einholen.
+1. **Planfreigabe:** die neue exakte Plan-SHA als Ownerfreigabe erteilen.
+2. **Stage-4-Auswahl:** nach Stage 0 bis 3 genau eine bevorzugte Low-Level-
+   Treiberrichtung und hoechstens ein Rueckfallkandidat bestimmen.
+3. **LVGL oder schlanke Projektion:** erst nach Stage 4 und dem identischen
+   Screen-/Ressourcenvergleich entscheiden; LVGL nur bei klarem gemessenem
+   R1-Vorteil, sonst `DEFER_AFTER_R1`.
+4. **Widerspruch zum Boardprofil:** bei materieller Abweichung vor Umsetzung
+   einen separaten SSOT-/Ownerentscheid einholen; die physische Tatsache selbst
+   bleibt Evidence und wird nicht durch Ownerentscheidung bestaetigt.
+
+Die konkrete Hardwareidentitaet, Boardrevision, Controller, Verdrahtung,
+Rotation, Raw-Grenzen, Kontakt-/Druckwerte, Entprellung und
+Verwechslungsschutz sind keine Ownerentscheidungen, sondern Stage-0-/Stage-2-/
+Stage-3-Evidence. Der `>=10 s`-Raw-Touch-Recoveryvertrag ist bereits
+entschieden; offen bleiben nur die hardwareabhaengigen Parameter innerhalb
+dieses Vertrags.
 
 Es gibt aktuell keinen nachgewiesenen fundamentalen ESP-IDF-Blocker. Sollte
 Stage 1 einen solchen zeigen, wird ein Frameworkwechsel als separate
@@ -490,12 +631,19 @@ Ownerentscheidung behandelt und nicht in #31 implementiert.
 Der Plan gilt als vollstaendig, wenn die exakte Ownerfreigabe vorliegt und
 folgende spaetere Evidence ohne unbelegte Vorannahmen abbildbar ist:
 
-- aktuelle Espressif-/LVGL-Quelle, Version, Lizenz und Abhaengigkeiten;
+- aktuelle Espressif-/LVGL-Quelle, Version, Lizenz und Abhaengigkeiten als
+  Plan-/Vorbereitungsrecherche sowie erneut als sequenzielles Stage-1-Gate;
 - offizielle Stackpruefung vor eigener Entwicklung;
 - unveraenderte #25/#26-Contracts und schmale Modulgrenzen;
+- expliziter app-spezifischer Owner in
+  `lib/fermentation_ui_renderer_esp_idf/` ohne Ausweitung von `main` oder
+  `device_platform_esp_idf`;
 - konkrete Stage-0-bis-4-Matrix mit actor-free Hardwarebedingungen;
 - Display, Touch, Rotation, Backlight, WakeOnly, Raw-Recovery,
-  PIN-unabhaengige Kalibrierung und Fehlerisolation;
+  PIN-unabhaengige Kalibrierung mit `>=10 s`-Recovery und Fehlerisolation;
+- keine feste Fuenf-Punkt-Produktivkalibrierung; Mess-/Validierungspunkte sind
+  von Produktivpunkten getrennt;
+- LVGL-Vergleich erst nach Low-Level-Stage-4 und neutraler Adaptergrenze;
 - Persistenz ueber den bestehenden Pfad und Factory-Reset-Erhalt gemaess
   ADR-010;
 - gleiche Ressourcen-/Stabilitaetsmessung ohne PSRAM und ohne willkuerliche
