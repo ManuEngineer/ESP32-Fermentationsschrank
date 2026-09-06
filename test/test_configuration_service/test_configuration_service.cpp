@@ -23,6 +23,7 @@
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_editing.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "storage_envelope.hpp"
@@ -499,6 +500,136 @@ std::string repeatedUmlaut(std::size_t scalarCount) {
         value += "\xC3\xA4";
     }
     return value;
+}
+
+void test_program_catalog_expected_revision_is_checked_under_preview_lock() {
+    Fixture fixture;
+    const auto stale =
+        fixture.service.beginPreview(fermentation::ProgramCatalogRevision{2U});
+    TEST_ASSERT_TRUE(stale.status ==
+                     fermentation::ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_FALSE(stale.lease.valid());
+
+    const auto current =
+        fixture.service.beginPreview(fermentation::ProgramCatalogRevision{1U});
+    TEST_ASSERT_TRUE(current.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(current.lease.valid());
+}
+
+void test_program_editor_consumes_the_opening_catalog_revision() {
+    Fixture fixture;
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_TRUE(
+        runtime.status ==
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+    const auto session = fermentation::openProgramEditSession(
+        runtime.lease.get(), "yogurt-mild");
+    TEST_ASSERT_TRUE(session.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U,
+                             session->expectedProgramCatalogRevision.value());
+
+    auto candidate = session->candidate;
+    candidate.program.name = "Joghurt mild edited";
+    const auto installed = fermentation::applyProgramEditPreview(
+        fixture.service, session->expectedProgramCatalogRevision,
+        {fermentation::FermentationUiProgramEditOperation::Edit, "yogurt-mild",
+         candidate, std::nullopt, true},
+        fermentation::makeFermentationUiProgramUsageEvidence(
+            fermentation::RunCommandState{}));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(installed.preview.has_value());
+    TEST_ASSERT_TRUE(fixture.service.cancelPreview(installed.preview->handle) ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+
+    const auto stale = fermentation::applyProgramEditPreview(
+        fixture.service, fermentation::ProgramCatalogRevision{2U},
+        {fermentation::FermentationUiProgramEditOperation::Edit, "yogurt-mild",
+         candidate, std::nullopt, true},
+        fermentation::makeFermentationUiProgramUsageEvidence(
+            fermentation::RunCommandState{}));
+    TEST_ASSERT_TRUE(stale.status ==
+                     fermentation::ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_FALSE(stale.preview.has_value());
+}
+
+// SIM-26-43: owning usage evidence is checked before a preview lease is
+// created for both user deletion and standard deinstallation.
+void test_program_delete_in_use_is_rejected_before_preview() {
+    auto catalog = fermentation::makeFactoryProgramCatalog();
+    auto& standard = catalog.programs.back().program;
+    standard.fermentationStages.front().targetTemperatureCelsius = 25.0;
+    standard.fermentationStages.front().durationMinutes = 60U;
+    standard.targetQualification.bandCelsius = 0.5;
+    standard.targetQualification.durationMinutes = 10U;
+    standard.maximumTargetReachMinutes = 180U;
+    standard.productSensorFailure.fallbackDelaySeconds = 60U;
+    auto user = catalog.programs.back();
+    user.program.id = "user-in-use";
+    user.program.name = "In-use user program";
+    user.program.builtIn = false;
+    user.program.factoryCatalogEntry = false;
+    user.program.resettable = false;
+    user.program.userDeletable = true;
+    user.program.installed = true;
+    user.program.fermentationStages.front().targetTemperatureCelsius = 25.0;
+    user.program.fermentationStages.front().durationMinutes = 60U;
+    user.program.targetQualification.bandCelsius = 0.5;
+    user.program.targetQualification.durationMinutes = 10U;
+    user.program.maximumTargetReachMinutes = 180U;
+    user.program.productSensorFailure.fallbackDelaySeconds = 60U;
+    catalog.programs.push_back(user);
+    Fixture fixture(catalog);
+    const auto writesBefore = fixture.store.writeCount();
+    const auto generationsBefore = fixture.service.fullModelGenerationCount();
+
+    fermentation::RunCommandState userRun;
+    userRun.processState.state = fermentation::ProcessState::Fermenting;
+    const auto activeUser = fermentation::ActiveRun::start(
+        user, fermentation::ProgramSourceKind::UserProgram,
+        fermentation::RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(activeUser.has_value());
+    userRun.activeProgramRun = std::move(*activeUser);
+    const auto userResult = fermentation::applyProgramEditPreview(
+        fixture.service, fermentation::ProgramCatalogRevision{1U},
+        {fermentation::FermentationUiProgramEditOperation::Delete,
+         "user-in-use", std::nullopt, std::nullopt, true},
+        fermentation::makeFermentationUiProgramUsageEvidence(userRun));
+    TEST_ASSERT_TRUE(userResult.status ==
+                     fermentation::ConfigurationPreviewStatus::NotAllowed);
+    TEST_ASSERT_FALSE(userResult.preview.has_value());
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(writesBefore),
+        static_cast<std::uint32_t>(fixture.store.writeCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(generationsBefore),
+        static_cast<std::uint32_t>(fixture.service.fullModelGenerationCount()));
+
+    const auto& standardProgram = catalog.programs[3U];
+    fermentation::RunCommandState standardRun;
+    standardRun.processState.state = fermentation::ProcessState::Fermenting;
+    const auto activeStandard = fermentation::ActiveRun::start(
+        standardProgram, fermentation::ProgramSourceKind::FactoryCatalog,
+        fermentation::RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(activeStandard.has_value());
+    standardRun.activeProgramRun = std::move(*activeStandard);
+    const auto standardResult = fermentation::applyProgramEditPreview(
+        fixture.service, fermentation::ProgramCatalogRevision{1U},
+        {fermentation::FermentationUiProgramEditOperation::Uninstall,
+         standardProgram.program.id, std::nullopt, std::nullopt, true},
+        fermentation::makeFermentationUiProgramUsageEvidence(standardRun));
+    TEST_ASSERT_TRUE(standardResult.status ==
+                     fermentation::ConfigurationPreviewStatus::NotAllowed);
+    TEST_ASSERT_FALSE(standardResult.preview.has_value());
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(writesBefore),
+        static_cast<std::uint32_t>(fixture.store.writeCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(generationsBefore),
+        static_cast<std::uint32_t>(fixture.service.fullModelGenerationCount()));
 }
 
 void maximizeProgramPayload(fermentation::ProgramDocument& document) {
@@ -1865,5 +1996,9 @@ int main() {
         test_state_revision_invariant_after_publish_never_returns_activated);
     RUN_TEST(test_preview_reports_schema_bound_integrity_and_redacted_summary);
     RUN_TEST(test_persistent_failure_causes_remain_distinct);
+    RUN_TEST(
+        test_program_catalog_expected_revision_is_checked_under_preview_lock);
+    RUN_TEST(test_program_editor_consumes_the_opening_catalog_revision);
+    RUN_TEST(test_program_delete_in_use_is_rejected_before_preview);
     return UNITY_END();
 }

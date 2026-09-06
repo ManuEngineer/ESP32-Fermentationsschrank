@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "configuration_documents.hpp"
+#include "application_lifecycle.hpp"
 #include "device_ui_contracts.hpp"
 #include "device_ui_session.hpp"
 #include "device_ui_theme.hpp"
@@ -29,8 +30,10 @@ struct FermentationUiExpectedRevisions {
 enum class FermentationHomeMode : std::uint8_t {
     Standby,
     ActiveRun,
+    Waiting,
+    Completed,
+    Restricted,
     Recovery,
-    ServiceRequired,
     Unavailable,
 };
 
@@ -119,8 +122,9 @@ struct FermentationUiServiceSource {
 // Owning application state supplied to the projector. This is deliberately
 // not an ApplicationStatusView; the projector alone creates that UI model.
 struct FermentationUiApplicationSource {
+    ApplicationLifecycleState lifecycleState{
+        ApplicationLifecycleState::Initializing};
     PresentationState presentation;
-    bool ready{false};
 };
 
 class FermentationUiRefreshRevisionTracker {

@@ -113,6 +113,65 @@ ManualTimedRunSource makeManualTimedSource(const ManualTimedRunValues& values) {
     return source;
 }
 
+std::optional<ProgramDocument> findProgram(
+    const RuntimeConfigurationSnapshot& snapshot,
+    const std::string& programId) {
+    for (const auto& document : snapshot.programCatalog().programs) {
+        if (document.program.id == programId) {
+            return document;
+        }
+    }
+    return std::nullopt;
+}
+
+bool hasNextRunOverride(
+    const FermentationUiStartCandidate& candidate) noexcept {
+    return candidate.targetTemperatureCelsius.has_value() ||
+           candidate.fermentationDurationMinutes.has_value() ||
+           candidate.preheatEnabled.has_value() ||
+           candidate.completionMode.has_value() ||
+           candidate.coolingTargetCelsius.has_value() ||
+           candidate.holdDurationMinutes.has_value();
+}
+
+void applyNextRunOverrides(ProgramDocument& program,
+                           const FermentationUiStartCandidate& candidate) {
+    auto& definition = program.program;
+    if (candidate.targetTemperatureCelsius.has_value() &&
+        !definition.fermentationStages.empty()) {
+        definition.fermentationStages.front().targetTemperatureCelsius =
+            candidate.targetTemperatureCelsius;
+    }
+    if (candidate.fermentationDurationMinutes.has_value() &&
+        !definition.fermentationStages.empty()) {
+        definition.fermentationStages.front().durationMinutes =
+            candidate.fermentationDurationMinutes;
+    }
+    if (candidate.preheatEnabled.has_value()) {
+        definition.preheat = *candidate.preheatEnabled;
+    }
+    if (candidate.completionMode.has_value()) {
+        definition.completion.mode = *candidate.completionMode;
+        if (*candidate.completionMode == CompletionMode::FinishWithoutCooling) {
+            definition.completion.coolingTargetCelsius.reset();
+            definition.completion.holdDurationMinutes.reset();
+        } else if (*candidate.completionMode ==
+                       CompletionMode::CoolThenFinish ||
+                   *candidate.completionMode ==
+                       CompletionMode::CoolAndHoldUntilManualStop) {
+            definition.completion.holdDurationMinutes.reset();
+        }
+    }
+    if (candidate.coolingTargetCelsius.has_value()) {
+        definition.completion.coolingTargetCelsius =
+            candidate.coolingTargetCelsius;
+    }
+    if (candidate.holdDurationMinutes.has_value()) {
+        definition.completion.holdDurationMinutes =
+            candidate.holdDurationMinutes;
+    }
+}
+
 }  // namespace
 
 template <typename Request>
@@ -154,20 +213,21 @@ FermentationApplication::prepareStartProgram(
         return requestFailure(
             FermentationApplicationRequestStatus::StaleProgramCatalog);
     }
-    std::optional<ProgramDocument> program;
-    for (const auto& candidate : snapshot.programCatalog().programs) {
-        if (candidate.program.id == intent.programId) {
-            program = candidate;
-            break;
-        }
-    }
+    const auto& candidate = intent.candidate;
+    std::optional<ProgramDocument> program =
+        findProgram(snapshot, candidate.programId);
     if (!program.has_value() || !program->program.installed) {
         return requestFailure(
             FermentationApplicationRequestStatus::ProgramUnavailable);
     }
+    const bool nextRunOverride = hasNextRunOverride(candidate);
+    const auto sensorMode = candidate.sensorMode.value_or(RunSensorMode::Air);
+    applyNextRunOverrides(*program, candidate);
     if (!validateProgram(*program, ValidationPurpose::Runnable).valid()) {
         return requestFailure(
-            FermentationApplicationRequestStatus::ProgramUnavailable);
+            nextRunOverride
+                ? FermentationApplicationRequestStatus::InvalidInput
+                : FermentationApplicationRequestStatus::ProgramUnavailable);
     }
     const auto sourceRevision =
         makeRunProgramSourceRevision(snapshot.programCatalogRevision());
@@ -190,7 +250,7 @@ FermentationApplication::prepareStartProgram(
     request.runId = *runId;
     request.program = std::move(*program);
     request.sourceProgramRevision = *sourceRevision;
-    request.sensorMode = intent.sensorMode;
+    request.sensorMode = sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
@@ -426,6 +486,11 @@ FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
                                      Intent,
                                      FermentationUiStartManualHoldingIntent>) {
                 return prepareStartManualHolding(context, intent, evidence);
+            } else if constexpr (std::is_same_v<
+                                     Intent,
+                                     FermentationUiStartManualTimedIntent>) {
+                return prepareStartManualTimed(context, intent.values,
+                                               evidence);
             } else if constexpr (std::is_same_v<Intent,
                                                 FermentationUiStopRunIntent>) {
                 return prepareStop(context, intent, evidence);

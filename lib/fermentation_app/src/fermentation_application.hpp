@@ -15,6 +15,7 @@
 #include "time_source.hpp"
 #include "time_zone_resolver.hpp"
 #include "application_run_identity.hpp"
+#include "application_lifecycle.hpp"
 #include "fermentation_ui_commands.hpp"
 
 namespace fermentation {
@@ -33,12 +34,6 @@ namespace issue_90_slice7 {
 class Harness;
 }
 #endif
-
-enum class ApplicationLifecycleState : std::uint8_t {
-    Initializing,
-    Ready,
-    ServiceRequired,
-};
 
 // Already evaluated evidence supplied by the owning application/orchestrator
 // boundary. This is a composition input, not a UI-controlled safety or

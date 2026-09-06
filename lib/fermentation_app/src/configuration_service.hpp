@@ -122,6 +122,7 @@ enum class ConfigurationPreviewStatus : std::uint8_t {
     ConfigurationRuntimeUnavailable,
     ConfigurationModelBudgetBusy,
     InvalidCandidate,
+    NotAllowed,
     StateChanged,
     PreviewNotFound,
     PreviewSuperseded,
@@ -274,7 +275,9 @@ class ConfigurationService {
     [[nodiscard]] ConfigurationServiceMode mode() const;
     [[nodiscard]] std::uint64_t stateRevision() const;
     [[nodiscard]] RuntimeConfigurationReadResult acquireRuntime();
-    [[nodiscard]] ConfigurationPreviewBuildResult beginPreview();
+    [[nodiscard]] ConfigurationPreviewBuildResult beginPreview(
+        std::optional<ProgramCatalogRevision> expectedProgramCatalogRevision =
+            std::nullopt);
     [[nodiscard]] ConfigurationPreviewInstallResult installPreview(
         ConfigurationPreviewBuildLease&& buildLease, ChangeOrigin origin,
         ChangeOperation operation);

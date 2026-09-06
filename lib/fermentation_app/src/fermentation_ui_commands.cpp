@@ -78,6 +78,7 @@ Category categoryFor(ConfigurationPreviewStatus status) {
         case ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable:
             return Category::Unavailable;
         case ConfigurationPreviewStatus::InvalidCandidate:
+        case ConfigurationPreviewStatus::NotAllowed:
         case ConfigurationPreviewStatus::StateChanged:
         case ConfigurationPreviewStatus::PreviewNotFound:
         case ConfigurationPreviewStatus::PreviewSuperseded:
@@ -212,6 +213,15 @@ FermentationUiCommandResult FermentationUiCommandBridge::fromCommandStatus(
     return result;
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::fromTransitionDecision(
+    DecisionStatus status) {
+    const auto category = status == DecisionStatus::Proposed
+                              ? Category::Accepted
+                              : Category::Rejected;
+    return makeResult(category, status,
+                      FermentationUiCommandPhase::DecisionOnly);
+}
+
 FermentationUiCommandResult
 FermentationUiCommandBridge::fromRunPersistenceResult(
     RunPersistenceResultStatus status) {
@@ -293,6 +303,22 @@ FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,
                       FermentationUiDetailStatus::UnsupportedAppDetail,
                       FermentationUiCommandPhase::DecisionOnly);
+}
+
+FermentationUiCommandResult
+FermentationUiCommandBridge::decideProductInsertedConfirmed(
+    const RunCommandState& current, const ProcessRunSnapshot* runSnapshot,
+    const FermentationUiCommandContext& context, const ProcessSignals& signals,
+    std::uint64_t monotonicMillis) {
+    if (context.expected.expectedStateSequence !=
+        current.processState.transitionSequence) {
+        return fromCommandStatus(CommandStatus::StaleState);
+    }
+    const TransitionRequest request{ProcessEvent::ProductInsertedConfirmed,
+                                    std::nullopt};
+    const auto decision = decideProcessTransition(
+        current.processState, runSnapshot, signals, request, monotonicMillis);
+    return fromTransitionDecision(decision.status);
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
