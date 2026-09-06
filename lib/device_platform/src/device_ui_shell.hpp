@@ -29,6 +29,7 @@ enum class BottomSlotKind : std::uint8_t {
 struct BottomSlot {
     BottomSlotKind kind{BottomSlotKind::Empty};
     TextKey label;
+    bool enabled{true};
 
     [[nodiscard]] bool visible() const noexcept { return true; }
 };

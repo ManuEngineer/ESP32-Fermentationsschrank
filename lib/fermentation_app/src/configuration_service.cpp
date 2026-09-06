@@ -644,7 +644,8 @@ RuntimeConfigurationReadResult ConfigurationService::acquireRuntime() {
     return result;
 }
 
-ConfigurationPreviewBuildResult ConfigurationService::beginPreview() {
+ConfigurationPreviewBuildResult ConfigurationService::beginPreview(
+    std::optional<ProgramCatalogRevision> expectedProgramCatalogRevision) {
     ConfigurationPreviewBuildResult result;
     std::uint64_t reservationId = 0U;
     std::uint64_t expectedRevision = 0U;
@@ -657,6 +658,12 @@ ConfigurationPreviewBuildResult ConfigurationService::beginPreview() {
         if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
             result.status =
                 ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
+            return result;
+        }
+        if (expectedProgramCatalogRevision.has_value() &&
+            *expectedProgramCatalogRevision !=
+                activeRuntime_->programCatalogRevision()) {
+            result.status = ConfigurationPreviewStatus::StateChanged;
             return result;
         }
         if (previewBuildReservation_.has_value() || previewModelReserved_ ||

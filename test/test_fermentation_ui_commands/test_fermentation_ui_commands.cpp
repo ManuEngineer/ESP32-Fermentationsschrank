@@ -251,6 +251,74 @@ void test_proposed_decision_is_not_reported_as_applied() {
         static_cast<int>(proposed.phase));
 }
 
+void test_manual_timed_ui_intent_uses_the_merged_application_contract() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    FermentationUiStartManualTimedIntent intent;
+    intent.values.targetTemperatureCelsius = 30.0;
+    intent.values.durationMinutes = 60U;
+    intent.values.sensorMode = RunSensorMode::Air;
+    intent.values.preheatEnabled = false;
+    intent.values.qualificationBandCelsius = 0.5;
+    intent.values.qualificationDurationMinutes = 10U;
+    intent.values.maximumTargetReachMinutes = 180U;
+    FermentationUiCommandContext value;
+    value.expected.expectedStateSequence = 0U;
+    const auto prepared = application.prepareEnvelope(
+        value, FermentationUiEnvelopePayload{intent}, uiEvidence());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(prepared.status));
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_TRUE(prepared.request->runId().has_value());
+
+    intent.values.targetTemperatureCelsius = -100.0;
+    const auto invalid = application.prepareEnvelope(
+        value, FermentationUiEnvelopePayload{intent}, uiEvidence());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::InvalidInput),
+        static_cast<int>(invalid.status));
+    TEST_ASSERT_FALSE(invalid.request.has_value());
+}
+
+void test_product_inserted_decision_uses_state_revision_without_apply() {
+    RunCommandState state;
+    state.processState.state = ProcessState::WaitingForProduct;
+    ProcessRunSnapshot runSnapshot;
+    runSnapshot.kind = ProcessKind::Timed;
+    runSnapshot.preheatEnabled = true;
+    runSnapshot.maximumProductWaitMinutes = 30U;
+    runSnapshot.completionMode = CompletionMode::FinishWithoutCooling;
+    runSnapshot.qualificationDurationMinutes = 10U;
+    runSnapshot.maximumTargetReachMinutes = 60U;
+    runSnapshot.fermentationDurationMinutes = 60U;
+    FermentationUiCommandContext value;
+    value.expected.expectedStateSequence = 0U;
+    const auto proposed =
+        FermentationUiCommandBridge::decideProductInsertedConfirmed(
+            state, &runSnapshot, value, ProcessSignals{}, 100U);
+    TEST_ASSERT_TRUE(std::holds_alternative<DecisionStatus>(proposed.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(DecisionStatus::Proposed),
+        static_cast<int>(std::get<DecisionStatus>(proposed.detail)));
+    assertDecisionOnly(proposed);
+
+    value.expected.expectedStateSequence = 1U;
+    const auto stale =
+        FermentationUiCommandBridge::decideProductInsertedConfirmed(
+            state, &runSnapshot, value, ProcessSignals{}, 100U);
+    TEST_ASSERT_TRUE(std::holds_alternative<CommandStatus>(stale.detail));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::StaleState),
+                          static_cast<int>(commandDetail(stale)));
+    assertDecisionOnly(stale);
+}
+
 void test_prepared_message_actions_remain_bound_to_their_action() {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
@@ -313,6 +381,8 @@ int main(int, char**) {
     RUN_TEST(test_command_result_preserves_typed_app_details);
     RUN_TEST(test_ui_payloads_are_intents_and_not_owning_evidence);
     RUN_TEST(test_proposed_decision_is_not_reported_as_applied);
+    RUN_TEST(test_manual_timed_ui_intent_uses_the_merged_application_contract);
+    RUN_TEST(test_product_inserted_decision_uses_state_revision_without_apply);
     RUN_TEST(test_prepared_message_actions_remain_bound_to_their_action);
     return UNITY_END();
 }

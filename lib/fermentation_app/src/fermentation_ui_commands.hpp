@@ -16,6 +16,8 @@ class FermentationApplication;
 enum class FermentationUiAction : std::uint8_t {
     StartProgram,
     StartManualHolding,
+    StartManualTimed,
+    ProductInsertedConfirmed,
     StopRun,
     CompleteRun,
     AdjustRun,
@@ -62,10 +64,36 @@ struct FermentationUiResumeFallbackCommand {
 // evidence, or an owning decision object.  The later application boundary
 // resolves the IDs and supplies its own current evidence before entering the
 // existing canonical command path.
+struct FermentationUiStartCandidate {
+    std::string programId;
+    std::optional<double> targetTemperatureCelsius;
+    std::optional<std::uint32_t> fermentationDurationMinutes;
+    std::optional<bool> preheatEnabled;
+    std::optional<RunSensorMode> sensorMode;
+    std::optional<CompletionMode> completionMode;
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
+};
+
 struct FermentationUiStartProgramIntent {
     std::string programId;
     RunSensorMode sensorMode{RunSensorMode::Air};
+    // Optional values are next-run-only overrides. The Application resolves
+    // and validates them on a transient ProgramDocument copy.
+    std::optional<double> targetTemperatureCelsius;
+    std::optional<std::uint32_t> fermentationDurationMinutes;
+    std::optional<bool> preheatEnabled;
+    std::optional<CompletionMode> completionMode;
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
+    std::optional<FermentationUiStartCandidate> candidate;
 };
+
+struct FermentationUiStartManualTimedIntent {
+    ManualTimedRunValues values;
+};
+
+struct FermentationUiProductInsertedConfirmedIntent {};
 
 // Identity-free UI values. The application adds the owning run identity once
 // at the existing request boundary; adapters cannot inject a run or command
@@ -195,8 +223,9 @@ struct FermentationUiSensorSelectionIntent {
 // semantics.
 using FermentationUiEnvelopePayload = std::variant<
     FermentationUiStartProgramIntent, FermentationUiStartManualHoldingIntent,
-    FermentationUiStopRunIntent, FermentationUiCompleteRunIntent,
-    FermentationUiAdjustRunIntent, FermentationUiRecoveryTimeCorrectionIntent,
+    FermentationUiStartManualTimedIntent, FermentationUiStopRunIntent,
+    FermentationUiCompleteRunIntent, FermentationUiAdjustRunIntent,
+    FermentationUiRecoveryTimeCorrectionIntent,
     FermentationUiAcknowledgeMessageIntent, FermentationUiMuteMessageIntent,
     FermentationUiResetFaultIntent, FermentationUiSensorSelectionIntent>;
 
@@ -229,7 +258,7 @@ enum class FermentationUiCommandPhase : std::uint8_t {
 };
 
 using FermentationUiCommandDetail =
-    std::variant<CommandStatus, RunPersistenceResultStatus,
+    std::variant<CommandStatus, DecisionStatus, RunPersistenceResultStatus,
                  ConfigurationPreviewStatus, ConfigurationCommitStatus,
                  FermentationUiDetailStatus>;
 
@@ -254,6 +283,8 @@ class FermentationUiCommandBridge {
         CommandStatus status,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
+    [[nodiscard]] static FermentationUiCommandResult fromTransitionDecision(
+        DecisionStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromRunPersistenceResult(
         RunPersistenceResultStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromConfigurationPreview(
@@ -263,6 +294,12 @@ class FermentationUiCommandBridge {
         FermentationUiCommandPhase phase =
             FermentationUiCommandPhase::DecisionOnly);
     [[nodiscard]] static FermentationUiCommandResult unsupportedAppDetail();
+    [[nodiscard]] static FermentationUiCommandResult
+    decideProductInsertedConfirmed(const RunCommandState& current,
+                                   const ProcessRunSnapshot* runSnapshot,
+                                   const FermentationUiCommandContext& context,
+                                   const ProcessSignals& signals,
+                                   std::uint64_t monotonicMillis);
 
     [[nodiscard]] static FermentationUiCommandResult decidePrepared(
         const RunCommandState& current,

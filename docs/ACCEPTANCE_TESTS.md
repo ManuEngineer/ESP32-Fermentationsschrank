@@ -202,6 +202,26 @@ Mindestens:
 Die Simulation prueft erwartete Zustaende, Meldungen, Revisionen und abstrakte
 Aktorbefehle. Eine verbotene Aktorfreigabe laesst den Test fehlschlagen.
 
+### Issue #26 – lokale Touch-Shell und Workspace
+
+Die native Consumer-Simulation führt den kanonischen Projector über die
+generische Shell in den Fermentations-Workspace. Sie prüft insbesondere:
+
+| ID | Consumer-Nachweis |
+|---|---|
+| SIM-26-01 | Lifecycle-/Process-Projektion von Bereit, Aktiv, Wartet, Abgeschlossen, Eingeschränkt, Recovery und technischem Unavailable; `ServiceRequired` bleibt `Restricted` und überlagert Recoverydaten. |
+| SIM-26-02 | Genau vier sichtbare Slots, Home/Back-Hierarchie, vertikaler Pager und erster Touch im Idle-Zustand als `WakeOnly` ohne Command. |
+| SIM-26-03 | ManualHolding und ManualTimed bleiben getrennte UI-Intents; ManualTimed konsumiert `ManualTimedRunValues` über `prepareStartManualTimed()` und erzeugt keine UI-eigene Identität. |
+| SIM-26-04 | ProductInsertedConfirmed verwendet ausschließlich die erwartete kanonische Zustandsrevision, `decideProcessTransition()` und bleibt vor einem owning Apply `DecisionOnly`. |
+| SIM-26-05 | Numerische/Text-Editoren halten nur flüchtige Kandidaten; Validierung und Commit bleiben bei Programmmodell, Preview und ConfigurationService. |
+| SIM-26-06 | Maskierte PIN-Eingabe projiziert ownergelieferte Pending-/Retry-/Accepted-/Rejected-Zustände und verändert keine Safety-/Aktorfreigabe. |
+| SIM-26-07 | SAFE_BOOT-Ziele sind bestehenden Ownern zugeordnet: #57 Werksreset, #31 Raw-Touch/Kalibrierung, #89 Netzwerk/Provisionierung und #28 Diagnose/Export; #26 implementiert diese Owner nicht vorzeitig. |
+
+Die bestehenden #144- und #152-Contract-Regressionen bleiben die
+Provenienztests für Run-Identity, ManualTimed-Quelle, Schema-5-Persistenz und
+Recovery. Diese #26-Simulation behauptet keine Display-, Touchcontroller-,
+elektrische oder thermische Hardwareabnahme.
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

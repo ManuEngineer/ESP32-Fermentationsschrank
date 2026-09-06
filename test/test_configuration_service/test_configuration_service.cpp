@@ -501,6 +501,21 @@ std::string repeatedUmlaut(std::size_t scalarCount) {
     return value;
 }
 
+void test_program_catalog_expected_revision_is_checked_under_preview_lock() {
+    Fixture fixture;
+    const auto stale =
+        fixture.service.beginPreview(fermentation::ProgramCatalogRevision{2U});
+    TEST_ASSERT_TRUE(stale.status ==
+                     fermentation::ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_FALSE(stale.lease.valid());
+
+    const auto current =
+        fixture.service.beginPreview(fermentation::ProgramCatalogRevision{1U});
+    TEST_ASSERT_TRUE(current.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(current.lease.valid());
+}
+
 void maximizeProgramPayload(fermentation::ProgramDocument& document) {
     auto& program = document.program;
     program.name = repeatedUmlaut(48U);
@@ -1865,5 +1880,7 @@ int main() {
         test_state_revision_invariant_after_publish_never_returns_activated);
     RUN_TEST(test_preview_reports_schema_bound_integrity_and_redacted_summary);
     RUN_TEST(test_persistent_failure_causes_remain_distinct);
+    RUN_TEST(
+        test_program_catalog_expected_revision_is_checked_under_preview_lock);
     return UNITY_END();
 }
