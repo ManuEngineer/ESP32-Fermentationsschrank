@@ -4,8 +4,9 @@
 
 Dies ist die vollständige, eigenständig ausführbare Planrevision für Issue
 #26. Sie ersetzt keinen bestehenden Fachvertrag. Für die Umsetzung ist diese
-Fassung zusammen mit den unten genannten aktuellen Quellen zu verwenden; es
-ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
+Fassung zusammen mit den unten genannten aktuellen Quellen zu verwenden;
+ältere #26-Planfassungen werden durch diese Revision ersetzt und nicht als
+Umsetzungsgrundlage herangezogen.
 
     ISSUE=26
     TITLE=[E4.2] Lokale Touch-Shell und Fermentations-Workspace
@@ -13,13 +14,14 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     BRANCH=feature/issue-26-local-touch-shell
     WORKFLOW=PLAN_FIRST_SINGLE_PR
     BASE_BRANCH=main
-    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
-    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
+    BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55
+    ROADMAP_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
     PLAN_COMMIT=THIS_COMMIT
     PR_HEAD=THIS_COMMIT
-    PLAN_REVISION=PLAN_REVIEW_BLOCKER_CORRECTIONS_AFTER_ISSUE144_MERGE_SYNC
-    SUPERSEDES_PLAN_COMMIT=5f74ec7e42b65e928ac1150648d3b90737d59563
+    PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION
+    SUPERSEDES_PLAN_COMMIT=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0
     ISSUE26_STATUS=PLANNING_READY_UNBLOCKED
     BLOCKED_BY_ISSUE144=NO
     RUN_IDENTITY_PREDECESSOR_REQUIRED=YES
@@ -28,6 +30,12 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
     RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
     MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152
+    MANUAL_TIME_TEMPERATURE_OWNER_PR=153
+    MANUAL_TIME_TEMPERATURE_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad
+    MANUAL_TIME_TEMPERATURE_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING
+    PR153_GITHUB_STATE=MERGED
+    MANUAL_TIME_TEMPERATURE_CONTRACT=MERGED_CONSUMER_AVAILABLE
     ISSUE144_GITHUB_STATE=CLOSED
     PR147_GITHUB_STATE=MERGED
     PREDECESSOR_ISSUE=25
@@ -44,12 +52,12 @@ ist keine ältere #26-Planfassung bekannt oder heranzuziehen.
     ESP_IDF_BUILD=NOT_RUN
     HARDWARE_TEST=NOT_RUN
     ISSUE25_GITHUB_STATE=CLOSED
-    ROADMAP_SYNC=ISSUE144_MERGED_UNBLOCKED
+    ROADMAP_SYNC=PR153_MERGED_MAIN_SYNC_COMPLETED
     PLAN_PROVENANCE_SYNC=COMPLETED
 
 Vor diesem Plan-Commit wurden live geprüft:
 
-- `main` steht auf dem vorgegebenen Merge-Commit BASE_SHA;
+- `origin/main` steht auf dem verifizierten PR-#153-Merge-Commit BASE_SHA;
 - PR #142 ist gemergt, sein Source-HEAD und Merge-Commit entsprechen den
   Vorgaben, und GitHub-CI #1015 ist PASS;
 - Issue #26 ist offen mit dem Titel und der Scope-/Akzeptanzspezifikation
@@ -57,12 +65,18 @@ Vor diesem Plan-Commit wurden live geprüft:
 - Issue #25 ist live CLOSED und liefert den gemergten UI-Vertrag als Basis;
 - Issue #144 ist live CLOSED durch den Merge von PR #147; PR #147 ist MERGED,
   sein Source-HEAD und sein Merge-Commit entsprechen den vorgegebenen SHAs;
+- PR #153 ist live MERGED mit Source-HEAD
+  `00b6fd9444f38108253961718f40adab2836c7ad` und Merge-Commit BASE_SHA;
+- Issue #152 ist live noch OPEN, der owning Vertrag ist aber über PR #153
+  gemergt; der Owner-Issue-Abschluss ist noch ausstehend und wird nicht durch
+  #26 vorweggenommen;
 - der revidierte Plan basiert auf dem bisherigen Plan-Commit
   SUPERSEDES_PLAN_COMMIT; der Branch enthält davor den Roadmap-Sync, den
   ursprünglichen Plan, die bisherigen Planrevisionen und den #144-Merge, aber
   keine #26-Implementation;
-- PR #143 ist als Draft angelegt, zielt auf `main` und wurde auf BASE_SHA
-  synchronisiert;
+- PR #143 ist als Draft angelegt, zielt auf `main`; seine reguläre
+  Main-Synchronisierung wurde als Merge-Commit
+  `e65696b9d5457f221a08cefc1b1ccc37402ecf55` durchgeführt;
 - der neueste veröffentlichte SESSION HANDOVER des Vorgänger-PRs nennt
   PREDECESSOR_SOURCE_HEAD, Owner Full Review PASS und das damalige CI-Gate;
   nach dem Merge ist der Handover nur Provenienz und kein offener
@@ -72,15 +86,17 @@ Vor diesem Plan-Commit wurden live geprüft:
 Kontextnachweis:
 
     CONTEXT_BASELINE_BRANCH=feature/issue-26-local-touch-shell
-    CONTEXT_BASELINE_SHA=aea6acb2e51147c6452d728a5a45840236ab1fdf
-    CONTEXT_HEAD_SHA=830b6410b4ca6f4776d89981acf337e2b4706314
-    CONTEXT_PLAN_SHA=aea6acb2e51147c6452d728a5a45840236ab1fdf
+    CONTEXT_BASELINE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    CONTEXT_HEAD_SHA=e65696b9d5457f221a08cefc1b1ccc37402ecf55
+    CONTEXT_PLAN_SHA=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0
     CONTEXT_REFRESH_MODE=FULL
-    CONTEXT_DELTA=PR147 merge into PR143, main sync, governance-only roadmap conflict resolution, and independent plan-review blocker corrections
-    SOURCE_OF_TRUTH_CONFLICT=NONE
+    CONTEXT_DELTA=PR153 merge into main, regular PR143 main sync, post-merge roadmap provenance, and full #152 consumer-plan consolidation
+    SOURCE_OF_TRUTH_CONFLICT=NONE_AFTER_GOVERNANCE_RESOLUTION
 
-Der erste Commit dieses PRs ist ausschließlich der Roadmap-Sync. Der
-ursprüngliche vollständige Plan war der zweite Commit
+Der neue Main-Sync-Commit dieses PRs ist der reguläre Merge
+`e65696b9d5457f221a08cefc1b1ccc37402ecf55`; er übernimmt den vollständigen
+PR-#153-Vertrag und löst ausschließlich die Roadmap-Governancekollision auf.
+Der ursprüngliche vollständige Plan war der frühere Commit
 c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9; darauf folgten die F1/F2-Revision
 2fbe85f41c2461575331c4c3afed73a447302d43, die F1-F10-Revision
 d8a0a70983a6641e1edf27be08d655572164d995d und die Restkorrektur
@@ -278,8 +294,9 @@ Touchpunkt eine Kalibrierung.
 ### 4.4 Verbrauchervertrag des gemergten Run-Identity-Scope
 
 Issue #144 / PR #147 sind abgeschlossen und gemergt. Der kleine
-Run-Identity-/Provenienzvertrag ist auf `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`
-verfügbar. Seine Schemaänderung, Codec-/Recoverytests, konkreten Dateien und
+Run-Identity-/Provenienzvertrag wurde mit `0b8b4cc1673f40296a510fdc0d79440c616ffeb8`
+eingeführt und ist im aktuellen `main@5d838f43f3b32ef8d49d29ae77776d3e86266575`
+enthalten. Seine Schemaänderung, Codec-/Recoverytests, konkreten Dateien und
 Allocatorimplementation gehören ausschließlich in den eigenen Issue-#144-
 Scope. #26 beschreibt und konsumiert nur die garantierten Schnittstellen und
 Invarianten:
@@ -298,12 +315,14 @@ Invarianten:
   Neue Starts erzeugen ihn an der Application-Grenze exakt aus der aktuell
   validierten `ProgramCatalogRevision`; diese Umwandlung behauptet keine
   per-program Revision.
-- Der gemergte Schema-4-/Legacy-Persistenzvertrag schreibt neue Records nur
-  als Schema 4; unterstützte Schemas 1–3 bleiben lesbar und erweitern ihren
-  historischen 32-Bit-Wert nur numerisch verlustfrei in den neutralen Typ.
-  #26 etikettiert Legacy-Werte nicht als `ProgramCatalogRevision`, dekodiert
-  oder migriert sie aber auch nicht selbst. Unbekannte neuere Schemas,
-  abgeschnittene oder unklare Records bleiben fail-closed.
+- Der mit #144 eingeführte Schema-4-/Legacy-Persistenzvertrag bleibt als
+  Vorgängerprovenienz erhalten; der aktuelle #152-Vertrag schreibt neue
+  Records als Schema 5. Unterstützte Schemas 1–4 bleiben lesbar und
+  erweitern ihren historischen 32-Bit-Wert nur numerisch verlustfrei in den
+  neutralen Typ. #26 etikettiert Legacy-Werte nicht als
+  `ProgramCatalogRevision`, dekodiert oder migriert sie aber auch nicht selbst.
+  Unbekannte neuere Schemas, abgeschnittene oder unklare Records bleiben
+  fail-closed.
 - Der vollständige `ProgramDocument` im Run-Snapshot bleibt die unveränderliche
   tatsächlich verwendete Laufkopie einschließlich next-run-only-Overrides.
   Die lokale UI-/Editor-Staleness verwendet davon unabhängig ausschließlich
@@ -323,6 +342,90 @@ Invarianten:
   `AbortAndCool` und `CoolAfterCompletion`; alle verwenden dieselbe
   Ableitung aus `StorageEpoch + StartCommandId` im bestehenden 1..48-Byte-
   Limit. UI-Payloads liefern weder `runId` noch `CommandId`.
+
+### 4.5 Verbrauchervertrag des gemergten manuellen Zeit-/Temperaturlaufs
+
+Issue #152 / PR #153 sind fachlich abgeschlossen und mit
+`5d838f43f3b32ef8d49d29ae77776d3e86266575` in `main` enthalten. Das GitHub-
+Issue #152 bleibt live offen, bis der Owner den Abschluss markiert; diese
+offene Metadatenaktion ist kein fehlender Fachvertrag und blockiert #26 nicht.
+
+#26 konsumiert den Vertrag ausschließlich über die vorhandenen Application-,
+Command-, Prozess-, Orchestrator-, Persistenz- und Recoverygrenzen. Der
+relevante Vertrag lautet:
+
+- `ManualHolding` bleibt der getrennte bestehende Pfad über
+  `ManualRunPlanRequest`, `ManualRunPlan`, `ManualStartRequest`,
+  `CommandKind::StartManualHolding`, `decideManualStart()` und
+  `ProcessKind::ManualHolding`. #26 erweitert diesen Pfad nicht zu einem
+  Zeitlauf.
+- `ManualTimedRunValues` ist der tatsächliche rendererunabhängige Application-
+  Eingang mit Zieltemperatur, Dauer, Sensorbetrieb, Vorheizen,
+  `maximumProductWaitMinutes`, Zielband, Qualifikationsdauer,
+  `maximumTargetReachMinutes`, `CompletionMode`, optionalem Cooling-Ziel und
+  optionaler Hold-Dauer. #26 baut dieses bestehende Modell ohne eigene
+  Run-/Command-/Persistence-Struktur aus flüchtigen Editordaten auf.
+- Die bestehende Validierung verlangt eine finite Zieltemperatur innerhalb der
+  Fermentationsgrenzen, eine Dauer innerhalb der Minimal-/Maximalgrenzen, ein
+  finites Zielband innerhalb seiner Grenzen, mindestens die minimale
+  Qualifikationsdauer, mindestens die minimale Zielerreichungszeit sowie ein
+  gültiges Vorheiz-/Produktwartezeit-Paar. Eine gesetzte Wartezeit muss ihre
+  Minimal-/Maximalgrenzen einhalten. `FinishWithoutCooling` darf weder Kühlziel
+  noch Hold-Dauer tragen; die drei Kühlmodi verlangen ein finites Kühlziel in
+  den Kühlgrenzen, wobei nur `CoolAndHoldForDuration` eine Hold-Dauer ab der
+  Mindestdauer verlangt. Diese Regeln bleiben ausschließlich in
+  `validateManualTimedRunSource()`.
+- `FermentationApplication::prepareStartManualTimed(context, values, evidence)`
+  ist die einzige vorbereitende Grenze. Sie erstellt die
+  `ManualTimedRunSource` mit einem einphasigen `FermentationStage`, validiert
+  sie über `validateManualTimedRunSource()`, allokiert genau eine
+  `ApplicationCommandIdentity`, leitet `runId` aus
+  `StorageEpoch + StartCommandId` ab und erzeugt einen bestehenden
+  `ProgramStartRequest` mit `ProgramSourceKind::ManualTimed`.
+- Der ManualTimed-`ProgramStartRequest` verwendet `CommandKind::StartProgram`,
+  trägt keine `ProgramCatalogRevision` als Quellprovenienz und erhält die
+  bereits von der Application bewertete Safety-/Sensor-Evidenz. Die
+  `FermentationUiCommandContext.expected`-Felder bleiben die einzige
+  Erwartungs-/Stalenessquelle; ManualTimed-Payloads erzeugen keine Duplikate.
+- `decideProgramStart()` bleibt der einzige fachliche Startentscheid.
+  Angefordertes `Air` bleibt `Air`, angefordertes `Product` bleibt `Product`;
+  ein ungültiger Product-Sensor führt zur bestehenden
+  `UserDecisionRequired`-/`Blocked`-Semantik und nie zu einem
+  Product-zu-Air-Fallback. Die abgeleitete manuelle Sensorsemantik bleibt
+  `ProductIfAvailableElseAir` / `WaitForUser` /
+  `ManualReturnToProduct` ohne Fallback-Delay.
+- Die bestehende `StartSummary` ist bereits vor Confirmation verfügbar,
+  trägt `sourceKind=ManualTimed`, `ProcessKind::Timed`, die echten Ziel-/Dauer-/
+  Completion-Werte und keinen erfundenen Programmnamen (`programName` absent).
+  Die sichtbare Bezeichnung kommt ausschließlich über den vorhandenen
+  TextKey-/Lokalisierungspfad.
+- Nach Confirmation verwendet der Pfad weiterhin
+  `TemperatureControlApplicationOrchestrator::persistFreshStartCommand()`;
+  dieser akzeptiert den vorhandenen `CommandKind::StartProgram`-Fresh-Start.
+  Die Persistenz liefert das vorhandene `RunPersistenceResult` mit seinem
+  tatsächlichen Status und seiner Durability; #26 projiziert nur dieses
+  Ergebnis und meldet keine Proposed-Entscheidung als Apply.
+- `RunProgramSource` bleibt die bestehende Variant aus `ProgramDocument` oder
+  `ManualTimedRunSource`; ein ManualTimed-Lauf ist ein `ProgramRun` mit
+  `ProcessKind::Timed`, niemals ein `ManualRun`. Seine Quelle ist
+  unveränderlich und ändert den `ProgramCatalog` nicht.
+- Für neue Writes gilt der gemergte Schema-5-Vertrag. Schema 5 trägt die
+  explizite `ManualTimed`-Quelle ohne `RunProgramSourceRevision`; gespeicherte
+  Factory-/User-Programme tragen weiterhin ihre neutrale
+  `RunProgramSourceRevision`. Schema 1–4 bleiben lesbar, unbekannte neuere
+  Schemas, unbekannte Source-Kinds sowie fehlende/widersprüchliche Sourcefelder
+  bleiben fail-closed.
+- Nach Decode und Restore verwendet ManualTimed dieselbe ProgramRun-/Timed-
+  Recoverymatrix wie gespeicherte Programme, einschließlich
+  `WaitingForTrustedTime`, bestehender Sensor-/Safety-Revalidation und
+  `SAFE_BOOT`. #26 erstellt keine zweite Recoverypolicy, keinen zweiten
+  Coordinator und keine neue Aktorfreigabe.
+
+Die vorhandenen #152-Nachweise in `test_issue144_run_identity`,
+`test_run_snapshots`, `test_run_checkpoint_codec` und
+`test_run_persistence_coordinator` sind Vertragsprovenienz. #26 ergänzt nur
+Consumer-/Bediennachweise über den owning Applicationpfad und wiederholt keine
+#152-Implementierungstests als eigenen Vertrag.
 
 #26 implementiert keinen Teil des Vorgängerscopes erneut und besitzt keine
 #144-Allocator-, Codec-, Handoff-, Recovery- oder Persistence-Ownership. Die
@@ -590,34 +693,29 @@ sichtbare Kontextaktionen, aber keine fünf neuen Fachautomaten.
 
 Der normale lokale Einstieg in den manuellen Betrieb liegt in der
 Programmliste beziehungsweise Startauswahl als semantische Aktion
-Manueller Betrieb. Er öffnet einen kleinen ManualRunPlan-Kandidaten mit den
-bereits vorhandenen editierbaren Feldern Zieltemperatur, Sensorbetrieb,
-optionalem Vorheizen und Qualifikationsdaten, aber ohne Lauf-ID. Nach
-fachlicher Prüfung ergänzt die Application-Grenze die Identität und ruft
-die App decideManualStart und nach Bestätigung
-TemperatureControlApplicationOrchestrator::persistFreshStartCommand auf.
-Der vorhandene owning Fachvertrag unterstützt dabei
-ProcessKind::ManualHolding; der aktive Lauf bleibt unveränderlich.
+Manueller Betrieb. Der Plan hält zwei getrennte Fachpfade:
 
-Die Produktanforderung eines manuellen Zeit-/Temperaturlaufs ist im aktuellen
-Baseline-Code von #26 dagegen nicht durch einen eigenen vollständigen
-CommandKind-, Decide- und Application-Persistenzvertrag abgedeckt.
-Der aktuelle kanonische R1-Stand in `docs/REQUIREMENTS.md`,
-`docs/PRODUCT_VISION.md` und `docs/STATE_MACHINE.md` enthält diese
-Anforderung weiterhin verbindlich. Deshalb ist sie keine frei verschiebbare
-Builderoption und `DEFER_FROM_R1` wird in #26 nicht angeboten.
+- `ManualHolding` öffnet die vorhandenen `ManualRunPlan`-/`ManualStartRequest`-
+  Werte ohne Lauf-ID und verlässt den Workspace über `decideManualStart()` und
+  nach Confirmation über `TemperatureControlApplicationOrchestrator::
+  persistFreshStartCommand()`. Sein `ProcessKind::ManualHolding` und sein
+  Ende durch Benutzeraktion oder Fehler bleiben unverändert.
+- `ManualTimed` öffnet die tatsächlichen vorhandenen
+  `ManualTimedRunValues` mit Zieltemperatur, Dauer, Sensorbetrieb, Vorheizen,
+  Produktwartezeit, Qualifikation und Completion/Cooling-Werten. Der Workspace
+  übergibt diese Werte ohne eigene Run-/Command-/Persistence- oder
+  Domainvalidierung an `FermentationApplication::prepareStartManualTimed()`.
+  Die Application validiert die `ManualTimedRunSource`, bindet die
+  Application-Identity und erzeugt den bestehenden `ProgramStartRequest`;
+  danach laufen `decideProgramStart()` und der bestehende
+  `persistFreshStartCommand()`-Handoff.
 
-Der kleinste fehlende owning Fachscope ist als Issue #152
-(`MANUAL_TIME_TEMPERATURE_OWNER_CONTRACT=ISSUE152`) separat festgelegt. Issue
-#152 verbindet den bestehenden Process-State-, Sensor-, Regelungs-, Safety-,
-Recovery-, Run-Persistence- und Application-Vertrag; es entfernt die
-Anforderung nicht aus R1 und dupliziert keine #144-Identitätsownership. Bis
-Issue #152 einen verifizierten Vertrag liefert, zeigt #26 diesen Modus
-typisiert als `Unavailable` mit `OWNER_CONTRACT_MISSING`. #26 implementiert
-den Vertrag nicht und behauptet nicht, diesen R1-Bedienpfad abzuschließen.
-Nur eine ausdrückliche Owner-Scopeentscheidung mit Änderung der kanonischen
-R1-Anforderungen darf ihn aus R1 entfernen. Der aktuelle #26-Umfang
-beschränkt sich auf den vorhandenen manuellen Haltebetrieb.
+Der manuelle Zeit-/Temperaturlauf ist damit durch den gemergten owning Vertrag
+aus Issue #152 / PR #153 verfügbar. Er wird in #26 nicht als fehlender
+Vertrag, `Unavailable` oder offener Vorgängerscope behandelt
+und nicht als `DEFER_FROM_R1` verschoben. #26 konsumiert nur die bestehende
+Application-/Persistence-/Recoverygrenze; Issue #152 bleibt im GitHub-Metadatum
+bis zur Owner-Schliessaktion offen.
 
 ### 7.2 Bestehende Commandpfade
 
@@ -628,6 +726,7 @@ tatsächlichen Application-Handoff und vom Persistenz-/Apply-Ergebnis:
 |---|---|---|
 | Programmstart/Vorheizen | FermentationUiStartProgramIntent -> decideProgramStart | TemperatureControlApplicationOrchestrator::persistFreshStartCommand; bei einem nicht als Fresh Start qualifizierten Pfad gilt der passende bestehende persistCommand-Aufruf |
 | manueller Lauf | FermentationUiStartManualHoldingIntent -> decideManualStart | TemperatureControlApplicationOrchestrator::persistFreshStartCommand |
+| manueller Zeit-/Temperaturlauf | flüchtige `ManualTimedRunValues` aus dem Workspace -> `FermentationApplication::prepareStartManualTimed()` -> bestehender `ProgramStartRequest`/`decideProgramStart()` | `TemperatureControlApplicationOrchestrator::persistFreshStartCommand()` für `CommandKind::StartProgram`; tatsächliches `RunPersistenceResult` projizieren |
 | Stop ausschalten/kühlen | FermentationUiStopRunIntent -> decideStop | TemperatureControlApplicationOrchestrator::persistCommand |
 | Abschluss/OK/Jetzt kühlen | FermentationUiCompleteRunIntent -> decideCompletion | TemperatureControlApplicationOrchestrator::persistCommand |
 | Laufwerte nur für diesen Lauf | FermentationUiAdjustRunIntent -> decideRunAdjustment | TemperatureControlApplicationOrchestrator::persistCommand |
@@ -641,8 +740,8 @@ tatsächlichen Application-Handoff und vom Persistenz-/Apply-Ergebnis:
 | Konfigurations-/Rezeptcommit | bestehendes Preview-/ConfigurationService-Validation- und Confirmationmodell | bestehender ConfigurationService-Commitpfad |
 
 Eine decide*-Funktion erzeugt ausschließlich eine kanonische Entscheidung.
-Der bestehende `fromCommandStatus`-Vertrag aus #25 ist auf
-`main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8` bereits die verbindliche
+Der bestehende `fromCommandStatus`-Vertrag aus #25 ist auf dem aktuellen
+`main@5d838f43f3b32ef8d49d29ae77776d3e86266575` weiterhin die verbindliche
 Baseline: Die Phase wird nach dem tatsächlich ausgeführten Pfad bestimmt,
 nicht nach dem Statusnamen. #26 ändert oder korrigiert diese Semantik nicht,
 sondern übernimmt sie als Regressionserwartung. Jede Rückgabe eines reinen
@@ -752,6 +851,18 @@ IDs und aktuelle Evidenz an ihrer Ownergrenze auf.
 - StaleState, InvalidInput, SafetyRejected, NotAllowedInState,
   ContextMissing, Busy, Unavailable und vergleichbare Zustände werden nicht
   durch ein UI-Precheck oder eine fehlende Bestätigung maskiert.
+- Für `ManualTimed` bildet der Workspace die flüchtigen Werte in das
+  vorhandene `ManualTimedRunValues` ab. Ein gültiger Aufruf von
+  `prepareStartManualTimed()` liefert `Prepared`; fehlende oder stale
+  `FermentationUiCommandContext.expected`-Werte sowie owning Safety-/Sensor-
+  Evidenz werden erst durch die bestehenden Application-/Startregeln als
+  `ContextMissing`, `StaleState`, `SafetyRejected` oder `Unavailable`
+  projiziert. Vor der Bestätigung bleibt der daraus folgende
+  `ProgramStartRequest` ein `DecisionOnly`-/Confirmation-Ergebnis; nach
+  Bestätigung wird ausschließlich das tatsächliche
+  `RunPersistenceResult` des bestehenden Orchestrators als
+  `OwningOutcome` dargestellt. Der UI-Pfad validiert weder die
+  `ManualTimedRunSource` selbst noch erzeugt er eine zweite Identität.
 - Die bereits gemergte `FermentationUiCommandBridge::commitConfiguration()`-
   Baseline behandelt das Ergebnis von `validatePreviewForConfirmation()`
   vollständig als Pre-Apply-Pfad:
@@ -1172,7 +1283,7 @@ Servicefreigabe`. „Kein aktiver Lauf“ allein ist keine Freigabe.
 | ApplicationLifecycleState::Ready + ProcessState::Standby + owning Servicefreigabe | verfügbar nach PIN-Eingabe | verfügbar |
 | ApplicationLifecycleState::Ready außerhalb ProcessState::Standby, einschließlich Completed | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
 | Initializing, Boot, Recovery oder ApplicationLifecycleState::ServiceRequired | gesperrt/unavailable mit Grund | verfügbar, soweit passiv |
-| aktiver Lauf inklusive ManualHolding | gesperrt/unavailable | verfügbar |
+| aktiver Lauf inklusive `ManualHolding` und `ManualTimed` | gesperrt/unavailable | verfügbar |
 | ProcessState::Fault | gesperrt/unavailable | verfügbar |
 | ProcessState::SafeBoot | gesperrt/unavailable | passive Diagnose/Recovery verfügbar |
 
@@ -1241,8 +1352,10 @@ Semantische Ziele der beiden Ansichten werden getrennt behandelt:
 | `FallbackSelectionRequired`: bestehendes Fallback-Resume | ausführbar ausschließlich über `FermentationApplication::resumeFallback` und die bestehende Bestätigung |
 | `SafeBoot`: ResumeFallback | nicht angeboten; kein Fallback-Resume aus SAFE_BOOT |
 | beide Ansichten: PIN-Service und Aktortest | immer gesperrt/unavailable; kein Backendpfad |
-| beide Ansichten: Vollreset, Netzwerk-Recovery, Export | nur ausführbar, wenn ein bestehender owning Application-/Platform-Aufruf mit Ergebnisvertrag nachgewiesen ist; im aktuellen Baseline-Code ist kein solcher SAFE_BOOT-UI-Pfad öffentlich nachgewiesen, daher typisiert Unavailable mit `OWNER_PATH_MISSING` |
-| beide Ansichten: Raw-Touch-Recovery, Kalibrierung, physische Trigger | außerhalb #26 und weiterhin #31/TBD_HARDWARE |
+| `SafeBoot`: persistenter/fortsetzbarer Werksreset | Owner #57; #26 bietet ihn nur an, wenn der bestehende autorisierte Application-Aufruf `FermentationApplication::beginAuthorizedFactoryReset()` im konkreten Compositionpfad mit seinem `ConfigurationRecoveryResult` verfügbar ist. Sonst `DeviceUiCommandOutcomeCategory::Unavailable` mit sichtbarer Zuordnung zu #57; #26 erfindet keine Reset- oder Autorisierungsschicht |
+| `SafeBoot`: Netzwerk-/Provisionierungs-Recovery | Owner #89; der aktuelle Baseline-Code stellt dafür keinen lokalen SAFE_BOOT-Applicationpfad bereit. Daher `DeviceUiCommandOutcomeCategory::Unavailable` mit Zuordnung zu #89, ohne #89 vorwegzunehmen |
+| `SafeBoot`: Diagnose-/Exportfunktionen | Owner #28; vorhandene passive Presentation-/Recoverywerte dürfen gelesen werden, ein Diagnose-/Serviceexport wird bis zum owning #28-Aufruf mit seinem Ergebnis als `Unavailable` mit Zuordnung zu #28 dargestellt |
+| `SafeBoot`: Raw-Touch-Recovery, Touchkalibrierung, physische Trigger | Owner #31; außerhalb #26 und bis zum Hardwarevertrag `Unavailable` beziehungsweise nicht angeboten; keine Raw-Touch-Annahme |
 
 SAFE_BOOT darf nicht:
 
@@ -1257,10 +1370,12 @@ SAFE_BOOT darf nicht:
 ResumeFallback bleibt die bestehende bestätigte Appaktion. Vor Applied
 bleiben FallbackRecoveryPending, RAM-/FSM-Aktivierung und Aktorpermission
 unresolved. Erst der bestehende Write-before-Apply-/FSM-/Fresh-Evidence-
-Pfad kann die spätere Interlockbewertung erreichen. Für jedes Ziel ohne
-nachgewiesenen owning Pfad zeigt die Shell einen typisierten
-OWNER_PATH_MISSING-/Unavailable-Grund statt einer scheinbaren ausführbaren
-Aktion.
+Pfad kann die spätere Interlockbewertung erreichen. SAFE_BOOT-Ziele werden
+nicht pauschal als fehlender Owner klassifiziert: #57, #31, #89 und #28 sind
+die bestehenden Owner. Nur der jeweils vorhandene ausführbare Application-/
+Platformpfad darf ein Ziel aktivieren; andernfalls zeigt die Shell den
+vorhandenen generischen `Unavailable`-Outcome zusammen mit dem zuständigen
+Issue und führt keine Mutation aus.
 
 ### 10.2 Aktor- und Safetygrenze
 
@@ -1279,10 +1394,12 @@ Adapterannahme.
 
 ### 11.0 Gemergter Verbrauchervertrag: Issue #144 / PR #147
 
-Issue #144 / PR #147 sind abgeschlossen und gemergt auf
-`main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`. Der #26-Diff enthält keine
-Dateien, Schemaänderungen, Codec-/Recoverytests oder Allocatorimplementation
-dieses Issues. #26 konsumiert ausschließlich diese Invarianten:
+Issue #144 / PR #147 sind abgeschlossen und mit
+`0b8b4cc1673f40296a510fdc0d79440c616ffeb8` eingeführt; der Vertrag ist im
+aktuellen `main@5d838f43f3b32ef8d49d29ae77776d3e86266575` enthalten. Der #26-
+Diff enthält keine Dateien, Schemaänderungen, Codec-/Recoverytests oder
+Allocatorimplementation dieses Issues. #26 konsumiert ausschließlich diese
+Invarianten:
 
     ISSUE144_GITHUB_STATE=CLOSED
     PR147_GITHUB_STATE=MERGED
@@ -1310,6 +1427,35 @@ Die vollständige Vorgängerprovenienz sowie ihre konkreten Dateien und
 Nachweise bleiben ausschließlich in Issue #144. #26 verwendet nur die
 gemergten Verträge und erzeugt keine parallele Ownership.
 
+### 11.0b Gemergter Verbrauchervertrag: Issue #152 / PR #153
+
+Issue #152 ist über PR #153 mit Source-HEAD
+`00b6fd9444f38108253961718f40adab2836c7ad` in den aktuellen
+`main@5d838f43f3b32ef8d49d29ae77776d3e86266575` gemergt. Das Issue bleibt live
+`OPEN` und benötigt nur noch die Owner-Schliessaktion. Diese offene
+GitHub-Metadatenaktion ist kein Implementierungsblocker für #26.
+
+Der #26-Diff übernimmt `ManualTimedRunValues`,
+`ManualTimedRunSource`, `ProgramSourceKind::ManualTimed`,
+`RunProgramSource`/`RunProgramSnapshot`,
+`FermentationApplication::prepareStartManualTimed()`, die bestehende
+`ProgramStartRequest`-/`decideProgramStart()`-Semantik,
+`TemperatureControlApplicationOrchestrator::persistFreshStartCommand()` und
+den Schema-5-/Recoveryvertrag unverändert. Er ändert keine der #152-Dateien
+für deren owning Fachlogik und baut weder eine zweite Start-, Command-,
+Persistence- noch Recoverygrenze.
+
+Der geplante UI-Consumer darf nur flüchtige Werte sammeln, sie in das exakt
+vorhandene `ManualTimedRunValues` überführen und die bestehende
+Application-Grenze aufrufen. Die owning Ergebnisse bleiben
+`FermentationApplicationRequestStatus` vor der Entscheidung,
+`FermentationUiCommandPhase::DecisionOnly` für reine Decide-/Confirmation-
+Ergebnisse und das tatsächliche `RunPersistenceResult`/seine
+`RunPersistenceResultStatus` nach dem Orchestrator-Handoff. Insbesondere
+werden `InvalidInput`, `ContextMissing`, `StaleState`, `SafetyRejected`,
+`Unavailable`, `NotConfirmed`, `Applied`, `AlreadyProcessed` und unbestimmte
+Durability nicht durch ein UI-Ergebnis ersetzt oder zusammengezogen.
+
 ### 11.1 Generische Plattform
 
 | Datei | geplante Verantwortung |
@@ -1329,9 +1475,9 @@ device_platform_test_support.
 |---|---|
 | lib/fermentation_app/src/fermentation_ui_models.hpp/.cpp | additive Home-Modi Waiting/Completed/Restricted sowie kleine Workspace-/Programmlisten-/Detailmodelle, ohne zweiten Domainzustand |
 | lib/fermentation_app/src/fermentation_ui_projector.hpp/.cpp | vollständige Home-/Recovery-/Message-/Temperatur-/Statusprojektion aus canonical Ownerwerten; keine Rohwertentscheidung |
-| lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen; kein direkter Owner- oder Persistenzaufruf |
-| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängige ProductInsertedConfirmed- und Startkandidatenverträge ohne doppelte Expected-Revisionsfelder; `FermentationUiCommandContext.expected` bleibt die einzige Command-Revisionsquelle, bestehende DecisionOnly-/OwningOutcome-Baseline nur als Regressionserwartung; keine künstliche Envelope-/Idempotenzsemantik |
-| lib/fermentation_app/src/fermentation_application.hpp/.cpp | minimaler Ausbau der bestehenden `prepareStartProgram()`-Application-Grenze: erlaubte next-run-only-Overrides auf flüchtige Programmkopie anwenden, danach Runnable-validieren und weiterhin dort Provenienz, Identität, Run-ID und owning Evidenz binden; kein zweiter Startservice oder Dispatcher |
+| lib/fermentation_app/src/fermentation_touch_workspace.hpp/.cpp | lokale Route, Seiten, vier appseitige Slotinhalte, Pager, Dialoge, Sperrgründe und Mapping auf bestehende Intentformen einschließlich der getrennten ManualHolding-/ManualTimed-Einstiege; kein direkter Owner- oder Persistenzaufruf |
+| lib/fermentation_app/src/fermentation_ui_commands.hpp/.cpp | app-owned rendererunabhängige ProductInsertedConfirmed- und Startkandidatenverträge ohne doppelte Expected-Revisionsfelder; ManualTimed wird als identity-freier UI-Intent auf das vorhandene `ManualTimedRunValues` abgebildet, `FermentationUiCommandContext.expected` bleibt die einzige Command-Revisionsquelle, bestehende DecisionOnly-/OwningOutcome-Baseline nur als Regressionserwartung; keine künstliche Envelope-/Idempotenzsemantik |
+| lib/fermentation_app/src/fermentation_application.hpp/.cpp | nur der bereits geplante minimale Ausbau der bestehenden `prepareStartProgram()`-Application-Grenze für next-run-only-Overrides; die gemergte `prepareStartManualTimed()`-Grenze wird ausschließlich konsumiert und nicht dupliziert oder semantisch erweitert; kein zweiter Startservice oder Dispatcher |
 | lib/fermentation_app/src/fermentation_ui_editing.hpp/.cpp | minimale NumericEditModel-/TextEditModel-Aktionen für Rezeptname, Notiz und Werte sowie deterministische freie Benutzerprogramm-ID-Allokation; nur flüchtige Kandidaten, keine Validierungs- oder Keyboardplattform |
 | lib/fermentation_app/src/fermentation_ui_text.hpp/.cpp | zusätzliche fermentation-owned TextKeys für Rezepte, Phasen, Aktionen, Status, Service, PIN, Feedback und Sperrgründe in DE/EN/ES |
 | lib/fermentation_app/src/configuration_service.hpp/.cpp | minimaler Preview-Vertrag `beginPreview(expectedProgramCatalogRevision)`, atomare Prüfung und Erfassung der ProgramCatalog-Basis unter dem bestehenden Lock; `StateChanged` bei Stale-Basis, keine zweite Revisionsquelle und kein zweiter Revisionsdienst |
@@ -1347,12 +1493,14 @@ TemperatureControlApplicationOrchestrator für Run-Apply/Persistenz und
 Lifecycle-Handoff, FermentationApplication für ApplicationLifecycleState und
 Recoveryaktionen, ConfigurationService/ConfigurationPreview für den
 Programmkatalog und Configuration-Commit, sowie die bestehende
-Process-State-Machine-, Sensor-, Recovery- und Safetylogik. Die konkrete
-Lücke für den manuellen Zeit-/Temperaturlauf bleibt bis zum separaten Issue
-#152 eine reale R1-Abhängigkeit und `OWNER_CONTRACT_MISSING`/Unavailable; die
-fehlenden SAFE_BOOT-UI-Aufrufe bleiben als
-vorgelagerte Ownerlücke `OWNER_PATH_MISSING`/Unavailable; beides wird nicht in
-#26 aufgelöst. `DEFER_FROM_R1` ist keine #26-Option.
+Process-State-Machine-, Sensor-, Recovery- und Safetylogik. Der manuelle
+Zeit-/Temperaturlauf ist über den gemergten #152-/PR-#153-Vertrag verfügbar und
+wird nur konsumiert; #26 ändert weder dessen Source-, Schema-, Validierungs-
+noch Persistence-Ownership. SAFE_BOOT-Ziele werden ihren bestehenden Ownern
+zugeordnet: #57 Werksreset, #31 Raw-Touch/Touchkalibrierung, #89 Netzwerk-/
+Provisionierungs-Recovery und #28 Diagnose/Export. Nicht exponierte spätere
+Aufrufe bleiben typisiert `Unavailable` mit dieser Ownerzuordnung. Es entsteht
+keine neue Ownership und `DEFER_FROM_R1` ist keine #26-Option.
 
 ### 11.3 Deterministischer Testsupport
 
@@ -1419,7 +1567,7 @@ innerhalb des normalen Programmstarts.
    vollständige lokale Routen, Status-/Service-Plattformbereiche und
    isolierte App-Erweiterungen. TextKeys statt sichtbarer Literale.
 4. Kontextaktionen: Slot-0-Matrix ohne implizite Programmauswahl,
-   ManualHolding-Einstieg, ProductInsertedConfirmed-Contract,
+   getrennte ManualHolding-/ManualTimed-Einstiege, ProductInsertedConfirmed-Contract,
    bestehende DecisionOnly-Baseline als Regression, Application-Apply über
    die bestehenden Orchestrator-Handoffs und strukturierte Dialoge/
    Sperrgründe.
@@ -1435,7 +1583,7 @@ innerhalb des normalen Programmstarts.
    FallbackSelectionRequired, WaitingForTrustedTime und sichtbare
    Restricted-Sperrgründe.
 7. Simulation und Nachweis: generic test-support shell, 320-x-240-Frame,
-   vollständige appseitige Szenarien einschließlich aller Ownerlücken,
+   vollständige appseitige Szenarien einschließlich aller Ownerzuordnungen,
    Layout-/Text-/Locale-/Theme- und Fehlbedienungsorakel; keine
    Hardwarepfade.
 8. Issue-spezifische Dokumentation: SIM-Matrix und notwendige
@@ -1443,9 +1591,9 @@ innerhalb des normalen Programmstarts.
    die bestehende Ownergrenze.
 
 Die konkrete spätere Implementierung bleibt auf diese fachlichen Pfade
-begrenzt. Fehlende Ownerverträge werden als BLOCKED/Unavailable
-nachgewiesen und nicht durch einen zusätzlichen Dispatcher- oder Fachpfad
-ersetzt.
+begrenzt. Nicht exponierte spätere Ownerpfade werden als typisiertes
+`Unavailable` mit ihrem bestehenden Owner nachgewiesen und nicht durch einen
+zusätzlichen Dispatcher- oder Fachpfad ersetzt.
 
 ## 13. Simulations- und Akzeptanzmatrix
 
@@ -1505,7 +1653,7 @@ Weitere #26-Pfade werden deterministisch separat geprüft:
 | ID | Nachweis |
 |---|---|
 | SIM-26-37 | ManualHolding ist über Manueller Betrieb, ManualRunPlanRequest, decideManualStart und TemperatureControlApplicationOrchestrator::persistFreshStartCommand bedienbar; es wird kein direkter Aktorpfad erzeugt |
-| SIM-26-38 | ManualHolding ist owning bedienbar; der in REQUIREMENTS.md, PRODUCT_VISION.md und STATE_MACHINE.md weiterhin verbindliche manuelle Zeit-/Temperaturlauf bleibt bis zum separaten Issue #152 mit OWNER_CONTRACT_MISSING/Unavailable sichtbar, wird weder simuliert noch als R1-erledigt verbucht und nicht als DEFER_FROM_R1-Option behandelt |
+| SIM-26-38 | ManualHolding und ManualTimed bleiben getrennte Fachpfade: Holding verwendet `ManualRunPlan`/`ManualStartRequest`/`decideManualStart()` mit `ProcessKind::ManualHolding`; Timed verwendet die bestehenden `ManualTimedRunValues`/`prepareStartManualTimed()`/`ProgramStartRequest`/`decideProgramStart()` mit `ProcessKind::Timed`. Kein Pfad wird in den anderen umetikettiert |
 | SIM-26-39 | NumericEditModel unterstützt Plus/Minus, direkte Ziffern, Dezimaltrennzeichen, Backspace, Clear, Cancel und Commit; Grenzen und Gültigkeit kommen ausschließlich vom owning Validator |
 | SIM-26-40 | TextEditModel unterstützt Zeichen-/Modusaktionen, Rückschritt, Löschen, Abbrechen und Übernehmen für Programmname und kurze Notiz; kein Keyboardframework wird benötigt |
 | SIM-26-41 | Bearbeiten einer Standard-Arbeitskopie und eines Benutzerprogramms verwendet flüchtige Kandidaten und ConfigurationPreview/ConfigurationService für den dauerhaften Commit; active RunProgramSnapshot und unveränderliche Factory-Vorlage bleiben unverändert |
@@ -1514,7 +1662,7 @@ Weitere #26-Pfade werden deterministisch separat geprüft:
 | SIM-26-44 | Echte ProgramCatalogRevision zwischen Editoröffnung und `beginPreview(expectedProgramCatalogRevision)` ergibt atomar `StateChanged`; spätere Konflikte ergeben `PreviewSuperseded` oder `PreviewNotFound` typisiert; kein stilles Überschreiben, kein UI-Refresh-Surrogat und kein bloßer acquireRuntime-/Pre-Read-Guard |
 | SIM-26-45 | PIN-Service ist ausschließlich bei Ready + validiertem ProcessState::Standby + owning Servicefreigabe erreichbar; Completed, Boot, Recovery, ServiceRequired, aktiver Lauf, Fault und SAFE_BOOT bleiben gesperrt, Status/Diagnose bleiben passiv erreichbar |
 | SIM-26-46 | PIN-Accepted eröffnet nur die lokale ServiceSessionLease; keine Safety-/Aktorfreigabe und keine Veränderung von ActuationInterlock |
-| SIM-26-47 | SAFE_BOOT und FallbackSelectionRequired werden getrennt nachgewiesen: SafeBoot bietet Read beziehungsweise OWNER_PATH_MISSING/Unavailable, aber kein ResumeFallback; nur FallbackSelectionRequired bietet den bestehenden Resume-Pfad; Raw-Touch, Kalibrierung und physische Trigger bleiben außerhalb #26 |
+| SIM-26-47 | SAFE_BOOT und FallbackSelectionRequired werden getrennt nachgewiesen: SafeBoot bietet vorhandene passive Reads, keinen ResumeFallback und nur tatsächlich exponierte Ownerpfade; nicht exponierte Ziele sind als `Unavailable` dem Owner #57 (Werksreset), #31 (Raw-Touch/Kalibrierung), #89 (Netzwerk/Provisionierung) oder #28 (Diagnose/Export) zugeordnet. Nur FallbackSelectionRequired bietet den bestehenden Resume-Pfad |
 
 Die Restkorrekturen erhalten zusätzlich folgende direkte, beobachtbare
 Nachweise:
@@ -1529,7 +1677,15 @@ Nachweise:
 | SIM-26-54 | Die deterministische ID-Allokation für Kopieren/Neu liefert eine gültige freie Benutzer-ID ohne editierbares ID-Feld; Kollision, ungültige Katalogbasis oder Kapazitätsende liefern typisiertes Unavailable/Capacity ohne Überschreiben oder persistierten Zähler, und eine geänderte Kataloggeneration wird stale abgelehnt |
 | SIM-26-55 | NumericEditModel und TextEditModel decken alle vorgesehenen Plus/Minus-, Ziffern-/Dezimal-, Zeichen-/Modus-, Rückschritt-, Löschen-, Abbrechen- und Übernehmen-Aktionen ab; nur der owning Validator entscheidet Grenzen und Commit |
 | SIM-26-56 | Der secretsfreie PIN-Test-Seam projiziert Pending und RetryWait sowie Accepted/Rejected; normaler Servicezugang entsteht nur aus validiertem Standby, PIN-Erfolg verändert keine Safety-/Aktorfreigabe |
-| SIM-26-57 | ManualHolding durchläuft den bestehenden owning Startpfad; der fehlende Zeit-/Temperaturlauf bleibt bis Issue #152 als OWNER_CONTRACT_MISSING/Unavailable sichtbar und ist keine DEFER_FROM_R1-Option; SafeBoot und FallbackSelectionRequired behalten ihre getrennten ausführbaren beziehungsweise unavailable Ziele |
+| SIM-26-57 | ManualHolding durchläuft den bestehenden owning Startpfad; ManualTimed durchläuft den gemergten #152-Vertrag über `prepareStartManualTimed()` und den bestehenden `ProgramStartRequest`-/`persistFreshStartCommand()`-Pfad. Beide Ergebnisse bleiben getrennt; SafeBoot und FallbackSelectionRequired behalten ihre Owner-zugeordneten ausführbaren beziehungsweise `Unavailable`-Ziele |
+| SIM-26-66 | Der ManualTimed-Editor bildet seine flüchtigen Werte 1:1 in das bestehende `ManualTimedRunValues` ab und ruft `FermentationApplication::prepareStartManualTimed()` mit `FermentationUiCommandContext.expected` und owning Evidence auf; weder UI noch Editor liefert `CommandId`, `runId`, `ProgramDocument`, Katalogrevision oder Evidence |
+| SIM-26-67 | Ungültige ManualTimed-Werte werden durch den bestehenden `validateManualTimedRunSource()`-Pfad als `FermentationApplicationRequestStatus::InvalidInput` abgelehnt; Ziel-/Dauer-/Qualifikations-/Warte-/Completionregeln werden nicht im UI dupliziert und vor einer Identity-Allokation beziehungsweise Mutation beendet |
+| SIM-26-68 | Ein gültiger ManualTimed-Start liefert das bestehende `Prepared`-Ergebnis mit genau einer Application-Command-ID und daraus abgeleitetem `runId`; `decidePrepared()` liefert vor Confirmation nur `ConfirmationRequired`/`DecisionOnly`, `confirmPrepared()` verwendet exakt dieselbe vorbereitete Identity und allokiert nichts neu |
+| SIM-26-69 | Fehlende oder veraltete `FermentationUiCommandContext.expected`-Werte sowie fehlende owning Safety-/Sensor-Evidence werden über die bestehenden `ContextMissing`-/`StaleState`-/`SafetyRejected`-/`Unavailable`-Ergebnisse sichtbar; der Workspace ersetzt sie weder durch lokale Checks noch durch Fallbackwerte |
+| SIM-26-70 | ManualTimed mit gültiger Product-Evidence bleibt Product; ohne gültige Product-Evidence erzeugt der bestehende Start-/Sensorpfad `UserDecisionRequired`/`Blocked` ohne Product-zu-Air-Fallback und ohne Aktorfreigabe |
+| SIM-26-71 | Nach bestätigter gültiger ManualTimed-Entscheidung ruft der owning Pfad `TemperatureControlApplicationOrchestrator::persistFreshStartCommand()` mit `CommandKind::StartProgram` auf; das tatsächliche `RunPersistenceResult` einschließlich `Applied`/`AlreadyProcessed`/Fehler-/Unknown-Durability wird unverändert projiziert, und erst Applied mutiert State/FSM |
+| SIM-26-72 | ManualTimed wird als `ProgramRun` mit `ProcessKind::Timed` und `ProgramSourceKind::ManualTimed` im Schema-5-Pfad persistiert; Source-Revision und Katalogeintrag bleiben absent/unverändert, Schema-1–4-Legacy-Reads und fail-closed-Unknown-Regeln bleiben unverändert |
+| SIM-26-73 | ManualTimed-Recovery verwendet die bestehende ProgramRun-/Timed-Matrix: Preheating/Waiting/Reaching/Qualifying ohne erfundene Fortsetzung, Fermenting mit bestehender trusted-UTC-/`WaitingForTrustedTime`-Regel, Cooling/Completed nach bestehendem Vertrag, frische Sensor-/Safety-Revalidation und kein SAFE_BOOT-Aktorpfad |
 | SIM-26-58 | Ein Editor aus Katalogrevision A übergibt A an `beginPreview(A)`; die ConfigurationService prüft A unter demselben Lock wie die atomar erfasste Preview-Basis. Nach Änderung auf B liefert der Aufruf `StateChanged` ohne Lease oder Kandidatenmutation; nach erfolgreichem BeginPreview mutiert der Editor nur die an diese Basis gebundene Lease. Ein bloßer acquireRuntime-/Pre-Read-Vergleich ist nicht ausreichend |
 | SIM-26-59 | Die Kombination `ApplicationLifecycleState::ServiceRequired` plus verbliebene Recoverydaten projiziert deterministisch `Restricted`, nicht `Recovery`; bei `Ready` wird derselbe Recoverydatensatz als `Recovery` projiziert |
 | SIM-26-60 | Regression der gemergten Baseline: `UnsupportedAppDetail` und jede andere bridge-eigene Ablehnung ohne owning Mutation werden als `DecisionOnly` projiziert; `makeResult()` liefert dafür keinen `OwningOutcome` und es gibt keinen dritten Phasenwert; #26 ändert diesen Pfad nicht |
@@ -1598,6 +1754,13 @@ betroffenen bestehenden Tests hinzu, insbesondere:
 - test_process_state_machine;
 - test_configuration_documents und test_configuration_service;
 - test_run_persistence_coordinator;
+- test_issue144_run_identity, test_run_snapshots und
+  test_run_checkpoint_codec als direkte #152-Contract-Regressionen für
+  Application-Identity, unveränderliche ManualTimed-Quelle und Schema 5;
+- der vorhandene ManualTimed-Recoveryfall in
+  test_run_persistence_coordinator. Diese #152-Nachweise bleiben bestehende
+  Owner-/Vertragsbelege; #26 ergänzt nur den UI-Consumerpfad und übernimmt
+  keine #152-Test- oder Persistence-Ownership;
 - test_boot_classification und test_actuation_interlock.
 
 Zusätzliche gezielte Prüfungen nach docs/CI_AND_QUALITY_GATES.md:
@@ -1647,11 +1810,14 @@ Issue-spezifische technische Grenzen:
    Backlightentscheidung wird in #26 eingeführt.
 3. Kein normaler Auth-/Credential-Backend und kein zweiter
    Application-/Persistence-/Safety-/Recoverypfad wird in #26 eingeführt.
-4. Der manuelle Zeit-/Temperaturlauf bleibt bis zum verifizierten owning
-   Vertrag aus Issue #152 eine reale R1-Abhängigkeit und in #26
-   `OWNER_CONTRACT_MISSING`/Unavailable; `DEFER_FROM_R1` ist keine
-   Builderoption. Die fehlenden SAFE_BOOT-UI-Aufrufe bleiben
-   `OWNER_PATH_MISSING`/Unavailable.
+4. Der manuelle Zeit-/Temperaturlauf ist über den verifizierten und gemergten
+   Vertrag aus Issue #152 / PR #153 verfügbar. #26 konsumiert
+   `ManualTimedRunValues`, `prepareStartManualTimed()`, den
+   `ProgramStartRequest`-/`decideProgramStart()`-/`persistFreshStartCommand()`-
+   Pfad sowie Schema-5-/Recoveryregeln und baut keinen Ersatzvertrag.
+   SAFE_BOOT-Ziele bleiben den bestehenden Ownern #57, #31, #89 und #28
+   zugeordnet; nicht exponierte Aufrufe werden generisch `Unavailable`
+   dargestellt, ohne neue Ownership oder Implementation dieser Issues.
 5. Die bestehenden Application-, ConfigurationService-, Recovery- und
    Safetyowner bleiben die einzigen Ownergrenzen. Zulässig sind nur die in
    diesem Plan ausdrücklich benannten minimalen Erweiterungen von
@@ -1668,91 +1834,87 @@ AGENT-/Workflow-/Quality-Gate-Dokumenten.
 
 ## 16. Planprovenienz und PR-Referenzen
 
-Die bisherige PR-eigene Planprovenienz endete mit dem bisherigen Plan-/Review-
-HEAD `5f74ec7e42b65e928ac1150648d3b90737d59563`; dieser hatte zuvor den
-Review-Basisstand `aea6acb2e51147c6452d728a5a45840236ab1fdf`.
-Danach wurde der PR-Branch
-mit dem vorgegebenen `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8`
-synchronisiert; der nicht historienverändernde Main-Sync-/Konfliktauflösungs-
-Merge ist `830b6410b4ca6f4776d89981acf337e2b4706314`. Diese Fassung ist die
-darauffolgende reine Plan-/Provenienzrevision:
+Die bisherige vollständige #26-Planrevision war
+`c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0`. Sie wird durch diese neue,
+vollständige Revision ersetzt, weil PR #153 den owning #152-Vertrag nach dem
+bisherigen Plan-Stand in `main` eingebracht hat. Die ältere Planhistorie bleibt
+als Historie nachvollziehbar, ist aber für die Umsetzung nicht maßgeblich.
 
-1. Roadmap-Sync-Commit 28a35b610020513460690d4b05e90bdec88e81d8;
-2. ursprünglicher vollständiger Plan-Commit
-   c57be99bdce9d55ebb65b4c4c06e5210e84b7ed9;
-3. vorige F1/F2-Planrevision
-   2fbe85f41c2461575331c4c3afed73a447302d43;
-4. vorherige F1-F10-Planrevision d8a0a70983a6641e1edf27be08d655572164d995d;
-5. die vorherige F1-F10-Restkorrektur
-   dd64d92745ed7ad1b0e744a0e02e4e5b09cec3b9;
-6. die vorherige F1-F6-Letztkorrektur
-   3de1d86180413896294f09bcfddb447df8c1e898;
-7. Roadmap-Synchronisierung für den konkreten Pflichtvorgänger #144
-   7bd0b6fe7ac7fc0f11505d1b1cd3b38d9f1fb714;
-8. die vorherige verbraucherorientierte Issue-#144-Vertragskorrektur
-   055617653b8692b7ff7dba3dce7d9659fd20fbf4;
-9. die vorherige Revisionskennungs-Korrektur
-   f99354edee8448768c1734d6df86d18c17a16a98;
-10. der Review-HEAD und vorherige Plan-Commit
-    170a3bd04f9193912201bdbdf8a5b38af1d395e9;
-11. der vollständig geprüfte vorherige Plan-/Review-HEAD
-    36891dfc28d22bc0ca3fb0e8a19505ad69986917;
-12. der bisherige vollständige Plan-/Review-HEAD
-    `aea6acb2e51147c6452d728a5a45840236ab1fdf`;
-13. der Main-Sync-/Konfliktauflösungs-Merge
-    `830b6410b4ca6f4776d89981acf337e2b4706314` mit
-    `main@0b8b4cc1673f40296a510fdc0d79440c616ffeb8` als Merge-Basis;
-14. die reine Plan-/Provenienzrevision `5f74ec7e42b65e928ac1150648d3b90737d59563`;
-15. diese Planreview-Blocker-Korrektur mit exakter SHA nach dem Commit.
+PR #143 wurde regulär und ohne Rebase oder Force-Push mit dem aktuellen
+`origin/main@5d838f43f3b32ef8d49d29ae77776d3e86266575` synchronisiert. Der
+Synchronisationsmerge ist
+`e65696b9d5457f221a08cefc1b1ccc37402ecf55`; ausschließlich die kollidierende
+Roadmap-Provenienz wurde aus dem kanonischen aktuellen Repositorystand
+aufgelöst. Die Synchronisierung enthält keine #26-Produktionsimplementation.
 
-Issue #25 ist live CLOSED und liefert weiterhin den gemergten #25-Vertrag als
-Basis. Issue #144 / PR #147 sind live abgeschlossen und gemergt; für die
-Planprovenienz von Draft-PR #143 gelten die folgenden issue-spezifischen
-Referenzen:
+PR #153 ist der gemergte fachliche Vorgänger für den manuellen
+Zeit-/Temperaturlauf: Source-HEAD
+`00b6fd9444f38108253961718f40adab2836c7ad`, Merge-Commit
+`5d838f43f3b32ef8d49d29ae77776d3e86266575`. Issue #152 ist deshalb fachlich
+erledigt, bleibt aber live `OPEN`; ausschließlich der Owner muss den Issue-
+Abschluss noch durchführen. Das blockiert den #26-Consumer nicht.
+
+Issue #25 / PR #142 und Issue #144 / PR #147 sind ebenfalls abgeschlossen und
+gemergt. #26 konsumiert den #144-Run-Identity-/Provenienzvertrag und den
+#152-ManualTimed-Vertrag, ohne diese Ownergrenzen zu duplizieren. Die aktuelle
+Planrevision ist auf den exakten Merge-HEAD der aktuellen `main` ausgerichtet:
 
     BASE_BRANCH=main
-    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
-    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
+    BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55
+    ROADMAP_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55
     PLAN_PATH=docs/tasks/issue-26-local-touch-shell-plan.md
-    SUPERSEDES_PLAN_COMMIT=5f74ec7e42b65e928ac1150648d3b90737d59563
+    PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION
+    SUPERSEDES_PLAN_COMMIT=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0
     MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152
+    MANUAL_TIME_TEMPERATURE_OWNER_PR=153
+    MANUAL_TIME_TEMPERATURE_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad
+    MANUAL_TIME_TEMPERATURE_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING
+    PR153_GITHUB_STATE=MERGED
     RUN_IDENTITY_PREDECESSOR_ISSUE=144
     RUN_IDENTITY_PREDECESSOR_PR=147
     RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
     RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
     ISSUE144_GITHUB_STATE=CLOSED
     PR147_GITHUB_STATE=MERGED
-    PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
-    PR_HEAD=<exakte SHA dieses Plan-Commits>
+    BLOCKED_BY_ISSUE144=NO
+    BLOCKED_BY_ISSUE152=NO_CONTRACT_MERGED
+    PLAN_COMMIT=THIS_COMMIT
+    PR_HEAD=THIS_COMMIT
     PLAN_PROVENANCE_SYNC=COMPLETED
     IMPLEMENTATION=NOT_STARTED
     OWNER_PLAN_APPROVAL_REQUIRED=YES
     ACTUATOR_RELEASE=NO
 
-Der aktuelle PR-HEAD und der aktuelle Plan-Commit werden nach dem Push mit
-ihren exakten SHAs in der PR-Provenienz und im gemäß
-docs/AGENT_WORKFLOW.md geführten Handover referenziert:
+Nach dem Plan-Commit werden dessen exakte SHA und der dadurch aktualisierte
+PR-HEAD in der PR-Provenienz sowie im einzigen aktuellen, gemäß
+docs/AGENT_WORKFLOW.md geführten Handover eingetragen. Der Handover hält
+zusätzlich fest:
 
     ISSUE=26
     PR=143_DRAFT
     BRANCH=feature/issue-26-local-touch-shell
-    HEAD=<exakte PR-HEAD-SHA nach Planpush>
+    HEAD=<exakte PR-HEAD-SHA nach allen autorisierten Plan-/Provenienz-Commits>
     BASE_BRANCH=main
-    BASE_SHA=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
-    ROADMAP_COMMIT=830b6410b4ca6f4776d89981acf337e2b4706314
-    SUPERSEDES_PLAN_COMMIT=5f74ec7e42b65e928ac1150648d3b90737d59563
-    RUN_IDENTITY_PREDECESSOR_ISSUE=144
-    RUN_IDENTITY_PREDECESSOR_PR=147
-    RUN_IDENTITY_PREDECESSOR_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb
-    RUN_IDENTITY_PREDECESSOR_MERGE_HEAD=0b8b4cc1673f40296a510fdc0d79440c616ffeb8
-    ISSUE144_GITHUB_STATE=CLOSED
-    PR147_GITHUB_STATE=MERGED
-    PLAN_COMMIT=<exakte SHA dieses Plan-Commits>
+    BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55
+    ROADMAP_COMMIT=<exakter Roadmap-Anker nach Plan-Commit>
+    PLAN_COMMIT=<exakte SHA dieses vollständigen Plan-Commits>
+    SUPERSEDES_PLAN_COMMIT=c9da9aa84bb66d4c5aacbfbc76a788c54e971ab0
+    PR153_GITHUB_STATE=MERGED
+    PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad
+    PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575
+    ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING
+    BLOCKED_BY_ISSUE144=NO
+    BLOCKED_BY_ISSUE152=NO_CONTRACT_MERGED
+    CONSUMER_OWNER_CLOSURE_CHECK=PASS
+    SAFE_BOOT_OWNER_CLOSURE_CHECK=PASS
     PLAN_PROVENANCE_SYNC=COMPLETED
     IMPLEMENTATION=NOT_STARTED
     TESTS=NOT_RUN_PLANNING_ONLY
     ACTUATOR_RELEASE=NO
-    OPEN_GATE=OWNER_APPROVAL_OF_EXACT_PLAN_COMMIT
+    OPEN_GATE=INDEPENDENT_FULL_PLAN_REVIEW_AND_OWNER_APPROVAL_OF_EXACT_PLAN_COMMIT
 
 Die allgemeine Handover-Formatierung, Draft-/Ready-/Merge- und
 Issue-Schluss-Governance sowie die übrigen Workflowregeln bleiben ausschließlich
@@ -1815,10 +1977,10 @@ gepflegt.
 - Der normale PIN-Service ist ausschließlich an
   Ready + validiertes ProcessState::Standby + owning Servicefreigabe gebunden;
   SAFE_BOOT und FallbackSelectionRequired bleiben getrennte actor-free Pfade.
-- ManualHolding ist bedienbar; der manuelle Zeit-/Temperaturlauf bleibt bis
-  Issue #152 als `OWNER_CONTRACT_MISSING` unavailable, ist eine reale
-  R1-Abhängigkeit und wird nicht als R1-Funktion gezählt oder aus R1
-  verschoben.
+- ManualHolding und ManualTimed sind beide bedienbar, aber über getrennte
+  bestehende Fachpfade. ManualTimed konsumiert den gemergten #152-/PR-#153-
+  Vertrag als `ProgramSourceKind::ManualTimed` / `ProcessKind::Timed` ohne
+  Katalogrevision; ManualHolding bleibt `ProcessKind::ManualHolding`.
 - lokale Servicelease ist 10 Minuten inaktivitätsbegrenzt, ohne absolute
   R1-Maximaldauer, und wird bei Logout, Restart und Ownerinvalidierung
   verworfen; Websession bleibt getrennt.
