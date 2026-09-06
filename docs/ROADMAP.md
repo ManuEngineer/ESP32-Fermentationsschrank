@@ -29,7 +29,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=IMPLEMENTATION_CORRECTED_REVIEW_PENDING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO`; `ISSUE152_CONTRACT_STATUS=MERGED`; `ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING`; `PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION`; `PLAN_COMMIT=09b108a93fd0c7196794861ff391415c1d8f2332`; `PLAN_APPROVED=YES`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PR143_MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55`; `IMPLEMENTATION_COMMIT=1d8e7d1d9d537c00093de27fe5e45969b6ec8c4d`; `EVIDENCE_COMMIT=1d8e7d1d9d537c00093de27fe5e45969b6ec8c4d`; `LAST_BLOCKER=PROGRAM_DELETION_CORRECTED`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `SIM_26_TRACE_INDEX=73_IDS_MAPPED`; `TARGETED_NATIVE=PASS_63_OF_63`; `FULL_NATIVE=NOT_RUN_ON_CURRENT_HEAD`; `PREVIOUS_FULL_NATIVE=PASS_1168_OF_1168_AT_000ad4d65c630c15a4004ad6456f738c70e7e3fc`; `ESP_IDF=NOT_RUN`; `HARDWARE=NOT_RUN`; `IMPLEMENTATION=CORRECTED_REVIEW_PENDING`; `OPEN_BLOCKERS=NOT_YET_INDEPENDENTLY_REVIEWED`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware sowie späteren #31/#28/#89-Ownerpfaden getrennt. | Unabhängigen vollständigen Implementierungsreview auf dem exakten PR-HEAD durchführen; danach Ownerentscheidung für weitere Gate-/Pre-Ready-Schritte |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=IMPLEMENTATION_CORRECTED_REVIEW_PENDING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO`; `ISSUE152_CONTRACT_STATUS=MERGED`; `ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING`; `PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION`; `PLAN_COMMIT=09b108a93fd0c7196794861ff391415c1d8f2332`; `PLAN_APPROVED=YES`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PR143_MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55`; `IMPLEMENTATION_COMMIT=632cfae71f088f45229b61734dda6aafb7409771`; `EVIDENCE_COMMIT=632cfae71f088f45229b61734dda6aafb7409771`; `LAST_BLOCKER=DELETE_CONFIRMATION_POSITION_AND_FACTORY_RESET_WARNING_CORRECTED`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `SIM_26_TRACE_INDEX=73_IDS_MAPPED`; `TARGETED_NATIVE=PASS_63_OF_63`; `FULL_NATIVE=NOT_RUN_ON_CURRENT_HEAD`; `PREVIOUS_FULL_NATIVE=PASS_1168_OF_1168_AT_000ad4d65c630c15a4004ad6456f738c70e7e3fc`; `ESP_IDF=NOT_RUN`; `HARDWARE=NOT_RUN`; `IMPLEMENTATION=CORRECTED_REVIEW_PENDING`; `OPEN_BLOCKERS=NOT_YET_INDEPENDENTLY_REVIEWED`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware sowie späteren #31/#28/#89-Ownerpfaden getrennt. | Unabhängigen vollständigen Implementierungsreview auf dem exakten PR-HEAD durchführen; danach Ownerentscheidung für weitere Gate-/Pre-Ready-Schritte |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -54,8 +54,9 @@ mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
 ist nach dem Merge von PR #153 die korrigierte Umsetzung des freigegebenen
 Plans für Issue #26 auf dem exakten `main`-Merge-HEAD. Issue #26 ist von den
 gemergten #144- und #152-Verträgen nicht mehr blockiert; der letzte
-Programmlöschungs-Blocker ist korrigiert: beide Bestätigungsstufen sind
-beobachtbar, der Programmname ist gebunden und die Nutzungsevidenz kommt aus
+Programmlöschungs-Blocker ist korrigiert: die beiden Bestätigungsstufen liegen
+auf getrennten Slots, der Standardprogramm-Werksreset-Hinweis wird semantisch
+projiziert, der Programmname ist gebunden und die Nutzungsevidenz kommt aus
 dem kanonischen Runzustand. Die betroffenen Native-Regressionen sind PASS und
 die vollständige Native-Suite ist auf diesem neuen HEAD noch nicht erneut
 ausgeführt; der Scope wartet auf unabhängigen Implementierungsreview. PR #153 ist der gemergte
@@ -69,9 +70,9 @@ bleibt bis zur Owner-Schliessaktion offen.
 `ISSUE26_STATUS=IMPLEMENTATION_CORRECTED_REVIEW_PENDING`,
 `BLOCKED_BY_ISSUE144=NO`, `BLOCKED_BY_ISSUE152=NO`,
 `ISSUE152_CONTRACT_STATUS=MERGED`, `PLAN_APPROVED=YES`,
-`IMPLEMENTATION_COMMIT=1d8e7d1d9d537c00093de27fe5e45969b6ec8c4d`,
-`EVIDENCE_COMMIT=1d8e7d1d9d537c00093de27fe5e45969b6ec8c4d`,
-`LAST_BLOCKER=PROGRAM_DELETION_CORRECTED`,
+`IMPLEMENTATION_COMMIT=632cfae71f088f45229b61734dda6aafb7409771`,
+`EVIDENCE_COMMIT=632cfae71f088f45229b61734dda6aafb7409771`,
+`LAST_BLOCKER=DELETE_CONFIRMATION_POSITION_AND_FACTORY_RESET_WARNING_CORRECTED`,
 `IMPLEMENTATION=CORRECTED_REVIEW_PENDING`,
 `OPEN_BLOCKERS=NOT_YET_INDEPENDENTLY_REVIEWED` und `ACTUATOR_RELEASE=NO`
 gelten ab dem neuen Plan-/Roadmap-Stand.
