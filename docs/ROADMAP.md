@@ -29,7 +29,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=IMPLEMENTATION_COMPLETE_REVIEW_PENDING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO`; `ISSUE152_CONTRACT_STATUS=MERGED`; `PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION`; `PLAN_COMMIT=09b108a93fd0c7196794861ff391415c1d8f2332`; `PLAN_APPROVED=YES`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PR143_MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55`; `IMPLEMENTATION_COMMIT=2a97e6c719cdb2199e0693381eab47e6cd5d7c13`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `TARGETED_NATIVE=PASS`; `ESP_IDF=NOT_RUN`; `HARDWARE=NOT_RUN`; `IMPLEMENTATION=COMPLETE`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Unabhängigen vollständigen Implementierungsreview durchführen; danach Ownerentscheidung für weitere Gate-/Pre-Ready-Schritte |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=IMPLEMENTATION_CORRECTED_REVIEW_PENDING`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO`; `ISSUE152_CONTRACT_STATUS=MERGED`; `ISSUE152_GITHUB_STATE=OPEN_OWNER_CLOSE_PENDING`; `PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION`; `PLAN_COMMIT=09b108a93fd0c7196794861ff391415c1d8f2332`; `PLAN_APPROVED=YES`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PR143_MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55`; `IMPLEMENTATION_COMMIT=026224e`; `EVIDENCE_COMMIT=026224e`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `SIM_26_TRACE_INDEX=73_IDS_MAPPED`; `TARGETED_NATIVE=PASS`; `FULL_NATIVE=PASS_1168_OF_1168`; `ESP_IDF=NOT_RUN`; `HARDWARE=NOT_RUN`; `IMPLEMENTATION=CORRECTED_REVIEW_PENDING`; `OPEN_BLOCKERS=NOT_YET_INDEPENDENTLY_REVIEWED`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware sowie späteren #31/#28/#89-Ownerpfaden getrennt. | Unabhängigen vollständigen Implementierungsreview auf dem exakten PR-HEAD durchführen; danach Ownerentscheidung für weitere Gate-/Pre-Ready-Schritte |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -51,10 +51,12 @@ Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
 Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
 mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
-ist nach dem Merge von PR #153 die vollständige neue Planrevision für Issue
-#26 auf dem exakten `main`-Merge-HEAD. Issue #26 ist von den gemergten #144-
-und #152-Verträgen nicht mehr blockiert; der freigegebene Plan ist umgesetzt
-und wartet auf unabhängigen Implementierungsreview. PR #153 ist der gemergte
+ist nach dem Merge von PR #153 die korrigierte Umsetzung des freigegebenen
+Plans für Issue #26 auf dem exakten `main`-Merge-HEAD. Issue #26 ist von den
+gemergten #144- und #152-Verträgen nicht mehr blockiert; die Implementierung
+korrigiert die zuvor offenen Consumerpfade, ist mit direkter SIM-26-Trace-
+Matrix und vollständigem Native-Lauf belegt und wartet auf unabhängigen
+Implementierungsreview. PR #153 ist der gemergte
 fachliche Vorgänger für den manuellen Zeit-/Temperaturlauf und Issue #152
 bleibt bis zur Owner-Schliessaktion offen.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
@@ -62,9 +64,13 @@ bleibt bis zur Owner-Schliessaktion offen.
 `ISSUE152_STATUS=OPEN_OWNER_CLOSE_PENDING`, `PR153=MERGED`,
 `PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`,
 `PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`,
-`ISSUE26_STATUS=IMPLEMENTATION_COMPLETE_REVIEW_PENDING`, `BLOCKED_BY_ISSUE144=NO`,
-`BLOCKED_BY_ISSUE152=NO`, `ISSUE152_CONTRACT_STATUS=MERGED`, `PLAN_APPROVED=YES`, `IMPLEMENTATION=COMPLETE` und
-`ACTUATOR_RELEASE=NO` gelten ab dem neuen Plan-/Roadmap-Stand.
+`ISSUE26_STATUS=IMPLEMENTATION_CORRECTED_REVIEW_PENDING`,
+`BLOCKED_BY_ISSUE144=NO`, `BLOCKED_BY_ISSUE152=NO`,
+`ISSUE152_CONTRACT_STATUS=MERGED`, `PLAN_APPROVED=YES`,
+`IMPLEMENTATION_COMMIT=026224e`, `EVIDENCE_COMMIT=026224e`,
+`IMPLEMENTATION=CORRECTED_REVIEW_PENDING`,
+`OPEN_BLOCKERS=NOT_YET_INDEPENDENTLY_REVIEWED` und `ACTUATOR_RELEASE=NO`
+gelten ab dem neuen Plan-/Roadmap-Stand.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless
