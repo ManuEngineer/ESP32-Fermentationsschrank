@@ -494,7 +494,7 @@ void test_sim_26_shell_locale_and_service_boundaries() {
     device_platform_test_support::SimulatedDeviceShell shell;
     TEST_ASSERT_TRUE(shell.frame().valid());
     const auto packs = makeFermentationUiTextPacks();
-    const std::array<const char*, 53U> keys{"standby",
+    const std::array<const char*, 54U> keys{"standby",
                                             "running",
                                             "waiting",
                                             "completed",
@@ -546,7 +546,8 @@ void test_sim_26_shell_locale_and_service_boundaries() {
                                             "fault-reset",
                                             "program-not-installed",
                                             "program-disabled",
-                                            "program-invalid"};
+                                            "program-invalid",
+                                            "factory-reset-required"};
     for (const auto& pack : packs) {
         for (const auto* value : keys) {
             const auto found =
@@ -674,6 +675,14 @@ void test_sim_26_program_editor_actions_are_real_requests() {
         TEST_ASSERT_TRUE(first.confirmationProgramName.has_value());
         TEST_ASSERT_EQUAL_STRING("Wasserkefir copy",
                                  first.confirmationProgramName->c_str());
+        TEST_ASSERT_FALSE(first.confirmationWarning.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationUiWorkspaceSlotAction::
+                                 NavigateProgramDeleteFinalConfirmation),
+            static_cast<int>(first.slotActions[1]));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateBack),
+            static_cast<int>(first.slotActions[2]));
     };
 
     enterDeleteConfirmation();
@@ -698,6 +707,13 @@ void test_sim_26_program_editor_actions_are_real_requests() {
     TEST_ASSERT_TRUE(second.confirmationProgramName.has_value());
     TEST_ASSERT_EQUAL_STRING("Wasserkefir copy",
                              second.confirmationProgramName->c_str());
+    TEST_ASSERT_FALSE(second.confirmationWarning.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::DeleteProgram),
+        static_cast<int>(second.slotActions[3]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(second.slotActions[2]));
 
     const auto secondCancel = workspace.press(
         snapshot, {device_platform::DeviceUiTargetKind::Cancel, 0U}, &catalog);
@@ -801,6 +817,27 @@ void test_sim_26_standard_delete_uses_two_confirmations() {
     TEST_ASSERT_TRUE(first.confirmationProgramName.has_value());
     TEST_ASSERT_EQUAL_STRING(standardName.c_str(),
                              first.confirmationProgramName->c_str());
+    TEST_ASSERT_TRUE(first.confirmationWarning.has_value());
+    TEST_ASSERT_EQUAL_STRING("factory-reset-required",
+                             first.confirmationWarning->value.c_str());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::
+                             NavigateProgramDeleteFinalConfirmation),
+        static_cast<int>(first.slotActions[1]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateBack),
+        static_cast<int>(first.slotActions[2]));
+    const auto repeatedDeleteTouch =
+        workspace.press(snapshot, bottom(2), &catalog);
+    TEST_ASSERT_TRUE(repeatedDeleteTouch.navigated);
+    TEST_ASSERT_FALSE(repeatedDeleteTouch.programEdit.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramEdit),
+                          static_cast<int>(workspace.page()));
+    const auto firstReopened = workspace.press(snapshot, bottom(2), &catalog);
+    TEST_ASSERT_TRUE(firstReopened.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiPage::ProgramDeleteConfirmation),
+        static_cast<int>(workspace.page()));
 
     const auto firstConfirmed = workspace.press(
         snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);
@@ -813,6 +850,15 @@ void test_sim_26_standard_delete_uses_two_confirmations() {
     TEST_ASSERT_TRUE(second.confirmationProgramName.has_value());
     TEST_ASSERT_EQUAL_STRING(standardName.c_str(),
                              second.confirmationProgramName->c_str());
+    TEST_ASSERT_TRUE(second.confirmationWarning.has_value());
+    TEST_ASSERT_EQUAL_STRING("factory-reset-required",
+                             second.confirmationWarning->value.c_str());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::UninstallProgram),
+        static_cast<int>(second.slotActions[3]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(second.slotActions[2]));
 
     const auto final = workspace.press(
         snapshot, {device_platform::DeviceUiTargetKind::Confirm, 0U}, &catalog);

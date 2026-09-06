@@ -122,6 +122,7 @@ struct FermentationUiWorkspaceView {
     std::array<FermentationUiWorkspaceSlotAction, 4U> slotActions{};
     std::vector<FermentationUiProgramListEntry> programList;
     std::optional<std::string> confirmationProgramName;
+    std::optional<device_platform::TextKey> confirmationWarning;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
     // for the explicitly selected action slot.

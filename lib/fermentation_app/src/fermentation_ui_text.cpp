@@ -19,7 +19,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 53U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 54U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -73,6 +73,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"program-not-installed", "Program not installed"},
         std::pair{"program-disabled", "Program disabled"},
         std::pair{"program-invalid", "Program invalid"},
+        std::pair{"factory-reset-required", "Restore only via factory reset"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -82,7 +83,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 53U> de{
+            const std::array<std::pair<const char*, const char*>, 54U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -135,7 +136,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"fault-reset", "Fehlerreset"},
                  {"program-not-installed", "Programm nicht installiert"},
                  {"program-disabled", "Programm deaktiviert"},
-                 {"program-invalid", "Programm ungueltig"}}};
+                 {"program-invalid", "Programm ungueltig"},
+                 {"factory-reset-required",
+                  "Wiederherstellung nur durch Werksreset"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -144,7 +147,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 53U> es{
+            const std::array<std::pair<const char*, const char*>, 54U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -197,7 +200,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"fault-reset", "Restablecer fallo"},
                  {"program-not-installed", "Programa no instalado"},
                  {"program-disabled", "Programa desactivado"},
-                 {"program-invalid", "Programa no valido"}}};
+                 {"program-invalid", "Programa no valido"},
+                 {"factory-reset-required",
+                  "Restaurar solo mediante restablecimiento de fabrica"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

@@ -528,27 +528,36 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     });
                 if (found != catalog->programs.end())
                     view.confirmationProgramName = found->program.name;
+                if (found != catalog->programs.end() &&
+                    found->program.builtIn &&
+                    found->program.factoryCatalogEntry)
+                    view.confirmationWarning = key("factory-reset-required");
             }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
-            setSlot(view, 1U, "cancel",
-                    FermentationUiWorkspaceSlotAction::NavigateBack);
             if (page_ == FermentationUiPage::ProgramDeleteConfirmation) {
-                setSlot(view, 2U, "confirm",
+                setSlot(view, 1U, "confirm",
                         FermentationUiWorkspaceSlotAction::
                             NavigateProgramDeleteFinalConfirmation,
                         selectedProgramId_.has_value());
+                setSlot(view, 2U, "cancel",
+                        FermentationUiWorkspaceSlotAction::NavigateBack);
             } else {
+                setSlot(view, 1U, "cancel",
+                        FermentationUiWorkspaceSlotAction::NavigateBack);
+                setSlot(view, 2U, "status",
+                        FermentationUiWorkspaceSlotAction::NavigateStatus);
                 setSlot(
-                    view, 2U, "delete",
+                    view, 3U, "delete",
                     programEditOperation_ ==
                             FermentationUiProgramEditOperation::Uninstall
                         ? FermentationUiWorkspaceSlotAction::UninstallProgram
                         : FermentationUiWorkspaceSlotAction::DeleteProgram,
                     selectedProgramId_.has_value());
             }
-            setSlot(view, 3U, "status",
-                    FermentationUiWorkspaceSlotAction::NavigateStatus);
+            if (page_ == FermentationUiPage::ProgramDeleteConfirmation)
+                setSlot(view, 3U, "status",
+                        FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
         case FermentationUiPage::ManualModeSelection:
             view.title = key("manual");
@@ -1255,8 +1264,10 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                     confirmSlot = 3U;
                     break;
                 case FermentationUiPage::ProgramDeleteConfirmation:
+                    confirmSlot = 1U;
+                    break;
                 case FermentationUiPage::ProgramDeleteFinalConfirmation:
-                    confirmSlot = 2U;
+                    confirmSlot = 3U;
                     break;
                 default:
                     break;
