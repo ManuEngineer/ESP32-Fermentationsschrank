@@ -42,8 +42,14 @@ unterstuetzen.
 Nur gezielte lokale Tests und Pruefungen fuer den tatsaechlich geaenderten
 Bereich. Bei geaenderten gemeinsamen Vertraegen gehoeren die direkt betroffenen
 Konsumententests zum gezielten Umfang. Nicht betroffene Profile und der
-vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt. Fuer Issue #154
-gehoert dazu der Builder-Static-Analysis-Self-Check des bestehenden Runners.
+vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt. Nach einer
+tatsaechlichen Implementation und vor jeder normalen Uebergabe an den
+Independent Review fuehrt der Builder den Builder-Static-Analysis-Self-Check
+des bestehenden Runners aus. Im Plan-only-Stand ist dieser
+Implementation-Self-Check noch nicht erforderlich. Der Runner entscheidet fuer
+den konkreten PR selbst, ob clang-format und/oder clang-tidy jeweils
+`REQUIRED` oder `NOT_REQUIRED` sind;
+diese Entscheidung wird nicht manuell durch den Builder vorselektiert.
 
 ### Builder-Static-Analysis-Self-Check
 
