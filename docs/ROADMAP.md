@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-05
+Stand: 2026-09-06
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -29,7 +29,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO_CONTRACT_MERGED`; `PLAN_REVIEW_BLOCKERS_CORRECTED=SUPERSEDED_BY_NEW_REVISION`; `PLAN_COMMIT=NEW_REVISION_PENDING`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Vollständige neue #26-Planrevision auf exaktem `main`-Merge-HEAD unabhängig reviewen und ownerfreigeben; erst danach die #26-Implementation beginnen |
+| 1 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `ISSUE26_STATUS=PLANNING_READY_UNBLOCKED`; `ISSUE26_STARTED=YES`; `BLOCKED_BY_ISSUE144=NO`; `BLOCKED_BY_ISSUE152=NO_CONTRACT_MERGED`; `PLAN_REVISION=POST_PR153_MAIN_SYNC_AND_ISSUE152_CONSUMER_CONSOLIDATION`; `PLAN_COMMIT=6016fcd252693b51daf5bf271d2a1a2999ac297e`; `BASE_SHA=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PR143_MAIN_SYNC_COMMIT=e65696b9d5457f221a08cefc1b1ccc37402ecf55`; `MANUAL_TIME_TEMPERATURE_OWNER_ISSUE=152`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `ACTUATOR_RELEASE=NO`; baut auf den gemergten #25-, #144- und #152-Verträgen auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Vollständige neue #26-Planrevision auf exaktem `main`-Merge-HEAD unabhängig reviewen und ownerfreigeben; erst danach die #26-Implementation beginnen |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #26 und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
