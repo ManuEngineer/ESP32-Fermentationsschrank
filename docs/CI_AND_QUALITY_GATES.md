@@ -42,7 +42,44 @@ unterstuetzen.
 Nur gezielte lokale Tests und Pruefungen fuer den tatsaechlich geaenderten
 Bereich. Bei geaenderten gemeinsamen Vertraegen gehoeren die direkt betroffenen
 Konsumententests zum gezielten Umfang. Nicht betroffene Profile und der
-vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt.
+vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt. Nach einer
+tatsaechlichen Implementation und vor jeder normalen Uebergabe an den
+Independent Review fuehrt der Builder den Builder-Static-Analysis-Self-Check
+des bestehenden Runners aus. Im Plan-only-Stand ist dieser
+Implementation-Self-Check noch nicht erforderlich. Der Runner entscheidet fuer
+den konkreten PR selbst, ob clang-format und/oder clang-tidy jeweils
+`REQUIRED` oder `NOT_REQUIRED` sind;
+diese Entscheidung wird nicht manuell durch den Builder vorselektiert.
+
+### Builder-Static-Analysis-Self-Check
+
+Vor der Uebergabe an den Independent Review fuehrt der Builder auf dem
+Implementierungs-`HEAD` den gezielten Self-Check aus:
+
+```bash
+export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
+bash scripts/run_pre_ready_gates.sh self-check
+```
+
+Der Runner verwendet ausschliesslich die vorhandene lokale Referenz
+`refs/remotes/origin/main` und leitet daraus mit `git merge-base HEAD
+refs/remotes/origin/main` die Basis ab. Die Referenz muss vorhanden und als
+Commit verifizierbar sein; ein frei gesetzter `STATIC_ANALYSIS_BASE_SHA` wird
+fail-closed abgelehnt. Dadurch kann ein spaeterer PR-Commit die frueheren
+PR-Aenderungen nicht aus dem Self-Check-Scope entfernen.
+
+clang-format-18 prueft frueh nur die geaenderten C/C++-Dateien. Sobald eine
+relevante C/C++-Aenderung im hardwareunabhaengigen nativen Produktionskern oder
+seinen Headern erkannt wird, erzeugt der Runner die native
+Kompilierungsdatenbank und fuehrt die vollstaendige bestehende kanonische
+clang-tidy-Dateiliste aus. Include-Abhaengigkeiten und
+Translation-Unit-Zuordnungen werden nicht dupliziert. Der Self-Check fuehrt
+keine vollstaendige Native-Suite, ESP-IDF-Profile oder esp-clang-Gesamtausfuehrung
+aus und ist kein `PRE_READY_LOCAL_GATES=PASS`.
+
+Der eigene Ergebnisstatus lautet `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`,
+`FAILED` oder `BLOCKED`. Ein nicht ausgefuehrter vollstaendiger Pre-Ready-Teil
+bleibt `NOT_RUN`.
 
 ### Vollstaendiger lokaler Lauf
 

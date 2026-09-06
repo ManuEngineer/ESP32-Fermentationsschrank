@@ -147,10 +147,22 @@ seinen Aufgaben gehören Planerstellung, Implementierung, gezielte Tests,
 notwendige Diagnose, CI- und Evidence-Aufbereitung sowie die Aktualisierung
 des PR.
 
-Vor der Übergabe führt der Builder einen angemessenen Implementation
-Self-Check durch. Dieser Self-Check prüft die Umsetzung gegen den freigegebenen
-Plan und die unmittelbar betroffenen Nachweise, ist aber kein unabhängiger Full
-Review. Danach hält der Builder für den externen Owner-/Reviewer-Schritt an.
+Nach einer tatsächlichen Implementation und vor jeder normalen Übergabe an den
+Independent Review führt der Builder als Bestandteil seines Implementation
+Self-Checks auf dem Implementierungs-`HEAD` den versionierten Runner-Aufruf aus:
+
+```bash
+bash scripts/run_pre_ready_gates.sh self-check
+```
+
+Im Plan-only-Stand wird kein Implementation-Self-Check ausgeführt. Der Runner
+entscheidet für den konkreten PR selbst, ob clang-format und/oder clang-tidy
+`REQUIRED` oder `NOT_REQUIRED` sind; der Builder führt dafür keine manuelle
+Tidy-Relevanz-Vorselektion ein. Der Self-Check bleibt ein gezielter
+Draft-Nachweis gegen den freigegebenen Plan und die unmittelbar betroffenen
+Nachweise. Er ersetzt weder gezielte Fach- oder Konsumententests noch den
+unabhängigen Full Review oder den vollständigen Pre-Ready-Lauf. Danach hält der
+Builder für den externen Owner-/Reviewer-Schritt an.
 
 Der formale Independent Review erfolgt grundsätzlich unabhängig vom Builder.
 Der aktuelle Owner-Reviewkanal liegt ausserhalb von ChatGPT Work/Codex; aktuell
@@ -251,7 +263,10 @@ Problemumfang; danach gilt wieder der Standard-Builder.
 
 Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
 Der Independent Review bewertet Scope, Implementation und diese gezielten
-Nachweise; der vollstaendige Pre-Ready-Lauf ist dafuer nicht erforderlich.
+Nachweise. Der Builder-Static-Analysis-Self-Check ist ein solcher gezielter
+Nachweis; er ersetzt weder den unabhaengigen Full Review noch den
+vollstaendigen Pre-Ready-Lauf und verschiebt keine vollständige Native-Suite,
+ESP-IDF-Profile oder esp-clang-Gesamtausfuehrung in die Draft-Phase.
 Zeitpunkt, Voraussetzungen und Toolvertraege stehen in
 `CI_AND_QUALITY_GATES.md`; die vollstaendigen ausfuehrbaren Gatebefehle und
 die clang-tidy-Dateiliste stehen ausschliesslich im dort referenzierten
