@@ -6,11 +6,27 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 cd "$REPO_ROOT"
 
+readonly SELF_CHECK_BASE_REF=refs/remotes/origin/main
+SELF_CHECK_MERGE_BASE=
+
+readonly CLANG_TIDY_FILES=(
+    include/app_config.hpp
+    lib/device_platform/src/device_platform.cpp
+    lib/device_platform/src/virtual_time_source.cpp
+    lib/fermentation_app/src/fermentation_application.cpp
+    lib/fermentation_app/src/process_state_machine.cpp
+    lib/fermentation_app/src/program_model.cpp
+    lib/fermentation_app/src/run_commands.cpp
+    lib/fermentation_app/src/run_snapshot.cpp
+    lib/fermentation_app/src/standard_program_catalog.cpp
+    src/main.cpp
+)
+
 usage() {
-    printf 'Usage: %s host|esp\n' "${BASH_SOURCE[0]}" >&2
+    printf 'Usage: %s host|esp|self-check\n' "${BASH_SOURCE[0]}" >&2
 }
 
-if [[ $# -ne 1 || ( "$1" != "host" && "$1" != "esp" ) ]]; then
+if [[ $# -ne 1 || ( "$1" != "host" && "$1" != "esp" && "$1" != "self-check" ) ]]; then
     usage
     exit 2
 fi
@@ -83,17 +99,103 @@ verify_expected_esp_environment() {
 }
 
 run_clang_tidy() {
-    clang-tidy -p . \
-        include/app_config.hpp \
-        lib/device_platform/src/device_platform.cpp \
-        lib/device_platform/src/virtual_time_source.cpp \
-        lib/fermentation_app/src/fermentation_application.cpp \
-        lib/fermentation_app/src/process_state_machine.cpp \
-        lib/fermentation_app/src/program_model.cpp \
-        lib/fermentation_app/src/run_commands.cpp \
-        lib/fermentation_app/src/run_snapshot.cpp \
-        lib/fermentation_app/src/standard_program_catalog.cpp \
-        src/main.cpp
+    clang-tidy -p . "$@"
+}
+
+verify_self_check_base() {
+    if [[ -n "${STATIC_ANALYSIS_BASE_SHA:-}" ]]; then
+        printf 'FAILED: STATIC_ANALYSIS_BASE_SHA ist im Self-Check nicht zulaessig; verwendet wird %s mit dessen Merge-Base.\n' \
+            "$SELF_CHECK_BASE_REF" >&2
+        exit 1
+    fi
+
+    if ! git show-ref --verify --quiet "$SELF_CHECK_BASE_REF"; then
+        printf 'BLOCKED: erforderliche lokale Base-Referenz fehlt: %s\n' \
+            "$SELF_CHECK_BASE_REF" >&2
+        exit 1
+    fi
+
+    local base_ref_commit
+    if ! base_ref_commit=$(git rev-parse --verify "$SELF_CHECK_BASE_REF^{commit}"); then
+        printf 'FAILED: lokale Base-Referenz ist kein Commit: %s\n' \
+            "$SELF_CHECK_BASE_REF" >&2
+        exit 1
+    fi
+
+    if ! SELF_CHECK_MERGE_BASE=$(git merge-base HEAD "$SELF_CHECK_BASE_REF"); then
+        printf 'FAILED: Merge-Base zwischen HEAD und %s konnte nicht bestimmt werden.\n' \
+            "$SELF_CHECK_BASE_REF" >&2
+        exit 1
+    fi
+
+    if [[ -z "$SELF_CHECK_MERGE_BASE" ]] ||
+        ! git merge-base --is-ancestor "$SELF_CHECK_MERGE_BASE" HEAD ||
+        ! git merge-base --is-ancestor "$SELF_CHECK_MERGE_BASE" "$SELF_CHECK_BASE_REF"; then
+        printf 'FAILED: ungueltige Merge-Base fuer HEAD und %s.\n' \
+            "$SELF_CHECK_BASE_REF" >&2
+        exit 1
+    fi
+
+    printf 'STATIC_ANALYSIS_BASE_REF=%s\n' "$SELF_CHECK_BASE_REF"
+    printf 'STATIC_ANALYSIS_BASE_REF_COMMIT=%s\n' "$base_ref_commit"
+    printf 'STATIC_ANALYSIS_MERGE_BASE=%s\n' "$SELF_CHECK_MERGE_BASE"
+}
+
+collect_changed_c_cpp_files() {
+    local scope=$1
+    local path
+    local changed_files=()
+
+    mapfile -t changed_files < <(
+        git diff --name-only --diff-filter=ACMRTUXB \
+            "$SELF_CHECK_MERGE_BASE...HEAD"
+    )
+
+    for path in "${changed_files[@]}"; do
+        [[ -f "$path" ]] || continue
+        case "$path" in
+            *.cpp|*.hpp|*.h) ;;
+            *) continue ;;
+        esac
+
+        if [[ "$scope" == "format" ]]; then
+            case "$path" in
+                src/*|include/*|lib/*|test/*|main/*) printf '%s\n' "$path" ;;
+            esac
+        else
+            case "$path" in
+                include/*|lib/device_platform/*|lib/fermentation_app/*|src/main.cpp)
+                    printf '%s\n' "$path"
+                    ;;
+            esac
+        fi
+    done
+}
+
+run_self_check() {
+    verify_self_check_base
+    verify_host_toolchain
+
+    local format_files=()
+    mapfile -t format_files < <(collect_changed_c_cpp_files format)
+    if ((${#format_files[@]} > 0)); then
+        clang-format --dry-run --Werror "${format_files[@]}"
+        printf 'CLANG_FORMAT=PASS\n'
+    else
+        printf 'CLANG_FORMAT=NOT_REQUIRED\n'
+    fi
+
+    local native_production_files=()
+    mapfile -t native_production_files < <(collect_changed_c_cpp_files native)
+    if ((${#native_production_files[@]} > 0)); then
+        pio run -e native -t compiledb
+        run_clang_tidy "${CLANG_TIDY_FILES[@]}"
+        printf 'CLANG_TIDY=PASS\n'
+    else
+        printf 'CLANG_TIDY=NOT_REQUIRED\n'
+    fi
+
+    printf 'BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS\n'
 }
 
 run_host_gates() {
@@ -109,7 +211,7 @@ run_host_gates() {
 
     pio test -e native
     pio run -e native -t compiledb
-    run_clang_tidy
+    run_clang_tidy "${CLANG_TIDY_FILES[@]}"
 
     python3 scripts/check_architecture_boundaries.py
     python3 scripts/check_secrets.py
@@ -134,10 +236,16 @@ run_esp_gates() {
     python3 scripts/run_esp_idf_static_analysis.py all
 }
 
-if [[ "$phase" == "host" ]]; then
-    run_host_gates
-    printf 'PRE_READY_HOST_GATES=PASS\n'
-else
-    run_esp_gates
-    printf 'PRE_READY_ESP_GATES=PASS\n'
-fi
+case "$phase" in
+    host)
+        run_host_gates
+        printf 'PRE_READY_HOST_GATES=PASS\n'
+        ;;
+    esp)
+        run_esp_gates
+        printf 'PRE_READY_ESP_GATES=PASS\n'
+        ;;
+    self-check)
+        run_self_check
+        ;;
+esac
