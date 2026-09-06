@@ -32,6 +32,16 @@ if [[ $# -ne 1 || ( "$1" != "host" && "$1" != "esp" && "$1" != "self-check" ) ]]
 fi
 
 phase=$1
+SELF_CHECK_STATUS_REPORTED=false
+SELF_CHECK_FAILURE_STATUS=FAILED
+
+trap '
+    exit_status=$?
+    if [[ "$phase" == "self-check" && "$SELF_CHECK_STATUS_REPORTED" != true ]]; then
+        printf "BUILDER_STATIC_ANALYSIS_SELF_CHECK=%s\n" "$SELF_CHECK_FAILURE_STATUS" >&2
+    fi
+    exit "$exit_status"
+' EXIT
 
 if [[ -n "${PRE_READY_EXPECTED_HEAD:-}" ]]; then
     current_head=$(git rev-parse HEAD)
@@ -45,6 +55,9 @@ fi
 require_command() {
     local command_name=$1
     if ! command -v "$command_name" >/dev/null 2>&1; then
+        if [[ "$phase" == "self-check" ]]; then
+            SELF_CHECK_FAILURE_STATUS=BLOCKED
+        fi
         printf 'BLOCKED: erforderliches Werkzeug fehlt: %s\n' "$command_name" >&2
         exit 1
     fi
@@ -110,6 +123,7 @@ verify_self_check_base() {
     fi
 
     if ! git show-ref --verify --quiet "$SELF_CHECK_BASE_REF"; then
+        SELF_CHECK_FAILURE_STATUS=BLOCKED
         printf 'BLOCKED: erforderliche lokale Base-Referenz fehlt: %s\n' \
             "$SELF_CHECK_BASE_REF" >&2
         exit 1
@@ -195,6 +209,7 @@ run_self_check() {
         printf 'CLANG_TIDY=NOT_REQUIRED\n'
     fi
 
+    SELF_CHECK_STATUS_REPORTED=true
     printf 'BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS\n'
 }
 
