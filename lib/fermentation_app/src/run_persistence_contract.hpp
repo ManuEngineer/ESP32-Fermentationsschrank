@@ -29,7 +29,9 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // run_recovery_types.hpp, transitively still visible here.
 // Schema 4 (#144): lossless 64-bit neutral run-source provenance and the
 // committed command-id high-water field in RunPersistenceHead.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 4U;
+// Schema 5 (#152): explicit ProgramRun source discrimination and the
+// truthful, catalog-independent ManualTimed source payload.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 5U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {

@@ -832,23 +832,40 @@ bool validateProcessRunSnapshot(const ProcessRunSnapshot& snapshot) {
 std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const RunProgramSnapshot& runSnapshot,
     const EffectiveRunValues& effectiveValues) {
-    const auto& program = runSnapshot.sourceProgram.program;
-    if (!program.targetQualification.durationMinutes.has_value() ||
-        !program.maximumTargetReachMinutes.has_value()) {
-        return std::nullopt;
-    }
-
     ProcessRunSnapshot snapshot;
     snapshot.kind = ProcessKind::Timed;
-    snapshot.preheatEnabled = program.preheat;
-    snapshot.completionMode = program.completion.mode;
-    snapshot.qualificationDurationMinutes =
-        *program.targetQualification.durationMinutes;
-    snapshot.maximumTargetReachMinutes = *program.maximumTargetReachMinutes;
-    snapshot.maximumProductWaitMinutes = program.maximumProductWaitMinutes;
+    if (const auto* program = storedProgram(runSnapshot.source)) {
+        if (!program->program.targetQualification.durationMinutes.has_value() ||
+            !program->program.maximumTargetReachMinutes.has_value()) {
+            return std::nullopt;
+        }
+        snapshot.preheatEnabled = program->program.preheat;
+        snapshot.completionMode = program->program.completion.mode;
+        snapshot.qualificationDurationMinutes =
+            *program->program.targetQualification.durationMinutes;
+        snapshot.maximumTargetReachMinutes =
+            *program->program.maximumTargetReachMinutes;
+        snapshot.maximumProductWaitMinutes =
+            program->program.maximumProductWaitMinutes;
+        snapshot.holdDurationMinutes =
+            program->program.completion.holdDurationMinutes;
+    } else if (const auto* manual = manualTimedSource(runSnapshot.source)) {
+        if (!manual->targetQualification.durationMinutes.has_value() ||
+            !manual->maximumTargetReachMinutes.has_value()) {
+            return std::nullopt;
+        }
+        snapshot.preheatEnabled = manual->preheatEnabled;
+        snapshot.completionMode = manual->completion.mode;
+        snapshot.qualificationDurationMinutes =
+            *manual->targetQualification.durationMinutes;
+        snapshot.maximumTargetReachMinutes = *manual->maximumTargetReachMinutes;
+        snapshot.maximumProductWaitMinutes = manual->maximumProductWaitMinutes;
+        snapshot.holdDurationMinutes = manual->completion.holdDurationMinutes;
+    } else {
+        return std::nullopt;
+    }
     snapshot.fermentationDurationMinutes =
         effectiveValues.remainingDurationMinutes;
-    snapshot.holdDurationMinutes = program.completion.holdDurationMinutes;
     return validateProcessRunSnapshot(snapshot)
                ? std::optional<ProcessRunSnapshot>{snapshot}
                : std::nullopt;

@@ -218,7 +218,6 @@ void test_product_application_keeps_resume_offer_after_begin_returns() {
                         std::nullopt};
     request.runId = "resume-offer";
     request.program = *document;
-    request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision =
         ::fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = fermentation::RunSensorMode::Product;

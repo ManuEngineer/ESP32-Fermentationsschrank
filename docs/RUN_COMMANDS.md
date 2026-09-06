@@ -178,6 +178,39 @@ spaeteren Katalogaenderungen.
 Issue #15 fuehrt weder `ConfigurationService` noch eine provisorische
 Katalogpersistenz ein.
 
+## Manueller Zeit-/Temperaturlauf
+
+`ManualTimed` ist ein rendererunabhaengiger Application-Eingang fuer
+Zieltemperatur, Dauer, Sensorbetrieb, optionales Vorheizen und
+Abschlussverhalten. Die Application erzeugt daraus eine fluechtige,
+unveraenderliche `ManualTimedRunSource` und verwendet den bestehenden
+`ProgramStartRequest`-/`decideProgramStart()`-/Orchestrator-Pfad. Ein zweiter
+Startservice oder ein paralleles Programmmodell ist nicht zulaessig.
+
+Die Application vergibt dabei genau eine Command-ID und leitet daraus die
+Run-ID ab. UI/Web liefern weder `CommandId` noch `runId` und keine Safety-,
+Sensor-, Planner- oder Persistenzevidenz. Eine Bestaetigung verwendet exakt
+die vorbereitete Identitaet.
+
+`ManualTimed` besitzt keine Katalog-ID, keinen Katalogeintrag und keine
+`RunProgramSourceRevision`. Die aktive Quelle ist dennoch ein unveraenderlicher
+Laufschnappschuss. Fuer gespeicherte Factory-/User-Programme bleibt die
+bestehende Katalog-/Sensoraufloesung unveraendert.
+
+Die manuelle Sensorsemantik wird innerhalb des bestehenden Startpfads
+source-aware aufgeloest: angefordert `Air` bleibt `Air`; angefordert `Product`
+bleibt `Product`. Ein ungueltiger Produktfuehler fuehrt zur bestehenden
+`UserDecisionRequired`-/`Blocked`-Semantik, nie zu einem stillen
+`Product -> Air`-Fallback. Der feste manuelle Kontext ist
+`ProductIfAvailableElseAir`, `WaitForUser`, `ManualReturnToProduct` ohne
+Fallback-Delay; er wird abgeleitet und nicht als neue konfigurierbare Policy
+persistiert.
+
+Die `StartSummary` ist auch vor der Bestaetigung vorhanden. Gespeicherte
+Programme liefern ihren echten Programmnamen. Bei `ManualTimed` kennzeichnet
+`sourceKind` die Quelle und `programName` bleibt ohne Wert; die sichtbare
+Bezeichnung kommt spaeter aus dem vorhandenen TextKey-/Lokalisierungspfad.
+
 ## Manueller Laufplan
 
 Manuelles Temperaturhalten und `Abbrechen und kuehlen` verwenden denselben

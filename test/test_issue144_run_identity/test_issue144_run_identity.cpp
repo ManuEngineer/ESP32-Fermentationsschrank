@@ -156,6 +156,53 @@ void test_ui_id_is_application_bound_to_existing_command_envelope() {
         static_cast<int>(prepared.request->commandEnvelope().source));
 }
 
+void test_application_prepares_manual_timed_with_shared_identity() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    fermentation::FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::LocalDisplay;
+    context.monotonicMillis = 100U;
+    fermentation::ManualTimedRunValues values;
+    values.targetTemperatureCelsius = 30.0;
+    values.durationMinutes = 60U;
+    values.sensorMode = fermentation::RunSensorMode::Product;
+    values.preheatEnabled = true;
+    values.maximumProductWaitMinutes = 30U;
+    values.qualificationBandCelsius = 0.5;
+    values.qualificationDurationMinutes = 10U;
+    values.maximumTargetReachMinutes = 180U;
+
+    const auto prepared =
+        application.prepareStartManualTimed(context, values, owningEvidence());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(prepared.status));
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
+    TEST_ASSERT_TRUE(prepared.request->runId().has_value());
+    TEST_ASSERT_EQUAL_STRING("e1-c1", prepared.request->runId()->c_str());
+
+    const auto confirmed =
+        fermentation::FermentationApplication::confirmPrepared(prepared);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(confirmed.status));
+    TEST_ASSERT_EQUAL_UINT64(prepared.request->commandId(),
+                             confirmed.request->commandId());
+    TEST_ASSERT_EQUAL_STRING(prepared.request->runId()->c_str(),
+                             confirmed.request->runId()->c_str());
+    TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
+    TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
+}
+
 fermentation::FermentationApplicationOwningEvidence owningEvidence() {
     fermentation::FermentationApplicationOwningEvidence evidence;
     evidence.safetyAllowsStart = true;
@@ -208,7 +255,6 @@ void seedActiveRunForApplication(device_platform::IStateStore& store) {
                         std::nullopt};
     request.runId = "e1-c11";
     request.program = *program;
-    request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision = fermentation::RunProgramSourceRevision{1U};
     request.sensorMode = fermentation::RunSensorMode::Product;
     request.safetyAllowsStart = true;
@@ -611,6 +657,7 @@ int main(int, char**) {
     RUN_TEST(
         test_catalog_revision_maps_to_neutral_run_provenance_without_truncation);
     RUN_TEST(test_ui_id_is_application_bound_to_existing_command_envelope);
+    RUN_TEST(test_application_prepares_manual_timed_with_shared_identity);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
     RUN_TEST(test_application_reset_hands_off_existing_run_store_to_new_epoch);
     RUN_TEST(test_application_prepares_every_envelope_action_with_one_identity);
