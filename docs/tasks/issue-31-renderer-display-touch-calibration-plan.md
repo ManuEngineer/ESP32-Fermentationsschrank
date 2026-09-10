@@ -573,14 +573,29 @@ beeinflusst aber weder Regelung noch Safety noch Aktorfreigabe.
 
 ### Persistenzvertrag und StorageEpoch
 
-Der technische Datensatz wird als eigener `TouchCalibrationRecord` mit eigener
-Schema-/Versionskennung und reservierten Keys `touch-calibration-active` und
-`touch-calibration-fallback` geplant. Die Namen stehen fuer den dedizierten
-Record-/Slotvertrag; sie werden nicht in den normalen User-, Service- oder
-Programm-Konfigurationsgraphen aufgenommen. Der Record/Codec verwendet den
-bestehenden `IStateStore`-/NVS-/versionierten Envelopepfad. Es entsteht kein
-zweiter allgemeiner Persistenzkern und kein kalibrierungsspezifischer
-Parallel-Codec ausserhalb dieses bestehenden technischen Pfads.
+Die persistente Wire-/Record-Identitaet wird vor der Implementationsfreigabe
+vollstaendig eingefroren. Fuer den technischen Datensatz gelten exakt:
+
+- `TOUCH_CALIBRATION_RECORD_TYPE_ID=RecordTypeId{10U}`;
+- `TOUCH_CALIBRATION_SCHEMA_VERSION=1`;
+- `TOUCH_CALIBRATION_KEYS=tc0,tc1`, wobei `tc0` der aktive und `tc1` der
+  Fallback-Slot ist;
+- `TOUCH_CALIBRATION_STORAGE_EPOCH=StorageEpoch{1}`.
+
+`tc0` und `tc1` sind stabile, dedizierte `StateStoreKey`-Identitaeten. Beide
+erfuellen den bestehenden Vertrag (maximal 15 Zeichen, kanonischer
+Zeichensatz) und wurden repositoryweit gegen die vorhandenen
+Persistenz-Keys geprueft; der Kollisionscheck ist PASS. Die produktiven
+RecordType-IDs 1 bis 8 sowie die in Tests verwendeten Negativ-/Fremdwerte
+werden nicht umgedeutet; `RecordTypeId{10U}` ist als neuer technischer Typ frei.
+Es gibt keine Erweiterung oder Lockerung von `StateStoreKey`.
+
+Der technische Datensatz ist ein eigener `TouchCalibrationRecord`. Er wird
+nicht in den normalen User-, Service- oder Programm-Konfigurationsgraphen
+aufgenommen. Record/Codec verwenden den bestehenden
+`IStateStore`-/NVS-/versionierten Envelopepfad. Es entsteht kein zweiter
+allgemeiner Persistenzkern und kein kalibrierungsspezifischer Parallel-Codec
+ausserhalb dieses bestehenden technischen Pfads.
 
 Die werksresetueberlebende Touchkalibrierung verwendet die Envelope-
 Infrastruktur, aber **nicht** die normale Konfigurations-
