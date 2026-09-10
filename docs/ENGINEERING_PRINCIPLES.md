@@ -6,10 +6,11 @@ Architekturvertraege bleiben vorrangig und werden dadurch nicht ersetzt.
 
 ## Grundprinzipien
 
-**KISS · YAGNI · SoC · DRY · SOLID · POLA · Fail Fast · Reuse before Build**
+**Reuse before Build · KISS · YAGNI · SoC · DRY · SOLID · POLA · Fail Fast**
 
 Code ist eine **Liability, keine Errungenschaft**. Je weniger eigener Code fuer dieselbe zuverlaessige Funktion notwendig ist, desto besser.
 
+* **Reuse before Build (Espressif-first):** Erst ESP-IDF, dann offizielle Espressif-Komponenten und -Repositories, dann geeignete gepflegte Drittkomponenten, erst danach kleine Eigenentwicklung bei nachgewiesener Luecke.
 * **KISS:** Bevorzuge die einfachste robuste Loesung.
 * **YAGNI:** Implementiere nur, was aktuell benoetigt wird.
 * **SoC:** Trenne Verantwortlichkeiten klar.
@@ -17,7 +18,6 @@ Code ist eine **Liability, keine Errungenschaft**. Je weniger eigener Code fuer 
 * **SOLID:** Halte Komponenten klar verantwortlich, lose gekoppelt und sinnvoll erweiterbar.
 * **POLA:** Verhalten und Schnittstellen sollen erwartbar und intuitiv sein.
 * **Fail Fast:** Fehler und ungueltige Zustaende frueh erkennen und sichtbar machen.
-* **Reuse before Build:** Erst Standard/Framework, dann Herstellerkomponente, dann etablierte Library, erst danach Eigenentwicklung.
 
 **Prioritaet bei Zielkonflikten:**
 **Einfachheit und konkreter Bedarf vor theoretischer Abstraktion.** SOLID, DRY oder Erweiterbarkeit duerfen nicht zu unnoetiger Komplexitaet oder Overengineering fuehren.
