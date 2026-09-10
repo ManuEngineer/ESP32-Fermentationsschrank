@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-06
+Stand: 2026-09-10
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -25,12 +25,13 @@ nicht kopiert, sondern verlinkt.
 | Issue #144 / PR #147 | `ISSUE144_STATUS=CLOSED_COMPLETED`; `PR147=MERGED`; `PR147_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb`; `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `RUN_IDENTITY_PROVENANCE=MERGED`; `ACTUATOR_RELEASE=NO` |
 | Issue #152 / PR #153 | `ISSUE152_STATUS=CLOSED_COMPLETED`; `PR153=MERGED`; `PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`; `PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `IMPLEMENTATION=MERGED`; `OWNER_ISSUE_CLOSE=COMPLETED`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` |
 | Issue #26 / PR #143 | `ISSUE26_STATUS=CLOSED_COMPLETED`; `PR143=MERGED`; `PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`; `PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`; `PRE_READY_LOCAL_GATES=PASS`; `ACTUATOR_RELEASE=NO` |
+| Issue #154 / PR #155 | `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO` |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `BLOCKED_HARDWARE`; folgt auf den abgeschlossenen #26-Vertrag und bringt die echte Bedienung am Gerät über dieselben Contracts. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO` | Display-/Touch-Hardware anschliessen und die fehlenden Stage-0-Identitaets-/SSOT-Nachweise erheben; danach sequenziell Stage 1–4 |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
 | 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
@@ -44,7 +45,7 @@ nicht kopiert, sondern verlinkt.
 
 - Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.
 - Issue #150 / PR #151 – Pre-Ready-CI-Parity-Gate vor `Ready for review` abgeschlossen: `ISSUE150_STATUS=CLOSED_COMPLETED`; `PR151=MERGED`; `PR151_MERGE_COMMIT=913f4c90084b77684ba37674e9070d288b22f5c1`; `IMPLEMENTATION=COMPLETE`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`.
-- Issue #154 – Static-Analysis-Self-Check vor Independent Review als parallele Governance-Arbeit: `PLAN_FIRST`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `PRE_READY_CONTRACT_UNCHANGED=YES`; `ACTUATOR_RELEASE=NO`.
+- Issue #154 / PR #155 – Static-Analysis-Self-Check als parallele Governance-Arbeit abgeschlossen: `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO`.
 
 ## Naechste fachliche Arbeit
 
@@ -55,10 +56,13 @@ mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
 ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
 blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
 abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
-Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Die reale
-Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; fehlende Hardware- und
-Commissioning-Nachweise werden nicht vorweggenommen. Issue #154 ist davon
-getrennte parallele Governance-Arbeit und ändert keine Fachlogik.
+Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Fuer #31
+ist nach dem Full Review eine Planrevision erforderlich; die Umsetzung bleibt
+bis zur unabhaengigen Plan-Fix-Verifikation und der Freigabe der exakten neuen
+Plan-SHA angehalten. Die reale Hardware-Reihenfolge bleibt #31 -> #30 -> #32
+-> #33; fehlende Hardware- und Commissioning-Nachweise werden nicht
+vorweggenommen. Issue #154 / PR #155 ist als getrennte parallele
+Governance-Arbeit abgeschlossen und ändert keine Fachlogik.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
@@ -199,9 +203,9 @@ ist geschlossene historische Persistenzprovenienz.
   manuellen Zeit-/Temperaturlauf; Issue #152 ist geschlossen. #26 / PR #143
   ist ebenfalls abgeschlossen und konsumiert den Vertrag ausschließlich über
   seine bestehenden Grenzen.
-- Issue #154 ist ein separater Plan-first-Governance-Scope für den
-  Builder-Self-Check; er ändert den vollständigen Pre-Ready-Vertrag nicht und
-  blockiert die reale Hardware-Reihenfolge nicht.
+- Issue #154 / PR #155 ist als separater Plan-first-Governance-Scope für den
+  Builder-Self-Check abgeschlossen; er ändert den vollständigen Pre-Ready-
+  Vertrag nicht und blockiert die reale Hardware-Reihenfolge nicht.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
