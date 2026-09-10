@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-06
+Stand: 2026-09-10
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -31,7 +31,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_IN_PROGRESS_HARDWARE_EVIDENCE_PENDING`; folgt auf den abgeschlossenen #26-Vertrag und bringt die echte Bedienung am Gerät über dieselben Contracts. Keine Implementation oder Hardware-Spike vor Ownerfreigabe der exakten Plan-SHA. | Ownerfreigabe von `docs/tasks/issue-31-renderer-display-touch-calibration-plan.md`; danach Stufe 0–4 mit SSOT-/Verdrahtungs-, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweisen, Ressourcen-/Lizenznachweis und realen Funktionstests ohne generelles Pegelmessgate |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_REVISION_REQUIRED_AFTER_FULL_REVIEW`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Independent Plan Fix Verification und danach Ownerfreigabe der exakten revidierten Plan-SHA |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
 | 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
@@ -57,12 +57,12 @@ ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
 blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
 abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
 Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Fuer #31
-ist die Planungsphase mit `PLAN_IN_PROGRESS_HARDWARE_EVIDENCE_PENDING` aktiv;
-die Umsetzung bleibt bis zur Freigabe der exakten Plan-SHA angehalten. Die
-reale Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; fehlende Hardware-
-und Commissioning-Nachweise werden nicht vorweggenommen. Issue #154 / PR #155
-ist als getrennte parallele Governance-Arbeit abgeschlossen und ändert keine
-Fachlogik.
+ist nach dem Full Review eine Planrevision erforderlich; die Umsetzung bleibt
+bis zur unabhaengigen Plan-Fix-Verifikation und der Freigabe der exakten neuen
+Plan-SHA angehalten. Die reale Hardware-Reihenfolge bleibt #31 -> #30 -> #32
+-> #33; fehlende Hardware- und Commissioning-Nachweise werden nicht
+vorweggenommen. Issue #154 / PR #155 ist als getrennte parallele
+Governance-Arbeit abgeschlossen und ändert keine Fachlogik.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
