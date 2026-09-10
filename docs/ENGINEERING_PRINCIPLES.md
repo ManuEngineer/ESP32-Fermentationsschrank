@@ -4,6 +4,24 @@ Diese Grundsaetze sind fuer Planung, Architektur, Implementierung, Tests und
 Reviews verbindlich. Spezifische Safety-, Security-, Recovery-, Workflow- und
 Architekturvertraege bleiben vorrangig und werden dadurch nicht ersetzt.
 
+## Grundprinzipien
+
+**KISS · YAGNI · SoC · DRY · SOLID · POLA · Fail Fast · Reuse before Build**
+
+Code ist eine **Liability, keine Errungenschaft**. Je weniger eigener Code fuer dieselbe zuverlaessige Funktion notwendig ist, desto besser.
+
+* **KISS:** Bevorzuge die einfachste robuste Loesung.
+* **YAGNI:** Implementiere nur, was aktuell benoetigt wird.
+* **SoC:** Trenne Verantwortlichkeiten klar.
+* **DRY:** Vermeide doppelte Logik und doppelte Wissenshaltung.
+* **SOLID:** Halte Komponenten klar verantwortlich, lose gekoppelt und sinnvoll erweiterbar.
+* **POLA:** Verhalten und Schnittstellen sollen erwartbar und intuitiv sein.
+* **Fail Fast:** Fehler und ungueltige Zustaende frueh erkennen und sichtbar machen.
+* **Reuse before Build:** Erst Standard/Framework, dann Herstellerkomponente, dann etablierte Library, erst danach Eigenentwicklung.
+
+**Prioritaet bei Zielkonflikten:**
+**Einfachheit und konkreter Bedarf vor theoretischer Abstraktion.** SOLID, DRY oder Erweiterbarkeit duerfen nicht zu unnoetiger Komplexitaet oder Overengineering fuehren.
+
 ## Repository-first und keine Parallelwahrheit
 
 Bestehender Code, Modelle, Tests, akzeptierte ADRs und kanonische Dokumente sind
