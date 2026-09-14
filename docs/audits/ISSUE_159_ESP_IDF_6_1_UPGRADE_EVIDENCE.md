@@ -84,7 +84,7 @@ die v6.1-Quellen unter `components/nvs_flash/`, `components/esp_netif/`,
 | Issue-90-UART-/NVS-Harness | `PASS` | `python3 scripts/build_issue90_slice7_harness.py`; v6.1-ESP32-Build, `state_store_test`, Bring-up enthalten, Release ausgeschlossen |
 | direkt betroffene Python-Selftests | `PASS` | `check_issue90_partitions.py --self-test`, `check_secrets.py --selftest`, `run_esp_idf_static_analysis.py --selftest` |
 | direkt betroffener NVS-Hosttest | `PASS` | v6.1-Linux-Hostbuild und Ausführung des erzeugten `issue90_nvs_adapter_host.elf`; `ISSUE90_HOST_ADAPTER_GATE=PASS`, Produktbrücke `PASS:3 FAIL:0 BLOCKED:0 NOT_RUN:0` |
-| Builder-Static-Analysis-Self-Check | `NOT_RUN` | nach den gezielten Tests auf finalem Builder-HEAD auszuführen |
+| Builder-Static-Analysis-Self-Check | `PASS` | `PRE_READY_EXPECTED_HEAD=bd31fea4993fbc4d235be1c202751f49401855ae`; `CLANG_FORMAT=PASS`, `CLANG_TIDY=NOT_REQUIRED`; kein vollständiger Pre-Ready-Lauf |
 
 Der erste v6.1-Compile des bestehenden Harnesses und anschließend des
 NVS-Host-Orakels legte wegen GCC 15.2 mit `-Werror=switch` bereits vorhandene
