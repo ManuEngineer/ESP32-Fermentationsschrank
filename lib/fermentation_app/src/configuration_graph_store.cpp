@@ -287,9 +287,24 @@ ConfigurationScanStatus validateServiceReferenceSemantically(
     }
     if (expected != nullptr) {
         std::string canonical;
-        if (encodeServiceConfigurationPayload(*expected, canonical) !=
-                ConfigurationCodecStatus::Success ||
-            canonical != loaded.record->envelope.payload) {
+        const auto referenceSchema = reference.schemaVersion;
+        if (referenceSchema ==
+            static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
+            // Service schema 1 is the pre-planner record: its payload is
+            // exactly empty.  Do not reinterpret it with the V2 absent tag.
+            if (expected->actuatorPlannerParameters.has_value() ||
+                !loaded.record->envelope.payload.empty()) {
+                return ConfigurationScanStatus::
+                    ConfigurationGraphReferenceFailure;
+            }
+        } else if (referenceSchema ==
+                       kCurrentServiceConfigurationSchemaVersion &&
+                   (encodeServiceConfigurationPayload(*expected, canonical) !=
+                        ConfigurationCodecStatus::Success ||
+                    canonical != loaded.record->envelope.payload)) {
+            return ConfigurationScanStatus::ConfigurationGraphReferenceFailure;
+        } else if (referenceSchema !=
+                   kCurrentServiceConfigurationSchemaVersion) {
             return ConfigurationScanStatus::ConfigurationGraphReferenceFailure;
         }
     }

@@ -156,6 +156,18 @@ bool sameRunIdentity(const RunPersistenceSnapshot& left,
            left.activeRunId == right.activeRunId;
 }
 
+bool sameLogicalActiveRun(const RunCommandState& left,
+                          const RunCommandState& right) {
+    const bool sameVariant =
+        left.activeProgramRun.has_value() ==
+            right.activeProgramRun.has_value() &&
+        left.activeManualRun.has_value() == right.activeManualRun.has_value();
+    return sameVariant &&
+           (left.activeProgramRun.has_value() ||
+            left.activeManualRun.has_value()) &&
+           !left.activeRunId.empty() && left.activeRunId == right.activeRunId;
+}
+
 bool currentMatchesLoadedRecord(
     const RunCommandState& current, const RunPersistenceRawRecord& record,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
@@ -2746,6 +2758,13 @@ RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
     }
     if (current.runRevision == std::numeric_limits<std::uint32_t>::max() ||
         candidate.runRevision != current.runRevision + 1U) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    if (sameLogicalActiveRun(current, candidate) &&
+        current.actuatorPlannerParametersSnapshot !=
+            candidate.actuatorPlannerParametersSnapshot) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);

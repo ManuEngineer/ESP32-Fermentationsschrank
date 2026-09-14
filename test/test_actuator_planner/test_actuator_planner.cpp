@@ -2356,11 +2356,44 @@ void test_feedback_handoff_is_single_use_and_severity_is_monotone() {
     TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
 }
 
+void test_force_stop_creates_and_honors_inner_fan_deadline() {
+    auto parameters = testParameters();
+    parameters.innerFanPostRunMillis = 5'000U;
+    ActuatorPlanner planner;
+    TEST_ASSERT_TRUE(planner.beginRun(parameters));
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext())));
+
+    static_cast<void>(planner.forceStop(
+        100U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
+    TEST_ASSERT_TRUE(
+        planner.state()
+            .innerFanDeactivationRequestedAtMonotonicMillis.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        100U, *planner.state().innerFanDeactivationRequestedAtMonotonicMillis);
+    TEST_ASSERT_EQUAL_UINT64(
+        5'100U, *planner.state().innerFanTeardownDeadlineMonotonicMillis);
+
+    const auto beforeDeadline = planner.tick(ActuatorPlanTickInput{
+        5'099U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_TRUE(beforeDeadline.innerFanEnabled);
+    const auto atDeadline = planner.tick(ActuatorPlanTickInput{
+        5'100U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_FALSE(atDeadline.innerFanEnabled);
+}
+
 void test_overlapping_run_teardown_tail_keeps_later_a_deadline() {
     auto a = testParameters();
     a.outerFanPostRunMillis = 5'000U;
+    a.innerFanPostRunMillis = 5'000U;
     auto b = testParameters();
     b.outerFanPostRunMillis = 1'000U;
+    b.innerFanPostRunMillis = 1'000U;
 
     ActuatorPlanner planner;
     TEST_ASSERT_TRUE(planner.beginRun(a));
@@ -2374,6 +2407,8 @@ void test_overlapping_run_teardown_tail_keeps_later_a_deadline() {
         100U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
     TEST_ASSERT_EQUAL_UINT64(
         5'100U, *planner.state().outerFanTeardownDeadlineMonotonicMillis);
+    TEST_ASSERT_EQUAL_UINT64(
+        5'100U, *planner.state().innerFanTeardownDeadlineMonotonicMillis);
 
     // Run B starts while A's tail is still open and uses only B's planner
     // values for its own lifecycle.
@@ -2392,10 +2427,12 @@ void test_overlapping_run_teardown_tail_keeps_later_a_deadline() {
         5'099U, std::nullopt, airContext(), false,
         ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
     TEST_ASSERT_TRUE(beforeADeadline.outerFanEnabled);
+    TEST_ASSERT_TRUE(beforeADeadline.innerFanEnabled);
     auto atADeadline = planner.tick(ActuatorPlanTickInput{
         5'100U, std::nullopt, airContext(), false,
         ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
     TEST_ASSERT_FALSE(atADeadline.outerFanEnabled);
+    TEST_ASSERT_FALSE(atADeadline.innerFanEnabled);
 }
 
 }  // namespace
@@ -2468,6 +2505,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
+    RUN_TEST(test_force_stop_creates_and_honors_inner_fan_deadline);
     RUN_TEST(test_overlapping_run_teardown_tail_keeps_later_a_deadline);
     return UNITY_END();
 }

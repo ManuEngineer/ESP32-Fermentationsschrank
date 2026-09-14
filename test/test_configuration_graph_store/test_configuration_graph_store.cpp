@@ -197,10 +197,12 @@ struct SeededGraph {
     fermentation::ConfigurationRootRecord root;
 };
 
-SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
-                      std::uint64_t sequence = 1U,
-                      std::uint32_t manifestSlot = 0U,
-                      std::uint32_t rootSlot = 0U) {
+SeededGraph seedGraph(
+    LocalStore& store, std::uint64_t generation = 1U,
+    std::uint64_t sequence = 1U, std::uint32_t manifestSlot = 0U,
+    std::uint32_t rootSlot = 0U,
+    std::uint32_t serviceSchema =
+        fermentation::kCurrentServiceConfigurationSchemaVersion) {
     const fermentation::UserConfiguration user{"de", "Europe/Zurich",
                                                "Fermentationsschrank"};
     const fermentation::ServiceConfiguration service;
@@ -212,20 +214,24 @@ SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
     TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
                          user, resolver, userPayload) ==
                      fermentation::ConfigurationCodecStatus::Success);
-    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
-                         service, servicePayload) ==
-                     fermentation::ConfigurationCodecStatus::Success);
+    if (serviceSchema ==
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version1)) {
+        servicePayload.clear();
+    } else {
+        TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                             service, servicePayload) ==
+                         fermentation::ConfigurationCodecStatus::Success);
+    }
     TEST_ASSERT_TRUE(
         fermentation::encodeProgramCatalogPayload(catalog, catalogPayload) ==
         fermentation::ConfigurationCodecStatus::Success);
     store.put("uc0", envelope(fermentation::configuration_storage_contract::
                                   kUserConfigurationRecordType,
                               1U, 1U, userPayload));
-    store.put("sc0",
-              envelope(fermentation::configuration_storage_contract::
-                           kServiceConfigurationRecordType,
-                       fermentation::kCurrentServiceConfigurationSchemaVersion,
-                       1U, servicePayload));
+    store.put("sc0", envelope(fermentation::configuration_storage_contract::
+                                  kServiceConfigurationRecordType,
+                              serviceSchema, 1U, servicePayload));
     store.put("pc0", envelope(fermentation::configuration_storage_contract::
                                   kProgramCatalogRecordType,
                               1U, 1U, catalogPayload));
@@ -239,8 +245,7 @@ SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
         reference(fermentation::configuration_storage_contract::
                       kServiceConfigurationRecordType,
                   0U, fermentation::ServiceConfigurationRevision{1U},
-                  servicePayload,
-                  fermentation::kCurrentServiceConfigurationSchemaVersion),
+                  servicePayload, serviceSchema),
         reference(fermentation::configuration_storage_contract::
                       kProgramCatalogRecordType,
                   0U, fermentation::ProgramCatalogRevision{1U},
@@ -270,6 +275,21 @@ SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
                            kConfigurationRootRecordType,
                        1U, sequence, rootPayload));
     return {manifestReference, root};
+}
+
+fermentation::ActuatorPlannerParameters validPlannerParameters() {
+    fermentation::ActuatorPlannerParameters parameters;
+    parameters.switchingWindowMillis = 30'000U;
+    parameters.minimumOnMillis = 2'000U;
+    parameters.minimumOffMillis = 1'000U;
+    parameters.polarityDeadTimeMillis = 3'000U;
+    parameters.pulseAccumulatorCapMillis = 30'000U;
+    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
+    parameters.counterDirectionConfirmationDurationMillis = 2'000U;
+    parameters.requestWatchdogMillis = 60'000U;
+    parameters.outerFanPostRunMillis = 5'000U;
+    parameters.innerFanPostRunMillis = 1'000U;
+    return parameters;
 }
 
 void test_loads_complete_active_graph() {
@@ -555,6 +575,85 @@ fermentation::ConfigurationCommitCandidate changedCandidate(
     return {std::make_shared<const fermentation::UserConfiguration>(
                 fermentation::UserConfiguration{"de", "Europe/Zurich", name}),
             current.active.serviceConfiguration, current.active.programCatalog};
+}
+
+void test_v1_service_record_survives_validation_and_changes_until_v2_write() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store, 1U, 1U, 0U, 0U,
+              static_cast<std::uint32_t>(
+                  fermentation::ServiceConfigurationSchema::Version1));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.graph.has_value());
+    TEST_ASSERT_TRUE(graphStore.validationScan(*loaded.graph).status ==
+                     fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version1),
+        loaded.graph->active.manifest.serviceConfiguration.schemaVersion);
+    TEST_ASSERT_TRUE(store.read(key("sc0"), 114U).value.size() > 0U);
+    const auto v1Record =
+        device_platform::decodeEnvelope(store.read(key("sc0"), 114U).value);
+    TEST_ASSERT_TRUE(v1Record.envelope.has_value());
+    TEST_ASSERT_TRUE(v1Record.envelope->payload.empty());
+
+    auto userChange = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "V1 erhalten"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(userChange.prepared.has_value());
+    TEST_ASSERT_TRUE(
+        graphStore.executePreparedCommit(*userChange.prepared).status ==
+        fermentation::ConfigurationCommitExecutionStatus::Activated);
+
+    auto afterUserChange = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(afterUserChange.graph.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version1),
+        afterUserChange.graph->active.manifest.serviceConfiguration
+            .schemaVersion);
+    const auto retainedV1 =
+        device_platform::decodeEnvelope(store.read(key("sc0"), 114U).value);
+    TEST_ASSERT_TRUE(retainedV1.envelope.has_value());
+    TEST_ASSERT_TRUE(retainedV1.envelope->payload.empty());
+
+    auto service = *afterUserChange.graph->active.serviceConfiguration;
+    service.actuatorPlannerParameters = validPlannerParameters();
+    const fermentation::ConfigurationCommitCandidate serviceChange{
+        afterUserChange.graph->active.userConfiguration,
+        std::make_shared<const fermentation::ServiceConfiguration>(service),
+        afterUserChange.graph->active.programCatalog};
+    auto preparedService =
+        graphStore.prepareCommit(*afterUserChange.graph, serviceChange,
+                                 fermentation::decodeChangeOrigin(2U),
+                                 fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(preparedService.prepared.has_value());
+    TEST_ASSERT_TRUE(
+        graphStore.executePreparedCommit(*preparedService.prepared).status ==
+        fermentation::ConfigurationCommitExecutionStatus::Activated);
+    const auto afterServiceWrite =
+        graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(afterServiceWrite.graph.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kCurrentServiceConfigurationSchemaVersion,
+        afterServiceWrite.graph->active.manifest.serviceConfiguration
+            .schemaVersion);
+    const auto serviceSlot = afterServiceWrite.graph->active.manifest
+                                 .serviceConfiguration.slot.value();
+    const auto v2Record = device_platform::decodeEnvelope(
+        store
+            .read(key(fermentation::configuration_storage_contract::
+                          kServiceConfigurationSlotKeys[serviceSlot]),
+                  fermentation::configuration_limits::
+                          kMaximumServiceConfigurationPayloadBytes +
+                      45U)
+            .value);
+    TEST_ASSERT_TRUE(v2Record.envelope.has_value());
+    TEST_ASSERT_FALSE(v2Record.envelope->payload.empty());
+    TEST_ASSERT_EQUAL_UINT8(
+        1U, static_cast<std::uint8_t>(v2Record.envelope->payload.front()));
 }
 
 fermentation::ConfigurationCommitCandidate programChangedCandidate(
@@ -1726,6 +1825,8 @@ void test_initial_graph_keeps_maximum_old_catalog_as_descriptor_only() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_loads_complete_active_graph);
+    RUN_TEST(
+        test_v1_service_record_survives_validation_and_changes_until_v2_write);
     RUN_TEST(test_root_read_error_has_priority_over_valid_older_root);
     RUN_TEST(test_root_capacity_error_has_priority_over_valid_older_root);
     RUN_TEST(

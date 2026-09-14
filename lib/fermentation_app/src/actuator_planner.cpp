@@ -1285,6 +1285,10 @@ ActuatorPlanTickResult ActuatorPlanner::forceStop(
         !state_.innerFanDeactivationRequestedAtMonotonicMillis.has_value()) {
         state_.innerFanDeactivationRequestedAtMonotonicMillis =
             nowMonotonicMillis;
+        retainLaterDeadline(
+            state_.innerFanTeardownDeadlineMonotonicMillis,
+            saturatingDeadline(nowMonotonicMillis,
+                               parameters_.innerFanPostRunMillis));
     }
     updateFanState(nowMonotonicMillis, false);
 

@@ -22,6 +22,16 @@
 #include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
+#include "actuator_plan_sink_driver.hpp"
+#include "actuator_planner.hpp"
+#include "run_commands.hpp"
+#include "run_persistence_contract.hpp"
+#include "run_persistence_coordinator.hpp"
+#include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
+#include "temperature_control_orchestrator.hpp"
+#include "mock_bidirectional_actuator_sink.hpp"
+#include "mock_binary_output_sink.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "fermentation_ui_editing.hpp"
 #include "state_store.hpp"
@@ -495,6 +505,231 @@ fermentation::ConfigurationPreviewView installChangedPreview(Fixture& fixture,
                      fermentation::ConfigurationPreviewStatus::Success);
     TEST_ASSERT_TRUE(installed.preview.has_value());
     return *installed.preview;
+}
+
+fermentation::ActuatorPlannerParameters contractPlannerParameters() {
+    fermentation::ActuatorPlannerParameters parameters;
+    parameters.switchingWindowMillis = 10'000U;
+    parameters.minimumOnMillis = 2'000U;
+    parameters.minimumOffMillis = 1'000U;
+    parameters.polarityDeadTimeMillis = 3'000U;
+    parameters.pulseAccumulatorCapMillis = 10'000U;
+    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
+    parameters.counterDirectionConfirmationDurationMillis = 2'000U;
+    parameters.requestWatchdogMillis = 60'000U;
+    parameters.outerFanPostRunMillis = 1'000U;
+    parameters.innerFanPostRunMillis = 500U;
+    return parameters;
+}
+
+fermentation::CommandDecision contractStartDecision(
+    const fermentation::RunCommandState& state, fermentation::CommandId id) {
+    auto program = fermentation::FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(program.has_value());
+    program->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    program->program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    program->program.fermentationStages.front().durationMinutes = 120U;
+    program->program.targetQualification.bandCelsius = 0.5;
+    program->program.targetQualification.durationMinutes = 10U;
+    program->program.maximumTargetReachMinutes = 180U;
+    fermentation::ProgramStartRequest request;
+    request.envelope = {id,
+                        fermentation::CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "contract-run";
+    request.program = *program;
+    request.sourceProgramRevision = fermentation::RunProgramSourceRevision{1U};
+    request.sensorMode = fermentation::RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    return fermentation::decideProgramStart(state, request);
+}
+
+void test_fresh_start_snapshot_contract_binds_only_after_applied() {
+    Fixture configuration;
+    const auto expected = contractPlannerParameters();
+    auto build = configuration.service.beginPreview();
+    TEST_ASSERT_TRUE(build.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    build.lease.serviceConfiguration().actuatorPlannerParameters = expected;
+    auto installed = configuration.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(
+        configuration.service.confirmPreview(installed.preview->handle)
+            .status == fermentation::ConfigurationCommitStatus::Activated);
+    auto runtime = configuration.service.acquireRuntime();
+    TEST_ASSERT_TRUE(
+        runtime.status ==
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+    const auto present =
+        fermentation::FreshStartSnapshotProvenance::fromRuntimeLease(
+            runtime.lease);
+    TEST_ASSERT_TRUE(present.present());
+    TEST_ASSERT_TRUE(present.snapshot() == expected);
+
+    fermentation::RunPersistenceCoordinator coordinator(
+        configuration.store, device_platform::StorageEpoch(1U),
+        fermentation::RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(coordinator.loadAndInitialize().status));
+    fermentation::TargetQualificationEvaluator evaluator;
+    fermentation::TemperatureController controller({}, {});
+    fermentation::ActuatorPlanner planner;
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    fermentation::ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
+    fermentation::TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator, planner, driver);
+    fermentation::RunCommandState current;
+    current.processState.state = fermentation::ProcessState::Standby;
+    const auto decision = contractStartDecision(current, 10'601U);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(
+        fermentation::classifyActuatorPlannerParameters(planner.parameters()) ==
+        fermentation::ActuatorPlannerParametersValidation::Unconfigured);
+
+    const auto applied = application.persistFreshStartCommand(
+        current, decision, present,
+        fermentation::RunCheckpointTime{100U, 1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(applied.status));
+    TEST_ASSERT_TRUE(current.actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(*current.actuatorPlannerParametersSnapshot == expected);
+    TEST_ASSERT_TRUE(planner.parameters() == expected);
+
+    device_platform_test_support::SimulatedPersistentStateStore failedStore;
+    fermentation::RunPersistenceCoordinator failedCoordinator(
+        failedStore, device_platform::StorageEpoch(1U),
+        fermentation::RunCheckpointSchedule{});
+    static_cast<void>(failedCoordinator.loadAndInitialize());
+    failedStore.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    fermentation::TargetQualificationEvaluator failedEvaluator;
+    fermentation::TemperatureController failedController({}, {});
+    fermentation::ActuatorPlanner failedPlanner;
+    device_platform_test_support::MockBidirectionalActuatorSink failedPeltier;
+    device_platform_test_support::MockBinaryOutputSink failedOuterFan;
+    device_platform_test_support::MockBinaryOutputSink failedInnerFan;
+    fermentation::ActuatorPlanSinkDriver failedDriver(
+        failedPeltier, failedOuterFan, failedInnerFan);
+    fermentation::TemperatureControlApplicationOrchestrator failedApplication(
+        failedCoordinator, failedController, failedEvaluator, failedPlanner,
+        failedDriver);
+    fermentation::RunCommandState failedState;
+    failedState.processState.state = fermentation::ProcessState::Standby;
+    const auto failed = failedApplication.persistFreshStartCommand(
+        failedState, contractStartDecision(failedState, 10'602U), present,
+        fermentation::RunCheckpointTime{100U, 1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(
+        failedState.actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(
+        fermentation::classifyActuatorPlannerParameters(
+            failedPlanner.parameters()) ==
+        fermentation::ActuatorPlannerParametersValidation::Unconfigured);
+
+    fermentation::RunPersistenceCoordinator absentCoordinator(
+        failedStore, device_platform::StorageEpoch(2U),
+        fermentation::RunCheckpointSchedule{});
+    static_cast<void>(absentCoordinator.loadAndInitialize());
+    fermentation::TargetQualificationEvaluator absentEvaluator;
+    fermentation::TemperatureController absentController({}, {});
+    fermentation::ActuatorPlanner absentPlanner;
+    device_platform_test_support::MockBidirectionalActuatorSink absentPeltier;
+    device_platform_test_support::MockBinaryOutputSink absentOuterFan;
+    device_platform_test_support::MockBinaryOutputSink absentInnerFan;
+    fermentation::ActuatorPlanSinkDriver absentDriver(
+        absentPeltier, absentOuterFan, absentInnerFan);
+    fermentation::TemperatureControlApplicationOrchestrator absentApplication(
+        absentCoordinator, absentController, absentEvaluator, absentPlanner,
+        absentDriver);
+    fermentation::RunCommandState absentState;
+    absentState.processState.state = fermentation::ProcessState::Standby;
+    const auto absent = absentApplication.persistFreshStartCommand(
+        absentState, contractStartDecision(absentState, 10'603U),
+        fermentation::FreshStartSnapshotProvenance::absent(),
+        fermentation::RunCheckpointTime{100U, 1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(absent.status));
+    TEST_ASSERT_FALSE(
+        absentState.actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(
+        fermentation::classifyActuatorPlannerParameters(
+            absentPlanner.parameters()) ==
+        fermentation::ActuatorPlannerParametersValidation::Unconfigured);
+
+    device_platform_test_support::SimulatedPersistentStateStore bypassStore;
+    fermentation::RunPersistenceCoordinator bypassCoordinator(
+        bypassStore, device_platform::StorageEpoch(1U),
+        fermentation::RunCheckpointSchedule{});
+    static_cast<void>(bypassCoordinator.loadAndInitialize());
+    fermentation::TargetQualificationEvaluator bypassEvaluator;
+    fermentation::TemperatureController bypassController({}, {});
+    fermentation::TemperatureControlApplicationOrchestrator bypassApplication(
+        bypassCoordinator, bypassController, bypassEvaluator);
+    fermentation::RunCommandState bypassState;
+    bypassState.processState.state = fermentation::ProcessState::Standby;
+    const auto bypass = bypassApplication.persistCommand(
+        bypassState, contractStartDecision(bypassState, 10'605U),
+        fermentation::RunCheckpointTime{100U, 1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(bypass.status));
+    TEST_ASSERT_FALSE(
+        bypassState.actuatorPlannerParametersSnapshot.has_value());
+
+    device_platform_test_support::SimulatedPersistentStateStore invalidStore;
+    fermentation::RunPersistenceCoordinator invalidCoordinator(
+        invalidStore, device_platform::StorageEpoch(1U),
+        fermentation::RunCheckpointSchedule{});
+    static_cast<void>(invalidCoordinator.loadAndInitialize());
+    fermentation::TargetQualificationEvaluator invalidEvaluator;
+    fermentation::TemperatureController invalidController({}, {});
+    fermentation::ActuatorPlanner invalidPlanner;
+    device_platform_test_support::MockBidirectionalActuatorSink invalidPeltier;
+    device_platform_test_support::MockBinaryOutputSink invalidOuterFan;
+    device_platform_test_support::MockBinaryOutputSink invalidInnerFan;
+    fermentation::ActuatorPlanSinkDriver invalidDriver(
+        invalidPeltier, invalidOuterFan, invalidInnerFan);
+    fermentation::TemperatureControlApplicationOrchestrator invalidApplication(
+        invalidCoordinator, invalidController, invalidEvaluator, invalidPlanner,
+        invalidDriver);
+    fermentation::RunCommandState invalidState;
+    invalidState.processState.state = fermentation::ProcessState::Standby;
+    fermentation::RuntimeConfigurationReadLease invalidLease;
+    const auto invalid = invalidApplication.persistFreshStartCommand(
+        invalidState, contractStartDecision(invalidState, 10'604U),
+        fermentation::FreshStartSnapshotProvenance::fromRuntimeLease(
+            invalidLease),
+        fermentation::RunCheckpointTime{100U, 1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(invalid.status));
+    TEST_ASSERT_FALSE(invalidState.activeProgramRun.has_value());
+    TEST_ASSERT_TRUE(
+        fermentation::classifyActuatorPlannerParameters(
+            invalidPlanner.parameters()) ==
+        fermentation::ActuatorPlannerParametersValidation::Unconfigured);
 }
 
 std::string repeatedUmlaut(std::size_t scalarCount) {
@@ -1946,6 +2181,7 @@ void test_persistent_failure_causes_remain_distinct() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_fresh_start_snapshot_contract_binds_only_after_applied);
     RUN_TEST(test_initial_runtime_is_available_through_move_only_lease);
     RUN_TEST(test_runtime_reader_limit_is_enforced_and_released);
     RUN_TEST(test_changed_preview_owns_the_only_second_model_generation);
