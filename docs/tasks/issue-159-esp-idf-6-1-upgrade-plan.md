@@ -17,7 +17,9 @@ EXPECTED_TARGET_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
 PLAN_STATUS=OWNER_PLAN_APPROVAL_PENDING
 IMPLEMENTATION=NOT_STARTED
 OWNER_PLAN_APPROVAL_REQUIRED=YES
-PR159=NOT_CREATED_BY_AGENT
+PR160=DRAFT
+PR160_BASE=main@2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
+PR160_ISSUE_REFERENCE=Refs_#159
 PR158=OPEN_DRAFT_OUT_OF_SCOPE
 ACTUATOR_RELEASE=NO
 ```
@@ -45,11 +47,13 @@ ESP_IDF_TARGET_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
 ESP_IDF_LOCAL_CHECKOUTS=AVAILABLE_AND_CLEAN_AT_PLAN_TIME
 ```
 
-`origin/main` wurde live auf dieselbe SHA verifiziert. PR #158 basiert live auf
-`main@2c010e8...`, ist Draft und bleibt samt Issue #89, WLAN-Onboarding,
-Provisioning-Spikes und deren Evidence ausserhalb dieses Scopes. Der aktuelle
-Checkout fuer diesen Plan ist ein separater frischer Clone; der bereitgestellte
-Checkout auf `agent/issue-89-wlan-onboarding-plan` wird nicht als Basis benutzt.
+`origin/main` wurde live auf dieselbe SHA verifiziert. PR #160 ist als Draft
+gegen `main` hergestellt und referenziert Issue #159 mit `Refs #159`. PR #158
+basiert live auf `main@2c010e8...`, ist Draft und bleibt samt Issue #89,
+WLAN-Onboarding, Provisioning-Spikes und deren Evidence ausserhalb dieses
+Scopes. Der aktuelle Checkout fuer diesen Plan ist ein separater frischer
+Clone; der bereitgestellte Checkout auf `agent/issue-89-wlan-onboarding-plan`
+wird nicht als Basis benutzt.
 
 Die vorhandene Datei `Agent-Auftraege/Auftrag.md` ist auf dieser Baseline nur
 eine allgemeine Vorlage. Der konkrete Auftrag ist durch den Live-Inhalt von
@@ -164,9 +168,8 @@ Nicht global umbenannt werden:
 
 Die aktuelle Issue-159-Evidence wird als neue, klar datierte Evidenz erfasst
 und nicht durch Umschreiben alter Messwerte erzeugt. `docs/ROADMAP.md` wird
-erst beim Owner-seitig etablierten Issue-159-Draft-PR gemaess bestehender
-Regel um den aktuellen Arbeitsstatus ergaenzt; der historische PR-79-Eintrag
-bleibt unveraendert.
+mit dem etablierten Draft-PR #160 und dem Plan-first-Status synchronisiert;
+der historische PR-79-Eintrag bleibt unveraendert.
 
 ## 4. Tatsachliche API-Oberflaeche auf `main`
 
@@ -248,12 +251,15 @@ zugehoerigen aktiven Static-Analysis-Selftests und der CI-/Dokumentations-
 vertrag werden mit diesen nachgewiesenen Werten aktualisiert.
 
 `pyclang` bleibt zunaechst auf dem bestehenden festen Projektwert `0.7.0`.
-Die v6.1-Installation und `idf.py clang-check` werden damit verifiziert. Eine
-Aenderung erfolgt nur, wenn die reale v6.1-Ausfuehrung diesen Stand nachweisbar
-nicht unterstuetzt; dann wird die konkrete feste kompatible Version samt
-Quelle, API-/Plugin-Evidence und Diff als Ownerentscheidung bzw. Planrevision
-vorgelegt. Die nativen clang-format-/clang-tidy-18-Werkzeuge werden durch das
-IDF-Minor-Upgrade nicht veraendert.
+Die v6.1-Installation und die gezielte Werkzeugkompatibilitaet werden damit
+verifiziert. Eine Aenderung erfolgt nur, wenn die reale v6.1-Ausfuehrung diesen
+Stand nachweisbar nicht unterstuetzt; dann wird die konkrete feste kompatible
+Version samt Quelle, API-/Plugin-Evidence und Diff als Ownerentscheidung bzw.
+Planrevision vorgelegt. Der vollstaendige Lauf
+`scripts/run_esp_idf_static_analysis.py all` gehoert ausschliesslich in den
+ownerautorisierten vollstaendigen Upgrade-/Pre-Ready-Nachweis und ist kein
+Draft-/Builder-Nachweis. Die nativen clang-format-/clang-tidy-18-Werkzeuge
+werden durch das IDF-Minor-Upgrade nicht veraendert.
 
 ## 7. Umsetzungsschnitte nach Planfreigabe
 
@@ -271,10 +277,12 @@ IDF-Minor-Upgrade nicht veraendert.
    Arbeitsbaum verifiziert; vor jedem Build werden Tag, Commit und Clean-
    Status erneut geprueft. Die ESP-IDF-Checkouts werden nicht in das
    Repository eingecheckt.
-3. Auf einer separaten Arbeitskopie der Baseline die bestehenden beiden
-   Profile mit v6.0.2 reproduzierbar bauen und die vorhandenen Bericht-/
-   Provenienzformate als Upgradevergleich sichern. In dieser Planphase wird
-   dieser Lauf nicht vorgezogen.
+3. Den vollstaendigen v6.0.2-Baseline-Build beider Produktionsprofile erst
+   als Teil des vollstaendigen, ownerautorisierten Upgrade-/Pre-Ready-
+   Nachweises ausfuehren. In der Draft-/Builderphase wird kein vollstaendiger
+   Produktprofilbuild vor dem Independent Review eingeplant; zulässig bleiben
+   nur konkret betroffene Configure-, Component-Manager-/Lockfile- und
+   Selftest-Pruefungen.
 4. `scripts/esp_idf_contract.py`, Top-Level-`CMakeLists.txt` und den CI-
    Installations-/Herkunftsschritt auf v6.1/Zielcommit umstellen. Aktive
    Pfadnamen, Fehlermeldungen und Versionsmetadaten muessen konsistent sein.
@@ -297,10 +305,11 @@ IDF-Minor-Upgrade nicht veraendert.
    `scripts/esp_idf_contract.py` auf die v6.1-`esp-clang`-Provenienz bringen;
    die bestehende Analyseauswahl, getrennte Buildpfade, `.clang-tidy` und
    `pyclang=0.7.0` bleiben inhaltlich unveraendert.
-4. Gegen den v6.1-Checkout die Adapter- und Composition-Root-Oberflaeche
-   bauen. Nur tatsaechlich erforderliche Include-/API-/Kconfig-Anpassungen
-   werden vorgenommen. Keine Wrapper fuer ungenutzte LCD-, SPI-, Wi-Fi-,
-   HTTP-, Provisioning- oder Security-APIs.
+4. Gegen den v6.1-Checkout nur die Adapter- und Composition-Root-Oberflaeche
+   sowie die unmittelbar betroffenen Selftests gezielt pruefen. Nur
+   tatsaechlich erforderliche Include-/API-/Kconfig-Anpassungen werden
+   vorgenommen. Keine vollstaendigen Produktprofilbuilds und keine Wrapper
+   fuer ungenutzte LCD-, SPI-, Wi-Fi-, HTTP-, Provisioning- oder Security-APIs.
 5. Den vorhandenen NVS-Adapter, die Entry-/Chunk-Kapazitaetsannahmen und den
    separaten Issue-90-Harness gezielt gegen v6.1 verifizieren. Eine zwingende
    Aenderung an NVS-Partition, GPIO, Aktorpolicy oder Persistenzvertrag stoppt
@@ -309,18 +318,21 @@ IDF-Minor-Upgrade nicht veraendert.
 ### Schnitt C – Vergleich, Evidence und Roadmap-Sync
 
 1. Gegenueber der reproduzierten v6.0.2-Baseline je Profil die generierte
-   `sdkconfig` vollstaendig diffen. Jede neue, entfernte oder geaenderte Option
-   wird als erwartbarer Framework-/Toolchain-Default, projektvertragliche
-   Option oder unerwartete Produktwirkung klassifiziert. Overlays bleiben
-   minimal und profilgetrennt.
+   `sdkconfig` vollstaendig diffen. Dieser Vergleich ist ein Bestandteil des
+   vollstaendigen Upgrade-Nachweises und kein Draft-/Builder-Lauf. Jede neue,
+   entfernte oder geaenderte Option wird als erwartbarer Framework-/Toolchain-
+   Default, projektvertragliche Option oder unerwartete Produktwirkung
+   klassifiziert. Overlays bleiben minimal und profilgetrennt.
 2. Mit den bestehenden Ressourcen-/Berichtsowner-Skripten Flash, DRAM/IRAM,
-   ELF/Map/App-BIN und vorhandene statische Stackwerte vergleichen. Die
-   Hardware-Smoke-Messung liefert weiterhin nur die im Upgradevertrag
-   vorgesehenen Heap-/Stack-/Heartbeat-/Resetkriterien; keine neue harte
-   Schwelle wird aus dem Minor-Upgrade erfunden.
+   ELF/Map/App-BIN und vorhandene statische Stackwerte vergleichen. Dieser
+   Ressourcenvergleich wird zusammen mit den vollstaendigen Profilbuilds im
+   Upgrade-Nachweis ausgefuehrt. Die Hardware-Smoke-Messung liefert weiterhin
+   nur die im Upgradevertrag vorgesehenen Heap-/Stack-/Heartbeat-/Reset-
+   Kriterien; keine neue harte Schwelle wird aus dem Minor-Upgrade erfunden.
 3. Buildlogs und Static-Analysis-Warnings nach neuen Deprecations oder
-   unerwarteten Warnungen auswerten. Bekannte Framework-/Toolchainmeldungen
-   werden von Produktwarnungen getrennt; jede ungeklärte Warnung bleibt offen
+   unerwarteten Warnungen auswerten. Diese Auswertung erfolgt im
+   vollstaendigen Upgrade-Nachweis; bekannte Framework-/Toolchainmeldungen
+   werden von Produktwarnungen getrennt. Jede ungeklärte Warnung bleibt offen
    und blockiert den Abschluss.
 4. Eine neue Evidence-Datei
    `docs/audits/ISSUE_159_ESP_IDF_6_1_UPGRADE_EVIDENCE.md` erstellen. Sie
@@ -328,9 +340,9 @@ IDF-Minor-Upgrade nicht veraendert.
    die vollstaendige Migrationsmatrix, Lockfile-/sdkconfig-/Ressourcen-/
    Warnungsdelta, `PASS`/`FAILED`/`BLOCKED`/`NOT_RUN`-Nachweise und Verweise
    auf die bestehenden Ownervertraege.
-5. Erst beim etablierten Draft-PR `docs/ROADMAP.md` gemaess bestehender Regel
-   um den aktuellen Issue-159-Status ergaenzen. Historische Roadmap-
-   Abschlusszeilen bleiben unveraendert.
+5. `docs/ROADMAP.md` mit dem etablierten Draft-PR #160 und dem Plan-first-
+   Status synchronisieren. Historische Roadmap-Abschlusszeilen bleiben
+   unveraendert.
 
 Die geplanten Implementierungsschnitte sind logisch klein genug fuer getrennte
 Commits; die tatsaechlichen Commit-SHAs und der exakte Diff werden erst nach
@@ -339,56 +351,64 @@ Persistenz, Hardware, Security, Bibliotheksauswahl, Partitionen oder
 Akzeptanzkriterien stoppt die Umsetzung vor dem Commit und erfordert eine
 vollstaendige Planrevision mit neuer Ownerfreigabe.
 
-## 8. Gezielte Nachweise und spaetere Owner-Gates
+## 8. Issue-159-Nachweise und Hardware-Paritaet
 
 ### Draft-/Builder-Nachweise nach der Planfreigabe
 
-- exakte Herkunftspruefung beider ESP-IDF-Checkouts (Tag, Commit, sauberer
-  Arbeitsbaum) und v6.1-`idf.py --version`;
-- beide isolierten v6.1-Produktionsprofile mit dem vorhandenen
-  `scripts/build_esp_idf_profiles.py`-Owner und anschliessender Profil-
-  validierung;
-- gezielter Build des bestehenden `esp32_bringup_issue90`-Harnesses fuer die
-  aktuelle UART-/NVS-Oberflaeche;
-- vorhandene NVS-Partition-/Kapazitaets-Selbsttests und die betroffenen
-  Python-/C++-Metadaten-Selftests;
-- `scripts/run_esp_idf_static_analysis.py all` mit `esp-clang 21.1.3` und
-  nachgewiesenem `pyclang 0.7.0`, sofern dieser Stand kompatibel bleibt;
-- `git diff --check`, gezielte Format-/Testpruefungen fuer geaenderte Dateien
-  sowie der Builder-Static-Analysis-Self-Check nach der tatsaechlichen
-  Implementation. Im Plan-only-Stand werden diese nicht ausgefuehrt.
+In der Draft-/Builderphase sind nur diese Issue-159-spezifischen, gezielten
+Pruefungen vorgesehen:
 
-### Vollstaendiger Minor-Upgrade- und Hardware-Nachweis vor Merge
+- exakte Herkunftspruefung beider parallel verfuegbarer ESP-IDF-Checkouts
+  (Tag, Commit, sauberer Arbeitsbaum) und gezielte v6.1-Tool-/Configure-
+  Pruefung;
+- Component-Manager-/Manifest-/Lockfile-Erzeugung und -Pruefung ohne
+  vollstaendigen Produktprofilbuild oder zweiten Gatepfad;
+- gezielter Build des bestehenden `esp32_bringup_issue90`-Harnesses fuer die
+  tatsaechlich betroffene UART-/NVS-Oberflaeche;
+- vorhandene NVS-Partition-/Kapazitaets-Selbsttests und direkt betroffene
+  Python-/C++-Metadaten-Selftests;
+- `git diff --check` sowie gezielte Format-/Testpruefungen fuer geaenderte
+  Dateien. Ein vollstaendiger v6.0.2- oder v6.1-Produktprofilbuild und
+  `scripts/run_esp_idf_static_analysis.py all` sind vor dem Independent
+  Review nicht vorgesehen.
+
+### Vollstaendiger Upgrade-Nachweis
 
 Der bestehende `docs/ESP_IDF_UPGRADE_CONTRACT.md` bleibt alleiniger Owner fuer
-die Reihenfolge und den Umfang. Nach Independent Full Review mit
-`OPEN_BLOCKERS=0` und ausdruecklicher Ownerfreigabe wird der vollstaendige
-lokale Runner auf exakt finalem HEAD ausgefuehrt. Erst beide vorhandenen
-Runnerphasen ergeben `PRE_READY_LOCAL_GATES=PASS`; fehlende Werkzeuge,
-fehlender sauberer ESP-IDF-Checkout, fehlende Hardware oder nicht ausgefuehrte
-Teile bleiben `BLOCKED` beziehungsweise `NOT_RUN`.
+die vollstaendige Reihenfolge und den Umfang. Erst im dort geregelten,
+ownerautorisierten vollstaendigen Upgrade-/Pre-Ready-Nachweis werden der
+vollstaendige v6.0.2-Baseline-Build beider Profile, der vollstaendige
+v6.1-Build beider Profile, `scripts/run_esp_idf_static_analysis.py all`,
+der vollstaendige `sdkconfig`-/Ressourcen-/Versions-/Warnungsvergleich und
+die nachfolgende Hardware-Paritaet auf dem finalen Upgrade-HEAD ausgefuehrt.
+Diese Aufzaehlung beschreibt nur die Issue-159-Deltas; die Gateprozedur wird
+nicht erneut definiert. Nicht ausgefuehrte oder wegen Werkzeug-/Hardwaremangel
+unmoegliche Nachweise bleiben `NOT_RUN` beziehungsweise `BLOCKED`.
 
-Vor Merge sind zudem die beiden im Upgradevertrag vorgeschriebenen mindestens
-35-sekuendigen, lastfreien Hardware-Smokes auf demselben Board mit den
-unveraenderten Bring-up-/Release-Aktorpolicies auszufuehren. Der Nachweis
-nennt finalen Implementierungs- und Firmware-Build-SHA, Profil, Port,
-Heartbeatabstaende, genau zwei Ressourcenmessungen sowie Reset-, Watchdog-,
-Panic-, Brownout- und unerwartete-Hardwareaktivitaetsstatus. Ein fehlender
-UART-/Boardzugang ist `BLOCKED_HARDWARE`, kein PASS. Nach jeder semantischen
-HEAD-Aenderung werden die betroffenen Nachweise gemaess bestehendem Vertrag
-erneuert.
+### Eindeutiger Minor-Upgrade-Hardwareumfang
 
-Die verbindliche Ownerreihenfolge bleibt:
+Der im Upgradevertrag zusaetzlich verlangte vollstaendige Hardware-
+Paritaetstest wiederholt genau die bereits unter v6.0.2 real bestaetigte
+Hardwareoberflaeche. Er erweitert sie nicht um unbestaetigte Hardware:
 
-```text
-Independent Review abgeschlossen
--> OPEN_BLOCKERS=0
--> Owner autorisiert finalen lokalen Pre-Ready-Lauf
--> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
--> Owner setzt Ready for review
--> GitHub-CI PASS
--> Merge-Gate
-```
+| Bereits real bestaetigte v6.0.2-Oberflaeche | v6.1-Paritaetsnachweis auf finalem Upgrade-HEAD |
+|---|---|
+| Issue #29: dasselbe ESP32-D0WD-V3-Board (Revision v3.1), 4 MB Flash, kein PSRAM, FTDI-FT232R-UART/USB mit reproduzierbarem ROM-Bootloader-Flash und DTR/RTS-Run-Reset | dieselbe Board-/Flash-/PSRAM-/UART-/Boot-Reset-Oberflaeche; anderer Boardtyp, andere Versorgung oder neue Hardware sind kein Ersatz und keine neue Anforderung |
+| Issue #29: `esp32_bringup` und `esp32_release` im unbelasteten, sicheren Lauf mit deaktivierten realen Aktoren, Heartbeat/Uptime, genau zwei Ressourcenpunkten und Reset-/Panic-/Watchdog-/Brownout-Pruefung | dieselben beiden 35-s-Smokes nach dem bestehenden Upgradevertrag; unveraenderte Aktorpolicies und keine Aktorfreigabe |
+| Issue #90 / PR #128: sechs reale Power-Cuts (`REAL_POWER_CUTS=6_OF_6_PASS`), Produktionsrestore und anschliessender Produktboot | dieselbe bestehende Power-Cut-/Restore-/Produktboot-Kampagne mit identischem Board-/UART-/Restore-Aufbau; kein neuer Cut-Typ und keine neue Safety-Policy |
+
+Die zugrunde liegende #29-Evidence weist sichere unbelastete Pegelmessungen
+und belastete MOSFET-/Verbraucherwirkung ausdrücklich als `NOT_RUN` aus; sie
+sind deshalb kein v6.1-Paritaetsgate. Ebenso bleiben
+`IMPLEMENTED_DIGITAL_PENDING_HARDWARE`, `BLOCKED_HARDWARE`, Display-, Touch-,
+Sensor-, Luefter-, BTS7960- und Peltierpfade sowie spaetere Commissioning-
+Scopes ausserhalb. Die im #29-Nachweis vorhandene Aktor-Inaktivitaet ist
+Bestandteil der Paritaet, nicht eine neue Hardware- oder Safety-Anforderung.
+
+Fehlt der exakt gleiche bereits qualifizierte Board-/UART-/Restore-Aufbau,
+bleibt die Paritaet `BLOCKED_HARDWARE`; sie wird nicht durch einen neuen
+Boardtyp, eine unbestaetigte Hardwareoberflaeche oder eine gelockerte
+Safety-Aussage ersetzt.
 
 ## 9. Abbruchkriterien und erwarteter Endzustand
 
@@ -414,8 +434,8 @@ Der Scope ist abgeschlossen, wenn:
   mit `NOT_AFFECTED` oder konkreter Anpassung abgeschlossen sind;
 - sdkconfig-, Lockfile-, Ressourcen-, Stack-/Heap- und Warnungsdeltas sowie
   die Trennung von Framework-/Toolchain- und Produktwirkung erklaert sind;
-- der bestehende Upgradevertrag, der vollstaendige Review-/Pre-Ready-/CI-
-  Ablauf und die Hardware-Smokes ohne neue Parallelgovernance angewendet sind;
+- der bestehende Upgradevertrag die Issue-159-Nachweise ohne eine zweite
+  Test- oder Workflow-Governance traegt;
 - PR #158 unveraendert bleibt und erst nach diesem Upgrade auf dem neuen
   `main`-Stand seine eigene ESP-IDF-abhaengige Evidence erneuern kann.
 
