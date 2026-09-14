@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include "run_commands.hpp"
 #include "run_recovery_types.hpp"
@@ -37,18 +36,19 @@ class FreshStartSnapshotProvenance {
         return status_ == FreshStartSnapshotProvenanceStatus::InvalidSource;
     }
     [[nodiscard]] const ActuatorPlannerParameters& snapshot() const noexcept {
-        return snapshot_.value();
+        return snapshot_;
     }
 
    private:
     FreshStartSnapshotProvenance(
         FreshStartSnapshotProvenanceStatus status,
         std::optional<ActuatorPlannerParameters> snapshot)
-        : status_(status), snapshot_(snapshot) {}
+        : status_(status),
+          snapshot_(snapshot.value_or(ActuatorPlannerParameters{})) {}
 
     FreshStartSnapshotProvenanceStatus status_{
         FreshStartSnapshotProvenanceStatus::Absent};
-    std::optional<ActuatorPlannerParameters> snapshot_;
+    ActuatorPlannerParameters snapshot_{};
 };
 
 inline constexpr std::size_t kMaximumPersistedRunCommandIds = 32U;
