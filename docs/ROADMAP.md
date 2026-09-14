@@ -32,7 +32,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | PLAN_FIRST; PLAN_APPROVAL=OWNER_APPROVED; PLAN_FIX_VERIFICATION=COMPLETE; PLAN_SHA=d8d506da1d5bde129c09d623263d7657c38f28a3; IMPLEMENTATION=PHASE_A_B_SPIKE_EVIDENCE_ONLY; EVIDENCE=docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md; CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE; PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED; ACTUATOR_RELEASE=NO. Softwareseitig ausführbar; keine zusätzliche Sensor-, Display- oder Aktorverkabelung für Host-/actor-free Evidence, reale Client-/QR-Nachweise separat. | Vergleichbare Reuse-/Capability-Evidence auswerten, danach Owner-Gate für Browser-only, Kandidat und allfällige Vertragsanpassung; erst anschließend kleinstes produktives Integrationsdelta |
+| 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | PLAN_FIRST; PLAN_APPROVAL=OWNER_APPROVED; PLAN_FIX_VERIFICATION=COMPLETE; PLAN_SHA=d8d506da1d5bde129c09d623263d7657c38f28a3; PHASE_A_CAPABILITY_EVIDENCE=PASS; PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING; OWNER_CANDIDATE_SELECTION_GATE=NOT_READY; IMPLEMENTATION=PHASE_A_CAPABILITY_EVIDENCE_ONLY; EVIDENCE=docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md; CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE; PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED; ACTUATOR_RELEASE=NO. Softwareseitig ausführbar; keine zusätzliche Sensor-, Display- oder Aktorverkabelung für Host-/actor-free Evidence, reale Client-/QR-Nachweise separat. | Vergleichbare Browser-/Client-/Recovery-/Ressourcenmatrix für die aussichtsreichen Hauptpfade ausführen; danach Owner-Gate für Browser-only, Kandidat und allfällige Vertragsanpassung; erst anschließend kleinstes produktives Integrationsdelta |
 | 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO`. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -209,10 +209,10 @@ ist geschlossene historische Persistenzprovenienz.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
 - Issue #89 ist die aktuelle softwareseitig ausführbare
-  WLAN-Onboarding-Evaluation; Phase A/B liefert nur isolierte
-  Reuse-/Capability-Evidence. Produktive Kandidatenauswahl und
-  Connectivity-Persistenz bleiben bis zum Owner-Gate offen. Issue #90 ist
-  geschlossen.
+  WLAN-Onboarding-Evaluation; Phase A liefert isolierte
+  Reuse-/Capability-Evidence, Phase B vergleichbare Client-/Recovery-
+  Evidence bleibt offen. Produktive Kandidatenauswahl und Connectivity-
+  Persistenz bleiben bis zum Owner-Gate offen. Issue #90 ist geschlossen.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen

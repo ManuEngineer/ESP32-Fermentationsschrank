@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Candidates-neutral Issue #89 Phase A/B host oracle.
+"""Candidates-neutral Issue #89 Phase A host oracle.
 
 This is a test oracle only.  It intentionally models a volatile browser
 candidate and never implements a production credential record, slot policy,

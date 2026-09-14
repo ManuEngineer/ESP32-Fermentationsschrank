@@ -68,11 +68,9 @@ static bool make_volatile_softap_credentials(char *name,
 void app_main(void)
 {
     esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ESP_ERROR_CHECK(nvs_flash_init());
-    } else {
-        ESP_ERROR_CHECK(err);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS init failed (0x%x); no erase performed; probe stopped", err);
+        return;
     }
 
     ESP_ERROR_CHECK(esp_netif_init());
