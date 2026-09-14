@@ -81,10 +81,28 @@ die v6.1-Quellen unter `components/nvs_flash/`, `components/esp_netif/`,
 | Herkunft beider ESP-IDF-Checkouts | `PASS` | Tag, exakter Commit und sauberer Arbeitsbaum vor den v6.1-Prüfungen verifiziert |
 | v6.1 Component-Manager-Configure | `PASS` | `idf.py reconfigure` mit `sdkconfig.defaults` und Bring-up-Overlay; kein Produktprofilbuild |
 | effektive v6.1-Konfiguration | `PASS` | Ziel `esp32`, 4 MB Flash, kein PSRAM; keine Overlayänderung erforderlich |
-| Issue-90-UART-/NVS-Harness | `NOT_RUN` | nach Commit auf cleanem Builder-HEAD gezielt auszuführen |
-| direkt betroffene Python-Selftests | `NOT_RUN` | nach Commit gezielt auszuführen |
-| direkt betroffener NVS-Hosttest | `NOT_RUN` | nach Commit gezielt auszuführen |
+| Issue-90-UART-/NVS-Harness | `PASS` | `python3 scripts/build_issue90_slice7_harness.py`; v6.1-ESP32-Build, `state_store_test`, Bring-up enthalten, Release ausgeschlossen |
+| direkt betroffene Python-Selftests | `PASS` | `check_issue90_partitions.py --self-test`, `check_secrets.py --selftest`, `run_esp_idf_static_analysis.py --selftest` |
+| direkt betroffener NVS-Hosttest | `PASS` | v6.1-Linux-Hostbuild und Ausführung des erzeugten `issue90_nvs_adapter_host.elf`; `ISSUE90_HOST_ADAPTER_GATE=PASS`, Produktbrücke `PASS:3 FAIL:0 BLOCKED:0 NOT_RUN:0` |
 | Builder-Static-Analysis-Self-Check | `NOT_RUN` | nach den gezielten Tests auf finalem Builder-HEAD auszuführen |
+
+Der erste v6.1-Compile des bestehenden Harnesses und anschließend des
+NVS-Host-Orakels legte wegen GCC 15.2 mit `-Werror=switch` bereits vorhandene
+Enum-Fälle offen. Die minimale Ergänzung der drei Statusfälle im Harness und
+der zwei Oracle-Projektionen ist in der gezielten Prüfung enthalten; es gab
+keine Änderung an Fach-, Persistenz- oder Safety-Semantik.
+
+Im gezielten v6.1-Ausgabesatz wurden folgende Warnungen klassifiziert:
+
+- `MINIMAL_BUILD ... disregarded because the COMPONENTS variable is defined`
+  stammt aus der bestehenden separaten Harness-Projektstruktur mit
+  `COMPONENTS=main` und ändert keinen Produktionsbuild;
+- die v6.1-`component_validation.cmake`-Warnung zum privaten Include von
+  `bootloader_support` durch das IDF-eigene `esp_partition` ist ein Upstream-
+  Frameworkhinweis, keine geänderte Repository-Abhängigkeit.
+
+Die vollständige Warnungs-/Deprecationsauswertung bleibt bis zum
+ownerautorisierten Upgrade-Nachweis `NOT_RUN`.
 
 ## Vollständiger Upgrade-Nachweis und Hardware-Parität
 

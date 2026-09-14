@@ -485,6 +485,8 @@ const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
             return "RESUME_OFFER";
         case fermentation::RunLoadDisposition::RecoveryEvaluation:
             return "RECOVERY_EVALUATION";
+        case fermentation::RunLoadDisposition::FallbackSelectionRequired:
+            return "FALLBACK_SELECTION_REQUIRED";
         case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
         case fermentation::RunLoadDisposition::Completed:
@@ -604,6 +606,7 @@ const char* runProductOutcomeName(
             case fermentation::RunLoadDisposition::NoActiveRun:
                 return "RUN_ABORT_REQUIRED";
             case fermentation::RunLoadDisposition::Standby:
+            case fermentation::RunLoadDisposition::FallbackSelectionRequired:
             case fermentation::RunLoadDisposition::SafeBoot:
                 break;
         }
