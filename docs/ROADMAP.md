@@ -25,16 +25,18 @@ nicht kopiert, sondern verlinkt.
 | Issue #144 / PR #147 | `ISSUE144_STATUS=CLOSED_COMPLETED`; `PR147=MERGED`; `PR147_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb`; `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `RUN_IDENTITY_PROVENANCE=MERGED`; `ACTUATOR_RELEASE=NO` |
 | Issue #152 / PR #153 | `ISSUE152_STATUS=CLOSED_COMPLETED`; `PR153=MERGED`; `PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`; `PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `IMPLEMENTATION=MERGED`; `OWNER_ISSUE_CLOSE=COMPLETED`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` |
 | Issue #26 / PR #143 | `ISSUE26_STATUS=CLOSED_COMPLETED`; `PR143=MERGED`; `PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`; `PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`; `PRE_READY_LOCAL_GATES=PASS`; `ACTUATOR_RELEASE=NO` |
+| Issue #154 / PR #155 | ISSUE154_STATUS=CLOSED_COMPLETED; PR155=MERGED; PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1; IMPLEMENTATION=COMPLETE; ACTUATOR_RELEASE=NO |
+| Issue #106 strukturell / PR #157 | PR157=MERGED; PR157_SOURCE_HEAD=39eebf4e06d7d9d142e4c18eabdb66778f3e3de9; PR157_MERGE_COMMIT=2c010e8a8be8e351f89b79ae6c74f665d24a1f0e; STRUCTURAL_IMPLEMENTATION=COMPLETE; INDEPENDENT_REVIEW=COMPLETE; PRE_READY_LOCAL_GATES=PASS; GITHUB_CI=PASS; PRODUCTIVE_COMPLETION=#35_GATED; ACTUATOR_RELEASE=NO |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO`. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
-| 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
-| 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
-| 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
-| 5 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLAN_APPROVED=YES`; `PLAN_SHA=3a7694aa0804ab9e4c8580a6e722782b81f9f275`; Draft-PR #157; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_FIX_VERIFICATION=PENDING`; `PRODUCTIVE_COMPLETION=#35_GATED`; `ACTUATOR_RELEASE=NO`. | Independent Fix Verification; #35 bleibt Werte-/Grenzengate; Issue #106 nicht produktiv abgeschlossen |
+| 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | PLAN_FIRST; PLAN_APPROVAL=OWNER_APPROVED; PLAN_FIX_VERIFICATION=COMPLETE; PLAN_SHA=d8d506da1d5bde129c09d623263d7657c38f28a3; PHASE_A_CAPABILITY_EVIDENCE=PASS; PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING; OWNER_CANDIDATE_SELECTION_GATE=NOT_READY; IMPLEMENTATION=PHASE_A_CAPABILITY_EVIDENCE_ONLY; EVIDENCE=docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md; CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE; PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED; ACTUATOR_RELEASE=NO. Softwareseitig ausführbar; keine zusätzliche Sensor-, Display- oder Aktorverkabelung für Host-/actor-free Evidence, reale Client-/QR-Nachweise separat. | Vergleichbare Browser-/Client-/Recovery-/Ressourcenmatrix für die aussichtsreichen Hauptpfade ausführen; danach Owner-Gate für Browser-only, Kandidat und allfällige Vertragsanpassung; erst anschließend kleinstes produktives Integrationsdelta |
+| 2 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO`. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
+| 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
+| 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
+| 5 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
 | 6 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
 | 7 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
 | 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
@@ -44,21 +46,20 @@ nicht kopiert, sondern verlinkt.
 
 - Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.
 - Issue #150 / PR #151 – Pre-Ready-CI-Parity-Gate vor `Ready for review` abgeschlossen: `ISSUE150_STATUS=CLOSED_COMPLETED`; `PR151=MERGED`; `PR151_MERGE_COMMIT=913f4c90084b77684ba37674e9070d288b22f5c1`; `IMPLEMENTATION=COMPLETE`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`.
-- Issue #154 – Static-Analysis-Self-Check vor Independent Review als parallele Governance-Arbeit: `PLAN_FIRST`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `PRE_READY_CONTRACT_UNCHANGED=YES`; `ACTUATOR_RELEASE=NO`.
 
 ## Naechste fachliche Arbeit
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
 Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
-mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
-ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
-blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
-abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
-Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Die reale
-Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; fehlende Hardware- und
-Commissioning-Nachweise werden nicht vorweggenommen. Issue #154 ist davon
-getrennte parallele Governance-Arbeit und ändert keine Fachlogik.
+mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle softwareseitig
+ausführbare Arbeit ist Issue #89 mit dem ergebnisoffenen WLAN-Onboarding-Plan
+und dem anschließenden Vier-Kandidaten-Evidence-Gate. Die reale
+Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; diese Issues warten
+weiterhin auf ihre jeweiligen Hardware- und Commissioning-Nachweise. Issue #26
+ist abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
+Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Issue #154
+ist abgeschlossen und keine offene parallele Governance-Arbeit.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
@@ -112,9 +113,10 @@ Die abgeschlossene Basis und die nächste fachliche Phase sind getrennt:
 
 ```text
 abgeschlossene Basis: #29 -> #90 -> #121 -> #124 -> #126 -> #25 -> #144 -> #152 -> #26
-nächste fachliche Phase: #31 -> #30 -> #32 -> #33
+aktuelle softwareseitig ausführbare Arbeit: #89
+nächste Hardwarephase: #31 -> #30 -> #32 -> #33
   -> erste real bedienbare Fermenter-Hardwareintegration
-  -> #106 strukturell -> #34 -> #35 -> #106 produktiv
+  -> #34 -> #35 -> #106 produktiv
   -> spätere vollständige Diagnose-/Abnahme-/Releasegates
 ```
 
@@ -172,10 +174,13 @@ ist geschlossene historische Persistenzprovenienz.
   Display- und Touch-Bedienung auf dem gemergten #25-/#26-Vertrag.
 - #152 bleibt der abgeschlossene owning Scope für den weiterhin verbindlichen
   manuellen Zeit-/Temperaturlauf. #26 konsumiert diesen gemergten Vertrag nur.
+- #89 ist als softwareseitig ausführbare, ergebnisoffene
+  WLAN-Onboarding-Evaluation sichtbar; die produktive Kandidatenauswahl bleibt
+  bis zur vergleichbaren Evidence und dem Ownerentscheid offen.
 - #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
   integriert. Low-Level-Hardwaretests bleiben schmal und erzeugen keine
   separate Wegwerf-Testanwendung.
-- #106 strukturell, #34, #35 und #106 produktiv folgen erst nach der ersten
+- #34, #35 und #106 produktiv folgen erst nach der ersten
   real bedienbaren Fermenter-Hardwareintegration.
 - #19 erhält vor einer späteren Umsetzung eine neue vollständige Planrevision
   auf dann aktuellem `main`. Der bestehende Review-Draft ist weder
@@ -199,15 +204,15 @@ ist geschlossene historische Persistenzprovenienz.
   manuellen Zeit-/Temperaturlauf; Issue #152 ist geschlossen. #26 / PR #143
   ist ebenfalls abgeschlossen und konsumiert den Vertrag ausschließlich über
   seine bestehenden Grenzen.
-- Issue #154 ist ein separater Plan-first-Governance-Scope für den
-  Builder-Self-Check; er ändert den vollständigen Pre-Ready-Vertrag nicht und
-  blockiert die reale Hardware-Reihenfolge nicht.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
-- Issue #89 (WLAN-Onboarding-Evaluation) benoetigt vor Beginn einen eigenen
-  Live-Abgleich und freigegebenen Plan. Issue #90 ist geschlossen.
+- Issue #89 ist die aktuelle softwareseitig ausführbare
+  WLAN-Onboarding-Evaluation; Phase A liefert isolierte
+  Reuse-/Capability-Evidence, Phase B vergleichbare Client-/Recovery-
+  Evidence bleibt offen. Produktive Kandidatenauswahl und Connectivity-
+  Persistenz bleiben bis zum Owner-Gate offen. Issue #90 ist geschlossen.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
