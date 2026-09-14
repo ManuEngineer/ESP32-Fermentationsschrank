@@ -149,6 +149,25 @@ bool sameCheckpointReference(const RunCheckpointReference& left,
            left.payloadCrc == right.payloadCrc && left.variant == right.variant;
 }
 
+bool sameRunIdentity(const RunPersistenceSnapshot& left,
+                     const RunPersistenceSnapshot& right) {
+    return left.variant != RunCheckpointVariant::NoActiveRun &&
+           right.variant == left.variant && !left.activeRunId.empty() &&
+           left.activeRunId == right.activeRunId;
+}
+
+bool sameLogicalActiveRun(const RunCommandState& left,
+                          const RunCommandState& right) {
+    const bool sameVariant =
+        left.activeProgramRun.has_value() ==
+            right.activeProgramRun.has_value() &&
+        left.activeManualRun.has_value() == right.activeManualRun.has_value();
+    return sameVariant &&
+           (left.activeProgramRun.has_value() ||
+            left.activeManualRun.has_value()) &&
+           !left.activeRunId.empty() && left.activeRunId == right.activeRunId;
+}
+
 bool currentMatchesLoadedRecord(
     const RunCommandState& current, const RunPersistenceRawRecord& record,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
@@ -870,12 +889,33 @@ void RunPersistenceCoordinator::loadAndInitializeInto(
         loadReference(currentHead_->current, currentStatus);
     if (currentRecord) {
         slots_[currentHead_->current.slot] = workingSet_.record;
-        const auto& snap = workingSet_.record.snapshot;
+        const auto currentRecordSnapshot = workingSet_.record;
+        const auto& snap = currentRecordSnapshot.snapshot;
+        // Current and Fallback may advance the same logical run at different
+        // revisions. Their immutable planner snapshot must nevertheless be
+        // byte-identical; a different run owns a different snapshot, and a
+        // tombstone owns none. This check never consults live configuration.
+        if (currentHead_->fallback.has_value()) {
+            RunPersistenceLoadStatus fallbackConsistencyStatus =
+                RunPersistenceLoadStatus::Current;
+            if (loadReference(*currentHead_->fallback,
+                              fallbackConsistencyStatus) &&
+                sameRunIdentity(snap, workingSet_.record.snapshot) &&
+                snap.actuatorPlannerParametersSnapshot !=
+                    workingSet_.record.snapshot
+                        .actuatorPlannerParametersSnapshot) {
+                enterBlockedIndeterminate();
+                destination.status =
+                    RunPersistenceLoadStatus::NotReconstructible;
+                return;
+            }
+            workingSet_.record = currentRecordSnapshot;
+        }
         nextCheckpointRevision_ =
-            workingSet_.record.checkpointRevision ==
+            currentRecordSnapshot.checkpointRevision ==
                     std::numeric_limits<std::uint64_t>::max()
                 ? 0U
-                : workingSet_.record.checkpointRevision + 1U;
+                : currentRecordSnapshot.checkpointRevision + 1U;
         persistedIds_ = snap.persistedRunCommandIds;
         persistedIdCount_ = snap.persistedRunCommandCount;
         // The head is the only source of the recoverable state.  A valid
@@ -2513,6 +2553,32 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    const bool freshProductiveStart =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    // Compatibility path for direct coordinator users: a start without the
+    // explicit provenance API is actor-free. It can never inject planner
+    // values; the application boundary uses persistFreshStartCommand when a
+    // lease-derived snapshot is available.
+    const auto absent = FreshStartSnapshotProvenance::absent();
+    return persistCommandInternal(current, decision, time, liveSensorEvidence,
+                                  freshProductiveStart ? &absent : nullptr);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::persistFreshStartCommand(
+    RunCommandState& current, const CommandDecision& decision,
+    const FreshStartSnapshotProvenance& provenance,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    return persistCommandInternal(current, decision, time, liveSensorEvidence,
+                                  &provenance);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
+    RunCommandState& current, const CommandDecision& decision,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence,
+    const FreshStartSnapshotProvenance* freshStartProvenance) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
         return unavailableResult();
@@ -2541,6 +2607,14 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     const bool freshProductiveStart =
         decision.kind == CommandKind::StartProgram ||
         decision.kind == CommandKind::StartManualHolding;
+    if (freshProductiveStart && freshStartProvenance == nullptr)
+        return result(RunPersistenceResultStatus::NotEligible,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    if (freshProductiveStart && freshStartProvenance->invalidSource())
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
     if (freshProductiveStart && !time.utcUnixSeconds.has_value()) {
         // The application/domain boundary uses the existing honest Blocked
         // result.  No candidate Apply, durable write, or RAM Apply is allowed
@@ -2609,6 +2683,13 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                       RunPersistenceStep::CandidateApply);
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(workingSet_.candidate, *liveSensorEvidence);
+    if (freshProductiveStart) {
+        workingSet_.candidate.actuatorPlannerParametersSnapshot.reset();
+        if (freshStartProvenance->present()) {
+            workingSet_.candidate.actuatorPlannerParametersSnapshot =
+                freshStartProvenance->snapshot();
+        }
+    }
     auto ids = persistedIds_;
     auto count = persistedIdCount_;
     if (count < ids.size())
@@ -2638,6 +2719,13 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
             RunPersistenceStep::RamApply,
             RunPersistenceTechnicalReason::InvalidProjection,
             RunPersistenceDurability::Changed);
+    }
+    if (freshProductiveStart) {
+        current.actuatorPlannerParametersSnapshot.reset();
+        if (freshStartProvenance->present()) {
+            current.actuatorPlannerParametersSnapshot =
+                freshStartProvenance->snapshot();
+        }
     }
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
@@ -2670,6 +2758,13 @@ RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
     }
     if (current.runRevision == std::numeric_limits<std::uint32_t>::max() ||
         candidate.runRevision != current.runRevision + 1U) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    if (sameLogicalActiveRun(current, candidate) &&
+        current.actuatorPlannerParametersSnapshot !=
+            candidate.actuatorPlannerParametersSnapshot) {
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);

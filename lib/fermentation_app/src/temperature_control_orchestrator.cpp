@@ -99,6 +99,12 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding) {
+        return persistFreshStartCommand(current, decision,
+                                        FreshStartSnapshotProvenance::absent(),
+                                        time, liveSensorEvidence);
+    }
     const TemperatureControlLifecycleSnapshot before{
         current.processState.state};
     return complete(persistence_.persistCommand(current, decision, time,
@@ -120,7 +126,32 @@ TemperatureControlApplicationOrchestrator::persistFreshStartCommand(
         rejected.coordinatorState = persistence_.state();
         return rejected;
     }
-    return persistCommand(current, decision, time, liveSensorEvidence);
+    return persistFreshStartCommand(current, decision,
+                                    FreshStartSnapshotProvenance::absent(),
+                                    time, liveSensorEvidence);
+}
+
+RunPersistenceResult
+TemperatureControlApplicationOrchestrator::persistFreshStartCommand(
+    RunCommandState& current, const CommandDecision& decision,
+    const FreshStartSnapshotProvenance& provenance,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
+    const bool isFreshStartKind =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    if (!isFreshStartKind) {
+        RunPersistenceResult rejected;
+        rejected.status = RunPersistenceResultStatus::NotEligible;
+        rejected.coordinatorState = persistence_.state();
+        return rejected;
+    }
+    return complete(
+        persistence_.persistFreshStartCommand(current, decision, provenance,
+                                              time, liveSensorEvidence),
+        before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -241,6 +272,11 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
             resetActuatorPlanAtBoundary(
                 *planner_, *actuatorDriver_, boundary, nowMonotonicMillis,
                 pendingControlRequestFeedback_, outstandingEvaluation_);
+            planner_->endRun();
+            if (current.actuatorPlannerParametersSnapshot.has_value()) {
+                static_cast<void>(planner_->beginRun(
+                    *current.actuatorPlannerParametersSnapshot));
+            }
         }
     }
     if (committedTransition.has_value() && !newActiveRun &&

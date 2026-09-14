@@ -145,13 +145,26 @@ Gespeicherte Factory-/User-Programme persistieren weiterhin ihr
 Laufschnappschuss aus Zieltemperatur, Dauer, Vorheizen, Produktwartezeit,
 Zielqualifikation und Abschlussverhalten; seine Source-Revision ist absent.
 
-Die aktuelle Schema-Semantik wird nicht in Schema 4 hineingepresst: neue
-Writes verwenden Schema 5. Die bestehenden Schema-1-bis-4-Records bleiben
+Die aktuelle Schema-5-Semantik wird nicht in Schema 4 hineingepresst. Neue
+Writes verwenden inzwischen Schema 6. Die bestehenden Schema-1-bis-5-Records bleiben
 lesbar und werden als gespeicherte ProgramRun-Quellen mit ihrer echten
 historischen Revision interpretiert. Ein unbekanntes neueres Schema bleibt
 fail-closed. Es gibt keine Migration alter Records nur fuer diesen Fachfall.
 Der gespeicherte ProgramCatalog wird durch einen ManualTimed-Lauf nicht
 geaendert.
+
+### Schema 6: unveraenderlicher Planner-Snapshot pro Run
+
+Schema 6 traegt fuer einen aktiven `ProgramRun` oder `ManualRun` optional den
+vollstaendig validierten `ActuatorPlannerParameters`-Snapshot. Fehlt der Block,
+ist der Lauf actor-free; weder RAM noch Planner darf Werte aus der aktuellen
+Service-Konfiguration ergaenzen. `NoActiveRun` traegt nie einen Snapshot.
+
+Current und Fallback mit derselben Run-Identitaet muessen denselben Snapshot
+byte-identisch tragen, auch wenn ihre `runRevision` verschieden ist. Ein
+anderer, aelterer Run traegt seinen eigenen Snapshot. Neue Writes verwenden
+Schema 6; Schema 1 bis 5 bleiben lesbar und aktive Altlaeufe bleiben bei
+fehlendem Block actor-free.
 
 Nach dem Decode wird derselbe bestehende ProgramRun-/Timed-
 Recoveryvertrag verwendet. `PREHEATING`, `WAITING_FOR_PRODUCT`,

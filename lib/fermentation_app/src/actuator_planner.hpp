@@ -21,7 +21,14 @@ enum class ActuatorFeedbackEpisodeAtStop : std::uint8_t {
 // Sink-, kein GPIO-Zugriff (ADR-013).
 class ActuatorPlanner {
    public:
+    ActuatorPlanner();
     explicit ActuatorPlanner(ActuatorPlannerParameters parameters);
+
+    // Binds one immutable per-run planner snapshot. This is a planner
+    // lifecycle binding only; #24 still owns actual actuator permission.
+    [[nodiscard]] bool beginRun(const ActuatorPlannerParameters& parameters);
+    // Clears the active run binding while retaining already-created fan tails.
+    void endRun();
 
     [[nodiscard]] ActuatorPlanTickResult tick(
         const ActuatorPlanTickInput& input);
@@ -132,6 +139,11 @@ class ActuatorPlanner {
 
     ActuatorPlannerParameters parameters_;
     ActuatorPlannerRuntimeState state_;
+    // The parameter-taking constructor is retained for deterministic unit
+    // fixtures. Production composition uses the unconfigured constructor and
+    // binds only through beginRun().
+    bool testConfigured_{false};
+    bool runBound_{false};
 };
 
 }  // namespace fermentation

@@ -58,6 +58,7 @@ using device_platform::StorageEpoch;
 using device_platform_test_support::MockTimeZoneResolver;
 using fermentation::ConfigurationCodecStatus;
 using fermentation::ProgramCatalog;
+using fermentation::ServiceConfiguration;
 using fermentation::UserConfiguration;
 
 UserConfiguration validUserConfiguration() {
@@ -453,21 +454,95 @@ void test_invalid_user_encode_leaves_output_unchanged() {
     TEST_ASSERT_EQUAL_STRING("old", output.c_str());
 }
 
-void test_service_configuration_is_exactly_empty() {
+fermentation::ActuatorPlannerParameters validPlannerParameters() {
+    fermentation::ActuatorPlannerParameters p;
+    p.switchingWindowMillis = 10'000U;
+    p.minimumOnMillis = 2'000U;
+    p.minimumOffMillis = 1'000U;
+    p.polarityDeadTimeMillis = 3'000U;
+    p.pulseAccumulatorCapMillis = 10'000U;
+    p.counterDirectionConfirmationQuoteThreshold = 0.5;
+    p.counterDirectionConfirmationDurationMillis = 2'000U;
+    p.requestWatchdogMillis = 60'000U;
+    p.outerFanPostRunMillis = 5'000U;
+    p.innerFanPostRunMillis = 1'000U;
+    return p;
+}
+
+void test_service_configuration_schema_one_two_and_strict_payloads() {
     std::string output = "old";
     TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
-                         fermentation::ServiceConfiguration{}, output) ==
+                         ServiceConfiguration{}, output) ==
                      ConfigurationCodecStatus::Success);
-    TEST_ASSERT_TRUE(output.empty());
+    TEST_ASSERT_EQUAL_UINT32(1U, output.size());
+    TEST_ASSERT_EQUAL_UINT8(0U, static_cast<std::uint8_t>(output[0]));
     TEST_ASSERT_TRUE(
         fermentation::decodeServiceConfigurationPayload(1U, "").status ==
         ConfigurationCodecStatus::Success);
+    TEST_ASSERT_FALSE(fermentation::decodeServiceConfigurationPayload(1U, "")
+                          .document->actuatorPlannerParameters.has_value());
+    const auto emptyV2 = fermentation::decodeServiceConfigurationPayload(
+        fermentation::kCurrentServiceConfigurationSchemaVersion, output);
+    TEST_ASSERT_TRUE(emptyV2.status == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_TRUE(emptyV2.document.has_value());
+    TEST_ASSERT_FALSE(emptyV2.document->actuatorPlannerParameters.has_value());
     TEST_ASSERT_TRUE(
         fermentation::decodeServiceConfigurationPayload(1U, "x").status ==
         ConfigurationCodecStatus::TrailingBytes);
     TEST_ASSERT_TRUE(
         fermentation::decodeServiceConfigurationPayload(0U, "").status ==
         ConfigurationCodecStatus::UnsupportedSchema);
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion + 1U,
+            output)
+            .status == ConfigurationCodecStatus::UnsupportedSchema);
+
+    ServiceConfiguration configured;
+    configured.actuatorPlannerParameters = validPlannerParameters();
+    TEST_ASSERT_TRUE(
+        fermentation::encodeServiceConfigurationPayload(configured, output) ==
+        ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(fermentation::configuration_limits::
+                                 kMaximumServiceConfigurationPayloadBytes,
+                             output.size());
+    const auto decoded = fermentation::decodeServiceConfigurationPayload(
+        fermentation::kCurrentServiceConfigurationSchemaVersion, output);
+    TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_TRUE(decoded.document.has_value());
+    TEST_ASSERT_TRUE(decoded.document->actuatorPlannerParameters.has_value());
+    TEST_ASSERT_TRUE(*decoded.document->actuatorPlannerParameters ==
+                     *configured.actuatorPlannerParameters);
+
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion,
+            std::string(1U, '\x02'))
+            .status == ConfigurationCodecStatus::InvalidWireValue);
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion,
+            std::string(1U, '\x01'))
+            .status == ConfigurationCodecStatus::InvalidWireValue);
+    auto nonFinite = output;
+    for (std::size_t index = 41U; index < 49U; ++index)
+        nonFinite[index] = static_cast<char>(0x7fU);
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion, nonFinite)
+            .status == ConfigurationCodecStatus::InvalidWireValue);
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion,
+            std::string("\0x", 2U))
+            .status == ConfigurationCodecStatus::TrailingBytes);
+
+    configured.actuatorPlannerParameters->minimumOnMillis = 0U;
+    const std::string unchanged = output;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeServiceConfigurationPayload(configured, output) ==
+        ConfigurationCodecStatus::InvalidDocument);
+    TEST_ASSERT_EQUAL_STRING(unchanged.c_str(), output.c_str());
 }
 
 void test_program_catalog_round_trip_is_deterministic_and_preserves_notes() {
@@ -792,7 +867,7 @@ int main() {
     RUN_TEST(
         test_payload_capacity_boundaries_are_independent_from_field_validation);
     RUN_TEST(test_invalid_user_encode_leaves_output_unchanged);
-    RUN_TEST(test_service_configuration_is_exactly_empty);
+    RUN_TEST(test_service_configuration_schema_one_two_and_strict_payloads);
     RUN_TEST(
         test_program_catalog_round_trip_is_deterministic_and_preserves_notes);
     RUN_TEST(test_program_catalog_factory_payload_has_fixed_golden_bytes);

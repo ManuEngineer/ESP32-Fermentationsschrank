@@ -22,6 +22,7 @@ inline constexpr std::size_t kFactoryProgramCount = 4U;
 inline constexpr std::size_t kMaximumUserProgramCount = 12U;
 inline constexpr std::size_t kMaximumProgramCount = 16U;
 inline constexpr std::size_t kMaximumUserConfigurationPayloadBytes = 256U;
+inline constexpr std::size_t kMaximumServiceConfigurationPayloadBytes = 81U;
 inline constexpr std::size_t kMaximumProgramCatalogPayloadBytes = 32768U;
 inline constexpr std::size_t kConfigurationReferenceBytes = 34U;
 inline constexpr std::size_t kConfigurationManifestPayloadBytes = 104U;

@@ -162,9 +162,9 @@ bool configurationContentEquals(const UserConfiguration& left,
            left.activeThemeId == right.activeThemeId;
 }
 
-bool configurationContentEquals(const ServiceConfiguration& /*left*/,
-                                const ServiceConfiguration& /*right*/) {
-    return true;
+bool configurationContentEquals(const ServiceConfiguration& left,
+                                const ServiceConfiguration& right) {
+    return left.actuatorPlannerParameters == right.actuatorPlannerParameters;
 }
 
 bool configurationContentEquals(const ProgramDocument& left,

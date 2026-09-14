@@ -91,6 +91,11 @@ class TemperatureControlApplicationOrchestrator {
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    [[nodiscard]] RunPersistenceResult persistFreshStartCommand(
+        RunCommandState& current, const CommandDecision& decision,
+        const FreshStartSnapshotProvenance& provenance,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     // R1 boot reconciliation for a trusted Current that the interlock
     // classifies as semantically non-resumable. Untrusted load statuses never
     // enter this method's discard path.

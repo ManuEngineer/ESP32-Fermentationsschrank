@@ -949,9 +949,15 @@ void test_tombstone_boot_resets_schedule_to_the_new_boot_timebase() {
     store.restart();
     RunPersistenceCoordinator afterBoot(
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto tombstone = afterBoot.loadAndInitialize();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
-        static_cast<int>(afterBoot.loadAndInitialize().status));
+        static_cast<int>(tombstone.status));
+    TEST_ASSERT_TRUE(tombstone.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::NoActiveRun),
+                          static_cast<int>(tombstone.snapshot->variant));
+    TEST_ASSERT_FALSE(
+        tombstone.snapshot->actuatorPlannerParametersSnapshot.has_value());
     RunCommandState newRun;
     newRun.processState.state = ProcessState::Standby;
     const auto nextStart = startDecision(newRun, 403U, 10U);
@@ -2074,6 +2080,103 @@ void test_tombstone_fallback_does_not_enter_recovery_pending() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
         static_cast<int>(afterBoot.state()));
+}
+
+void test_current_fallback_snapshot_identity_contract() {
+    const auto epoch = device_platform::StorageEpoch{1U};
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, epoch, RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = persistedFermentingRun(seed, 995U);
+    const auto initialReference =
+        RunPersistenceCoordinatorTestAccess::currentReference(seed);
+    const auto initialBytes =
+        store.read(slotKey(initialReference.slot == 0U ? "rc0" : "rc1"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(initialBytes.status));
+    auto initialRecord = decodeRunPersistenceRecord(initialBytes.value, epoch);
+    TEST_ASSERT_TRUE(initialRecord.has_value());
+
+    auto currentSnapshot = initialRecord->snapshot;
+    currentSnapshot.actuatorPlannerParametersSnapshot =
+        bridgeActuatorPlannerParameters();
+    ++currentSnapshot.runRevision;
+    const auto currentBytes = encodeCheckpointForTest(
+        currentSnapshot, epoch, kCurrentRunPersistenceSchema, 2U);
+    const auto currentRecord = decodeRunPersistenceRecord(currentBytes, epoch);
+    TEST_ASSERT_TRUE(currentRecord.has_value());
+
+    auto installFallback = [&](RunPersistenceSnapshot fallbackSnapshot) {
+        const auto fallbackBytes = encodeCheckpointForTest(
+            fallbackSnapshot, epoch, kCurrentRunPersistenceSchema, 1U);
+        const auto fallbackRecord =
+            decodeRunPersistenceRecord(fallbackBytes, epoch);
+        if (!fallbackRecord.has_value()) return false;
+        RunPersistenceHead head;
+        head.state = RunPersistenceHeadState::Committed;
+        head.revision = 3U;
+        head.current = makeRunCheckpointReference(1U, *currentRecord, epoch);
+        head.fallback = makeRunCheckpointReference(0U, *fallbackRecord, epoch);
+        const auto headBytes = encodeRunPersistenceHead(head, epoch);
+        if (!headBytes.has_value()) return false;
+        return store.backing().write(slotKey("rc0"), fallbackBytes) ==
+                   device_platform::StateStoreWriteStatus::Success &&
+               store.backing().write(slotKey("rc1"), currentBytes) ==
+                   device_platform::StateStoreWriteStatus::Success &&
+               store.backing().write(slotKey("rh0"), *headBytes) ==
+                   device_platform::StateStoreWriteStatus::Success;
+    };
+
+    // An older run owns its own snapshot; it is not compared with Current.
+    auto olderRun = initialRecord->snapshot;
+    olderRun.activeRunId = "older-run";
+    olderRun.actuatorPlannerParametersSnapshot =
+        bridgeActuatorPlannerParameters();
+    olderRun.actuatorPlannerParametersSnapshot->minimumOnMillis += 1U;
+    TEST_ASSERT_TRUE(installFallback(olderRun));
+    store.restart();
+    RunPersistenceCoordinator olderRunBoot(store, epoch,
+                                           RunCheckpointSchedule{});
+    const auto olderLoaded = olderRunBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(olderLoaded.status));
+    TEST_ASSERT_TRUE(olderLoaded.snapshot.has_value());
+    TEST_ASSERT_TRUE(
+        olderLoaded.snapshot->actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(*olderLoaded.snapshot->actuatorPlannerParametersSnapshot ==
+                     *currentSnapshot.actuatorPlannerParametersSnapshot);
+
+    // Same logical run, different run revisions: the immutable snapshot is
+    // identical and therefore remains loadable.
+    auto sameRunFallback = currentSnapshot;
+    --sameRunFallback.runRevision;
+    TEST_ASSERT_TRUE(installFallback(sameRunFallback));
+    store.restart();
+    RunPersistenceCoordinator sameRunBoot(store, epoch,
+                                          RunCheckpointSchedule{});
+    const auto sameRunLoaded = sameRunBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(sameRunLoaded.status));
+    TEST_ASSERT_TRUE(sameRunLoaded.snapshot.has_value());
+    TEST_ASSERT_TRUE(
+        sameRunLoaded.snapshot->actuatorPlannerParametersSnapshot.has_value());
+
+    // A changed snapshot for the same run is a reconstruction blocker.
+    auto mismatchedFallback = sameRunFallback;
+    mismatchedFallback.actuatorPlannerParametersSnapshot->minimumOnMillis += 1U;
+    TEST_ASSERT_TRUE(installFallback(mismatchedFallback));
+    store.restart();
+    RunPersistenceCoordinator mismatchBoot(store, epoch,
+                                           RunCheckpointSchedule{});
+    const auto mismatchLoaded = mismatchBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NotReconstructible),
+        static_cast<int>(mismatchLoaded.status));
+    TEST_ASSERT_FALSE(mismatchLoaded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(mismatchBoot.state()));
 }
 
 enum class CorePreCommitFailure {
@@ -8950,6 +9053,82 @@ void test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow() {
                      ActuatorSafetyGateStatus::Unresolved);
 }
 
+void test_recovery_candidate_cannot_change_active_run_planner_snapshot() {
+    // Recovery without a persisted snapshot remains actor-free; no live
+    // planner configuration is consulted as a fallback.
+    {
+        SequencedWriteStore absentStore;
+        RunPersistenceCoordinator absentCoordinator(
+            absentStore, device_platform::StorageEpoch(1U),
+            RunCheckpointSchedule{});
+        static_cast<void>(absentCoordinator.loadAndInitialize());
+        auto absentCurrent = persistedFermentingRun(absentCoordinator, 1233U);
+        auto absentCandidate = absentCurrent;
+        ++absentCandidate.runRevision;
+        const auto absentPersisted = absentCoordinator.persistRecoveryCandidate(
+            absentCurrent, absentCandidate,
+            RunCheckpointTime{
+                absentCurrent.processState.stateEnteredAtMillis + 1'000U,
+                1'700'000'001LL});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(absentPersisted.status));
+        TEST_ASSERT_FALSE(
+            absentCurrent.actuatorPlannerParametersSnapshot.has_value());
+    }
+
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto current = persistedFermentingRun(coordinator, 1234U);
+    current.actuatorPlannerParametersSnapshot =
+        bridgeActuatorPlannerParameters();
+    auto unchanged = current;
+    ++unchanged.runRevision;
+    const auto persisted = coordinator.persistRecoveryCandidate(
+        current, unchanged,
+        RunCheckpointTime{current.processState.stateEnteredAtMillis + 1'000U,
+                          1'700'000'001LL});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(persisted.status));
+    TEST_ASSERT_TRUE(current.actuatorPlannerParametersSnapshot.has_value());
+
+    auto mutated = current;
+    ++mutated.runRevision;
+    mutated.actuatorPlannerParametersSnapshot->minimumOnMillis += 1U;
+    const auto writesBeforeMutation = store.writeCount();
+    const auto rejectedMutation = coordinator.persistRecoveryCandidate(
+        current, mutated,
+        RunCheckpointTime{current.processState.stateEnteredAtMillis + 2'000U,
+                          1'700'000'002LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(rejectedMutation.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceTechnicalReason::InvalidProjection),
+        static_cast<int>(rejectedMutation.technicalReason));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeMutation),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_UINT64(
+        2'000U, current.actuatorPlannerParametersSnapshot->minimumOnMillis);
+
+    auto removed = current;
+    ++removed.runRevision;
+    removed.actuatorPlannerParametersSnapshot.reset();
+    const auto writesBeforeRemoval = store.writeCount();
+    const auto rejectedRemoval = coordinator.persistRecoveryCandidate(
+        current, removed,
+        RunCheckpointTime{current.processState.stateEnteredAtMillis + 3'000U,
+                          1'700'000'003LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(rejectedRemoval.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeRemoval),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_TRUE(current.actuatorPlannerParametersSnapshot.has_value());
+}
+
 void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
     SequencedWriteStore store;
     RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
@@ -10362,6 +10541,7 @@ int main(int, char**) {
     RUN_TEST(test_periodic_target_slot_existing_not_found_is_indeterminate);
     RUN_TEST(test_load_fallback_orphan_and_schema_epoch_matrix);
     RUN_TEST(test_tombstone_fallback_does_not_enter_recovery_pending);
+    RUN_TEST(test_current_fallback_snapshot_identity_contract);
     RUN_TEST(
         test_write_snapshot_core_rolls_back_loaded_active_run_before_commit);
     RUN_TEST(
@@ -10428,6 +10608,7 @@ int main(int, char**) {
     RUN_TEST(test_fresh_start_bridge_reaches_safety_only_after_real_apply);
     RUN_TEST(
         test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow);
+    RUN_TEST(test_recovery_candidate_cannot_change_active_run_planner_snapshot);
     RUN_TEST(test_discarded_no_active_run_can_use_real_fresh_start_bridge);
     RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
     RUN_TEST(

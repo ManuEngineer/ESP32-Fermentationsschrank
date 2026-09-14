@@ -60,6 +60,28 @@ bool validChangeOperation(const ChangeOperation& operation) {
     return false;
 }
 
+bool validServiceConfigurationReference(
+    const ServiceConfigurationReference& reference, std::size_t slotCount) {
+    if (!validReference(
+            reference,
+            configuration_storage_contract::kServiceConfigurationRecordType,
+            slotCount, 1U, kCurrentServiceConfigurationSchemaVersion,
+            configuration_limits::kMaximumServiceConfigurationPayloadBytes)) {
+        return false;
+    }
+    if (reference.schemaVersion ==
+        static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
+        return reference.payloadLength == 0U;
+    }
+    if (reference.schemaVersion == kCurrentServiceConfigurationSchemaVersion) {
+        return reference.payloadLength == 1U ||
+               reference.payloadLength ==
+                   configuration_limits::
+                       kMaximumServiceConfigurationPayloadBytes;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool operator==(const ChangeOrigin& left, const ChangeOrigin& right) {
@@ -124,10 +146,9 @@ bool isPlausible(const ConfigurationManifest& manifest) {
                configuration_limits::kConfigurationDocumentSlotCount, 1U,
                kCurrentUserConfigurationSchemaVersion,
                configuration_limits::kMaximumUserConfigurationPayloadBytes) &&
-           validReference(manifest.serviceConfiguration,
-                          kServiceConfigurationRecordType,
-                          configuration_limits::kConfigurationDocumentSlotCount,
-                          1U, 1U, 0U, 0U) &&
+           validServiceConfigurationReference(
+               manifest.serviceConfiguration,
+               configuration_limits::kConfigurationDocumentSlotCount) &&
            validReference(
                manifest.programCatalog, kProgramCatalogRecordType,
                configuration_limits::kConfigurationDocumentSlotCount, 1U, 1U,

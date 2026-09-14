@@ -129,6 +129,15 @@ RUN_PERSISTENCE_DECISION_PARAMETER_TYPES = frozenset(
     {"CommandDecision", "TransitionDecision"}
 )
 
+# Issue #106: the immutable persisted planner snapshot may be bound to the
+# live planner only at the existing Application/Orchestrator handoff. This is
+# deliberately a small call-site guard, not a second parser or lifecycle
+# model.
+PLANNER_BINDING_ALLOWED_FILE = (
+    "lib/fermentation_app/src/temperature_control_orchestrator.cpp"
+)
+PLANNER_BINDING_CALL_PATTERN = re.compile(r"(?:\.|->)\s*beginRun\s*\(")
+
 
 def _run_persistence_function_parameter_list(
     code: str, brace_index: int
@@ -568,6 +577,29 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 )
 
 
+def add_planner_binding_boundary_violations(
+    violations: list[str], root: Path
+) -> None:
+    """Keep snapshot-to-planner binding at the existing application boundary."""
+    for relative_root in ("lib/fermentation_app/src", "src", "main"):
+        directory = root / relative_root
+        for path in text_files(directory):
+            relative = path.relative_to(root).as_posix()
+            if relative == PLANNER_BINDING_ALLOWED_FILE:
+                continue
+            try:
+                source = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            code = mask_cxx_comments_and_strings(source)
+            for match in PLANNER_BINDING_CALL_PATTERN.finditer(code):
+                line_number = code.count("\n", 0, match.start()) + 1
+                violations.append(
+                    f"{path}:{line_number}: Planner-Bindung ausserhalb der "
+                    "Application-/Orchestrator-Grenze"
+                )
+
+
 # Issue #21, Plan Abschnitt 7/9.7: die vier Sensorselektions-/Kommando-
 # vertragsheader duerfen keinen gegenseitigen Include-Zyklus bilden. Nur die
 # beiden explizit ausgeschlossenen Kopplungen sind ueberhaupt erreichbar
@@ -935,6 +967,7 @@ def check(root: Path) -> list[str]:
 
     add_idf_leak_violations(violations, root)
     add_run_persistence_bypass_violations(violations, root)
+    add_planner_binding_boundary_violations(violations, root)
     add_component_requires_violations(violations, root)
     add_sensor_selection_include_cycle_violations(violations, root)
     add_sensor_selection_canonical_function_violations(violations, root)
@@ -1425,6 +1458,13 @@ RUN_PERSISTENCE_BYPASS_CASES = {
     ),
 }
 
+PLANNER_BINDING_BOUNDARY_VIOLATION_CASES = {
+    "planner_begin_run_outside_orchestrator": (
+        "lib/fermentation_app/src/rogue_planner_binding.cpp",
+        "void f(Planner& planner) { planner.beginRun(snapshot); }\n",
+    ),
+}
+
 # The bypass rule deliberately follows values originating from decide*().  It
 # must not turn into a repository-wide ban on unrelated members with the same
 # spelling.
@@ -1568,6 +1608,16 @@ def selftest() -> int:
             print(
                 f"{FAILED}: fachfremder Member-Fall {name!r} wurde faelschlich "
                 "als Bypass erkannt"
+            )
+            return 1
+
+    for name, (relative_path, content) in (
+        PLANNER_BINDING_BOUNDARY_VIOLATION_CASES.items()
+    ):
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: Planner-Bindung ausserhalb der Orchestrator-Grenze "
+                f"{name!r} wurde nicht erkannt"
             )
             return 1
 

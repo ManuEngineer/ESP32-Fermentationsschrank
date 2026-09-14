@@ -528,11 +528,12 @@ void put(SimulatedPersistentStateStore& store, const char* key,
 template <typename Version>
 fermentation::ConfigurationRecordReference<Version> reference(
     RecordTypeId type, std::uint32_t slot, Version version,
-    const std::string& payload, StorageEpoch epoch = kEpoch) {
+    const std::string& payload, StorageEpoch epoch = kEpoch,
+    std::uint32_t schemaVersion = 1U) {
     return {type,
             device_platform::SlotId{slot},
             version,
-            1U,
+            schemaVersion,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
             epoch};
@@ -593,7 +594,9 @@ ConfigurationFixtureBytes configurationBaseline(bool withNewGeneration) {
     result.bytes["uc0"] =
         envelope(kUserConfigurationRecordType, 1U, 1U, result.oldUserPayload);
     result.bytes["sc0"] =
-        envelope(kServiceConfigurationRecordType, 1U, 1U, oldServicePayload);
+        envelope(kServiceConfigurationRecordType,
+                 fermentation::kCurrentServiceConfigurationSchemaVersion, 1U,
+                 oldServicePayload);
     result.bytes["pc0"] =
         envelope(kProgramCatalogRecordType, 1U, 1U, oldCatalogPayload);
     const fermentation::ConfigurationManifest oldManifest{
@@ -604,7 +607,8 @@ ConfigurationFixtureBytes configurationBaseline(bool withNewGeneration) {
                   result.oldUserPayload),
         reference(kServiceConfigurationRecordType, 0U,
                   fermentation::ServiceConfigurationRevision{1U},
-                  oldServicePayload),
+                  oldServicePayload, kEpoch,
+                  fermentation::kCurrentServiceConfigurationSchemaVersion),
         reference(kProgramCatalogRecordType, 0U,
                   fermentation::ProgramCatalogRevision{1U}, oldCatalogPayload)};
     std::string oldManifestPayload;
@@ -631,8 +635,10 @@ ConfigurationFixtureBytes configurationBaseline(bool withNewGeneration) {
     if (withNewGeneration) {
         result.bytes["uc1"] = envelope(kUserConfigurationRecordType, 1U, 2U,
                                        result.newUserPayload);
-        result.bytes["sc1"] = envelope(kServiceConfigurationRecordType, 1U, 2U,
-                                       newServicePayload);
+        result.bytes["sc1"] =
+            envelope(kServiceConfigurationRecordType,
+                     fermentation::kCurrentServiceConfigurationSchemaVersion,
+                     2U, newServicePayload);
         result.bytes["pc1"] =
             envelope(kProgramCatalogRecordType, 1U, 2U, newCatalogPayload);
         const fermentation::ConfigurationManifest newManifest{
@@ -643,7 +649,8 @@ ConfigurationFixtureBytes configurationBaseline(bool withNewGeneration) {
                       result.newUserPayload),
             reference(kServiceConfigurationRecordType, 1U,
                       fermentation::ServiceConfigurationRevision{2U},
-                      newServicePayload),
+                      newServicePayload, kEpoch,
+                      fermentation::kCurrentServiceConfigurationSchemaVersion),
             reference(kProgramCatalogRecordType, 1U,
                       fermentation::ProgramCatalogRevision{2U},
                       newCatalogPayload)};

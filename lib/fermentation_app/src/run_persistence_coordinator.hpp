@@ -228,6 +228,11 @@ class RunPersistenceCoordinator {
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    [[nodiscard]] RunPersistenceResult persistFreshStartCommand(
+        RunCommandState& current, const CommandDecision& decision,
+        const FreshStartSnapshotProvenance& provenance,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
         const RunCheckpointTime& time,
@@ -300,6 +305,11 @@ class RunPersistenceCoordinator {
         RunPersistenceFallbackDirective fallbackDirective = {});
 
    private:
+    [[nodiscard]] RunPersistenceResult persistCommandInternal(
+        RunCommandState& current, const CommandDecision& decision,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence,
+        const FreshStartSnapshotProvenance* freshStartProvenance);
     friend class RunPersistenceCoordinatorTestAccess;
 
     struct RunPersistenceWorkingSet {
