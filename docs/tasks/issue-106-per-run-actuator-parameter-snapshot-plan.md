@@ -29,28 +29,30 @@ Servicekonfiguration und dem ausführenden, langlebigen Aktorplaner.
 
 ### 2.1 Ziel
 
-Jeder logisch startbare Run wird als `ActorFree` oder als
-`ProductiveActorRun` über dieselbe bestehende Startgrenze klassifiziert. Ein
-`ActorFree`-Run darf ohne Planner-Snapshot logisch und persistent starten; er
-bleibt aktor-unberechtigt. Ein `ProductiveActorRun` erhält genau einmal einen
-vollständigen, validierten `ActuatorPlannerParameters`-Snapshot aus der zu
-diesem Start gelesenen Servicekonfiguration. Dieser Snapshot wird vor
-`NewActiveRun` atomar im bestehenden Run-Checkpoint gespeichert, nach einem
-Neustart ausschließlich aus dem gespeicherten Run wiederhergestellt und für
-die aktive Run-Lebenszeit in den langlebigen `ActuatorPlanner` kopiert.
-Änderungen der Servicekonfiguration wirken erst auf einen späteren Run.
+Jeder logisch startbare Run erhält an derselben bestehenden Startgrenze
+entweder keinen Planner-Snapshot (`absent`) oder genau einen vollständigen,
+validierten `ActuatorPlannerParameters`-Snapshot (`present`) aus einer gültigen
+`RuntimeConfigurationReadLease`. Diese Snapshot-Provenienz entscheidet nur,
+welcher unveränderliche Planerwert in den Run gelangt; sie ist keine Safety-
+oder Aktorfreigabe. Ein `absent`-Run darf logisch und persistent ohne
+Planner-Bindung starten. Ein `present`-Snapshot wird vor `NewActiveRun`
+atomar im bestehenden Run-Checkpoint gespeichert, nach einem Neustart
+ausschließlich aus dem gespeicherten Run wiederhergestellt und für die aktive
+Run-Lebenszeit in den langlebigen `ActuatorPlanner` kopiert. Änderungen der
+Servicekonfiguration wirken erst auf einen späteren Run.
 
 Der Ablauf muss für Program- und Manual-Run identisch gelten:
 
 ```text
-eine einzige Fresh-Start-API mit owner-erzeugter ActuationAdmission
--> ActorFree: Run-Kandidat ohne Planner-Snapshot bilden
--> ProductiveActorRun: RuntimeConfigurationReadLease erwerben
--> bei ProductiveActorRun aktuellen Service-Snapshot lesen und validieren
+eine einzige bestehende Fresh-Start-API mit Snapshot-Provenienz
+-> absent: Run-Kandidat ohne Planner-Snapshot bilden
+-> present: bestehende RuntimeConfigurationReadLease erwerben
+-> bei present aktuellen Service-Snapshot lesen und validieren
 -> Run-Kandidat mit absent/present Planner-Snapshot bilden
 -> bestehende #17-Run-Transaktion atomar persistieren/verifizieren
 -> erst nach bestätigtem Commit NewActiveRun/RAM-State publizieren
--> nur bei present Snapshot und ProductiveActorRun den Planner binden
+-> nur bei present Snapshot den Planner binden
+-> tatsächliche Aktorfreigabe ausschließlich über #24/ActuationInterlock
 ```
 
 Bei Recovery gilt ausschließlich:
@@ -58,7 +60,7 @@ Bei Recovery gilt ausschließlich:
 ```text
 Run-Head/Current/Fallback laden
 -> jeden Kandidaten für sich vollständig validieren
--> present Snapshot rekonstruieren oder absent als ActorFree klassifizieren
+-> present Snapshot rekonstruieren oder absent als actor-free Zustand laden
 -> niemals Live-Servicewerte nachladen
 -> bestehende Recovery-/Safety-Entscheidung fortsetzen
 -> Planner nur bei present Snapshot nach erfolgreicher Activation binden
@@ -111,7 +113,7 @@ Produktionspersistenz oder Release-Konfiguration gelangen.
 |---|---|---|
 | Erzeugung der aktuellen Servicekonfiguration | `ConfigurationService` / bestehender Konfigurationsgraph | schema-versionierte `ServiceConfiguration`; kein zweiter Producer |
 | Werttyp und strukturelle Parameterprüfung | `fermentation_app` mit bestehendem `ActuatorPlannerParameters` und `classifyActuatorPlannerParameters()` | keine produktiven Werte, keine Fach-/Safety-Neuregel |
-| Bildung des immutable Per-Run-Snapshots | bestehender Application-/Startpfad im `fermentation_app` | genau einmal am kanonischen New-Active-Run-Punkt für `ProductiveActorRun` aus einer gültigen Runtime-Lease; `ActorFree` bleibt absent |
+| Bildung des immutable Per-Run-Snapshots | bestehender Application-/Startpfad im `fermentation_app` | genau einmal am kanonischen New-Active-Run-Punkt bei `present` aus einer gültigen Runtime-Lease; `absent` bleibt absent |
 | Run-Record, Schema, Codec, Head/Slot-Transaktion | `RunPersistenceCoordinator` und bestehender #17-Codec | atomar; jeder Current-/Fallback-Kandidat ist für sich vollständig; kein Live-Fallback |
 | Recovery-Entscheidung und Wiederherstellung | bestehender Run-Recovery-/`RunPersistenceCoordinator`-Pfad | gespeicherten Snapshot validieren und rekonstruieren; kein zweiter Koordinator |
 | Planner-Bindung und Lebenszeit | `TemperatureControlApplicationOrchestrator` | wertkopierende Bindung nach Commit/Activation, Reset an jeder kanonischen Boundary |
@@ -164,12 +166,14 @@ Damit gilt:
 ### 4.2 Producer-Vertrag ohne Default-Aktivierung
 
 Ein Runtime-Snapshot mit `std::nullopt`, `Unconfigured` oder `Invalid` ist ein
-strukturell ehrlicher, actor-free Zustand. Der logisch/persistent startbare
-`ActorFree`-Pfad darf ihn nicht durch Nullen, lokale Defaults, letzte Livewerte
-oder eine andere Servicekonfiguration ersetzen. Ein als
-`ProductiveActorRun` zugelassener Start wird ohne gültigen Snapshot vor
-`Applied` abgelehnt. Erst Issue #35 kann eine gültige produktive Konfiguration
-liefern.
+strukturell ehrlicher, actor-free Zustand ohne Planner-Bindung. Der
+logisch/persistent startbare `absent`-Pfad darf ihn nicht durch Nullen, lokale
+Defaults, letzte Livewerte oder eine andere Servicekonfiguration ersetzen. Ein
+`present`-Handoff wird ohne gültige, nicht abgelaufene Herkunft aus der
+bestehenden Runtime-Konfiguration vor `Applied` abgelehnt. Ob Aktoren
+tatsächlich freigegeben werden, entscheidet ausschließlich #24 über
+`ActuationInterlock`; #35 bleibt alleiniger Owner der produktiven Werte und
+Grenzen.
 
 Die Konfigurationsrevision und der `RuntimeConfigurationReadLease` halten die
 Quelle bis zur Snapshotbildung konsistent. Nach der wertkopierenden
@@ -190,9 +194,9 @@ std::optional<ActuatorPlannerParameters> actuatorPlannerParametersSnapshot
 Das Feld verwendet denselben bestehenden Parameterwerttyp und ist semantisch
 der Per-Run-Snapshot, nicht eine zweite Parameterquelle. Es wird:
 
-- bei einem als `ProductiveActorRun` zugelassenen Program- oder Manual-Run vor
-  der Persistenz in den Kandidaten kopiert;
-- bei einem `ActorFree`-Run absent bleibt und keinen Planner bindet;
+- bei einem `present`-Program- oder Manual-Run vor der Persistenz in den
+  Kandidaten kopiert;
+- bei einem `absent`-Run absent bleibt und keinen Planner bindet;
 - bei jeder normalen laufenden Run-Mutation unverändert mitgeführt;
 - beim Stop/NoActiveRun gelöscht;
 - bei Recovery aus dem ausgewählten Current- oder Fallback-Payload
@@ -200,9 +204,8 @@ der Per-Run-Snapshot, nicht eine zweite Parameterquelle. Es wird:
 - niemals während eines aktiven Runs aus `ConfigurationService` aktualisiert.
 
 Ein aktiver Run ohne dieses Feld ist ein gültiger, actor-free Run, aber nicht
-produktiver Aktorplanung zugänglich. Recovery darf daraus keinen
-Planner-Snapshot ergänzen. Ein `NoActiveRun`-Snapshot darf kein
-Planner-Snapshot-Feld tragen.
+für produktive Aktorplanung zugänglich. Recovery darf daraus keinen
+Planner-Snapshot ergänzen. `NoActiveRun` trägt keinen Planner-Snapshot.
 
 ### 5.2 Run-Persistenzschema 6
 
@@ -226,7 +229,7 @@ angehängt:
 - `ProgramRun` und `ManualRun`: ein Presence-Tag; `present` trägt den
   vollständigen Snapshotblock mit den zehn bestehenden Parametern in
   `ActuatorPlannerParameters`-Reihenfolge, `absent` ist ausschließlich der
-  persistierte `ActorFree`-/`actuation-unconfigured`-Zustand;
+  persistierte actor-free/`actuation-unconfigured`-Zustand;
 - `NoActiveRun`: kein Snapshotblock;
 - ungültiger Presence-Tag, verkürzter, überlanger oder strukturell ungültiger
   `present`-Block: Decode- bzw. Validierungsfehler;
@@ -251,86 +254,99 @@ erfinden.
   fremder `StorageEpoch` bleibt fail-closed nach den bestehenden
   Run-Persistence-/Recovery-Verträgen. `absent` ist hiervon als explizit
   erlaubter actor-free Zustand zu unterscheiden.
-- Jeder Current-/Fallback-Kandidat wird für sich vollständig geprüft:
-  dieselbe aktive Run-Identität und dieselben Run-Revisionen müssen denselben
-  immutable Snapshot tragen; ein `NoActiveRun`-Fallback trägt keinen
-  Snapshot; ein Fallback eines anderen älteren Runs trägt dessen eigenen
-  Snapshot. Kein Kandidat wird aus Current oder Live-Konfiguration ergänzt.
+- Jeder Current-/Fallback-Kandidat wird für sich vollständig geprüft. Gehören
+  Current und Fallback zur selben Run-Identität, müssen sie unabhängig von
+  unterschiedlichen Run-Revisionen denselben immutable Snapshot tragen
+  (oder beide absent sein). `NoActiveRun` trägt keinen Snapshot. Ein Fallback
+  eines anderen älteren Runs trägt ausschließlich dessen eigenen Snapshot.
+  Kein Kandidat wird aus Current, einem anderen Run oder der Live-Konfiguration
+  ergänzt.
 
 ## 6. Fresh-Start-Transaktion: Write-before-Apply
 
 Der vorhandene `persistFreshStartCommand`-Pfad bleibt die einzige
-Anwendungsgrenze für jeden neuen Program- und Manual-Run. Die Implementierung
-muss dafür eine owner-erzeugte, nicht caller-fälschbare
-`FreshStartActuationAdmission` oder eine semantisch identische Typgrenze
-herstellen:
+Anwendungsgrenze für jeden neuen Program- und Manual-Run. #106 entscheidet an
+dieser Grenze ausschließlich über Snapshot-Provenienz: `absent` oder
+`present` aus der bestehenden Runtime-Konfiguration. Zuerst sind die
+vorhandenen Typen und APIs, insbesondere `RuntimeConfigurationReadLease` und
+das bestehende optionale Snapshot-Feld, zu verwenden. Nur wenn ein normaler
+`persistCommand()`-Pfad diese Grenze nachweislich umgehen könnte, darf die
+kleinste zusätzliche, streng typisierte `FreshStartSnapshotProvenance`
+eingeführt werden. Sie trägt keine Safety-Capability und keine
+Commissioning-Wahrheit. Eine Bezeichnung wie
+`FreshStartActuationAdmission` darf nicht zu einem zweiten Safety-Vertrag
+werden:
 
 ```text
 persistFreshStartCommand(
     current,
     startDecision,
-    FreshStartActuationAdmission admission,
+    existing snapshot-provenance handoff,
     time,
     liveSensorEvidence)
 ```
 
-Die Admission ist kein zweiter Lifecycle-State und keine zweite Start-API. Sie
-hat genau zwei Ergebnisse:
+Der Handoff hat genau zwei Provenienz-Zustände, keine Aktorberechtigung:
 
 ```text
-ActorFree
-ProductiveActorRun + gültige RuntimeConfigurationReadLease
+absent
+present + gültige, nicht abgelaufene RuntimeConfigurationReadLease
 ```
 
-`ActorFree` wird durch die bestehende Application-/Safety-Komposition für
-uncommissioned bzw. nicht aktorberechtigte Runs erzeugt. `ProductiveActorRun`
-ist eine owner-erzeugte, bereits gegen die vorhandene #35-/Safety-Evidenz
-geprüfte Capability; ein frei gesetztes Caller-Bool genügt nicht. Die
-Admission enthält beim produktiven Ergebnis die konsistente Runtime-Lease
-oder den daraus unveränderlich abgeleiteten Start-Snapshot.
+#106 entscheidet damit nur, ob der Snapshot vorhanden ist und ob seine
+Herkunft aus der bestehenden Runtime-Konfiguration gültig ist. `#24` bzw.
+`ActuationInterlock` bleibt die alleinige Autorität für die tatsächliche
+Aktorfreigabe aus frischer Safety-Evidenz. `#35` bleibt alleiniger Owner der
+produktiven Werte und Grenzen. Es gibt keine neue Safety-Capability, keine
+parallele Freigabelogik und keine zweite Commissioning-Wahrheit.
 
 Die Methode muss:
 
 1. ausschließlich `StartProgram` und `StartManualHolding` akzeptieren;
-2. `ActorFree` ohne Runtime-Lease als logisch/persistent startbar behandeln,
-   den Snapshot absent lassen und keine Planner-Bindung vorbereiten;
-3. bei `ProductiveActorRun` eine gültige, nicht abgelaufene Runtime-Lease und
-   den darin enthaltenen `ServiceConfiguration`-Snapshot verlangen;
-4. bei `ProductiveActorRun` den vollständigen Planner-Snapshot wertkopierend
-   in den Run-Kandidaten übernehmen;
-5. `classifyActuatorPlannerParameters()` und alle bestehenden
+2. `absent` ohne Runtime-Lease als logisch/persistent startbar behandeln, den
+   Snapshot absent lassen und keine Planner-Bindung vorbereiten;
+3. bei `present` eine gültige, nicht abgelaufene Runtime-Lease und den darin
+   enthaltenen `ServiceConfiguration`-Snapshot verlangen;
+4. bei `present` den vollständigen Planner-Snapshot wertkopierend in den
+   Run-Kandidaten übernehmen;
+5. `classifyActuatorPlannerParameters()` ausschließlich als bestehende
+   strukturelle Parameterprüfung und alle bestehenden
    Run-Kandidaten-/Plausibilitätsprüfungen vor dem Schreiben ausführen;
 6. die bestehende `RunPersistenceCoordinator`-Transaktion benutzen, wobei
    der absent/present Snapshot vor `makeRunPersistenceSnapshot()` im
    Kandidaten liegt;
-7. `ProductiveActorRun` ohne gültigen present Snapshot vor `Applied`
+7. einen behaupteten `present`-Snapshot ohne gültige Herkunft vor `Applied`
    ablehnen; dies gilt auch dann, wenn ein Caller versucht, die normale
    `persistCommand()`-Methode zu verwenden;
 8. bei Candidate-, Slot-, Head-, Verify-Fehler oder unbestimmtem Write-Ergebnis
    weder RAM noch Planner binden;
 9. erst nach `Applied` die bestehende `applyRunCommand`-/RAM-Änderung sichtbar
-   machen und nur bei present Snapshot den Planner binden.
+   machen und nur bei present Snapshot den Planner binden; eine tatsächliche
+   Aktorfreigabe bleibt anschließend weiterhin die Entscheidung von
+   `ActuationInterlock`.
 
 Dafür darf die bestehende `RunPersistenceCoordinator`-Klasse einen
-start-spezifischen, streng typisierten Admission-/Snapshot-Handoff an ihre
-vorhandene Persistenzroutine erhalten. Das ist keine zweite Transaktion:
+start-spezifischen, streng typisierten Snapshot-Handoff an ihre vorhandene
+Persistenzroutine erhalten, falls die vorhandenen APIs die Provenienz sonst
+nicht-umgehbar transportieren. Das ist keine zweite Transaktion:
 Candidate-Apply, `writeSnapshotCore`, Head-Commit, Verify und bestehende
 Rollback-/Failure-Semantik bleiben zentral im selben Coordinator. Ein
-beliebiger Caller darf weder einen Productive-Admission-Status noch ein
-produktives Parameterobjekt in `persistCommand()` einschleusen. Alle
-Fresh-Start-Kommandos außerhalb dieser einen API werden abgewiesen.
+beliebiger Caller darf weder einen Safety-/Commissioning-Status noch ein
+produktives Parameterobjekt in `persistCommand()` einschleusen. Es wird keine
+zweite Fresh-Start- oder Safety-Logik eingeführt.
 
 Die zulässige Reihenfolge ist:
 
 ```text
-Admission bestimmen
--> ActorFree: Run-Kandidat ohne Snapshot bilden
--> ProductiveActorRun: Lease-Snapshot A lesen und validieren
+Snapshot-Provenienz bestimmen
+-> absent: Run-Kandidat ohne Snapshot bilden
+-> present: Lease-Snapshot A lesen und validieren
 -> absent/present Run-Kandidat atomar schreiben/verifizieren
 -> Commit bestätigen
 -> RunState anwenden
 -> nur bei present Snapshot Planner mit A binden
 -> actor-free bleibt ohne produktive Aktorplanung
+-> aktuelle #24/ActuationInterlock-Evidenz entscheidet separat über Freigabe
 ```
 
 Eine zwischenzeitliche Änderung der Servicekonfiguration B beeinflusst weder
@@ -388,14 +404,18 @@ Normative Eigenschaften:
 - Die kleinste Zustands-Erweiterung ist eine optionale
   `teardownParameters_`-Kopie im bestehenden Planner (oder ein semantisch
   identisches Feld im vorhandenen Runtime-State) plus die vorhandenen Fan-
-  Deaktivierungszeitpunkte und `lastPhysicalDeactivationDirection`/
-  `lastPhysicalDeactivationAtMonotonicMillis`. Es wird keine zweite
-  Lifecycle-Architektur angelegt.
+  Deaktivierungsanker und je betroffenem Lüfter eine erhaltene absolute
+  monotone Teardown-Deadline. Bestehende Felder wie
+  `lastPhysicalDeactivationDirection`/
+  `lastPhysicalDeactivationAtMonotonicMillis` werden wiederverwendet, soweit
+  sie dafür ausreichen. Es wird keine zweite Lifecycle-Engine, Deadline-Queue
+  oder parallele Run-State-Machine angelegt.
 - `forceStop()` beendet die aktive physische Planung und erzeugt bzw. erhält
-  die vorhandenen äußeren/inneren Fan-Nachlaufanker. Erst danach darf
-  `endRun()` die aktive A-Bindung löschen. Die für den laufenden Nachlauf
-  nötige kopierte A-Parameterbasis bleibt bis zum Abschluss dieses
-  Nachlaufs verfügbar.
+  die vorhandenen äußeren/inneren Fan-Nachlaufanker. Für jeden betroffenen
+  Lüfter wird die daraus berechnete absolute A-Deadline materialisiert oder
+  erhalten. Erst danach darf `endRun()` die aktive A-Bindung löschen. Die für
+  den laufenden Nachlauf nötige kopierte A-Parameterbasis bleibt bis zum
+  Abschluss dieses Nachlaufs verfügbar.
 - `endRun()` löscht weder laufende Fan-Nachläufe noch
   `lastPhysicalDeactivationDirection`/-Zeit. Diese Evidenz bleibt erhalten,
   bis die vorhandenen Nachlauf- bzw. Mindest-Auszeit-/Totzeitberechnungen sie
@@ -403,16 +423,23 @@ Normative Eigenschaften:
 - Startet Run B während eines A-Nachlaufs, bleiben die betroffenen Lüfter
   kontinuierlich aktiv. Die aktive Planung, neue Fenster und ein späterer
   B-Teardown verwenden B; A wirkt nur auf den bereits entstandenen Tail.
-  Ein späteres `forceStop()` von B ersetzt den alten Tail-Kontext durch die
-  neue B-Teardownbasis und aktualisiert den physischen Deaktivierungsanker.
+  Ein späteres `forceStop()` von B ersetzt den alten Tail-Kontext nicht. Für
+  jeden betroffenen Lüfter gilt die effektive Deadline als Maximum aus jeder
+  noch offenen A-Deadline und der neu aus B entstandenen Deadline. B darf eine
+  bereits entstandene A-Anforderung daher nie verkürzen; A-Werte dürfen nur
+  den bereits entstandenen Rest-Tail verlängern und niemals B aktiv planen.
+- Startet B und endet es vor einer noch offenen A-Deadline, bleibt der
+  betroffene Lüfter bis zu dieser A-Deadline eingeschaltet. Erst wenn keine
+  gespeicherte Deadline und keine bestehende Mindest-Auszeit-/Totzeitbindung
+  mehr offen ist, darf die vorhandene Abschaltlogik den Lüfter ausschalten.
 - Ohne aktive Bindung und ohne present Snapshot liefert der Planner
   fail-closed `Idle`/`Unconfigured`, darf aber bereits laufende Teardown-
   Ausgänge bis zum Ende ihres gespeicherten Nachlaufs weiter ausgeben. Daraus
   wird keine `ActuatorSafetyGateStatus::Allowed`-Freigabe abgeleitet.
 - `TemperatureControlApplicationOrchestrator` ruft `beginRun()` erst nach
-  bestätigtem Fresh-Start-Commit eines `ProductiveActorRun` bzw.
-  erfolgreicher Recovery-Activation mit present Snapshot auf. Bei
-  `ActorFree`/absent bleibt der Planner ungebunden.
+  bestätigtem Fresh-Start-Commit mit present Snapshot bzw. erfolgreicher
+  Recovery-Activation mit present Snapshot auf. Bei absent bleibt der Planner
+  ungebunden.
 - Derselbe Orchestrator räumt aktive Bindung, Feedback und offene Evaluationen
   an allen bereits kanonischen Run-Ende-, Stop-, Fault-, Standby-, Completion-
   und Recovery-Abbruch-Boundaries auf. `forceStop` erfolgt am Run-Ende vor
@@ -445,9 +472,9 @@ Slice bleibt auf #106 begrenzt und enthält keine Display-/Touch-Änderung.
 3. **Fresh-Start-Handoff**
    - `temperature_control_orchestrator.*` und der bereits existierende
      Application-Startpfad.
-   - Leasegebundene Snapshotbildung vor Candidate-Write für
-     `ProductiveActorRun`, absent/present-Admission und keine RAM-/Planner-
-     Anwendung vor `Applied`.
+   - Snapshotbildung aus der bestehenden Runtime-Lease vor Candidate-Write,
+     reine absent/present-Provenienz und keine RAM-/Planner-Anwendung vor
+     `Applied`.
 4. **Planner-Lebenszeit**
    - `actuator_planner.*`, `actuator_plan_types.*` nur soweit für den
      wertkopierenden Lifecycle erforderlich, sowie der bestehende Orchestrator.
@@ -482,12 +509,11 @@ und Pre-Ready-Gates sind in diesem Plan-PR `NOT_RUN`.
 
 ### 9.2 Run-Persistenz und Recovery
 
-- Actor-free Schema-6-Program- und Manual-Run ohne Snapshot dürfen logisch und
-  persistent starten; ihre Recovery bleibt actor-free und lädt keine
-  Live-Servicewerte.
-- Ein als `ProductiveActorRun` zugelassener Start ohne present Snapshot wird
-  vor `Applied` abgelehnt; es gibt keinen zweiten Startpfad und keinen
-  `persistCommand()`-Bypass.
+- Schema-6-Program- und Manual-Run ohne Snapshot dürfen logisch und persistent
+  starten; ihre Recovery bleibt actor-free und lädt keine Live-Servicewerte.
+- Ein behaupteter present-Snapshot ohne gültige Herkunft aus der bestehenden
+  Runtime-Lease wird vor `Applied` abgelehnt; es gibt keinen zweiten
+  Startpfad und keinen `persistCommand()`-Bypass.
 - Schema-5-Active-Run ohne Snapshot bleibt als actor-free Run lesbar und
   rekonstruierbar; Schema-5-NoActiveRun bleibt lesbar.
 - Corruption, fehlendes Feld, falsche Variante, fremde Epoch und unbekanntes
@@ -499,31 +525,37 @@ und Pre-Ready-Gates sind in diesem Plan-PR `NOT_RUN`.
   maßgeblich.
 - Run A mit Servicewerten A behält A trotz nachfolgender Serviceänderung B;
   der nächste neue Run erhält B; Recovery von A ignoriert Live-B.
-- Productive Fresh-Start mit altem `NoActiveRun`-Fallback trägt im Current den
-  neuen Snapshot und im Fallback keinen Snapshot.
-- Zwei Revisionen derselben Run-Identität tragen denselben immutable Snapshot;
-  ein Fallback eines anderen älteren Runs trägt dessen eigenen Snapshot.
+- Fresh-Start mit altem `NoActiveRun`-Fallback trägt im Current den neuen
+  present-Snapshot und im Fallback keinen Snapshot.
+- Current und Fallback derselben Run-Identität tragen auch bei
+  unterschiedlichen Run-Revisionen byte-identisch denselben immutable
+  Snapshot; ein Fallback eines anderen älteren Runs trägt dessen eigenen
+  Snapshot und `NoActiveRun` trägt keinen Snapshot.
 - Es wird kein direkter Aktor-/GPIO-Wert persistiert.
 
 ### 9.3 Planner-Lebenszeit und Application Boundary
 
-- `beginRun()` erfolgt für `ProductiveActorRun` erst nach bestätigtem
-  `Applied` und nicht nach einem bloßen Candidate-/Write-Aufruf. Ein
-  `ActorFree`-Run bleibt ohne aktive Planner-Bindung zulässig.
-- Persistenzfehler, ein fehlender Snapshot beim produktiven Admission und
-  ungültige Parameter lassen den produktiven Planner-/Aktorpfad fail-closed;
-  ein actor-free Run bleibt logisch/persistent verfügbar.
+- `beginRun()` erfolgt bei present Snapshot erst nach bestätigtem `Applied` und
+  nicht nach einem bloßen Candidate-/Write-Aufruf. Ein absent-Run bleibt ohne
+  aktive Planner-Bindung zulässig.
+- Persistenzfehler, ein present-Snapshot ohne gültige Provenienz und ungültige
+  Parameter lassen den produktiven Planner-/Aktorpfad fail-closed; ein
+  actor-free Run bleibt logisch/persistent verfügbar. Die eigentliche
+  Aktorfreigabe prüft weiterhin ausschließlich #24/`ActuationInterlock`.
 - Derselbe Planner überlebt zwei Runs, kopiert beide Snapshots unabhängig und
   erhält nach Run A dessen laufenden Fan-Tail sowie
   Deaktivierungszeit/-richtung über `endRun()` hinweg.
-- Actor-free Start ohne Snapshot, produktiver Start ohne Snapshot und
-  Recovery ohne Snapshot werden als getrennte Tests ausgeführt; Recovery lädt
-  niemals Live-Servicewerte.
+- Start ohne Snapshot, present-Start ohne gültige Provenienz und Recovery ohne
+  Snapshot werden als getrennte Tests ausgeführt; Recovery lädt niemals
+  Live-Servicewerte.
 - Rebind während eines aktiven Runs, Lease-/State-Pointer und Mid-Run-
   Konfigurationsänderung werden zurückgewiesen bzw. bleiben wirkungslos.
 - Run-Ende führt über die bestehende zentrale Boundary zu `forceStop` und
-  danach `endRun`; der Test startet Run B während A-Nachlauf und prüft
-  kontinuierliche Lüfterausgabe, B-Planung und A-only-Tailsemantik.
+  danach `endRun`; der Test verwendet einen A-Nachlauf, der länger als der
+  B-Nachlauf ist, startet Run B während dieses A-Tails und lässt B vor der noch
+  offenen A-Deadline enden. Er prüft kontinuierliche Lüfterausgabe, B-Planung
+  sowie, dass der betroffene Lüfter nicht vor der A-Deadline abschaltet. Eine
+  B-Deadline darf eine längere offene A-Deadline nicht verkürzen.
 - Stop, Fault, Standby, Completion und Recovery-Abbruch behalten ihre
   bestehende zentrale Boundary; nur ein tatsächlich persistiertes Run-Ende
   beendet die aktive Run-Bindung.
@@ -551,27 +583,33 @@ Code und gezielte Tests belegt sind:
 1. ServiceConfiguration Schema 2 kann den bestehenden Plannerwerttyp
    versioniert erzeugen, validieren, lesen und schreiben; Schema 1 bleibt
    rückwärts lesbar und erzeugt keine erfundenen Werte.
-2. Ein neuer actor-free Program- oder Manual-Run darf ohne Snapshot logisch
-   und persistent starten; ein als `ProductiveActorRun` zugelassener Start
-   persistiert genau einen vollständigen, validierten Planner-Snapshot vor
-   `NewActiveRun`/RAM-`Applied`.
+2. Ein neuer Run ohne Snapshot darf logisch und persistent starten; ein
+   present-Start aus gültiger Runtime-Lease persistiert genau einen
+   vollständigen, validierten Planner-Snapshot vor `NewActiveRun`/RAM-
+   `Applied`. Snapshot-Provenienz erteilt keine Aktorfreigabe.
 3. Schema 6 friert `absent=actuation-unconfigured` und
    `present=gebundener Snapshot` ein; kein Start-API- oder
-   `persistCommand()`-Bypass kann einen produktiven Run ohne Snapshot
-   persistieren.
-4. Jeder Current-/Fallback-Kandidat ist für sich vollständig: gleiche Run-
-   Identität/Revisionen bedeuten denselben Snapshot, `NoActiveRun` bedeutet
-   keinen Snapshot, und ein anderer älterer Run trägt seinen eigenen Snapshot.
+   `persistCommand()`-Bypass kann einen present-Snapshot ohne gültige
+   Runtime-Provenienz persistieren.
+4. Jeder Current-/Fallback-Kandidat ist für sich vollständig: Current und
+   Fallback derselben Run-Identität tragen unabhängig von unterschiedlichen
+   Run-Revisionen byte-identisch denselben immutable Snapshot (oder beide
+   keinen), `NoActiveRun` trägt keinen Snapshot, und ein anderer älterer Run
+   trägt seinen eigenen Snapshot.
 5. Recovery verwendet bei present ausschließlich den persistierten Snapshot,
    bei absent niemals eine inzwischen geänderte Live-Servicekonfiguration und
    bleibt dann actor-free.
 6. Der langlebige Planner besitzt eine wertkopierende, ausführbare
    `beginRun`/`endRun`-Lebenszeitbindung ohne Dangling- oder Mid-Run-Referenzen;
-   Fan-Nachläufe und physische Deaktivierungsanker überleben `endRun()`.
+   Fan-Nachläufe und physische Deaktivierungsanker überleben `endRun()`, und
+   überlappende Teardown-Anforderungen verwenden je betroffenem Lüfter die
+   spätere noch offene absolute Deadline. Run B kann einen A-Tail nicht
+   verkürzen und plant aktiv ausschließlich mit B.
 7. Keine Produktivparameter, Grenzwerte, Defaults, GPIO-/Hardwarewerte oder
    `ActuatorSafetyGateStatus::Allowed`-Freigabe werden durch #106 erfunden oder
-   aktiviert; diese bleiben von #35 beziehungsweise den bestehenden Safety-
-   und Hardware-Gates abhängig.
+   aktiviert. #106 entscheidet nur Snapshot-Provenienz; #24/
+   `ActuationInterlock` bleibt alleinige Aktorfreigabe und #35 alleiniger Owner
+   produktiver Werte und Grenzen.
 8. Keine Display-/Touch-Datei, kein PR-#156-Inhalt und keine neue allgemeine
    Renderer-/Persistenzplattform ist enthalten.
 
