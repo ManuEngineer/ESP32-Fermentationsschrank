@@ -84,7 +84,7 @@ die v6.1-Quellen unter `components/nvs_flash/`, `components/esp_netif/`,
 | Issue-90-UART-/NVS-Harness | `PASS` | `python3 scripts/build_issue90_slice7_harness.py`; v6.1-ESP32-Build, `state_store_test`, Bring-up enthalten, Release ausgeschlossen |
 | direkt betroffene Python-Selftests | `PASS` | `check_issue90_partitions.py --self-test`, `check_secrets.py --selftest`, `run_esp_idf_static_analysis.py --selftest` |
 | direkt betroffener NVS-Hosttest | `PASS` | v6.1-Linux-Hostbuild und Ausführung des erzeugten `issue90_nvs_adapter_host.elf`; `ISSUE90_HOST_ADAPTER_GATE=PASS`, Produktbrücke `PASS:3 FAIL:0 BLOCKED:0 NOT_RUN:0` |
-| Builder-Static-Analysis-Self-Check | `PASS` | `PRE_READY_EXPECTED_HEAD=bd31fea4993fbc4d235be1c202751f49401855ae`; `CLANG_FORMAT=PASS`, `CLANG_TIDY=NOT_REQUIRED`; kein vollständiger Pre-Ready-Lauf |
+| Builder-Static-Analysis-Self-Check | `PASS` | `PRE_READY_EXPECTED_HEAD=41546b6f4e24a46b32ead1b01d26093b36759d1a`; `CLANG_FORMAT=PASS`, `CLANG_TIDY=NOT_REQUIRED` |
 
 Der erste v6.1-Compile des bestehenden Harnesses und anschließend des
 NVS-Host-Orakels legte wegen GCC 15.2 mit `-Werror=switch` bereits vorhandene
@@ -101,25 +101,122 @@ Im gezielten v6.1-Ausgabesatz wurden folgende Warnungen klassifiziert:
   `bootloader_support` durch das IDF-eigene `esp_partition` ist ein Upstream-
   Frameworkhinweis, keine geänderte Repository-Abhängigkeit.
 
-Die vollständige Warnungs-/Deprecationsauswertung bleibt bis zum
-ownerautorisierten Upgrade-Nachweis `NOT_RUN`.
+Die vollständige Warnungs-/Deprecationsauswertung steht im folgenden
+ownerautorisierten Upgrade-Nachweis. Die dort beschriebene erste
+6.1-Analyseabweichung wurde vor der finalen Wiederholung lokal begrenzt
+korrigiert.
 
 ## Vollständiger Upgrade-Nachweis und Hardware-Parität
 
-Diese Nachweise sind in der Draft-/Builderphase absichtlich `NOT_RUN`:
+Die Owner-Autorisierung für den vollständigen Nachweis lag für den
+Independent-Review-HEAD `41546b6f4e24a46b32ead1b01d26093b36759d1a` vor. Nach
+dem dabei gefundenen, semantikneutralen 6.1-`esp-clang`-Befund wurde die
+begrenzte Korrektur als `fc306c4428a2bd770866e5f23ce0881f38bc1baf` gepusht
+und die vollständige Fix Verification auf genau diesem HEAD wiederholt.
 
-| Nachweis | Status | Zuordnung |
+| Nachweis | Status | Provenienz / Ergebnis |
 |---|---|---|
-| vollständiger v6.0.2-Baseline-Build beider Profile | `NOT_RUN` | ownerautorisierter vollständiger Upgrade-/Pre-Ready-Nachweis |
-| vollständiger v6.1-Build beider Profile | `NOT_RUN` | ownerautorisierter vollständiger Upgrade-/Pre-Ready-Nachweis |
-| `scripts/run_esp_idf_static_analysis.py all` | `NOT_RUN` | ownerautorisierter vollständiger Upgrade-/Pre-Ready-Nachweis |
-| sdkconfig-Diff je Profil | `NOT_RUN` | zusammen mit den vollständigen Profilbuilds |
-| Flash-/RAM-/Stack-/Heap-/Warnungs-/Versionsvergleich | `NOT_RUN` | bestehende Ressourcen- und Berichtseigner; keine neue Schwelle |
-| Hardware-Parität | `NOT_RUN` | finaler Upgrade-HEAD: Issue-29-qualifiziertes Board/UART, sichere Bring-up-/Release-Smokes und Issue-90-Power-Cut/Restore/Product-Boot |
+| vollständiger v6.0.2-Baseline-Build beider Profile | `PASS` | Source `2c010e8a8be8e351f89b79ae6c74f665d24a1f0e`; ESP-IDF `v6.0.2` / `7101770dc6db2667b3c477cc31365dd1acd6db4e`; `esp32_bringup` und `esp32_release` |
+| vollständiger v6.1-Build beider Profile | `PASS` | Source `fc306c4428a2bd770866e5f23ce0881f38bc1baf`; ESP-IDF `v6.1` / `fff9895c82d744c7237be8847347bdd1b07c6643`; `esp32_bringup` und `esp32_release` |
+| vollständiger Host-Pre-Ready-Lauf | `PASS` | `PRE_READY_EXPECTED_HEAD=fc306c4428a2bd770866e5f23ce0881f38bc1baf`; 1.178/1.178 native Tests, clang-tidy, Architektur-, Secret- und Quality-Gates |
+| `scripts/run_esp_idf_static_analysis.py all` | `PASS` | final auf `fc306c4428a2bd770866e5f23ce0881f38bc1baf` mit `esp-clang 21.1.3` für Bring-up und Release |
+| `sdkconfig`-Vergleich je Profil | `PASS` | beide Profile besitzen dasselbe normalisierte Delta mit 28 geänderten Schlüsseln; keine Overlayänderung |
+| Flash-/RAM-/bestehender Ressourcenvergleich | `PASS` | exakte Werte und Deltas siehe Tabelle unten; keine verbindliche Budgetgrenze erfunden |
+| Warnungs-/Deprecationsvergleich | `PASS` | keine Warnung/Deprecation im vollständigen Profil-`build.log`; erwartete Upstream-Clang-Konfigurationswarnung, keine Produkt- oder API-Warnung |
+| Stack-/Heap-Messung | `NOT_RUN` | der bestehende JSON2-Buildbericht liefert keine reale Stack-/Heap-Messung; das bleibt ein Hardware-/Belastungsnachweis gemäß Vertrag |
+
+### Generierte `sdkconfig`-Deltas
+
+Die normalisierte Gegenüberstellung von `build/esp32_bringup/sdkconfig` und
+`build/esp32_release/sdkconfig` gegen die getrennte v6.0.2-Baseline ist
+identisch. Die folgenden Änderungen sind vollständig; Reihenfolge- und
+Kommentaränderungen sind nicht als Delta gezählt:
+
+```text
+CONFIG_IDF_INIT_VERSION: "6.0.2" -> "6.1.0"
+new unset defaults: CONFIG_APP_BUILD_MINIMIZE_BINARY_CHANGES,
+  CONFIG_ESP_SLEEP_SET_FLASH_DPD, CONFIG_LWIP_ND6_SUPPORT_STATIC_ENTRIES,
+  CONFIG_MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND,
+  CONFIG_MBEDTLS_SECURE_ELEMENT_DRIVER_ENABLED
+new target metadata/defaults: CONFIG_ESPTOOLPY_FLASHMODE_VAL=3,
+  CONFIG_ESP_EVENT_POST_FROM_ISR_SIZE=4,
+  CONFIG_ESP_ROM_BOOTLOADER_OFFSET_FLASH=0x1000,
+  CONFIG_ESP_ROM_HAS_REGI2C_IMPL=y, CONFIG_ESP_STDIO_MAX_VFS_ENTRIES=2,
+  CONFIG_SECURE_BOOT_IMAGE_DIGEST_LEN=32,
+  CONFIG_SECURE_BOOT_ROM_FAST_WAKE_RESERVE_SIZE=0,
+  CONFIG_SOC_EMAC_REF_CLK_FROM_APLL=y,
+  CONFIG_SOC_GPIO_HP_PERIPH_PD_SLEEP_WAKEABLE_MASK=0,
+  CONFIG_SOC_GPIO_SUPPORT_HP_PERIPH_PD_SLEEP_WAKEUP=y,
+  CONFIG_SOC_PM_RTC_NOT_SUPPORT_UART2_WAKEUP=y,
+  CONFIG_SOC_REGI2C_SUPPORTED=y, CONFIG_SOC_RTC_TIMER_SUPPORTED=y,
+  CONFIG_SOC_RTC_TIMER_V1=y, CONFIG_SOC_RTC_WDT_SUPPORTED=y,
+  CONFIG_SOC_SPI_EXTERNAL_NOR_FLASH_SUPPORTED=y
+removed/replaced target metadata: CONFIG_SOC_RTC_TIMER_V1_SUPPORTED,
+  CONFIG_SOC_SPI_AS_CS_SUPPORTED, CONFIG_SOC_SPI_DMA_CHAN_NUM=2,
+  CONFIG_SOC_SPI_MAX_CS_NUM=3, CONFIG_SOC_SPI_MAX_PRE_DIVIDER=8192,
+  CONFIG_SOC_SPI_SUPPORT_CLK_APB
+```
+
+Die neuen und entfernten `SOC_*`-Werte sind 6.1-Targetmetadaten; im
+Repository gibt es keinen entsprechenden SPI-, Flash-, Sleep-, Secure-Element-
+oder UART-Wakeup-Produktpfad. `CONFIG_ESPTOOLPY_FLASHMODE_VAL=3` beschreibt
+weiterhin den unveränderten `dio`-/40-MHz-/4-MB-Vertrag. Beide Profile bleiben
+`CONFIG_IDF_TARGET=esp32`, 4 MB, ohne PSRAM und mit unveränderter
+Partitionstabelle.
+
+### Ressourcenvergleich aus den bestehenden JSON2-Berichten
+
+| Profil / Messwert | v6.0.2 | v6.1 | Delta | Einordnung |
+|---|---:|---:|---:|---|
+| `bringup` `size.json total_size` | 414111 B | 417759 B | +3648 B | Framework-/Toolchain-Delta, innerhalb der bestehenden `TBD_IMPLEMENTATION_BUDGET`-Regel |
+| `release` `size.json total_size` | 397063 B | 400699 B | +3636 B | Framework-/Toolchain-Delta, innerhalb der bestehenden `TBD_IMPLEMENTATION_BUDGET`-Regel |
+| beide Profile DRAM used | 17246 B | 17526 B | +280 B | gleicher ESP32-Kapazitätswert 180736 B |
+| beide Profile IRAM used | 48675 B | 48715 B | +40 B | gleicher ESP32-Kapazitätswert 131072 B |
+| `bringup` App-BIN | 414224 B | 417872 B | +3648 B | kein Partitions- oder Policywechsel |
+| `release` App-BIN | 397184 B | 400816 B | +3632 B | kein Partitions- oder Policywechsel |
+| Bootloader-BIN, beide Profile | 26096 B | 26176 B | +80 B | 6.1 Frameworkdelta |
+| Partitionstabellen-BIN, beide Profile | 3072 B | 3072 B | +0 B | unverändert |
+| `bringup` ELF / Mapfile | 15613180 / 8032524 B | 15692420 / 8060170 B | +79240 / +27646 B | Debug-/Toolchain-Artefakte, nicht als Flashbudget verwendet |
+| `release` ELF / Mapfile | 14471928 / 7695665 B | 14550104 / 7723150 B | +78176 / +27485 B | Debug-/Toolchain-Artefakte, nicht als Flashbudget verwendet |
+
+### Warnungs- und Static-Analysis-Befund
+
+Die vollständigen Profilbuilds erzeugten in beiden Versionen keine
+`warning`-, `deprecated`- oder `error:`-Zeilen im jeweiligen Buildlog. Die
+6.1-Analyse-Konfiguration erzeugt wie 6.0.2 den erwarteten Espressif-Hinweis,
+dass der Clang-Build experimentell ist; das ist kein Produktbefund. Die in
+`warnings.txt` sichtbaren Namen `modernize-deprecated-*` sind aktivierte
+Checknamen und keine Findings.
+
+Der erste vollständige v6.1-Analyseversuch auf `41546b6...` fand neun durch
+`esp-clang 21.1.3` neu als Fehler behandelte Stilbefunde: sieben
+`#if defined(...)`-Bedingungen und zwei `std::lock_guard`-Verwendungen. Der
+v6.0.2-Vergleich mit `esp-clang 20.1.1` war für beide Profile PASS. Die
+Korrektur auf `fc306c4...` verwendet ausschließlich `#ifdef` und
+`std::scoped_lock`; sie verändert keine Fach-, Safety-, Persistenz-, GPIO-,
+Flash-, Partition- oder Aktorsemantik. Die vollständige Wiederholung ist
+danach für beide Profile PASS.
+
+### Eindeutige Hardware-Parität
 
 Die Hardware-Parität erweitert die bereits qualifizierte v6.0.2-Oberfläche
-nicht. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`, `BLOCKED_HARDWARE`, Display,
-Touch, Sensoren, Lüfter, BTS/Peltier und spätere Commissioning-Scope bleiben
-außerhalb. Eine fehlende identische Board-/UART-/Restore-Oberfläche ist
-`BLOCKED_HARDWARE`, kein Anlass für eine Ersatzhardware oder eine gelockerte
-Safety-Policy.
+nicht. Ihr Umfang ist exakt:
+
+- die in [`ISSUE_29_MEASUREMENTS.md`](../ISSUE_29_MEASUREMENTS.md) real
+  qualifizierte ESP32-D0WD-V3-Revision 3.1 mit 4 MB Flash, ohne PSRAM,
+  FTDI-FT232R-UART/ROM-Bootloader sowie DTR/RTS-Reset;
+- die bereits unter v6.0.2 qualifizierten aktorfreien `esp32_bringup`- und
+  `esp32_release`-Smokes mit Anwendung bereit, Heartbeat/Uptime und genau zwei
+  Ressourcenpunkten ohne Reset, Panic, Watchdog oder Brownout;
+- die in der bestehenden Roadmap- und Issue-90-Evidence ausgewiesene Kampagne
+  mit sechs realen Power-Cuts, Produktionsrestore und anschließendem
+  Produktboot auf derselben Board-/UART-/Restore-Oberfläche.
+
+`HARDWARE_PARITY=BLOCKED_HARDWARE`: In dieser Sitzung war der identische reale
+Board-/UART-/kontrollierte Reset-/Power-Cut-Aufbau nicht verfügbar. Deshalb
+sind `HARDWARE_SMOKE_BRINGUP=NOT_RUN`, `HARDWARE_SMOKE_RELEASE=NOT_RUN` und
+`ISSUE90_POWER_CUT_RESTORE=NOT_RUN` für den finalen v6.1-HEAD; Software-PASS
+wird nicht als Hardware-PASS umetikettiert. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`,
+`BLOCKED_HARDWARE`, Display, Touch, Sensoren, Lüfter, BTS/Peltier und spätere
+Commissioning-Scope bleiben außerhalb. Es gibt keine Ersatzhardware, keine
+neue Hardwareanforderung und keine Aktorfreigabe.
