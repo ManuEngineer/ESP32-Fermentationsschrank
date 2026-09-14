@@ -2356,6 +2356,48 @@ void test_feedback_handoff_is_single_use_and_severity_is_monotone() {
     TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
 }
 
+void test_overlapping_run_teardown_tail_keeps_later_a_deadline() {
+    auto a = testParameters();
+    a.outerFanPostRunMillis = 5'000U;
+    auto b = testParameters();
+    b.outerFanPostRunMillis = 1'000U;
+
+    ActuatorPlanner planner;
+    TEST_ASSERT_TRUE(planner.beginRun(a));
+    TEST_ASSERT_FALSE(planner.beginRun(b));
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext())));
+    static_cast<void>(planner.forceStop(
+        100U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
+    TEST_ASSERT_EQUAL_UINT64(
+        5'100U, *planner.state().outerFanTeardownDeadlineMonotonicMillis);
+
+    // Run B starts while A's tail is still open and uses only B's planner
+    // values for its own lifecycle.
+    planner.endRun();
+    TEST_ASSERT_TRUE(planner.beginRun(b));
+    static_cast<void>(
+        planner.tick(tickInput(1'200U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 1'200U, airContext()),
+                               airContext())));
+    static_cast<void>(planner.forceStop(
+        1'300U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
+    planner.endRun();
+
+    auto beforeADeadline = planner.tick(ActuatorPlanTickInput{
+        5'099U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_TRUE(beforeADeadline.outerFanEnabled);
+    auto atADeadline = planner.tick(ActuatorPlanTickInput{
+        5'100U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_FALSE(atADeadline.outerFanEnabled);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2426,5 +2468,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
+    RUN_TEST(test_overlapping_run_teardown_tail_keeps_later_a_deadline);
     return UNITY_END();
 }

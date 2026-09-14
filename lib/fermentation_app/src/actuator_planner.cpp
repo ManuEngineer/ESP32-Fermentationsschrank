@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace fermentation {
@@ -17,6 +18,18 @@ namespace {
         return false;
     }
     return (now - since) >= durationMillis;
+}
+
+[[nodiscard]] std::uint64_t saturatingDeadline(std::uint64_t start,
+                                               std::uint64_t duration) {
+    if (duration > std::numeric_limits<std::uint64_t>::max() - start)
+        return std::numeric_limits<std::uint64_t>::max();
+    return start + duration;
+}
+
+void retainLaterDeadline(std::optional<std::uint64_t>& deadline,
+                         std::uint64_t candidate) {
+    if (!deadline.has_value() || candidate > *deadline) deadline = candidate;
 }
 
 [[nodiscard]] double roundHalfUp(double value) {
@@ -316,8 +329,26 @@ namespace {
 
 }  // namespace
 
+ActuatorPlanner::ActuatorPlanner() = default;
+
 ActuatorPlanner::ActuatorPlanner(ActuatorPlannerParameters parameters)
-    : parameters_(std::move(parameters)) {}
+    : parameters_(std::move(parameters)), testConfigured_(true) {}
+
+bool ActuatorPlanner::beginRun(const ActuatorPlannerParameters& parameters) {
+    if (runBound_) return false;
+    if (classifyActuatorPlannerParameters(parameters) !=
+        ActuatorPlannerParametersValidation::Valid) {
+        return false;
+    }
+    parameters_ = parameters;
+    runBound_ = true;
+    return true;
+}
+
+void ActuatorPlanner::endRun() {
+    runBound_ = false;
+    if (!testConfigured_) parameters_ = ActuatorPlannerParameters{};
+}
 
 const ActuatorPlannerRuntimeState& ActuatorPlanner::state() const {
     return state_;
@@ -350,6 +381,9 @@ void ActuatorPlanner::setPhysicalDirection(AbstractControlDirection next,
         // refreshes the mandatory post-run anchor.
         state_.outerFanActive = true;
         state_.outerFanDeactivationRequestedAtMonotonicMillis = now;
+        retainLaterDeadline(
+            state_.outerFanTeardownDeadlineMonotonicMillis,
+            saturatingDeadline(now, parameters_.outerFanPostRunMillis));
     }
     if (next != AbstractControlDirection::Idle) {
         state_.currentOnPhaseStartedAtMonotonicMillis = now;
@@ -416,10 +450,11 @@ void ActuatorPlanner::updateFanState(std::uint64_t now,
     } else if (state_.outerFanActive &&
                state_.outerFanDeactivationRequestedAtMonotonicMillis
                    .has_value() &&
+               state_.outerFanTeardownDeadlineMonotonicMillis.has_value() &&
                deadlineReached(
-                   now, *state_.outerFanDeactivationRequestedAtMonotonicMillis,
-                   parameters_.outerFanPostRunMillis)) {
+                   now, 0U, *state_.outerFanTeardownDeadlineMonotonicMillis)) {
         state_.outerFanActive = false;
+        state_.outerFanTeardownDeadlineMonotonicMillis.reset();
     }
 
     if (temperatureControlledPhase) {
@@ -430,13 +465,16 @@ void ActuatorPlanner::updateFanState(std::uint64_t now,
             !state_.innerFanDeactivationRequestedAtMonotonicMillis
                  .has_value()) {
             state_.innerFanDeactivationRequestedAtMonotonicMillis = now;
+            retainLaterDeadline(
+                state_.innerFanTeardownDeadlineMonotonicMillis,
+                saturatingDeadline(now, parameters_.innerFanPostRunMillis));
         }
         if (state_.innerFanActive &&
-            state_.innerFanDeactivationRequestedAtMonotonicMillis.has_value() &&
-            deadlineReached(
-                now, *state_.innerFanDeactivationRequestedAtMonotonicMillis,
-                parameters_.innerFanPostRunMillis)) {
+            state_.innerFanTeardownDeadlineMonotonicMillis.has_value() &&
+            deadlineReached(now, 0U,
+                            *state_.innerFanTeardownDeadlineMonotonicMillis)) {
             state_.innerFanActive = false;
+            state_.innerFanTeardownDeadlineMonotonicMillis.reset();
         }
     }
 }

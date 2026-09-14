@@ -225,6 +225,10 @@ Verbindliche Regeln:
 - Beim Abschalten des Peltiers beginnt ein konfigurierbarer Nachlauf.
 - Eine erneute Peltierfreigabe waehrend des Nachlaufs laesst den Luefter ohne
   Unterbrechung weiterlaufen.
+- Bereits entstandene Nachlauf-Deadlines bleiben absolut erhalten. Startet ein
+  neuer Run waehrend eines offenen Nachlaufs, verlaengert dessen kuerzere
+  Nachlaufanforderung den alten Tail nicht nach unten; der Luefter bleibt bis
+  zur spaeteren noch offenen Deadline aktiv.
 - Der Nachlauf gilt auch nach normalem Stop, Richtungswechsel und veralteter
   Regelanforderung.
 - Ein Fehler darf den Aussenluefter nicht automatisch gleichzeitig mit dem
