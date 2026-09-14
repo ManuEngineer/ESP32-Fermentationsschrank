@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "actuator_plan_types.hpp"
 #include "program_model.hpp"
 #include "storage_types.hpp"
 #include "time_zone_resolver.hpp"
@@ -18,7 +19,12 @@ enum class UserConfigurationSchema : std::uint8_t {
 
 inline constexpr std::uint32_t kCurrentUserConfigurationSchemaVersion =
     static_cast<std::uint32_t>(UserConfigurationSchema::Version2);
-enum class ServiceConfigurationSchema : std::uint8_t { Version1 = 1U };
+enum class ServiceConfigurationSchema : std::uint8_t {
+    Version1 = 1U,
+    Version2 = 2U,
+};
+inline constexpr std::uint32_t kCurrentServiceConfigurationSchemaVersion =
+    static_cast<std::uint32_t>(ServiceConfigurationSchema::Version2);
 enum class ProgramCatalogSchema : std::uint8_t { Version1 = 1U };
 
 namespace detail {
@@ -45,7 +51,9 @@ struct UserConfiguration {
     std::string activeThemeId{"manuengineer-dark"};
 };
 
-struct ServiceConfiguration {};
+struct ServiceConfiguration {
+    std::optional<ActuatorPlannerParameters> actuatorPlannerParameters;
+};
 
 struct ProgramCatalog {
     std::vector<ProgramDocument> programs;

@@ -182,11 +182,11 @@ std::string envelope(RecordTypeId type, std::uint32_t schema,
 template <typename Version>
 fermentation::ConfigurationRecordReference<Version> reference(
     RecordTypeId type, std::uint32_t slot, Version version,
-    const std::string& payload) {
+    const std::string& payload, std::uint32_t schema = 1U) {
     return {type,
             SlotId{slot},
             version,
-            1U,
+            schema,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
             StorageEpoch{1U}};
@@ -221,9 +221,11 @@ SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
     store.put("uc0", envelope(fermentation::configuration_storage_contract::
                                   kUserConfigurationRecordType,
                               1U, 1U, userPayload));
-    store.put("sc0", envelope(fermentation::configuration_storage_contract::
-                                  kServiceConfigurationRecordType,
-                              1U, 1U, servicePayload));
+    store.put("sc0",
+              envelope(fermentation::configuration_storage_contract::
+                           kServiceConfigurationRecordType,
+                       fermentation::kCurrentServiceConfigurationSchemaVersion,
+                       1U, servicePayload));
     store.put("pc0", envelope(fermentation::configuration_storage_contract::
                                   kProgramCatalogRecordType,
                               1U, 1U, catalogPayload));
@@ -237,7 +239,8 @@ SeededGraph seedGraph(LocalStore& store, std::uint64_t generation = 1U,
         reference(fermentation::configuration_storage_contract::
                       kServiceConfigurationRecordType,
                   0U, fermentation::ServiceConfigurationRevision{1U},
-                  servicePayload),
+                  servicePayload,
+                  fermentation::kCurrentServiceConfigurationSchemaVersion),
         reference(fermentation::configuration_storage_contract::
                       kProgramCatalogRecordType,
                   0U, fermentation::ProgramCatalogRevision{1U},
@@ -625,18 +628,23 @@ std::string sameCrcDifferentBytes(std::string original) {
     return original;
 }
 
-void enableSchemaOneServiceWriteForTest(
+void enableServiceWriteForTest(
     fermentation::PreparedConfigurationCommit& prepared) {
     const auto epoch = prepared.newGraph.active.manifestReference.storageEpoch;
     prepared.changes.serviceConfiguration = true;
     prepared.slotPlan.serviceConfigurationSlot = SlotId{1U};
     prepared.slotPlan.serviceConfigurationRevision =
         fermentation::ServiceConfigurationRevision{2U};
-    const std::string emptyPayload;
+    fermentation::ServiceConfiguration service;
+    std::string servicePayload;
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                         service, servicePayload) ==
+                     fermentation::ConfigurationCodecStatus::Success);
     prepared.newGraph.active.manifest.serviceConfiguration = reference(
         fermentation::configuration_storage_contract::
             kServiceConfigurationRecordType,
-        1U, fermentation::ServiceConfigurationRevision{2U}, emptyPayload);
+        1U, fermentation::ServiceConfigurationRevision{2U}, servicePayload,
+        fermentation::kCurrentServiceConfigurationSchemaVersion);
 
     std::string manifestPayload;
     TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestPayload(
@@ -895,11 +903,13 @@ void test_document_and_manifest_identity_collisions_all_fail_closed() {
         seedGraph(store);
         store.put("sc1", envelope(fermentation::configuration_storage_contract::
                                       kServiceConfigurationRecordType,
-                                  1U, 1U, "different"));
+                                  1U, 1U, std::string(82U, 'x')));
         fermentation::ConfigurationGraphStore graphStore(store, resolver);
-        TEST_ASSERT_TRUE(
-            graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
-            fermentation::ConfigurationGraphLoadStatus::RecordCapacityError);
+        const auto collision = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationGraphLoadStatus::
+                                 ConfigurationGraphIntegrityFailure),
+            static_cast<int>(collision.status));
     }
     {
         LocalStore store;
@@ -1542,7 +1552,7 @@ void test_each_pre_root_write_phase_obeys_state_store_outcome_contract() {
                 fermentation::decodeChangeOperation(1U));
             TEST_ASSERT_TRUE(prepared.prepared.has_value());
             if (phase == Phase::Service) {
-                enableSchemaOneServiceWriteForTest(*prepared.prepared);
+                enableServiceWriteForTest(*prepared.prepared);
             }
             const char* target = "cm1";
             if (phase == Phase::User || phase == Phase::Service) {
@@ -1553,12 +1563,14 @@ void test_each_pre_root_write_phase_obeys_state_store_outcome_contract() {
             store.failWrite(target, scenario.writeStatus, scenario.commitValue);
             const auto execution =
                 graphStore.executePreparedCommit(*prepared.prepared);
-            TEST_ASSERT_TRUE(execution.status == scenario.expected);
+            TEST_ASSERT_EQUAL_INT(static_cast<int>(scenario.expected),
+                                  static_cast<int>(execution.status));
             if (scenario.expected !=
                 fermentation::ConfigurationCommitExecutionStatus::Activated) {
-                TEST_ASSERT_TRUE(
-                    store.read(key("cr1"), 114U).status ==
-                    device_platform::StateStoreReadStatus::NotFound);
+                TEST_ASSERT_EQUAL_INT(
+                    static_cast<int>(
+                        device_platform::StateStoreReadStatus::NotFound),
+                    static_cast<int>(store.read(key("cr1"), 114U).status));
             }
         }
     }
@@ -1584,7 +1596,7 @@ void test_unknown_pre_root_readback_failures_never_reach_root_write() {
                 fermentation::decodeChangeOrigin(2U),
                 fermentation::decodeChangeOperation(1U));
             if (phase == Phase::Service) {
-                enableSchemaOneServiceWriteForTest(*prepared.prepared);
+                enableServiceWriteForTest(*prepared.prepared);
             }
             const char* target = "cm1";
             if (phase == Phase::User || phase == Phase::Service) {
@@ -1606,8 +1618,10 @@ void test_unknown_pre_root_readback_failures_never_reach_root_write() {
                 execution.status ==
                     fermentation::ConfigurationCommitExecutionStatus::
                         CapacityFailure);
-            TEST_ASSERT_TRUE(store.read(key("cr1"), 114U).status ==
-                             device_platform::StateStoreReadStatus::NotFound);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    device_platform::StateStoreReadStatus::NotFound),
+                static_cast<int>(store.read(key("cr1"), 114U).status));
         }
     }
 }

@@ -127,7 +127,9 @@ bool isPlausible(const ConfigurationManifest& manifest) {
            validReference(manifest.serviceConfiguration,
                           kServiceConfigurationRecordType,
                           configuration_limits::kConfigurationDocumentSlotCount,
-                          1U, 1U, 0U, 0U) &&
+                          1U, kCurrentServiceConfigurationSchemaVersion,
+                          configuration_limits::
+                              kMaximumServiceConfigurationPayloadBytes) &&
            validReference(
                manifest.programCatalog, kProgramCatalogRecordType,
                configuration_limits::kConfigurationDocumentSlotCount, 1U, 1U,

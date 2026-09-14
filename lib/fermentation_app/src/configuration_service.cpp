@@ -205,7 +205,7 @@ bool calculateCandidateIntegrity(
         ConfigurationCodecStatus::Success) {
         return false;
     }
-    integrity.serviceSchema = 1U;
+    integrity.serviceSchema = kCurrentServiceConfigurationSchemaVersion;
     integrity.servicePayloadLength = static_cast<std::uint32_t>(payload.size());
     integrity.servicePayloadCrc = device_platform::computeCrc32IsoHdlc(payload);
     payload.clear();

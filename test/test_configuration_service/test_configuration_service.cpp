@@ -337,11 +337,11 @@ class Resolver final : public device_platform::ITimeZoneResolver {
 };
 
 std::string envelope(device_platform::RecordTypeId type, std::uint64_t version,
-                     const std::string& payload) {
+                     const std::string& payload, std::uint32_t schema = 1U) {
     std::string bytes;
     TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
-                         {type, 1U, device_platform::StorageEpoch{1U}, version,
-                          std::nullopt, payload},
+                         {type, schema, device_platform::StorageEpoch{1U},
+                          version, std::nullopt, payload},
                          bytes, payload.size() + 45U) ==
                      device_platform::EnvelopeEncodeStatus::Success);
     return bytes;
@@ -350,11 +350,11 @@ std::string envelope(device_platform::RecordTypeId type, std::uint64_t version,
 template <typename Version>
 fermentation::ConfigurationRecordReference<Version> reference(
     device_platform::RecordTypeId type, std::uint32_t slot, Version version,
-    const std::string& payload) {
+    const std::string& payload, std::uint32_t schema = 1U) {
     return {type,
             device_platform::SlotId{slot},
             version,
-            1U,
+            schema,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
             device_platform::StorageEpoch{1U}};
@@ -381,9 +381,12 @@ fermentation::LoadedConfigurationGraph seedGraphWithCatalog(
     store.put("uc0", envelope(fermentation::configuration_storage_contract::
                                   kUserConfigurationRecordType,
                               1U, userPayload));
-    store.put("sc0", envelope(fermentation::configuration_storage_contract::
-                                  kServiceConfigurationRecordType,
-                              1U, servicePayload));
+    store.put(
+        "sc0",
+        envelope(fermentation::configuration_storage_contract::
+                     kServiceConfigurationRecordType,
+                 1U, servicePayload,
+                 fermentation::kCurrentServiceConfigurationSchemaVersion));
     store.put("pc0", envelope(fermentation::configuration_storage_contract::
                                   kProgramCatalogRecordType,
                               1U, catalogPayload));
@@ -396,7 +399,8 @@ fermentation::LoadedConfigurationGraph seedGraphWithCatalog(
         reference(fermentation::configuration_storage_contract::
                       kServiceConfigurationRecordType,
                   0U, fermentation::ServiceConfigurationRevision{1U},
-                  servicePayload),
+                  servicePayload,
+                  fermentation::kCurrentServiceConfigurationSchemaVersion),
         reference(fermentation::configuration_storage_contract::
                       kProgramCatalogRecordType,
                   0U, fermentation::ProgramCatalogRevision{1U},
@@ -1861,7 +1865,9 @@ void test_preview_reports_schema_bound_integrity_and_redacted_summary() {
     TEST_ASSERT_TRUE(installed.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(2U, installed.preview->integrity.userSchema);
-    TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.serviceSchema);
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kCurrentServiceConfigurationSchemaVersion,
+        installed.preview->integrity.serviceSchema);
     TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.programSchema);
     TEST_ASSERT_TRUE(installed.preview->summary.deviceNameChanged);
     TEST_ASSERT_EQUAL_UINT16(1U, installed.preview->summary.programsAdded);
