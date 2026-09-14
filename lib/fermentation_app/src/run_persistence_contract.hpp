@@ -37,14 +37,14 @@ class FreshStartSnapshotProvenance {
         return status_ == FreshStartSnapshotProvenanceStatus::InvalidSource;
     }
     [[nodiscard]] const ActuatorPlannerParameters& snapshot() const noexcept {
-        return *snapshot_;
+        return snapshot_.value();
     }
 
    private:
     FreshStartSnapshotProvenance(
         FreshStartSnapshotProvenanceStatus status,
         std::optional<ActuatorPlannerParameters> snapshot)
-        : status_(status), snapshot_(std::move(snapshot)) {}
+        : status_(status), snapshot_(snapshot) {}
 
     FreshStartSnapshotProvenanceStatus status_{
         FreshStartSnapshotProvenanceStatus::Absent};
