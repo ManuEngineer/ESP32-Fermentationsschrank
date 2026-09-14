@@ -199,7 +199,7 @@ void test_program_checkpoint_round_trip_restores_active_run() {
         "01000201010000001e03010140430000000000000100000078013fe000000000"
         "0000010000000a01000000b400010000000100010000000a000000b400010000"
         "0078000600000000000000000000000000000000000000000000010000000000"
-        "000063000000020002000200000000000000010000000000");
+        "00006300000002000200020000000000000001000000000000");
     const auto decoded =
         decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
@@ -294,6 +294,52 @@ void test_schema_five_round_trips_manual_timed_without_catalog_provenance() {
         static_cast<int>(restored->activeProgramRun->snapshot().sourceKind));
     TEST_ASSERT_FALSE(restored->activeProgramRun->snapshot()
                           .sourceProgramRevision.has_value());
+}
+
+void test_schema_six_carries_immutable_planner_snapshot_and_legacy_is_actor_free() {
+    auto source = programSnapshot();
+    ActuatorPlannerParameters parameters;
+    parameters.switchingWindowMillis = 10'000U;
+    parameters.minimumOnMillis = 2'000U;
+    parameters.minimumOffMillis = 1'000U;
+    parameters.polarityDeadTimeMillis = 3'000U;
+    parameters.pulseAccumulatorCapMillis = 10'000U;
+    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
+    parameters.counterDirectionConfirmationDurationMillis = 2'000U;
+    parameters.requestWatchdogMillis = 60'000U;
+    parameters.outerFanPostRunMillis = 5'000U;
+    parameters.innerFanPostRunMillis = 1'000U;
+    source.actuatorPlannerParametersSnapshot = parameters;
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
+    const auto decoded =
+        decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_TRUE(
+        decoded.snapshot->actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(*decoded.snapshot->actuatorPlannerParametersSnapshot ==
+                     parameters);
+    const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->actuatorPlannerParametersSnapshot.has_value());
+    TEST_ASSERT_TRUE(*restored->actuatorPlannerParametersSnapshot ==
+                     parameters);
+
+    const auto legacy =
+        decodeRunPersistenceSnapshot(schemaOneActivePayload(), 1U);
+    TEST_ASSERT_TRUE(legacy.snapshot.has_value());
+    TEST_ASSERT_FALSE(
+        legacy.snapshot->actuatorPlannerParametersSnapshot.has_value());
+
+    RunPersistenceSnapshot tombstone;
+    tombstone.variant = RunCheckpointVariant::NoActiveRun;
+    tombstone.intervalMinutes = 5U;
+    tombstone.processState.state = ProcessState::Standby;
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(tombstone));
+    tombstone.actuatorPlannerParametersSnapshot = parameters;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(tombstone));
 }
 
 void test_schema_three_active_program_golden_migrates_without_reinterpretation() {
@@ -572,7 +618,8 @@ void test_active_recovery_fault_requires_schema_three() {
     TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 2U));
     TEST_ASSERT_TRUE(validateRunPersistenceSnapshotForSchema(
         fault, kCurrentRunPersistenceSchema));
-    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 6U));
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(
+        fault, kCurrentRunPersistenceSchema + 1U));
 
     std::string encoded;
     TEST_ASSERT_EQUAL_INT(
@@ -689,7 +736,7 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
         "96e74020101020000000140280000000000000200003fe0000000000000000000"
         "0a000000b401000000000000000a020200010000000a000000b40000000c00000"
         "00000000064000000000000000000000000000000000000020002000200000000"
-        "000000010000000000");
+        "00000001000000000000");
     const auto decoded =
         decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
@@ -1247,8 +1294,8 @@ void test_prepared_head_binds_full_transaction_contract() {
     TEST_ASSERT_TRUE(encoded.has_value());
     assertGolden(
         *encoded,
-        "44505246000100080000000500000000000000090000000000000014000000780"
-        "0db8f4ddc010100000000010000000000000009000000000000000a0000000b000"
+        "445052460001000800000006000000000000000900000000000000140000007800"
+        "23373565010100000000010000000000000009000000000000000a0000000b000"
         "0000c0101010000000100000000000000090000000000000009000000080000000"
         "70301000000010000000000000009000000000000000b0000000d0000000e030101"
         "00000000000000580000000400000005000000060000000700");
@@ -1448,10 +1495,10 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     TEST_ASSERT_TRUE(committedGolden.has_value());
     assertGolden(
         *committedGolden,
-        "445052460001000800000005000000000000000900000000000000160000003f0"
-        "03a1227e40200000000010000000000000009000000000000000a0000000b0000"
-        "000c0101010000000100000000000000090000000000000009000000080000000"
-        "70300");
+        "445052460001000800000006000000000000000900000000000000160000003f00"
+        "269042670200000000010000000000000009000000000000000a0000000b000000"
+        "0c0101010000000100000000000000090000000000000009000000080000000703"
+        "00");
 
     committed.fallback = current;
     TEST_ASSERT_FALSE(
@@ -1666,7 +1713,7 @@ void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
     unknownSchema.state = RunPersistenceHeadState::Committed;
     unknownSchema.revision = 5U;
     unknownSchema.current = RunCheckpointReference{
-        0U, 6U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+        0U, 7U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
     TEST_ASSERT_FALSE(
         encodeRunPersistenceHead(unknownSchema, epoch).has_value());
 }
@@ -1705,6 +1752,8 @@ int main(int, char**) {
         test_schema_four_program_run_golden_restores_without_manual_reinterpretation);
     RUN_TEST(
         test_schema_five_round_trips_manual_timed_without_catalog_provenance);
+    RUN_TEST(
+        test_schema_six_carries_immutable_planner_snapshot_and_legacy_is_actor_free);
     RUN_TEST(
         test_schema_three_active_program_golden_migrates_without_reinterpretation);
     RUN_TEST(

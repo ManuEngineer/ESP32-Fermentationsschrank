@@ -141,6 +141,55 @@ bool readOptionalUint64(ByteReader& reader, std::optional<std::uint64_t>& out) {
     return true;
 }
 
+bool writeOptionalActuatorPlannerParameters(
+    ByteWriter& writer, const std::optional<ActuatorPlannerParameters>& value) {
+    if (!be::writeOptionalTag(writer, value.has_value())) return false;
+    if (!value.has_value()) return true;
+    const auto& p = *value;
+    return classifyActuatorPlannerParameters(p) ==
+               ActuatorPlannerParametersValidation::Valid &&
+           be::writeUint64(writer, p.switchingWindowMillis) &&
+           be::writeUint64(writer, p.minimumOnMillis) &&
+           be::writeUint64(writer, p.minimumOffMillis) &&
+           be::writeUint64(writer, p.polarityDeadTimeMillis) &&
+           be::writeUint64(writer, p.pulseAccumulatorCapMillis) &&
+           device_platform::binary64::encode(
+               p.counterDirectionConfirmationQuoteThreshold, writer) &&
+           be::writeUint64(writer,
+                           p.counterDirectionConfirmationDurationMillis) &&
+           be::writeUint64(writer, p.requestWatchdogMillis) &&
+           be::writeUint64(writer, p.outerFanPostRunMillis) &&
+           be::writeUint64(writer, p.innerFanPostRunMillis);
+}
+
+bool readOptionalActuatorPlannerParameters(
+    ByteReader& reader, std::optional<ActuatorPlannerParameters>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    ActuatorPlannerParameters p;
+    if (!be::readUint64(reader, p.switchingWindowMillis) ||
+        !be::readUint64(reader, p.minimumOnMillis) ||
+        !be::readUint64(reader, p.minimumOffMillis) ||
+        !be::readUint64(reader, p.polarityDeadTimeMillis) ||
+        !be::readUint64(reader, p.pulseAccumulatorCapMillis) ||
+        !device_platform::binary64::decode(
+            reader, p.counterDirectionConfirmationQuoteThreshold) ||
+        !be::readUint64(reader, p.counterDirectionConfirmationDurationMillis) ||
+        !be::readUint64(reader, p.requestWatchdogMillis) ||
+        !be::readUint64(reader, p.outerFanPostRunMillis) ||
+        !be::readUint64(reader, p.innerFanPostRunMillis) ||
+        classifyActuatorPlannerParameters(p) !=
+            ActuatorPlannerParametersValidation::Valid) {
+        return false;
+    }
+    out = p;
+    return true;
+}
+
 bool writeRunProgramSourceRevision(ByteWriter& writer,
                                    RunProgramSourceRevision value) {
     return be::writeUint64(writer, value.value());
@@ -1192,7 +1241,10 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
          writeOptionalNominalRecoveryAdjustmentState(
              writer, snapshot.nominalRecoveryAdjustment) &&
          be::writeUint32(writer, snapshot.recoveryEpisodeRevision) &&
-         writeRunProgressState(writer, snapshot.runProgress);
+         writeRunProgressState(writer, snapshot.runProgress) &&
+         (snapshot.variant == RunCheckpointVariant::NoActiveRun ||
+          writeOptionalActuatorPlannerParameters(
+              writer, snapshot.actuatorPlannerParametersSnapshot));
     if (!ok) return RunPersistenceCodecStatus::CapacityExceeded;
     auto encoded = writer.takeBytes();
     out.swap(encoded);
@@ -1209,6 +1261,7 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
     destination.revisionCount = 0U;
     destination.manual.reset();
     destination.processRunSnapshot.reset();
+    destination.actuatorPlannerParametersSnapshot.reset();
     destination.pendingRecoveryAnchor.reset();
     destination.recoveryBootAnchorMonotonicMillis.reset();
     destination.recoveryTemperatureEvidence.lastKnown = CrossRoleEvidence{};
@@ -1369,6 +1422,11 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
         s.runProgress.weightedProgress = WeightedProgressState{
             WeightedProgressBounds{0U, std::nullopt},
             WeightedProgressCoverage::PartialUnknown, std::nullopt};
+    }
+    if (schemaVersion >= 6U && s.variant != RunCheckpointVariant::NoActiveRun &&
+        !readOptionalActuatorPlannerParameters(
+            reader, s.actuatorPlannerParametersSnapshot)) {
+        return RunPersistenceCodecStatus::InvalidWireValue;
     }
     if (reader.remaining() != 0U)
         return RunPersistenceCodecStatus::TrailingBytes;

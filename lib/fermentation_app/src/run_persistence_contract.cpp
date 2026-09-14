@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "configuration_service.hpp"
 #include "run_limits.hpp"
 
 namespace fermentation {
@@ -275,9 +276,31 @@ bool validRecoveryFieldsForSnapshot(const RunPersistenceSnapshot& snapshot) {
 
 }  // namespace
 
+FreshStartSnapshotProvenance FreshStartSnapshotProvenance::absent() {
+    return {FreshStartSnapshotProvenanceStatus::Absent, std::nullopt};
+}
+
+FreshStartSnapshotProvenance FreshStartSnapshotProvenance::fromRuntimeLease(
+    const RuntimeConfigurationReadLease& lease) {
+    if (!lease.valid()) {
+        return {FreshStartSnapshotProvenanceStatus::InvalidSource,
+                std::nullopt};
+    }
+    const auto& candidate =
+        lease->serviceConfiguration().actuatorPlannerParameters;
+    if (!candidate.has_value()) return absent();
+    if (classifyActuatorPlannerParameters(*candidate) !=
+        ActuatorPlannerParametersValidation::Valid) {
+        return {FreshStartSnapshotProvenanceStatus::InvalidSource,
+                std::nullopt};
+    }
+    return {FreshStartSnapshotProvenanceStatus::Present, *candidate};
+}
+
 bool knownRunPersistenceSchema(std::uint32_t schemaVersion) {
     return schemaVersion == 1U || schemaVersion == 2U || schemaVersion == 3U ||
-           schemaVersion == 4U || schemaVersion == kCurrentRunPersistenceSchema;
+           schemaVersion == 4U || schemaVersion == 5U ||
+           schemaVersion == kCurrentRunPersistenceSchema;
 }
 
 bool isPersistedRunCommand(CommandKind kind) {
@@ -315,6 +338,7 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
                !snapshot.manual.has_value() &&
                !snapshot.processRunSnapshot.has_value() &&
+               !snapshot.actuatorPlannerParametersSnapshot.has_value() &&
                validRecoveryFieldsForSnapshot(snapshot) &&
                validateProcessRuntimeForCheckpoint(
                    snapshot.processState, nullptr,
@@ -332,6 +356,12 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                                          *snapshot.activeRunSensorMode,
                                          snapshot.runRevision) ||
         !validRecoveryFieldsForSnapshot(snapshot)) {
+        return false;
+    }
+    if (snapshot.actuatorPlannerParametersSnapshot.has_value() &&
+        classifyActuatorPlannerParameters(
+            *snapshot.actuatorPlannerParametersSnapshot) !=
+            ActuatorPlannerParametersValidation::Valid) {
         return false;
     }
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
@@ -397,6 +427,7 @@ void resetRunPersistenceSnapshotForMake(RunPersistenceSnapshot& destination) {
     destination.revisionCount = 0U;
     destination.manual.reset();
     destination.processRunSnapshot.reset();
+    destination.actuatorPlannerParametersSnapshot.reset();
     destination.pendingRecoveryAnchor.reset();
     destination.recoveryBootAnchorMonotonicMillis.reset();
     destination.lastRecoveryEpisodeEvidence.reset();
@@ -464,6 +495,8 @@ bool makeRunPersistenceSnapshotInto(
         snapshot.revisions = state.activeProgramRun->revisions();
         snapshot.revisionCount = state.activeProgramRun->revisionCount();
         snapshot.processRunSnapshot = state.processRunSnapshot;
+        snapshot.actuatorPlannerParametersSnapshot =
+            state.actuatorPlannerParametersSnapshot;
         snapshot.pendingRecoveryAnchor = state.pendingRecoveryAnchor;
         snapshot.recoveryBootAnchorMonotonicMillis =
             state.recoveryBootAnchorMonotonicMillis;
@@ -479,6 +512,8 @@ bool makeRunPersistenceSnapshotInto(
         snapshot.sensorSelection = state.sensorSelection;
         snapshot.manual = state.activeManualRun;
         snapshot.processRunSnapshot = state.processRunSnapshot;
+        snapshot.actuatorPlannerParametersSnapshot =
+            state.actuatorPlannerParametersSnapshot;
         snapshot.pendingRecoveryAnchor = state.pendingRecoveryAnchor;
         snapshot.recoveryBootAnchorMonotonicMillis =
             state.recoveryBootAnchorMonotonicMillis;
@@ -517,6 +552,7 @@ bool restoreRunPersistenceSnapshotInto(const RunPersistenceSnapshot& snapshot,
     destination.activeRunSensorMode.reset();
     destination.sensorSelection.reset();
     destination.processRunSnapshot.reset();
+    destination.actuatorPlannerParametersSnapshot.reset();
     destination.pendingRecoveryAnchor.reset();
     destination.recoveryBootAnchorMonotonicMillis.reset();
     destination.lastRecoveryEpisodeEvidence.reset();
@@ -541,6 +577,8 @@ bool restoreRunPersistenceSnapshotInto(const RunPersistenceSnapshot& snapshot,
         destination.activeRunSensorMode = snapshot.activeRunSensorMode;
         destination.sensorSelection = snapshot.sensorSelection;
         destination.processRunSnapshot = snapshot.processRunSnapshot;
+        destination.actuatorPlannerParametersSnapshot =
+            snapshot.actuatorPlannerParametersSnapshot;
         destination.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
         destination.recoveryBootAnchorMonotonicMillis =
             snapshot.recoveryBootAnchorMonotonicMillis;
@@ -567,6 +605,8 @@ bool restoreRunPersistenceSnapshotInto(const RunPersistenceSnapshot& snapshot,
         destination.activeRunSensorMode = snapshot.activeRunSensorMode;
         destination.sensorSelection = snapshot.sensorSelection;
         destination.processRunSnapshot = snapshot.processRunSnapshot;
+        destination.actuatorPlannerParametersSnapshot =
+            snapshot.actuatorPlannerParametersSnapshot;
         destination.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
         destination.recoveryBootAnchorMonotonicMillis =
             snapshot.recoveryBootAnchorMonotonicMillis;

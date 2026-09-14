@@ -7,6 +7,7 @@
 #include <string>
 
 #include "process_state_machine.hpp"
+#include "actuator_plan_types.hpp"
 #include "run_command_limits.hpp"
 #include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
@@ -339,6 +340,9 @@ struct RunCommandState {
     std::optional<ActiveRun> activeProgramRun;
     std::optional<ManualRunPlan> activeManualRun;
     std::optional<ProcessRunSnapshot> processRunSnapshot;
+    // Immutable Issue-106 per-run planner parameters. Absence is deliberate:
+    // the run is actor-free and must not recover values from live config.
+    std::optional<ActuatorPlannerParameters> actuatorPlannerParametersSnapshot;
     std::string activeRunId;
     // Der Modus gehoert zum aktiven Laufvertrag und wird zusammen mit dem
     // Programmschnappschuss beziehungsweise dem manuellen Plan gesetzt. Er

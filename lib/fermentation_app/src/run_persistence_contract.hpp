@@ -4,11 +4,52 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "run_commands.hpp"
 #include "run_recovery_types.hpp"
 
 namespace fermentation {
+
+class RuntimeConfigurationReadLease;
+
+enum class FreshStartSnapshotProvenanceStatus : std::uint8_t {
+    Absent,
+    Present,
+    InvalidSource,
+};
+
+// Narrow #106 provenance type. It carries only whether a valid snapshot was
+// obtained from the existing runtime configuration lease; it is not a Safety
+// capability and never authorizes an actuator.
+class FreshStartSnapshotProvenance {
+   public:
+    [[nodiscard]] static FreshStartSnapshotProvenance absent();
+    [[nodiscard]] static FreshStartSnapshotProvenance fromRuntimeLease(
+        const RuntimeConfigurationReadLease& lease);
+    [[nodiscard]] FreshStartSnapshotProvenanceStatus status() const noexcept {
+        return status_;
+    }
+    [[nodiscard]] bool present() const noexcept {
+        return status_ == FreshStartSnapshotProvenanceStatus::Present;
+    }
+    [[nodiscard]] bool invalidSource() const noexcept {
+        return status_ == FreshStartSnapshotProvenanceStatus::InvalidSource;
+    }
+    [[nodiscard]] const ActuatorPlannerParameters& snapshot() const noexcept {
+        return *snapshot_;
+    }
+
+   private:
+    FreshStartSnapshotProvenance(
+        FreshStartSnapshotProvenanceStatus status,
+        std::optional<ActuatorPlannerParameters> snapshot)
+        : status_(status), snapshot_(std::move(snapshot)) {}
+
+    FreshStartSnapshotProvenanceStatus status_{
+        FreshStartSnapshotProvenanceStatus::Absent};
+    std::optional<ActuatorPlannerParameters> snapshot_;
+};
 
 inline constexpr std::size_t kMaximumPersistedRunCommandIds = 32U;
 inline constexpr std::size_t kMaximumRunPersistencePayloadBytes = 8192U;
@@ -31,7 +72,8 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // committed command-id high-water field in RunPersistenceHead.
 // Schema 5 (#152): explicit ProgramRun source discrimination and the
 // truthful, catalog-independent ManualTimed source payload.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 5U;
+// Schema 6 (#157/#106): immutable per-run actuator planner snapshot.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 6U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {
@@ -210,6 +252,7 @@ struct RunPersistenceSnapshot {
     std::size_t revisionCount{0U};
     std::optional<ManualRunPlan> manual;
     std::optional<ProcessRunSnapshot> processRunSnapshot;
+    std::optional<ActuatorPlannerParameters> actuatorPlannerParametersSnapshot;
     ProcessRuntimeState processState;
     std::uint32_t runRevision{0U};
     std::array<CommandId, kMaximumPersistedRunCommandIds>
