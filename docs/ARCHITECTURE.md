@@ -45,8 +45,8 @@ Fehlerhistorie, keinen Restartakkumulator und keine Charge-Recovery-Plattform.
 
 `platformio.ini` definiert ausschliesslich `native` fuer den
 hardwareunabhaengigen Hosttestpfad. `esp32_bringup` und `esp32_release` werden
-aus derselben Codebasis ausschliesslich mit ESP-IDF `v6.0.2`
-(`7101770dc6db2667b3c477cc31365dd1acd6db4e`) in getrennten Buildverzeichnissen
+aus derselben Codebasis ausschliesslich mit ESP-IDF `v6.1`
+(`fff9895c82d744c7237be8847347bdd1b07c6643`) in getrennten Buildverzeichnissen
 gebaut. Beide ESP32-Profile planen mit 4 MB Flash ohne vorausgesetzte PSRAM.
 PlatformIO Core `6.1.19` bleibt fuer den nativen Hostpfad fixiert.
 

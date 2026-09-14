@@ -11,8 +11,8 @@ ausschliesslich im versionierten Runner
 im Workflow.
 
 Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
-verwenden ESP-IDF `v6.0.2` am Commit
-`7101770dc6db2667b3c477cc31365dd1acd6db4e`.
+verwenden ESP-IDF `v6.1` am Commit
+`fff9895c82d744c7237be8847347bdd1b07c6643`.
 
 Der gemeinsame versionierte Gate-Owner ist
 `scripts/run_pre_ready_gates.sh`. Er verifiziert vor den Gates PlatformIO
@@ -100,7 +100,7 @@ Gatebefehle und die clang-tidy-Dateiliste:
 export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
 bash scripts/run_pre_ready_gates.sh host
 
-# Danach die kanonische ESP-IDF-6.0.2-/esp-clang-Umgebung bereitstellen und
+# Danach die kanonische ESP-IDF-6.1-/esp-clang-Umgebung bereitstellen und
 # export.sh aktivieren; dies ist Provisionierung, kein zweiter Gatepfad.
 export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-$HOME/.espressif}"
 python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
@@ -167,8 +167,8 @@ Wiederholungslauf nach dem Merge.
 | Profil | Werkzeug | Zweck |
 |---|---|---|
 | `native` | PlatformIO/Host-Compiler | Fachlogik, Simulation und native Tests |
-| `esp32_bringup` | ESP-IDF 6.0.2 | Produktionsbuild mit gesperrten Aktoren und unbestaetigter Hardware |
-| `esp32_release` | ESP-IDF 6.0.2 | Releaseprofil; keine automatische Hardwarefreigabe |
+| `esp32_bringup` | ESP-IDF 6.1 | Produktionsbuild mit gesperrten Aktoren und unbestaetigter Hardware |
+| `esp32_release` | ESP-IDF 6.1 | Releaseprofil; keine automatische Hardwarefreigabe |
 
 `src/main.cpp` ist der native Composition Root. `main/app_main.cpp` ist der
 ESP-IDF Composition Root.
@@ -225,7 +225,7 @@ Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
 |---|---:|---|
 | clang-format | 18 | C/C++ unter `src/`, `include/`, `lib/`, `test/`, `main/` |
 | clang-tidy | 18 | hardwareunabhaengiger Produktionskern ueber die native Kompilierungsdatenbank |
-| esp-clang | zur ESP-IDF-6.0.2-Toolchain passend | beide ESP-IDF-Profile |
+| esp-clang | zur ESP-IDF-6.1-Toolchain passend (`esp-21.1.3_20260408`) | beide ESP-IDF-Profile |
 
 Die vollständige Formatprüfung, die native Kompilierungsdatenbank und die
 kanonische clang-tidy-Dateiliste stehen ausschließlich im versionierten
@@ -299,7 +299,7 @@ Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 2. PlatformIO, clang-format und clang-tidy installieren;
 3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
    Format, Build, Tests oder clang-tidy fail-fast ab;
-4. ESP-IDF `v6.0.2` am exakten Commit installieren und verifizieren;
+4. ESP-IDF `v6.1` am exakten Commit installieren und verifizieren;
 5. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
    Runner in der `esp`-Phase ausfuehren;
 6. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung

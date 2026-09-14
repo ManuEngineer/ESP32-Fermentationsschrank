@@ -12,7 +12,8 @@ und Ownerentscheidungen stehen ausschliesslich in
 
 ## Technische Einordnung
 
-- ESP-IDF `v6.0.2` ist der einzige ESP32-Produktionspfad.
+- ESP-IDF `v6.1` (`fff9895c82d744c7237be8847347bdd1b07c6643`) ist der einzige
+  ESP32-Produktionspfad.
 - PlatformIO dient ausschliesslich dem nativen Hosttestpfad.
 - Fachlogik, Plattformports, ESP-IDF-Adapter und Test-Support sind getrennt.
 - Unbestaetigte Hardware und offene Safety-Gates bleiben fail-closed.

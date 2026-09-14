@@ -2,8 +2,8 @@
 
 ## Ziel und Geltung
 
-ESP-IDF `v6.0.2` mit Commit
-`7101770dc6db2667b3c477cc31365dd1acd6db4e` ist die fixierte
+ESP-IDF `v6.1` mit Commit
+`fff9895c82d744c7237be8847347bdd1b07c6643` ist die fixierte
 ESP32-Produktionsgrundlage. Dieser Vertrag regelt Upgrades der Toolchain und
 gilt fuer die getrennten Profile `esp32_bringup` und `esp32_release`.
 PlatformIO bleibt ausschliesslich der native Hosttestpfad.
@@ -30,18 +30,20 @@ offiziellen `esp-clang`-Pfad ueber `scripts/run_esp_idf_static_analysis.py`.
 
 ## Komponenten- und Lockfilevertrag
 
-Der aktuelle Produktionsstand verwendet keine externe ESP-IDF-Komponente.
-Deshalb gibt es weder ein `idf_component.yml` noch ein `dependencies.lock`;
-eine leere Manifest- oder Lockdatei als Scheinstruktur ist nicht zulaessig.
+Der aktuelle Produktionsstand verwendet die fest versionierten
+Component-Manager-Abhaengigkeiten `esp-idf-lib/ds3231` `1.1.7` und
+`esp-idf-lib/i2cdev` `2.1.2` aus
+`lib/device_platform_esp_idf/idf_component.yml`. Die transitive
+`esp-idf-lib/esp_idf_lib_helpers`-Abhaengigkeit und die IDF-Version sind in
+`dependencies.lock` enthalten. Dieser Bestand ist aktive Produktionsprovenienz
+und keine neue Issue-159-Funktion.
 
-Bei einem spaeteren echten Bedarf werden zuerst offizielle Espressif-
-Component-Manager-Komponenten geprueft. Jede uebernommene Abhaengigkeit muss
-auf eine feste Version gebunden sein. Direkte Git-Downloads, unfixierte
-Versionsbereiche und unbestimmte Quell-URLs sind ausgeschlossen. Sobald die
-erste reale Component-Manager-Abhaengigkeit eingebunden wird, ist das erzeugte
-`dependencies.lock` zu versionieren und darf nicht manuell bearbeitet werden.
-Komponenten- und Lockfile-Diffs werden ab diesem Zeitpunkt Teil der
-Upgrade-Nachweise.
+Jede Abhaengigkeit bleibt auf eine feste Version gebunden. Direkte Git-
+Downloads, unfixierte Versionsbereiche und unbestimmte Quell-URLs sind
+ausgeschlossen. `dependencies.lock` wird mit dem Component Manager unter der
+fixierten ESP-IDF-Version erzeugt, vollstaendig geprueft und nicht manuell
+gepflegt. Komponenten- und Lockfile-Diffs sind Teil des Minor-Upgrade-
+Nachweises.
 
 ## Bugfix-Upgrade
 

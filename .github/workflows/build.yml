@@ -70,17 +70,17 @@ jobs:
           path: platformio-build.log
           if-no-files-found: ignore
 
-      - name: ESP-IDF installieren (v6.0.2, exakter Commit)
+      - name: ESP-IDF installieren (v6.1, exakter Commit)
         run: |
           set -euo pipefail
 
-          export IDF_PATH="$RUNNER_TEMP/esp-idf-v6.0.2"
+          export IDF_PATH="$RUNNER_TEMP/esp-idf-v6.1"
           export IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
           echo "IDF_PATH=$IDF_PATH" >> "$GITHUB_ENV"
           echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> "$GITHUB_ENV"
 
-          EXPECTED_TAG="v6.0.2"
-          EXPECTED_COMMIT="7101770dc6db2667b3c477cc31365dd1acd6db4e"
+          EXPECTED_TAG="v6.1"
+          EXPECTED_COMMIT="fff9895c82d744c7237be8847347bdd1b07c6643"
 
           git clone --filter=blob:none --no-checkout \
             https://github.com/espressif/esp-idf.git \

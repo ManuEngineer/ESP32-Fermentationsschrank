@@ -7,7 +7,7 @@ namespace device_platform_esp_idf {
 namespace {
 
 device_platform::StateStoreWriteStatus mapSetError(esp_err_t error) {
-    // ESP-IDF v6.0.2 does not provide a deferred-write boundary here:
+    // ESP-IDF v6.1 does not provide a deferred-write boundary here:
     // NVSHandleSimple::set_blob() calls Storage::writeItem() directly and
     // nvs_commit() is currently a no-op. writeMultiPageBlob() may already
     // have written BLOB_DATA/Page state before returning an error. Therefore
@@ -16,7 +16,7 @@ device_platform::StateStoreWriteStatus mapSetError(esp_err_t error) {
     switch (error) {
         case ESP_ERR_NVS_VALUE_TOO_LONG:
             // writeMultiPageBlob() checks the page-count limit before its
-            // first page write (nvs_storage.cpp:281-290 in v6.0.2).
+            // first page write (nvs_storage.cpp:283-290 in v6.1).
             return device_platform::StateStoreWriteStatus::CapacityError;
         case ESP_ERR_NVS_INVALID_HANDLE:
         case ESP_ERR_NVS_READ_ONLY:
@@ -47,7 +47,7 @@ device_platform::StateStoreWriteStatus mapSetError(esp_err_t error) {
 std::optional<NvsStateStoreConfig> NvsStateStoreConfig::create(
     std::string partitionLabel, std::string namespaceName) {
     // The normal ESP-IDF partition contract permits 16 non-NUL label bytes;
-    // the v6.0.2 BDL admission path has a stricter test-only
+    // the v6.1 BDL admission path has a stricter test-only
     // strlen(label) >= NVS_PART_NAME_MAX_SIZE quirk. Keep that quirk out of
     // the generic production adapter contract. BDL fixtures use a shorter
     // label and document the backend-specific limit separately.

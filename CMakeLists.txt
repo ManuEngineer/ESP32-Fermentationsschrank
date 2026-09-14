@@ -25,10 +25,10 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(MINIMAL_BUILD ON)
 project(esp32_fermentationsschrank)
 
-# Fail-fast: #72 ist ausschliesslich gegen den gepinnten Release v6.0.2
+# Fail-fast: #159 ist ausschliesslich gegen den gepinnten Release v6.1
 # geprueft. IDF_VER (statt IDF_VERSION_MAJOR/MINOR/PATCH) unterscheidet auch
 # Release-/RC-/Beta-/Dev-Staende mit sonst gleichen Versionszahlen.
 idf_build_get_property(idf_ver IDF_VER)
-if(NOT idf_ver STREQUAL "v6.0.2")
-    message(FATAL_ERROR "ESP-IDF v6.0.2 required, active version is '${idf_ver}'")
+if(NOT idf_ver STREQUAL "v6.1")
+    message(FATAL_ERROR "ESP-IDF v6.1 required, active version is '${idf_ver}'")
 endif()
