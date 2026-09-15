@@ -212,18 +212,62 @@ nicht. Ihr Umfang ist exakt:
   mit sechs realen Power-Cuts, Produktionsrestore und anschließendem
   Produktboot auf derselben Board-/UART-/Restore-Oberfläche.
 
-`HARDWARE_PARITY=PARTIAL`: In einer späteren Sitzung (2026-09-15) war die in
-`ISSUE_29_MEASUREMENTS.md` qualifizierte reale Board-/UART-Basis verfügbar;
-`HARDWARE_SMOKE_BRINGUP` und `HARDWARE_SMOKE_RELEASE` sind damit für den
-finalen v6.1-HEAD `fc306c4428a2bd770866e5f23ce0881f38bc1baf` real belegt
-(siehe Unterabschnitt unten). `ISSUE90_POWER_CUT_RESTORE` blieb in dieser
-Sitzung außerhalb des Umfangs und bleibt `NOT_RUN`; die Sechsfach-Power-Cut-
-Kampagne sowie die Stack-/Heap-Belastungsmessung sind damit weiterhin
-offene Hardwarenachweise. Software-PASS wird nicht als Hardware-PASS
-umetikettiert. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`, `BLOCKED_HARDWARE`,
-Display, Touch, Sensoren, Lüfter, BTS/Peltier und spätere Commissioning-
-Scope bleiben außerhalb. Es gibt keine Ersatzhardware, keine neue
-Hardwareanforderung und keine Aktorfreigabe.
+`HARDWARE_PARITY=PASS_WITH_OWNER_WAIVER`: In einer späteren Sitzung
+(2026-09-15) war die in `ISSUE_29_MEASUREMENTS.md` qualifizierte reale
+Board-/UART-Basis verfügbar; `HARDWARE_SMOKE_BRINGUP` und
+`HARDWARE_SMOKE_RELEASE` sind damit für den finalen v6.1-HEAD
+`fc306c4428a2bd770866e5f23ce0881f38bc1baf` real belegt (siehe
+Unterabschnitt unten). `ISSUE90_POWER_CUT_RESTORE=OWNER_WAIVED` (siehe
+Owner-Entscheidung unten); die Stack-/Heap-Belastungsmessung unter realer
+Dauerlast bleibt weiterhin `NOT_RUN`. Software-PASS wird nicht als
+Hardware-PASS umetikettiert. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`,
+`BLOCKED_HARDWARE`, Display, Touch, Sensoren, Lüfter, BTS/Peltier und
+spätere Commissioning-Scope bleiben außerhalb. Es gibt keine
+Ersatzhardware, keine neue Hardwareanforderung und keine Aktorfreigabe.
+
+#### Owner-Entscheidung: Issue-90-Power-Cut-Kampagne nicht wiederholt (2026-09-15)
+
+Der Auftrag `AUFTRAG_PR160_HARDWARE_PARITAET` forderte eine Wiederholung der
+unter v6.0.2 bereits qualifizierten Sechsfach-Power-Cut-Kampagne (3x
+Config-, 3x Run-Szenario, siehe PR #128) unter v6.1. Der Owner-Vorbereitungs-
+schritt (`--phase prepare`: Sicherung der Produktions-Partitionstabelle und
+des State-Store vor einem etwaigen Harness-Flash) wurde real auf der
+Hardware ausgeführt und war `PRE_HARNESS_BACKUP=PASS` mit
+`PRODUCTION_PARTITION_TABLE_BACKUP_SHA256=d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d`
+und
+`PRODUCTION_STATE_STORE_BACKUP_SHA256=3d678c449760e7772901870930efe492c81d99a48abfc8246d6cd23215b95b9a`.
+Vor dem ersten realen Power-Cut hat der Owner die Kampagne als für diesen
+Umstieg unverhältnismäßig bewertet:
+
+- reiner ESP-IDF-SDK-Versionswechsel `v6.0.2` auf `v6.1`, keine Fach-,
+  Safety-, Persistenz-, GPIO- oder Partitionscodeänderung;
+- der offizielle ESP-IDF-6.1-Migrationsguide (`docs/en/migration-guides/
+  release-6.x/6.1/`) enthält keinen Storage-/NVS-Abschnitt, nur
+  `peripherals` und `tools`; der einzige Tooling-Treffer betrifft das
+  `idf.py flash`-Fast-Reflash-Verhalten und ist bereits oben als
+  `NOT_AFFECTED` bewertet, da der Projektworkflow direkt `esptool`
+  verwendet;
+- die dokumentierten SPI-Flash-Breaking-Changes in v6.1 betreffen
+  ausschließlich die Custom-Flash-Treiber-C-API-Oberfläche
+  (Header-Sichtbarkeit, neues `flags`-Argument in
+  `esp_flash_os_functions_t::start`), nicht die NVS-Standard-API-Nutzung
+  des Produkts;
+- die GitHub-Release-Notes zu `v6.1` bestätigen explizit weitgehende
+  Kompatibilität zu v6.0;
+- `HARDWARE_SMOKE_BRINGUP` und `HARDWARE_SMOKE_RELEASE` sind bereits real
+  auf dem finalen v6.1-HEAD PASS, alles Übrige aus dem Upgrade lief bereits
+  fehlerfrei.
+
+Es wurde kein Harness geflasht, kein Power-Cut durchgeführt und keine
+Restore-/Rebaseline-Phase ausgeführt; die real gesicherte
+Produktionspartition/State-Store bleibt als unveränderter Nachweis lokal
+erhalten, ist aber nicht Teil dieses Commits. Der Board-Zustand nach dieser
+Sitzung ist unverändert die zuletzt real geflashte `esp32_release`-Firmware
+auf `fc306c4428a2bd770866e5f23ce0881f38bc1baf`. `ISSUE90_POWER_CUT_RESTORE`
+bleibt damit `OWNER_WAIVED`, nicht `PASS`; eine künftige Session kann die
+Kampagne bei Bedarf jederzeit gegen denselben Plan (`PLAN_SHA=
+baf0b2ae04cd42afa75dfa00e21d900116b38bc8`, `scripts/
+issue_90_slice7_product_runner.py`) nachholen.
 
 #### Realer Hardware-Smoke-Nachweis (2026-09-15)
 
@@ -238,10 +282,14 @@ Der Boot-Log wurde über einen kontrollierten DTR/RTS-Reset (DTR/IO0 deassert
 vor dem RTS/EN-Puls, um versehentlichen Download-Bootloader-Verbleib zu
 vermeiden) direkt mitgeschnitten:
 
-| Profil | `application: ready` | Ressourcenpunkte | Heartbeat/Uptime | Reset/Panic/Watchdog/Brownout | Aktorpolicy |
+| Profil | `application: ready` | Ressourcenpunkte (Zeit / Heap / Stack-HWM) | Heartbeat/Uptime | Reset/Panic/Watchdog/Brownout | Aktorpolicy |
 |---|---|---|---|---|---|
-| `esp32_bringup` | ja | genau 2 (t=795 ms, t=31015 ms) | 38 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `LOCKED_FOR_BRINGUP`; `real actuators: disabled` |
-| `esp32_release` | ja | genau 2 (t=799 ms, t=30809 ms) | 39 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `REQUIRE_VERIFIED_HARDWARE`; `real actuators: disabled` |
+| `esp32_bringup` | ja | t=795 ms: `free_heap_bytes=231444 stack_hwm_bytes=8136`; t=31015 ms: `free_heap_bytes=231444 stack_hwm_bytes=8136` | 38 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `LOCKED_FOR_BRINGUP`; `real actuators: disabled` |
+| `esp32_release` | ja | t=799 ms: `free_heap_bytes=231444 stack_hwm_bytes=8136`; t=30809 ms: `free_heap_bytes=231444 stack_hwm_bytes=8136` | 39 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `REQUIRE_VERIFIED_HARDWARE`; `real actuators: disabled` |
+
+Beide Ressourcenpunkte je Profil zeigen identische Werte (kein Heap-/Stack-
+Verbrauch zwischen Boot und Sekunde 30, erwartungsgemäß für den unveränderten
+Heartbeat-Loop ohne zusätzliche Allokation nach dem `issue29_probe`-Lauf).
 
 Beide Boot-Logs bestätigen `App version: fc306c4428a2bd770866e5f23ce0881f38bc1baf`
 und `ESP-IDF: v6.1`. Der eingebettete `issue29_probe` meldet
