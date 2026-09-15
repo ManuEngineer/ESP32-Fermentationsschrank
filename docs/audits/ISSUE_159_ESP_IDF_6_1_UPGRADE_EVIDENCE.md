@@ -212,11 +212,41 @@ nicht. Ihr Umfang ist exakt:
   mit sechs realen Power-Cuts, Produktionsrestore und anschließendem
   Produktboot auf derselben Board-/UART-/Restore-Oberfläche.
 
-`HARDWARE_PARITY=BLOCKED_HARDWARE`: In dieser Sitzung war der identische reale
-Board-/UART-/kontrollierte Reset-/Power-Cut-Aufbau nicht verfügbar. Deshalb
-sind `HARDWARE_SMOKE_BRINGUP=NOT_RUN`, `HARDWARE_SMOKE_RELEASE=NOT_RUN` und
-`ISSUE90_POWER_CUT_RESTORE=NOT_RUN` für den finalen v6.1-HEAD; Software-PASS
-wird nicht als Hardware-PASS umetikettiert. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`,
-`BLOCKED_HARDWARE`, Display, Touch, Sensoren, Lüfter, BTS/Peltier und spätere
-Commissioning-Scope bleiben außerhalb. Es gibt keine Ersatzhardware, keine
-neue Hardwareanforderung und keine Aktorfreigabe.
+`HARDWARE_PARITY=PARTIAL`: In einer späteren Sitzung (2026-09-15) war die in
+`ISSUE_29_MEASUREMENTS.md` qualifizierte reale Board-/UART-Basis verfügbar;
+`HARDWARE_SMOKE_BRINGUP` und `HARDWARE_SMOKE_RELEASE` sind damit für den
+finalen v6.1-HEAD `fc306c4428a2bd770866e5f23ce0881f38bc1baf` real belegt
+(siehe Unterabschnitt unten). `ISSUE90_POWER_CUT_RESTORE` blieb in dieser
+Sitzung außerhalb des Umfangs und bleibt `NOT_RUN`; die Sechsfach-Power-Cut-
+Kampagne sowie die Stack-/Heap-Belastungsmessung sind damit weiterhin
+offene Hardwarenachweise. Software-PASS wird nicht als Hardware-PASS
+umetikettiert. `IMPLEMENTED_DIGITAL_PENDING_HARDWARE`, `BLOCKED_HARDWARE`,
+Display, Touch, Sensoren, Lüfter, BTS/Peltier und spätere Commissioning-
+Scope bleiben außerhalb. Es gibt keine Ersatzhardware, keine neue
+Hardwareanforderung und keine Aktorfreigabe.
+
+#### Realer Hardware-Smoke-Nachweis (2026-09-15)
+
+Board: ESP32-D0WD-V3 Revision v3.1, 4 MB Flash, kein PSRAM,
+FTDI-FT232R-UART-Adapter (`/dev/ttyUSB0`, MAC `20:50:0d:1b:2f:34`), DTR/RTS-
+Reset über die vorhandene actor-free ESP32-Basis; identisch zur in
+`ISSUE_29_MEASUREMENTS.md` qualifizierten Oberfläche. Beide Profile wurden
+mit `esptool.py` (v4.11.0, `--flash_mode dio --flash_size 4MB --flash_freq
+40m`) auf `fc306c4428a2bd770866e5f23ce0881f38bc1baf` geflasht; `Hash of data
+verified` für Bootloader, Partitionstabelle und App-Image in beiden Fällen.
+Der Boot-Log wurde über einen kontrollierten DTR/RTS-Reset (DTR/IO0 deassert
+vor dem RTS/EN-Puls, um versehentlichen Download-Bootloader-Verbleib zu
+vermeiden) direkt mitgeschnitten:
+
+| Profil | `application: ready` | Ressourcenpunkte | Heartbeat/Uptime | Reset/Panic/Watchdog/Brownout | Aktorpolicy |
+|---|---|---|---|---|---|
+| `esp32_bringup` | ja | genau 2 (t=795 ms, t=31015 ms) | 38 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `LOCKED_FOR_BRINGUP`; `real actuators: disabled` |
+| `esp32_release` | ja | genau 2 (t=799 ms, t=30809 ms) | 39 Zeilen, exakt 1000 ms-Takt, keine Lücke/Duplikat | keiner außer dem einen erwarteten `POWERON_RESET` beim Boot | `REQUIRE_VERIFIED_HARDWARE`; `real actuators: disabled` |
+
+Beide Boot-Logs bestätigen `App version: fc306c4428a2bd770866e5f23ce0881f38bc1baf`
+und `ESP-IDF: v6.1`. Der eingebettete `issue29_probe` meldet
+`result=PASS`, `actor_release=false`, `safety_fail_closed=true`. Es gab
+keine Aktorfreigabe, keinen Flash- oder Partitionswechsel gegenüber dem
+Build und keine Fach-/Safety-Codeänderung; dieser Nachweis ist rein additiv
+zur bestehenden Software-Evidence. `HARDWARE_SMOKE_BRINGUP=PASS`,
+`HARDWARE_SMOKE_RELEASE=PASS`.
