@@ -22,6 +22,7 @@ PR160_BASE=main@2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
 PR160_ISSUE_REFERENCE=Refs_#159
 PR158=OPEN_DRAFT_OUT_OF_SCOPE
 ACTUATOR_RELEASE=NO
+ISSUE90_POWER_CUT_RESTORE=OWNER_WAIVED_FOR_PR160_ONLY
 ```
 
 Verifizierte Kontextbaseline:
@@ -409,6 +410,32 @@ Fehlt der exakt gleiche bereits qualifizierte Board-/UART-/Restore-Aufbau,
 bleibt die Paritaet `BLOCKED_HARDWARE`; sie wird nicht durch einen neuen
 Boardtyp, eine unbestaetigte Hardwareoberflaeche oder eine gelockerte
 Safety-Aussage ersetzt.
+
+### Owner-Ausnahme fuer PR #160: Issue-90-Power-Cut-Kampagne
+
+Die in der Tabelle oben genannte Wiederholung der sechs realen Power-Cuts
+(Issue #90 / PR #128) ist als Nachweis weiterhin Teil dieses Upgradevertrags.
+Fuer PR #160 hat der Owner nach Pruefung der bereits dokumentierten
+Issue-159-Befunde entschieden, sie nicht auszufuehren:
+`ISSUE90_POWER_CUT_RESTORE=OWNER_WAIVED`. Die Begruendung bleibt exakt auf
+den bereits in `docs/audits/ISSUE_159_ESP_IDF_6_1_UPGRADE_EVIDENCE.md`
+dokumentierten Befund beschraenkt: ein reiner ESP-IDF-Minor-Versionswechsel
+ohne Fach-, Safety-, Persistenz-, GPIO- oder Partitionscodeaenderung, keine
+im offiziellen 6.0-auf-6.1-Migrationsguide ausgewiesene NVS-/Storage-
+Migration, und beide realen v6.1-Hardware-Smokes (`esp32_bringup`,
+`esp32_release`) bereits `PASS`. `HARDWARE_PARITY` fuer PR #160 ist damit
+`PASS_WITH_OWNER_WAIVER`, nicht `PASS` und nicht `BLOCKED_HARDWARE`.
+
+Diese Ausnahme gilt ausschliesslich fuer Issue #159 / PR #160 auf dem hier
+geprueften reinen SDK-Upgrade-Scope. Sie aendert und lockert weder den
+globalen `docs/ESP_IDF_UPGRADE_CONTRACT.md` noch die allgemeine
+Hardware-Paritaetsanforderung fuer kuenftige Upgrades oder andere Issues; ein
+kuenftiger Upgrade- oder Produktcodescope, der Fach-, Safety-, Persistenz-,
+GPIO- oder Partitionscode aendert, verlangt die volle Sechsfach-Kampagne
+unveraendert erneut. Die real ausgefuehrte, hashverifizierte
+Produktions-Backup-Vorbereitung (`--phase prepare`) bleibt als Nachweis
+lokal erhalten; es wurde kein Harness geflasht, kein Power-Cut durchgefuehrt
+und keine Restore-Phase ausgefuehrt.
 
 ## 9. Abbruchkriterien und erwarteter Endzustand
 
