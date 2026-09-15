@@ -560,7 +560,7 @@ def _good_tools_json_data() -> dict:
                         "status": "recommended",
                         "linux-amd64": {
                             "sha256": esp_idf_contract.ESP_CLANG_LINUX_AMD64_SHA256,
-                            "size": 339870496,
+                            "size": 416927952,
                         },
                     },
                 ],
@@ -811,10 +811,10 @@ def run_selftest() -> int:
 
     rejected_missing_tool_version_token = _raises_analysis_error(
         lambda: verify_tool_version(
-            Path("/fake/tools/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clang"),
+            Path("/fake/tools/tools/esp-clang/esp-21.1.3_20260408/esp-clang/bin/clang"),
             esp_idf_contract.ESP_CLANG_TOOL_VERSION,
             "clang", "bringup",
-            run_fn=lambda cmd: _fake_completed(0, stdout="Espressif clang version 20.1.1 (some other build)\n"),
+            run_fn=lambda cmd: _fake_completed(0, stdout="Espressif clang version 21.1.3 (some other build)\n"),
         ),
     )
     checks.append((

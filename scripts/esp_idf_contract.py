@@ -12,8 +12,8 @@ keine Klassenhierarchie, kein generisches Toolchain-Framework, kein
 Dependency-Injection-Container.
 """
 
-ESP_IDF_TAG = "v6.0.2"
-ESP_IDF_COMMIT = "7101770dc6db2667b3c477cc31365dd1acd6db4e"
+ESP_IDF_TAG = "v6.1"
+ESP_IDF_COMMIT = "fff9895c82d744c7237be8847347bdd1b07c6643"
 
 PROFILES = ("bringup", "release")
 
@@ -22,10 +22,10 @@ PROFILES = ("bringup", "release")
 # Toolpaketnamen (ESP_CLANG_TOOL_VERSION); `clang-tidy --version` meldet
 # nachweislich nur die LLVM-Version (ESP_CLANG_LLVM_VERSION), nicht den
 # Toolpaketnamen - deshalb zwei getrennte Konstanten statt einer.
-ESP_CLANG_TOOL_VERSION = "esp-20.1.1_20250829"
-ESP_CLANG_LLVM_VERSION = "20.1.1"
+ESP_CLANG_TOOL_VERSION = "esp-21.1.3_20260408"
+ESP_CLANG_LLVM_VERSION = "21.1.3"
 ESP_CLANG_LINUX_AMD64_SHA256 = (
-    "88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f"
+    "6e62bf1973b57b5388aad281ce1463e953e70b3d8df74ef4668c70f31fbeda63"
 )
 
 # Von ESP-IDF selbst nicht ueber ein Constraints-File fixiert (siehe Plan

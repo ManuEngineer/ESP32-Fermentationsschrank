@@ -100,6 +100,8 @@ const char* configurationRecoveryStatusName(
             return "ConfigurationRecordOutcomeIndeterminate";
         case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
             return "ConfigurationCommitIndeterminate";
+        case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
+            return "RunPersistenceHandoffUnavailable";
     }
     return "Unknown";
 }
@@ -148,6 +150,8 @@ const char* runLoadDispositionName(RunLoadDisposition value) noexcept {
             return "Completed";
         case RunLoadDisposition::TerminalFault:
             return "TerminalFault";
+        case RunLoadDisposition::FallbackSelectionRequired:
+            return "FallbackSelectionRequired";
         case RunLoadDisposition::SafeBoot:
             return "SafeBoot";
     }
@@ -215,6 +219,8 @@ const char* configurationCommitStatusName(
             return "ConfigurationCommitIndeterminate";
         case ConfigurationCommitStatus::ConfigurationRuntimeFailure:
             return "ConfigurationRuntimeFailure";
+        case ConfigurationCommitStatus::ReadyForConfirmation:
+            return "ReadyForConfirmation";
     }
     return "Unknown";
 }
