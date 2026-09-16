@@ -331,7 +331,7 @@ Fehlgeschlagene Builds sichern den verfuegbaren Buildlog.
 
 Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 
-1. Checkout und Python (mit `pip`-Cache);
+1. Checkout und Python;
 2. PlatformIO installieren; clang-format/clang-tidy 18 sind auf
    `ubuntu-24.04` bereits vorinstalliert und werden nur verlinkt;
 3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
