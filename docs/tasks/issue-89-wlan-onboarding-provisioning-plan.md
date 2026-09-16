@@ -21,19 +21,57 @@ PR_SYNC_MERGE_SHA=f6ffe1617a733d699d45b880df3ce9fb6ed9a5d6
 ESP_IDF_TAG=v6.1
 ESP_IDF_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
 HISTORICAL_APPROVED_PLAN_SHA=d8d506da1d5bde129c09d623263d7657c38f28a3
-PLAN_REVISION=ESP_IDF_6_1_REBASELINE
+PARENT_APPROVED_PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
+OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
+PLAN_REVISION=ESP_IDF_6_1_PHASE_B_OWNER_TEST_BOUNDARY
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
 PLAN_SHA=EXACT_COMMIT_RECORDED_IN_PR_AND_SESSION_HANDOVER
-IMPLEMENTATION=NOT_STARTED
+IMPLEMENTATION=PHASE_A_EVIDENCE_COMPLETE
 EVIDENCE_EXECUTION=NOT_AUTHORIZED_BEFORE_PLAN_APPROVAL
 HISTORICAL_6_0_2_EVIDENCE=RETAIN_AS_HISTORICAL_ONLY
-PHASE_A_6_1_REVALIDATION=PENDING
+PHASE_A_6_1_REVALIDATION=PASS
+PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
+
+### Ownerentscheid fuer den Phase-B-Testaufbau
+
+Der Owner hat fuer den realen Issue-#89-Lauf auf dem Stand
+`OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949` den
+vorhandenen ESP32-WROOM-32E-Dev-Aufbau ausdruecklich als entbehrlichen
+Development-Testtraeger freigegeben. Diese Freigabe gilt nur fuer den
+kontrollierten, isolierten Issue-#89-Spike und ist keine produktive
+Persistenz-, Recovery- oder Loeschfreigabe.
+
+```text
+DEV_BOARD_IS_DISPOSABLE_TEST_TARGET=YES
+FLASH_OVERWRITE_ALLOWED=YES
+NVS_ERASE_ALLOWED_FOR_ISSUE89_TESTS=YES
+EXISTING_DEV_STATE_PRESERVATION_REQUIRED=NO
+PRE_TEST_FLASH_BACKUP_REQUIRED=NO
+POWER_CUT_TESTS_REQUIRED=NO
+POWER_CUT_TESTS=WAIVED_BY_OWNER
+UART_RESET_TESTS_ALLOWED=YES
+FLASH_TESTS_ALLOWED=YES
+REAL_CLIENT_TESTS_ALLOWED=YES
+```
+
+Daraus folgt fuer Phase B: Ein zusaetzliches Test-NVS, eine separate physische
+Testpartition und ein Backup des bisherigen Development-Stands sind nicht
+erforderlich, solange ausschliesslich dieser freigegebene Dev-Testtraeger
+verwendet wird. Die kontrollierte Testprozedur darf dessen Flash und Default-
+NVS ueberschreiben oder loeschen. Automatisches oder unbeabsichtigtes Loeschen
+bleibt in Produktionscode, Bibliotheksvertraegen und Recoveryvertraegen
+unzulässig.
+
+Power-Cut ist kein verpflichtendes Phase-B-Acceptance-Criterion und kein
+offener Testpunkt. `Reset != Power-Cut` bleibt als Begriffsgrenze dokumentiert.
+UART-, Reset-, Neustart-, Credential-, Commit- und Recoverytests bleiben
+verpflichtend.
 
 Der alte Plan `d8d506da...` bleibt als historische Planrevision im
 Git-Verlauf nachvollziehbar. Diese aktuelle Datei ersetzt ihn als alleinige
@@ -126,7 +164,7 @@ Vertraege oder Framework-Abstraktionen sind unzulaessig.
 | Toolchain | `docs/ESP_IDF_UPGRADE_CONTRACT.md`, `docs/CI_AND_QUALITY_GATES.md`, ESP-IDF `v6.1` am exakten Commit |
 | Bestehende Evidence | `docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md`, `spikes/issue89_wlan_onboarding/README.md` und der historische Plan-Commit |
 | Isolierte Spikes | `spikes/issue89_wlan_onboarding/`, ausserhalb des produktiven CMake-Graphs |
-| Hardwaregrenze | `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`, keine Behauptung ohne Board-, UART-, Reset- und Power-Nachweis |
+| Hardwaregrenze | `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`, keine Behauptung ohne Board-, UART- und Reset-Nachweis; Power-Cut ist Owner-waived |
 
 Der native Fachkern kennt weiterhin keine ESP-IDF-, WLAN-, HTTP-, DNS-, QR-
 oder Kandidaten-Typen. Kandidatencode bleibt im isolierten Spike, bis der
@@ -202,6 +240,7 @@ separate Lauf erfolgt.
 | WiFiManager- und weitere Drittanbieter-Screens | `HISTORICAL_CANDIDATE_SCREEN`, `RERUN_6_1` vor vertieftem Gate | Commit, Lizenz, Manifest, IDF-/Arduino-Pfad, Storage- und Lifecycle-Risiken erneut aus exakten Quellen pruefen; kein automatisches Shortlisting |
 | Issue-159-Produktionsbuilds, Ressourcen, esp-clang und Hardware-Smokes | `REUSE_AS_ISSUE159_PROVENANCE_ONLY` | Belegt ESP-IDF 6.1 fuer die Produktionsbasis, aber keinen Issue-89-Kandidaten-, Browser- oder Clientnachweis |
 | Android/iOS/iPadOS/Windows, Browser, QR-Kamera, UART-/Reset-Recovery | `PENDING/NOT_RUN` | Im bisherigen Stand nicht erbracht; keine Umdeklaration als PASS |
+| Konservativer Phase-B-Stop vor dem Ownerentscheid | `HISTORICAL_PRE_OWNER_DECISION` | Der damalige Stop wegen Test-NVS- und Power-Cut-Absicherung bleibt als historische Evidence erhalten; er ist nach der ausdruecklichen Ownerfreigabe keine aktuelle Voraussetzung mehr |
 
 Die historischen Werte werden in der neuen Evidence als `ESP_IDF=6.0.2`,
 `SOURCE_SHA=2f64a1c...` beziehungsweise der damals dokumentierten Source-/Tool-
@@ -345,10 +384,15 @@ Source-SHA, Toolchainprovenienz, Befehl und Ergebnis dokumentiert.
 
 ### Phase B – vergleichbare Client-, Browser- und Recovery-Evidence
 
-Phase B bleibt bis heute `PENDING`; sie darf erst nach erfolgreicher oder
-begruendet eingeschraenkter Phase-A-6.1-Evidence und mit einem isolierten,
-wegwerfbaren beziehungsweise gesicherten Test-NVS starten. Das Projekt-
-oder Benutzer-NVS darf nicht verwendet und nie automatisch geloescht werden.
+Phase B bleibt bis heute `PENDING`; sie darf nach Freigabe der exakten neuen
+Plan-SHA auf dem vom Owner ausdruecklich freigegebenen, entbehrlichen
+ESP32-WROOM-32E-Development-Testtraeger starten. Fuer diesen kontrollierten
+Issue-#89-Spike sind Flash- und Default-NVS-Ueberschreibung beziehungsweise
+-Loeschung erlaubt. Ein zusaetzliches Test-NVS, eine separate physische
+Testpartition oder ein Backup des bisherigen Development-Stands sind dafuer
+nicht erforderlich. Das Projekt-/Benutzer-NVS eines nicht freigegebenen
+Produktivgeraets darf weiterhin nicht verwendet werden, und automatisches oder
+unbeabsichtigtes Loeschen bleibt unzulaessig.
 
 Die vier Kandidaten erhalten denselben Testaufbau, dieselbe Firmware-
 Provenienz je Kandidat und dieselben Cut-Points:
@@ -359,15 +403,19 @@ Provenienz je Kandidat und dieselben Cut-Points:
 | iOS/iPadOS | dieselben Punkte; OS-Captive-Ansicht und Safari/direkte IP getrennt protokollieren |
 | Windows | WLAN-Beitritt, Standardbrowser, Captive-Angebot, direkte IP, lange Eingabe, Fehler/Abbruch, Reconnect und Neustart |
 | Browservertrag | Portalstart/-stop, QR-Encoding/Decoding, sichtbare lokale Adresse, no-store/Redaction, Erfolg/Fehler/Timeout |
-| Recovery | Write-/Readback-/Reset-/Power-/CommitOutcomeUnknown-Cutpoints, alte Konfiguration erhalten, keine alte Epoch reaktivieren |
+| Recovery | Write-/Readback-/Reset-/CommitOutcomeUnknown-Cutpoints, alte Konfiguration erhalten, keine alte Epoch reaktivieren |
 | Runtime/Safety | actor-free Regel-/Safety-Simulation bleibt bei allen Netzwerkfehlern unabhaengig und fail-closed |
 | Ressourcen | Heap, niedrigster Heap, groesster Block, Stack-Watermark, Start/Stop, Scan, Formular, Reconnect, Jitter, Watchdog, Leaks und Handles |
 
-Fuer reale Tests muessen Board, UART, Resetpfad, Powerzustand, Clientgeraete,
-Test-NVS, Partitionierung, Backupgrenze und Firmware-SHA vorab dokumentiert
-sein. `EN/RTS`-Reset ist kein Power-Cut. Fehlt die Power-/UART-/Reset-
-Voraussetzung oder meldet esptool keine seriellen Daten, lautet der Nachweis
-`BLOCKED`; es wird kein Hardware- oder Client-PASS behauptet.
+Fuer reale Tests muessen der ausdruecklich freigegebene Dev-Testtraeger, UART,
+Resetpfad, Clientgeraete, Partitionierung und Firmware-SHA vorab dokumentiert
+sein. Ein zusaetzliches Test-NVS, eine Backupgrenze und ein verifizierter
+Power-Cut-Pfad sind keine Voraussetzungen dieses Ownerentscheids. Power-Cut-
+Tests sind vollstaendig als `WAIVED_BY_OWNER` aus den verpflichtenden
+Acceptance Criteria entfernt. `EN/RTS`-Reset ist kein Power-Cut; UART-, Reset-,
+Neustart-, Credential- und Recoverytests bleiben verpflichtend. Fehlt Board-,
+UART- oder Resetvoraussetzung oder meldet esptool keine seriellen Daten, lautet
+der Nachweis `BLOCKED`; es wird kein Hardware- oder Client-PASS behauptet.
 
 Ein physischer QR-Scan am vorgesehenen Display ist von synthetischem
 QR-Encoding und Kamera-/Browsertests getrennt. Ohne bestaetigte Display-
@@ -422,6 +470,8 @@ Tabellen getrennt und enthaelt mindestens:
 - vier Kandidaten mit gleicher Bewertungslogik;
 - `PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING`, solange kein vergleichbarer
   Clientlauf vollstaendig erfasst ist;
+- `PHASE_B_TEST_SETUP=OWNER_AUTHORIZED` und
+  `POWER_CUT_TESTS=WAIVED_BY_OWNER` nach dem aktuellen Ownerentscheid;
 - keine produktive Kandidaten- oder Persistenzentscheidung.
 
 Es gelten die Begriffe aus `docs/CI_AND_QUALITY_GATES.md`:
@@ -466,8 +516,8 @@ Sofort anhalten und `BLOCKED` oder einen Ownerentscheid einholen bei:
   Auto-Commit;
 - fehlendem direktem-IP-Fallback, App-/Cloud-/CLI-Zwang oder nicht
   vergleichbarer Kandidaten-Evidence;
-- fehlendem Board-, UART-, Reset- oder Power-Nachweis fuer einen beanspruchten
-  realen Lauf;
+- fehlendem Board-, UART- oder Reset-Nachweis fuer einen beanspruchten realen
+  Lauf; der Owner-Waiver fuer Power-Cut ist kein offener Testpunkt;
 - materieller Abweichung von #57, ADR-013, ADR-016, `NETWORK.md`,
   `SYSTEM_SAFETY_AND_RECOVERY.md` oder diesem Plan.
 
