@@ -74,9 +74,10 @@ redundant und wird durch reines Verlinken ersetzt). `verify_clang_major` in
 diese Anforderung wird durch die Umstellung nicht veraendert, nur die Quelle
 der Binaries.
 
-Diese Wahl wird im Draft-PR dokumentiert und kann vom Owner bei der
-Plan-Freigabe explizit verworfen werden, falls ein Container-Image dennoch
-gewuenscht ist.
+Diese Wahl (Caching statt Docker-Image) ist bereits mit der Freigabe der
+ersten Plan-SHA `66ab4f3678a5265ca176998dfad1d428d1806982` vom Owner
+ausdruecklich bestaetigt worden und steht durch diese Revision nicht erneut
+zur Entscheidung.
 
 ## Zu erhaltende Vertraege (unveraendert)
 
