@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -16,8 +17,18 @@
 #include "esp_netif.h"
 #include "esp_random.h"
 #include "esp_wifi.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "issue89_native";
+
+static void fail_closed_nvs_init(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS init failed (0x%x); no erase performed; probe stopped", err);
+        abort();
+    }
+}
 
 static bool make_volatile_softap_config(wifi_config_t *config)
 {
@@ -71,6 +82,7 @@ static httpd_handle_t start_http_server(void)
 
 void app_main(void)
 {
+    fail_closed_nvs_init();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
@@ -78,6 +90,7 @@ void app_main(void)
 
     wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init_config));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     wifi_config_t ap_config = {0};
     if (!make_volatile_softap_config(&ap_config)) {
