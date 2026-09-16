@@ -1,8 +1,9 @@
 # Issue #89: isolated WLAN onboarding spikes
 
-This directory contains the Phase A capability-evidence harness authorized by
-the approved plan. Phase B comparable client evidence is still pending. The
-artefacts are deliberately outside the production CMake graph and have no
+This directory contains the Phase A capability-evidence harness and the
+authorized Phase-B hardware/transport probes. Comparable client evidence is
+still pending. The artefacts are deliberately outside the production CMake
+graph and have no
 production dependency, storage namespace, credential record, or runtime
 lifecycle contract.
 
@@ -57,10 +58,13 @@ They are not evidence until the corresponding command result and source
 revision are recorded in
 `docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md`.
 
-No flash or client command is part of the default reproduction. The official
-manager probe must never be run against a project/user NVS for a real
-credential test: before any client Set/Apply test, prepare an explicitly
-disposable or secured test NVS and record the isolated target, partition
-layout, backup/reset boundary, UART/reset path, client matrix, and
-secret-safe evidence. Do not add an automatic NVS erase to make the test
-convenient; existing project/user data must remain untouched.
+No flash or client command is part of the default build reproduction. For the
+approved Issue-#89 Phase-B run, only the explicitly authorized
+ESP32-WROOM-32E-Development-Testtraeger may be used. Its complete flash and
+Default-NVS may be erased and overwritten before each controlled candidate
+run; no additional test NVS, separate physical test partition, or pre-test
+backup is required. Record the exact target, partition layout, UART/reset
+path, client matrix, and secret-safe evidence. Never add automatic NVS erase
+to product code or run this flow against a non-authorized project/user device.
+Power-cut tests are waived by the Owner and are not part of the Phase-B
+acceptance criteria; DTR/RTS reset remains a separate reset test.

@@ -37,6 +37,7 @@ ISSUE=89
 PLAN_SHA=6a0a83b3b037c47b89caa87f9d2cb1e65f498c59
 PARENT_APPROVED_PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
+PHASE_B_TEST_RUN_HEAD=70a489b75a19ebb8a2ea231e98245d5811f8987f
 BASE=main@7029df3997bb92e60379eb218f1894f86c5f7d55
 EVIDENCE_SOURCE_SHA=aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775
 PREVIOUS_PHASE_A_EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
@@ -56,6 +57,8 @@ DEV_BOARD_DISPOSABLE=YES
 FLASH_OVERWRITE_ALLOWED=YES
 NVS_ERASE_ALLOWED_FOR_TEST=YES
 POWER_CUT_TESTS=WAIVED_BY_OWNER
+PHASE_B_FLASH_BOOT_EVIDENCE=PASS
+PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 PHASE_B_EXECUTION=NOT_RUN
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
@@ -185,24 +188,27 @@ Produktionspfad. WiFiManager bleibt fuer den nativen ESP-IDF-6.1-Spike
 
 ### Phase-A-Grenzen und naechster Gate
 
-Die neuen 6.1-Build-PASS ersetzen weder Client- noch Browser-, QR-, Hardware-
-oder Recovery-Evidence. Flash, UART, Reset, QR-Kamera, Android, iOS/iPadOS und
-Windows sind in dieser Umsetzung `NOT_RUN`; Power-Cut ist fuer Phase B durch
-den Owner als `WAIVED_BY_OWNER` festgelegt. Der vorhandene
+Die neuen 6.1-Build-PASS und die drei realen Flash-/Boot-/DTR-/RTS-Reset-
+Nachweise ersetzen weder Client- noch Browser-, QR- oder Recovery-Evidence.
+QR-Kamera, Android, iOS/iPadOS und Windows sind in dieser Umsetzung `NOT_RUN`;
+Power-Cut ist fuer Phase B durch den Owner als `WAIVED_BY_OWNER` festgelegt.
+Der vorhandene
 ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten Issue-#89-Spike als
 entbehrlicher Testtraeger freigegeben. Ein zusaetzliches Test-NVS, eine
 separate physische Testpartition oder ein Backup sind fuer diesen Testtraeger
-nicht erforderlich. Die vergleichbare Kandidatenmatrix bleibt `PENDING` und
-die Ausfuehrung wartet auf die Freigabe der exakten neuen Plan-SHA; ein
-zusaetzliches NVS-/Power-Cut-Owner-Gate ist nicht offen.
+nicht erforderlich. Die drei Flash-/Boot-/SoftAP-Teilnachweise sind `PASS`; die
+vergleichbare Kandidatenmatrix bleibt wegen fehlender Clientplattform
+`PENDING`. Die Ausfuehrung wartet auf Independent Phase-B Review und das
+Owner-Kandidatengate; ein zusaetzliches NVS-/Power-Cut-Owner-Gate ist nicht
+offen.
 
 ## Aktueller Phase-B-Testaufbau nach Ownerentscheid
 
-Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. In
-diesem Dokumentationscommit wurde noch kein Phase-B-Flash, Client-, Browser-,
-UART-, Reset- oder Recoverytest ausgefuehrt. `Reset != Power-Cut` bleibt die
-technische Begriffsgrenze; Power-Cut-Tests sind kein verpflichtendes
-Acceptance-Criterion.
+Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. Die
+drei autorisierten Flash-/Boot-/SoftAP-Laeufe wurden ausgefuehrt; die
+vergleichbare Client-, Browser- und Recovery-Matrix bleibt offen. `Reset !=
+Power-Cut` bleibt die technische Begriffsgrenze; Power-Cut-Tests sind kein
+verpflichtendes Acceptance-Criterion.
 
 ```text
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
@@ -225,20 +231,87 @@ UART_ACCESS=PASS_FOR_BOOTLOADER_HANDSHAKE
 RESET_PATH=FT232R_DTR_RTS_DEFAULT_RESET
 RESET_IS_POWER_CUT=NO
 PROJECT_USER_NVS_TOUCH=NOT_RUN
-FIRST_FLASH=NOT_RUN
+FIRST_FLASH=PASS
+FLASH_ERASE_AND_WRITE=PASS
 CLIENT_MATRIX=NOT_RUN
+PHASE_B_FLASH_BOOT_EVIDENCE=PASS
+PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 FIRMWARE_SOURCE_SHA=b2f08f4d568c60559e575c824844199012b80c30
 CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
-NEXT_GATE=OWNER_APPROVES_EXACT_REVISED_PLAN_SHA
+NEXT_GATE=INDEPENDENT_PHASE_B_REVIEW_AND_OWNER_CANDIDATE_GATE
 ```
 
 Die kontrollierte Freigabe gilt ausschliesslich fuer diesen ausdruecklich
 freigegebenen Development-Testtraeger. Automatisches oder unbeabsichtigtes
 Loeschen bleibt in Produktcode, Bibliotheks- und Recoveryvertraegen
 unzulaessig. Android, iOS/iPadOS, Windows, Browser/Captive Portal, direkte IP,
-Credential-Test/Commit, Reconnect, Neustart, UART/Reset und Recovery bleiben
-nach Plan ausstehende Phase-B-Nachweise.
+Credential-Test/Commit, Reconnect und Recovery bleiben nach Plan ausstehende
+Phase-B-Nachweise. UART-/DTR-/RTS-Reset wurde fuer alle drei geflashten
+Kandidaten ausgefuehrt; ein Reset ist kein Power-Cut.
+
+### Aktuelle Phase-B-Hardware- und Transport-Evidence
+
+Der kontrollierte Ablauf loeschte vor jedem Kandidatenlauf den vollstaendigen
+Flash des freigegebenen Development-Testtraegers und schrieb danach
+Bootloader, Partitionstabelle und die jeweilige App. Alle drei
+`write-flash`-Laeufe meldeten `Hash of data verified`. Es wurde kein Backup
+angelegt und kein nicht freigegebenes Projekt-/Benutzer-NVS verwendet.
+
+| Kandidat | Firmware-/Binary-Provenienz | Flash und Boot | SoftAP-/Transportbefund |
+|---|---|---|---|
+| `espressif/network_provisioning` 1.2.4 | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `909424 B`; Binary-SHA `228af151ac107f9c1a4e8290b95e6e452863f64d08b3ee0a022e06e6d9f1237b` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; `esptool --after hard-reset` ueber RTS `PASS` | Geschuetzter Dienststart `PASS`, SSID `R1SPK-A3E050`, DHCP/AP-IP laut UART `192.168.4.1`; Browser-/Clientzugriff `NOT_RUN` |
+| direkter `protocomm`-/ESP-IDF-Pfad | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `838128 B`; Binary-SHA `ace70b0464aeceb086fc4c9d4d18f4957ed38ed26dd01f0fe5eccc1e311917a3` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; Monitor-Reset ueber DTR/RTS `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1PC-F8141F` beziehungsweise nach Reset neu erzeugt, DHCP/AP-IP `192.168.4.1`; Endpoint-Bind `PASS`; Browser-/Clientzugriff `NOT_RUN` |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `815488 B`; Binary-SHA `eddc3164770949cfd697e9b9eacc29cc4fd83590e467def390b2242a4898c4b5` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; Monitor-Reset ueber DTR/RTS `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1NAT-39FB43` beziehungsweise nach Reset neu erzeugt, DHCP/AP-IP `192.168.4.1`; direkte HTTP-Seite laut UART vorhanden; Browser-/Clientzugriff `NOT_RUN` |
+
+Die Schutzkonfigurationen sind in den drei Probequellen WPA2-geschuetzt; die
+Passwoerter wurden nie ausgegeben und die UART-Ausgaben redigieren sie. Eine
+echte WLAN-Assoziation konnte ohne Client nicht ausgefuehrt werden. Ein
+expliziter SoftAP-Stop-Lifecycle wurde in keinem Probe implementiert und ist
+deshalb `NOT_RUN`; der DTR/RTS-Reset beendet jeweils die laufende Firmware und
+startet sie mit einem neu erzeugten SoftAP erneut.
+
+| Phase-B-Nachweis | Status | Aktueller Befund |
+|---|---|---|
+| Flash-Erase, App-/Bootloader-/Partition-Write und Hash-Verifikation | `PASS` | je Kandidat mit ESP-IDF-6.1/esptool 5.4.0 ausgefuehrt |
+| Boot, UART und ESP-IDF-Provenienz | `PASS` | alle drei Logs zeigen ESP-IDF v6.1 und App-Version `b2f08f4` |
+| SoftAP-Start, Schutz und AP-IP-Ankuendigung | `PASS` | geschuetzter SoftAP; DHCP/AP-IP `192.168.4.1`; Secrets redigiert |
+| SoftAP-Stop ohne Reset | `NOT_RUN` | kein Stop-Lifecycle im jeweiligen Probe vorhanden |
+| WLAN-Assoziation und geschuetzter Zugang | `NOT_RUN` | kein verfuegbarer WLAN-Clientpfad |
+| direkte HTTP-/Protocomm-IP-Anfrage | `NOT_RUN` | Host route ueber Ethernet statt AP; kein assoziierter Client |
+| Captive Portal / DNS / Browser | `NOT_RUN` | offizieller Browservertrag unbewiesen; direkte/native Spikes enthalten DNS/Captive nicht |
+| WLAN-Scan und Credential-Eingabe | `NOT_RUN` | direkte/native Spikes haben diese Capability nicht; official kein Clientlauf |
+| falsches Passwort, Abbruch, Timeout, Test-vor-Commit, Commitgrenze | `NOT_RUN` | keine Credentials an einen Kandidaten gesendet |
+| Reconnect und Neustart | `NOT_RUN` | Neustart-/Resetnachweis vorhanden, echter Reconnect nicht |
+| DTR/RTS-Reset | `PASS` | alle drei Kandidaten booteten danach erneut; `Reset != Power-Cut` |
+| Credential-/NVS-/Recovery-Cut-Points | `NOT_RUN` | kein Set/Apply/Commit; Vollerase war kontrollierter Testaufbau |
+| Laufzeit-Heap, Stack, Handles, Leaks, Watchdog und Jitter | `NOT_RUN` | Probeaufbau liefert keine belastbare Laufzeitmessung; Buildgroesse ist kein Ersatz |
+| Power-Cut-Tests | `WAIVED_BY_OWNER` | nicht verpflichtendes Acceptance-Criterion und kein offener Testpunkt |
+
+Fehlende Capabilities bleiben Kandidatenbefunde: Der direkte Protocomm-Probe
+bindet nur Boundary-Handler ohne Credentialinterpretation; der native
+HTTP-Probe hat nur direkte HTTP-Seite; beide enthalten keinen DNS-/Captive-,
+Scan-, Reconnect- oder Commitpfad. Der offizielle Manager startet seinen
+Standardtransport, sein Browservertrag und seine reale Set/Apply-/Recovery-
+Semantik bleiben ohne Clientlauf unbewiesen. Es wurde kein Wrapper und kein
+Arduino-Produktionspfad eingefuehrt.
+
+### Aktuelle Clientmatrix und QR-Grenze
+
+Auf dem ausfuehrenden Host stand `wlp1s0` `DOWN`; `192.168.4.1` wurde deshalb
+ueber `enp2s0` geroutet und war nicht erreichbar. `adb`, `idevice_id`,
+`wpa_supplicant`, `iw` und `nmcli` waren nicht verfuegbar. Daher wurden keine
+Android-, iOS/iPadOS- oder Windows-Tests als PASS behauptet:
+
+| Plattform / Nachweis | WLAN-Beitritt | Captive-Angebot | Browser / direkte IP | Formular / Scan | Fehler / Reconnect |
+|---|---|---|---|---|---|
+| Android | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+
+Der physische QR-Scan ueber das spaetere Geraetedisplay bleibt unabhaengig
+`BLOCKED_HARDWARE`; synthetisches QR-Oracle und die drei UART-/SoftAP-
+Nachweise ersetzen ihn nicht.
 
 ## Historischer Phase-B-Stop vor dem Ownerentscheid
 
@@ -459,12 +532,14 @@ Die Probe behauptet keinen alten Credential-Fallback; ein solcher waere
 insbesondere kein zulaessiger Vertrag nach #57.
 
 Der NVS-Fehlerpfad des offiziellen Probes stoppt fail-closed und ruft
-`nvs_flash_erase()` nicht auf. Vor jedem spaeteren realen Client-/Credential-
-Test sind ein explizit wegwerfbares oder gesichertes Test-NVS, ein eindeutig
-isolierter Flash-/Partitionsaufbau und die dokumentierte Backup-/Resetgrenze
-vorzubereiten. Ein bestehender Projekt-/Benutzerstore darf weder still
-geloescht noch fuer den Test ueberschrieben werden. Der Komponentenquellcode
-wird nicht geforkt oder gepatcht, um seinen Persistenzbefund zu verdecken.
+`nvs_flash_erase()` nicht auf. Fuer den kontrollierten, vom Owner freigegebenen
+Phase-B-Lauf wurde der entbehrliche Development-Testtraeger verwendet; sein
+vollstaendiger Flash und Default-NVS durften vor jedem Kandidatenlauf geloescht
+und neu beschrieben werden. Ein zusaetzliches Test-NVS, eine separate
+Testpartition und ein Backup waren nicht erforderlich. Ein nicht freigegebener
+Projekt-/Benutzerstore darf weiterhin weder still geloescht noch fuer Tests
+ueberschrieben werden. Der Komponentenquellcode wird nicht geforkt oder
+gepatcht, um seinen Persistenzbefund zu verdecken.
 
 Vor dem Owner-Gate wird deshalb keine Connectivity-Persistenz implementiert.
 Falls der Owner die native Persistenz eines ausgewaehlten Components oder des
@@ -484,7 +559,7 @@ freigegeben.
 | individuelle geschuetzte SoftAP-Zugangsdaten | PARTIAL | volatile individuelle Werte werden erzeugt und redigiert; keine reale Clientabnahme |
 | WLAN-QR | PARTIAL | synthetisches Format und Escaping im Host-Oracle PASS; QR-Encoding, Anzeige und Kamera-Decoding NOT_RUN |
 | direkte IP | PARTIAL | native Probe registriert eine direkte HTTP-Seite; realer Zugriff NOT_RUN |
-| direkter Protocomm-Transport und oeffentliche Endpoint-Grenze | PASS fuer Capability | ESP-IDF-6.0.2-Build bindet Security-, Version- und Set/Test/Commit-Handlergrenzen ohne High-Level-Manager; kein Clientlauf |
+| direkter Protocomm-Transport und oeffentliche Endpoint-Grenze | PASS fuer Capability | ESP-IDF-6.1-Build und realer Boot binden Security-, Version- und Set/Test/Commit-Handlergrenzen ohne High-Level-Manager; kein Clientlauf |
 | Captive Portal/DNS/OS-Erkennung | NOT_RUN | kein vollständiger Kandidatennachweis; zusätzlicher Portal-Screen bleibt konditional |
 | Scan, Eingabe, Test, Abbruch, Timeout, Reconnect | NOT_RUN | keine Produktlogik vor Owner-Gate |
 | Android | NOT_RUN | kein Client-/Hardwarelauf |
@@ -493,7 +568,7 @@ freigegeben.
 | Redaction in Logs, URLs, Diagnose, Backup | PARTIAL/PASS | Host-Oracle und statische Probeausgabe PASS; reale Bibliotheks-/Backuppfade nicht freigegeben |
 | alte funktionierende Credentials bei Fehlversuch erhalten | PARTIAL | kandidatenneutrale Commitgrenze PASS; offizielle native Vorab-Flashsemantik ist Konfliktbefund, kein Produkt-PASS |
 | Safety-/Regelungsunabhaengigkeit | PASS fuer Scope | keine Produktionskopplung; reale Laufzeitisolation bleibt Integrationsnachweis |
-| Hardware-/UART-/Reset-Recovery | NOT_RUN/BLOCKED_HARDWARE | getrenntes Hardwarefenster mit ESP32, reproduzierbarem Boot/Reset und Clientmatrix erforderlich |
+| Hardware-/UART-/Reset-Recovery | PASS fuer Boot/Reset, NOT_RUN fuer Recovery | drei ESP-IDF-6.1-Flash-/Bootlaeufe und DTR/RTS-Resets PASS; Client-/Recovery-Cut-Points fehlen |
 | Heap-/Stack-/Jitter-Messung | NOT_RUN | Buildgroessen sind dokumentiert; Laufzeitbudgets und Regelungs-/Safety-Jitter sind nicht gemessen |
 
 Die Nachweise ohne zusätzliche Verkabelung sind damit auf Host-Oracle,
@@ -519,7 +594,11 @@ Bis zu diesem Gate ist der Status:
 
 ```text
 PHASE_A_CAPABILITY_EVIDENCE=PASS
+PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
+PHASE_B_FLASH_BOOT_EVIDENCE=PASS
+PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+POWER_CUT_TESTS=WAIVED_BY_OWNER
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
