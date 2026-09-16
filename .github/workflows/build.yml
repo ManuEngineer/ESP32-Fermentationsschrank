@@ -33,12 +33,18 @@ jobs:
       # (build_report.py, immer per `git rev-parse HEAD`) — beide Werte duerfen
       # nicht zusammengelegt werden.
       SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      # Kanonischer ESP-IDF-Pin (siehe ESP_IDF_UPGRADE_CONTRACT.md). Einmal
+      # definiert und von Cache-Schluesseln sowie der Provenienzverifikation
+      # unten referenziert, statt inline dupliziert zu werden.
+      ESP_IDF_TAG: v6.1
+      ESP_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643
 
     steps:
       - name: Repository auschecken
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Python einrichten
+        id: setup-python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
@@ -46,10 +52,9 @@ jobs:
       - name: PlatformIO fuer nativen Hostpfad installieren
         run: python3 -m pip install platformio==6.1.19
 
-      - name: Format- und Analysewerkzeuge installieren (clang 18)
+      - name: Format- und Analysewerkzeuge verlinken (clang 18, bereits auf ubuntu-24.04 vorinstalliert)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18 clang-tidy-18
+          set -euo pipefail
           sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
           sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
           clang-format --version
@@ -70,35 +75,58 @@ jobs:
           path: platformio-build.log
           if-no-files-found: ignore
 
+      - name: ESP-IDF-Checkout cachen
+        id: cache-esp-idf-checkout
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/esp-idf-${{ env.ESP_IDF_TAG }}
+          key: esp-idf-checkout-${{ env.ESP_IDF_COMMIT }}
+
+      - name: ESP-IDF-Tools-Verzeichnis cachen
+        id: cache-esp-idf-tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/espressif
+          key: esp-idf-tools-${{ env.ESP_IDF_COMMIT }}-py${{ steps.setup-python.outputs.python-version }}-${{ runner.os }}-${{ runner.arch }}
+
       - name: ESP-IDF installieren (v6.1, exakter Commit)
+        env:
+          CHECKOUT_CACHE_HIT: ${{ steps.cache-esp-idf-checkout.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.cache-esp-idf-tools.outputs.cache-hit }}
         run: |
           set -euo pipefail
 
-          export IDF_PATH="$RUNNER_TEMP/esp-idf-v6.1"
+          export IDF_PATH="$RUNNER_TEMP/esp-idf-$ESP_IDF_TAG"
           export IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
           echo "IDF_PATH=$IDF_PATH" >> "$GITHUB_ENV"
           echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> "$GITHUB_ENV"
 
-          EXPECTED_TAG="v6.1"
-          EXPECTED_COMMIT="fff9895c82d744c7237be8847347bdd1b07c6643"
+          # Checkout: nur bei einem echten, exakt schluesselgebundenen
+          # Cache-Treffer (keine restore-keys) und tatsaechlich vorhandenem
+          # Verzeichnis wird der Clone/Fetch/Checkout/Submodule-Block
+          # uebersprungen. Die Provenienzverifikation unten laeuft in jedem
+          # Fall unveraendert und ersetzt den Cache-Treffer nicht.
+          if [ "$CHECKOUT_CACHE_HIT" = "true" ] && [ -d "$IDF_PATH/.git" ]; then
+            echo "Checkout-Cache-Treffer: Clone/Fetch/Checkout/Submodule werden uebersprungen."
+          else
+            git clone --filter=blob:none --no-checkout \
+              https://github.com/espressif/esp-idf.git \
+              "$IDF_PATH"
 
-          git clone --filter=blob:none --no-checkout \
-            https://github.com/espressif/esp-idf.git \
-            "$IDF_PATH"
-
-          git -C "$IDF_PATH" fetch --depth 1 origin "$EXPECTED_COMMIT"
-          git -C "$IDF_PATH" checkout --detach "$EXPECTED_COMMIT"
-          git -C "$IDF_PATH" submodule update --init --recursive
+            git -C "$IDF_PATH" fetch --depth 1 origin "$ESP_IDF_COMMIT"
+            git -C "$IDF_PATH" checkout --detach "$ESP_IDF_COMMIT"
+            git -C "$IDF_PATH" submodule update --init --recursive
+          fi
 
           ACTUAL_TAG=$(git -C "$IDF_PATH" describe --tags --exact-match)
-          if [ "$ACTUAL_TAG" != "$EXPECTED_TAG" ]; then
-            echo "::error::falscher ESP-IDF-Tag: erwartet $EXPECTED_TAG, gefunden $ACTUAL_TAG"
+          if [ "$ACTUAL_TAG" != "$ESP_IDF_TAG" ]; then
+            echo "::error::falscher ESP-IDF-Tag: erwartet $ESP_IDF_TAG, gefunden $ACTUAL_TAG"
             exit 1
           fi
 
           ACTUAL_COMMIT=$(git -C "$IDF_PATH" rev-parse HEAD)
-          if [ "$ACTUAL_COMMIT" != "$EXPECTED_COMMIT" ]; then
-            echo "::error::falscher ESP-IDF-Commit: erwartet $EXPECTED_COMMIT, gefunden $ACTUAL_COMMIT"
+          if [ "$ACTUAL_COMMIT" != "$ESP_IDF_COMMIT" ]; then
+            echo "::error::falscher ESP-IDF-Commit: erwartet $ESP_IDF_COMMIT, gefunden $ACTUAL_COMMIT"
             exit 1
           fi
 
@@ -108,12 +136,25 @@ jobs:
             exit 1
           fi
 
-          "$IDF_PATH/install.sh" esp32
+          # install.sh: nur bei einem echten Tools-Cache-Treffer
+          # uebersprungen; ein Checkout-Hit allein reicht dafuer nicht, da
+          # beide Caches unabhaengig ausfallen koennen.
+          if [ "$TOOLS_CACHE_HIT" = "true" ]; then
+            echo "Tools-Cache-Treffer: install.sh esp32 wird uebersprungen."
+          else
+            "$IDF_PATH/install.sh" esp32
+          fi
 
       - name: Gemeinsame Gateausfuehrung (ESP-IDF)
+        env:
+          TOOLS_CACHE_HIT: ${{ steps.cache-esp-idf-tools.outputs.cache-hit }}
         run: |
           set -euo pipefail
-          python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
+          if [ "$TOOLS_CACHE_HIT" = "true" ]; then
+            echo "Tools-Cache-Treffer: erneute esp-clang-Installation wird uebersprungen."
+          else
+            python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
+          fi
           . "$IDF_PATH/export.sh"
           bash scripts/run_pre_ready_gates.sh esp
 
