@@ -25,16 +25,19 @@ ACTUATOR_RELEASE=NO
 
 ## Aktuelle Phase-A-Revalidierung auf ESP-IDF 6.1
 
-Die folgenden Ergebnisse wurden auf dem Quellstand
-`0b0d125379a5fef79ca2760a101603c831dc7e7e` ausgefuehrt. Der nachfolgende
-Dokumentationscommit aendert keine Probequelle; die Source-SHA bleibt daher
-die Provenienz der ausfuehrbaren Evidence.
+Die offiziellen und direkten 6.1-Ergebnisse wurden auf dem Quellstand
+`0b0d125379a5fef79ca2760a101603c831dc7e7e` ausgefuehrt. Der native
+HTTP-Probe wurde nach dem Fail-Closed-/RAM-Storage-Fix auf dem Quellstand
+`aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775` neu gebaut. Die nachfolgenden
+Dokumentationscommits aendern keine Probequelle; beide Source-SHAs bleiben
+die Provenienz der jeweils ausfuehrbaren Evidence.
 
 ```text
 ISSUE=89
 PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
 BASE=main@7029df3997bb92e60379eb218f1894f86c5f7d55
-EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
+EVIDENCE_SOURCE_SHA=aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775
+PREVIOUS_PHASE_A_EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
 CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
 ESP_IDF_CHECKOUT=clean
 ESP_IDF_PYTHON=3.13.5
@@ -58,10 +61,11 @@ ACTUATOR_RELEASE=NO
 | Nachweis | Ergebnis | Befehl / Befund |
 |---|---|---|
 | Host-Oracle | PASS | `python3 spikes/issue89_wlan_onboarding/host_contract_test.py`; 5/5 Tests fuer Bytegrenzen, Commitgrenze, Redaction und QR-Escaping |
-| Secret-Scan | PASS | `python3 scripts/check_secrets.py`; 482 getrackte Dateien, keine Geheimnisse oder privaten Pfade |
+| Secret-Scan | PASS | `python3 scripts/check_secrets.py`; 482 getrackte Dateien, keine geschuetzten Dateien oder Geheimnismuster; der Standardlauf prueft keine privaten Pfade |
+| Portable-Reproduktionspfad | PASS | `grep -nE '/(home|Users|var/lib|srv)/' spikes/issue89_wlan_onboarding/README.md`; kein Treffer; Reproduktion verwendet `IDF_PATH` und `IDF_TOOLS_PATH` |
 | Repository-Integritaet | PASS | `git diff --check origin/main...HEAD`; keine Whitespace-Fehler; nur Roadmap, Plan/Evidence und isolierte Spike-Artefakte im PR-Scope |
 | Produktionsgraph | PASS | keine `network_provisioning`-, `protocomm`-, `esp_http_server`- oder `nvs_flash_erase`-Referenz in Root-/Produktionsquellen |
-| Probegrenzen | PASS | keine produktive Credential-Domaene, keine Connectivity-Persistenz und keine Aktorfreigabe; `WIFI_STORAGE_RAM` nur im direkten Protocomm-Probe |
+| Probegrenzen | PASS | keine produktive Credential-Domaene, keine Connectivity-Persistenz und keine Aktorfreigabe; `WIFI_STORAGE_RAM` wird im direkten Protocomm- und nativen HTTP-Probe vor `esp_wifi_set_config()` gesetzt |
 | Toolchain-Provenienz | PASS | sauberer Checkout `ESP-IDF v6.1` am exakten Commit; `idf.py --version`, `esptool v5.4.0`, GCC 15.2.0 und esp-clang 21.1.3 verifiziert |
 
 ### A2 bis A4 – aktuelle 6.1-Build-Evidence
@@ -76,7 +80,28 @@ Delta abgeleitet.
 |---|---|---:|---:|---:|---:|---|
 | offizieller `network_provisioning`-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning -B build/issue89_official_network_provisioning_idf61 build` | 909424 B / +14512 B (historisch 894912 B) | 139152 B / 13 % | 43585 B | 143297 B | `bb5e0fb66dc970436c4050b30d3efd318375dffa6bdea3fbd9cfc1fd7768108a` |
 | direkter Protocomm-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/direct_protocomm -B build/issue89_direct_protocomm_idf61 build` | 838128 B / +12416 B (historisch 825712 B) | 210448 B / 20 % | 43585 B | 143369 B | `253d4ec2d9da56b4925c70cd9fdb268d83b46329cd82f68acac5a923e0ea600a` |
-| nativer HTTP-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter -B build/issue89_native_http_adapter_idf61 build` | 805568 B / +12668 B (historisch 792900 B) | 243008 B / 23 % | 45701 B | 143609 B | `ffb44e3e07cd0a7f88d80ecf5800cc0bda249b2f5db2868b909903cf7cbbcd24` |
+| nativer HTTP-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter -B build/issue89_native_http_adapter_idf61 build` | 815488 B / +22588 B (historisch 792900 B); `idf.py size` Gesamtbild 815372 B | 233088 B / 22 % | 43585 B | 143393 B | `b2b971ff0c7a46d503f1e53f27a533b6cdebb47d93819edbe52833b310dde54c` |
+
+Der korrigierte native HTTP-Probe verwendet `nvs_flash_init()` fail-closed:
+bei jedem Initialisierungsfehler wird weder `nvs_flash_erase()` aufgerufen noch
+eine Konfiguration weiterverwendet. Unmittelbar nach `esp_wifi_init()` wird
+`esp_wifi_set_storage(WIFI_STORAGE_RAM)` gesetzt; erst danach darf der Probe
+`esp_wifi_set_config(WIFI_IF_AP, ...)` aufrufen. Die zusaetzliche
+Komponentenabhaengigkeit `nvs_flash` ist ausschliesslich fuer diese
+Initialisierung deklariert.
+
+```text
+NATIVE_HTTP_SOURCE_SHA=aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775
+NATIVE_HTTP_APP_BIN=815488
+NATIVE_HTTP_APP_BIN_SHA256=b2b971ff0c7a46d503f1e53f27a533b6cdebb47d93819edbe52833b310dde54c
+NATIVE_HTTP_APP_ELF_SHA256=776830e23ca35f2fc05897984f6d445a35a744a555092fea43ac36d71927f472
+NATIVE_HTTP_TOTAL_IMAGE_SIZE=815372
+NATIVE_HTTP_PARTITION_FREE=233088
+NATIVE_HTTP_IRAM_FREE=43585
+NATIVE_HTTP_DRAM_FREE=143393
+NATIVE_HTTP_BOOTLOADER_BIN_SHA256=64a25a4d64fc7d1116cd7cb3c385cf37d66658d12c42c103219eb619c997dafc
+NATIVE_HTTP_PARTITION_TABLE_BIN_SHA256=7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820
+```
 
 Die gemeinsame 6.1-Provenienz der drei Buildartefakte ist:
 
@@ -117,12 +142,28 @@ aktuell als `PASS` bezeichnet:
 | `espressif/network_provisioning` 1.2.4 | `PASS` fuer Component-Aufloesung und actor-free 6.1-Build | kein Browser-Portalnachweis; native Set/Apply-Persistenz und Fehler-/Recovery-Semantik bleiben offen |
 | direkter `protocomm`-/ESP-IDF-Pfad | `PASS` fuer 6.1-Build sowie Security-/Versions-/Set-/Test-/Commit-Handlergrenzen | kein Browser-, DNS-, Scan-, Reconnect- oder Recovery-Nachweis; Handler bleiben Boundary-only |
 | kleiner nativer ESP-IDF-Adapter | `PASS` fuer 6.1-SoftAP-/direkte-IP-HTTP-Capability | DNS/Captive Portal, Scan, Reconnect, Persistenz, Recovery und Commit sind nicht implementiert |
-| WiFiManager v2.0.17 | `HISTORICAL_CANDIDATE_SCREEN`, kein neuer 6.1-Native-Build | Arduino-/IDF-Pfad, Lizenz-, Storage- und Lifecycle-Fragen bleiben vor Owner-Gate offen |
+| WiFiManager v2.0.17 | `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` | aktueller Tag ist ein Arduino-/PlatformIO-Kandidat; der vorhandene CMake-Pfad verlangt `arduino`; kein nativer ESP-IDF-6.1-Pfad ohne Arduino-Produktionsframework |
 
-Die historischen Drittanbieter-Screens fuer `thorrak/esp_wifi_config`,
-`tuanpmt/esp_wifi_manager` und `nordesems/esp-captive-portal` bleiben ebenfalls
-historische Screen-Evidence. Es gibt keine Auswahl, kein Shortlisting und
-keine produktive Connectivity-Persistenz.
+### A5.1 – aktueller Source-/Manifest-/Lizenzscreen
+
+Der folgende Screen wurde gegen die aktuellen oeffentlichen Quellen und deren
+exakte Tags beziehungsweise HEAD-SHAs erstellt. `SOURCE_SCREEN=PASS` bedeutet
+vollstaendige Quellen-/Manifest-/Lizenzpruefung, nicht Build-, Client- oder
+Produktionsfreigabe. Nicht in diesem Delta gebaute Drittanbieter bleiben
+`BUILD=NOT_RUN`.
+
+| Kandidat | Quelle, Version und Lizenz | IDF-/Arduino-Annahme und Dependencies | Storage, Lifecycle, Reset und Integrationsrisiko | Status |
+|---|---|---|---|---|
+| WiFiManager | [`tzapu/WiFiManager@v2.0.17`](https://github.com/tzapu/WiFiManager/tree/v2.0.17), Commit `d82d0a1b9fca741b9ec44accdf553606a6576dda`; MIT (`LICENSE`) | `library.json`/`library.properties` deklarieren Arduino; `CMakeLists.txt` hat `PRIV_REQUIRES arduino`; kein `idf_component.yml`; README nennt ESP8266-/ESP32-Arduino und PlatformIO | `autoConnect()` startet AP-/DNS-/Webportal und speichert ueber den Arduino-WiFi-Laufzeitpfad; `resetSettings()` und Portal-Timeout sind eigene Bibliothekssemantik; kein #57-kompatibler Storage-/Recoveryvertrag belegt | `SOURCE_SCREEN=PASS`; `BUILD=NOT_RUN`; `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` |
+| `thorrak/esp_wifi_config` | [`WiFiConfig/esp_wifi_config@32c78805e9fc206610b7debe31d06638cbe5da09`](https://github.com/thorrak/esp_wifi_config/tree/32c78805e9fc206610b7debe31d06638cbe5da09), Version `0.4.0`; MIT | `idf_component.yml`: `idf >=5.4`, `espressif/network_provisioning ^1.0.0` ab `idf_version >=6.0`; `library.json` nennt `espidf`/`arduino`, `library.properties` Arduino-ESP32 `3.3.11+`; CMake ist ESP-IDF-Komponente | NVS-basierte Mehrfachnetze, Auto-Reconnect und Portal; Reset-/Recovery- und Commitgrenzen sind eigene Bibliothekssemantik und nicht als #57-Vertrag nachgewiesen; zusaetzliche Storage-/HTTP-Lifecycle-Integration | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
+| `tuanpmt/esp_wifi_manager` | [`tuanpmt/esp_wifi_manager@20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a`](https://github.com/tuanpmt/esp_wifi_manager/tree/20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a), Version `1.1.0`; MIT | `idf_component.yml`: `idf >=5.0.0`, `tuanpmt/esp_bus ^1.0.3`, `espressif/mdns ^1.2`; CMake: `esp_wifi`, `esp_netif`, `nvs_flash`, `esp_http_server`, `esp_event`, `mdns` sowie private `esp_bus`, JSON und mbedTLS | NVS-Persistenz, SoftAP, REST, mDNS und Auto-Reconnect; eigener Reset-/Lifecycle-/Storagebesitz und HTTP-Handler-Sharing erzeugen Integrationsrisiko gegen #57 und die Recoverygrenze | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
+| `nordesems/esp-captive-portal` | [`nordesems/esp-captive-portal@b937ee88b86de47b40cd195f829cfd70e5af03c0`](https://github.com/nordesems/esp-captive-portal/tree/b937ee88b86de47b40cd195f829cfd70e5af03c0), Version `1.3.0`; MIT | `idf_component.yml`: `idf >=5.0.0`; CMake benoetigt `esp_event`, `esp_http_server`, `esp_netif`, `esp_wifi`, FreeRTOS, Log und lwIP; keine weitere externe Dependency | DNS-/DHCP-Option-114-Portal ohne Credential-Storage, Scan oder Reconnect; Lifecycle-/HTTPD-Handler-Reihenfolge und Kombination mit einem getrennten Owner-Transport bleiben Integrationsrisiko | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
+
+Die drei Zusatz-Screens wurden nur auf 6.1-relevante Manifest-/Dependency-
+Aenderungen und die geforderten Lizenz-/Lifecycle-Felder revalidiert. Es gibt
+keine zusaetzlichen Vollkandidaten, keine Auswahl und keinen Arduino-
+Produktionspfad. WiFiManager bleibt fuer den nativen ESP-IDF-6.1-Spike
+`BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE`.
 
 ### Phase-A-Grenzen und naechster Gate
 
@@ -157,8 +198,9 @@ ESP-WiFi-/NVS-Persistenz. Die Probe kann beim
 lesen, startet bei bereits provisioniertem Zustand keinen Reset und fuehrt
 keinen automatischen NVS-Erase mehr aus.
 
-Der direkte Protocomm-Probe setzt `WIFI_STORAGE_RAM` und schreibt keine
-Credentialkonfiguration in NVS. Seine Endpoint-Handler sind statische
+Der direkte Protocomm- und der native HTTP-Probe setzen jeweils
+`WIFI_STORAGE_RAM` und schreiben keine Credentialkonfiguration in NVS. Ihre
+Endpoint- beziehungsweise HTTP-Handler sind statische
 Boundary-Nachweise; Requestdaten werden nicht interpretiert, angewendet oder
 persistiert.
 
@@ -176,7 +218,7 @@ Probe-Code; `APP_REAL_ACTUATORS_ENABLED=0` und
 | offizieller ESP-IDF-Probe-Build | PASS | `idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning -B build/issue89_official_network_provisioning build`; `network_provisioning` 1.2.4, Paket-Hash `72d27784e3daf807418a34fb00be136ec50c6db49d989ce981d22e031fc0e7f8`; 894912 Bytes, Partition frei 15 %, IRAM frei 43477, DRAM frei 145297; NVS-Fehlerpfad ohne Erase |
 | nativer ESP-IDF-Probe-Build | PASS | `idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter -B build/issue89_native_http_adapter build`; 792900 Bytes, Partition frei 24 %, IRAM frei 45593, DRAM frei 145609 |
 | direkter Protocomm-Probe-Build | PASS | `idf.py -C spikes/issue89_wlan_onboarding/direct_protocomm -B build/issue89_direct_protocomm build`; ESP-IDF-6.0.2-Built-in `protocomm`/`protobuf-c`/`esp_http_server`, Apache-2.0; 825712 Bytes, Partition frei 21 %, IRAM frei 43477, DRAM frei 145353 |
-| Secret-Scan | PASS | `python3 scripts/check_secrets.py` ueber die vier neuen Python-/C-Artefakte: keine Geheimnisse oder privaten Pfade |
+| Secret-Scan | PASS | `python3 scripts/check_secrets.py` ueber die vier neuen Python-/C-Artefakte: keine geschuetzten Dateien oder Geheimnismuster; der Standardlauf prueft keine privaten Pfade |
 | Produktionsgraph | PASS | keine neue WLAN-Komponente, Persistenz oder Laufzeitkopplung in `lib/` bzw. im Root-Produktionsbuild |
 | Flash-/UART-/Reset-Lauf | NOT_RUN | kein Flash war fuer die lokale Capability-Evidence erforderlich; ein spaeterer actor-free Hardwarelauf benoetigt einen separat dokumentierten Zielaufbau |
 
@@ -186,13 +228,14 @@ Artefakte. Der reproduzierbare offizielle Dependency-Stand ist in
 Komponenten werden nicht als produktive Abhaengigkeit in den Root-Graphen
 uebernommen.
 
-## Vergleichbarer Reuse-Screen
+## Historischer 6.0.2-Reuse-Screen
 
-Die vier Plan-Kandidaten bleiben die gemeinsame Hauptmatrix. Die drei
-zusaetzlich angeforderten nativen Drittlösungen wurden gescreent, aber nicht
-automatisch in die Hardwarematrix aufgenommen. Der direkte Protocomm-Pfad
-ist jetzt als eigener Capability-Probe nachgewiesen; das ist kein
-vergleichbarer Client-/Recovery-PASS.
+Die folgende Tabelle ist die historische 6.0.2-Reuse-Evidence und bleibt als
+solche unveraendert zitierbar. Die aktuelle 6.1-Source-/Manifest-/Lizenz-
+Revalidierung steht in Abschnitt A5.1. Die vier Plan-Kandidaten bleiben die
+gemeinsame Hauptmatrix; es gibt keine automatische Aufnahme in die
+Hardwarematrix. Der direkte Protocomm-Pfad ist kein vergleichbarer
+Client-/Recovery-PASS.
 
 | Kandidat | Reuse-/Capability-Evidence | R1-/Vertragsluecke | Status fuer vertieften Spike |
 |---|---|---|---|
@@ -204,7 +247,7 @@ vergleichbarer Client-/Recovery-PASS.
 | `tuanpmt/esp_wifi_manager` v1.1.0 | liefert SoftAP, Captive Portal/DNS, Web-UI, Scan, Multinetwork-Reconnect/Lifecycle und Reset; MIT; aktueller Stand `20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a` | eigene NVS-/REST-/Config-Semantik, `esp_bus`-/mDNS-Abhaengigkeit, leeres Default-AP-Passwort und unredigierte Config-/REST-Risiken; kein belegter Vorteil gegenueber den Hauptkandidaten | `CONDITIONAL_NO`; kein Deep-Spike ohne neuen Vorteil |
 | `nordesems/esp-captive-portal` v1.3.0 | MIT; aktueller Stand `b937ee88b86de47b40cd195f829cfd70e5af03c0`; DNS, DHCP Option 114, OS-Probes und Registrierung an bestehenden `esp_http_server` | liefert weder SoftAP, Credentialfluss, Scan, Reconnect, Storage noch Reset; Handler-Reihenfolge und Lifecycle muessen integriert geprueft werden | `CONDITIONAL_SUBCOMPONENT`; nur als kleiner DNS/OS-Probe-Teil vertiefen |
 
-Quellen des Screens: [`network_provisioning`](https://components.espressif.com/components/espressif/network_provisioning),
+Historische Quellen dieses Screens: [`network_provisioning`](https://components.espressif.com/components/espressif/network_provisioning),
 [`esp_wifi_config`](https://github.com/thorrak/esp_wifi_config),
 [`esp_wifi_manager`](https://github.com/tuanpmt/esp_wifi_manager),
 [`esp-captive-portal`](https://github.com/nordesems/esp-captive-portal) und

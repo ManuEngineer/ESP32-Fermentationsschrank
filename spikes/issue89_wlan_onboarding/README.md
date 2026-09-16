@@ -16,10 +16,12 @@ The three ESP-IDF projects are build-only/actor-free probes:
   a read-only or volatile credential path: the unchanged manager uses native
   ESP-WiFi/NVS persistence when a client actually applies credentials.
 - `native_http_adapter/` uses only ESP-IDF `esp_wifi`, `esp_netif`,
-  `esp_event`, and `esp_http_server` to expose a minimal direct-IP page. It
-  also keeps generated SoftAP credentials volatile and redacts them. This is
-  an isolated capability probe, not permission to build the production
-  adapter or DNS/portal contract.
+  `esp_event`, `esp_http_server`, and the required `nvs_flash` initialization
+  to expose a minimal direct-IP page. It
+  initializes NVS fail-closed without automatic erase, selects
+  `WIFI_STORAGE_RAM` before applying the SoftAP configuration, and keeps the
+  generated credentials volatile and redacted. This is an isolated capability
+  probe, not permission to build the production adapter or DNS/portal contract.
 - `direct_protocomm/` uses the public ESP-IDF `protocomm` and HTTPD transport
   APIs without `network_provisioning`. Its Set/Test/Commit endpoint names are
   static handler-boundary probes only: request data is not interpreted,
@@ -32,11 +34,15 @@ record.
 
 ## Reproduce
 
-From the repository root, source the pinned ESP-IDF 6.1 environment and run:
+From the repository root, set both variables to explicitly verified local
+checkouts, source the pinned ESP-IDF 6.1 environment, and run:
 
 ```text
-export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
-source /var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/export.sh
+export IDF_PATH=/path/to/verified/esp-idf-v6.1
+export IDF_TOOLS_PATH=/path/to/verified/espressif-tools
+test "$(git -C "$IDF_PATH" rev-parse HEAD)" = \
+  "fff9895c82d744c7237be8847347bdd1b07c6643"
+source "$IDF_PATH/export.sh"
 python3 spikes/issue89_wlan_onboarding/host_contract_test.py
 idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning \
   -B build/issue89_official_network_provisioning_idf61 build
