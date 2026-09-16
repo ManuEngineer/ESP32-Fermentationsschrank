@@ -1,840 +1,479 @@
-# Plan – Issue #89: WLAN-Onboarding und Provisionierung evaluieren
+# Planrevision – Issue #89: WLAN-Onboarding und Provisionierung auf ESP-IDF 6.1
 
-## Planstatus und harte Basis
+## Planstatus, Revision und harte Basis
 
-Dies ist ein Plan-only-Artefakt. Es waehlt keine WLAN-Onboarding-Loesung,
-fuehrt keine produktive Provisionierung ein und startet weder einen vollstaendigen
-Pre-Ready-Lauf noch einen Ready-, Merge-, Issue-Schluss- oder
-Aktorfreigabevorgang. Die Umsetzung beginnt erst nach ausdruecklicher
-Ownerfreigabe der exakten Commit-SHA dieses vollstaendigen Plans.
+Dies ist die vollstaendige, eigenstaendig ausfuehrbare Planrevision fuer die
+Fortsetzung von Issue #89 nach dem gemergten ESP-IDF-Upgrade. Sie ist ein
+Plan-only-Artefakt. Vor ihrer ausdruecklichen Freigabe der exakten Commit-SHA
+werden keine Evidence-Laeufe, Builds, Clienttests, Hardwaretests,
+Kandidatenentscheidungen oder produktiven WLAN-/Connectivity-Aenderungen
+ausgefuehrt.
 
-~~~
+```text
 ISSUE=89
-TITLE=[E5.6] ESP-IDF-WLAN-Onboarding und Provisionierung evaluieren
+PR=158
 BASE_BRANCH=main
-BASE_SHA=2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
-EXPECTED_BASE_SHA=2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
-PLAN_STATUS=OWNER_PLAN_FIX_VERIFICATION_PENDING
+BASE_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55
+EXPECTED_BASE_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55
+PR_PRE_SYNC_HEAD=2f64a1c3d09a086ac77bf4a5f4f5369524b4a1dd
+PR_SYNC_MODE=NORMAL_MERGE_NO_REBASE_NO_FORCE_PUSH
+PR_SYNC_MERGE_SHA=f6ffe1617a733d699d45b880df3ce9fb6ed9a5d6
+ESP_IDF_TAG=v6.1
+ESP_IDF_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
+HISTORICAL_APPROVED_PLAN_SHA=d8d506da1d5bde129c09d623263d7657c38f28a3
+PLAN_REVISION=ESP_IDF_6_1_REBASELINE
+PLAN_STATUS=OWNER_APPROVAL_REQUIRED
 PLAN_SHA=EXACT_COMMIT_RECORDED_IN_PR_AND_SESSION_HANDOVER
-REVIEWED_PLAN_SHA=d0307728a7d587236414c3489638206f29ebd811
-REUSE_BEFORE_BUILD=REQUIRED
-BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=OWNER_GATE_PENDING
 IMPLEMENTATION=NOT_STARTED
+EVIDENCE_EXECUTION=NOT_AUTHORIZED_BEFORE_PLAN_APPROVAL
+HISTORICAL_6_0_2_EVIDENCE=RETAIN_AS_HISTORICAL_ONLY
+PHASE_A_6_1_REVALIDATION=PENDING
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
+PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
-~~~
+```
 
-Verifizierte Kontextbaseline:
+Der alte Plan `d8d506da...` bleibt als historische Planrevision im
+Git-Verlauf nachvollziehbar. Diese aktuelle Datei ersetzt ihn als alleinige
+Ausfuehrungsbasis; ein spaeterer Builder muss keine zwei Planrevisionen
+zusammensetzen.
 
-~~~
-CONTEXT_BASELINE_BRANCH=agent/issue-89-wlan-onboarding-plan
-CONTEXT_BASELINE_SHA=2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
-CONTEXT_HEAD_SHA=2c010e8a8be8e351f89b79ae6c74f665d24a1f0e
-CONTEXT_PLAN_SHA=EXACT_COMMIT_RECORDED_IN_PR_AND_SESSION_HANDOVER
-CONTEXT_REFRESH_MODE=FULL
-CONTEXT_DELTA=origin/main auf Basis-SHA, Live-Issue #89, Live-PR #157,
-  Issue #154 sowie die direkt betroffenen Netzwerk-, Konfigurations-,
-  Architektur-, Hardware- und Spike-Vertraege
-SOURCE_OF_TRUTH_CONFLICT=NONE
-~~~
+### Verifizierter Live- und Repositorystand
 
-Der Live-Abgleich vor der Planerstellung ergibt:
-
-- Issue #89 ist offen und traegt PLANNED_SPEC_PENDING.
-- PR #157 ist gemergt; PR157_MERGE_COMMIT ist exakt
-  2c010e8a8be8e351f89b79ae6c74f665d24a1f0e.
-- Die strukturelle #106-Arbeit ist damit in main; der produktive #106-Abschluss
-  bleibt an #35 gebunden und ACTUATOR_RELEASE bleibt NO.
-- Issue #154 ist geschlossen und keine offene parallele Governance-Arbeit.
-- Issue #27 bleibt offen und ist ein getrennter Web-API-/Weboberflaechen- und
-  Authentisierungsscope.
-- Issues #31, #30, #32 und #33 sind offen und hardwareblockiert. #89 besitzt
-  die abgeschlossenen digitalen Grundlagen aus #29 und #57, benoetigt fuer
-  Host-/Actor-free-Evidence keine neue Sensor-, Display- oder Aktorverkabelung,
-  fuer reale WLAN-/QR-Abnahme aber einen nachweisbaren ESP32-Aufbau und die
-  jeweiligen Clientgeraete.
+- Issue #89 ist offen und traegt weiterhin den ergebnisoffenen Scope fuer
+  browserbasiertes SoftAP-/Captive-Portal-Onboarding, vier Kandidaten und die
+  getrennte Produktivitaetsentscheidung.
+- Issue #159 ist live geschlossen. PR #160 ist gemergt; `main` fixiert ESP-IDF
+  `v6.1` auf dem oben genannten Commit. PR #161 und PR #162 sind bereits in
+  `main` enthalten. Die Roadmap weist Issue #159 als `CLOSED_COMPLETED` aus.
+- PR #158 ist offen und Draft. Der Branch wurde ohne History-Umschreibung per
+  normalem Merge auf `main` synchronisiert. Der Merge enthaelt die aktuelle
+  `main`-Roadmap als Basis; die alte PR-Roadmap wurde nicht ueber `main`
+  zurueckgeschrieben. Der Issue-#89-Status bleibt als aktuelle Arbeit
+  erhalten.
+- Die Produktionsfirmware ist nach Issue #159 auf ESP-IDF 6.1 umgestellt.
+  `docs/CI_AND_QUALITY_GATES.md` und `docs/ESP_IDF_UPGRADE_CONTRACT.md` sind
+  deshalb fuer neue ESP-IDF-nahe Evidence verbindlich.
+- Die bestehende Issue-#89-Evidence stammt aus ESP-IDF 6.0.2. Sie wird nicht
+  nachtraeglich zu 6.1-Evidence umetikettiert.
 
 ## 1. Ziel und Nicht-Ziele
 
 ### Ziel
 
 Issue #89 liefert eine vergleichbare, reproduzierbare Entscheidungsgrundlage
-fuer einen R1-Onboardingpfad und die offene Frage, ob der browserbasierte
-Zugang harte R1-Anforderung bleibt. Dieselbe R1-Anforderung wird gegen alle
-vier Kandidaten geprueft:
+fuer den R1-Onboardingpfad. Dieselbe fachliche Anforderung wird gegen vier
+Kandidaten bewertet, ohne eine Vorabentscheidung:
 
-1. espressif/network_provisioning 1.2.4 auf Basis von protocomm;
-2. direkter protocomm-/ESP-IDF-SoftAP-/HTTP-/DNS-Pfad ohne
-   network_provisioning;
+1. `espressif/network_provisioning` 1.2.4 auf Basis von `protocomm`;
+2. direkter `protocomm`-/ESP-IDF-SoftAP-/HTTP-/DNS-Pfad ohne
+   `network_provisioning`;
 3. kleiner eigener nativer ESP-IDF-SoftAP-/DNS-/HTTP-Adapter;
-4. WiFiManager v2.0.17 als zusaetzlicher konditionaler
-   Drittanbieter-Evaluationskandidat.
+4. WiFiManager v2.0.17 als konditionaler zusaetzlicher
+   Drittanbieter-Kandidat.
 
-Der Nachweis muss zeigen, ob der jeweilige Kandidat den browserbasierten
-R1-Vertrag ohne verpflichtende App, Cloud oder separates CLI-Werkzeug erfuellt.
-Ein ESP-IDF- oder Espressif-Herkunftsnachweis allein ist kein Browser-PASS.
+Die Revision aktualisiert die technische Evidence-Basis auf ESP-IDF 6.1 und
+trennt dabei:
 
-Der Plan umfasst:
+- historisch gueltige 6.0.2-Evidence;
+- fachliche und hostseitige Evidence, die IDF-unabhaengig wiederverwendet
+  werden kann;
+- ESP-IDF-, Build-, Ressourcen-, Komponenten- und Kandidaten-Evidence, die
+  unter 6.1 gezielt neu auszufuehren ist;
+- noch nicht erbrachte Phase-B-Client-, Browser-, QR-, Recovery- und
+  Laufzeitnachweise.
 
-- den gemeinsamen browserbasierten SoftAP-/Captive-Portal-Vertrag;
-- ausdruecklichen Portalstart, individuelle geschuetzte SoftAP-Zugangsdaten,
-  gaengigen WLAN-QR und direkten IP-Fallback;
-- WLAN-Scan, Eingabe, Validierung, Verbindungstest und bewussten Commit;
-- Secret-Redaction, Credential-Lebenszyklus, Neustart, Fehler und Recovery;
-- identische Funktion-, Kompatibilitaets-, Lizenz-, Abhaengigkeits-,
-  Ressourcen-, Testbarkeits- und Integrationsmessungen;
-- actor-free Host-/ESP32-Evidence sowie reale Tests mit Android, iOS/iPadOS
-  und Windows;
-- einen harten Owner-Entscheidungspunkt nach der gemeinsamen Evidence.
+Der gemeinsame R1-Vertrag bleibt: lokale Einrichtung ohne Cloudzwang,
+individueller geschuetzter Einrichtungszugang, QR- und direkter-IP-Fallback,
+WLAN-Scan und Eingabe, Test vor bestaetigtem Commit, Secret-Redaction,
+definierte Recovery sowie vollstaendige Unabhaengigkeit von Regelung und
+Safety.
 
-### Nicht-Ziele
+### Nicht-Ziele dieser Planrevision
 
-- keine Vorabentscheidung fuer einen der vier Kandidaten;
-- keine vollstaendige normale Web-API, Weboberflaeche, Webanmeldung, Service-
-  PIN-, Session-, CSRF- oder Konfliktimplementierung aus #27;
-- keine zweite Konfigurations-, Credential- oder Webserverwahrheit;
-- keine Credentialspeicherung durch eine Bibliothek oder ein Framework ohne
-  projektspezifische Validierung und Commit;
-- kein BLE-, SmartConfig-, Cloud-, App- oder OTA-Provisioning in R1;
-- keine automatische Portaleroeffnung nur wegen eines kurzen Router-,
-  Access-Point-, WLAN- oder Internetausfalls;
-- keine Aenderung an GPIO-, Sensor-, Aktor-, Display- oder Verdrahtungs-SSOT;
-- keine produktive Webserver-, DNS-, QR- oder Provisioningplattform auf Vorrat;
-- kein Claim von Flashverschluesselung, realer Flashatomizitaet,
-  Flashlebensdauer, Hardwarefunktion oder Aktorfreigabe ohne den jeweiligen
-  Nachweis.
+- keine Kandidatenauswahl und kein implizites Shortlisting vor vergleichbarer
+  Evidence und Owner-Gate;
+- keine produktive Connectivity-Domaene, kein Credential-Record, keine
+  Slotrotation, keine `StorageEpoch`-Mutation und keine produktive WLAN-
+  Persistenz;
+- kein produktiver Webserver-, DNS-, QR-, Reconnect- oder Portalpfad;
+- keine Aenderung an `fermentation_app`, Safety, Aktorfreigabe, GPIO-,
+  Display-, Sensor- oder Verdrahtungs-SSOT;
+- keine Ersetzung der Issue-#159-Evidence durch Issue-#89-Evidence und keine
+  Wiederverwendung von Produktions-Hardware-Smokes als WLAN-Clientnachweis;
+- kein vollstaendiger Pre-Ready-Lauf vor Independent Review, `OPEN_BLOCKERS=0`
+  und ausdruecklicher Owner-Anordnung;
+- keine produktive Integration nach Phase C. Ein danach erforderlicher
+  Implementierungsdelta bekommt einen eigenen Detailplan beziehungsweise eine
+  neue Planrevision und ein neues Owner-Gate.
 
-### Harte R1-Ergebnisse und offene Implementierungswahl
+## 2. Verbindliche Quellen und Grenzen
 
-Die folgenden Ergebnisse sind Produktziele und bleiben fuer jeden Kandidaten
-gleich:
+Die Ausfuehrung verwendet bestehende Vertraege und Modelle. Neue parallele
+Vertraege oder Framework-Abstraktionen sind unzulaessig.
 
-- lokale Einrichtung ohne Cloudzwang;
-- geschuetzter, geraetespezifischer Einrichtungszugang;
-- eine bestehende funktionierende Heim-WLAN-Konfiguration wird bei einem
-  fehlgeschlagenen Wechsel nicht unbemerkt zerstoert;
-- kein Secret-Leak in Logs, URLs, Diagnose oder Backups;
-- definierter Werksreset und definierte Recovery;
-- Netzwerk bleibt unabhaengig von Regelung und Safety;
-- direkte lokale Recovery- und Zugriffsmöglichkeit.
-
-Diese Ziele legen weder eine Connectivity-Domaene noch deren Persistenz- oder
-Lifecyclebesitz fest. Vor dem Owner-Gate werden insbesondere kein eigener
-Credential-Record, keine Slotrotation, kein eigener DNS-Responder, kein
-eigener Reconnect-Automat und kein eigener HTTP-/Portalserver als
-Umsetzungsrichtung geplant. Eine vorhandene Loesung darf diese Teile nur dann
-uebernehmen, wenn ihre native Semantik den bestaetigten R1-Ergebnissen und den
-nachfolgend zu pruefenden #57-/Security-/Resetvertraegen genuegt.
-
-## 2. Verbindliche Quellen und wiederzuverwendende Grundlagen
-
-Die Umsetzung liest und verwendet diese Quellen unveraendert, soweit der
-Plan nicht ausdruecklich eine additive #89-Ergaenzung vorsieht:
-
-| Verantwortung | Kanonische Quelle / Wiederverwendung |
+| Thema | Verbindliche Quelle / Grenze |
 |---|---|
-| R1-WLAN-Verhalten | docs/NETWORK.md, insbesondere Ersteinrichtung, Ersatz-WLAN, QR, direkte IP, DHCP/mDNS und lokaler HTTP |
-| Browser-/Webgrenzen | docs/WEB_UI.md und Issue #27; #89 liefert nur den Onboarding-Transportvertrag |
-| Konfigurationspersistenz | docs/CONFIGURATION_PERSISTENCE.md, docs/SETTINGS_AND_STORAGE.md und ADR-016 |
-| erster Connectivity-Konsument | Issue #57; native Credential-/Persistenz-/Resetsemantik zuerst gegen die R1-Ergebnisse pruefen, projektspezifischen Delta-Vertrag erst nach Owner-Gate |
-| Recovery und fail-closed | docs/RECOVERY_AND_INTERRUPTION.md, docs/SYSTEM_SAFETY_AND_RECOVERY.md und bestehende ConfigurationRecovery-/ActuationInterlock-Producer |
-| Architektur | ADR-013, docs/ARCHITECTURE.md und die lokalen Modulregeln |
-| Adopting vor Eigenbau | docs/ENGINEERING_PRINCIPLES.md, docs/ADOPT_OR_BUILD.md und das Komponenteregister |
-| WLAN-Spike | docs/audits/HARDWARE_SPIKE_PLAN.md, Spike C |
-| Toolchain und Hardwarebaseline | ESP-IDF v6.0.2, Commit 7101770dc6db2667b3c477cc31365dd1acd6db4e, Profile esp32_bringup/esp32_release, 4 MB Flash, kein PSRAM, APP_REAL_ACTUATORS_ENABLED=0 |
-| persistenter Port | device_platform::IStateStore, StateStoreKey, StorageEnvelope, StorageEpoch und die vorhandene ConfigurationMutationCoordinator-Instanz |
-| Zufall | der vorhandene device_platform::ISecureRandomSource-Port; die konkrete ESP-IDF-Quelle wird erst im Adapter-/Spike-Nachweis verifiziert |
-| aktueller Arbeitsstand | docs/ROADMAP.md und Live-Issues/PRs; historische Planangaben werden nicht als aktueller Status verwendet |
+| Aktueller Status | `docs/ROADMAP.md`, Issue #89, PR #158 und der neueste SESSION-HANDOVER |
+| R1-WLAN-Verhalten | `docs/NETWORK.md`: Einrichtungs-WLAN, QR, Captive-Portal, direkte IP, Ersatz-WLAN und kein Netzwerkzwang fuer Regelung/Safety |
+| Release-Scope | `docs/SPECIFICATION_REVIEW.md` |
+| Persistenz und Recovery | `docs/CONFIGURATION_PERSISTENCE.md`, `docs/SETTINGS_AND_STORAGE.md`, `docs/RECOVERY_AND_INTERRUPTION.md`, `docs/SYSTEM_SAFETY_AND_RECOVERY.md` |
+| Erstkonsument und Commitgrenze | Issue #57 sowie vorhandene `ConfigurationMutationCoordinator`-/`IStateStore`-/`StorageEpoch`-Vertraege |
+| Architektur | ADR-013, `docs/DECISIONS.md`, `docs/ARCHITECTURE.md` und lokale `AGENTS.md` |
+| Adopt before build | `docs/ENGINEERING_PRINCIPLES.md`, `docs/ADOPT_OR_BUILD.md`, `docs/THIRD_PARTY_COMPONENTS.md` |
+| Toolchain | `docs/ESP_IDF_UPGRADE_CONTRACT.md`, `docs/CI_AND_QUALITY_GATES.md`, ESP-IDF `v6.1` am exakten Commit |
+| Bestehende Evidence | `docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md`, `spikes/issue89_wlan_onboarding/README.md` und der historische Plan-Commit |
+| Isolierte Spikes | `spikes/issue89_wlan_onboarding/`, ausserhalb des produktiven CMake-Graphs |
+| Hardwaregrenze | `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`, keine Behauptung ohne Board-, UART-, Reset- und Power-Nachweis |
 
-Das native Fachmodul kennt weder ESP-IDF-, protocomm-, WiFiManager-,
-HTTP-, DNS-, QR- noch Bibliothekstypen. Konkrete Frameworktypen enden an der
-ESP-IDF-Adaptergrenze. Eine allgemeine IWebTransport-, Provisioning-,
-Provider- oder Pluginplattform wird nicht eingefuehrt.
+Der native Fachkern kennt weiterhin keine ESP-IDF-, WLAN-, HTTP-, DNS-, QR-
+oder Kandidaten-Typen. Kandidatencode bleibt im isolierten Spike, bis der
+Owner nach der Evidence ausdruecklich einen neuen Integrationsscope freigibt.
 
-## 3. Gemeinsamer R1-Browservertrag
+## 3. Geltende R1-Vergleichsanforderung
 
-Jeder Kandidat wird mit demselben actor-free Prototypvertrag und denselben
-Eingaben, Zeitlimits, Clients, Fehlern und Cut-Points bewertet. Der
-Prototyp ist ein Evidence-Artefakt, keine zweite Produktionsanwendung. Der
-Browserablauf ist bis zum Gate in Abschnitt 4.4 die Vergleichsbasis; dort
-entscheidet der Owner, ob `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES` bleibt
-oder ein ausdruecklich geaenderter Standardclientvertrag gilt.
+Jeder Kandidat wird im gleichen, actor-free Aufbau und mit gleichen Eingaben,
+Zeitgrenzen, Fehlern und Cut-Points bewertet. Der Spike ist Evidence und keine
+zweite Produktionsanwendung.
 
-### 3.1 Portalstart und Lebenszyklus
+### 3.1 Portal- und Browserablauf
 
-Der Ablauf besitzt klar unterscheidbare Gruende:
+Der Vergleich prueft mindestens:
 
-| Anlass | Verhalten |
-|---|---|
-| kein bestaetigter Connectivity-Record beim fabrikneuen beziehungsweise vollstaendig initialisierten Geraet | geschuetztes individuelles Einrichtungs-SoftAP mit Portal anbieten |
-| ausdrueckliche lokale Benutzeraktion | Onboarding-Portal kontrolliert starten; bestehende funktionierende Credentials bleiben bis zum Commit aktiv |
-| kurzer oder voruebergehender Heim-WLAN-Ausfall | kein Portalstart und keine Credentialmutation |
-| langer Heim-WLAN-Ausfall nach noch festzulegender TBD_COMMISSIONING-Wartezeit | separates geschuetztes Ersatz-WLAN; weiterhin kein automatischer Credential-Commit |
-| Read-/Write-/Recoveryfehler oder unklarer Speicherzustand | kein sicherer Credential- oder Runtimeclaim; fail-closed klassifizieren und keinen Factory-Fallback erfinden |
+1. expliziter Start eines geschuetzten, individuellen SoftAP;
+2. sichtbare SSID, Passwort, Portaladresse beziehungsweise AP-IP und erneute
+   QR-Anzeige;
+3. WLAN-QR im gaengigen Format mit korrekt escapten Werten;
+4. Captive-Portal-Erkennung, soweit der jeweilige Client sie anbietet;
+5. manueller direkter IP-Aufruf als verbindlicher Fallback;
+6. Scan und Anzeige erreichbarer Heim-WLANs;
+7. SSID-Auswahl beziehungsweise manuelle Eingabe und verdeckte
+   Passworteingabe;
+8. Verbindungstest ohne unbestaetigte Zerstoerung einer funktionierenden
+   alten Konfiguration;
+9. ausdrueckliche Bestaetigung vor dem Commit;
+10. Erfolg, Fehler, Abbruch, Timeout, Neustart und Recovery ohne Secret-Leak.
 
-Portal, DNS und SoftAP werden explizit gestartet und kontrolliert beendet.
-Ein Bibliothekscallback darf keinen versteckten automatischen
-Credential-Commit und keinen ungeprueften Portalstart ausloesen. Ein
-Ersatz-WLAN ist ein eigener Netzwerklebenszyklus und keine Umdeutung eines
-kurzen Netzausfalls in eine Ersteinrichtung.
+Ein fehlender automatischer Captive-Redirect ist zu protokollieren und nicht
+automatisch ein Gesamtfail, wenn der direkte-IP-Fallback voll funktioniert.
+Ein fehlender direkter-IP-Fallback ist ein R1-FAIL. Ob der Browservertrag
+weiterhin eine harte Pflicht bleibt, entscheidet ausschliesslich der Owner.
 
-### 3.2 Browserablauf
+### 3.2 Lebenszyklus, Recovery und Safety
 
-Der Browserablauf muss ohne Spezialsoftware funktionieren:
+- Ein kurzer Heim-WLAN-Ausfall startet kein Onboarding und mutiert keine
+  Credentials.
+- Ein spaeterer Ersatz-WLAN-Lebenszyklus bleibt von Ersteinrichtung und
+  Kandidatenscreen getrennt; Warte- und Uebergangszeiten bleiben
+  `TBD_COMMISSIONING`.
+- Read-, Write-, Readback-, Reset- und Commit-Unsicherheit wird fail-closed
+  klassifiziert. `NotFound` wird nicht mit einem beschaedigten oder unklaren
+  Store verwechselt.
+- Ein unbekannter Commitausgang wird weder als alter noch als neuer gueltiger
+  Zustand geraten. Es gibt keine stille Factory-Neuanlage und keine
+  Reaktivierung einer alten Epoch.
+- Netzwerk, Portal und Client blockieren weder Regelung noch Safety. Bei Boot,
+  Reset, Fehler, unbekanntem Zustand oder unbestaetigter Hardware bleiben
+  Aktoren gesperrt.
 
-1. SoftAP mit individueller SSID und individuellem geschuetztem Passwort
-   starten;
-2. SSID, SoftAP-Passwort, aktuelle Portaladresse beziehungsweise AP-IP und
-   eine Aktion zum erneuten Anzeigen des QR sichtbar machen;
-3. WLAN-QR im gaengigen WLAN-QR-Format mit korrektem Escaping erzeugen;
-4. nach dem Beitritt die Captive-Portal-Erkennung bedienen, soweit der Client
-   sie anbietet;
-5. dieselbe Seite zusaetzlich direkt ueber die angezeigte lokale IP-Adresse
-   erreichen koennen;
-6. verfuegbare Heim-WLANs scannen und anzeigen;
-7. SSID auswaehlen oder manuell eingeben, Passwort verdeckt eingeben und
-   Eingabe abbrechen koennen;
-8. eine begrenzte Verbindung pruefen, ohne die alte funktionierende
-   Konfiguration zu ueberschreiben;
-9. erst nach erfolgreichem Test und ausdruecklicher Bestaetigung den
-   projektspezifischen Commitpfad aufrufen;
-10. Erfolg, Fehler, Abbruch, Timeout und Wiedereroeffnung ohne geheime Werte
-    anzeigen.
+## 4. Evidence-Konversion: was bleibt gueltig, was muss neu laufen
 
-Die Captive-Portal-Erkennung wird als Clientverhalten gemessen, nicht als
-universelle Garantie behauptet. Der direkte IP-Aufruf bleibt der
-verbindliche manuelle Rueckfall. Zugangsdaten stehen nicht in URLs,
-Redirect-Parametern, HTML-Fehlermeldungen, Browserhistory oder Logs.
+Die nachfolgende Matrix ist verbindlich. `HISTORICAL` bedeutet: behalten und
+zitierbar, aber nicht als aktueller 6.1-PASS ausgeben. `REUSE` bedeutet: die
+Evidence beantwortet weiterhin dieselbe IDF-unabhaengige Frage und wird nach
+Source-/Artefaktintegritaet weiterverwendet. `RERUN_6_1` bedeutet: ein neuer
+Nachweis mit ESP-IDF 6.1 ist erforderlich. `PENDING` bleibt offen, bis der
+separate Lauf erfolgt.
 
-### 3.3 Ersatz-WLAN
-
-Die Evaluation prueft den in NETWORK.md beschriebenen separaten
-Ersatz-WLAN-Lebenszyklus:
-
-- kurzer Ausfall startet nichts;
-- langer Ausfall startet nach dem dokumentierten,
-  bis zur Messung weiterhin TBD_COMMISSIONING-Wert;
-- Heim-WLAN-Reconnect laeuft parallel;
-- offene Requests und Speichervorgaenge werden kontrolliert beendet oder
-  abgeschlossen;
-- normale Web-, Auth-, CSRF-, Lauf- und Safetygrenzen bleiben wirksam;
-- stabile Heim-WLAN-Rueckkehr beendet das Ersatz-WLAN nach kontrollierter
-  Uebergangszeit;
-- Neustart im Ersatz-WLAN aktiviert keine unbestaetigte neue Credentialversion.
-
-Die Warte- und Uebergangszeiten werden im Spike gemessen und als
-Produktparameter nur nach separatem Ownerentscheid festgelegt. Sie werden
-nicht als erfundene Produktivwerte in diesen Plan geschrieben.
-
-## 4. Ergebnisoffene Kandidatenpruefung
-
-### 4.1 Kandidaten und Browsernachweis
-
-| Kandidat | Wiederzuverwendender Anteil | Browsernachweis im identischen Spike | Harte Ablehnung |
-|---|---|---|---|
-| network_provisioning 1.2.4 | offizieller Espressif-Baustein auf protocomm, ESP-IDF-WLAN-/Event-/Netif-Dienste und esp_http_server soweit erforderlich | zeigen, dass der komplette R1-Ablauf im Browser ueber SoftAP, DNS, HTTP-Formular, QR und direkte IP funktioniert; eine zwingende mobile App, Cloud oder CLI ist ein FAIL | kein kontrollierbarer Browserpfad, versteckter Auto-Commit, unkontrollierbare Credentialablage oder kein ESP-IDF-6.0.2-Nachweis |
-| direkter protocomm-/SoftAP-/HTTP-/DNS-Pfad | protocomm, esp_wifi, esp_netif, esp_event, esp_http_server und vorhandene LWIP-/DNS-Funktionen | protocomm-Transport und Browserseite mit denselben Requests, Formularen, Scan-/Test-/Commit- und Fehlerfällen nachweisen; Browser darf kein separates CLI benoetigen | protocomm-only-Appvertrag, fehlende Browserinteroperabilitaet, fehlende Begrenzbarkeit oder wesentliche Zusatzabhaengigkeit |
-| kleiner eigener nativer ESP-IDF-Adapter | nur nach dem Reuse-Screen und Owner-Gate fuer eine konkret nachgewiesene Restluecke; bis dahin ausschliesslich isolierte Spike-Harness | kleiner nativer Browserablauf mit identischen Seiten-/Endpoint-/Fehler- und IP-Fallback-Anforderungen | eigener Parallelserver ohne Lueckennachweis, fehlender Browser-/Clientnachweis oder unvertretbare Ressourcen-/Wartungslast |
-| WiFiManager v2.0.17, Commit d82d0a1b | nur nachgewiesener ESP-IDF-6.0.2-Integrationspfad; keine stillschweigende Rueckkehr zum Arduino-Produktionspfad | Standard-/angepasster Portalablauf muss ebenfalls individuelle SoftAP-Credentials, QR, DNS, direkte IP, expliziten Start und Projekt-Commit im Browser zeigen | kein direkter ESP-IDF-6.0.2-Build/Betrieb beziehungsweise kein dokumentierter Integrationsweg ohne Arduino-Produktionspfad; App-/Cloud-/CLI-Zwang; unkontrollierbare Bibliotheksdefaults |
-
-Der WiFiManager-Test ist konditional, aber nicht vorab abgewertet. Das
-Evaluationsgate ist inhaltlich identisch; die Espressif-first-Reihenfolge
-bestimmt die Pruefprioritaet, nicht das Ergebnis.
-
-### 4.2 Reuse-/Capability-Screen vor eigenem Code
-
-Vor jeder produktiven projektspezifischen Festlegung wird je Funktion in
-folgender Reihenfolge
-geprueft und dokumentiert:
-
-1. eingebaute ESP-IDF-6.0.2-Dienste: esp_wifi, esp_netif, esp_event,
-   esp_http_server, LWIP-DNS-/Socketpfad, esp_timer und
-   esp_fill_random beziehungsweise die verifizierte Zufallsquelle;
-2. offizielle Espressif-Komponenten und Repositories, insbesondere
-   network_provisioning und protocomm;
-3. die bereits registrierten oder aktuell gescreenten gepflegten
-   Drittkomponenten mit nachvollziehbarer Lizenz;
-4. erst nach dem Owner-Gate der kleinstmoegliche projektspezifische Adapter
-   fuer eine belegte Restluecke.
-
-Der QR-Code wird als gesonderte, begrenzte Presentation-/Codecentscheidung
-behandelt. Er darf weder einen WLAN-Kandidaten noch eine eigene Web-/Storage-
-Architektur erzwingen. Jeder Screen dokumentiert verwendete, deaktivierte und
-transitive Komponenten sowie die Frage, ob native Persistenz, Lifecycle,
-Reset und HTTP-Server-Sharing kontrollierbar an die Projektgrenzen
-uebergeben werden koennen.
-
-### 4.3 Aktueller nativer ESP-IDF-Drittanbieter-Screen
-
-Dieser kurze Screen wurde am 2026-09-14 read-only gegen die jeweiligen
-Repository-Metadaten, README, Component-Manifest und die angegebene
-Quellcodebasis durchgefuehrt. Er ist kein vollstaendiger Hardware-Spike und
-keine Produktivauswahl. Die angeforderten Koordinaten
-`thorrak/esp_wifi_config`, `tuanpmt/esp_wifi_manager` und
-`nordesems/esp-captive-portal` werden mit ihrem live aufgeloesten
-Repository-/Commitstand festgehalten.
-
-| Screen-Kandidat und Snapshot | Bereits sichtbarer Vorteil / relevante Teile | Native Semantik und Integrationsrisiko | Lizenz, IDF, Wartung und Ressourcen | Weiteres Gate |
-|---|---|---|---|---|
-| `thorrak/esp_wifi_config` -> live `WiFiConfig/esp_wifi_config`; Version 0.4.0; [HEAD 32c78805e9fc206610b7debe31d06638cbe5da09](https://github.com/WiFiConfig/esp_wifi_config/commit/32c78805e9fc206610b7debe31d06638cbe5da09) | Liefert SoftAP, Captive Portal/DNS, eingebettete Web-UI, Scan, Reconnect/Lifecycle, NVS-Netzwerk-/AP-/Authspeicher und einen dokumentierten Shared-HTTPD-Einstieg (`examples/with_shared_httpd`). | Die Bibliothek besitzt eigene NVS-Keys, Credentials, AP-Konfiguration, Auto-Commit-/Reconnect- und Factory-Resetpfade; Kompatibilitaet mit projektverwaltetem #57-Commit, Redaction, Widerruf, Recovery und Reset ist nicht belegt. | MIT; Component-Manifest `idf >=5.4`, IDF-6.x zieht `espressif/network_provisioning` bedingt hinzu; aktive Pflege am Snapshotdatum, Ressourcen und genaue IDF-6.0.2-Ausfuehrung noch ungemessen. | `DEEP_SPIKE=CONDITIONAL_YES`: nur wenn ein no-parallel-NVS-/Credentialpfad, Shared-HTTPD und kontrollierter Lifecycle gegen #57 bestehen; sonst Screen-Fail, keine Hardwarematrix. |
-| `tuanpmt/esp_wifi_manager`; Version 1.1.0; [HEAD 20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a](https://github.com/tuanpmt/esp_wifi_manager/commit/20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a) | Liefert SoftAP, Captive Portal/DNS, Web-UI, Scan, Multi-Network-Reconnect/Lifecycle, REST/CLI/BLE und Factory-Reset; ein bestehender HTTPD kann laut API geteilt werden. | Eigene NVS-Wahrheit fuer Netzwerke, AP, Variablen und Auth; `esp_bus`-Eventarchitektur, Default-AP mit leerem Passwort und unredigierte REST-/Config-Oberflaechen sind gegen R1/#57/Security/Reset zu pruefen. | MIT; Component-Manifest `idf >=5.0`, zusaetzlich `tuanpmt/esp_bus` und `espressif/mdns`; Pflege und Codeaktivitaet vorhanden, aber IDF-6.0.2, Ressourcen und kontrollierte Abschaltung ungemessen. | `DEEP_SPIKE=CONDITIONAL_NO`: nur aufnehmen, wenn der Nachweis einen konkreten Vorteil gegenueber WiFiConfig oder dem nativen Teilkomponentenpfad zeigt; sonst Screen-only, keine Hardwarematrix. |
-| `nordesems/esp-captive-portal`; Version 1.3.0; [HEAD b937ee88b86de47b40cd195f829cfd70e5af03c0](https://github.com/Nordesems/esp-captive-portal/commit/b937ee88b86de47b40cd195f829cfd70e5af03c0) | Kleine Teilkomponente fuer Captive-Portal-DNS, DHCP Option 114 und Standard-OS-Probes; registriert sich auf einem bereits laufenden `esp_http_server` und unterstuetzt direkte IP-Weiterleitung. SoftAP, Credentialeingabe, Scan, Reconnect und Portalinhalt bleiben beim aufrufenden Projekt. | Keine Credential-Persistenz, kein WLAN-Scan, kein Reconnect und kein vollstaendiger Portal-/Commitablauf; Reset und Storage bleiben Projektbesitz. DNS-Lifecycle und URI-Slots/Handler-Reihenfolge bei HTTP-Sharing muessen geprueft werden. | MIT; Component-Manifest `idf >=5.0`; kein eigener NVS-/Storagebestand und keine externen Drittdeps laut Manifest, aber ESP-IDF-HTTP-/Event-/WiFi-/FreeRTOS-Dienste; DNS-Task und Handlerressourcen sind noch zu messen. | `DEEP_SPIKE=CONDITIONAL_SUBCOMPONENT`: nur als Teilkomponente des direkten/native Pfads, wenn sie gegen eigenen DNS-/Probe-Code einen realen Vorteil liefert; kein eigenstaendiger End-to-End-Kandidat. |
-
-Die Tabelle trennt dokumentierte Capability vom noch unbewiesenen
-Produktvertrag. Insbesondere sind NVS-Keybestand, Reset-API oder ein
-automatischer Reconnect kein Nachweis fuer sichere Projektpersistenz. Nur ein
-Kandidat mit dem jeweils genannten realen Vorteil erreicht einen vertieften
-actor-free Spike; dadurch bleiben die vier bestehenden Hauptkandidaten und
-hoechstens die begruendet shortlisted Teilkomponenten im Vergleich.
-
-### 4.4 Browser-only-Gate fuer network_provisioning
-
-`espressif/network_provisioning` ueber SoftAP verwendet Protocomm/HTTP und ist
-nicht automatisch ein normales Captive-Portal-Web-UI. Vor jeder Auswahl werden
-daher drei Varianten mit gleichem R1-Ergebnisrahmen geschaetzt und, soweit
-erforderlich, minimal gespiked:
-
-1. browserbasierte Verwendung des offiziellen Stacks: exakter
-   Zusatzcode, HTTP-/Protocomm-Endpunkte, Formular-/Scan-/Test-/Commitfluss,
-   Browserfehler und Pflegegrenze;
-2. Wiederverwendung einer nativen Captive-Portal-Komponente, insbesondere
-   nur fuer DNS/OS-Probes auf einem geteilten HTTP-Server;
-3. eine vereinfachte Anforderung, falls der Owner einen Espressif-Standardclient
-   oder eine Espressif-App akzeptiert.
-
-Keine grosse eigene Browser-Protocomm-Schicht wird gebaut, nur um den
-offiziellen Transport formal durch den bisherigen Browservertrag zu zwingen.
-Nach der vergleichbaren Aufwand-/Capability-Evidence entscheidet der Owner
-explizit:
-
-~~~
-BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO
-~~~
-
-Bis zu diesem Gate bleibt jede Produktivauswahl offen. Bei `YES` ist der
-Browsernachweis aus Abschnitt 3 ein hartes Auswahlkriterium. Bei `NO` muss der
-Owner den zulaessigen Standardclient und die dadurch geaenderten
-R1-/Security-/Recoveryvertraege explizit festlegen; App-/Cloud-/CLI-Zwang wird
-nicht still als bestehender Browservertrag weitergefuehrt.
-
-### 4.5 Identische Vergleichsmatrix
-
-Die vier Hauptkandidaten erhalten die vollstaendige Matrix. Eine zusaetzliche
-Komponente aus Abschnitt 4.3 wird nur nach dem dort beschriebenen
-Vorteilsnachweis und als klar markierte Teilkomponente aufgenommen. Jede Zeile
-bekommt PASS, FAIL, NOT_RUN oder BLOCKED sowie reproduzierbare Evidence.
-Numerische Werte werden als Base und Kandidatenwert mit identischer Firmware-,
-Last-, Zeit- und Messmethode protokolliert.
-
-| Kriterium | Gleiches Akzeptanzkriterium fuer alle Kandidaten |
-|---|---|
-| Funktion | alle Schritte aus Abschnitt 3: Portalstart, SoftAP, DNS, Browser, Scan, Eingabe, Test, Commit, Abbruch, Timeout, Reconnect, Ersatz-WLAN, Abbau, direkte IP und QR |
-| Browservertrag | Android, iOS/iPadOS und Windows koennen ohne Pflicht-App, Cloud oder CLI ueber Captive-Erkennung oder direkte IP arbeiten; Unterschiede werden clientweise dokumentiert |
-| ESP-IDF-6.0.2 | reproduzierbarer Build und, soweit fuer den Kandidaten erforderlich, actor-free Betrieb auf der fixierten ESP-IDF-6.0.2-Produktionsbasis |
-| Lizenz/Herkunft/Wartung | Quelle, exakter Version-/Commitstand, Abrufdatum, Lizenzdateien, Notices, eingebettete Assets, transitive Lizenzen, Maintaineraktivitaet und Update-/Fixpfad |
-| Abhaengigkeiten | direkte und transitive Komponenten, Arduino-/Cloud-/CLI-Anteil, aktivierte Features, Buildgraph und spaetere Entfernung nicht ausgewaehlter Kandidaten |
-| Flash | firmware.bin, firmware.elf, Komponenten-/Symbolvergleich gegen exakt gleiche Base |
-| statisches RAM | statische Daten, BSS, eingebettete Assets und Task-/Bufferanteile |
-| Heap | freier Heap, niedrigster Heap, groesster freier Block und Fragmentierungsverhalten vor, waehrend und nach Portal-/Scan-/Fehlerzyklen |
-| Stack | High-Water-Mark jeder beteiligten Task, inklusive Portal-, DNS-, WiFi- und Callbackpfad; kein ungemessener Reserveclaim |
-| Laufzeit | Portalstart, Scan, Antwort, Commit, Abbau, Reconnect, Regelzyklus-Jitter, Watchdog, Reset und Stabilitaet |
-| Testbarkeit | Hostsimulation, deterministische Fakes, Fehler-/Cut-Point-Injektion, Browser-/Clientbeobachtbarkeit, keine Bibliothekstypen im Fachkern |
-| Integrationsrisiko | Lifecyclebesitz, Callback-/Threadmodell, Fehleruebersetzung, Abbau, Zusammenspiel mit #27/#57, API-/Schemawirkung und spaeterer Wechselaufwand |
-| Safety-Isolation | Regelung und Safety bleiben bei WLAN-, DNS-, HTTP-, Browser-, Speicher- und Bibliotheksfehlern aktiv und fail-closed; kein Aktorpfad wird benoetigt |
-
-Ein Build-PASS ohne den vollstaendigen Browser-, Fehler-, Speicher- und
-Clientnachweis ist keine Auswahl. Unausgefuehrte Zeilen bleiben NOT_RUN oder
-BLOCKED und werden nicht als bestanden behandelt.
-
-## 5. R1-Ergebnisvertrag, native Semantik und Owner-Gate
-
-### 5.1 Produktziele getrennt von Implementierungsentscheidungen
-
-Issue #89 ist der erste reale Connectivity-Konsument. Der Plan legt vor dem
-Owner-Gate jedoch keine neue Connectivity-Domaene, keinen projektseitigen
-Credential-Record, keine Slotnamen oder Active-/Fallback-Semantik fest. Die
-folgenden Ergebnisse muessen unabhaengig vom spaeteren Persistenzbesitzer
-erreicht werden:
-
-- lokale Einrichtung ohne Cloudzwang;
-- geschuetzter, geraetespezifischer Einrichtungszugang;
-- die bestehende funktionierende Heim-WLAN-Konfiguration bleibt bei einem
-  fehlgeschlagenen Wechsel unbemerkt unangetastet;
-- kein Secret-Leak in Logs, URLs, Diagnose oder Backups;
-- definierter Werksreset und definierte Recovery;
-- Netzwerk bleibt unabhaengig von Regelung und Safety;
-- direkte lokale Recovery- und Zugriffsmöglichkeit.
-
-Nicht als Produktanforderung vorweggenommen werden eigener Credential-Record,
-eigene Slotrotation, eigener DNS-Responder, eigener Reconnect-Automat, eigener
-HTTP-/Portalserver oder eigene Credential-Persistenz. Sie duerfen erst nach
-dem Owner-Gate als moeglicher Restdelta beschrieben werden, falls die
-ausgewaehlte vorhandene Loesung den Ergebnisvertrag nicht vollstaendig
-abdeckt.
-
-### 5.2 Native Persistenz-, Lifecycle-, Browser-, Recovery- und Resetsemantik
-
-Fuer jeden der vier Hauptkandidaten und jede begruendet shortlisted
-Teilkomponente wird vor einer Produktivauswahl dieselbe Semantik-Inventur
-angelegt:
-
-| Semantik | Nachweisfrage | Auswahlfolge |
+| Bestehender Nachweis | Einordnung in dieser Revision | Begruendung / Aktion |
 |---|---|---|
-| Credentialbesitz und Persistenz | Wer speichert SSID/Passwort/AP-Zugang, in welchem Store/Namespace/Format, mit welcher Verschluesselungs- und Redactionaussage? | vorhandenen Besitzer wiederverwenden, wenn #57/Security/Backup nachweisbar erfuellt; sonst als Vertragskonflikt vorlegen |
-| Commitidentitaet und Fehlerausgang | Gibt es eine eindeutige Version-/Commitidentitaet, Readback und einen sicheren Ausgang fuer WriteError, ReadError und CommitOutcomeUnknown? | native Semantik beweisen; keine projektspezifische Parallelpersistenz als stillen Ausweg bauen |
-| Superseded-/Recoveryverhalten | Was geschieht bei Korruption, unvollstaendigem Write, Neustart, Rueckkehr aus Recovery und mehreren lesbaren Credentialstaenden? | kein automatischer Rueckfall auf die naechstaeltere Credentialversion, wenn sie superseded oder widerrufen ist; Luecke als Ownerentscheidung markieren |
-| StorageEpoch, Reset und Forward-Progress | Werden alte Epochen unerreichbar, ist Factory-Reset vollstaendig und entsteht kein stiller Dummy-/Defaultzugang? | native Resetsemantik gegen #57 pruefen oder explizite Vertragsanpassung einholen |
-| Start/Stop und Reconnect | Wer startet Portal, SoftAP, DNS, HTTP und Reconnect, wer beendet sie, und wie werden kurze/lange Ausfaelle unterschieden? | bestehendes Lifecyclemodell wiederverwenden, nur mit kontrollierbarer Ownership und R1-Nachweis |
-| Browser und direkte IP | Ist SoftAP-Portalzugriff ohne Pflicht-App/Cloud/CLI moeglich, einschliesslich direkter IP? | Abschnitt 4.4 und Clientmatrix entscheiden lassen |
-| HTTP-Server-Sharing | Werden vorhandene Handler, URI-Slots, Socket-/Taskressourcen und Abbau mit #27 kompatibel geteilt? | vorhandenen Server wiederverwenden; Parallelserver nur bei belegter Luecke nach Owner-Gate |
+| R1-Anforderungen aus Issue #89 und `docs/NETWORK.md` | `REUSE` | Fachvertrag ist nicht von der IDF-Minorversion abhaengig; unveraendert als Vergleichsorakel verwenden |
+| Vier-Kandidaten-Gate und keine Vorabentscheidung | `REUSE` | Owner-/Governancegrenze; kein technischer Buildnachweis |
+| `host_contract_test.py`, historisch 5/5 | `REUSE_WITH_INTEGRITY_CHECK` | Kandidatenneutraler Python-Oracle fuer Bytes, volatile Commitgrenze, Redaction und QR-Escaping; IDF-unabhaengig. Nicht als ESP-IDF-6.1-Buildnachweis ausgeben |
+| Secret-/Diff-/Produktionsgraph-Screen der alten PR | `HISTORICAL`, gezielte aktuelle Pruefung nach Freigabe | Der alte Lauf bleibt historisch; aktuelle Branch-/Graphintegritaet wird nach dem Sync erneut geprueft, ohne daraus Kandidatenauswahl abzuleiten |
+| Offizieller Probe: 894912 B, 15 % Partitionsreserve | `HISTORICAL_6_0_2` | Nur Baseline. Unter 6.1 neu bauen und mit neuer Source-SHA, Lockfile und Ressourcenwerten dokumentieren |
+| Direkter Protocomm-Probe: 825712 B, 21 % Reserve | `HISTORICAL_6_0_2` | Nur Baseline. Unter 6.1 neu bauen; Handlergrenze bleibt zu pruefen |
+| Nativer HTTP-Probe: 792900 B, 24 % Reserve | `HISTORICAL_6_0_2` | Nur Baseline. Unter 6.1 neu bauen; direkte-IP-Capability bleibt zu pruefen |
+| Offizieller Component-Hash und `idf 6.0.2`-Lockfile | `HISTORICAL_6_0_2` | Nicht in die aktuelle Evidence kopieren; Lockfile fuer 6.1 mit Component Manager neu erzeugen |
+| `network_provisioning` 1.2.4 als Version | `REUSE_AS_CANDIDATE_VERSION`, `RERUN_6_1` fuer Kompatibilitaet | Version ist weiterhin der Kandidat, aber Manifest-/IDF-Grenze und transitive Abhaengigkeiten muessen unter 6.1 verifiziert werden |
+| `protocomm`, ESP-IDF HTTPD/WiFi/Netif im direkten Probe | `RERUN_6_1` | Built-in APIs, Header und Linkgraph muessen gegen den fixierten 6.1-Checkout gebaut werden |
+| WiFiManager- und weitere Drittanbieter-Screens | `HISTORICAL_CANDIDATE_SCREEN`, `RERUN_6_1` vor vertieftem Gate | Commit, Lizenz, Manifest, IDF-/Arduino-Pfad, Storage- und Lifecycle-Risiken erneut aus exakten Quellen pruefen; kein automatisches Shortlisting |
+| Issue-159-Produktionsbuilds, Ressourcen, esp-clang und Hardware-Smokes | `REUSE_AS_ISSUE159_PROVENANCE_ONLY` | Belegt ESP-IDF 6.1 fuer die Produktionsbasis, aber keinen Issue-89-Kandidaten-, Browser- oder Clientnachweis |
+| Android/iOS/iPadOS/Windows, Browser, QR-Kamera, UART-/Reset-Recovery | `PENDING/NOT_RUN` | Im bisherigen Stand nicht erbracht; keine Umdeklaration als PASS |
 
-Die Untersuchung bewertet native Semantik als Teilkomponente oder als
-Gesamtloesung. Ein Component-README, eine Reset-API oder ein vorhandener
-NVS-Store ist noch kein Nachweis fuer die fachlich sichere Projektsemantik.
+Die historischen Werte werden in der neuen Evidence als `ESP_IDF=6.0.2`,
+`SOURCE_SHA=2f64a1c...` beziehungsweise der damals dokumentierten Source-/Tool-
+Provenienz zitiert. Der neue 6.1-Lauf erhaelt eigene Buildverzeichnisse,
+Provenienzzeilen und Tabellen. Alte Logs oder Buildausgaben werden nicht
+ueberschrieben.
 
-### 5.3 #57-, Security-, Backup- und Resetgrenze
+## 5. Kandidaten- und Komponentenstrategie
 
-Falls eine ausgewählte native Loesung ihren eigenen Store beziehungsweise die
-ESP-WiFi-Persistenz als kanonische Wahrheit behalten soll, legt der
-Entscheidungspunkt die erforderlichen Anpassungen an #57, Security, Backup,
-Reset und Recovery explizit vor. Sie werden nicht still durch eine zweite
-projektverwaltete Credential-Wahrheit umgangen.
+### 5.1 Gleichrangige Hauptkandidaten
 
-In jedem Fall bleiben folgende Pruefziele hart:
+| Kandidat | Was unter 6.1 zu verifizieren ist | Vorabstatus |
+|---|---|---|
+| `espressif/network_provisioning` 1.2.4 | Component-Manager-Aufloesung, `protocomm`-/HTTP-Transport, SoftAP-Start, NVS-/WiFi-Semantik, Browsergrenze, Ressourcen und Lizenz | offen, kein Browser-PASS behauptet |
+| direkter `protocomm`-Pfad | oeffentliche 6.1-APIs, Security-/Version-/Endpointgrenzen, RAM-only-SoftAP im Probe, Ressourcen und fehlende Credentialsemantik | offen, Capability allein ist kein Client-PASS |
+| nativer ESP-IDF-Adapter | ESP-IDF-6.1-SoftAP/HTTP-Pfad, direkte IP, Lifecycle, Ressourcen und die bewusst fehlenden DNS-/Committeile | offen, kein Eigenbau vor Gate |
+| WiFiManager v2.0.17 | nur falls ein nachvollziehbarer nativer 6.1-Pfad ohne ungeplanten Arduino-Produktionswechsel besteht; Manifest, Lizenz, Storage, Webserver und Ressourcen | konditional, weder bevorzugt noch verworfen |
 
-- superseded Credentials werden nach Korruption oder Recovery nicht allein
-  deshalb wieder aktiv, weil sie der naechstaeltere noch lesbare Stand sind;
-- Widerruf, Forward-Progress und Commitidentitaet sind eindeutig und durch
-  Cut-Point-/Readback-Evidence belegt;
-- alte StorageEpochs bleiben unerreichbar;
-- es existiert kein paralleler ESP-WiFi-/Library-NVS-Secretbestand neben einer
-  projektverwalteten Credential-Wahrheit;
-- Werksreset, Neustart und unklarer Writeausgang fuehren nicht zu einem
-  geratenen Erfolg, versteckten Fallback oder Secret-Leak;
-- Netzwerk-, Portal-, DNS- und Reconnectfehler koennen Regelung und Safety
-  weder blockieren noch eine Aktorfreigabe umgehen.
+Die bereits gescreenten Drittanbieter `thorrak/esp_wifi_config`,
+`tuanpmt/esp_wifi_manager` und `nordesems/esp-captive-portal` bleiben
+historische Screen-Evidence. Sie werden nur dann in die vertiefte 6.1-Matrix
+aufgenommen, wenn ein dokumentierter, realer Vorteil gegen die vier
+Hauptkandidaten besteht und der Owner diesen Zusatzscope bestaetigt. Ein
+Screening ist keine Auswahl und kein produktiver Dependency-Entscheid.
 
-Erst wenn der Owner eine projektverwaltete Connectivity-Domaene waehlt, wird
-ein separater Detailplan fuer den kleinsten verbleibenden Vertrag erstellt.
-Er muss dann die bestehende IStateStore-/ConfigurationMutationCoordinator-
-Grenze, StorageEnvelope, StorageEpoch, Redaction, Reset und die eindeutige
-Commitauswertung verwenden. Recordtyp, Schluessel, Slots, Schema und
-Active-/Fallbackregeln sind bis dahin bewusst offen und werden nicht in
-diesem Plan vorweggenommen.
+### 5.2 Aktueller Lockfile-Befund und geplante Korrektur
 
-### 5.4 Credential-Kandidat und Secretregeln als Ergebnispruefung
+`spikes/issue89_wlan_onboarding/official_network_provisioning/` besitzt aktuell
+ein Manifest mit `>=6.0.2,<6.1` und ein Lockfile mit `idf` `6.0.2`. Nach
+Planfreigabe wird dieser isolierte Spike auf die exakte 6.1-Basis umgestellt:
 
-Der Credential-Kandidat bleibt bis zur Ownerentscheidung ein begrenztes
-fluechtiges RAM-Objekt des jeweiligen Spikes. Eine Bibliothek darf es fuer
-Transport und Verbindung temporaer verwenden; sie darf seine Persistenz- oder
-Aktivierungsentscheidung nur dann besitzen, wenn der Owner dies nach der
-Semantik-Evidence ausdruecklich akzeptiert.
+1. Manifestconstraint auf eine 6.1-kompatible, weiterhin eng begrenzte
+   Bedingung aktualisieren;
+2. Component Manager mit dem exakten `IDF_PATH` ausfuehren;
+3. `dependencies.lock` neu erzeugen, nicht manuell editieren;
+4. `idf`, `network_provisioning`, transitive `cjson`-Version/-Hash,
+   Manifest-Hash, Zielchip und Quellquelle festhalten;
+5. keine Lockfile- oder Component-Aenderung in den Produktionsgraphen
+   uebernehmen.
 
-Verbindlich zu pruefen:
+Wenn die Komponente unter 6.1 nicht reproduzierbar aufloest oder baut, ist das
+ein Evidence-Befund fuer diesen Kandidaten und kein Anlass fuer eine
+Kompatibilitaets-Wrapper-Architektur.
 
-- genau ein Home-WLAN in R1; mehrere bekannte Netze sind nicht Teil der
-  Benutzeroberflaeche;
-- SSID wird als WLAN-Bytefolge ohne stille Normalisierung angenommen;
-  Leereingabe, nicht darstellbare beziehungsweise vom IDF-/R1-Vertrag
-  ausgeschlossene Werte und Laengenueberschreitung werden abgelehnt;
-- Passwortgrenzen und Authentisierungsmodi werden aus der fixierten
-  ESP-IDF-/802.11-Schnittstelle und dem R1-Vertrag abgeleitet, explizit
-  getestet und nicht geraten; ungueltige oder unbekannte Modi werden
-  abgelehnt;
-- Home-Credentials werden nur nach erfolgreichem Verbindungstest und
-  ausdruecklicher Bestaetigung an den vom Owner erlaubten Commitbesitzer
-  uebergeben;
-- SoftAP-SSID und SoftAP-Passwort sind geraetespezifisch und ausreichend
-  zufaellig; die bestehende ISecureRandomSource-Grenze wird verwendet;
-  Zufallsfehler verhindern die sichere Ausgabe;
-- die Lebensdauer, Rotation und Frage, ob Einrichtungs- und Ersatz-WLAN
-  denselben persistenten Zugang verwenden, werden als explizite
-  Ownerentscheidung mit dem Spike nachgewiesen. Ein allgemeines Default- oder
-  Quellcodepasswort ist in keinem Fall zulaessig;
-- Home-Passwort, SoftAP-Passwort, Salts, Token und vergleichbare Geheimnisse
-  werden nie in normalen Logs, Events, Diagnose, Exporten, URLs, QR-Test-
-  artefakten, Fehlermeldungen oder CI-Ausgaben wiederholt;
-- sichtbare SSID/Passwort/QR-Ausgabe ist nur die bewusst lokale
-  Einrichtungsanzeige des aktuellen SoftAP-Zugangs; sie wird nicht als
-  Diagnose- oder Exportfeld modelliert;
-- Tests verwenden synthetische Testgeheimnisse, erzeugen redigierte Logs und
-  pruefen auch Fehlermeldungen, Redirects, Exception-/Callbacktexte und
-  Speicher-/Artefaktdateien auf Secretleaks;
-- NVS-/Flashintegritaet durch Envelope/CRC ist keine Vertraulichkeitsgarantie.
-  Eine Aussage zum Schutz bei physischem Flashzugriff bleibt bis zum
-  separaten EVALUATE_BEFORE_RELEASE-Gate fuer Plattformverschluesselung offen.
+## 6. Ausfuehrungsplan nach Owner-Freigabe
 
-Webpasswort, Service-PIN, KDF, Sessions und CSRF gehoeren fachlich zu #27 und
-seinen Authquellen. #89 darf dafuer keine zweite Credentialablage anlegen.
+### Phase 0 – Gate, Checkout und Toolchain-Provenienz
 
-### 5.5 Validierung, Commit, Neustart und Recovery nach dem Owner-Gate
+1. PR #158, Issue #89, `docs/ROADMAP.md`, neuer Plan-Commit und der aktuelle
+   SESSION-HANDOVER live erneut lesen.
+2. Verifizieren, dass der Branch nicht `main` ist, der Arbeitsbaum sauber ist,
+   `origin/main` `7029df3997...` entspricht und der PR-Head der freigegebene
+   Plan-/Implementierungsstand ist.
+3. Die Planfreigabe muss exakt die neue `PLAN_SHA` nennen. Bei einer anderen
+   `main`-, PR-, Roadmap-, Issue- oder Planbasis anhalten und neu abgleichen.
+4. ESP-IDF aus
+   `/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1` oder einem
+   gleichwertig verifizierten Checkout aktivieren. Vor jedem Build sind
+   `git -C "$IDF_PATH" rev-parse HEAD`, exakter Tag, sauberer Zustand,
+   `idf.py --version` und `IDF_TOOLS_PATH` zu protokollieren.
+5. Bei fehlender oder abweichender Toolchain `BLOCKED` melden. Kein Wechsel
+   auf 6.0.2 und kein Ersatzcheckout wird als aktuelle Evidence verwendet.
 
-Vor dem Owner-Gate werden diese Abläufe nur als vergleichbare Evidence-
-Szenarien modelliert. Kein Szenario darf produktive Connectivity-Persistenz
-oder einen neuen projektspezifischen Record implementieren. Der gemeinsame
-Spikestrom lautet:
+### Phase A – Host- und 6.1-Capability-Evidence
 
-~~~
-Browser-/Touch-Kandidat nur im RAM
-  -> typisierte Feld-, Laengen-, Modus- und Sicherheitsvalidierung
-  -> native beziehungsweise bestehende Projektbasis des Kandidaten lesen
-  -> Heim-WLAN testen, ohne den bisher funktionierenden Stand unbemerkt zu ersetzen
-  -> erneute Validierung und ausdrueckliche Bestaetigung
-  -> Commit des vom Owner zugelassenen Persistenzbesitzers
-  -> exakten Commit-/Readback-/Epoch-/Resetausgang bestimmen
-  -> bei Erfolg erst dann Laufzeit-WLAN anwenden oder bestaetigen
-~~~
+Die Phasenreihenfolge bleibt billig vor teuer. Jeder Status wird mit exakter
+Source-SHA, Toolchainprovenienz, Befehl und Ergebnis dokumentiert.
 
-Fuer jede Variante werden WriteError, CapacityError, ReadError und
-CommitOutcomeUnknown mit Cut-Points, Readback und klarer Statusklassifikation
-geprueft. Ein unklarer Ausgang behauptet weder Erfolg noch Misserfolg und
-loest keine weitere Credentialmutation oder Freigabe aus, bis der gewaehlte
-Vertrag dies sicher aufloest.
+#### A1. IDF-unabhaengige Integritaet
 
-Ein Verbindungstestfehler, Browserabbruch, Timeout oder Neustart vor dem
-Commit muss die bisher funktionierende Heim-WLAN-Konfiguration erhalten. Nach
-einem eindeutig neuen Commit wird geprueft, dass Neustart, Recovery,
-Superseded-/Widerrufsstatus und StorageEpoch den #57-Entscheid nicht
-unterlaufen. Ein alter lesbarer Stand darf nicht automatisch reaktiviert
-werden, nur weil er der naechstaeltere ist.
+- Source-Integritaet von `host_contract_test.py` und den drei Probegraphen
+  gegen den freigegebenen Planstand pruefen.
+- Den vorhandenen Host-Oracle nur als kandidatenneutrale Regression ausfuehren
+  und das Ergebnis nicht als Firmware- oder 6.1-Build-PASS ausgeben.
+- Produktionsgraph, Secrets und Diffgrenzen gezielt pruefen. Ein Secret,
+  eine produktive WLAN-Kopplung, ein `nvs_flash_erase()`-Conveniencepfad oder
+  eine unredigierte Credentialausgabe ist ein Stop-/FAIL-Befund.
 
-Bei Readfehler, ungueltigem Format, falscher Epoch, unbekanntem Writeausgang
-oder unvollstaendigem Reset gibt es keinen stillen Factory-Fallback und keine
-Aktorwirkung. Netzwerkstart, Scan, DNS, HTTP, Portalabbruch und NTP warten
-nicht blockierend aufeinander; #124 bleibt app-neutral. Bei jedem Boot bleiben
-alle Aktoren AUS und Netzwerkfehler koennen ActuationInterlock-/SAFE_BOOT-
-Entscheidungen nicht umgehen. Fluechtige Portal-/Browserkandidaten verschwinden
-bei Neustart, sofern der ausgewaehlte native Vertrag nichts anderes explizit
-und sicher festlegt.
+#### A2. Offizieller `network_provisioning`-Probe unter 6.1
 
-### 5.6 Owner-Entscheidungspunkt
+- Manifest und Lockfile wie in Abschnitt 5.2 beschrieben regenerieren.
+- Mit eigenem ignorierten Buildverzeichnis bauen, zum Beispiel:
 
-Nach Screen, Browser-only-Vergleich, Kandidatenspikes und identischer
-Evidence entscheidet der Owner in einem dokumentierten Gate ueber:
+  ```bash
+  idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning \
+    -B build/issue89_official_network_provisioning_idf61 build
+  ```
 
-1. `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO`;
-2. den Produktkandidaten oder die Ablehnung aller Kandidaten;
-3. den zulaessigen Besitzer von Credential-Persistenz, Lifecycle, Reset und
-   Recovery;
-4. jede notwendige Anpassung an #57, Security, Backup, Reset oder #27;
-5. erst danach den kleinsten verbleibenden projektspezifischen Delta-Vertrag.
+- `idf.py size`, Binary-/ELF-/Partition-/RAM-/IRAM-Werte, Dependency-Graph,
+  Component-Hash, Manifest-/Lockfile-Hash und Source-SHA sichern.
+- Pruefen, dass der Standard-Build-only-/No-Client-Lauf keinen Credential-
+  Commit ausfuehrt, dass bei NVS-Initfehlern kein automatisches Erase erfolgt
+  und dass Secrets redigiert bleiben.
+- Die native Semantik des unveraenderten Managers nicht als volatil oder
+  read-only verkuerzen: ein spaeterer echter Set/Apply kann native
+  ESP-WiFi-/NVS-Persistenz vor dem erfolgreichen Verbindungstest beruehren.
+  Dieser Befund bleibt fuer das spaetere #57-/Recovery-Gate offen.
 
-Ohne diese Entscheidung bleiben Produktivabhaengigkeit, eigener
-Connectivity-Record, Slot-/Active-/Fallback-Semantik und eigener
-DNS-/Reconnect-/HTTP-/Portalpfad ausgeschlossen. Ein materieller
-Vertragsunterschied erfordert eine neue Planrevision und erneute Freigabe,
-bevor Code entsteht.
+#### A3. Direkter Protocomm-Probe unter 6.1
 
-## 6. Architektur- und Dateischnitt nach dem Owner-Gate
+- Mit ESP-IDF 6.1 bauen:
 
-Die folgenden Schnitte sind erwartete, vor der Umsetzung gegen den exakten
-freigegebenen Plan-Head zu verifizieren. Eine materielle Abweichung stoppt
-und benoetigt eine neue Plan-SHA.
+  ```bash
+  idf.py -C spikes/issue89_wlan_onboarding/direct_protocomm \
+    -B build/issue89_direct_protocomm_idf61 build
+  ```
 
-### Vor dem Owner-Gate: nur kandidatenneutrale Evidence
+- `WIFI_STORAGE_RAM`, SoftAP, HTTPD-Transport, Security-, Versions- und
+  `r1-set`/`r1-test`/`r1-commit`-Boundary erneut aus dem 6.1-Build verifizieren.
+- Festhalten, dass Handler keine Request-Credentials interpretieren,
+  anwenden, persistieren oder einen Kandidaten auswaehlen. Ein erfolgreicher
+  Build ist kein Browser-, DNS-, Scan-, Reconnect- oder Recovery-PASS.
 
-Vor der Auswahl werden keine produktiven Connectivity-Modelle,
-Storage-Keys/-Slots, Credential-Recordtypen, Active-/Fallbackregeln oder
-projektseitigen DNS-/Reconnect-/HTTP-/Portalpfade eingefuehrt. Erlaubt sind
-nur:
+#### A4. Nativer HTTP-Probe unter 6.1
 
-- ein isolierter actor-free Testvertrag mit fluechtigen, synthetischen
-  Credentials und redigierter Evidence;
-- vorhandene portable Status-/Storage-/Random-Ports als Testgrenzen, ohne
-  neue produktive Connectivity-Persistenz;
-- deterministische Fakes fuer WLAN, Scan, DNS/HTTP-Ereignisse, Zeit und
-  Fehler-/Cut-Points;
-- isolierte ESP-IDF-6.0.2-Builds mit jeweils exakt gelocktem Kandidaten-
-  beziehungsweise Teilkomponentenbestand;
-- vorhandene ESP-IDF-Dienste und ein bereits vorhandener HTTP-Server, wenn
-  der jeweilige Spike deren Ownership kontrolliert nachweist.
+- Mit eigenem Buildverzeichnis bauen:
 
-Die bestehende `fermentation_app`-Persistenz, `IStateStore`,
-`StorageEnvelope`, `StorageEpoch` und `ConfigurationMutationCoordinator` sind
-Pruef- und Integrationsgrenzen. Sie werden vor dem Owner-Gate nicht um einen
-Connectivity-Record erweitert. `device_platform_test_support` bleibt reine
-Testhilfe und nimmt keine Produktionsabhaengigkeit auf.
+  ```bash
+  idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter \
+    -B build/issue89_native_http_adapter_idf61 build
+  ```
 
-### Nach dem Owner-Gate: kleinster konditionaler Integrationsdelta
+- SoftAP, direkte HTTP-IP-Seite, redigierte volatile Zugangsdaten und die
+  bewusst fehlenden DNS-/Captive-/Scan-/Reconnect-/Committeile aus dem neuen
+  Build verifizieren.
+- Die alte 6.0.2-Groesse nur als Baseline gegenueberstellen; keine fixe
+  Budgetgrenze erfinden.
 
-Erst nach expliziter Kandidaten- und Vertragsentscheidung wird festgestellt,
-ob ueberhaupt projektspezifischer Code verbleibt:
+#### A5. Vergleich und Komponenten-/Kandidaten-Evidence
 
-- Bei akzeptierter nativer Persistenz bleiben deren Store, Commit-, Reset- und
-  Recoverypfade die eine Wahrheit; die beschlossenen #57-/Security-/Backup-
-  Anpassungen werden dokumentiert und umgesetzt.
-- Bei ausdruecklich projektverwalteter Persistenz wird ein neuer Detailplan
-  fuer den kleinsten notwendigen Vertrag erstellt. Erst dieser Detailplan
-  bestimmt Typen, Schema, Schluessel, Slots, Epoch-/Widerrufssemantik und die
-  Nutzung der bestehenden Storage-/Coordinator-Grenze.
-- Fuer SoftAP, DNS, HTTP, QR und Reconnect werden nur nachgewiesene Luecken
-  gegen vorhandene ESP-IDF-/Espressif-/Drittkomponenten als Delta umgesetzt.
-- Im Produktionsgraphen existiert danach genau der vom Owner gewaehlte
-  Adapter beziehungsweise die gewaehlte Teilkomponente. Nicht ausgewaehlte
-  Kandidaten werden entfernt und bilden keine zweite Wahrheit.
+- Fuer alle drei ESP-IDF-Spikes dieselbe Tabelle mit v6.0.2-Baseline,
+  v6.1-Wert, Delta, Source-SHA, Toolchain-SHA, Partition, IRAM, DRAM,
+  Binary-Hash und Ergebnisstatus erstellen.
+- Die vier Hauptkandidaten mit exakter Quelle, Version/Commit, Lizenz,
+  transitive Abhaengigkeiten, IDF-/Arduino-Annahme, HTTP-Server-Sharing,
+  NVS-/Commitsemantik, Reset-/Recoverygrenze, Wartung und Ressourcenrisiko
+  dokumentieren.
+- Nur die unter 6.1 tatsaechlich geprueften Eigenschaften als `PASS`
+  bezeichnen. Nicht gebaute, nicht geflashte oder nicht getestete Teile
+  bleiben `NOT_RUN`, fehlende Toolchain/Hardware bleibt `BLOCKED`.
 
-### Isolierter Spike
+### Phase B – vergleichbare Client-, Browser- und Recovery-Evidence
 
-Der Spike verwendet denselben begrenzten Browservertrag fuer die vier
-Hauptkandidaten und nur begruendet shortlisted Teilkomponenten. Er ist keine
-allgemeine Portalplattform und keine Vorstufe eines eigenen Produktions-
-vertrags. Kandidatenabhaengigkeiten werden nur dort eingebunden, mit exakter
-Quelle gelockt und nach der Ownerentscheidung aus dem Produktionsgraphen
-entfernt, wenn sie nicht gewaehlt werden.
+Phase B bleibt bis heute `PENDING`; sie darf erst nach erfolgreicher oder
+begruendet eingeschraenkter Phase-A-6.1-Evidence und mit einem isolierten,
+wegwerfbaren beziehungsweise gesicherten Test-NVS starten. Das Projekt-
+oder Benutzer-NVS darf nicht verwendet und nie automatisch geloescht werden.
 
-### #27-Grenze
+Die vier Kandidaten erhalten denselben Testaufbau, dieselbe Firmware-
+Provenienz je Kandidat und dieselben Cut-Points:
 
-Die Onboardingseite ist eine schmale, temporare Setup-Seite. Sie ist keine
-normale lokale Weboberflaeche und keine oeffentliche Schreib-API. Nach Auswahl
-eines Produktionspfads wird der Transport an der gemeinsamen
-ESP-IDF-/Composition-Root-Grenze mit #27 abgestimmt. #89 kopiert weder
-Routing-, Auth-, Session-, CSRF-, JSON- noch Webserverwahrheit aus #27.
-
-## 7. Ausfuehrungsphasen und Commits nach dem Reuse-/Owner-Gate
-
-### Phase A – Reuse-/Capability-Screen und isolierte minimale Spikes
-
-1. Baseline, Live-Issue/PR, Toolchain und Quellen auf dem freigegebenen
-   Plan-Head erneut verifizieren.
-2. Die drei aktuellen nativen Drittanbieter-Repositories aus Abschnitt 4.3
-   sowie die offiziellen Espressif-Pfade auf aktuelle Quelle, Lizenz,
-   IDF-6.0.2-Kompatibilitaet, HTTP-Sharing, NVS/Storage, Reset, Lifecycle,
-   Ressourcen und Wartung screenen.
-3. Nur reale Vorteile gegen die vier Hauptkandidaten als minimale
-   actor-free Teilkomponenten- oder End-to-End-Spikes aufnehmen.
-4. Browser-Protocomm-Aufwand, native Captive-Portal-Wiederverwendung und
-   Standardclient-Alternative getrennt bewerten.
-
-Phase A baut keine produktive Connectivity-Persistenz, keine projektspezifische
-Credentialdomäne und keinen eigenen DNS-/Reconnect-/HTTP-/Portalpfad. Spikes
-verwenden nur fluechtige synthetische Credentials, kontrollierte bestehende
-Stores der Kandidaten und redigierte Evidence.
-
-### Phase B – vergleichbare Evidence der aussichtsreichen Pfade
-
-1. Fuer die vier Hauptkandidaten und nur die begruendet shortlisted
-   Teilkomponenten denselben Browser-, Fehler-, Recovery-, Reset-,
-   Ressourcen- und Clienttest mit identischen Zeit-/Lastgrenzen ausfuehren.
-2. Native Persistenz-, Commit-, Superseded-, Epoch-, Reconnect- und
-   Resetsemantik gegen die #57-/Security-/Backup-Ergebnisziele pruefen;
-   Unterschiede und Vereinfachungen als Ownerentscheid vorbereiten.
-3. `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT` noch nicht setzen, sondern
-   Aufwand und Evidence fuer `YES` und `NO` transparent gegenueberstellen.
-4. Kandidaten ohne realen Vorteil im Screen belassen; keine weitere
-   Bibliothek in die Hardwarematrix aufnehmen.
-
-Ein Spike-Commit darf keinen Kandidaten in die normale Composition Root
-eintragen und keinen projektspezifischen Persistenz- oder Lifecyclevertrag
-festlegen.
-
-### Phase C – Ownerentscheid ueber Anforderungen, Kandidat und Vertrag
-
-Der Builder haelt nach der vergleichbaren Evidence an und legt vor:
-
-- Matrix mit PASS/FAIL/NOT_RUN/BLOCKED je vier Hauptkandidaten und
-  begruendeter Teilkomponenten;
-- Browser-only-Aufwand, Clientmatrix, QR-/Captive-/direkte-IP- und
-  Standardclientnachweis;
-- native Storage-/Commit-/Recovery-/Resetsemantik sowie #57-/Security-/
-  Backup-Abweichungen;
-- reproduzierbare Builds, Quellen, Lizenzen, Notices, Abhaengigkeiten,
-  Ressourcen, Wartung, Testbarkeit und Integrationsrisiko;
-- offene Risiken und eine begruendete Empfehlung ohne automatische Auswahl.
-
-Der Owner entscheidet explizit:
-
-1. `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO`;
-2. den Produktkandidaten oder die Ablehnung aller Kandidaten;
-3. den zulässigen Persistenz-, Lifecycle-, Recovery- und Resetbesitzer;
-4. alle erforderlichen Anpassungen an #57, Security, Backup, Reset und #27.
-
-Bis zu diesem Gate gibt es keine Produktivauswahl und keine eigene
-Connectivity-Persistenz.
-
-### Phase D – kleinster verbleibender produktiver Integrationsdelta
-
-Erst nach Phase C wird der minimale Delta-Vertrag geplant und implementiert:
-
-- native Persistenz und native Lifecyclesemantik werden direkt integriert,
-  wenn sie als eine sichere Wahrheit akzeptiert sind;
-- ein projektspezifischer Credential-/Storagevertrag entsteht nur, wenn der
-  Owner ihn nach dem Semantikvergleich ausdruecklich verlangt, und wird in
-  einem separaten Detailplan gegen #57 konkretisiert;
-- eigener DNS-, Reconnect-, HTTP- oder Portalcode entsteht nur fuer die
-  belegte Restluecke nach Reuse der vorhandenen Dienste;
-- nicht ausgewaehlte Bibliotheken und Spike-Harnesses werden entfernt oder
-  als Evidence markiert; keine zweite Web-/Credential-/Storagewahrheit.
-
-Danach gelten die normalen Independent-Review-, OPEN_BLOCKERS-, Owner-
-Pre-Ready- und CI-Gates. Ein materieller Vertragsunterschied erfordert vor
-der Implementation eine neue Planrevision und Ownerfreigabe.
-
-## 8. Tests und Evidence
-
-### 8.1 Ohne zusaetzliche Verkabelung moeglich
-
-Diese Nachweise koennen actor-free auf Host beziehungsweise mit der
-vorhandenen ESP32-/USB-/UART-/FT232RL-Basis erfolgen:
-
-- Wertebereichs-, Authmodus-, Bytekanonizitaets- und
-  kandidatenbezogene Storage-/Schluesseltests;
-- Hostsimulation von WLAN, Scan, Verbindung, DNS, HTTP, Timeout, Abbruch,
-  Browserabbruch, Read-/Writefehler, falscher Epoch, Korruption und
-  CommitOutcomeUnknown;
-- exakte alte/neue/ungueltige Credentialzustandsvergleiche sowie
-  native beziehungsweise bereits vorhandene StorageEpoch-/Werksreset-
-  Orakel;
-- Secret-Redaction- und Repository-/CI-Artefakt-Scans;
-- isolierte ESP-IDF-6.0.2-Builds, Lizenz-/Noticepruefung,
-  Abhaengigkeitsinventur und Base-/Kandidatenmessung;
-- actor-free ESP32-Station/SoftAP/DNS/HTTP-/direkte-IP-Ablauf mit
-  vorhandener Stromversorgung und UART, wenn die Hardwarebaseline
-  nachweisbar ist. Sensoren, Display, Peltier, BTS7960, Luefter, MOSFET-
-  Verbraucher und Summer bleiben getrennt beziehungsweise nachweislich
-  inaktiv;
-- synthetische QR-Encoding-/Decodingtests mit Testgeheimnissen sowie
-  Escaping-, Groesse-, Rotation- und Redactiontests.
-
-Diese Nachweise beweisen weder reale Displaylesbarkeit noch eine physische
-QR-Scan-Abnahme. Das wird separat ausgewiesen.
-
-### 8.2 Zwingende reale Clientmatrix
-
-Auf exakt demselben actor-free ESP32-Stand und mit identischem Testfallset fuer
-die vier Hauptkandidaten sowie nur begruendet shortlisted Teilkomponenten:
-
-| Client | Pflichtnachweise |
+| Bereich | Pflichtnachweis |
 |---|---|
-| Android-Telefon | QR-Beitritt, Captive-Portal-Angebot, manuelle direkte IP, Scan/Formular, falsches Passwort, Abbruch, Reconnect, Neustart |
-| iPhone beziehungsweise iPad mit iOS/iPadOS | dieselben Nachweise; OS-Captive-Ansicht und Safari/direkte IP getrennt protokollieren |
-| Windows-PC | WLAN-Beitritt, Edge beziehungsweise der vereinbarte Standardbrowser, Captive-Portal-Erkennung, direkte IP, lange Eingabe, Fehler/Abbruch und Reconnect |
+| Android | QR-Beitritt, Captive-Angebot, direkte IP, Scan/Formular, falsches Passwort, Abbruch, Commitgrenze, Reconnect, Neustart |
+| iOS/iPadOS | dieselben Punkte; OS-Captive-Ansicht und Safari/direkte IP getrennt protokollieren |
+| Windows | WLAN-Beitritt, Standardbrowser, Captive-Angebot, direkte IP, lange Eingabe, Fehler/Abbruch, Reconnect und Neustart |
+| Browservertrag | Portalstart/-stop, QR-Encoding/Decoding, sichtbare lokale Adresse, no-store/Redaction, Erfolg/Fehler/Timeout |
+| Recovery | Write-/Readback-/Reset-/Power-/CommitOutcomeUnknown-Cutpoints, alte Konfiguration erhalten, keine alte Epoch reaktivieren |
+| Runtime/Safety | actor-free Regel-/Safety-Simulation bleibt bei allen Netzwerkfehlern unabhaengig und fail-closed |
+| Ressourcen | Heap, niedrigster Heap, groesster Block, Stack-Watermark, Start/Stop, Scan, Formular, Reconnect, Jitter, Watchdog, Leaks und Handles |
 
-Für jeden Client werden Modell/OS/Browserstand, Uhrzeit,
-automatische Portalentdeckung JA/NEIN, direkte-IP-Ergebnis,
-Antwortzeiten, sichtbare Fehlermeldung, Credential-Commitstatus,
-Verbindungsabbruch und Secret-Redaction protokolliert. Ein fehlender
-Captive-Redirect wird nicht als Gesamtfail bewertet, wenn der direkte
-angezeigte IP-Fallback voll funktioniert; ein fehlender direkter IP-Fallback
-ist dagegen ein R1-FAIL.
+Fuer reale Tests muessen Board, UART, Resetpfad, Powerzustand, Clientgeraete,
+Test-NVS, Partitionierung, Backupgrenze und Firmware-SHA vorab dokumentiert
+sein. `EN/RTS`-Reset ist kein Power-Cut. Fehlt die Power-/UART-/Reset-
+Voraussetzung oder meldet esptool keine seriellen Daten, lautet der Nachweis
+`BLOCKED`; es wird kein Hardware- oder Client-PASS behauptet.
 
-### 8.3 QR- und Hardwaregrenze
+Ein physischer QR-Scan am vorgesehenen Display ist von synthetischem
+QR-Encoding und Kamera-/Browsertests getrennt. Ohne bestaetigte Display-
+Hardware bleibt der physische Nachweis `BLOCKED_HARDWARE` oder `NOT_RUN`.
 
-Die reale Anzeige und das Scannen des QR auf dem vorgesehenen 320-x-240-
-Display benoetigen die bestaetigte Displayhardware und den #31-Pfad. Bis
-dahin gilt:
+### Phase C – Owner-Gate
 
-- Host-/synthetische QR-Evidence darf PASS sein, wenn sie vollstaendig
-  redigiert und mit Testgeheimnissen ausgefuehrt ist;
-- physischer Display-/Kamera-Scan bleibt BLOCKED_HARDWARE oder NOT_RUN;
-- kein UART- oder Logdump mit einem produktiven Passwort ersetzt den
-  Display-/QR-Nachweis;
-- Android/iOS/Windows-Portal- und direkte-IP-Evidence kann mit dem
-  vorhandenen actor-free ESP32-/UART-Aufbau getrennt davon erfolgen.
+Nach vergleichbarer Evidence haelt der Builder an und legt ausschliesslich
+eine Entscheidungsgrundlage vor. Der Owner entscheidet explizit:
 
-### 8.4 Fehler-, Recovery- und Safetytests
+1. `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO`;
+2. Kandidat oder Ablehnung aller Kandidaten;
+3. Besitzer von Credential-Persistenz, Lifecycle, Reset und Recovery;
+4. notwendige Anpassungen an #57, Security, Backup, Reset und #27;
+5. minimaler weiterer Integrationsscope.
 
-Mindestens:
+Bis zur Entscheidung bleiben:
 
-- kein bestaetigter WLAN-Zugang, gueltiger nativer beziehungsweise
-  projektseitiger Kandidatenstand, falsches Passwort, unerreichbarer AP,
-  kurzer Ausfall, langer Ausfall und stabiler Reconnect;
-- Portalstart vor und nach ausdruecklicher lokaler Aktion;
-- Portal-/DNS-/HTTP-Abbruch, Browserabbruch, Timeout und parallele
-  Start-/Stopanfragen;
-- Cut vor und nach dem jeweiligen nativen oder projektseitigen Write, vor
-  Readback, nach Readback, vor Runtime-Apply, waehrend Reset und nach
-  Epochwechsel;
-- WriteError, CapacityError, ReadError, NotFound nach begonnenem Write,
-  CommitOutcomeUnknown sowie Format-/CRC-/Schema-/Length-/Epoch- und
-  Revisionsfehler des jeweiligen Besitzers;
-- Neustart vor Commit, nach eindeutigem unveraendertem Stand, nach eindeutigem
-  neuen Commit, im Ersatz-WLAN und mit unklarem Ausgang;
-- keine Wiederbelebung alter Epochcredentials, keine automatische
-  Factory-Neuanlage bei korrupten/alten Bytes und keine neue Mutation bei
-  indeterminiertem Zustand;
-- laufende actor-free Regel-/Safety-Simulation bleibt bei allen
-  Netzwerkfehlern bedienbar beziehungsweise fail-closed, ohne Aktorwirkung;
-- kontrollierter Portalabbau gibt Heap, Stack, Socket, DNS und Callback-
-  Ressourcen frei und hinterlaesst keine Secretkopien in Test-/Diagnosepfaden.
+```text
+PHASE_A_6_1_REVALIDATION=PASS|FAILED|BLOCKED
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
+PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
+```
 
-### 8.5 Ressourcen- und Stabilitaetsmessung
+Ein materieller Unterschied bei Schema, Persistenz, Wireformat, Security,
+Recovery, Architektur, Bibliothek, Hardware oder Acceptance Criteria stoppt
+die Ausfuehrung und erfordert eine neue Planrevision vor Code.
 
-Pro Hauptkandidat und Base sowie fuer jede begruendet shortlisted
-Teilkomponente, mit identischem Build und identischer Last:
+### Phase D – ausdruecklich nicht Teil dieses Freigabepakets
 
-- firmware.bin, firmware.elf, Flashkomponenten und statisches RAM;
-- freier Heap, niedrigster Heap, groesster freier Block und Fragmentierung
-  nach wiederholtem Start/Stop, Scan, Fehler und maximal gueltigem Formular;
-- Task-Stack-High-Water-Mark fuer App, WiFi/Event, HTTP, DNS und
-  kandidatspezifische Tasks;
-- Zeit fuer SoftAP-/Portalstart, Scan, Browserantwort, Verbindungstest,
-  Commit, Readback, Reconnect und Abbau;
-- Regelzyklus-Jitter, Watchdog, Reset, Leak-/Handle-/Socketrest und
-  Langzeitstabilitaet;
-- direkte und transitive Abhaengigkeitszahl sowie projektspezifischer
-  Integrationscode.
+Die produktive Integration wird in dieser Planrevision weder ausgefuehrt noch
+implementiert. Erst nach Phase C kann ein eigener Detailplan den kleinsten
+verbleibenden Delta-Vertrag bestimmen. Dieser muss explizit festlegen, ob
+native Bibliotheks-/ESP-WiFi-Persistenz als eine Wahrheit uebernommen wird
+oder ob #57 einen neuen, ownergenehmigten Vertrag benoetigt. Ein zweiter
+Credentialstore, zweiter Webserver oder stiller Auto-Commit ist nicht
+zulaessig.
 
-Rohwerte, Messmethode, Toolversion, Profil, Boardrevision und exakter
-Source-SHA werden mit den Evidence-Artefakten abgelegt. Hostwerte ersetzen
-keine realen Heap-, Jitter-, Watchdog-, WiFi- oder Flashclaims.
+## 7. Ergebnis- und Evidence-Status
 
-## 9. Dokumentations- und Abschlusswirkung
+Die Evidence-Datei `docs/audits/ISSUE_89_WLAN_ONBOARDING_EVIDENCE.md` wird erst
+nach autorisierten Laeufen aktualisiert. Sie fuehrt historische und aktuelle
+Tabellen getrennt und enthaelt mindestens:
 
-Im aktuellen Plan-PR werden nur der vollstaendige Plan und die geforderte
-Roadmap-Synchronisierung geaendert. Es gibt keine Kandidatenauswahl,
-keine neue Produktionsabhaengigkeit und keine Firmwareaenderung.
+- `HISTORICAL_ESP_IDF=6.0.2` mit alter Source-/Toolchainprovenienz;
+- `CURRENT_ESP_IDF=6.1` mit exakter IDF-SHA und aktuellem Source-Head;
+- Host-Oracle als kandidatenneutrale Evidence;
+- drei getrennte 6.1-Probe-Builds mit Komponenten-/Lockfile-/Ressourcen-
+  Evidence;
+- vier Kandidaten mit gleicher Bewertungslogik;
+- `PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING`, solange kein vergleichbarer
+  Clientlauf vollstaendig erfasst ist;
+- keine produktive Kandidaten- oder Persistenzentscheidung.
 
-Nach dem spaeteren Spike beziehungsweise Auswahlentscheid sind nur die
-tatsaechlich belegten Dokumente zu aktualisieren:
+Es gelten die Begriffe aus `docs/CI_AND_QUALITY_GATES.md`:
 
-- NETWORK.md fuer bestaetigte Lebenszyklus-, QR-, IP-, Ersatz-WLAN- und
-  Credentialregeln;
-- CONFIGURATION_PERSISTENCE.md und SETTINGS_AND_STORAGE.md fuer den nach
-  Owner-Gate bestaetigten #89-Persistenzbesitzer sowie dessen Epoch-, Reset-,
-  Commit- und Redactionvertrag;
-- THIRD_PARTY_COMPONENTS.md und die Auditdokumente fuer exakte Quelle,
-  Version/Commit, Lizenz, Notices, Abhaengigkeiten, Status und Evidence;
-- NETWORK_DIAGNOSTICS_INTEGRATION.md fuer die projektseitige Status-/Fehler-
-  projektion, ohne Geheimnisse;
-- CHANGELOG.md und ROADMAP.md fuer den nachgewiesenen Status;
-- keine Aenderung an Issue #27s owning Web-/Auth-Vertrag ausser explizit
-  abgestimmter gemeinsamer Adaptergrenze.
+- `PASS`: ausgefuehrt und erfolgreich;
+- `FAILED`: ausgefuehrt, fehlgeschlagen und blockierend;
+- `BLOCKED`: konkrete Voraussetzung fehlt;
+- `NOT_RUN`: nicht ausgefuehrt;
+- `SKIPPED` und fehlende Angaben sind nie `PASS`.
 
-## 10. Stopregeln und Definition of Done
+Ein Phase-A-Build-PASS ist weder Clientakzeptanz noch Hardwareakzeptanz.
+Issue-159-Produktions-Smokes, Hosttests und statische Screens ersetzen keine
+Browser-, QR-, Recovery- oder Ressourcenmessung des jeweiligen Kandidaten.
 
-Sofort anhalten und Ownerentscheidung einholen bei:
+## 8. Commits, Dokumentation und Stopregeln
 
-- abweichender main-Basis, fehlendem Live-Issue/PR-Abgleich oder nicht
-  reproduzierbarer Toolchain;
-- Widerspruch zwischen #57, ADR-016, NETWORK.md, #27 oder ADR-013;
-- Bedarf nach zweitem Store, zweitem Coordinator, zweiter Webserver- oder
-  Credentialwahrheit;
-- Bibliotheks- oder Callbackpfad mit unkontrollierbarem Auto-Commit,
-  unredigiertem Secret, nicht begrenzbarer Allokation oder Safetywirkung;
-- Materialabweichung an Schema, Persistenz, Security, Recovery, Architektur,
-  Toolchain, Hardware oder Acceptance Criteria;
-- fehlender Browsernachweis, fehlender direkter IP-Fallback oder
-  App-/Cloud-/CLI-Zwang;
-- Hardware-/UART-/Power-/Reset-Baseline fehlt fuer den jeweils beanspruchten
-  realen Nachweis. Der Status ist dann BLOCKED oder NOT_RUN, nicht PASS.
+### 8.1 Aktueller Plan-Commit
 
-Issue #89 ist aus Plan-/Spike-Sicht erst abgeschlossen, wenn:
+Dieser Plan-Commit darf nur Planinhalt und die erforderliche aktuelle
+Roadmap-Synchronisierung enthalten. Es gibt in diesem Schnitt:
 
-- alle vier Kandidaten im identischen Vergleichsrahmen bewertet oder
-  begruendet als BLOCKED/NOT_RUN ausgewiesen sind;
-- bei `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES` der browserbasierte Vertrag
-  einschliesslich QR-/direkte-IP-Fallback nachgewiesen ist; bei `NO` der
-  explizit ownergenehmigte Standardclientvertrag einschliesslich direkter
-  lokaler Recovery-/Zugriffsmöglichkeit nachgewiesen ist;
-- Android, iOS/iPadOS und Windows getrennte Ergebnisse besitzen;
-- Base-/Kandidaten-Ressourcen, Stack, Jitter, Watchdog, Lizenz,
-  Abhaengigkeiten, Wartung, Testbarkeit und Integrationsrisiko dokumentiert
-  sind;
-- keine geheime Information in Code, Logs, URLs, Diagnosen, Exporten oder
-  Evidence verbleibt;
-- der Owner nach der vergleichbaren Evidence explizit Anforderungen,
-  Produktivkandidat und Persistenz-/Lifecyclebesitzer waehlt oder die Auswahl
-  offen beziehungsweise abgelehnt laesst;
-- erst danach eine produktive Abhaengigkeit festgelegt wird. Bis zu diesem
-  Gate bleibt CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
-  und ACTUATOR_RELEASE=NO.
+- keine neue Produktionsabhaengigkeit;
+- keine Code-, Build- oder Lockfile-Aenderung fuer einen Evidence-Lauf;
+- keine neue Evidence und keinen neuen PASS-Claim;
+- keine Kandidatenauswahl und keine Connectivity-Persistenz.
+
+Nach dem Commit werden exakte Plan-SHA, aktualisierter PR-HEAD und offene
+Entscheidungen im PR-Body und im genau einen aktuellen SESSION-HANDOVER
+ausgewiesen. Danach haelt der Builder an und wartet auf die Ownerfreigabe der
+exakten Plan-SHA.
+
+### 8.2 Stopregeln
+
+Sofort anhalten und `BLOCKED` oder einen Ownerentscheid einholen bei:
+
+- abweichender `main`-, PR-, Plan- oder ESP-IDF-SHA;
+- fehlendem Live-Issue-/PR-/Roadmap-Abgleich;
+- fehlender oder nicht sauberer 6.1-Toolchain;
+- Component-Manager-/Lockfile-Aufloesung, die nicht reproduzierbar ist;
+- zweiter Credential-, Storage- oder Webserverwahrheit;
+- automatischem NVS-Erase, unredigiertem Secret oder unkontrolliertem
+  Auto-Commit;
+- fehlendem direktem-IP-Fallback, App-/Cloud-/CLI-Zwang oder nicht
+  vergleichbarer Kandidaten-Evidence;
+- fehlendem Board-, UART-, Reset- oder Power-Nachweis fuer einen beanspruchten
+  realen Lauf;
+- materieller Abweichung von #57, ADR-013, ADR-016, `NETWORK.md`,
+  `SYSTEM_SAFETY_AND_RECOVERY.md` oder diesem Plan.
+
+Issue #89 ist aus Evaluationssicht erst bereit fuer die Ownerentscheidung,
+wenn Phase-A-6.1-Evidence und die vergleichbare Phase-B-Matrix fuer die
+bewerteten Kandidaten mit exakten Statuswerten vorliegen. Bis dahin bleiben
+`CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE`,
+`PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED` und
+`ACTUATOR_RELEASE=NO` unveraendert.
