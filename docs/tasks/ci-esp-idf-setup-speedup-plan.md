@@ -8,7 +8,20 @@ Toolchain-Einrichtung deutlich zu beschleunigen, ohne bestehende Gates,
 Pinning-Garantien oder Nachweisqualität zu schwächen. Kein passendes
 GitHub-Issue existiert; der Owner hat ausdrücklich entschieden, ohne
 Issue-Referenz fortzufahren (Branch `agent/ci-esp-idf-setup-speedup-plan`,
-Draft-PR wird nach diesem Plan-Commit erstellt).
+Draft-PR #161).
+
+Dies ist die zweite, vollstaendige und eigenstaendig ausfuehrbare Revision
+dieses Plans. Sie korrigiert einen Full-Review-Befund zur ersten Revision
+(Plan-SHA `66ab4f3678a5265ca176998dfad1d428d1806982`, vom Owner freigegeben
+und bereits umgesetzt bis Implementierungs-HEAD `033a6aa`): Das dort geplante
+`cache: pip` fuer `actions/setup-python` ist wirkungslos, da das Repository
+weder `requirements.txt` noch `pyproject.toml` besitzt und `setup-python@v6`
+seinen Standard-Pip-Cache nur darüber initialisiert. Diese Revision entfernt
+den Punkt ersatzlos aus dem Scope, korrigiert eine unzutreffende Aussage zur
+Pre-Ready-/Ready-Reihenfolge und ergaenzt `docs/ROADMAP.md`- sowie
+PR-Statuspflege als notwendige Dokumentationswirkung. Die genehmigte
+Caching-statt-Docker-Entscheidung sowie alle uebrigen Commit-2/3-Inhalte der
+ersten Revision bleiben unveraendert gueltig und sind bereits umgesetzt.
 
 Verifizierter Live-Ausgangsbefund (heutiger Baseline-CI-Lauf, PR #160,
 `gh run view 35014280372` auf `main`-HEAD `dc017f4`, Ergebnis `success`,
@@ -90,8 +103,15 @@ gewuenscht ist.
   vorhandenen Binaries (`/usr/bin/clang-format-18`, `/usr/bin/clang-tidy-18`)
   plus Versionsausgabe zur Absicherung; bei fehlendem Pfad schlaegt der
   Schritt sichtbar fehl (fail-closed, kein stiller Fallback auf `apt-get`).
-- `actions/setup-python` um `cache: pip` ergaenzen (spart den PlatformIO-
-  Download bei wiederholten Laeufen).
+- **Kein** `cache: pip` fuer `actions/setup-python`: Das Repository besitzt
+  weder `requirements.txt` noch `pyproject.toml`, wodurch `setup-python@v6`
+  seinen vorgesehenen Standard-Pip-Cache nicht initialisieren kann (die
+  Aktion cached darueber nur bei erkanntem Dependency-Manifest). Es wird
+  weder eine Dummy-Dependency-Datei noch ein eigener zusaetzlicher
+  PlatformIO-Pip-Cache eingefuehrt; dieser Optimierungsschritt entfaellt
+  ersatzlos aus dem Scope. `id: setup-python` bleibt bestehen, da
+  `steps.setup-python.outputs.python-version` weiterhin Bestandteil des
+  ESP-IDF-Tools-Cache-Schluessels in Commit 2 ist.
 
 **Commit 2 — `.github/workflows/build.yml`: ESP-IDF-Checkout und `IDF_TOOLS_PATH` cachen und bei verifiziertem Hit tatsaechlich wiederverwenden**
 - `ESP_IDF_TAG`/`ESP_IDF_COMMIT` als Job-`env` einmal definieren (bisher
@@ -164,6 +184,28 @@ gewuenscht ist.
   behoben (Datei nennt durchgehend `v6.1`); kein Korrekturbedarf mehr. Sollte
   eine gezielte Pruefung waehrend der Umsetzung doch eine reale verbliebene
   Abweichung finden, wird nur diese redaktionell korrigiert.
+- Korrektur aus dieser Revision: Die CI-Pipeline-Schrittbeschreibung
+  ("Checkout und Python (mit `pip`-Cache)") wird auf den tatsaechlich
+  verbleibenden Zustand ohne Pip-Cache korrigiert; es wird keine neue
+  Pip-Cache-Loesung dokumentiert. Die bestehende ESP-IDF-Checkout-/
+  Tools-Cache-Dokumentation bleibt inhaltlich unveraendert.
+
+**Commit 4 — `docs/ROADMAP.md` und PR-Beschreibung synchronisieren**
+- `docs/ROADMAP.md`: den verifizierten Live-Stand von PR #160 auf `MERGED`
+  mit Merge-Commit `dc017f4ee7c4f33be240fac23c1686606f340225`
+  synchronisieren; Issue #159 nur als weiterhin `OPEN` fuehren, solange der
+  Owner es nicht schliesst; PR #161 als aktuelle parallele CI-/
+  Governance-Arbeit mit der revidierten freigegebenen Plan-SHA und dem
+  aktuellen Implementierungs-/Reviewstatus aufnehmen. Keine fachlichen
+  Anforderungen in die Roadmap kopieren — nur Statuszeilen im bestehenden
+  Roadmap-Format.
+- PR-Beschreibung von #161: die veraltete Beschreibung ("Planungsphase",
+  noch offene Caching-vs-Docker-Entscheidung) auf den tatsaechlichen Status
+  und die dann freigegebene revidierte Plan-SHA aktualisieren.
+- Dies ist eine notwendige Status-/Dokumentationswirkung gemaess
+  `AGENT_WORKFLOW.md` §5 (Plan, PR-Beschreibung und `docs/ROADMAP.md` werden
+  bei tatsaechlicher Status- oder Scopewirkung aktualisiert), keine
+  Scopeerweiterung.
 
 ## Nachweis (Vorher/Nachher)
 
@@ -219,6 +261,9 @@ gewuenscht ist.
 
 - `.github/workflows/build.yml`
 - `docs/CI_AND_QUALITY_GATES.md`
+- `docs/ROADMAP.md`
+- PR-Beschreibung #161 (kein Repository-Dateiartefakt, aber Teil der
+  Statuspflege aus Commit 4)
 
 ## Tests / gezielte Pruefungen
 
@@ -233,11 +278,19 @@ gewuenscht ist.
   Erwartetes Ergebnis, da keine C/C++-Datei geaendert wird:
   `CLANG_FORMAT=NOT_REQUIRED`, `CLANG_TIDY=NOT_REQUIRED`,
   `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`.
-- Der vollstaendige `host`-/`esp`-Pre-Ready-Lauf und der reale Zeitnachweis
-  erfolgen ausschliesslich ueber den echten GitHub-CI-Lauf (Owner-Wechsel auf
-  `Ready for review` erforderlich, da Firmware-CI im Draft nicht laeuft).
+- Fuer die verbindliche Pre-Ready-/Ready-/CI-Reihenfolge gilt ausschliesslich
+  der kanonische `docs/AGENT_WORKFLOW.md` (Independent Review abgeschlossen
+  -> `OPEN_BLOCKERS=0` -> Owner autorisiert lokalen Pre-Ready-Lauf ->
+  `PRE_READY_LOCAL_GATES=PASS` -> Owner setzt `Ready for review` ->
+  GitHub-CI `PASS` -> Merge-Gate); dieser Plan erfindet keine abweichende
+  Reihenfolge. Der separate Cache-Miss-/Cache-Hit-Performance-Nachweis (siehe
+  Abschnitt „Nachweis (Vorher/Nachher)") bleibt ein GitHub-CI-Nachweis nach
+  dem Owner-Ready-Gate, da GitHub-gehostetes Cache-Backend-Verhalten lokal
+  nicht reproduzierbar ist.
 
 ## Offene Entscheidungen
 
-1. Owner-Bestaetigung, dass Caching (statt offizielles Docker-Image) die
-   gewuenschte Loesung ist (siehe Reuse-before-Build-Bewertung oben).
+Keine. Die einzige offene Entscheidung der ersten Revision (Caching statt
+offizielles Docker-Image) hat der Owner bei der Freigabe der Plan-SHA
+`66ab4f3678a5265ca176998dfad1d428d1806982` ausdruecklich bestaetigt. Diese
+Revision fuegt keine neue offene Entscheidung hinzu.
