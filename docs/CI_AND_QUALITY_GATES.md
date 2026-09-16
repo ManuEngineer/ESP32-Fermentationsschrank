@@ -162,6 +162,42 @@ review` fuehrt nur der Owner aus.
 Es gibt keinen `push`-Trigger und damit keinen automatischen identischen
 Wiederholungslauf nach dem Merge.
 
+### ESP-IDF-Checkout- und Tools-Caching
+
+Der ESP-IDF-Checkout (`$RUNNER_TEMP/esp-idf-<ESP_IDF_TAG>`) und
+`IDF_TOOLS_PATH` (`$RUNNER_TEMP/espressif`, enthaelt die von `install.sh
+esp32` installierte Toolchain sowie `esp-clang`) werden ueber
+`actions/cache` wiederverwendet. Beide Cache-Schluessel sind exakt an den
+gepinnten `ESP_IDF_COMMIT` gebunden, der Tools-Schluessel zusaetzlich an die
+konkrete `setup-python`-Version sowie `runner.os`/`runner.arch`; es werden
+keine `restore-keys` verwendet, sodass ausschliesslich ein exakter
+Schluesseltreffer als Cache-Hit zaehlt.
+
+Bei einem gueltigen Checkout-Cache-Treffer entfaellt Clone/Fetch/Checkout/
+Submodule vollstaendig; bei einem gueltigen Tools-Cache-Treffer entfallen
+`install.sh esp32` und die erneute `esp-clang`-Installation vollstaendig.
+Die bestehende Tag-/Commit-/Sauberkeitspruefung des ESP-IDF-Checkouts sowie
+alle nachgelagerten Provenienz- und Versionspruefungen
+(`verify_expected_esp_environment` in `run_pre_ready_gates.sh`, die
+esp-clang-Pfad-/Versions-/`tools.json`-/`pyclang`-Pruefung in
+`run_esp_idf_static_analysis.py`) laufen davon unabhaengig bei jedem Lauf
+unveraendert; ein Cache-Treffer ersetzt diese Pruefungen nicht, sondern
+liefert nur den Baum, gegen den sie laufen. Ein Cache-Wechsel des gepinnten
+`ESP_IDF_COMMIT` (z. B. bei einem kuenftigen ESP-IDF-Upgrade) erzeugt
+automatisch neue Cache-Schluessel und damit einen sauberen Vollinstall-Pfad.
+
+Die reale Reichweite dieses Caching ist durch den fehlenden `push`-Trigger
+begrenzt: Ein Merge nach `main` fuehrt diesen Workflow nicht aus und erzeugt
+damit keinen Cache-Eintrag auf `main`. GitHub-Actions-Caches sind zudem
+nicht global, sondern nur fuer den erzeugenden Branch sowie fuer Pull
+Requests mit Zugriff auf dessen Basis-/Default-Branch-Cache sichtbar. Ohne
+main-seitigen Lauf existiert kein Default-Branch-Cache, von dem neue
+PR-Branches profitieren koennten; der Nutzen ist auf Folgelaeufe innerhalb
+desselben PR-Branches (Reruns, spaetere `synchronize`-Pushes bei
+unveraendertem `ESP_IDF_COMMIT`) beschraenkt. Eine zusaetzliche
+Cache-Warming- oder Trigger-Infrastruktur, um dies zu aendern, ist nicht
+Teil dieses Caching-Mechanismus.
+
 ## Buildprofile
 
 | Profil | Werkzeug | Zweck |
@@ -295,13 +331,18 @@ Fehlgeschlagene Builds sichern den verfuegbaren Buildlog.
 
 Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 
-1. Checkout und Python;
-2. PlatformIO, clang-format und clang-tidy installieren;
+1. Checkout und Python (mit `pip`-Cache);
+2. PlatformIO installieren; clang-format/clang-tidy 18 sind auf
+   `ubuntu-24.04` bereits vorinstalliert und werden nur verlinkt;
 3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
    Format, Build, Tests oder clang-tidy fail-fast ab;
-4. ESP-IDF `v6.1` am exakten Commit installieren und verifizieren;
-5. esp-clang installieren, die ESP-IDF-Umgebung aktivieren und den gemeinsamen
-   Runner in der `esp`-Phase ausfuehren;
+4. ESP-IDF `v6.1` am exakten Commit installieren und verifizieren; Checkout
+   und `IDF_TOOLS_PATH` werden dabei ueber `actions/cache` wiederverwendet
+   (siehe „ESP-IDF-Checkout- und Tools-Caching" oben), die Provenienz-
+   verifikation laeuft unveraendert bei jedem Lauf;
+5. esp-clang installieren (uebersprungen bei gueltigem Tools-Cache-Treffer),
+   die ESP-IDF-Umgebung aktivieren und den gemeinsamen Runner in der
+   `esp`-Phase ausfuehren;
 6. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
    ausfuehren;
 7. Berichte und Buildartefakte sichern.
