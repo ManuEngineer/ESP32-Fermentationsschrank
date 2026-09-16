@@ -80,9 +80,13 @@ record each result separately:
 
 1. Join the WPA2 SoftAP and verify the board's direct address, normally
    `192.168.4.1`.
-2. Open `http://192.168.4.1/` in the browser. For the official and direct
-   candidates, probe the documented Protocomm HTTP endpoints; for the native
-   candidate, record the page response.
+2. For `network_provisioning` 1.2.4, use the POST endpoints
+   `/prov-session`, `/prov-config`, `/proto-ver`, `/prov-scan` and
+   `/prov-ctrl`; for direct Protocomm, use POST `/r1-session`,
+   `/r1-version`, `/r1-set`, `/r1-test` and `/r1-commit`. For native HTTP,
+   use GET `/` and record the page response. The official endpoints follow
+   the pinned component's `esp_prov` protocol; the direct handlers are
+   boundary-only and do not apply credentials.
 3. Check whether a captive offer or DNS interception exists, then run scan,
    form, false-password, abort/timeout, test-before-commit and commit-boundary
    cases without entering production credentials.
