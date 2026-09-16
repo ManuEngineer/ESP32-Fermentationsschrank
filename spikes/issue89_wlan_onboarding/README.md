@@ -32,16 +32,18 @@ record.
 
 ## Reproduce
 
-From the repository root, source the pinned ESP-IDF 6.0.2 environment and run:
+From the repository root, source the pinned ESP-IDF 6.1 environment and run:
 
 ```text
+export IDF_TOOLS_PATH=/var/lib/docker/data/engineering/home/manuel/.espressif
+source /var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/export.sh
 python3 spikes/issue89_wlan_onboarding/host_contract_test.py
 idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning \
-  -B build/issue89_official_network_provisioning build
+  -B build/issue89_official_network_provisioning_idf61 build
 idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter \
-  -B build/issue89_native_http_adapter build
+  -B build/issue89_native_http_adapter_idf61 build
 idf.py -C spikes/issue89_wlan_onboarding/direct_protocomm \
-  -B build/issue89_direct_protocomm build
+  -B build/issue89_direct_protocomm_idf61 build
 ```
 
 The generated build trees and managed components are local ignored artefacts.

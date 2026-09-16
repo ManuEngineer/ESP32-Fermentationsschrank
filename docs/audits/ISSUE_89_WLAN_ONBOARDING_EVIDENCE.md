@@ -1,9 +1,12 @@
 # Issue #89 – Phase-A-Reuse-/Capability-Evidence
 
-Dieser Bericht dokumentiert die autorisierte Phase-A-Umsetzung des
-freigegebenen Plans. Die vergleichbare Phase-B-Client-/Recovery-Evidence ist
-noch nicht ausgefuehrt. Der Bericht ist eine Entscheidungsgrundlage und keine
-Produktivauswahl.
+Dieser Bericht dokumentiert die historische ESP-IDF-6.0.2-Baseline und die
+separat aufgezeichnete autorisierte Phase-A-Revalidierung auf ESP-IDF 6.1.
+Die 6.0.2-Evidence wird nicht nachtraeglich umetikettiert. Die vergleichbare
+Phase-B-Client-/Recovery-Evidence ist noch nicht ausgefuehrt. Der Bericht ist
+eine Entscheidungsgrundlage und keine Produktivauswahl.
+
+## Historische 6.0.2-Baseline
 
 ```text
 ISSUE=89
@@ -19,6 +22,119 @@ BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=OWNER_GATE_PENDING
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
+
+## Aktuelle Phase-A-Revalidierung auf ESP-IDF 6.1
+
+Die folgenden Ergebnisse wurden auf dem Quellstand
+`0b0d125379a5fef79ca2760a101603c831dc7e7e` ausgefuehrt. Der nachfolgende
+Dokumentationscommit aendert keine Probequelle; die Source-SHA bleibt daher
+die Provenienz der ausfuehrbaren Evidence.
+
+```text
+ISSUE=89
+PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
+BASE=main@7029df3997bb92e60379eb218f1894f86c5f7d55
+EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
+CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
+ESP_IDF_CHECKOUT=clean
+ESP_IDF_PYTHON=3.13.5
+ESPTOOL=5.4.0
+XTENSA_ESP_ELF_GCC=15.2.0
+ESP_CLANG=21.1.3
+TARGET=esp32
+FLASH=4MB
+PSRAM=NONE
+SCOPE=PHASE_A_CAPABILITY_EVIDENCE_ONLY
+PHASE_A_6_1_REVALIDATION=PASS
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
+PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
+ACTUATOR_RELEASE=NO
+```
+
+### A1 – kandidatenneutrale Integritaet
+
+| Nachweis | Ergebnis | Befehl / Befund |
+|---|---|---|
+| Host-Oracle | PASS | `python3 spikes/issue89_wlan_onboarding/host_contract_test.py`; 5/5 Tests fuer Bytegrenzen, Commitgrenze, Redaction und QR-Escaping |
+| Secret-Scan | PASS | `python3 scripts/check_secrets.py`; 482 getrackte Dateien, keine Geheimnisse oder privaten Pfade |
+| Repository-Integritaet | PASS | `git diff --check origin/main...HEAD`; keine Whitespace-Fehler; nur Roadmap, Plan/Evidence und isolierte Spike-Artefakte im PR-Scope |
+| Produktionsgraph | PASS | keine `network_provisioning`-, `protocomm`-, `esp_http_server`- oder `nvs_flash_erase`-Referenz in Root-/Produktionsquellen |
+| Probegrenzen | PASS | keine produktive Credential-Domaene, keine Connectivity-Persistenz und keine Aktorfreigabe; `WIFI_STORAGE_RAM` nur im direkten Protocomm-Probe |
+| Toolchain-Provenienz | PASS | sauberer Checkout `ESP-IDF v6.1` am exakten Commit; `idf.py --version`, `esptool v5.4.0`, GCC 15.2.0 und esp-clang 21.1.3 verifiziert |
+
+### A2 bis A4 – aktuelle 6.1-Build-Evidence
+
+Alle drei Builds liefen mit eigenem ignoriertem Buildverzeichnis und dem
+kanonischen ESP-IDF-6.1-Checkout. Die Prozentwerte und Speicherwerte stammen
+aus `idf.py size`; die historische Groesse ist die im alten Bericht
+aufgezeichnete `.bin`-Groesse. Es wird keine neue feste Budgetgrenze aus dem
+Delta abgeleitet.
+
+| Kandidat / Ergebnis | Befehl | App `.bin` / Delta zu 6.0.2 | Partition frei | IRAM frei | DRAM frei | App-Binary-SHA256 |
+|---|---|---:|---:|---:|---:|---|
+| offizieller `network_provisioning`-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning -B build/issue89_official_network_provisioning_idf61 build` | 909424 B / +14512 B (historisch 894912 B) | 139152 B / 13 % | 43585 B | 143297 B | `bb5e0fb66dc970436c4050b30d3efd318375dffa6bdea3fbd9cfc1fd7768108a` |
+| direkter Protocomm-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/direct_protocomm -B build/issue89_direct_protocomm_idf61 build` | 838128 B / +12416 B (historisch 825712 B) | 210448 B / 20 % | 43585 B | 143369 B | `253d4ec2d9da56b4925c70cd9fdb268d83b46329cd82f68acac5a923e0ea600a` |
+| nativer HTTP-Probe: PASS | `idf.py -C spikes/issue89_wlan_onboarding/native_http_adapter -B build/issue89_native_http_adapter_idf61 build` | 805568 B / +12668 B (historisch 792900 B) | 243008 B / 23 % | 45701 B | 143609 B | `ffb44e3e07cd0a7f88d80ecf5800cc0bda249b2f5db2868b909903cf7cbbcd24` |
+
+Die gemeinsame 6.1-Provenienz der drei Buildartefakte ist:
+
+```text
+BOOTLOADER_BIN_SHA256=64a25a4d64fc7d1116cd7cb3c385cf37d66658d12c42c103219eb619c997dafc
+PARTITION_TABLE_BIN_SHA256=7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820
+PARTITION_MODE=PARTITION_TABLE_SINGLE_APP
+APP_PARTITION=0x100000
+```
+
+Der offizielle Component-Manager-Lauf wurde mit
+`idf.py -C spikes/issue89_wlan_onboarding/official_network_provisioning
+-B build/issue89_official_network_provisioning_idf61 update-dependencies`
+erneut aufgeloest. Die daraus bestaetigte Lockfile-Aufloesung ist:
+
+| Dependency | Version | Component-Hash / Herkunft |
+|---|---|---|
+| `idf` | 6.1.0 | exakter lokaler ESP-IDF-Checkout `fff9895c82d744c7237be8847347bdd1b07c6643` |
+| `espressif/network_provisioning` | 1.2.4 | `72d27784e3daf807418a34fb00be136ec50c6db49d989ce981d22e031fc0e7f8` |
+| `espressif/cjson` | 1.7.19~2 | `e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469` |
+
+`dependencies.lock` wurde durch den 6.1-Resolve unveraendert bestaetigt;
+`manifest_hash=068c79db5865d491673373872e8a40ddcb0bcc8ac0d5b95b8750828d2a96dc64`.
+Der direkte Probe verwendet die eingebauten 6.1-Komponenten
+`protocomm`, `protobuf-c`, `esp_http_server`, `esp_wifi`, `esp_netif` und
+`nvs_flash`; der native Probe verwendet `esp_http_server`, `esp_wifi`,
+`esp_netif`, `esp_event` und `nvs_flash`. Kein dieser Pfade wurde in den
+Produktionsgraphen uebernommen.
+
+### A5 – aktueller Kandidatenstatus
+
+Die fachliche Vergleichslogik, vier Kandidaten und Owner-Gates bleiben
+unveraendert. Nur die unter 6.1 ausgefuehrten Capability-Eigenschaften sind
+aktuell als `PASS` bezeichnet:
+
+| Kandidat | Aktueller 6.1-Status | Weiterhin offene R1-Frage |
+|---|---|---|
+| `espressif/network_provisioning` 1.2.4 | `PASS` fuer Component-Aufloesung und actor-free 6.1-Build | kein Browser-Portalnachweis; native Set/Apply-Persistenz und Fehler-/Recovery-Semantik bleiben offen |
+| direkter `protocomm`-/ESP-IDF-Pfad | `PASS` fuer 6.1-Build sowie Security-/Versions-/Set-/Test-/Commit-Handlergrenzen | kein Browser-, DNS-, Scan-, Reconnect- oder Recovery-Nachweis; Handler bleiben Boundary-only |
+| kleiner nativer ESP-IDF-Adapter | `PASS` fuer 6.1-SoftAP-/direkte-IP-HTTP-Capability | DNS/Captive Portal, Scan, Reconnect, Persistenz, Recovery und Commit sind nicht implementiert |
+| WiFiManager v2.0.17 | `HISTORICAL_CANDIDATE_SCREEN`, kein neuer 6.1-Native-Build | Arduino-/IDF-Pfad, Lizenz-, Storage- und Lifecycle-Fragen bleiben vor Owner-Gate offen |
+
+Die historischen Drittanbieter-Screens fuer `thorrak/esp_wifi_config`,
+`tuanpmt/esp_wifi_manager` und `nordesems/esp-captive-portal` bleiben ebenfalls
+historische Screen-Evidence. Es gibt keine Auswahl, kein Shortlisting und
+keine produktive Connectivity-Persistenz.
+
+### Phase-A-Grenzen und naechster Gate
+
+Die neuen 6.1-Build-PASS ersetzen weder Client- noch Browser-, QR-, Hardware-
+oder Recovery-Evidence. Flash, UART, Reset, Power-Cut, QR-Kamera, Android,
+iOS/iPadOS und Windows sind in dieser Umsetzung `NOT_RUN`; die Hardware-
+voraussetzungen fuer Phase B wurden nicht behauptet. `PHASE_B_COMPARABLE_CLIENT_EVIDENCE`
+bleibt `PENDING`. Vor Phase B muessen ein isoliertes oder gesichertes Test-NVS,
+ein dokumentierter Flash-/Partitionaufbau, UART-/Resetzugang und die
+vergleichbare Kandidatenmatrix vorbereitet werden. Die naechste Entscheidung
+bleibt das Owner-Gate fuer Browser-only, Kandidat, Persistenzbesitzer und
+Recovery-/#57-Anpassungen.
 
 ## Ausfuehrungsgrenze
 
