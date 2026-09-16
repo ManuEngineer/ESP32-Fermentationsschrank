@@ -25,19 +25,22 @@ ACTUATOR_RELEASE=NO
 
 ## Aktuelle Phase-A-Revalidierung auf ESP-IDF 6.1
 
-Die offiziellen und direkten 6.1-Ergebnisse wurden auf dem Quellstand
-`0b0d125379a5fef79ca2760a101603c831dc7e7e` ausgefuehrt. Der native
-HTTP-Probe wurde nach dem Fail-Closed-/RAM-Storage-Fix auf dem Quellstand
-`aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775` neu gebaut. Die nachfolgenden
-Dokumentationscommits aendern keine Probequelle; beide Source-SHAs bleiben
-die Provenienz der jeweils ausfuehrbaren Evidence.
+Die offiziellen und direkten 6.1-Ergebnisse der Phase-A-Revalidierung wurden
+auf dem Quellstand `0b0d125379a5fef79ca2760a101603c831dc7e7e` ausgefuehrt. Der
+native HTTP-Probe wurde nach dem Fail-Closed-/RAM-Storage-Fix auf dem
+Quellstand `aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775` neu gebaut. Die aktuelle
+Phase-B-Firmware mit lokalem Credential-Testweg und Start-Ressourcenlogging
+stammt aus `7d68c66589ffffe2ca943eb3583189207b8fdd87`; der lokale Credential-
+Wert wurde nicht aufgezeichnet und die ungetrackte Eingabedatei nach dem Build
+entfernt. Historische Source-SHAs bleiben die Provenienz ihrer jeweiligen
+Evidence.
 
 ```text
 ISSUE=89
 PLAN_SHA=6a0a83b3b037c47b89caa87f9d2cb1e65f498c59
 PARENT_APPROVED_PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
-PHASE_B_TEST_RUN_HEAD=70a489b75a19ebb8a2ea231e98245d5811f8987f
+PHASE_B_TEST_RUN_HEAD=7d68c66589ffffe2ca943eb3583189207b8fdd87
 BASE=main@7029df3997bb92e60379eb218f1894f86c5f7d55
 EVIDENCE_SOURCE_SHA=aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775
 PREVIOUS_PHASE_A_EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
@@ -60,7 +63,6 @@ POWER_CUT_TESTS=WAIVED_BY_OWNER
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
 PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
-PHASE_B_EXECUTION=NOT_RUN
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
@@ -205,13 +207,14 @@ offen.
 ## Aktueller Phase-B-Testaufbau nach Ownerentscheid
 
 Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. Die
-drei autorisierten Flash-/Boot-/SoftAP-Laeufe wurden ausgefuehrt; die
-vergleichbare Client-, Browser- und Recovery-Matrix bleibt offen. `Reset !=
-Power-Cut` bleibt die technische Begriffsgrenze; Power-Cut-Tests sind kein
-verpflichtendes Acceptance-Criterion.
+drei autorisierten Flash-/Boot-/SoftAP-Laeufe mit dem aktuellen
+Phase-B-Testzugang wurden ausgefuehrt; die vergleichbare Client-, Browser- und
+Recovery-Matrix bleibt offen. `Reset != Power-Cut` bleibt die technische
+Begriffsgrenze; Power-Cut-Tests sind kein verpflichtendes Acceptance-Criterion.
 
 ```text
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
+PHASE_B_TEST_RUN_HEAD=7d68c66589ffffe2ca943eb3583189207b8fdd87
 PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
 BOARD_FAMILY=esp32_32e_quad_mosfet
 BOARD_MODULE=ESP32-WROOM-32E
@@ -223,6 +226,10 @@ PRE_TEST_FLASH_BACKUP_REQUIRED=NO
 UART_RESET_TESTS_ALLOWED=YES
 FLASH_TESTS_ALLOWED=YES
 REAL_CLIENT_TESTS_ALLOWED=YES
+EFUSE_WRITE=NO
+SECURE_BOOT_CHANGE=NO
+FLASH_ENCRYPTION_CHANGE=NO
+ROM_DOWNLOAD_MODE_DISABLE=NO
 POWER_CUT_TESTS_REQUIRED=NO
 POWER_CUT_TESTS=WAIVED_BY_OWNER
 POWER_CUT_PATH=WAIVED_BY_OWNER
@@ -237,7 +244,9 @@ CLIENT_MATRIX=NOT_RUN
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
 PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
-FIRMWARE_SOURCE_SHA=b2f08f4d568c60559e575c824844199012b80c30
+PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
+PHASE_B_SECRET_REDACTION=PASS
+FIRMWARE_SOURCE_SHA=7d68c66589ffffe2ca943eb3583189207b8fdd87
 CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
 NEXT_GATE=INDEPENDENT_PHASE_B_REVIEW_AND_OWNER_CANDIDATE_GATE
 ```
@@ -260,12 +269,27 @@ angelegt und kein nicht freigegebenes Projekt-/Benutzer-NVS verwendet.
 
 | Kandidat | Firmware-/Binary-Provenienz | Flash und Boot | SoftAP-/Transportbefund |
 |---|---|---|---|
-| `espressif/network_provisioning` 1.2.4 | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `909424 B`; Binary-SHA `228af151ac107f9c1a4e8290b95e6e452863f64d08b3ee0a022e06e6d9f1237b` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; `esptool --after hard-reset` ueber RTS `PASS` | Geschuetzter Dienststart `PASS`, SSID `R1SPK-A3E050`, DHCP/AP-IP laut UART `192.168.4.1`; Browser-/Clientzugriff `NOT_RUN` |
-| direkter `protocomm`-/ESP-IDF-Pfad | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `838128 B`; Binary-SHA `ace70b0464aeceb086fc4c9d4d18f4957ed38ed26dd01f0fe5eccc1e311917a3` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; Monitor-Reset ueber DTR/RTS `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1PC-F8141F` beziehungsweise nach Reset neu erzeugt, DHCP/AP-IP `192.168.4.1`; Endpoint-Bind `PASS`; Browser-/Clientzugriff `NOT_RUN` |
-| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | Source `b2f08f4d568c60559e575c824844199012b80c30`; App `815488 B`; Binary-SHA `eddc3164770949cfd697e9b9eacc29cc4fd83590e467def390b2242a4898c4b5` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; Monitor-Reset ueber DTR/RTS `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1NAT-39FB43` beziehungsweise nach Reset neu erzeugt, DHCP/AP-IP `192.168.4.1`; direkte HTTP-Seite laut UART vorhanden; Browser-/Clientzugriff `NOT_RUN` |
+| `espressif/network_provisioning` 1.2.4 | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `909712 B`; Binary-SHA `adfcfe663e56f0d4cdc48ea94709aeb2353103f693a3c9ec682179133cd97374` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter Dienststart `PASS`, SSID `R1SPK-F5020F`, DHCP/AP-IP laut UART `192.168.4.1`; Browser-/Clientzugriff `NOT_RUN` |
+| direkter `protocomm`-/ESP-IDF-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `838400 B`; Binary-SHA `044f0a843074eb138a965918364a76e4d20b0c96979eead9e25f730495c99b94` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1PC-C02C0F`, DHCP/AP-IP `192.168.4.1`; Endpoint-Bind `PASS`; Browser-/Clientzugriff `NOT_RUN` |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `815792 B`; Binary-SHA `845b32bf85ec4d06b77db6a0bedc8be63a3d4e389b71f92c65764416f5d8b427` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1NAT-0ABB84`, DHCP/AP-IP `192.168.4.1`; direkte HTTP-Seite laut UART vorhanden; Browser-/Clientzugriff `NOT_RUN` |
 
-Die Schutzkonfigurationen sind in den drei Probequellen WPA2-geschuetzt; die
-Passwoerter wurden nie ausgegeben und die UART-Ausgaben redigieren sie. Eine
+Die zugehoerigen ESP-IDF-6.1-Build- und Laufzeitwerte des geflashten
+Phase-B-Images sind:
+
+| Kandidat | Gesamtbild | App-Partition frei | IRAM frei | DRAM frei | Start: Free Heap | Minimum | groesster Block | Stack-Watermark | ELF-SHA256 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `network_provisioning` 1.2.4 | `909672 B` | `138784 B / 13 %` | `43585 B` | `143297 B` | `212016 B` | `211612 B` | `110592 B` | `1916` | `1201af0909b3b71a62fd5e09c8336f1ddde1c7852ba997bab5f4a0c6c54c199e` |
+| direkter Protocomm-Pfad | `838356 B` | `210096 B / 20 %` | `43585 B` | `143369 B` | `215560 B` | `215436 B` | `110592 B` | `2180` | `fda1517b8551d65659a33e146458f43b202c74b4abee4e9fd030b55765f4075f` |
+| nativer HTTP-Pfad | `815744 B` | `232720 B / 22 %` | `43585 B` | `143393 B` | `214812 B` | `214688 B` | `110592 B` | `2204` | `3f656e0c4dc168ff376d47c41bcc7086ff18a4872b7dd288b1c62f3e9fd633fd` |
+
+Alle drei Images wurden mit ESP-IDF v6.1 gebaut; die App-Binary-SHAs stehen
+oben in der Kandidatentabelle. Die Ressourcenwerte sind Messpunkte direkt nach
+dem Start des jeweiligen Transports, keine Messung unter Clientlast.
+
+Die Schutzkonfigurationen sind in den drei Probequellen WPA2-geschuetzt. Fuer
+den kontrollierten Lauf wurde der Passwortwert ueber die ungetrackte lokale
+Build-Datei gesetzt, ohne ihn in Evidence oder Logs zu uebernehmen; die Datei
+wurde danach entfernt. Die UART-Ausgaben redigieren den Wert. Eine
 echte WLAN-Assoziation konnte ohne Client nicht ausgefuehrt werden. Ein
 expliziter SoftAP-Stop-Lifecycle wurde in keinem Probe implementiert und ist
 deshalb `NOT_RUN`; der DTR/RTS-Reset beendet jeweils die laufende Firmware und
@@ -274,7 +298,7 @@ startet sie mit einem neu erzeugten SoftAP erneut.
 | Phase-B-Nachweis | Status | Aktueller Befund |
 |---|---|---|
 | Flash-Erase, App-/Bootloader-/Partition-Write und Hash-Verifikation | `PASS` | je Kandidat mit ESP-IDF-6.1/esptool 5.4.0 ausgefuehrt |
-| Boot, UART und ESP-IDF-Provenienz | `PASS` | alle drei Logs zeigen ESP-IDF v6.1 und App-Version `b2f08f4` |
+| Boot, UART und ESP-IDF-Provenienz | `PASS` | alle drei Logs zeigen ESP-IDF v6.1 und Firmware-Source `7d68c66589ffffe2ca943eb3583189207b8fdd87` |
 | SoftAP-Start, Schutz und AP-IP-Ankuendigung | `PASS` | geschuetzter SoftAP; DHCP/AP-IP `192.168.4.1`; Secrets redigiert |
 | SoftAP-Stop ohne Reset | `NOT_RUN` | kein Stop-Lifecycle im jeweiligen Probe vorhanden |
 | WLAN-Assoziation und geschuetzter Zugang | `NOT_RUN` | kein verfuegbarer WLAN-Clientpfad |
@@ -285,7 +309,8 @@ startet sie mit einem neu erzeugten SoftAP erneut.
 | Reconnect und Neustart | `NOT_RUN` | Neustart-/Resetnachweis vorhanden, echter Reconnect nicht |
 | DTR/RTS-Reset | `PASS` | alle drei Kandidaten booteten danach erneut; `Reset != Power-Cut` |
 | Credential-/NVS-/Recovery-Cut-Points | `NOT_RUN` | kein Set/Apply/Commit; Vollerase war kontrollierter Testaufbau |
-| Laufzeit-Heap, Stack, Handles, Leaks, Watchdog und Jitter | `NOT_RUN` | Probeaufbau liefert keine belastbare Laufzeitmessung; Buildgroesse ist kein Ersatz |
+| Laufzeit-Heap, Minimum, groesster Block und Stack-Watermark am Transportstart | `PASS` | belastbare Messzeile fuer alle drei geflashten Kandidaten; keine Clientlast |
+| Handles, Leaks, Watchdog unter Clientlast und Jitter | `NOT_RUN` | kein Clientlauf und kein belastbarer Jitter-Messpunkt |
 | Power-Cut-Tests | `WAIVED_BY_OWNER` | nicht verpflichtendes Acceptance-Criterion und kein offener Testpunkt |
 
 Fehlende Capabilities bleiben Kandidatenbefunde: Der direkte Protocomm-Probe
@@ -598,11 +623,19 @@ PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
 PHASE_B_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
+PHASE_B_SECRET_REDACTION=PASS
+PHASE_B_RUNTIME_RESOURCE_EVIDENCE=PASS_AT_TRANSPORT_START
 POWER_CUT_TESTS=WAIVED_BY_OWNER
+EFUSE_WRITE=NO
+SECURE_BOOT_CHANGE=NO
+FLASH_ENCRYPTION_CHANGE=NO
+ROM_DOWNLOAD_MODE_DISABLE=NO
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
-IMPLEMENTATION=PHASE_A_CAPABILITY_EVIDENCE_ONLY
+ACTUATOR_RELEASE=NO
+IMPLEMENTATION=SPIKE_ONLY_EVIDENCE
 ```
 
 Erst danach darf Phase D den kleinsten verbleibenden projektspezifischen

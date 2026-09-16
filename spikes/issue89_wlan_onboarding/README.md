@@ -43,7 +43,9 @@ The default probes generate a fresh protected SoftAP password and only print
 same local-only file in each candidate's `main/` directory:
 
 ```text
-export ISSUE89_TEST_AP_PASSWORD="R1T-<12-hex-characters>"
+export ISSUE89_TEST_AP_PASSWORD
+read -r -s -p 'Enter a new 8-16 character test value: ' ISSUE89_TEST_AP_PASSWORD
+printf '\n'
 for project in \
   official_network_provisioning direct_protocomm native_http_adapter; do
   printf '#define ISSUE89_TEST_AP_PASSWORD "%s"\n' \
