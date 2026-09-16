@@ -10,15 +10,34 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_random.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "network_provisioning/manager.h"
 #include "network_provisioning/scheme_softap.h"
 
+#if defined(__has_include)
+#if __has_include("issue89_test_credentials.local")
+#include "issue89_test_credentials.local"
+#define ISSUE89_LOCAL_TEST_CREDENTIAL 1
+#endif
+#endif
+
 static const char *TAG = "issue89_official";
+
+static void log_runtime_resources(const char *phase)
+{
+    ESP_LOGI(TAG,
+             "runtime[%s]: free_heap=%u min_free_heap=%u largest_free_block=%u stack_watermark=%u",
+             phase, (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+}
 
 static void provisioning_events(void *user_data,
                                 network_prov_cb_event_t event,
@@ -56,13 +75,17 @@ static bool make_volatile_softap_credentials(char *name,
     esp_fill_random(random_bytes, sizeof(random_bytes));
     int name_written = snprintf(name, name_size, "R1SPK-%02X%02X%02X",
                                 random_bytes[3], random_bytes[4], random_bytes[5]);
+#ifdef ISSUE89_LOCAL_TEST_CREDENTIAL
+    int key_written = snprintf(key, key_size, "%s", ISSUE89_TEST_AP_PASSWORD);
+#else
     int key_written = snprintf(key, key_size, "%02X%02X%02X%02X%02X%02X%02X%02X",
                                random_bytes[0], random_bytes[1], random_bytes[2],
                                random_bytes[3], random_bytes[4], random_bytes[5],
                                (unsigned)esp_random() & 0xFFU,
                                ((unsigned)esp_random() >> 8U) & 0xFFU);
+#endif
     return name_written > 0 && (size_t)name_written < name_size && key_written > 0 &&
-           (size_t)key_written < key_size;
+           (size_t)key_written < key_size && key_written >= 8;
 }
 
 void app_main(void)
@@ -114,6 +137,7 @@ void app_main(void)
                                                          NULL,
                                                          service_name,
                                                          service_key));
+    log_runtime_resources("official-start");
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));

@@ -12,14 +12,33 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_random.h"
+#include "esp_system.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
+#if defined(__has_include)
+#if __has_include("issue89_test_credentials.local")
+#include "issue89_test_credentials.local"
+#define ISSUE89_LOCAL_TEST_CREDENTIAL 1
+#endif
+#endif
+
 static const char *TAG = "issue89_native";
+
+static void log_runtime_resources(const char *phase)
+{
+    ESP_LOGI(TAG,
+             "runtime[%s]: free_heap=%u min_free_heap=%u largest_free_block=%u stack_watermark=%u",
+             phase, (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+}
 
 static void fail_closed_nvs_init(void)
 {
@@ -37,17 +56,24 @@ static bool make_volatile_softap_config(wifi_config_t *config)
     int ssid_written = snprintf((char *)config->ap.ssid, sizeof(config->ap.ssid),
                                 "R1NAT-%02X%02X%02X",
                                 random_bytes[3], random_bytes[4], random_bytes[5]);
+#ifdef ISSUE89_LOCAL_TEST_CREDENTIAL
+    int password_written = snprintf((char *)config->ap.password,
+                                     sizeof(config->ap.password), "%s",
+                                     ISSUE89_TEST_AP_PASSWORD);
+#else
     int password_written = snprintf((char *)config->ap.password, sizeof(config->ap.password),
                                      "%02X%02X%02X%02X%02X%02X%02X%02X",
                                      random_bytes[0], random_bytes[1], random_bytes[2],
                                      random_bytes[3], random_bytes[4], random_bytes[5],
                                      (unsigned)esp_random() & 0xFFU,
                                      ((unsigned)esp_random() >> 8U) & 0xFFU);
+#endif
     config->ap.authmode = WIFI_AUTH_WPA2_PSK;
     config->ap.max_connection = 2;
     config->ap.pmf_cfg.required = true;
     return ssid_written > 0 && (size_t)ssid_written < sizeof(config->ap.ssid) &&
-           password_written > 0 && (size_t)password_written < sizeof(config->ap.password);
+           password_written > 0 && (size_t)password_written < sizeof(config->ap.password) &&
+           password_written >= 8;
 }
 
 static esp_err_t setup_page(httpd_req_t *request)
@@ -105,6 +131,7 @@ void app_main(void)
     (void)start_http_server();
     ESP_LOGI(TAG, "direct-IP HTTP page is available at the SoftAP address");
     ESP_LOGI(TAG, "DNS/captive portal, scan, reconnect, and credential commit remain unimplemented in this pre-owner probe");
+    log_runtime_resources("native-start");
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));

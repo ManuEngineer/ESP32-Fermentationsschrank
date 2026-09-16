@@ -21,8 +21,11 @@ The three ESP-IDF projects are build-only/actor-free probes:
   to expose a minimal direct-IP page. It
   initializes NVS fail-closed without automatic erase, selects
   `WIFI_STORAGE_RAM` before applying the SoftAP configuration, and keeps the
-  generated credentials volatile and redacted. This is an isolated capability
-  probe, not permission to build the production adapter or DNS/portal contract.
+  generated credentials volatile and redacted. For a controlled client run,
+  an optional untracked `main/issue89_test_credentials.local` file can provide
+  one ephemeral WPA2 password; it is never logged or committed. This is an
+  isolated capability probe, not permission to build the production adapter or
+  DNS/portal contract.
 - `direct_protocomm/` uses the public ESP-IDF `protocomm` and HTTPD transport
   APIs without `network_provisioning`. Its Set/Test/Commit endpoint names are
   static handler-boundary probes only: request data is not interpreted,
@@ -32,6 +35,65 @@ The three ESP-IDF projects are build-only/actor-free probes:
 for field validation, commit-before/after behavior, redaction, and the
 synthetic Wi-Fi QR payload. It never writes credentials or a project storage
 record.
+
+## Controlled client credential
+
+The default probes generate a fresh protected SoftAP password and only print
+`key=<redacted>`. For one authorized Issue-89 run, the operator may create the
+same local-only file in each candidate's `main/` directory:
+
+```text
+export ISSUE89_TEST_AP_PASSWORD="R1T-<12-hex-characters>"
+for project in \
+  official_network_provisioning direct_protocomm native_http_adapter; do
+  printf '#define ISSUE89_TEST_AP_PASSWORD "%s"\n' \
+    "$ISSUE89_TEST_AP_PASSWORD" \
+    > "spikes/issue89_wlan_onboarding/$project/main/issue89_test_credentials.local"
+done
+```
+
+Use a new value for each controlled run and pass it to the private test
+operator or client out of band. The value must be 8 to 16 characters so the
+probes remain WPA2-protected. Do not echo it into UART captures, shell
+transcripts, Evidence, PR text, or other durable logs. Remove all three local
+files after the run:
+
+```text
+rm -f spikes/issue89_wlan_onboarding/official_network_provisioning/main/issue89_test_credentials.local \
+  spikes/issue89_wlan_onboarding/direct_protocomm/main/issue89_test_credentials.local \
+  spikes/issue89_wlan_onboarding/native_http_adapter/main/issue89_test_credentials.local
+unset ISSUE89_TEST_AP_PASSWORD
+```
+
+The local file only selects the password for the isolated firmware build; it
+does not add a credential domain, persistence path, recovery behavior, or
+production dependency. A missing file restores the random-password default.
+
+## Manual client sequence
+
+After flashing one candidate to the authorized disposable board, use the SSID
+printed by the probe and the private `ISSUE89_TEST_AP_PASSWORD` value. Keep the
+UART capture redacted. For each available platform, execute this sequence and
+record each result separately:
+
+1. Join the WPA2 SoftAP and verify the board's direct address, normally
+   `192.168.4.1`.
+2. Open `http://192.168.4.1/` in the browser. For the official and direct
+   candidates, probe the documented Protocomm HTTP endpoints; for the native
+   candidate, record the page response.
+3. Check whether a captive offer or DNS interception exists, then run scan,
+   form, false-password, abort/timeout, test-before-commit and commit-boundary
+   cases without entering production credentials.
+4. Record disconnect/reconnect, browser reload, firmware restart, and DTR/RTS
+   reset behavior. Reset is not a power-cut test; power-cut is waived by the
+   Owner.
+5. Record redaction, recovery, free/minimum/free-block heap, relevant stack
+   watermarks, handles/leaks, watchdog/errors and a jitter measurement only
+   when a real measurement point exists.
+
+Repeat the complete sequence for `network_provisioning` 1.2.4, direct
+Protocomm and native HTTP before any candidate-selection decision. WiFiManager
+remains `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` and is not part of this client run.
 
 ## Reproduce
 
