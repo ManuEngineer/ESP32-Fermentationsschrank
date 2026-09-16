@@ -3,7 +3,7 @@
 Dieser Bericht dokumentiert die historische ESP-IDF-6.0.2-Baseline und die
 separat aufgezeichnete autorisierte Phase-A-Revalidierung auf ESP-IDF 6.1.
 Die 6.0.2-Evidence wird nicht nachtraeglich umetikettiert. Die vergleichbare
-Phase-B-Client-/Recovery-Evidence ist noch nicht ausgefuehrt. Der Bericht ist
+Phase-B-Client-/Recovery-Evidence ist teilweise ausgefuehrt. Der Bericht ist
 eine Entscheidungsgrundlage und keine Produktivauswahl.
 
 ## Historische 6.0.2-Baseline
@@ -61,7 +61,10 @@ FLASH_OVERWRITE_ALLOWED=YES
 NVS_ERASE_ALLOWED_FOR_TEST=YES
 POWER_CUT_TESTS=WAIVED_BY_OWNER
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=NOT_RUN
+PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+ANDROID_CLIENT_EVIDENCE=PASS
+IOS_CLIENT_EVIDENCE=NOT_RUN
+WINDOWS_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
@@ -192,8 +195,9 @@ Produktionspfad. WiFiManager bleibt fuer den nativen ESP-IDF-6.1-Spike
 
 Die neuen 6.1-Build-PASS und die drei realen Flash-/Boot-/DTR-/RTS-Reset-
 Nachweise ersetzen weder Client- noch Browser-, QR- oder Recovery-Evidence.
-QR-Kamera, Android, iOS/iPadOS und Windows sind in dieser Umsetzung `NOT_RUN`;
-Power-Cut ist fuer Phase B durch den Owner als `WAIVED_BY_OWNER` festgelegt.
+QR-Kamera, iOS/iPadOS und Windows bleiben `NOT_RUN`; Android und der Linux-
+Host wurden im aktuellen Owner-Lauf real verwendet. Power-Cut ist fuer Phase B
+durch den Owner als `WAIVED_BY_OWNER` festgelegt.
 Der vorhandene
 ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten Issue-#89-Spike als
 entbehrlicher Testtraeger freigegeben. Ein zusaetzliches Test-NVS, eine
@@ -207,10 +211,12 @@ offen.
 ## Aktueller Phase-B-Testaufbau nach Ownerentscheid
 
 Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. Die
-drei autorisierten Flash-/Boot-/SoftAP-Laeufe mit dem aktuellen
-Phase-B-Testzugang wurden ausgefuehrt; die vergleichbare Client-, Browser- und
-Recovery-Matrix bleibt offen. `Reset != Power-Cut` bleibt die technische
-Begriffsgrenze; Power-Cut-Tests sind kein verpflichtendes Acceptance-Criterion.
+drei autorisierten Flash-/Boot-/SoftAP-Laeufe und der anschliessende
+Owner-interaktive Lauf mit einem Linux-Host und Android wurden ausgefuehrt.
+Die vergleichbare Matrix bleibt wegen nicht ausgefuehrtem iOS/iPadOS- und
+Windows-Lauf sowie wegen kandidatspezifischer Capability-Gaps offen.
+`Reset != Power-Cut` bleibt die technische Begriffsgrenze; Power-Cut-Tests sind
+kein verpflichtendes Acceptance-Criterion.
 
 ```text
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
@@ -240,9 +246,12 @@ RESET_IS_POWER_CUT=NO
 PROJECT_USER_NVS_TOUCH=NOT_RUN
 FIRST_FLASH=PASS
 FLASH_ERASE_AND_WRITE=PASS
-CLIENT_MATRIX=NOT_RUN
+CLIENT_MATRIX=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=NOT_RUN
+PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+ANDROID_CLIENT_EVIDENCE=PASS
+IOS_CLIENT_EVIDENCE=NOT_RUN
+WINDOWS_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
 PHASE_B_SECRET_REDACTION=PASS
@@ -254,10 +263,11 @@ NEXT_GATE=INDEPENDENT_PHASE_B_REVIEW_AND_OWNER_CANDIDATE_GATE
 Die kontrollierte Freigabe gilt ausschliesslich fuer diesen ausdruecklich
 freigegebenen Development-Testtraeger. Automatisches oder unbeabsichtigtes
 Loeschen bleibt in Produktcode, Bibliotheks- und Recoveryvertraegen
-unzulaessig. Android, iOS/iPadOS, Windows, Browser/Captive Portal, direkte IP,
-Credential-Test/Commit, Reconnect und Recovery bleiben nach Plan ausstehende
-Phase-B-Nachweise. UART-/DTR-/RTS-Reset wurde fuer alle drei geflashten
-Kandidaten ausgefuehrt; ein Reset ist kein Power-Cut.
+unzulaessig. Linux-Host und Android wurden real getestet; iOS/iPadOS und
+Windows wurden in dieser Session nicht ausgefuehrt. Kandidatengaps bei
+Captive/DNS, Scan/Form, Test/Commit und dem offiziellen Spezialclient bleiben
+offen. UART-/DTR-/RTS-Reset wurde fuer alle drei geflashten Kandidaten
+ausgefuehrt; ein Reset ist kein Power-Cut.
 
 ### Aktuelle Phase-B-Hardware- und Transport-Evidence
 
@@ -269,28 +279,30 @@ angelegt und kein nicht freigegebenes Projekt-/Benutzer-NVS verwendet.
 
 | Kandidat | Firmware-/Binary-Provenienz | Flash und Boot | SoftAP-/Transportbefund |
 |---|---|---|---|
-| `espressif/network_provisioning` 1.2.4 | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `909712 B`; Binary-SHA `adfcfe663e56f0d4cdc48ea94709aeb2353103f693a3c9ec682179133cd97374` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter Dienststart `PASS`, SSID `R1SPK-F5020F`, DHCP/AP-IP laut UART `192.168.4.1`; Browser-/Clientzugriff `NOT_RUN` |
-| direkter `protocomm`-/ESP-IDF-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `838400 B`; Binary-SHA `044f0a843074eb138a965918364a76e4d20b0c96979eead9e25f730495c99b94` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1PC-C02C0F`, DHCP/AP-IP `192.168.4.1`; Endpoint-Bind `PASS`; Browser-/Clientzugriff `NOT_RUN` |
-| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `815792 B`; Binary-SHA `845b32bf85ec4d06b77db6a0bedc8be63a3d4e389b71f92c65764416f5d8b427` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`, SSID `R1NAT-0ABB84`, DHCP/AP-IP `192.168.4.1`; direkte HTTP-Seite laut UART vorhanden; Browser-/Clientzugriff `NOT_RUN` |
+| `espressif/network_provisioning` 1.2.4 | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `909712 B`; Binary-SHA `3c8a52004d26d0505fc7927ca7d27bb3eab657fbd019b16dc7ca6d6647c07f16` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter Dienststart `PASS`; Test-SSIDs `R1SPK-84221C` und nach Reset `R1SPK-197EC9`; DHCP/AP-IP `192.168.4.1`; Linux/Android real verbunden |
+| direkter `protocomm`-/ESP-IDF-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `838400 B`; Binary-SHA `30af8e93b5e5c7ef85b2acad0eb58a683d671078adfbb98f9e16d2d8f4449544` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`; Test-SSIDs `R1PC-B77A7F` und nach Reset `R1PC-6FA9FC`; Endpoint-Bind `PASS`; DHCP/AP-IP `192.168.4.1`; Linux/Android real verbunden |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | Source `7d68c66589ffffe2ca943eb3583189207b8fdd87`; App `815792 B`; Binary-SHA `3ed75740e05ab08b9efa4ad404bdc71b8150d61ecec602857f2e0246fbc7605a` | Vollerase und Flash `PASS`; ESP-IDF-6.1-Boot/UART `PASS`; DTR/RTS-Monitor-Reset `PASS` | Geschuetzter SoftAP-Start `PASS`; Test-SSIDs `R1NAT-34B205` und nach Reset `R1NAT-7D8FE3`; DHCP/AP-IP `192.168.4.1`; direkte HTTP-Seite und Linux/Android real verbunden |
 
 Die zugehoerigen ESP-IDF-6.1-Build- und Laufzeitwerte des geflashten
 Phase-B-Images sind:
 
 | Kandidat | Gesamtbild | App-Partition frei | IRAM frei | DRAM frei | Start: Free Heap | Minimum | groesster Block | Stack-Watermark | ELF-SHA256 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `network_provisioning` 1.2.4 | `909672 B` | `138784 B / 13 %` | `43585 B` | `143297 B` | `212016 B` | `211612 B` | `110592 B` | `1916` | `1201af0909b3b71a62fd5e09c8336f1ddde1c7852ba997bab5f4a0c6c54c199e` |
-| direkter Protocomm-Pfad | `838356 B` | `210096 B / 20 %` | `43585 B` | `143369 B` | `215560 B` | `215436 B` | `110592 B` | `2180` | `fda1517b8551d65659a33e146458f43b202c74b4abee4e9fd030b55765f4075f` |
-| nativer HTTP-Pfad | `815744 B` | `232720 B / 22 %` | `43585 B` | `143393 B` | `214812 B` | `214688 B` | `110592 B` | `2204` | `3f656e0c4dc168ff376d47c41bcc7086ff18a4872b7dd288b1c62f3e9fd633fd` |
+| `network_provisioning` 1.2.4 | `909600 B` (`.bin` `909712 B`) | `138864 B / 13 %` | `43585 B` | `143297 B` | `212024 B` / `211892 B` | `211620` / `211340` | `110592` / `110592` | `1916` / `1916` | `f18d64685522e0d522d08389542ccae40dfaf19e7a32fdab06cb537caf097817` |
+| direkter Protocomm-Pfad | `838284 B` (`.bin` `838400 B`) | `210176 B / 20 %` | `43585 B` | `143369 B` | `215568 B` / `215568 B` | `215444` / `215444` | `110592` / `110592` | `2308` / `2308` | `eb2c6090654ee8fe52067ed3582518dccb0b7e8a5dd79140fb27b0cf4bb60346` |
+| nativer HTTP-Pfad | `815672 B` (`.bin` `815792 B`) | `232784 B / 22 %` | `43585 B` | `143393 B` | `214820 B` / `214820 B` | `214696` / `214696` | `110592` / `110592` | `2332` / `2332` | `ab2c3474d567413867aa4a01bd55f6054dbd19453ada288eafb80178037e69cd` |
 
 Alle drei Images wurden mit ESP-IDF v6.1 gebaut; die App-Binary-SHAs stehen
-oben in der Kandidatentabelle. Die Ressourcenwerte sind Messpunkte direkt nach
-dem Start des jeweiligen Transports, keine Messung unter Clientlast.
+oben in der Kandidatentabelle. Die beiden Ressourcenwerte je Kandidat sind
+`erster Start / Start nach DTR/RTS-Reset`; alle Messpunkte stammen direkt nach
+dem Transportstart und nicht aus einer belastbaren Messung unter Clientlast.
+Clientlast-Werte bleiben `NOT_RUN`.
 
 Die Schutzkonfigurationen sind in den drei Probequellen WPA2-geschuetzt. Fuer
 den kontrollierten Lauf wurde der Passwortwert ueber die ungetrackte lokale
 Build-Datei gesetzt, ohne ihn in Evidence oder Logs zu uebernehmen; die Datei
 wurde danach entfernt. Die UART-Ausgaben redigieren den Wert. Eine
-echte WLAN-Assoziation konnte ohne Client nicht ausgefuehrt werden. Ein
+echte WLAN-Assoziation wurde fuer Linux-Host und Android ausgefuehrt. Ein
 expliziter SoftAP-Stop-Lifecycle wurde in keinem Probe implementiert und ist
 deshalb `NOT_RUN`; der DTR/RTS-Reset beendet jeweils die laufende Firmware und
 startet sie mit einem neu erzeugten SoftAP erneut.
@@ -301,13 +313,16 @@ startet sie mit einem neu erzeugten SoftAP erneut.
 | Boot, UART und ESP-IDF-Provenienz | `PASS` | alle drei Logs zeigen ESP-IDF v6.1 und Firmware-Source `7d68c66589ffffe2ca943eb3583189207b8fdd87` |
 | SoftAP-Start, Schutz und AP-IP-Ankuendigung | `PASS` | geschuetzter SoftAP; DHCP/AP-IP `192.168.4.1`; Secrets redigiert |
 | SoftAP-Stop ohne Reset | `NOT_RUN` | kein Stop-Lifecycle im jeweiligen Probe vorhanden |
-| WLAN-Assoziation und geschuetzter Zugang | `NOT_RUN` | kein verfuegbarer WLAN-Clientpfad |
-| direkte HTTP-/Protocomm-IP-Anfrage | `NOT_RUN` | Host route ueber Ethernet statt AP; kein assoziierter Client |
-| Captive Portal / DNS / Browser | `NOT_RUN` | offizieller Browservertrag unbewiesen; direkte/native Spikes enthalten DNS/Captive nicht |
-| WLAN-Scan und Credential-Eingabe | `NOT_RUN` | direkte/native Spikes haben diese Capability nicht; official kein Clientlauf |
-| falsches Passwort, Abbruch, Timeout, Test-vor-Commit, Commitgrenze | `NOT_RUN` | keine Credentials an einen Kandidaten gesendet |
-| Reconnect und Neustart | `NOT_RUN` | Neustart-/Resetnachweis vorhanden, echter Reconnect nicht |
+| WLAN-Assoziation und geschuetzter Zugang | `PASS` fuer Linux-Host und Android | alle drei Kandidaten wurden mit je einem neuen temporaeren WPA2-Wert getestet; beide Geraete erhielten DHCP |
+| direkte HTTP-/Protocomm-IP-Anfrage | `PASS` mit Kandidatengap | official und direct: Root `404 Nothing matches the given URI`; native: `200` und Setup-Seite |
+| Captive Portal / DNS / Browser | `PARTIAL` | native direkter Browser `PASS`; official `BROWSER_R1_CONTRACT=FAIL_OR_GAP`; direct Root `404`; DNS/Captive in direct/native nicht implementiert |
+| WLAN-Scan und Credential-Eingabe | `GAP/NOT_RUN` | officialer Spezialclient nicht verfuegbar; direct/native haben diese Capability nicht; keine Nachimplementierung |
+| falsches Passwort | `EXPECTED_FAIL` je Kandidat | interaktiver `nmcli`-Versuch mit falschem Wert lief in Timeout; korrekte Verbindung wurde anschliessend wiederhergestellt; explizite Protokoll-Auth-Ablehnung nicht separat beobachtet |
+| Protokoll-Abbruch/Timeout, Test-vor-Commit, Commitgrenze | `NOT_RUN` | kein gueltiger `esp_prov`-/Protocomm-Spezialclient verfuegbar; Browser-POST ist kein Ersatz; keine Credentials an den offiziellen Manager gesendet; direct Handler bleiben Boundary-only |
+| Host-Disconnect/Reconnect | `PASS` | je Kandidat `nmcli`-Down/Up erfolgreich; UART bestaetigt erneuten Join/DHCP |
+| Firmware-Neustart getrennt vom DTR/RTS-Reset | `NOT_RUN` | kein eigener Restart-/Stop-Endpunkt im Probe |
 | DTR/RTS-Reset | `PASS` | alle drei Kandidaten booteten danach erneut; `Reset != Power-Cut` |
+| Recovery nach DTR/RTS-Reset | `PASS` fuer Transport-Recovery | alle drei Kandidaten erzeugten eine neue SSID; Host und Android wurden danach erneut verbunden; kein produktiver Credential-Recoverypfad |
 | Credential-/NVS-/Recovery-Cut-Points | `NOT_RUN` | kein Set/Apply/Commit; Vollerase war kontrollierter Testaufbau |
 | Laufzeit-Heap, Minimum, groesster Block und Stack-Watermark am Transportstart | `PASS` | belastbare Messzeile fuer alle drei geflashten Kandidaten; keine Clientlast |
 | Handles, Leaks, Watchdog unter Clientlast und Jitter | `NOT_RUN` | kein Clientlauf und kein belastbarer Jitter-Messpunkt |
@@ -316,23 +331,45 @@ startet sie mit einem neu erzeugten SoftAP erneut.
 Fehlende Capabilities bleiben Kandidatenbefunde: Der direkte Protocomm-Probe
 bindet nur Boundary-Handler ohne Credentialinterpretation; der native
 HTTP-Probe hat nur direkte HTTP-Seite; beide enthalten keinen DNS-/Captive-,
-Scan-, Reconnect- oder Commitpfad. Der offizielle Manager startet seinen
-Standardtransport, sein Browservertrag und seine reale Set/Apply-/Recovery-
-Semantik bleiben ohne Clientlauf unbewiesen. Es wurde kein Wrapper und kein
-Arduino-Produktionspfad eingefuehrt.
+Scan-, Formular- oder Commitpfad. Der offizielle Manager startet seinen
+Standardtransport, aber ein normaler Browser-GET/POST ist kein gueltiger
+`esp_prov`-Client. Der Rootzugriff war `404`; deshalb ist
+`BROWSER_R1_CONTRACT=FAIL_OR_GAP`. Ein Spezialclient war in der vorhandenen
+Umgebung nicht verfuegbar und wurde nicht nachgebaut. Es wurde kein Wrapper
+und kein Arduino-Produktionspfad eingefuehrt.
 
 ### Aktuelle Clientmatrix und QR-Grenze
 
-Auf dem ausfuehrenden Host stand `wlp1s0` `DOWN`; `192.168.4.1` wurde deshalb
-ueber `enp2s0` geroutet und war nicht erreichbar. `adb`, `idevice_id`,
-`wpa_supplicant`, `iw` und `nmcli` waren nicht verfuegbar. Daher wurden keine
-Android-, iOS/iPadOS- oder Windows-Tests als PASS behauptet:
+Der Linux-Host wurde als realer WLAN-Client ueber `wlp1s0` verwendet; Android
+wurde als zweiter realer Client verwendet. Die nachstehenden SSIDs sind keine
+Passwoerter und dienen nur der Zuordnung der UART-/Hostnachweise. Die
+temporaeren WPA2-Werte wurden weder hier noch in UART-/PR-Evidence
+aufgezeichnet.
 
-| Plattform / Nachweis | WLAN-Beitritt | Captive-Angebot | Browser / direkte IP | Formular / Scan | Fehler / Reconnect |
-|---|---|---|---|---|---|
-| Android | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| Kandidat / Plattform | WLAN / AP-IP | Captive-Angebot | Browser / direkte IP | Formular / Scan | Falsches Passwort | Abbruch / Test / Commit | Reconnect | Neustart / DTR/RTS / Recovery | Runtime unter Last | Redaction |
+|---|---|---|---|---|---|---|---|---|---|---|
+| official / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `404`; `BROWSER_R1_CONTRACT=FAIL_OR_GAP` | `NOT_RUN`; Spezialclient nicht verfuegbar | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; kein gueltiger `esp_prov`-Client | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| official / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | manueller Zugriff `404`; kein Browser-R1-Portal | `NOT_RUN`; kein App-/CLI-Spezialclient | `NOT_RUN` | `NOT_RUN`; keine Credential-Apply-Aktion | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| direct Protocomm / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `404`; Browser-Capability-Gap | `GAP` | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; Handler Boundary-only | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| direct Protocomm / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | manueller Zugriff `404`; Browser-Capability-Gap | `GAP` | `NOT_RUN` | `NOT_RUN`; Handler Boundary-only | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| native HTTP / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `200`; native Setup-Seite | `GAP` | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; kein Commitpfad | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| native HTTP / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `200`; „Direct local setup transport“ | `GAP` | `NOT_RUN` | `NOT_RUN`; kein Commitpfad | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| official / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| direct Protocomm / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| native HTTP / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| official / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| direct Protocomm / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| native HTTP / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+
+Damit gilt explizit:
+
+```text
+ANDROID_CLIENT_EVIDENCE=PASS
+IOS_CLIENT_EVIDENCE=NOT_RUN
+WINDOWS_CLIENT_EVIDENCE=NOT_RUN
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+```
 
 Der physische QR-Scan ueber das spaetere Geraetedisplay bleibt unabhaengig
 `BLOCKED_HARDWARE`; synthetisches QR-Oracle und die drei UART-/SoftAP-
@@ -549,9 +586,9 @@ Semantik entscheidend: `network_prov_mgr_configure_wifi_sta` setzt
 `NETWORK_PROV_WIFI_CRED_SUCCESS` wird erst spaeter nach dem IP-Ereignis
 gemeldet. Ein Fehler nach diesem Vorab-Schreiben ist daher kein PASS fuer
 das harte R1-Ergebnis, dass eine funktionierende Heim-WLAN-Konfiguration bei
-fehlgeschlagenem Wechsel nicht unbemerkt zerstoert wird. Die aufgezeichnete
-Probe hatte keinen Client und keinen Set-/Apply-Vorgang; jede Aussage ueber
-fehlendes Commit gilt nur fuer diesen konkreten Lauf. Der unveraenderte
+fehlgeschlagenem Wechsel nicht unbemerkt zerstoert wird. Der aktuelle
+Clientlauf hatte keinen Set-/Apply-Vorgang; jede Aussage ueber fehlendes
+Commit gilt nur fuer diesen konkreten Lauf. Der unveraenderte
 Manager ist bei einem spaeteren Clienttest gerade nicht read-only/volatil.
 Die Probe behauptet keinen alten Credential-Fallback; ein solcher waere
 insbesondere kein zulaessiger Vertrag nach #57.
@@ -580,20 +617,20 @@ freigegeben.
 
 | Nachweis | Status | Grenze / naechster Nachweis |
 |---|---|---|
-| Portal explizit starten und kontrolliert beenden | PARTIAL | offizieller Manager-/native Probe-/direkter Protocomm-Transportstart belegt; Browser-UI, Stop, Timeout und Recovery fehlen |
+| Portal explizit starten und kontrolliert beenden | PARTIAL | drei Transportstarts und native direkte HTTP-Seite real belegt; offizieller Browser-R1-Vertrag, Stop und produktive Recovery fehlen |
 | individuelle geschuetzte SoftAP-Zugangsdaten | PARTIAL | volatile individuelle Werte werden erzeugt und redigiert; keine reale Clientabnahme |
 | WLAN-QR | PARTIAL | synthetisches Format und Escaping im Host-Oracle PASS; QR-Encoding, Anzeige und Kamera-Decoding NOT_RUN |
-| direkte IP | PARTIAL | native Probe registriert eine direkte HTTP-Seite; realer Zugriff NOT_RUN |
-| direkter Protocomm-Transport und oeffentliche Endpoint-Grenze | PASS fuer Capability | ESP-IDF-6.1-Build und realer Boot binden Security-, Version- und Set/Test/Commit-Handlergrenzen ohne High-Level-Manager; kein Clientlauf |
-| Captive Portal/DNS/OS-Erkennung | NOT_RUN | kein vollständiger Kandidatennachweis; zusätzlicher Portal-Screen bleibt konditional |
-| Scan, Eingabe, Test, Abbruch, Timeout, Reconnect | NOT_RUN | keine Produktlogik vor Owner-Gate |
-| Android | NOT_RUN | kein Client-/Hardwarelauf |
+| direkte IP | PASS mit Kandidatengaps | official/direct Root `404`; native direkte HTTP-Seite `200`; Host und Android real verbunden |
+| direkter Protocomm-Transport und oeffentliche Endpoint-Grenze | PASS fuer Capability | ESP-IDF-6.1-Build, realer Boot und echter WLAN-Transport; Set/Test/Commit bleiben Boundary-only und wurden nicht als Credentialvorgang ausgefuehrt |
+| Captive Portal/DNS/OS-Erkennung | PARTIAL | keine Captive-/DNS-Erkennung beobachtet; native/direct ohne diese Capability; offizieller Browser-R1-Vertrag `FAIL_OR_GAP` |
+| Scan, Eingabe, Test, Abbruch, Timeout, Reconnect | PARTIAL | WLAN-/Host-Reconnect und falsches Passwort real; Scan/Form, Protokoll-Abbruch, Test/Commit und Spezialclient `NOT_RUN/GAP` |
+| Android | PASS mit Kandidatengaps | alle drei SoftAPs beigetreten; direct/native Browserbefund real, official Root `404`; iOS-/Windows-Vergleich fehlt |
 | iOS/iPadOS | NOT_RUN | kein Client-/Hardwarelauf |
 | Windows | NOT_RUN | kein Client-/Hardwarelauf |
 | Redaction in Logs, URLs, Diagnose, Backup | PARTIAL/PASS | Host-Oracle und statische Probeausgabe PASS; reale Bibliotheks-/Backuppfade nicht freigegeben |
 | alte funktionierende Credentials bei Fehlversuch erhalten | PARTIAL | kandidatenneutrale Commitgrenze PASS; offizielle native Vorab-Flashsemantik ist Konfliktbefund, kein Produkt-PASS |
 | Safety-/Regelungsunabhaengigkeit | PASS fuer Scope | keine Produktionskopplung; reale Laufzeitisolation bleibt Integrationsnachweis |
-| Hardware-/UART-/Reset-Recovery | PASS fuer Boot/Reset, NOT_RUN fuer Recovery | drei ESP-IDF-6.1-Flash-/Bootlaeufe und DTR/RTS-Resets PASS; Client-/Recovery-Cut-Points fehlen |
+| Hardware-/UART-/Reset-Recovery | PASS fuer Transport-Recovery | drei ESP-IDF-6.1-Flash-/Bootlaeufe, DTR/RTS-Resets und anschliessende Host-/Android-Reconnects PASS; Credential-/Recovery-Cut-Points fehlen |
 | Heap-/Stack-/Jitter-Messung | NOT_RUN | Buildgroessen sind dokumentiert; Laufzeitbudgets und Regelungs-/Safety-Jitter sind nicht gemessen |
 
 Die Nachweise ohne zusätzliche Verkabelung sind damit auf Host-Oracle,
@@ -621,11 +658,14 @@ Bis zu diesem Gate ist der Status:
 PHASE_A_CAPABILITY_EVIDENCE=PASS
 PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=NOT_RUN
+PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+ANDROID_CLIENT_EVIDENCE=PASS
+IOS_CLIENT_EVIDENCE=NOT_RUN
+WINDOWS_CLIENT_EVIDENCE=NOT_RUN
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
 PHASE_B_SECRET_REDACTION=PASS
-PHASE_B_RUNTIME_RESOURCE_EVIDENCE=PASS_AT_TRANSPORT_START
+PHASE_B_RUNTIME_RESOURCE_EVIDENCE=PASS_AT_TRANSPORT_START; CLIENT_LOAD=NOT_RUN
 POWER_CUT_TESTS=WAIVED_BY_OWNER
 EFUSE_WRITE=NO
 SECURE_BOOT_CHANGE=NO
