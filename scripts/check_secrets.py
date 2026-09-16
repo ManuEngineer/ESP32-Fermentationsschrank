@@ -273,7 +273,7 @@ def run_selftest() -> int:
         manifest_clean_file = tmp_path / "artifact-manifest-clean.json"
         manifest_clean_file.write_text(
             '{"profile": "esp32_bringup", "git_sha": "abc123", '
-            '"idf_version": "v6.0.2", "idf_commit": "7101770dc"}\n'
+            '"idf_version": "v6.1", "idf_commit": "fff9895c8"}\n'
         )
         compile_commands_ci_path_file = tmp_path / "compile_commands.json"
         compile_commands_ci_path_file.write_text(

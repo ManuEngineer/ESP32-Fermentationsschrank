@@ -1,4 +1,4 @@
-# Reproduzierbare Startwerte fuer die ESP-IDF-6.0.2-Buildbasis (Issue #72).
+# Reproduzierbare Startwerte fuer die ESP-IDF-6.1-Buildbasis (Issue #159).
 # Kein Bring-up-/CI-/Release-Overlay: #72 besitzt noch keine reale
 # funktionale Kconfig-Differenz zwischen diesen Stufen (siehe
 # docs/tasks/issue-72-implementation-plan.md, Abschnitt 6).

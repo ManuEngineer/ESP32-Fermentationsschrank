@@ -15,11 +15,11 @@
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
 
-#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
 #include "issue_90_slice7_harness.hpp"
 #endif
 
-#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+#ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
 #endif
 
@@ -35,7 +35,7 @@
 namespace {
 
 constexpr char kTag[] = "app_main";
-#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
 constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
 constexpr char kStateStorePartitionLabel[] = "state_store";
@@ -167,7 +167,7 @@ extern "C" void app_main(void) {
         // cannot initialize and open its persistent store.
         return;
     }
-#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
     ESP_LOGI(kTag,
              "ISSUE90_NVS_PARTITION_INIT=PASS ISSUE90_NVS_STORE_OPEN=PASS");
 #endif
@@ -225,7 +225,7 @@ extern "C" void app_main(void) {
         return;
     }
 
-#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
     fermentation::issue_90_slice7::Harness issue90Harness(application,
                                                           timeSource);
     issue90Harness.start();
@@ -233,7 +233,7 @@ extern "C" void app_main(void) {
 
     logResources();
 
-#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+#ifdef APP_ISSUE_29_BRINGUP_PROBE
     if (!fermentation::issue_29_bringup::run()) {
         ESP_LOGE(kTag,
                  "Issue 29 bring-up probe failed; stopping before the"
@@ -253,7 +253,7 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
 

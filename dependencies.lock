@@ -68,7 +68,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 6.0.2
+    version: 6.1.0
 direct_dependencies:
 - esp-idf-lib/ds3231
 - esp-idf-lib/i2cdev
