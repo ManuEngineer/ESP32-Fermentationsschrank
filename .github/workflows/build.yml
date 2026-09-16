@@ -39,17 +39,18 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Python einrichten
+        id: setup-python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
+          cache: pip
 
       - name: PlatformIO fuer nativen Hostpfad installieren
         run: python3 -m pip install platformio==6.1.19
 
-      - name: Format- und Analysewerkzeuge installieren (clang 18)
+      - name: Format- und Analysewerkzeuge verlinken (clang 18, bereits auf ubuntu-24.04 vorinstalliert)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18 clang-tidy-18
+          set -euo pipefail
           sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
           sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
           clang-format --version
