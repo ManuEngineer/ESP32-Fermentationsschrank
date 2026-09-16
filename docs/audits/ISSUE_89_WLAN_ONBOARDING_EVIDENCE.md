@@ -49,7 +49,9 @@ FLASH=4MB
 PSRAM=NONE
 SCOPE=PHASE_A_CAPABILITY_EVIDENCE_ONLY
 PHASE_A_6_1_REVALIDATION=PASS
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+PHASE_B_TEST_SETUP=BLOCKED_HARDWARE
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=BLOCKED_HARDWARE
+PHASE_B_EXECUTION=NOT_RUN
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
@@ -181,11 +183,104 @@ Die neuen 6.1-Build-PASS ersetzen weder Client- noch Browser-, QR-, Hardware-
 oder Recovery-Evidence. Flash, UART, Reset, Power-Cut, QR-Kamera, Android,
 iOS/iPadOS und Windows sind in dieser Umsetzung `NOT_RUN`; die Hardware-
 voraussetzungen fuer Phase B wurden nicht behauptet. `PHASE_B_COMPARABLE_CLIENT_EVIDENCE`
-bleibt `PENDING`. Vor Phase B muessen ein isoliertes oder gesichertes Test-NVS,
+bleibt bis zur bestaetigten Testumgebung `BLOCKED_HARDWARE`. Vor einer
+Fortsetzung muessen ein isoliertes oder gesichertes Test-NVS,
 ein dokumentierter Flash-/Partitionaufbau, UART-/Resetzugang und die
 vergleichbare Kandidatenmatrix vorbereitet werden. Die naechste Entscheidung
 bleibt das Owner-Gate fuer Browser-only, Kandidat, Persistenzbesitzer und
 Recovery-/#57-Anpassungen.
+
+## Phase B – Testaufbau und Ausfuehrungsstatus
+
+Vor jedem Flash-/Clienttest wurde der folgende Aufbau festgehalten. Der
+Chip-Handshake war nichtschreibend erfolgreich; ein Flash oder Clientlauf
+wurde danach nicht gestartet, weil das Test-NVS und der Power-Cut-Pfad nicht
+als isoliert beziehungsweise Owner-gesichert bestaetigt waren.
+
+```text
+PHASE_B_TEST_SETUP=BLOCKED_HARDWARE
+BOARD_FAMILY=esp32_32e_quad_mosfet
+BOARD_MODULE=ESP32-WROOM-32E
+BOARD_REVISION=TBD_HARDWARE
+CHIP_HANDSHAKE=PASS_NON_WRITING
+CHIP_TYPE=ESP32-D0WD-V3_REVISION_v3.1
+FLASH_ID=PASS_NON_WRITING
+FLASH_SIZE=4MB_CONFIRMED
+UART=FT232R_USB_UART_SESSION_PORT_/dev/ttyUSB0
+UART_ACCESS=PASS_FOR_BOOTLOADER_HANDSHAKE
+RESET_PATH=FT232R_DTR_RTS_DEFAULT_RESET
+RESET_IS_POWER_CUT=NO
+POWER_AT_HANDSHAKE=BOARD_RESPONDED
+POWER_CUT_PATH=NOT_VERIFIED
+TEST_NVS=BLOCKED_NOT_EXPLICITLY_ISOLATED_OR_OWNER_SECURED
+PROJECT_USER_NVS_TOUCH=NOT_RUN
+FIRST_FLASH=NOT_RUN
+CLIENT_MATRIX=NOT_RUN
+FIRMWARE_SOURCE_SHA=b2f08f4d568c60559e575c824844199012b80c30
+CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
+```
+
+Der Handshake wurde mit `esptool v5.4.0 chip-id` und
+`--before default-reset --after no-reset` ausgefuehrt. Er bestaetigt nur,
+dass der ESP32 in diesem Moment ueber den FT232R erreichbar und versorgt war;
+er bestaetigt keinen Power-Cut und keinen sicheren NVS-Zustand. Der vom Tool
+ausgegebene Hardware-MAC wurde nicht in die Evidence uebernommen. Es wurden
+keine Projekt-/Benutzer-Credentials gelesen, ausgegeben, ueberschrieben oder
+geloescht.
+
+### Phase-B-Firmware vor dem Flash-Gate
+
+Alle drei actor-free Kandidaten wurden auf dem oben genannten Source-HEAD mit
+ESP-IDF 6.1 gebaut. Die Artefakte sind vorbereitet, aber nicht geflasht.
+
+| Kandidat | Build | Partition-/NVS-Aufbau | App `.bin` | App-Binary-SHA256 | App-ELF-SHA256 |
+|---|---|---|---:|---|---|
+| `espressif/network_provisioning` 1.2.4 | `PASS` | `nvs 0x9000/0x6000`, `phy_init 0xf000/0x1000`, `factory 0x10000/0x180000`; kein Test-NVS geflasht | 909424 B | `228af151ac107f9c1a4e8290b95e6e452863f64d08b3ee0a022e06e6d9f1237b` | `f231354b4be1ba91098573f6599b374d556704ad700c9c311b48e1f4f5ae16c6` |
+| direkter `protocomm`-/ESP-IDF-Pfad | `PASS` | `nvs 0x9000/0x6000`, `phy_init 0xf000/0x1000`, `factory 0x10000/0x180000`; kein Test-NVS geflasht | 838128 B | `ace70b0464aeceb086fc4c9d4d18f4957ed38ed26dd01f0fe5eccc1e311917a3` | `6ad3eec5b0c250c48cdbf93dc3ad7964e67432f5cce06040e4a2f01b1ffdbbba` |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | `PASS` | IDF-Default `partitions_singleapp`: `nvs 0x9000/0x6000`, `phy_init 0xf000/0x1000`, `factory 0x10000/1M`; kein Test-NVS geflasht | 815488 B | `eddc3164770949cfd697e9b9eacc29cc4fd83590e467def390b2242a4898c4b5` | `1d7651c23223d6cf08e0b60027b80fe4d48019c82efe0b4fbb1b9483576cac32` |
+
+Die gemeinsamen Buildartefakte haben weiterhin
+`BOOTLOADER_BIN_SHA256=64a25a4d64fc7d1116cd7cb3c385cf37d66658d12c42c103219eb619c997dafc`
+und
+`PARTITION_TABLE_BIN_SHA256=7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820`.
+Build-/Imagegroessen sind keine Laufzeit- oder Client-Evidence.
+
+### Phase-B-Matrix
+
+Mangels bestaetigtem isoliertem beziehungsweise gesichertem Test-NVS und
+fehlendem verifiziertem Power-Cut-Pfad wurde kein Kandidat geflasht. Deshalb
+sind alle hardware-, client- und laufzeitabhaengigen Felder `NOT_RUN`; der
+fehlende sichere Testaufbau ist `BLOCKED_HARDWARE` und kein simuliertes PASS.
+
+| Kandidat | Flash / SoftAP | Browser / direkte IP / Captive | Scan / Credential-Eingabe | Falsches Passwort / Abbruch / Timeout | Reconnect / Neustart | Commit-/NVS-/Recovery-Cut-Points | Laufzeitressourcen |
+|---|---|---|---|---|---|---|---|
+| `espressif/network_provisioning` 1.2.4 | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Screen bleibt: native NVS-/Set-/Apply-Semantik offen | `NOT_RUN` |
+| direkter `protocomm`-/ESP-IDF-Pfad | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Handler bleiben Boundary-only und RAM-only | `NOT_RUN` |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Probe bleibt ohne Credential-Commit | `NOT_RUN` |
+| WiFiManager v2.0.17 | `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+
+Damit gibt es keinen neuen Browser-only-Befund, keinen vergleichbaren
+Client-/QR-Befund, keinen #57-/Security-/Backup-/Reset-Entscheid und keine
+Kandidaten- oder Persistenzauswahl. Android, iOS/iPadOS und Windows waren in
+diesem Lauf `NOT_RUN`; ein physischer QR-Scan bleibt getrennt und ist ohne
+angeschlossene Displayhardware `BLOCKED_HARDWARE` beziehungsweise `NOT_RUN`.
+
+### Recovery-, Reuse- und Owner-Gate
+
+Da kein Flash und kein Clientlauf stattgefunden hat, sind Write-, Readback-,
+Reset-, Power-, CommitOutcomeUnknown-, alte-Konfiguration- und
+superseded-Credential-Cut-Points `NOT_RUN`. Kein Projekt-/Benutzer-NVS wurde
+beruehrt. Die bereits gescreenten Zusatzkomponenten wurden nicht gebaut; es
+gab keinen Phase-B-Befund, der einen vertieften Reuse-Spike rechtfertigt.
+
+```text
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=BLOCKED_HARDWARE
+BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=OWNER_GATE_PENDING
+OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
+ACTUATOR_RELEASE=NO
+NEXT_GATE=OWNER_CONFIRMS_ISOLATED_TEST_NVS_AND_POWER_CUT_SETUP
+```
 
 ## Ausfuehrungsgrenze
 
