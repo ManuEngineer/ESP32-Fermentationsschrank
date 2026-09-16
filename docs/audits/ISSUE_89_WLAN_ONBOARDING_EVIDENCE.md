@@ -34,7 +34,9 @@ die Provenienz der jeweils ausfuehrbaren Evidence.
 
 ```text
 ISSUE=89
-PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
+PLAN_SHA=6a0a83b3b037c47b89caa87f9d2cb1e65f498c59
+PARENT_APPROVED_PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
+OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
 BASE=main@7029df3997bb92e60379eb218f1894f86c5f7d55
 EVIDENCE_SOURCE_SHA=aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775
 PREVIOUS_PHASE_A_EVIDENCE_SOURCE_SHA=0b0d125379a5fef79ca2760a101603c831dc7e7e
@@ -49,8 +51,12 @@ FLASH=4MB
 PSRAM=NONE
 SCOPE=PHASE_A_CAPABILITY_EVIDENCE_ONLY
 PHASE_A_6_1_REVALIDATION=PASS
-PHASE_B_TEST_SETUP=BLOCKED_HARDWARE
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=BLOCKED_HARDWARE
+PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
+DEV_BOARD_DISPOSABLE=YES
+FLASH_OVERWRITE_ALLOWED=YES
+NVS_ERASE_ALLOWED_FOR_TEST=YES
+POWER_CUT_TESTS=WAIVED_BY_OWNER
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
 PHASE_B_EXECUTION=NOT_RUN
 OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
 CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
@@ -180,17 +186,65 @@ Produktionspfad. WiFiManager bleibt fuer den nativen ESP-IDF-6.1-Spike
 ### Phase-A-Grenzen und naechster Gate
 
 Die neuen 6.1-Build-PASS ersetzen weder Client- noch Browser-, QR-, Hardware-
-oder Recovery-Evidence. Flash, UART, Reset, Power-Cut, QR-Kamera, Android,
-iOS/iPadOS und Windows sind in dieser Umsetzung `NOT_RUN`; die Hardware-
-voraussetzungen fuer Phase B wurden nicht behauptet. `PHASE_B_COMPARABLE_CLIENT_EVIDENCE`
-bleibt bis zur bestaetigten Testumgebung `BLOCKED_HARDWARE`. Vor einer
-Fortsetzung muessen ein isoliertes oder gesichertes Test-NVS,
-ein dokumentierter Flash-/Partitionaufbau, UART-/Resetzugang und die
-vergleichbare Kandidatenmatrix vorbereitet werden. Die naechste Entscheidung
-bleibt das Owner-Gate fuer Browser-only, Kandidat, Persistenzbesitzer und
-Recovery-/#57-Anpassungen.
+oder Recovery-Evidence. Flash, UART, Reset, QR-Kamera, Android, iOS/iPadOS und
+Windows sind in dieser Umsetzung `NOT_RUN`; Power-Cut ist fuer Phase B durch
+den Owner als `WAIVED_BY_OWNER` festgelegt. Der vorhandene
+ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten Issue-#89-Spike als
+entbehrlicher Testtraeger freigegeben. Ein zusaetzliches Test-NVS, eine
+separate physische Testpartition oder ein Backup sind fuer diesen Testtraeger
+nicht erforderlich. Die vergleichbare Kandidatenmatrix bleibt `PENDING` und
+die Ausfuehrung wartet auf die Freigabe der exakten neuen Plan-SHA; ein
+zusaetzliches NVS-/Power-Cut-Owner-Gate ist nicht offen.
 
-## Phase B – Testaufbau und Ausfuehrungsstatus
+## Aktueller Phase-B-Testaufbau nach Ownerentscheid
+
+Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. In
+diesem Dokumentationscommit wurde noch kein Phase-B-Flash, Client-, Browser-,
+UART-, Reset- oder Recoverytest ausgefuehrt. `Reset != Power-Cut` bleibt die
+technische Begriffsgrenze; Power-Cut-Tests sind kein verpflichtendes
+Acceptance-Criterion.
+
+```text
+OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
+PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
+BOARD_FAMILY=esp32_32e_quad_mosfet
+BOARD_MODULE=ESP32-WROOM-32E
+DEV_BOARD_DISPOSABLE=YES
+FLASH_OVERWRITE_ALLOWED=YES
+NVS_ERASE_ALLOWED_FOR_TEST=YES
+EXISTING_DEV_STATE_PRESERVATION_REQUIRED=NO
+PRE_TEST_FLASH_BACKUP_REQUIRED=NO
+UART_RESET_TESTS_ALLOWED=YES
+FLASH_TESTS_ALLOWED=YES
+REAL_CLIENT_TESTS_ALLOWED=YES
+POWER_CUT_TESTS_REQUIRED=NO
+POWER_CUT_TESTS=WAIVED_BY_OWNER
+POWER_CUT_PATH=WAIVED_BY_OWNER
+TEST_NVS=DEFAULT_NVS_ALLOWED_ON_DISPOSABLE_DEV_BOARD
+UART_ACCESS=PASS_FOR_BOOTLOADER_HANDSHAKE
+RESET_PATH=FT232R_DTR_RTS_DEFAULT_RESET
+RESET_IS_POWER_CUT=NO
+PROJECT_USER_NVS_TOUCH=NOT_RUN
+FIRST_FLASH=NOT_RUN
+CLIENT_MATRIX=NOT_RUN
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+FIRMWARE_SOURCE_SHA=b2f08f4d568c60559e575c824844199012b80c30
+CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
+NEXT_GATE=OWNER_APPROVES_EXACT_REVISED_PLAN_SHA
+```
+
+Die kontrollierte Freigabe gilt ausschliesslich fuer diesen ausdruecklich
+freigegebenen Development-Testtraeger. Automatisches oder unbeabsichtigtes
+Loeschen bleibt in Produktcode, Bibliotheks- und Recoveryvertraegen
+unzulaessig. Android, iOS/iPadOS, Windows, Browser/Captive Portal, direkte IP,
+Credential-Test/Commit, Reconnect, Neustart, UART/Reset und Recovery bleiben
+nach Plan ausstehende Phase-B-Nachweise.
+
+## Historischer Phase-B-Stop vor dem Ownerentscheid
+
+Die folgenden Angaben sind der damalige konservative Status vor der
+ausdruecklichen Ownerfreigabe. Sie bleiben unveraendert als historische
+Evidence und beschreiben nicht die aktuelle Testgrenze.
 
 Vor jedem Flash-/Clienttest wurde der folgende Aufbau festgehalten. Der
 Chip-Handshake war nichtschreibend erfolgreich; ein Flash oder Clientlauf
@@ -265,7 +319,7 @@ Kandidaten- oder Persistenzauswahl. Android, iOS/iPadOS und Windows waren in
 diesem Lauf `NOT_RUN`; ein physischer QR-Scan bleibt getrennt und ist ohne
 angeschlossene Displayhardware `BLOCKED_HARDWARE` beziehungsweise `NOT_RUN`.
 
-### Recovery-, Reuse- und Owner-Gate
+### Recovery-, Reuse- und Owner-Gate des historischen Stops
 
 Da kein Flash und kein Clientlauf stattgefunden hat, sind Write-, Readback-,
 Reset-, Power-, CommitOutcomeUnknown-, alte-Konfiguration- und
