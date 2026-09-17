@@ -209,8 +209,9 @@ ist geschlossene historische Persistenzprovenienz.
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
-- Issue #89 (WLAN-Onboarding-Evaluation) benoetigt vor Beginn einen eigenen
-  Live-Abgleich und freigegebenen Plan. Issue #90 ist geschlossen.
+- Issue #89 (WLAN-Onboarding-Evaluation) ist mit der Owner-Kandidatenauswahl
+  abgeschlossen; die separate R1-Integration ist in Issue #164 mit einem
+  eigenen, noch freizugebenden Plan vorbereitet. Issue #90 ist geschlossen.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
