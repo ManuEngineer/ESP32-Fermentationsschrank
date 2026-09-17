@@ -1,8 +1,7 @@
 #pragma once
 
-#include <mutex>
+#include <memory>
 
-#include "esp_http_server.h"
 #include "http_server_lifecycle.hpp"
 
 namespace device_platform_esp_idf {
@@ -10,7 +9,7 @@ namespace device_platform_esp_idf {
 class EspIdfHttpServerLifecycle final
     : public device_platform::IHttpServerLifecycle {
    public:
-    EspIdfHttpServerLifecycle() = default;
+    EspIdfHttpServerLifecycle();
     ~EspIdfHttpServerLifecycle() override;
 
     EspIdfHttpServerLifecycle(const EspIdfHttpServerLifecycle&) = delete;
@@ -24,11 +23,8 @@ class EspIdfHttpServerLifecycle final
     [[nodiscard]] bool running() const override;
 
    private:
-    static esp_err_t handleRequest(httpd_req_t* request);
-
-    httpd_handle_t server_{nullptr};
-    device_platform::IHttpRouteSink* routes_{nullptr};
-    mutable std::mutex mutex_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace device_platform_esp_idf

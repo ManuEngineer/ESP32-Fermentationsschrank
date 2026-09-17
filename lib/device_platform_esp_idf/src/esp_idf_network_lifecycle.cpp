@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <utility>
 
 #include "esp_event.h"
@@ -35,6 +36,23 @@ bool copyBounded(std::uint8_t* destination, std::size_t capacity,
 
 }  // namespace
 
+struct EspIdfNetworkLifecycle::Impl {
+    explicit Impl(EspIdfNetworkLifecycle& owner) : owner(owner) {}
+
+    EspIdfNetworkLifecycle& owner;
+    esp_netif_t* stationNetif_{nullptr};
+    esp_netif_t* accessPointNetif_{nullptr};
+    esp_event_handler_instance_t wifiEventHandler_{nullptr};
+    esp_event_handler_instance_t ipEventHandler_{nullptr};
+
+    static void handleEvent(void* context, esp_event_base_t eventBase,
+                            std::int32_t eventId, void* eventData);
+};
+
+EspIdfNetworkLifecycle::EspIdfNetworkLifecycle(
+    EspIdfNetworkLifecycleConfig config)
+    : config_(std::move(config)), impl_(std::make_unique<Impl>(*this)) {}
+
 bool EspIdfNetworkLifecycle::validAccessPointConfig(
     const EspIdfNetworkLifecycleConfig& config) {
     return !config.softApSsid.empty() &&
@@ -56,13 +74,13 @@ EspIdfNetworkLifecycle::~EspIdfNetworkLifecycle() {
 }
 
 void EspIdfNetworkLifecycle::destroyDefaultNetifs() noexcept {
-    if (accessPointNetif_ != nullptr) {
-        esp_netif_destroy_default_wifi(accessPointNetif_);
-        accessPointNetif_ = nullptr;
+    if (impl_->accessPointNetif_ != nullptr) {
+        esp_netif_destroy_default_wifi(impl_->accessPointNetif_);
+        impl_->accessPointNetif_ = nullptr;
     }
-    if (stationNetif_ != nullptr) {
-        esp_netif_destroy_default_wifi(stationNetif_);
-        stationNetif_ = nullptr;
+    if (impl_->stationNetif_ != nullptr) {
+        esp_netif_destroy_default_wifi(impl_->stationNetif_);
+        impl_->stationNetif_ = nullptr;
     }
 }
 
@@ -89,8 +107,10 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
         return true;
     }
     if (wifiInitialized_ || wifiStarted_ || mdnsInitialized_ ||
-        stationNetif_ != nullptr || accessPointNetif_ != nullptr ||
-        wifiEventHandler_ != nullptr || ipEventHandler_ != nullptr) {
+        impl_->stationNetif_ != nullptr ||
+        impl_->accessPointNetif_ != nullptr ||
+        impl_->wifiEventHandler_ != nullptr ||
+        impl_->ipEventHandler_ != nullptr) {
         cleanupInitialization();
     }
     if (!validAccessPointConfig(config_)) {
@@ -104,9 +124,10 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
     if (eventStatus != ESP_OK && eventStatus != ESP_ERR_INVALID_STATE) {
         return false;
     }
-    stationNetif_ = esp_netif_create_default_wifi_sta();
-    accessPointNetif_ = esp_netif_create_default_wifi_ap();
-    if (stationNetif_ == nullptr || accessPointNetif_ == nullptr) {
+    impl_->stationNetif_ = esp_netif_create_default_wifi_sta();
+    impl_->accessPointNetif_ = esp_netif_create_default_wifi_ap();
+    if (impl_->stationNetif_ == nullptr ||
+        impl_->accessPointNetif_ == nullptr) {
         cleanupInitialization();
         return false;
     }
@@ -132,11 +153,11 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
         return false;
     }
     if (esp_event_handler_instance_register(
-            WIFI_EVENT, ESP_EVENT_ANY_ID, &EspIdfNetworkLifecycle::handleEvent,
-            this, &wifiEventHandler_) != ESP_OK ||
+            WIFI_EVENT, ESP_EVENT_ANY_ID, &Impl::handleEvent, impl_.get(),
+            &impl_->wifiEventHandler_) != ESP_OK ||
         esp_event_handler_instance_register(
-            IP_EVENT, IP_EVENT_STA_GOT_IP, &EspIdfNetworkLifecycle::handleEvent,
-            this, &ipEventHandler_) != ESP_OK) {
+            IP_EVENT, IP_EVENT_STA_GOT_IP, &Impl::handleEvent, impl_.get(),
+            &impl_->ipEventHandler_) != ESP_OK) {
         cleanupInitialization();
         return false;
     }
@@ -219,60 +240,61 @@ void EspIdfNetworkLifecycle::stopWifi() noexcept {
 }
 
 void EspIdfNetworkLifecycle::unregisterEventHandlers() noexcept {
-    if (wifiEventHandler_ != nullptr) {
+    if (impl_->wifiEventHandler_ != nullptr) {
         static_cast<void>(esp_event_handler_instance_unregister(
-            WIFI_EVENT, ESP_EVENT_ANY_ID, wifiEventHandler_));
-        wifiEventHandler_ = nullptr;
+            WIFI_EVENT, ESP_EVENT_ANY_ID, impl_->wifiEventHandler_));
+        impl_->wifiEventHandler_ = nullptr;
     }
-    if (ipEventHandler_ != nullptr) {
+    if (impl_->ipEventHandler_ != nullptr) {
         static_cast<void>(esp_event_handler_instance_unregister(
-            IP_EVENT, IP_EVENT_STA_GOT_IP, ipEventHandler_));
-        ipEventHandler_ = nullptr;
+            IP_EVENT, IP_EVENT_STA_GOT_IP, impl_->ipEventHandler_));
+        impl_->ipEventHandler_ = nullptr;
     }
 }
 
-void EspIdfNetworkLifecycle::handleEvent(void* context,
-                                         esp_event_base_t eventBase,
-                                         std::int32_t eventId,
-                                         void* eventData) {
-    auto* self = static_cast<EspIdfNetworkLifecycle*>(context);
-    if (self == nullptr) {
+void EspIdfNetworkLifecycle::Impl::handleEvent(void* context,
+                                               esp_event_base_t eventBase,
+                                               std::int32_t eventId,
+                                               void* eventData) {
+    auto* impl = static_cast<Impl*>(context);
+    if (impl == nullptr) {
         return;
     }
+    auto& self = impl->owner;
     if (eventBase == WIFI_EVENT && eventId == WIFI_EVENT_STA_DISCONNECTED) {
-        std::lock_guard<std::mutex> stateLock(self->stateMutex_);
-        if (self->intentionalDisconnectsPending_ != 0U) {
-            --self->intentionalDisconnectsPending_;
+        std::lock_guard<std::mutex> stateLock(self.stateMutex_);
+        if (self.intentionalDisconnectsPending_ != 0U) {
+            --self.intentionalDisconnectsPending_;
             return;
         }
-        self->status_.ipv4Address.reset();
-        if (self->candidateTesting_) {
-            self->candidateTestOutcome_ = CandidateTestOutcome::Failed;
-            self->status_.state =
-                device_platform::NetworkLifecycleState::Failed;
-        } else if (self->reconnectAllowed_ &&
-                   self->status_.selectedMode ==
+        self.status_.ipv4Address.reset();
+        if (self.candidateTesting_) {
+            self.candidateTestOutcome_ =
+                EspIdfNetworkLifecycle::CandidateTestOutcome::Failed;
+            self.status_.state = device_platform::NetworkLifecycleState::Failed;
+        } else if (self.reconnectAllowed_ &&
+                   self.status_.selectedMode ==
                        device_platform::NetworkMode::HOME_WIFI &&
-                   self->activeHomeCredentials_.has_value()) {
-            self->reconnectRequested_ = true;
-            self->status_.state =
+                   self.activeHomeCredentials_.has_value()) {
+            self.reconnectRequested_ = true;
+            self.status_.state =
                 device_platform::NetworkLifecycleState::ConnectingHome;
-        } else if (self->status_.state !=
+        } else if (self.status_.state !=
                    device_platform::NetworkLifecycleState::Stopped) {
-            self->status_.state =
-                device_platform::NetworkLifecycleState::Failed;
+            self.status_.state = device_platform::NetworkLifecycleState::Failed;
         }
         return;
     }
     if (eventBase == IP_EVENT && eventId == IP_EVENT_STA_GOT_IP &&
         eventData != nullptr) {
         const auto* event = static_cast<const ip_event_got_ip_t*>(eventData);
-        std::lock_guard<std::mutex> stateLock(self->stateMutex_);
-        self->status_.ipv4Address = event->ip_info.ip.addr;
-        if (self->candidateTesting_) {
-            self->candidateTestOutcome_ = CandidateTestOutcome::Connected;
+        std::lock_guard<std::mutex> stateLock(self.stateMutex_);
+        self.status_.ipv4Address = event->ip_info.ip.addr;
+        if (self.candidateTesting_) {
+            self.candidateTestOutcome_ =
+                EspIdfNetworkLifecycle::CandidateTestOutcome::Connected;
         } else {
-            self->status_.state =
+            self.status_.state =
                 device_platform::NetworkLifecycleState::HomeConnected;
         }
     }
@@ -321,8 +343,9 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
             return {device_platform::NetworkOperationStatus::Failed};
         }
         esp_netif_ip_info_t ipInfo{};
-        if (accessPointNetif_ == nullptr ||
-            esp_netif_get_ip_info(accessPointNetif_, &ipInfo) != ESP_OK) {
+        if (impl_->accessPointNetif_ == nullptr ||
+            esp_netif_get_ip_info(impl_->accessPointNetif_, &ipInfo) !=
+                ESP_OK) {
             return {device_platform::NetworkOperationStatus::Failed};
         }
         std::lock_guard<std::mutex> stateLock(stateMutex_);
@@ -444,8 +467,8 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
         return {device_platform::NetworkOperationStatus::Failed};
     }
     esp_netif_ip_info_t ipInfo{};
-    if (accessPointNetif_ == nullptr ||
-        esp_netif_get_ip_info(accessPointNetif_, &ipInfo) != ESP_OK) {
+    if (impl_->accessPointNetif_ == nullptr ||
+        esp_netif_get_ip_info(impl_->accessPointNetif_, &ipInfo) != ESP_OK) {
         std::lock_guard<std::mutex> stateLock(stateMutex_);
         status_.state = device_platform::NetworkLifecycleState::Failed;
         return {device_platform::NetworkOperationStatus::Failed};

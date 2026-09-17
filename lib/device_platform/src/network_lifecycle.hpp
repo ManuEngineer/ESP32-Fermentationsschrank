@@ -77,9 +77,9 @@ struct NetworkScanResult {
     std::vector<NetworkScanEntry> entries;
 };
 
-// An application-neutral lifecycle port.  It owns volatile transport state
-// only; persistence, preview, commit, and credential redaction remain owned by
-// fermentation_app.
+// An application-neutral lifecycle port. It owns volatile transport state
+// only; persistence, preview, commit, and credential redaction remain outside
+// this transport boundary.
 class INetworkLifecycle {
    public:
     INetworkLifecycle() = default;

@@ -1,7 +1,10 @@
 #include "esp_idf_http_server_lifecycle.hpp"
 
 #include <cstdint>
+#include <mutex>
 #include <string>
+
+#include "esp_http_server.h"
 
 namespace device_platform_esp_idf {
 namespace {
@@ -44,33 +47,44 @@ const char* statusLine(std::uint16_t status) {
 
 }  // namespace
 
+struct EspIdfHttpServerLifecycle::Impl {
+    httpd_handle_t server{nullptr};
+    device_platform::IHttpRouteSink* routes{nullptr};
+    mutable std::mutex mutex;
+
+    static esp_err_t handleRequest(httpd_req_t* request);
+};
+
+EspIdfHttpServerLifecycle::EspIdfHttpServerLifecycle()
+    : impl_(std::make_unique<Impl>()) {}
+
 EspIdfHttpServerLifecycle::~EspIdfHttpServerLifecycle() {
     static_cast<void>(stop());
 }
 
 bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (server_ != nullptr) {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->server != nullptr) {
         return false;
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 1U;
     config.uri_match_fn = httpd_uri_match_wildcard;
-    if (httpd_start(&server_, &config) != ESP_OK) {
-        server_ = nullptr;
+    if (httpd_start(&impl_->server, &config) != ESP_OK) {
+        impl_->server = nullptr;
         return false;
     }
-    routes_ = &routes;
+    impl_->routes = &routes;
     const httpd_uri_t wildcard{
         .uri = "/*",
         .method = static_cast<httpd_method_t>(HTTP_ANY),
-        .handler = &EspIdfHttpServerLifecycle::handleRequest,
-        .user_ctx = this,
+        .handler = &Impl::handleRequest,
+        .user_ctx = impl_.get(),
     };
-    if (httpd_register_uri_handler(server_, &wildcard) != ESP_OK) {
-        static_cast<void>(httpd_stop(server_));
-        server_ = nullptr;
-        routes_ = nullptr;
+    if (httpd_register_uri_handler(impl_->server, &wildcard) != ESP_OK) {
+        static_cast<void>(httpd_stop(impl_->server));
+        impl_->server = nullptr;
+        impl_->routes = nullptr;
         return false;
     }
     return true;
@@ -79,10 +93,10 @@ bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
 bool EspIdfHttpServerLifecycle::stop() {
     httpd_handle_t server = nullptr;
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        server = server_;
-        server_ = nullptr;
-        routes_ = nullptr;
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        server = impl_->server;
+        impl_->server = nullptr;
+        impl_->routes = nullptr;
     }
     if (server == nullptr) {
         return true;
@@ -91,19 +105,19 @@ bool EspIdfHttpServerLifecycle::stop() {
 }
 
 bool EspIdfHttpServerLifecycle::running() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return server_ != nullptr;
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    return impl_->server != nullptr;
 }
 
-esp_err_t EspIdfHttpServerLifecycle::handleRequest(httpd_req_t* request) {
+esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
     if (request == nullptr || request->user_ctx == nullptr) {
         return ESP_FAIL;
     }
-    auto* self = static_cast<EspIdfHttpServerLifecycle*>(request->user_ctx);
+    auto* self = static_cast<Impl*>(request->user_ctx);
     device_platform::IHttpRouteSink* routes = nullptr;
     {
-        std::lock_guard<std::mutex> lock(self->mutex_);
-        routes = self->routes_;
+        std::lock_guard<std::mutex> lock(self->mutex);
+        routes = self->routes;
     }
     if (routes == nullptr || request->content_len > kMaximumHttpBodyBytes) {
         return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,

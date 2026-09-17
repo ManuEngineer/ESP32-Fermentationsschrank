@@ -1,14 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "esp_err.h"
-#include "esp_event.h"
-#include "esp_netif.h"
 #include "network_lifecycle.hpp"
 
 namespace device_platform_esp_idf {
@@ -21,8 +19,7 @@ struct EspIdfNetworkLifecycleConfig {
 
 class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
    public:
-    explicit EspIdfNetworkLifecycle(EspIdfNetworkLifecycleConfig config)
-        : config_(std::move(config)) {}
+    explicit EspIdfNetworkLifecycle(EspIdfNetworkLifecycleConfig config);
     ~EspIdfNetworkLifecycle() override;
 
     EspIdfNetworkLifecycle(const EspIdfNetworkLifecycle&) = delete;
@@ -46,6 +43,8 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     void poll() override;
 
    private:
+    struct Impl;
+
     [[nodiscard]] bool ensureInitialized();
     void cleanupInitialization() noexcept;
     void destroyDefaultNetifs() noexcept;
@@ -56,15 +55,11 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] bool connectStationOnce();
     [[nodiscard]] bool requestIntentionalDisconnect() noexcept;
     void stopWifi() noexcept;
-    static void handleEvent(void* context, esp_event_base_t eventBase,
-                            std::int32_t eventId, void* eventData);
     void unregisterEventHandlers() noexcept;
     [[nodiscard]] static bool validAccessPointConfig(
         const EspIdfNetworkLifecycleConfig& config);
 
     EspIdfNetworkLifecycleConfig config_;
-    esp_netif_t* stationNetif_{nullptr};
-    esp_netif_t* accessPointNetif_{nullptr};
     device_platform::NetworkStatus status_;
     std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
     bool initialized_{false};
@@ -84,8 +79,7 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     std::uint32_t intentionalDisconnectsPending_{0U};
     mutable std::mutex operationMutex_;
     mutable std::mutex stateMutex_;
-    esp_event_handler_instance_t wifiEventHandler_{nullptr};
-    esp_event_handler_instance_t ipEventHandler_{nullptr};
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace device_platform_esp_idf
