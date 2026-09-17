@@ -43,6 +43,8 @@ HOME_WIFI_MODE=RECOMMENDED
 AP_ONLY_MODE=SUPPORTED_EXPLICITLY
 R1_NETWORK_WEB_TRANSPORT=NATIVE_ESP_IDF_HTTP
 NETWORK_MODE_SELECTION_CONTRACT=R1_ISSUE164
+INITIAL_NETWORK_SELECTION=UNSELECTED_UNTIL_USER_CHOICE
+USER_SELECTABLE_NETWORK_MODES=AP_ONLY_HOME_WIFI_ONLY
 PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
 ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 ```
@@ -52,13 +54,21 @@ Der reale Nachweis von Displayanzeige, Touchinteraktion und Renderer bleibt
 Issue #31 zugeordnet. Issue #164 darf den Auswahlvertrag nativ implementieren
 und testen, ohne auf den physischen Display-/Touchnachweis zu warten.
 
-Der Auswahlvertrag ist im bestehenden `UserConfiguration`-Dokument persistent.
-Der aktuelle User-Schemawert ist 3. V1/V2-Records werden beim Lesen als
-`HOME_WIFI` ohne Credentials behandelt. Credentials sind genau ein optionales
-SSID-/Passwort-Paar im bestehenden Konfigurationsgraphen; ein zweiter
-Credential- oder Persistenzspeicher ist unzulaessig. Fehlende Credentials
-starten im expliziten `HOME_WIFI`-Modus den Setup-Flow und leiten niemals
-automatisch nach `AP_ONLY` um.
+Der Auswahlvertrag ist als Netzwerkmodus-Auswahl im bestehenden
+`UserConfiguration`-Dokument persistent. Vor der ersten Benutzerentscheidung
+und bei der Migration ist der interne Zustand `UNSELECTED`; er ist kein dritter
+Benutzermodus. `UserConfiguration` enthaelt weder eine `HOME_WIFI`-SSID noch
+ein wiederverwendbares WLAN-Passwort.
+
+Factory-, V1- und V2-Records migrieren beim Lesen nach `UNSELECTED`. Sie leiten
+weder `HOME_WIFI` noch `AP_ONLY` implizit aus Credentials ab. Genau ein
+typisierter `ConnectivityCredential`-V1-Record liegt im bestehenden
+`IStateStore` unter `StateStoreKey=cc0` und `RecordTypeId=9`; SSID und Passwort
+liegen gemeinsam darin und sind an die `StorageEpoch` gebunden. Es gibt weder
+einen zweiten physischen Store noch eine zweite Credential-Wahrheit.
+
+Fehlende oder ungueltige Credentials starten im expliziten `HOME_WIFI`-Modus
+den Setup-Flow und leiten niemals automatisch nach `AP_ONLY` um.
 
 ### AP-only-Modus
 
@@ -93,8 +103,10 @@ zusaetzlicher QR-Code nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
 
 `AP_ONLY` und `HOME_WIFI` sind getrennte, explizit persistierbare
 Benutzerentscheidungen. Der aktive Modus und die Heim-WLAN-Credentials sind
-fachlich getrennte Werte. Das Vorhandensein oder Fehlen von Credentials darf
-den Modus nicht implizit erraten oder aendern.
+fachlich getrennte Werte. Die Credentials leben ausschliesslich im einen
+`ConnectivityCredential`-V1-Record des bestehenden `IStateStore`; das
+Vorhandensein oder Fehlen von Credentials darf den Modus nicht implizit
+erraten oder aendern.
 
 Die Zustandslogik lautet:
 
