@@ -214,13 +214,21 @@ oder implizite Modus-State-Machine entsteht nicht.
 
 ```text
 R1_NETWORK_WEB_TRANSPORT=NATIVE_ESP_IDF_HTTP
-WIFI_CREDENTIAL_OWNER=CONNECTIVITY_CREDENTIAL_DOMAIN
+WIFI_CREDENTIAL_OWNER=PROJECT_CONFIGURATION_DOMAIN
+WIFI_CREDENTIAL_RECORD_DOMAIN=CONNECTIVITY_CREDENTIAL_DOMAIN
 TEST_BEFORE_COMMIT=REQUIRED
 FAILED_TEST_PRESERVES_ACTIVE_CONFIGURATION=YES
 SECOND_CREDENTIAL_STORE=NO
 SECOND_PHYSICAL_STORE=NO
 SECOND_CREDENTIAL_TRUTH=NO
 ESP_WIFI_PERSISTENT_CREDENTIAL_STORE=NO
+CONNECTIVITY_CREDENTIAL_SCHEMA=V1
+HOME_WIFI_CREDENTIAL_COUNT=1
+HOME_WIFI_SSID_OWNER=CONNECTIVITY_CREDENTIAL_RECORD
+HOME_WIFI_PASSWORD_OWNER=CONNECTIVITY_CREDENTIAL_RECORD
+USER_CONFIGURATION_HOME_WIFI_SSID=NO
+USER_CONFIGURATION_WIFI_PASSWORD=NO
+STORAGE_EPOCH_BINDING=REQUIRED
 ISSUE164_SHARED_HTTP_FOUNDATION=YES
 ISSUE164_NORMAL_R1_WEB_UI=NOT_IMPLEMENTED_BY_ISSUE164
 ISSUE27_NORMAL_WEB_UI_OWNERSHIP=PRESERVED
@@ -232,25 +240,54 @@ Credential-Wahrheit. Ein Kandidat darf fuer den Test volatil beziehungsweise
 mit `WIFI_STORAGE_RAM` gehalten werden. Die aktive produktive Konfiguration
 liegt ausschliesslich im bestehenden Projekt-Konfigurations-/Persistenzvertrag.
 
+Der Projekt-Konfigurations-/Persistenzvertrag bleibt Owner. Die
+`ConnectivityCredential` ist seine interne Persistenz-Unterdomaene und ein
+separater Secret-Record im selben bestehenden `IStateStore`-Backend; ESP-IDF
+bleibt Transport und Treiber.
+
 Der Persistenzvertrag trennt die Domaenen unmissverstaendlich:
 
 ```text
 UserConfiguration:
-- network selection / non-secret network configuration
+- network selection only for the WLAN contract
+- no HOME_WIFI SSID
 - NEVER stores reusable Wi-Fi password
 
 ConnectivityCredential domain:
 - same existing IStateStore backend
-- separate typed/versioned record
-- exactly one R1 HOME_WIFI credential
-- StorageEpoch-bound
+- exactly one HOME_WIFI credential record
+- contains SSID + password together
+- typed/versioned schema V1
+- bound to current StorageEpoch
+- stored under the existing StateStoreKey/IStateStore representation
 - secret redaction / reset / recovery contract
 ```
 
 Das WLAN-Passwort darf weder im normalen `UserConfiguration`-Wireformat noch
 in Preview, Change-Summary, Fingerprint, Diagnose, Log oder normalem
-Backup/Export landen. Die SSID-Ownership wird so definiert, dass genau eine
-aktive Wahrheit besteht; es gibt keine Doppelhaltung ohne klaren Grund.
+Backup/Export landen. Die `UserConfiguration` enthaelt keine `HOME_WIFI`-SSID
+und kein wiederverwendbares WLAN-Passwort. SSID und Passwort bilden gemeinsam
+den einen `ConnectivityCredential`-Record; es gibt keine zweite aktive
+Credential- oder SSID-Wahrheit.
+
+Die konkrete bestehende IStateStore-Darstellung fuer diesen einen R1-Record
+ist:
+
+```text
+CONNECTIVITY_CREDENTIAL_RECORD_TYPE=9
+CONNECTIVITY_CREDENTIAL_STORE_KEY=cc0
+CONNECTIVITY_CREDENTIAL_SCHEMA=V1
+CONNECTIVITY_CREDENTIAL_SLOT_COUNT=1
+CONNECTIVITY_CREDENTIAL_ENVELOPE_VERSION=1
+CONNECTIVITY_CREDENTIAL_CRC=CRC-32/ISO-HDLC
+CONNECTIVITY_CREDENTIAL_STORAGE_EPOCH_BINDING=REQUIRED
+```
+
+Die Implementierung verwendet dafuer `StateStoreKey::create("cc0")`, den
+vorhandenen generischen `StorageEnvelope`-/CRC-Codec und
+`IStateStore::read`/`IStateStore::write`; die konkrete Payload V1 enthaelt
+SSID und Passwort zusammen. Es wird keine allgemeine Key-/Provider-
+Abstraktion und kein zweiter physischer Store eingefuehrt.
 
 Der erste reale Connectivity-Konsument muss gemaess #57 ein eigenes
 typisiertes, versioniertes und an `StorageEpoch` gebundenes Schema sowie seine
@@ -471,6 +508,8 @@ Nachweise sind proportional und auf dem exakten finalen HEAD zu erheben.
 - falsches Passwort, Scan-/Apply-Fehler, Timeout und Abbruch ohne Mutation der
   aktiven Konfiguration;
 - Write-/Readback-/`CommitOutcomeUnknown`-Pfad, `StorageEpoch` und Recovery;
+- konkreter R1-Record mit `RecordTypeId=9`, `StateStoreKey=cc0`, Envelope v1,
+  Schema V1 und bestehender CRC-32/ISO-HDLC-Primitivkette;
 - Redaction sowie Ausschluss aus `UserConfiguration`-Wireformat, Preview,
   Change-Summary, Fingerprint, Backup, URL, Diagnose und UART;
 - Startup-Policy in `fermentation_app` gegen anwendungsneutrale
@@ -545,7 +584,8 @@ freigegebenen finalen Implementierungs-HEAD nachgewiesen ist:
 - `UserConfiguration` enthaelt keine wiederverwendbaren WLAN-Passwoerter; die
   genau eine R1-`HOME_WIFI`-Credential liegt als separate typisierte,
   versionierte und `StorageEpoch`-gebundene Domaene im bestehenden
-  `IStateStore`-Backend mit Redaction-/Reset-/Recovery-Vertrag;
+  `IStateStore`-Backend unter `StateStoreKey=cc0` und
+  `RecordTypeId=9` mit Redaction-/Reset-/Recovery-Vertrag;
 - die Startup-Policy liegt in `fermentation_app`, waehrend
   `device_platform` nur anwendungsneutrale Netzwerk-/HTTP-Transportports
   bereitstellt;
