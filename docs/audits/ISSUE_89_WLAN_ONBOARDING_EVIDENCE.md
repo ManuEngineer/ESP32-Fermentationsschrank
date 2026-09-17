@@ -38,7 +38,7 @@ Evidence.
 
 ```text
 ISSUE=89
-PLAN_SHA=eb83c82dfcfdeb1713e32169e3a2001f69303c8a
+PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c
 PARENT_APPROVED_PLAN_SHA=5c582aa179cd6e382dc4442a6824bb79a1e2b22f
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
 PHASE_B_TEST_RUN_HEAD=7d68c66589ffffe2ca943eb3583189207b8fdd87
@@ -209,22 +209,22 @@ Der physische Display-/Kamera-QR-Test ist
 `PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION`; iOS/iPadOS
 und Windows sind durch den Owner-Waiver vor dem Auswahlgate nicht erforderlich.
 Power-Cut ist fuer Phase B durch den Owner als `WAIVED_BY_OWNER` festgelegt.
-Der vorhandene
-ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten Issue-#89-Spike als
-entbehrlicher Testtraeger freigegeben. Ein zusaetzliches Test-NVS, eine
-separate physische Testpartition oder ein Backup sind fuer diesen Testtraeger
-nicht erforderlich. Die drei Flash-/Boot-/SoftAP-Teilnachweise sind `PASS`; die
-vergleichbare Kandidatenmatrix bleibt wegen fehlender Clientplattform
-`PENDING`. Die Ausfuehrung wartet auf Independent Phase-B Review und das
-Owner-Kandidatengate; ein zusaetzliches NVS-/Power-Cut-Owner-Gate ist nicht
-offen.
+Der vorhandene ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten
+Issue-#89-Spike als entbehrlicher Testtraeger freigegeben. Ein zusaetzliches
+Test-NVS, eine separate physische Testpartition oder ein Backup sind fuer
+diesen Testtraeger nicht erforderlich. Die drei Flash-/Boot-/SoftAP-
+Teilnachweise sind `PASS`; die vergleichbare Kandidatenmatrix ist fuer das
+aktuelle Owner-Gate mit `PASS_MINIMAL_PROPORTIONAL` abgeschlossen. Der
+Owner-Waiver fuer iOS/iPadOS und Windows sowie der deferred Display-/Kamera-
+QR-Test bleiben unveraendert; ein zusaetzliches NVS-/Power-Cut-Owner-Gate ist
+nicht offen.
 
 ## Aktueller Phase-B-Testaufbau nach Ownerentscheid
 
 Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. Die
-drei autorisierten Flash-/Boot-/SoftAP-Laeufe und der anschliessende
-Der owner-interaktive Lauf mit einem Linux-Host und Android wurde fuer alle
-drei ausfuehrbaren Kandidaten ausgefuehrt. Die Android-Evidence ist PASS;
+drei autorisierten Flash-/Boot-/SoftAP-Laeufe sowie der owner-interaktive Lauf
+mit einem Linux-Host und Android wurden fuer alle drei ausfuehrbaren
+Kandidaten ausgefuehrt. Die Android-Evidence ist PASS;
 iOS/iPadOS und Windows sind durch den Owner-Waiver vor dem Kandidatengate nicht
 mehr verpflichtend. Kandidatenspezifische fehlende Funktionen bleiben
 `CAPABILITY_NOT_PRESENT` beziehungsweise dokumentierte Produkt-/
