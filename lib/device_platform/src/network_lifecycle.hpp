@@ -59,7 +59,6 @@ struct NetworkStatus {
     NetworkLifecycleState state{NetworkLifecycleState::Stopped};
     bool httpReady{false};
     std::optional<std::uint32_t> ipv4Address;
-    std::optional<NetworkAccessPointInfo> accessPoint;
 };
 
 enum class NetworkOperationStatus : std::uint8_t {
@@ -103,6 +102,10 @@ class INetworkLifecycle {
     [[nodiscard]] virtual NetworkOperationResult setHostname(
         const std::string& hostname) = 0;
     [[nodiscard]] virtual NetworkStatus status() const = 0;
+    // Deliberately separate sensitive local SoftAP setup data from the
+    // generic status/diagnostic contract.
+    [[nodiscard]] virtual std::optional<NetworkAccessPointInfo>
+    accessPointInfo() const = 0;
     virtual void poll() = 0;
 };
 

@@ -335,15 +335,15 @@ void test_transport_stop_start_is_restartable() {
     TEST_ASSERT_TRUE(
         lifecycle.start(NetworkMode::AP_ONLY, std::nullopt).status ==
         device_platform::NetworkOperationStatus::Applied);
-    TEST_ASSERT_TRUE(lifecycle.status().accessPoint.has_value());
+    TEST_ASSERT_TRUE(lifecycle.accessPointInfo().has_value());
     TEST_ASSERT_TRUE(lifecycle.stop().status ==
                      device_platform::NetworkOperationStatus::Applied);
-    TEST_ASSERT_FALSE(lifecycle.status().accessPoint.has_value());
+    TEST_ASSERT_FALSE(lifecycle.accessPointInfo().has_value());
     TEST_ASSERT_TRUE(
         lifecycle.start(NetworkMode::AP_ONLY, std::nullopt).status ==
         device_platform::NetworkOperationStatus::Applied);
     TEST_ASSERT_EQUAL_UINT(2U, lifecycle.startCallCount());
-    TEST_ASSERT_TRUE(lifecycle.status().accessPoint.has_value());
+    TEST_ASSERT_TRUE(lifecycle.accessPointInfo().has_value());
 }
 
 void test_setup_routes_share_one_surface_and_redact_passwords() {
@@ -354,6 +354,9 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
     TEST_ASSERT_TRUE(
         service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
             .status == NetworkConfigurationStatus::Applied);
+    const auto genericStatus = service.status();
+    TEST_ASSERT_TRUE(genericStatus.state ==
+                     device_platform::NetworkLifecycleState::SetupAccessPoint);
     const auto accessPoint = service.accessPointInfo();
     TEST_ASSERT_TRUE(accessPoint.has_value());
     TEST_ASSERT_EQUAL_STRING("mock-setup-ap", accessPoint->ssid.c_str());
@@ -368,7 +371,22 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
     TEST_ASSERT_NOT_NULL(response.body.c_str());
     TEST_ASSERT_NOT_EQUAL(std::string::npos, response.body.find("name=ssid"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          response.body.find("id=scan-ssid"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          response.body.find("select.onchange"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          response.body.find("/api/network/scan"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
                           response.body.find("Test and commit"));
+    TEST_ASSERT_EQUAL(std::string::npos,
+                      response.body.find("mock-ap-password"));
+
+    response = {};
+    TEST_ASSERT_TRUE(
+        routes.handle({"GET", "/api/network/status", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL(std::string::npos,
+                      response.body.find("mock-ap-password"));
 
     response = {};
     TEST_ASSERT_TRUE(

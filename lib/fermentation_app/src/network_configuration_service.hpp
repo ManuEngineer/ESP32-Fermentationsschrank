@@ -66,7 +66,7 @@ class NetworkConfigurationService final {
     }
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     accessPointInfo() const {
-        return lifecycle_.status().accessPoint;
+        return lifecycle_.accessPointInfo();
     }
     [[nodiscard]] device_platform::NetworkMode selectedMode() const noexcept {
         return selectedMode_;

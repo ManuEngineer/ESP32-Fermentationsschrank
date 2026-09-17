@@ -41,6 +41,8 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] device_platform::NetworkOperationResult setHostname(
         const std::string& hostname) override;
     [[nodiscard]] device_platform::NetworkStatus status() const override;
+    [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
+    accessPointInfo() const override;
     void poll() override;
 
    private:
@@ -64,6 +66,7 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     esp_netif_t* stationNetif_{nullptr};
     esp_netif_t* accessPointNetif_{nullptr};
     device_platform::NetworkStatus status_;
+    std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
     bool initialized_{false};
     bool wifiInitialized_{false};
     bool mdnsInitialized_{false};
