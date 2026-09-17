@@ -757,13 +757,8 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
     }
     if (schemaVersion >=
         static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
-        const bool hasCredentials = configuration.homeWifiCredentials.has_value();
         if (!big_endian::writeUint8(
-                writer, static_cast<std::uint8_t>(configuration.networkMode)) ||
-            !big_endian::writeOptionalTag(writer, hasCredentials) ||
-            (hasCredentials &&
-             (!writeString(writer, configuration.homeWifiCredentials->ssid) ||
-              !writeString(writer, configuration.homeWifiCredentials->password)))) {
+                writer, static_cast<std::uint8_t>(configuration.networkMode))) {
             return ConfigurationCodecStatus::CapacityExceeded;
         }
     }
@@ -802,25 +797,11 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
     if (schemaVersion >=
         static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
         std::uint8_t rawMode = 0U;
-        bool hasCredentials = false;
-        if (!big_endian::readUint8(reader, rawMode) ||
-            !big_endian::readOptionalTag(reader, hasCredentials)) {
+        if (!big_endian::readUint8(reader, rawMode)) {
             return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
         }
-        candidate.networkMode = static_cast<device_platform::NetworkMode>(rawMode);
-        if (hasCredentials) {
-            std::string ssid;
-            std::string password;
-            if (!readString(reader, configuration_limits::kMaximumHomeWifiSsidBytes,
-                            ssid) ||
-                !readString(reader,
-                            configuration_limits::kMaximumHomeWifiPasswordBytes,
-                            password)) {
-                return {ConfigurationCodecStatus::Truncated, std::nullopt};
-            }
-            candidate.homeWifiCredentials =
-                HomeWifiCredentials{std::move(ssid), std::move(password)};
-        }
+        candidate.networkMode =
+            static_cast<device_platform::NetworkMode>(rawMode);
     }
     if (reader.remaining() != 0U) {
         return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};

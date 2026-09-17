@@ -1,12 +1,16 @@
 #include <cinttypes>
+#include <cstdio>
 #include <memory>
 #include <new>
+#include <string>
 #include <utility>
 
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "ds3231_sn_rtc_adapter.hpp"
 #include "esp_idf_i2c_subsystem.hpp"
+#include "esp_idf_http_server_lifecycle.hpp"
+#include "esp_idf_network_lifecycle.hpp"
 #include "esp_idf_sntp_time_coordinator.hpp"
 #include "esp_timer_time_source.hpp"
 #include "esp_reset_cause_source.hpp"
@@ -24,6 +28,7 @@
 #endif
 
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -158,6 +163,18 @@ void logResources() {
              freeHeapBytes, static_cast<unsigned>(stackHighWaterMarkBytes));
 }
 
+device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig() {
+    std::uint8_t mac[6]{};
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
+        return {};
+    }
+    char suffix[13]{};
+    std::snprintf(suffix, sizeof(suffix), "%02X%02X%02X%02X%02X%02X", mac[0],
+                  mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return {std::string("Fermentation-") + suffix,
+            std::string("Ferm-") + suffix, "fermentation"};
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -203,6 +220,10 @@ extern "C" void app_main(void) {
     }
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
+    const auto networkConfig = makeNetworkConfig();
+    device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle(
+        networkConfig);
+    device_platform_esp_idf::EspIdfHttpServerLifecycle httpServerLifecycle;
 
     const device_platform::PlatformStartupContext startupContext{
         app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
@@ -210,7 +231,8 @@ extern "C" void app_main(void) {
     const bool applicationStarted =
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
-                          timeZoneResolver, timeSource, &resetCauseSource);
+                          timeZoneResolver, timeSource, networkLifecycle,
+                          httpServerLifecycle, &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());

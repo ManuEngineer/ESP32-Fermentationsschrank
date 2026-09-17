@@ -45,47 +45,28 @@ using ServiceConfigurationRevision =
 using ProgramCatalogRevision =
     device_platform::StrongId<detail::ProgramCatalogRevisionTag, std::uint64_t>;
 
-struct HomeWifiCredentials {
-    std::string ssid;
-    std::string password;
-
-    friend bool operator==(const HomeWifiCredentials& left,
-                           const HomeWifiCredentials& right) {
-        return left.ssid == right.ssid && left.password == right.password;
-    }
-    friend bool operator!=(const HomeWifiCredentials& left,
-                           const HomeWifiCredentials& right) {
-        return !(left == right);
-    }
-};
-
 struct UserConfiguration {
     UserConfiguration() = default;
-    UserConfiguration(
-        std::string displayLanguage, std::string timeZone, std::string name,
-        std::string theme = "manuengineer-dark",
-        device_platform::NetworkMode mode = device_platform::NetworkMode::HOME_WIFI,
-        std::optional<HomeWifiCredentials> credentials = std::nullopt)
+    UserConfiguration(std::string displayLanguage, std::string timeZone,
+                      std::string name, std::string theme = "manuengineer-dark",
+                      device_platform::NetworkMode mode =
+                          device_platform::NetworkMode::UNSELECTED)
         : displayLanguageId(std::move(displayLanguage)),
           timeZoneId(std::move(timeZone)),
           deviceName(std::move(name)),
           activeThemeId(std::move(theme)),
-          networkMode(mode),
-          homeWifiCredentials(std::move(credentials)) {}
+          networkMode(mode) {}
 
     std::string displayLanguageId;
     std::string timeZoneId;
     std::string deviceName;
-    // V1 records are normalized to this stable R1 default while being read.
-    // New persistent records carry this value in the V2 payload.
+    // V1/V2 records normalize to the internal bootstrap/migration state.
+    // Current records carry only the explicit network mode; credentials are a
+    // separate ConnectivityCredential record.
     std::string activeThemeId{"manuengineer-dark"};
-    // Network mode is explicit and is not inferred from credentials.  V1/V2
-    // records migrate to the recommended HOME_WIFI mode without credentials.
+    // Network mode is explicit and is not inferred from credentials.
     device_platform::NetworkMode networkMode{
-        device_platform::NetworkMode::HOME_WIFI};
-    // Exactly one optional HOME_WIFI credential set is supported in R1.  The
-    // value is never exposed by preview views, summaries, logs, or diagnostics.
-    std::optional<HomeWifiCredentials> homeWifiCredentials{std::nullopt};
+        device_platform::NetworkMode::UNSELECTED};
 };
 
 struct ServiceConfiguration {
@@ -108,8 +89,6 @@ enum class UserConfigurationStatus : std::uint8_t {
     TimeZonePreparationFailed,
     InvalidDeviceName,
     InvalidNetworkMode,
-    InvalidHomeWifiSsid,
-    InvalidHomeWifiPassword,
 };
 
 struct UserConfigurationValidationResult {

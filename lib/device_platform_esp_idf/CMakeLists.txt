@@ -1,8 +1,9 @@
 idf_component_register(
     SRC_DIRS "src"
     INCLUDE_DIRS "src"
-    REQUIRES device_platform nvs_flash
-    PRIV_REQUIRES esp_timer esp_netif lwip esp-idf-lib__ds3231
+    REQUIRES device_platform nvs_flash esp_wifi esp_event esp_netif
+             esp_http_server mdns
+    PRIV_REQUIRES esp_timer lwip esp-idf-lib__ds3231
                   esp-idf-lib__i2cdev
 )
 

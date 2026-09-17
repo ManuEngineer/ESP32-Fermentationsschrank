@@ -12,6 +12,15 @@ namespace device_platform {
 struct NetworkCredentials {
     std::string ssid;
     std::string password;
+
+    friend bool operator==(const NetworkCredentials& left,
+                           const NetworkCredentials& right) {
+        return left.ssid == right.ssid && left.password == right.password;
+    }
+    friend bool operator!=(const NetworkCredentials& left,
+                           const NetworkCredentials& right) {
+        return !(left == right);
+    }
 };
 
 struct NetworkScanEntry {
@@ -31,7 +40,7 @@ enum class NetworkLifecycleState : std::uint8_t {
 };
 
 struct NetworkStatus {
-    NetworkMode selectedMode{NetworkMode::HOME_WIFI};
+    NetworkMode selectedMode{NetworkMode::UNSELECTED};
     NetworkLifecycleState state{NetworkLifecycleState::Stopped};
     bool httpReady{false};
     std::optional<std::uint32_t> ipv4Address;

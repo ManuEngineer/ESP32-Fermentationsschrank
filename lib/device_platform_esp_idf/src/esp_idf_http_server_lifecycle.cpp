@@ -1,0 +1,124 @@
+#include "esp_idf_http_server_lifecycle.hpp"
+
+#include <cstdint>
+#include <string>
+
+namespace device_platform_esp_idf {
+namespace {
+
+constexpr std::size_t kMaximumHttpBodyBytes = 4096U;
+
+const char* methodName(http_method method) {
+    switch (method) {
+        case HTTP_GET:
+            return "GET";
+        case HTTP_POST:
+            return "POST";
+        case HTTP_PUT:
+            return "PUT";
+        case HTTP_DELETE:
+            return "DELETE";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+const char* statusLine(std::uint16_t status) {
+    switch (status) {
+        case 200U:
+            return "200 OK";
+        case 400U:
+            return "400 Bad Request";
+        case 404U:
+            return "404 Not Found";
+        case 409U:
+            return "409 Conflict";
+        case 503U:
+            return "503 Service Unavailable";
+        default:
+            return "500 Internal Server Error";
+    }
+}
+
+}  // namespace
+
+EspIdfHttpServerLifecycle::~EspIdfHttpServerLifecycle() {
+    static_cast<void>(stop());
+}
+
+bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
+    if (server_ != nullptr) {
+        return false;
+    }
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 1U;
+    config.uri_match_fn = httpd_uri_match_wildcard;
+    if (httpd_start(&server_, &config) != ESP_OK) {
+        server_ = nullptr;
+        return false;
+    }
+    routes_ = &routes;
+    const httpd_uri_t wildcard{
+        .uri = "/*",
+        .method = static_cast<httpd_method_t>(HTTP_ANY),
+        .handler = &EspIdfHttpServerLifecycle::handleRequest,
+        .user_ctx = this,
+    };
+    if (httpd_register_uri_handler(server_, &wildcard) != ESP_OK) {
+        static_cast<void>(httpd_stop(server_));
+        server_ = nullptr;
+        routes_ = nullptr;
+        return false;
+    }
+    return true;
+}
+
+bool EspIdfHttpServerLifecycle::stop() {
+    routes_ = nullptr;
+    if (server_ == nullptr) {
+        return true;
+    }
+    const esp_err_t result = httpd_stop(server_);
+    if (result == ESP_OK) {
+        server_ = nullptr;
+        return true;
+    }
+    return false;
+}
+
+esp_err_t EspIdfHttpServerLifecycle::handleRequest(httpd_req_t* request) {
+    if (request == nullptr || request->user_ctx == nullptr) {
+        return ESP_FAIL;
+    }
+    auto* self = static_cast<EspIdfHttpServerLifecycle*>(request->user_ctx);
+    if (self->routes_ == nullptr ||
+        request->content_len > kMaximumHttpBodyBytes) {
+        return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,
+                                   "invalid request");
+    }
+    std::string body(request->content_len, '\0');
+    std::size_t received = 0U;
+    while (received < body.size()) {
+        const int count = httpd_req_recv(request, body.data() + received,
+                                         body.size() - received);
+        if (count <= 0) {
+            return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,
+                                       "request body unavailable");
+        }
+        received += static_cast<std::size_t>(count);
+    }
+    device_platform::HttpResponse response;
+    const device_platform::HttpRequest input{
+        methodName(static_cast<http_method>(request->method)), request->uri,
+        std::move(body)};
+    if (!self->routes_->handle(input, response)) {
+        return httpd_resp_send_err(request, HTTPD_404_NOT_FOUND, "not found");
+    }
+    static_cast<void>(
+        httpd_resp_set_status(request, statusLine(response.statusCode)));
+    static_cast<void>(
+        httpd_resp_set_type(request, response.contentType.c_str()));
+    return httpd_resp_send(request, response.body.data(), response.body.size());
+}
+
+}  // namespace device_platform_esp_idf

@@ -9,7 +9,10 @@
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "connectivity_credentials.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "network_configuration_service.hpp"
+#include "network_setup_routes.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -555,7 +558,62 @@ bool FermentationApplication::begin(
     const device_platform::ITimeSource& timeSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
     return beginPersistent(platformServices, store, timeZoneResolver,
-                           &timeSource, resetCauseSource);
+                           &timeSource, resetCauseSource, nullptr, nullptr);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource, &networkLifecycle,
+                           &httpServerLifecycle);
+}
+
+bool FermentationApplication::initializeNetwork(
+    device_platform::IStateStore& store,
+    device_platform::StorageEpoch storageEpoch,
+    device_platform::NetworkMode selectedMode) {
+    if (networkLifecycle_ == nullptr || httpServerLifecycle_ == nullptr) {
+        return true;
+    }
+
+    connectivityCredentialStore_ = std::unique_ptr<ConnectivityCredentialStore>{
+        new (std::nothrow) ConnectivityCredentialStore(store)};
+    if (connectivityCredentialStore_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    networkConfigurationService_ = std::unique_ptr<NetworkConfigurationService>{
+        new (std::nothrow) NetworkConfigurationService(
+            *connectivityCredentialStore_, *networkLifecycle_)};
+    if (networkConfigurationService_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    networkSetupRoutes_ = std::unique_ptr<NetworkSetupRoutes>{
+        new (std::nothrow) NetworkSetupRoutes(*networkConfigurationService_)};
+    if (networkSetupRoutes_ == nullptr) {
+        requireService(FaultCode::None, true);
+        return false;
+    }
+    const auto networkStart =
+        networkConfigurationService_->start(selectedMode, storageEpoch);
+    if (networkStart.status == NetworkConfigurationStatus::Applied &&
+        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        requireService(FaultCode::ConfigurationUnavailable);
+        return false;
+    }
+    if (networkStart.status != NetworkConfigurationStatus::Applied &&
+        networkStart.status != NetworkConfigurationStatus::SelectionRequired) {
+        requireService(FaultCode::ConfigurationUnavailable);
+        return false;
+    }
+    return true;
 }
 
 bool FermentationApplication::beginPersistent(
@@ -563,7 +621,9 @@ bool FermentationApplication::beginPersistent(
     device_platform::IStateStore& store,
     const device_platform::ITimeZoneResolver& timeZoneResolver,
     const device_platform::ITimeSource* timeSource,
-    const device_platform::IResetCauseSource* resetCauseSource) {
+    const device_platform::IResetCauseSource* resetCauseSource,
+    device_platform::INetworkLifecycle* networkLifecycle,
+    device_platform::IHttpServerLifecycle* httpServerLifecycle) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -571,6 +631,8 @@ bool FermentationApplication::beginPersistent(
     platformServices_ = &platformServices;
     timeSource_ = timeSource;
     stateStore_ = &store;
+    networkLifecycle_ = networkLifecycle;
+    httpServerLifecycle_ = httpServerLifecycle;
     storageEpoch_.reset();
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
@@ -591,6 +653,9 @@ bool FermentationApplication::beginPersistent(
     runtimeRunState_.reset();
     runPersistenceCoordinator_.reset();
     configurationRecoveryService_.reset();
+    networkSetupRoutes_.reset();
+    networkConfigurationService_.reset();
+    connectivityCredentialStore_.reset();
     configurationService_.reset();
     graphStore_.reset();
     mutationCoordinator_.reset();
@@ -647,6 +712,12 @@ bool FermentationApplication::beginPersistent(
     }
     const auto epoch = runtime.lease.get().storageEpoch();
     storageEpoch_ = epoch;
+
+    if (!initializeNetwork(
+            store, epoch,
+            runtime.lease.get().userConfiguration().networkMode)) {
+        return true;
+    }
 
     runPersistenceCoordinator_ = std::unique_ptr<RunPersistenceCoordinator>{
         new (std::nothrow)
@@ -837,7 +908,12 @@ bool FermentationApplication::processTerminalClassification(
     return true;
 }
 
-void FermentationApplication::update() { reevaluateWaitingForTrustedTime(); }
+void FermentationApplication::update() {
+    if (networkLifecycle_ != nullptr) {
+        networkLifecycle_->poll();
+    }
+    reevaluateWaitingForTrustedTime();
+}
 
 void FermentationApplication::publishOwningRecoveryEvidence(
     const CrossRolePlausibilityContext& evidence) {
