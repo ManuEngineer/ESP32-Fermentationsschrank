@@ -100,6 +100,31 @@ UserConfigurationValidationResult validateUserConfiguration(
         ConfigurationTextStatus::Success) {
         return {UserConfigurationStatus::InvalidDeviceName, std::nullopt};
     }
+    if (!device_platform::isValidNetworkMode(configuration.networkMode)) {
+        return {UserConfigurationStatus::InvalidNetworkMode, std::nullopt};
+    }
+    if (configuration.homeWifiCredentials.has_value()) {
+        const auto& credentials = *configuration.homeWifiCredentials;
+        const auto& ssid = credentials.ssid;
+        const auto& password = credentials.password;
+        if (ssid.empty() ||
+            ssid.size() > kMaximumHomeWifiSsidBytes ||
+            std::any_of(ssid.begin(), ssid.end(), [](char value) {
+                return value == '\0';
+            })) {
+            return {UserConfigurationStatus::InvalidHomeWifiSsid,
+                    std::nullopt};
+        }
+        if (password.size() < kMinimumHomeWifiPasswordBytes ||
+            password.size() > kMaximumHomeWifiPasswordBytes ||
+            std::any_of(password.begin(), password.end(), [](char value) {
+                const auto byte = static_cast<unsigned char>(value);
+                return byte < 0x20U || byte == 0x7FU;
+            })) {
+            return {UserConfigurationStatus::InvalidHomeWifiPassword,
+                    std::nullopt};
+        }
+    }
     auto prepared = resolver.prepare(configuration.timeZoneId);
     if (prepared.status ==
         device_platform::TimeZonePrepareStatus::UnsupportedIdentifier) {
@@ -159,7 +184,9 @@ bool configurationContentEquals(const UserConfiguration& left,
     return left.displayLanguageId == right.displayLanguageId &&
            left.timeZoneId == right.timeZoneId &&
            left.deviceName == right.deviceName &&
-           left.activeThemeId == right.activeThemeId;
+           left.activeThemeId == right.activeThemeId &&
+           left.networkMode == right.networkMode &&
+           left.homeWifiCredentials == right.homeWifiCredentials;
 }
 
 bool configurationContentEquals(const ServiceConfiguration& left,

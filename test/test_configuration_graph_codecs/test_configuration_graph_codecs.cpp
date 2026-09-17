@@ -134,7 +134,7 @@ void test_manifest_rejects_inconsistent_wire_metadata_and_reference_contracts() 
         ConfigurationGraphCodecStatus::InvalidModel);
 
     manifest = validManifest();
-    manifest.userConfiguration.schemaVersion = 3U;
+    manifest.userConfiguration.schemaVersion = 4U;
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::InvalidModel);

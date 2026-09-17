@@ -59,8 +59,11 @@ UserConfiguration + ServiceConfiguration + ProgramCatalog
         ↓
 ActiveConfigurationManifest als gemeinsam aktivierte Generation
 
-getrennt davon: spaetere reale Secret-Domaenen und unveraenderlicher
-Laufschnappschuss
+UserConfiguration enthaelt im R1-Netzwerkscope von Issue #164 zusaetzlich den
+expliziten Modus `AP_ONLY | HOME_WIFI` und genau ein optionales
+HOME_WIFI-Credential-Paar. Es gibt dafuer keinen zweiten Store.
+
+getrennt davon: unveraenderlicher Laufschnappschuss
 ```
 
 ### Werkseinstellungen
