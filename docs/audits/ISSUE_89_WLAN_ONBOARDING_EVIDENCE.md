@@ -1,10 +1,11 @@
 # Issue #89 – Phase-A-Reuse-/Capability-Evidence
 
-Dieser Bericht dokumentiert die historische ESP-IDF-6.0.2-Baseline und die
-separat aufgezeichnete autorisierte Phase-A-Revalidierung auf ESP-IDF 6.1.
-Die 6.0.2-Evidence wird nicht nachtraeglich umetikettiert. Die vergleichbare
-Phase-B-Client-/Recovery-Evidence ist teilweise ausgefuehrt. Der Bericht ist
-eine Entscheidungsgrundlage und keine Produktivauswahl.
+Dieser Bericht dokumentiert die historische ESP-IDF-6.0.2-Baseline, die
+separat aufgezeichnete autorisierte Phase-A-Revalidierung auf ESP-IDF 6.1 und
+die abgeschlossene proportionale Phase-B-Kandidatenevaluation. Die 6.0.2-
+Evidence wird nicht nachtraeglich umetikettiert. Die vorhandene Android-/Linux-
+Evidence und die aktuellen Owner-Waiver reichen fuer das minimale
+Owner-Kandidatengate; der Bericht ist weiterhin keine Produktivauswahl.
 
 ## Historische 6.0.2-Baseline
 
@@ -61,13 +62,22 @@ FLASH_OVERWRITE_ALLOWED=YES
 NVS_ERASE_ALLOWED_FOR_TEST=YES
 POWER_CUT_TESTS=WAIVED_BY_OWNER
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+PHASE_B_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL_WITH_CANDIDATE_GAPS
 ANDROID_CLIENT_EVIDENCE=PASS
-IOS_CLIENT_EVIDENCE=NOT_RUN
-WINDOWS_CLIENT_EVIDENCE=NOT_RUN
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
-OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
-CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
+ANDROID_DIRECT_IP_TEST=PASS
+ANDROID_CAPTIVE_PORTAL_AUTO_OPEN=NOT_OBSERVED
+OFFICIAL_NETWORK_PROVISIONING_SOFTAP=PASS
+OFFICIAL_BROWSER_R1_CONTRACT=GAP
+DIRECT_PROTOCOMM_SOFTAP=PASS
+DIRECT_PROTOCOMM_BROWSER_R1_CONTRACT=GAP
+NATIVE_HTTP_SOFTAP=PASS
+NATIVE_HTTP_BROWSER_TRANSPORT=PASS
+IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
+OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
+CANDIDATE_SELECTION=OWNER_DECISION_PENDING
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
@@ -158,7 +168,7 @@ aktuell als `PASS` bezeichnet:
 | `espressif/network_provisioning` 1.2.4 | `PASS` fuer Component-Aufloesung und actor-free 6.1-Build | kein Browser-Portalnachweis; native Set/Apply-Persistenz und Fehler-/Recovery-Semantik bleiben offen |
 | direkter `protocomm`-/ESP-IDF-Pfad | `PASS` fuer 6.1-Build sowie Security-/Versions-/Set-/Test-/Commit-Handlergrenzen | kein Browser-, DNS-, Scan-, Reconnect- oder Recovery-Nachweis; Handler bleiben Boundary-only |
 | kleiner nativer ESP-IDF-Adapter | `PASS` fuer 6.1-SoftAP-/direkte-IP-HTTP-Capability | DNS/Captive Portal, Scan, Reconnect, Persistenz, Recovery und Commit sind nicht implementiert |
-| WiFiManager v2.0.17 | `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` | aktueller Tag ist ein Arduino-/PlatformIO-Kandidat; der vorhandene CMake-Pfad verlangt `arduino`; kein nativer ESP-IDF-6.1-Pfad ohne Arduino-Produktionsframework |
+| WiFiManager v2.0.17 | `CAPABILITY_NOT_PRESENT_FOR_CURRENT_NATIVE_IDF_GATE` | aktueller Tag ist ein Arduino-/PlatformIO-Kandidat; der vorhandene CMake-Pfad verlangt `arduino`; kein nativer ESP-IDF-6.1-Pfad ohne Arduino-Produktionsframework |
 
 ### A5.1 – aktueller Source-/Manifest-/Lizenzscreen
 
@@ -180,7 +190,7 @@ kein Shortlisting.
 | `espressif/network_provisioning` | [`espressif/network_provisioning@1.2.4`](https://components.espressif.com/components/espressif/network_provisioning), Component-Hash `72d27784e3daf807418a34fb00be136ec50c6db49d989ce981d22e031fc0e7f8`; Apache-2.0-Komponente, isolierter Probe CC0-1.0 | Managed ESP-IDF-Komponente, Manifest `idf >=5.1`, fuer IDF >=6.0 `espressif/cjson ^1.7.19`; kein Arduino; 6.1-Lockfile loest `idf 6.1.0`, `cjson 1.7.19~2` auf | Standard-Protocomm-/HTTP-SoftAP-Manager; native WiFi-/NVS-Zustands- und Set/Apply-Semantik bleibt Bibliotheksbesitz; der actor-free Build-only-Probe fuehrt keinen Client-Commit aus und loescht nichts; Browser-/HTTPD-Sharing-, #57-, Reset- und Recovery-Vertrag offen | `SOURCE_SCREEN=PASS`; `6.1_RESOLVE_BUILD=PASS`; kein Browser-/Recovery-PASS |
 | direkter `protocomm`-/ESP-IDF-Pfad | ESP-IDF-Built-ins am exakten `v6.1@fff9895c82d744c7237be8847347bdd1b07c6643`; ESP-IDF Apache-2.0, isolierter Probe CC0-1.0 | ESP-IDF-only ohne Arduino; `protocomm`, `protobuf-c`, `esp_http_server`, `esp_wifi`, `esp_netif`, `esp_event`, `nvs_flash`; der Probe registriert eigene HTTPD-/Protocomm-Endpunkte | `WIFI_STORAGE_RAM` und fail-closed NVS-Init; Set/Test/Commit-Handler sind Boundary-only und parsen, wenden oder persistieren keine Credentials; Stop-/Reset-/Recovery- und Browservertrag fehlen; eigenes HTTPD-/Security-/Endpoint-Sharing waere Integrationsrisiko | `SOURCE_SCREEN=PASS`; `6.1_BUILD=PASS`; `BUILD=actor-free`, kein Client-PASS |
 | kleiner nativer ESP-IDF-Adapter | Probequelle `aa0d231e9b97cfe489b69b27d0b1ab5dcd28c775`, CC0-1.0; ESP-IDF v6.1-Built-ins Apache-2.0 | ESP-IDF-only ohne Arduino; `esp_wifi`, `esp_netif`, `esp_event`, `esp_http_server`; `nvs_flash` nur fuer `nvs_flash_init()`; keine externe Managed-Dependency | fail-closed NVS-Init ohne Erase, `WIFI_STORAGE_RAM` vor `esp_wifi_set_config()`, direkter HTTPD-Transport ohne Server-Sharing; keine Credential-Commit-, DNS-, Scan-, Reconnect- oder Recovery-Semantik; spaetere produktive Integration muesste HTTP-/Lifecycle-/#57-Vertraege erst ownerfreigeben | `SOURCE_SCREEN=PASS`; `6.1_BUILD=PASS`; kein produktiver Adapter |
-| WiFiManager | [`tzapu/WiFiManager@v2.0.17`](https://github.com/tzapu/WiFiManager/tree/v2.0.17), Commit `d82d0a1b9fca741b9ec44accdf553606a6576dda`; MIT (`LICENSE`) | `library.json`/`library.properties` deklarieren Arduino; `CMakeLists.txt` hat `PRIV_REQUIRES arduino`; kein `idf_component.yml`; README nennt ESP8266-/ESP32-Arduino und PlatformIO | `autoConnect()` startet AP-/DNS-/Webportal und speichert ueber den Arduino-WiFi-Laufzeitpfad; `resetSettings()` und Portal-Timeout sind eigene Bibliothekssemantik; kein #57-kompatibler Storage-/Recoveryvertrag belegt | `SOURCE_SCREEN=PASS`; `BUILD=NOT_RUN`; `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` |
+| WiFiManager | [`tzapu/WiFiManager@v2.0.17`](https://github.com/tzapu/WiFiManager/tree/v2.0.17), Commit `d82d0a1b9fca741b9ec44accdf553606a6576dda`; MIT (`LICENSE`) | `library.json`/`library.properties` deklarieren Arduino; `CMakeLists.txt` hat `PRIV_REQUIRES arduino`; kein `idf_component.yml`; README nennt ESP8266-/ESP32-Arduino und PlatformIO | `autoConnect()` startet AP-/DNS-/Webportal und speichert ueber den Arduino-WiFi-Laufzeitpfad; `resetSettings()` und Portal-Timeout sind eigene Bibliothekssemantik; kein #57-kompatibler Storage-/Recoveryvertrag belegt | `SOURCE_SCREEN=PASS`; `BUILD=NOT_RUN`; `CAPABILITY_NOT_PRESENT_FOR_CURRENT_NATIVE_IDF_GATE` |
 | `thorrak/esp_wifi_config` | [`WiFiConfig/esp_wifi_config@32c78805e9fc206610b7debe31d06638cbe5da09`](https://github.com/thorrak/esp_wifi_config/tree/32c78805e9fc206610b7debe31d06638cbe5da09), Version `0.4.0`; MIT | `idf_component.yml`: `idf >=5.4`, `espressif/network_provisioning ^1.0.0` ab `idf_version >=6.0`; `library.json` nennt `espidf`/`arduino`, `library.properties` Arduino-ESP32 `3.3.11+`; CMake ist ESP-IDF-Komponente | NVS-basierte Mehrfachnetze, Auto-Reconnect und Portal; Reset-/Recovery- und Commitgrenzen sind eigene Bibliothekssemantik und nicht als #57-Vertrag nachgewiesen; zusaetzliche Storage-/HTTP-Lifecycle-Integration | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
 | `tuanpmt/esp_wifi_manager` | [`tuanpmt/esp_wifi_manager@20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a`](https://github.com/tuanpmt/esp_wifi_manager/tree/20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a), Version `1.1.0`; MIT | `idf_component.yml`: `idf >=5.0.0`, `tuanpmt/esp_bus ^1.0.3`, `espressif/mdns ^1.2`; CMake: `esp_wifi`, `esp_netif`, `nvs_flash`, `esp_http_server`, `esp_event`, `mdns` sowie private `esp_bus`, JSON und mbedTLS | NVS-Persistenz, SoftAP, REST, mDNS und Auto-Reconnect; eigener Reset-/Lifecycle-/Storagebesitz und HTTP-Handler-Sharing erzeugen Integrationsrisiko gegen #57 und die Recoverygrenze | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
 | `nordesems/esp-captive-portal` | [`nordesems/esp-captive-portal@b937ee88b86de47b40cd195f829cfd70e5af03c0`](https://github.com/nordesems/esp-captive-portal/tree/b937ee88b86de47b40cd195f829cfd70e5af03c0), Version `1.3.0`; MIT | `idf_component.yml`: `idf >=5.0.0`; CMake benoetigt `esp_event`, `esp_http_server`, `esp_netif`, `esp_wifi`, FreeRTOS, Log und lwIP; keine weitere externe Dependency | DNS-/DHCP-Option-114-Portal ohne Credential-Storage, Scan oder Reconnect; Lifecycle-/HTTPD-Handler-Reihenfolge und Kombination mit einem getrennten Owner-Transport bleiben Integrationsrisiko | `SOURCE_SCREEN=PASS`; `MANIFEST_DECLARATION_ACCEPTS_6_1=PASS`; `BUILD=NOT_RUN`; kein Shortlisting |
@@ -189,15 +199,16 @@ Die drei Zusatz-Screens wurden nur auf 6.1-relevante Manifest-/Dependency-
 Aenderungen und die geforderten Lizenz-/Lifecycle-Felder revalidiert. Es gibt
 keine zusaetzlichen Vollkandidaten, keine Auswahl und keinen Arduino-
 Produktionspfad. WiFiManager bleibt fuer den nativen ESP-IDF-6.1-Spike
-`BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE`.
+`CAPABILITY_NOT_PRESENT_FOR_CURRENT_NATIVE_IDF_GATE`.
 
 ### Phase-A-Grenzen und naechster Gate
 
 Die neuen 6.1-Build-PASS und die drei realen Flash-/Boot-/DTR-/RTS-Reset-
-Nachweise ersetzen weder Client- noch Browser-, QR- oder Recovery-Evidence.
-QR-Kamera, iOS/iPadOS und Windows bleiben `NOT_RUN`; Android und der Linux-
-Host wurden im aktuellen Owner-Lauf real verwendet. Power-Cut ist fuer Phase B
-durch den Owner als `WAIVED_BY_OWNER` festgelegt.
+Nachweise werden durch die vorhandene Android-/Linux-Client-Evidence ergaenzt.
+Der physische Display-/Kamera-QR-Test ist
+`PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION`; iOS/iPadOS
+und Windows sind durch den Owner-Waiver vor dem Auswahlgate nicht erforderlich.
+Power-Cut ist fuer Phase B durch den Owner als `WAIVED_BY_OWNER` festgelegt.
 Der vorhandene
 ESP32-WROOM-32E-Dev-Aufbau ist fuer den kontrollierten Issue-#89-Spike als
 entbehrlicher Testtraeger freigegeben. Ein zusaetzliches Test-NVS, eine
@@ -212,11 +223,13 @@ offen.
 
 Der folgende Status ist die aktuelle Testgrenze nach dem Ownerentscheid. Die
 drei autorisierten Flash-/Boot-/SoftAP-Laeufe und der anschliessende
-Owner-interaktive Lauf mit einem Linux-Host und Android wurden ausgefuehrt.
-Die vergleichbare Matrix bleibt wegen nicht ausgefuehrtem iOS/iPadOS- und
-Windows-Lauf sowie wegen kandidatspezifischer Capability-Gaps offen.
-`Reset != Power-Cut` bleibt die technische Begriffsgrenze; Power-Cut-Tests sind
-kein verpflichtendes Acceptance-Criterion.
+Der owner-interaktive Lauf mit einem Linux-Host und Android wurde fuer alle
+drei ausfuehrbaren Kandidaten ausgefuehrt. Die Android-Evidence ist PASS;
+iOS/iPadOS und Windows sind durch den Owner-Waiver vor dem Kandidatengate nicht
+mehr verpflichtend. Kandidatenspezifische fehlende Funktionen bleiben
+`CAPABILITY_NOT_PRESENT` beziehungsweise dokumentierte Produkt-/
+Integrationsluecken. `Reset != Power-Cut` bleibt die technische
+Begriffsgrenze; Power-Cut-Tests sind kein verpflichtendes Acceptance-Criterion.
 
 ```text
 OWNER_DECISION_BASE_HEAD=42a495d7139d9810086d5be77f81b2fccf3fc949
@@ -246,27 +259,37 @@ RESET_IS_POWER_CUT=NO
 PROJECT_USER_NVS_TOUCH=NOT_RUN
 FIRST_FLASH=PASS
 FLASH_ERASE_AND_WRITE=PASS
-CLIENT_MATRIX=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+CLIENT_MATRIX=PASS_MINIMAL_PROPORTIONAL_WITH_CANDIDATE_GAPS
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+PHASE_B_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL_WITH_CANDIDATE_GAPS
 ANDROID_CLIENT_EVIDENCE=PASS
-IOS_CLIENT_EVIDENCE=NOT_RUN
-WINDOWS_CLIENT_EVIDENCE=NOT_RUN
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+ANDROID_DIRECT_IP_TEST=PASS
+ANDROID_CAPTIVE_PORTAL_AUTO_OPEN=NOT_OBSERVED
+OFFICIAL_NETWORK_PROVISIONING_SOFTAP=PASS
+OFFICIAL_BROWSER_R1_CONTRACT=GAP
+DIRECT_PROTOCOMM_SOFTAP=PASS
+DIRECT_PROTOCOMM_BROWSER_R1_CONTRACT=GAP
+NATIVE_HTTP_SOFTAP=PASS
+NATIVE_HTTP_BROWSER_TRANSPORT=PASS
+IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
 PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
 PHASE_B_SECRET_REDACTION=PASS
 FIRMWARE_SOURCE_SHA=7d68c66589ffffe2ca943eb3583189207b8fdd87
 CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
-NEXT_GATE=INDEPENDENT_PHASE_B_REVIEW_AND_OWNER_CANDIDATE_GATE
+NEXT_GATE=OWNER_CANDIDATE_SELECTION_GATE
 ```
 
 Die kontrollierte Freigabe gilt ausschliesslich fuer diesen ausdruecklich
 freigegebenen Development-Testtraeger. Automatisches oder unbeabsichtigtes
 Loeschen bleibt in Produktcode, Bibliotheks- und Recoveryvertraegen
 unzulaessig. Linux-Host und Android wurden real getestet; iOS/iPadOS und
-Windows wurden in dieser Session nicht ausgefuehrt. Kandidatengaps bei
+Windows sind vor dem Kandidatengate ownerseitig waived. Kandidatengaps bei
 Captive/DNS, Scan/Form, Test/Commit und dem offiziellen Spezialclient bleiben
-offen. UART-/DTR-/RTS-Reset wurde fuer alle drei geflashten Kandidaten
+als `CAPABILITY_NOT_PRESENT` beziehungsweise Produkt-/Integrationsluecke
+dokumentiert. UART-/DTR-/RTS-Reset wurde fuer alle drei geflashten Kandidaten
 ausgefuehrt; ein Reset ist kein Power-Cut.
 
 ### Aktuelle Phase-B-Hardware- und Transport-Evidence
@@ -294,9 +317,9 @@ Phase-B-Images sind:
 
 Alle drei Images wurden mit ESP-IDF v6.1 gebaut; die App-Binary-SHAs stehen
 oben in der Kandidatentabelle. Die beiden Ressourcenwerte je Kandidat sind
-`erster Start / Start nach DTR/RTS-Reset`; alle Messpunkte stammen direkt nach
-dem Transportstart und nicht aus einer belastbaren Messung unter Clientlast.
-Clientlast-Werte bleiben `NOT_RUN`.
+`erster Start / Start nach DTR/RTS-Reset`; sie sind als Fruehindikator fuer
+dieses Owner-Gate ausreichend. Eine vollstaendige Clientlast-Qualifikation
+bleibt nach der Auswahl und produktiven Integration vorbehalten.
 
 Die Schutzkonfigurationen sind in den drei Probequellen WPA2-geschuetzt. Fuer
 den kontrollierten Lauf wurde der Passwortwert ueber die ungetrackte lokale
@@ -312,31 +335,32 @@ startet sie mit einem neu erzeugten SoftAP erneut.
 | Flash-Erase, App-/Bootloader-/Partition-Write und Hash-Verifikation | `PASS` | je Kandidat mit ESP-IDF-6.1/esptool 5.4.0 ausgefuehrt |
 | Boot, UART und ESP-IDF-Provenienz | `PASS` | alle drei Logs zeigen ESP-IDF v6.1 und Firmware-Source `7d68c66589ffffe2ca943eb3583189207b8fdd87` |
 | SoftAP-Start, Schutz und AP-IP-Ankuendigung | `PASS` | geschuetzter SoftAP; DHCP/AP-IP `192.168.4.1`; Secrets redigiert |
-| SoftAP-Stop ohne Reset | `NOT_RUN` | kein Stop-Lifecycle im jeweiligen Probe vorhanden |
+| SoftAP-Stop ohne Reset | `CAPABILITY_NOT_PRESENT` | kein Stop-Lifecycle im jeweiligen Probe vorhanden; keine Nachimplementierung vor der Auswahl |
 | WLAN-Assoziation und geschuetzter Zugang | `PASS` fuer Linux-Host und Android | alle drei Kandidaten wurden mit je einem neuen temporaeren WPA2-Wert getestet; beide Geraete erhielten DHCP |
 | direkte HTTP-/Protocomm-IP-Anfrage | `PASS` mit Kandidatengap | official und direct: Root `404 Nothing matches the given URI`; native: `200` und Setup-Seite |
-| Captive Portal / DNS / Browser | `PARTIAL` | native direkter Browser `PASS`; official `BROWSER_R1_CONTRACT=FAIL_OR_GAP`; direct Root `404`; DNS/Captive in direct/native nicht implementiert |
-| WLAN-Scan und Credential-Eingabe | `GAP/NOT_RUN` | officialer Spezialclient nicht verfuegbar; direct/native haben diese Capability nicht; keine Nachimplementierung |
+| Captive Portal / DNS / Browser | `PASS_MINIMAL_PROPORTIONAL` | native direkter Browser `PASS`; official `BROWSER_R1_CONTRACT=GAP`; direct Root `404`; DNS/Captive in direct/native als `CAPABILITY_NOT_PRESENT` dokumentiert |
+| WLAN-Scan und Credential-Eingabe | `CAPABILITY_NOT_PRESENT` / `DEFERRED_AFTER_SELECTION` | officialer Spezialclient nicht verfuegbar; direct/native haben diese Capability nicht; keine Nachimplementierung |
 | falsches Passwort | `EXPECTED_FAIL` je Kandidat | interaktiver `nmcli`-Versuch mit falschem Wert lief in Timeout; korrekte Verbindung wurde anschliessend wiederhergestellt; explizite Protokoll-Auth-Ablehnung nicht separat beobachtet |
-| Protokoll-Abbruch/Timeout, Test-vor-Commit, Commitgrenze | `NOT_RUN` | kein gueltiger `esp_prov`-/Protocomm-Spezialclient verfuegbar; Browser-POST ist kein Ersatz; keine Credentials an den offiziellen Manager gesendet; direct Handler bleiben Boundary-only |
+| Protokoll-Abbruch/Timeout, Test-vor-Commit, Commitgrenze | `DEFERRED_AFTER_SELECTION` / `CAPABILITY_NOT_PRESENT` | kein gueltiger `esp_prov`-/Protocomm-Spezialclient verfuegbar; Browser-POST ist kein Ersatz; keine Credentials an den offiziellen Manager gesendet; direct Handler bleiben Boundary-only |
 | Host-Disconnect/Reconnect | `PASS` | je Kandidat `nmcli`-Down/Up erfolgreich; UART bestaetigt erneuten Join/DHCP |
-| Firmware-Neustart getrennt vom DTR/RTS-Reset | `NOT_RUN` | kein eigener Restart-/Stop-Endpunkt im Probe |
+| Firmware-Neustart getrennt vom DTR/RTS-Reset | `CAPABILITY_NOT_PRESENT` | kein eigener Restart-/Stop-Endpunkt im Probe |
 | DTR/RTS-Reset | `PASS` | alle drei Kandidaten booteten danach erneut; `Reset != Power-Cut` |
 | Recovery nach DTR/RTS-Reset | `PASS` fuer Transport-Recovery | alle drei Kandidaten erzeugten eine neue SSID; Host und Android wurden danach erneut verbunden; kein produktiver Credential-Recoverypfad |
-| Credential-/NVS-/Recovery-Cut-Points | `NOT_RUN` | kein Set/Apply/Commit; Vollerase war kontrollierter Testaufbau |
+| Credential-/NVS-/Recovery-Cut-Points | `DEFERRED_AFTER_SELECTION` | kein Set/Apply/Commit; Vollerase war kontrollierter Testaufbau; produktive Cutpoints folgen erst nach Integration |
 | Laufzeit-Heap, Minimum, groesster Block und Stack-Watermark am Transportstart | `PASS` | belastbare Messzeile fuer alle drei geflashten Kandidaten; keine Clientlast |
-| Handles, Leaks, Watchdog unter Clientlast und Jitter | `NOT_RUN` | kein Clientlauf und kein belastbarer Jitter-Messpunkt |
+| Handles, Leaks, Watchdog unter Clientlast und Jitter | `DEFERRED_AFTER_SELECTION` | keine weitere Clientlastqualifikation vor der Owner-Auswahl |
 | Power-Cut-Tests | `WAIVED_BY_OWNER` | nicht verpflichtendes Acceptance-Criterion und kein offener Testpunkt |
 
-Fehlende Capabilities bleiben Kandidatenbefunde: Der direkte Protocomm-Probe
-bindet nur Boundary-Handler ohne Credentialinterpretation; der native
+Fehlende Capabilities bleiben als `CAPABILITY_NOT_PRESENT` beziehungsweise
+dokumentierte Produkt-/Integrationsluecken erhalten: Der direkte Protocomm-
+Probe bindet nur Boundary-Handler ohne Credentialinterpretation; der native
 HTTP-Probe hat nur direkte HTTP-Seite; beide enthalten keinen DNS-/Captive-,
 Scan-, Formular- oder Commitpfad. Der offizielle Manager startet seinen
 Standardtransport, aber ein normaler Browser-GET/POST ist kein gueltiger
 `esp_prov`-Client. Der Rootzugriff war `404`; deshalb ist
-`BROWSER_R1_CONTRACT=FAIL_OR_GAP`. Ein Spezialclient war in der vorhandenen
-Umgebung nicht verfuegbar und wurde nicht nachgebaut. Es wurde kein Wrapper
-und kein Arduino-Produktionspfad eingefuehrt.
+`BROWSER_R1_CONTRACT=GAP`. Ein Spezialclient war in der vorhandenen Umgebung
+nicht verfuegbar und wurde nicht nachgebaut. Es wurde kein Wrapper und kein
+Arduino-Produktionspfad eingefuehrt.
 
 ### Aktuelle Clientmatrix und QR-Grenze
 
@@ -348,38 +372,44 @@ aufgezeichnet.
 
 | Kandidat / Plattform | WLAN / AP-IP | Captive-Angebot | Browser / direkte IP | Formular / Scan | Falsches Passwort | Abbruch / Test / Commit | Reconnect | Neustart / DTR/RTS / Recovery | Runtime unter Last | Redaction |
 |---|---|---|---|---|---|---|---|---|---|---|
-| official / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `404`; `BROWSER_R1_CONTRACT=FAIL_OR_GAP` | `NOT_RUN`; Spezialclient nicht verfuegbar | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; kein gueltiger `esp_prov`-Client | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
+| official / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `404`; `BROWSER_R1_CONTRACT=GAP` | `NOT_RUN`; Spezialclient nicht verfuegbar | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; kein gueltiger `esp_prov`-Client | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
 | official / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | manueller Zugriff `404`; kein Browser-R1-Portal | `NOT_RUN`; kein App-/CLI-Spezialclient | `NOT_RUN` | `NOT_RUN`; keine Credential-Apply-Aktion | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
 | direct Protocomm / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `404`; Browser-Capability-Gap | `GAP` | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; Handler Boundary-only | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
 | direct Protocomm / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | manueller Zugriff `404`; Browser-Capability-Gap | `GAP` | `NOT_RUN` | `NOT_RUN`; Handler Boundary-only | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
 | native HTTP / Linux-Host | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `200`; native Setup-Seite | `GAP` | `EXPECTED_FAIL`; NM-Timeout | `NOT_RUN`; kein Commitpfad | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
 | native HTTP / Android | `PASS` / `192.168.4.1` | `NOT_OBSERVED` | `200`; „Direct local setup transport“ | `GAP` | `NOT_RUN` | `NOT_RUN`; kein Commitpfad | `PASS` | `NOT_RUN` / `PASS` / `PASS` | `NOT_RUN` | `PASS` |
-| official / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| direct Protocomm / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| native HTTP / iOS/iPadOS | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| official / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| direct Protocomm / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
-| native HTTP / Windows | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| official / iOS/iPadOS | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
+| direct Protocomm / iOS/iPadOS | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
+| native HTTP / iOS/iPadOS | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
+| official / Windows | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
+| direct Protocomm / Windows | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
+| native HTTP / Windows | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `WAIVED_BY_OWNER` | `DEFERRED_AFTER_SELECTION` | `PASS` |
 
 Damit gilt explizit:
 
 ```text
 ANDROID_CLIENT_EVIDENCE=PASS
-IOS_CLIENT_EVIDENCE=NOT_RUN
-WINDOWS_CLIENT_EVIDENCE=NOT_RUN
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
-OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+ANDROID_DIRECT_IP_TEST=PASS
+ANDROID_CAPTIVE_PORTAL_AUTO_OPEN=NOT_OBSERVED
+IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
+OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
 ```
 
-Der physische QR-Scan ueber das spaetere Geraetedisplay bleibt unabhaengig
-`BLOCKED_HARDWARE`; synthetisches QR-Oracle und die drei UART-/SoftAP-
-Nachweise ersetzen ihn nicht.
+Der physische QR-Scan ueber das spaetere Geraetedisplay ist
+`PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION`.
+Synthetisches QR-Oracle und die drei UART-/SoftAP-Nachweise bleiben gueltig;
+der reale Display-/Kamera-Test wird erst mit angeschlossener Displayhardware
+nachgeholt.
 
 ## Historischer Phase-B-Stop vor dem Ownerentscheid
 
 Die folgenden Angaben sind der damalige konservative Status vor der
-ausdruecklichen Ownerfreigabe. Sie bleiben unveraendert als historische
-Evidence und beschreiben nicht die aktuelle Testgrenze.
+ausdruecklichen Ownerfreigabe. Sie bleiben als historische Evidence erhalten,
+sind durch die Ownerfreigabe superseded und beschreiben nicht die aktuelle
+Testgrenze.
 
 Vor jedem Flash-/Clienttest wurde der folgende Aufbau festgehalten. Der
 Chip-Handshake war nichtschreibend erfolgreich; ein Flash oder Clientlauf
@@ -387,7 +417,7 @@ wurde danach nicht gestartet, weil das Test-NVS und der Power-Cut-Pfad nicht
 als isoliert beziehungsweise Owner-gesichert bestaetigt waren.
 
 ```text
-PHASE_B_TEST_SETUP=BLOCKED_HARDWARE
+PHASE_B_TEST_SETUP=SUPERSEDED_PRE_OWNER_STOP
 BOARD_FAMILY=esp32_32e_quad_mosfet
 BOARD_MODULE=ESP32-WROOM-32E
 BOARD_REVISION=TBD_HARDWARE
@@ -400,11 +430,11 @@ UART_ACCESS=PASS_FOR_BOOTLOADER_HANDSHAKE
 RESET_PATH=FT232R_DTR_RTS_DEFAULT_RESET
 RESET_IS_POWER_CUT=NO
 POWER_AT_HANDSHAKE=BOARD_RESPONDED
-POWER_CUT_PATH=NOT_VERIFIED
-TEST_NVS=BLOCKED_NOT_EXPLICITLY_ISOLATED_OR_OWNER_SECURED
+POWER_CUT_PATH=WAIVED_BY_OWNER
+TEST_NVS=SUPERSEDED_BY_OWNER_AUTHORIZATION
 PROJECT_USER_NVS_TOUCH=NOT_RUN
-FIRST_FLASH=NOT_RUN
-CLIENT_MATRIX=NOT_RUN
+FIRST_FLASH=SUPERSEDED_BY_CURRENT_PASS
+CLIENT_MATRIX=SUPERSEDED_BY_CURRENT_MINIMAL_EVIDENCE
 FIRMWARE_SOURCE_SHA=b2f08f4d568c60559e575c824844199012b80c30
 CURRENT_ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
 ```
@@ -417,10 +447,12 @@ ausgegebene Hardware-MAC wurde nicht in die Evidence uebernommen. Es wurden
 keine Projekt-/Benutzer-Credentials gelesen, ausgegeben, ueberschrieben oder
 geloescht.
 
-### Phase-B-Firmware vor dem Flash-Gate
+### Historische Phase-B-Firmware vor dem damaligen Flash-Gate
 
-Alle drei actor-free Kandidaten wurden auf dem oben genannten Source-HEAD mit
-ESP-IDF 6.1 gebaut. Die Artefakte sind vorbereitet, aber nicht geflasht.
+Alle drei actor-free Kandidaten wurden auf dem damals dokumentierten Source-HEAD
+mit ESP-IDF 6.1 gebaut. Die folgende Tabelle ist historische Evidence vor der
+später erfolgten Ownerfreigabe und wird nicht als aktueller Hardwarestatus
+verwendet.
 
 | Kandidat | Build | Partition-/NVS-Aufbau | App `.bin` | App-Binary-SHA256 | App-ELF-SHA256 |
 |---|---|---|---:|---|---|
@@ -436,23 +468,24 @@ Build-/Imagegroessen sind keine Laufzeit- oder Client-Evidence.
 
 ### Phase-B-Matrix
 
-Mangels bestaetigtem isoliertem beziehungsweise gesichertem Test-NVS und
-fehlendem verifiziertem Power-Cut-Pfad wurde kein Kandidat geflasht. Deshalb
-sind alle hardware-, client- und laufzeitabhaengigen Felder `NOT_RUN`; der
-fehlende sichere Testaufbau ist `BLOCKED_HARDWARE` und kein simuliertes PASS.
+Die damalige Matrix wurde vor der ausdruecklichen Ownerfreigabe konservativ
+geschlossen. Sie ist durch die aktuelle reale Phase-B-Evidence und die
+proportionalen Owner-Waiver ersetzt; daraus werden keine aktuellen
+`BLOCKED`- oder `FAILED`-Statuswerte fuer das Owner-Kandidatengate abgeleitet.
 
 | Kandidat | Flash / SoftAP | Browser / direkte IP / Captive | Scan / Credential-Eingabe | Falsches Passwort / Abbruch / Timeout | Reconnect / Neustart | Commit-/NVS-/Recovery-Cut-Points | Laufzeitressourcen |
 |---|---|---|---|---|---|---|---|
-| `espressif/network_provisioning` 1.2.4 | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Screen bleibt: native NVS-/Set-/Apply-Semantik offen | `NOT_RUN` |
-| direkter `protocomm`-/ESP-IDF-Pfad | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Handler bleiben Boundary-only und RAM-only | `NOT_RUN` |
-| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | `NOT_RUN` (`BLOCKED_HARDWARE`) | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN`; Phase-A-Probe bleibt ohne Credential-Commit | `NOT_RUN` |
-| WiFiManager v2.0.17 | `BLOCKED_FOR_NATIVE_IDF_6_1_SPIKE` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` | `NOT_RUN` |
+| `espressif/network_provisioning` 1.2.4 | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP`; native NVS-/Set-/Apply-Semantik bleibt Integrationsbefund | `SUPERSEDED_PRE_OWNER_STOP` |
+| direkter `protocomm`-/ESP-IDF-Pfad | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP`; Handler bleiben Boundary-only und RAM-only | `SUPERSEDED_PRE_OWNER_STOP` |
+| kleiner nativer ESP-IDF-SoftAP-/HTTP-Pfad | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP` | `SUPERSEDED_PRE_OWNER_STOP`; Probe bleibt ohne Credential-Commit | `SUPERSEDED_PRE_OWNER_STOP` |
+| WiFiManager v2.0.17 | `CAPABILITY_NOT_PRESENT_FOR_CURRENT_GATE` | `DEFERRED_AFTER_SELECTION` | `DEFERRED_AFTER_SELECTION` | `DEFERRED_AFTER_SELECTION` | `DEFERRED_AFTER_SELECTION` | `DEFERRED_AFTER_SELECTION` | `DEFERRED_AFTER_SELECTION` |
 
-Damit gibt es keinen neuen Browser-only-Befund, keinen vergleichbaren
-Client-/QR-Befund, keinen #57-/Security-/Backup-/Reset-Entscheid und keine
-Kandidaten- oder Persistenzauswahl. Android, iOS/iPadOS und Windows waren in
-diesem Lauf `NOT_RUN`; ein physischer QR-Scan bleibt getrennt und ist ohne
-angeschlossene Displayhardware `BLOCKED_HARDWARE` beziehungsweise `NOT_RUN`.
+Damit gab es in dieser historischen Momentaufnahme noch keinen Browser-only-
+Befund, keinen vergleichbaren Client-/QR-Befund, keinen #57-/Security-/
+Backup-/Reset-Entscheid und keine Kandidaten- oder Persistenzauswahl. Diese
+Momentaufnahme ist durch den aktuellen Android-/Linux-Lauf und den
+Ownerentscheid superseded; der physische QR-Scan ist heute
+`PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION`.
 
 ### Recovery-, Reuse- und Owner-Gate des historischen Stops
 
@@ -463,12 +496,12 @@ beruehrt. Die bereits gescreenten Zusatzkomponenten wurden nicht gebaut; es
 gab keinen Phase-B-Befund, der einen vertieften Reuse-Spike rechtfertigt.
 
 ```text
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=BLOCKED_HARDWARE
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=SUPERSEDED_PRE_OWNER_STOP
 BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=OWNER_GATE_PENDING
-OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
+OWNER_CANDIDATE_SELECTION_GATE=SUPERSEDED_PRE_OWNER_STOP
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
-NEXT_GATE=OWNER_CONFIRMS_ISOLATED_TEST_NVS_AND_POWER_CUT_SETUP
+NEXT_GATE=SUPERSEDED_BY_CURRENT_OWNER_CANDIDATE_GATE
 ```
 
 ## Ausfuehrungsgrenze
@@ -536,7 +569,7 @@ Client-/Recovery-PASS.
 | `espressif/network_provisioning` 1.2.4 | PASS fuer ESP-IDF-6.0.2-Build; native SoftAP-/Protocomm-/HTTP-Transportfunktionen | Standard-SoftAP-Schema startet Protocomm-HTTPD, liefert aber nicht automatisch ein normales Browser-Portal; native WiFi-Konfiguration wird vor erfolgreichem Verbindungstest in Flash gesetzt; Fehlerpfad stellt die bisherige funktionierende Konfiguration nicht als R1-Vertrag wieder her | JA, browser- und Persistenz-Gate offen |
 | direkter `protocomm`-/ESP-IDF-SoftAP-/HTTP-/DNS-Pfad | PASS fuer reproduzierbaren ESP-IDF-6.0.2-Build; `protocomm_new`, `protocomm_httpd_start`, `protocomm_set_security`, `protocomm_set_version` und `protocomm_add_endpoint` werden ohne `network_provisioning` verwendet; isolierter SoftAP, HTTPD-Transport und `r1-set`/`r1-test`/`r1-commit`-Handlergrenzen; ESP-IDF-/Protocomm-/protobuf-c-/HTTPD-Abhaengigkeiten, Apache-2.0 | Handler verarbeiten keine Credentialdaten; kein Browser-/Captive-/DNS-/Scan-/Reconnect-/Commit-Nachweis und keine Produktsemantik; Security 0 ist nur Build-/Boundary-Evidence und kein R1-Sicherheitsnachweis | Capability PASS; Phase-B-Matrix PENDING |
 | kleiner eigener nativer ESP-IDF-Adapter | PASS nur fuer isolierten SoftAP-/direkte-IP-HTTP-Capability-Build; kein produktiver Adapter | DNS/Captive Portal, Scan, Reconnect, Persistenz, Recovery und Commit sind absichtlich nicht implementiert; Eigenbau ist vor Reuse- und Owner-Gate keine Umsetzungsrichtung | JA, nur nach Gate und gegen Reuse-Evidence |
-| WiFiManager v2.0.17 | Quellen-/Lizenzscreen; Arduino-Framework und `CMakeLists.txt`-Abhaengigkeit auf `arduino` | kein direkter nativer ESP-IDF-6.0.2-Pfad ohne Frameworkwechsel; keine gleichwertige ESP-IDF-Produktintegration belegt | `FAIL/BLOCKED_FOR_NATIVE_IDF_SPIKE`; nur bei Owner-Entscheid fuer Arduino nochmals pruefen |
+| WiFiManager v2.0.17 | Quellen-/Lizenzscreen; Arduino-Framework und `CMakeLists.txt`-Abhaengigkeit auf `arduino` | kein direkter nativer ESP-IDF-6.0.2-Pfad ohne Frameworkwechsel; keine gleichwertige ESP-IDF-Produktintegration belegt | `CAPABILITY_NOT_PRESENT_FOR_CURRENT_NATIVE_IDF_GATE`; nur bei Owner-Entscheid fuer Arduino nochmals pruefen |
 | `thorrak/esp_wifi_config` v0.4.0 | liefert SoftAP, Captive Portal/DNS, Web-UI, Scan, Reconnect/Lifecycle und HTTPD-Sharing; MIT; aktueller Stand `32c78805e9fc206610b7debe31d06638cbe5da09`; Manifest ab IDF 5.4 und IDF-6-Hinweis auf `network_provisioning` | eigene NVS-/Auto-Commit-/Reconnect-/Reset-Semantik und Zusatzabhaengigkeiten muessen gegen #57, Security, Backup und Reset geprueft werden | `CONDITIONAL_YES`; nur bei realem Vorteil vertiefen |
 | `tuanpmt/esp_wifi_manager` v1.1.0 | liefert SoftAP, Captive Portal/DNS, Web-UI, Scan, Multinetwork-Reconnect/Lifecycle und Reset; MIT; aktueller Stand `20f77d79e9cdde9e4d3f0c3c7a3bd3babfaf893a` | eigene NVS-/REST-/Config-Semantik, `esp_bus`-/mDNS-Abhaengigkeit, leeres Default-AP-Passwort und unredigierte Config-/REST-Risiken; kein belegter Vorteil gegenueber den Hauptkandidaten | `CONDITIONAL_NO`; kein Deep-Spike ohne neuen Vorteil |
 | `nordesems/esp-captive-portal` v1.3.0 | MIT; aktueller Stand `b937ee88b86de47b40cd195f829cfd70e5af03c0`; DNS, DHCP Option 114, OS-Probes und Registrierung an bestehenden `esp_http_server` | liefert weder SoftAP, Credentialfluss, Scan, Reconnect, Storage noch Reset; Handler-Reihenfolge und Lifecycle muessen integriert geprueft werden | `CONDITIONAL_SUBCOMPONENT`; nur als kleiner DNS/OS-Probe-Teil vertiefen |
@@ -617,32 +650,32 @@ freigegeben.
 
 | Nachweis | Status | Grenze / naechster Nachweis |
 |---|---|---|
-| Portal explizit starten und kontrolliert beenden | PARTIAL | drei Transportstarts und native direkte HTTP-Seite real belegt; offizieller Browser-R1-Vertrag, Stop und produktive Recovery fehlen |
-| individuelle geschuetzte SoftAP-Zugangsdaten | PARTIAL | volatile individuelle Werte werden erzeugt und redigiert; keine reale Clientabnahme |
-| WLAN-QR | PARTIAL | synthetisches Format und Escaping im Host-Oracle PASS; QR-Encoding, Anzeige und Kamera-Decoding NOT_RUN |
-| direkte IP | PASS mit Kandidatengaps | official/direct Root `404`; native direkte HTTP-Seite `200`; Host und Android real verbunden |
+| Portal explizit starten und kontrolliert beenden | PASS_MINIMAL_PROPORTIONAL | drei Transportstarts und native direkte HTTP-Seite real belegt; offizieller Browser-R1-Vertrag bleibt GAP; produktive Recovery folgt nach Integration |
+| individuelle geschuetzte SoftAP-Zugangsdaten | PASS fuer den Testaufbau | volatile individuelle Werte wurden erzeugt, fuer Linux/Android verwendet und redigiert; produktive Credential-Persistenz bleibt ausserhalb des Scopes |
+| WLAN-QR | DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION | synthetisches Format und Escaping im Host-Oracle PASS; realer Display-/Kamera-Test folgt mit Displayhardware |
+| direkte IP | PASS_MINIMAL_PROPORTIONAL mit Kandidatengaps | official/direct Root `404`; native direkte HTTP-Seite `200`; Host und Android real verbunden |
 | direkter Protocomm-Transport und oeffentliche Endpoint-Grenze | PASS fuer Capability | ESP-IDF-6.1-Build, realer Boot und echter WLAN-Transport; Set/Test/Commit bleiben Boundary-only und wurden nicht als Credentialvorgang ausgefuehrt |
-| Captive Portal/DNS/OS-Erkennung | PARTIAL | keine Captive-/DNS-Erkennung beobachtet; native/direct ohne diese Capability; offizieller Browser-R1-Vertrag `FAIL_OR_GAP` |
-| Scan, Eingabe, Test, Abbruch, Timeout, Reconnect | PARTIAL | WLAN-/Host-Reconnect und falsches Passwort real; Scan/Form, Protokoll-Abbruch, Test/Commit und Spezialclient `NOT_RUN/GAP` |
-| Android | PASS mit Kandidatengaps | alle drei SoftAPs beigetreten; direct/native Browserbefund real, official Root `404`; iOS-/Windows-Vergleich fehlt |
-| iOS/iPadOS | NOT_RUN | kein Client-/Hardwarelauf |
-| Windows | NOT_RUN | kein Client-/Hardwarelauf |
+| Captive Portal/DNS/OS-Erkennung | NOT_OBSERVED / CAPABILITY_NOT_PRESENT | Android-Captive-Auto-Open nicht beobachtet; native/direct ohne DNS-/Captive-Capability; offizieller Browser-R1-Vertrag `GAP` |
+| Scan, Eingabe, Test, Abbruch, Timeout, Reconnect | PASS_MINIMAL_PROPORTIONAL mit deferred Capabilities | WLAN-/Host-Reconnect und falsches Passwort real; Scan/Form, Protokoll-Abbruch, Test/Commit und Spezialclient bleiben `CAPABILITY_NOT_PRESENT` oder nach Auswahl deferred |
+| Android | PASS | alle drei SoftAPs beigetreten; direkte IP real; official/direct Root `404`, native Root `200` |
+| iOS/iPadOS | WAIVED_BY_OWNER | vor dem Owner-Kandidatengate nicht verpflichtend |
+| Windows | WAIVED_BY_OWNER | vor dem Owner-Kandidatengate nicht verpflichtend |
 | Redaction in Logs, URLs, Diagnose, Backup | PARTIAL/PASS | Host-Oracle und statische Probeausgabe PASS; reale Bibliotheks-/Backuppfade nicht freigegeben |
 | alte funktionierende Credentials bei Fehlversuch erhalten | PARTIAL | kandidatenneutrale Commitgrenze PASS; offizielle native Vorab-Flashsemantik ist Konfliktbefund, kein Produkt-PASS |
 | Safety-/Regelungsunabhaengigkeit | PASS fuer Scope | keine Produktionskopplung; reale Laufzeitisolation bleibt Integrationsnachweis |
 | Hardware-/UART-/Reset-Recovery | PASS fuer Transport-Recovery | drei ESP-IDF-6.1-Flash-/Bootlaeufe, DTR/RTS-Resets und anschliessende Host-/Android-Reconnects PASS; Credential-/Recovery-Cut-Points fehlen |
-| Heap-/Stack-/Jitter-Messung | NOT_RUN | Buildgroessen sind dokumentiert; Laufzeitbudgets und Regelungs-/Safety-Jitter sind nicht gemessen |
+| Heap-/Stack-/Jitter-Messung | PASS_AT_TRANSPORT_START / DEFERRED_AFTER_SELECTION | vorhandene Start-/Reset-Werte reichen als Fruehindikator; vollstaendige Clientlast-/Gesamtsystemqualifikation folgt nach Integration |
 
-Die Nachweise ohne zusätzliche Verkabelung sind damit auf Host-Oracle,
-statischen Source-/Manifest-Screen und actor-free IDF-Builds begrenzt. Reale
-Android-, iOS- und Windows-Browser-, QR-, SoftAP-, Reset- und
-Reconnect-Nachweise benötigen den ESP32-Aufbau, UART/Resetzugang und die
-jeweiligen Clientgeraete. Sie werden nicht durch Host- oder Build-PASS
-ersetzt.
+Die proportionale Kandidatenevaluation ist damit fuer das Owner-Gate
+ausreichend. Fehlende Spike-Funktionen werden nicht nachgebaut. Die
+vollstaendige WLAN-/Web-/Reconnect-/Safety-Ressourcenqualifikation sowie der
+Display-/Kamera-QR-Test erfolgen erst nach Auswahl und produktiver
+Integration.
 
 ## Owner-Gate vor produktiver Auswahl
 
-Nach der vergleichbaren Evidence entscheidet der Owner ausdrücklich:
+Nach der proportionalen vergleichbaren Evidence entscheidet der Owner
+ausdrücklich:
 
 - `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO`;
 - welcher der vier Hauptpfade, gegebenenfalls mit einem begründeten
@@ -652,17 +685,26 @@ Nach der vergleichbaren Evidence entscheidet der Owner ausdrücklich:
 - welche minimale Integrationsgrenze und welche realen Client-/Hardwaretests
   vor Phase D gelten.
 
-Bis zu diesem Gate ist der Status:
+Das Owner-Kandidatengate ist vorbereitet; bis zur Auswahl ist der Status:
 
 ```text
 PHASE_A_CAPABILITY_EVIDENCE=PASS
 PHASE_B_TEST_SETUP=OWNER_AUTHORIZED
 PHASE_B_FLASH_BOOT_EVIDENCE=PASS
-PHASE_B_CLIENT_EVIDENCE=PARTIAL_WITH_CANDIDATE_AND_PLATFORM_GAPS
+PHASE_B_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL_WITH_CANDIDATE_GAPS
 ANDROID_CLIENT_EVIDENCE=PASS
-IOS_CLIENT_EVIDENCE=NOT_RUN
-WINDOWS_CLIENT_EVIDENCE=NOT_RUN
-PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PENDING
+ANDROID_DIRECT_IP_TEST=PASS
+ANDROID_CAPTIVE_PORTAL_AUTO_OPEN=NOT_OBSERVED
+OFFICIAL_NETWORK_PROVISIONING_SOFTAP=PASS
+OFFICIAL_BROWSER_R1_CONTRACT=GAP
+DIRECT_PROTOCOMM_SOFTAP=PASS
+DIRECT_PROTOCOMM_BROWSER_R1_CONTRACT=GAP
+NATIVE_HTTP_SOFTAP=PASS
+NATIVE_HTTP_BROWSER_TRANSPORT=PASS
+IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
+PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
+PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
 PHASE_B_LOCAL_TEST_CREDENTIAL=EPHEMERAL_UNTRACKED_OVERRIDE
 PHASE_B_SECRET_REDACTION=PASS
 PHASE_B_RUNTIME_RESOURCE_EVIDENCE=PASS_AT_TRANSPORT_START; CLIENT_LOAD=NOT_RUN
@@ -671,8 +713,8 @@ EFUSE_WRITE=NO
 SECURE_BOOT_CHANGE=NO
 FLASH_ENCRYPTION_CHANGE=NO
 ROM_DOWNLOAD_MODE_DISABLE=NO
-OWNER_CANDIDATE_SELECTION_GATE=NOT_READY
-CANDIDATE_SELECTION=OWNER_PENDING_AFTER_COMPARABLE_EVIDENCE
+OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
+CANDIDATE_SELECTION=OWNER_DECISION_PENDING
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 IMPLEMENTATION=SPIKE_ONLY_EVIDENCE
