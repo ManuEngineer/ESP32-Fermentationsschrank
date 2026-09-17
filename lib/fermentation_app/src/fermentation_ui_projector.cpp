@@ -47,6 +47,9 @@ FermentationUiSnapshot FermentationUiProjector::project(
     output.service.serviceAuthorizationRequired =
         input.service.serviceAuthorizationRequired;
     output.service.unavailableReason = input.service.unavailableReason;
+    output.network.currentMode = input.network.currentMode;
+    output.network.selectionRequired =
+        input.network.currentMode == device_platform::NetworkMode::UNSELECTED;
     output.home.primaryAction =
         input.primaryAction.value_or(device_platform::TextKey{});
 

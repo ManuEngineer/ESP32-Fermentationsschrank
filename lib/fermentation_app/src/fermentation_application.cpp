@@ -663,7 +663,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     }
     build.lease.userConfiguration().networkMode = selectedMode;
     const auto installed = configurationService_->installPreview(
-        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 1U},
+        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
         {ChangeOperationKind::NormalEdit, 1U});
     if (installed.status != ConfigurationPreviewStatus::Success ||
         !installed.preview.has_value()) {
@@ -717,6 +717,14 @@ FermentationApplication::networkAccessPointInfo() const {
         return std::nullopt;
     }
     return networkConfigurationService_->accessPointInfo();
+}
+
+device_platform::NetworkMode FermentationApplication::networkMode()
+    const noexcept {
+    if (networkConfigurationService_ == nullptr) {
+        return device_platform::NetworkMode::UNSELECTED;
+    }
+    return networkConfigurationService_->selectedMode();
 }
 
 bool FermentationApplication::beginPersistent(

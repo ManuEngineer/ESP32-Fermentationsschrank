@@ -94,6 +94,8 @@ class FermentationApplication {
     // these credentials.
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     networkAccessPointInfo() const;
+    // Secret-free canonical mode input for the renderer-independent UI view.
+    [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {

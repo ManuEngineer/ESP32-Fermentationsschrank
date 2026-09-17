@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -10,6 +11,7 @@
 #include "device_ui_contracts.hpp"
 #include "device_ui_session.hpp"
 #include "device_ui_theme.hpp"
+#include "network_mode.hpp"
 #include "presentation_state.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
@@ -94,6 +96,20 @@ struct ServiceAvailabilityView {
     std::optional<device_platform::TextKey> unavailableReason;
 };
 
+// The network selector is the smallest renderer-independent view needed by
+// local and future UI surfaces. UNSELECTED is an internal bootstrap state;
+// the fixed array is the complete user-facing choice set. SoftAP setup data
+// intentionally does not belong here and remains on the dedicated
+// FermentationApplication accessor.
+struct FermentationNetworkModeView {
+    device_platform::NetworkMode currentMode{
+        device_platform::NetworkMode::UNSELECTED};
+    bool selectionRequired{true};
+    std::array<device_platform::NetworkMode, 2U> selectableModes{
+        device_platform::NetworkMode::AP_ONLY,
+        device_platform::NetworkMode::HOME_WIFI};
+};
+
 struct FermentationUiSnapshot {
     FermentationUiExpectedRevisions revisions;
     FermentationHomeView home;
@@ -103,6 +119,7 @@ struct FermentationUiSnapshot {
     RecoveryView recovery;
     ApplicationStatusView status;
     ServiceAvailabilityView service;
+    FermentationNetworkModeView network;
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 
@@ -117,6 +134,13 @@ struct FermentationUiServiceSource {
     bool confirmationRequired{false};
     bool serviceAuthorizationRequired{false};
     std::optional<device_platform::TextKey> unavailableReason;
+};
+
+// Application-owned, secret-free network input for projection. Credentials
+// and SoftAP access data never cross the general UI snapshot boundary.
+struct FermentationUiNetworkSource {
+    device_platform::NetworkMode currentMode{
+        device_platform::NetworkMode::UNSELECTED};
 };
 
 // Owning application state supplied to the projector. This is deliberately
