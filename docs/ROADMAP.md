@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-16
+Stand: 2026-09-17
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -32,7 +32,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `BASE_SHA=c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`; `PLAN_REVISION_REQUIRED=YES`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `IMPLEMENTATION=PAUSED_FOR_PLAN_REVISION`; `PR=165_DRAFT`; `PRODUCTIVE_IMPLEMENTATION=PAUSED`; `ACTUATOR_RELEASE=NO`. | Planrevision unabhaengig pruefen und Ownerfreigabe der neuen exakten Plan-SHA abwarten; keine weitere Produktimplementierung |
+| 0 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `BASE_SHA=c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`; `REVISED_PLAN_SHA=39a96d1c7be39cecf16f71a9dc9a250dbc53e736`; `PLAN_REVISION_REQUIRED=YES`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `IMPLEMENTATION=PAUSED_FOR_PLAN_REVISION`; `PR=165_DRAFT`; `PRODUCTIVE_IMPLEMENTATION=PAUSED`; `ACTUATOR_RELEASE=NO`. | Unabhaengige Pruefung und Ownerfreigabe von `REVISED_PLAN_SHA=39a96d1c7be39cecf16f71a9dc9a250dbc53e736`; keine weitere Produktimplementierung |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PR158_SOURCE_HEAD=c9b7730531a6c3d5a450e1ee8dbae661bf29b686`; `BASE_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55`; `APPROVED_PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c`; `PLAN_STATUS=APPROVED`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `INTEGRATION_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`; `PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED`; `PRODUCTIVE_IMPLEMENTATION=PAUSED_FOR_PLAN_REVISION`; `ACTUATOR_RELEASE=NO`; `IMPLEMENTATION=SPIKE_ONLY_EVIDENCE`. Die Kandidatenevaluation ist abgeschlossen; die weitere #89-Arbeit ist beendet und die produktive Integration in #164 pausiert bis zur Planfreigabe. | Keine weitere #89-Implementation; Owner kann den Abschluss von Issue #89 pruefen |
 | 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO`. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
