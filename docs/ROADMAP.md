@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-16
+Stand: 2026-09-17
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden

@@ -16,6 +16,18 @@ geprueft:
 - freigegebener Plan-Commit und neuester `SESSION HANDOVER`, sofern vorhanden;
 - die laut Lesematrix und Aufgabe konkret betroffenen Fachquellen.
 
+Abhaengige Folgearbeit startet grundsaetzlich auf dem aktuellen kanonischen
+`main`, nachdem alle fuer ihre Baseline notwendigen vorgelagerten PRs gemergt
+sind.
+
+Ein Branch/PR darf nur dann bewusst auf einem noch ungemergten PR aufbauen,
+wenn der Owner einen gestapelten PR ausdruecklich autorisiert hat. In diesem
+Fall muessen Abhaengigkeit, Basis-PR und Rebase-/Neuaufbau-Gate sichtbar
+dokumentiert sein.
+
+Fehlt diese Freigabe oder ist ein notwendiger Vorgänger noch ungemergt:
+BASELINE_BLOCKED – keine Produktimplementierung fortsetzen.
+
 Die Kontextpruefung folgt `ENGINEERING_PRINCIPLES.md`. Widersprueche,
 fehlende Entscheidungen und Scopeabweichungen werden sichtbar gemacht.
 
