@@ -89,6 +89,11 @@ class FermentationApplication {
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
         device_platform::NetworkMode selectedMode);
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
+    // Renderer-independent local setup data for the currently active
+    // SoftAP. The caller owns display/QR rendering; HTTP routes never expose
+    // these credentials.
+    [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
+    networkAccessPointInfo() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {

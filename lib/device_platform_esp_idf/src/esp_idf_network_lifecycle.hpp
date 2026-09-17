@@ -45,11 +45,14 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
 
    private:
     [[nodiscard]] bool ensureInitialized();
+    void cleanupInitialization() noexcept;
+    void destroyDefaultNetifs() noexcept;
     [[nodiscard]] bool configureAccessPoint();
     [[nodiscard]] bool configureStation(
         const device_platform::NetworkCredentials& credentials);
     [[nodiscard]] bool startWifi();
     [[nodiscard]] bool connectStationOnce();
+    [[nodiscard]] bool requestIntentionalDisconnect() noexcept;
     void stopWifi() noexcept;
     static void handleEvent(void* context, esp_event_base_t eventBase,
                             std::int32_t eventId, void* eventData);
@@ -62,6 +65,8 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     esp_netif_t* accessPointNetif_{nullptr};
     device_platform::NetworkStatus status_;
     bool initialized_{false};
+    bool wifiInitialized_{false};
+    bool mdnsInitialized_{false};
     bool wifiStarted_{false};
     bool candidateTesting_{false};
     enum class CandidateTestOutcome : std::uint8_t {
@@ -73,6 +78,7 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     std::optional<device_platform::NetworkCredentials> activeHomeCredentials_;
     bool reconnectAllowed_{false};
     bool reconnectRequested_{false};
+    std::uint32_t intentionalDisconnectsPending_{0U};
     mutable std::mutex operationMutex_;
     mutable std::mutex stateMutex_;
     esp_event_handler_instance_t wifiEventHandler_{nullptr};

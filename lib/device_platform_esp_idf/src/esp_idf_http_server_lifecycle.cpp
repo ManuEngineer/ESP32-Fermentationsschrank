@@ -33,6 +33,8 @@ const char* statusLine(std::uint16_t status) {
             return "404 Not Found";
         case 409U:
             return "409 Conflict";
+        case 422U:
+            return "422 Unprocessable Content";
         case 503U:
             return "503 Service Unavailable";
         default:

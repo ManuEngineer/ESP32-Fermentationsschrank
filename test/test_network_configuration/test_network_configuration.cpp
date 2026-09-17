@@ -1,7 +1,9 @@
 #include <unity.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <utility>
 
 #include "configuration_document_codec.hpp"
 #include "configuration_documents.hpp"
@@ -262,6 +264,18 @@ void test_indeterminate_commit_stops_without_restoring_old_runtime() {
     TEST_ASSERT_EQUAL_UINT(1U, lifecycle.stopCallCount());
     TEST_ASSERT_TRUE(
         credentials.load(device_platform::StorageEpoch{1U}).record.has_value());
+
+    // Recovery is explicit and restartable: the next start reloads the
+    // durable winner instead of restoring the pre-write runtime credential.
+    lifecycle.setStartStatus(device_platform::NetworkOperationStatus::Applied);
+    TEST_ASSERT_TRUE(
+        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_FALSE(service.recoveryRequired());
+    TEST_ASSERT_TRUE(lifecycle.lastStartedCredentials().has_value());
+    const device_platform::NetworkCredentials recovered{"new-wlan",
+                                                        "new-password-1"};
+    TEST_ASSERT_TRUE(*lifecycle.lastStartedCredentials() == recovered);
 }
 
 void test_normal_home_mode_gates_setup_mutations_until_reconfiguration() {
@@ -316,6 +330,22 @@ void test_ap_only_does_not_infer_home_wifi_from_credentials() {
     TEST_ASSERT_FALSE(lifecycle.lastStartedCredentials().has_value());
 }
 
+void test_transport_stop_start_is_restartable() {
+    MockNetworkLifecycle lifecycle;
+    TEST_ASSERT_TRUE(
+        lifecycle.start(NetworkMode::AP_ONLY, std::nullopt).status ==
+        device_platform::NetworkOperationStatus::Applied);
+    TEST_ASSERT_TRUE(lifecycle.status().accessPoint.has_value());
+    TEST_ASSERT_TRUE(lifecycle.stop().status ==
+                     device_platform::NetworkOperationStatus::Applied);
+    TEST_ASSERT_FALSE(lifecycle.status().accessPoint.has_value());
+    TEST_ASSERT_TRUE(
+        lifecycle.start(NetworkMode::AP_ONLY, std::nullopt).status ==
+        device_platform::NetworkOperationStatus::Applied);
+    TEST_ASSERT_EQUAL_UINT(2U, lifecycle.startCallCount());
+    TEST_ASSERT_TRUE(lifecycle.status().accessPoint.has_value());
+}
+
 void test_setup_routes_share_one_surface_and_redact_passwords() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -324,6 +354,12 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
     TEST_ASSERT_TRUE(
         service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
             .status == NetworkConfigurationStatus::Applied);
+    const auto accessPoint = service.accessPointInfo();
+    TEST_ASSERT_TRUE(accessPoint.has_value());
+    TEST_ASSERT_EQUAL_STRING("mock-setup-ap", accessPoint->ssid.c_str());
+    TEST_ASSERT_EQUAL_STRING("mock-ap-password", accessPoint->password.c_str());
+    TEST_ASSERT_TRUE(accessPoint->ipv4Address.has_value());
+    TEST_ASSERT_TRUE(*accessPoint->ipv4Address == 0x0104A8C0U);
     NetworkSetupRoutes routes(service);
 
     device_platform::HttpResponse response;
@@ -344,6 +380,78 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
                           response.body.find("candidate committed"));
     TEST_ASSERT_EQUAL(std::string::npos,
                       response.body.find("correct-horse-battery"));
+}
+
+std::pair<std::uint16_t, std::string> submitCandidateRoute(
+    device_platform::NetworkOperationStatus candidateStatus,
+    std::optional<SimulatedPersistentStateStore::WriteFault> writeFault,
+    bool failRuntimeAdoption) {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    MockNetworkLifecycle lifecycle;
+    NetworkConfigurationService service(credentials, lifecycle);
+    if (service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status != NetworkConfigurationStatus::Applied) {
+        return {0U, "setup failed"};
+    }
+    lifecycle.setCandidateStatus(candidateStatus);
+    if (writeFault.has_value()) {
+        store.setNextWriteFault(*writeFault);
+        if (*writeFault == SimulatedPersistentStateStore::WriteFault::
+                               PowerCutAfterCommitBeforeReturn) {
+            store.failNextReadAfterWrite();
+        }
+    }
+    if (failRuntimeAdoption) {
+        lifecycle.setStartStatus(
+            device_platform::NetworkOperationStatus::Failed);
+    }
+    NetworkSetupRoutes routes(service);
+    device_platform::HttpResponse response;
+    if (!routes.handle({"POST", "/api/network/candidate",
+                        "ssid=another&password=another-password"},
+                       response)) {
+        return {0U, "route unavailable"};
+    }
+    return {response.statusCode, std::move(response.body)};
+}
+
+void test_candidate_route_distinguishes_persistence_and_recovery_outcomes() {
+    const auto rejected = submitCandidateRoute(
+        device_platform::NetworkOperationStatus::Failed, std::nullopt, false);
+    TEST_ASSERT_TRUE(rejected.first == 422U);
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          rejected.second.find("candidate rejected"));
+    TEST_ASSERT_EQUAL(std::string::npos,
+                      rejected.second.find("commit indeterminate"));
+
+    const auto writeFailure = submitCandidateRoute(
+        device_platform::NetworkOperationStatus::Applied,
+        SimulatedPersistentStateStore::WriteFault::FailBeforeBegin, false);
+    TEST_ASSERT_TRUE(writeFailure.first == 500U);
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          writeFailure.second.find("write failed"));
+
+    const auto indeterminate =
+        submitCandidateRoute(device_platform::NetworkOperationStatus::Applied,
+                             SimulatedPersistentStateStore::WriteFault::
+                                 PowerCutAfterCommitBeforeReturn,
+                             false);
+    TEST_ASSERT_TRUE(indeterminate.first == 503U);
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          indeterminate.second.find("commit indeterminate"));
+    TEST_ASSERT_EQUAL(std::string::npos,
+                      indeterminate.second.find("not committed"));
+
+    const auto recoveryRequired = submitCandidateRoute(
+        device_platform::NetworkOperationStatus::Applied, std::nullopt, true);
+    TEST_ASSERT_TRUE(recoveryRequired.first == 503U);
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          recoveryRequired.second.find("credential committed"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          recoveryRequired.second.find("runtime recovery"));
+    TEST_ASSERT_EQUAL(std::string::npos,
+                      recoveryRequired.second.find("not committed"));
 }
 
 void test_normal_home_routes_do_not_render_or_accept_setup_mutations() {
@@ -390,7 +498,10 @@ int main() {
     RUN_TEST(test_indeterminate_commit_stops_without_restoring_old_runtime);
     RUN_TEST(test_normal_home_mode_gates_setup_mutations_until_reconfiguration);
     RUN_TEST(test_ap_only_does_not_infer_home_wifi_from_credentials);
+    RUN_TEST(test_transport_stop_start_is_restartable);
     RUN_TEST(test_setup_routes_share_one_surface_and_redact_passwords);
+    RUN_TEST(
+        test_candidate_route_distinguishes_persistence_and_recovery_outcomes);
     RUN_TEST(test_normal_home_routes_do_not_render_or_accept_setup_mutations);
     return UNITY_END();
 }

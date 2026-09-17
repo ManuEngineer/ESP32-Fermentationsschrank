@@ -18,6 +18,13 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::start(
         : credentials.has_value()
             ? device_platform::NetworkLifecycleState::HomeConnected
             : device_platform::NetworkLifecycleState::SetupAccessPoint;
+    if (mode == device_platform::NetworkMode::AP_ONLY ||
+        !credentials.has_value()) {
+        status_.accessPoint = device_platform::NetworkAccessPointInfo{
+            "mock-setup-ap", "mock-ap-password", 0x0104A8C0U};
+    } else {
+        status_.accessPoint.reset();
+    }
     lastStartedCredentials_ = credentials;
     return {device_platform::NetworkOperationStatus::Applied};
 }
@@ -27,6 +34,7 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::stop() {
     status_.state = device_platform::NetworkLifecycleState::Stopped;
     status_.httpReady = false;
     status_.ipv4Address.reset();
+    status_.accessPoint.reset();
     return {device_platform::NetworkOperationStatus::Applied};
 }
 

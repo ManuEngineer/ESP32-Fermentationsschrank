@@ -711,6 +711,14 @@ FermentationApplication::beginHomeWifiReconfiguration() {
     return networkConfigurationService_->beginHomeWifiReconfiguration();
 }
 
+std::optional<device_platform::NetworkAccessPointInfo>
+FermentationApplication::networkAccessPointInfo() const {
+    if (networkConfigurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    return networkConfigurationService_->accessPointInfo();
+}
+
 bool FermentationApplication::beginPersistent(
     device_platform::IPlatformServices& platformServices,
     device_platform::IStateStore& store,

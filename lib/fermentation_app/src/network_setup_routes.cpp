@@ -157,7 +157,28 @@ bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
         }
         const auto result = networkService_.testCandidate();
         if (result.status != NetworkConfigurationStatus::Applied) {
-            setText(response, 409U, "candidate not committed");
+            switch (result.status) {
+                case NetworkConfigurationStatus::CandidateRejected:
+                    setText(response, 422U,
+                            "candidate rejected; no credential commit");
+                    break;
+                case NetworkConfigurationStatus::PersistenceFailure:
+                    setText(response, 500U,
+                            "candidate tested; credential write failed");
+                    break;
+                case NetworkConfigurationStatus::CommitIndeterminate:
+                    setText(
+                        response, 503U,
+                        "credential commit indeterminate; recovery required");
+                    break;
+                case NetworkConfigurationStatus::RecoveryRequired:
+                    setText(response, 503U,
+                            "credential committed; runtime recovery required");
+                    break;
+                default:
+                    setText(response, 503U, "network recovery required");
+                    break;
+            }
             return true;
         }
         // Never echo the password or the complete credential in a response.

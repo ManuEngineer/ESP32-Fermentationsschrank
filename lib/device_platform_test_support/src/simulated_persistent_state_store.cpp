@@ -40,14 +40,14 @@ StateStoreWriteStatus SimulatedPersistentStateStore::write(
     committed_[pendingWrite_->key] = pendingWrite_->value;
     pendingWrite_.reset();
 
-    if (fault == WriteFault::PowerCutAfterCommitBeforeReturn) {
-        return StateStoreWriteStatus::CommitOutcomeUnknown;
-    }
     // Consume this fault on the verification read performed by the caller.
     // It deliberately does not roll back the already committed bytes.
     if (armFailNextReadAfterWrite_) {
         armFailNextReadAfterWrite_ = false;
         failReadAfterWrite_ = true;
+    }
+    if (fault == WriteFault::PowerCutAfterCommitBeforeReturn) {
+        return StateStoreWriteStatus::CommitOutcomeUnknown;
     }
     return StateStoreWriteStatus::Success;
 }

@@ -1,6 +1,7 @@
 #include "esp_idf_network_lifecycle.hpp"
 
 #include <cstring>
+#include <limits>
 #include <utility>
 
 #include "esp_event.h"
@@ -51,18 +52,45 @@ EspIdfNetworkLifecycle::~EspIdfNetworkLifecycle() {
         reconnectRequested_ = false;
         candidateTesting_ = false;
     }
-    stopWifi();
+    cleanupInitialization();
+}
+
+void EspIdfNetworkLifecycle::destroyDefaultNetifs() noexcept {
     if (accessPointNetif_ != nullptr) {
-        esp_netif_destroy(accessPointNetif_);
+        esp_netif_destroy_default_wifi(accessPointNetif_);
+        accessPointNetif_ = nullptr;
     }
     if (stationNetif_ != nullptr) {
-        esp_netif_destroy(stationNetif_);
+        esp_netif_destroy_default_wifi(stationNetif_);
+        stationNetif_ = nullptr;
     }
+}
+
+void EspIdfNetworkLifecycle::cleanupInitialization() noexcept {
+    stopWifi();
+    unregisterEventHandlers();
+    if (wifiInitialized_) {
+        static_cast<void>(esp_wifi_deinit());
+        wifiInitialized_ = false;
+    }
+    if (mdnsInitialized_) {
+        mdns_free();
+        mdnsInitialized_ = false;
+    }
+    destroyDefaultNetifs();
+    initialized_ = false;
+    std::lock_guard<std::mutex> stateLock(stateMutex_);
+    intentionalDisconnectsPending_ = 0U;
 }
 
 bool EspIdfNetworkLifecycle::ensureInitialized() {
     if (initialized_) {
         return true;
+    }
+    if (wifiInitialized_ || wifiStarted_ || mdnsInitialized_ ||
+        stationNetif_ != nullptr || accessPointNetif_ != nullptr ||
+        wifiEventHandler_ != nullptr || ipEventHandler_ != nullptr) {
+        cleanupInitialization();
     }
     if (!validAccessPointConfig(config_)) {
         return false;
@@ -78,21 +106,28 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
     stationNetif_ = esp_netif_create_default_wifi_sta();
     accessPointNetif_ = esp_netif_create_default_wifi_ap();
     if (stationNetif_ == nullptr || accessPointNetif_ == nullptr) {
+        cleanupInitialization();
         return false;
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     if (esp_wifi_init(&init) != ESP_OK) {
+        cleanupInitialization();
         return false;
     }
+    wifiInitialized_ = true;
     // The ESP-IDF adapter must never create a second persistent credential
     // store. cc0/record type 9 in IStateStore is the only durable truth.
     if (esp_wifi_set_storage(WIFI_STORAGE_RAM) != ESP_OK) {
-        static_cast<void>(esp_wifi_deinit());
+        cleanupInitialization();
         return false;
     }
-    if (mdns_init() != ESP_OK ||
-        mdns_hostname_set(config_.hostname.c_str()) != ESP_OK) {
-        static_cast<void>(esp_wifi_deinit());
+    if (mdns_init() != ESP_OK) {
+        cleanupInitialization();
+        return false;
+    }
+    mdnsInitialized_ = true;
+    if (mdns_hostname_set(config_.hostname.c_str()) != ESP_OK) {
+        cleanupInitialization();
         return false;
     }
     if (esp_event_handler_instance_register(
@@ -101,9 +136,7 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
         esp_event_handler_instance_register(
             IP_EVENT, IP_EVENT_STA_GOT_IP, &EspIdfNetworkLifecycle::handleEvent,
             this, &ipEventHandler_) != ESP_OK) {
-        unregisterEventHandlers();
-        mdns_free();
-        static_cast<void>(esp_wifi_deinit());
+        cleanupInitialization();
         return false;
     }
     initialized_ = true;
@@ -157,18 +190,31 @@ bool EspIdfNetworkLifecycle::connectStationOnce() {
     return esp_wifi_connect() == ESP_OK;
 }
 
+bool EspIdfNetworkLifecycle::requestIntentionalDisconnect() noexcept {
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        if (intentionalDisconnectsPending_ ==
+            std::numeric_limits<std::uint32_t>::max()) {
+            return false;
+        }
+        ++intentionalDisconnectsPending_;
+    }
+    if (esp_wifi_disconnect() == ESP_OK) {
+        return true;
+    }
+    std::lock_guard<std::mutex> stateLock(stateMutex_);
+    if (intentionalDisconnectsPending_ != 0U) {
+        --intentionalDisconnectsPending_;
+    }
+    return false;
+}
+
 void EspIdfNetworkLifecycle::stopWifi() noexcept {
-    if (!initialized_) {
+    if (!wifiStarted_) {
         return;
     }
-    if (wifiStarted_) {
-        static_cast<void>(esp_wifi_stop());
-        wifiStarted_ = false;
-    }
-    unregisterEventHandlers();
-    static_cast<void>(esp_wifi_deinit());
-    mdns_free();
-    initialized_ = false;
+    static_cast<void>(esp_wifi_stop());
+    wifiStarted_ = false;
 }
 
 void EspIdfNetworkLifecycle::unregisterEventHandlers() noexcept {
@@ -195,6 +241,10 @@ void EspIdfNetworkLifecycle::handleEvent(void* context,
     if (eventBase == WIFI_EVENT && eventId == WIFI_EVENT_STA_DISCONNECTED) {
         std::lock_guard<std::mutex> stateLock(self->stateMutex_);
         self->status_.ipv4Address.reset();
+        if (self->intentionalDisconnectsPending_ != 0U) {
+            --self->intentionalDisconnectsPending_;
+            return;
+        }
         if (self->candidateTesting_) {
             self->candidateTestOutcome_ = CandidateTestOutcome::Failed;
             self->status_.state =
@@ -240,16 +290,26 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
     if (!ensureInitialized()) {
         return {device_platform::NetworkOperationStatus::Failed};
     }
+    bool stationWasActive = false;
     {
         std::lock_guard<std::mutex> stateLock(stateMutex_);
+        stationWasActive =
+            activeHomeCredentials_.has_value() || candidateTesting_ ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::ConnectingHome ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::HomeConnected ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::CandidateTesting;
         reconnectAllowed_ = false;
         reconnectRequested_ = false;
         candidateTesting_ = false;
         candidateTestOutcome_ = CandidateTestOutcome::None;
         status_.ipv4Address.reset();
+        status_.accessPoint.reset();
     }
-    if (wifiStarted_) {
-        static_cast<void>(esp_wifi_disconnect());
+    if (stationWasActive && wifiStarted_) {
+        static_cast<void>(requestIntentionalDisconnect());
     }
     if (mode == device_platform::NetworkMode::AP_ONLY ||
         !credentials.has_value()) {
@@ -260,6 +320,11 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
             !startWifi()) {
             return {device_platform::NetworkOperationStatus::Failed};
         }
+        esp_netif_ip_info_t ipInfo{};
+        if (accessPointNetif_ == nullptr ||
+            esp_netif_get_ip_info(accessPointNetif_, &ipInfo) != ESP_OK) {
+            return {device_platform::NetworkOperationStatus::Failed};
+        }
         std::lock_guard<std::mutex> stateLock(stateMutex_);
         activeHomeCredentials_.reset();
         status_.selectedMode = mode;
@@ -267,11 +332,9 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
             mode == device_platform::NetworkMode::AP_ONLY
                 ? device_platform::NetworkLifecycleState::AccessPointOnly
                 : device_platform::NetworkLifecycleState::SetupAccessPoint;
-        esp_netif_ip_info_t ipInfo{};
-        if (accessPointNetif_ != nullptr &&
-            esp_netif_get_ip_info(accessPointNetif_, &ipInfo) == ESP_OK) {
-            status_.ipv4Address = ipInfo.ip.addr;
-        }
+        status_.ipv4Address = ipInfo.ip.addr;
+        status_.accessPoint = device_platform::NetworkAccessPointInfo{
+            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr};
         return {device_platform::NetworkOperationStatus::Applied};
     }
     if (!configureStation(*credentials) ||
@@ -285,14 +348,24 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
         reconnectAllowed_ = true;
         status_.selectedMode = mode;
         status_.state = device_platform::NetworkLifecycleState::ConnectingHome;
+        status_.accessPoint.reset();
     }
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
 device_platform::NetworkOperationResult EspIdfNetworkLifecycle::stop() {
     std::lock_guard<std::mutex> operationLock(operationMutex_);
+    bool stationWasActive = false;
     {
         std::lock_guard<std::mutex> stateLock(stateMutex_);
+        stationWasActive =
+            activeHomeCredentials_.has_value() || candidateTesting_ ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::ConnectingHome ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::HomeConnected ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::CandidateTesting;
         reconnectAllowed_ = false;
         reconnectRequested_ = false;
         candidateTesting_ = false;
@@ -301,11 +374,19 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::stop() {
         status_.state = device_platform::NetworkLifecycleState::Stopped;
         status_.httpReady = false;
         status_.ipv4Address.reset();
+        status_.accessPoint.reset();
+    }
+    if (stationWasActive && wifiStarted_) {
+        static_cast<void>(requestIntentionalDisconnect());
     }
     if (!initialized_) {
-        return {device_platform::NetworkOperationStatus::Applied};
+        cleanupInitialization();
+    } else {
+        // Keep the initialized ESP-IDF Wi-Fi/netif/event objects alive so a
+        // later start reuses them and delayed intentional-disconnect events
+        // still reach the same lifecycle generation.
+        stopWifi();
     }
-    stopWifi();
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
@@ -340,6 +421,21 @@ device_platform::NetworkScanResult EspIdfNetworkLifecycle::scan() {
 device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
     const device_platform::NetworkCredentials& candidate) {
     std::lock_guard<std::mutex> operationLock(operationMutex_);
+    bool stationWasActive = false;
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        stationWasActive =
+            activeHomeCredentials_.has_value() || candidateTesting_ ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::ConnectingHome ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::HomeConnected ||
+            status_.state ==
+                device_platform::NetworkLifecycleState::CandidateTesting;
+    }
+    if (stationWasActive && wifiStarted_) {
+        static_cast<void>(requestIntentionalDisconnect());
+    }
     if (!initialized_ || !configureAccessPoint() ||
         !configureStation(candidate) ||
         esp_wifi_set_mode(WIFI_MODE_APSTA) != ESP_OK || !startWifi()) {
@@ -347,8 +443,17 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
         status_.state = device_platform::NetworkLifecycleState::Failed;
         return {device_platform::NetworkOperationStatus::Failed};
     }
+    esp_netif_ip_info_t ipInfo{};
+    if (accessPointNetif_ == nullptr ||
+        esp_netif_get_ip_info(accessPointNetif_, &ipInfo) != ESP_OK) {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        status_.state = device_platform::NetworkLifecycleState::Failed;
+        return {device_platform::NetworkOperationStatus::Failed};
+    }
     {
         std::lock_guard<std::mutex> stateLock(stateMutex_);
+        status_.accessPoint = device_platform::NetworkAccessPointInfo{
+            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr};
         reconnectAllowed_ = false;
         reconnectRequested_ = false;
         candidateTesting_ = true;
@@ -390,7 +495,7 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
         candidateTestOutcome_ = CandidateTestOutcome::Failed;
         status_.state = device_platform::NetworkLifecycleState::Failed;
     }
-    static_cast<void>(esp_wifi_disconnect());
+    static_cast<void>(requestIntentionalDisconnect());
     return {device_platform::NetworkOperationStatus::Failed};
 }
 

@@ -29,6 +29,21 @@ struct NetworkScanEntry {
     bool protectedNetwork{false};
 };
 
+// Renderer-independent access data for the currently active local SoftAP.
+// This is intentionally a concrete setup contract, not a general secret
+// store. It is available only while the transport exposes that SoftAP.
+struct NetworkAccessPointInfo {
+    std::string ssid;
+    std::string password;
+    std::optional<std::uint32_t> ipv4Address;
+
+    friend bool operator==(const NetworkAccessPointInfo& left,
+                           const NetworkAccessPointInfo& right) {
+        return left.ssid == right.ssid && left.password == right.password &&
+               left.ipv4Address == right.ipv4Address;
+    }
+};
+
 enum class NetworkLifecycleState : std::uint8_t {
     Stopped,
     SetupAccessPoint,
@@ -44,6 +59,7 @@ struct NetworkStatus {
     NetworkLifecycleState state{NetworkLifecycleState::Stopped};
     bool httpReady{false};
     std::optional<std::uint32_t> ipv4Address;
+    std::optional<NetworkAccessPointInfo> accessPoint;
 };
 
 enum class NetworkOperationStatus : std::uint8_t {
