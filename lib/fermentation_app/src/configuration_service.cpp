@@ -154,6 +154,17 @@ ConfigurationChangeSummary summarizeChanges(
                               candidate.baseUserConfiguration->timeZoneId;
     summary.deviceNameChanged = candidate.userConfiguration->deviceName !=
                                 candidate.baseUserConfiguration->deviceName;
+    summary.networkModeChanged =
+        candidate.userConfiguration->networkMode !=
+        candidate.baseUserConfiguration->networkMode;
+    const auto& candidateCredentials =
+        candidate.userConfiguration->homeWifiCredentials;
+    const auto& baseCredentials =
+        candidate.baseUserConfiguration->homeWifiCredentials;
+    summary.homeWifiCredentialsChanged =
+        candidateCredentials.has_value() != baseCredentials.has_value() ||
+        (candidateCredentials.has_value() &&
+         *candidateCredentials != *baseCredentials);
     for (const auto& program : candidate.programCatalog->programs) {
         const auto found =
             std::find_if(candidate.baseProgramCatalog->programs.begin(),

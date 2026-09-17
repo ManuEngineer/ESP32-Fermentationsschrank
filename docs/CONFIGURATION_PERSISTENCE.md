@@ -10,8 +10,29 @@ von Issue #16. Es konkretisiert:
 - [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md)
 
 Es nimmt weder Laufpersistenz aus Issue #17, das portable Backupformat aus
-Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch konkrete
-WLAN- und Authentifizierungsdaten aus Issue #27 vorweg.
+Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch die normale
+Web-Authentifizierung aus Issue #27 vorweg. Die explizite R1-Netzwerkdomäne von
+Issue #164 ist ein nachgelagerter Konsument dieses Vertrags.
+
+### Issue #164: Netzwerk-Konfigurationsdelta
+
+Issue #164 erweitert ausschliesslich das bestehende `UserConfiguration`-
+Dokument auf Schema 3. Es fuehrt keinen zweiten Store und keinen parallelen
+Aktivierungszweig ein:
+
+- `networkMode` ist ein persistierter, typisierter Wert `AP_ONLY | HOME_WIFI`;
+- `homeWifiCredentials` ist genau ein optionales SSID-/Passwort-Paar;
+- fehlende Credentials waehlen niemals implizit `AP_ONLY`;
+- V1-/V2-Records migrieren beim Lesen nach `HOME_WIFI` ohne Credentials;
+- Credentials bleiben ausserhalb von Preview-Views, Fingerprints,
+  Aenderungsdetails, Logs, Diagnose und Exporten;
+- Test-vor-Commit, `StorageEpoch`, Graph-Revision, Readback und
+  `CommitOutcomeUnknown` folgen unveraendert dem bestehenden Projektvertrag.
+
+Der Netzwerktransport erhaelt nur fluessige Kandidaten und Status ueber
+anwendungsneutrale Plattformports. Persistenz, Preview und Aktivierung bleiben
+im bestehenden `fermentation_app`-Konfigurationsgraphen. Die vollstaendige
+Web-Authentifizierung, Session- und CSRF-Logik bleibt Issue #27 vorbehalten.
 
 Der Release-1-Vertrag folgt ADR-018 (Variante B). Die Umsetzung ist in die
 Teilpakete #54 bis #57 geschnitten. Jedes Paket besitzt einen eigenen Scope und
@@ -1098,8 +1119,9 @@ spekulative Slotplattform zu schaffen.
 Manifest-, Root- und Bootstrapbedeutung, Graphvalidierung, ProgramCatalog,
 fluechtige Vorschau, Migration, Boot/Recovery,
 `RuntimeConfigurationSnapshot` und den typisierten
-`ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. #56 und
-#57 fuehren keinen Port zu #17 und keine vorbereitete Secret-Domaene ein.
+`ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. Die
+Netzwerkfelder aus dem #164-Delta bleiben in derselben UserConfiguration-
+Wahrheit; ein zweiter Credential- oder Secret-Blob-Store wird nicht eingefuehrt.
 
 `device_platform_test_support` enthaelt nur anwendungsneutrale Testadapter wie
 `SimulatedPersistentStateStore`, kontrollierbare Zufallsquelle, Cut-Point- und

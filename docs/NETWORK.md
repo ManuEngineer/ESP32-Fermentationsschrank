@@ -52,6 +52,14 @@ Der reale Nachweis von Displayanzeige, Touchinteraktion und Renderer bleibt
 Issue #31 zugeordnet. Issue #164 darf den Auswahlvertrag nativ implementieren
 und testen, ohne auf den physischen Display-/Touchnachweis zu warten.
 
+Der Auswahlvertrag ist im bestehenden `UserConfiguration`-Dokument persistent.
+Der aktuelle User-Schemawert ist 3. V1/V2-Records werden beim Lesen als
+`HOME_WIFI` ohne Credentials behandelt. Credentials sind genau ein optionales
+SSID-/Passwort-Paar im bestehenden Konfigurationsgraphen; ein zweiter
+Credential- oder Persistenzspeicher ist unzulaessig. Fehlende Credentials
+starten im expliziten `HOME_WIFI`-Modus den Setup-Flow und leiten niemals
+automatisch nach `AP_ONLY` um.
+
 ### AP-only-Modus
 
 Der AP-only-Modus ist ein voll unterstuetzter R1-Betriebsmodus:

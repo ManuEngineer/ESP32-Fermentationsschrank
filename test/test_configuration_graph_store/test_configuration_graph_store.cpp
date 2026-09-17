@@ -548,7 +548,7 @@ void test_unknown_newer_schema_blocks_mutation_before_plan() {
     seedGraph(store);
     store.put("uc2", envelope(fermentation::configuration_storage_contract::
                                   kUserConfigurationRecordType,
-                              3U, 9U, "future"));
+                              4U, 9U, "future"));
     fermentation::ConfigurationGraphStore graphStore(store, resolver);
     auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(loaded.graph.has_value());
@@ -988,7 +988,7 @@ void test_five_commits_rotate_active_and_exact_previous_fallback() {
         TEST_ASSERT_TRUE(loaded.graph->fallback->manifestReference == previous);
         TEST_ASSERT_EQUAL_UINT32(
             static_cast<std::uint32_t>(
-                fermentation::UserConfigurationSchema::Version2),
+                fermentation::UserConfigurationSchema::Version3),
             loaded.graph->active.manifest.userConfiguration.schemaVersion);
         TEST_ASSERT_EQUAL_UINT64(index + 2U,
                                  loaded.graph->rootSequence.value());
@@ -1254,7 +1254,7 @@ void test_exact_new_root_with_invalid_target_graph_never_recovers_old() {
     std::string newPayload;
     TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
                          *prepared.prepared->newGraph.active.userConfiguration,
-                         2U, resolver, newPayload) ==
+                         3U, resolver, newPayload) ==
                      fermentation::ConfigurationCodecStatus::Success);
     const auto collision = sameCrcDifferentBytes(newPayload);
     store.failWrite(
@@ -1263,7 +1263,7 @@ void test_exact_new_root_with_invalid_target_graph_never_recovers_old() {
     store.replaceAfterWrite(
         "cr1", {{"uc1", envelope(fermentation::configuration_storage_contract::
                                      kUserConfigurationRecordType,
-                                 2U, 2U, collision)}});
+                                 3U, 2U, collision)}});
     const auto result = graphStore.executePreparedCommit(*prepared.prepared);
     TEST_ASSERT_TRUE(
         result.status ==

@@ -2099,7 +2099,7 @@ void test_preview_reports_schema_bound_integrity_and_redacted_summary() {
         fermentation::decodeChangeOperation(1U));
     TEST_ASSERT_TRUE(installed.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(2U, installed.preview->integrity.userSchema);
+    TEST_ASSERT_EQUAL_UINT32(3U, installed.preview->integrity.userSchema);
     TEST_ASSERT_EQUAL_UINT32(
         fermentation::kCurrentServiceConfigurationSchemaVersion,
         installed.preview->integrity.serviceSchema);

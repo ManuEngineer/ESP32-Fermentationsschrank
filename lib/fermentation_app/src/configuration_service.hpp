@@ -147,6 +147,8 @@ struct ConfigurationChangeSummary {
     bool activeThemeChanged{false};
     bool timeZoneChanged{false};
     bool deviceNameChanged{false};
+    bool networkModeChanged{false};
+    bool homeWifiCredentialsChanged{false};
     std::uint16_t programsAdded{0U};
     std::uint16_t programsRemoved{0U};
     std::uint16_t programsModified{0U};

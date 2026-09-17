@@ -395,7 +395,7 @@ void test_user_configuration_v1_v2_schema_contract() {
     TEST_ASSERT_EQUAL_STRING(configuration.activeThemeId.c_str(),
                              decodedV2.document->activeThemeId.c_str());
     TEST_ASSERT_TRUE(
-        fermentation::decodeUserConfigurationPayload(3U, v2, resolver).status ==
+        fermentation::decodeUserConfigurationPayload(4U, v2, resolver).status ==
         ConfigurationCodecStatus::UnsupportedSchema);
 }
 
@@ -417,7 +417,7 @@ void test_user_codec_rejects_missing_extra_and_oversized_payloads() {
                          1U, std::string(257U, 'x'), resolver)
                          .status == ConfigurationCodecStatus::CapacityExceeded);
     TEST_ASSERT_TRUE(
-        fermentation::decodeUserConfigurationPayload(3U, encoded, resolver)
+        fermentation::decodeUserConfigurationPayload(4U, encoded, resolver)
             .status == ConfigurationCodecStatus::UnsupportedSchema);
 }
 
