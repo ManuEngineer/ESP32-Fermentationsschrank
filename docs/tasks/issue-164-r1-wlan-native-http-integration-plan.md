@@ -9,8 +9,15 @@ BASE_BRANCH=main
 CURRENT_MAIN_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55
 APPROVED_EVALUATION_PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c
 OWNER_SELECTED_CANDIDATE=NATIVE_ESP_IDF_HTTP
-R1_NETWORK_SCOPE_SOURCE_COMMIT=c77049ddbf8ecba53da9693d1430bd818cb20ca4
+R1_NETWORK_SCOPE_SOURCE_COMMIT=3b36b04504cf2b7df9db62db75851814b4934137
 ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
+HTTP_SCOPE_DECISION=B
+ISSUE164_SHARED_HTTP_FOUNDATION=YES
+ISSUE27_NORMAL_WEB_UI_OWNERSHIP=PRESERVED
+SECOND_HTTP_SERVER=NO
+NETWORK_MODE_SELECTION_CONTRACT=R1_ISSUE164
+PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
+ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
@@ -31,20 +38,26 @@ stehen in [`docs/NETWORK.md`](../NETWORK.md) und
 
 ## 1. Ziel
 
-Der bestehende Fermentationskern soll eine lokale R1-Netzwerkbedienung mit
-genau zwei vom Benutzer am Display waehlbaren Modi erhalten:
+Der bestehende Fermentationskern soll einen lokalen R1-Netzwerkvertrag mit
+genau zwei vom Benutzer waehlbaren Modi erhalten. Issue #164 liefert dafuer den
+rendererunabhaengigen Auswahlvertrag und den gemeinsamen nativen HTTP-
+Unterbau; der reale Display-/Touchbeweis bleibt Issue #31 zugeordnet.
 
-- `AP_ONLY`: persistenter, geschuetzter SoftAP mit direkter normaler lokaler
-  R1-Weboberflaeche;
+- `AP_ONLY`: persistenter, geschuetzter SoftAP mit lokalem HTTP-Zugang ueber
+  den gemeinsamen Unterbau und den #164-Setup-/Minimalrouten; die vollstaendige
+  normale R1-Weboberflaeche bleibt bis Issue #27
+  `NOT_IMPLEMENTED_BY_ISSUE164`;
 - `HOME_WIFI`: temporaerer geschuetzter Setup-SoftAP zur browserbasierten
   Einrichtung von genau einem Heim-WLAN und anschliessender normaler
   Erreichbarkeit im Heim-LAN.
 
 Der gewaehlte technische Transport ist der native ESP-IDF-Weg mit Wi-Fi,
-SoftAP/STA/APSTA, Scan, `esp_http_server`, DHCP/netif und mDNS, soweit die
-konkreten ESP-IDF-6.1-Adapter dafuer erforderlich sind. Die bestehende lokale
-R1-Weboberflaeche bleibt die fachliche Weboberflaeche; es entsteht kein zweiter
-Setup-Webserver.
+SoftAP/STA/APSTA, Scan, einem gemeinsamen `esp_http_server`-Lifecycle,
+DHCP/netif und mDNS, soweit die konkreten ESP-IDF-6.1-Adapter dafuer
+erforderlich sind. Issue #164 besitzt die technische Start-/Stop-/Bind-/Fehler-
+grenze dieses gemeinsamen HTTP-Unterbaus und die WLAN-Setup-Routen. Issue #27
+ist ein nachgelagerter Consumer fuer die normale R1-Weboberflaeche; es gibt
+keinen zweiten HTTP-Server.
 
 ## 2. Verbindlicher R1-Vertrag
 
@@ -60,12 +73,23 @@ R1_NETWORK_MODE_HOME_WIFI=SUPPORTED
 HOME_WIFI_COUNT=1
 HOME_WIFI_MODE=RECOMMENDED
 AP_ONLY_MODE=SUPPORTED_EXPLICITLY
+NETWORK_MODE_SELECTION_CONTRACT=R1_ISSUE164
+PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
+ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 ```
 
-`AP_ONLY` bedeutet:
+Die Software stellt dafuer den typisierten Auswahlvertrag, das zugehoerige
+Command-/View-Model beziehungsweise die kleinstmoegliche bestehende
+UI-Vertragsanbindung und native Tests bereit. Die reale Anzeige,
+Touchinteraktion, der Renderer und die physische Bedienverifikation gehoeren zu
+Issue #31 und blockieren #164 nicht.
+
+`AP_ONLY` bedeutet im vollstaendigen R1-Produktvertrag:
 
 - persistenter geschuetzter SoftAP;
-- normale lokale R1-Weboberflaeche direkt auf dem AP;
+- lokaler HTTP-Zugang des gemeinsamen Unterbaus und #164-Setup-/Minimalrouten
+  direkt auf dem AP;
+- vollstaendige normale lokale R1-Weboberflaeche als spaeterer #27-Consumer;
 - mDNS beziehungsweise `*.local` als bevorzugter Komfortzugang, soweit der
   Client dies unterstuetzt;
 - direkte AP-IP als verbindlicher Fallback;
@@ -84,7 +108,8 @@ Display waehlt HOME_WIFI
   -> Setup-SoftAP starten
   -> SSID, Passwort, QR und lokale Setup-IP anzeigen
   -> Client verbindet sich manuell oder per WLAN-QR
-  -> bestehende lokale R1-Weboberflaeche per mDNS oder direkter IP oeffnen
+  -> #164-Setup-Seite/-Formular des gemeinsamen HTTP-Unterbaus per mDNS oder
+     direkter IP oeffnen
   -> Heim-WLAN scannen und auswaehlen oder SSID manuell eingeben
   -> Passwort eingeben
   -> Kandidat vollstaendig validieren und nur volatil halten
@@ -98,6 +123,33 @@ erforderlich. Ein fehlgeschlagener Test darf die bisherige aktive
 Konfiguration nicht veraendern. Der grundlegende Reconnect zum selben
 gespeicherten Heim-WLAN nach einem kurzzeitigen Ausfall gehoert zu R1.
 
+Die Zustandslogik ist explizit und darf nicht aus dem Vorhandensein von
+Credentials abgeleitet werden:
+
+```text
+if mode == AP_ONLY:
+    persistent protected AP_ONLY SoftAP starten
+    nicht wegen fehlender HOME_WIFI-Credentials in HOME_WIFI-Setup wechseln
+
+if mode == HOME_WIFI and valid_home_wifi_credentials_exist:
+    mit den gespeicherten HOME_WIFI-Credentials verbinden
+
+if mode == HOME_WIFI and no_valid_home_wifi_credentials_exist:
+    temporaeren geschuetzten HOME_WIFI-Setup-SoftAP starten
+
+if explicit_home_wifi_reconfiguration_requested:
+    HOME_WIFI-Setup-Flow starten
+```
+
+`AP_ONLY | HOME_WIFI` ist eine explizite, persistierbare Benutzerentscheidung;
+der aktive Modus und die Heim-WLAN-Credentials sind fachlich getrennte Werte.
+Fehlende `HOME_WIFI`-Credentials machen `AP_ONLY` nicht ungueltig. Beim Wechsel
+`AP_ONLY -> HOME_WIFI` ohne gueltige Credentials startet der Setup-Flow. Beim
+Wechsel `HOME_WIFI -> AP_ONLY` werden vorhandene Heim-WLAN-Credentials nicht
+automatisch geloescht, sofern der spaetere Persistenzvertrag keine
+ausdrueckliche Ownerentscheidung dazu trifft. Eine zusaetzliche Multi-WLAN-
+oder implizite Modus-State-Machine entsteht nicht.
+
 ### 2.3 Credential- und Persistenzgrenze
 
 ```text
@@ -106,6 +158,10 @@ WIFI_CREDENTIAL_OWNER=PROJECT_CONFIGURATION_DOMAIN
 TEST_BEFORE_COMMIT=REQUIRED
 FAILED_TEST_PRESERVES_ACTIVE_CONFIGURATION=YES
 SECOND_CREDENTIAL_STORE=NO
+ISSUE164_SHARED_HTTP_FOUNDATION=YES
+ISSUE164_NORMAL_R1_WEB_UI=NOT_IMPLEMENTED_BY_ISSUE164
+ISSUE27_NORMAL_WEB_UI_OWNERSHIP=PRESERVED
+SECOND_HTTP_SERVER=NO
 ```
 
 ESP-IDF-Wi-Fi ist Transport und Treiber, nicht die zweite produktive
@@ -148,8 +204,8 @@ von `main` revalidiert werden. Fuer diesen Plan wurde `main` live auf
 
 | Quelle | Verbindliche Rolle |
 |---|---|
-| `docs/NETWORK.md` am Scope-Sync-Commit `c77049ddbf8ecba53da9693d1430bd818cb20ca4` | aktuelle R1-Modi, lokale Adressierung, kein Captive/Fallback-AP, ein Heim-WLAN |
-| `docs/WEB_UI.md` | bestehende lokale Web-UI, Sessions, CSRF, Revisionen, Servicefreigabe und Web-/Touch-Gleichheit |
+| `docs/NETWORK.md` am Korrektur-Commit `3b36b04504cf2b7df9db62db75851814b4934137` | aktuelle R1-Modi, explizite AP-only/HOME-WIFI-Zustandslogik, lokale Adressierung, kein Captive/Fallback-AP, ein Heim-WLAN |
+| `docs/WEB_UI.md` und Issue #27 | #27-Eigentum der normalen R1-Weboberflaeche, Sessions, CSRF, Revisionen, Servicefreigabe und Web-/Touch-Gleichheit; #164 liefert nur den gemeinsamen HTTP-Consumerpunkt |
 | `docs/SETTINGS_AND_STORAGE.md` | fluechtige Vorschau, Test-vor-Commit, atomare Aktivierung und Rueckfallgrenze |
 | `docs/CONFIGURATION_PERSISTENCE.md` und #57 | `IStateStore`, Active/Fallback, `StorageEpoch`, Root-Commit und Connectivity-Konsumentvertrag |
 | `docs/ARCHITECTURE.md` | Composition Roots, Buildprofile, Safety-/Aktorgrenze und Schichten |
@@ -178,7 +234,8 @@ device_platform
     schmale, anwendungsneutrale Ports fuer die benoetigte Netzwerkkapazitaet
 
 device_platform_esp_idf
-    konkrete Wi-Fi-, netif-, DHCP/mDNS- und HTTP-Adapter
+    konkrete Wi-Fi-, netif-, DHCP/mDNS- und gemeinsame HTTP-Unterbau-Adapter;
+    #164-Setup-Routen und #27 spaeterer Web-Consumer an einem Lifecycle
 
 fermentation_app
     keine ESP-IDF-, WLAN-, Dateisystem- oder direkten HTTP-Aufrufe;
@@ -196,7 +253,10 @@ vorhandenen Ports entschieden. Sie muss folgende Regeln einhalten:
 - keine Fermentationsbegriffe im anwendungsneutralen Plattformport;
 - keine Test-Support-Abhaengigkeit im Produktionsgraphen;
 - keine Netzwerkabhaengigkeit fuer Regelung, Safety oder Aktorplanung;
-- kein zweiter HTTP-Lifecycle neben der bestehenden R1-Weboberflaeche;
+- genau ein gemeinsamer `esp_http_server`-Lifecycle; #27 wird als spaeterer
+  Consumer angebunden, ohne zweiten HTTP-Server;
+- Issue #164 implementiert nicht die vollstaendige normale R1-Weboberflaeche;
+  diese bleibt `NOT_IMPLEMENTED_BY_ISSUE164` und Eigentum von #27;
 - keine Composition-Root-Logik in UI-, Adapter- oder Fachmodulen.
 
 ## 6. Persistenz-, Preview- und Commitvertrag
@@ -251,9 +311,13 @@ Implementierungsfreigabe:
 3. **ESP-IDF-Adapter** – SoftAP, STA/APSTA, Scan, DHCP/netif, mDNS und
    Ressourcen-/Fehlerpfade am fixierten ESP-IDF-6.1-Stand adaptieren. AP-only
    und Setup-AP muessen denselben expliziten Adapter-Lifecycle verwenden.
-4. **Bestehende Web-UI anbinden** – vorhandene rendererunabhaengige Commands,
-   Sessions, CSRF, Revisionen und Servicegrenzen verwenden; Setup-Route und
-   normale AP-only-Route in denselben Webserver integrieren.
+4. **Gemeinsamen HTTP-Unterbau und #164-Setup-Routen anbinden** – genau einen
+   nativen `esp_http_server`-Lifecycle mit Start-/Stop-/Bind-/Fehlergrenzen
+   bereitstellen und die minimale Setup-Seite/-Form sowie Setup-Routen daran
+   registrieren. Die vollstaendige normale R1-Weboberflaeche, Navigation,
+   Sessions, Login, CSRF, Service-Webfreigaben und normale Geraetekommandos
+   werden nicht in #164 implementiert; #27 bleibt dafuer der nachgelagerte
+   Consumer.
 5. **HOME_WIFI-Workflow** – SSID-Auswahl/manuelle Eingabe, fluechtige
    Credentials, AP+STA-Test, positive Testauswertung, Fehlerabbruch und
    Preserve-on-failure implementieren. Kein Commit vor dem Test.
@@ -261,7 +325,9 @@ Implementierungsfreigabe:
    Projektvertrag, Boot des gespeicherten Heim-WLANs, mDNS/DHCP/direct-IP-
    Anzeige und grundlegenden Reconnect zum selben WLAN integrieren.
 7. **AP-only-Modus** – persistente Modusentscheidung, geschuetzten SoftAP,
-   normale R1-Web-UI und direkte AP-IP als verbindlichen Zugang integrieren.
+   gemeinsamen HTTP-Unterbau, #164-Setup-/Minimalrouten und direkte AP-IP als
+   verbindlichen Zugang integrieren. Die vollstaendige normale R1-Web-UI bleibt
+   `NOT_IMPLEMENTED_BY_ISSUE164` und wird spaeter durch #27 angebunden.
 8. **Nachweise und Dokumentation** – geaenderte SSOTs, Roadmap, Issue, PR und
    Handover synchronisieren; keine historische Spike-Evidence als
    Implementierungsnachweis umetikettieren.
@@ -281,9 +347,10 @@ freizugeben.
 - AP- und Setup-Passwoerter sind geraetespezifisch und geschuetzt; Werte werden
   nur volatil angezeigt/eingegeben und nicht in Repository, PR, normalen UART-
   Logs, URLs, Diagnose oder Backups geschrieben.
-- Direktes lokales HTTP hat die in `NETWORK.md` und `WEB_UI.md` beschriebene
-  lokale Vertrauensgrenze; kein Internetzugriff oder TLS-Versprechen wird
-  hinzugefuegt.
+- Direktes lokales HTTP und die #164-Setup-Routen haben die in `NETWORK.md`
+  beschriebene lokale Vertrauensgrenze; kein Internetzugriff oder TLS-
+  Versprechen wird hinzugefuegt. Die vollstaendigen Login-, Session-, CSRF-
+  und Service-Webgrenzen bleiben #27 vorbehalten.
 - Reset-, Recovery- und Werksresetverhalten bindet die neue Domaene an die
   bestehende `StorageEpoch`; kein automatischer Reset und kein stiller
   Credential-Rollback.
@@ -316,8 +383,8 @@ Nachweise sind proportional und auf dem exakten finalen HEAD zu erheben.
 
 - getrennte `esp32_bringup`-/`esp32_release`-Builds mit fixiertem ESP-IDF 6.1;
 - Buildprofilpruefung, gezielte Static Analysis und relevante Quality Gates;
-- unbelasteter ESP32-Transportstart mit AP-only und Setup-AP, ohne
-  Aktorfreigabe;
+- unbelasteter ESP32-Transportstart mit AP-only und Setup-AP, gemeinsamen
+  HTTP-Unterbau-/Setup-Routen, ohne Aktorfreigabe;
 - AP+STA-Kandidatentest bei erhaltenem Setup-Pfad;
 - Android als bestehende minimale Clientreferenz am finalen Produktpfad;
 - mDNS, direkte lokale IP, Boot mit gespeichertem Heim-WLAN und grundlegender
@@ -362,10 +429,13 @@ ACTUATOR_RELEASE=NO
 Issue #164 ist erst fachlich integriert, wenn mindestens Folgendes am
 freigegebenen finalen Implementierungs-HEAD nachgewiesen ist:
 
-- Displayauswahl zwischen `AP_ONLY` und `HOME_WIFI` funktioniert ohne
-  Netzwerkvoraussetzung;
-- AP-only stellt einen geschuetzten persistenten SoftAP und die normale lokale
-  R1-Web-UI bereit; direkte AP-IP ist erreichbar;
+- der rendererunabhaengige Auswahlvertrag zwischen `AP_ONLY` und `HOME_WIFI`
+  funktioniert ohne Netzwerkvoraussetzung; der physische Display-/Touchbeweis
+  bleibt Issue #31;
+- AP-only stellt einen geschuetzten persistenten SoftAP, den gemeinsamen
+  nativen HTTP-Unterbau samt #164-Setup-/Minimalrouten und direkte AP-IP
+  bereit; die vollstaendige normale R1-Weboberflaeche bleibt bis #27
+  `NOT_IMPLEMENTED_BY_ISSUE164`;
 - HOME_WIFI bietet Setup-AP, Browserformular, Scan oder manuelle SSID,
   volatilen Kandidaten und AP+STA-Test;
 - ein Testfehler bewahrt die aktive Konfiguration; Commit erfolgt erst nach
@@ -373,8 +443,9 @@ freigegebenen finalen Implementierungs-HEAD nachgewiesen ist:
 - genau ein Heim-WLAN wird unterstuetzt, beim Boot geladen und zum selben WLAN
   grundlegend wiederverbunden;
 - DHCP/mDNS und direkte IP entsprechen `NETWORK.md`;
-- bestehende Web-Session-, CSRF-, Revisions-, Service- und Safetyregeln bleiben
-  wirksam;
+- die gemeinsame HTTP-Consumergrenze fuer #27 ist klar; #164 fuehrt weder die
+  vollstaendige normale Web-UI noch deren Login-, Session-, CSRF-, Service- und
+  normalen Commandlogik ein;
 - keine zweite Web-/Credential-/Persistenzwahrheit und keine Aktorfreigabe
   wurden eingefuehrt;
 - relevante native, ESP-IDF-, Host-, Client-, Security- und Dokumentations-
