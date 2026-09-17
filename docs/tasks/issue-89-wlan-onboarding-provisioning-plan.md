@@ -204,7 +204,17 @@ direkte-IP-Erreichbarkeit, dokumentierte Browser-/Capability-Befunde sowie
 die ausdruecklichen Waiver fuer iOS/iPadOS, Windows, Display-QR und Power-Cut.
 Der Spike ist Evidence und keine zweite Produktionsanwendung.
 
+```text
+CURRENT_OWNER_SELECTION_GATE_REQUIREMENTS=SECTION_3_3_ONLY
+FULL_R1_PRODUCT_CONTRACT=DEFERRED_TO_SELECTED_PATH_INTEGRATION
+```
+
 ### 3.1 Portal- und Browserablauf
+
+Die folgende Liste ist der spaetere verbindliche R1-Produktvertrag fuer die
+produktive Integration des vom Owner gewaehlten Pfads. Sie ist nicht die
+Acceptance-Grenze des aktuellen Owner-Kandidatengates; dafuer gilt
+ausschliesslich Abschnitt 3.3.
 
 Der Vergleich prueft mindestens:
 
