@@ -42,15 +42,24 @@ HOME_WIFI_COUNT=1
 HOME_WIFI_MODE=RECOMMENDED
 AP_ONLY_MODE=SUPPORTED_EXPLICITLY
 R1_NETWORK_WEB_TRANSPORT=NATIVE_ESP_IDF_HTTP
+NETWORK_MODE_SELECTION_CONTRACT=R1_ISSUE164
+PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
+ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 ```
+
+Der typisierte, rendererunabhaengige Auswahlvertrag gehoert zu Issue #164.
+Der reale Nachweis von Displayanzeige, Touchinteraktion und Renderer bleibt
+Issue #31 zugeordnet. Issue #164 darf den Auswahlvertrag nativ implementieren
+und testen, ohne auf den physischen Display-/Touchnachweis zu warten.
 
 ### AP-only-Modus
 
 Der AP-only-Modus ist ein voll unterstuetzter R1-Betriebsmodus:
 
 - persistenter, geschuetzter SoftAP;
-- direkt die normale lokale R1-Weboberflaeche, ohne separaten
-  WLAN-Einrichtungsassistenten;
+- lokaler HTTP-Zugang des gemeinsamen nativen HTTP-Unterbaus ohne separaten
+  WLAN-Einrichtungsassistenten; die vollstaendige normale R1-Weboberflaeche
+  bleibt Eigentum von Issue #27;
 - mDNS beziehungsweise `*.local` als bevorzugter Komfortzugang, soweit der
   Client dies unterstuetzt;
 - direkte lokale IP als verbindlicher Fallback;
@@ -60,6 +69,9 @@ Der AP-only-Modus ist ein voll unterstuetzter R1-Betriebsmodus:
 ```text
 AP_ONLY_SOFTAP=PERSISTENT
 AP_ONLY_NORMAL_WEB_UI=YES
+ISSUE164_SHARED_HTTP_FOUNDATION=YES
+ISSUE164_NORMAL_R1_WEB_UI=NOT_IMPLEMENTED_BY_ISSUE164
+ISSUE27_NORMAL_WEB_UI_OWNERSHIP=PRESERVED
 AP_ONLY_CAPTIVE_PORTAL_REQUIRED=NO
 MDNS_ACCESS=PREFERRED_NOT_REQUIRED
 DIRECT_IP_FALLBACK=REQUIRED
@@ -71,9 +83,38 @@ zusaetzlicher QR-Code nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
 
 ### Heim-WLAN-Modus
 
-Wenn der Benutzer `HOME_WIFI` waehlt oder noch keine Heim-WLAN-Konfiguration
-vorhanden ist, stellt das Geraet einen temporaeren geschuetzten Setup-SoftAP
-bereit. Die Einrichtung erfolgt browserbasiert ohne App- oder CLI-Zwang:
+`AP_ONLY` und `HOME_WIFI` sind getrennte, explizit persistierbare
+Benutzerentscheidungen. Der aktive Modus und die Heim-WLAN-Credentials sind
+fachlich getrennte Werte. Das Vorhandensein oder Fehlen von Credentials darf
+den Modus nicht implizit erraten oder aendern.
+
+Die Zustandslogik lautet:
+
+```text
+if mode == AP_ONLY:
+    persistent protected AP_ONLY SoftAP starten
+    nicht wegen fehlender HOME_WIFI-Credentials in HOME_WIFI-Setup wechseln
+
+if mode == HOME_WIFI and valid_home_wifi_credentials_exist:
+    mit den gespeicherten HOME_WIFI-Credentials verbinden
+
+if mode == HOME_WIFI and no_valid_home_wifi_credentials_exist:
+    temporaeren geschuetzten HOME_WIFI-Setup-SoftAP starten
+
+if explicit_home_wifi_reconfiguration_requested:
+    HOME_WIFI-Setup-Flow starten
+```
+
+Bei einem Wechsel `AP_ONLY -> HOME_WIFI` ohne gueltige Credentials wird der
+Setup-Flow gestartet. Bei `HOME_WIFI -> AP_ONLY` werden vorhandene Heim-WLAN-
+Credentials nicht automatisch geloescht; eine solche Loeschung benoetigt eine
+spaetere ausdrueckliche Entscheidung im Persistenzvertrag. Es gibt keine
+zusaetzliche Multi-WLAN- oder implizite Modus-State-Machine.
+
+Nur bei `HOME_WIFI` ohne gueltige Credentials oder bei einer ausdruecklichen
+Heim-WLAN-Neukonfiguration stellt das Geraet einen temporaeren geschuetzten
+Setup-SoftAP bereit. Die Einrichtung erfolgt browserbasiert ohne App- oder
+CLI-Zwang:
 
 ```text
 Display waehlt HOME_WIFI
@@ -170,8 +211,10 @@ Heim-WLANs ist kein R1-Verhalten; siehe [`FUTURE_SCOPE.md`](FUTURE_SCOPE.md).
 
 ### Verbindungsversuch nach Start
 
-Nach einem normalen Start versucht das Geraet zuerst, das gespeicherte Heim-WLAN
-zu erreichen. Der Fermentationsprozess wartet dabei nicht auf das Netzwerk.
+Im Modus `HOME_WIFI` versucht das Geraet nach einem normalen Start zuerst, das
+gespeicherte Heim-WLAN zu erreichen, sofern gueltige Credentials vorhanden
+sind. Im Modus `AP_ONLY` startet es den persistenten geschuetzten SoftAP. Der
+Fermentationsprozess wartet in keinem Modus auf das Netzwerk.
 
 Der Router kann nach einem Stromausfall mehrere Minuten spaeter bereit sein als
 der ESP32. Deshalb gilt ein voruebergehend fehlendes WLAN nicht als Fehler des
@@ -327,7 +370,8 @@ wird in `WEB_UI.md` spezifiziert.
 
 - [x] lokale Displayauswahl zwischen `HOME_WIFI` und `AP_ONLY`
 - [x] `AP_ONLY` als unterstuetzter Modus mit persistentem geschuetztem SoftAP
-- [x] normale lokale R1-Weboberflaeche im `AP_ONLY`-Modus
+- [x] lokaler HTTP-Zugang im `AP_ONLY`-Modus ueber den gemeinsamen Unterbau;
+      die vollstaendige normale R1-Weboberflaeche bleibt Eigentum von Issue #27
 - [x] `HOME_WIFI` als unterstuetzter und empfohlener Modus
 - [x] genau ein gespeichertes Heim-WLAN
 - [x] temporaerer geschuetzter Setup-SoftAP fuer die browserbasierte
