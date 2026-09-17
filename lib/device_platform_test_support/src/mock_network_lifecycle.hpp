@@ -26,6 +26,10 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] device_platform::NetworkStatus status() const override {
         return status_;
     }
+    [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
+    accessPointInfo() const override {
+        return accessPointInfo_;
+    }
     void poll() override {}
 
     void setStartStatus(
@@ -64,6 +68,7 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
 
    private:
     device_platform::NetworkStatus status_;
+    std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
     device_platform::NetworkOperationStatus startStatus_{
         device_platform::NetworkOperationStatus::Applied};
     device_platform::NetworkOperationStatus candidateStatus_{
