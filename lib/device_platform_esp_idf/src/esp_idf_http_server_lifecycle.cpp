@@ -47,6 +47,7 @@ EspIdfHttpServerLifecycle::~EspIdfHttpServerLifecycle() {
 }
 
 bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (server_ != nullptr) {
         return false;
     }
@@ -74,16 +75,22 @@ bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
 }
 
 bool EspIdfHttpServerLifecycle::stop() {
-    routes_ = nullptr;
-    if (server_ == nullptr) {
-        return true;
-    }
-    const esp_err_t result = httpd_stop(server_);
-    if (result == ESP_OK) {
+    httpd_handle_t server = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        server = server_;
         server_ = nullptr;
+        routes_ = nullptr;
+    }
+    if (server == nullptr) {
         return true;
     }
-    return false;
+    return httpd_stop(server) == ESP_OK;
+}
+
+bool EspIdfHttpServerLifecycle::running() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return server_ != nullptr;
 }
 
 esp_err_t EspIdfHttpServerLifecycle::handleRequest(httpd_req_t* request) {
@@ -91,8 +98,12 @@ esp_err_t EspIdfHttpServerLifecycle::handleRequest(httpd_req_t* request) {
         return ESP_FAIL;
     }
     auto* self = static_cast<EspIdfHttpServerLifecycle*>(request->user_ctx);
-    if (self->routes_ == nullptr ||
-        request->content_len > kMaximumHttpBodyBytes) {
+    device_platform::IHttpRouteSink* routes = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(self->mutex_);
+        routes = self->routes_;
+    }
+    if (routes == nullptr || request->content_len > kMaximumHttpBodyBytes) {
         return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,
                                    "invalid request");
     }
@@ -111,7 +122,7 @@ esp_err_t EspIdfHttpServerLifecycle::handleRequest(httpd_req_t* request) {
     const device_platform::HttpRequest input{
         methodName(static_cast<http_method>(request->method)), request->uri,
         std::move(body)};
-    if (!self->routes_->handle(input, response)) {
+    if (!routes->handle(input, response)) {
         return httpd_resp_send_err(request, HTTPD_404_NOT_FOUND, "not found");
     }
     static_cast<void>(

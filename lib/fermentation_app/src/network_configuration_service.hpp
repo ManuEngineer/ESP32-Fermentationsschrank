@@ -8,6 +8,7 @@
 #include "connectivity_credentials.hpp"
 #include "network_lifecycle.hpp"
 #include "network_mode.hpp"
+#include "network_startup_policy.hpp"
 
 namespace fermentation {
 
@@ -21,6 +22,8 @@ enum class NetworkConfigurationStatus : std::uint8_t {
     CandidateRejected,
     PersistenceFailure,
     CommitIndeterminate,
+    RecoveryRequired,
+    SetupNotAvailable,
     NotInitialized,
 };
 
@@ -55,6 +58,7 @@ class NetworkConfigurationService final {
     [[nodiscard]] NetworkConfigurationResult beginCandidate(
         std::string ssid, std::string password);
     [[nodiscard]] NetworkConfigurationResult testCandidate();
+    [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
     void discardCandidate() noexcept;
 
     [[nodiscard]] device_platform::NetworkStatus status() const {
@@ -65,6 +69,12 @@ class NetworkConfigurationService final {
     }
     [[nodiscard]] bool candidatePending() const noexcept {
         return candidate_.has_value();
+    }
+    [[nodiscard]] bool setupFlowActive() const noexcept {
+        return setupFlowActive_;
+    }
+    [[nodiscard]] bool recoveryRequired() const noexcept {
+        return recoveryRequired_;
     }
 
    private:
@@ -80,6 +90,8 @@ class NetworkConfigurationService final {
     std::optional<ConnectivityCredential> activeCredential_;
     std::optional<ConnectivityCredential> candidate_;
     bool initialized_{false};
+    bool setupFlowActive_{false};
+    bool recoveryRequired_{false};
 };
 
 }  // namespace fermentation

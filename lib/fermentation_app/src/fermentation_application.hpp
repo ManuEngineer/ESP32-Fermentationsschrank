@@ -86,6 +86,9 @@ class FermentationApplication {
         device_platform::IHttpServerLifecycle& httpServerLifecycle,
         const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
+    [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
+        device_platform::NetworkMode selectedMode);
+    [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -180,7 +183,8 @@ class FermentationApplication {
     [[nodiscard]] bool initializeNetwork(
         device_platform::IStateStore& store,
         device_platform::StorageEpoch storageEpoch,
-        device_platform::NetworkMode selectedMode);
+        device_platform::NetworkMode selectedMode,
+        const std::string& canonicalDeviceName);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
         const RunPersistenceSnapshot* snapshot,

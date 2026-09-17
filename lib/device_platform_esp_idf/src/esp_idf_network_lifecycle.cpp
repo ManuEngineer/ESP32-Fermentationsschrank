@@ -5,11 +5,10 @@
 
 #include "esp_event.h"
 #include "esp_netif.h"
-#include "esp_wifi_default.h"
 #include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_netif_ip_addr.h"
-#include "lwip/inet.h"
+#include "esp_wifi_default.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "mdns.h"
 
 namespace device_platform_esp_idf {
@@ -18,6 +17,8 @@ namespace {
 constexpr std::size_t kMaximumSsidBytes = 32U;
 constexpr std::size_t kMinimumPasswordBytes = 8U;
 constexpr std::size_t kMaximumPasswordBytes = 63U;
+constexpr TickType_t kCandidatePollTicks = pdMS_TO_TICKS(100U);
+constexpr TickType_t kCandidateTimeoutTicks = pdMS_TO_TICKS(10000U);
 
 bool copyBounded(std::uint8_t* destination, std::size_t capacity,
                  const std::string& value) {
@@ -43,6 +44,13 @@ bool EspIdfNetworkLifecycle::validAccessPointConfig(
 }
 
 EspIdfNetworkLifecycle::~EspIdfNetworkLifecycle() {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        reconnectAllowed_ = false;
+        reconnectRequested_ = false;
+        candidateTesting_ = false;
+    }
     stopWifi();
     if (accessPointNetif_ != nullptr) {
         esp_netif_destroy(accessPointNetif_);
@@ -74,6 +82,12 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     if (esp_wifi_init(&init) != ESP_OK) {
+        return false;
+    }
+    // The ESP-IDF adapter must never create a second persistent credential
+    // store. cc0/record type 9 in IStateStore is the only durable truth.
+    if (esp_wifi_set_storage(WIFI_STORAGE_RAM) != ESP_OK) {
+        static_cast<void>(esp_wifi_deinit());
         return false;
     }
     if (mdns_init() != ESP_OK ||
@@ -130,13 +144,17 @@ bool EspIdfNetworkLifecycle::configureStation(
 
 bool EspIdfNetworkLifecycle::startWifi() {
     if (wifiStarted_) {
-        return esp_wifi_connect() == ESP_OK;
+        return true;
     }
     if (esp_wifi_start() != ESP_OK) {
         return false;
     }
     wifiStarted_ = true;
     return true;
+}
+
+bool EspIdfNetworkLifecycle::connectStationOnce() {
+    return esp_wifi_connect() == ESP_OK;
 }
 
 void EspIdfNetworkLifecycle::stopWifi() noexcept {
@@ -175,18 +193,34 @@ void EspIdfNetworkLifecycle::handleEvent(void* context,
         return;
     }
     if (eventBase == WIFI_EVENT && eventId == WIFI_EVENT_STA_DISCONNECTED) {
+        std::lock_guard<std::mutex> stateLock(self->stateMutex_);
         self->status_.ipv4Address.reset();
-        self->status_.state =
-            self->candidateTesting_
-                ? device_platform::NetworkLifecycleState::Failed
-                : device_platform::NetworkLifecycleState::ConnectingHome;
+        if (self->candidateTesting_) {
+            self->candidateTestOutcome_ = CandidateTestOutcome::Failed;
+            self->status_.state =
+                device_platform::NetworkLifecycleState::Failed;
+        } else if (self->reconnectAllowed_ &&
+                   self->status_.selectedMode ==
+                       device_platform::NetworkMode::HOME_WIFI &&
+                   self->activeHomeCredentials_.has_value()) {
+            self->reconnectRequested_ = true;
+            self->status_.state =
+                device_platform::NetworkLifecycleState::ConnectingHome;
+        } else if (self->status_.state !=
+                   device_platform::NetworkLifecycleState::Stopped) {
+            self->status_.state =
+                device_platform::NetworkLifecycleState::Failed;
+        }
         return;
     }
     if (eventBase == IP_EVENT && eventId == IP_EVENT_STA_GOT_IP &&
         eventData != nullptr) {
         const auto* event = static_cast<const ip_event_got_ip_t*>(eventData);
+        std::lock_guard<std::mutex> stateLock(self->stateMutex_);
         self->status_.ipv4Address = event->ip_info.ip.addr;
-        if (!self->candidateTesting_) {
+        if (self->candidateTesting_) {
+            self->candidateTestOutcome_ = CandidateTestOutcome::Connected;
+        } else {
             self->status_.state =
                 device_platform::NetworkLifecycleState::HomeConnected;
         }
@@ -196,6 +230,7 @@ void EspIdfNetworkLifecycle::handleEvent(void* context,
 device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
     device_platform::NetworkMode mode,
     const std::optional<device_platform::NetworkCredentials>& credentials) {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
     if (!device_platform::isSelectableNetworkMode(mode) ||
         (mode == device_platform::NetworkMode::HOME_WIFI &&
          credentials.has_value() &&
@@ -204,6 +239,17 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
     }
     if (!ensureInitialized()) {
         return {device_platform::NetworkOperationStatus::Failed};
+    }
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        reconnectAllowed_ = false;
+        reconnectRequested_ = false;
+        candidateTesting_ = false;
+        candidateTestOutcome_ = CandidateTestOutcome::None;
+        status_.ipv4Address.reset();
+    }
+    if (wifiStarted_) {
+        static_cast<void>(esp_wifi_disconnect());
     }
     if (mode == device_platform::NetworkMode::AP_ONLY ||
         !credentials.has_value()) {
@@ -214,6 +260,8 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
             !startWifi()) {
             return {device_platform::NetworkOperationStatus::Failed};
         }
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        activeHomeCredentials_.reset();
         status_.selectedMode = mode;
         status_.state =
             mode == device_platform::NetworkMode::AP_ONLY
@@ -228,27 +276,41 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
     }
     if (!configureStation(*credentials) ||
         esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK || !startWifi() ||
-        esp_wifi_connect() != ESP_OK) {
+        !connectStationOnce()) {
         return {device_platform::NetworkOperationStatus::Failed};
     }
-    status_.selectedMode = mode;
-    status_.state = device_platform::NetworkLifecycleState::ConnectingHome;
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        activeHomeCredentials_ = *credentials;
+        reconnectAllowed_ = true;
+        status_.selectedMode = mode;
+        status_.state = device_platform::NetworkLifecycleState::ConnectingHome;
+    }
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
 device_platform::NetworkOperationResult EspIdfNetworkLifecycle::stop() {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        reconnectAllowed_ = false;
+        reconnectRequested_ = false;
+        candidateTesting_ = false;
+        candidateTestOutcome_ = CandidateTestOutcome::None;
+        activeHomeCredentials_.reset();
+        status_.state = device_platform::NetworkLifecycleState::Stopped;
+        status_.httpReady = false;
+        status_.ipv4Address.reset();
+    }
     if (!initialized_) {
         return {device_platform::NetworkOperationStatus::Applied};
     }
     stopWifi();
-    status_.state = device_platform::NetworkLifecycleState::Stopped;
-    status_.httpReady = false;
-    status_.ipv4Address.reset();
-    candidateTesting_ = false;
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
 device_platform::NetworkScanResult EspIdfNetworkLifecycle::scan() {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
     if (!initialized_ || !wifiStarted_) {
         return {device_platform::NetworkOperationStatus::Failed, {}};
     }
@@ -277,28 +339,96 @@ device_platform::NetworkScanResult EspIdfNetworkLifecycle::scan() {
 
 device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
     const device_platform::NetworkCredentials& candidate) {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
     if (!initialized_ || !configureAccessPoint() ||
         !configureStation(candidate) ||
-        esp_wifi_set_mode(WIFI_MODE_APSTA) != ESP_OK || !startWifi() ||
-        esp_wifi_connect() != ESP_OK) {
+        esp_wifi_set_mode(WIFI_MODE_APSTA) != ESP_OK || !startWifi()) {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
         status_.state = device_platform::NetworkLifecycleState::Failed;
         return {device_platform::NetworkOperationStatus::Failed};
     }
-    candidateTesting_ = true;
-    status_.state = device_platform::NetworkLifecycleState::CandidateTesting;
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        reconnectAllowed_ = false;
+        reconnectRequested_ = false;
+        candidateTesting_ = true;
+        candidateTestOutcome_ = CandidateTestOutcome::None;
+        status_.state =
+            device_platform::NetworkLifecycleState::CandidateTesting;
+        status_.ipv4Address.reset();
+    }
+    if (!connectStationOnce()) {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        candidateTesting_ = false;
+        candidateTestOutcome_ = CandidateTestOutcome::Failed;
+        status_.state = device_platform::NetworkLifecycleState::Failed;
+        return {device_platform::NetworkOperationStatus::Failed};
+    }
+
+    TickType_t waited = 0U;
+    while (waited < kCandidateTimeoutTicks) {
+        {
+            std::lock_guard<std::mutex> stateLock(stateMutex_);
+            if (candidateTestOutcome_ == CandidateTestOutcome::Connected) {
+                candidateTesting_ = false;
+                status_.state =
+                    device_platform::NetworkLifecycleState::HomeConnected;
+                // APSTA remains active until the app has resolved the commit.
+                return {device_platform::NetworkOperationStatus::Applied};
+            }
+            if (candidateTestOutcome_ == CandidateTestOutcome::Failed) {
+                candidateTesting_ = false;
+                return {device_platform::NetworkOperationStatus::Failed};
+            }
+        }
+        vTaskDelay(kCandidatePollTicks);
+        waited += kCandidatePollTicks;
+    }
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        candidateTesting_ = false;
+        candidateTestOutcome_ = CandidateTestOutcome::Failed;
+        status_.state = device_platform::NetworkLifecycleState::Failed;
+    }
+    static_cast<void>(esp_wifi_disconnect());
+    return {device_platform::NetworkOperationStatus::Failed};
+}
+
+device_platform::NetworkOperationResult EspIdfNetworkLifecycle::setHostname(
+    const std::string& hostname) {
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    if (hostname.empty() || hostname.size() > 63U) {
+        return {device_platform::NetworkOperationStatus::InvalidInput};
+    }
+    if (initialized_) {
+        return {device_platform::NetworkOperationStatus::Busy};
+    }
+    config_.hostname = hostname;
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
+device_platform::NetworkStatus EspIdfNetworkLifecycle::status() const {
+    std::lock_guard<std::mutex> stateLock(stateMutex_);
+    return status_;
+}
+
 void EspIdfNetworkLifecycle::poll() {
-    if (candidateTesting_) {
-        // The event-driven ESP-IDF adapter can only promote this state after
-        // the platform reports an IP. This call keeps the state conservative;
-        // no credential commit is performed by the transport adapter.
-        if (status_.ipv4Address.has_value()) {
-            candidateTesting_ = false;
-            status_.state =
-                device_platform::NetworkLifecycleState::HomeConnected;
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    std::optional<device_platform::NetworkCredentials> reconnectCredentials;
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        if (!reconnectRequested_ || !reconnectAllowed_ || candidateTesting_ ||
+            !activeHomeCredentials_.has_value() || !wifiStarted_) {
+            return;
         }
+        reconnectRequested_ = false;
+        reconnectCredentials = activeHomeCredentials_;
+    }
+    // The event callback only schedules this action. The app task performs
+    // the one reconnect call under the lifecycle operation lock.
+    if (!reconnectCredentials.has_value() || !connectStationOnce()) {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        status_.state = device_platform::NetworkLifecycleState::Failed;
     }
 }
 

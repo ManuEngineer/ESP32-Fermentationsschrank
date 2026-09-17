@@ -42,6 +42,8 @@ NetworkConfigurationResult NetworkConfigurationService::start(
     selectedMode_ = selectedMode;
     storageEpoch_ = storageEpoch;
     candidate_.reset();
+    recoveryRequired_ = false;
+    setupFlowActive_ = false;
     if (selectedMode == device_platform::NetworkMode::UNSELECTED) {
         initialized_ = false;
         return {NetworkConfigurationStatus::SelectionRequired};
@@ -67,16 +69,16 @@ NetworkConfigurationResult NetworkConfigurationService::start(
         }
     }
 
-    const auto decision = device_platform::decideNetworkStartup(
-        selectedMode, activeCredential_.has_value(),
-        explicitHomeWifiReconfiguration);
-    if (decision.path ==
-        device_platform::NetworkStartupPath::SelectionRequired) {
+    const auto decision =
+        decideNetworkStartup(selectedMode, activeCredential_.has_value(),
+                             explicitHomeWifiReconfiguration);
+    if (decision.path == NetworkStartupPath::SelectionRequired) {
         initialized_ = false;
         return {NetworkConfigurationStatus::SelectionRequired};
     }
+    setupFlowActive_ = decision.path == NetworkStartupPath::HomeWifiSetup;
     std::optional<device_platform::NetworkCredentials> credentials;
-    if (decision.path == device_platform::NetworkStartupPath::HomeWifi &&
+    if (decision.path == NetworkStartupPath::HomeWifi &&
         activeCredential_.has_value()) {
         credentials = activeCredential_->homeWifi;
     }
@@ -90,9 +92,12 @@ NetworkConfigurationResult NetworkConfigurationService::start(
 }
 
 NetworkConfigurationScanResult NetworkConfigurationService::scan() {
-    if (!initialized_ ||
+    if (!initialized_ || !setupFlowActive_ ||
         selectedMode_ == device_platform::NetworkMode::UNSELECTED) {
-        return {NetworkConfigurationStatus::NotInitialized, {}};
+        const auto status = initialized_
+                                ? NetworkConfigurationStatus::SetupNotAvailable
+                                : NetworkConfigurationStatus::NotInitialized;
+        return {status, {}};
     }
     const auto result = lifecycle_.scan();
     if (result.status != device_platform::NetworkOperationStatus::Applied) {
@@ -103,9 +108,10 @@ NetworkConfigurationScanResult NetworkConfigurationService::scan() {
 
 NetworkConfigurationResult NetworkConfigurationService::beginCandidate(
     std::string ssid, std::string password) {
-    if (!initialized_ ||
+    if (!initialized_ || !setupFlowActive_ ||
         selectedMode_ != device_platform::NetworkMode::HOME_WIFI) {
-        return {NetworkConfigurationStatus::NotInitialized};
+        return {initialized_ ? NetworkConfigurationStatus::SetupNotAvailable
+                             : NetworkConfigurationStatus::NotInitialized};
     }
     ConnectivityCredential candidate;
     candidate.homeWifi = device_platform::NetworkCredentials{
@@ -119,7 +125,7 @@ NetworkConfigurationResult NetworkConfigurationService::beginCandidate(
 }
 
 NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
-    if (!initialized_ || !candidate_.has_value() ||
+    if (!initialized_ || !setupFlowActive_ || !candidate_.has_value() ||
         !candidate_->homeWifi.has_value()) {
         return {NetworkConfigurationStatus::CandidateRejected};
     }
@@ -127,16 +133,6 @@ NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
     if (tested.status != device_platform::NetworkOperationStatus::Applied) {
         // The active credential and lifecycle remain untouched by a failed
         // candidate test. The volatile candidate is deliberately discarded.
-        static_cast<void>(restoreActiveTransport());
-        candidate_.reset();
-        return {NetworkConfigurationStatus::CandidateRejected};
-    }
-
-    // Apply the candidate to the transport before persisting it. A transport
-    // failure therefore cannot leave a newly persisted credential behind.
-    const auto applied = lifecycle_.start(
-        device_platform::NetworkMode::HOME_WIFI, candidate_->homeWifi);
-    if (applied.status != device_platform::NetworkOperationStatus::Applied) {
         static_cast<void>(restoreActiveTransport());
         candidate_.reset();
         return {NetworkConfigurationStatus::CandidateRejected};
@@ -163,17 +159,51 @@ NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
     const auto written =
         credentialStore_.write(*candidate_, storageEpoch_, nextSequence);
     if (written.status == ConnectivityCredentialWriteStatus::Committed) {
-        activeCredential_ = *candidate_;
+        const auto committed = *candidate_;
+        const auto applied = lifecycle_.start(
+            device_platform::NetworkMode::HOME_WIFI, committed.homeWifi);
+        if (applied.status !=
+            device_platform::NetworkOperationStatus::Applied) {
+            // The persistent winner is known, but the runtime could not adopt
+            // it. Stop rather than restoring an older runtime credential; the
+            // next explicit start reloads cc0 and resolves the state.
+            activeCredential_ = committed;
+            candidate_.reset();
+            initialized_ = false;
+            recoveryRequired_ = true;
+            static_cast<void>(lifecycle_.stop());
+            return {NetworkConfigurationStatus::RecoveryRequired};
+        }
+        activeCredential_ = committed;
         candidate_.reset();
+        setupFlowActive_ = false;
         return {NetworkConfigurationStatus::Applied};
     }
     const auto status =
         written.status == ConnectivityCredentialWriteStatus::Indeterminate
             ? NetworkConfigurationStatus::CommitIndeterminate
             : NetworkConfigurationStatus::PersistenceFailure;
-    static_cast<void>(restoreActiveTransport());
+    if (written.status == ConnectivityCredentialWriteStatus::Indeterminate) {
+        // A write followed by an uncertain readback may have changed cc0.
+        // Keeping the old runtime would create a runtime/persistence split.
+        activeCredential_.reset();
+        initialized_ = false;
+        recoveryRequired_ = true;
+        static_cast<void>(lifecycle_.stop());
+    } else {
+        static_cast<void>(restoreActiveTransport());
+    }
     candidate_.reset();
     return {status};
+}
+
+NetworkConfigurationResult
+NetworkConfigurationService::beginHomeWifiReconfiguration() {
+    if (selectedMode_ != device_platform::NetworkMode::HOME_WIFI ||
+        storageEpoch_.value() == 0U) {
+        return {NetworkConfigurationStatus::SetupNotAvailable};
+    }
+    return start(device_platform::NetworkMode::HOME_WIFI, storageEpoch_, true);
 }
 
 void NetworkConfigurationService::discardCandidate() noexcept {

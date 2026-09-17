@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
+#include <vector>
 
 #include "network_lifecycle.hpp"
 
@@ -16,6 +18,11 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] device_platform::NetworkScanResult scan() override;
     [[nodiscard]] device_platform::NetworkOperationResult testCandidate(
         const device_platform::NetworkCredentials& candidate) override;
+    [[nodiscard]] device_platform::NetworkOperationResult setHostname(
+        const std::string& hostname) override {
+        hostname_ = hostname;
+        return {device_platform::NetworkOperationStatus::Applied};
+    }
     [[nodiscard]] device_platform::NetworkStatus status() const override {
         return status_;
     }
@@ -40,6 +47,20 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     lastTestedCandidate() const {
         return lastTestedCandidate_;
     }
+    [[nodiscard]] const std::string& hostname() const noexcept {
+        return hostname_;
+    }
+    [[nodiscard]] std::size_t startCallCount() const noexcept {
+        return startHistory_.size();
+    }
+    [[nodiscard]] std::size_t stopCallCount() const noexcept {
+        return stopCallCount_;
+    }
+    [[nodiscard]] const std::vector<
+        std::optional<device_platform::NetworkCredentials>>&
+    startHistory() const noexcept {
+        return startHistory_;
+    }
 
    private:
     device_platform::NetworkStatus status_;
@@ -51,6 +72,10 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
         device_platform::NetworkOperationStatus::Applied, {}};
     std::optional<device_platform::NetworkCredentials> lastStartedCredentials_;
     std::optional<device_platform::NetworkCredentials> lastTestedCandidate_;
+    std::string hostname_;
+    std::vector<std::optional<device_platform::NetworkCredentials>>
+        startHistory_;
+    std::size_t stopCallCount_{0U};
 };
 
 }  // namespace device_platform_test_support

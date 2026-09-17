@@ -43,11 +43,21 @@ StateStoreWriteStatus SimulatedPersistentStateStore::write(
     if (fault == WriteFault::PowerCutAfterCommitBeforeReturn) {
         return StateStoreWriteStatus::CommitOutcomeUnknown;
     }
+    // Consume this fault on the verification read performed by the caller.
+    // It deliberately does not roll back the already committed bytes.
+    if (armFailNextReadAfterWrite_) {
+        armFailNextReadAfterWrite_ = false;
+        failReadAfterWrite_ = true;
+    }
     return StateStoreWriteStatus::Success;
 }
 
 StateStoreReadResult SimulatedPersistentStateStore::read(
     const StateStoreKey& key, std::size_t maxBytes) const {
+    if (failReadAfterWrite_) {
+        failReadAfterWrite_ = false;
+        return {StateStoreReadStatus::ReadError, {}};
+    }
     const auto forcedIterator = forceNotFound_.find(key);
     if (forcedIterator != forceNotFound_.end() && forcedIterator->second) {
         return {StateStoreReadStatus::NotFound, {}};
@@ -70,6 +80,10 @@ void SimulatedPersistentStateStore::setNextWriteFault(WriteFault fault) {
     nextWriteFault_ = fault;
 }
 
+void SimulatedPersistentStateStore::failNextReadAfterWrite() {
+    armFailNextReadAfterWrite_ = true;
+}
+
 void SimulatedPersistentStateStore::injectReadFailure(const StateStoreKey& key,
                                                       bool shouldFail) {
     readShouldFail_[key] = shouldFail;
@@ -90,6 +104,8 @@ void SimulatedPersistentStateStore::restart() {
     nextWriteFault_ = WriteFault::None;
     readShouldFail_.clear();
     forceNotFound_.clear();
+    armFailNextReadAfterWrite_ = false;
+    failReadAfterWrite_ = false;
 }
 
 }  // namespace device_platform_test_support

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "esp_http_server.h"
 #include "http_server_lifecycle.hpp"
 
@@ -19,13 +21,14 @@ class EspIdfHttpServerLifecycle final
 
     [[nodiscard]] bool start(device_platform::IHttpRouteSink& routes) override;
     [[nodiscard]] bool stop() override;
-    [[nodiscard]] bool running() const override { return server_ != nullptr; }
+    [[nodiscard]] bool running() const override;
 
    private:
     static esp_err_t handleRequest(httpd_req_t* request);
 
     httpd_handle_t server_{nullptr};
     device_platform::IHttpRouteSink* routes_{nullptr};
+    mutable std::mutex mutex_;
 };
 
 }  // namespace device_platform_esp_idf

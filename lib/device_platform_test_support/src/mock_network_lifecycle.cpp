@@ -10,6 +10,7 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::start(
     if (startStatus_ != device_platform::NetworkOperationStatus::Applied) {
         return {startStatus_};
     }
+    startHistory_.push_back(credentials);
     status_.selectedMode = mode;
     status_.state =
         mode == device_platform::NetworkMode::AP_ONLY
@@ -22,6 +23,7 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::start(
 }
 
 device_platform::NetworkOperationResult MockNetworkLifecycle::stop() {
+    ++stopCallCount_;
     status_.state = device_platform::NetworkLifecycleState::Stopped;
     status_.httpReady = false;
     status_.ipv4Address.reset();

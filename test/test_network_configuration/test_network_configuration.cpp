@@ -17,7 +17,6 @@
 namespace {
 
 using device_platform::NetworkMode;
-using device_platform::NetworkStartupPath;
 using device_platform_test_support::MockNetworkLifecycle;
 using device_platform_test_support::MockTimeZoneResolver;
 using device_platform_test_support::SimulatedPersistentStateStore;
@@ -31,6 +30,7 @@ using fermentation::ConnectivityCredentialWriteStatus;
 using fermentation::NetworkConfigurationService;
 using fermentation::NetworkConfigurationStatus;
 using fermentation::NetworkSetupRoutes;
+using fermentation::NetworkStartupPath;
 using fermentation::UserConfiguration;
 using fermentation::UserConfigurationSchema;
 
@@ -66,21 +66,21 @@ void test_mode_selection_has_internal_unselected_state() {
 }
 
 void test_startup_decision_requires_selection_and_never_infers_mode() {
-    TEST_ASSERT_TRUE(device_platform::decideNetworkStartup(
-                         NetworkMode::UNSELECTED, false, false)
+    TEST_ASSERT_TRUE(fermentation::decideNetworkStartup(NetworkMode::UNSELECTED,
+                                                        false, false)
                          .path == NetworkStartupPath::SelectionRequired);
-    TEST_ASSERT_TRUE(device_platform::decideNetworkStartup(NetworkMode::AP_ONLY,
-                                                           false, false)
-                         .path == NetworkStartupPath::AccessPointOnly);
-    TEST_ASSERT_TRUE(device_platform::decideNetworkStartup(
-                         NetworkMode::HOME_WIFI, false, false)
-                         .path == NetworkStartupPath::HomeWifiSetup);
-    TEST_ASSERT_TRUE(device_platform::decideNetworkStartup(
-                         NetworkMode::HOME_WIFI, true, false)
-                         .path == NetworkStartupPath::HomeWifi);
-    TEST_ASSERT_TRUE(device_platform::decideNetworkStartup(
-                         NetworkMode::HOME_WIFI, true, true)
-                         .path == NetworkStartupPath::HomeWifiSetup);
+    TEST_ASSERT_TRUE(
+        fermentation::decideNetworkStartup(NetworkMode::AP_ONLY, false, false)
+            .path == NetworkStartupPath::AccessPointOnly);
+    TEST_ASSERT_TRUE(
+        fermentation::decideNetworkStartup(NetworkMode::HOME_WIFI, false, false)
+            .path == NetworkStartupPath::HomeWifiSetup);
+    TEST_ASSERT_TRUE(
+        fermentation::decideNetworkStartup(NetworkMode::HOME_WIFI, true, false)
+            .path == NetworkStartupPath::HomeWifi);
+    TEST_ASSERT_TRUE(
+        fermentation::decideNetworkStartup(NetworkMode::HOME_WIFI, true, true)
+            .path == NetworkStartupPath::HomeWifiSetup);
 }
 
 void test_v1_v2_migrate_to_unselected_and_v3_has_no_credentials() {
@@ -172,6 +172,21 @@ void test_connectivity_credential_store_uses_cc0_and_epoch_binding() {
                      ConnectivityCredentialLoadStatus::OtherEpoch);
 }
 
+void test_successful_write_with_readback_error_is_indeterminate() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    store.failNextReadAfterWrite();
+    const auto result = credentials.write(
+        validCredential(), device_platform::StorageEpoch{1U}, 1U);
+    TEST_ASSERT_TRUE(result.status ==
+                     ConnectivityCredentialWriteStatus::Indeterminate);
+    store.injectReadFailure(ConnectivityCredentialStore::key(), false);
+    const auto loaded = credentials.load(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.status ==
+                     ConnectivityCredentialLoadStatus::Available);
+    TEST_ASSERT_TRUE(loaded.record->credential == validCredential());
+}
+
 void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -205,6 +220,85 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
     TEST_ASSERT_TRUE(committed.record->credential == validCredential());
 }
 
+void test_candidate_wrong_password_disconnect_and_timeout_never_commit() {
+    for (const auto failure :
+         {device_platform::NetworkOperationStatus::Failed,
+          device_platform::NetworkOperationStatus::Busy,
+          device_platform::NetworkOperationStatus::InvalidInput}) {
+        SimulatedPersistentStateStore store;
+        ConnectivityCredentialStore credentials(store);
+        MockNetworkLifecycle lifecycle;
+        NetworkConfigurationService service(credentials, lifecycle);
+        TEST_ASSERT_TRUE(service
+                             .start(NetworkMode::HOME_WIFI,
+                                    device_platform::StorageEpoch{1U})
+                             .status == NetworkConfigurationStatus::Applied);
+        lifecycle.setCandidateStatus(failure);
+        TEST_ASSERT_TRUE(
+            service.beginCandidate("wrong", "wrong-pass-1").status ==
+            NetworkConfigurationStatus::Applied);
+        TEST_ASSERT_TRUE(service.testCandidate().status ==
+                         NetworkConfigurationStatus::CandidateRejected);
+        TEST_ASSERT_FALSE(credentials.load(device_platform::StorageEpoch{1U})
+                              .record.has_value());
+    }
+}
+
+void test_indeterminate_commit_stops_without_restoring_old_runtime() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    MockNetworkLifecycle lifecycle;
+    NetworkConfigurationService service(credentials, lifecycle);
+    TEST_ASSERT_TRUE(
+        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(
+        service.beginCandidate("new-wlan", "new-password-1").status ==
+        NetworkConfigurationStatus::Applied);
+    store.failNextReadAfterWrite();
+    TEST_ASSERT_TRUE(service.testCandidate().status ==
+                     NetworkConfigurationStatus::CommitIndeterminate);
+    TEST_ASSERT_TRUE(service.recoveryRequired());
+    TEST_ASSERT_EQUAL_UINT(1U, lifecycle.stopCallCount());
+    TEST_ASSERT_TRUE(
+        credentials.load(device_platform::StorageEpoch{1U}).record.has_value());
+}
+
+void test_normal_home_mode_gates_setup_mutations_until_reconfiguration() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    TEST_ASSERT_TRUE(
+        credentials
+            .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
+            .status == ConnectivityCredentialWriteStatus::Committed);
+    MockNetworkLifecycle lifecycle;
+    NetworkConfigurationService service(credentials, lifecycle);
+    TEST_ASSERT_TRUE(
+        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_FALSE(service.setupFlowActive());
+    TEST_ASSERT_TRUE(service.scan().status ==
+                     NetworkConfigurationStatus::SetupNotAvailable);
+    TEST_ASSERT_TRUE(service.beginCandidate("ssid", "password-1").status ==
+                     NetworkConfigurationStatus::SetupNotAvailable);
+
+    TEST_ASSERT_TRUE(service.beginHomeWifiReconfiguration().status ==
+                     NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(service.setupFlowActive());
+    // Reconfiguration starts the AP setup path without deleting the stored
+    // credential. A failed candidate restores that still-active credential.
+    lifecycle.setCandidateStatus(
+        device_platform::NetworkOperationStatus::Failed);
+    TEST_ASSERT_TRUE(
+        service.beginCandidate("new-wlan", "new-password-1").status ==
+        NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(service.testCandidate().status ==
+                     NetworkConfigurationStatus::CandidateRejected);
+    TEST_ASSERT_TRUE(lifecycle.lastStartedCredentials().has_value());
+    TEST_ASSERT_TRUE(*lifecycle.lastStartedCredentials() ==
+                     validCredential().homeWifi);
+}
+
 void test_ap_only_does_not_infer_home_wifi_from_credentials() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -236,6 +330,9 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
     TEST_ASSERT_TRUE(routes.handle({"GET", "/", {}}, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_NOT_NULL(response.body.c_str());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, response.body.find("name=ssid"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos,
+                          response.body.find("Test and commit"));
 
     response = {};
     TEST_ASSERT_TRUE(
@@ -249,6 +346,34 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
                       response.body.find("correct-horse-battery"));
 }
 
+void test_normal_home_routes_do_not_render_or_accept_setup_mutations() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    TEST_ASSERT_TRUE(
+        credentials
+            .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
+            .status == ConnectivityCredentialWriteStatus::Committed);
+    MockNetworkLifecycle lifecycle;
+    NetworkConfigurationService service(credentials, lifecycle);
+    TEST_ASSERT_TRUE(
+        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status == NetworkConfigurationStatus::Applied);
+    NetworkSetupRoutes routes(service);
+
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL(std::string::npos, response.body.find("name=ssid"));
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"POST", "/api/network/candidate",
+                                    "ssid=another&password=another-password"},
+                                   response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+}
+
 }  // namespace
 
 int main() {
@@ -258,9 +383,14 @@ int main() {
     RUN_TEST(test_v1_v2_migrate_to_unselected_and_v3_has_no_credentials);
     RUN_TEST(test_connectivity_credential_codec_keeps_pair_together);
     RUN_TEST(test_connectivity_credential_store_uses_cc0_and_epoch_binding);
+    RUN_TEST(test_successful_write_with_readback_error_is_indeterminate);
     RUN_TEST(
         test_network_workflow_tests_before_commit_and_preserves_on_failure);
+    RUN_TEST(test_candidate_wrong_password_disconnect_and_timeout_never_commit);
+    RUN_TEST(test_indeterminate_commit_stops_without_restoring_old_runtime);
+    RUN_TEST(test_normal_home_mode_gates_setup_mutations_until_reconfiguration);
     RUN_TEST(test_ap_only_does_not_infer_home_wifi_from_credentials);
     RUN_TEST(test_setup_routes_share_one_surface_and_redact_passwords);
+    RUN_TEST(test_normal_home_routes_do_not_render_or_accept_setup_mutations);
     return UNITY_END();
 }

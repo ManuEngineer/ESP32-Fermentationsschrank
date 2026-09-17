@@ -82,6 +82,10 @@ class INetworkLifecycle {
     [[nodiscard]] virtual NetworkScanResult scan() = 0;
     [[nodiscard]] virtual NetworkOperationResult testCandidate(
         const NetworkCredentials& candidate) = 0;
+    // Supplies the canonical application device name before startup. The
+    // transport derives its advertised hostname/mDNS identity from it.
+    [[nodiscard]] virtual NetworkOperationResult setHostname(
+        const std::string& hostname) = 0;
     [[nodiscard]] virtual NetworkStatus status() const = 0;
     virtual void poll() = 0;
 };

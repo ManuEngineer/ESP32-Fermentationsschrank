@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -36,9 +38,9 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] device_platform::NetworkScanResult scan() override;
     [[nodiscard]] device_platform::NetworkOperationResult testCandidate(
         const device_platform::NetworkCredentials& candidate) override;
-    [[nodiscard]] device_platform::NetworkStatus status() const override {
-        return status_;
-    }
+    [[nodiscard]] device_platform::NetworkOperationResult setHostname(
+        const std::string& hostname) override;
+    [[nodiscard]] device_platform::NetworkStatus status() const override;
     void poll() override;
 
    private:
@@ -47,6 +49,7 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] bool configureStation(
         const device_platform::NetworkCredentials& credentials);
     [[nodiscard]] bool startWifi();
+    [[nodiscard]] bool connectStationOnce();
     void stopWifi() noexcept;
     static void handleEvent(void* context, esp_event_base_t eventBase,
                             std::int32_t eventId, void* eventData);
@@ -61,6 +64,17 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     bool initialized_{false};
     bool wifiStarted_{false};
     bool candidateTesting_{false};
+    enum class CandidateTestOutcome : std::uint8_t {
+        None,
+        Connected,
+        Failed,
+    };
+    CandidateTestOutcome candidateTestOutcome_{CandidateTestOutcome::None};
+    std::optional<device_platform::NetworkCredentials> activeHomeCredentials_;
+    bool reconnectAllowed_{false};
+    bool reconnectRequested_{false};
+    mutable std::mutex operationMutex_;
+    mutable std::mutex stateMutex_;
     esp_event_handler_instance_t wifiEventHandler_{nullptr};
     esp_event_handler_instance_t ipEventHandler_{nullptr};
 };

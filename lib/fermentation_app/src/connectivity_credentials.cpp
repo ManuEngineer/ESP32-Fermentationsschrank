@@ -108,10 +108,11 @@ ConnectivityCredentialWriteResult ConnectivityCredentialStore::write(
         device_platform::StateStoreWriteStatus::CommitOutcomeUnknown) {
         return {ConnectivityCredentialWriteStatus::Indeterminate, 0U};
     }
-    return {read.status == device_platform::StateStoreReadStatus::CapacityError
-                ? ConnectivityCredentialWriteStatus::CapacityFailure
-                : ConnectivityCredentialWriteStatus::WriteFailure,
-            0U};
+    // A successful write with a failed or non-matching readback is not a
+    // known pre-write failure. The value may already be durable, so callers
+    // must keep the result recovery-required instead of restoring an older
+    // runtime credential.
+    return {ConnectivityCredentialWriteStatus::Indeterminate, 0U};
 }
 
 }  // namespace fermentation

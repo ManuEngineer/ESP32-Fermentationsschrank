@@ -80,9 +80,34 @@ bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
     if (request.method == "GET" && request.path == "/") {
         response.statusCode = 200U;
         response.contentType = "text/html; charset=utf-8";
+        if (!networkService_.setupFlowActive()) {
+            response.body =
+                "<!doctype html><meta charset=utf-8>"
+                "<title>Network status</title><h1>Network status</h1>"
+                "<p>Setup is not available in the active network mode.</p>";
+            return true;
+        }
         response.body =
             "<!doctype html><meta charset=utf-8><title>Network setup</title>"
-            "<h1>Network setup</h1><p>Use the local setup form.</p>";
+            "<h1>Network setup</h1>"
+            "<form method=post action=/api/network/candidate>"
+            "<label>SSID <input name=ssid required maxlength=32></label>"
+            "<label>Password <input name=password type=password required "
+            "maxlength=63></label>"
+            "<button type=button id=scan>Scan</button>"
+            "<button type=submit>Test and commit</button></form>"
+            "<pre id=scan-result aria-live=polite></pre>"
+            "<p id=result aria-live=polite></p>"
+            "<script>const r=document.getElementById('scan-result');"
+            "document.getElementById('scan').onclick=async()=>{"
+            "const x=await fetch('/api/network/scan');r.textContent=await "
+            "x.text();};"
+            "document.querySelector('form').onsubmit=async "
+            "e=>{e.preventDefault();"
+            "const x=await fetch(e.target.action,{method:'POST',body:new "
+            "URLSearchParams(new FormData(e.target))});"
+            "document.getElementById('result').textContent=await x.text();};"
+            "</script>";
         return true;
     }
     if (request.method == "GET" && request.path == "/api/network/status") {
@@ -116,9 +141,18 @@ bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
             setText(response, 400U, "ssid and password required");
             return true;
         }
-        if (networkService_.beginCandidate(std::move(ssid), std::move(password))
-                .status != NetworkConfigurationStatus::Applied) {
-            setText(response, 400U, "invalid candidate");
+        const auto candidate = networkService_.beginCandidate(
+            std::move(ssid), std::move(password));
+        if (candidate.status != NetworkConfigurationStatus::Applied) {
+            setText(response,
+                    candidate.status ==
+                            NetworkConfigurationStatus::SetupNotAvailable
+                        ? 503U
+                        : 400U,
+                    candidate.status ==
+                            NetworkConfigurationStatus::SetupNotAvailable
+                        ? "setup unavailable"
+                        : "invalid candidate");
             return true;
         }
         const auto result = networkService_.testCandidate();
