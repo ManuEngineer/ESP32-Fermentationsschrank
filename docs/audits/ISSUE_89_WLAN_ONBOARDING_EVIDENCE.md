@@ -76,8 +76,19 @@ IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
 WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
 PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
-OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
-CANDIDATE_SELECTION=OWNER_DECISION_PENDING
+OWNER_CANDIDATE_SELECTION_GATE=COMPLETED
+CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP
+OWNER_CANDIDATE_SELECTION=COMPLETED
+R1_AP_ONLY=YES
+R1_HOME_WIFI=YES
+R1_HOME_WIFI_COUNT=1
+CAPTIVE_PORTAL_REQUIRED=NO
+WIFI_CREDENTIAL_OWNER=PROJECT_CONFIGURATION_DOMAIN
+TEST_BEFORE_COMMIT=YES
+SECOND_CREDENTIAL_STORE=NO
+R1_NETWORK_SCOPE_SYNC=PASS
+FUTURE_SCOPE_ISSUE=163
+R1_IMPLEMENTATION_ISSUE=164
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
@@ -395,7 +406,9 @@ IOS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
 WINDOWS_CLIENT_EVIDENCE=WAIVED_BY_OWNER
 PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION
 PHASE_B_COMPARABLE_CLIENT_EVIDENCE=PASS_MINIMAL_PROPORTIONAL
-OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
+OWNER_CANDIDATE_SELECTION_GATE=COMPLETED
+CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP
+OWNER_CANDIDATE_SELECTION=COMPLETED
 ```
 
 Der physische QR-Scan ueber das spaetere Geraetedisplay ist
@@ -672,20 +685,17 @@ vollstaendige WLAN-/Web-/Reconnect-/Safety-Ressourcenqualifikation sowie der
 Display-/Kamera-QR-Test erfolgen erst nach Auswahl und produktiver
 Integration.
 
-## Owner-Gate vor produktiver Auswahl
+## Owner-Kandidatenauswahl abgeschlossen und naechster Integrationsplan
 
-Nach der proportionalen vergleichbaren Evidence entscheidet der Owner
-ausdrücklich:
+Der Owner hat nach der proportionalen vergleichbaren Evidence den nativen
+ESP-IDF-HTTP-Pfad fuer die R1-Integration ausgewaehlt. Die Evaluation in Issue
+#89 und PR #158 bleibt die historische Entscheidungsgrundlage; ihre
+Kandidatengaps werden nicht als Implementierungs-PASS umgedeutet. Die separate
+Integration wird in Issue #164 und einem eigenstaendigen, noch freizugebenden
+Plan vorbereitet. Der vollstaendige R1-Produktvertrag ist bis dahin vom
+aktuellen Owner-Gate getrennt.
 
-- `BROWSER_ONLY_REMAINS_HARD_REQUIREMENT=YES|NO`;
-- welcher der vier Hauptpfade, gegebenenfalls mit einem begründeten
-  Zusatz-Screen-Kandidaten als Teilkomponente, weiterverfolgt wird;
-- ob native Component-/ESP-WiFi-Persistenz den Produktvertrag uebernehmen
-  darf oder welche #57-/Security-/Backup-/Reset-Anpassung zulaessig ist;
-- welche minimale Integrationsgrenze und welche realen Client-/Hardwaretests
-  vor Phase D gelten.
-
-Das Owner-Kandidatengate ist vorbereitet; bis zur Auswahl ist der Status:
+Aktueller Status:
 
 ```text
 PHASE_A_CAPABILITY_EVIDENCE=PASS
@@ -713,13 +723,24 @@ EFUSE_WRITE=NO
 SECURE_BOOT_CHANGE=NO
 FLASH_ENCRYPTION_CHANGE=NO
 ROM_DOWNLOAD_MODE_DISABLE=NO
-OWNER_CANDIDATE_SELECTION_GATE=READY_FOR_OWNER_DECISION
-CANDIDATE_SELECTION=OWNER_DECISION_PENDING
+OWNER_CANDIDATE_SELECTION_GATE=COMPLETED
+CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP
+OWNER_CANDIDATE_SELECTION=COMPLETED
+R1_AP_ONLY=YES
+R1_HOME_WIFI=YES
+R1_HOME_WIFI_COUNT=1
+CAPTIVE_PORTAL_REQUIRED=NO
+WIFI_CREDENTIAL_OWNER=PROJECT_CONFIGURATION_DOMAIN
+TEST_BEFORE_COMMIT=YES
+SECOND_CREDENTIAL_STORE=NO
+R1_NETWORK_SCOPE_SYNC=PASS
+FUTURE_SCOPE_ISSUE=163
+R1_IMPLEMENTATION_ISSUE=164
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 IMPLEMENTATION=SPIKE_ONLY_EVIDENCE
 ```
 
-Erst danach darf Phase D den kleinsten verbleibenden projektspezifischen
-Integrationsdelta planen. Normale Review-/Pre-Ready-Gates folgen erst nach
-dieser Auswahl und der entsprechenden Plan-/Vertragsfreigabe.
+Naechster Schritt ist die unabhaengige Planpruefung und anschliessende
+Ownerfreigabe der exakten Integrationsplan-SHA. Bis dahin bleibt die produktive
+Connectivity-Persistenz ungestartet und die Aktorfreigabe aus.
