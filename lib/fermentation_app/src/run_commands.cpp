@@ -598,6 +598,7 @@ void clearActiveRunState(RunCommandState& state) {
     state.activeProgramRun.reset();
     state.activeManualRun.reset();
     state.processRunSnapshot.reset();
+    state.actuatorPlannerParametersSnapshot.reset();
     state.activeRunId.clear();
     state.activeRunSensorMode.reset();
     state.sensorSelection.reset();

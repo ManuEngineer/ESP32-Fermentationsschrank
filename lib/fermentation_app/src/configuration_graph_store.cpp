@@ -275,7 +275,8 @@ ConfigurationScanStatus validateServiceReferenceSemantically(
     const ServiceConfiguration* expected = nullptr) {
     auto loaded = loadReferencedRecord(
         store, configuration_storage_contract::kServiceConfigurationSlotKeys,
-        reference, 45U);
+        reference,
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes + 45U);
     if (!loaded.record.has_value()) {
         return loaded.status;
     }
@@ -286,9 +287,24 @@ ConfigurationScanStatus validateServiceReferenceSemantically(
     }
     if (expected != nullptr) {
         std::string canonical;
-        if (encodeServiceConfigurationPayload(*expected, canonical) !=
-                ConfigurationCodecStatus::Success ||
-            canonical != loaded.record->envelope.payload) {
+        const auto referenceSchema = reference.schemaVersion;
+        if (referenceSchema ==
+            static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
+            // Service schema 1 is the pre-planner record: its payload is
+            // exactly empty.  Do not reinterpret it with the V2 absent tag.
+            if (expected->actuatorPlannerParameters.has_value() ||
+                !loaded.record->envelope.payload.empty()) {
+                return ConfigurationScanStatus::
+                    ConfigurationGraphReferenceFailure;
+            }
+        } else if (referenceSchema ==
+                       kCurrentServiceConfigurationSchemaVersion &&
+                   (encodeServiceConfigurationPayload(*expected, canonical) !=
+                        ConfigurationCodecStatus::Success ||
+                    canonical != loaded.record->envelope.payload)) {
+            return ConfigurationScanStatus::ConfigurationGraphReferenceFailure;
+        } else if (referenceSchema !=
+                   kCurrentServiceConfigurationSchemaVersion) {
             return ConfigurationScanStatus::ConfigurationGraphReferenceFailure;
         }
     }
@@ -520,7 +536,9 @@ LoadedBranchPartsResult loadBranchParts(
         auto record = loadReferencedRecord(
             store,
             configuration_storage_contract::kServiceConfigurationSlotKeys,
-            manifest.serviceConfiguration, 45U);
+            manifest.serviceConfiguration,
+            configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                45U);
         if (!record.record.has_value()) {
             return {record.status, std::nullopt};
         }
@@ -993,8 +1011,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         result.diagnostics);
     auto services = scanGroupMetadata(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
-        configuration_storage_contract::kServiceConfigurationRecordType, 1U,
-        storageEpoch, 45U, result.diagnostics);
+        configuration_storage_contract::kServiceConfigurationRecordType,
+        kCurrentServiceConfigurationSchemaVersion, storageEpoch,
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes + 45U,
+        result.diagnostics);
     auto catalogs = scanGroupMetadata(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys,
         configuration_storage_contract::kProgramCatalogRecordType, 1U,
@@ -1169,8 +1189,10 @@ ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
         result.diagnostics);
     auto services = scanGroupMetadata(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
-        configuration_storage_contract::kServiceConfigurationRecordType, 1U,
-        epoch, 45U, result.diagnostics);
+        configuration_storage_contract::kServiceConfigurationRecordType,
+        kCurrentServiceConfigurationSchemaVersion, epoch,
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes + 45U,
+        result.diagnostics);
     auto catalogs = scanGroupMetadata(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys,
         configuration_storage_contract::kProgramCatalogRecordType, 1U, epoch,
@@ -1497,7 +1519,7 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
             configuration_storage_contract::kServiceConfigurationRecordType,
             requiredPlannedValue(plan.serviceConfigurationSlot),
             requiredPlannedValue(plan.serviceConfigurationRevision),
-            1U,
+            kCurrentServiceConfigurationSchemaVersion,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
             epoch};
@@ -1639,10 +1661,13 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::
                 ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
                 configuration_storage_contract::kServiceConfigurationRecordType,
-                1U,
+                kCurrentServiceConfigurationSchemaVersion,
                 requiredPlannedValue(
                     prepared.slotPlan.serviceConfigurationRevision),
-                epoch, payload, 45U, record)) {
+                epoch, payload,
+                configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                    45U,
+                record)) {
             return {ConfigurationCommitExecutionStatus::CapacityFailure,
                     ConfigurationCommitFailurePhase::ServiceDocument};
         }
@@ -1652,7 +1677,9 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::
                 [requiredPlannedValue(
                      prepared.slotPlan.serviceConfigurationSlot)
                      .value()],
-            45U, ConfigurationCommitFailurePhase::ServiceDocument);
+            configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                45U,
+            ConfigurationCommitFailurePhase::ServiceDocument);
         if (failure.has_value()) {
             return *failure;
         }
@@ -1886,15 +1913,21 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (encodeServiceConfigurationPayload(*service, payload) !=
             ConfigurationCodecStatus::Success ||
         !encodeDocumentRecord(
-            configuration_storage_contract::kServiceConfigurationRecordType, 1U,
-            ServiceConfigurationRevision{1U}, epoch, payload, 45U, record)) {
+            configuration_storage_contract::kServiceConfigurationRecordType,
+            kCurrentServiceConfigurationSchemaVersion,
+            ServiceConfigurationRevision{1U}, epoch, payload,
+            configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                45U,
+            record)) {
         return {InitialConfigurationPrepareStatus::InvalidCandidate,
                 std::nullopt};
     }
     const auto serviceSlot = selectInitialSlot(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
         epoch, configuration_storage_contract::kServiceConfigurationRecordType,
-        1U, record, 45U, false, knownEmpty);
+        kCurrentServiceConfigurationSchemaVersion, record,
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes + 45U,
+        false, knownEmpty);
     if (serviceSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {serviceSlot.status, std::nullopt};
     }
@@ -1904,7 +1937,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
         configuration_storage_contract::kServiceConfigurationRecordType,
         *serviceSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
         ServiceConfigurationRevision{1U},
-        1U,
+        kCurrentServiceConfigurationSchemaVersion,
         static_cast<std::uint32_t>(payload.size()),
         device_platform::computeCrc32IsoHdlc(payload),
         epoch};
@@ -2147,7 +2180,10 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
              ConfigurationCodecStatus::Success ||
          !encodeDocumentRecord(
              configuration_storage_contract::kServiceConfigurationRecordType,
-             1U, ServiceConfigurationRevision{1U}, epoch, payload, 45U,
+             kCurrentServiceConfigurationSchemaVersion,
+             ServiceConfigurationRevision{1U}, epoch, payload,
+             configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                 45U,
              record))) {
         return {ConfigurationCommitExecutionStatus::CapacityFailure,
                 ConfigurationCommitFailurePhase::ServiceDocument};
@@ -2162,7 +2198,9 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
         if (auto failure = writeDocument(
                 configuration_storage_contract::kServiceConfigurationSlotKeys
                     [selectedSlot.value()],
-                prepared.previousTargetServiceRecord, 45U,
+                prepared.previousTargetServiceRecord,
+                configuration_limits::kMaximumServiceConfigurationPayloadBytes +
+                    45U,
                 ConfigurationCommitFailurePhase::ServiceDocument)) {
             return *failure;
         }

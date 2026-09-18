@@ -7,6 +7,7 @@
 #include "application_run_identity.hpp"
 #include "configuration_service.hpp"
 #include "fermentation_ui_models.hpp"
+#include "network_configuration_service.hpp"
 #include "sensor_selection.hpp"
 
 namespace fermentation {
@@ -58,6 +59,16 @@ struct FermentationUiResumeFallbackCommand {
     FermentationUiExpectedRevisions expected;
     bool confirmed{false};
 };
+
+// These commands are typed UI intents only. Their execution enters the
+// existing application-owned configuration paths; no UI layer reimplements
+// persistence, preview/commit, credential handling, or startup policy.
+struct FermentationUiApplyNetworkModeCommand {
+    device_platform::NetworkMode selectedMode{
+        device_platform::NetworkMode::UNSELECTED};
+};
+
+struct FermentationUiBeginHomeWifiReconfigurationCommand {};
 
 // The renderer-independent UI contract carries intent only.  In particular,
 // these payloads never carry a ProgramDocument, safety/sensor/planner
@@ -234,7 +245,9 @@ struct FermentationUiCommand {
     std::uint64_t monotonicMillis{0U};
     std::variant<FermentationUiEnvelopeCommand,
                  FermentationUiConfigurationCommitCommand,
-                 FermentationUiResumeFallbackCommand>
+                 FermentationUiResumeFallbackCommand,
+                 FermentationUiApplyNetworkModeCommand,
+                 FermentationUiBeginHomeWifiReconfigurationCommand>
         operation;
 };
 
@@ -253,7 +266,7 @@ enum class FermentationUiCommandPhase : std::uint8_t {
 using FermentationUiCommandDetail =
     std::variant<CommandStatus, DecisionStatus, RunPersistenceResultStatus,
                  ConfigurationPreviewStatus, ConfigurationCommitStatus,
-                 FermentationUiDetailStatus>;
+                 NetworkConfigurationStatus, FermentationUiDetailStatus>;
 
 struct FermentationUiCommandResult {
     device_platform::DeviceUiCommandOutcomeCategory category{
@@ -286,6 +299,8 @@ class FermentationUiCommandBridge {
         ConfigurationCommitStatus status,
         FermentationUiCommandPhase phase =
             FermentationUiCommandPhase::DecisionOnly);
+    [[nodiscard]] static FermentationUiCommandResult
+    fromNetworkConfigurationResult(NetworkConfigurationStatus status);
     [[nodiscard]] static FermentationUiCommandResult unsupportedAppDetail();
     [[nodiscard]] static FermentationUiCommandResult
     decideProductInsertedConfirmed(const RunCommandState& current,
@@ -315,6 +330,13 @@ class FermentationUiCommandBridge {
         const FermentationUiResumeFallbackCommand& command,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
+    [[nodiscard]] static FermentationUiCommandResult applyNetworkMode(
+        FermentationApplication& application,
+        const FermentationUiApplyNetworkModeCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult
+    beginHomeWifiReconfiguration(
+        FermentationApplication& application,
+        const FermentationUiBeginHomeWifiReconfigurationCommand& command);
 
    private:
     friend class FermentationApplication;

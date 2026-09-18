@@ -485,6 +485,8 @@ const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
             return "RESUME_OFFER";
         case fermentation::RunLoadDisposition::RecoveryEvaluation:
             return "RECOVERY_EVALUATION";
+        case fermentation::RunLoadDisposition::FallbackSelectionRequired:
+            return "FALLBACK_SELECTION_REQUIRED";
         case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
         case fermentation::RunLoadDisposition::Completed:
@@ -604,6 +606,7 @@ const char* runProductOutcomeName(
             case fermentation::RunLoadDisposition::NoActiveRun:
                 return "RUN_ABORT_REQUIRED";
             case fermentation::RunLoadDisposition::Standby:
+            case fermentation::RunLoadDisposition::FallbackSelectionRequired:
             case fermentation::RunLoadDisposition::SafeBoot:
                 break;
         }
@@ -831,9 +834,9 @@ void writeCutArtifact(const char* caseId, const char* label,
                 ? "UNKNOWN"
                 : std::getenv("ISSUE90_SOURCE_SHA"))
         << "\",\n"
-        << "  \"esp_idf_tag\": \"v6.0.2\",\n"
+        << "  \"esp_idf_tag\": \"v6.1\",\n"
         << "  \"esp_idf_commit\": "
-           "\"7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+           "\"fff9895c82d744c7237be8847347bdd1b07c6643\",\n"
         << "  \"case_id\": \"" << caseId << "\",\n"
         << "  \"stimulus_kind\": \"" << stimulusKind << "\",\n"
         << "  \"partition_backend\": \"" << label << "\",\n"
@@ -1374,9 +1377,9 @@ void writePowerCutArtifact(const char* caseId, const char* stimulusKind,
                      ? "UNKNOWN"
                      : std::getenv("ISSUE90_SOURCE_SHA"))
              << "\",\n"
-             << "  \"esp_idf_tag\": \"v6.0.2\",\n"
+             << "  \"esp_idf_tag\": \"v6.1\",\n"
              << "  \"esp_idf_commit\": "
-                "\"7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+                "\"fff9895c82d744c7237be8847347bdd1b07c6643\",\n"
              << "  \"case_id\": \"" << caseId << "\",\n"
              << "  \"stimulus_kind\": \"" << stimulusKind << "\",\n"
              << "  \"partition_backend\": \"frozen_image_bdl\",\n"
@@ -1581,9 +1584,9 @@ void writeGcErasePowerCutArtifact(
                      ? "UNKNOWN"
                      : std::getenv("ISSUE90_SOURCE_SHA"))
              << "\",\n"
-             << "  \"esp_idf_tag\": \"v6.0.2\",\n"
+             << "  \"esp_idf_tag\": \"v6.1\",\n"
              << "  \"esp_idf_commit\": "
-                "\"7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+                "\"fff9895c82d744c7237be8847347bdd1b07c6643\",\n"
              << "  \"case_id\": \"" << caseId << "\",\n"
              << "  \"stimulus_kind\": \"" << stimulusKind << "\",\n"
              << "  \"partition_backend\": \"frozen_image_bdl\",\n"

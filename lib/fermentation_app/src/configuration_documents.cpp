@@ -100,6 +100,9 @@ UserConfigurationValidationResult validateUserConfiguration(
         ConfigurationTextStatus::Success) {
         return {UserConfigurationStatus::InvalidDeviceName, std::nullopt};
     }
+    if (!device_platform::isValidNetworkMode(configuration.networkMode)) {
+        return {UserConfigurationStatus::InvalidNetworkMode, std::nullopt};
+    }
     auto prepared = resolver.prepare(configuration.timeZoneId);
     if (prepared.status ==
         device_platform::TimeZonePrepareStatus::UnsupportedIdentifier) {
@@ -159,12 +162,13 @@ bool configurationContentEquals(const UserConfiguration& left,
     return left.displayLanguageId == right.displayLanguageId &&
            left.timeZoneId == right.timeZoneId &&
            left.deviceName == right.deviceName &&
-           left.activeThemeId == right.activeThemeId;
+           left.activeThemeId == right.activeThemeId &&
+           left.networkMode == right.networkMode;
 }
 
-bool configurationContentEquals(const ServiceConfiguration& /*left*/,
-                                const ServiceConfiguration& /*right*/) {
-    return true;
+bool configurationContentEquals(const ServiceConfiguration& left,
+                                const ServiceConfiguration& right) {
+    return left.actuatorPlannerParameters == right.actuatorPlannerParameters;
 }
 
 bool configurationContentEquals(const ProgramDocument& left,

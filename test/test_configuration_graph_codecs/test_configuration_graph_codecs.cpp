@@ -134,13 +134,42 @@ void test_manifest_rejects_inconsistent_wire_metadata_and_reference_contracts() 
         ConfigurationGraphCodecStatus::InvalidModel);
 
     manifest = validManifest();
-    manifest.userConfiguration.schemaVersion = 3U;
+    manifest.userConfiguration.schemaVersion = 4U;
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::InvalidModel);
 
     manifest = validManifest();
     manifest.serviceConfiguration.payloadLength = 1U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest = validManifest();
+    manifest.serviceConfiguration.schemaVersion =
+        fermentation::kCurrentServiceConfigurationSchemaVersion;
+    manifest.serviceConfiguration.payloadLength = 1U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::Success);
+
+    manifest.serviceConfiguration.payloadLength = static_cast<std::uint32_t>(
+        fermentation::configuration_limits::
+            kMaximumServiceConfigurationPayloadBytes);
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::Success);
+
+    output = "sentinel";
+    manifest.serviceConfiguration.payloadLength = 2U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest.serviceConfiguration.payloadLength = static_cast<std::uint32_t>(
+        fermentation::configuration_limits::
+            kMaximumServiceConfigurationPayloadBytes -
+        1U);
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::InvalidModel);

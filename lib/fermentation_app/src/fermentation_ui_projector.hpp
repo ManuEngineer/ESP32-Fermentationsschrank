@@ -16,6 +16,7 @@ struct FermentationUiProjectionInput {
     std::optional<RunPersistenceCoordinatorState> coordinatorState;
     FermentationUiApplicationSource application;
     FermentationUiServiceSource service;
+    FermentationUiNetworkSource network;
     std::optional<device_platform::TextKey> primaryAction;
     std::vector<device_platform::TextKey> semanticActions;
     FermentationUiRefreshRevisionTracker* refreshTracker{nullptr};

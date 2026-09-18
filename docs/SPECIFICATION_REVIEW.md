@@ -38,7 +38,7 @@ Aktueller Projekt- und Arbeitsstatus steht ausschliesslich in `ROADMAP.md`.
 - ESP32-32E mit 4 MB Flash;
 - keine PSRAM-Abhaengigkeit;
 - `native` als PlatformIO-Hosttestprofil;
-- `esp32_bringup` und `esp32_release` als ESP-IDF-6.0.2-Produktionsprofile;
+- `esp32_bringup` und `esp32_release` als ESP-IDF-6.1-Produktionsprofile;
 - UART/FT232RL als Update- und Recoveryweg;
 - keine OTA-Partitionen oder dualen Firmware-Slots.
 

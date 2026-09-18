@@ -3,8 +3,11 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "actuator_plan_types.hpp"
+#include "network_mode.hpp"
 #include "program_model.hpp"
 #include "storage_types.hpp"
 #include "time_zone_resolver.hpp"
@@ -14,11 +17,17 @@ namespace fermentation {
 enum class UserConfigurationSchema : std::uint8_t {
     Version1 = 1U,
     Version2 = 2U,
+    Version3 = 3U,
 };
 
 inline constexpr std::uint32_t kCurrentUserConfigurationSchemaVersion =
-    static_cast<std::uint32_t>(UserConfigurationSchema::Version2);
-enum class ServiceConfigurationSchema : std::uint8_t { Version1 = 1U };
+    static_cast<std::uint32_t>(UserConfigurationSchema::Version3);
+enum class ServiceConfigurationSchema : std::uint8_t {
+    Version1 = 1U,
+    Version2 = 2U,
+};
+inline constexpr std::uint32_t kCurrentServiceConfigurationSchemaVersion =
+    static_cast<std::uint32_t>(ServiceConfigurationSchema::Version2);
 enum class ProgramCatalogSchema : std::uint8_t { Version1 = 1U };
 
 namespace detail {
@@ -37,15 +46,32 @@ using ProgramCatalogRevision =
     device_platform::StrongId<detail::ProgramCatalogRevisionTag, std::uint64_t>;
 
 struct UserConfiguration {
+    UserConfiguration() = default;
+    UserConfiguration(std::string displayLanguage, std::string timeZone,
+                      std::string name, std::string theme = "manuengineer-dark",
+                      device_platform::NetworkMode mode =
+                          device_platform::NetworkMode::UNSELECTED)
+        : displayLanguageId(std::move(displayLanguage)),
+          timeZoneId(std::move(timeZone)),
+          deviceName(std::move(name)),
+          activeThemeId(std::move(theme)),
+          networkMode(mode) {}
+
     std::string displayLanguageId;
     std::string timeZoneId;
     std::string deviceName;
-    // V1 records are normalized to this stable R1 default while being read.
-    // New persistent records carry this value in the V2 payload.
+    // V1/V2 records normalize to the internal bootstrap/migration state.
+    // Current records carry only the explicit network mode; credentials are a
+    // separate ConnectivityCredential record.
     std::string activeThemeId{"manuengineer-dark"};
+    // Network mode is explicit and is not inferred from credentials.
+    device_platform::NetworkMode networkMode{
+        device_platform::NetworkMode::UNSELECTED};
 };
 
-struct ServiceConfiguration {};
+struct ServiceConfiguration {
+    std::optional<ActuatorPlannerParameters> actuatorPlannerParameters;
+};
 
 struct ProgramCatalog {
     std::vector<ProgramDocument> programs;
@@ -62,6 +88,7 @@ enum class UserConfigurationStatus : std::uint8_t {
     TimeZoneRejected,
     TimeZonePreparationFailed,
     InvalidDeviceName,
+    InvalidNetworkMode,
 };
 
 struct UserConfigurationValidationResult {

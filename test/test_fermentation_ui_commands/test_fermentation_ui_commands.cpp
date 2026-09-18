@@ -7,12 +7,33 @@
 #include "fermentation_ui_commands.hpp"
 #include "device_platform.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "mock_network_lifecycle.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
+#include "virtual_time_source.hpp"
 
 namespace {
 
 using namespace fermentation;
+
+class MockHttpServerLifecycle final
+    : public device_platform::IHttpServerLifecycle {
+   public:
+    [[nodiscard]] bool start(device_platform::IHttpRouteSink&) override {
+        running_ = true;
+        return true;
+    }
+
+    [[nodiscard]] bool stop() override {
+        running_ = false;
+        return true;
+    }
+
+    [[nodiscard]] bool running() const override { return running_; }
+
+   private:
+    bool running_{false};
+};
 
 FermentationApplicationOwningEvidence uiEvidence(
     bool safetyAllowsStart = true) {
@@ -212,6 +233,96 @@ void test_command_result_preserves_typed_app_details() {
     assertDecisionOnly(commit);
 }
 
+void test_network_ui_commands_use_the_owning_application_paths() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http));
+
+    FermentationUiCommand typedCommand;
+    typedCommand.operation = FermentationUiApplyNetworkModeCommand{
+        device_platform::NetworkMode::AP_ONLY};
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<FermentationUiApplyNetworkModeCommand>(
+            typedCommand.operation));
+
+    const auto apOnly = FermentationUiCommandBridge::applyNetworkMode(
+        application, std::get<FermentationUiApplyNetworkModeCommand>(
+                         typedCommand.operation));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<NetworkConfigurationStatus>(apOnly.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(std::get<NetworkConfigurationStatus>(apOnly.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(apOnly.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::AP_ONLY),
+        static_cast<int>(application.networkMode()));
+
+    const auto accessPoint = application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(accessPoint.has_value());
+    TEST_ASSERT_EQUAL_STRING("mock-ap-password", accessPoint->password.c_str());
+
+    const auto homeWifi = FermentationUiCommandBridge::applyNetworkMode(
+        application, FermentationUiApplyNetworkModeCommand{
+                         device_platform::NetworkMode::HOME_WIFI});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              homeWifi.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::HOME_WIFI),
+        static_cast<int>(application.networkMode()));
+
+    FermentationUiCommand reconfigurationCommand;
+    reconfigurationCommand.operation =
+        FermentationUiBeginHomeWifiReconfigurationCommand{};
+    TEST_ASSERT_TRUE(std::holds_alternative<
+                     FermentationUiBeginHomeWifiReconfigurationCommand>(
+        reconfigurationCommand.operation));
+    const auto reconfigured =
+        FermentationUiCommandBridge::beginHomeWifiReconfiguration(
+            application,
+            std::get<FermentationUiBeginHomeWifiReconfigurationCommand>(
+                reconfigurationCommand.operation));
+    TEST_ASSERT_TRUE(std::holds_alternative<NetworkConfigurationStatus>(
+        reconfigured.detail));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              reconfigured.detail)));
+    TEST_ASSERT_TRUE(network.startCallCount() >= 3U);
+}
+
+void test_unselected_network_command_is_rejected_without_a_third_ui_option() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http));
+
+    const auto result = FermentationUiCommandBridge::applyNetworkMode(
+        application, FermentationUiApplyNetworkModeCommand{
+                         device_platform::NetworkMode::UNSELECTED});
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<NetworkConfigurationStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::InvalidMode),
+        static_cast<int>(std::get<NetworkConfigurationStatus>(result.detail)));
+    TEST_ASSERT_EQUAL_INT(0U, network.startCallCount());
+}
+
 void test_ui_payloads_are_intents_and_not_owning_evidence() {
     static_assert(!std::is_constructible_v<FermentationUiEnvelopePayload,
                                            ProgramStartRequest>);
@@ -379,6 +490,9 @@ int main(int, char**) {
     RUN_TEST(test_ui_request_id_is_the_existing_command_id);
     RUN_TEST(test_canonical_validation_precedes_ui_confirmation);
     RUN_TEST(test_command_result_preserves_typed_app_details);
+    RUN_TEST(test_network_ui_commands_use_the_owning_application_paths);
+    RUN_TEST(
+        test_unselected_network_command_is_rejected_without_a_third_ui_option);
     RUN_TEST(test_ui_payloads_are_intents_and_not_owning_evidence);
     RUN_TEST(test_proposed_decision_is_not_reported_as_applied);
     RUN_TEST(test_manual_timed_ui_intent_uses_the_merged_application_contract);

@@ -109,6 +109,27 @@ Category categoryFor(ConfigurationCommitStatus status) {
     return Category::Rejected;
 }
 
+Category categoryFor(NetworkConfigurationStatus status) {
+    switch (status) {
+        case NetworkConfigurationStatus::Applied:
+            return Category::Accepted;
+        case NetworkConfigurationStatus::SelectionRequired:
+        case NetworkConfigurationStatus::InvalidMode:
+        case NetworkConfigurationStatus::InvalidCredential:
+        case NetworkConfigurationStatus::CandidateRejected:
+        case NetworkConfigurationStatus::PersistenceFailure:
+            return Category::Rejected;
+        case NetworkConfigurationStatus::CredentialUnavailable:
+        case NetworkConfigurationStatus::TransportFailure:
+        case NetworkConfigurationStatus::CommitIndeterminate:
+        case NetworkConfigurationStatus::RecoveryRequired:
+        case NetworkConfigurationStatus::SetupNotAvailable:
+        case NetworkConfigurationStatus::NotInitialized:
+            return Category::Unavailable;
+    }
+    return Category::Rejected;
+}
+
 }  // namespace
 
 CommandId FermentationApplicationPreparedRequest::commandId() const noexcept {
@@ -242,6 +263,13 @@ FermentationUiCommandBridge::fromConfigurationCommit(
     return makeResult(categoryFor(status), status, phase);
 }
 
+FermentationUiCommandResult
+FermentationUiCommandBridge::fromNetworkConfigurationResult(
+    NetworkConfigurationStatus status) {
+    return makeResult(categoryFor(status), status,
+                      FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult FermentationUiCommandBridge::fromFallbackResult(
     RunPersistenceResultStatus status) {
     return fromRunPersistenceResult(status);
@@ -296,6 +324,21 @@ FermentationUiCommandResult FermentationUiCommandBridge::resumeFallback(
                           FermentationUiCommandPhase::DecisionOnly);
     }
     return fromFallbackResult(outcome.status);
+}
+
+FermentationUiCommandResult FermentationUiCommandBridge::applyNetworkMode(
+    FermentationApplication& application,
+    const FermentationUiApplyNetworkModeCommand& command) {
+    return fromNetworkConfigurationResult(
+        application.applyNetworkMode(command.selectedMode).status);
+}
+
+FermentationUiCommandResult
+FermentationUiCommandBridge::beginHomeWifiReconfiguration(
+    FermentationApplication& application,
+    const FermentationUiBeginHomeWifiReconfigurationCommand&) {
+    return fromNetworkConfigurationResult(
+        application.beginHomeWifiReconfiguration().status);
 }
 
 FermentationUiCommandResult

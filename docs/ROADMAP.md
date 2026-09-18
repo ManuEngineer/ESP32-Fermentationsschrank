@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-10
+Stand: 2026-09-17
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -26,16 +26,19 @@ nicht kopiert, sondern verlinkt.
 | Issue #152 / PR #153 | `ISSUE152_STATUS=CLOSED_COMPLETED`; `PR153=MERGED`; `PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`; `PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `IMPLEMENTATION=MERGED`; `OWNER_ISSUE_CLOSE=COMPLETED`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` |
 | Issue #26 / PR #143 | `ISSUE26_STATUS=CLOSED_COMPLETED`; `PR143=MERGED`; `PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`; `PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`; `PRE_READY_LOCAL_GATES=PASS`; `ACTUATOR_RELEASE=NO` |
 | Issue #154 / PR #155 | `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO` |
+| Issue #159 / PR #160 | `ISSUE159=CLOSED_COMPLETED`; `PR160=MERGED @ dc017f4ee7c4f33be240fac23c1686606f340225`; `APPROVED_PLAN_SHA=b7747dc270a513f5dea45bb86f274a85ae2bf1cf`; `IMPLEMENTATION=BUILDER_COMPLETE`; `FULL_PROFILE_BUILDS=PASS`; `FULL_ESP_CLANG=PASS`; `HARDWARE_PARITY=PASS_WITH_OWNER_WAIVER`; `TARGET=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643`; `ACTUATOR_RELEASE=NO` |
+| Kein Issue / PR #161 – GitHub-CI ESP-IDF-Setup beschleunigen | `PR161=MERGED`; `PR161_SOURCE_HEAD=6fed57dc5e58c6e6aa3124f7b2a9ee3a1796c34e`; `PR161_MERGE_COMMIT=0f37004121355e1ad5efbf76e44b88004d0789f8`; `APPROVED_PLAN_SHA=e354b2026a5a73450a96be661a9e4b87f1a5e027`; `INDEPENDENT_REVIEW=PASS`; `OPEN_BLOCKERS=0`; `GITHUB_CI=PASS`; `CACHE_HIT_EVIDENCE=ZWEITER_LAUF_CA_5MIN_VS_CA_10MIN_BASELINE`; `ACTUATOR_RELEASE=NO` |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO` | Display-/Touch-Hardware anschliessen und die fehlenden Stage-0-Identitaets-/SSOT-Nachweise erheben; danach sequenziell Stage 1–4 |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_REVALIDATION=IN_PROGRESS`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=NO`; `TOUCH_BLOCKED_OWNER_SOLDERING=YES`; `STAGE_0_OVERALL=BLOCKED`; `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Touch zuerst physisch anschliessen; Display-only-Stage-0-Evidence darf vorbereitet/erhoben werden, aber keine Stage-1/2/3/4-Implementation oder Renderer-/Bibliotheksauswahl vor bestandenem Gesamt-Stage-0 |
+| 2 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164=OPEN`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `IMPLEMENTATION=MERGED`; `REAL_WLAN_EVIDENCE=WAITING_FOR_ISSUE31_PHYSICAL_MODE_ENTRY`; `ACTUATOR_RELEASE=NO` | Reale WLAN-Evidence erst nach dem physischen Modus-Einstieg aus #31; keine parallele #164-Implementierung |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
 | 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
-| 5 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
+| 5 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLAN_APPROVED=YES`; `PLAN_SHA=3a7694aa0804ab9e4c8580a6e722782b81f9f275`; `PR157=MERGED @ 2c010e8a8be8e351f89b79ae6c74f665d24a1f0e`; `PR157_SOURCE_HEAD=39eebf4e06d7d9d142e4c18eabdb66778f3e3de9`; `IMPLEMENTATION=COMPLETE`; `INDEPENDENT_FIX_VERIFICATION=COMPLETED`; `PRODUCTIVE_COMPLETION=#35_GATED`; `ACTUATOR_RELEASE=NO`. | #35 bleibt Werte-/Grenzengate; produktive #106-Erledigung weiterhin nicht abgeschlossen |
 | 6 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und auswertbare Messprotokolle; vollständige Lauf-/Diagnose-/Serviceexporte bleiben #28 |
 | 7 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
 | 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
@@ -48,6 +51,12 @@ nicht kopiert, sondern verlinkt.
 - Issue #154 / PR #155 – Static-Analysis-Self-Check als parallele Governance-Arbeit abgeschlossen: `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO`.
 
 ## Naechste fachliche Arbeit
+
+PR #165 ist auf `main` gemergt. Issue #164 bleibt offen, weil die reale
+WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
+ist damit der naechste aktive Hardware-Scope; Display-only-Stage-0-Evidence
+darf vorbereitet/erhoben werden, waehrend `STAGE_0_OVERALL=BLOCKED` bis zum
+physischen Touchanschluss bleibt.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
@@ -210,8 +219,9 @@ ist geschlossene historische Persistenzprovenienz.
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
-- Issue #89 (WLAN-Onboarding-Evaluation) benoetigt vor Beginn einen eigenen
-  Live-Abgleich und freigegebenen Plan. Issue #90 ist geschlossen.
+- Issue #89 (WLAN-Onboarding-Evaluation) ist mit der Owner-Kandidatenauswahl
+  abgeschlossen; die separate R1-Integration ist in Issue #164 mit einem
+  eigenen, noch freizugebenden Plan vorbereitet. Issue #90 ist geschlossen.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen

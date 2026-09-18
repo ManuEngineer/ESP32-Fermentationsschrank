@@ -18,7 +18,7 @@ uint64_t EspTimerTimeSource::monotonicMillis() const {
 }
 
 std::optional<int64_t> EspTimerTimeSource::unixTimeSeconds() const {
-    const std::lock_guard<std::mutex> lock(trustMutex_);
+    const std::scoped_lock lock(trustMutex_);
     if (!publicationGate_.trusted()) {
         return std::nullopt;
     }
@@ -53,7 +53,7 @@ bool EspTimerTimeSource::setSystemTimeUtc(
 }
 
 bool EspTimerTimeSource::markAbsoluteTimeTrusted() const noexcept {
-    const std::lock_guard<std::mutex> lock(trustMutex_);
+    const std::scoped_lock lock(trustMutex_);
     publicationGate_.markTrusted();
     return true;
 }

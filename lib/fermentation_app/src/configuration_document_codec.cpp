@@ -735,10 +735,10 @@ configuration_codec_internal::decodeSingleProgramDocumentPayload(
 ConfigurationCodecStatus encodeUserConfigurationPayload(
     const UserConfiguration& configuration, std::uint32_t schemaVersion,
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
-    if (schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
-        schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
+    if (schemaVersion <
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) ||
+        schemaVersion >
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
         return ConfigurationCodecStatus::UnsupportedSchema;
     }
     if (validateUserConfiguration(configuration, resolver).status !=
@@ -750,10 +750,17 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
     if (!writeString(writer, configuration.displayLanguageId) ||
         !writeString(writer, configuration.timeZoneId) ||
         !writeString(writer, configuration.deviceName) ||
-        (schemaVersion ==
+        (schemaVersion >=
              static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
          !writeString(writer, configuration.activeThemeId))) {
         return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    if (schemaVersion >=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
+        if (!big_endian::writeUint8(
+                writer, static_cast<std::uint8_t>(configuration.networkMode))) {
+            return ConfigurationCodecStatus::CapacityExceeded;
+        }
     }
     auto encoded = writer.takeBytes();
     out.swap(encoded);
@@ -763,10 +770,10 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
 ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
     std::uint32_t schemaVersion, const std::string& payload,
     const device_platform::ITimeZoneResolver& resolver) {
-    if (schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
-        schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
+    if (schemaVersion <
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) ||
+        schemaVersion >
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
         return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
     }
     if (payload.size() >
@@ -781,11 +788,20 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
                     candidate.timeZoneId) ||
         !readString(reader, configuration_limits::kMaximumVisibleNameBytes,
                     candidate.deviceName) ||
-        (schemaVersion ==
+        (schemaVersion >=
              static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
          !readString(reader, configuration_limits::kMaximumThemeIdBytes,
                      candidate.activeThemeId))) {
         return {ConfigurationCodecStatus::Truncated, std::nullopt};
+    }
+    if (schemaVersion >=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
+        std::uint8_t rawMode = 0U;
+        if (!big_endian::readUint8(reader, rawMode)) {
+            return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
+        }
+        candidate.networkMode =
+            static_cast<device_platform::NetworkMode>(rawMode);
     }
     if (reader.remaining() != 0U) {
         return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
@@ -798,8 +814,30 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
 }
 
 ConfigurationCodecStatus encodeServiceConfigurationPayload(
-    const ServiceConfiguration& /*configuration*/, std::string& out) {
-    std::string encoded;
+    const ServiceConfiguration& configuration, std::string& out) {
+    ByteWriter writer(
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes);
+    bool ok = big_endian::writeOptionalTag(
+        writer, configuration.actuatorPlannerParameters.has_value());
+    if (ok && configuration.actuatorPlannerParameters.has_value()) {
+        const auto& p = *configuration.actuatorPlannerParameters;
+        ok = classifyActuatorPlannerParameters(p) ==
+                 ActuatorPlannerParametersValidation::Valid &&
+             big_endian::writeUint64(writer, p.switchingWindowMillis) &&
+             big_endian::writeUint64(writer, p.minimumOnMillis) &&
+             big_endian::writeUint64(writer, p.minimumOffMillis) &&
+             big_endian::writeUint64(writer, p.polarityDeadTimeMillis) &&
+             big_endian::writeUint64(writer, p.pulseAccumulatorCapMillis) &&
+             device_platform::binary64::encode(
+                 p.counterDirectionConfirmationQuoteThreshold, writer) &&
+             big_endian::writeUint64(
+                 writer, p.counterDirectionConfirmationDurationMillis) &&
+             big_endian::writeUint64(writer, p.requestWatchdogMillis) &&
+             big_endian::writeUint64(writer, p.outerFanPostRunMillis) &&
+             big_endian::writeUint64(writer, p.innerFanPostRunMillis);
+    }
+    if (!ok) return ConfigurationCodecStatus::InvalidDocument;
+    auto encoded = writer.takeBytes();
     out.swap(encoded);
     return ConfigurationCodecStatus::Success;
 }
@@ -807,14 +845,50 @@ ConfigurationCodecStatus encodeServiceConfigurationPayload(
 ConfigurationDecodeResult<ServiceConfiguration>
 decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
                                   const std::string& payload) {
-    if (schemaVersion !=
+    if (schemaVersion ==
         static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
+        if (!payload.empty()) {
+            return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
+        }
+        return {ConfigurationCodecStatus::Success, ServiceConfiguration{}};
+    }
+    if (schemaVersion != kCurrentServiceConfigurationSchemaVersion) {
         return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
     }
-    if (!payload.empty()) {
+    if (payload.size() >
+        configuration_limits::kMaximumServiceConfigurationPayloadBytes) {
+        return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
+    }
+    ByteReader reader(payload);
+    bool present = false;
+    if (!big_endian::readOptionalTag(reader, present)) {
+        return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
+    }
+    ServiceConfiguration candidate;
+    if (present) {
+        ActuatorPlannerParameters p;
+        if (!big_endian::readUint64(reader, p.switchingWindowMillis) ||
+            !big_endian::readUint64(reader, p.minimumOnMillis) ||
+            !big_endian::readUint64(reader, p.minimumOffMillis) ||
+            !big_endian::readUint64(reader, p.polarityDeadTimeMillis) ||
+            !big_endian::readUint64(reader, p.pulseAccumulatorCapMillis) ||
+            !device_platform::binary64::decode(
+                reader, p.counterDirectionConfirmationQuoteThreshold) ||
+            !big_endian::readUint64(
+                reader, p.counterDirectionConfirmationDurationMillis) ||
+            !big_endian::readUint64(reader, p.requestWatchdogMillis) ||
+            !big_endian::readUint64(reader, p.outerFanPostRunMillis) ||
+            !big_endian::readUint64(reader, p.innerFanPostRunMillis) ||
+            classifyActuatorPlannerParameters(p) !=
+                ActuatorPlannerParametersValidation::Valid) {
+            return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
+        }
+        candidate.actuatorPlannerParameters = p;
+    }
+    if (reader.remaining() != 0U) {
         return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
     }
-    return {ConfigurationCodecStatus::Success, ServiceConfiguration{}};
+    return {ConfigurationCodecStatus::Success, std::move(candidate)};
 }
 
 ConfigurationCodecStatus encodeProgramCatalogPayload(

@@ -17,6 +17,11 @@
 #include "application_run_identity.hpp"
 #include "application_lifecycle.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "http_server_lifecycle.hpp"
+#include "connectivity_credentials.hpp"
+#include "network_lifecycle.hpp"
+#include "network_configuration_service.hpp"
+#include "network_setup_routes.hpp"
 
 namespace fermentation {
 
@@ -72,7 +77,25 @@ class FermentationApplication {
         const device_platform::ITimeZoneResolver& timeZoneResolver,
         const device_platform::ITimeSource& timeSource,
         const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+    [[nodiscard]] bool begin(
+        device_platform::IPlatformServices& platformServices,
+        device_platform::IStateStore& store,
+        const device_platform::ITimeZoneResolver& timeZoneResolver,
+        const device_platform::ITimeSource& timeSource,
+        device_platform::INetworkLifecycle& networkLifecycle,
+        device_platform::IHttpServerLifecycle& httpServerLifecycle,
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
+    [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
+        device_platform::NetworkMode selectedMode);
+    [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
+    // Renderer-independent local setup data for the currently active
+    // SoftAP. The caller owns display/QR rendering; HTTP routes never expose
+    // these credentials.
+    [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
+    networkAccessPointInfo() const;
+    // Secret-free canonical mode input for the renderer-independent UI view.
+    [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -161,7 +184,14 @@ class FermentationApplication {
         device_platform::IStateStore& store,
         const device_platform::ITimeZoneResolver& timeZoneResolver,
         const device_platform::ITimeSource* timeSource,
-        const device_platform::IResetCauseSource* resetCauseSource);
+        const device_platform::IResetCauseSource* resetCauseSource,
+        device_platform::INetworkLifecycle* networkLifecycle = nullptr,
+        device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr);
+    [[nodiscard]] bool initializeNetwork(
+        device_platform::IStateStore& store,
+        device_platform::StorageEpoch storageEpoch,
+        device_platform::NetworkMode selectedMode,
+        const std::string& canonicalDeviceName);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
         const RunPersistenceSnapshot* snapshot,
@@ -189,9 +219,14 @@ class FermentationApplication {
     std::unique_ptr<ConfigurationGraphStore> graphStore_;
     std::unique_ptr<ConfigurationService> configurationService_;
     std::unique_ptr<ConfigurationRecoveryService> configurationRecoveryService_;
+    std::unique_ptr<ConnectivityCredentialStore> connectivityCredentialStore_;
+    std::unique_ptr<NetworkConfigurationService> networkConfigurationService_;
+    std::unique_ptr<NetworkSetupRoutes> networkSetupRoutes_;
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
     std::unique_ptr<ApplicationRunIdentity> runIdentity_;
     device_platform::IStateStore* stateStore_{nullptr};
+    device_platform::INetworkLifecycle* networkLifecycle_{nullptr};
+    device_platform::IHttpServerLifecycle* httpServerLifecycle_{nullptr};
     std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;

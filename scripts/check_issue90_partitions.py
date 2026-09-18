@@ -29,7 +29,7 @@ EXPECTED = {
     },
 }
 
-# ESP-IDF v6.0.2 NVS model used by the host backend. Page::writeItem() stores
+# ESP-IDF v6.1 NVS model used by the host backend. Page::writeItem() stores
 # one variable-length metadata entry and ceil(chunk_size / ENTRY_SIZE) data
 # entries for each BLOB_DATA chunk. writeMultiPageBlob() stores one separate
 # BLOB_IDX entry after all chunks have been written.

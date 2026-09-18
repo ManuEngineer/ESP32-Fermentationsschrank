@@ -126,6 +126,27 @@ struct ActuatorPlannerParameters {
     std::uint64_t innerFanPostRunMillis{0U};
 };
 
+[[nodiscard]] inline bool operator==(const ActuatorPlannerParameters& left,
+                                     const ActuatorPlannerParameters& right) {
+    return left.switchingWindowMillis == right.switchingWindowMillis &&
+           left.minimumOnMillis == right.minimumOnMillis &&
+           left.minimumOffMillis == right.minimumOffMillis &&
+           left.polarityDeadTimeMillis == right.polarityDeadTimeMillis &&
+           left.pulseAccumulatorCapMillis == right.pulseAccumulatorCapMillis &&
+           left.counterDirectionConfirmationQuoteThreshold ==
+               right.counterDirectionConfirmationQuoteThreshold &&
+           left.counterDirectionConfirmationDurationMillis ==
+               right.counterDirectionConfirmationDurationMillis &&
+           left.requestWatchdogMillis == right.requestWatchdogMillis &&
+           left.outerFanPostRunMillis == right.outerFanPostRunMillis &&
+           left.innerFanPostRunMillis == right.innerFanPostRunMillis;
+}
+
+[[nodiscard]] inline bool operator!=(const ActuatorPlannerParameters& left,
+                                     const ActuatorPlannerParameters& right) {
+    return !(left == right);
+}
+
 enum class ActuatorPlannerParametersValidation : std::uint8_t {
     Unconfigured,
     Valid,
@@ -279,8 +300,12 @@ struct ActuatorPlannerRuntimeState {
 
     bool outerFanActive{false};
     std::optional<std::uint64_t> outerFanDeactivationRequestedAtMonotonicMillis;
+    // Absolute retained teardown deadline. It is never shortened by a later
+    // run with a shorter post-run value.
+    std::optional<std::uint64_t> outerFanTeardownDeadlineMonotonicMillis;
     bool innerFanActive{false};
     std::optional<std::uint64_t> innerFanDeactivationRequestedAtMonotonicMillis;
+    std::optional<std::uint64_t> innerFanTeardownDeadlineMonotonicMillis;
 };
 
 struct ActuatorPlanTickInput {

@@ -65,13 +65,24 @@ dependencies:
     - esp32s2
     - esp32s3
     version: 2.1.2
+  espressif/mdns:
+    component_hash: b679eafd0acae2066e2645bd91d073e33ca5be515e2545cd3c4e55a3e3bce3cb
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.13.1
   idf:
     source:
       type: idf
-    version: 6.0.2
+    version: 6.1.0
 direct_dependencies:
 - esp-idf-lib/ds3231
 - esp-idf-lib/i2cdev
-manifest_hash: 4efec0b1e94112d4e26eb25e3a4bdf2d6e5d1e9af39c305569169481b5e66dff
+- espressif/mdns
+manifest_hash: 370d3e92b0a23693bdb7fd103f03085ba60861663fdc8ccb31b2e751981b117b
 target: esp32
 version: 3.0.0

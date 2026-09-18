@@ -48,6 +48,37 @@ void test_projector_builds_shared_snapshot_without_surface_state() {
     TEST_ASSERT_TRUE(snapshot.home.primaryAction.valid());
 }
 
+void test_projector_exposes_only_the_two_selectable_network_modes() {
+    FermentationUiProjectionInput input;
+    input.network.currentMode = device_platform::NetworkMode::UNSELECTED;
+    auto snapshot = FermentationUiProjector::project(input);
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::UNSELECTED),
+        static_cast<int>(snapshot.network.currentMode));
+    TEST_ASSERT_TRUE(snapshot.network.selectionRequired);
+    TEST_ASSERT_EQUAL_UINT32(2U, snapshot.network.selectableModes.size());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::AP_ONLY),
+        static_cast<int>(snapshot.network.selectableModes[0]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::HOME_WIFI),
+        static_cast<int>(snapshot.network.selectableModes[1]));
+    TEST_ASSERT_NOT_EQUAL(
+        static_cast<int>(device_platform::NetworkMode::UNSELECTED),
+        static_cast<int>(snapshot.network.selectableModes[0]));
+    TEST_ASSERT_NOT_EQUAL(
+        static_cast<int>(device_platform::NetworkMode::UNSELECTED),
+        static_cast<int>(snapshot.network.selectableModes[1]));
+
+    input.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
+    snapshot = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::HOME_WIFI),
+        static_cast<int>(snapshot.network.currentMode));
+    TEST_ASSERT_FALSE(snapshot.network.selectionRequired);
+}
+
 void test_projector_marks_fallback_only_from_canonical_pending_state() {
     RunCommandState state;
     FermentationUiProjectionInput input;
@@ -224,6 +255,7 @@ void tearDown() {}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_projector_builds_shared_snapshot_without_surface_state);
+    RUN_TEST(test_projector_exposes_only_the_two_selectable_network_modes);
     RUN_TEST(test_projector_marks_fallback_only_from_canonical_pending_state);
     RUN_TEST(test_projector_marks_recovery_home_from_canonical_disposition);
     RUN_TEST(

@@ -48,6 +48,10 @@ class SimulatedPersistentStateStore final
     // `None` zurueckgesetzt.
     void setNextWriteFault(WriteFault fault);
 
+    // Causes only the readback immediately following the next write to fail;
+    // the committed bytes remain available afterwards.
+    void failNextReadAfterWrite();
+
     // Solange gesetzt, schlaegt jeder Lesevorgang fuer `key` mit
     // `ReadError` fehl.
     void injectReadFailure(const device_platform::StateStoreKey& key,
@@ -100,6 +104,8 @@ class SimulatedPersistentStateStore final
     WriteFault nextWriteFault_{WriteFault::None};
     std::map<device_platform::StateStoreKey, bool> readShouldFail_;
     std::map<device_platform::StateStoreKey, bool> forceNotFound_;
+    bool armFailNextReadAfterWrite_{false};
+    mutable bool failReadAfterWrite_{false};
 };
 
 }  // namespace device_platform_test_support
