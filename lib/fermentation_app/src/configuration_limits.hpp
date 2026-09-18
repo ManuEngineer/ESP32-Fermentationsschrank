@@ -16,6 +16,13 @@ inline constexpr std::size_t kMaximumProgramIdBytes = 48U;
 inline constexpr std::size_t kMinimumVisibleNameScalars = 1U;
 inline constexpr std::size_t kMaximumVisibleNameScalars = 48U;
 inline constexpr std::size_t kMaximumVisibleNameBytes = 96U;
+inline constexpr std::size_t kMaximumHomeWifiSsidBytes = 32U;
+inline constexpr std::size_t kMinimumHomeWifiPasswordBytes = 8U;
+inline constexpr std::size_t kMaximumHomeWifiPasswordBytes = 63U;
+inline constexpr std::size_t kMaximumConnectivityCredentialPayloadBytes =
+    1U + 2U + kMaximumHomeWifiSsidBytes + 2U + kMaximumHomeWifiPasswordBytes;
+inline constexpr std::size_t kMaximumConnectivityCredentialEnvelopeBytes =
+    kMaximumConnectivityCredentialPayloadBytes + 45U;
 inline constexpr std::size_t kMaximumNotesScalars = 512U;
 inline constexpr std::size_t kMaximumNotesBytes = 1024U;
 inline constexpr std::size_t kFactoryProgramCount = 4U;

@@ -154,6 +154,8 @@ ConfigurationChangeSummary summarizeChanges(
                               candidate.baseUserConfiguration->timeZoneId;
     summary.deviceNameChanged = candidate.userConfiguration->deviceName !=
                                 candidate.baseUserConfiguration->deviceName;
+    summary.networkModeChanged = candidate.userConfiguration->networkMode !=
+                                 candidate.baseUserConfiguration->networkMode;
     for (const auto& program : candidate.programCatalog->programs) {
         const auto found =
             std::find_if(candidate.baseProgramCatalog->programs.begin(),

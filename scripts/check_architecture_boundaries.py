@@ -311,8 +311,12 @@ COMPONENT_REQUIRES_ALLOWLIST = {
         "public": frozenset({"device_platform", "nvs_flash"}),
         "private": frozenset(
             {
+                "esp_event",
+                "esp_http_server",
                 "esp_timer",
                 "esp_netif",
+                "esp_wifi",
+                "mdns",
                 "lwip",
                 "esp-idf-lib__ds3231",
                 "esp-idf-lib__i2cdev",
@@ -1001,8 +1005,8 @@ def create_clean_fixture(root: Path) -> None:
         "lib/device_platform_esp_idf/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
             'REQUIRES device_platform nvs_flash PRIV_REQUIRES '
-            'esp_timer esp_netif lwip esp-idf-lib__ds3231 '
-            'esp-idf-lib__i2cdev)\n'
+            'esp_event esp_http_server esp_netif esp_wifi mdns esp_timer '
+            'lwip esp-idf-lib__ds3231 esp-idf-lib__i2cdev)\n'
         ),
         "main/app_main.cpp": '#include "device_platform.hpp"\n',
         "main/CMakeLists.txt": (

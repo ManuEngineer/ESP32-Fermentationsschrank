@@ -6,7 +6,10 @@
 ISSUE=164
 SOURCE_EVALUATION_ISSUE=89
 BASE_BRANCH=main
-CURRENT_MAIN_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55
+CURRENT_MAIN_SHA=c5aa9cabf5165408d4dcc7f40975dd7918f0394e
+PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d
+OWNER_PREVIOUS_PLAN_APPROVAL=CONFIRMED
+PLAN_REVISION_REQUIRED=YES
 APPROVED_EVALUATION_PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c
 OWNER_SELECTED_CANDIDATE=NATIVE_ESP_IDF_HTTP
 R1_NETWORK_SCOPE_SOURCE_COMMIT=3b36b04504cf2b7df9db62db75851814b4934137
@@ -20,14 +23,21 @@ PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
 ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
 IMPLEMENTATION_AUTHORIZATION=NO
+IMPLEMENTATION_PAUSED_FOR_PLAN_REVISION=YES
+PRODUCTIVE_IMPLEMENTATION=PAUSED
 PRODUCTIVE_CONNECTIVITY_PERSISTENCE=NOT_STARTED
 ACTUATOR_RELEASE=NO
 ```
 
-Dieser Plan ist die eigenstaendige Umsetzungsgrundlage fuer die spaetere
-produktive R1-Integration. Er ersetzt nicht die Ownerfreigabe seiner exakten
-Plan-SHA. Bis zu dieser Freigabe werden weder Produktionscode noch produktive
-WLAN-Persistenz, Hardwarelaeufe oder neue Clienttests ausgefuehrt.
+Diese Planrevision ist die eigenstaendige Umsetzungsgrundlage fuer die spaetere
+produktive R1-Integration und ersetzt nach Ownerfreigabe die vorherige
+Planrevision `PREVIOUS_APPROVED_PLAN_SHA`. Sie fuehrt die bisherigen
+Ownerentscheidungen, den nativen ESP-IDF-HTTP-Pfad, die #27-Grenze und die
+Trennung von #31 unveraendert fort und praezisiert nur den initialen
+Bootstrap-/Migrationszustand, die Credential-Domaene und die Startup-Policy.
+Sie ersetzt nicht die Ownerfreigabe ihrer neuen exakten Plan-SHA. Bis zu dieser
+Freigabe werden weder Produktionscode noch produktive WLAN-Persistenz,
+Hardwarelaeufe oder neue Clienttests ausgefuehrt.
 
 Die Kandidatenevaluation bleibt in [Issue #89](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/89),
 PR #158 und
@@ -68,6 +78,13 @@ die Optionen zur Verfuegung:
 
 ```text
 INITIAL_NETWORK_MODE_SELECTION=DISPLAY
+USER_SELECTABLE_NETWORK_MODES:
+- AP_ONLY
+- HOME_WIFI
+NETWORK_MODE_SELECTION=UNSELECTED
+FACTORY_NETWORK_SELECTION=UNSELECTED
+V1_NETWORK_MIGRATION=UNSELECTED
+V2_NETWORK_MIGRATION=UNSELECTED
 R1_NETWORK_MODE_AP_ONLY=SUPPORTED
 R1_NETWORK_MODE_HOME_WIFI=SUPPORTED
 HOME_WIFI_COUNT=1
@@ -77,6 +94,31 @@ NETWORK_MODE_SELECTION_CONTRACT=R1_ISSUE164
 PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31
 ISSUE164_BLOCKED_BY_PHYSICAL_DISPLAY_PROOF=NO
 ```
+
+`UNSELECTED` ist ausschliesslich ein interner Bootstrap-/Migrationszustand vor
+der initialen Benutzerentscheidung. Er ist kein dritter auswaehlbarer
+Betriebsmodus und darf nicht als solcher angezeigt werden. Die Auswahl wird
+nicht implizit aus vorhandenen Credentials abgeleitet; es gibt weder ein
+automatisches `HOME_WIFI` noch ein automatisches `AP_ONLY`. Der
+Netzwerk-Lifecycle bleibt bis zur Benutzerentscheidung in einem nicht
+produktiv gewaehlten Zustand. Der rendererunabhaengige Auswahlvertrag aus
+#164 fordert danach genau `AP_ONLY | HOME_WIFI`; der physische
+Display-/Touchnachweis bleibt #31.
+
+Verbindliche Bootstrap-/Migrationsuebergaenge:
+
+```text
+UNSELECTED + user selects AP_ONLY
+    -> persist AP_ONLY
+    -> AP_ONLY lifecycle
+
+UNSELECTED + user selects HOME_WIFI
+    -> persist HOME_WIFI
+    -> if no valid credentials: HOME_WIFI setup
+```
+
+Es entsteht kein dritter Benutzer-Betriebsmodus und keine allgemeine
+State-Machine.
 
 Die Software stellt dafuer den typisierten Auswahlvertrag, das zugehoerige
 Command-/View-Model beziehungsweise die kleinstmoegliche bestehende
@@ -99,6 +141,24 @@ Der WLAN-QR darf den Beitritt zum geschuetzten SoftAP vereinfachen. Ein QR zum
 reinen Oeffnen der Webseite ist nicht R1-pflichtig.
 
 ### 2.2 Heim-WLAN-Setup
+
+Die Startup-Policy ist Fachlogik in `fermentation_app` und wird nicht aus
+ESP-IDF-Transportdetails oder dem Vorhandensein von Credentials abgeleitet:
+
+```text
+NETWORK_STARTUP_POLICY_LAYER=fermentation_app
+DEVICE_PLATFORM_ROLE=APPLICATION_NEUTRAL_TRANSPORT_PORTS
+
+UNSELECTED -> lokale Auswahl erforderlich
+AP_ONLY -> AP-only
+HOME_WIFI ohne Credential -> Setup
+HOME_WIFI mit Credential -> Home
+explizite Reconfiguration -> Setup
+```
+
+Bei `UNSELECTED` startet kein produktiv gewaehlter Netzwerk-Lifecycle. Die
+Wahl wird lokal angefordert und anschliessend als `AP_ONLY` oder `HOME_WIFI`
+persistiert.
 
 Bei `HOME_WIFI` bleibt der temporaere geschuetzte Setup-SoftAP aktiv, waehrend
 der Browserablauf stattfindet:
@@ -155,9 +215,20 @@ oder implizite Modus-State-Machine entsteht nicht.
 ```text
 R1_NETWORK_WEB_TRANSPORT=NATIVE_ESP_IDF_HTTP
 WIFI_CREDENTIAL_OWNER=PROJECT_CONFIGURATION_DOMAIN
+WIFI_CREDENTIAL_RECORD_DOMAIN=CONNECTIVITY_CREDENTIAL_DOMAIN
 TEST_BEFORE_COMMIT=REQUIRED
 FAILED_TEST_PRESERVES_ACTIVE_CONFIGURATION=YES
 SECOND_CREDENTIAL_STORE=NO
+SECOND_PHYSICAL_STORE=NO
+SECOND_CREDENTIAL_TRUTH=NO
+ESP_WIFI_PERSISTENT_CREDENTIAL_STORE=NO
+CONNECTIVITY_CREDENTIAL_SCHEMA=V1
+HOME_WIFI_CREDENTIAL_COUNT=1
+HOME_WIFI_SSID_OWNER=CONNECTIVITY_CREDENTIAL_RECORD
+HOME_WIFI_PASSWORD_OWNER=CONNECTIVITY_CREDENTIAL_RECORD
+USER_CONFIGURATION_HOME_WIFI_SSID=NO
+USER_CONFIGURATION_WIFI_PASSWORD=NO
+STORAGE_EPOCH_BINDING=REQUIRED
 ISSUE164_SHARED_HTTP_FOUNDATION=YES
 ISSUE164_NORMAL_R1_WEB_UI=NOT_IMPLEMENTED_BY_ISSUE164
 ISSUE27_NORMAL_WEB_UI_OWNERSHIP=PRESERVED
@@ -168,6 +239,55 @@ ESP-IDF-Wi-Fi ist Transport und Treiber, nicht die zweite produktive
 Credential-Wahrheit. Ein Kandidat darf fuer den Test volatil beziehungsweise
 mit `WIFI_STORAGE_RAM` gehalten werden. Die aktive produktive Konfiguration
 liegt ausschliesslich im bestehenden Projekt-Konfigurations-/Persistenzvertrag.
+
+Der Projekt-Konfigurations-/Persistenzvertrag bleibt Owner. Die
+`ConnectivityCredential` ist seine interne Persistenz-Unterdomaene und ein
+separater Secret-Record im selben bestehenden `IStateStore`-Backend; ESP-IDF
+bleibt Transport und Treiber.
+
+Der Persistenzvertrag trennt die Domaenen unmissverstaendlich:
+
+```text
+UserConfiguration:
+- network selection only for the WLAN contract
+- no HOME_WIFI SSID
+- NEVER stores reusable Wi-Fi password
+
+ConnectivityCredential domain:
+- same existing IStateStore backend
+- exactly one HOME_WIFI credential record
+- contains SSID + password together
+- typed/versioned schema V1
+- bound to current StorageEpoch
+- stored under the existing StateStoreKey/IStateStore representation
+- secret redaction / reset / recovery contract
+```
+
+Das WLAN-Passwort darf weder im normalen `UserConfiguration`-Wireformat noch
+in Preview, Change-Summary, Fingerprint, Diagnose, Log oder normalem
+Backup/Export landen. Die `UserConfiguration` enthaelt keine `HOME_WIFI`-SSID
+und kein wiederverwendbares WLAN-Passwort. SSID und Passwort bilden gemeinsam
+den einen `ConnectivityCredential`-Record; es gibt keine zweite aktive
+Credential- oder SSID-Wahrheit.
+
+Die konkrete bestehende IStateStore-Darstellung fuer diesen einen R1-Record
+ist:
+
+```text
+CONNECTIVITY_CREDENTIAL_RECORD_TYPE=9
+CONNECTIVITY_CREDENTIAL_STORE_KEY=cc0
+CONNECTIVITY_CREDENTIAL_SCHEMA=V1
+CONNECTIVITY_CREDENTIAL_SLOT_COUNT=1
+CONNECTIVITY_CREDENTIAL_ENVELOPE_VERSION=1
+CONNECTIVITY_CREDENTIAL_CRC=CRC-32/ISO-HDLC
+CONNECTIVITY_CREDENTIAL_STORAGE_EPOCH_BINDING=REQUIRED
+```
+
+Die Implementierung verwendet dafuer `StateStoreKey::create("cc0")`, den
+vorhandenen generischen `StorageEnvelope`-/CRC-Codec und
+`IStateStore::read`/`IStateStore::write`; die konkrete Payload V1 enthaelt
+SSID und Passwort zusammen. Es wird keine allgemeine Key-/Provider-
+Abstraktion und kein zweiter physischer Store eingefuehrt.
 
 Der erste reale Connectivity-Konsument muss gemaess #57 ein eigenes
 typisiertes, versioniertes und an `StorageEpoch` gebundenes Schema sowie seine
@@ -199,8 +319,9 @@ bleibt `PHYSICAL_DISPLAY_QR_TEST=DEFERRED_NOT_BLOCKING_ISSUE89_SELECTION`.
 ## 4. Verifizierte Ausgangslage und Quellen
 
 Die Umsetzung muss vor dem ersten Codecommit gegen den dann aktuellen Stand
-von `main` revalidiert werden. Fuer diesen Plan wurde `main` live auf
-`7029df3997bb92e60379eb218f1894f86c5f7d55` festgestellt. Relevant sind:
+von `main` revalidiert werden. Fuer diese Planrevision wurde `main` live auf
+`c5aa9cabf5165408d4dcc7f40975dd7918f0394e` festgestellt; PR #158 ist darin
+gemergt. Relevant sind:
 
 | Quelle | Verbindliche Rolle |
 |---|---|
@@ -231,7 +352,8 @@ main/app_main.cpp
     ESP-IDF-Composition-Root
 
 device_platform
-    schmale, anwendungsneutrale Ports fuer die benoetigte Netzwerkkapazitaet
+    schmale, anwendungsneutrale technische Netzwerkports fuer Scan, Status,
+    Kandidatentest und HTTP-Lifecycle
 
 device_platform_esp_idf
     konkrete Wi-Fi-, netif-, DHCP/mDNS- und gemeinsame HTTP-Unterbau-Adapter;
@@ -239,8 +361,8 @@ device_platform_esp_idf
 
 fermentation_app
     keine ESP-IDF-, WLAN-, Dateisystem- oder direkten HTTP-Aufrufe;
-    nur fachliche Konfiguration/Commands, falls nach Quellenpruefung dort
-    erforderlich
+    Startup-Policy und fachliche Konfigurations-/Commandentscheidung:
+    UNSELECTED, AP_ONLY, HOME_WIFI und explizite Reconfiguration
 
 device_platform_test_support
     nur native Mocks, Simulation und Fehlerinjektion
@@ -265,9 +387,13 @@ Vor produktivem Code ist ein kleiner Vertragsdelta-Commit erforderlich, falls
 die bestehenden kanonischen Konfigurationsdokumente die folgenden Werte noch
 nicht aufnehmen. Der Delta muss mindestens definieren:
 
-- Netzwerkmodus `AP_ONLY | HOME_WIFI`;
+- internen Bootstrap-/Migrationszustand `UNSELECTED` vor der initialen
+  Benutzerwahl und genau die Benutzer-Modi `AP_ONLY | HOME_WIFI`;
 - genau eine aktive Heim-WLAN-Identitaet und die zugehoerige geschuetzte
   Credential-Domaene;
+- eine separate typisierte/versionierte `ConnectivityCredential`-Record-
+  Domaene im bestehenden `IStateStore`-Backend mit genau einem R1-
+  `HOME_WIFI`-Credential und `StorageEpoch`-Bindung;
 - Schema, Inhaltsrevision, `StorageEpoch`, Redaction und Schluesselraum;
 - Trennung von nicht-geheimem Netzwerkstatus, Webkonfiguration und WLAN-Secret;
 - volatile Preview fuer SSID/Passwort und erwartete aktive Basis;
@@ -275,7 +401,8 @@ nicht aufnehmen. Der Delta muss mindestens definieren:
 - Teststatus und Commitgrenze ohne persistentes Pending- oder Aktivierungsintent;
 - Verhalten bei Write-, Readback- und `CommitOutcomeUnknown`-Fehler;
 - Widerruf bei Modus-/Credentialwechsel, Neustart, Reset und Recovery;
-- Ausschluss der WLAN-Secrets aus normalem Backup, Diagnose und Logs.
+- Ausschluss der WLAN-Secrets aus `UserConfiguration`-Wireformat, Preview,
+  Change-Summary, Fingerprint, Diagnose, Logs und normalem Backup/Export.
 
 Der fachliche Ablauf lautet:
 
@@ -304,7 +431,10 @@ Implementierungsfreigabe:
 
 1. **Vertragsrevalidierung und Delta** – aktuellen `main` pruefen, bestehende
    Konfigurations-/Web-/Portvertraege abgleichen und nur notwendige typisierte
-   Netzwerkfelder, Fehler und Commitgrenzen ergaenzen.
+   Netzwerkfelder, Fehler und Commitgrenzen ergaenzen. Dabei sind
+   `UNSELECTED` als interner Bootstrap-/Migrationszustand, die beiden
+   Benutzer-Modi und die separate `ConnectivityCredential`-Domaene explizit
+   zu modellieren.
 2. **Port- und Preview-Schicht** – schmale anwendungsneutrale Faehigkeiten fuer
    Modus, Scan, Kandidatenverbindung, Status und Lifecycle definieren; native
    Mocks und Fehlerinjektionen fuer Commit-/Reconnect-Faelle ergaenzen.
@@ -369,13 +499,21 @@ Nachweise sind proportional und auf dem exakten finalen HEAD zu erheben.
 
 ### Native und Vertragsnachweise
 
-- Modusvalidierung und genau-ein-Heim-WLAN-Regel;
+- Modusvalidierung fuer `UNSELECTED` sowie genau die Benutzer-Modi
+  `AP_ONLY | HOME_WIFI` und die genau-ein-Heim-WLAN-Regel;
+- Factory-, V1- und V2-Migration nach `UNSELECTED` sowie explizite
+  `UNSELECTED`-Uebergaenge ohne implizite Credentials-Auswahl;
 - volatile Preview, Abbruch und Neustartverwerfung;
 - Commit erst nach erfolgreichem Kandidatentest;
 - falsches Passwort, Scan-/Apply-Fehler, Timeout und Abbruch ohne Mutation der
   aktiven Konfiguration;
 - Write-/Readback-/`CommitOutcomeUnknown`-Pfad, `StorageEpoch` und Recovery;
-- Redaction sowie Ausschluss aus Backup, URL, Diagnose und UART;
+- konkreter R1-Record mit `RecordTypeId=9`, `StateStoreKey=cc0`, Envelope v1,
+  Schema V1 und bestehender CRC-32/ISO-HDLC-Primitivkette;
+- Redaction sowie Ausschluss aus `UserConfiguration`-Wireformat, Preview,
+  Change-Summary, Fingerprint, Backup, URL, Diagnose und UART;
+- Startup-Policy in `fermentation_app` gegen anwendungsneutrale
+  `device_platform`-Transportports;
 - kein zweiter Store und keine Netzwerkabhaengigkeit des Fach-/Safety-Kerns;
 - native Konsumententests und Architekturgrenzen.
 
@@ -430,8 +568,9 @@ Issue #164 ist erst fachlich integriert, wenn mindestens Folgendes am
 freigegebenen finalen Implementierungs-HEAD nachgewiesen ist:
 
 - der rendererunabhaengige Auswahlvertrag zwischen `AP_ONLY` und `HOME_WIFI`
-  funktioniert ohne Netzwerkvoraussetzung; der physische Display-/Touchbeweis
-  bleibt Issue #31;
+  funktioniert ohne Netzwerkvoraussetzung; `UNSELECTED` bleibt auf
+  Bootstrap-/Migration beschraenkt und wird weder angezeigt noch implizit aus
+  Credentials abgeleitet; der physische Display-/Touchbeweis bleibt Issue #31;
 - AP-only stellt einen geschuetzten persistenten SoftAP, den gemeinsamen
   nativen HTTP-Unterbau samt #164-Setup-/Minimalrouten und direkte AP-IP
   bereit; die vollstaendige normale R1-Weboberflaeche bleibt bis #27
@@ -442,6 +581,14 @@ freigegebenen finalen Implementierungs-HEAD nachgewiesen ist:
   positivem Test ueber den Projektvertrag;
 - genau ein Heim-WLAN wird unterstuetzt, beim Boot geladen und zum selben WLAN
   grundlegend wiederverbunden;
+- `UserConfiguration` enthaelt keine wiederverwendbaren WLAN-Passwoerter; die
+  genau eine R1-`HOME_WIFI`-Credential liegt als separate typisierte,
+  versionierte und `StorageEpoch`-gebundene Domaene im bestehenden
+  `IStateStore`-Backend unter `StateStoreKey=cc0` und
+  `RecordTypeId=9` mit Redaction-/Reset-/Recovery-Vertrag;
+- die Startup-Policy liegt in `fermentation_app`, waehrend
+  `device_platform` nur anwendungsneutrale Netzwerk-/HTTP-Transportports
+  bereitstellt;
 - DHCP/mDNS und direkte IP entsprechen `NETWORK.md`;
 - die gemeinsame HTTP-Consumergrenze fuer #27 ist klar; #164 fuehrt weder die
   vollstaendige normale Web-UI noch deren Login-, Session-, CSRF-, Service- und

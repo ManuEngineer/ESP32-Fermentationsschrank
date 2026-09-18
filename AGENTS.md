@@ -58,6 +58,10 @@ Bei Arbeiten in diesen Verzeichnissen gilt zusaetzlich die lokale `AGENTS.md`.
 Es wird nie direkt auf `main` gearbeitet. Grundsaetzlich gilt ein
 zusammenhaengender Scope und ein Issue pro Branch und Pull Request.
 
+Abhaengige Folge-PRs basieren grundsaetzlich auf kanonischem `main` nach Merge
+ihrer notwendigen Vorgaenger. Gestapelte PRs auf ungemergten Vorgaengern sind
+nur mit ausdruecklicher Ownerfreigabe zulaessig.
+
 Nicht triviale Arbeit folgt `docs/AGENT_WORKFLOW.md`:
 
 1. Branch und Draft-PR erstellen.

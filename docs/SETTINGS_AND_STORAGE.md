@@ -59,8 +59,20 @@ UserConfiguration + ServiceConfiguration + ProgramCatalog
         ↓
 ActiveConfigurationManifest als gemeinsam aktivierte Generation
 
-getrennt davon: spaetere reale Secret-Domaenen und unveraenderlicher
-Laufschnappschuss
+UserConfiguration enthaelt im R1-Netzwerkscope von Issue #164 nur die
+Netzwerkmodus-Auswahl `UNSELECTED | AP_ONLY | HOME_WIFI`; `UNSELECTED` ist
+dabei der interne Bootstrap-/Migrationszustand und kein dritter Benutzermodus.
+Eine `HOME_WIFI`-SSID und ein wiederverwendbares WLAN-Passwort gehoeren nicht
+in `UserConfiguration`. Factory-, V1- und V2-Zustaende migrieren nach
+`UNSELECTED`; sie leiten keinen Benutzer-Modus aus Credentials ab.
+
+Die separate, typisierte `ConnectivityCredential`-Domaene besteht aus genau
+einem V1-Record im bestehenden `IStateStore`-Backend unter
+`StateStoreKey=cc0` und `RecordTypeId=9`. SSID und Passwort liegen gemeinsam
+im Record und sind an die `StorageEpoch` gebunden. Das ist weder ein zweiter
+physischer Store noch eine zweite Credential-Wahrheit.
+
+getrennt davon: unveraenderlicher Laufschnappschuss
 ```
 
 ### Werkseinstellungen

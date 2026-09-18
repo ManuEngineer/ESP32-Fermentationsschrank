@@ -10,8 +10,39 @@ von Issue #16. Es konkretisiert:
 - [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md)
 
 Es nimmt weder Laufpersistenz aus Issue #17, das portable Backupformat aus
-Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch konkrete
-WLAN- und Authentifizierungsdaten aus Issue #27 vorweg.
+Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch die normale
+Web-Authentifizierung aus Issue #27 vorweg. Die explizite R1-Netzwerkdomäne von
+Issue #164 ist ein nachgelagerter Konsument dieses Vertrags.
+
+### Issue #164: Netzwerk-Konfigurationsdelta
+
+Issue #164 fuehrt den internen Zustand `UNSELECTED` und die beiden
+Benutzermodi `AP_ONLY | HOME_WIFI` ein. Das bestehende
+`UserConfiguration`-Dokument enthaelt im WLAN-Vertrag nur diese
+Netzwerkmodus-Auswahl; es enthaelt weder eine `HOME_WIFI`-SSID noch ein
+wiederverwendbares WLAN-Passwort.
+
+- `networkMode` ist ein persistierter, typisierter Wert
+  `UNSELECTED | AP_ONLY | HOME_WIFI`, wobei `UNSELECTED` nur der interne
+  Bootstrap-/Migrationszustand und kein dritter Benutzermodus ist;
+- Factory-, V1- und V2-Zustaende migrieren beim Lesen nach `UNSELECTED`;
+- V1-/V2-Records leiten weder `HOME_WIFI` noch `AP_ONLY` implizit aus
+  Credentials ab;
+- es gibt genau einen typisierten `ConnectivityCredential`-V1-Record im
+  bestehenden `IStateStore` unter `StateStoreKey=cc0` und
+  `RecordTypeId=9`;
+- SSID und Passwort liegen gemeinsam in diesem Record und sind an die aktuelle
+  `StorageEpoch` gebunden;
+- der bestehende generische `StorageEnvelope`-V1-Vertrag, CRC,
+  `IStateStore`-Read/Write, Test-vor-Commit, Graph-Revision, Readback und
+  `CommitOutcomeUnknown` bleiben unveraendert;
+- Credentials bleiben ausserhalb von Preview-Views, Fingerprints,
+  Aenderungsdetails, Logs, Diagnose und Exporten;
+
+Der Netzwerktransport erhaelt nur fluessige Kandidaten und Status ueber
+anwendungsneutrale Plattformports. Persistenz, Preview und Aktivierung bleiben
+im bestehenden `fermentation_app`-Konfigurationsgraphen. Die vollstaendige
+Web-Authentifizierung, Session- und CSRF-Logik bleibt Issue #27 vorbehalten.
 
 Der Release-1-Vertrag folgt ADR-018 (Variante B). Die Umsetzung ist in die
 Teilpakete #54 bis #57 geschnitten. Jedes Paket besitzt einen eigenen Scope und
@@ -536,6 +567,10 @@ ADR-016-Schluessel lauten je Dokumenttyp `uc0`..`uc3`, `sc0`..`sc3` und
 Rotation, Referenzschutz, Manifeste, Roots und Commitlogik folgen nicht in
 Issue #55.
 
+Der `ConnectivityCredential`-V1-Record aus Issue #164 ist davon getrennt
+typisiert und verwendet `RecordTypeId=9` sowie `StateStoreKey=cc0`; er ist kein
+zweites `UserConfiguration`-Dokument und keine zweite Credential-Wahrheit.
+
 Der ProgramCatalog-Encoder berechnet die exakte kanonische Payloadgroesse vor
 der Writer-Konstruktion mit ueberlaufsicheren `checkedAddSize`-Schritten fuer
 dieselben Felder und Schema-4-/Schema-5-Zweige wie der Encoder. Der
@@ -860,19 +895,26 @@ Commitzustand, Neustart mit erhaltener notwendiger Verriegelung, keine
 Aktorfreigabe bei unbekanntem oder unaufgeloestem Konfigurationszustand sowie
 Recovery ausschliesslich nach dem #24-Fehlerresetvertrag.
 
-## Spaetere persistente Connectivity- und Authentication-Domaenen
+## Persistente Connectivity- und spaetere Authentication-Domaenen
 
 Konfigurationsdokumente enthalten weder Geheimnisse noch Passwort- oder PIN-
 Pruefnachweise. #16, #56 und #57 erzeugen keine leeren Connectivity- oder
 Authentication-Manifeste, -Roots, -Slots oder Reservepayloads.
 
-Eine reale persistente Connectivity- beziehungsweise Authentication-Domaene
-entsteht erst mit ihrem ersten produktiven Konsumenten. Sie muss dann eigene
-stark typisierte, versionierte und an die aktuelle `StorageEpoch` gebundene
-Records sowie ihre fachlich notwendige Commit-, Widerrufs- und
-Recoverysemantik erhalten. Der spaetere Detailplan darf diese Semantik nicht
-stillschweigend in `UserConfiguration`, `ProgramCatalog` oder freie Key/Value-
-Strukturen verschieben.
+Die persistente Connectivity-Domaene von Issue #164 besitzt genau einen
+stark typisierten, versionierten und an die aktuelle `StorageEpoch` gebundenen
+`ConnectivityCredential`-V1-Record im bestehenden `IStateStore` unter
+`StateStoreKey=cc0` und `RecordTypeId=9`. SSID und Passwort bilden darin ein
+gemeinsames Credential-Paar. Diese Domaene ist keine zweite physische
+Persistenz und keine zweite Credential-Wahrheit; ihre Commit-, Readback- und
+Recoverysemantik bleibt Teil des bestehenden Konfigurationsvertrags.
+
+Spaetere Authentication-Domaenen muessen bei ihrem ersten produktiven
+Konsumenten ebenfalls eigene stark typisierte, versionierte und an die
+aktuelle `StorageEpoch` gebundene Records sowie ihre fachlich notwendige
+Commit-, Widerrufs- und Recoverysemantik erhalten. Kein Detailplan darf diese
+Semantik stillschweigend in `UserConfiguration`, `ProgramCatalog` oder freie
+Key/Value-Strukturen verschieben.
 
 Normale Backups enthalten weder wiederverwendbare Secrets noch
 Pruefnachweise. Das konkrete portable Format folgt mit Issue #19.
@@ -1098,8 +1140,13 @@ spekulative Slotplattform zu schaffen.
 Manifest-, Root- und Bootstrapbedeutung, Graphvalidierung, ProgramCatalog,
 fluechtige Vorschau, Migration, Boot/Recovery,
 `RuntimeConfigurationSnapshot` und den typisierten
-`ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. #56 und
-#57 fuehren keinen Port zu #17 und keine vorbereitete Secret-Domaene ein.
+`ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. Die
+Die `UserConfiguration`-Wahrheit enthaelt fuer das #164-Delta nur die
+Netzwerkmodus-Auswahl. Der eine `ConnectivityCredential`-V1-Record unter
+`StateStoreKey=cc0` und `RecordTypeId=9` liegt mit SSID und Passwort gemeinsam
+im bestehenden `IStateStore` und ist an `StorageEpoch` gebunden. Ein zweiter
+physischer Credential- oder Secret-Blob-Store und eine zweite Credential-
+Wahrheit werden nicht eingefuehrt.
 
 `device_platform_test_support` enthaelt nur anwendungsneutrale Testadapter wie
 `SimulatedPersistentStateStore`, kontrollierbare Zufallsquelle, Cut-Point- und
@@ -1495,9 +1542,9 @@ Der Themenbereich implementiert noch keine:
 - portables Backupformat, Journale und Aufbewahrung aus #19
 - systemweite Fehlerklassen, persistente Verriegelungen, vollstaendige
   `SAFE_BOOT`-Politik oder reale Aktorsperren aus #24
-- reale Connectivity-Domaene, WLAN-Credentials, Passwort-/PIN-Pruefnachweise,
+- eine spaetere Authentication-Domaene, Passwort-/PIN-Pruefnachweise,
   Anmeldung, Sitzungen, Tokens, CSRF oder Sperrzeiten aus den spaeteren
-  Connectivity-/Authentication-Arbeiten
+  Authentication-Arbeiten
 - noch nicht fachlich definierte Display-, Ton-, Sensor-, Regel-, Sicherheits-
   oder Hardwarefelder
 - lokale Terminplanung oder lokale-Zeit-nach-UTC-Regeln

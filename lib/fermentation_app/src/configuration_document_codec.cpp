@@ -735,10 +735,10 @@ configuration_codec_internal::decodeSingleProgramDocumentPayload(
 ConfigurationCodecStatus encodeUserConfigurationPayload(
     const UserConfiguration& configuration, std::uint32_t schemaVersion,
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
-    if (schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
-        schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
+    if (schemaVersion <
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) ||
+        schemaVersion >
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
         return ConfigurationCodecStatus::UnsupportedSchema;
     }
     if (validateUserConfiguration(configuration, resolver).status !=
@@ -750,10 +750,17 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
     if (!writeString(writer, configuration.displayLanguageId) ||
         !writeString(writer, configuration.timeZoneId) ||
         !writeString(writer, configuration.deviceName) ||
-        (schemaVersion ==
+        (schemaVersion >=
              static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
          !writeString(writer, configuration.activeThemeId))) {
         return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    if (schemaVersion >=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
+        if (!big_endian::writeUint8(
+                writer, static_cast<std::uint8_t>(configuration.networkMode))) {
+            return ConfigurationCodecStatus::CapacityExceeded;
+        }
     }
     auto encoded = writer.takeBytes();
     out.swap(encoded);
@@ -763,10 +770,10 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
 ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
     std::uint32_t schemaVersion, const std::string& payload,
     const device_platform::ITimeZoneResolver& resolver) {
-    if (schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) &&
-        schemaVersion !=
-            static_cast<std::uint32_t>(UserConfigurationSchema::Version2)) {
+    if (schemaVersion <
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version1) ||
+        schemaVersion >
+            static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
         return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
     }
     if (payload.size() >
@@ -781,11 +788,20 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
                     candidate.timeZoneId) ||
         !readString(reader, configuration_limits::kMaximumVisibleNameBytes,
                     candidate.deviceName) ||
-        (schemaVersion ==
+        (schemaVersion >=
              static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
          !readString(reader, configuration_limits::kMaximumThemeIdBytes,
                      candidate.activeThemeId))) {
         return {ConfigurationCodecStatus::Truncated, std::nullopt};
+    }
+    if (schemaVersion >=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
+        std::uint8_t rawMode = 0U;
+        if (!big_endian::readUint8(reader, rawMode)) {
+            return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
+        }
+        candidate.networkMode =
+            static_cast<device_platform::NetworkMode>(rawMode);
     }
     if (reader.remaining() != 0U) {
         return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
