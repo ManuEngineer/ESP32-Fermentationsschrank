@@ -376,6 +376,19 @@ Nachweis. Bis zum Abschluss von Stage 0 bleiben `STAGE_1` bis `STAGE_4`
 `NOT_RUN`; es gibt keine Stage-1/2/3/4-Implementation und keine
 Renderer-/Bibliotheksauswahl.
 
+Die begrenzte actor-free Reset-/Boot-Prüfung ist auf dem exakten
+`HEAD=6d803d0895cf6d906c99792d7d2ee20024c22881` erfolgt: Das gebaute
+`esp32_bringup`-Profil wurde ohne Taster geschrieben und verifiziert
+(`FLASH=PASS`), `--before default-reset` hat den Auto-Reset ausgeführt
+(`AUTO_RESET=PASS`), und der anschliessende 40-Sekunden-UART-Run meldete
+`application: ready`, sicheren Heartbeat und deaktivierte Aktoren
+(`BOOT=PASS`; kein Guru Meditation Error, Stack Overflow, Watchdog oder
+Brownout). Der EN-Reset-Puls wurde nach der direkten
+`MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung ausgeführt
+(`ESP32_EN_RESET_PULSE=PASS`). Dies bestätigt den gemeinsamen Resetpfad; die
+Display-/Touch-Controlleridentität und die eigentliche Display-/Touchfunktion
+bleiben für den vollständigen Stage-0-Nachweis `NOT_RUN`.
+
 #### Stage-0-Reihenfolge fuer das Reset-Netz
 
 Die Reset-Netz-Prüfung ist dokumentationsbasiert abgeschlossen:
