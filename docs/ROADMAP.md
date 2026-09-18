@@ -33,7 +33,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `PLAN_STATUS=OWNER_APPROVED`; `HARDWARE_SPIKE_STAGE_0=PASS`; `HARDWARE_SPIKE_STAGE_1=PASS`; `HARDWARE_SPIKE_STAGE_2_TO_4=NOT_STARTED`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `EXPECTED_DISPLAY_CONTROLLER=ILI9341`; `EXPECTED_TOUCH_CONTROLLER=XPT2046`; `DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`; `TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_SSOT_CONFORMANCE=PASS`; `STAGE_0_BASELINE=PASS`; `STAGE_0_OVERALL=PASS`; `SSOT_CONFORMANCE=PASS`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `STAGE_0_DISPLAY_FUNCTION=NOT_RUN`; `STAGE_0_TOUCH_FUNCTION=NOT_RUN`; `STAGE_1=PASS`; `STAGE_1_EVIDENCE=docs/audits/ISSUE_31_STAGE_1_EVIDENCE.md`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Stage 0 und Stage 1 sind abgeschlossen; naechstes Gate ist Ownerentscheidung fuer `STAGE_2` mit aktivem Low-Level-Smoke und funktionaler Controllerbestaetigung; keine Produktimplementation vor diesem Gate |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `PLAN_STATUS=OWNER_APPROVED`; `HARDWARE_SPIKE_STAGE_0=PASS`; `HARDWARE_SPIKE_STAGE_1=PASS`; `HARDWARE_SPIKE_STAGE_2=FAILED`; `HARDWARE_SPIKE_STAGE_3_TO_4=NOT_RUN`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `EXPECTED_DISPLAY_CONTROLLER=ILI9341`; `EXPECTED_TOUCH_CONTROLLER=XPT2046`; `DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED`; `TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_SSOT_CONFORMANCE=PASS`; `STAGE_0_BASELINE=PASS`; `STAGE_0_OVERALL=PASS`; `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`; `STAGE_2_TOUCH_FUNCTION=PASS`; `STAGE_1=PASS`; `STAGE_1_EVIDENCE=docs/audits/ISSUE_31_STAGE_1_EVIDENCE.md`; `STAGE_2=FAILED`; `STAGE_2_EVIDENCE=docs/audits/ISSUE_31_STAGE_2_EVIDENCE.md`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Stage 2 ist wegen nicht reproduzierbarer Displayausgabe nach Kaltstart fehlgeschlagen; Touch ist separat PASS. Naechstes Gate ist ausschließlich die gezielte Diagnose dieses Displaybefunds; keine Stage-3-/Stage-4-Arbeit oder Produktimplementation |
 | 2 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164=OPEN`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `IMPLEMENTATION=MERGED`; `REAL_WLAN_EVIDENCE=WAITING_FOR_ISSUE31_PHYSICAL_MODE_ENTRY`; `ACTUATOR_RELEASE=NO` | Reale WLAN-Evidence erst nach dem physischen Modus-Einstieg aus #31; keine parallele #164-Implementierung |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -54,22 +54,16 @@ nicht kopiert, sondern verlinkt.
 
 PR #165 ist auf `main` gemergt. Issue #164 bleibt offen, weil die reale
 WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
-ist damit der naechste aktive Hardware-Scope; Display und Touch sind
-angeschlossen, `DISPLAY_RESET_NET_VERIFICATION=PASS` ist dokumentationsbasiert
-erreicht und `DISPLAY_RESET_CONNECTED=YES` vom Owner bestätigt. Die vorhandene
-Hardware-/SSOT-/Reset-, actor-free Flash-/Boot-/Reset-, No-PSRAM- und
-Baseline-Evidence schliesst Stage 0: `STAGE_0_SSOT_CONFORMANCE=PASS`,
-`STAGE_0_BASELINE=PASS` und `STAGE_0_OVERALL=PASS`. `EXPECTED_DISPLAY_CONTROLLER=ILI9341`
-und `EXPECTED_TOUCH_CONTROLLER=XPT2046` bleiben erwartete Kandidaten aus der
-bekannten MSP2807-Dokumentation / bestehenden Projektbasis;
-`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
-`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Die exakte neue
-Plan-SHA ist ownerfreigegeben und `STAGE_1` ist mit dem Nachweis
-`docs/audits/ISSUE_31_STAGE_1_EVIDENCE.md` auf `PASS`. Naechstes Gate ist die
-Ownerentscheidung fuer `STAGE_2` mit vorhandenem Treiberpfad, aktivem
-Low-Level-Smoke und funktionaler Controllerbestaetigung. `STAGE_2` bis
-`STAGE_4` bleiben bis dahin `NOT_RUN`; Produktimplementation und
-Aktorfreigabe bleiben ausgeschlossen.
+ist der naechste aktive Hardware-Scope; Stage 0 und Stage 1 sind PASS. Der
+offizielle actor-free Stage-2-Smoke initialisierte Display und Touch und zeigte
+nach erneutem Flash/Hard-Reset vier Farben; die Software-Rotation darf die
+physische Einbaulage ausgleichen. Nach einem realen Kaltstart war die Anzeige
+jedoch nicht reproduzierbar und zeigte nur Backlight. Deshalb ist
+`STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`, während
+`STAGE_2_TOUCH_FUNCTION=PASS` separat bleibt. `STAGE_2=FAILED`,
+`STAGE_3=NOT_RUN` und `STAGE_4=NOT_RUN`; Produktimplementation und
+Aktorfreigabe bleiben ausgeschlossen. Der nächste Schritt ist ausschließlich
+die gezielte Diagnose des Display-Kaltstartbefunds.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
