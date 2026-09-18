@@ -41,13 +41,16 @@ Owner-Beobachtung des wiederholten Laufs war:
 
 ```text
 OWNER_DISPLAY_OBSERVATION_AFTER_FLASH=OL_WHITE_OR_GREEN_UL_RED_UR_BLUE
+OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART=OL_WHITE_OR_GREEN_UL_RED_UR_BLUE
 DISPLAY_CORNERS_VISIBLE=PASS
 DISPLAY_ORIENTATION=SOFTWARE_ROTATION_CONFIGURABLE
 ```
 
-Die physische Einbaulage ist damit kein eigener Blocker: Die Zuordnung der
+Die gleiche Eckenzuordnung war bereits vor dem Kaltstart sichtbar. Die
+physische Einbaulage ist damit kein eigener Blocker: Die Zuordnung der
 logischen Ecken darf über die bereits getesteten `swap_xy`-/Mirror-/Rotation-
-Einstellungen erfolgen; ein Wenden des Moduls ist nicht erforderlich.
+Einstellungen erfolgen; ein Wenden des Moduls ist nicht erforderlich. Der
+Eckenzuordnungsbefund ist daher kein zusätzlicher Stage-2-Fehler.
 
 Beim vorherigen realen Kaltstart nach Stromunterbrechung meldete der UART den
 vollständigen Boot und den Start des gleichen Smoke-Pfads, der Owner sah dabei
