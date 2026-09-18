@@ -28,6 +28,11 @@ STAGE_2_TOUCH_FUNCTION=POLLING_PASS_IRQ_PASS
 DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED
 TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
 COLDSTART_BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED
+COLDSTART_DIAGNOSTIC_REPEAT=PASS
+COLDSTART_DIAGNOSTIC_BROWNOUT_CURRENT_REPEAT=NOT_OBSERVED
+COLDSTART_DIAGNOSIS=INTERMITTENT_FAILURE_NOT_REPRODUCED
+COLDSTART_ROOT_CAUSE=UNDETERMINED
+HARDWARE_SPIKE_STAGE_2=FAILED
 STAGE_2=FAILED
 STAGE_3=NOT_RUN
 STAGE_4=NOT_RUN
@@ -40,8 +45,14 @@ Builder-Flash/Reset ein sichtbares Vier-Ecken-Muster ausgeben. Die reale
 Owner-Beobachtung des wiederholten Laufs war:
 
 ```text
-OWNER_DISPLAY_OBSERVATION_AFTER_FLASH=OL_WHITE_OR_GREEN_UL_RED_UR_BLUE
-OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART=OL_WHITE_OR_GREEN_UL_RED_UR_BLUE
+OWNER_DISPLAY_OBSERVATION_AFTER_FLASH_TOP_LEFT=WHITE
+OWNER_DISPLAY_OBSERVATION_AFTER_FLASH_TOP_RIGHT=GREEN
+OWNER_DISPLAY_OBSERVATION_AFTER_FLASH_BOTTOM_LEFT=RED
+OWNER_DISPLAY_OBSERVATION_AFTER_FLASH_BOTTOM_RIGHT=BLUE
+OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART_TOP_LEFT=WHITE
+OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART_TOP_RIGHT=GREEN
+OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART_BOTTOM_LEFT=RED
+OWNER_DISPLAY_OBSERVATION_BEFORE_COLDSTART_BOTTOM_RIGHT=BLUE
 DISPLAY_CORNERS_VISIBLE=PASS
 DISPLAY_ORIENTATION=SOFTWARE_ROTATION_CONFIGURABLE
 ```
@@ -65,6 +76,36 @@ Dieser konkrete Widerspruch wird fail-closed als fehlende Kaltstart-
 Reproduzierbarkeit gewertet. Die spätere sichtbare Ausgabe nach erneutem
 Flash/Hard-Reset hebt den Kaltstartbefund nicht stillschweigend auf. Deshalb
 ist Stage 2 insgesamt `FAILED`; Stage 3 und Stage 4 wurden nicht gestartet.
+
+### Gezielte Kaltstartdiagnose
+
+Mit demselben offiziellen IRQ-Stack, derselben Verdrahtung
+`MSP2807_RESET -> EN_CHIP_PU` und weiterhin actor-free wurde ein zweiter echter
+Power-Cycle überwacht. Der aktuelle UART-Capture zeigte:
+
+```text
+POWERON_RESET=PASS
+SPI_FAST_FLASH_BOOT=PASS
+STAGE2_START=PASS
+SPI_BUS=PASS
+DISPLAY_CONTROLLER_DRIVER=ILI9341_CREATE_PASS
+TOUCH_CONTROLLER_DRIVER=XPT2046_CREATE_PASS
+DISPLAY_VISUAL_PASS=PASS
+CURRENT_REPEAT_BROWNOUT_MARKER=NOT_OBSERVED
+CURRENT_REPEAT_TOP_LEFT=WHITE
+CURRENT_REPEAT_TOP_RIGHT=GREEN
+CURRENT_REPEAT_BOTTOM_LEFT=RED
+CURRENT_REPEAT_BOTTOM_RIGHT=BLUE
+```
+
+Die frühere Owner-Beobachtung `ONLY_WHITE_BACKLIGHT_NO_EXPECTED_COLOR_PATTERN`
+wurde damit nicht reproduziert. Der Brownout-Hinweis bleibt als historischer
+konkreter Diagnosehinweis bestehen; im überwachten Wiederholungslauf trat kein
+Brownout-Marker auf. Die Logs erlauben deshalb keine belastbare engere Ursache
+als einen intermittierenden, aktuell nicht reproduzierten Kaltstartbefund.
+Es wird keine Produktkorrektur und kein allgemeines Pegel-/Mess-Gate abgeleitet.
+Der ursprüngliche Stage-2-Fehler bleibt bis zu einer reproduzierbaren Ursache
+oder einer ausdrücklich neuen Owner-Entscheidung bestehen.
 
 ## Testaufbau
 
