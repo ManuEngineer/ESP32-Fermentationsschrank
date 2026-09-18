@@ -11,11 +11,11 @@
 | Planpfad | `docs/tasks/issue-31-renderer-display-touch-calibration-plan.md` |
 | Vorherige freigegebene Plan-SHA | `64c0b7f96b5f17e74585888448a76e7f57f1b02f` |
 | Normaler Main-Sync-Commit | `bdd4ab7` (`0b54b4c639bcc9af9bd3b1bec30d855074bb0dc2` + `1f1755e5e706fb668472920545b5302fcef1df16`) |
-| Planstatus | `OWNER_PLAN_APPROVAL_PENDING_NEW_REVISION` |
+| Planstatus | `OWNER_PLAN_APPROVAL_REQUIRED` |
 | ESP-IDF-Vertrag | `v6.1@fff9895c82d744c7237be8847347bdd1b07c6643` |
 | Issue-164-Baseline | `PR165=MERGED`; `ISSUE164=OPEN`; reale WLAN-Evidence wartet auf physischen Modus-Einstieg aus #31 |
 | Implementation | `NOT_STARTED` |
-| Hardware-Spike | `NOT_STARTED` |
+| Hardware-Spike | `STAGE_0=PASS`; `STAGE_1_TO_4=NOT_STARTED` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
 | LVGL-Auswahl | `DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION` |
 | Renderer-Owner-Architektur | `EXISTING_MAIN_COMPONENT` |
@@ -47,9 +47,10 @@ Diese vollständige neue Planrevision ist auf dem aktuellen kanonischen
 `main=1f1755e5e706fb668472920545b5302fcef1df16` revalidiert. Sie ersetzt nach
 Ownerfreigabe die vorherige freigegebene Plan-SHA
 `64c0b7f96b5f17e74585888448a76e7f57f1b02f`; die neue Plan-SHA ist erst nach
-dem Plan-Commit bekannt und wird nicht vorgezogen. Eine Umsetzung, ein
-Hardware-Spike, eine Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein
-Merge sind bis zur Ownerfreigabe genau dieser neuen Plan-SHA ausgeschlossen.
+dem Plan-Commit bekannt und wird nicht vorgezogen. Die bereits
+ownerautorisierte Stage-0-Evidence bleibt gueltig. Stage 1 bis 4, eine
+Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein Merge sind bis zur
+Ownerfreigabe genau dieser neuen Plan-SHA ausgeschlossen.
 
 ### Korrektur dieser Planrevision: Stage-0-Controlleridentitaet
 
@@ -65,6 +66,13 @@ Low-Level-Smoke bestaetigt die Controller funktional, sobald der jeweilige
 Treiberpfad existiert. Diese Korrektur fuehrt weder Produktcode noch einen
 Rendererentscheid ein und verlangt keine weitere Owner-Bestaetigung von
 Aufdrucken, Modulvariante oder Dokumentationsuebereinstimmung.
+
+Das naechste Gate ist ausschliesslich die Ownerfreigabe dieser exakten neuen
+Plan-SHA. Erst danach startet `STAGE_1` mit Quelle, Lizenz,
+Kompatibilitaet und reproduzierbarem Build. Erst bei `STAGE_1=PASS` folgt
+`STAGE_2` mit dem aktiven Low-Level-Smoke und der funktionalen
+Controllerbestaetigung. `STAGE_1` bis `STAGE_4` sind bis dahin nicht gestartet;
+Stage 0 bleibt abgeschlossen.
 
 ## 1. Ausgangslage und aktuelle Live-Baseline
 
@@ -141,8 +149,9 @@ Produktivauswahl.
 ### Nichtziele
 
 - Keine Implementation vor Ownerfreigabe der exakten Plan-SHA.
-- Kein Hardware-Spike, keine Hardware-PASS-Aussage und keine elektrische
-  Messung ohne einen konkret offenen, sinnvollen Hardwarepunkt.
+- Keine Stage-1-/Stage-2-/Stage-3-/Stage-4-Ausfuehrung vor Ownerfreigabe der
+  exakten Plan-SHA; die bereits abgeschlossene Stage-0-Evidence bleibt davon
+  unberuehrt.
 - Keine neue UI-, Command-, Navigation-, PIN-, Recovery-, Programm- oder
   Persistenzlogik neben den gemergten #25/#26- und bestehenden Recovery-
   Vertraegen.
