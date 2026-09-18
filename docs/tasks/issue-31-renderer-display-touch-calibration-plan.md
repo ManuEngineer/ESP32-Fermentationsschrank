@@ -1,4 +1,4 @@
-# Issue #31 – Plan: realer Renderer, Display, Touch und Kalibrierung
+# Issue #31 – Planrevision: realer Renderer, Display, Touch und Kalibrierung
 
 ## Planstatus und unveraenderliche Basis
 
@@ -6,11 +6,14 @@
 |---|---|
 | Issue | #31 – `[E5.3] Renderer, Display-/Touchadapter und Kalibrierung nach Hardwarebeweis` |
 | Basisbranch | `main` |
-| Basis-SHA | `54c80d26416343495b4d9a8c4518e6137dc747c1` |
+| Basis-SHA | `1f1755e5e706fb668472920545b5302fcef1df16` |
 | Arbeitsbranch | `agent/issue-31-renderer-display-touch-plan` |
 | Planpfad | `docs/tasks/issue-31-renderer-display-touch-calibration-plan.md` |
-| Reviewter Plan-HEAD | `1f31e6f17ec8003072cbf7b040d5e08a17050039` |
-| Planstatus | `OWNER_PLAN_APPROVAL_PENDING_AFTER_FULL_REVIEW` |
+| Vorherige freigegebene Plan-SHA | `64c0b7f96b5f17e74585888448a76e7f57f1b02f` |
+| Normaler Main-Sync-Commit | `bdd4ab7` (`0b54b4c639bcc9af9bd3b1bec30d855074bb0dc2` + `1f1755e5e706fb668472920545b5302fcef1df16`) |
+| Planstatus | `OWNER_PLAN_APPROVAL_PENDING_NEW_REVISION` |
+| ESP-IDF-Vertrag | `v6.1@fff9895c82d744c7237be8847347bdd1b07c6643` |
+| Issue-164-Baseline | `PR165=MERGED`; `ISSUE164=OPEN`; reale WLAN-Evidence wartet auf physischen Modus-Einstieg aus #31 |
 | Implementation | `NOT_STARTED` |
 | Hardware-Spike | `NOT_STARTED` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
@@ -22,15 +25,23 @@
 | Kalibrierungs-/Recovery-/Persistenz-Ownership | `CORRECTED` |
 | Kalibrierungs-StorageEpoch-Vertrag | `CORRECTED` |
 | Stage-0-Board-Revisionsgate | `CORRECTED` |
+| DISPLAY_CONNECTED | `YES` |
+| TOUCH_CONNECTED | `NO` |
+| TOUCH_BLOCKED_OWNER_SOLDERING | `YES` |
+| Stage-0-Status | `DISPLAY_ONLY_EVIDENCE=ALLOWED`; `STAGE_0_OVERALL=BLOCKED` |
+| Stage-1-bis-4-Status | `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
 | GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PENDING` |
 | Elektrische Messung | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` |
 | Aktorfreigabe | `NO` |
 
-Dieser Plan ist auf dem oben genannten `main`-Stand erstellt. Die Plan-SHA ist
-erst nach dem Plan-Commit bekannt und wird nicht in diesen Inhalt
-vorgezogen. Eine Umsetzung, ein Hardware-Spike, ein Ready-Wechsel und ein
-Merge sind bis zur Ownerfreigabe genau dieser Plan-SHA ausgeschlossen.
+Diese vollständige neue Planrevision ist auf dem aktuellen kanonischen
+`main=1f1755e5e706fb668472920545b5302fcef1df16` revalidiert. Sie ersetzt nach
+Ownerfreigabe die vorherige freigegebene Plan-SHA
+`64c0b7f96b5f17e74585888448a76e7f57f1b02f`; die neue Plan-SHA ist erst nach
+dem Plan-Commit bekannt und wird nicht vorgezogen. Eine Umsetzung, ein
+Hardware-Spike, eine Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein
+Merge sind bis zur Ownerfreigabe genau dieser neuen Plan-SHA ausgeschlossen.
 
 ## 1. Ausgangslage und aktuelle Live-Baseline
 
@@ -38,12 +49,16 @@ Vor diesem Plan wurden Repository, Branch, `HEAD`, Issue #31, die vorhandenen
 Draft-/Merge-Zustaende, Roadmap, Hardware-SSOT, die #25/#26-Vertraege, die
 Audits und die Governancequellen live abgeglichen.
 
-- `origin/main` und die Arbeitsbasis sind exakt
-  `54c80d26416343495b4d9a8c4518e6137dc747c1`.
-- Issue #31 ist offen und hardwareblockiert. Die offenen Werte bleiben
-  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` und
-  `SSOT_CONFORMANCE=PENDING`; Lieferantentexte werden nicht als Controller-
-  oder Funktionsnachweis akzeptiert.
+- `origin/main` und die revalidierte Arbeitsbasis sind exakt
+  `1f1755e5e706fb668472920545b5302fcef1df16`; PR #156 wurde ohne Force-Push
+  per normalem Merge von der alten Basis synchronisiert.
+- Issue #31 ist offen und bis zum Touchanschluss hardwareblockiert. Der
+  Displayanschluss ist `DISPLAY_CONNECTED=YES`; der Touch ist
+  `TOUCH_CONNECTED=NO` und `TOUCH_BLOCKED_OWNER_SOLDERING=YES`.
+  `DISPLAY_ONLY_STAGE_0_EVIDENCE=ALLOWED`, aber
+  `STAGE_0_OVERALL=BLOCKED`; `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`.
+  Lieferantentexte werden nicht als Controller- oder Funktionsnachweis
+  akzeptiert.
 - PR #155 / Issue #154 ist abgeschlossen: PR #155 ist gemergt und Issue #154
   geschlossen. Der in der Roadmap dokumentierte Plan ist
   `3824bf54f1aebc5e3453739fd083ab9c317ef868`; der PR-Source-Head war
@@ -54,14 +69,21 @@ Audits und die Governancequellen live abgeglichen.
   rendererunabhaengigen Praesentations-, Text-, Theme-, Interaktions- und
   Commandvertraege; #26 besitzt die Workspace-/Navigation-/Press-/WakeOnly-
   Projektion. Diese Vertraege sind zu konsumieren, nicht zu duplizieren.
+- PR #165 / Issue #164 ist auf `main` gemergt. Der bestehende
+  rendererunabhaengige Netzwerkmodus-Vertrag mit genau `AP_ONLY | HOME_WIFI`,
+  internem `UNSELECTED`, dem typisierten Connectivity-Credential-Record und
+  den vorhandenen UI-Commands/View-Modellen wird von #31 nur konsumiert; #31
+  dupliziert weder Netzwerk-Lifecycle, Credential-Persistenz, HTTP-Routen noch
+  SoftAP-Secretpfad. Issue #164 bleibt bis zur realen WLAN-Evidence offen, die
+  nach dem physischen Modus-Einstieg aus #31 erfolgt.
 - PR #156 ist der einzige Draft-PR fuer Issue #31 und verwendet den separaten
   Arbeitsbranch `agent/issue-31-renderer-display-touch-plan`.
 
 Die alten Audits sind Ausgangslage, aber keine aktuelle Versions- oder
-Produktionsauswahl. Die Upstream-Pruefung dieses Plans wurde am 2026-09-06
-gegen primaere Quellen neu gestartet und bindet die Auswahl an eine erneute
-reproduzierbare Stage-1-Pruefung mit der fixierten lokalen ESP-IDF-6.0.2-
-Toolchain.
+Produktionsauswahl. Diese Planrevision wurde am 2026-09-18 gegen den
+kanonischen lokalen ESP-IDF-6.1-Vertrag und die auf `main` gemergten #164-
+Netzwerk-/UI-Vertraege revalidiert. Die spaetere Stage-1-Pruefung bleibt an
+die fixierte lokale ESP-IDF-6.1-Toolchain und ihre exakten Lockdaten gebunden.
 
 ## 2. Ziel, Nichtziele und unveraenderliche Grenzen
 
@@ -159,6 +181,38 @@ keine App- oder Composition-Abhaengigkeit erhalten. `main/CMakeLists.txt` ist
 bereits die erlaubte konkrete Anwendungskomponente und besitzt die fuer die
 bestehende Composition erforderlichen privaten Abhaengigkeiten.
 
+#### Revalidierte #164-Netzwerk- und UI-Baseline
+
+Die auf dem aktuellen `main` vorhandene #164-Baseline ist verbindlicher
+Konsumvertrag fuer #31. Sie wird nicht in einen Display-/Touch-Plan kopiert
+oder parallel modelliert:
+
+- `UserConfiguration` traegt nur die Moduswahl. `UNSELECTED` ist intern und
+  wird nicht als Benutzeroption angezeigt; die einzige Benutzerwahl ist exakt
+  `AP_ONLY | HOME_WIFI`.
+- `ConnectivityCredential` bleibt die einzige HOME_WIFI-Credential-Wahrheit
+  im bestehenden `IStateStore` unter `cc0` / `RecordTypeId=9`, einschliesslich
+  gemeinsamer SSID-/Passwort- und `StorageEpoch`-Bindung. #31 speichert,
+  prueft oder rendert diese Credentials nicht selbst.
+- Die bestehende `FermentationNetworkModeView` projiziert aktuellen Modus,
+  `selectionRequired` und genau die zwei waehlbaren Modi. Der bestehende
+  `FermentationUiApplyNetworkModeCommand` wird ueber
+  `FermentationUiCommandBridge::applyNetworkMode()` an
+  `FermentationApplication::applyNetworkMode()` weitergereicht.
+- Die explizite HOME_WIFI-Neukonfiguration verwendet den bestehenden
+  typisierten UI-Commandpfad zu
+  `FermentationApplication::beginHomeWifiReconfiguration()`. #31 fuehrt
+  keinen zweiten Modus-, Setup-, Preview-/Commit- oder Startup-State ein.
+- Der gemergte native ESP-IDF-HTTP-/WLAN-Unterbau, die Setup-Routen, die
+  SoftAP-Secretgrenze und die anwendungsneutrale Adaptergrenze bleiben
+  Eigentum von #164. #31 liefert spaeter nur den physischen lokalen Consumer
+  fuer den bereits vorhandenen View-/Commandvertrag.
+
+Damit ist `PHYSICAL_DISPLAY_TOUCH_PROOF=ISSUE31` die einzige #31-Abhaengigkeit
+des #164-Vertrags. Die offene reale WLAN-Evidence von Issue #164 wird erst nach
+dem physischen Modus-Einstieg aus #31 erhoben; sie rechtfertigt keine
+vorweggenommene #31-Implementierung.
+
 Daher ist `main/` die bestehende und kleinste app-spezifische Ownergrenze
 dieses Plans. Die erwarteten Grenzen nach Planfreigabe sind:
 
@@ -243,11 +297,11 @@ und `TBD_COMMISSIONING` sind keine Laufzeitwerte.
 Die folgenden Staende sind eine live verifizierte Kandidaten- und
 Evaluationsbasis, keine Auswahl. Die Stage-1-Dokumentation muss Version,
 aufgeloesten Commit, Lizenz und transitive Abhaengigkeiten nochmals im
-reproduzierbaren ESP-IDF-6.0.2-Build festhalten.
+reproduzierbaren ESP-IDF-6.1-Build auf dem fixierten Commit festhalten.
 
 | Kandidat / Baustein | Aktueller Primarquellenstand | Vorlaeufige Einordnung |
 |---|---|---|
-| ESP-IDF `esp_lcd` | In der lokalen fixierten ESP-IDF 6.0.2 vorhanden; SPI-I/O, DMA-faehige Panel-I/O und Panel-APIs. Die lokale Version enthaelt keinen ILI9341-Paneltreiber. | Rendererunabhaengige Low-Level-Panel-/Busgrundlage fuer Stage 1–4; adoptieren, soweit der konkrete Panel-/Touchkandidat die Gates erfuellt. |
+| ESP-IDF `esp_lcd` | In der kanonischen fixierten ESP-IDF 6.1 vorhanden; SPI-I/O, DMA-faehige Panel-I/O und Panel-APIs. Die lokale Version enthaelt keinen ILI9341-Paneltreiber. | Rendererunabhaengige Low-Level-Panel-/Busgrundlage fuer Stage 1–4; adoptieren, soweit der konkrete Panel-/Touchkandidat die Gates erfuellt. |
 | `espressif/esp_lcd_ili9341` | Registry aktuell `2.1.0`, Apache-2.0; ILI9341 ueber `esp_lcd`. [Registry](https://components.espressif.com/components/espressif/esp_lcd_ili9341) | Low-Level-Paneladapter fuer Controllerinitialisierung und Pixel-/Rechteck-/Flaechentests; noch kein Controller- oder Hardware-PASS. |
 | `espressif/esp_lcd_touch` | Registry aktuell `1.2.1`, Apache-2.0; XY-Lesen, Swap/Mirror, IRQ-Callback und Sleep; keine fertige Kalibrierung im Baustein. [Registry](https://components.espressif.com/components/espressif/esp_lcd_touch) | Rendererunabhaengige Raw-Touch-/IRQ-/Polling-Basis; Kalibrierung und App-Recovery bleiben ausserhalb dieses Stacks. |
 | XPT2046 | Live Registry-Suche zeigt aktuell keinen geeigneten `espressif/*`-XPT2046-Kandidaten. `atanisoft/esp_lcd_touch_xpt2046` ist aktuell `1.0.6`, MIT; Raw-/Z-Schwelle, IRQ/Polling und abschaltbare Konvertierung sind vorgesehen. [Registry](https://components.espressif.com/components/atanisoft/esp_lcd_touch_xpt2046) | Konkreter Low-Level-Raw-Touchadapter erst nach Gate 1; kein Ersatz fuer reale Controlleridentifikation und kein Recovery-Owner. |
@@ -266,7 +320,9 @@ automatische Abkuerzung verwendet.
 Die technische API-Basis fuer die Panelpruefung ist die offizielle
 [ESP-IDF SPI-LCD-Dokumentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/lcd/spi_lcd.html).
 Die produktive Kompatibilitaet muss trotzdem mit der lokal fixierten
-ESP-IDF-6.0.2-Toolchain und deren exakten Lockdaten bewiesen werden.
+ESP-IDF-6.1-Toolchain am Commit
+`fff9895c82d744c7237be8847347bdd1b07c6643` und deren exakten Lockdaten
+bewiesen werden.
 
 ## 6. Stufenplan und Hardware-Evidence-Matrix
 
@@ -297,9 +353,14 @@ dokumentiert und nachgewiesen. Das umfasst:
 Die bestehende boardseitige Stage-0-Evidence des reviewten Plan-HEADs bleibt
 gueltig. UART-, Chip-, Flash-, Boot-/Reset-, Toolchain-, No-PSRAM- und bereits
 gemessene Ressourcenwerte werden fuer diese Planrevision nicht erneut
-gemessen. Nach Anschluss der Display-/Touchhardware sind nur die fehlenden
-Display-/Touch-Identitaets-, SSOT- und Funktionspunkte zu erheben und gegen
-diese Baseline zu ergaenzen.
+gemessen. Der Displayanschluss ist aktuell `DISPLAY_CONNECTED=YES`. Der
+Touchanschluss fehlt aktuell: `TOUCH_CONNECTED=NO` und
+`TOUCH_BLOCKED_OWNER_SOLDERING=YES`. Display-only-Stage-0-Evidence darf
+vorbereitet und erhoben werden; `STAGE_0_OVERALL=BLOCKED`, bis der Owner den
+Touch zuerst physisch angeschlossen und verloetet hat und die fehlenden
+Touch-Identitaets-, SSOT- und Funktionspunkte erhoben sind. Bis dahin bleiben
+`STAGE_1` bis `STAGE_4` `NOT_RUN`; es gibt keine Stage-1/2/3/4-Implementation
+und keine Renderer-/Bibliotheksauswahl.
 
 - reale Boardfamilie passend zur Repository-Referenz und das tatsaechliche
   ESP32-Modul/der Chip;
@@ -318,7 +379,7 @@ diese Baseline zu ergaenzen.
 - reproduzierbare Verbindung ueber UART beziehungsweise FT232RL sowie
   Flash-, Boot- und Resetablauf;
 - reale Flashgroesse;
-- verwendete und fixierte ESP-IDF-6.0.2-Toolchain mit den Profilen
+- verwendete und fixierte ESP-IDF-6.1-Toolchain am kanonischen Commit mit den Profilen
   `esp32_bringup`/`esp32_release`;
 - Betrieb ohne PSRAM;
 - Baseline-Firmwaregroesse, statisches RAM, freier Heap und groesster freier
@@ -353,7 +414,7 @@ vorbereitenden Quellenrecherche bis nach Stage 4 ausserhalb dieser Gates.
 2. SPDX-/Lizenznachweis und Lizenz-/Notice-Dateien fuer direkte und relevante
    transitive Abhaengigkeiten erfassen; Fonts, Assets und generierte Dateien
    einschliessen.
-3. ESP-IDF 6.0.2, ESP32-32E, C++17, 4 MB Flash und **kein PSRAM** in den
+3. ESP-IDF 6.1 am kanonischen Commit, ESP32-32E, C++17, 4 MB Flash und **kein PSRAM** in den
    Kandidatenprofilen reproduzierbar bauen; Build-Warnungen und Konfiguration
    festhalten.
 4. Die in Stufe 0 erhobene Baseline gegen den Kandidaten mit denselben
@@ -686,7 +747,7 @@ eine Owner-Bestaetigung physischer Tatsachen:
    MOSFET-Verbraucher und Summer physisch getrennt oder nachweislich inaktiv;
    kein Test darf eine produktive Aktorfreigabe herstellen.
 5. Reproduzierbarer Flash-, Boot- und Resetpfad, reale Flashgroesse,
-   ESP-IDF-6.0.2-Toolchain, kein PSRAM sowie die Moeglichkeit, Baseline-
+   ESP-IDF-6.1-Toolchain am kanonischen Commit, kein PSRAM sowie die Moeglichkeit, Baseline-
    Firmwaregroesse, statisches RAM, freien Heap, groessten Heapblock und
    Logs/Reset-/Watchdogdaten aufzuzeichnen.
 6. Freigabe fuer die identische Stage-2-/Stage-3-Matrix und actor-free
@@ -706,7 +767,7 @@ Plan nicht materiell ueberschreiten:
 | Schnitt | Inhalt | Ergebnis / Grenze |
 |---:|---|---|
 | 1 | Plan-/Vorbereitungsrecherche und Stage-0-Aufnahme | Registry-/Lizenz-/Versionsstand ist nur Desk Research; Stage 0 muss die vollstaendige sichere Hardwarebaseline als Evidence liefern. |
-| 2 | Stage-1-Gate erst nach bestandenem Stage 0: gepinnte Kandidatenbuilds, Quellen, Lizenzen und Kompatibilitaet | Reproduzierbarer ESP-IDF-6.0.2-Build je Kandidat; kein Stage-1-PASS ohne Stage-0-Baseline, keine Aktoren. |
+| 2 | Stage-1-Gate erst nach bestandenem Stage 0: gepinnte Kandidatenbuilds, Quellen, Lizenzen und Kompatibilitaet | Reproduzierbarer ESP-IDF-6.1-Build am kanonischen Commit je Kandidat; kein Stage-1-PASS ohne Stage-0-Baseline, keine Aktoren. |
 | 3 | Identischer Stage-2-Smoke fuer den offiziellen Stack und begruendete Alternativen | Nur Kandidaten mit bestandenem Stage 0 und Stage 1; keine produktive Navigation oder Auswahl. |
 | 4 | Vollstaendige Stage-3-Matrix nur fuer Low-Level-Funktion, Raw-I/O, Fehler, Ressourcen und Stabilitaet | Identische rendererunabhaengige Evidence; keine LVGL-/Lean-Entscheidung und keine UI-/Recovery-PASS-Aussage. |
 | 5 | Stage-4-Auswahl der Low-Level-Grundlage und eines Rueckfallkandidaten; schmale Flush-/Input-Grenze festschreiben | Genau eine bevorzugte Low-Level-Richtung plus hoechstens ein Rueckfall; keine neue Treiberarchitektur. |
