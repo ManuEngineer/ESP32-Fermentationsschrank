@@ -30,10 +30,16 @@
 | TOUCH_BLOCKED_OWNER_SOLDERING | `NO` |
 | DISPLAY_RESET_CONNECTED | `YES` (Owner-Evidence: direkte `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung) |
 | DISPLAY_RESET_NET_VERIFICATION | `PASS` (Dokumentationsbasis und bekannte Modulvariante) |
-| Stage-0-Status | `STAGE_0_OVERALL=NOT_RUN` |
+| EXPECTED_DISPLAY_CONTROLLER | `ILI9341` (bekannte MSP2807-Dokumentation / bestehende Projektbasis) |
+| EXPECTED_TOUCH_CONTROLLER | `XPT2046` (bekannte MSP2807-Dokumentation / bestehende Projektbasis) |
+| DISPLAY_CONTROLLER_IDENTITY | `DEFERRED_TO_FUNCTIONAL_SMOKE` |
+| TOUCH_CONTROLLER_IDENTITY | `DEFERRED_TO_FUNCTIONAL_SMOKE` |
+| STAGE_0_SSOT_CONFORMANCE | `PASS` |
+| STAGE_0_BASELINE | `PASS` |
+| Stage-0-Status | `STAGE_0_OVERALL=PASS` |
 | Stage-1-bis-4-Status | `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
-| GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PENDING` |
+| GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PASS` |
 | Elektrische Messung | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` |
 | Aktorfreigabe | `NO` |
 
@@ -45,6 +51,21 @@ dem Plan-Commit bekannt und wird nicht vorgezogen. Eine Umsetzung, ein
 Hardware-Spike, eine Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein
 Merge sind bis zur Ownerfreigabe genau dieser neuen Plan-SHA ausgeschlossen.
 
+### Korrektur dieser Planrevision: Stage-0-Controlleridentitaet
+
+Stage 0 wird anhand der bereits vorhandenen realen Evidence als abgeschlossen
+bewertet. Die bekannte MSP2807-Dokumentation / bestehende Projektbasis liefert
+`EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
+`EXPECTED_TOUCH_CONTROLLER=XPT2046`, aber keine vorgezogene reale
+Controlleridentitaet. Da der unveraenderte Bring-up-Pfad Display und Touch
+noch nicht initialisiert, gelten
+`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
+`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Der erste aktive
+Low-Level-Smoke bestaetigt die Controller funktional, sobald der jeweilige
+Treiberpfad existiert. Diese Korrektur fuehrt weder Produktcode noch einen
+Rendererentscheid ein und verlangt keine weitere Owner-Bestaetigung von
+Aufdrucken, Modulvariante oder Dokumentationsuebereinstimmung.
+
 ## 1. Ausgangslage und aktuelle Live-Baseline
 
 Vor diesem Plan wurden Repository, Branch, `HEAD`, Issue #31, die vorhandenen
@@ -54,22 +75,29 @@ Audits und die Governancequellen live abgeglichen.
 - `origin/main` und die revalidierte Arbeitsbasis sind exakt
   `1f1755e5e706fb668472920545b5302fcef1df16`; PR #156 wurde ohne Force-Push
   per normalem Merge von der alten Basis synchronisiert.
-- Issue #31 ist offen; Display und Touch sind physisch angeschlossen, aber der
-  Display-RESET ist noch nicht mit `EN_CHIP_PU` verbunden. Es gilt
+- Issue #31 ist offen; Display und Touch sind physisch angeschlossen und der
+  Display-RESET ist direkt mit `EN_CHIP_PU` verbunden. Es gilt
   `DISPLAY_CONNECTED=YES`, `TOUCH_CONNECTED=YES`,
   `TOUCH_BLOCKED_OWNER_SOLDERING=NO`,
   `DISPLAY_RESET_CONNECTED=YES` und
   `DISPLAY_RESET_NET_VERIFICATION=PASS` auf Dokumentations- und
   Owner-Verdrahtungsbasis. Die
   bestätigte FT232-Topologie (`DTR -> GPIO0`, `RTS -> EN`) sowie Auto-Reset und
-  Flash ohne Taster werden nicht erneut geprüft. `STAGE_0_OVERALL=NOT_RUN`;
-  `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`. Der Anschluss ist kein
-  Hardware-PASS; `SSOT_CONFORMANCE=PENDING` und
-  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`. Die Funktionsverifikation über
-  Boot, Auto-Reset, Flash ohne Taster und gemeinsamen ESP32-/Display-Reset
-  steht nach der realen Verdrahtung noch aus.
-  Lieferantentexte werden nicht als Controller- oder Funktionsnachweis
-  akzeptiert.
+  Flash ohne Taster sind real nachgewiesen. Die physische Verbindung, die
+  SSOT-Verdrahtung, der Resetpfad, actor-free Flash/Boot/Reset, No-PSRAM und
+  die relevanten Baselinewerte bilden damit den abgeschlossenen
+  `STAGE_0_OVERALL=PASS`; `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`.
+  `SSOT_CONFORMANCE=PASS`, während
+  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt. Die erwarteten
+  Controller sind `EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
+  `EXPECTED_TOUCH_CONTROLLER=XPT2046` aus der bekannten
+  MSP2807-Dokumentation / bestehenden Projektbasis. Ihre reale Identität wird
+  ausdrücklich erst im ersten aktiven Low-Level-Smoke mit vorhandenem
+  Treiberpfad geprüft:
+  `DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
+  `TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Lieferantenangaben,
+  Silkscreen oder Doku-Uebereinstimmung werden davor nicht als reale
+  Controlleridentität behauptet.
 - PR #155 / Issue #154 ist abgeschlossen: PR #155 ist gemergt und Issue #154
   geschlossen. Der in der Roadmap dokumentierte Plan ist
   `3824bf54f1aebc5e3453739fd083ab9c317ef868`; der PR-Source-Head war
@@ -355,7 +383,7 @@ Plan-/Vorbereitungsrecherche. Sie ist kein bestandenes Gate und darf keinen
 Stage-1-PASS ersetzen. Ebenso darf ein Build erst als Stage-1-Evidence
 gelten, wenn Stufe 0 einschliesslich der Baseline abgeschlossen ist.
 
-### Stufe 0 – reale Hardware identifizieren und sichere Baseline nachweisen
+### Stufe 0 – reale Hardware, SSOT und sichere Baseline nachweisen
 
 Vor jeder Bibliotheksbewertung und vor jedem aktiven Display-/Touchtest wird
 die minimale sichere Hardwarebaseline aus dem kanonischen Spikevertrag
@@ -363,18 +391,33 @@ dokumentiert und nachgewiesen. Das umfasst:
 
 Die bestehende boardseitige Stage-0-Evidence des reviewten Plan-HEADs bleibt
 gueltig. UART-, Chip-, Flash-, Boot-/Reset-, Toolchain-, No-PSRAM- und bereits
-gemessene Ressourcenwerte werden fuer diese Planrevision nicht erneut
-gemessen. Display und Touch sind physisch angeschlossen; der
-`MSP2807_RESET`-Pad ist gemaess Owner-Rueckmeldung direkt mit `EN_CHIP_PU`
-verbunden und `DISPLAY_RESET_NET_VERIFICATION=PASS`.
-`DISPLAY_RESET_CONNECTED=YES` ist damit als Verdrahtungs-Evidence
-dokumentiert, aber noch kein funktionaler Hardware-PASS. `SSOT_CONFORMANCE=PENDING`,
-`FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` und
-`STAGE_0_OVERALL=NOT_RUN`. Es folgen jetzt actor-free Boot, Auto-Reset, Flash
-ohne Taster, gemeinsamer ESP32-/Display-Reset und der restliche Stage-0-
-Nachweis. Bis zum Abschluss von Stage 0 bleiben `STAGE_1` bis `STAGE_4`
-`NOT_RUN`; es gibt keine Stage-1/2/3/4-Implementation und keine
-Renderer-/Bibliotheksauswahl.
+gemessene Ressourcenwerte sind nachgewiesen. Display und Touch sind physisch
+angeschlossen; der `MSP2807_RESET`-Pad ist direkt mit `EN_CHIP_PU` verbunden
+und `DISPLAY_RESET_NET_VERIFICATION=PASS`.
+
+Stage 0 verlangt keinen funktionalen Controlleridentitaetsnachweis, solange
+der unveraenderte Bring-up-Pfad noch keinen Display-/Touch-Treiberpfad besitzt.
+Die bekannte MSP2807-Dokumentation und die bestehende Projektbasis liefern
+deshalb nur die erwarteten Kandidaten
+`EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
+`EXPECTED_TOUCH_CONTROLLER=XPT2046`. Die reale Identitaet bleibt bis zum
+ersten aktiven Low-Level-Smoke mit vorhandenem Treiberpfad ausdruecklich
+offen:
+
+```text
+DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE
+TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE
+```
+
+Die bereits vorhandene Evidence fuer reale Hardware, SSOT-Verdrahtung und
+Resetpfad, actor-free Flash/Boot/Reset, No-PSRAM und Baselinewerte schliesst
+Stage 0 ab:
+`STAGE_0_SSOT_CONFORMANCE=PASS`, `STAGE_0_BASELINE=PASS`,
+`SSOT_CONFORMANCE=PASS` und `STAGE_0_OVERALL=PASS`.
+`FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt korrekt, weil der
+Display-/Touch-Smoke noch nicht ausgefuehrt wurde. Bis zu dessen Start bleiben
+`STAGE_1` bis `STAGE_4` `NOT_RUN`; es gibt keine Stage-1/2/3/4-Implementation
+und keine Renderer-/Bibliotheksauswahl.
 
 Die begrenzte actor-free Reset-/Boot-Prüfung ist auf dem exakten
 `HEAD=6d803d0895cf6d906c99792d7d2ee20024c22881` erfolgt: Das gebaute
@@ -386,8 +429,13 @@ Die begrenzte actor-free Reset-/Boot-Prüfung ist auf dem exakten
 Brownout). Der EN-Reset-Puls wurde nach der direkten
 `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung ausgeführt
 (`ESP32_EN_RESET_PULSE=PASS`). Dies bestätigt den gemeinsamen Resetpfad; die
-Display-/Touch-Controlleridentität und die eigentliche Display-/Touchfunktion
-bleiben für den vollständigen Stage-0-Nachweis `NOT_RUN`.
+Die Display-/Touch-Controlleridentität und die eigentliche Display-/Touchfunktion
+werden nicht aus diesem Bring-up-Log abgeleitet. Sie sind fuer den ersten
+aktiven Low-Level-Smoke vorgesehen; bis dahin gelten
+`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`,
+`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`,
+`STAGE_0_DISPLAY_FUNCTION=NOT_RUN` und
+`STAGE_0_TOUCH_FUNCTION=NOT_RUN`.
 
 #### Stage-0-Reihenfolge fuer das Reset-Netz
 
@@ -411,11 +459,11 @@ Die Reset-Netz-Prüfung ist dokumentationsbasiert abgeschlossen:
 
 Damit gilt `DISPLAY_RESET_NET_VERIFICATION=PASS`; die direkte
 `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung ist vom Owner bestätigt und als
-`DISPLAY_RESET_CONNECTED=YES` dokumentiert. Die funktionale Verifikation über
-actor-free Boot, Auto-Reset, Flash ohne Taster und gemeinsamen
-ESP32-/Display-Reset steht noch aus; erst zusammen mit dem übrigen
-Display-/Touch-Nachweis kann `STAGE_0_OVERALL` von `NOT_RUN` weitergeführt
-werden.
+`DISPLAY_RESET_CONNECTED=YES` dokumentiert. Actor-free Boot, Auto-Reset,
+Flash ohne Taster und der gemeinsame ESP32-/Display-Reset sind bereits
+funktional verifiziert. Damit ist Stage 0 abgeschlossen; nur die
+Display-/Touch-Controlleridentitaet und -funktion bleiben bis zum ersten
+aktiven Low-Level-Smoke deferred.
 
 - reale Boardfamilie passend zur Repository-Referenz und das tatsaechliche
   ESP32-Modul/der Chip;
@@ -423,8 +471,9 @@ werden.
   eindeutige Carrier-Revisionskennung, wird ausschliesslich
   `board_revision=TBD_HARDWARE_NO_IDENTIFIABLE_MARKING` dokumentiert; die
   unbekannte Nummer blockiert #31 nicht dauerhaft;
-- praktisch ermittelten Displaycontroller und Touchcontroller; ILI9341 und
-  XPT2046 bleiben bis dahin Kandidatennamen, nicht PASS;
+- einen spaeteren funktionalen Low-Level-Smoke mit vorhandenem Treiberpfad zur
+  Bestaetigung der erwarteten Display-/Touchcontroller; ILI9341 und XPT2046
+  bleiben bis dahin erwartete Kandidaten, nicht reale Identitaets-PASS;
 - reale TFT-/Touch-CS-, D/C-, Reset-, Backlight-, IRQ-, SPI- und
   Masseverbindungen gegen das Boardprofil;
 - keine widerspruechliche revisionsabhaengige Eigenschaft, insbesondere keine
@@ -445,15 +494,15 @@ werden.
   Innen-/Aussenlueftern, allen MOSFET-Verbrauchern und Summer;
 - Resetnetz `EN_CHIP_PU -> MSP2807_RESET` und Boot-/Reset-Safe-Zustaende.
 
-Die physische Identitaet und Verdrahtung sind Evidence, keine Owner-
-Bestaetigung. Der Owner stellt Modul, Zugriff und actor-free Testbedingungen
-bereit; der Builder dokumentiert die gemessenen/verifizierten Tatsachen mit
-Quelle, Methode und Status. Ein Lieferantentext ohne praktische Identifikation
-ist `BLOCKED`, nicht `PASS`. Die unbekannte Carrier-Revisionsnummer allein ist
-kein Stage-0-Blocker. Nur wenn daraus eine konkrete relevante Mehrdeutigkeit
-entsteht, etwa bei Pinbelegung, Versorgung, Resetnetz oder Logic-Domain,
-stoppt #31 und erfordert einen separaten SSOT-/Ownerentscheid. Abweichungen
-vom Boardprofil bleiben ein solcher Blocker.
+Die vorhandene Hardware-/SSOT-/Reset-Evidence und die actor-free Baseline sind
+ausreichend fuer Stage 0; die Controlleridentitaet wird bewusst nicht aus
+Lieferantentext, Silkscreen oder Doku-Uebereinstimmung als PASS abgeleitet.
+Der Builder bestaetigt sie erst im ersten aktiven Low-Level-Smoke mit
+vorhandenem Treiberpfad. Die unbekannte Carrier-Revisionsnummer oder ein
+fehlender Modulaufdruck allein sind kein Stage-0-Blocker. Nur wenn ein
+konkreter Widerspruch bei Pinbelegung, Versorgung, Resetnetz oder
+Logic-Domain entsteht, stoppt #31 und erfordert einen separaten SSOT-/
+Ownerentscheid. Abweichungen vom Boardprofil bleiben ein solcher Blocker.
 
 ### Stufe 1 – Quelle, Lizenz, Kompatibilitaet und reproduzierbarer Build
 
@@ -784,13 +833,13 @@ Fachaktion erreichen.
 Vor Stage 0 benoetigt der Builder vom Owner Zugang und Testbedingungen, nicht
 eine Owner-Bestaetigung physischer Tatsachen:
 
-1. Reale Boardfamilie gegen die Repository-Referenz, tatsaechliches
-   ESP32-Modul/Chip sowie vorhandene Fotos/Markierungen dokumentieren. Falls
-   keine eindeutige Carrier-Revisionskennung vorhanden ist,
-   `board_revision=TBD_HARDWARE_NO_IDENTIFIABLE_MARKING` setzen; dies stoppt
-   #31 nur bei einer konkreten revisionsabhaengigen Mehrdeutigkeit. UART/
-   FT232RL-Zugang und die Moeglichkeit zur praktischen Display-/Touch-
-   Controlleridentifikation muessen vorhanden sein.
+1. Die bereits vorliegende Board-/ESP32- und Anschluss-Evidence verwenden.
+   Eine fehlende Carrier-Revisionskennung oder ein fehlender Modulaufdruck
+   erzeugt ohne konkrete relevante Abweichung kein weiteres Owner-Gate.
+   UART-/FT232RL-Zugang und actor-free Testbedingungen sind vorhanden. Die
+   praktische Display-/Touch-Controlleridentifikation wird nicht vorgezogen;
+   sie erfolgt erst im ersten aktiven Low-Level-Smoke mit vorhandenem
+   Treiberpfad.
 2. Zugang zur realen Verdrahtung von SCK/MISO/MOSI, TFT-CS, D/C, Reset,
    Backlight, Touch-CS, IRQ und GND gegen das Boardprofil. Der Builder
    dokumentiert Konformitaet oder Abweichung als Evidence; eine Abweichung ist
@@ -810,9 +859,12 @@ eine Owner-Bestaetigung physischer Tatsachen:
    folgenden Stufen `NOT_RUN`.
 
 Die Owner-Hardwaremitwirkung stellt also Hardware, Zugriff und sichere
-Testbedingungen bereit. Die reale Modul-/Board-/Controlleridentitaet,
-Verdrahtungskonformitaet, Rotation, Raw-Grenzen, Druck-/Kontaktwerte und
-Stabilitaetseigenschaften sind Builder-Evidence, keine Ownerentscheidungen.
+Testbedingungen bereit. Die bereits bestaetigte Hardware-/SSOT-/Reset-
+Evidence schliesst Stage 0; die reale Controlleridentitaet, Rotation,
+Raw-Grenzen, Druck-/Kontaktwerte und Stabilitaetseigenschaften werden erst im
+aktiven Low-Level-Smoke als Builder-Evidence erhoben. Keine weitere
+Owner-Bestaetigung von Aufdrucken, Modulvariante oder Doku-Uebereinstimmung
+ist dafuer erforderlich, solange kein konkreter Widerspruch auftritt.
 
 ## 10. Spaetere Umsetzungsschnitte nach Planfreigabe
 
@@ -907,14 +959,14 @@ Die folgenden Punkte sind aktuell offen:
    einen separaten SSOT-/Ownerentscheid einholen; die physische Tatsache selbst
    bleibt Evidence und wird nicht durch Ownerentscheidung bestaetigt.
 
-Die konkrete Hardwareidentitaet, Boardrevision, Controller, Verdrahtung,
-Rotation, Raw-Grenzen, Kontakt-/Druckwerte, Entprellung und
-Verwechslungsschutz sind keine Ownerentscheidungen, sondern Stage-0-/Stage-2-/
-Stage-3-Evidence. Eine fehlende identifizierbare Carrier-Revisionsmarkierung
-wird als `TBD_HARDWARE_NO_IDENTIFIABLE_MARKING` dokumentiert und blockiert nur
-bei einer daraus entstehenden konkreten Mehrdeutigkeit. Der `>=10 s`-Raw-Touch-Recoveryvertrag ist bereits
-entschieden; offen bleiben nur die hardwareabhaengigen Parameter innerhalb
-dieses Vertrags.
+Die konkrete Controlleridentitaet, Rotation, Raw-Grenzen, Kontakt-/Druckwerte,
+Entprellung und Verwechslungsschutz sind keine Stage-0-Voraussetzungen,
+sondern werden im ersten aktiven Low-Level-Smoke und danach in der
+Stage-3-Matrix als Builder-Evidence erhoben. Eine fehlende identifizierbare
+Carrier-Revisionsmarkierung oder ein fehlender Aufdruck blockiert nicht ohne
+konkrete relevante Mehrdeutigkeit. Der `>=10 s`-Raw-Touch-Recoveryvertrag ist
+bereits entschieden; offen bleiben nur die hardwareabhaengigen Parameter
+innerhalb dieses Vertrags.
 
 Es gibt aktuell keinen nachgewiesenen fundamentalen ESP-IDF-Blocker. Sollte
 Stage 1 einen solchen zeigen, wird ein Frameworkwechsel als separate

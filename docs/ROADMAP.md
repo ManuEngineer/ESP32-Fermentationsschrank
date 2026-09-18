@@ -33,7 +33,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=85892d634f8b4de522d70b752190010fe7650f75`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_OVERALL=NOT_RUN`; `SSOT_CONFORMANCE=PENDING`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `STAGE_0_DISPLAY_FUNCTION=NOT_RUN`; `STAGE_0_TOUCH_FUNCTION=NOT_RUN`; `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Reset-Netz sowie actor-free Flash-/Boot-/EN-Puls-Evidence PASS; Display-/Touch-Identität und -Funktion bleiben für den vollständigen Stage-0-Nachweis offen |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=NEW_REVISION_AFTER_COMMIT`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `EXPECTED_DISPLAY_CONTROLLER=ILI9341`; `EXPECTED_TOUCH_CONTROLLER=XPT2046`; `DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`; `TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_SSOT_CONFORMANCE=PASS`; `STAGE_0_BASELINE=PASS`; `STAGE_0_OVERALL=PASS`; `SSOT_CONFORMANCE=PASS`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `STAGE_0_DISPLAY_FUNCTION=NOT_RUN`; `STAGE_0_TOUCH_FUNCTION=NOT_RUN`; `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Stage 0 ist mit Hardware-/SSOT-/Reset-, actor-free Flash-/Boot-/Reset-, No-PSRAM- und Baseline-Evidence PASS; Controlleridentität und Display-/Touch-Funktion werden erst im ersten aktiven Low-Level-Smoke mit vorhandenem Treiberpfad verifiziert |
 | 2 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164=OPEN`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `IMPLEMENTATION=MERGED`; `REAL_WLAN_EVIDENCE=WAITING_FOR_ISSUE31_PHYSICAL_MODE_ENTRY`; `ACTUATOR_RELEASE=NO` | Reale WLAN-Evidence erst nach dem physischen Modus-Einstieg aus #31; keine parallele #164-Implementierung |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -56,10 +56,17 @@ PR #165 ist auf `main` gemergt. Issue #164 bleibt offen, weil die reale
 WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
 ist damit der naechste aktive Hardware-Scope; Display und Touch sind
 angeschlossen, `DISPLAY_RESET_NET_VERIFICATION=PASS` ist dokumentationsbasiert
-erreicht und `DISPLAY_RESET_CONNECTED=YES` vom Owner bestätigt;
-`STAGE_0_OVERALL=NOT_RUN`. Als Nächstes folgt die funktionale actor-free
-Verifikation von Display-/Touch-Identität, SPI-/Reset-/Backlight-Funktion,
-Raw-Touch und der vollständige restliche Display-/Touch-Stage-0-Nachweis.
+erreicht und `DISPLAY_RESET_CONNECTED=YES` vom Owner bestätigt. Die vorhandene
+Hardware-/SSOT-/Reset-, actor-free Flash-/Boot-/Reset-, No-PSRAM- und
+Baseline-Evidence schliesst Stage 0: `STAGE_0_SSOT_CONFORMANCE=PASS`,
+`STAGE_0_BASELINE=PASS` und `STAGE_0_OVERALL=PASS`. `EXPECTED_DISPLAY_CONTROLLER=ILI9341`
+und `EXPECTED_TOUCH_CONTROLLER=XPT2046` bleiben erwartete Kandidaten aus der
+bekannten MSP2807-Dokumentation / bestehenden Projektbasis;
+`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
+`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Als Nächstes folgt
+erst mit vorhandenem Treiberpfad der aktive Low-Level-Smoke für Controller-,
+SPI-/CS-/D-C-/Reset-/Backlight- und Raw-Touch-Funktion; Stage 1–4 bleiben
+`NOT_RUN`.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
