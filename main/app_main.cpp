@@ -171,8 +171,12 @@ device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
         return {};
     }
     char suffix[13]{};
-    std::snprintf(suffix, sizeof(suffix), "%02X%02X%02X%02X%02X%02X", mac[0],
-                  mac[1], mac[2], mac[3], mac[4], mac[5]);
+    const int written =
+        std::snprintf(suffix, sizeof(suffix), "%02X%02X%02X%02X%02X%02X",
+                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (written != 12) {
+        return {};
+    }
     std::uint8_t randomBytes[16]{};
     if (!randomSource.fill(randomBytes, sizeof(randomBytes))) {
         return {};
