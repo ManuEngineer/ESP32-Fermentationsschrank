@@ -33,7 +33,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=85892d634f8b4de522d70b752190010fe7650f75`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=NO`; `DISPLAY_RESET_NET_VERIFICATION=PENDING`; `STAGE_0_OVERALL=NOT_RUN`; `SSOT_CONFORMANCE=PENDING`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Zuerst reale EN-/UART-Reset-Topologie pruefen; erst bei `DISPLAY_RESET_NET_VERIFICATION=PASS` den Owner zum konkreten Display-RESET-Anschluss anweisen; danach vollstaendigen Display-/Touch-Stage-0-Nachweis, ohne Stage-1/2/3/4-Implementation oder Renderer-/Bibliotheksauswahl |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=85892d634f8b4de522d70b752190010fe7650f75`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=NO`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `STAGE_0_OVERALL=NOT_RUN`; `SSOT_CONFORMANCE=PENDING`; `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`; `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Dokumentationsbasierter Reset-Netz-PASS; Owner verbindet den MSP2807-`RST/RESET`-Pad direkt mit `EN_CHIP_PU`; danach vollständiger actor-free Display-/Touch-Stage-0-Nachweis, ohne Stage-1/2/3/4-Implementation oder Renderer-/Bibliotheksauswahl |
 | 2 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164=OPEN`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `IMPLEMENTATION=MERGED`; `REAL_WLAN_EVIDENCE=WAITING_FOR_ISSUE31_PHYSICAL_MODE_ENTRY`; `ACTUATOR_RELEASE=NO` | Reale WLAN-Evidence erst nach dem physischen Modus-Einstieg aus #31; keine parallele #164-Implementierung |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -55,9 +55,10 @@ nicht kopiert, sondern verlinkt.
 PR #165 ist auf `main` gemergt. Issue #164 bleibt offen, weil die reale
 WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
 ist damit der naechste aktive Hardware-Scope; Display und Touch sind
-angeschlossen, aber `DISPLAY_RESET_NET_VERIFICATION=PENDING` und
-`STAGE_0_OVERALL=NOT_RUN`. Zuerst ist die reale EN-/UART-Reset-Topologie zu
-pruefen; der Display-RESET wird erst nach PASS konkret angeschlossen.
+angeschlossen, `DISPLAY_RESET_NET_VERIFICATION=PASS` ist dokumentationsbasiert
+erreicht, aber `DISPLAY_RESET_CONNECTED=NO` und `STAGE_0_OVERALL=NOT_RUN`.
+Der Owner muss den MSP2807-`RST/RESET`-Pad direkt mit `EN_CHIP_PU` verbinden;
+danach folgt die funktionale actor-free Reset-/Display-/Touch-Verifikation.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale

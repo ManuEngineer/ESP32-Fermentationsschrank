@@ -29,7 +29,7 @@
 | TOUCH_CONNECTED | `YES` |
 | TOUCH_BLOCKED_OWNER_SOLDERING | `NO` |
 | DISPLAY_RESET_CONNECTED | `NO` |
-| DISPLAY_RESET_NET_VERIFICATION | `PENDING` |
+| DISPLAY_RESET_NET_VERIFICATION | `PASS` (Dokumentationsbasis und bekannte Modulvariante; `DISPLAY_RESET_CONNECTED` bleibt bis zur realen Verdrahtung `NO`) |
 | Stage-0-Status | `STAGE_0_OVERALL=NOT_RUN` |
 | Stage-1-bis-4-Status | `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
@@ -59,11 +59,16 @@ Audits und die Governancequellen live abgeglichen.
   `DISPLAY_CONNECTED=YES`, `TOUCH_CONNECTED=YES`,
   `TOUCH_BLOCKED_OWNER_SOLDERING=NO`,
   `DISPLAY_RESET_CONNECTED=NO` und
-  `DISPLAY_RESET_NET_VERIFICATION=PENDING`.
-  `STAGE_0_OVERALL=NOT_RUN`; `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`.
-  Physischer Anschluss ist kein Hardware-PASS; `SSOT_CONFORMANCE=PENDING` und
-  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`. Lieferantentexte werden nicht
-  als Controller- oder Funktionsnachweis akzeptiert.
+  `DISPLAY_RESET_NET_VERIFICATION=PASS` auf Dokumentationsbasis. Die
+  bestätigte FT232-Topologie (`DTR -> GPIO0`, `RTS -> EN`) sowie Auto-Reset und
+  Flash ohne Taster werden nicht erneut geprüft. `STAGE_0_OVERALL=NOT_RUN`;
+  `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`. Der Anschluss ist kein
+  Hardware-PASS; `SSOT_CONFORMANCE=PENDING` und
+  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`. Die Funktionsverifikation über
+  Boot, Auto-Reset, Flash ohne Taster und gemeinsamen ESP32-/Display-Reset
+  steht nach der realen Verdrahtung noch aus.
+  Lieferantentexte werden nicht als Controller- oder Funktionsnachweis
+  akzeptiert.
 - PR #155 / Issue #154 ist abgeschlossen: PR #155 ist gemergt und Issue #154
   geschlossen. Der in der Roadmap dokumentierte Plan ist
   `3824bf54f1aebc5e3453739fd083ab9c317ef868`; der PR-Source-Head war
@@ -290,7 +295,7 @@ ist SSOT fuer die geplante Zuordnung, aber kein Funktionsnachweis:
 | TFT Backlight | GPIO4 | `PLANNED`, PWM/safe-off, nicht bestaetigt |
 | Touch CS | GPIO15 | `PLANNED`, active-low/safe-high, nicht bestaetigt |
 | Touch IRQ | GPIO39 | `PLANNED`, input-only/active-low, nicht bestaetigt |
-| Display-Reset | `EN_CHIP_PU -> MSP2807_RESET` | `DISPLAY_RESET_CONNECTED=NO`; `DISPLAY_RESET_NET_VERIFICATION=PENDING`; reale gemeinsame active-low-Resetsemantik vor Anschluss zu pruefen |
+| Display-Reset | `EN_CHIP_PU -> MSP2807_RESET` | `DISPLAY_RESET_CONNECTED=NO`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; veröffentlichte MSP2807/ILI9341-Unterlagen und die bekannte Modulvariante führen den `RST/RESET`-Pad als nicht aktiv treibenden Display-Reset-Eingang; Anschluss steht noch aus |
 
 Es gibt in #31 keine Umverteilung dieser Signale. Ein realer Widerspruch
 zwischen Modul, Verdrahtung und Boardprofil stoppt die Umsetzung und benoetigt
@@ -369,28 +374,31 @@ Stage-1/2/3/4-Implementation und keine Renderer-/Bibliotheksauswahl.
 
 #### Stage-0-Reihenfolge fuer das Reset-Netz
 
-Die Reset-Netz-Pruefung ist der erste physische Stage-0-Schritt fuer den
-Display-RESET. Es wird keine Verdrahtung aus dem Plan abgeleitet oder geraten:
+Die Reset-Netz-Prüfung ist dokumentationsbasiert abgeschlossen:
 
-1. Die reale aktuelle Verbindung von FT232-`RTS`/`DTR` zum ESP32-
-   `EN_CHIP_PU` einschliesslich der vorhandenen Reset-/Auto-Reset-Schaltung
-   dokumentieren.
-2. Pruefen, dass am gemeinsamen EN-Netz keine unabhaengigen Treiber
-   gegeneinander arbeiten und keine zweite aktive Resetquelle unkontrolliert
-   auf das Netz treibt.
-3. Pruefen, dass `MSP2807_RESET` als Eingang beschaltet ist und
-   `EN_CHIP_PU` nicht zuruecktreiben kann.
-4. Gemeinsame 3,3-V-Logik und gemeinsame Masse der beteiligten Reset-/UART-
-   Komponenten pruefen.
-5. Die kanonische SSOT-Beziehung `EN_CHIP_PU -> MSP2807_RESET` gegen die
-   reale Topologie abgleichen.
+- Die bereits bestätigte reale UART-/Auto-Reset-Topologie bleibt unverändert:
+  `FT232_DTR_TO_GPIO0=YES`, `FT232_RTS_TO_EN=YES`, Auto-Reset und Flash ohne
+  Taster funktionieren.
+- Die kanonische SSOT legt `EN_CHIP_PU -> MSP2807_RESET` als
+  `direct_active_low_shared_reset` mit `target_is_input_only=true` und
+  `independent_drive_forbidden=true` fest.
+- Die veröffentlichten MSP2807/ILI9341-Unterlagen und die bekannte
+  Modulvariante kennzeichnen den Modul-Pad `RST/RESET` als Reset-Eingang des
+  ILI9341; es ist kein aktiv zurücktreibender Ausgang und keine konkrete
+  abweichende Resetquelle am Modul dokumentiert oder am bekannten Modul
+  erkennbar.
+- `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`: Es gibt kein generelles
+  Multimeter-, Pegel-, Widerstands- oder Durchgangs-Gate. Eine gezielte
+  elektrische Prüfung wäre nur bei einem konkreten Widerspruch zwischen
+  realem Modul und Dokumentation erforderlich.
 
-Erst wenn alle fuenf Punkte mit realer Evidence `PASS` sind, darf der Owner
-den konkreten Anschluss von `MSP2807_RESET` an `EN_CHIP_PU` ausfuehren. Bei
-`DISPLAY_RESET_NET_VERIFICATION=FAIL` oder `PENDING` bleibt der Anschluss
-unterlassen und die Stage-0-Evidence stoppt. Nach einem Anschluss wird der
-vollstaendige Display-/Touch-Stage-0-Nachweis actor-free erhoben; erst dieser
-Nachweis kann `STAGE_0_OVERALL` von `NOT_RUN` weiterfuehren.
+Damit gilt `DISPLAY_RESET_NET_VERIFICATION=PASS`. Der Owner darf jetzt den
+`RST/RESET`-Pad des MSP2807 direkt mit `EN_CHIP_PU` verbinden. Bis diese
+Verdrahtung real erfolgt ist, bleibt `DISPLAY_RESET_CONNECTED=NO`. Danach
+werden actor-free Boot, Auto-Reset, Flash ohne Taster und der gemeinsame
+ESP32-/Display-Reset funktional verifiziert; erst zusammen mit dem übrigen
+Display-/Touch-Nachweis kann `STAGE_0_OVERALL` von `NOT_RUN` weitergeführt
+werden.
 
 - reale Boardfamilie passend zur Repository-Referenz und das tatsaechliche
   ESP32-Modul/der Chip;
