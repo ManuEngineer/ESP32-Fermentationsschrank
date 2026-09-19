@@ -28,10 +28,14 @@ STAGE_2_TOUCH_FUNCTION=POLLING_PASS_IRQ_PASS
 DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED
 TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
 COLDSTART_BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED
-COLDSTART_DIAGNOSTIC_REPEAT=PASS
+HISTORICAL_COLDSTART_DIAGNOSTIC_REPEAT=PASS
 COLDSTART_DIAGNOSTIC_BROWNOUT_CURRENT_REPEAT=NOT_OBSERVED
 COLDSTART_DIAGNOSIS=INTERMITTENT_FAILURE_NOT_REPRODUCED
 COLDSTART_ROOT_CAUSE=UNDETERMINED
+COLDSTART_REPRODUCIBILITY_RETEST=FAIL
+COLDSTART_RETEST_COMPLETED_CYCLES=1_OF_5
+COLDSTART_RETEST_FAILURE_RUN=1
+COLDSTART_RETEST_FAILURE=BROWNOUT_MARKER_AND_WHITE_DISPLAY_REPRODUCED
 HARDWARE_SPIKE_STAGE_2=FAILED
 STAGE_2=FAILED
 STAGE_3=NOT_RUN
@@ -99,13 +103,39 @@ CURRENT_REPEAT_BOTTOM_RIGHT=BLUE
 ```
 
 Die frühere Owner-Beobachtung `ONLY_WHITE_BACKLIGHT_NO_EXPECTED_COLOR_PATTERN`
-wurde damit nicht reproduziert. Der Brownout-Hinweis bleibt als historischer
-konkreter Diagnosehinweis bestehen; im überwachten Wiederholungslauf trat kein
-Brownout-Marker auf. Die Logs erlauben deshalb keine belastbare engere Ursache
-als einen intermittierenden, aktuell nicht reproduzierten Kaltstartbefund.
+wurde im anschließenden Konvergenz-Retest in Lauf 1 erneut konkret beobachtet.
+Nach Wiederkehr der Versorgung meldete der UART erneut den vollständigen Boot
+und den Smoke-Start; der Owner sah diesmal nur weißes Display. Die Logs
+erlauben weiterhin keine belastbare Root Cause.
 Es wird keine Produktkorrektur und kein allgemeines Pegel-/Mess-Gate abgeleitet.
 Der ursprüngliche Stage-2-Fehler bleibt bis zu einer reproduzierbaren Ursache
 oder einer ausdrücklich neuen Owner-Entscheidung bestehen.
+
+### Kaltstart-Konvergenz-Retest
+
+Der Retest sollte fünf echte überwachte Power-Cycles mit exakt demselben
+IRQ-Smoke, derselben `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung und weiterhin
+actor-free Bedingungen umfassen. Lauf 1 wurde bis zum konkreten Fehler
+ausgeführt und beendet den Retest fail-closed:
+
+```text
+COLDSTART_REPRODUCIBILITY_RETEST=FAIL
+COLDSTART_RETEST_COMPLETED_CYCLES=1_OF_5
+COLDSTART_RETEST_FAILURE_RUN=1
+COLDSTART_RETEST_FAILURE_MARKER=E_BOD_BROWNOUT_DETECTOR_WAS
+COLDSTART_RETEST_OWNER_DISPLAY=ONLY_WHITE
+POWERON_RESET=PASS_AFTER_POWER_RESTORE
+SPI_FAST_FLASH_BOOT=PASS_AFTER_POWER_RESTORE
+STAGE2_START=PASS_AFTER_POWER_RESTORE
+SPI_BUS=PASS_AFTER_POWER_RESTORE
+DISPLAY_CONTROLLER_DRIVER=ILI9341_CREATE_PASS_AFTER_POWER_RESTORE
+TOUCH_CONTROLLER_DRIVER=XPT2046_CREATE_PASS_AFTER_POWER_RESTORE
+DISPLAY_VISUAL_UART_MARKER=PASS_AFTER_POWER_RESTORE
+COLDSTART_ROOT_CAUSE=UNDETERMINED
+STAGE_2=FAILED
+```
+
+Läufe 2–5 wurden nach dem ersten Brownout-/Displayfehler nicht gestartet.
 
 ## Testaufbau
 
