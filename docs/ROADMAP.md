@@ -33,7 +33,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `PLAN_STATUS=OWNER_APPROVED`; `HARDWARE_SPIKE_STAGE_0=PASS`; `HARDWARE_SPIKE_STAGE_1=PASS`; `HARDWARE_SPIKE_STAGE_2=FAILED`; `HARDWARE_SPIKE_STAGE_3_TO_4=NOT_RUN`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `EXPECTED_DISPLAY_CONTROLLER=ILI9341`; `EXPECTED_TOUCH_CONTROLLER=XPT2046`; `DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED`; `TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_SSOT_CONFORMANCE=PASS`; `STAGE_0_BASELINE=PASS`; `STAGE_0_OVERALL=PASS`; `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`; `STAGE_2_TOUCH_FUNCTION=PASS`; `HISTORICAL_COLDSTART_DIAGNOSTIC_REPEAT=PASS`; `POST_STABLE_RAIL_SHARED_EN_RESET_RECOVERY=PASS`; `COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED`; `CONTROLLED_COLDSTART_RETEST=FAIL`; `CONTROLLED_COLDSTART_COMPLETED=1_OF_3`; `CONTROLLED_COLDSTART_1_OFF_TIME_SECONDS=APPROX_30`; `CONTROLLED_COLDSTART_1_BROWNOUT=REPRODUCED`; `CONTROLLED_COLDSTART_1_DISPLAY=ONLY_WHITE`; `COLDSTART_ROOT_CAUSE=UNDETERMINED`; `STAGE_1=PASS`; `STAGE_1_EVIDENCE=docs/audits/ISSUE_31_STAGE_1_EVIDENCE.md`; `STAGE_2=FAILED`; `STAGE_2_EVIDENCE=docs/audits/ISSUE_31_STAGE_2_EVIDENCE.md`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Shared-EN-Reset stellte das exakte Vier-Ecken-Muster wieder her; der kontrollierte Kaltstart in Lauf 1 reproduzierte nach ca. 30 s Auszeit Brownout und nur weißes Display. Fehlerklasse stark in Richtung Power-On-/Reset-Sequenz eingegrenzt, konkrete Root Cause bleibt unbestimmt. Keine weiteren Läufe, keine Stage-3-/Stage-4-Arbeit oder Produktimplementation |
+| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `PLAN_STATUS=OWNER_APPROVED`; `HARDWARE_SPIKE_STAGE_0=PASS`; `HARDWARE_SPIKE_STAGE_1=PASS`; `HARDWARE_SPIKE_STAGE_2=FAILED`; `HARDWARE_SPIKE_STAGE_3_TO_4=NOT_RUN`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `TOUCH_BLOCKED_OWNER_SOLDERING=NO`; `DISPLAY_RESET_CONNECTED=YES`; `DISPLAY_RESET_NET_VERIFICATION=PASS`; `EXPECTED_DISPLAY_CONTROLLER=ILI9341`; `EXPECTED_TOUCH_CONTROLLER=XPT2046`; `DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED`; `TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS`; `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`; `FLASH=PASS`; `AUTO_RESET=PASS`; `BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED`; `ESP32_EN_RESET_PULSE=PASS`; `STAGE_0_SSOT_CONFORMANCE=PASS`; `STAGE_0_BASELINE=PASS`; `STAGE_0_OVERALL=PASS`; `SMOKE_PANEL_RESET_PATH=PASS`; `PANEL_RESET_BEFORE_INIT=YES`; `PANEL_RESET_GPIO_NUM=GPIO_NUM_NC`; `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`; `STAGE_2_TOUCH_FUNCTION=PASS`; `HISTORICAL_COLDSTART_DIAGNOSTIC_REPEAT=PASS`; `POST_STABLE_RAIL_SHARED_EN_RESET_RECOVERY=PASS`; `COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED`; `HISTORICAL_NORMAL_COLDSTART_RETEST=FAIL`; `HISTORICAL_NORMAL_COLDSTART_OFF_TIME_SECONDS=APPROX_30`; `HISTORICAL_NORMAL_COLDSTART_BROWNOUT=REPRODUCED`; `HISTORICAL_NORMAL_COLDSTART_DISPLAY=ONLY_WHITE`; `DELAYED_EN_POWERON_RETEST=PASS_3_OF_3`; `DELAYED_EN_POWERON_OFF_TIME=AT_LEAST_10_SECONDS_EACH`; `DELAYED_EN_BROWNOUT_MARKER=NOT_OBSERVED_RUNS_1_TO_3`; `COLDSTART_ROOT_CAUSE=UNDETERMINED`; `STAGE_1=PASS`; `STAGE_1_EVIDENCE=docs/audits/ISSUE_31_STAGE_1_EVIDENCE.md`; `STAGE_2=FAILED`; `STAGE_2_EVIDENCE=docs/audits/ISSUE_31_STAGE_2_EVIDENCE.md`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `IMPLEMENTATION=NOT_STARTED`; `ACTUATOR_RELEASE=NO` | Harness-Resetpfad vor Init verifiziert. Die verzögerte EN-Power-On-Sequenz bestand 3/3 mit mindestens 10 s Auszeit, 1 s EN-Haltezeit und erwartetem Vier-Ecken-Muster ohne Brownout-Marker. Der historische normale Kaltstartfehler bleibt unverändert dokumentiert; Root Cause bleibt unbestimmt, Stage 2 bleibt FAILED. Keine Stage-3-/Stage-4-Arbeit oder Produktimplementation |
 | 2 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164=OPEN`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `IMPLEMENTATION=MERGED`; `REAL_WLAN_EVIDENCE=WAITING_FOR_ISSUE31_PHYSICAL_MODE_ENTRY`; `ACTUATOR_RELEASE=NO` | Reale WLAN-Evidence erst nach dem physischen Modus-Einstieg aus #31; keine parallele #164-Implementierung |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -57,18 +57,25 @@ WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
 ist der naechste aktive Hardware-Scope; Stage 0 und Stage 1 sind PASS. Der
 offizielle actor-free Stage-2-Smoke initialisierte Display und Touch und zeigte
 vier Farben; die Software-Rotation darf die physische Einbaulage ausgleichen.
-Der stabile Versorgungslauf mit genau einem gemeinsamen EN-Reset über RTS-only
-stellte das erwartete Muster `TL=WHITE, TR=GREEN, BL=RED, BR=BLUE` wieder her.
-Im anschließenden kontrollierten Kaltstart mit ungefähr 30 Sekunden Auszeit
-wurde in Lauf 1 erneut ein Brownout-Marker beobachtet; nach Wiederkehr der
-Versorgung sah der Owner nur weißes Display. Die Fehlerklasse
-`POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED` ist damit gestützt, die
-konkrete Root Cause bleibt jedoch `UNDETERMINED`. Deshalb bleibt
+Der Harness-Resetpfad ist direkt gegen die Quelle verifiziert:
+`esp_lcd_panel_reset(panel)` steht unmittelbar vor
+`esp_lcd_panel_init(panel)`, während `reset_gpio_num=GPIO_NUM_NC` den
+unveränderten gemeinsamen physischen Resetpfad belässt. Der stabile
+Versorgungslauf mit genau einem gemeinsamen EN-Reset über RTS-only stellte das
+erwartete Muster `TL=WHITE, TR=GREEN, BL=RED, BR=BLUE` wieder her. Die
+anschließende verzögerte EN-Power-On-Sequenz bestand in drei echten Läufen mit
+mindestens 10 Sekunden Auszeit und 1 Sekunde EN-Haltezeit; kein Lauf zeigte im
+UART-Fenster vom Power-On bis zur ersten Draw-Ausgabe einen Brownout-Marker,
+und alle drei Sichtprüfungen waren PASS. Die Fehlerklasse
+`POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED` bleibt damit gestützt, die
+konkrete Root Cause bleibt jedoch `UNDETERMINED`. Der historische normale
+Kaltstart mit Brownout und nur weißem Display bleibt unverändert als Fehler-
+Evidence bestehen. Deshalb bleibt
 `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`, während
 `STAGE_2_TOUCH_FUNCTION=PASS` separat bleibt. `STAGE_2=FAILED`,
 `STAGE_3=NOT_RUN` und `STAGE_4=NOT_RUN`; Produktimplementation und
-Aktorfreigabe bleiben ausgeschlossen. Weitere kontrollierte Kaltstarts wurden
-nach Lauf 1 nicht gestartet.
+Aktorfreigabe bleiben ausgeschlossen. Es gab keine Hardware-/SSOT- oder
+Produktänderung.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale

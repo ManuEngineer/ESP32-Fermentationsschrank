@@ -1,6 +1,6 @@
 # Issue #31 – Stage-2-Hardware-Smoke-Evidence
 
-Stand: 2026-09-19. Diese Evidence bezieht sich auf den freigegebenen
+Stand: 2026-09-20. Diese Evidence bezieht sich auf den freigegebenen
 Stage-1-/Stage-2-Vertrag und enthält ausschließlich den nichtproduktiven,
 actor-free Low-Level-Smoke.
 
@@ -32,15 +32,24 @@ HISTORICAL_COLDSTART_DIAGNOSTIC_REPEAT=PASS
 HISTORICAL_COLDSTART_DIAGNOSTIC_BROWNOUT_CURRENT_REPEAT=NOT_OBSERVED
 HISTORICAL_COLDSTART_DIAGNOSIS=INTERMITTENT_FAILURE_NOT_REPRODUCED
 COLDSTART_ROOT_CAUSE=UNDETERMINED
+SMOKE_PANEL_RESET_PATH=PASS
+PANEL_RESET_BEFORE_INIT=YES
+PANEL_RESET_GPIO_NUM=GPIO_NUM_NC
 POST_STABLE_RAIL_SHARED_EN_RESET_RECOVERY=PASS
 POST_STABLE_RAIL_SHARED_EN_RESET_PATTERN=TL_WHITE_TR_GREEN_BL_RED_BR_BLUE
 POST_STABLE_RAIL_SHARED_EN_RESET=RTS_ONLY_NO_FLASH_NO_DTR_GPIO0
 COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED
-CONTROLLED_COLDSTART_RETEST=FAIL
-CONTROLLED_COLDSTART_COMPLETED=1_OF_3
-CONTROLLED_COLDSTART_1_OFF_TIME_SECONDS=APPROX_30
-CONTROLLED_COLDSTART_1_BROWNOUT=REPRODUCED
-CONTROLLED_COLDSTART_1_DISPLAY=ONLY_WHITE
+HISTORICAL_NORMAL_COLDSTART_RETEST=FAIL
+HISTORICAL_NORMAL_COLDSTART_OFF_TIME_SECONDS=APPROX_30
+HISTORICAL_NORMAL_COLDSTART_BROWNOUT=REPRODUCED
+HISTORICAL_NORMAL_COLDSTART_DISPLAY=ONLY_WHITE
+DELAYED_EN_POWERON_RETEST=PASS_3_OF_3
+DELAYED_EN_POWERON_OFF_TIME=AT_LEAST_10_SECONDS_EACH
+DELAYED_EN_POWERON_SEQUENCE=RTS_ASSERTED_BEFORE_POWER_ON_HOLD_1S_THEN_RELEASE
+DELAYED_EN_BROWNOUT_MARKER=NOT_OBSERVED_RUNS_1_TO_3
+DELAYED_EN_RUN_1_DISPLAY=PATTERN_PASS
+DELAYED_EN_RUN_2_DISPLAY=PATTERN_PASS
+DELAYED_EN_RUN_3_DISPLAY=PATTERN_PASS
 HARDWARE_SPIKE_STAGE_2=FAILED
 STAGE_2=FAILED
 STAGE_3=NOT_RUN
@@ -135,27 +144,69 @@ Fehlerklasse `POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED`; sie beweist keine
 konkrete Versorgungskomponente und ändert `COLDSTART_ROOT_CAUSE=UNDETERMINED`
 nicht.
 
-Anschließend wurde genau ein kontrollierter Kaltstart mit unveränderter
+Anschließend wurde historisch genau ein normaler kontrollierter Kaltstart mit unveränderter
 Verdrahtung, demselben offiziellen IRQ-Smoke und actor-free Bedingungen
 ausgeführt. Die Auszeit betrug nach Owner-Angabe ungefähr 30 Sekunden. Der
 UART zeigte erneut den Brownout-Marker; das Display blieb weiß. Deshalb wurde
-der definierte Dreier-Retest nach Lauf 1 beendet:
+der damalige Dreier-Retest nach Lauf 1 beendet:
 
 ```text
-CONTROLLED_COLDSTART_RETEST=FAIL
-CONTROLLED_COLDSTART_COMPLETED=1_OF_3
-CONTROLLED_COLDSTART_1_OFF_TIME_SECONDS=APPROX_30
-CONTROLLED_COLDSTART_1_BROWNOUT=REPRODUCED
-CONTROLLED_COLDSTART_1_DISPLAY=ONLY_WHITE
-CONTROLLED_COLDSTART_1_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
-CONTROLLED_COLDSTART_2_TO_3=NOT_RUN_AFTER_FAILURE
+HISTORICAL_NORMAL_COLDSTART_RETEST=FAIL
+HISTORICAL_NORMAL_COLDSTART_OFF_TIME_SECONDS=APPROX_30
+HISTORICAL_NORMAL_COLDSTART_BROWNOUT=REPRODUCED
+HISTORICAL_NORMAL_COLDSTART_DISPLAY=ONLY_WHITE
+HISTORICAL_NORMAL_COLDSTART_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
+HISTORICAL_NORMAL_COLDSTART_BROWNOUT_TIMING=POST_POWER_ON_BOOT_CAPTURE_EXACT_OFFSET_NOT_INSTRUMENTED
 COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED
 COLDSTART_ROOT_CAUSE=UNDETERMINED
 ```
 
-Es wurden keine weiteren Power-Cycles, keine generellen Messungen und keine
-Produktkorrektur begonnen. Stage 2 bleibt `FAILED`; Stage 3 und Stage 4
-bleiben `NOT_RUN`.
+Dieser historische Brownout-Marker wurde zeitlich nur dem Boot-Capture nach
+Wiederkehr der Versorgung zugeordnet; ein exakter Millisekundenabstand zum
+Power-On wurde nicht erfasst. Der Marker allein wird nicht als bewiesene
+Startup-Ursache behandelt.
+
+### Verzögerter EN-Power-On-Retest
+
+Die Harnessquelle wurde vor dem Retest direkt geprüft. In
+`/tmp/issue31-stage2-smoke/main/main.cpp` steht
+`esp_lcd_panel_reset(panel)` unmittelbar vor
+`esp_lcd_panel_init(panel)`. Der Harness setzt
+`panel_config.reset_gpio_num=GPIO_NUM_NC`; der physische Panel-Reset bleibt
+damit der unveränderte gemeinsame Pfad `MSP2807_RESET -> EN_CHIP_PU`.
+
+Für den diagnostischen Retest wurde der offizielle IRQ-Smoke unverändert
+verwendet. Vor jedem Power-On wurde über den bereits bewiesenen FT232-RTS-
+Pfad EN LOW gehalten, die Versorgung mindestens 10 Sekunden ausgeschaltet,
+nach dem Einschalten diagnostisch 1 Sekunde gewartet und EN anschließend
+freigegeben. DTR/GPIO0 blieben unbenutzt, es wurde nicht geflasht und die
+Versorgung/SSOT blieb unverändert.
+
+```text
+SMOKE_PANEL_RESET_PATH=PASS
+PANEL_RESET_BEFORE_INIT=YES
+PANEL_RESET_GPIO_NUM=GPIO_NUM_NC
+DELAYED_EN_POWERON_RETEST=PASS_3_OF_3
+DELAYED_EN_POWERON_OFF_TIME=AT_LEAST_10_SECONDS_EACH
+DELAYED_EN_POWERON_SEQUENCE=RTS_ASSERTED_BEFORE_POWER_ON_HOLD_1S_THEN_RELEASE
+DELAYED_EN_BROWNOUT_MARKER=NOT_OBSERVED_RUNS_1_TO_3
+DELAYED_EN_RUN_1_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
+DELAYED_EN_RUN_1_DISPLAY=PATTERN_PASS
+DELAYED_EN_RUN_2_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
+DELAYED_EN_RUN_2_DISPLAY=PATTERN_PASS
+DELAYED_EN_RUN_3_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
+DELAYED_EN_RUN_3_DISPLAY=PATTERN_PASS
+COLDSTART_ROOT_CAUSE=UNDETERMINED
+```
+
+In allen drei verzögerten Läufen wurde im vollständigen UART-Fenster vom
+Power-On über Boot, Panel-Init und erste Draw-Ausgabe kein Brownout-Marker
+beobachtet; alle drei Owner-Sichtprüfungen bestätigten das erwartete Muster.
+Die verzögerte EN-Sequenz ist damit `PASS_3_OF_3`, beweist aber keine konkrete
+Root Cause für die historische normale Kaltstartabweichung. Es wurden keine
+Hardware-/SSOT-Änderung, keine Produktkorrektur und keine Stage-3-/Stage-4-
+Arbeit begonnen. Stage 2 bleibt wegen der historischen normalen
+Kaltstartabweichung `FAILED`.
 
 ### Historischer Kaltstart-Konvergenz-Retest
 
