@@ -284,14 +284,24 @@ Webpfad zur Verfügung.
 - Der Initialwert ist standardmäßig passwortgeschützt und muss bewusst
   eingerichtet werden. Deaktivierung ist eine geschützte, warnende und
   bestätigungspflichtige Mutation; sie ist kein anonymer Dauerzugang.
-- Die minimale und maximale Eingabepolicy ist in dieser Planrevision noch
-  nicht stillschweigend kanonisiert: `WEB_PASSWORD_MIN_LENGTH=
-  OWNER_DECISION_REQUIRED` und `WEB_PASSWORD_MAX_UTF8_BYTES=
-  OWNER_DECISION_REQUIRED`. Leere, nur aus Whitespace bestehende und nicht
-  vollständig darstellbare Eingaben werden unabhängig davon abgelehnt. Die
-  Policy ist keine Verschlüsselung und darf nicht durch den Browser ersetzt
-  werden; die Umsetzung bleibt bis zur Ownerentscheidung für diese beiden
-  Grenzen blockiert.
+- Die Ownerentscheidung vom 2026-09-21 ist kanonisch in
+  `docs/WEB_UI.md` festgehalten und gilt für R1:
+  ```text
+  WEB_PASSWORD_MIN_LENGTH=15_CODEPOINTS
+  WEB_PASSWORD_MAX_LENGTH=64_CODEPOINTS
+  WEB_PASSWORD_MAX_UTF8_BYTES=256
+  PASSWORD_COMPOSITION_RULES=NO
+  PASSWORD_PASTE_ALLOWED=YES
+  PASSWORD_MANAGER_ALLOWED=YES
+  PASSWORD_TRUNCATION=NO
+  ```
+  Die Länge wird in Unicode-Codepoints über einer vollständig gültigen UTF-8-
+  Eingabe bewertet; zugleich gilt die 256-Byte-Obergrenze. Leerzeichen und
+  Unicode-Zeichen sind grundsätzlich erlaubt, leere Eingaben nicht. Es gibt
+  keine Zeichenklassenpflicht und kein stilles Abschneiden. Die Zahlen
+  orientieren sich an NIST SP 800-63B-4, sind aber keine Behauptung
+  vollständiger NIST-Konformität; direkter lokaler HTTP-Betrieb bleibt die
+  dokumentierte Transportgrenze.
 
 ### 3.2 Passwortschutz bewusst deaktiviert
 
@@ -877,7 +887,7 @@ führen:
 |---|---|
 | Baseline | `BASE_SHA`, ESP-IDF-Commit, C++17, 4 MB, kein PSRAM, beide Profile |
 | Erstprovisionierung | aktuelle Epoch mit positivem `UNPROVISIONED`-Root -> Bootstrap erlaubt; korrupter Auth-Record, unsupported Schema, indeterminate Commit/Readback oder zuvor provisionierter fehlender Authzustand -> `AUTH_RECOVERY_REQUIRED` und Bootstrap verboten; Factory Reset/neue Epoch -> definierter unprovisionierter Zustand |
-| Login | korrekt/falsch, leere/zu lange/Whitespace-Eingabe, sessiongebundener CSRF-Handoff ohne URL-/Log-Secret |
+| Login | korrekt/falsch; 14/15/64/65 Unicode-Codepoints; UTF-8 bei 255/256/>256 Bytes; Unicode/Leerzeichen; keine Trunkierung/Kompositionspflicht; Passwortmanager/Paste; sessiongebundener CSRF-Handoff ohne URL-/Log-Secret |
 | Passwort-Lockout | 5 Fehler, 30 s, exponentielle Blöcke bis 15 min, aktiver Lockout ohne KDF/Write, Fehler erst nach Write/Readback, Erfolg resetet atomar |
 | Lockout-Recovery | Neustart bei aktivem Lockout, Persistenz-/Readbackfehler, kein Bypass |
 | Service-PIN | korrekt/falsch, 3 Fehler, 30 s, exponentiell bis 30 min, global |
@@ -953,7 +963,9 @@ Plan-only werden geändert:
 1. diese Datei als vollständige versionierte Planrevision;
 2. `docs/ROADMAP.md` minimal auf `main @ 1f1755e…`, gemergtes #164 und den
    neuen #27-Plan-/Ownerstatus synchronisieren;
-3. der PR-Body und genau ein aktueller `SESSION HANDOVER` als GitHub-
+3. `docs/WEB_UI.md` ausschließlich um die am 2026-09-21 getroffene
+   Ownerentscheidung zur R1-Webpasswortpolicy synchronisieren;
+4. der PR-Body und genau ein aktueller `SESSION HANDOVER` als GitHub-
    Metadaten.
 
 Nicht geändert werden in dieser Runde Produktcode, CMake, Lockfiles,
@@ -998,19 +1010,20 @@ ESP-IDF-Build-/Ressourcennachweise sind davon unabhängig planbar.
 ## 14. Offene Ownerentscheidungen nach vollständiger Analyse
 
 Es verbleiben nur technische Freigabepunkte, die durch die verbindlichen
-Quellen noch nicht numerisch entschieden sind:
+Quellen noch nicht abschließend entschieden oder gemessen sind:
 
 1. Ownerfreigabe dieser exakten Plan-SHA als Voraussetzung für jede
    Implementation.
-2. Ownerentscheidung für `WEB_PASSWORD_MIN_LENGTH` und
-   `WEB_PASSWORD_MAX_UTF8_BYTES`; bis dahin keine stillschweigende Wahl von
-   `12`/`128` oder anderen Grenzen.
-3. nach v6.1-KDF-Messung: finaler PBKDF2-/mbedTLS-Work-Factor und eventuelle
+2. nach v6.1-KDF-Messung: finaler PBKDF2-/mbedTLS-Work-Factor und eventuelle
    dokumentierte Rest-Risiken, falls Plattformverschlüsselung weiterhin nicht
    aktiviert ist;
-4. finale Messbestätigung der maximal vier parallelen Websessions, Asset-/DTO-
+3. finale Messbestätigung der maximal vier parallelen Websessions, Asset-/DTO-
    Grenzen, Pollinglast und KDF-Laufzeit gegen die bestehende Ressourcen-
    baseline.
+
+Die Passwortgrenzen sind keine offene Ownerentscheidung mehr:
+`15..64 Unicode-Codepoints`, maximal `256 UTF-8-Bytes`, keine
+Kompositionsregeln oder Trunkierung, Passwortmanager/Paste erlaubt.
 
 Diese Punkte sind keine Einladung zu Scope-Erweiterung. Ohne eine notwendige
 Freigabe oder einen reproduzierbaren Nachweis bleibt der betroffene Teil
@@ -1034,5 +1047,6 @@ ISSUE31_REQUIRED=NO
 ISSUE31_IMPLEMENTATION=EXCLUDED
 PRODUCT_IMPLEMENTATION=NOT_STARTED
 ACTUATOR_RELEASE=NO
+PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
 OWNER_PLAN_APPROVAL_REQUIRED=YES
 ```
