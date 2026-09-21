@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-17
+Stand: 2026-09-21
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -32,8 +32,9 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `BASE_SHA=c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_REVISION_REQUIRED=YES`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR=165_DRAFT`; `PRODUCTIVE_IMPLEMENTATION=BUILDER_COMPLETE`; `ACTUATOR_RELEASE=NO`. | Umsetzung gemaess freigegebenem Plan `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e` abgeschlossen; Builder-Self-Check PASS; naechstes Gate: unabhaengiger Full Review |
-| 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PR158_SOURCE_HEAD=c9b7730531a6c3d5a450e1ee8dbae661bf29b686`; `BASE_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55`; `APPROVED_PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c`; `PLAN_STATUS=APPROVED`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PRODUCTIVE_CONNECTIVITY_PERSISTENCE=IMPLEMENTATION_IN_PROGRESS`; `PRODUCTIVE_IMPLEMENTATION=IN_PROGRESS`; `ACTUATOR_RELEASE=NO`; `IMPLEMENTATION=SPIKE_ONLY_EVIDENCE`. Die Kandidatenevaluation ist abgeschlossen; die weitere #89-Arbeit ist beendet und die produktive Integration in #164 laeuft gemaess freigegebenem Plan. | Keine weitere #89-Implementation; Owner kann den Abschluss von Issue #89 pruefen |
+| 0 | Issue #164 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `ISSUE164_STATUS=OPEN_PENDING_ISSUE31_PHYSICAL_MODE_ENTRY`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `APPROVED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `IMPLEMENTATION=MERGED`; `FINAL_HARDWARE_CLIENT_EVIDENCE=PENDING`; `MODE_ENTRY_PATH=BLOCKED_BY_DEFERRED_RENDERER`; `ACTUATOR_RELEASE=NO`. | Reale AP_ONLY/HOME_WIFI-/Android-/mDNS-/Direct-IP-/Boot-/Reconnect-Evidence nach physischem Modus-Einstieg aus #31; keine historische #89-Evidence umetikettieren |
+| 1 | Issue #27 – Web-API, Weboberflaeche, Anmeldung und Bedienkonflikte | `PLAN_FIRST=YES`; `BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_STATUS=OWNER_APPROVAL_REQUIRED`; `PLAN_SHA=EXACT_COMMIT_RECORDED_IN_PR_AND_HANDOVER`; `IMPLEMENTATION=NOT_STARTED`; `LIVE_UPDATE_SELECTION=BOUNDED_POLLING`; `ISSUE31_REQUIRED=NO`; `ACTUATOR_RELEASE=NO`. | Ownerfreigabe der exakten neuen Plan-SHA; danach Umsetzung auf dem gemergten #164-HTTP-/WLAN-Fundament und den #25/#26-Contracts, ohne Display-/Touch-/LVGL-Scope |
+| 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `PR158_SOURCE_HEAD=c9b7730531a6c3d5a450e1ee8dbae661bf29b686`; `BASE_SHA=7029df3997bb92e60379eb218f1894f86c5f7d55`; `APPROVED_PLAN_SHA=74474268391b47718aa3c751d16a0d5e815efc5c`; `PLAN_STATUS=APPROVED`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a35615e4a1d`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PRODUCTIVE_CONNECTIVITY_PERSISTENCE=MERGED_IN_ISSUE164`; `PRODUCTIVE_IMPLEMENTATION=MERGED_IN_ISSUE164`; `ACTUATOR_RELEASE=NO`; `IMPLEMENTATION=SPIKE_ONLY_EVIDENCE`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration ist mit PR #165 in #164 gemergt. | Keine weitere #89-Implementation; die reale #164-Abschluss-Evidence bleibt offen |
 | 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `BOARD_SIDE_STAGE0_EVIDENCE=PASS`; `DISPLAY_TOUCH_STAGE0=BLOCKED_HARDWARE_NOT_CONNECTED`; `IMPLEMENTATION=NOT_STARTED`; `IMPLEMENTATION_BLOCKER=DISPLAY_TOUCH_HARDWARE_NOT_CONNECTED`; `ACTUATOR_RELEASE=NO`. | SSOT-/Verdrahtungskonformität, Controller-/SPI-/CS-/Reset-/Backlight-/Touch-/Wake-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise, Ressourcen-/Lizenznachweis und reale Funktionstests ohne generelles Pegelmessgate |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -56,13 +57,14 @@ Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
 Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
 mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
-ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
-blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
-abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
-Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Die reale
+umfasst nach dem Merge von PR #143, PR #153 und PR #165 zwei getrennte Scopes:
+Issue #27 kann auf dem gemergten #164-HTTP-/WLAN-Fundament und den #25/#26-
+Contracts ohne #31 umgesetzt werden; Issue #31 bleibt der reale, derzeit
+hardwareblockierte Renderer-/Display-/Touch-Scope. Die reale
 Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; fehlende Hardware- und
-Commissioning-Nachweise werden nicht vorweggenommen. Issue #154 ist davon
-getrennte parallele Governance-Arbeit und ändert keine Fachlogik.
+Commissioning-Nachweise werden nicht vorweggenommen. Reale #164-WLAN-/Client-
+Evidence wartet weiterhin auf den physischen Modus-Einstieg aus #31. Issue #154
+ist davon getrennte parallele Governance-Arbeit und ändert keine Fachlogik.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
@@ -174,6 +176,11 @@ ist geschlossene historische Persistenzprovenienz.
   gemergt; #152 ist mit PR #153 gemergt und geschlossen; #26 ist mit PR #143
   gemergt und geschlossen. Danach folgt #31 für die echte Device Shell,
   Display- und Touch-Bedienung auf dem gemergten #25-/#26-Vertrag.
+- #27 ist nach dem Merge von PR #165 ein zulässiger unabhängiger Web-/API-
+  Scope. Er verwendet den einzigen #164-HTTP-Lifecycle und die bestehenden
+  #25/#26-Contracts; #31-Hardware, LVGL und Touch-/Display-Evidence sind keine
+  Umsetzungsvoraussetzung. Reale Browser-/WLAN-Evidence bleibt vom offenen
+  #164-Connectivity-Gate abhängig.
 - #152 bleibt der abgeschlossene owning Scope für den weiterhin verbindlichen
   manuellen Zeit-/Temperaturlauf. #26 konsumiert diesen gemergten Vertrag nur.
 - #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
@@ -211,8 +218,9 @@ ist geschlossene historische Persistenzprovenienz.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
 - Issue #89 (WLAN-Onboarding-Evaluation) ist mit der Owner-Kandidatenauswahl
-  abgeschlossen; die separate R1-Integration ist in Issue #164 mit einem
-  eigenen, noch freizugebenden Plan vorbereitet. Issue #90 ist geschlossen.
+  abgeschlossen; die native R1-Integration ist mit PR #165 in Issue #164 auf
+  `main` gemergt. Die reale Abschluss-Evidence bleibt dort offen. Issue #90
+  ist geschlossen.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
