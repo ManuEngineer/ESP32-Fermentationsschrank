@@ -9,20 +9,22 @@ Routen, Webassets, Tests, Abhängigkeiten, Persistenzschemas oder
 Hardwarepfade implementiert.
 
 Die Live-Prüfung wurde am 2026-09-21 in einem frischen Arbeitsbaum gegen
-GitHub-`origin/main` durchgeführt. Es gibt noch keinen bestehenden
-Issue-#27-Plan und keinen offenen PR für Issue #27. Die frühere Issue-Beschreibung
-enthielt noch die historische ESP-IDF-6.0.2-Bezeichnung; dieser Plan verwendet
-ausschließlich den nach #159 und #165 kanonischen ESP-IDF-6.1-Stand.
+GitHub-`origin/main` durchgeführt. Diese Revision korrigiert den bestehenden
+Draft-Plan in PR #167 nach der unabhängigen Planprüfung; die frühere
+Issue-Beschreibung enthielt noch die historische ESP-IDF-6.0.2-Bezeichnung.
+Dieser Plan verwendet ausschließlich den nach #159 und #165 kanonischen
+ESP-IDF-6.1-Stand.
 
 ```text
 ISSUE=27
-PR=NEW_DRAFT_AFTER_PLAN_COMMIT
+PR=167
+PR_STATUS=DRAFT
 BASE_BRANCH=main
 BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16
 CURRENT_HEAD=1f1755e5e706fb668472920545b5302fcef1df16
 PLAN_REVISION=FULL_WEB_API_AUTH_REVALIDATION_ON_POST_165_MAIN
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
-PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_COMMIT
+PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_IMPLEMENTATION=NOT_STARTED
 ESP_IDF_VERSION=v6.1.0
@@ -65,6 +67,10 @@ Schritt.
 - Issue #31 ist nicht Teil dieser Arbeit. Weder Display-/Touchhardware noch
   LVGL, SPI, Controller, Kalibrierung, Fonts oder ein Renderer werden für #27
   vorausgesetzt oder implementiert.
+- Die historische #89-Provenienz in `docs/ROADMAP.md` bleibt unverändert und
+  verwendet exakt `PREVIOUS_APPROVED_PLAN_SHA=524dbaaf34f2350f407872640124a356155e4a1d`;
+  sie wird nicht mit der aktuellen #27-Planrevision vermischt oder rückwirkend
+  umetikettiert.
 - Issue #164 bleibt der Besitzer der WLAN-/Setup-Wahrheit und kann für die
   vollständige reale WLAN-Evidence weiterhin ein eigenes Gate haben. Das ist
   keine Rechtfertigung für einen zweiten Connectivity- oder HTTP-Vertrag in
@@ -91,6 +97,54 @@ Es gibt aktuell keine normalen Webassets, keine Websessionverwaltung, keinen
 Webpasswort-Verifier, keine Authentication-Domäne und keinen normalen
 Web-API-Routenadapter. Diese Lücken sind der eigentliche #27-Scope; sie
 werden nicht durch eine zweite HTTP-, UI- oder Persistenzplattform gefüllt.
+
+#### 1.2.1 Bounded HTTP-Metadatenvertrag vor der Umsetzung
+
+Der vorhandene plattformneutrale HTTP-Vertrag wird vor jeder #27-Route um
+eine kleine typisierte Metadatenstruktur erweitert. Es gibt keine allgemeine
+Header-Map und kein generisches Middleware-Framework. Die Request-Metadaten
+tragen ausschließlich diese einzelnen Felder: `Host`, `Content-Type`,
+`Cookie`, `X-CSRF-Token`, `X-UI-Mutation-Id`, `Origin`, `Referer` und
+`Sec-Fetch-Site`. Die Response-Metadaten tragen ausschließlich `Set-Cookie`
+und `Retry-After`; Statuscode, Response-Content-Type und Body bleiben Teil des
+bestehenden `HttpResponse`.
+
+Die Grenzen sind fest und werden bereits im ESP-IDF-Adapter geprüft: maximal
+acht bekannte Request-Metadatenfelder, höchstens ein Vorkommen je Feld,
+insgesamt 2048 Bytes und je Feld maximal `Host=256`, `Content-Type=64`,
+`Cookie=512`, `X-CSRF-Token=64`, `X-UI-Mutation-Id=32`, `Origin=256`,
+`Referer=512` und `Sec-Fetch-Site=32` Bytes. `Set-Cookie` ist auf 512 und
+`Retry-After` auf acht ASCII-Ziffern begrenzt. NUL, CR, LF, Steuerzeichen,
+ungültige Kodierung, Duplikate und Überschreitung werden vor dem Route-Sink
+fail-closed mit einer passenden 400-/431-Antwort beendet. Es gibt keinen
+Fallback auf ungeprüfte Rohheader.
+
+Der Adapter übersetzt mindestens die bereits verwendeten Statuscodes 200,
+400, 404, 409, 422 und 503 sowie zusätzlich 204, 401, 403, 405, 413, 415,
+429 und 431 in gültige ESP-IDF-HTTP-Antworten. `401` ist für fehlende oder
+ungültige Authentisierung, `403` für verweigerte CSRF-/Origin-/Fetch-/Policy-
+Prüfung, `405` für falsche Methode, `413` für zu große Bodies, `415` für
+falschen Content-Type, `429` für aktiven Lockout und `431` für ungültige oder
+zu große Security-Metadaten reserviert; fachlicher Konflikt bleibt `409`,
+persistente Nichtverfügbarkeit `503`. Auth-/Policyfehler dürfen nicht als
+pauschaler `500` erscheinen.
+
+CSRF wird nach erfolgreicher Sessionbildung über eine bounded JSON-Antwort
+ohne weitere Secrets mit dem sessiongebundenen 16-Byte-Token in 32
+kleingeschriebenen
+Hexzeichen an den same-origin Browser übergeben; alternativ darf derselbe
+Handoff in der erfolgreichen Loginantwort erfolgen. Der Token steht weder in
+URL, Cookie, Log, Diagnose, Export noch im persistenten Auth-Record. Die
+Session-ID bleibt ausschließlich im `HttpOnly; SameSite=Strict; Path=/`-
+Cookie; das `Set-Cookie`-Feld enthält keine Session- oder CSRF-Daten außerhalb
+des vorgesehenen Cookiewerts und nie ein `Domain`-Attribut. Ein späterer
+TLS-Transport darf zusätzlich `Secure` setzen.
+
+Frontend-Requests verwenden relative, dokumentbasierte URLs und keine
+festen Scheme-/Host-/Root-Annahmen, damit ein explizit konfigurierter lokaler
+Reverse-Proxy-Pfad möglich bleibt. `Forwarded` und `X-Forwarded-*` gehören
+nicht zur Allowlist und werden standardmäßig nicht vertraut; eine spätere
+Proxy-Unterstützung ist nur mit eigener expliziter Konfiguration zulässig.
 
 ### 1.3 Verbindliche Quellen
 
@@ -168,6 +222,33 @@ Regelung, Persistenz-Recovery oder Safety nicht beenden.
 
 ## 3. Authentisierung, Sessions und Berechtigungen
 
+### 3.0 Erstprovisionierung und unprovisionierter Zustand
+
+Ein fehlender oder ungültiger Authentication-Record in der aktuellen
+`StorageEpoch` bedeutet ausdrücklich `AUTH_BOOTSTRAP_UNPROVISIONED` und nicht
+„Passwortschutz bewusst deaktiviert“. In diesem Zustand gibt es keine normale
+Websession, keinen anonymen Normalbetrieb und keinen LAN-Erstschreiber.
+Normale Web-/API-Routen liefern nur eine feste, secret-freie
+`503 AUTH_NOT_PROVISIONED`-Antwort bzw. eine statische lokale
+„Provisionierung erforderlich“-Seite ohne mutierenden Webpfad.
+
+Die erste Einrichtung von Webpasswort und Service-PIN erfolgt gemeinsam über
+einen typisierten Bootstrap-Command an der bestehenden lokalen,
+rendererunabhängigen Application-/UI-Grenze. Er akzeptiert ausschließlich
+`UiSurface::LocalDisplay` mit expliziter lokaler Bestätigung; `WebInterface`
+und `WebService` werden vom Application-Eigentümer abgewiesen. Damit kann der
+Pfad ohne #31 über native Commands, einen deterministischen Store und
+Testdoubles implementiert und getestet werden, ohne einem beliebigen
+LAN-Absender Erstvertrauen zu geben. Es gibt weder Factory-PIN noch
+Defaultpasswort.
+
+Webpasswort und Service-PIN werden in einem atomaren Authentication-Record
+angelegt. Ein Factory Reset erhöht die bestehende `StorageEpoch`, invalidiert
+den alten Auth-Record und alle Sessions logisch und führt erneut in
+`AUTH_BOOTSTRAP_UNPROVISIONED`; kein alter Epoch-Record und kein Fallback-
+Credential wird wieder aktiviert. Erst nach erfolgreichem Readback-Commit
+steht der normale Webpfad zur Verfügung.
+
 ### 3.1 Normales Webpasswort
 
 - Ein gemeinsames normales Webpasswort, kein Konto-, Benutzer-, Rollen- oder
@@ -188,10 +269,14 @@ Regelung, Persistenz-Recovery oder Safety nicht beenden.
 - Der Initialwert ist standardmäßig passwortgeschützt und muss bewusst
   eingerichtet werden. Deaktivierung ist eine geschützte, warnende und
   bestätigungspflichtige Mutation; sie ist kein anonymer Dauerzugang.
-- Die minimale Eingabepolicy wird für R1 auf mindestens 12 Zeichen und maximal
-  128 UTF-8-Bytes festgelegt; leere, nur aus Whitespace bestehende und nicht
-  vollständig darstellbare Eingaben werden abgelehnt. Die Policy ist keine
-  Verschlüsselung und darf nicht durch den Browser ersetzt werden.
+- Die minimale und maximale Eingabepolicy ist in dieser Planrevision noch
+  nicht stillschweigend kanonisiert: `WEB_PASSWORD_MIN_LENGTH=
+  OWNER_DECISION_REQUIRED` und `WEB_PASSWORD_MAX_UTF8_BYTES=
+  OWNER_DECISION_REQUIRED`. Leere, nur aus Whitespace bestehende und nicht
+  vollständig darstellbare Eingaben werden unabhängig davon abgelehnt. Die
+  Policy ist keine Verschlüsselung und darf nicht durch den Browser ersetzt
+  werden; die Umsetzung bleibt bis zur Ownerentscheidung für diese beiden
+  Grenzen blockiert.
 
 ### 3.2 Passwortschutz bewusst deaktiviert
 
@@ -276,6 +361,24 @@ Persistenzmechanismus mit eigenen Feldern verwendet:
   widerruft mindestens alle Web-Servicefreigaben und erfordert erneute
   Authentisierung.
 
+Die Prüf- und Schreibreihenfolge ist für jeden falschen Versuch verbindlich:
+
+1. aktiven Lockout aus dem kanonischen Zustand prüfen; während eines aktiven
+   Lockouts gibt es keine KDF-Arbeit und keinen Persistenzschreibvorgang, nur
+   die aus dem kanonischen Zustand berechnete Restdauer und `429`;
+2. andernfalls Credential prüfen und bei einem Fehlversuch den neuen Zähler,
+   die Sperrstufe und den Lockoutzustand berechnen;
+3. diesen Zustand atomar persistieren, exakt zurücklesen und vollständig
+   validieren;
+4. erst danach den Fehler abschließen und die Antwort senden.
+
+Ein erfolgreicher Versuch setzt Zähler/Sperrstufe nach demselben
+Write--Readback--Validate-Muster zurück und erzeugt erst danach eine Session
+oder Servicefreigabe. `CommitOutcomeUnknown` oder ein Readbackfehler führt
+statt einer scheinbar beantworteten Fehlanmeldung zu
+`RecoveryRequired`/`503`, widerruft Berechtigungen und darf den fehlenden
+Fehlversuch nach einem unmittelbaren Neustart nicht verlieren.
+
 ## 4. Authentication-Persistenz als erster realer Consumer
 
 ### 4.1 Speichergrenze
@@ -285,19 +388,32 @@ Backend. Es gibt weder einen zweiten physischen Store, eine zweite NVS-
 Partition, LittleFS nur für Auth noch eine Auth-Wahrheit in
 `UserConfiguration`/`ServiceConfiguration`.
 
-Der Implementierungsschnitt führt nach der bestätigten Recordtyp-Prüfung einen
-eigenen, typisierten V1-Record ein, vorgesehen als:
+Der Implementierungsschnitt führt einen eigenen, typisierten V1-Record ein:
 
 ```text
 StateStoreKey=auth0
-RecordTypeId=10   # nur gültig, wenn die Implementierung den freien Raum erneut prüft
+RecordTypeId=10
 SchemaVersion=1
 StorageEpoch=current active epoch
 ```
 
-Die konkrete Nummer darf nicht still verwendet werden, falls eine zwischenzeitliche
-Main-Änderung sie belegt; dann stoppt der Builder mit einem planrelevanten
-Konflikt statt umzudeuten. Der Record enthält nur technische
+Die Baseline-Prüfung auf `main@1f1755e5e706fb668472920545b5302fcef1df16`
+ergibt für `auth0` und `RecordTypeId=10` keine Key- oder Recordtyp-Kollision.
+Diese Zuordnung ist Bestandteil dieser Planrevision und wird nicht erst nach
+Beginn der Umsetzung entschieden:
+
+```text
+AUTH_STATE_STORE_KEY=auth0
+AUTH_RECORD_TYPE_ID=10
+AUTH_SCHEMA_VERSION=1
+AUTH_KEY_COLLISION=NONE_ON_BASELINE
+AUTH_RECORD_TYPE_COLLISION=NONE_ON_BASELINE
+```
+
+Vor dem ersten Auth-Commit wird nur noch verifiziert, dass die Implementierung
+auf genau dieser unveränderten Baseline arbeitet. Eine spätere Belegung auf
+`main` wäre ein Baseline-/Plan-Konflikt und erfordert Planrevision, nicht eine
+Entscheidung des Builders. Der Record enthält nur technische
 Authentication-Daten:
 
 - `webPasswordEnabled`;
@@ -370,8 +486,9 @@ Folgezuständen, Passwort-/PIN-/Modusänderungen und Fachkommandos, müssen:
 - den passenden begrenzten Content-Type verwenden, für JSON
   `application/json`;
 - bei bestehender Session den Header `X-CSRF-Token` mit einem mindestens
-  128-Bit-sitzungsgebundenen Token tragen; der Token steht nie in URL, Cookie,
-  Antwortbody, Log oder Export;
+  128-Bit-sitzungsgebundenen Token tragen; der Token wird ausschließlich über
+  den in Abschnitt 1.2.1 beschriebenen bounded same-origin-Response-Handoff
+  bereitgestellt und steht nie in URL, Cookie, Log oder Export;
 - `Origin`, ersatzweise `Referer`, gegen den lokalen Host/Scheme-Kontext
   prüfen und bei vorhandenen Fetch-Metadata-Headern eine fremde Site ablehnen;
 - die erwartete fachliche Revision bzw. den erwarteten State-/Run-/Message- /
@@ -380,8 +497,10 @@ Folgezuständen, Passwort-/PIN-/Modusänderungen und Fachkommandos, müssen:
   laufen.
 
 Login ohne bestehende Session darf keinen CSRF-Token voraussetzen, muss aber
-Methode, Content-Type, Origin-/Referer-/Fetch-Metadata-Regeln, Bodygrenze und
-Lockout einhalten. Loginantworten erzeugen keine wiederverwendbaren Tokens.
+  Methode, Content-Type, Origin-/Referer-/Fetch-Metadata-Regeln, Bodygrenze und
+  Lockout einhalten. Eine Loginantwort darf nur den für die neu erzeugte
+  Session bestimmten CSRF-Handoff aus Abschnitt 1.2.1 enthalten; sie erzeugt
+  keine URL-, persistenten oder sessionübergreifend wiederverwendbaren Tokens.
 Kein CORS-Wildcard, keine URL-Credentials und keine URL-Session.
 
 ### 5.3 Öffentliche read-only API
@@ -424,18 +543,20 @@ Der interne Adapter übersetzt nur auf bestehende Commands und Services:
 - Start, Stop, Quittieren, Mute, Abschluss und Recovery über den bestehenden
   Application-/Command-Bridge-Pfad;
 - Serviceaktionen erst nach gültiger sessiongebundener Web-Servicelease und
-  zusätzlicher Bestätigung;
+  zusätzlicher Bestätigung; sie tragen dabei die gemeinsame Quelle
+  `UiSurface::WebService`;
 - Sicherheits-/Fachablehnung wird strukturiert als Ergebnis zurückgegeben,
   nicht in HTTP-Erfolg umgedeutet.
 
-Der aktuelle gemeinsame `CommandSource`-Vertrag unterscheidet im Code
-`LocalDisplay` und `WebInterface`; ein eigener ad-hoc-String `service_web`
-ist unzulässig. Vor produktiven Service-Mutationen wird deshalb im
-Contract-Slice geprüft, ob die bereits vorgesehenen Quellen ausreichen. Falls
-die Protokoll-/Auditsemantik die Unterscheidung verlangt, wird ausschließlich
-eine kleine, von #25/#26 ownerseitig mitgetragene Erweiterung des gemeinsamen
-Source-Typs vorgenommen. #27 erhält weder eine parallele Command-Quelle noch
-eine zweite Audit-/Revisionstruth.
+Der gemeinsame Contract-Slice erweitert `UiSurface` um `WebService` und die
+zugehörigen gemeinsamen Provenienztypen um `ServiceWeb`; ein ad-hoc-String
+`service_web` und eine private Web-Quelle sind unzulässig. Die bestehenden
+Wirewerte bleiben stabil: `CommandSource::ServiceWeb` erhält den nächsten
+freien Wert `3`, `RunChangeSource::ServiceWeb` den nächsten freien Wert `4`
+(nach `Recovery=3`) und `ChangeOriginKind::ServiceWeb` den nächsten freien
+Wert `4`. Mapping, Validierung und Persistenzcodec werden gemeinsam mit den
+#25/#26-Contracts aktualisiert. #27 erhält weder eine parallele Command-Quelle
+noch eine zweite Audit-/Revisionstruth.
 
 Jede Mutation bringt Schutz gegen doppelte/retryte Ausführung mit:
 
@@ -447,6 +568,28 @@ Jede Mutation bringt Schutz gegen doppelte/retryte Ausführung mit:
 - stale Revision führt zu `Conflict`/`StateChanged`, nicht zu last-write-wins;
 - Antwort und anschließender Snapshot enthalten den tatsächlichen
   owning outcome.
+
+Für HTTP-Retries führt der Browser bei jedem internen Schreibrequest eine
+sessiongebundene `X-UI-Mutation-Id` aus 16 zufälligen Bytes als 32
+kleingeschriebenen Hexzeichen mit. Sie steht nicht in URL, Body, Log oder
+Persistenz. Der Web-Transport hält pro Session ein festes Ledger mit acht
+Einträgen. Jeder Eintrag enthält ID, einen bounded Fingerprint aus Methode,
+Pfad, Bodylänge/-inhalt und relevanten erwarteten Revisionen sowie den
+secret-freien typisierten Outcome und `InFlight`-/`Completed`-Status.
+
+- Die ID wird vor dem Application-Command reserviert. Ein identischer Retry
+  während `InFlight` liefert deterministisch `409`/`503` ohne zweite
+  Ausführung; ein identischer Retry nach `Completed` liefert exakt denselben
+  owning Outcome zurück.
+- Dieselbe ID mit anderem Fingerprint wird als `409 mutation_id_reused`
+  abgelehnt und erreicht die Anwendung nicht. Fehlende, ungültige oder zu
+  große IDs liefern `400` und mutieren nichts.
+- Ein volles Ledger verdrängt keinen Eintrag: es antwortet fail-closed mit
+  `503 retry_ledger_full`. Einträge enden erst mit Sessionablauf, Logout,
+  Widerruf oder Neustart; der alte Session-Cookie ist nach Neustart ungültig.
+- Die fachliche `CommandId` und deren Persistenz-/Owning-Semantik bleiben
+  ausschließlich Anwendungseigentum. Das HTTP-Ledger korreliert nur die
+  Transportwiederholung.
 
 ## 6. Responsive WebUI, Projektion und Live-Daten
 
@@ -586,6 +729,11 @@ erneute Ownerfreigabe.
 - `fermentation_ui_commands.*`/`run_commands.*` nur dann ändern, wenn die
   bestehende Source-/Service-Web-Auditsemantik den kleinen gemeinsamen
   Contract-Ausbau verlangt; keine private Web-Enum oder Stringquelle.
+- `lib/device_platform/src/device_ui_contracts.hpp` und
+  `fermentation_ui_commands.*` für `UiSurface::WebService`;
+- `run_commands.*`, `run_snapshot.*`, `configuration_graph.*`,
+  `run_persistence_codec.*` und die zugehörigen Tests für den stabilen
+  `ServiceWeb`-Provenienzwert; keine private Web-Enum oder Stringquelle.
 
 ### 8.2 Authentication und Sessions
 
@@ -610,6 +758,12 @@ erneute Ownerfreigabe.
   vollständiger UI-Snapshot für Polling;
 - interne, ausdrücklich nicht öffentliche UI-Write-DTOs mit Auth-/CSRF-/Origin-
   Prüfung und erwarteten Revisionen;
+- `lib/device_platform/src/http_server_lifecycle.hpp` erhält nur den in
+  Abschnitt 1.2.1 definierten bounded Request-/Response-Metadatenvertrag;
+- `lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp` extrahiert
+  und begrenzt die genannten ESP-IDF-Header, weist Response-Status und die
+  beiden typisierten Response-Metadaten zu und leakt keine ESP-IDF-Typen in
+  Application-Contracts;
 - `main/app_main.cpp` und ggf. `lib/fermentation_app/CMakeLists.txt` nur für
   Composition und compile-time Assets; keine Produkt- oder Hardwareänderung;
 - `lib/device_platform_esp_idf` wird nur geändert, falls der bestehende
@@ -639,18 +793,19 @@ führen:
 | Bereich | Nachweis |
 |---|---|
 | Baseline | `BASE_SHA`, ESP-IDF-Commit, C++17, 4 MB, kein PSRAM, beide Profile |
-| Login | korrekt/falsch, leere/zu lange/Whitespace-Eingabe, Passwort nie in Antwort/Log |
-| Passwort-Lockout | 5 Fehler, 30 s, exponentielle Blöcke bis 15 min, Erfolg resetet atomar |
+| Erstprovisionierung | fehlender Auth-Record ist nicht passwordlos, kein LAN-Erstschreiber, LocalDisplay-Bootstrap, atomarer Webpasswort-/PIN-Commit, Factory-Reset zurück zu `AUTH_BOOTSTRAP_UNPROVISIONED` |
+| Login | korrekt/falsch, leere/zu lange/Whitespace-Eingabe, sessiongebundener CSRF-Handoff ohne URL-/Log-Secret |
+| Passwort-Lockout | 5 Fehler, 30 s, exponentielle Blöcke bis 15 min, aktiver Lockout ohne KDF/Write, Fehler erst nach Write/Readback, Erfolg resetet atomar |
 | Lockout-Recovery | Neustart bei aktivem Lockout, Persistenz-/Readbackfehler, kein Bypass |
 | Service-PIN | korrekt/falsch, 3 Fehler, 30 s, exponentiell bis 30 min, global |
 | Service-Weblease | 5 min Inaktivität, 15 min absolut, genau eine Session, zusätzliche Bestätigung |
 | Session | Aktivität vor Timeout, 30-min Inaktivität, 12-h absolut, Logout, Neustartwiderruf |
 | Passwortlos | anonyme Session, Warnung, kein Nutzer/Rollenmodell, Service-PIN bleibt nötig |
 | Widerruf | Passwort-/PIN-/Moduswechsel, Factory Reset, Recovery, keine alte Session |
-| Cookie/CSRF | Cookieflags, gültiger/missing/falscher Token, keine URL-Tokens |
-| Browsergrenze | Methode, Content-Type, Origin, Referer-Ersatz, Fetch-Metadata, CORS-Ablehnung |
+| Cookie/CSRF | Cookieflags, Set-Cookie, gültiger/missing/falscher Token, same-origin Handoff, keine URL-Tokens |
+| Browsergrenze | Methode, Content-Type, Origin, Referer-Ersatz, Fetch-Metadata, fehlende/duplizierte/zu große Header fail-closed, Statusmapping statt 500, CORS-Ablehnung |
 | Revision | stale User-/Program-/Run-/Message-/Network-Revision -> Conflict, kein Überschreiben |
-| Idempotenz | doppelte/retryte Start-/Stop-/Quittier-/Commitanfrage erzeugt höchstens eine Mutation |
+| Idempotenz | verlorene Antwort plus identischer Retry erzeugt höchstens eine Mutation; gleiche ID mit anderem Payload wird abgelehnt; parallele Display-/Webrevision bleibt konfliktfest |
 | Safety | formal gültige Webaktion wird bei fehlender Safety-/Fach-Evidenz abgelehnt |
 | API | `/api/v1/status`, `/temperatures`, `/alerts`, Authmodus, stabile Codes, keine Secrets |
 | API-Grenze | keine offizielle externe Write-Operation in OpenAPI-/Route-/Dokumentationsfläche |
@@ -764,14 +919,13 @@ Quellen noch nicht numerisch entschieden sind:
 
 1. Ownerfreigabe dieser exakten Plan-SHA als Voraussetzung für jede
    Implementation.
-2. nach v6.1-KDF-Messung: finaler PBKDF2-/mbedTLS-Work-Factor und eventuelle
+2. Ownerentscheidung für `WEB_PASSWORD_MIN_LENGTH` und
+   `WEB_PASSWORD_MAX_UTF8_BYTES`; bis dahin keine stillschweigende Wahl von
+   `12`/`128` oder anderen Grenzen.
+3. nach v6.1-KDF-Messung: finaler PBKDF2-/mbedTLS-Work-Factor und eventuelle
    dokumentierte Rest-Risiken, falls Plattformverschlüsselung weiterhin nicht
    aktiviert ist;
-3. Bestätigung der freien `RecordTypeId=10`/`auth0`-Belegung nach dem
-   Implementierungsbeginn, bevor der Recordtyp unveränderlich verwendet wird;
-4. falls Audit-/Journalsemantik es wirklich verlangt: Ownerfreigabe des
-   minimalen gemeinsamen `service_web`-Source-Ausbaus in #25/#26;
-5. finale Messbestätigung der maximal vier parallelen Websessions, Asset-/DTO-
+4. finale Messbestätigung der maximal vier parallelen Websessions, Asset-/DTO-
    Grenzen, Pollinglast und KDF-Laufzeit gegen die bestehende Ressourcen-
    baseline.
 
