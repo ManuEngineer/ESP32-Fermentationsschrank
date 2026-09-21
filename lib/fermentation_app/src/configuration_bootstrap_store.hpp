@@ -59,6 +59,12 @@ class ConfigurationBootstrapStore {
         : store_(store) {}
 
     [[nodiscard]] ConfigurationBootstrapScanResult scan() const;
+    // Schema-3 first-consumer handoff. The caller must have positive
+    // bootstrap/auth evidence; this method only advances the bounded,
+    // sequence-checked record and never interprets NotFound as evidence.
+    [[nodiscard]] ConfigurationBootstrapWriteResult writeAuthDomainHandoff(
+        const LoadedConfigurationBootstrap& expected,
+        AuthDomainHandoffState targetHandoff);
 
    private:
     friend class ConfigurationRecoveryService;

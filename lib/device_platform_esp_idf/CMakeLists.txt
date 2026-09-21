@@ -10,3 +10,10 @@ idf_component_register(
 # haelt gnu++17 (siehe platformio.ini und
 # docs/tasks/issue-72-implementation-plan.md, Abschnitt 5).
 target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
+target_include_directories(
+    ${COMPONENT_LIB}
+    PRIVATE
+        "${IDF_PATH}/components/esp_http_server/src"
+        "${IDF_PATH}/components/esp_http_server/src/util"
+        "${IDF_PATH}/components/esp_http_server/src/port/esp32"
+)

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -18,6 +19,7 @@
 #include "application_lifecycle.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "http_server_lifecycle.hpp"
+#include "secure_random_source.hpp"
 #include "connectivity_credentials.hpp"
 #include "network_lifecycle.hpp"
 #include "network_configuration_service.hpp"
@@ -31,6 +33,13 @@ class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
 struct ConfigurationRecoveryResult;
 class ConfigurationService;
+class AuthenticationRecordStore;
+class AuthenticationDomain;
+class WebSessionManager;
+class WebApplicationRoutes;
+class WebRouteDispatcher;
+class IAuthenticationKdf;
+enum class AuthBootstrapStatus : std::uint8_t;
 class RunPersistenceCoordinator;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
@@ -56,7 +65,7 @@ struct FermentationApplicationOwningEvidence {
 
 class FermentationApplication {
    public:
-    FermentationApplication() = default;
+    FermentationApplication();
     FermentationApplication(const FermentationApplication&) = delete;
     FermentationApplication& operator=(const FermentationApplication&) = delete;
     FermentationApplication(FermentationApplication&&) = delete;
@@ -84,11 +93,19 @@ class FermentationApplication {
         const device_platform::ITimeSource& timeSource,
         device_platform::INetworkLifecycle& networkLifecycle,
         device_platform::IHttpServerLifecycle& httpServerLifecycle,
-        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr,
+        device_platform::ISecureRandomSource* randomSource = nullptr,
+        IAuthenticationKdf* authenticationKdf = nullptr);
     void update();
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
-        device_platform::NetworkMode selectedMode);
+        device_platform::NetworkMode selectedMode,
+        std::optional<UserConfigurationRevision> expectedRevision =
+            std::nullopt,
+        ChangeOriginKind origin = ChangeOriginKind::LocalDisplay);
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
+    [[nodiscard]] AuthBootstrapStatus bootstrapAuthentication(
+        const FermentationUiCommandContext& context,
+        const FermentationUiBootstrapAuthenticationCommand& command);
     // Renderer-independent local setup data for the currently active
     // SoftAP. The caller owns display/QR rendering; HTTP routes never expose
     // these credentials.
@@ -96,6 +113,9 @@ class FermentationApplication {
     networkAccessPointInfo() const;
     // Secret-free canonical mode input for the renderer-independent UI view.
     [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
+    [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
+    [[nodiscard]] std::optional<device_platform::StorageEpoch>
+    currentStorageEpoch() const noexcept;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -186,12 +206,15 @@ class FermentationApplication {
         const device_platform::ITimeSource* timeSource,
         const device_platform::IResetCauseSource* resetCauseSource,
         device_platform::INetworkLifecycle* networkLifecycle = nullptr,
-        device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr);
+        device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr,
+        device_platform::ISecureRandomSource* randomSource = nullptr,
+        IAuthenticationKdf* authenticationKdf = nullptr);
     [[nodiscard]] bool initializeNetwork(
         device_platform::IStateStore& store,
         device_platform::StorageEpoch storageEpoch,
         device_platform::NetworkMode selectedMode,
-        const std::string& canonicalDeviceName);
+        const std::string& canonicalDeviceName,
+        bool positiveAuthenticationEpochEvidence);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
         const RunPersistenceSnapshot* snapshot,
@@ -227,6 +250,13 @@ class FermentationApplication {
     device_platform::IStateStore* stateStore_{nullptr};
     device_platform::INetworkLifecycle* networkLifecycle_{nullptr};
     device_platform::IHttpServerLifecycle* httpServerLifecycle_{nullptr};
+    device_platform::ISecureRandomSource* randomSource_{nullptr};
+    IAuthenticationKdf* authenticationKdf_{nullptr};
+    std::unique_ptr<AuthenticationRecordStore> authenticationStore_;
+    std::unique_ptr<AuthenticationDomain> authenticationDomain_;
+    std::unique_ptr<WebSessionManager> webSessionManager_;
+    std::unique_ptr<WebApplicationRoutes> webApplicationRoutes_;
+    std::unique_ptr<WebRouteDispatcher> webRouteDispatcher_;
     std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
@@ -242,6 +272,8 @@ class FermentationApplication {
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
+    mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
+    mutable std::recursive_mutex stateMutex_;
 };
 
 }  // namespace fermentation

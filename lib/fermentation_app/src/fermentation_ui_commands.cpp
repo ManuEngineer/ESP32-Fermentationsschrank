@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "fermentation_application.hpp"
+#include "authentication_records.hpp"
 
 namespace fermentation {
 namespace {
@@ -118,6 +119,7 @@ Category categoryFor(NetworkConfigurationStatus status) {
         case NetworkConfigurationStatus::InvalidCredential:
         case NetworkConfigurationStatus::CandidateRejected:
         case NetworkConfigurationStatus::PersistenceFailure:
+        case NetworkConfigurationStatus::StateChanged:
             return Category::Rejected;
         case NetworkConfigurationStatus::CredentialUnavailable:
         case NetworkConfigurationStatus::TransportFailure:
@@ -203,10 +205,13 @@ FermentationApplicationPreparedRequest::FermentationApplicationPreparedRequest(
 CommandEnvelope FermentationUiCommandBridge::makeEnvelope(
     const FermentationUiCommandContext& context,
     const ApplicationCommandIdentity& identity) noexcept {
-    return {identity.commandId(),
-            context.surface == device_platform::UiSurface::LocalDisplay
-                ? CommandSource::LocalDisplay
-                : CommandSource::WebInterface,
+    const auto source =
+        context.surface == device_platform::UiSurface::LocalDisplay
+            ? CommandSource::LocalDisplay
+            : context.surface == device_platform::UiSurface::WebService
+                  ? CommandSource::ServiceWeb
+                  : CommandSource::WebInterface;
+    return {identity.commandId(), source,
             context.monotonicMillis,
             context.expected.expectedStateSequence,
             context.expected.expectedRunRevision,
@@ -330,7 +335,10 @@ FermentationUiCommandResult FermentationUiCommandBridge::applyNetworkMode(
     FermentationApplication& application,
     const FermentationUiApplyNetworkModeCommand& command) {
     return fromNetworkConfigurationResult(
-        application.applyNetworkMode(command.selectedMode).status);
+        application
+            .applyNetworkMode(command.selectedMode,
+                              command.expectedUserConfigurationRevision)
+            .status);
 }
 
 FermentationUiCommandResult
@@ -339,6 +347,50 @@ FermentationUiCommandBridge::beginHomeWifiReconfiguration(
     const FermentationUiBeginHomeWifiReconfigurationCommand&) {
     return fromNetworkConfigurationResult(
         application.beginHomeWifiReconfiguration().status);
+}
+
+FermentationUiCommandResult
+FermentationUiCommandBridge::bootstrapAuthentication(
+    FermentationApplication& application,
+    const FermentationUiCommandContext& context,
+    const FermentationUiBootstrapAuthenticationCommand& command) {
+    if (context.surface != device_platform::UiSurface::LocalDisplay ||
+        !command.confirmed) {
+        return makeResult(Category::ConfirmationRequired,
+                          FermentationUiAuthenticationStatus::InvalidInput,
+                          FermentationUiCommandPhase::DecisionOnly);
+    }
+    const auto status = application.bootstrapAuthentication(context, command);
+    const auto detail = [&]() {
+        switch (status) {
+            case AuthBootstrapStatus::BootstrapAllowed:
+                return FermentationUiAuthenticationStatus::Applied;
+            case AuthBootstrapStatus::InvalidInput:
+                return FermentationUiAuthenticationStatus::InvalidInput;
+            case AuthBootstrapStatus::KdfUnavailable:
+                return FermentationUiAuthenticationStatus::KdfUnavailable;
+            case AuthBootstrapStatus::CommitOutcomeUnknown:
+                return FermentationUiAuthenticationStatus::CommitOutcomeUnknown;
+            case AuthBootstrapStatus::PersistenceFailure:
+                return FermentationUiAuthenticationStatus::PersistenceFailure;
+            case AuthBootstrapStatus::NotProvisioned:
+            case AuthBootstrapStatus::RecoveryRequired:
+            case AuthBootstrapStatus::AlreadyProvisioned:
+                return FermentationUiAuthenticationStatus::RecoveryRequired;
+        }
+        return FermentationUiAuthenticationStatus::RecoveryRequired;
+    }();
+    const auto category = detail == FermentationUiAuthenticationStatus::Applied
+                              ? Category::Accepted
+                              : (detail ==
+                                         FermentationUiAuthenticationStatus::KdfUnavailable ||
+                                     detail ==
+                                         FermentationUiAuthenticationStatus::RecoveryRequired ||
+                                     detail == FermentationUiAuthenticationStatus::CommitOutcomeUnknown
+                                 ? Category::Unavailable
+                                 : Category::Rejected);
+    return makeResult(category, detail,
+                      FermentationUiCommandPhase::OwningOutcome);
 }
 
 FermentationUiCommandResult

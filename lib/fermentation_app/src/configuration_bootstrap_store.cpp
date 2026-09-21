@@ -61,7 +61,7 @@ ConfigurationBootstrapScanResult ConfigurationBootstrapStore::scan() const {
     for (std::size_t slot = 0U; slot < candidates.size(); ++slot) {
         auto read = store_.read(
             keyFor(slot),
-            configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+            configuration_limits::kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
         if (read.status == StateStoreReadStatus::NotFound) {
             continue;
         }
@@ -176,6 +176,38 @@ ConfigurationBootstrapStore::writeHandoffSuccessor(
 }
 
 ConfigurationBootstrapWriteResult
+ConfigurationBootstrapStore::writeAuthDomainHandoff(
+    const LoadedConfigurationBootstrap& expected,
+    AuthDomainHandoffState targetHandoff) {
+    const auto current = scan();
+    if (current.status != ConfigurationBootstrapScanStatus::Available ||
+        !current.loaded.has_value() || current.loaded->record != expected.record ||
+        current.loaded->canonicalRecordBytes != expected.canonicalRecordBytes ||
+        current.loaded->slot != expected.slot) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
+    if (expected.record.sequence.value() == std::numeric_limits<std::uint64_t>::max()) {
+        return {ConfigurationBootstrapWriteStatus::CounterOverflow, std::nullopt};
+    }
+    const auto schema = expected.record.schemaVersion ==
+                                kConfigurationBootstrapSchemaVersion2
+                            ? kConfigurationBootstrapSchemaVersion3
+                            : expected.record.schemaVersion;
+    const ConfigurationBootstrapRecord target{
+        ConfigurationBootstrapSequence{expected.record.sequence.value() + 1U},
+        expected.record.storageFormatVersion, expected.record.storageEpoch,
+        expected.record.state, schema, expected.record.handoff,
+        expected.record.previousEpoch, expected.record.currentEpoch,
+        targetHandoff};
+    if (!isAllowedBootstrapSuccessor(expected.record, target)) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
+    return writeBound(current, target);
+}
+
+ConfigurationBootstrapWriteResult
 ConfigurationBootstrapStore::writeSuccessorWithHandoff(
     const LoadedConfigurationBootstrap& expected,
     ConfigurationBootstrapState targetState,
@@ -229,10 +261,13 @@ ConfigurationBootstrapStore::writeSuccessorWithHandoff(
         expected.record.storageFormatVersion,
         epoch,
         targetState,
-        kConfigurationBootstrapSchemaVersion2,
+        expected.record.schemaVersion,
         targetHandoff,
         previousEpoch,
-        currentEpoch};
+        currentEpoch,
+        targetState == ConfigurationBootstrapState::Resetting
+            ? AuthDomainHandoffState::None
+            : expected.record.authDomainHandoff};
     if (!isAllowedBootstrapSuccessor(expected.record, target)) {
         return {ConfigurationBootstrapWriteStatus::InvalidTransition,
                 std::nullopt};
@@ -249,7 +284,7 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
         targetSlot = scanResult.loaded->slot.value() == 0U ? 1U : 0U;
         const auto prior = store_.read(
             keyFor(targetSlot),
-            configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+            configuration_limits::kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
         if (prior.status == StateStoreReadStatus::Success) {
             previous = prior.value;
         } else if (prior.status == StateStoreReadStatus::ReadError) {
@@ -275,7 +310,7 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
     }
     const auto readback = store_.read(
         keyFor(targetSlot),
-        configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+        configuration_limits::kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
     if (readback.status == StateStoreReadStatus::ReadError) {
         return {ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate,
                 std::nullopt};

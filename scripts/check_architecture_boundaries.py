@@ -305,7 +305,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/fermentation_app/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
-        "private": frozenset(),
+        "private": frozenset({"bblanchon__arduinojson"}),
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform", "nvs_flash"}),
@@ -331,6 +331,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "fermentation_app",
                 "device_platform_esp_idf",
                 "nvs_flash",
+                "mbedtls",
             }
         ),
     },

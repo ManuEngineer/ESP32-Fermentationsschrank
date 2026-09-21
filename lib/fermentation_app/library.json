@@ -2,6 +2,9 @@
   "name": "fermentation_app",
   "version": "0.1.0",
   "description": "Konkrete Fermentationsanwendung (ADR-013).",
+  "dependencies": {
+    "bblanchon/ArduinoJson": "7.4.3"
+  },
   "build": {
     "flags": ["-Wall", "-Wextra", "-Werror"]
   }

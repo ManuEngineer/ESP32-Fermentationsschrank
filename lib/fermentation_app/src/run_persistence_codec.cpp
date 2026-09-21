@@ -274,6 +274,8 @@ bool writeEnum(ByteWriter& w, CommandSource v) {
             return be::writeUint8(w, 1U);
         case CommandSource::WebInterface:
             return be::writeUint8(w, 2U);
+        case CommandSource::ServiceWeb:
+            return be::writeUint8(w, 3U);
     }
     return false;
 }
@@ -364,6 +366,8 @@ bool writeEnum(ByteWriter& w, RunChangeSource v) {
             return be::writeUint8(w, 2U);
         case RunChangeSource::Recovery:
             return be::writeUint8(w, 3U);
+        case RunChangeSource::ServiceWeb:
+            return be::writeUint8(w, 4U);
     }
     return false;
 }
@@ -546,6 +550,9 @@ bool readCommandSource(ByteReader& reader, CommandSource& out) {
         case 2U:
             out = CommandSource::WebInterface;
             return true;
+        case 3U:
+            out = CommandSource::ServiceWeb;
+            return true;
         default:
             return false;
     }
@@ -715,6 +722,9 @@ bool readChangeSource(ByteReader& reader, RunChangeSource& out) {
             return true;
         case 3U:
             out = RunChangeSource::Recovery;
+            return true;
+        case 4U:
+            out = RunChangeSource::ServiceWeb;
             return true;
         default:
             return false;

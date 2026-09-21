@@ -110,6 +110,7 @@ bool validChangeSource(RunChangeSource source) {
         case RunChangeSource::LocalDisplay:
         case RunChangeSource::WebInterface:
         case RunChangeSource::Recovery:
+        case RunChangeSource::ServiceWeb:
             return true;
     }
     return false;

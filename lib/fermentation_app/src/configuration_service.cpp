@@ -626,6 +626,15 @@ std::uint64_t ConfigurationService::stateRevision() const {
     return stateRevision_;
 }
 
+std::optional<UserConfigurationRevision>
+ConfigurationService::userConfigurationRevision() const {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
+        return std::nullopt;
+    }
+    return activeRuntime_->userConfigurationRevision();
+}
+
 RuntimeConfigurationReadResult ConfigurationService::acquireRuntime() {
     const std::lock_guard<std::mutex> lock(stateMutex_);
     if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {

@@ -1,4 +1,11 @@
 dependencies:
+  bblanchon/arduinojson:
+    component_hash: 5e6aff2bc5bc988b36c8e90c01e637495ee895ad3af93911860c21ec6da79b6a
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 7.4.3
   esp-idf-lib/ds3231:
     component_hash: 474f5cc0e8e02ffaca0f21e3b1bbc5d4a20d0679368cd9e21de4203f1b8016f6
     dependencies:
@@ -80,9 +87,10 @@ dependencies:
       type: idf
     version: 6.1.0
 direct_dependencies:
+- bblanchon/arduinojson
 - esp-idf-lib/ds3231
 - esp-idf-lib/i2cdev
 - espressif/mdns
-manifest_hash: 370d3e92b0a23693bdb7fd103f03085ba60861663fdc8ccb31b2e751981b117b
+manifest_hash: 5fb2cbd7d9620fde61d0c3895dc4b98bf978b0240a52d734572c20772157694b
 target: esp32
 version: 3.0.0

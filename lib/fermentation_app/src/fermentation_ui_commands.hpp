@@ -29,6 +29,7 @@ enum class FermentationUiAction : std::uint8_t {
     ApplySensorSelection,
     CommitConfiguration,
     ResumeFallback,
+    BootstrapAuthentication,
 };
 
 struct FermentationUiCommandContext {
@@ -66,9 +67,22 @@ struct FermentationUiResumeFallbackCommand {
 struct FermentationUiApplyNetworkModeCommand {
     device_platform::NetworkMode selectedMode{
         device_platform::NetworkMode::UNSELECTED};
+    std::optional<UserConfigurationRevision> expectedUserConfigurationRevision;
+
+    FermentationUiApplyNetworkModeCommand() = default;
+    explicit FermentationUiApplyNetworkModeCommand(
+        device_platform::NetworkMode mode) noexcept
+        : selectedMode(mode) {}
 };
 
 struct FermentationUiBeginHomeWifiReconfigurationCommand {};
+
+struct FermentationUiBootstrapAuthenticationCommand {
+    std::string password;
+    std::string servicePin;
+    std::uint32_t measuredWorkFactor{0U};
+    bool confirmed{false};
+};
 
 // The renderer-independent UI contract carries intent only.  In particular,
 // these payloads never carry a ProgramDocument, safety/sensor/planner
@@ -247,12 +261,22 @@ struct FermentationUiCommand {
                  FermentationUiConfigurationCommitCommand,
                  FermentationUiResumeFallbackCommand,
                  FermentationUiApplyNetworkModeCommand,
-                 FermentationUiBeginHomeWifiReconfigurationCommand>
+                 FermentationUiBeginHomeWifiReconfigurationCommand,
+                 FermentationUiBootstrapAuthenticationCommand>
         operation;
 };
 
 enum class FermentationUiDetailStatus : std::uint8_t {
     UnsupportedAppDetail,
+};
+
+enum class FermentationUiAuthenticationStatus : std::uint8_t {
+    Applied,
+    InvalidInput,
+    RecoveryRequired,
+    PersistenceFailure,
+    KdfUnavailable,
+    CommitOutcomeUnknown,
 };
 
 // A canonical Proposed decision is not an owning apply/persist outcome.  The
@@ -266,7 +290,8 @@ enum class FermentationUiCommandPhase : std::uint8_t {
 using FermentationUiCommandDetail =
     std::variant<CommandStatus, DecisionStatus, RunPersistenceResultStatus,
                  ConfigurationPreviewStatus, ConfigurationCommitStatus,
-                 NetworkConfigurationStatus, FermentationUiDetailStatus>;
+                 NetworkConfigurationStatus, FermentationUiDetailStatus,
+                 FermentationUiAuthenticationStatus>;
 
 struct FermentationUiCommandResult {
     device_platform::DeviceUiCommandOutcomeCategory category{
@@ -337,6 +362,10 @@ class FermentationUiCommandBridge {
     beginHomeWifiReconfiguration(
         FermentationApplication& application,
         const FermentationUiBeginHomeWifiReconfigurationCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult bootstrapAuthentication(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const FermentationUiBootstrapAuthenticationCommand& command);
 
    private:
     friend class FermentationApplication;

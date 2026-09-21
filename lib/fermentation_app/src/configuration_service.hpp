@@ -275,6 +275,8 @@ class ConfigurationService {
 
     [[nodiscard]] ConfigurationServiceMode mode() const;
     [[nodiscard]] std::uint64_t stateRevision() const;
+    [[nodiscard]] std::optional<UserConfigurationRevision>
+    userConfigurationRevision() const;
     [[nodiscard]] RuntimeConfigurationReadResult acquireRuntime();
     [[nodiscard]] ConfigurationPreviewBuildResult beginPreview(
         std::optional<ProgramCatalogRevision> expectedProgramCatalogRevision =

@@ -30,6 +30,7 @@ using CommandId = std::uint64_t;
 enum class CommandSource : std::uint8_t {
     LocalDisplay,
     WebInterface,
+    ServiceWeb,
 };
 
 struct CommandEnvelope {

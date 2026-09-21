@@ -31,6 +31,7 @@ enum class RunChangeSource : std::uint8_t {
     LocalDisplay,
     WebInterface,
     Recovery,
+    ServiceWeb,
 };
 
 enum class RunChangeReason : std::uint8_t {
