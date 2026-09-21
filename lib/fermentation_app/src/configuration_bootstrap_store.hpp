@@ -64,7 +64,8 @@ class ConfigurationBootstrapStore {
     // sequence-checked record and never interprets NotFound as evidence.
     [[nodiscard]] ConfigurationBootstrapWriteResult writeAuthDomainHandoff(
         const LoadedConfigurationBootstrap& expected,
-        AuthDomainHandoffState targetHandoff);
+        AuthDomainHandoffState targetHandoff,
+        const ConfigurationMutationLease& mutationLease);
 
    private:
     friend class ConfigurationRecoveryService;

@@ -19,9 +19,11 @@ constexpr std::size_t kRecordBytes = 2U * kSingleCredentialPayloadBytes + 1U;
 constexpr std::size_t kRootPayloadBytes = 1U + 8U;
 constexpr std::size_t kMaximumCredentialEnvelopeBytes = kRecordBytes + 45U;
 constexpr std::size_t kMaximumRootEnvelopeBytes = kRootPayloadBytes + 45U;
+constexpr std::uint64_t kMaximumLockoutDurationMs = 30ULL * 60ULL * 1000ULL;
 
 bool validLockout(const AuthLockoutState& state) noexcept {
-    return state.lockoutStage <= 31U;
+    return state.lockoutStage <= 31U &&
+           state.lockoutRemainingMs <= kMaximumLockoutDurationMs;
 }
 
 bool writeVerifier(device_platform::ByteWriter& writer,
@@ -40,7 +42,7 @@ bool writeVerifier(device_platform::ByteWriter& writer,
            writer.writeBytes(verifier.verifier.data(), verifier.verifier.size()) &&
            writeUint32(writer, lockout.failedAttempts) &&
            writeUint8(writer, lockout.lockoutStage) &&
-           writeUint64(writer, lockout.lockoutUntilMonotonicMs);
+           writeUint64(writer, lockout.lockoutRemainingMs);
 }
 
 bool readVerifier(device_platform::ByteReader& reader, AuthVerifier& verifier,
@@ -59,7 +61,7 @@ bool readVerifier(device_platform::ByteReader& reader, AuthVerifier& verifier,
         !reader.readBytes(verifier.verifier.data(), verifier.verifier.size()) ||
         !readUint32(reader, lockout.failedAttempts) ||
         !readUint8(reader, lockout.lockoutStage) ||
-        !readUint64(reader, lockout.lockoutUntilMonotonicMs)) {
+        !readUint64(reader, lockout.lockoutRemainingMs)) {
         return false;
     }
     return verifier.valid() && validLockout(lockout) && credentialEpoch != 0U;
@@ -157,7 +159,7 @@ bool operator==(const AuthLockoutState& left,
                 const AuthLockoutState& right) noexcept {
     return left.failedAttempts == right.failedAttempts &&
            left.lockoutStage == right.lockoutStage &&
-           left.lockoutUntilMonotonicMs == right.lockoutUntilMonotonicMs;
+           left.lockoutRemainingMs == right.lockoutRemainingMs;
 }
 
 bool operator==(const AuthenticationCredentialRecord& left,
@@ -214,7 +216,8 @@ AuthenticationRecordCodecStatus encodeAuthenticationCredential(
     }
     std::string encoded;
     const auto status = device_platform::encodeEnvelope(
-        {configuration_storage_contract::kAuthenticationRecordType, 1U,
+         {configuration_storage_contract::kAuthenticationRecordType,
+          configuration_storage_contract::kAuthenticationSchemaVersion,
          record.storageEpoch, record.recordSequence, std::nullopt,
          payload.takeBytes()},
         encoded, kMaximumCredentialEnvelopeBytes);
@@ -237,7 +240,9 @@ AuthenticationCredentialDecodeResult decodeAuthenticationCredential(
     const auto& value = *envelope.envelope;
     if (value.recordTypeId != configuration_storage_contract::kAuthenticationRecordType)
         return {AuthenticationRecordCodecStatus::RecordIdentityMismatch, std::nullopt};
-    if (value.schemaVersion != 1U || value.utcUnixSeconds.has_value() ||
+    if (value.schemaVersion !=
+            configuration_storage_contract::kAuthenticationSchemaVersion ||
+        value.utcUnixSeconds.has_value() ||
         value.payload.size() != kRecordBytes)
         return {value.schemaVersion > 1U ? AuthenticationRecordCodecStatus::UnsupportedSchema
                                         : AuthenticationRecordCodecStatus::InvalidModel,
@@ -267,7 +272,8 @@ AuthenticationRecordCodecStatus encodeAuthProvisioningRoot(
         return AuthenticationRecordCodecStatus::CapacityExceeded;
     std::string encoded;
     const auto status = device_platform::encodeEnvelope(
-        {configuration_storage_contract::kAuthenticationRootRecordType, 1U,
+         {configuration_storage_contract::kAuthenticationRootRecordType,
+          configuration_storage_contract::kAuthenticationRootSchemaVersion,
          root.storageEpoch, root.recordSequence, std::nullopt,
          payload.takeBytes()},
         encoded, kMaximumRootEnvelopeBytes);
@@ -290,7 +296,9 @@ AuthProvisioningRootDecodeResult decodeAuthProvisioningRoot(
     const auto& value = *envelope.envelope;
     if (value.recordTypeId != configuration_storage_contract::kAuthenticationRootRecordType)
         return {AuthenticationRecordCodecStatus::RecordIdentityMismatch, std::nullopt};
-    if (value.schemaVersion != 1U || value.utcUnixSeconds.has_value() ||
+    if (value.schemaVersion !=
+            configuration_storage_contract::kAuthenticationRootSchemaVersion ||
+        value.utcUnixSeconds.has_value() ||
         value.payload.size() != kRootPayloadBytes)
         return {value.schemaVersion > 1U ? AuthenticationRecordCodecStatus::UnsupportedSchema
                                         : AuthenticationRecordCodecStatus::InvalidModel,
@@ -328,7 +336,7 @@ AuthenticationCredentialReadResult AuthenticationRecordStore::readCredentials(
                 std::nullopt};
     }
     if (decoded.value->storageEpoch != expectedEpoch)
-        return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
+        return {AuthenticationReadStatus::DifferentEpoch, std::nullopt};
     return {AuthenticationReadStatus::Success, decoded.value};
 }
 
@@ -348,7 +356,7 @@ AuthProvisioningRootReadResult AuthenticationRecordStore::readRoot(
                 std::nullopt};
     }
     if (decoded.value->storageEpoch != expectedEpoch)
-        return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
+        return {AuthenticationReadStatus::DifferentEpoch, std::nullopt};
     return {AuthenticationReadStatus::Success, decoded.value};
 }
 
@@ -427,6 +435,31 @@ AuthBootstrapStatus AuthenticationDomain::inspect(
     return AuthBootstrapStatus::RecoveryRequired;
 }
 
+std::uint64_t AuthenticationDomain::effectiveLockoutRemaining(
+    const AuthLockoutState& persisted, std::uint64_t recordSequence,
+    std::uint64_t nowMs, LockoutClock& clock) const noexcept {
+    if (persisted.lockoutRemainingMs == 0U) {
+        clock = LockoutClock{};
+        return 0U;
+    }
+    if (!clock.initialized || clock.recordSequence != recordSequence ||
+        nowMs < clock.anchorMs) {
+        // A reboot, an external record change, or a monotonic discontinuity
+        // conservatively starts the persisted full duration again.
+        clock = LockoutClock{recordSequence, nowMs,
+                             persisted.lockoutRemainingMs, true};
+        return clock.remainingMs;
+    }
+    const auto elapsed = nowMs - clock.anchorMs;
+    if (elapsed >= clock.remainingMs) {
+        clock = LockoutClock{};
+        return 0U;
+    }
+    clock.remainingMs -= elapsed;
+    clock.anchorMs = nowMs;
+    return clock.remainingMs;
+}
+
 AuthBootstrapStatus AuthenticationDomain::initializeUnprovisioned(
     device_platform::StorageEpoch epoch) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -438,11 +471,13 @@ AuthBootstrapStatus AuthenticationDomain::initializeUnprovisioned(
             return AuthBootstrapStatus::RecoveryRequired;
         }
         const auto credentials = store_.readCredentials(epoch);
-        return credentials.status == AuthenticationReadStatus::NotFound
+        return (credentials.status == AuthenticationReadStatus::NotFound ||
+                credentials.status == AuthenticationReadStatus::DifferentEpoch)
                    ? AuthBootstrapStatus::BootstrapAllowed
                    : AuthBootstrapStatus::RecoveryRequired;
     }
-    if (existing.status != AuthenticationReadStatus::NotFound)
+    if (existing.status != AuthenticationReadStatus::NotFound &&
+        existing.status != AuthenticationReadStatus::DifferentEpoch)
         return AuthBootstrapStatus::RecoveryRequired;
     AuthProvisioningRoot root{epoch, 1U, AuthProvisioningState::Unprovisioned,
                               1U};
@@ -463,19 +498,21 @@ bool AuthenticationDomain::makeVerifier(const std::string& secret,
 
 AuthBootstrapStatus AuthenticationDomain::bootstrap(
     device_platform::StorageEpoch epoch, const std::string& password,
-    const std::string& servicePin, std::uint32_t measuredWorkFactor) {
+    const std::string& servicePin) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (validateWebPassword(password) != AuthInputStatus::Valid ||
         validateServicePin(servicePin) != AuthInputStatus::Valid)
         return AuthBootstrapStatus::InvalidInput;
-    if (measuredWorkFactor == 0U) return AuthBootstrapStatus::KdfUnavailable;
+    if (!workFactorPolicy_.has_value() || *workFactorPolicy_ == 0U)
+        return AuthBootstrapStatus::KdfUnavailable;
     const auto current = store_.readRoot(epoch);
     if (current.status != AuthenticationReadStatus::Success ||
         !current.value.has_value() ||
         current.value->state != AuthProvisioningState::Unprovisioned)
         return AuthBootstrapStatus::RecoveryRequired;
     const auto existingCredentials = store_.readCredentials(epoch);
-    if (existingCredentials.status != AuthenticationReadStatus::NotFound)
+    if (existingCredentials.status != AuthenticationReadStatus::NotFound &&
+        existingCredentials.status != AuthenticationReadStatus::DifferentEpoch)
         return AuthBootstrapStatus::RecoveryRequired;
     auto provisioning = *current.value;
     if (provisioning.recordSequence == std::numeric_limits<std::uint64_t>::max()) {
@@ -505,8 +542,8 @@ AuthBootstrapStatus AuthenticationDomain::bootstrap(
     };
     AuthenticationCredentialRecord record;
     record.storageEpoch = epoch;
-    if (!makeVerifier(password, measuredWorkFactor, record.webPassword) ||
-        !makeVerifier(servicePin, measuredWorkFactor, record.servicePin))
+    if (!makeVerifier(password, *workFactorPolicy_, record.webPassword) ||
+        !makeVerifier(servicePin, *workFactorPolicy_, record.servicePin))
         return markRecovery(AuthBootstrapStatus::KdfUnavailable);
     const auto credentials = store_.writeCredentials(record);
     if (credentials == AuthenticationWriteStatus::CommitOutcomeUnknown)
@@ -545,10 +582,13 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
     auto record = *credentials.value;
     if (!record.webPasswordEnabled) return AuthCheckStatus::Disabled;
     auto& lockout = record.webLockout;
-    if (nowMs < lockout.lockoutUntilMonotonicMs) {
-        retryAfterMs = lockout.lockoutUntilMonotonicMs - nowMs;
+    const auto remaining = effectiveLockoutRemaining(
+        lockout, record.recordSequence, nowMs, webLockoutClock_);
+    if (remaining != 0U) {
+        retryAfterMs = remaining;
         return AuthCheckStatus::LockedOut;
     }
+    lockout.lockoutRemainingMs = 0U;
     if (!record.webPassword.valid()) return AuthCheckStatus::KdfUnavailable;
     std::array<std::uint8_t, kAuthenticationVerifierBytes> derived{};
     if (!kdf_.derive(password, record.webPassword, derived))
@@ -575,7 +615,7 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
                                     (30ULL * 1000ULL) << exponent);
         if (nowMs > std::numeric_limits<std::uint64_t>::max() - duration)
             return AuthCheckStatus::RecoveryRequired;
-        lockout.lockoutUntilMonotonicMs = nowMs + duration;
+        lockout.lockoutRemainingMs = duration;
         retryAfterMs = duration;
     }
     if (record.recordSequence == std::numeric_limits<std::uint64_t>::max())
@@ -584,6 +624,8 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
     const auto persisted = store_.writeCredentials(record);
     if (persisted != AuthenticationWriteStatus::Success)
         return AuthCheckStatus::RecoveryRequired;
+    webLockoutClock_ = LockoutClock{record.recordSequence, nowMs,
+                                    lockout.lockoutRemainingMs, true};
     return AuthCheckStatus::Invalid;
 }
 
@@ -608,10 +650,13 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     }
     auto record = *credentials.value;
     auto& lockout = record.servicePinLockout;
-    if (nowMs < lockout.lockoutUntilMonotonicMs) {
-        retryAfterMs = lockout.lockoutUntilMonotonicMs - nowMs;
+    const auto remaining = effectiveLockoutRemaining(
+        lockout, record.recordSequence, nowMs, servicePinLockoutClock_);
+    if (remaining != 0U) {
+        retryAfterMs = remaining;
         return AuthCheckStatus::LockedOut;
     }
+    lockout.lockoutRemainingMs = 0U;
     std::array<std::uint8_t, kAuthenticationVerifierBytes> derived{};
     if (!kdf_.derive(servicePin, record.servicePin, derived)) {
         return AuthCheckStatus::KdfUnavailable;
@@ -640,7 +685,7 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
         if (nowMs > std::numeric_limits<std::uint64_t>::max() - duration) {
             return AuthCheckStatus::RecoveryRequired;
         }
-        lockout.lockoutUntilMonotonicMs = nowMs + duration;
+        lockout.lockoutRemainingMs = duration;
         retryAfterMs = duration;
     }
     if (record.recordSequence == std::numeric_limits<std::uint64_t>::max()) {
@@ -648,15 +693,16 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     }
     ++record.recordSequence;
     const auto persisted = store_.writeCredentials(record);
-    return persisted == AuthenticationWriteStatus::Success
-               ? AuthCheckStatus::Invalid
-               : AuthCheckStatus::RecoveryRequired;
+    if (persisted != AuthenticationWriteStatus::Success)
+        return AuthCheckStatus::RecoveryRequired;
+    servicePinLockoutClock_ = LockoutClock{record.recordSequence, nowMs,
+                                           lockout.lockoutRemainingMs, true};
+    return AuthCheckStatus::Invalid;
 }
 
 AuthBootstrapStatus AuthenticationDomain::changeWebPassword(
     device_platform::StorageEpoch epoch, const std::string& current,
-    const std::string& replacement, std::uint32_t measuredWorkFactor,
-    std::uint64_t nowMs) {
+    const std::string& replacement, std::uint64_t nowMs) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (validateWebPassword(replacement) != AuthInputStatus::Valid) {
         return AuthBootstrapStatus::InvalidInput;
@@ -678,15 +724,10 @@ AuthBootstrapStatus AuthenticationDomain::changeWebPassword(
         return AuthBootstrapStatus::RecoveryRequired;
     }
     auto record = *credentials.value;
-    if (measuredWorkFactor == 0U) {
-        measuredWorkFactor = record.webPassword.workFactor;
-    }
-    if (measuredWorkFactor == 0U) {
-        return AuthBootstrapStatus::KdfUnavailable;
-    }
     if (record.webCredentialEpoch == std::numeric_limits<std::uint64_t>::max() ||
         record.recordSequence == std::numeric_limits<std::uint64_t>::max() ||
-        !makeVerifier(replacement, measuredWorkFactor, record.webPassword)) {
+        !makeVerifier(replacement, record.webPassword.workFactor,
+                      record.webPassword)) {
         return AuthBootstrapStatus::PersistenceFailure;
     }
     ++record.webCredentialEpoch;
@@ -699,8 +740,7 @@ AuthBootstrapStatus AuthenticationDomain::changeWebPassword(
 
 AuthBootstrapStatus AuthenticationDomain::changeServicePin(
     device_platform::StorageEpoch epoch, const std::string& current,
-    const std::string& replacement, std::uint32_t measuredWorkFactor,
-    std::uint64_t nowMs) {
+    const std::string& replacement, std::uint64_t nowMs) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (validateServicePin(replacement) != AuthInputStatus::Valid) {
         return AuthBootstrapStatus::InvalidInput;
@@ -720,16 +760,11 @@ AuthBootstrapStatus AuthenticationDomain::changeServicePin(
         return AuthBootstrapStatus::RecoveryRequired;
     }
     auto record = *credentials.value;
-    if (measuredWorkFactor == 0U) {
-        measuredWorkFactor = record.servicePin.workFactor;
-    }
-    if (measuredWorkFactor == 0U) {
-        return AuthBootstrapStatus::KdfUnavailable;
-    }
     if (record.servicePinCredentialEpoch ==
             std::numeric_limits<std::uint64_t>::max() ||
         record.recordSequence == std::numeric_limits<std::uint64_t>::max() ||
-        !makeVerifier(replacement, measuredWorkFactor, record.servicePin)) {
+        !makeVerifier(replacement, record.servicePin.workFactor,
+                      record.servicePin)) {
         return AuthBootstrapStatus::PersistenceFailure;
     }
     ++record.servicePinCredentialEpoch;

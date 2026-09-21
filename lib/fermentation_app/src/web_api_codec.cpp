@@ -49,6 +49,15 @@ WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
                                    const MutationSequenceView& sequence,
                                    std::optional<bool> webPasswordEnabled,
                                    std::string& out) {
+    return encodeUiSnapshot(snapshot, sequence, webPasswordEnabled,
+                            std::nullopt, out);
+}
+
+WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
+                                   const MutationSequenceView& sequence,
+                                   std::optional<bool> webPasswordEnabled,
+                                   std::optional<std::string> csrfToken,
+                                   std::string& out) {
     ArduinoJson::JsonDocument document;
     auto root = document.to<ArduinoJson::JsonObject>();
     root["refreshRevision"] = snapshot.refreshRevision.has_value()
@@ -57,6 +66,9 @@ WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
     root["ready"] = snapshot.status.ready;
     if (webPasswordEnabled.has_value()) {
         root["webPasswordEnabled"] = *webPasswordEnabled;
+    }
+    if (csrfToken.has_value() && csrfToken->size() == 32U) {
+        root["csrfToken"] = *csrfToken;
     }
     root["networkMode"] = networkModeCode(snapshot.network.currentMode);
     root["selectionRequired"] = snapshot.network.selectionRequired;

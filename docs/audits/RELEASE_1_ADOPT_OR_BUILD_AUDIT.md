@@ -19,6 +19,17 @@ dabei nicht geaendert.
 
 ## Gepruefter Stand
 
+### Current implementation addendum – Issue #27
+
+ArduinoJson `7.4.3` is now the bounded external Web/API codec used by PR #167.
+The resolved tag commit is
+`77771d3c07668e01d8f52acb03910c1110bb373f`; the package is MIT-licensed and
+has no transitive runtime dependency in its ESP-IDF manifest. Native
+bounded/negative/redaction coverage and the source/license register are
+present. Integrated flash, heap, fragmentation and jitter measurements remain
+`RESOURCE_EVIDENCE_PENDING`; historical candidate rows below are retained as
+audit history and do not create a second dependency or parser choice.
+
 | Gegenstand | Stand |
 |---|---|
 | Repository | `ManuEngineer/ESP32-Fermentationsschrank` |
@@ -27,7 +38,7 @@ dabei nicht geaendert.
 | Abruf-/Auditdatum | 2026-07-27 (Original-Audit) |
 | Toolchain im Repository (Original-Audit) | PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17` (`dcc1105b`), C++17 |
 | Synchronisiert am | 2026-08-05 gegen Baseline `8d65b50326c4419dc45bbc024615c0a1c592e1aa` (Espressif-first-Audit-Sync) |
-| Toolchain im Repository (aktuell) | ESP-IDF `v6.0.2` (`7101770dc6db2667b3c477cc31365dd1acd6db4e`, Issue #71 / PR #79); PlatformIO ausschliesslich nativer Hosttestpfad; Arduino-ESP32 keine aktive Produktionsbasis |
+| Toolchain im Repository (aktuell) | ESP-IDF `v6.1` (`fff9895c82d744c7237be8847347bdd1b07c6643`); PlatformIO ausschliesslich nativer Hosttestpfad; Arduino-ESP32 keine aktive Produktionsbasis |
 | Zielbasis | ESP32-32E, 4 MB Flash, keine PSRAM-Abhaengigkeit |
 | betrachtete Implementierungs-/Tracking-Issues | #16–#37, #56/#57 sowie #89/#90: 26 Eintraege; nicht alle zwingend aktuell offen, z. B. ist #17 nach PR #84 abgeschlossen |
 | Konfigurationsstand | #54 und #55 gemergt; #16 bleibt Tracking; #56/#57 `BLOCKED_DEPENDENCY` |

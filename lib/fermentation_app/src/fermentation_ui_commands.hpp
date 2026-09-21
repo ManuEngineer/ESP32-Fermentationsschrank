@@ -80,7 +80,6 @@ struct FermentationUiBeginHomeWifiReconfigurationCommand {};
 struct FermentationUiBootstrapAuthenticationCommand {
     std::string password;
     std::string servicePin;
-    std::uint32_t measuredWorkFactor{0U};
     bool confirmed{false};
 };
 
@@ -339,6 +338,9 @@ class FermentationUiCommandBridge {
         const FermentationApplicationPreparedRequest& request,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
             std::nullopt);
+    [[nodiscard]] static std::optional<CommandDecision> decidePreparedCommand(
+        const RunCommandState& current,
+        const FermentationApplicationPreparedRequest& request);
     [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
         RunPersistenceResultStatus status);
 

@@ -178,7 +178,12 @@ ConfigurationBootstrapStore::writeHandoffSuccessor(
 ConfigurationBootstrapWriteResult
 ConfigurationBootstrapStore::writeAuthDomainHandoff(
     const LoadedConfigurationBootstrap& expected,
-    AuthDomainHandoffState targetHandoff) {
+    AuthDomainHandoffState targetHandoff,
+    const ConfigurationMutationLease& mutationLease) {
+    if (!mutationLease.valid()) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
     const auto current = scan();
     if (current.status != ConfigurationBootstrapScanStatus::Available ||
         !current.loaded.has_value() || current.loaded->record != expected.record ||

@@ -129,6 +129,18 @@ const WebSessionManager::Session* WebSessionManager::get(
 
 WebSessionResult WebSessionManager::create(std::uint64_t nowMs) {
     std::lock_guard<std::mutex> lock(mutex_);
+    // Expiry is a lifecycle transition, not only a lookup concern. Reclaim
+    // abandoned sessions before capacity is evaluated, but never evict a
+    // live session merely to make room for a new login.
+    for (auto& session : sessions_) {
+        if (session.active &&
+            (nowMs < session.createdAtMs ||
+             nowMs - session.createdAtMs >= kWebSessionAbsoluteLimitMs ||
+             nowMs < session.lastActivityMs ||
+             nowMs - session.lastActivityMs >= kWebSessionIdleLimitMs)) {
+            session.active = false;
+        }
+    }
     Session* target = nullptr;
     std::size_t slot = 0U;
     for (; slot < sessions_.size(); ++slot) {

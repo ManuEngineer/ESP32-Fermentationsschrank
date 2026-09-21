@@ -420,8 +420,18 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
     const RunCommandState& current,
     const FermentationApplicationPreparedRequest& request,
     const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    const auto decision = decidePreparedCommand(current, request);
+    if (!decision.has_value()) return unsupportedAppDetail();
+    return fromCommandStatus(decision->status, confirmation);
+}
+
+std::optional<CommandDecision>
+FermentationUiCommandBridge::decidePreparedCommand(
+    const RunCommandState& current,
+    const FermentationApplicationPreparedRequest& request) {
     return std::visit(
-        [&current, &request, &confirmation](const auto& prepared) {
+        [&current, &request](const auto& prepared)
+            -> std::optional<CommandDecision> {
             using Request = std::decay_t<decltype(prepared)>;
             CommandDecision decision;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
@@ -458,12 +468,11 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
                 decision = ::fermentation::decideFaultReset(current, prepared);
             } else {
                 if (!request.owningPlausibility().has_value())
-                    return FermentationUiCommandBridge::unsupportedAppDetail();
+                    return std::nullopt;
                 decision = decideApplySensorSelectionAction(
                     current, prepared, *request.owningPlausibility());
             }
-            return FermentationUiCommandBridge::fromCommandStatus(
-                decision.status, confirmation);
+            return decision;
         },
         request.storage());
 }

@@ -27,6 +27,10 @@ enum class WebApiCodecStatus : std::uint8_t {
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
     const FermentationUiSnapshot& snapshot, const MutationSequenceView& sequence,
     std::optional<bool> webPasswordEnabled, std::string& out);
+[[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
+    const FermentationUiSnapshot& snapshot, const MutationSequenceView& sequence,
+    std::optional<bool> webPasswordEnabled,
+    std::optional<std::string> csrfToken, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeStatus(
     const FermentationUiSnapshot& snapshot, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeStatus(

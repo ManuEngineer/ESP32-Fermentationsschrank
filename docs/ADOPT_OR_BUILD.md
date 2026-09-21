@@ -127,10 +127,12 @@ allgemeine Connectivity-Plattform.
 ## JSON an externen Grenzen
 
 Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
-allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist dafuer der
-bevorzugte Release-1-Kandidat, wird aber erst nach einem begrenzten Build-,
-Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernommen. Eine
-Alternative wird nur bei einem konkret belegten Release-1-Problem untersucht.
+allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist im bounded
+Web-/API-Codec integriert. Quelle, Tag-Commit, MIT-Lizenz, verwendete Header
+und die direkte ESP-IDF-Komponenteneinbindung sind in den technischen
+Registern fixiert. Die integrierten Flash-/Heap-/Fragmentierungs-/Jitterwerte
+bleiben bis zum Ressourcen-Gate offen; eine Alternative wird nur bei einem
+konkret belegten Release-1-Problem untersucht.
 
 Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
 Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und

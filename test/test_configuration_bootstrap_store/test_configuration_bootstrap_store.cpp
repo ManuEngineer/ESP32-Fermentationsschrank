@@ -380,6 +380,75 @@ void test_impossible_history_gap_and_regression_fail_closed() {
         static_cast<int>(bootstrap.scan().status));
 }
 
+fermentation::ConfigurationBootstrapRecord schema3Record(
+    std::uint64_t sequence,
+    fermentation::AuthDomainHandoffState authHandoff) {
+    return {fermentation::ConfigurationBootstrapSequence{sequence},
+            fermentation::kConfigurationStorageFormatVersion1,
+            device_platform::StorageEpoch{1U},
+            fermentation::ConfigurationBootstrapState::Initialized,
+            fermentation::kConfigurationBootstrapSchemaVersion3,
+            fermentation::RunEpochHandoffState::None, std::nullopt,
+            std::nullopt, authHandoff};
+}
+
+void test_schema2_to_schema3_handoff_and_auth_cutpoints_are_exact() {
+    const fermentation::ConfigurationBootstrapRecord schema2{
+        fermentation::ConfigurationBootstrapSequence{2U},
+        fermentation::kConfigurationStorageFormatVersion1,
+        device_platform::StorageEpoch{1U},
+        fermentation::ConfigurationBootstrapState::Initialized,
+        fermentation::kConfigurationBootstrapSchemaVersion2};
+    auto unconsumed = schema3Record(
+        3U, fermentation::AuthDomainHandoffState::Unconsumed);
+    auto inProgress = schema3Record(
+        4U, fermentation::AuthDomainHandoffState::InProgress);
+    auto consumed = schema3Record(
+        5U, fermentation::AuthDomainHandoffState::Consumed);
+    auto indeterminate = schema3Record(
+        5U, fermentation::AuthDomainHandoffState::Indeterminate);
+
+    TEST_ASSERT_TRUE(fermentation::isPlausible(schema2));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(unconsumed));
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(schema2,
+                                                                unconsumed));
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(unconsumed,
+                                                               inProgress));
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(inProgress,
+                                                               consumed));
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(inProgress,
+                                                               indeterminate));
+
+    auto skipped = schema3Record(4U, fermentation::AuthDomainHandoffState::Consumed);
+    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(unconsumed,
+                                                                skipped));
+    auto reused = schema3Record(5U, fermentation::AuthDomainHandoffState::InProgress);
+    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(inProgress,
+                                                                reused));
+}
+
+void test_schema3_preserves_bound_run_epoch_and_rejects_tampering() {
+    const fermentation::ConfigurationBootstrapRecord previous{
+        fermentation::ConfigurationBootstrapSequence{20U},
+        fermentation::kConfigurationStorageFormatVersion1,
+        device_platform::StorageEpoch{5U},
+        fermentation::ConfigurationBootstrapState::Initialized,
+        fermentation::kConfigurationBootstrapSchemaVersion3,
+        fermentation::RunEpochHandoffState::Pending,
+        device_platform::StorageEpoch{4U}, device_platform::StorageEpoch{5U},
+        fermentation::AuthDomainHandoffState::None};
+    auto next = previous;
+    next.sequence = fermentation::ConfigurationBootstrapSequence{21U};
+    next.authDomainHandoff = fermentation::AuthDomainHandoffState::Unconsumed;
+    TEST_ASSERT_TRUE(fermentation::isPlausible(previous));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(next));
+    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(previous, next));
+
+    next.currentEpoch = device_platform::StorageEpoch{6U};
+    TEST_ASSERT_FALSE(fermentation::isPlausible(next));
+    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(previous, next));
+}
+
 void test_factory_novelty_proof_matching_binding_succeeds_in_order() {
     LocalStore store;
     fermentation::ConfigurationMutationCoordinator coordinator;
@@ -536,6 +605,8 @@ int main() {
     RUN_TEST(test_write_successor_rejects_stale_expected_without_write);
     RUN_TEST(test_write_successor_detects_newer_schema_during_rescan);
     RUN_TEST(test_impossible_history_gap_and_regression_fail_closed);
+    RUN_TEST(test_schema2_to_schema3_handoff_and_auth_cutpoints_are_exact);
+    RUN_TEST(test_schema3_preserves_bound_run_epoch_and_rejects_tampering);
     RUN_TEST(test_factory_novelty_proof_matching_binding_succeeds_in_order);
     RUN_TEST(test_factory_novelty_proof_rejects_wrong_store);
     RUN_TEST(test_factory_novelty_proof_rejects_wrong_lease);

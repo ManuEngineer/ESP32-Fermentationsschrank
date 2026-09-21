@@ -100,6 +100,18 @@ void test_session_expiry_and_capacity() {
                           static_cast<int>(sessions.create(99U).status));
 }
 
+void test_create_retires_all_expired_slots_before_capacity() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    for (std::size_t i = 0U; i < fermentation::kMaximumWebSessions; ++i)
+        TEST_ASSERT_TRUE(sessions.create(0U).handle.has_value());
+    const auto replacement = sessions.create(
+        fermentation::kWebSessionIdleLimitMs + 1U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::WebSessionStatus::Created),
+                          static_cast<int>(replacement.status));
+    TEST_ASSERT_TRUE(replacement.handle.has_value());
+}
+
 }  // namespace
 
 int main() {
@@ -108,5 +120,6 @@ int main() {
     RUN_TEST(test_replay_and_reuse_are_not_second_mutations);
     RUN_TEST(test_inflight_and_old_retired_values_fail_closed);
     RUN_TEST(test_session_expiry_and_capacity);
+    RUN_TEST(test_create_retires_all_expired_slots_before_capacity);
     return UNITY_END();
 }

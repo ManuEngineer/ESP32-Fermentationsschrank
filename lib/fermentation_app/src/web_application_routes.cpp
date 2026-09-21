@@ -1,10 +1,10 @@
 #include "web_application_routes.hpp"
 
-#include <algorithm>
 #include <string>
 
 #include "web_api_codec.hpp"
 #include "web_assets.hpp"
+#include "web_browser_policy.hpp"
 
 namespace fermentation {
 namespace {
@@ -33,33 +33,6 @@ void errorResponse(device_platform::HttpResponse& response, std::uint16_t status
     jsonResponse(response, status, std::move(body));
 }
 
-bool sameOrigin(const device_platform::HttpRequest& request) {
-    if (request.metadata.secFetchSite.has_value() &&
-        (*request.metadata.secFetchSite == "cross-site" ||
-         *request.metadata.secFetchSite == "cross-origin"))
-        return false;
-    const auto host = request.metadata.host.value_or(std::string{});
-    const auto originMatchesHost = [&host](const std::string& value) {
-        const auto scheme = value.find("://");
-        if (scheme == std::string::npos || host.empty()) return false;
-        const auto authorityStart = scheme + 3U;
-        const auto authorityEnd = value.find('/', authorityStart);
-        const auto authority = value.substr(
-            authorityStart,
-            authorityEnd == std::string::npos ? std::string::npos
-                                               : authorityEnd - authorityStart);
-        return authority == host && value.find('@', authorityStart) ==
-                                      std::string::npos;
-    };
-    if (request.metadata.origin.has_value()) {
-        return originMatchesHost(*request.metadata.origin);
-    }
-    if (request.metadata.referer.has_value()) {
-        return originMatchesHost(*request.metadata.referer);
-    }
-    return true;
-}
-
 std::uint16_t networkStatusCode(NetworkConfigurationStatus status) {
     switch (status) {
         case NetworkConfigurationStatus::Applied:
@@ -83,7 +56,7 @@ std::uint16_t networkStatusCode(NetworkConfigurationStatus status) {
 bool WebApplicationRoutes::browserPolicy(
     const device_platform::HttpRequest& request,
     device_platform::HttpResponse& response, bool mutation) const {
-    if (!sameOrigin(request)) {
+    if (!web_browser_policy::sameOrigin(request)) {
         errorResponse(response, 403U, "origin_rejected", "same origin required");
         return false;
     }
@@ -93,7 +66,7 @@ bool WebApplicationRoutes::browserPolicy(
             return false;
         }
         if (!request.metadata.contentType.has_value() ||
-            request.metadata.contentType->find("application/json") != 0U) {
+            !web_browser_policy::exactJsonContentType(*request.metadata.contentType)) {
             errorResponse(response, 415U, "content_type_rejected",
                           "application/json required");
             return false;
@@ -309,7 +282,9 @@ bool WebApplicationRoutes::handle(const device_platform::HttpRequest& request,
         if (encodeUiSnapshot(
                 snapshot,
                 sessions_.mutationSequence(*handle, timeSource_.monotonicMillis()),
-                passwordEnabled, body) != WebApiCodecStatus::Success) {
+                passwordEnabled,
+                sessions_.csrfToken(*handle, timeSource_.monotonicMillis()),
+                body) != WebApiCodecStatus::Success) {
             errorResponse(response, 503U, "response_unavailable",
                           "snapshot unavailable");
         } else {
@@ -541,12 +516,12 @@ bool WebApplicationRoutes::handle(const device_platform::HttpRequest& request,
         }
         const auto epoch = application_.currentStorageEpoch();
         const auto status = epoch.has_value()
-                                ? (pinChange
+                                       ? (pinChange
                                        ? authentication_.changeServicePin(
-                                             *epoch, current, replacement, 0U,
+                                             *epoch, current, replacement,
                                              timeSource_.monotonicMillis())
                                        : authentication_.changeWebPassword(
-                                             *epoch, current, replacement, 0U,
+                                             *epoch, current, replacement,
                                              timeSource_.monotonicMillis()))
                                 : AuthBootstrapStatus::RecoveryRequired;
         switch (status) {

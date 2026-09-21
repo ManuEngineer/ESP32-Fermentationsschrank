@@ -32,7 +32,10 @@ enum class AuthCredentialKind : std::uint8_t {
 struct AuthLockoutState {
     std::uint32_t failedAttempts{0U};
     std::uint8_t lockoutStage{0U};
-    std::uint64_t lockoutUntilMonotonicMs{0U};
+    // Persisted duration, never an absolute monotonic timestamp. After a
+    // reboot the owning domain starts this full duration again because the
+    // monotonic clock has no trusted cross-boot continuity.
+    std::uint64_t lockoutRemainingMs{0U};
 };
 
 struct AuthVerifier {
@@ -113,6 +116,7 @@ decodeAuthenticationCredential(const std::string& bytes);
 enum class AuthenticationReadStatus : std::uint8_t {
     Success,
     NotFound,
+    DifferentEpoch,
     ReadError,
     CapacityError,
     IntegrityFailure,
@@ -212,8 +216,13 @@ class AuthenticationDomain final {
    public:
     AuthenticationDomain(AuthenticationRecordStore& store,
                           IAuthenticationKdf& kdf,
-                          device_platform::ISecureRandomSource& random)
-        : store_(store), kdf_(kdf), random_(random) {}
+                          device_platform::ISecureRandomSource& random,
+                          std::optional<std::uint32_t> workFactorPolicy =
+                              std::nullopt)
+        : store_(store),
+          kdf_(kdf),
+          random_(random),
+          workFactorPolicy_(workFactorPolicy) {}
 
     [[nodiscard]] AuthBootstrapStatus inspect(
         device_platform::StorageEpoch epoch) const;
@@ -224,7 +233,7 @@ class AuthenticationDomain final {
         device_platform::StorageEpoch epoch);
     [[nodiscard]] AuthBootstrapStatus bootstrap(
         device_platform::StorageEpoch epoch, const std::string& password,
-        const std::string& servicePin, std::uint32_t measuredWorkFactor);
+        const std::string& servicePin);
     [[nodiscard]] AuthCheckStatus verifyWebPassword(
         device_platform::StorageEpoch epoch, const std::string& password,
         std::uint64_t nowMs, std::uint64_t& retryAfterMs);
@@ -233,12 +242,10 @@ class AuthenticationDomain final {
         std::uint64_t nowMs, std::uint64_t& retryAfterMs);
     [[nodiscard]] AuthBootstrapStatus changeWebPassword(
         device_platform::StorageEpoch epoch, const std::string& current,
-        const std::string& replacement, std::uint32_t measuredWorkFactor,
-        std::uint64_t nowMs);
+        const std::string& replacement, std::uint64_t nowMs);
     [[nodiscard]] AuthBootstrapStatus changeServicePin(
         device_platform::StorageEpoch epoch, const std::string& current,
-        const std::string& replacement, std::uint32_t measuredWorkFactor,
-        std::uint64_t nowMs);
+        const std::string& replacement, std::uint64_t nowMs);
     [[nodiscard]] AuthBootstrapStatus setWebPasswordEnabled(
         device_platform::StorageEpoch epoch, const std::string& currentPassword,
         const std::string& replacementPassword, bool enabled, bool confirmed,
@@ -247,12 +254,25 @@ class AuthenticationDomain final {
         device_platform::StorageEpoch epoch) const;
 
    private:
+    struct LockoutClock {
+        std::uint64_t recordSequence{0U};
+        std::uint64_t anchorMs{0U};
+        std::uint64_t remainingMs{0U};
+        bool initialized{false};
+    };
+
+    [[nodiscard]] std::uint64_t effectiveLockoutRemaining(
+        const AuthLockoutState& persisted, std::uint64_t recordSequence,
+        std::uint64_t nowMs, LockoutClock& clock) const noexcept;
     [[nodiscard]] bool makeVerifier(const std::string& secret,
                                     std::uint32_t workFactor,
                                     AuthVerifier& out);
     AuthenticationRecordStore& store_;
     IAuthenticationKdf& kdf_;
     device_platform::ISecureRandomSource& random_;
+    std::optional<std::uint32_t> workFactorPolicy_;
+    mutable LockoutClock webLockoutClock_;
+    mutable LockoutClock servicePinLockoutClock_;
     mutable std::recursive_mutex mutex_;
 };
 

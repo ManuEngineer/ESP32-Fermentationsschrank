@@ -41,6 +41,7 @@ class WebRouteDispatcher;
 class IAuthenticationKdf;
 enum class AuthBootstrapStatus : std::uint8_t;
 class RunPersistenceCoordinator;
+struct RunPersistenceResult;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
@@ -165,6 +166,8 @@ class FermentationApplication {
     // new CommandId or derives a replacement runId.
     [[nodiscard]] static FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared) noexcept;
+    [[nodiscard]] RunPersistenceResult applyPreparedRequest(
+        const FermentationApplicationPreparedRequest& request);
 
     // Existing configuration recovery remains the authorization owner. This
     // application entry point composes its FactoryResetCompleted result with
