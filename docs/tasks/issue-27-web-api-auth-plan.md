@@ -23,7 +23,7 @@ BASE_BRANCH=main
 BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16
 CURRENT_HEAD=1f1755e5e706fb668472920545b5302fcef1df16
 PLAN_REVISION=FULL_WEB_API_AUTH_REVALIDATION_ON_POST_165_MAIN
-PLAN_STATUS=REVIEW_CORRECTION_REQUIRED
+PLAN_STATUS=FIX_VERIFICATION_PENDING
 PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_IMPLEMENTATION=NOT_STARTED
@@ -264,6 +264,34 @@ alter Epoch-Record und kein Fallback-Credential wird wieder aktiviert. Erst
 nach erfolgreichem Credential- und Root-Readback-Commit steht der normale
 Webpfad zur Verfügung.
 
+Für eine bereits gültige, vor #27 angelegte `StorageEpoch` gibt es genau einen
+First-Consumer-Handoff. Der bestehende, historisch kanonische
+`ConfigurationBootstrapRecord` wird über seinen vorhandenen
+`ConfigurationBootstrapStore` und die bestehende Mutation-/Recovery-Lease auf
+`SchemaVersion=3` fortgeschrieben. Die Schema-3-Erweiterung trägt ausschließlich
+den versionierten Marker
+`AuthDomainHandoff=UNCONSUMED|IN_PROGRESS|CONSUMED|INDETERMINATE` und bindet
+ihn an die bestehende Bootstrap-Sequenz und `StorageEpoch`.
+
+Nur die gültige Schema-2-zu-Schema-3-Migration auf der unveränderten
+Pre-#27-Baseline liefert die positive Evidenz `UNCONSUMED`, dass diese
+Authentication-Domäne in der aktuellen Epoch noch nie initialisiert wurde.
+`IN_PROGRESS` wird vor dem ersten `authroot0`-Write readback-validiert;
+danach wird `authroot0=UNPROVISIONED` für dieselbe Epoch geschrieben und
+readback-validiert, erst anschließend wird der Handoff-Marker als
+`CONSUMED` persistiert und validiert. Jeder Write-/Readback-/Commitfehler
+führt zu `INDETERMINATE` bzw. `AUTH_RECOVERY_REQUIRED`. Ein `CONSUMED`-
+Marker darf nie wieder zu `UNCONSUMED` werden. Dadurch ist ein späteres
+fehlendes oder korruptes `authroot0` kein erneuter First-Consumer-Fall.
+
+Diese einmalige Migration verändert weder bestehende Konfiguration,
+Connectivity-Credentials, Run-Persistenz noch die `StorageEpoch`; sie nutzt
+nur den bestehenden Bootstrap-/Recoveryvertrag. Ein stiller Factory Reset,
+eine Ableitung allein aus `authroot0 == NotFound` oder eine zweite globale
+Recoveryplattform ist unzulässig. Auf neu erzeugten Epochs wird derselbe
+versionierte Handoff im bestehenden Epoch-Initialisierungspfad als
+`UNCONSUMED` angelegt.
+
 ### 3.1 Normales Webpasswort
 
 - Ein gemeinsames normales Webpasswort, kein Konto-, Benutzer-, Rollen- oder
@@ -431,7 +459,7 @@ RecordTypeId=11
 SchemaVersion=1
 StorageEpoch=current active epoch
 ProvisioningState=UNPROVISIONED|PROVISIONING|PROVISIONING_INDETERMINATE|PROVISIONED|RECOVERY_REQUIRED
-CredentialRecordSequence=0-or-auth0-sequence
+AuthDomainGeneration=1
 ```
 
 Die Baseline-Prüfung auf `main@1f1755e5e706fb668472920545b5302fcef1df16`
@@ -451,6 +479,7 @@ AUTH_ROOT_RECORD_TYPE_ID=11
 AUTH_ROOT_SCHEMA_VERSION=1
 AUTH_ROOT_KEY_COLLISION=NONE_ON_BASELINE
 AUTH_ROOT_RECORD_TYPE_COLLISION=NONE_ON_BASELINE
+CONFIGURATION_BOOTSTRAP_AUTH_HANDOFF_SCHEMA=3
 ```
 
 Vor dem ersten Auth-Commit wird nur noch verifiziert, dass die Implementierung
@@ -469,8 +498,8 @@ Authentication-Daten:
   Vertrag.
 
 Der `authroot0`-Payload enthält ausschließlich den aktuellen
-Provisionierungszustand, die aktuelle `StorageEpoch`, eine monotone
-Credential-Record-Referenz und seine Integritäts-/Sequenzdaten. Er enthält
+Provisionierungszustand, die aktuelle `StorageEpoch`, die
+Authentication-Domain-Generation und seine Integritäts-/Sequenzdaten. Er enthält
 keine Passwörter, PINs, Verifier, Sessiondaten oder CSRF-Tokens. Auf einer
 frisch initialisierten oder per Factory Reset neu erzeugten Epoch wird
 `UNPROVISIONED` über den bestehenden Epoch-Initialisierungspfad geschrieben
@@ -521,14 +550,22 @@ die vorhandenen per-Key-Write-/Readback-Semantiken des `IStateStore`:
    ein Credential-Record geschrieben und vollständig readback-validiert. Ein
    Parse-, CRC-, Schema-, Epoch-, Readback- oder Commitfehler lässt den Root
    in einem nicht bootstrapfähigen Zustand.
-4. Erst nach gültigem `auth0`-Readback wird `authroot0=PROVISIONED` mit der
-   exakten Credential-Record-Referenz geschrieben und readback-validiert.
+4. Erst nach gültigem `auth0`-Readback wird `authroot0=PROVISIONED` für die
+   aktuelle `StorageEpoch` und `AuthDomainGeneration=1` geschrieben und
+   readback-validiert. Der Root referenziert keine veränderliche `auth0`-
+   Recordsequenz.
    `PROVISIONING`, `PROVISIONING_INDETERMINATE` und
    `RECOVERY_REQUIRED` öffnen niemals den Bootstrap. Ein nach
    `PROVISIONED` fehlender oder ungültiger `auth0`-Record bleibt Recovery-
    required; er wird nicht neu angelegt.
 
-Damit ist der Root ein schmaler, persistenter Zustands-/Revisionsanker im
+Lockout-Zähler, Lockout-Stufen, erfolgreiche Prüfungen und Credentialwechsel
+schreiben ausschließlich den vollständig validierten `auth0`-Record mit
+seiner eigenen monotonen Recordsequenz. `authroot0` bleibt dabei unverändert;
+`AuthDomainGeneration` ändert sich nur bei der definierten neuen
+`StorageEpoch`/Domain-Initialisierung.
+
+Damit ist der Root ein schmaler, persistenter Zustands-/Generationsanker im
 gleichen Store und keine zweite Credential-Wahrheit. Eine Implementierung
 darf weder die beiden Records als unbestätigte neue Transaktion behandeln
 noch einen unklaren Ausgang durch Löschen, Reprovisionierung oder Factory-
@@ -651,12 +688,39 @@ Jede Mutation bringt Schutz gegen doppelte/retryte Ausführung mit:
 Für HTTP-Retries führt der Browser bei jedem internen Schreibrequest eine
 sessiongebundene monotone `X-UI-Mutation-Seq` als positive Dezimalzahl mit
 maximal 20 ASCII-Zeichen mit. Die Browser-Shell reserviert die Sequenzwerte
-sessionweit auch über mehrere Tabs; sie steht nicht in URL, Body, Log oder
-Persistenz. Der Web-Transport hält pro Session nur `highWater`, einen kleinen
-Replay-Floor, höchstens acht kürzlich abgeschlossene Outcomes und die
-aktuelle `InFlight`-Mutation. Jeder Outcome enthält die Sequenz, einen
-bounded Fingerprint aus Methode, Pfad, Bodylänge/-inhalt und relevanten
-erwarteten Revisionen sowie den secret-freien typisierten Outcome.
+sessionweit auch über mehrere Tabs; die lokale Monotonie ist aber keine
+Securitygrenze. Die Sequenz steht nicht in URL, Body, Log oder Persistenz. Der
+Web-Transport hält pro Session nur `highWater`, einen kleinen Replay-Floor,
+höchstens acht kürzlich abgeschlossene Outcomes und die aktuelle `InFlight`-
+Mutation. Jeder Outcome enthält die Sequenz, einen bounded Fingerprint aus
+Methode, Pfad, Bodylänge/-inhalt und relevanten erwarteten Revisionen sowie
+den secret-freien typisierten Outcome.
+
+Jede gültige Session erhält über den bestehenden bounded Session-/Snapshot-
+Handoff ein autoritatives Transportfeld `nextMutationSeq` sowie den Zustand
+`AVAILABLE`, `IN_FLIGHT` oder `EXHAUSTED`. Dieser Handoff wird bei Login,
+Sessionbildung, Reload, Browser-Restore und Reconnect mit dem ohnehin
+benötigten Session-/UI-Snapshot aktualisiert; er ist weder Teil der
+Fachdatenprojektion noch Session-ID, Auth-Token oder persistentes Credential.
+Bei `AVAILABLE` ist `nextMutationSeq=highWater+1`. Bei `IN_FLIGHT` wird die
+reservierte Sequenz zusätzlich als `inFlightMutationSeq` ausgewiesen; bis zu
+ihrem Outcome wird keine weitere neue Sequenz zugelassen. Nach Abschluss
+liefert der nächste Handoff wieder die neue autoritative `nextMutationSeq`.
+
+Der Server prüft und reserviert den erwarteten Wert atomar unter dem
+Sessionzustand. Ein Browser-/Tab-Rennen kann deshalb höchstens eine
+Mutation reservieren; der unterlegene Tab erhält einen typisierten
+`409 mutation_sequence_conflict`, lädt `nextMutationSeq` und die aktuellen
+Fachrevisionen neu und muss die Aktion gegen den neuen Zustand erneut
+auslösen/bestätigen. Kein Tab führt nach diesem Konflikt ein blindes
+automatisches Replay aus. Ein identischer Retry nach nachweislich verlorenem
+Response nutzt weiterhin das begrenzte Outcome-Fenster.
+
+`X-UI-Mutation-Seq` wird ausschließlich als `uint64` mit Overflowprüfung
+geparst. Bei `highWater=UINT64_MAX` ist `nextMutationSeq` nicht darstellbar;
+der Zustand wird `EXHAUSTED`, neue Mutationen liefern fail-closed
+`503 mutation_sequence_exhausted` und mutieren nichts. Es gibt kein Wraparound
+und keinen stillen Wechsel auf eine zweite Sequenzwahrheit.
 
 - Die nächste neue Sequenz muss genau `highWater + 1` sein und wird vor dem
   Application-Command reserviert. Eine höhere Sequenz liefert
@@ -836,6 +900,9 @@ erneute Ownerfreigabe.
   Wiederverwendung von `ServiceSessionLease` für die Web-Servicelease;
 - `configuration_storage_contract.*` nur für den geprüften Auth-Recordtyp /
   Schema-/Keyvertrag;
+- `configuration_bootstrap.*` und `configuration_bootstrap_store.*` nur für
+  den versionierten Schema-3-`AuthDomainHandoff`, gebunden an die vorhandene
+  Bootstrap-Sequenz, `StorageEpoch`, Mutation-Lease und Recoverysemantik;
 - `IStateStore`, `StorageEnvelope`, `StorageEpoch`,
   `CommitOutcomeUnknown` unverändert verwenden; keine zweite
   Backendimplementierung;
@@ -887,6 +954,8 @@ führen:
 |---|---|
 | Baseline | `BASE_SHA`, ESP-IDF-Commit, C++17, 4 MB, kein PSRAM, beide Profile |
 | Erstprovisionierung | aktuelle Epoch mit positivem `UNPROVISIONED`-Root -> Bootstrap erlaubt; korrupter Auth-Record, unsupported Schema, indeterminate Commit/Readback oder zuvor provisionierter fehlender Authzustand -> `AUTH_RECOVERY_REQUIRED` und Bootstrap verboten; Factory Reset/neue Epoch -> definierter unprovisionierter Zustand |
+| First-Consumer-Handoff | gültige bestehende Pre-#27-Epoch ohne Auth-Domain -> genau einmal Schema-2-zu-3-Handoff und `UNPROVISIONED`; danach fehlender/korruptierter `authroot0` -> `AUTH_RECOVERY_REQUIRED`; Handoff-CommitOutcomeUnknown/Readbackfehler -> fail-closed; bestehende Konfiguration, WLAN-Credentials und Run-Persistenz bleiben erhalten |
+| Auth-Root/Generation | `PROVISIONED` plus mehrere Lockout-Writes -> Root bleibt gültig; erfolgreicher Passwort- oder PIN-Wechsel erzeugt gültige neue `auth0`-Generation ohne Root-Mutation; fehlender/korruptierter `auth0` -> `AUTH_RECOVERY_REQUIRED` |
 | Login | korrekt/falsch; 14/15/64/65 Unicode-Codepoints; UTF-8 bei 255/256/>256 Bytes; Unicode/Leerzeichen; keine Trunkierung/Kompositionspflicht; Passwortmanager/Paste; sessiongebundener CSRF-Handoff ohne URL-/Log-Secret |
 | Passwort-Lockout | 5 Fehler, 30 s, exponentielle Blöcke bis 15 min, aktiver Lockout ohne KDF/Write, Fehler erst nach Write/Readback, Erfolg resetet atomar |
 | Lockout-Recovery | Neustart bei aktivem Lockout, Persistenz-/Readbackfehler, kein Bypass |
@@ -899,6 +968,7 @@ führen:
 | Browsergrenze | Methode, Content-Type, Origin, Referer-Ersatz, Fetch-Metadata, fehlende/duplizierte/zu große Header fail-closed, Statusmapping statt 500, CORS-Ablehnung |
 | Revision | stale User-/Program-/Run-/Message-/Network-Revision -> Conflict, kein Überschreiben |
 | Idempotenz | mehr als acht sequenzielle Mutationen in derselben Session funktionieren; identischer aktueller Retry erzeugt keine zweite Mutation; retirierter Replay und gleiche Sequenz mit anderem Payload werden ohne Mutation abgelehnt; `InFlight` wird nicht verdrängt; bounded Speicher bleibt konstant; parallele Display-/Webrevision bleibt konfliktfest |
+| Mutation-Resync | Reload/Browser-Restore/Reconnect derselben Session erhält autoritatives `nextMutationSeq`; zwei Tabs reservieren gleichzeitig höchstens eine Mutation; unterlegener Tab resynchronisiert Fachrevisionen ohne blindes Replay; `UINT64_MAX`/Overflow bleibt fail-closed |
 | Safety | formal gültige Webaktion wird bei fehlender Safety-/Fach-Evidenz abgelehnt |
 | API | `/api/v1/status`, `/temperatures`, `/alerts`, Authmodus, stabile Codes, keine Secrets |
 | API-Grenze | keine offizielle externe Write-Operation in OpenAPI-/Route-/Dokumentationsfläche |
@@ -1048,6 +1118,7 @@ ISSUE31_IMPLEMENTATION=EXCLUDED
 PRODUCT_IMPLEMENTATION=NOT_STARTED
 ACTUATOR_RELEASE=NO
 PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
-OPEN_REVIEW_BLOCKERS=2
-OWNER_PLAN_APPROVAL_REQUIRED=AFTER_REVIEW_CORRECTIONS
+OPEN_REVIEW_BLOCKERS=0
+FIX_VERIFICATION_REQUIRED=YES
+OWNER_PLAN_APPROVAL_REQUIRED=AFTER_FIX_VERIFICATION
 ```
