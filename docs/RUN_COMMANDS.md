@@ -449,22 +449,19 @@ aktive Meldungen.
 
 ## Fehler zuruecksetzen
 
-Issue #15 definiert das fachliche Kommando `Fehler zuruecksetzen` und dessen
-Ergebnisstruktur, aber keine konkrete Fehlercode-, Sensor-, Hardware- oder
-Berechtigungspolitik.
+Der rendererunabhaengige UI-Intent `FermentationUiResetFaultIntent` bleibt als
+Bedienabsicht erhalten, ist im aktuellen Application-Composition-Scope aber
+kein generischer Run-Command mit einer von aussen gelieferten
+`FaultResetEvaluation`. Solange kein kanonischer Planner-/Watchdog-Owner
+gebunden ist, liefert die Application typisiert `Unavailable` und erzeugt
+weder eine Run-Persistenzmutation noch eine Aktor-Composition.
 
-Das Kommando verwendet eine aktuelle, bereits qualifizierte
-Resetfreigabebewertung der spaeteren Sicherheitslogik. Diese Bewertung drueckt
-mindestens aus:
-
-- ob der Reset erlaubt ist
-- ob die Ursache weiterhin aktiv ist
-- ob erforderliche Sicherheitspruefungen bestanden sind
-- ob die erforderliche Berechtigung erfuellt ist
-- auf welche Fehlerrevision sich die Bewertung bezieht
-- einen stabilen Ablehnungsgrund
-
-Ohne positive und noch aktuelle Resetfreigabe wird das Kommando abgelehnt.
+Die spaetere konkrete R1-Mutation bleibt beim bestehenden
+`ActuationInterlock::resetRequestWatchdog(...)` ->
+`ActuatorPlanner::applyExternalWatchdogFaultReset(...)`-Pfad. Sie benoetigt
+frische Owner-Evidence; eine UI-/Transport-Eingabe kann keine Resetfreigabe,
+Fehlerrevision oder Berechtigung behaupten. Quittieren und Stummschalten
+bleiben davon getrennte, nicht verriegelungsloesende Kommandos.
 
 Issue #15:
 
@@ -492,8 +489,9 @@ Native Tests decken mindestens ab:
 - Zieltemperaturaenderung vor und waehrend `FERMENTING`
 - weiterlaufende Restdauer bei Zielaenderung waehrend `FERMENTING`
 - Restdaueranpassung in zulaessigen und unzulaessigen Phasen
-- Quittieren, Stummschalten und Fehlerreset als getrennte Aktionen
-- erlaubte und abgelehnte deterministische Resetfreigabebewertungen
+- Quittieren, Stummschalten und den fail-closed Fehlerreset-Intent als
+  getrennte Aktionen
+- Unverfuegbarkeit des ungebundenen Watchdog-Owners ohne Mutation
 - keine direkte Persistenz, Hardwarewirkung oder Abhaengigkeit von Display/Web
 - phasengerechte Laufrevision bei Zielaenderung (vor der Fermentationsphase je
   Einzelphase, waehrend `FERMENTING`, reine Restdaueranpassung) sowie
@@ -535,7 +533,7 @@ Persistenz-, Sicherheits- oder Transportimplementierungen vorwegnehmen.
 Die produktive, hardwareunabhaengige Umsetzung liegt in:
 
 - `lib/fermentation_app/src/run_commands.hpp/.cpp` fuer Kommando-Umschlaege,
-  manuelle Laufplaene, Startzusammenfassungen, Meldungen, Resetbewertungen und
+  manuelle Laufplaene, Startzusammenfassungen und Meldungen sowie
   zweistufige `CommandDecision`s
 - `lib/fermentation_app/src/run_command_limits.hpp` fuer die festen Grenzen der
   verarbeiteten Kommando-IDs, Laufzeitmeldungen und Wirkungsabsichten; die

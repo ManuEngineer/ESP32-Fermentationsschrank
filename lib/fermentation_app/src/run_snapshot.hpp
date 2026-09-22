@@ -114,7 +114,6 @@ struct RunRevision {
 
 struct RunAdjustmentContext {
     bool runActive{true};
-    bool safetyAllowsChange{true};
     std::size_t activeStageIndex{0U};
     std::size_t completedStageCount{0U};
     RunAdjustmentPhaseContext phaseContext{

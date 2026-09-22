@@ -55,15 +55,6 @@ device_platform::DeviceUiTarget bottom(std::uint8_t index) {
     return {device_platform::DeviceUiTargetKind::BottomSlot, index};
 }
 
-FermentationApplicationOwningEvidence owningEvidence() {
-    FermentationApplicationOwningEvidence evidence;
-    evidence.safetyAllowsStart = true;
-    evidence.airSensorValid = true;
-    evidence.coolingSensorValid = true;
-    evidence.productSensorValid = true;
-    return evidence;
-}
-
 FermentationUiSnapshot snapshotFor(ProcessState state,
                                    FermentationHomeMode expectedMode) {
     static RunCommandState run;
@@ -442,8 +433,8 @@ void test_sim_26_manual_and_program_consumer_paths() {
     FermentationUiCommandContext context;
     context.surface = device_platform::UiSurface::LocalDisplay;
     context.expected.expectedStateSequence = 0U;
-    const auto prepared = application.prepareEnvelope(
-        context, *timedPress.action, owningEvidence());
+    const auto prepared =
+        application.prepareEnvelope(context, *timedPress.action);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(prepared.status));

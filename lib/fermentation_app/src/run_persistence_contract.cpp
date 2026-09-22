@@ -318,7 +318,6 @@ bool isPersistedRunCommand(CommandKind kind) {
             return true;
         case CommandKind::AcknowledgeMessage:
         case CommandKind::MuteMessage:
-        case CommandKind::ResetFault:
             return false;
     }
     return false;
