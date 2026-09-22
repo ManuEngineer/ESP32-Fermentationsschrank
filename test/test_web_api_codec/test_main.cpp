@@ -103,6 +103,46 @@ void test_json_negative_and_redaction_boundaries_are_bounded() {
     TEST_ASSERT_TRUE(encoded.find("csrfToken") == std::string::npos);
 }
 
+void test_web_run_command_decoder_keeps_intents_and_revisions_typed() {
+    fermentation::WebUiRunCommand command;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebApiCodecStatus::Success),
+        static_cast<int>(fermentation::decodeWebUiRunCommand(
+            R"({"action":"start_manual_timed","confirmed":true,"expectedStateSequence":4,"expectedRunRevision":0,"targetTemperatureCelsius":28.5,"durationMinutes":90,"sensorMode":"PRODUCT","preheatEnabled":true,"qualificationBandCelsius":0.5,"qualificationDurationMinutes":10,"maximumTargetReachMinutes":180,"completionMode":"FINISH_WITHOUT_COOLING"})",
+            command)));
+    TEST_ASSERT_TRUE(command.confirmed);
+    TEST_ASSERT_EQUAL_UINT32(4U, command.expected.expectedStateSequence);
+    TEST_ASSERT_TRUE(command.expected.expectedRunRevision.has_value());
+    TEST_ASSERT_TRUE(std::holds_alternative<
+                     fermentation::FermentationUiStartManualTimedIntent>(
+        command.payload));
+    const auto& timed = std::get<fermentation::FermentationUiStartManualTimedIntent>(
+        command.payload);
+    TEST_ASSERT_EQUAL_UINT32(90U, timed.values.durationMinutes);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunSensorMode::Product),
+        static_cast<int>(timed.values.sensorMode));
+    TEST_ASSERT_TRUE(timed.values.preheatEnabled);
+}
+
+void test_web_run_command_decoder_rejects_missing_confirmation_or_bounds() {
+    fermentation::WebUiRunCommand command;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebApiCodecStatus::MissingField),
+        static_cast<int>(fermentation::decodeWebUiRunCommand(
+            R"({"action":"stop","expectedStateSequence":1,"option":"back"})",
+            command)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebApiCodecStatus::WrongType),
+        static_cast<int>(fermentation::decodeWebUiRunCommand(
+            R"({"action":"stop","confirmed":false,"expectedStateSequence":1,"option":"bad"})",
+            command)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebApiCodecStatus::CapacityExceeded),
+        static_cast<int>(fermentation::decodeWebUiRunCommand(
+            std::string(4097U, 'x'), command)));
+}
+
 }  // namespace
 
 void setup() {}
@@ -114,5 +154,7 @@ int main() {
     RUN_TEST(test_network_mode_decoder_keeps_only_user_modes_and_revision);
     RUN_TEST(test_boolean_and_credential_decoders_enforce_types_and_bounds);
     RUN_TEST(test_json_negative_and_redaction_boundaries_are_bounded);
+    RUN_TEST(test_web_run_command_decoder_keeps_intents_and_revisions_typed);
+    RUN_TEST(test_web_run_command_decoder_rejects_missing_confirmation_or_bounds);
     return UNITY_END();
 }

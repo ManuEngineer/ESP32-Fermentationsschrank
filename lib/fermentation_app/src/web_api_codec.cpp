@@ -1,6 +1,8 @@
 #include "web_api_codec.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include <ArduinoJson.h>
 
@@ -8,6 +10,417 @@ namespace fermentation {
 namespace {
 
 constexpr std::size_t kMaximumJsonResponseBytes = 4096U;
+constexpr std::size_t kMaximumJsonRequestBytes = 4096U;
+constexpr std::size_t kMaximumProgramIdBytes = 128U;
+
+using JsonDocument = ArduinoJson::JsonDocument;
+
+WebApiCodecStatus requiredString(const JsonDocument& document, const char* field,
+                                 std::size_t maximumBytes,
+                                 std::string& out) {
+    const auto value = document[field];
+    if (value.isNull()) return WebApiCodecStatus::MissingField;
+    if (!value.is<const char*>()) return WebApiCodecStatus::WrongType;
+    const char* text = value.as<const char*>();
+    if (text == nullptr) return WebApiCodecStatus::WrongType;
+    out.assign(text);
+    if (out.empty()) {
+        out.clear();
+        return WebApiCodecStatus::MissingField;
+    }
+    if (out.size() > maximumBytes) {
+        out.clear();
+        return WebApiCodecStatus::CapacityExceeded;
+    }
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus requiredUInt32(const JsonDocument& document, const char* field,
+                                 std::uint32_t& out) {
+    const auto value = document[field];
+    if (value.isNull()) return WebApiCodecStatus::MissingField;
+    if (!value.is<std::uint64_t>() ||
+        value.as<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max()) {
+        return WebApiCodecStatus::WrongType;
+    }
+    out = value.as<std::uint32_t>();
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus optionalUInt32(
+    const JsonDocument& document, const char* field,
+    std::optional<std::uint32_t>& out) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        out.reset();
+        return WebApiCodecStatus::Success;
+    }
+    std::uint32_t parsed = 0U;
+    const auto status = requiredUInt32(document, field, parsed);
+    if (status == WebApiCodecStatus::Success) out = parsed;
+    return status;
+}
+
+WebApiCodecStatus requiredDouble(const JsonDocument& document, const char* field,
+                                 double& out) {
+    const auto value = document[field];
+    if (value.isNull()) return WebApiCodecStatus::MissingField;
+    if (!value.is<double>()) return WebApiCodecStatus::WrongType;
+    const double parsed = value.as<double>();
+    if (!std::isfinite(parsed)) return WebApiCodecStatus::WrongType;
+    out = parsed;
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus optionalDouble(const JsonDocument& document, const char* field,
+                                 std::optional<double>& out) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        out.reset();
+        return WebApiCodecStatus::Success;
+    }
+    double parsed = 0.0;
+    const auto status = requiredDouble(document, field, parsed);
+    if (status == WebApiCodecStatus::Success) out = parsed;
+    return status;
+}
+
+WebApiCodecStatus optionalBoolean(const JsonDocument& document, const char* field,
+                                  std::optional<bool>& out) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        out.reset();
+        return WebApiCodecStatus::Success;
+    }
+    if (!value.is<bool>()) return WebApiCodecStatus::WrongType;
+    out = value.as<bool>();
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus requiredBoolean(const JsonDocument& document, const char* field,
+                                  bool& out) {
+    const auto value = document[field];
+    if (value.isNull()) return WebApiCodecStatus::MissingField;
+    if (!value.is<bool>()) return WebApiCodecStatus::WrongType;
+    out = value.as<bool>();
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus optionalRevision(const JsonDocument& document, const char* field,
+                                   std::optional<std::uint32_t>& out) {
+    return optionalUInt32(document, field, out);
+}
+
+WebApiCodecStatus optionalUserRevision(
+    const JsonDocument& document, const char* field,
+    std::optional<UserConfigurationRevision>& out) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        out.reset();
+        return WebApiCodecStatus::Success;
+    }
+    if (!value.is<std::uint64_t>() || value.as<std::uint64_t>() == 0U) {
+        return WebApiCodecStatus::WrongType;
+    }
+    out = UserConfigurationRevision{value.as<std::uint64_t>()};
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus optionalProgramRevision(
+    const JsonDocument& document, const char* field,
+    std::optional<ProgramCatalogRevision>& out) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        out.reset();
+        return WebApiCodecStatus::Success;
+    }
+    if (!value.is<std::uint64_t>() || value.as<std::uint64_t>() == 0U) {
+        return WebApiCodecStatus::WrongType;
+    }
+    out = ProgramCatalogRevision{value.as<std::uint64_t>()};
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus sensorMode(const JsonDocument& document, const char* field,
+                             RunSensorMode& out, bool required) {
+    const auto value = document[field];
+    if (value.isNull()) {
+        return required ? WebApiCodecStatus::MissingField
+                        : WebApiCodecStatus::Success;
+    }
+    if (!value.is<const char*>()) return WebApiCodecStatus::WrongType;
+    const std::string code = value.as<const char*>();
+    if (code == "PRODUCT") {
+        out = RunSensorMode::Product;
+        return WebApiCodecStatus::Success;
+    }
+    if (code == "AIR") {
+        out = RunSensorMode::Air;
+        return WebApiCodecStatus::Success;
+    }
+    return WebApiCodecStatus::WrongType;
+}
+
+WebApiCodecStatus completionMode(const JsonDocument& document, const char* field,
+                                 CompletionMode& out) {
+    const auto value = document[field];
+    if (value.isNull()) return WebApiCodecStatus::Success;
+    if (!value.is<const char*>()) return WebApiCodecStatus::WrongType;
+    const std::string code = value.as<const char*>();
+    if (code == "FINISH_WITHOUT_COOLING") {
+        out = CompletionMode::FinishWithoutCooling;
+    } else if (code == "COOL_THEN_FINISH") {
+        out = CompletionMode::CoolThenFinish;
+    } else if (code == "COOL_AND_HOLD_FOR_DURATION") {
+        out = CompletionMode::CoolAndHoldForDuration;
+    } else if (code == "COOL_AND_HOLD_UNTIL_MANUAL_STOP") {
+        out = CompletionMode::CoolAndHoldUntilManualStop;
+    } else {
+        return WebApiCodecStatus::WrongType;
+    }
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus decodeManualPlan(const JsonDocument& document,
+                                   FermentationUiManualRunPlanValues& out) {
+    auto status = requiredDouble(document, "targetTemperatureCelsius",
+                                 out.targetTemperatureCelsius);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = sensorMode(document, "sensorMode", out.sensorMode, false);
+    if (status != WebApiCodecStatus::Success) return status;
+    std::optional<bool> preheat;
+    status = optionalBoolean(document, "preheatEnabled", preheat);
+    if (status != WebApiCodecStatus::Success) return status;
+    if (preheat.has_value()) out.preheatEnabled = *preheat;
+    status = optionalUInt32(document, "maximumProductWaitMinutes",
+                            out.maximumProductWaitMinutes);
+    if (status != WebApiCodecStatus::Success) return status;
+    if (document["qualificationBandCelsius"].isNull()) {
+        out.qualificationBandCelsius = 0.0;
+    } else {
+        status = requiredDouble(document, "qualificationBandCelsius",
+                                out.qualificationBandCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+    }
+    if (document["qualificationDurationMinutes"].isNull()) {
+        out.qualificationDurationMinutes = 0U;
+    } else {
+        status = requiredUInt32(document, "qualificationDurationMinutes",
+                                out.qualificationDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+    }
+    if (document["maximumTargetReachMinutes"].isNull()) {
+        out.maximumTargetReachMinutes = 0U;
+    } else {
+        status = requiredUInt32(document, "maximumTargetReachMinutes",
+                                out.maximumTargetReachMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+    }
+    return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus decodeExpectedRevisions(const JsonDocument& document,
+                                          FermentationUiExpectedRevisions& out) {
+    auto status = requiredUInt32(document, "expectedStateSequence",
+                                 out.expectedStateSequence);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = optionalRevision(document, "expectedRunRevision",
+                              out.expectedRunRevision);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = optionalRevision(document, "expectedMessageRevision",
+                              out.expectedMessageRevision);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = optionalRevision(document, "expectedFaultRevision",
+                              out.expectedFaultRevision);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = optionalRevision(document, "expectedRecoveryEpisodeRevision",
+                              out.expectedRecoveryEpisodeRevision);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = optionalUserRevision(document, "expectedUserConfigurationRevision",
+                                  out.expectedUserConfigurationRevision);
+    if (status != WebApiCodecStatus::Success) return status;
+    return optionalProgramRevision(document, "expectedProgramCatalogRevision",
+                                   out.expectedProgramCatalogRevision);
+}
+
+WebApiCodecStatus requiredAction(const JsonDocument& document,
+                                 std::string& out) {
+    return requiredString(document, "action", 64U, out);
+}
+
+WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
+                                   const std::string& action,
+                                   FermentationUiEnvelopePayload& out) {
+    if (action == "start_program") {
+        FermentationUiStartProgramIntent intent;
+        auto status = requiredString(document, "programId", kMaximumProgramIdBytes,
+                                     intent.candidate.programId);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalDouble(document, "targetTemperatureCelsius",
+                                intent.candidate.targetTemperatureCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalUInt32(document, "fermentationDurationMinutes",
+                                intent.candidate.fermentationDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalBoolean(document, "preheatEnabled",
+                                 intent.candidate.preheatEnabled);
+        if (status != WebApiCodecStatus::Success) return status;
+        RunSensorMode sensor = RunSensorMode::Air;
+        status = sensorMode(document, "sensorMode", sensor, false);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (!document["sensorMode"].isNull()) intent.candidate.sensorMode = sensor;
+        CompletionMode completion = CompletionMode::FinishWithoutCooling;
+        status = completionMode(document, "completionMode", completion);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (!document["completionMode"].isNull()) {
+            intent.candidate.completionMode = completion;
+        }
+        status = optionalDouble(document, "coolingTargetCelsius",
+                                intent.candidate.coolingTargetCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalUInt32(document, "holdDurationMinutes",
+                                intent.candidate.holdDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "start_manual_holding") {
+        FermentationUiStartManualHoldingIntent intent;
+        const auto status = decodeManualPlan(document, intent.plan);
+        if (status != WebApiCodecStatus::Success) return status;
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "start_manual_timed") {
+        FermentationUiStartManualTimedIntent intent;
+        auto status = requiredDouble(document, "targetTemperatureCelsius",
+                                     intent.values.targetTemperatureCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = requiredUInt32(document, "durationMinutes",
+                                intent.values.durationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = sensorMode(document, "sensorMode", intent.values.sensorMode, false);
+        if (status != WebApiCodecStatus::Success) return status;
+        std::optional<bool> preheat;
+        status = optionalBoolean(document, "preheatEnabled", preheat);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (preheat.has_value()) intent.values.preheatEnabled = *preheat;
+        status = optionalUInt32(document, "maximumProductWaitMinutes",
+                                intent.values.maximumProductWaitMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = requiredDouble(document, "qualificationBandCelsius",
+                                intent.values.qualificationBandCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = requiredUInt32(document, "qualificationDurationMinutes",
+                                intent.values.qualificationDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = requiredUInt32(document, "maximumTargetReachMinutes",
+                                intent.values.maximumTargetReachMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = completionMode(document, "completionMode",
+                                intent.values.completionMode);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalDouble(document, "coolingTargetCelsius",
+                                intent.values.coolingTargetCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalUInt32(document, "holdDurationMinutes",
+                                intent.values.holdDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "stop") {
+        FermentationUiStopRunIntent intent;
+        std::string option;
+        auto status = requiredString(document, "option", 32U, option);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (option == "back") {
+            intent.option = StopOption::Back;
+        } else if (option == "abort_and_turn_off") {
+            intent.option = StopOption::AbortAndTurnOff;
+        } else if (option == "abort_and_cool") {
+            intent.option = StopOption::AbortAndCool;
+        } else {
+            return WebApiCodecStatus::WrongType;
+        }
+        if (intent.option == StopOption::AbortAndCool) {
+            FermentationUiManualRunPlanValues plan;
+            status = decodeManualPlan(document, plan);
+            if (status != WebApiCodecStatus::Success) return status;
+            intent.coolingPlan = plan;
+        }
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "complete") {
+        FermentationUiCompleteRunIntent intent;
+        auto status = requiredBoolean(document, "startCooling", intent.startCooling);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (intent.startCooling) {
+            FermentationUiManualRunPlanValues plan;
+            status = decodeManualPlan(document, plan);
+            if (status != WebApiCodecStatus::Success) return status;
+            intent.coolingPlan = plan;
+        }
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "adjust") {
+        FermentationUiAdjustRunIntent intent;
+        auto status = optionalDouble(document, "targetTemperatureCelsius",
+                                     intent.targetTemperatureCelsius);
+        if (status != WebApiCodecStatus::Success) return status;
+        status = optionalUInt32(document, "remainingDurationMinutes",
+                                intent.remainingDurationMinutes);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (!intent.targetTemperatureCelsius.has_value() &&
+            !intent.remainingDurationMinutes.has_value()) {
+            return WebApiCodecStatus::MissingField;
+        }
+        out = std::move(intent);
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "recovery_time") {
+        FermentationUiRecoveryTimeCorrectionIntent intent;
+        const auto status = requiredUInt32(document, "secondsDelta", intent.secondsDelta);
+        if (status != WebApiCodecStatus::Success) return status;
+        out = intent;
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "acknowledge" || action == "mute") {
+        std::uint32_t messageId = 0U;
+        const auto status = requiredUInt32(document, "messageId", messageId);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (action == "acknowledge") {
+            out = FermentationUiAcknowledgeMessageIntent{messageId};
+        } else {
+            out = FermentationUiMuteMessageIntent{messageId};
+        }
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "sensor_selection") {
+        FermentationUiSensorSelectionIntent intent;
+        std::string selection;
+        const auto status = requiredString(document, "selection", 48U, selection);
+        if (status != WebApiCodecStatus::Success) return status;
+        if (selection == "continue_with_air") {
+            intent.action = SensorSelectionUserAction::ContinueWithAir;
+        } else if (selection == "return_to_product") {
+            intent.action = SensorSelectionUserAction::ReturnToProduct;
+        } else if (selection == "recheck_product") {
+            intent.action = SensorSelectionUserAction::RecheckProduct;
+        } else {
+            return WebApiCodecStatus::WrongType;
+        }
+        out = intent;
+        return WebApiCodecStatus::Success;
+    }
+    if (action == "reset_fault") {
+        out = FermentationUiResetFaultIntent{};
+        return WebApiCodecStatus::Success;
+    }
+    return WebApiCodecStatus::WrongType;
+}
 
 bool finish(ArduinoJson::JsonDocument& document, std::string& out) {
     out.clear();
@@ -253,6 +666,26 @@ WebApiCodecStatus decodeNetworkMode(const std::string& body,
         expectedRevision.reset();
     }
     return WebApiCodecStatus::Success;
+}
+
+WebApiCodecStatus decodeWebUiRunCommand(const std::string& body,
+                                        WebUiRunCommand& out) {
+    if (body.size() > kMaximumJsonRequestBytes) {
+        return WebApiCodecStatus::CapacityExceeded;
+    }
+    JsonDocument document;
+    if (deserializeJson(document, body)) {
+        return WebApiCodecStatus::InvalidJson;
+    }
+
+    auto status = decodeExpectedRevisions(document, out.expected);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = requiredBoolean(document, "confirmed", out.confirmed);
+    if (status != WebApiCodecStatus::Success) return status;
+    std::string action;
+    status = requiredAction(document, action);
+    if (status != WebApiCodecStatus::Success) return status;
+    return decodeRunPayload(document, action, out.payload);
 }
 
 }  // namespace fermentation

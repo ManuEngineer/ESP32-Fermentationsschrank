@@ -51,6 +51,123 @@ std::uint16_t networkStatusCode(NetworkConfigurationStatus status) {
     }
 }
 
+std::uint16_t requestStatusCode(FermentationApplicationRequestStatus status) {
+    switch (status) {
+        case FermentationApplicationRequestStatus::Prepared:
+            return 200U;
+        case FermentationApplicationRequestStatus::StaleProgramCatalog:
+            return 409U;
+        case FermentationApplicationRequestStatus::ProgramUnavailable:
+        case FermentationApplicationRequestStatus::InvalidInput:
+            return 422U;
+        case FermentationApplicationRequestStatus::Overflow:
+            return 413U;
+        case FermentationApplicationRequestStatus::NotInitialized:
+        case FermentationApplicationRequestStatus::Unavailable:
+            return 503U;
+    }
+    return 503U;
+}
+
+void requestErrorResponse(device_platform::HttpResponse& response,
+                           FermentationApplicationRequestStatus status) {
+    switch (status) {
+        case FermentationApplicationRequestStatus::StaleProgramCatalog:
+            errorResponse(response, requestStatusCode(status),
+                          "stale_program_catalog", "program catalog changed");
+            return;
+        case FermentationApplicationRequestStatus::ProgramUnavailable:
+            errorResponse(response, requestStatusCode(status),
+                          "program_unavailable", "program unavailable");
+            return;
+        case FermentationApplicationRequestStatus::InvalidInput:
+            errorResponse(response, requestStatusCode(status), "invalid_command",
+                          "invalid command");
+            return;
+        case FermentationApplicationRequestStatus::Overflow:
+            errorResponse(response, requestStatusCode(status), "command_capacity",
+                          "command capacity exceeded");
+            return;
+        case FermentationApplicationRequestStatus::NotInitialized:
+            errorResponse(response, requestStatusCode(status), "not_initialized",
+                          "application unavailable");
+            return;
+        case FermentationApplicationRequestStatus::Unavailable:
+            errorResponse(response, requestStatusCode(status), "unavailable",
+                          "application unavailable");
+            return;
+        case FermentationApplicationRequestStatus::Prepared:
+            break;
+    }
+    errorResponse(response, 503U, "unavailable", "application unavailable");
+}
+
+void persistenceResponse(device_platform::HttpResponse& response,
+                          const RunPersistenceResult& result) {
+    switch (result.status) {
+        case RunPersistenceResultStatus::Applied:
+            jsonResponse(response, 200U, "{\"status\":\"applied\"}");
+            return;
+        case RunPersistenceResultStatus::CheckpointWritten:
+            jsonResponse(response, 200U,
+                         "{\"status\":\"checkpoint_written\"}");
+            return;
+        case RunPersistenceResultStatus::AlreadyProcessed:
+            jsonResponse(response, 200U,
+                         "{\"status\":\"already_processed\"}");
+            return;
+        case RunPersistenceResultStatus::AlreadyPersisted:
+            jsonResponse(response, 200U,
+                         "{\"status\":\"already_persisted\"}");
+            return;
+        case RunPersistenceResultStatus::Busy:
+            errorResponse(response, 409U, "busy", "command busy");
+            return;
+        case RunPersistenceResultStatus::StaleDecision:
+            errorResponse(response, 409U, "stale_confirmation",
+                          "command became stale");
+            return;
+        case RunPersistenceResultStatus::InvalidDecision:
+        case RunPersistenceResultStatus::NotEligible:
+        case RunPersistenceResultStatus::NotAllowedInState:
+        case RunPersistenceResultStatus::TimeMismatch:
+        case RunPersistenceResultStatus::TimeWentBackwards:
+        case RunPersistenceResultStatus::CounterOverflow:
+        case RunPersistenceResultStatus::NotDue:
+        case RunPersistenceResultStatus::NoActiveRun:
+            errorResponse(response, 422U, "command_rejected", "command rejected");
+            return;
+        case RunPersistenceResultStatus::WriteFailed:
+            errorResponse(response, 500U, "persistence_failure",
+                          "persistence failed");
+            return;
+        case RunPersistenceResultStatus::CapacityExceeded:
+            errorResponse(response, 413U, "persistence_capacity",
+                          "persistence capacity exceeded");
+            return;
+        case RunPersistenceResultStatus::NotInitialized:
+            errorResponse(response, 503U, "not_initialized",
+                          "application unavailable");
+            return;
+        case RunPersistenceResultStatus::RecoveryPending:
+            errorResponse(response, 503U, "recovery_pending",
+                          "recovery required");
+            return;
+        case RunPersistenceResultStatus::PersistenceIndeterminate:
+            errorResponse(response, 503U, "commit_indeterminate",
+                          "persistence outcome requires recovery");
+            return;
+        case RunPersistenceResultStatus::PersistenceCommittedApplyFailed:
+            errorResponse(response, 503U, "committed_apply_failed",
+                          "committed state requires recovery");
+            return;
+        case RunPersistenceResultStatus::Blocked:
+            errorResponse(response, 503U, "blocked", "command unavailable");
+            return;
+    }
+    errorResponse(response, 503U, "unavailable", "command unavailable");
+}
+
 }  // namespace
 
 bool WebApplicationRoutes::browserPolicy(
@@ -291,6 +408,86 @@ bool WebApplicationRoutes::handle(const device_platform::HttpRequest& request,
             jsonResponse(response, 200U, std::move(body));
         }
         return true;
+    }
+    if (request.method == "POST" && request.path == "/internal/ui/run") {
+        if (!browserPolicy(request, response, true)) return true;
+        const auto handle = session(request, response, true);
+        if (!handle.has_value()) return true;
+        if (!request.metadata.mutationSeq.has_value()) {
+            errorResponse(response, 409U, "mutation_sequence_required",
+                          "mutation sequence required");
+            return true;
+        }
+        const auto sequence = parseMutationSequence(*request.metadata.mutationSeq);
+        if (!sequence.has_value()) {
+            errorResponse(response, 431U, "mutation_sequence_invalid",
+                          "mutation sequence invalid");
+            return true;
+        }
+
+        WebUiRunCommand command;
+        const auto decoded = decodeWebUiRunCommand(request.body, command);
+        if (decoded != WebApiCodecStatus::Success) {
+            const auto status = decoded == WebApiCodecStatus::CapacityExceeded
+                                    ? 413U
+                                    : 422U;
+            errorResponse(response, status, "invalid_command",
+                          "invalid command payload");
+            return true;
+        }
+
+        const auto fingerprint = mutationFingerprint(request);
+        const auto reservation = sessions_.reserveMutation(
+            *handle, timeSource_.monotonicMillis(), *sequence, fingerprint);
+        if (reservation.status == MutationReservationStatus::ReplayOutcome &&
+            reservation.outcome.has_value()) {
+            response.statusCode = reservation.outcome->statusCode;
+            response.contentType = reservation.outcome->contentType;
+            response.body = reservation.outcome->body;
+            return true;
+        }
+        if (reservation.status != MutationReservationStatus::Reserved) {
+            errorResponse(response,
+                          reservation.status == MutationReservationStatus::Exhausted
+                              ? 503U
+                              : 409U,
+                          "mutation_sequence_conflict", "reload required");
+            return true;
+        }
+
+        const auto finish = [&]() {
+            static_cast<void>(complete(*handle, *sequence, fingerprint, response));
+            return true;
+        };
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::WebInterface;
+        context.monotonicMillis = timeSource_.monotonicMillis();
+        context.expected = command.expected;
+        // Always prepare unconfirmed and use the owning confirmation method
+        // below. The HTTP boolean is not allowed to manufacture a confirmed
+        // CommandEnvelope at the adapter boundary.
+        context.confirmed = false;
+        const auto prepared = application_.prepareEnvelope(context, command.payload);
+        if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
+            !prepared.request.has_value()) {
+            requestErrorResponse(response, prepared.status);
+            return finish();
+        }
+        if (!command.confirmed) {
+            errorResponse(response, 409U, "confirmation_required",
+                          "explicit confirmation required");
+            return finish();
+        }
+        const auto confirmed = application_.confirmPrepared(prepared);
+        if (confirmed.status != FermentationApplicationRequestStatus::Prepared ||
+            !confirmed.request.has_value()) {
+            errorResponse(response, 409U, "confirmation_rejected",
+                          "command confirmation rejected");
+            return finish();
+        }
+        const auto result = application_.applyPreparedRequest(*confirmed.request);
+        persistenceResponse(response, result);
+        return finish();
     }
     if (request.method == "GET" && request.path == "/internal/service/status") {
         if (!browserPolicy(request, response, false)) return true;

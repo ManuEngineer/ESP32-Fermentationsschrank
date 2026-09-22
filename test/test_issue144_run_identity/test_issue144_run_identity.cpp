@@ -29,6 +29,7 @@
 #include "standard_program_catalog.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "temperature_source.hpp"
+#include "virtual_time_source.hpp"
 
 namespace fermentation {
 
@@ -1071,6 +1072,61 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
                              next.request->commandId());
 }
 
+void test_application_owner_rejects_unconfirmed_before_decision_or_persist() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(
+        application.begin(platform, store, timeZoneResolver, timeSource));
+    application.publishOwningRuntimeEvidence(owningEvidence());
+
+    fermentation::FermentationUiStartManualTimedIntent intent;
+    intent.values.targetTemperatureCelsius = 30.0;
+    intent.values.durationMinutes = 60U;
+    intent.values.sensorMode = fermentation::RunSensorMode::Air;
+    intent.values.qualificationBandCelsius = 0.5;
+    intent.values.qualificationDurationMinutes = 10U;
+    intent.values.maximumTargetReachMinutes = 180U;
+    fermentation::FermentationUiCommandContext context;
+    context.expected.expectedStateSequence =
+        fermentation::FermentationApplicationTestAccess::stateSequence(
+            application);
+    context.expected.expectedRunRevision = 0U;
+    const auto prepared = application.prepareEnvelope(
+        context,
+        fermentation::FermentationUiEnvelopePayload{intent});
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
+
+    const auto beforeSequence =
+        fermentation::FermentationApplicationTestAccess::stateSequence(
+            application);
+    const auto rejected = application.applyPreparedRequest(*prepared.request);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(rejected.status));
+    TEST_ASSERT_EQUAL_UINT32(
+        beforeSequence,
+        fermentation::FermentationApplicationTestAccess::stateSequence(
+            application));
+
+    const auto confirmed = application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
+    const auto applied = application.applyPreparedRequest(*confirmed.request);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Blocked),
+        static_cast<int>(applied.status));
+    TEST_ASSERT_EQUAL_UINT32(
+        beforeSequence,
+        fermentation::FermentationApplicationTestAccess::stateSequence(
+            application));
+}
+
 void test_application_reconstructs_reset_handoff_after_run_write_cut() {
     FailNextRunSlotStore store;
     seedActiveRunForApplication(store);
@@ -1251,5 +1307,7 @@ int main(int, char**) {
     RUN_TEST(test_application_reconstructs_reset_handoff_after_run_write_cut);
     RUN_TEST(test_application_finishes_committed_handoff_before_ready);
     RUN_TEST(test_application_resumes_empty_partial_handoff_before_allocator);
+    RUN_TEST(
+        test_application_owner_rejects_unconfirmed_before_decision_or_persist);
     return UNITY_END();
 }

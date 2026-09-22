@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 
-#include "fermentation_ui_models.hpp"
+#include "fermentation_ui_commands.hpp"
 #include "network_mode.hpp"
 #include "web_session.hpp"
 
@@ -17,6 +17,15 @@ enum class WebApiCodecStatus : std::uint8_t {
     MissingField,
     WrongType,
     CapacityExceeded,
+};
+
+// HTTP remains an adapter boundary: this DTO contains only bounded user
+// values, expected revisions, and the explicit UI confirmation bit. It does
+// not carry runtime evidence, a command identity, or a persistence result.
+struct WebUiRunCommand {
+    FermentationUiExpectedRevisions expected;
+    bool confirmed{false};
+    FermentationUiEnvelopePayload payload{FermentationUiResetFaultIntent{}};
 };
 
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
@@ -55,5 +64,7 @@ enum class WebApiCodecStatus : std::uint8_t {
 [[nodiscard]] WebApiCodecStatus decodeNetworkMode(
     const std::string& body, device_platform::NetworkMode& out,
     std::optional<UserConfigurationRevision>& expectedRevision);
+[[nodiscard]] WebApiCodecStatus decodeWebUiRunCommand(
+    const std::string& body, WebUiRunCommand& out);
 
 }  // namespace fermentation

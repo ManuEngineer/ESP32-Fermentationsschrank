@@ -543,6 +543,14 @@ RunPersistenceResult FermentationApplication::applyPreparedRequest(
     unavailable.status = RunPersistenceResultStatus::NotInitialized;
     unavailable.coordinatorState =
         RunPersistenceCoordinatorState::Uninitialized;
+    // This is the last application-owned mutation boundary.  Callers still
+    // use prepare -> confirm -> apply, but the owner must not rely on a
+    // transport preserving that order: several domain deciders intentionally
+    // accept an unconfirmed request for decision-only evaluation.
+    if (!request.commandEnvelope().confirmed) {
+        unavailable.status = RunPersistenceResultStatus::InvalidDecision;
+        return unavailable;
+    }
     if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr ||
         timeSource_ == nullptr) {
         return unavailable;
