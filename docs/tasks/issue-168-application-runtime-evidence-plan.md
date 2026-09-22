@@ -339,15 +339,28 @@ Der eine rendererunabhaengige R1-Bedienpfad bleibt der bestehende
 `FermentationUiAction::ResetFault`. Sein interner Application-Bridgevertrag
 wird auf einen schmalen, nicht generischen Watchdog-Reset-Request reduziert;
 `FaultResetEvaluation` und `FaultResetRequest` werden nicht ersetzt. Die
-Application prueft bei Prepare/Confirm die vorhandenen
+Repository-Bestandspruefung ergibt jedoch, dass auf `BASE_SHA` weder
+`FermentationApplication` noch `main/app_main.cpp` einen produktiven
+`ActuatorPlanner`-/Watchdog-Owner binden. Solange dieser Owner im aktuellen
+Compositionpfad fehlt, liefert die Application fuer diesen Intent bereits bei
+Prepare typisiert `FermentationApplicationRequestStatus::Unavailable`.
+Prepare/Confirm erzeugen dann weder `ActuationEvidence` noch irgendeine
+Planner-/Aktor-Composition. Ist ein kanonisch gebundener Owner spaeter
+vorhanden, prueft die Application die vorhandenen
 `expectedStateSequence`-/`expectedFaultRevision`-Werte des bestehenden
-`CommandEnvelope` gegen den aktuellen `RunCommandState`-Owner und loest fuer
-Confirm frische `ActuationEvidence` auf. Eine fehlende Bestaetigung oder
-stale Revision wird mit den bestehenden typisierten UI-/Command-Ergebnissen
-abgelehnt.
+`CommandEnvelope` gegen den aktuellen `RunCommandState`-Owner und loest erst
+dann fuer Confirm frische `ActuationEvidence` auf. Eine fehlende
+Bestaetigung oder stale Revision wird mit den bestehenden typisierten
+UI-/Command-Ergebnissen abgelehnt.
 
-Bei bestaetigtem, aktuellem Intent ruft `FermentationApplication`
-ausschliesslich den bestehenden #24-Ownerpfad
+`#168` konstruiert dafuer keinen `ActuatorPlanner`, keinen
+`TemperatureControlApplicationOrchestrator`, keinen Aktorsink und keine
+produktiven Plannerparameter. Es fuehrt auch keinen neuen Planner-Port,
+Provider, Service-Locator oder zweiten Safety-Owner ein.
+
+Bei bestaetigtem, aktuellem Intent und bereits vorhandenem kanonischem
+Planner-Owner ruft `FermentationApplication` ausschliesslich den bestehenden
+#24-Ownerpfad
 `ActuationInterlock::resetRequestWatchdog(...)` auf. Dieser prueft frische
 gueltige `ActuationEvidence` und ruft ausschliesslich
 `ActuatorPlanner::applyExternalWatchdogFaultReset(...)` auf. Dessen `true`
@@ -374,15 +387,34 @@ Authorization-Schicht werden
 eingefuehrt; `authorizationSatisfied` wird nicht als PIN-/Berechtigungs-
 plattform interpretiert.
 
+### Downstream-Abhaengigkeit fuer spaetere produktive Aktivierung
+
+Die spaetere Bindung desselben `FermentationUiResetFaultIntent` an einen
+produktiven Planner-Owner ist ausdruecklich an den bestehenden offenen
+Composition-Scope von #106 gebunden. #106 bleibt das Gate fuer produktive
+Plannerbindung, Per-Run-Parameterbindung und produktives
+`ActuatorSafetyGateStatus::Allowed`; #35 bleibt Owner der dafuer benoetigten
+realen Parameter und Grenzen. Sobald #106 den kanonischen Planner-Owner im
+Composition-Root tatsaechlich bereitstellt, darf der bestehende Intent an
+genau diesen Owner angeschlossen werden. Die Mutation bleibt dann
+ausschliesslich
+`ActuationInterlock::resetRequestWatchdog(...)` ->
+`ActuatorPlanner::applyExternalWatchdogFaultReset(...)`.
+
+Das ist keine neue Resetsemantik in #106 und keine Umsetzung von #106 in
+PR #169. Falls #106 seinen Scope dafuer nur dokumentarisch ergaenzen muss,
+bleibt dies eine explizite Downstream-Abhaengigkeit dieses Plans.
+
 Die bestehenden Watchdog-Tests in
 `test/test_actuation_interlock/test_actuation_interlock.cpp` und
-`test/test_actuator_planner/test_actuator_planner.cpp` werden als Owner-
-Regression erweitert bzw. direkt verwendet. Generische
+`test/test_actuator_planner/test_actuator_planner.cpp` bleiben die Owner-
+Regressionen fuer den tatsaechlich erfolgreichen Watchdog-Reset. Im
+`#168`-Scope pruefen Application-/UI-/Touch-Tests den ungebundenen
+Compositionpfad: `ResetFault` liefert `Unavailable`, ohne Mutation und ohne
+Planner-/Aktor-Composition; Ack/Mute bleiben unabhaengig. Generische
 `decideFaultReset()`-Tests und die generische RunCommand-Variante werden
-entfernt; UI-/Touch-Tests pruefen stattdessen den schmalen
-`FermentationUiResetFaultIntent`-Bridgepfad, seine Confirmation-/Revision-
-Ablehnung, `false`-Fail-closed und den einzigen `true`-Ownererfolg. Kein
-generischer Fault-Clearer bleibt als scheinbar produktiver R1-Pfad bestehen.
+entfernt. Ein erfolgreicher Application-End-to-End-Watchdogpfad wird erst im
+produktiven Composition-Scope gebunden, nicht in #168 vorgezogen.
 
 Damit sind die vier Ownerentscheidungen vollständig in den Plan übersetzt;
 die betroffenen `prepare*`-Pfade sind nicht mehr wegen ungeklärter
@@ -569,9 +601,11 @@ Aenderung ist zulaessig:
    (`publishOwningRecoveryEvidence`/`owningRecoveryEvidence_`/
    `resumeFallback()`) auf denselben `CrossRolePlausibilityContext`-Vertrag
    (Blocker 4), ohne dessen bestehende Semantik zu aendern.
-5. Schmaler `FermentationUiResetFaultIntent`-/Application-Bridgepfad auf
-   `ActuationInterlock::resetRequestWatchdog(...)` mit typisiertem
-   fail-closed Ergebnis, bestehender Confirmation-/Revisionspruefung und
+5. Schmaler `FermentationUiResetFaultIntent`-/Application-Bridgepfad, der
+   ohne bereits kanonisch gebundenen Planner-Owner typisiert `Unavailable`
+   liefert und keine Composition erzeugt. Die spaetere Ownerbindung an
+   `ActuationInterlock::resetRequestWatchdog(...)` bleibt an #106/#35
+   downstream gebunden, mit bestehender Confirmation-/Revisionspruefung und
    ohne Run-Persistence-Mutation; kein generischer Fault-Dispatcher.
 6. Synchronisierung der in "Aktive Dokumentationsgrenzen" genannten aktiven
    Aussagen, nur soweit der direkte Produktions-/Command-Diff sie
@@ -662,10 +696,11 @@ Parallelvertrag einfuehren:
    (Blocker 4).
 7. Start-, Cooling-, Aenderungs-, Completion-, Stop- und Recovery-Kommandos
    loesen die aktuelle Pre-Command-Evidence in der Application auf. Der
-   `FermentationUiResetFaultIntent` loest ausschliesslich den bestehenden
-   Watchdog-Ownerpfad auf; `false` bleibt typisiert abgelehnt/unavailable,
-   `true` ist der einzige mutierende Erfolg, ohne Run-Persistence-Mutation.
-   Kein oeffentlicher Command-/UI-Aufruf kann
+   `FermentationUiResetFaultIntent` liefert im aktuellen #168-
+   Compositionpfad typisiert `Unavailable`, solange kein kanonischer
+   Planner-Owner gebunden ist; er erzeugt keine Mutation. Die spaetere
+   `true`-Ownermutation bleibt an #106/#35 gebunden und erfolgt ohne
+   Run-Persistence-Mutation. Kein oeffentlicher Command-/UI-Aufruf kann
    `FermentationApplicationOwningEvidence`, `FaultResetEvaluation` oder
    `FaultResetRequest` einsetzen.
 8. Bestehende erwartete Revisionen, Run-Identity, Persistenz- und
