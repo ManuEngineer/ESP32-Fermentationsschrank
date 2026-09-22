@@ -959,9 +959,20 @@ Web-Request/DTO
 
 `FermentationUiCommandBridge::decidePreparedCommand()` bleibt dabei die
 kanonische fachliche Entscheidungsprojektion; sie ist kein zweiter Commandbus.
-Nur ein bestätigtes Application-Request darf `applyPreparedRequest()`
-erreichen. Web konstruiert weder `CommandDecision`, Runtime-/Sensor-/Safety-
-Evidence noch Persistenzresultate und wendet keine Fachmutation selbst an.
+`FermentationApplication::applyPreparedRequest()` ist jedoch selbst die
+letzte Application-Mutationsgrenze und prüft vor jeder
+`decidePreparedCommand()`- oder Persistenzausführung das
+`request.commandEnvelope().confirmed`-Bit fail-closed. Ein unbestätigtes
+PreparedRequest liefert den bestehenden typisierten abgelehnten
+`RunPersistenceResult`-Outcome (`InvalidDecision`, im UI-Contract nicht als
+Owning-Erfolg) und erreicht weder Domain-Decision noch
+`RunPersistenceCoordinator`; `RunCommandState` und Persistenz bleiben
+unverändert. Web muss weiterhin `prepare -> confirm -> apply` einhalten, ist
+aber nicht der einzige Sicherheitsgarant. Web konstruiert weder
+`CommandDecision`, Runtime-/Sensor-/Safety-Evidence noch Persistenzresultate
+und wendet keine Fachmutation selbst an. Es werden keine verteilten
+Confirmation-Checks in allen Domain-Decidern eingeführt.
+
 Der Application-Pfad besitzt stale-Confirmation-/Revision-Prüfung sowie die
 Anbindung an den bestehenden `RunPersistenceCoordinator`; seine
 `RunPersistenceResult`-Durability-/Recoveryzustände werden unverändert an den
@@ -982,6 +993,9 @@ Nach Freigabe dieser Plan-SHA ist ausschließlich Folgendes noch auszuführen:
 - die bestehenden internen Web-Run-Intents für Start, Stop, Completion und
   die bereits im Contract vorgesehenen Aktionen an den oben beschriebenen
   `prepare -> confirm -> applyPreparedRequest`-Pfad binden;
+- den zentralen Confirmation-Guard in `applyPreparedRequest()` vor jeder
+  Domain-Decision/Persistenzmutation umsetzen; kein bestätigungsabhängiges
+  Verhalten in einzelne Domain-Decider duplizieren;
 - Application- und Route-Resultate so abbilden, dass Stale-Confirmation,
   `RunPersistenceResult`-Durability, `PersistenceIndeterminate`,
   `PersistenceCommittedApplyFailed`, Recovery-/Blocked-Zustände und fehlende
@@ -1000,6 +1014,14 @@ Der verbleibende Delta-Schnitt muss mindestens nachweisen:
 
 - Web-Intent erreicht ausschließlich die Application-Prepare-/Confirm-/Apply-
   Kette; externe Evidence-Injektion bleibt unmöglich;
+- `prepareEnvelope(...) -> applyPreparedRequest(unconfirmed)` mit einem
+  vorhandenen Requesttyp, dessen Domain-Decider nicht selbst generell das
+  Envelope-Confirmation-Bit prüft (z. B. Run-Adjustment oder Acknowledge/Mute),
+  liefert den typisierten abgelehnten Outcome, ruft keine Domain-Decision und
+  keine Persistenz auf und lässt `RunCommandState` unverändert;
+- `prepareEnvelope(...) -> confirmPrepared(...) ->
+  applyPreparedRequest(confirmed)` erreicht dagegen den bestehenden
+  Decision-/Persistence-Pfad und liefert dessen tatsächlichen Outcome;
 - unbestätigte, stale oder nach `Valid -> Stale/Failed` revalidierte Requests
   mutieren nichts;
 - bestätigte Requests erzeugen genau eine `CommandId`-/Persistenzmutation;
@@ -1040,6 +1062,7 @@ führen:
 | Browsergrenze | Methode, Content-Type, Origin, Referer-Ersatz, Fetch-Metadata, fehlende/duplizierte/zu große Header fail-closed, Statusmapping statt 500, CORS-Ablehnung |
 | Revision | stale User-/Program-/Run-/Message-/Network-Revision -> Conflict, kein Überschreiben |
 | Application-Ownerpfad | Web-Intent -> `prepare*()` -> `confirmPrepared()` -> `applyPreparedRequest()` -> `RunPersistenceCoordinator`; unbestätigt/stale/indeterminate/committed-apply-failed ohne zweite Mutation und ohne fehlende Aktorfreigabe als Erfolg zu melden |
+| Confirmation-Guard | unbestätigtes `prepareEnvelope()` erreicht weder `decidePreparedCommand()` noch Persistenz; bestätigtes Request erreicht genau den bestehenden Ownerpfad |
 | Idempotenz | mehr als acht sequenzielle Mutationen in derselben Session funktionieren; identischer aktueller Retry erzeugt keine zweite Mutation; retirierter Replay und gleiche Sequenz mit anderem Payload werden ohne Mutation abgelehnt; `InFlight` wird nicht verdrängt; bounded Speicher bleibt konstant; parallele Display-/Webrevision bleibt konfliktfest |
 | Mutation-Resync | Reload/Browser-Restore/Reconnect derselben Session erhält autoritatives `nextMutationSeq`; zwei Tabs reservieren gleichzeitig höchstens eine Mutation; unterlegener Tab resynchronisiert Fachrevisionen ohne blindes Replay; `UINT64_MAX`/Overflow bleibt fail-closed |
 | Safety | formal gültige Webaktion wird bei fehlender Safety-/Fach-Evidenz abgelehnt |
@@ -1204,5 +1227,7 @@ OPEN_REVIEW_BLOCKERS=0
 WEB_FULL_SCOPE=PLAN_REVALIDATED_ON_APPLICATION_OWNED_CONTRACT
 PLAN_REVIEW_REQUIRED=YES
 OWNER_PLAN_APPROVAL_REQUIRED=YES
+PLAN_FIX_VERIFICATION=REQUIRED
+NEXT_GATE=INDEPENDENT_PLAN_FIX_VERIFICATION
 IMPLEMENTATION_AUTHORIZATION=NO
 ```
