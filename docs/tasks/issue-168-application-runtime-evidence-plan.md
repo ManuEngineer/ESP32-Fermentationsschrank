@@ -222,26 +222,33 @@ aktuellen Aufruf gueltig sind:
 1. `FermentationApplication::lifecycleState_` ist
    `ApplicationLifecycleState::Ready`; ein Initializing- oder
    `ServiceRequired`-Zustand ist fail-closed.
-2. Der bestehende Konfigurationsowner ist vertrauenswuerdig: die
-   `ConfigurationRecoveryService`-Boot-/Revalidierung hat keinen
-   `ConfigurationRecoveryStatus`-Fehler geliefert und der bestehende
-   `ConfigurationService`-Runtime-Lease ist fuer die aktuelle
-   `StorageEpoch` erteilt. Dazu gehoeren die bereits vorhandenen positiven
-   Runtime-/Factory-Handoff-Zustaende (`RuntimeReady`,
-   `FactoryInitializationCompleted`, `FactoryResetCompleted`), nicht jedoch
-   `ConfigurationUnavailable`, Integritaets-, Read-, Write- oder
-   Indeterminate-Zustaende.
-3. Der bestehende `RunPersistenceCoordinator` ist fuer den aktuellen
-   `StorageEpoch` vertrauenswuerdig: `persistenceLoadStatus_` ist bekannt und
-   nicht Safe-Boot/unklar, `loadDisposition_` ist nicht
-   `RunLoadDisposition::SafeBoot`, und der Coordinator befindet sich in einem
-   bestehenden committed/trusted Zustand (`ReadyEmpty`, `Ready` oder
-   `LoadedActiveRun`). `Uninitialized`, `Busy`, `BlockedIndeterminate`,
-   `FallbackRecoveryPending` und `PersistenceCommittedApplyFailed` sind
-   nicht ausreichend.
-4. Im aktuellen `RunCommandState` besteht kein offener kritischer
-   Safety-Zustand, der normalen Betrieb blockiert; insbesondere bleibt die
-   bestehende `criticalSafetyEventPending`-Invariante wirksam.
+2. Der bestehende Konfigurationsowner ist vertrauenswuerdig: eine aktuelle
+   `ConfigurationService::acquireRuntime()`-Abfrage liefert
+   `RuntimeConfigurationReadStatus::RuntimeLeaseGranted`, und
+   `runtime.lease.get().storageEpoch()` entspricht der aktuellen
+   Application-`storageEpoch_`. Der Plan fuehrt dafuer keinen neuen
+   dauerhaft gespeicherten `ConfigurationRecoveryStatus` und keine neue
+   Safety-Kopie des Bootresultats ein. Andere Ergebnisse von
+   `acquireRuntime()` (`RuntimeReadLeaseBusy`,
+   `ConfigurationRuntimeUnavailable`) sind fail-closed.
+3. Die vorhandenen Application-Kopien `persistenceLoadStatus_` und
+   `loadDisposition_` sowie `RunPersistenceCoordinator::state()` muessen
+   einen bereits bestehenden, vertrauenswuerdigen Nicht-Safe-Boot-Zustand
+   darstellen. Akzeptierte Load-Status sind exakt
+   `NoPersistedRun`, `NoActiveRun`, `Current` und `FallbackRecovered`, jedoch
+   nur wenn die bestehende `boot_classification::classifyRunLoad()`-Auswertung
+   nicht `RunLoadDisposition::SafeBoot` ergibt. Abgelehnt werden exakt
+   `PreparedInterrupted`, `NotReconstructible`,
+   `NotReconstructibleOrphanedState`, `ReadFailed`, `CapacityExceeded`,
+   `UnsupportedSchema`, `ForeignEpoch` und `AlreadyInitialized` sowie jeder
+   unbekannte/unklare Wert. Akzeptierte Coordinator-Zustaende sind exakt
+   `ReadyEmpty`, `Ready` und `LoadedActiveRun`; `Uninitialized`, `Busy`,
+   `BlockedIndeterminate`, `FallbackRecoveryPending` und
+   `PersistenceCommittedApplyFailed` werden abgelehnt.
+4. Auf der Run-Command-Ebene ist die bestehende
+   `RunCommandState::criticalSafetyEventPending`-Invariante massgeblich. Fuer
+   den normalen Start-/Cooling-Readinesspfad muss sie `false` sein; es wird
+   keine zusaetzliche Safety-Projektion aus einem anderen Owner konsultiert.
 
 Dieses Readiness-Gate enthaelt ausschliesslich Application-, Boot-,
 Konfigurations-, Run-Persistenz- und kritische Safety-Bereitschaft. Es
@@ -253,10 +260,13 @@ thermische/#35-Grenzen oder produktives
 separat aus `CrossRolePlausibilityContext` geprueft.
 
 Die vorhandenen Zustands- und Lease-Owner werden fuer die Ableitung
-verwendet; falls die laufende Application einen Zustand nur ueber eine
-bestehende Owner-Methode abfragen kann, wird diese Methode verwendet. Es
-werden keine neuen globalen Flags, keine parallele Readiness-Wahrheit und
-keine neue Safety-State-Machine eingefuehrt.
+verwendet. `PresentationState`/Diagnoseprojektionen sind keine neue
+Safety-Entscheidungsquelle; ein direkter `ActuatorPlanner`-/Watchdog-Latch
+ist kein Bestandteil dieses Gates; `ActuationInterlock::evaluate()` wird
+nicht fuer das Pre-Command-Gate aufgerufen. Watchdog-/Aktor-Safety bleibt am
+bestehenden #24-Ownerpfad und wird post-commit durch den Interlock
+durchgesetzt. Es werden keine neuen globalen Flags, keine parallele
+Readiness-Wahrheit und keine neue Readiness-/Safety-State-Machine eingefuehrt.
 
 ##### `safetyAllowsCooling`: gleiche Grundbereitschaft, nur fuer Cooling-Start
 
@@ -324,28 +334,55 @@ PIN-/Berechtigungslogik zu erfinden. Betroffen sind
 `FermentationUiResetFaultIntent`-/Touch-Workspace-Bridgepfad und die direkt
 zugehoerigen nativen Tests.
 
-Der einzige R1-Resetpfad bleibt der bereits kanonische Current-Boot-Request-
-Watchdog-Ownerpfad:
+Der eine rendererunabhaengige R1-Bedienpfad bleibt der bestehende
+`FermentationUiResetFaultIntent` mit
+`FermentationUiAction::ResetFault`. Sein interner Application-Bridgevertrag
+wird auf einen schmalen, nicht generischen Watchdog-Reset-Request reduziert;
+`FaultResetEvaluation` und `FaultResetRequest` werden nicht ersetzt. Die
+Application prueft bei Prepare/Confirm die vorhandenen
+`expectedStateSequence`-/`expectedFaultRevision`-Werte des bestehenden
+`CommandEnvelope` gegen den aktuellen `RunCommandState`-Owner und loest fuer
+Confirm frische `ActuationEvidence` auf. Eine fehlende Bestaetigung oder
+stale Revision wird mit den bestehenden typisierten UI-/Command-Ergebnissen
+abgelehnt.
 
-`ActuationInterlock::resetRequestWatchdog(...)` prueft frische gueltige
-`ActuationEvidence` und ruft ausschliesslich
-`ActuatorPlanner::applyExternalWatchdogFaultReset(...)` auf. Nur dieser
-Ownerpfad darf den Watchdog-Fault mutieren. Configuration-, Persistence- und
-Sensorfehler werden ausschliesslich durch ihre Producer-/Revalidierungs-
-pfade gesund; Ack/Mute aendert keine Safetyfreigabe. Ein UI-/Command-Bridge-
-vertrag bleibt nur erhalten, wenn er technisch fuer genau diesen bestehenden
-Watchdog-Ownerpfad benoetigt wird; dann enthaelt er keine generische
-`FaultResetEvaluation`, kein Service-PIN und keinen zweiten Watchdog-
-Resetpfad. `authorizationSatisfied` wird nicht als neue
-PIN-/Berechtigungsplattform interpretiert.
+Bei bestaetigtem, aktuellem Intent ruft `FermentationApplication`
+ausschliesslich den bestehenden #24-Ownerpfad
+`ActuationInterlock::resetRequestWatchdog(...)` auf. Dieser prueft frische
+gueltige `ActuationEvidence` und ruft ausschliesslich
+`ActuatorPlanner::applyExternalWatchdogFaultReset(...)` auf. Dessen `true`
+ist der einzige mutierende Reset-Erfolg und wird als typisiertes
+`OwningOutcome` mit bestehendem `CommandStatus::Applied` projiziert. Dessen
+`false` wird fail-closed als bestehendes typisiertes
+`CommandStatus::SafetyRejected` projiziert; ist der Application-Owner vor dem
+Aufruf nicht verfuegbar, wird bereits bei Prepare das bestehende
+`FermentationApplicationRequestStatus::Unavailable` geliefert. Es gibt keine
+positive Resetannahme aus UI-Daten.
+
+Der Watchdog-Reset erzeugt keine Run-Persistence-Mutation: kein Aufruf von
+`RunPersistenceCoordinator`, kein Fortschreiben von `faultRevision`, kein
+`criticalSafetyEventPending`-Clear durch den UI-Bridge und kein zweiter
+Watchdog-Latch. Die vorhandene CommandId-/Confirmation-/Revision-Semantik
+dient nur der aktuellen UI-Operation und ihrer erneuten Pruefung; der Erfolg
+ist ausschliesslich die Rueckgabe des Watchdog-Ownerpfads. Ack/Mute bleiben
+vollstaendig getrennt.
+
+Nur dieser Ownerpfad darf den Watchdog-Fault mutieren. Configuration-,
+Persistence- und Sensorfehler werden ausschliesslich durch ihre
+Producer-/Revalidierungspfade gesund. Kein Service-PIN und keine neue
+Authorization-Schicht werden
+eingefuehrt; `authorizationSatisfied` wird nicht als PIN-/Berechtigungs-
+plattform interpretiert.
 
 Die bestehenden Watchdog-Tests in
 `test/test_actuation_interlock/test_actuation_interlock.cpp` und
 `test/test_actuator_planner/test_actuator_planner.cpp` werden als Owner-
 Regression erweitert bzw. direkt verwendet. Generische
-`decideFaultReset()`-Tests werden entfernt oder auf die bestehende
-Watchdog-Semantik umgestellt; kein generischer Fault-Clearer bleibt als
-scheinbar produktiver R1-Pfad bestehen.
+`decideFaultReset()`-Tests und die generische RunCommand-Variante werden
+entfernt; UI-/Touch-Tests pruefen stattdessen den schmalen
+`FermentationUiResetFaultIntent`-Bridgepfad, seine Confirmation-/Revision-
+Ablehnung, `false`-Fail-closed und den einzigen `true`-Ownererfolg. Kein
+generischer Fault-Clearer bleibt als scheinbar produktiver R1-Pfad bestehen.
 
 Damit sind die vier Ownerentscheidungen vollständig in den Plan übersetzt;
 die betroffenen `prepare*`-Pfade sind nicht mehr wegen ungeklärter
@@ -482,6 +519,36 @@ Sensorstatus. In diesem Scope wird nur der softwareseitige Vertrag fuer
 diesen Handoff und eine native Testquelle festgelegt; DS18B20-Adapter, GPIO,
 ROM, CRC, Bus- und Hot-Plug-Arbeit bleiben ausgeschlossen.
 
+## Aktive Dokumentationsgrenzen
+
+Die folgenden aktiven kanonischen Dokumente wurden repository-first gegen
+den bestehenden Vertrag geprueft. Die spaetere Implementation synchronisiert
+nur tatsaechlich widerspruechliche Aussagen; historische versionierte
+Task-Plaene werden nicht rueckwirkend umgeschrieben:
+
+- `docs/RUN_COMMANDS.md` ist direkt betroffen: der aktive Command-Vertrag
+  muss `safetyAllowsChange` und den generischen
+  `FaultResetEvaluation`-/`FaultResetRequest`-Pfad entfernen und den schmalen
+  `FermentationUiResetFaultIntent`-/Watchdog-Ownerpfad ohne Service-PIN
+  beschreiben.
+- `docs/SAFETY_AND_FAULTS.md` enthaelt bereits im vorrangigen R1-Abschnitt
+  den stateless `ActuationInterlock`, `ActuatorRequestWatchdog` als einzigen
+  expliziten #23-Reset mit frischer Evidence sowie keine Service-PIN-Pflicht.
+  Die nachfolgenden C2-/Legacy-/Future-Abschnitte sind ausdruecklich nicht
+  #24-R1 und bleiben unveraendert.
+- `docs/STATE_MACHINE.md` beschreibt die Service-PIN bereits als spaeteres
+  Service-/Hardware-Gate ausserhalb des #24-R1-Interlocks; nur ein direkter
+  Widerspruch zur neuen Reset-Bridge waere zu korrigieren.
+- `docs/REQUIREMENTS.md` fuehrt Service-PIN-/Hardware-Servicefunktionen als
+  spaetere Gates und fuehrt keinen generischen R1-Fault-Clearer; kein
+  Rueckwirkungsdelta ist derzeit begruendet.
+- `docs/ACCEPTANCE_TESTS.md` grenzt Service-PIN-/Vollreset-Tests bereits von
+  der #24-R1-Abnahme ab und nennt den R1-Watchdog-/Ack-Vertrag; nur direkt
+  betroffene Command-/Resettestverweise werden synchronisiert.
+
+Damit ist der aktive Dokumentationsumfang konkret festgelegt, ohne
+historische Aussagen in einen falschen aktuellen R1-Vertrag umzudeuten.
+
 ## Erlaubter Implementierungsumfang
 
 Nur die kleinste direkt betroffene Application-/Composition-/Projection-
@@ -502,10 +569,17 @@ Aenderung ist zulaessig:
    (`publishOwningRecoveryEvidence`/`owningRecoveryEvidence_`/
    `resumeFallback()`) auf denselben `CrossRolePlausibilityContext`-Vertrag
    (Blocker 4), ohne dessen bestehende Semantik zu aendern.
-5. Nur direkt betroffene native Tests fuer Snapshot, Evidence-Aufloesung,
+5. Schmaler `FermentationUiResetFaultIntent`-/Application-Bridgepfad auf
+   `ActuationInterlock::resetRequestWatchdog(...)` mit typisiertem
+   fail-closed Ergebnis, bestehender Confirmation-/Revisionspruefung und
+   ohne Run-Persistence-Mutation; kein generischer Fault-Dispatcher.
+6. Synchronisierung der in "Aktive Dokumentationsgrenzen" genannten aktiven
+   Aussagen, nur soweit der direkte Produktions-/Command-Diff sie
+   widerspricht.
+7. Nur direkt betroffene native Tests fuer Snapshot, Evidence-Aufloesung,
    Pre-Command-/post-commit-Trennung, Confirmation-Revalidierung,
-   Recovery-Konsolidierung, Fail-closed-Verhalten, Revisionen und
-   Command-Aufrufe.
+   Recovery-Konsolidierung, Fail-closed-Verhalten, Revisionen, den
+   Watchdog-Reset-Bridgepfad und Command-Aufrufe.
 
 Ein neues kleines application-internes Struct ist nur zulaessig, wenn die
 bestehenden Typen die Komposition nicht ausdruecken koennen. Es darf keine
@@ -573,6 +647,13 @@ Parallelvertrag einfuehren:
    Application-Readiness fuer Start und Cooling werden getrennt geprueft;
    `AbortAndTurnOff` und Completion ohne Cooling bleiben bei fehlender
    Cooling-Readiness zulaessig.
+   Jede Readiness-Bedingung wird einzeln negativ getestet: Lifecycle nicht
+   `Ready`; Runtime-Lease busy/unavailable oder falsche `StorageEpoch`; jeder
+   abgelehnte `RunPersistenceLoadStatus`; `RunLoadDisposition::SafeBoot`; jeder
+   abgelehnte `RunPersistenceCoordinatorState`; sowie
+   `criticalSafetyEventPending=true`. Ein post-commit Watchdog-/Interlock-
+   Fault wird separat nachgewiesen und darf keine neue Pre-Command-
+   Parallelregel erzeugen.
 5. `Prepare gueltig -> Evidence stale/failed vor Confirm -> Confirm ->
    typisierte Ablehnung ohne Mutation, Command-ID/`runId` unveraendert`
    (Blocker 3).
@@ -580,9 +661,13 @@ Parallelvertrag einfuehren:
    veraltet, konsolidiert auf denselben `CrossRolePlausibilityContext`-Vertrag
    (Blocker 4).
 7. Start-, Cooling-, Aenderungs-, Completion-, Stop- und Recovery-Kommandos
-   loesen die aktuelle Pre-Command-Evidence in der Application auf. Kein
-   oeffentlicher Command-/UI-Aufruf kann `FermentationApplicationOwningEvidence`
-   einsetzen.
+   loesen die aktuelle Pre-Command-Evidence in der Application auf. Der
+   `FermentationUiResetFaultIntent` loest ausschliesslich den bestehenden
+   Watchdog-Ownerpfad auf; `false` bleibt typisiert abgelehnt/unavailable,
+   `true` ist der einzige mutierende Erfolg, ohne Run-Persistence-Mutation.
+   Kein oeffentlicher Command-/UI-Aufruf kann
+   `FermentationApplicationOwningEvidence`, `FaultResetEvaluation` oder
+   `FaultResetRequest` einsetzen.
 8. Bestehende erwartete Revisionen, Run-Identity, Persistenz- und
    Exactly-once-Semantik bleiben erhalten; stale Commands werden wie bisher
    abgelehnt.
