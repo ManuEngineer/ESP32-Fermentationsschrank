@@ -1,6 +1,8 @@
 #include <unity.h>
 
+#include <array>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -8,6 +10,7 @@
 #include "application_run_identity.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_graph_store.hpp"
+#include "configuration_limits.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
@@ -16,12 +19,76 @@
 #include "fermentation_ui_commands.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "run_persistence_coordinator.hpp"
+#include "sensor_quality_config.hpp"
+#include "sensor_quality_pipeline.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "standard_program_catalog.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "temperature_source.hpp"
 
 namespace fermentation {
+
+class ConfigurationServiceTestAccess {
+   public:
+    static void forceRuntimeFailure(ConfigurationService& service) {
+        const std::lock_guard<std::mutex> lock(service.stateMutex_);
+        service.enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
+    }
+};
+
+class RunPersistenceCoordinatorTestAccess {
+   public:
+    static void setState(RunPersistenceCoordinator& coordinator,
+                         RunPersistenceCoordinatorState state) {
+        coordinator.state_ = state;
+    }
+};
+
+class FermentationApplicationTestAccess {
+   public:
+    static bool applicationReadiness(
+        const FermentationApplication& application) {
+        return application.applicationReadiness();
+    }
+
+    static ConfigurationService& configurationService(
+        FermentationApplication& application) {
+        return *application.configurationService_;
+    }
+
+    static RunPersistenceCoordinator& runPersistenceCoordinator(
+        FermentationApplication& application) {
+        return *application.runPersistenceCoordinator_;
+    }
+
+    static void setLifecycleState(FermentationApplication& application,
+                                  ApplicationLifecycleState state) {
+        application.lifecycleState_ = state;
+    }
+
+    static void setStorageEpoch(FermentationApplication& application,
+                                device_platform::StorageEpoch epoch) {
+        application.storageEpoch_ = epoch;
+    }
+
+    static void setLoadStatus(FermentationApplication& application,
+                              RunPersistenceLoadStatus status) {
+        application.persistenceLoadStatus_ = status;
+    }
+
+    static void setLoadDisposition(FermentationApplication& application,
+                                   RunLoadDisposition disposition) {
+        application.loadDisposition_ = disposition;
+    }
+
+    static void setCriticalSafetyEventPending(
+        FermentationApplication& application, bool pending) {
+        application.runtimeRunState_->criticalSafetyEventPending = pending;
+    }
+};
 
 class ApplicationRunIdentityTestAccess {
    public:
@@ -203,7 +270,7 @@ void test_application_prepares_manual_timed_with_shared_identity() {
     TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
 
     auto staleEvidence = owningEvidence();
-    staleEvidence.air.quality = device_platform::SensorQuality::Stale;
+    staleEvidence.product.quality = device_platform::SensorQuality::Stale;
     application.publishOwningRuntimeEvidence(staleEvidence);
     const auto rejected = application.confirmPrepared(prepared);
     TEST_ASSERT_EQUAL_INT(
@@ -214,6 +281,21 @@ void test_application_prepares_manual_timed_with_shared_identity() {
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e1-c1", prepared.request->runId()->c_str());
     TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
+
+    application.publishOwningRuntimeEvidence(owningEvidence());
+    const auto preparedAgain =
+        application.prepareStartManualTimed(context, values);
+    TEST_ASSERT_TRUE(preparedAgain.request.has_value());
+    auto failedEvidence = owningEvidence();
+    failedEvidence.product.quality = device_platform::SensorQuality::Failed;
+    application.publishOwningRuntimeEvidence(failedEvidence);
+    const auto failed = application.confirmPrepared(preparedAgain);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(failed.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U, preparedAgain.request->commandId());
 }
 
 void test_application_projects_default_runtime_evidence_fail_closed() {
@@ -226,7 +308,7 @@ void test_application_projects_default_runtime_evidence_fail_closed() {
 
     const auto snapshot = application.uiSnapshot();
     TEST_ASSERT_TRUE(snapshot.status.ready);
-    TEST_ASSERT_TRUE(snapshot.service.available);
+    TEST_ASSERT_FALSE(snapshot.service.available);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::NetworkMode::UNSELECTED),
         static_cast<int>(snapshot.network.currentMode));
@@ -238,6 +320,269 @@ void test_application_projects_default_runtime_evidence_fail_closed() {
         TEST_ASSERT_FALSE(temperature.valueCelsius.has_value());
     }
     TEST_ASSERT_TRUE(snapshot.refreshRevision.has_value());
+}
+
+void test_application_readiness_rejects_each_plan_condition() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+
+    fermentation::FermentationApplicationTestAccess::setLifecycleState(
+        application, fermentation::ApplicationLifecycleState::Initializing);
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+    fermentation::FermentationApplicationTestAccess::setLifecycleState(
+        application, fermentation::ApplicationLifecycleState::Ready);
+
+    auto& configuration =
+        fermentation::FermentationApplicationTestAccess::configurationService(
+            application);
+    std::array<
+        fermentation::RuntimeConfigurationReadResult,
+        fermentation::configuration_limits::kMaxRuntimeConfigurationReadLeases>
+        leases{};
+    bool allLeasesGranted = true;
+    for (auto& result : leases) {
+        result = configuration.acquireRuntime();
+        allLeasesGranted = allLeasesGranted &&
+                           result.status ==
+                               fermentation::RuntimeConfigurationReadStatus::
+                                   RuntimeLeaseGranted;
+    }
+    TEST_ASSERT_TRUE(allLeasesGranted);
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+    leases = {};
+
+    device_platform::DevicePlatform unavailablePlatform;
+    device_platform_test_support::SimulatedPersistentStateStore
+        unavailableStore;
+    fermentation::FermentationApplication unavailableApplication;
+    TEST_ASSERT_TRUE(unavailablePlatform.begin({true}));
+    TEST_ASSERT_TRUE(unavailableApplication.begin(
+        unavailablePlatform, unavailableStore, timeZoneResolver));
+    auto& unavailableConfiguration =
+        fermentation::FermentationApplicationTestAccess::configurationService(
+            unavailableApplication);
+    fermentation::ConfigurationServiceTestAccess::forceRuntimeFailure(
+        unavailableConfiguration);
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            unavailableApplication));
+
+    device_platform::DevicePlatform epochPlatform;
+    device_platform_test_support::SimulatedPersistentStateStore epochStore;
+    fermentation::FermentationApplication epochApplication;
+    TEST_ASSERT_TRUE(epochPlatform.begin({true}));
+    TEST_ASSERT_TRUE(
+        epochApplication.begin(epochPlatform, epochStore, timeZoneResolver));
+    fermentation::FermentationApplicationTestAccess::setStorageEpoch(
+        epochApplication, device_platform::StorageEpoch{2U});
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            epochApplication));
+
+    const std::array rejectedLoadStatuses = {
+        fermentation::RunPersistenceLoadStatus::PreparedInterrupted,
+        fermentation::RunPersistenceLoadStatus::NotReconstructible,
+        fermentation::RunPersistenceLoadStatus::NotReconstructibleOrphanedState,
+        fermentation::RunPersistenceLoadStatus::ReadFailed,
+        fermentation::RunPersistenceLoadStatus::CapacityExceeded,
+        fermentation::RunPersistenceLoadStatus::UnsupportedSchema,
+        fermentation::RunPersistenceLoadStatus::ForeignEpoch,
+        fermentation::RunPersistenceLoadStatus::AlreadyInitialized};
+    for (const auto status : rejectedLoadStatuses) {
+        fermentation::FermentationApplicationTestAccess::setLoadStatus(
+            application, status);
+        TEST_ASSERT_FALSE(fermentation::FermentationApplicationTestAccess::
+                              applicationReadiness(application));
+    }
+    fermentation::FermentationApplicationTestAccess::setLoadStatus(
+        application, fermentation::RunPersistenceLoadStatus::NoPersistedRun);
+
+    fermentation::FermentationApplicationTestAccess::setLoadDisposition(
+        application, fermentation::RunLoadDisposition::SafeBoot);
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+    fermentation::FermentationApplicationTestAccess::setLoadDisposition(
+        application, fermentation::RunLoadDisposition::Standby);
+
+    const std::array rejectedCoordinatorStates = {
+        fermentation::RunPersistenceCoordinatorState::Uninitialized,
+        fermentation::RunPersistenceCoordinatorState::Busy,
+        fermentation::RunPersistenceCoordinatorState::BlockedIndeterminate,
+        fermentation::RunPersistenceCoordinatorState::FallbackRecoveryPending,
+        fermentation::RunPersistenceCoordinatorState::
+            PersistenceCommittedApplyFailed};
+    for (const auto state : rejectedCoordinatorStates) {
+        fermentation::RunPersistenceCoordinatorTestAccess::setState(
+            fermentation::FermentationApplicationTestAccess::
+                runPersistenceCoordinator(application),
+            state);
+        TEST_ASSERT_FALSE(fermentation::FermentationApplicationTestAccess::
+                              applicationReadiness(application));
+    }
+    fermentation::RunPersistenceCoordinatorTestAccess::setState(
+        fermentation::FermentationApplicationTestAccess::
+            runPersistenceCoordinator(application),
+        fermentation::RunPersistenceCoordinatorState::ReadyEmpty);
+
+    fermentation::FermentationApplicationTestAccess::
+        setCriticalSafetyEventPending(application, true);
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+}
+
+void test_confirmation_preserves_canonical_product_selection_paths() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    auto productUnavailable = owningEvidence();
+    productUnavailable.product.quality = device_platform::SensorQuality::Stale;
+    application.publishOwningRuntimeEvidence(productUnavailable);
+
+    fermentation::FermentationUiCommandContext context;
+    context.monotonicMillis = 100U;
+    fermentation::ManualTimedRunValues values;
+    values.targetTemperatureCelsius = 30.0;
+    values.durationMinutes = 60U;
+    values.sensorMode = fermentation::RunSensorMode::Product;
+    values.preheatEnabled = true;
+    values.maximumProductWaitMinutes = 30U;
+    values.qualificationBandCelsius = 0.5;
+    values.qualificationDurationMinutes = 10U;
+    values.maximumTargetReachMinutes = 180U;
+
+    const auto prepared = application.prepareStartManualTimed(context, values);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    const auto confirmed = application.confirmPrepared(prepared);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(confirmed.status));
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(prepared.request->commandId(),
+                             confirmed.request->commandId());
+    TEST_ASSERT_EQUAL_STRING(prepared.request->runId()->c_str(),
+                             confirmed.request->runId()->c_str());
+}
+
+void test_pipeline_handoff_drives_application_snapshot_and_confirmation() {
+    const auto config = device_platform::SensorQualityConfig::create(
+        3U, 5.0, -20.0, 80.0, 5.0, 10'000U, 3U, 2U, 2'000U);
+    TEST_ASSERT_TRUE(config.config.has_value());
+    device_platform::SensorQualityPipeline air(*config.config);
+    device_platform::SensorQualityPipeline product(*config.config);
+    device_platform::SensorQualityPipeline cooling(*config.config);
+    const auto validReading = [](std::uint64_t timestamp, double celsius) {
+        return device_platform::TemperatureReading::create(
+                   std::nullopt, timestamp,
+                   device_platform::TemperatureSampleStatus::Ok, celsius)
+            .reading.value();
+    };
+    for (auto* pipeline : {&air, &product, &cooling}) {
+        (void)pipeline->ingest(validReading(0U, 20.0), 0U);
+        (void)pipeline->ingest(validReading(2'000U, 21.0), 2'000U);
+    }
+
+    fermentation::CrossRolePlausibilityContext valid;
+    valid.air = air.snapshot(2'000U);
+    valid.product = product.snapshot(2'000U);
+    valid.cooling = cooling.snapshot(2'000U);
+    TEST_ASSERT_TRUE(valid.air.quality ==
+                     device_platform::SensorQuality::Valid);
+    TEST_ASSERT_TRUE(valid.product.quality ==
+                     device_platform::SensorQuality::Valid);
+    TEST_ASSERT_TRUE(valid.cooling.quality ==
+                     device_platform::SensorQuality::Valid);
+
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    application.publishOwningRuntimeEvidence(valid);
+    const auto validSnapshot = application.uiSnapshot();
+    for (const auto& temperature : validSnapshot.temperatures) {
+        TEST_ASSERT_TRUE(temperature.quality.quality ==
+                         device_platform::SensorQuality::Valid);
+    }
+
+    fermentation::ManualTimedRunValues values;
+    values.targetTemperatureCelsius = 30.0;
+    values.durationMinutes = 60U;
+    values.sensorMode = fermentation::RunSensorMode::Air;
+    values.preheatEnabled = true;
+    values.maximumProductWaitMinutes = 30U;
+    values.qualificationBandCelsius = 0.5;
+    values.qualificationDurationMinutes = 10U;
+    values.maximumTargetReachMinutes = 180U;
+    const auto prepared = application.prepareStartManualTimed(
+        fermentation::FermentationUiCommandContext{}, values);
+    TEST_ASSERT_TRUE(
+        fermentation::FermentationApplicationTestAccess::applicationReadiness(
+            application));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(prepared.status));
+    TEST_ASSERT_TRUE(application.confirmPrepared(prepared).request.has_value());
+
+    const auto failedReading = [](std::uint64_t timestamp) {
+        return device_platform::TemperatureReading::create(
+                   std::nullopt, timestamp,
+                   device_platform::TemperatureSampleStatus::CrcFault,
+                   std::nullopt)
+            .reading.value();
+    };
+    for (auto* pipeline : {&air, &product, &cooling}) {
+        (void)pipeline->ingest(failedReading(3'000U), 3'000U);
+    }
+    auto stale = valid;
+    stale.air = air.snapshot(3'000U);
+    stale.product = product.snapshot(3'000U);
+    stale.cooling = cooling.snapshot(3'000U);
+    application.publishOwningRuntimeEvidence(stale);
+    const auto staleSnapshot = application.uiSnapshot();
+    for (const auto& temperature : staleSnapshot.temperatures) {
+        TEST_ASSERT_TRUE(temperature.quality.quality ==
+                         device_platform::SensorQuality::Stale);
+    }
+    TEST_ASSERT_FALSE(
+        application.confirmPrepared(prepared).request.has_value());
+
+    for (auto* pipeline : {&air, &product, &cooling}) {
+        for (std::uint64_t timestamp = 4'000U; timestamp <= 6'000U;
+             timestamp += 1'000U) {
+            (void)pipeline->ingest(failedReading(timestamp), timestamp);
+        }
+    }
+    auto failed = valid;
+    failed.air = air.snapshot(6'000U);
+    failed.product = product.snapshot(6'000U);
+    failed.cooling = cooling.snapshot(6'000U);
+    application.publishOwningRuntimeEvidence(failed);
+    const auto failedSnapshot = application.uiSnapshot();
+    for (const auto& temperature : failedSnapshot.temperatures) {
+        TEST_ASSERT_TRUE(temperature.quality.quality ==
+                         device_platform::SensorQuality::Failed);
+    }
 }
 
 fermentation::CrossRolePlausibilityContext owningEvidence() {
@@ -691,6 +1036,10 @@ int main(int, char**) {
     RUN_TEST(test_ui_id_is_application_bound_to_existing_command_envelope);
     RUN_TEST(test_application_prepares_manual_timed_with_shared_identity);
     RUN_TEST(test_application_projects_default_runtime_evidence_fail_closed);
+    RUN_TEST(test_application_readiness_rejects_each_plan_condition);
+    RUN_TEST(test_confirmation_preserves_canonical_product_selection_paths);
+    RUN_TEST(
+        test_pipeline_handoff_drives_application_snapshot_and_confirmation);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
     RUN_TEST(test_application_reset_hands_off_existing_run_store_to_new_epoch);
     RUN_TEST(test_application_prepares_every_envelope_action_with_one_identity);

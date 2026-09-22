@@ -34,6 +34,7 @@ struct ConfigurationRecoveryResult;
 class ConfigurationService;
 class RunPersistenceCoordinator;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
+class FermentationApplicationTestAccess;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
 namespace issue_90_slice7 {
@@ -177,6 +178,7 @@ class FermentationApplication {
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
 #endif
+    friend class FermentationApplicationTestAccess;
     void requireService(FaultCode faultCode,
                         bool applicationAllocationFailure = false) noexcept;
     [[nodiscard]] bool publishStandby();

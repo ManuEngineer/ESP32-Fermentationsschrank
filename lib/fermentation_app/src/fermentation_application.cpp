@@ -282,7 +282,7 @@ FermentationApplication::prepareStartProgram(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult
@@ -311,7 +311,7 @@ FermentationApplication::prepareStartManualHolding(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult
@@ -348,7 +348,7 @@ FermentationApplication::prepareStartManualTimed(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult FermentationApplication::prepareStop(
@@ -777,8 +777,16 @@ bool FermentationApplication::revalidatePreparedRequest(
     FermentationApplicationPreparedRequest& request) {
     const auto evidence = resolveRuntimeEvidence();
     bool valid = true;
+    const auto productEvidenceRegressed = [&request, &evidence] {
+        return request.owningPlausibility_.has_value() &&
+               request.owningPlausibility_->product.quality ==
+                   device_platform::SensorQuality::Valid &&
+               evidence.plausibility.product.quality !=
+                   device_platform::SensorQuality::Valid;
+    };
     std::visit(
-        [&request, &evidence, &valid](auto& prepared) {
+        [&request, &evidence, &valid,
+         &productEvidenceRegressed](auto& prepared) {
             using Request = std::decay_t<decltype(prepared)>;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
                 prepared.safetyAllowsStart = evidence.safetyAllowsStart;
@@ -787,8 +795,8 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
                         prepared.coolingSensorValid &&
-                        (prepared.sensorMode != RunSensorMode::Product ||
-                         prepared.productSensorValid);
+                        !(prepared.sensorMode == RunSensorMode::Product &&
+                          productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
                 prepared.safetyAllowsStart = evidence.safetyAllowsStart;
                 prepared.airSensorValid = evidence.airSensorValid;
@@ -796,8 +804,8 @@ bool FermentationApplication::revalidatePreparedRequest(
                 prepared.productSensorValid = evidence.productSensorValid;
                 valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
                         prepared.coolingSensorValid &&
-                        (prepared.plan.sensorMode != RunSensorMode::Product ||
-                         prepared.productSensorValid);
+                        !(prepared.plan.sensorMode == RunSensorMode::Product &&
+                          productEvidenceRegressed());
             } else if constexpr (std::is_same_v<Request, StopRequest>) {
                 if (prepared.option == StopOption::AbortAndCool) {
                     prepared.safetyAllowsCooling = evidence.safetyAllowsCooling;
@@ -895,8 +903,6 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     }
     input.application.lifecycleState = lifecycleState_;
     input.application.presentation = presentationState_;
-    input.service.available =
-        lifecycleState_ == ApplicationLifecycleState::Ready;
     input.network.currentMode = networkMode();
     input.refreshTracker = &uiRefreshTracker_;
     return FermentationUiProjector::project(input);
