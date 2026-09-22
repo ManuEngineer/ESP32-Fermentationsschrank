@@ -451,9 +451,6 @@ RunAdjustmentDecision ActiveRun::decideAdjustment(
     if (!context.runActive) {
         return rejected(RunAdjustmentStatus::RunInactive);
     }
-    if (!context.safetyAllowsChange) {
-        return rejected(RunAdjustmentStatus::SafetyRejected);
-    }
     if (context.activeStageIndex >= sourceStageCount(snapshot_.source)) {
         return rejected(RunAdjustmentStatus::InvalidStage);
     }

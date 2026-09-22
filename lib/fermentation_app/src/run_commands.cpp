@@ -122,7 +122,6 @@ bool isRunComfortCommand(CommandKind kind) {
             return true;
         case CommandKind::AcknowledgeMessage:
         case CommandKind::MuteMessage:
-        case CommandKind::ResetFault:
         // #21, 6.14.1: false, damit der generische criticalSafetyEventPending-
         // Gate in beginDecision() die Aktion nicht pauschal vor der
         // aktionsspezifischen Pruefung verwirft. Kein Safety-Bypass -
@@ -278,22 +277,6 @@ bool requireMessageRevision(CommandDecision& decision) {
     }
     if (*decision.envelope.expectedMessageRevision !=
         decision.before.messageRevision) {
-        decision.status = CommandStatus::StaleState;
-        return false;
-    }
-    return true;
-}
-
-bool requireFaultRevision(CommandDecision& decision) {
-    if (!decision.proposed()) {
-        return false;
-    }
-    if (!decision.envelope.expectedFaultRevision.has_value()) {
-        decision.status = CommandStatus::ContextMissing;
-        return false;
-    }
-    if (*decision.envelope.expectedFaultRevision !=
-        decision.before.faultRevision) {
         decision.status = CommandStatus::StaleState;
         return false;
     }
@@ -1142,7 +1125,6 @@ CommandDecision decideRunAdjustment(
     adjustment.timestamp.monotonicMillis = request.envelope.monotonicMillis;
     RunAdjustmentContext context;
     context.runActive = true;
-    context.safetyAllowsChange = request.safetyAllowsChange;
     context.phaseContext = phaseContextFor(current.processState.state);
     const auto runDecision =
         current.activeProgramRun->decideAdjustment(adjustment, context);
@@ -1358,39 +1340,6 @@ CommandDecision decideMuteMessage(const RunCommandState& current,
     return decision;
 }
 
-CommandDecision decideFaultReset(const RunCommandState& current,
-                                 const FaultResetRequest& request) {
-    auto decision =
-        beginDecision(current, request.envelope, CommandKind::ResetFault);
-    if (!requireFaultRevision(decision)) {
-        return decision;
-    }
-    const auto& evaluation = request.evaluation;
-    if (evaluation.faultRevision != current.faultRevision) {
-        decision.status = CommandStatus::StaleState;
-        return decision;
-    }
-    if (!evaluation.allowed || evaluation.causeStillActive ||
-        !evaluation.safetyChecksPassed || !evaluation.authorizationSatisfied ||
-        evaluation.otherBlockingFaultActive ||
-        evaluation.rejection != FaultResetRejection::None) {
-        decision.status = CommandStatus::SafetyRejected;
-        return decision;
-    }
-    if (!requireRevisionCapacity(decision, decision.before.faultRevision)) {
-        return decision;
-    }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return decision;
-    }
-    beginMutation(decision);
-    ++decision.after.faultRevision;
-    decision.after.criticalSafetyEventPending = false;
-    static_cast<void>(addEffect(decision, CommandEffect::FaultResetAuthorized));
-    return decision;
-}
-
 CommandDecision decideApplySensorSelectionAction(
     const RunCommandState& current,
     const SensorSelectionCommandRequest& request,
@@ -1408,15 +1357,6 @@ CommandDecision decideApplySensorSelectionAction(
     if (current.activeRunId.empty() ||
         !current.activeRunSensorMode.has_value()) {
         decision.status = CommandStatus::ContextMissing;
-        return decision;
-    }
-    // 6.14.1: `safetyAllowsChange` ist ein zusaetzliches externes
-    // Pruefsignal (analog `safetyAllowsStart`/`safetyAllowsCooling`) und wird
-    // unabhaengig von der folgenden internen Matrix verlangt.
-    if (!request.safetyAllowsChange) {
-        decision.status = CommandStatus::SafetyRejected;
-        decision.sensorSelectionApplyStatus =
-            SensorSelectionApplyStatus::InvalidDecision;
         return decision;
     }
     // 6.14.1 Aktionsspezifische Matrix bei criticalSafetyEventPending:

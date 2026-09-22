@@ -811,7 +811,6 @@ RunAdjustmentCommandRequest targetChange(const RunCommandState& state,
     request.envelope =
         envelope(id, state, CommandSource::WebInterface, true, time);
     request.targetTemperatureCelsius = target;
-    request.safetyAllowsChange = true;
     return request;
 }
 
@@ -880,7 +879,6 @@ void test_duration_adjustment_restarts_remaining_timer_and_allows_zero() {
     request.envelope =
         envelope(2U, state, CommandSource::LocalDisplay, true, 300U);
     request.remainingDurationMinutes = 0U;
-    request.safetyAllowsChange = true;
 
     const auto decision = decideRunAdjustment(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
@@ -913,7 +911,6 @@ void test_duration_adjustment_folds_observed_time_and_resets_recovery_baseline()
     request.envelope =
         envelope(2U, state, CommandSource::LocalDisplay, true, 5'050U);
     request.remainingDurationMinutes = 60U;
-    request.safetyAllowsChange = true;
     const auto decision = decideRunAdjustment(state, request);
 
     TEST_ASSERT_TRUE(decision.proposed());
@@ -1186,36 +1183,6 @@ void test_message_priority_acknowledgement_and_mute_are_independent() {
     TEST_ASSERT_TRUE(acknowledged.after.criticalSafetyEventPending);
 }
 
-void test_fault_reset_requires_current_qualified_evaluation() {
-    auto state = standbyState();
-    state.processState.state = ProcessState::Fault;
-    state.faultRevision = 4U;
-    state.criticalSafetyEventPending = true;
-    FaultResetRequest request;
-    request.envelope = envelope(1U, state);
-    request.evaluation = {
-        true, false, true, true, false, 4U, FaultResetRejection::None};
-
-    const auto accepted = decideFaultReset(state, request);
-    TEST_ASSERT_TRUE(accepted.proposed());
-    TEST_ASSERT_FALSE(accepted.after.criticalSafetyEventPending);
-    TEST_ASSERT_EQUAL_UINT32(5U, accepted.after.faultRevision);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
-                          static_cast<int>(accepted.after.processState.state));
-    TEST_ASSERT_TRUE(hasEffect(accepted, CommandEffect::FaultResetAuthorized));
-
-    request.evaluation.causeStillActive = true;
-    request.evaluation.allowed = false;
-    request.evaluation.rejection = FaultResetRejection::CauseStillActive;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(CommandStatus::SafetyRejected),
-        static_cast<int>(decideFaultReset(state, request).status));
-    request.evaluation.faultRevision = 3U;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(CommandStatus::StaleState),
-        static_cast<int>(decideFaultReset(state, request).status));
-}
-
 void test_critical_safety_blocks_run_commands_but_not_message_commands() {
     auto state = standbyState();
     state.criticalSafetyEventPending = true;
@@ -1275,18 +1242,6 @@ void test_domain_revision_conflicts_are_rejected_without_mutation() {
             decideAcknowledgeMessage(messageState, messageRequest).status));
     TEST_ASSERT_FALSE(messageState.messages[0].acknowledged);
 
-    auto faultState = standbyState();
-    faultState.processState.state = ProcessState::Fault;
-    faultState.faultRevision = 4U;
-    FaultResetRequest reset;
-    reset.envelope = envelope(4U, faultState);
-    reset.envelope.expectedFaultRevision = 3U;
-    reset.evaluation = {
-        true, false, true, true, false, 4U, FaultResetRejection::None};
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(CommandStatus::StaleState),
-        static_cast<int>(decideFaultReset(faultState, reset).status));
-    TEST_ASSERT_EQUAL_UINT32(4U, faultState.faultRevision);
 }
 
 void test_processed_command_ids_form_a_bounded_rolling_window() {
@@ -1620,37 +1575,6 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         TEST_ASSERT_FALSE(decision.after.messages[0].acousticMuted);
         assertRejectedWithoutStateMutation(decision);
     }
-    // Fehlerrevision an der Grenze abgelehnt, davor genau einmal erhoehbar.
-    {
-        auto state = standbyState();
-        state.processState.state = ProcessState::Fault;
-        state.faultRevision = max;
-        state.criticalSafetyEventPending = true;
-        FaultResetRequest request;
-        request.envelope = envelope(1U, state);
-        request.evaluation = {
-            true, false, true, true, false, max, FaultResetRejection::None};
-        const auto decision = decideFaultReset(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
-                              static_cast<int>(decision.status));
-        TEST_ASSERT_TRUE(decision.after.criticalSafetyEventPending);
-        TEST_ASSERT_EQUAL_UINT32(max, decision.after.faultRevision);
-        assertRejectedWithoutStateMutation(decision);
-
-        state.faultRevision = max - 1U;
-        FaultResetRequest okRequest;
-        okRequest.envelope = envelope(2U, state);
-        okRequest.evaluation = {true,
-                                false,
-                                true,
-                                true,
-                                false,
-                                max - 1U,
-                                FaultResetRejection::None};
-        const auto ok = decideFaultReset(state, okRequest);
-        TEST_ASSERT_TRUE(ok.proposed());
-        TEST_ASSERT_EQUAL_UINT32(max, ok.after.faultRevision);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1734,11 +1658,10 @@ RunCommandState withSensorPhase(RunCommandState base,
 
 SensorSelectionCommandRequest sensorSelectionRequest(
     const RunCommandState& state, CommandId id,
-    SensorSelectionUserAction action, bool safetyAllowsChange = true) {
+    SensorSelectionUserAction action) {
     SensorSelectionCommandRequest request;
     request.envelope = envelope(id, state);
     request.action = action;
-    request.safetyAllowsChange = safetyAllowsChange;
     return request;
 }
 
@@ -1983,7 +1906,7 @@ void test_sensor_selection_action_safety_pending_matrix() {
         plausibilityWith(validSnapshot(), validSnapshot(), validSnapshot());
 
     // ContinueWithAir/ReturnToProduct enden fail-closed vor jeder Mutation,
-    // unabhaengig vom externen safetyAllowsChange-Signal.
+    // wenn ein kritisches Safety-Ereignis offen ist.
     for (const auto action : {SensorSelectionUserAction::ContinueWithAir,
                               SensorSelectionUserAction::ReturnToProduct}) {
         auto state =
@@ -1999,7 +1922,7 @@ void test_sensor_selection_action_safety_pending_matrix() {
                                 ? RunSensorMode::Product
                                 : RunSensorMode::Air);
         state.criticalSafetyEventPending = true;
-        const auto request = sensorSelectionRequest(state, 90U, action, true);
+        const auto request = sensorSelectionRequest(state, 90U, action);
         const auto decision =
             decideApplySensorSelectionAction(state, request, plausibility);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
@@ -2017,7 +1940,7 @@ void test_sensor_selection_action_safety_pending_matrix() {
             SensorPeltierPermission::Blocked, RunSensorMode::Product);
         state.criticalSafetyEventPending = true;
         const auto request = sensorSelectionRequest(
-            state, 91U, SensorSelectionUserAction::RecheckProduct, true);
+            state, 91U, SensorSelectionUserAction::RecheckProduct);
         const auto decision =
             decideApplySensorSelectionAction(state, request, plausibility);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
@@ -2034,7 +1957,7 @@ void test_sensor_selection_action_safety_pending_matrix() {
             SensorPeltierPermission::Allowed, RunSensorMode::Air);
         state.criticalSafetyEventPending = true;
         const auto request = sensorSelectionRequest(
-            state, 92U, SensorSelectionUserAction::RecheckProduct, true);
+            state, 92U, SensorSelectionUserAction::RecheckProduct);
         const auto decision = decideApplySensorSelectionAction(
             state, request,
             plausibilityWith(validSnapshot(), failedSnapshot(),
@@ -2043,24 +1966,6 @@ void test_sensor_selection_action_safety_pending_matrix() {
                               static_cast<int>(decision.status));
     }
 
-    // Externes safetyAllowsChange=false blockiert unabhaengig von
-    // criticalSafetyEventPending - es ersetzt die interne Invariante nicht,
-    // wird aber selbst ebenfalls verlangt.
-    {
-        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
-                                         ReturnStrategy::ManualReturnToProduct),
-                                     SensorSelectionPhase::UserDecisionRequired,
-                                     SensorPeltierPermission::Blocked,
-                                     RunSensorMode::Product);
-        TEST_ASSERT_FALSE(state.criticalSafetyEventPending);
-        const auto request = sensorSelectionRequest(
-            state, 93U, SensorSelectionUserAction::ContinueWithAir, false);
-        const auto decision =
-            decideApplySensorSelectionAction(state, request, plausibility);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
-                              static_cast<int>(decision.status));
-        assertRejectedWithoutStateMutation(decision);
-    }
 }
 
 // #21, 6.14.3/Review-Fund aus Commit 3: ManualRunPlan::values.sensorMode
@@ -2721,7 +2626,6 @@ int main() {
     RUN_TEST(test_composed_cooling_rejections_discard_the_complete_candidate);
     RUN_TEST(test_adjustments_are_rejected_in_inappropriate_states);
     RUN_TEST(test_message_priority_acknowledgement_and_mute_are_independent);
-    RUN_TEST(test_fault_reset_requires_current_qualified_evaluation);
     RUN_TEST(test_critical_safety_blocks_run_commands_but_not_message_commands);
     RUN_TEST(test_critical_safety_event_invalidates_a_pending_comfort_decision);
     RUN_TEST(test_domain_revision_conflicts_are_rejected_without_mutation);

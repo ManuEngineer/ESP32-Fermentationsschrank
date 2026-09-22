@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-21
+Stand: 2026-09-22
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -33,7 +33,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #168 – Application-owned Runtime-Evidence und UI-/Command-Projection | `PLAN_FIRST=YES`; `BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16`; `PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED`; `IMPLEMENTATION=NOT_STARTED`; `CONSUMER=ISSUE27_PR167_AFTER_ISSUE168_MERGE`; `ACTUATOR_RELEASE=NO`. | Exakte Plan-SHA ownerseitig freigeben; danach kleinsten Application-/Composition-Scope umsetzen |
+| 1 | Issue #168 – Application-owned Runtime-Evidence und UI-/Command-Projection | `PLAN_FIRST=YES`; `BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16`; `APPROVED_PLAN_SHA=ac56052c011b92d38866bc0be0d31de2d5e1fb90`; `PLAN_STATUS=APPROVED`; `OWNER_PLAN_APPROVAL=PASS`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `CONSUMER=ISSUE27_PR167_AFTER_ISSUE168_MERGE`; `ACTUATOR_RELEASE=NO`. | Builder-Self-Check abschliessen, danach Independent Full Review; #27 bleibt bis zum Merge dieses Vorgängers pausiert |
 | 2 | Issue #27 / PR #167 – Web/API/Auth | `CONSUMER_PREDECESSOR=ISSUE168`; `IMPLEMENTATION=PAUSED_PENDING_PREDECESSOR`; `ACTUATOR_RELEASE=NO`. | #168 mergen, PR #167 auf aktuellen `main` revalidieren und den #27-Plan als Verbraucher revidieren |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `STAGE_0=PASS`; `STAGE_1=PASS`; `STAGE_2=FAILED`; `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`; `STAGE_2_TOUCH_FUNCTION=PASS`; `COLDSTART_ROOT_CAUSE=UNDETERMINED`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `ACTUATOR_RELEASE=NO`. | Coldstart-Root-Cause fuer Stage 2 klaeren, danach Stage 3/4 SSOT-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise und reale Funktionstests ohne generelles Pegelmessgate |

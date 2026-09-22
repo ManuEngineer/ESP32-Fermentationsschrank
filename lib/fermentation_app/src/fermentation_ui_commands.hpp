@@ -167,7 +167,7 @@ class FermentationApplicationPreparedRequest {
                      CompletionRequest, RunAdjustmentCommandRequest,
                      ApplyRecoveryTimeCorrectionRequest,
                      PreparedAcknowledgeMessage, PreparedMuteMessage,
-                     FaultResetRequest, SensorSelectionCommandRequest>;
+                     SensorSelectionCommandRequest>;
 
     FermentationApplicationPreparedRequest(
         Storage storage,
