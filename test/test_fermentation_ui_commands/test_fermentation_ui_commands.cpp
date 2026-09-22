@@ -158,8 +158,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
 
     auto invalidManual = manual;
     invalidManual.plan.targetTemperatureCelsius = 0.0;
-    const auto invalidPrepared =
-        application.prepareStartManualHolding(unconfirmedContext, invalidManual);
+    const auto invalidPrepared = application.prepareStartManualHolding(
+        unconfirmedContext, invalidManual);
     TEST_ASSERT_TRUE(invalidPrepared.request.has_value());
     const auto invalidResult = FermentationUiCommandBridge::decidePrepared(
         state, *invalidPrepared.request, confirmation(unconfirmedContext));
@@ -381,8 +381,8 @@ void test_manual_timed_ui_intent_uses_the_merged_application_contract() {
     intent.values.maximumTargetReachMinutes = 180U;
     FermentationUiCommandContext value;
     value.expected.expectedStateSequence = 0U;
-    const auto prepared =
-        application.prepareEnvelope(value, FermentationUiEnvelopePayload{intent});
+    const auto prepared = application.prepareEnvelope(
+        value, FermentationUiEnvelopePayload{intent});
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(prepared.status));
@@ -391,8 +391,8 @@ void test_manual_timed_ui_intent_uses_the_merged_application_contract() {
     TEST_ASSERT_TRUE(prepared.request->runId().has_value());
 
     intent.values.targetTemperatureCelsius = -100.0;
-    const auto invalid =
-        application.prepareEnvelope(value, FermentationUiEnvelopePayload{intent});
+    const auto invalid = application.prepareEnvelope(
+        value, FermentationUiEnvelopePayload{intent});
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::InvalidInput),
         static_cast<int>(invalid.status));
@@ -448,17 +448,15 @@ void test_prepared_message_actions_remain_bound_to_their_action() {
     FermentationUiCommandContext value = context(state, false);
     value.expected.expectedMessageRevision = state.messageRevision;
     const auto acknowledge = application.prepareEnvelope(
-        value,
-        FermentationUiEnvelopePayload{
-            FermentationUiAcknowledgeMessageIntent{7U}});
+        value, FermentationUiEnvelopePayload{
+                   FermentationUiAcknowledgeMessageIntent{7U}});
     const auto mute = application.prepareEnvelope(
         value,
         FermentationUiEnvelopePayload{FermentationUiMuteMessageIntent{7U}});
     TEST_ASSERT_TRUE(acknowledge.request.has_value());
     TEST_ASSERT_TRUE(mute.request.has_value());
 
-    const auto confirmedAcknowledge =
-        application.confirmPrepared(acknowledge);
+    const auto confirmedAcknowledge = application.confirmPrepared(acknowledge);
     const auto confirmedMute = application.confirmPrepared(mute);
     const auto acknowledgeResult = FermentationUiCommandBridge::decidePrepared(
         state, *confirmedAcknowledge.request);

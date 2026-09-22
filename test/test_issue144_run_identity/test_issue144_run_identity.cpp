@@ -146,7 +146,8 @@ void test_ui_id_is_application_bound_to_existing_command_envelope() {
     context.monotonicMillis = 100U;
     fermentation::FermentationUiStartManualHoldingIntent manual;
     manual.plan.targetTemperatureCelsius = 30.0;
-    const auto prepared = application.prepareStartManualHolding(context, manual);
+    const auto prepared =
+        application.prepareStartManualHolding(context, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
@@ -179,8 +180,7 @@ void test_application_prepares_manual_timed_with_shared_identity() {
     values.qualificationDurationMinutes = 10U;
     values.maximumTargetReachMinutes = 180U;
 
-    const auto prepared =
-        application.prepareStartManualTimed(context, values);
+    const auto prepared = application.prepareStartManualTimed(context, values);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),
@@ -375,8 +375,7 @@ void test_application_composes_all_run_identities_at_one_boundary() {
 
     stop.option = fermentation::StopOption::AbortAndCool;
     stop.coolingPlan = coolingValues();
-    const auto preparedCoolingStop =
-        application.prepareStop(context, stop);
+    const auto preparedCoolingStop = application.prepareStop(context, stop);
     TEST_ASSERT_TRUE(preparedCoolingStop.request.has_value());
     TEST_ASSERT_TRUE(preparedCoolingStop.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(4U, preparedCoolingStop.request->commandId());
@@ -419,7 +418,8 @@ void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
     fermentation::FermentationUiCommandContext context;
     context.monotonicMillis = 200U;
     fermentation::FermentationUiStartManualHoldingIntent manual;
-    const auto prepared = application.prepareStartManualHolding(context, manual);
+    const auto prepared =
+        application.prepareStartManualHolding(context, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
@@ -458,7 +458,8 @@ void test_application_prepares_every_envelope_action_with_one_identity() {
     TEST_ASSERT_EQUAL_UINT64(3U, acknowledgement.request->commandId());
     TEST_ASSERT_EQUAL_UINT64(4U, mute.request->commandId());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::Unavailable),
         static_cast<int>(reset.status));
     TEST_ASSERT_FALSE(reset.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(5U, sensor.request->commandId());
@@ -484,7 +485,8 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
 
     fermentation::FermentationUiStartManualHoldingIntent manual;
     application.publishOwningRuntimeEvidence(owningEvidence());
-    const auto prepared = application.prepareStartManualHolding(context, manual);
+    const auto prepared =
+        application.prepareStartManualHolding(context, manual);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),

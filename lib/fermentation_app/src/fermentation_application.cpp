@@ -428,13 +428,14 @@ template <typename Intent>
 FermentationApplicationRequestResult
 FermentationApplication::prepareAdditionalEnvelope(
     const FermentationUiCommandContext& context, const Intent& intent) {
-    const auto evidence = resolveRuntimeEvidence();
     if constexpr (std::is_same_v<Intent, FermentationUiResetFaultIntent>) {
         // #24's Planner/Watchdog owner is not part of the current #168
         // composition. Do not manufacture a second owner or a generic reset
         // request; the typed UI intent remains explicitly unavailable.
-        return requestFailure(FermentationApplicationRequestStatus::Unavailable);
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -488,8 +489,8 @@ FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
     const FermentationUiCommandContext& context,
     const FermentationUiEnvelopePayload& payload) {
     return std::visit(
-        [this, &context](
-            const auto& intent) -> FermentationApplicationRequestResult {
+        [this,
+         &context](const auto& intent) -> FermentationApplicationRequestResult {
             using Intent = std::decay_t<decltype(intent)>;
             if constexpr (std::is_same_v<Intent,
                                          FermentationUiStartProgramIntent>) {
@@ -524,7 +525,8 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     }
     auto confirmed = prepared;
     if (!revalidatePreparedRequest(*confirmed.request)) {
-        return requestFailure(FermentationApplicationRequestStatus::Unavailable);
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
     confirmed.request->confirm();
     return confirmed;
@@ -723,9 +725,9 @@ bool FermentationApplication::validSensor(
 
 bool FermentationApplication::applicationReadiness() const {
     if (lifecycleState_ != ApplicationLifecycleState::Ready ||
-        configurationService_ == nullptr || runPersistenceCoordinator_ == nullptr ||
-        runtimeRunState_ == nullptr || !storageEpoch_.has_value() ||
-        !persistenceLoadStatus_.has_value()) {
+        configurationService_ == nullptr ||
+        runPersistenceCoordinator_ == nullptr || runtimeRunState_ == nullptr ||
+        !storageEpoch_.has_value() || !persistenceLoadStatus_.has_value()) {
         return false;
     }
 
@@ -823,7 +825,8 @@ bool FermentationApplication::revalidatePreparedRequest(
                     return;
                 }
                 const auto regressed = [](const auto& before, const auto& now) {
-                    return before.quality == device_platform::SensorQuality::Valid &&
+                    return before.quality ==
+                               device_platform::SensorQuality::Valid &&
                            now.quality != device_platform::SensorQuality::Valid;
                 };
                 valid = !regressed(previous->air, evidence.plausibility.air) &&
@@ -851,14 +854,14 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
         input.revisions.expectedRunRevision = runtimeRunState_->runRevision;
         input.revisions.expectedMessageRevision =
             runtimeRunState_->messageRevision;
-        input.revisions.expectedFaultRevision =
-            runtimeRunState_->faultRevision;
+        input.revisions.expectedFaultRevision = runtimeRunState_->faultRevision;
         input.revisions.expectedRecoveryEpisodeRevision =
             runtimeRunState_->recoveryEpisodeRevision;
     }
     if (configurationService_ != nullptr) {
         const auto runtime = configurationService_->acquireRuntime();
-        if (runtime.status == RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        if (runtime.status ==
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
             input.revisions.expectedUserConfigurationRevision =
                 runtime.lease.get().userConfigurationRevision();
             input.revisions.expectedProgramCatalogRevision =
@@ -879,7 +882,8 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
         {FermentationTemperatureRole::Product,
          valueOf(evidence.plausibility.product), evidence.plausibility.product},
         {FermentationTemperatureRole::Cooling,
-         valueOf(evidence.plausibility.cooling), evidence.plausibility.cooling}};
+         valueOf(evidence.plausibility.cooling),
+         evidence.plausibility.cooling}};
     input.recoveryDisposition = recoveryDisposition_;
     input.persistenceLoadStatus = persistenceLoadStatus_;
     if (runPersistenceCoordinator_ != nullptr) {
@@ -887,7 +891,8 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     }
     input.application.lifecycleState = lifecycleState_;
     input.application.presentation = presentationState_;
-    input.service.available = lifecycleState_ == ApplicationLifecycleState::Ready;
+    input.service.available =
+        lifecycleState_ == ApplicationLifecycleState::Ready;
     input.network.currentMode = networkMode();
     input.refreshTracker = &uiRefreshTracker_;
     return FermentationUiProjector::project(input);

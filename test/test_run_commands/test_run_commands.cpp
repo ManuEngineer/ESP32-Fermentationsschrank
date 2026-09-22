@@ -1241,7 +1241,6 @@ void test_domain_revision_conflicts_are_rejected_without_mutation() {
         static_cast<int>(
             decideAcknowledgeMessage(messageState, messageRequest).status));
     TEST_ASSERT_FALSE(messageState.messages[0].acknowledged);
-
 }
 
 void test_processed_command_ids_form_a_bounded_rolling_window() {
@@ -1965,7 +1964,6 @@ void test_sensor_selection_action_safety_pending_matrix() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
                               static_cast<int>(decision.status));
     }
-
 }
 
 // #21, 6.14.3/Review-Fund aus Commit 3: ManualRunPlan::values.sensorMode

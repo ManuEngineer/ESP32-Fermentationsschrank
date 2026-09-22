@@ -433,7 +433,8 @@ void test_sim_26_manual_and_program_consumer_paths() {
     FermentationUiCommandContext context;
     context.surface = device_platform::UiSurface::LocalDisplay;
     context.expected.expectedStateSequence = 0U;
-    const auto prepared = application.prepareEnvelope(context, *timedPress.action);
+    const auto prepared =
+        application.prepareEnvelope(context, *timedPress.action);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(prepared.status));
