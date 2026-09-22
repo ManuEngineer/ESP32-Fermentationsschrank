@@ -871,8 +871,12 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
 
     const auto valueOf = [](const device_platform::SensorQualitySnapshot& value)
         -> std::optional<double> {
-        if (value.filteredCelsius.has_value()) return value.filteredCelsius;
-        if (value.correctedCelsius.has_value()) return value.correctedCelsius;
+        if (value.filteredCelsius.has_value()) {
+            return value.filteredCelsius;
+        }
+        if (value.correctedCelsius.has_value()) {
+            return value.correctedCelsius;
+        }
         return value.rawCelsius;
     };
     const auto evidence = resolveRuntimeEvidence();
