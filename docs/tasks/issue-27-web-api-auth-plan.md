@@ -8,22 +8,22 @@ dieser Revision werden keine Produktmodule, Authentifizierungsdaten, HTTP-
 Routen, Webassets, Tests, Abhängigkeiten, Persistenzschemas oder
 Hardwarepfade implementiert.
 
-Die Live-Prüfung wurde am 2026-09-21 in einem frischen Arbeitsbaum gegen
-GitHub-`origin/main` durchgeführt. Diese Revision korrigiert den bestehenden
-Draft-Plan in PR #167 nach der unabhängigen Planprüfung; die frühere
-Issue-Beschreibung enthielt noch die historische ESP-IDF-6.0.2-Bezeichnung.
-Dieser Plan verwendet ausschließlich den nach #159 und #165 kanonischen
-ESP-IDF-6.1-Stand.
+Die Live-Prüfung wurde am 2026-09-22 in einem frischen Arbeitsbaum gegen
+GitHub-`origin/main` durchgeführt. Diese Revision aktualisiert PR #167 nach
+dem Merge von PR #169 und konsumiert dessen kanonische Application-/Runtime-
+Evidence-Grenzen. Die frühere Issue-Beschreibung enthielt noch die historische
+ESP-IDF-6.0.2-Bezeichnung. Dieser Plan verwendet ausschließlich den nach #159,
+#165 und #169 kanonischen ESP-IDF-6.1-Stand.
 
 ```text
 ISSUE=27
 PR=167
 PR_STATUS=DRAFT
 BASE_BRANCH=main
-BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16
-CURRENT_HEAD=1f1755e5e706fb668472920545b5302fcef1df16
-PLAN_REVISION=FULL_WEB_API_AUTH_REVALIDATION_ON_POST_165_MAIN
-PLAN_STATUS=FIX_VERIFICATION_PENDING
+BASE_SHA=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
+CURRENT_HEAD=8cff0b1a49f0c68cadc3794e4d516299c8f9d509
+PLAN_REVISION=APPLICATION_OWNED_RUNTIME_EVIDENCE_REVALIDATION_AFTER_PR169
+PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
 PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_IMPLEMENTATION=NOT_STARTED
@@ -35,6 +35,13 @@ PSRAM=NOT_REQUIRED
 CXX_STANDARD=GNU++17
 PR165_STATUS=MERGED
 PR165_MERGE_SHA=1f1755e5e706fb668472920545b5302fcef1df16
+PR169_STATUS=MERGED
+PR169_MERGE_SHA=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
+PREVIOUS_APPROVED_PLAN_SHA=da30f0526b6ffd76e51297d00291afe5808a4815
+APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_ISSUE=168
+APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_PR=169
+APPLICATION_RUNTIME_EVIDENCE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
+APPLICATION_RUNTIME_EVIDENCE_STATUS=AVAILABLE
 PR142_ISSUE25_STATUS=MERGED
 PR143_ISSUE26_STATUS=MERGED
 ISSUE164_HTTP_FOUNDATION=AVAILABLE_ON_BASE
@@ -64,6 +71,11 @@ Schritt.
   Revisionen, Commands und strukturierten Ergebnisse.
 - PR #143 / Issue #26 liefert die lokale Shell-/Anwendungsgrenze. Der Webpfad
   wird kein zweiter UI- oder Fachkern.
+- PR #169 / Issue #168 ist auf `main` gemergt und liefert die kanonische
+  Application-owned Runtime-Evidence: `FermentationApplication` nimmt keine
+  Sensor-, Planner- oder Safety-Evidence von UI/Web entgegen, publiziert die
+  owning Evidence an der Application-Grenze und revalidiert vorbereitete
+  Requests bei `confirmPrepared()` fail-closed.
 - Issue #31 ist nicht Teil dieser Arbeit. Weder Display-/Touchhardware noch
   LVGL, SPI, Controller, Kalibrierung, Fonts oder ein Renderer werden für #27
   vorausgesetzt oder implementiert.
@@ -88,6 +100,7 @@ Die Planumsetzung muss diese vorhandenen Grenzen direkt verwenden:
 | Netzwerk | `FermentationApplication`, `NetworkConfigurationService`, `ConnectivityCredentialStore`, `NetworkAccessPointInfo` | #27 liest Status; Modus, Candidate/Commit und Credentials werden nicht dupliziert |
 | UI-Snapshot | `FermentationUiSnapshot`, `FermentationUiProjector`, `FermentationUiExpectedRevisions`, secret-freies `FermentationNetworkModeView` | Web und Touch erhalten dieselbe Projektion; fehlende Werte bleiben ungültig/unverfügbar |
 | UI-Commands | `FermentationUiCommand`, `FermentationUiCommandBridge`, Konfigurations-/Netzwerkcommands und erwartete Revisionen | Webadapter liefert nur typisierte Werte und Revisionen; die Anwendung entscheidet |
+| Application-Runtime-Evidence | `FermentationApplication::publishOwningRuntimeEvidence()`, `uiSnapshot()`, `prepare*()` und `confirmPrepared()` | #168/#169 besitzen Runtime-/Sensor-/Safety-Provenienz und Confirmation-Revalidierung; Web erzeugt oder übergibt keine Evidence und rekonstruiert keine Safetyentscheidung |
 | Service-Policy | `ServiceSessionPolicy`, `ServiceSessionLease`, `fermentationWebServicePolicy()` | 5 Minuten Inaktivität / 15 Minuten absolut, getrennt von Touch |
 | Persistenz | `IStateStore`, `StorageEnvelope`, `StorageEpoch`, Readback und `CommitOutcomeUnknown` | Authentifizierungsdomäne wird erster realer Auth-Consumer auf diesem Backend |
 | Zufall/Zeit | `ISecureRandomSource`, ESP-IDF-Zufallsadapter, `ITimeSource` | Session-/CSRF-Zufall und Zeitouts; keine URL-/Log-Secrets |
@@ -191,6 +204,7 @@ Aktorfreigabe.
 | AP_ONLY, HOME_WIFI, APSTA, Setup-AP, Scan, Kandidatentest, Credential-Commit, Connectivity-Recovery, mDNS und direkte IP | #164 / `fermentation_app` | #27 zeigt den von #164 gelieferten Status und verlinkt Setup; keine zweite WLAN-/Credential-Wahrheit |
 | `UserConfiguration.networkMode`, `ConnectivityCredential` `cc0`/RecordType 9, StorageEpoch | #164 und bestehende Persistenzverträge | #27 behandelt diese Daten nur über vorhandene Application-/UI-Grenzen |
 | rendererunabhängige Snapshots, typed Commands, expected revisions, results, Permission-/UI-Semantik | #25/#26 und bestehende `fermentation_app`-Contracts | Web ist Consumer; ein notwendiger minimaler Source-Enum-Ausbau muss als gemeinsamer Contract-Slice geprüft werden, nicht als Web-Schattenvertrag |
+| Runtime-/Sensor-/Safety-Evidence und Confirmation-Revalidierung | #168 / PR #169, `FermentationApplication` auf kanonischem `main` | #27 konsumiert `uiSnapshot()` sowie die bestehenden `prepare*()`-/`confirmPrepared()`-Pfade; keine Web-/Renderer-Evidence und keine parallele Runtime-Wahrheit |
 | normaler Webtransportadapter, Webnavigation und responsive WebUI | #27 | keine Touch-/Display-Rendererlogik |
 | Webpasswort, Authentication-Persistenz, Verifier/KDF-Vertrag, Websessions und Web-Lockout | #27 als erster Auth-Consumer | eine typisierte Authentication-Domäne im bestehenden `IStateStore`; kein zweiter physischer Store |
 | CSRF, Origin/Referer/Fetch-Metadata, Cookie- und Methodengrenze | #27 | vor fachlicher Mutation; nicht als ESP-IDF-Serverfeature delegieren |
@@ -209,8 +223,11 @@ esp_http_server / #164 lifecycle
            -> #27 WebAuth/WebUI/API-Routes
         -> Session-/CSRF-/Origin-Prüfung
         -> DTO/Codec mit festen Grenzen
-        -> FermentationUiProjector / bestehender Application-Read-Facade
-        -> FermentationUiCommandBridge / bestehende owning Services
+        -> FermentationApplication::uiSnapshot()
+        -> typisierte `FermentationApplication::prepare*()`-/`prepareEnvelope()`-
+           Intents mit erwarteten Revisionen
+        -> `FermentationApplication::confirmPrepared()`
+        -> bestehende `FermentationUiCommandBridge` / owning Services
         -> fachliche Validierung, Revision, Persistenz, Safety, Publish
 ```
 
@@ -219,6 +236,15 @@ Die Route-Reihenfolge verhindert, dass die normale WebUI den Setup-Flow
 wenn kein aktiver #164-Setup-Flow die angeforderte Route besitzt. Ein
 Netzwerkfehler, HTTP-Fehler oder Web-Heapfehler darf `application.update()`,
 Regelung, Persistenz-Recovery oder Safety nicht beenden.
+
+Web-/HTTP-Code darf keine `FermentationApplicationOwningEvidence`, keine
+`safetyAllowsStart`-/`safetyAllowsCooling`-/`safetyAllowsChange`-Werte, keine
+generische `FaultResetEvaluation`/`FaultResetRequest`-Wahrheit und keine
+Sensor-/Planner-/Recovery-Snapshots in Application-Commands einspeisen. Die
+Anwendung liest ihre aktuelle owning Evidence ausschließlich von der
+Application-/Orchestrator-Grenze. `ResetFault` bleibt im aktuellen
+Compositionpfad `Unavailable`, solange kein kanonischer produktiver
+Planner-Owner aus dem vorgesehenen Downstream-Scope gebunden ist.
 
 ## 3. Authentisierung, Sessions und Berechtigungen
 
@@ -656,8 +682,8 @@ Der interne Adapter übersetzt nur auf bestehende Commands und Services:
   Network-Commands, ohne Credentialpayload oder Persistenzduplikat;
 - Programm-, Einstellungs- und Preview-/Commit-Änderungen über den bestehenden
   Preview-/Commitpfad;
-- Start, Stop, Quittieren, Mute, Abschluss und Recovery über den bestehenden
-  Application-/Command-Bridge-Pfad;
+- Start, Stop, Quittieren, Mute, Abschluss und Recovery über die bestehenden
+  Application-`prepare*()`-/`confirmPrepared()`- und Command-Bridge-Pfade;
 - Serviceaktionen erst nach gültiger sessiongebundener Web-Servicelease und
   zusätzlicher Bestätigung; sie tragen dabei die gemeinsame Quelle
   `UiSurface::WebService`;
@@ -752,11 +778,12 @@ und keinen stillen Wechsel auf eine zweite Sequenzwahrheit.
 ### 6.1 Gemeinsames View-Modell
 
 Der Webadapter erzeugt keine Web-Schattenmodelle für Prozess-, Temperatur-,
-Meldungs-, Netzwerk-, Recovery- oder Berechtigungszustände. Eine kleine
-Application-Facade assembliert aus den bestehenden Ownern die
-`FermentationUiProjectionInput` und lässt `FermentationUiProjector` den
-`FermentationUiSnapshot` erzeugen. `refreshRevision` und die vorhandenen
-`FermentationUiExpectedRevisions` werden unverändert als Webbasis verwendet.
+Meldungs-, Netzwerk-, Recovery- oder Berechtigungszustände. Er konsumiert den
+von `FermentationApplication::uiSnapshot()` gelieferten kanonischen
+`FermentationUiSnapshot`; dessen Application-owned Projektion verwendet die
+bestehenden Owner und `FermentationUiProjector`. `refreshRevision` und die
+vorhandenen `FermentationUiExpectedRevisions` werden unverändert als Webbasis
+verwendet.
 
 Wenn ein kanonischer Producer einen Wert nicht liefert, zeigt die WebUI
 `unavailable`/`unknown` mit Qualitätsstatus. Sie erfindet keine Null-
@@ -1103,7 +1130,12 @@ Freigabe oder einen reproduzierbaren Nachweis bleibt der betroffene Teil
 
 ```text
 ISSUE27_PLAN_REVISION=COMPLETE_FOR_OWNER_REVIEW
-BASELINE_MAIN=1f1755e5e706fb668472920545b5302fcef1df16
+BASELINE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
+PREVIOUS_APPROVED_PLAN_SHA=da30f0526b6ffd76e51297d00291afe5808a4815
+APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_ISSUE=168
+APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_PR=169
+APPLICATION_RUNTIME_EVIDENCE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
+APPLICATION_RUNTIME_EVIDENCE_STATUS=AVAILABLE
 ESP_IDF=v6.1.0@fff9895c82d744c7237be8847347bdd1b07c6643
 ISSUE164_HTTP_LIFECYCLE_REUSED=YES
 SECOND_HTTP_SERVER=NO
@@ -1119,6 +1151,8 @@ PRODUCT_IMPLEMENTATION=NOT_STARTED
 ACTUATOR_RELEASE=NO
 PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
 OPEN_REVIEW_BLOCKERS=0
-FIX_VERIFICATION_REQUIRED=YES
-OWNER_PLAN_APPROVAL_REQUIRED=AFTER_FIX_VERIFICATION
+WEB_FULL_SCOPE=PLAN_REVALIDATED_ON_APPLICATION_OWNED_CONTRACT
+PLAN_REVIEW_REQUIRED=YES
+OWNER_PLAN_APPROVAL_REQUIRED=YES
+IMPLEMENTATION_AUTHORIZATION=NO
 ```

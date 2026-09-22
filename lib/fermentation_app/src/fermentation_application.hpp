@@ -279,7 +279,6 @@ class FermentationApplication {
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
-    mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
     mutable std::recursive_mutex stateMutex_;
 };
 
