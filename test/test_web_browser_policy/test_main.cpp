@@ -55,8 +55,8 @@ void test_json_content_type_is_exact_and_bounded() {
         "application/jsonp"));
     TEST_ASSERT_FALSE(fermentation::web_browser_policy::exactJsonContentType(
         "application/json; charset=utf-8; profile=unsafe"));
-    TEST_ASSERT_FALSE(fermentation::web_browser_policy::exactJsonContentType(
-        "text/plain"));
+    TEST_ASSERT_FALSE(
+        fermentation::web_browser_policy::exactJsonContentType("text/plain"));
 }
 
 }  // namespace

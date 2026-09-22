@@ -49,6 +49,23 @@ class ServiceSessionLease {
         return policy_.absoluteTimeoutMillis.has_value() &&
                nowMillis - grantedAtMillis_ >= *policy_.absoluteTimeoutMillis;
     }
+    // This read-only view deliberately does not count as relevant activity.
+    // A UI can display the remaining authorization without extending it.
+    [[nodiscard]] std::optional<std::uint64_t> remainingAt(
+        std::uint64_t nowMillis) const noexcept {
+        if (!activeAt(nowMillis)) {
+            return std::nullopt;
+        }
+        const auto idleRemaining = policy_.inactivityTimeoutMillis -
+                                   (nowMillis - lastActivityAtMillis_);
+        if (!policy_.absoluteTimeoutMillis.has_value()) {
+            return idleRemaining;
+        }
+        const auto absoluteRemaining =
+            *policy_.absoluteTimeoutMillis - (nowMillis - grantedAtMillis_);
+        return idleRemaining < absoluteRemaining ? idleRemaining
+                                                 : absoluteRemaining;
+    }
     void observe(ServiceSessionEvent event, std::uint64_t nowMillis) noexcept {
         if (!active_) {
             return;

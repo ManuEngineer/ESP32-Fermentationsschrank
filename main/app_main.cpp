@@ -253,8 +253,8 @@ extern "C" void app_main(void) {
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
                           timeZoneResolver, timeSource, networkLifecycle,
-                          httpServerLifecycle, &resetCauseSource,
-                          &randomSource, &authenticationKdf);
+                          httpServerLifecycle, &resetCauseSource, &randomSource,
+                          &authenticationKdf);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());

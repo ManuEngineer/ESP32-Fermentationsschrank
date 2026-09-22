@@ -123,6 +123,29 @@ class FermentationApplicationTestAccess {
         FermentationApplication& application, bool pending) {
         application.runtimeRunState_->criticalSafetyEventPending = pending;
     }
+
+    static void addAcknowledgableMessage(FermentationApplication& application,
+                                         std::uint32_t id) {
+        auto& state = *application.runtimeRunState_;
+        state.messages[0] = {id,
+                             MessageCode::RunCompleted,
+                             MessageClass::Information,
+                             0U,
+                             MessageTrigger::Process,
+                             0U,
+                             true,
+                             false,
+                             false,
+                             false,
+                             false,
+                             AcousticIntent::None,
+                             std::nullopt,
+                             std::nullopt,
+                             std::nullopt,
+                             1U};
+        state.messageCount = 1U;
+        state.messageRevision = 1U;
+    }
 };
 
 class ApplicationRunIdentityTestAccess {
@@ -1072,7 +1095,7 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
                              next.request->commandId());
 }
 
-void test_application_owner_rejects_unconfirmed_before_decision_or_persist() {
+void test_application_owner_rejects_unconfirmed_message_action_before_decision_or_persist() {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
@@ -1083,22 +1106,17 @@ void test_application_owner_rejects_unconfirmed_before_decision_or_persist() {
     TEST_ASSERT_TRUE(
         application.begin(platform, store, timeZoneResolver, timeSource));
     application.publishOwningRuntimeEvidence(owningEvidence());
+    fermentation::FermentationApplicationTestAccess::addAcknowledgableMessage(
+        application, 7U);
 
-    fermentation::FermentationUiStartManualTimedIntent intent;
-    intent.values.targetTemperatureCelsius = 30.0;
-    intent.values.durationMinutes = 60U;
-    intent.values.sensorMode = fermentation::RunSensorMode::Air;
-    intent.values.qualificationBandCelsius = 0.5;
-    intent.values.qualificationDurationMinutes = 10U;
-    intent.values.maximumTargetReachMinutes = 180U;
+    const fermentation::FermentationUiAcknowledgeMessageIntent intent{7U};
     fermentation::FermentationUiCommandContext context;
     context.expected.expectedStateSequence =
         fermentation::FermentationApplicationTestAccess::stateSequence(
             application);
-    context.expected.expectedRunRevision = 0U;
+    context.expected.expectedMessageRevision = 1U;
     const auto prepared = application.prepareEnvelope(
-        context,
-        fermentation::FermentationUiEnvelopePayload{intent});
+        context, fermentation::FermentationUiEnvelopePayload{intent});
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
 
@@ -1107,7 +1125,8 @@ void test_application_owner_rejects_unconfirmed_before_decision_or_persist() {
             application);
     const auto rejected = application.applyPreparedRequest(*prepared.request);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(
+            fermentation::RunPersistenceResultStatus::InvalidDecision),
         static_cast<int>(rejected.status));
     TEST_ASSERT_EQUAL_UINT32(
         beforeSequence,
@@ -1119,12 +1138,52 @@ void test_application_owner_rejects_unconfirmed_before_decision_or_persist() {
     TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
     const auto applied = application.applyPreparedRequest(*confirmed.request);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::RunPersistenceResultStatus::Blocked),
+        static_cast<int>(fermentation::RunPersistenceResultStatus::NotEligible),
         static_cast<int>(applied.status));
     TEST_ASSERT_EQUAL_UINT32(
         beforeSequence,
         fermentation::FermentationApplicationTestAccess::stateSequence(
             application));
+}
+
+void test_application_program_preview_and_commit_stay_with_configuration_owner() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+    const auto before = application.uiProgramList();
+    TEST_ASSERT_TRUE(before.has_value());
+    TEST_ASSERT_TRUE(!before->empty());
+    const auto snapshot = application.uiSnapshot();
+    TEST_ASSERT_TRUE(
+        snapshot.revisions.expectedProgramCatalogRevision.has_value());
+    fermentation::FermentationUiProgramEditRequest edit;
+    edit.operation = fermentation::FermentationUiProgramEditOperation::Copy;
+    edit.programId = "water-kefir";
+    edit.name = "Web preview";
+    edit.confirmed = true;
+    const auto preview = application.prepareProgramEdit(
+        *snapshot.revisions.expectedProgramCatalogRevision, edit);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationPreviewStatus::Success),
+        static_cast<int>(preview.status));
+    TEST_ASSERT_TRUE(preview.preview.has_value());
+
+    fermentation::FermentationUiConfigurationCommitCommand commit;
+    commit.previewHandle = preview.preview->handle;
+    commit.expectedUserConfigurationRevision =
+        preview.preview->expectedUserConfigurationRevision;
+    commit.confirmed = true;
+    const auto committed = application.confirmConfigurationPreview(commit);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationCommitStatus::Activated),
+        static_cast<int>(committed.status));
+    const auto after = application.uiProgramList();
+    TEST_ASSERT_TRUE(after.has_value());
+    TEST_ASSERT_EQUAL_UINT32(before->size() + 1U, after->size());
 }
 
 void test_application_reconstructs_reset_handoff_after_run_write_cut() {
@@ -1308,6 +1367,8 @@ int main(int, char**) {
     RUN_TEST(test_application_finishes_committed_handoff_before_ready);
     RUN_TEST(test_application_resumes_empty_partial_handoff_before_allocator);
     RUN_TEST(
-        test_application_owner_rejects_unconfirmed_before_decision_or_persist);
+        test_application_owner_rejects_unconfirmed_message_action_before_decision_or_persist);
+    RUN_TEST(
+        test_application_program_preview_and_commit_stay_with_configuration_owner);
     return UNITY_END();
 }

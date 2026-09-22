@@ -208,10 +208,11 @@ CommandEnvelope FermentationUiCommandBridge::makeEnvelope(
     const auto source =
         context.surface == device_platform::UiSurface::LocalDisplay
             ? CommandSource::LocalDisplay
-            : context.surface == device_platform::UiSurface::WebService
-                  ? CommandSource::ServiceWeb
-                  : CommandSource::WebInterface;
-    return {identity.commandId(), source,
+        : context.surface == device_platform::UiSurface::WebService
+            ? CommandSource::ServiceWeb
+            : CommandSource::WebInterface;
+    return {identity.commandId(),
+            source,
             context.monotonicMillis,
             context.expected.expectedStateSequence,
             context.expected.expectedRunRevision,
@@ -380,15 +381,16 @@ FermentationUiCommandBridge::bootstrapAuthentication(
         }
         return FermentationUiAuthenticationStatus::RecoveryRequired;
     }();
-    const auto category = detail == FermentationUiAuthenticationStatus::Applied
-                              ? Category::Accepted
-                              : (detail ==
-                                         FermentationUiAuthenticationStatus::KdfUnavailable ||
-                                     detail ==
-                                         FermentationUiAuthenticationStatus::RecoveryRequired ||
-                                     detail == FermentationUiAuthenticationStatus::CommitOutcomeUnknown
-                                 ? Category::Unavailable
-                                 : Category::Rejected);
+    const auto category =
+        detail == FermentationUiAuthenticationStatus::Applied
+            ? Category::Accepted
+            : (detail == FermentationUiAuthenticationStatus::KdfUnavailable ||
+                       detail == FermentationUiAuthenticationStatus::
+                                     RecoveryRequired ||
+                       detail == FermentationUiAuthenticationStatus::
+                                     CommitOutcomeUnknown
+                   ? Category::Unavailable
+                   : Category::Rejected);
     return makeResult(category, detail,
                       FermentationUiCommandPhase::OwningOutcome);
 }
@@ -430,8 +432,8 @@ FermentationUiCommandBridge::decidePreparedCommand(
     const RunCommandState& current,
     const FermentationApplicationPreparedRequest& request) {
     return std::visit(
-        [&current, &request](const auto& prepared)
-            -> std::optional<CommandDecision> {
+        [&current,
+         &request](const auto& prepared) -> std::optional<CommandDecision> {
             using Request = std::decay_t<decltype(prepared)>;
             CommandDecision decision;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {

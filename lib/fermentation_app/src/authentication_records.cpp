@@ -35,11 +35,13 @@ bool writeVerifier(device_platform::ByteWriter& writer,
            writeUint16(writer, verifier.algorithmId) &&
            writeUint32(writer, verifier.workFactor) &&
            writeUint64(writer, credentialEpoch) &&
-           writeUint8(writer, static_cast<std::uint8_t>(verifier.salt.size())) &&
+           writeUint8(writer,
+                      static_cast<std::uint8_t>(verifier.salt.size())) &&
            writer.writeBytes(verifier.salt.data(), verifier.salt.size()) &&
            writeUint8(writer,
                       static_cast<std::uint8_t>(verifier.verifier.size())) &&
-           writer.writeBytes(verifier.verifier.data(), verifier.verifier.size()) &&
+           writer.writeBytes(verifier.verifier.data(),
+                             verifier.verifier.size()) &&
            writeUint32(writer, lockout.failedAttempts) &&
            writeUint8(writer, lockout.lockoutStage) &&
            writeUint64(writer, lockout.lockoutRemainingMs);
@@ -53,8 +55,7 @@ bool readVerifier(device_platform::ByteReader& reader, AuthVerifier& verifier,
     if (!readUint16(reader, verifier.algorithmId) ||
         !readUint32(reader, verifier.workFactor) ||
         !readUint64(reader, credentialEpoch) ||
-        !readUint8(reader, saltLength) ||
-        saltLength != verifier.salt.size() ||
+        !readUint8(reader, saltLength) || saltLength != verifier.salt.size() ||
         !reader.readBytes(verifier.salt.data(), verifier.salt.size()) ||
         !readUint8(reader, verifierLength) ||
         verifierLength != verifier.verifier.size() ||
@@ -83,9 +84,9 @@ AuthenticationReadStatus mapRead(device_platform::StateStoreReadStatus status) {
 
 template <typename Record, typename Decoder>
 AuthenticationWriteStatus writeAndReadback(
-    device_platform::IStateStore& store, const device_platform::StateStoreKey& key,
-    const std::string& encoded, std::size_t maximum, Decoder decoder,
-    const Record& expected) {
+    device_platform::IStateStore& store,
+    const device_platform::StateStoreKey& key, const std::string& encoded,
+    std::size_t maximum, Decoder decoder, const Record& expected) {
     const auto status = store.write(key, encoded);
     if (status == device_platform::StateStoreWriteStatus::WriteError)
         return AuthenticationWriteStatus::WriteError;
@@ -93,14 +94,16 @@ AuthenticationWriteStatus writeAndReadback(
         return AuthenticationWriteStatus::CapacityError;
     const auto read = store.read(key, maximum);
     if (read.status != device_platform::StateStoreReadStatus::Success) {
-        return status == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+        return status == device_platform::StateStoreWriteStatus::
+                             CommitOutcomeUnknown
                    ? AuthenticationWriteStatus::CommitOutcomeUnknown
                    : AuthenticationWriteStatus::ReadbackFailure;
     }
     const auto decoded = decoder(read.value);
     if (!decoded.value.has_value() || !(*decoded.value == expected) ||
         read.value != encoded) {
-        return status == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+        return status == device_platform::StateStoreWriteStatus::
+                             CommitOutcomeUnknown
                    ? AuthenticationWriteStatus::CommitOutcomeUnknown
                    : AuthenticationWriteStatus::IntegrityFailure;
     }
@@ -136,8 +139,7 @@ bool validUtf8(const std::string& value, std::size_t& codePoints) noexcept {
         }
         if ((width == 2U && codePoint < 0x80U) ||
             (width == 3U && codePoint < 0x800U) ||
-            (width == 4U && codePoint < 0x10000U) ||
-            codePoint > 0x10FFFFU ||
+            (width == 4U && codePoint < 0x10000U) || codePoint > 0x10FFFFU ||
             (codePoint >= 0xD800U && codePoint <= 0xDFFFU)) {
             return false;
         }
@@ -178,15 +180,18 @@ bool operator==(const AuthenticationCredentialRecord& left,
 bool operator==(const AuthProvisioningRoot& left,
                 const AuthProvisioningRoot& right) noexcept {
     return left.storageEpoch == right.storageEpoch &&
-           left.recordSequence == right.recordSequence && left.state == right.state &&
+           left.recordSequence == right.recordSequence &&
+           left.state == right.state &&
            left.authDomainGeneration == right.authDomainGeneration;
 }
 
 bool isPlausible(const AuthenticationCredentialRecord& record) noexcept {
     return record.storageEpoch.value() != 0U && record.recordSequence != 0U &&
-           record.webCredentialEpoch != 0U && record.servicePinCredentialEpoch != 0U &&
+           record.webCredentialEpoch != 0U &&
+           record.servicePinCredentialEpoch != 0U &&
            record.webPassword.valid() && record.servicePin.valid() &&
-           validLockout(record.webLockout) && validLockout(record.servicePinLockout);
+           validLockout(record.webLockout) &&
+           validLockout(record.servicePinLockout);
 }
 
 bool isPlausible(const AuthProvisioningRoot& root) noexcept {
@@ -196,17 +201,19 @@ bool isPlausible(const AuthProvisioningRoot& root) noexcept {
         case AuthProvisioningState::ProvisioningIndeterminate:
         case AuthProvisioningState::Provisioned:
         case AuthProvisioningState::RecoveryRequired:
-            return root.storageEpoch.value() != 0U && root.recordSequence != 0U &&
-                   root.authDomainGeneration != 0U;
+            return root.storageEpoch.value() != 0U &&
+                   root.recordSequence != 0U && root.authDomainGeneration != 0U;
     }
     return false;
 }
 
 AuthenticationRecordCodecStatus encodeAuthenticationCredential(
     const AuthenticationCredentialRecord& record, std::string& out) {
-    if (!isPlausible(record)) return AuthenticationRecordCodecStatus::InvalidModel;
+    if (!isPlausible(record))
+        return AuthenticationRecordCodecStatus::InvalidModel;
     device_platform::ByteWriter payload(kRecordBytes);
-    if (!device_platform::big_endian::writeBool(payload, record.webPasswordEnabled) ||
+    if (!device_platform::big_endian::writeBool(payload,
+                                                record.webPasswordEnabled) ||
         !writeVerifier(payload, record.webPassword, record.webLockout,
                        record.webCredentialEpoch) ||
         !writeVerifier(payload, record.servicePin, record.servicePinLockout,
@@ -216,8 +223,8 @@ AuthenticationRecordCodecStatus encodeAuthenticationCredential(
     }
     std::string encoded;
     const auto status = device_platform::encodeEnvelope(
-         {configuration_storage_contract::kAuthenticationRecordType,
-          configuration_storage_contract::kAuthenticationSchemaVersion,
+        {configuration_storage_contract::kAuthenticationRecordType,
+         configuration_storage_contract::kAuthenticationSchemaVersion,
          record.storageEpoch, record.recordSequence, std::nullopt,
          payload.takeBytes()},
         encoded, kMaximumCredentialEnvelopeBytes);
@@ -232,26 +239,32 @@ AuthenticationRecordCodecStatus encodeAuthenticationCredential(
 AuthenticationCredentialDecodeResult decodeAuthenticationCredential(
     const std::string& bytes) {
     const auto envelope = device_platform::decodeEnvelope(bytes);
-    if (envelope.status == device_platform::EnvelopeDecodeStatus::UnknownEnvelopeVersion)
-        return {AuthenticationRecordCodecStatus::UnsupportedSchema, std::nullopt};
+    if (envelope.status ==
+        device_platform::EnvelopeDecodeStatus::UnknownEnvelopeVersion)
+        return {AuthenticationRecordCodecStatus::UnsupportedSchema,
+                std::nullopt};
     if (envelope.status != device_platform::EnvelopeDecodeStatus::Success ||
         !envelope.envelope.has_value())
         return {AuthenticationRecordCodecStatus::InvalidEnvelope, std::nullopt};
     const auto& value = *envelope.envelope;
-    if (value.recordTypeId != configuration_storage_contract::kAuthenticationRecordType)
-        return {AuthenticationRecordCodecStatus::RecordIdentityMismatch, std::nullopt};
+    if (value.recordTypeId !=
+        configuration_storage_contract::kAuthenticationRecordType)
+        return {AuthenticationRecordCodecStatus::RecordIdentityMismatch,
+                std::nullopt};
     if (value.schemaVersion !=
             configuration_storage_contract::kAuthenticationSchemaVersion ||
         value.utcUnixSeconds.has_value() ||
         value.payload.size() != kRecordBytes)
-        return {value.schemaVersion > 1U ? AuthenticationRecordCodecStatus::UnsupportedSchema
-                                        : AuthenticationRecordCodecStatus::InvalidModel,
+        return {value.schemaVersion > 1U
+                    ? AuthenticationRecordCodecStatus::UnsupportedSchema
+                    : AuthenticationRecordCodecStatus::InvalidModel,
                 std::nullopt};
     device_platform::ByteReader reader(value.payload);
     AuthenticationCredentialRecord record;
     record.storageEpoch = value.storageEpoch;
     record.recordSequence = value.versionValue;
-    if (!device_platform::big_endian::readBool(reader, record.webPasswordEnabled) ||
+    if (!device_platform::big_endian::readBool(reader,
+                                               record.webPasswordEnabled) ||
         !readVerifier(reader, record.webPassword, record.webLockout,
                       record.webCredentialEpoch) ||
         !readVerifier(reader, record.servicePin, record.servicePinLockout,
@@ -263,7 +276,8 @@ AuthenticationCredentialDecodeResult decodeAuthenticationCredential(
 
 AuthenticationRecordCodecStatus encodeAuthProvisioningRoot(
     const AuthProvisioningRoot& root, std::string& out) {
-    if (!isPlausible(root)) return AuthenticationRecordCodecStatus::InvalidModel;
+    if (!isPlausible(root))
+        return AuthenticationRecordCodecStatus::InvalidModel;
     device_platform::ByteWriter payload(kRootPayloadBytes);
     if (!device_platform::big_endian::writeUint8(
             payload, static_cast<std::uint8_t>(root.state)) ||
@@ -272,8 +286,8 @@ AuthenticationRecordCodecStatus encodeAuthProvisioningRoot(
         return AuthenticationRecordCodecStatus::CapacityExceeded;
     std::string encoded;
     const auto status = device_platform::encodeEnvelope(
-         {configuration_storage_contract::kAuthenticationRootRecordType,
-          configuration_storage_contract::kAuthenticationRootSchemaVersion,
+        {configuration_storage_contract::kAuthenticationRootRecordType,
+         configuration_storage_contract::kAuthenticationRootSchemaVersion,
          root.storageEpoch, root.recordSequence, std::nullopt,
          payload.takeBytes()},
         encoded, kMaximumRootEnvelopeBytes);
@@ -288,20 +302,25 @@ AuthenticationRecordCodecStatus encodeAuthProvisioningRoot(
 AuthProvisioningRootDecodeResult decodeAuthProvisioningRoot(
     const std::string& bytes) {
     const auto envelope = device_platform::decodeEnvelope(bytes);
-    if (envelope.status == device_platform::EnvelopeDecodeStatus::UnknownEnvelopeVersion)
-        return {AuthenticationRecordCodecStatus::UnsupportedSchema, std::nullopt};
+    if (envelope.status ==
+        device_platform::EnvelopeDecodeStatus::UnknownEnvelopeVersion)
+        return {AuthenticationRecordCodecStatus::UnsupportedSchema,
+                std::nullopt};
     if (envelope.status != device_platform::EnvelopeDecodeStatus::Success ||
         !envelope.envelope.has_value())
         return {AuthenticationRecordCodecStatus::InvalidEnvelope, std::nullopt};
     const auto& value = *envelope.envelope;
-    if (value.recordTypeId != configuration_storage_contract::kAuthenticationRootRecordType)
-        return {AuthenticationRecordCodecStatus::RecordIdentityMismatch, std::nullopt};
+    if (value.recordTypeId !=
+        configuration_storage_contract::kAuthenticationRootRecordType)
+        return {AuthenticationRecordCodecStatus::RecordIdentityMismatch,
+                std::nullopt};
     if (value.schemaVersion !=
             configuration_storage_contract::kAuthenticationRootSchemaVersion ||
         value.utcUnixSeconds.has_value() ||
         value.payload.size() != kRootPayloadBytes)
-        return {value.schemaVersion > 1U ? AuthenticationRecordCodecStatus::UnsupportedSchema
-                                        : AuthenticationRecordCodecStatus::InvalidModel,
+        return {value.schemaVersion > 1U
+                    ? AuthenticationRecordCodecStatus::UnsupportedSchema
+                    : AuthenticationRecordCodecStatus::InvalidModel,
                 std::nullopt};
     device_platform::ByteReader reader(value.payload);
     std::uint8_t state = 0U;
@@ -310,7 +329,7 @@ AuthProvisioningRootDecodeResult decodeAuthProvisioningRoot(
     root.recordSequence = value.versionValue;
     if (!device_platform::big_endian::readUint8(reader, state) ||
         !device_platform::big_endian::readUint64(reader,
-                                                  root.authDomainGeneration) ||
+                                                 root.authDomainGeneration) ||
         reader.remaining() != 0U) {
         return {AuthenticationRecordCodecStatus::InvalidModel, std::nullopt};
     }
@@ -324,16 +343,18 @@ AuthenticationCredentialReadResult AuthenticationRecordStore::readCredentials(
     device_platform::StorageEpoch expectedEpoch) const {
     const auto key = device_platform::StateStoreKey::create(
         configuration_storage_contract::kAuthenticationStoreKey);
-    if (!key.key.has_value()) return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
+    if (!key.key.has_value())
+        return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
     const auto read = store_.read(*key.key, kMaximumCredentialEnvelopeBytes);
     if (read.status != device_platform::StateStoreReadStatus::Success)
         return {mapRead(read.status), std::nullopt};
     const auto decoded = decodeAuthenticationCredential(read.value);
     if (!decoded.value.has_value()) {
-        return {decoded.status == AuthenticationRecordCodecStatus::UnsupportedSchema
-                    ? AuthenticationReadStatus::UnsupportedSchema
-                    : AuthenticationReadStatus::IntegrityFailure,
-                std::nullopt};
+        return {
+            decoded.status == AuthenticationRecordCodecStatus::UnsupportedSchema
+                ? AuthenticationReadStatus::UnsupportedSchema
+                : AuthenticationReadStatus::IntegrityFailure,
+            std::nullopt};
     }
     if (decoded.value->storageEpoch != expectedEpoch)
         return {AuthenticationReadStatus::DifferentEpoch, std::nullopt};
@@ -344,16 +365,18 @@ AuthProvisioningRootReadResult AuthenticationRecordStore::readRoot(
     device_platform::StorageEpoch expectedEpoch) const {
     const auto key = device_platform::StateStoreKey::create(
         configuration_storage_contract::kAuthenticationRootStoreKey);
-    if (!key.key.has_value()) return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
+    if (!key.key.has_value())
+        return {AuthenticationReadStatus::IntegrityFailure, std::nullopt};
     const auto read = store_.read(*key.key, kMaximumRootEnvelopeBytes);
     if (read.status != device_platform::StateStoreReadStatus::Success)
         return {mapRead(read.status), std::nullopt};
     const auto decoded = decodeAuthProvisioningRoot(read.value);
     if (!decoded.value.has_value()) {
-        return {decoded.status == AuthenticationRecordCodecStatus::UnsupportedSchema
-                    ? AuthenticationReadStatus::UnsupportedSchema
-                    : AuthenticationReadStatus::IntegrityFailure,
-                std::nullopt};
+        return {
+            decoded.status == AuthenticationRecordCodecStatus::UnsupportedSchema
+                ? AuthenticationReadStatus::UnsupportedSchema
+                : AuthenticationReadStatus::IntegrityFailure,
+            std::nullopt};
     }
     if (decoded.value->storageEpoch != expectedEpoch)
         return {AuthenticationReadStatus::DifferentEpoch, std::nullopt};
@@ -368,7 +391,8 @@ AuthenticationWriteStatus AuthenticationRecordStore::writeCredentials(
         return AuthenticationWriteStatus::IntegrityFailure;
     const auto key = device_platform::StateStoreKey::create(
         configuration_storage_contract::kAuthenticationStoreKey);
-    if (!key.key.has_value()) return AuthenticationWriteStatus::IntegrityFailure;
+    if (!key.key.has_value())
+        return AuthenticationWriteStatus::IntegrityFailure;
     return writeAndReadback<AuthenticationCredentialRecord>(
         store_, *key.key, encoded, kMaximumCredentialEnvelopeBytes,
         decodeAuthenticationCredential, record);
@@ -382,7 +406,8 @@ AuthenticationWriteStatus AuthenticationRecordStore::writeRoot(
         return AuthenticationWriteStatus::IntegrityFailure;
     const auto key = device_platform::StateStoreKey::create(
         configuration_storage_contract::kAuthenticationRootStoreKey);
-    if (!key.key.has_value()) return AuthenticationWriteStatus::IntegrityFailure;
+    if (!key.key.has_value())
+        return AuthenticationWriteStatus::IntegrityFailure;
     return writeAndReadback<AuthProvisioningRoot>(
         store_, *key.key, encoded, kMaximumRootEnvelopeBytes,
         decodeAuthProvisioningRoot, root);
@@ -392,8 +417,9 @@ AuthInputStatus validateWebPassword(const std::string& value) noexcept {
     if (value.size() > 256U) return AuthInputStatus::CapacityExceeded;
     std::size_t codePoints = 0U;
     if (!validUtf8(value, codePoints)) return AuthInputStatus::InvalidUtf8;
-    return codePoints >= 15U && codePoints <= 64U ? AuthInputStatus::Valid
-                                                  : AuthInputStatus::InvalidLength;
+    return codePoints >= 15U && codePoints <= 64U
+               ? AuthInputStatus::Valid
+               : AuthInputStatus::InvalidLength;
 }
 
 AuthInputStatus validateServicePin(const std::string& value) noexcept {
@@ -405,10 +431,11 @@ AuthInputStatus validateServicePin(const std::string& value) noexcept {
 
 bool constantTimeEqual(
     const std::array<std::uint8_t, kAuthenticationVerifierBytes>& left,
-    const std::array<std::uint8_t, kAuthenticationVerifierBytes>& right)
-    noexcept {
+    const std::array<std::uint8_t, kAuthenticationVerifierBytes>&
+        right) noexcept {
     std::uint8_t difference = 0U;
-    for (std::size_t i = 0U; i < left.size(); ++i) difference |= left[i] ^ right[i];
+    for (std::size_t i = 0U; i < left.size(); ++i)
+        difference |= left[i] ^ right[i];
     return difference == 0U;
 }
 
@@ -416,7 +443,8 @@ AuthBootstrapStatus AuthenticationDomain::inspect(
     device_platform::StorageEpoch epoch) const {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto root = store_.readRoot(epoch);
-    if (root.status != AuthenticationReadStatus::Success || !root.value.has_value())
+    if (root.status != AuthenticationReadStatus::Success ||
+        !root.value.has_value())
         return root.status == AuthenticationReadStatus::NotFound
                    ? AuthBootstrapStatus::RecoveryRequired
                    : AuthBootstrapStatus::RecoveryRequired;
@@ -515,7 +543,8 @@ AuthBootstrapStatus AuthenticationDomain::bootstrap(
         existingCredentials.status != AuthenticationReadStatus::DifferentEpoch)
         return AuthBootstrapStatus::RecoveryRequired;
     auto provisioning = *current.value;
-    if (provisioning.recordSequence == std::numeric_limits<std::uint64_t>::max()) {
+    if (provisioning.recordSequence ==
+        std::numeric_limits<std::uint64_t>::max()) {
         return AuthBootstrapStatus::CommitOutcomeUnknown;
     }
     provisioning.state = AuthProvisioningState::Provisioning;
@@ -550,7 +579,8 @@ AuthBootstrapStatus AuthenticationDomain::bootstrap(
         return AuthBootstrapStatus::CommitOutcomeUnknown;
     if (credentials != AuthenticationWriteStatus::Success)
         return markRecovery(AuthBootstrapStatus::PersistenceFailure);
-    if (provisioning.recordSequence == std::numeric_limits<std::uint64_t>::max()) {
+    if (provisioning.recordSequence ==
+        std::numeric_limits<std::uint64_t>::max()) {
         return AuthBootstrapStatus::CommitOutcomeUnknown;
     }
     provisioning.state = AuthProvisioningState::Provisioned;
@@ -598,7 +628,8 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
         if (record.recordSequence == std::numeric_limits<std::uint64_t>::max())
             return AuthCheckStatus::RecoveryRequired;
         ++record.recordSequence;
-        return store_.writeCredentials(record) == AuthenticationWriteStatus::Success
+        return store_.writeCredentials(record) ==
+                       AuthenticationWriteStatus::Success
                    ? AuthCheckStatus::Authenticated
                    : AuthCheckStatus::RecoveryRequired;
     }
@@ -610,9 +641,8 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
         if (lockout.lockoutStage < 31U) ++lockout.lockoutStage;
         const std::uint8_t exponent = static_cast<std::uint8_t>(
             std::min<std::uint8_t>(lockout.lockoutStage - 1U, 5U));
-        const std::uint64_t duration =
-            std::min<std::uint64_t>(15ULL * 60ULL * 1000ULL,
-                                    (30ULL * 1000ULL) << exponent);
+        const std::uint64_t duration = std::min<std::uint64_t>(
+            15ULL * 60ULL * 1000ULL, (30ULL * 1000ULL) << exponent);
         if (nowMs > std::numeric_limits<std::uint64_t>::max() - duration)
             return AuthCheckStatus::RecoveryRequired;
         lockout.lockoutRemainingMs = duration;
@@ -645,7 +675,8 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     }
     const auto credentials = store_.readCredentials(epoch);
     if (credentials.status != AuthenticationReadStatus::Success ||
-        !credentials.value.has_value() || !credentials.value->servicePin.valid()) {
+        !credentials.value.has_value() ||
+        !credentials.value->servicePin.valid()) {
         return AuthCheckStatus::RecoveryRequired;
     }
     auto record = *credentials.value;
@@ -663,11 +694,13 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     }
     if (constantTimeEqual(derived, record.servicePin.verifier)) {
         lockout = AuthLockoutState{};
-        if (record.recordSequence == std::numeric_limits<std::uint64_t>::max()) {
+        if (record.recordSequence ==
+            std::numeric_limits<std::uint64_t>::max()) {
             return AuthCheckStatus::RecoveryRequired;
         }
         ++record.recordSequence;
-        return store_.writeCredentials(record) == AuthenticationWriteStatus::Success
+        return store_.writeCredentials(record) ==
+                       AuthenticationWriteStatus::Success
                    ? AuthCheckStatus::Authenticated
                    : AuthCheckStatus::RecoveryRequired;
     }
@@ -712,19 +745,21 @@ AuthBootstrapStatus AuthenticationDomain::changeWebPassword(
     if (verified != AuthCheckStatus::Authenticated) {
         return verified == AuthCheckStatus::KdfUnavailable
                    ? AuthBootstrapStatus::KdfUnavailable
-                   : verified == AuthCheckStatus::RecoveryRequired
-                         ? AuthBootstrapStatus::RecoveryRequired
-                         : AuthBootstrapStatus::InvalidInput;
+               : verified == AuthCheckStatus::RecoveryRequired
+                   ? AuthBootstrapStatus::RecoveryRequired
+                   : AuthBootstrapStatus::InvalidInput;
     }
     const auto root = store_.readRoot(epoch);
     const auto credentials = store_.readCredentials(epoch);
     if (root.status != AuthenticationReadStatus::Success ||
-        !root.value.has_value() || credentials.status != AuthenticationReadStatus::Success ||
+        !root.value.has_value() ||
+        credentials.status != AuthenticationReadStatus::Success ||
         !credentials.value.has_value()) {
         return AuthBootstrapStatus::RecoveryRequired;
     }
     auto record = *credentials.value;
-    if (record.webCredentialEpoch == std::numeric_limits<std::uint64_t>::max() ||
+    if (record.webCredentialEpoch ==
+            std::numeric_limits<std::uint64_t>::max() ||
         record.recordSequence == std::numeric_limits<std::uint64_t>::max() ||
         !makeVerifier(replacement, record.webPassword.workFactor,
                       record.webPassword)) {
@@ -750,9 +785,9 @@ AuthBootstrapStatus AuthenticationDomain::changeServicePin(
     if (verified != AuthCheckStatus::Authenticated) {
         return verified == AuthCheckStatus::KdfUnavailable
                    ? AuthBootstrapStatus::KdfUnavailable
-                   : verified == AuthCheckStatus::RecoveryRequired
-                         ? AuthBootstrapStatus::RecoveryRequired
-                         : AuthBootstrapStatus::InvalidInput;
+               : verified == AuthCheckStatus::RecoveryRequired
+                   ? AuthBootstrapStatus::RecoveryRequired
+                   : AuthBootstrapStatus::InvalidInput;
     }
     const auto credentials = store_.readCredentials(epoch);
     if (credentials.status != AuthenticationReadStatus::Success ||
@@ -798,7 +833,8 @@ AuthBootstrapStatus AuthenticationDomain::setWebPasswordEnabled(
     }
 
     if (enabled) {
-        if (validateWebPassword(replacementPassword) != AuthInputStatus::Valid) {
+        if (validateWebPassword(replacementPassword) !=
+            AuthInputStatus::Valid) {
             return AuthBootstrapStatus::InvalidInput;
         }
         if (record.webPassword.workFactor == 0U) {
@@ -808,20 +844,21 @@ AuthBootstrapStatus AuthenticationDomain::setWebPasswordEnabled(
                           record.webPassword)) {
             return AuthBootstrapStatus::KdfUnavailable;
         }
-        if (record.webCredentialEpoch == std::numeric_limits<std::uint64_t>::max())
+        if (record.webCredentialEpoch ==
+            std::numeric_limits<std::uint64_t>::max())
             return AuthBootstrapStatus::CommitOutcomeUnknown;
         ++record.webCredentialEpoch;
         record.webPasswordEnabled = true;
     } else {
         std::uint64_t retryAfterMs = 0U;
-        const auto verified = verifyWebPassword(
-            epoch, currentPassword, nowMs, retryAfterMs);
+        const auto verified =
+            verifyWebPassword(epoch, currentPassword, nowMs, retryAfterMs);
         if (verified != AuthCheckStatus::Authenticated) {
             return verified == AuthCheckStatus::KdfUnavailable
                        ? AuthBootstrapStatus::KdfUnavailable
-                       : verified == AuthCheckStatus::RecoveryRequired
-                             ? AuthBootstrapStatus::RecoveryRequired
-                             : AuthBootstrapStatus::InvalidInput;
+                   : verified == AuthCheckStatus::RecoveryRequired
+                       ? AuthBootstrapStatus::RecoveryRequired
+                       : AuthBootstrapStatus::InvalidInput;
         }
         const auto reread = store_.readCredentials(epoch);
         if (reread.status != AuthenticationReadStatus::Success ||

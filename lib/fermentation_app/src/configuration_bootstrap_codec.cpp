@@ -24,11 +24,14 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
     const auto payloadSize =
         record.schemaVersion == kConfigurationBootstrapSchemaVersion3
             ? (record.handoff == RunEpochHandoffState::None
-                   ? configuration_limits::kConfigurationBootstrapSchema3PayloadBytes
-                   : configuration_limits::kConfigurationBootstrapSchema3BoundPayloadBytes)
+                   ? configuration_limits::
+                         kConfigurationBootstrapSchema3PayloadBytes
+                   : configuration_limits::
+                         kConfigurationBootstrapSchema3BoundPayloadBytes)
             : (record.handoff == RunEpochHandoffState::None
                    ? configuration_limits::kConfigurationBootstrapPayloadBytes
-                   : configuration_limits::kConfigurationBootstrapBoundPayloadBytes);
+                   : configuration_limits::
+                         kConfigurationBootstrapBoundPayloadBytes);
     device_platform::ByteWriter payload(payloadSize);
     if (!device_platform::big_endian::writeUint32(
             payload, record.storageFormatVersion.value()) ||
@@ -67,8 +70,10 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
     const auto status = device_platform::encodeEnvelope(
         envelope, encoded,
         record.schemaVersion == kConfigurationBootstrapSchemaVersion3
-            ? configuration_limits::kMaximumConfigurationBootstrapSchema3EnvelopeBytes
-            : configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+            ? configuration_limits::
+                  kMaximumConfigurationBootstrapSchema3EnvelopeBytes
+            : configuration_limits::
+                  kMaximumConfigurationBootstrapEnvelopeBytes);
     if (status == device_platform::EnvelopeEncodeStatus::CapacityExceeded) {
         return ConfigurationBootstrapCodecStatus::CapacityExceeded;
     }
@@ -112,9 +117,9 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
     const auto expectedPayloadSize =
         envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1
             ? configuration_limits::kConfigurationBootstrapSchema1PayloadBytes
-            : envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2
-                  ? configuration_limits::kConfigurationBootstrapPayloadBytes
-                  : configuration_limits::kConfigurationBootstrapSchema3PayloadBytes;
+        : envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2
+            ? configuration_limits::kConfigurationBootstrapPayloadBytes
+            : configuration_limits::kConfigurationBootstrapSchema3PayloadBytes;
     if (envelope.payload.size() != expectedPayloadSize &&
         envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
@@ -130,7 +135,8 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
         envelope.payload.size() !=
             configuration_limits::kConfigurationBootstrapSchema3PayloadBytes &&
         envelope.payload.size() !=
-            configuration_limits::kConfigurationBootstrapSchema3BoundPayloadBytes) {
+            configuration_limits::
+                kConfigurationBootstrapSchema3BoundPayloadBytes) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }
 

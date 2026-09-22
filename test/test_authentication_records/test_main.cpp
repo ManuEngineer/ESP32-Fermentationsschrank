@@ -25,11 +25,10 @@ class Random final : public device_platform::ISecureRandomSource {
 
 class Kdf final : public fermentation::IAuthenticationKdf {
    public:
-    bool derive(const std::string& secret,
-                const fermentation::AuthVerifier& parameters,
-                std::array<std::uint8_t,
-                           fermentation::kAuthenticationVerifierBytes>& out)
-        override {
+    bool derive(
+        const std::string& secret, const fermentation::AuthVerifier& parameters,
+        std::array<std::uint8_t, fermentation::kAuthenticationVerifierBytes>&
+            out) override {
         if (!parameters.valid()) return false;
         ++calls;
         std::uint8_t value = 0U;
@@ -60,7 +59,8 @@ void test_auth_bootstrap_requires_positive_root_and_roundtrips() {
     fermentation::AuthenticationDomain unavailable(records, kdf, random);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::KdfUnavailable),
-        static_cast<int>(unavailable.bootstrap(epoch, "a-valid-password", "1234")));
+        static_cast<int>(
+            unavailable.bootstrap(epoch, "a-valid-password", "1234")));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
         static_cast<int>(domain->bootstrap(epoch, "a-valid-password", "1234")));
@@ -81,20 +81,24 @@ void test_auth_wrong_password_persists_lockout_before_result() {
         static_cast<int>(domain.initializeUnprovisioned(epoch)));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
-        static_cast<int>(domain.bootstrap(epoch, "another-valid-password", "9876")));
+        static_cast<int>(
+            domain.bootstrap(epoch, "another-valid-password", "9876")));
     std::uint64_t retry = 0U;
     for (int i = 0; i < 5; ++i) {
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthCheckStatus::Invalid),
-                              static_cast<int>(domain.verifyWebPassword(
-                                  epoch, "wrong-password-value", 1000U + i, retry)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::AuthCheckStatus::Invalid),
+            static_cast<int>(domain.verifyWebPassword(
+                epoch, "wrong-password-value", 1000U + i, retry)));
     }
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
-                          static_cast<int>(domain.verifyWebPassword(
-                              epoch, "wrong-password-value", 2000U, retry)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
+        static_cast<int>(domain.verifyWebPassword(epoch, "wrong-password-value",
+                                                  2000U, retry)));
     TEST_ASSERT_GREATER_THAN(0, retry);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
-                          static_cast<int>(domain.verifyWebPassword(
-                              epoch, "another-valid-password", 33'000U, retry)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
+        static_cast<int>(domain.verifyWebPassword(
+            epoch, "another-valid-password", 33'000U, retry)));
 }
 
 void test_corrupt_root_never_reopens_bootstrap() {
@@ -134,30 +138,35 @@ void test_existing_credentials_never_reopen_unprovisioned_bootstrap() {
 
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthenticationWriteStatus::Success),
-        static_cast<int>(records.writeRoot(
-            fermentation::AuthProvisioningRoot{
-                epoch, 99U, fermentation::AuthProvisioningState::Unprovisioned,
-                1U})));
+        static_cast<int>(records.writeRoot(fermentation::AuthProvisioningRoot{
+            epoch, 99U, fermentation::AuthProvisioningState::Unprovisioned,
+            1U})));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::RecoveryRequired),
-        static_cast<int>(domain.bootstrap(epoch, "replacement-password", "2468")));
+        static_cast<int>(
+            domain.bootstrap(epoch, "replacement-password", "2468")));
 }
 
 void test_password_utf8_bounds_are_exact() {
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::InvalidLength),
-                          static_cast<int>(fermentation::validateWebPassword("short")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::Valid),
-                          static_cast<int>(fermentation::validateWebPassword(
-                              "123456789012345")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::Valid),
-                          static_cast<int>(fermentation::validateWebPassword(
-                              "äöüäöüäöüäöüäöüä")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::InvalidUtf8),
-                          static_cast<int>(fermentation::validateWebPassword("\xC3")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::Valid),
-                          static_cast<int>(fermentation::validateServicePin("1234")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::AuthInputStatus::InvalidLength),
-                          static_cast<int>(fermentation::validateServicePin("123")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::InvalidLength),
+        static_cast<int>(fermentation::validateWebPassword("short")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::Valid),
+        static_cast<int>(fermentation::validateWebPassword("123456789012345")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::Valid),
+        static_cast<int>(
+            fermentation::validateWebPassword("äöüäöüäöüäöüäöüä")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::InvalidUtf8),
+        static_cast<int>(fermentation::validateWebPassword("\xC3")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::Valid),
+        static_cast<int>(fermentation::validateServicePin("1234")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthInputStatus::InvalidLength),
+        static_cast<int>(fermentation::validateServicePin("123")));
 }
 
 void test_service_pin_and_password_mode_are_owned_by_auth_domain() {
@@ -176,16 +185,16 @@ void test_service_pin_and_password_mode_are_owned_by_auth_domain() {
 
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
-        static_cast<int>(domain.setWebPasswordEnabled(
-            epoch, "initial-password", "", false, true, 1000U)));
+        static_cast<int>(domain.setWebPasswordEnabled(epoch, "initial-password",
+                                                      "", false, true, 1000U)));
     const auto disabled = domain.webPasswordEnabled(epoch);
     TEST_ASSERT_TRUE(disabled.has_value());
     TEST_ASSERT_FALSE(*disabled);
     std::uint64_t retry = 0U;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthCheckStatus::Disabled),
-        static_cast<int>(domain.verifyWebPassword(
-            epoch, "initial-password", 1001U, retry)));
+        static_cast<int>(
+            domain.verifyWebPassword(epoch, "initial-password", 1001U, retry)));
 
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
@@ -193,14 +202,14 @@ void test_service_pin_and_password_mode_are_owned_by_auth_domain() {
             epoch, "", "replacement-password", true, true, 1002U)));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
-        static_cast<int>(domain.verifyWebPassword(
-            epoch, "replacement-password", 1003U, retry)));
+        static_cast<int>(domain.verifyWebPassword(epoch, "replacement-password",
+                                                  1003U, retry)));
 
     for (int i = 0; i < 3; ++i) {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::AuthCheckStatus::Invalid),
-            static_cast<int>(domain.verifyServicePin(epoch, "0000", 2000U + i,
-                                                     retry)));
+            static_cast<int>(
+                domain.verifyServicePin(epoch, "0000", 2000U + i, retry)));
     }
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
@@ -208,8 +217,8 @@ void test_service_pin_and_password_mode_are_owned_by_auth_domain() {
     TEST_ASSERT_GREATER_THAN(0, retry);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
-        static_cast<int>(domain.verifyServicePin(epoch, "2468", 33'000U,
-                                                 retry)));
+        static_cast<int>(
+            domain.verifyServicePin(epoch, "2468", 33'000U, retry)));
 }
 
 void test_lockout_restarts_conservatively_after_reboot_without_kdf_or_write() {
@@ -259,7 +268,8 @@ void test_service_pin_reboot_lockout_covers_elevated_and_maximum_stages() {
         static_cast<int>(domain->initializeUnprovisioned(epoch)));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
-        static_cast<int>(domain->bootstrap(epoch, "service-lockout-password", "8642")));
+        static_cast<int>(
+            domain->bootstrap(epoch, "service-lockout-password", "8642")));
 
     std::uint64_t retry = 0U;
     std::uint64_t now = 1000U;
@@ -270,20 +280,21 @@ void test_service_pin_reboot_lockout_covers_elevated_and_maximum_stages() {
         for (int failure = 0; failure < failuresToTrigger; ++failure) {
             TEST_ASSERT_EQUAL_INT(
                 static_cast<int>(fermentation::AuthCheckStatus::Invalid),
-                static_cast<int>(domain->verifyServicePin(epoch, "0000", now++, retry)));
+                static_cast<int>(
+                    domain->verifyServicePin(epoch, "0000", now++, retry)));
         }
         fermentation::AuthenticationDomain rebooted(records, kdf, random, 100U);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
-            static_cast<int>(rebooted.verifyServicePin(epoch, "8642", now, retry)));
-        const auto expected = stage < 7U
-                                  ? (30'000ULL << (stage - 1U))
-                                  : 30ULL * 60ULL * 1000ULL;
+            static_cast<int>(
+                rebooted.verifyServicePin(epoch, "8642", now, retry)));
+        const auto expected =
+            stage < 7U ? (30'000ULL << (stage - 1U)) : 30ULL * 60ULL * 1000ULL;
         TEST_ASSERT_EQUAL_UINT64(expected, retry);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::AuthCheckStatus::Invalid),
-            static_cast<int>(rebooted.verifyServicePin(
-                epoch, "0000", now + expected, retry)));
+            static_cast<int>(rebooted.verifyServicePin(epoch, "0000",
+                                                       now + expected, retry)));
         domain = std::make_unique<fermentation::AuthenticationDomain>(
             records, kdf, random, 100U);
         failuresToTrigger = 2;
@@ -301,7 +312,9 @@ int main() {
     RUN_TEST(test_existing_credentials_never_reopen_unprovisioned_bootstrap);
     RUN_TEST(test_password_utf8_bounds_are_exact);
     RUN_TEST(test_service_pin_and_password_mode_are_owned_by_auth_domain);
-    RUN_TEST(test_lockout_restarts_conservatively_after_reboot_without_kdf_or_write);
-    RUN_TEST(test_service_pin_reboot_lockout_covers_elevated_and_maximum_stages);
+    RUN_TEST(
+        test_lockout_restarts_conservatively_after_reboot_without_kdf_or_write);
+    RUN_TEST(
+        test_service_pin_reboot_lockout_covers_elevated_and_maximum_stages);
     return UNITY_END();
 }

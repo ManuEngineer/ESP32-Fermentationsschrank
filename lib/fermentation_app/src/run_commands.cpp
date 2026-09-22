@@ -64,7 +64,6 @@ bool validCommandSource(CommandSource source) {
     switch (source) {
         case CommandSource::LocalDisplay:
         case CommandSource::WebInterface:
-            return true;
         case CommandSource::ServiceWeb:
             return true;
     }

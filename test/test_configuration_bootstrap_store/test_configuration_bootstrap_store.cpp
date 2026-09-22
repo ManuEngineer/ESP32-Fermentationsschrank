@@ -346,7 +346,7 @@ void test_write_successor_detects_newer_schema_during_rescan() {
     TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
                          {fermentation::configuration_storage_contract::
                               kConfigurationBootstrapRecordType,
-                              4U, device_platform::StorageEpoch{1U}, 1U,
+                          4U, device_platform::StorageEpoch{1U}, 1U,
                           std::nullopt, std::string(6U, '\0')},
                          newerSchemaBytes, 64U) ==
                      device_platform::EnvelopeEncodeStatus::Success);
@@ -381,15 +381,16 @@ void test_impossible_history_gap_and_regression_fail_closed() {
 }
 
 fermentation::ConfigurationBootstrapRecord schema3Record(
-    std::uint64_t sequence,
-    fermentation::AuthDomainHandoffState authHandoff) {
+    std::uint64_t sequence, fermentation::AuthDomainHandoffState authHandoff) {
     return {fermentation::ConfigurationBootstrapSequence{sequence},
             fermentation::kConfigurationStorageFormatVersion1,
             device_platform::StorageEpoch{1U},
             fermentation::ConfigurationBootstrapState::Initialized,
             fermentation::kConfigurationBootstrapSchemaVersion3,
-            fermentation::RunEpochHandoffState::None, std::nullopt,
-            std::nullopt, authHandoff};
+            fermentation::RunEpochHandoffState::None,
+            std::nullopt,
+            std::nullopt,
+            authHandoff};
 }
 
 void test_schema2_to_schema3_handoff_and_auth_cutpoints_are_exact() {
@@ -399,32 +400,34 @@ void test_schema2_to_schema3_handoff_and_auth_cutpoints_are_exact() {
         device_platform::StorageEpoch{1U},
         fermentation::ConfigurationBootstrapState::Initialized,
         fermentation::kConfigurationBootstrapSchemaVersion2};
-    auto unconsumed = schema3Record(
-        3U, fermentation::AuthDomainHandoffState::Unconsumed);
-    auto inProgress = schema3Record(
-        4U, fermentation::AuthDomainHandoffState::InProgress);
-    auto consumed = schema3Record(
-        5U, fermentation::AuthDomainHandoffState::Consumed);
-    auto indeterminate = schema3Record(
-        5U, fermentation::AuthDomainHandoffState::Indeterminate);
+    auto unconsumed =
+        schema3Record(3U, fermentation::AuthDomainHandoffState::Unconsumed);
+    auto inProgress =
+        schema3Record(4U, fermentation::AuthDomainHandoffState::InProgress);
+    auto consumed =
+        schema3Record(5U, fermentation::AuthDomainHandoffState::Consumed);
+    auto indeterminate =
+        schema3Record(5U, fermentation::AuthDomainHandoffState::Indeterminate);
 
     TEST_ASSERT_TRUE(fermentation::isPlausible(schema2));
     TEST_ASSERT_TRUE(fermentation::isPlausible(unconsumed));
-    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(schema2,
-                                                                unconsumed));
-    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(unconsumed,
-                                                               inProgress));
-    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(inProgress,
-                                                               consumed));
-    TEST_ASSERT_TRUE(fermentation::isAllowedBootstrapSuccessor(inProgress,
-                                                               indeterminate));
+    TEST_ASSERT_TRUE(
+        fermentation::isAllowedBootstrapSuccessor(schema2, unconsumed));
+    TEST_ASSERT_TRUE(
+        fermentation::isAllowedBootstrapSuccessor(unconsumed, inProgress));
+    TEST_ASSERT_TRUE(
+        fermentation::isAllowedBootstrapSuccessor(inProgress, consumed));
+    TEST_ASSERT_TRUE(
+        fermentation::isAllowedBootstrapSuccessor(inProgress, indeterminate));
 
-    auto skipped = schema3Record(4U, fermentation::AuthDomainHandoffState::Consumed);
-    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(unconsumed,
-                                                                skipped));
-    auto reused = schema3Record(5U, fermentation::AuthDomainHandoffState::InProgress);
-    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(inProgress,
-                                                                reused));
+    auto skipped =
+        schema3Record(4U, fermentation::AuthDomainHandoffState::Consumed);
+    TEST_ASSERT_FALSE(
+        fermentation::isAllowedBootstrapSuccessor(unconsumed, skipped));
+    auto reused =
+        schema3Record(5U, fermentation::AuthDomainHandoffState::InProgress);
+    TEST_ASSERT_FALSE(
+        fermentation::isAllowedBootstrapSuccessor(inProgress, reused));
 }
 
 void test_schema3_preserves_bound_run_epoch_and_rejects_tampering() {
@@ -435,7 +438,8 @@ void test_schema3_preserves_bound_run_epoch_and_rejects_tampering() {
         fermentation::ConfigurationBootstrapState::Initialized,
         fermentation::kConfigurationBootstrapSchemaVersion3,
         fermentation::RunEpochHandoffState::Pending,
-        device_platform::StorageEpoch{4U}, device_platform::StorageEpoch{5U},
+        device_platform::StorageEpoch{4U},
+        device_platform::StorageEpoch{5U},
         fermentation::AuthDomainHandoffState::None};
     auto next = previous;
     next.sequence = fermentation::ConfigurationBootstrapSequence{21U};
@@ -446,7 +450,8 @@ void test_schema3_preserves_bound_run_epoch_and_rejects_tampering() {
 
     next.currentEpoch = device_platform::StorageEpoch{6U};
     TEST_ASSERT_FALSE(fermentation::isPlausible(next));
-    TEST_ASSERT_FALSE(fermentation::isAllowedBootstrapSuccessor(previous, next));
+    TEST_ASSERT_FALSE(
+        fermentation::isAllowedBootstrapSuccessor(previous, next));
 }
 
 void test_factory_novelty_proof_matching_binding_succeeds_in_order() {

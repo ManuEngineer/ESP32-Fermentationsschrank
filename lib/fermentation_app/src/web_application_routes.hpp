@@ -30,9 +30,9 @@ class WebApplicationRoutes final : public device_platform::IHttpRouteSink {
     [[nodiscard]] std::optional<WebSessionHandle> session(
         const device_platform::HttpRequest& request,
         device_platform::HttpResponse& response, bool mutation);
-    [[nodiscard]] bool complete(
-        WebSessionHandle handle, std::uint64_t sequence,
-        const std::string& fingerprint, device_platform::HttpResponse& response);
+    [[nodiscard]] bool complete(WebSessionHandle handle, std::uint64_t sequence,
+                                const std::string& fingerprint,
+                                device_platform::HttpResponse& response);
 
     FermentationApplication& application_;
     AuthenticationDomain& authentication_;
@@ -48,9 +48,12 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
     WebRouteDispatcher(NetworkSetupRoutes& setup, WebApplicationRoutes& web)
         : setup_(setup), web_(web) {}
 
-    [[nodiscard]] bool handle(const device_platform::HttpRequest& request,
-                              device_platform::HttpResponse& response) override {
-        if (setup_.ownsRoute(request)) return setup_.handle(request, response);
+    [[nodiscard]] bool handle(
+        const device_platform::HttpRequest& request,
+        device_platform::HttpResponse& response) override {
+        if (setup_.ownsRoute(request)) {
+            return setup_.handle(request, response);
+        }
         return web_.handle(request, response);
     }
 

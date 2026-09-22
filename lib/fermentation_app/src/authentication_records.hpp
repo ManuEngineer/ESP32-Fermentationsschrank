@@ -75,8 +75,9 @@ struct AuthProvisioningRoot {
                               const AuthVerifier& right) noexcept;
 [[nodiscard]] bool operator==(const AuthLockoutState& left,
                               const AuthLockoutState& right) noexcept;
-[[nodiscard]] bool operator==(const AuthenticationCredentialRecord& left,
-                              const AuthenticationCredentialRecord& right) noexcept;
+[[nodiscard]] bool operator==(
+    const AuthenticationCredentialRecord& left,
+    const AuthenticationCredentialRecord& right) noexcept;
 [[nodiscard]] bool operator==(const AuthProvisioningRoot& left,
                               const AuthProvisioningRoot& right) noexcept;
 
@@ -109,8 +110,8 @@ decodeAuthenticationCredential(const std::string& bytes);
     const AuthProvisioningRoot& root, std::string& out);
 [[nodiscard]] AuthProvisioningRootDecodeResult decodeAuthProvisioningRoot(
     const std::string& bytes);
-[[nodiscard]] bool isPlausible(const AuthenticationCredentialRecord& record)
-    noexcept;
+[[nodiscard]] bool isPlausible(
+    const AuthenticationCredentialRecord& record) noexcept;
 [[nodiscard]] bool isPlausible(const AuthProvisioningRoot& root) noexcept;
 
 enum class AuthenticationReadStatus : std::uint8_t {
@@ -169,10 +170,11 @@ class IAuthenticationKdf {
     virtual ~IAuthenticationKdf() = default;
     IAuthenticationKdf(const IAuthenticationKdf&) = delete;
     IAuthenticationKdf& operator=(const IAuthenticationKdf&) = delete;
+    IAuthenticationKdf(IAuthenticationKdf&&) = delete;
+    IAuthenticationKdf& operator=(IAuthenticationKdf&&) = delete;
 
     [[nodiscard]] virtual bool derive(
-        const std::string& secret,
-        const AuthVerifier& parameters,
+        const std::string& secret, const AuthVerifier& parameters,
         std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) = 0;
 };
 
@@ -183,14 +185,14 @@ enum class AuthInputStatus : std::uint8_t {
     CapacityExceeded,
 };
 
-[[nodiscard]] AuthInputStatus validateWebPassword(const std::string& value)
-    noexcept;
-[[nodiscard]] AuthInputStatus validateServicePin(const std::string& value)
-    noexcept;
+[[nodiscard]] AuthInputStatus validateWebPassword(
+    const std::string& value) noexcept;
+[[nodiscard]] AuthInputStatus validateServicePin(
+    const std::string& value) noexcept;
 [[nodiscard]] bool constantTimeEqual(
     const std::array<std::uint8_t, kAuthenticationVerifierBytes>& left,
-    const std::array<std::uint8_t, kAuthenticationVerifierBytes>& right)
-    noexcept;
+    const std::array<std::uint8_t, kAuthenticationVerifierBytes>&
+        right) noexcept;
 
 enum class AuthBootstrapStatus : std::uint8_t {
     BootstrapAllowed,
@@ -214,11 +216,10 @@ enum class AuthCheckStatus : std::uint8_t {
 
 class AuthenticationDomain final {
    public:
-    AuthenticationDomain(AuthenticationRecordStore& store,
-                          IAuthenticationKdf& kdf,
-                          device_platform::ISecureRandomSource& random,
-                          std::optional<std::uint32_t> workFactorPolicy =
-                              std::nullopt)
+    AuthenticationDomain(
+        AuthenticationRecordStore& store, IAuthenticationKdf& kdf,
+        device_platform::ISecureRandomSource& random,
+        std::optional<std::uint32_t> workFactorPolicy = std::nullopt)
         : store_(store),
           kdf_(kdf),
           random_(random),

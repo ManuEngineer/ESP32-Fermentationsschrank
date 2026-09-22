@@ -12,11 +12,12 @@ namespace {
 constexpr std::size_t kMaximumJsonResponseBytes = 4096U;
 constexpr std::size_t kMaximumJsonRequestBytes = 4096U;
 constexpr std::size_t kMaximumProgramIdBytes = 128U;
+constexpr std::size_t kMaximumProgramNameBytes = 128U;
 
 using JsonDocument = ArduinoJson::JsonDocument;
 
-WebApiCodecStatus requiredString(const JsonDocument& document, const char* field,
-                                 std::size_t maximumBytes,
+WebApiCodecStatus requiredString(const JsonDocument& document,
+                                 const char* field, std::size_t maximumBytes,
                                  std::string& out) {
     const auto value = document[field];
     if (value.isNull()) return WebApiCodecStatus::MissingField;
@@ -35,8 +36,8 @@ WebApiCodecStatus requiredString(const JsonDocument& document, const char* field
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus requiredUInt32(const JsonDocument& document, const char* field,
-                                 std::uint32_t& out) {
+WebApiCodecStatus requiredUInt32(const JsonDocument& document,
+                                 const char* field, std::uint32_t& out) {
     const auto value = document[field];
     if (value.isNull()) return WebApiCodecStatus::MissingField;
     if (!value.is<std::uint64_t>() ||
@@ -47,9 +48,9 @@ WebApiCodecStatus requiredUInt32(const JsonDocument& document, const char* field
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus optionalUInt32(
-    const JsonDocument& document, const char* field,
-    std::optional<std::uint32_t>& out) {
+WebApiCodecStatus optionalUInt32(const JsonDocument& document,
+                                 const char* field,
+                                 std::optional<std::uint32_t>& out) {
     const auto value = document[field];
     if (value.isNull()) {
         out.reset();
@@ -61,8 +62,8 @@ WebApiCodecStatus optionalUInt32(
     return status;
 }
 
-WebApiCodecStatus requiredDouble(const JsonDocument& document, const char* field,
-                                 double& out) {
+WebApiCodecStatus requiredDouble(const JsonDocument& document,
+                                 const char* field, double& out) {
     const auto value = document[field];
     if (value.isNull()) return WebApiCodecStatus::MissingField;
     if (!value.is<double>()) return WebApiCodecStatus::WrongType;
@@ -72,7 +73,8 @@ WebApiCodecStatus requiredDouble(const JsonDocument& document, const char* field
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus optionalDouble(const JsonDocument& document, const char* field,
+WebApiCodecStatus optionalDouble(const JsonDocument& document,
+                                 const char* field,
                                  std::optional<double>& out) {
     const auto value = document[field];
     if (value.isNull()) {
@@ -85,8 +87,8 @@ WebApiCodecStatus optionalDouble(const JsonDocument& document, const char* field
     return status;
 }
 
-WebApiCodecStatus optionalBoolean(const JsonDocument& document, const char* field,
-                                  std::optional<bool>& out) {
+WebApiCodecStatus optionalBoolean(const JsonDocument& document,
+                                  const char* field, std::optional<bool>& out) {
     const auto value = document[field];
     if (value.isNull()) {
         out.reset();
@@ -97,8 +99,8 @@ WebApiCodecStatus optionalBoolean(const JsonDocument& document, const char* fiel
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus requiredBoolean(const JsonDocument& document, const char* field,
-                                  bool& out) {
+WebApiCodecStatus requiredBoolean(const JsonDocument& document,
+                                  const char* field, bool& out) {
     const auto value = document[field];
     if (value.isNull()) return WebApiCodecStatus::MissingField;
     if (!value.is<bool>()) return WebApiCodecStatus::WrongType;
@@ -106,7 +108,8 @@ WebApiCodecStatus requiredBoolean(const JsonDocument& document, const char* fiel
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus optionalRevision(const JsonDocument& document, const char* field,
+WebApiCodecStatus optionalRevision(const JsonDocument& document,
+                                   const char* field,
                                    std::optional<std::uint32_t>& out) {
     return optionalUInt32(document, field, out);
 }
@@ -161,8 +164,8 @@ WebApiCodecStatus sensorMode(const JsonDocument& document, const char* field,
     return WebApiCodecStatus::WrongType;
 }
 
-WebApiCodecStatus completionMode(const JsonDocument& document, const char* field,
-                                 CompletionMode& out) {
+WebApiCodecStatus completionMode(const JsonDocument& document,
+                                 const char* field, CompletionMode& out) {
     const auto value = document[field];
     if (value.isNull()) return WebApiCodecStatus::Success;
     if (!value.is<const char*>()) return WebApiCodecStatus::WrongType;
@@ -219,8 +222,8 @@ WebApiCodecStatus decodeManualPlan(const JsonDocument& document,
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus decodeExpectedRevisions(const JsonDocument& document,
-                                          FermentationUiExpectedRevisions& out) {
+WebApiCodecStatus decodeExpectedRevisions(
+    const JsonDocument& document, FermentationUiExpectedRevisions& out) {
     auto status = requiredUInt32(document, "expectedStateSequence",
                                  out.expectedStateSequence);
     if (status != WebApiCodecStatus::Success) return status;
@@ -253,8 +256,9 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
                                    FermentationUiEnvelopePayload& out) {
     if (action == "start_program") {
         FermentationUiStartProgramIntent intent;
-        auto status = requiredString(document, "programId", kMaximumProgramIdBytes,
-                                     intent.candidate.programId);
+        auto status =
+            requiredString(document, "programId", kMaximumProgramIdBytes,
+                           intent.candidate.programId);
         if (status != WebApiCodecStatus::Success) return status;
         status = optionalDouble(document, "targetTemperatureCelsius",
                                 intent.candidate.targetTemperatureCelsius);
@@ -268,7 +272,8 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
         RunSensorMode sensor = RunSensorMode::Air;
         status = sensorMode(document, "sensorMode", sensor, false);
         if (status != WebApiCodecStatus::Success) return status;
-        if (!document["sensorMode"].isNull()) intent.candidate.sensorMode = sensor;
+        if (!document["sensorMode"].isNull())
+            intent.candidate.sensorMode = sensor;
         CompletionMode completion = CompletionMode::FinishWithoutCooling;
         status = completionMode(document, "completionMode", completion);
         if (status != WebApiCodecStatus::Success) return status;
@@ -299,7 +304,8 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
         status = requiredUInt32(document, "durationMinutes",
                                 intent.values.durationMinutes);
         if (status != WebApiCodecStatus::Success) return status;
-        status = sensorMode(document, "sensorMode", intent.values.sensorMode, false);
+        status =
+            sensorMode(document, "sensorMode", intent.values.sensorMode, false);
         if (status != WebApiCodecStatus::Success) return status;
         std::optional<bool> preheat;
         status = optionalBoolean(document, "preheatEnabled", preheat);
@@ -354,7 +360,8 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
     }
     if (action == "complete") {
         FermentationUiCompleteRunIntent intent;
-        auto status = requiredBoolean(document, "startCooling", intent.startCooling);
+        auto status =
+            requiredBoolean(document, "startCooling", intent.startCooling);
         if (status != WebApiCodecStatus::Success) return status;
         if (intent.startCooling) {
             FermentationUiManualRunPlanValues plan;
@@ -382,7 +389,8 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
     }
     if (action == "recovery_time") {
         FermentationUiRecoveryTimeCorrectionIntent intent;
-        const auto status = requiredUInt32(document, "secondsDelta", intent.secondsDelta);
+        const auto status =
+            requiredUInt32(document, "secondsDelta", intent.secondsDelta);
         if (status != WebApiCodecStatus::Success) return status;
         out = intent;
         return WebApiCodecStatus::Success;
@@ -401,7 +409,8 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
     if (action == "sensor_selection") {
         FermentationUiSensorSelectionIntent intent;
         std::string selection;
-        const auto status = requiredString(document, "selection", 48U, selection);
+        const auto status =
+            requiredString(document, "selection", 48U, selection);
         if (status != WebApiCodecStatus::Success) return status;
         if (selection == "continue_with_air") {
             intent.action = SensorSelectionUserAction::ContinueWithAir;
@@ -420,6 +429,28 @@ WebApiCodecStatus decodeRunPayload(const JsonDocument& document,
         return WebApiCodecStatus::Success;
     }
     return WebApiCodecStatus::WrongType;
+}
+
+WebApiCodecStatus programOperation(const JsonDocument& document,
+                                   FermentationUiProgramEditOperation& out) {
+    std::string operation;
+    const auto status = requiredString(document, "operation", 16U, operation);
+    if (status != WebApiCodecStatus::Success) return status;
+    if (operation == "new")
+        out = FermentationUiProgramEditOperation::New;
+    else if (operation == "copy")
+        out = FermentationUiProgramEditOperation::Copy;
+    else if (operation == "edit")
+        out = FermentationUiProgramEditOperation::Edit;
+    else if (operation == "reset")
+        out = FermentationUiProgramEditOperation::Reset;
+    else if (operation == "uninstall")
+        out = FermentationUiProgramEditOperation::Uninstall;
+    else if (operation == "delete")
+        out = FermentationUiProgramEditOperation::Delete;
+    else
+        return WebApiCodecStatus::WrongType;
+    return WebApiCodecStatus::Success;
 }
 
 bool finish(ArduinoJson::JsonDocument& document, std::string& out) {
@@ -446,10 +477,11 @@ const char* networkModeCode(device_platform::NetworkMode mode) {
 
 WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
                                    std::string& out) {
-    return encodeUiSnapshot(snapshot,
-                            MutationSequenceView{MutationSequenceState::Exhausted,
-                                                 0U, std::nullopt},
-                            std::nullopt, out);
+    return encodeUiSnapshot(
+        snapshot,
+        MutationSequenceView{MutationSequenceState::Exhausted, 0U,
+                             std::nullopt},
+        std::nullopt, out);
 }
 
 WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
@@ -493,18 +525,38 @@ WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
         root["expectedUserConfigurationRevision"] =
             snapshot.revisions.expectedUserConfigurationRevision->value();
     }
+    root["expectedStateSequence"] = snapshot.revisions.expectedStateSequence;
+    if (snapshot.revisions.expectedRunRevision.has_value()) {
+        root["expectedRunRevision"] = *snapshot.revisions.expectedRunRevision;
+    }
+    if (snapshot.revisions.expectedMessageRevision.has_value()) {
+        root["expectedMessageRevision"] =
+            *snapshot.revisions.expectedMessageRevision;
+    }
+    if (snapshot.revisions.expectedFaultRevision.has_value()) {
+        root["expectedFaultRevision"] =
+            *snapshot.revisions.expectedFaultRevision;
+    }
+    if (snapshot.revisions.expectedRecoveryEpisodeRevision.has_value()) {
+        root["expectedRecoveryEpisodeRevision"] =
+            *snapshot.revisions.expectedRecoveryEpisodeRevision;
+    }
+    if (snapshot.revisions.expectedProgramCatalogRevision.has_value()) {
+        root["expectedProgramCatalogRevision"] =
+            snapshot.revisions.expectedProgramCatalogRevision->value();
+    }
     const char* sequenceState =
-        sequence.state == MutationSequenceState::Available
-            ? "AVAILABLE"
-            : sequence.state == MutationSequenceState::InFlight ? "IN_FLIGHT"
-                                                                 : "EXHAUSTED";
+        sequence.state == MutationSequenceState::Available  ? "AVAILABLE"
+        : sequence.state == MutationSequenceState::InFlight ? "IN_FLIGHT"
+                                                            : "EXHAUSTED";
     root["nextMutationSeq"] = sequence.nextMutationSeq;
     root["mutationSequenceState"] = sequenceState;
     if (sequence.inFlightMutationSeq.has_value()) {
         root["inFlightMutationSeq"] = *sequence.inFlightMutationSeq;
     }
     root["homeMode"] = static_cast<std::uint8_t>(snapshot.home.mode);
-    root["processState"] = static_cast<std::uint8_t>(snapshot.home.processState);
+    root["processState"] =
+        static_cast<std::uint8_t>(snapshot.home.processState);
     root["activeRunId"] = snapshot.home.activeRunId;
     auto temperatures = root["temperatures"].to<ArduinoJson::JsonArray>();
     for (const auto& temperature : snapshot.temperatures) {
@@ -514,7 +566,17 @@ WebApiCodecStatus encodeUiSnapshot(const FermentationUiSnapshot& snapshot,
             item["celsius"] = *temperature.valueCelsius;
         else
             item["celsius"] = nullptr;
-        item["quality"] = static_cast<std::uint8_t>(temperature.quality.quality);
+        item["quality"] =
+            static_cast<std::uint8_t>(temperature.quality.quality);
+    }
+    auto messages = root["messages"].to<ArduinoJson::JsonArray>();
+    for (const auto& view : snapshot.messages) {
+        auto item = messages.add<ArduinoJson::JsonObject>();
+        item["id"] = view.message.id;
+        item["active"] = view.message.active;
+        item["resolved"] = view.message.resolved;
+        item["decisionRequired"] = view.message.decisionRequired;
+        item["code"] = static_cast<std::uint8_t>(view.message.code);
     }
     return finish(document, out) ? WebApiCodecStatus::Success
                                  : WebApiCodecStatus::CapacityExceeded;
@@ -536,7 +598,8 @@ WebApiCodecStatus encodeStatus(const FermentationUiSnapshot& snapshot,
     }
     root["networkMode"] = networkModeCode(snapshot.network.currentMode);
     root["homeMode"] = static_cast<std::uint8_t>(snapshot.home.mode);
-    root["processState"] = static_cast<std::uint8_t>(snapshot.home.processState);
+    root["processState"] =
+        static_cast<std::uint8_t>(snapshot.home.processState);
     root["activeRunId"] = snapshot.home.activeRunId;
     return finish(document, out) ? WebApiCodecStatus::Success
                                  : WebApiCodecStatus::CapacityExceeded;
@@ -551,7 +614,8 @@ WebApiCodecStatus encodeTemperatures(const FermentationUiSnapshot& snapshot,
         item["role"] = static_cast<std::uint8_t>(temperature.role);
         if (temperature.valueCelsius.has_value())
             item["celsius"] = *temperature.valueCelsius;
-        item["quality"] = static_cast<std::uint8_t>(temperature.quality.quality);
+        item["quality"] =
+            static_cast<std::uint8_t>(temperature.quality.quality);
     }
     return finish(document, out) ? WebApiCodecStatus::Success
                                  : WebApiCodecStatus::CapacityExceeded;
@@ -573,6 +637,33 @@ WebApiCodecStatus encodeAlerts(const FermentationUiSnapshot& snapshot,
                                  : WebApiCodecStatus::CapacityExceeded;
 }
 
+WebApiCodecStatus encodeProgramList(
+    const std::vector<FermentationUiProgramListEntry>& programs,
+    std::string& out) {
+    ArduinoJson::JsonDocument document;
+    auto values = document["programs"].to<ArduinoJson::JsonArray>();
+    for (const auto& entry : programs) {
+        auto value = values.add<ArduinoJson::JsonObject>();
+        value["id"] = entry.program.program.id;
+        value["name"] = entry.program.program.name;
+        value["active"] = entry.active;
+        value["startable"] = entry.startable;
+    }
+    return finish(document, out) ? WebApiCodecStatus::Success
+                                 : WebApiCodecStatus::CapacityExceeded;
+}
+
+WebApiCodecStatus encodeProgramPreview(const ConfigurationPreviewView& preview,
+                                       std::string& out) {
+    ArduinoJson::JsonDocument document;
+    document["previewHandle"] = preview.handle;
+    document["expectedUserConfigurationRevision"] =
+        preview.expectedUserConfigurationRevision.value();
+    document["noChange"] = preview.noChange;
+    return finish(document, out) ? WebApiCodecStatus::Success
+                                 : WebApiCodecStatus::CapacityExceeded;
+}
+
 WebApiCodecStatus encodeSessionHandoff(const std::string& csrfToken,
                                        const MutationSequenceView& sequence,
                                        std::string& out) {
@@ -581,10 +672,9 @@ WebApiCodecStatus encodeSessionHandoff(const std::string& csrfToken,
     document["csrfToken"] = csrfToken;
     document["nextMutationSeq"] = sequence.nextMutationSeq;
     document["mutationSequenceState"] =
-        sequence.state == MutationSequenceState::Available
-            ? "AVAILABLE"
-            : sequence.state == MutationSequenceState::InFlight ? "IN_FLIGHT"
-                                                                 : "EXHAUSTED";
+        sequence.state == MutationSequenceState::Available  ? "AVAILABLE"
+        : sequence.state == MutationSequenceState::InFlight ? "IN_FLIGHT"
+                                                            : "EXHAUSTED";
     if (sequence.inFlightMutationSeq.has_value()) {
         document["inFlightMutationSeq"] = *sequence.inFlightMutationSeq;
     }
@@ -594,7 +684,8 @@ WebApiCodecStatus encodeSessionHandoff(const std::string& csrfToken,
 
 WebApiCodecStatus encodeError(const char* code, const char* message,
                               std::string& out) {
-    if (code == nullptr || message == nullptr) return WebApiCodecStatus::WrongType;
+    if (code == nullptr || message == nullptr)
+        return WebApiCodecStatus::WrongType;
     ArduinoJson::JsonDocument document;
     document["code"] = code;
     document["message"] = message;
@@ -606,7 +697,8 @@ WebApiCodecStatus decodeCredentialField(const std::string& body,
                                         const char* field,
                                         std::size_t maximumBytes,
                                         std::string& out) {
-    if (body.size() > 4096U || field == nullptr) return WebApiCodecStatus::CapacityExceeded;
+    if (body.size() > 4096U || field == nullptr)
+        return WebApiCodecStatus::CapacityExceeded;
     ArduinoJson::JsonDocument document;
     const auto error = deserializeJson(document, body);
     if (error) return WebApiCodecStatus::InvalidJson;
@@ -637,10 +729,9 @@ WebApiCodecStatus decodeBooleanField(const std::string& body, const char* field,
     return WebApiCodecStatus::Success;
 }
 
-WebApiCodecStatus decodeNetworkMode(const std::string& body,
-                                    device_platform::NetworkMode& out,
-                                    std::optional<UserConfigurationRevision>&
-                                        expectedRevision) {
+WebApiCodecStatus decodeNetworkMode(
+    const std::string& body, device_platform::NetworkMode& out,
+    std::optional<UserConfigurationRevision>& expectedRevision) {
     if (body.size() > 1024U) return WebApiCodecStatus::CapacityExceeded;
     ArduinoJson::JsonDocument document;
     if (deserializeJson(document, body)) return WebApiCodecStatus::InvalidJson;
@@ -658,10 +749,12 @@ WebApiCodecStatus decodeNetworkMode(const std::string& body,
     }
     const auto revision = document["expectedUserConfigurationRevision"];
     if (!revision.isNull()) {
-        if (!revision.is<std::uint64_t>() || revision.as<std::uint64_t>() == 0U) {
+        if (!revision.is<std::uint64_t>() ||
+            revision.as<std::uint64_t>() == 0U) {
             return WebApiCodecStatus::WrongType;
         }
-        expectedRevision = UserConfigurationRevision{revision.as<std::uint64_t>()};
+        expectedRevision =
+            UserConfigurationRevision{revision.as<std::uint64_t>()};
     } else {
         expectedRevision.reset();
     }
@@ -686,6 +779,62 @@ WebApiCodecStatus decodeWebUiRunCommand(const std::string& body,
     status = requiredAction(document, action);
     if (status != WebApiCodecStatus::Success) return status;
     return decodeRunPayload(document, action, out.payload);
+}
+
+WebApiCodecStatus decodeWebProgramEditCommand(const std::string& body,
+                                              WebProgramEditCommand& out) {
+    if (body.size() > 1024U) return WebApiCodecStatus::CapacityExceeded;
+    JsonDocument document;
+    if (deserializeJson(document, body)) return WebApiCodecStatus::InvalidJson;
+    std::optional<ProgramCatalogRevision> revision;
+    auto status = optionalProgramRevision(
+        document, "expectedProgramCatalogRevision", revision);
+    if (status != WebApiCodecStatus::Success || !revision.has_value()) {
+        return status == WebApiCodecStatus::Success
+                   ? WebApiCodecStatus::MissingField
+                   : status;
+    }
+    out.expectedProgramCatalogRevision = *revision;
+    status = programOperation(document, out.request.operation);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = requiredString(document, "programId", kMaximumProgramIdBytes,
+                            out.request.programId);
+    if (status != WebApiCodecStatus::Success) return status;
+    status = requiredBoolean(document, "confirmed", out.request.confirmed);
+    if (status != WebApiCodecStatus::Success) return status;
+    const auto name = document["name"];
+    if (name.isNull()) {
+        out.request.name.reset();
+        return WebApiCodecStatus::Success;
+    }
+    std::string parsedName;
+    status =
+        requiredString(document, "name", kMaximumProgramNameBytes, parsedName);
+    if (status == WebApiCodecStatus::Success)
+        out.request.name = std::move(parsedName);
+    return status;
+}
+
+WebApiCodecStatus decodeWebConfigurationCommitCommand(
+    const std::string& body, WebConfigurationCommitCommand& out) {
+    if (body.size() > 512U) return WebApiCodecStatus::CapacityExceeded;
+    JsonDocument document;
+    if (deserializeJson(document, body)) return WebApiCodecStatus::InvalidJson;
+    const auto handle = document["previewHandle"];
+    if (!handle.is<std::uint64_t>() || handle.as<std::uint64_t>() == 0U) {
+        return WebApiCodecStatus::WrongType;
+    }
+    out.command.previewHandle = handle.as<std::uint64_t>();
+    std::optional<UserConfigurationRevision> revision;
+    const auto status = optionalUserRevision(
+        document, "expectedUserConfigurationRevision", revision);
+    if (status != WebApiCodecStatus::Success || !revision.has_value()) {
+        return status == WebApiCodecStatus::Success
+                   ? WebApiCodecStatus::MissingField
+                   : status;
+    }
+    out.command.expectedUserConfigurationRevision = *revision;
+    return requiredBoolean(document, "confirmed", out.command.confirmed);
 }
 
 }  // namespace fermentation

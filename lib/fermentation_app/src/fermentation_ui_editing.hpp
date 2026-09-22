@@ -189,7 +189,8 @@ struct FermentationUiProgramEditResult {
 [[nodiscard]] ConfigurationPreviewInstallResult applyProgramEditPreview(
     ConfigurationService& service, ProgramCatalogRevision expectedRevision,
     const FermentationUiProgramEditRequest& request,
-    const FermentationUiProgramUsageEvidence& usage);
+    const FermentationUiProgramUsageEvidence& usage,
+    ChangeOrigin origin = {ChangeOriginKind::LocalDisplay, 2U});
 
 struct FermentationUiProgramEditSession {
     ProgramDocument candidate;

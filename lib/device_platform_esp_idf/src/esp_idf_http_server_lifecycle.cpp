@@ -122,12 +122,10 @@ device_platform::HttpRequestMetadata requestMetadata(httpd_req_t* request,
     metadata.contentType = header(request, "Content-Type", 64U, invalid);
     metadata.cookie = header(request, "Cookie", 512U, invalid);
     metadata.csrfToken = header(request, "X-CSRF-Token", 64U, invalid);
-    metadata.mutationSeq =
-        header(request, "X-UI-Mutation-Seq", 20U, invalid);
+    metadata.mutationSeq = header(request, "X-UI-Mutation-Seq", 20U, invalid);
     metadata.origin = header(request, "Origin", 256U, invalid);
     metadata.referer = header(request, "Referer", 512U, invalid);
-    metadata.secFetchSite =
-        header(request, "Sec-Fetch-Site", 32U, invalid);
+    metadata.secFetchSite = header(request, "Sec-Fetch-Site", 32U, invalid);
     if (device_platform::validateHttpRequestMetadata(metadata) !=
         device_platform::HttpMetadataValidation::Valid) {
         invalid = true;

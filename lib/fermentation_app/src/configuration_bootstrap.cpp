@@ -316,21 +316,18 @@ bool isAllowedBootstrapSuccessor(const ConfigurationBootstrapRecord& previous,
             previous.handoff == next.handoff &&
             previous.previousEpoch == next.previousEpoch &&
             previous.currentEpoch == next.currentEpoch;
-        const bool authStep = sameConfiguration &&
-                              ((previous.authDomainHandoff ==
-                                    AuthDomainHandoffState::None &&
-                                next.authDomainHandoff ==
-                                    AuthDomainHandoffState::Unconsumed) ||
-                               (previous.authDomainHandoff ==
-                                    AuthDomainHandoffState::Unconsumed &&
-                                next.authDomainHandoff ==
-                                    AuthDomainHandoffState::InProgress) ||
-                               (previous.authDomainHandoff ==
-                                    AuthDomainHandoffState::InProgress &&
-                                (next.authDomainHandoff ==
-                                     AuthDomainHandoffState::Consumed ||
-                                 next.authDomainHandoff ==
-                                     AuthDomainHandoffState::Indeterminate)));
+        const bool authStep =
+            sameConfiguration &&
+            ((previous.authDomainHandoff == AuthDomainHandoffState::None &&
+              next.authDomainHandoff == AuthDomainHandoffState::Unconsumed) ||
+             (previous.authDomainHandoff ==
+                  AuthDomainHandoffState::Unconsumed &&
+              next.authDomainHandoff == AuthDomainHandoffState::InProgress) ||
+             (previous.authDomainHandoff ==
+                  AuthDomainHandoffState::InProgress &&
+              (next.authDomainHandoff == AuthDomainHandoffState::Consumed ||
+               next.authDomainHandoff ==
+                   AuthDomainHandoffState::Indeterminate)));
         const bool configurationStep =
             [&] {
                 auto previousLegacy = previous;

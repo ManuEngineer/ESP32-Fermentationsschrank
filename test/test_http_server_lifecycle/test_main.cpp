@@ -18,7 +18,8 @@ void test_bounded_http_metadata_accepts_known_values() {
     metadata.secFetchSite = "same-origin";
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::HttpMetadataValidation::Valid),
-        static_cast<int>(device_platform::validateHttpRequestMetadata(metadata)));
+        static_cast<int>(
+            device_platform::validateHttpRequestMetadata(metadata)));
 }
 
 void test_http_metadata_rejects_control_and_capacity_values() {
@@ -26,17 +27,20 @@ void test_http_metadata_rejects_control_and_capacity_values() {
     metadata.host = "bad\r\nvalue";
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::HttpMetadataValidation::Invalid),
-        static_cast<int>(device_platform::validateHttpRequestMetadata(metadata)));
+        static_cast<int>(
+            device_platform::validateHttpRequestMetadata(metadata)));
     metadata.host.reset();
     metadata.cookie = std::string(513U, 'x');
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::HttpMetadataValidation::Invalid),
-        static_cast<int>(device_platform::validateHttpRequestMetadata(metadata)));
+        static_cast<int>(
+            device_platform::validateHttpRequestMetadata(metadata)));
     metadata.cookie.reset();
     metadata.mutationSeq = "000000000000000000001";
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::HttpMetadataValidation::Invalid),
-        static_cast<int>(device_platform::validateHttpRequestMetadata(metadata)));
+        static_cast<int>(
+            device_platform::validateHttpRequestMetadata(metadata)));
 }
 
 void test_response_metadata_is_bounded_and_ascii() {

@@ -6,6 +6,7 @@
 #include <string>
 
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_editing.hpp"
 #include "network_mode.hpp"
 #include "web_session.hpp"
 
@@ -28,16 +29,27 @@ struct WebUiRunCommand {
     FermentationUiEnvelopePayload payload{FermentationUiResetFaultIntent{}};
 };
 
+struct WebProgramEditCommand {
+    ProgramCatalogRevision expectedProgramCatalogRevision;
+    FermentationUiProgramEditRequest request;
+};
+
+struct WebConfigurationCommitCommand {
+    FermentationUiConfigurationCommitCommand command;
+};
+
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
     const FermentationUiSnapshot& snapshot, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
-    const FermentationUiSnapshot& snapshot, const MutationSequenceView& sequence,
-    std::string& out);
+    const FermentationUiSnapshot& snapshot,
+    const MutationSequenceView& sequence, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
-    const FermentationUiSnapshot& snapshot, const MutationSequenceView& sequence,
+    const FermentationUiSnapshot& snapshot,
+    const MutationSequenceView& sequence,
     std::optional<bool> webPasswordEnabled, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeUiSnapshot(
-    const FermentationUiSnapshot& snapshot, const MutationSequenceView& sequence,
+    const FermentationUiSnapshot& snapshot,
+    const MutationSequenceView& sequence,
     std::optional<bool> webPasswordEnabled,
     std::optional<std::string> csrfToken, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeStatus(
@@ -49,6 +61,11 @@ struct WebUiRunCommand {
     const FermentationUiSnapshot& snapshot, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeAlerts(
     const FermentationUiSnapshot& snapshot, std::string& out);
+[[nodiscard]] WebApiCodecStatus encodeProgramList(
+    const std::vector<FermentationUiProgramListEntry>& programs,
+    std::string& out);
+[[nodiscard]] WebApiCodecStatus encodeProgramPreview(
+    const ConfigurationPreviewView& preview, std::string& out);
 [[nodiscard]] WebApiCodecStatus encodeSessionHandoff(
     const std::string& csrfToken, const MutationSequenceView& sequence,
     std::string& out);
@@ -56,15 +73,21 @@ struct WebUiRunCommand {
                                             const char* message,
                                             std::string& out);
 
-[[nodiscard]] WebApiCodecStatus decodeCredentialField(
-    const std::string& body, const char* field, std::size_t maximumBytes,
-    std::string& out);
-[[nodiscard]] WebApiCodecStatus decodeBooleanField(
-    const std::string& body, const char* field, bool& out);
+[[nodiscard]] WebApiCodecStatus decodeCredentialField(const std::string& body,
+                                                      const char* field,
+                                                      std::size_t maximumBytes,
+                                                      std::string& out);
+[[nodiscard]] WebApiCodecStatus decodeBooleanField(const std::string& body,
+                                                   const char* field,
+                                                   bool& out);
 [[nodiscard]] WebApiCodecStatus decodeNetworkMode(
     const std::string& body, device_platform::NetworkMode& out,
     std::optional<UserConfigurationRevision>& expectedRevision);
-[[nodiscard]] WebApiCodecStatus decodeWebUiRunCommand(
-    const std::string& body, WebUiRunCommand& out);
+[[nodiscard]] WebApiCodecStatus decodeWebUiRunCommand(const std::string& body,
+                                                      WebUiRunCommand& out);
+[[nodiscard]] WebApiCodecStatus decodeWebProgramEditCommand(
+    const std::string& body, WebProgramEditCommand& out);
+[[nodiscard]] WebApiCodecStatus decodeWebConfigurationCommitCommand(
+    const std::string& body, WebConfigurationCommitCommand& out);
 
 }  // namespace fermentation

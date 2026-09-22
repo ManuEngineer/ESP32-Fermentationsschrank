@@ -47,18 +47,15 @@ HttpMetadataValidation validateHttpRequestMetadata(
     if (count > 8U || bytes > kMaximumRequestMetadataBytes) {
         return HttpMetadataValidation::Invalid;
     }
-    if ((metadata.host.has_value() &&
-         !validValue(*metadata.host, 256U)) ||
+    if ((metadata.host.has_value() && !validValue(*metadata.host, 256U)) ||
         (metadata.contentType.has_value() &&
          !validValue(*metadata.contentType, 64U)) ||
-        (metadata.cookie.has_value() &&
-         !validValue(*metadata.cookie, 512U)) ||
+        (metadata.cookie.has_value() && !validValue(*metadata.cookie, 512U)) ||
         (metadata.csrfToken.has_value() &&
          !validValue(*metadata.csrfToken, 64U, true)) ||
         (metadata.mutationSeq.has_value() &&
          !validValue(*metadata.mutationSeq, 20U, true)) ||
-        (metadata.origin.has_value() &&
-         !validValue(*metadata.origin, 256U)) ||
+        (metadata.origin.has_value() && !validValue(*metadata.origin, 256U)) ||
         (metadata.referer.has_value() &&
          !validValue(*metadata.referer, 512U)) ||
         (metadata.secFetchSite.has_value() &&
@@ -68,7 +65,8 @@ HttpMetadataValidation validateHttpRequestMetadata(
     return HttpMetadataValidation::Valid;
 }
 
-bool validateHttpResponseMetadata(const HttpResponseMetadata& metadata) noexcept {
+bool validateHttpResponseMetadata(
+    const HttpResponseMetadata& metadata) noexcept {
     if (metadata.setCookie.has_value() &&
         !validValue(*metadata.setCookie, kMaximumResponseSetCookieBytes)) {
         return false;

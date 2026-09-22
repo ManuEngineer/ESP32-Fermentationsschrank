@@ -29,8 +29,8 @@ bool EspIdfPbkdf2HmacSha256::derive(
             secret.size());
     }
     if (status == PSA_SUCCESS) {
-        status = psa_key_derivation_output_bytes(&operation, out.data(),
-                                                 out.size());
+        status =
+            psa_key_derivation_output_bytes(&operation, out.data(), out.size());
     }
     static_cast<void>(psa_key_derivation_abort(&operation));
     return status == PSA_SUCCESS;

@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "boot_classification.hpp"
 #include "process_state_machine.hpp"
@@ -18,6 +19,7 @@
 #include "application_run_identity.hpp"
 #include "application_lifecycle.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_editing.hpp"
 #include "fermentation_ui_projector.hpp"
 #include "http_server_lifecycle.hpp"
 #include "secure_random_source.hpp"
@@ -155,6 +157,17 @@ class FermentationApplication {
         const FermentationApplicationRequestResult& prepared);
     [[nodiscard]] RunPersistenceResult applyPreparedRequest(
         const FermentationApplicationPreparedRequest& request);
+    // Shared renderer/Web projection and mutation adapter. The Application
+    // retains ConfigurationService ownership; callers only provide an
+    // existing typed edit request and its expected catalog revision.
+    [[nodiscard]] std::optional<std::vector<FermentationUiProgramListEntry>>
+    uiProgramList() const;
+    [[nodiscard]] ConfigurationPreviewInstallResult prepareProgramEdit(
+        ProgramCatalogRevision expectedRevision,
+        FermentationUiProgramEditRequest request,
+        ChangeOrigin origin = {ChangeOriginKind::WebInterface, 3U});
+    [[nodiscard]] ConfigurationCommitResult confirmConfigurationPreview(
+        const FermentationUiConfigurationCommitCommand& command);
 
     // Existing configuration recovery remains the authorization owner. This
     // application entry point composes its FactoryResetCompleted result with

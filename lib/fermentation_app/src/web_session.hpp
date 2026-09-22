@@ -16,7 +16,8 @@ namespace fermentation {
 
 inline constexpr std::size_t kMaximumWebSessions = 4U;
 inline constexpr std::uint64_t kWebSessionIdleLimitMs = 30ULL * 60ULL * 1000ULL;
-inline constexpr std::uint64_t kWebSessionAbsoluteLimitMs = 12ULL * 60ULL * 60ULL * 1000ULL;
+inline constexpr std::uint64_t kWebSessionAbsoluteLimitMs =
+    12ULL * 60ULL * 60ULL * 1000ULL;
 
 struct WebSessionHandle {
     std::size_t slot{0U};
@@ -79,14 +80,23 @@ struct MutationReservation {
     std::optional<WebMutationOutcome> outcome;
 };
 
+struct ServiceLeaseView {
+    bool active{false};
+    std::optional<std::uint64_t> remainingMillis;
+};
+
 [[nodiscard]] std::optional<std::uint64_t> parseMutationSequence(
     const std::string& value) noexcept;
-[[nodiscard]] std::string mutationFingerprint(const device_platform::HttpRequest& request);
+[[nodiscard]] std::string mutationFingerprint(
+    const device_platform::HttpRequest& request);
 
 class WebSessionManager final {
    public:
-    explicit WebSessionManager(device_platform::ISecureRandomSource& random)
-        : random_(random) {}
+    explicit WebSessionManager(device_platform::ISecureRandomSource& random,
+                               device_platform::ServiceSessionPolicy
+                                   servicePolicy = {5ULL * 60ULL * 1000ULL,
+                                                    15ULL * 60ULL * 1000ULL})
+        : random_(random), servicePolicy_(servicePolicy) {}
 
     [[nodiscard]] WebSessionResult create(std::uint64_t nowMs);
     [[nodiscard]] WebSessionResult find(const std::string& cookie,
@@ -94,8 +104,8 @@ class WebSessionManager final {
     [[nodiscard]] bool validateCsrf(WebSessionHandle handle,
                                     const std::string& token,
                                     std::uint64_t nowMs);
-    [[nodiscard]] std::optional<std::string> csrfToken(
-        WebSessionHandle handle, std::uint64_t nowMs);
+    [[nodiscard]] std::optional<std::string> csrfToken(WebSessionHandle handle,
+                                                       std::uint64_t nowMs);
     [[nodiscard]] std::optional<std::string> cookieValue(
         WebSessionHandle handle, std::uint64_t nowMs);
     [[nodiscard]] bool touch(WebSessionHandle handle, std::uint64_t nowMs);
@@ -104,7 +114,9 @@ class WebSessionManager final {
     [[nodiscard]] bool grantServiceLease(WebSessionHandle handle,
                                          std::uint64_t nowMs);
     [[nodiscard]] bool serviceLeaseActive(WebSessionHandle handle,
-                                           std::uint64_t nowMs);
+                                          std::uint64_t nowMs);
+    [[nodiscard]] ServiceLeaseView serviceLeaseStatus(
+        WebSessionHandle handle, std::uint64_t nowMs) const;
     void revokeServiceLease(WebSessionHandle handle);
 
     [[nodiscard]] MutationSequenceView mutationSequence(
@@ -112,9 +124,11 @@ class WebSessionManager final {
     [[nodiscard]] MutationReservation reserveMutation(
         WebSessionHandle handle, std::uint64_t nowMs, std::uint64_t sequence,
         const std::string& fingerprint);
-    [[nodiscard]] bool completeMutation(
-        WebSessionHandle handle, std::uint64_t nowMs, std::uint64_t sequence,
-        const std::string& fingerprint, const WebMutationOutcome& outcome);
+    [[nodiscard]] bool completeMutation(WebSessionHandle handle,
+                                        std::uint64_t nowMs,
+                                        std::uint64_t sequence,
+                                        const std::string& fingerprint,
+                                        const WebMutationOutcome& outcome);
 
    private:
     struct CompletedMutation {
@@ -147,6 +161,7 @@ class WebSessionManager final {
                                       const std::array<std::uint8_t, 16U>& id);
 
     device_platform::ISecureRandomSource& random_;
+    device_platform::ServiceSessionPolicy servicePolicy_;
     mutable std::mutex mutex_;
     std::array<Session, kMaximumWebSessions> sessions_{};
 };

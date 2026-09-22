@@ -14,8 +14,7 @@ std::string lower(std::string value) {
     return value;
 }
 
-bool originMatchesHttpHost(const std::string& value,
-                           const std::string& host) {
+bool originMatchesHttpHost(const std::string& value, const std::string& host) {
     const auto schemeEnd = value.find("://");
     if (schemeEnd == std::string::npos || host.empty() ||
         lower(value.substr(0U, schemeEnd)) != "http") {
@@ -23,10 +22,10 @@ bool originMatchesHttpHost(const std::string& value,
     }
     const auto authorityStart = schemeEnd + 3U;
     const auto authorityEnd = value.find('/', authorityStart);
-    const auto authority = value.substr(
-        authorityStart,
-        authorityEnd == std::string::npos ? std::string::npos
-                                           : authorityEnd - authorityStart);
+    const auto authority =
+        value.substr(authorityStart, authorityEnd == std::string::npos
+                                         ? std::string::npos
+                                         : authorityEnd - authorityStart);
     return !authority.empty() && authority.find('@') == std::string::npos &&
            lower(authority) == lower(host);
 }
