@@ -29,8 +29,11 @@ PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
 IMPLEMENTATION_STATUS=PAUSED_PLAN_REVALIDATION
 EXISTING_IMPLEMENTATION_PRESENT=YES
-EXISTING_WEB_UI=LOGIN_OVERVIEW_NETWORK_SERVICE_PASSWORD_ALERTS_LOGOUT_BOUNDED_POLLING_BASE
+EXISTING_WEB_UI=LOGIN_LOGOUT_LANGUAGE_OVERVIEW_NETWORK_RECONFIGURE_SERVICE_UNLOCK_PASSWORD_MODE_ALERT_SURFACE_BOUNDED_POLLING_BASE
 REMAINING_WEB_UI_DELTA=OWNER_APPROVAL_REQUIRED
+SERVICE_LEASE_BROWSER_DISPLAY=REMAINING
+ALERT_LIST_ACK_MUTE=REMAINING
+ISSUE28_DIAGNOSTICS_CHART_HISTORY_EXPORT_OWNERSHIP=YES
 REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ESP_IDF_VERSION=v6.1.0
 ESP_IDF_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
@@ -177,7 +180,9 @@ Proxy-Unterstützung ist nur mit eigener expliziter Konfiguration zulässig.
 Die Umsetzung verwendet als fachliche Quellen, ohne ihre Verträge zu kopieren:
 
 - `docs/WEB_UI.md`: responsive Oberflächen, Sprache, Session-/CSRF-/Service-
-  Regeln, Live-Verhalten, Konflikte und aktueller Laufchart;
+  Regeln, Live-Verhalten, Konflikte und die Produktanforderung für den
+  aktuellen Laufchart; die Implementierungsownership von Chart/History liegt
+  gemäß aktuellem Repository-Scope bei #28;
 - `docs/NETWORK.md`: #164-Transport, AP_ONLY/HOME_WIFI, Setup-Abgrenzung,
   direkte HTTP-/mDNS-Grenzen und kein zweiter Credential-Speicher;
 - `docs/NETWORK_DIAGNOSTICS_INTEGRATION.md`: read-only API und
@@ -222,7 +227,8 @@ Aktorfreigabe.
 | Webpasswort, Authentication-Persistenz, Verifier/KDF-Vertrag, Websessions und Web-Lockout | #27 als erster Auth-Consumer | eine typisierte Authentication-Domäne im bestehenden `IStateStore`; kein zweiter physischer Store |
 | CSRF, Origin/Referer/Fetch-Metadata, Cookie- und Methodengrenze | #27 | vor fachlicher Mutation; nicht als ESP-IDF-Serverfeature delegieren |
 | Web-Servicefreigabe über die bestehende vierstellige Service-PIN | gemeinsame Application-/Permission-Grenze, konsumiert durch #27 | identischer Service-PIN-Verifier für lokale und Web-Servicepfade; keine separate Web-PIN |
-| normale Web-Seiten: Übersicht, Programme, Lauf, manuell, Meldungen, Einstellungen, Diagnose, Service, System | #27 | Daten und Aktionen kommen aus den #25/#26-Projektionen und Commands |
+| normale Web-Shell und fachlich bereits verfügbare Seiten/Funktionen: momentane Übersicht, Programme, Lauf-/Startstatus, manuell, Meldungen, Einstellungen, Service-Auth und System-/Recovery-/Build-Info | #27 | Daten und Aktionen kommen aus den #25/#26-Projektionen und Commands; keine neue #28-Diagnose-/Chart-/History-/Export-Wahrheit |
+| vollständige Diagnose, Roh-/korrigierte-/gefilterte Sensorwerte, Regler-/Aktor-/Heap-/Ressourcen-Vollanzeige, aktueller Laufchart, begrenzte History, Ereignis-Historie, Diagnose-/Lauf-/Serviceexporte und geführter Serviceablauf | #28 | #27 darf die Navigation strukturell vorbereiten und vorhandene secret-freie Producerwerte anzeigen, erzeugt aber keine #28-Projektion, Zeitreihe, History oder Exportgrenze |
 | dokumentierte `/api/v1/`-Lese-API | #27 | stabil read-only; interne UI-Schreibwege sind keine öffentliche Write-API |
 | Display-/Touch-Treiber, LVGL, Fonts, Controller, Kalibrierung und physische Evidence | #31 | vollständig ausgeschlossen |
 
@@ -809,18 +815,23 @@ Netzwerkdaten ab.
 Die normale WebUI ist eine schlanke, responsive lokale Anwendung für
 Mobiltelefon, Tablet und Desktop mit gleichem Funktionsumfang:
 
-1. Übersicht: Gerätename, Prozessmodus, Produkt-/Schrank-/Solltemperatur,
-   Sensorqualität, Phase, Laufzeiten, wichtigste Meldungen, Netzwerk-/Zeit-
-   status, Start/Manuell;
+1. Übersicht: Gerätename, Prozessmodus, die momentan aus dem Snapshot
+   verfügbaren Produkt-/Schrank-/Solltemperatur-, Sensorqualitäts-, Phasen-,
+   Lauf-, Meldungs-, Netzwerk- und Zeitwerte sowie Start/Manuell. Keine neue
+   Zeitreihe oder Chart-/History-Projektion;
 2. Programme: Liste, Erstellung/Änderung/Löschung im bestehenden
    Configuration-Preview-/Commitpfad, erwartete Revision und Konfliktansicht;
 3. manueller Betrieb: bestehende typisierte Werte/Validierungen;
 4. Meldungen/Protokolle: secret-freie Meldungen, Quittieren/Mute über Commands;
 5. Einstellungen: Sprache pro Browser, Geräteeinstellungen und Netzwerk-
    Verweise über bestehende Grenzen;
-6. Diagnose: read-only status-, Ressourcen-, Netzwerk- und Zeitprojektionen;
-7. Service: separate PIN-Freigabe, sichtbare Lease/Timeout-Information,
-   Bestätigung für kritische Aktionen;
+6. Diagnose: strukturelle Navigation und read-only Anzeige nur bereits
+   kanonisch gelieferter secret-freier Status-/Systemwerte; die vollständige
+   #28-Diagnoseprojektion bleibt außerhalb dieses Plans;
+7. Service: separate PIN-Freigabe und vorhandene Web-Servicegrenzen; eine
+   Browseranzeige von Lease/Timeout sowie Bestätigung für zulässige kritische
+   Aktionen wird an die bestehenden Owner gebunden, ohne eine zweite
+   Servicepolicy zu berechnen;
 8. System: Firmware-/Build-/Reset-/Recovery-Informationen ohne Secrets.
 
 Browserlokale Sprache ist unabhängig vom Touchdisplay und unterstützt DE/EN/ES.
@@ -843,8 +854,9 @@ Der konkrete R1-Vertrag ist:
 
 - Polling-GET auf einen vollständigen, bounded Snapshot mit normalem
   `/api/v1/`-Read-Schutz;
-- aktive Laufansicht nominal alle 2 Sekunden, Standby nominal alle 10 Sekunden,
-  sofortiger Refresh nach eigener Commandantwort und nach Reconnect;
+- momentane Lauf-/Statusansicht nominal alle 2 Sekunden im aktiven Betrieb,
+  Standby nominal alle 10 Sekunden, sofortiger Refresh nach eigener
+  Commandantwort und nach Reconnect;
 - Backoff bei Fehlern bis höchstens 30 Sekunden, sichtbarer Offline-/Stale-
   Zustand mit Alter des letzten gültigen Snapshots;
 - nach jeder Wiederverbindung vollständiger Snapshot, kein Delta- oder
@@ -853,12 +865,12 @@ Der konkrete R1-Vertrag ist:
 - keine SSE-/WebSocket-Route und keine allgemeine `IWebTransport`-
   Abstraktion im R1.
 
-Der aktuelle Laufchart wird aus bounded, aktuellen Mess-/Ereignisdaten
-projektiert. Produkttemperatur, Schranktemperatur und Sollwert enthalten
-Einheit, Zeitbasis, Qualitätsstatus und sichtbare Lücken; Phasenwechsel,
-Warnungen, Unterbrechungen und Laufzeitkorrekturen werden als Ereignismarker
-angezeigt. Fehlende Messwerte werden nicht verbunden. Vollständige historische
-Charts und eine neue Langzeitdatenbank gehören nicht zu #27.
+Der aktuelle Laufchart, seine Zeitreihe, sichtbaren Qualitätslücken und
+Phasen-/Warn-/Unterbrechungs-/Recovery-Ereignismarker gehören zur
+Implementierungsownership von #28. #27 erzeugt dafür keinen Puffer, keine
+History und keine neue Ereignisprojektion. Die Produktanforderung aus
+`docs/WEB_UI.md` bleibt erhalten und wird durch #28 umgesetzt; #27 darf nur
+momentane, bereits kanonisch gelieferte Snapshotwerte anzeigen.
 
 ## 7. Frontend-, JSON- und Abhängigkeitsstrategie
 
@@ -941,8 +953,13 @@ vollständigen §6.2-/§6.3-R1-Scope ab. Der verifizierte Bestand
 - eine read-only-Übersichtsprojektion aus dem vorhandenen Snapshot;
 - Netzwerkmoduswahl und explizite WLAN-Rekonfiguration über die bestehenden
   Routen;
-- Service-PIN-Unlock, Lease-Status und Passwortmodus;
-- die vorhandene Meldungsfläche ohne vollständige Acknowledge-/Mute-Bedienung;
+- Service-PIN-Unlock und Passwortmodus; die serverseitige Service-Lease-Policy,
+  `WebSessionManager`/`ServiceSessionLease`,
+  `fermentationWebServicePolicy()` und `/internal/service/status` sind
+  vorhanden, werden vom Browser aber noch nicht als kanonischer Lease-/Timeout-
+  Status angezeigt;
+- die vorhandene Meldungsfläche; `render()` befüllt sie noch nicht als
+  sichtbare Meldungsliste und bietet noch keine Acknowledge-/Mute-Bedienung;
 - den vorhandenen bounded Polling-/Offline-/Stale-Grundmechanismus.
 
 Die ausgelieferten Assets konsumieren den neuen `/internal/ui/run`-Endpoint
@@ -1028,18 +1045,36 @@ Nach Freigabe dieser Plan-SHA ist ausschließlich Folgendes noch auszuführen:
   `PersistenceCommittedApplyFailed`, Recovery-/Blocked-Zustände und fehlende
   Aktorfreigabe nicht in einen HTTP-Erfolg umgedeutet werden;
 - `REMAINING_WEB_UI_DELTA` mit den vorhandenen compile-time-Assets umsetzen:
-  Übersicht mit Start/Manuell, Programme über die bestehenden
-  Preview-/Commitpfade, manueller Betrieb, Acknowledge/Mute für Meldungen,
-  Einstellungen, read-only Diagnose, Service-Lease/Timeout und Bestätigung,
-  System-/Recovery-/Build-Informationen sowie die aktuelle Laufansicht mit
-  Ist/Soll, Qualitätslücken und Ereignismarkern;
+  responsive Navigation, momentane Übersicht mit Start/Manuell, Programme
+  über die bestehenden Preview-/Commitpfade, manueller Betrieb,
+  Acknowledge/Mute für Meldungen, Einstellungen, Service-Lease/Timeout und
+  Bestätigung sowie einfache System-/Recovery-/Build-Informationen nur bei
+  vorhandenem kanonischem secret-freiem Producer;
+- die Navigation darf einen Diagnosebereich strukturell vorsehen, aber #27
+  erzeugt keine neue #28-Diagnoseprojektion, keine Roh-/korrigierte-/gefilterte
+  Sensoransicht, keine Regler-/Aktor-/Heap-/Ressourcen-Vollanzeige, keine
+  Zeitreihe, keinen aktuellen Laufchart, keine Ereignis-Historie, keine
+  Diagnose-/Lauf-/Serviceexporte und keinen geführten #28-Serviceablauf;
 - die Assets müssen `/internal/ui/run` für die bestehenden Start-, Stop-,
   Completion-, Adjustment-, Acknowledge- und Mute-Intents tatsächlich über
   `prepare*()`/`confirmPrepared()`/`applyPreparedRequest()` verwenden;
-- bounded Polling, sichtbarer Offline-/Stale-Zustand, Reconnect-Snapshot und
-  der aktuelle Laufchart werden aus `FermentationApplication::uiSnapshot()`
-  und den vorhandenen Projektionen konsumiert; Browsercode erfindet keine
-  Runtime-, Sensor-, Safety- oder Persistenz-Evidence;
+- bounded Polling, sichtbarer Offline-/Stale-Zustand und Reconnect-Snapshot
+  werden aus `FermentationApplication::uiSnapshot()` und den vorhandenen
+  Projektionen konsumiert; Browsercode erfindet keine Runtime-, Sensor-,
+  Safety-, Zeitreihen- oder Persistenz-Evidence;
+- die Browseranzeige des Service-Lease-/Timeout-Status verwendet
+  `WebSessionManager`/`ServiceSessionLease`,
+  `fermentationWebServicePolicy()` und die bestehende
+  `/internal/service/status`-Grenze; JavaScript berechnet keine zweite
+  Timeout- oder Servicepolicy;
+- die bekannte Builder-Static-Analysis-Remediation abschließen: den
+  `scripts/run_pre_ready_gates.sh self-check` gegen den kanonischen
+  `origin/main`-Merge-Base ausführen, PR-eigene clang-format-18-Befunde in
+  den betroffenen Stellen korrigieren, clang-tidy-Befunde gegen `main`
+  repository-first klassifizieren und nur PR-eigene Befunde beheben;
+  scopefremde Breitensäuberung bleibt ausgeschlossen. Vor der unabhängigen
+  Implementation-Fix-Verification muss
+  `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS` gelten;
 - ausschließlich die noch fehlende integrierte ArduinoJson-/Firmware-
   Ressourcen-Evidence sowie die im Plan offenen KDF-/Hardware-/Browser-
   Nachweise erheben; keine bereits bestandenen Auth-/Session-/Codec-Verträge
@@ -1115,9 +1150,9 @@ führen:
 | Safety | formal gültige Webaktion wird bei fehlender Safety-/Fach-Evidenz abgelehnt |
 | API | `/api/v1/status`, `/temperatures`, `/alerts`, Authmodus, stabile Codes, keine Secrets |
 | API-Grenze | keine offizielle externe Write-Operation in OpenAPI-/Route-/Dokumentationsfläche |
-| Live | 2-s/10-s Polling, Backoff, Offline/Stale, vollständiger Snapshot nach Reconnect |
-| Chart | Ist/Soll, Einheit/Zeitbasis, Qualitätslücken, Phasen-/Warn-/Unterbrechungsmarker |
-| UI | mobile/tablet/desktop, Übersicht mit Start/Manuell, Programme, manueller Betrieb, Meldungen/Acknowledge/Mute, Einstellungen, Diagnose, Service-Lease/Bestätigung, System/Recovery/Build, DE/EN/ES, englischer dann technischer Fallback, kein Horizontalzwang |
+| Live | 2-s/10-s Polling für momentane Snapshots, Backoff, Offline/Stale, vollständiger Snapshot nach Reconnect; keine #27-Zeitreihe |
+| Chart | #28-Ownership: Ist/Soll, Einheit/Zeitbasis, Qualitätslücken, Phasen-/Warn-/Unterbrechungsmarker und begrenzte History; #27 erzeugt dafür keine Projektion |
+| UI | mobile/tablet/desktop, responsive Navigation, momentane Übersicht mit Start/Manuell, Programme, manueller Betrieb, Meldungen/Acknowledge/Mute, Einstellungen, struktureller Diagnosebereich ohne neue #28-Wahrheit, Service-Lease/Bestätigung, vorhandene System/Recovery/Build-Info, DE/EN/ES, englischer dann technischer Fallback, kein Horizontalzwang |
 | Web-Route-Integration | `/internal/ui/run` wird aus den compile-time-Assets mit bounded DTO, Session-/CSRF-/Mutation-Seq-Schutz und aktuellen Revisionen aufgerufen; confirmed/unconfirmed, stale, Replay, Indeterminate, CommittedApplyFailed, Recovery und Blocked werden end-to-end truthful abgebildet |
 | Netzwerk | #164 Setup-Routen gewinnen im Setup-Flow; kein zweiter Server/Store/SSID-/Passwortpfad |
 | Isolation | Browserabbruch, WLANverlust, langsame/zu große Anfrage beeinflusst Prozess/Safety nicht |
@@ -1209,6 +1244,10 @@ Ausdrücklich nicht Teil von #27:
   Framework, zweiter JSON-Codec, zweiter Store oder zweite UI-/Commandtruth;
 - vollständige historische Laufcharts, unbegrenzte Uploads/Exporte oder
   Millisekunden-Echtzeit;
+- #28-Diagnose-/Chart-/History-/Export-Scope: Roh-/korrigierte-/gefilterte
+  Sensorwerte, Regler-/Aktor-/Heap-/Ressourcen-Vollanzeige, Ereignis-Historie
+  und geführter Serviceablauf bleiben dessen späteres Gate; #27 erzeugt dafür
+  keinen Parallelvertrag;
 - direkte GPIO-/Aktor-/Safetysteuerung aus HTTP oder JavaScript.
 
 **Kann #27 ohne #31 umgesetzt werden? Ja.** Die WebUI und ihre native
@@ -1256,6 +1295,7 @@ Freigabe oder einen reproduzierbaren Nachweis bleibt der betroffene Teil
 ISSUE27_PLAN_REVISION=COMPLETE_FOR_OWNER_REVIEW
 BASELINE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
 PREVIOUS_APPROVED_PLAN_SHA=da30f0526b6ffd76e51297d00291afe5808a4815
+PREVIOUS_REVISED_PLAN_SHA=94279a6016d60ebe5b9ac17fd0213a357a1749a8
 APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_ISSUE=168
 APPLICATION_RUNTIME_EVIDENCE_PREDECESSOR_PR=169
 APPLICATION_RUNTIME_EVIDENCE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
@@ -1273,16 +1313,22 @@ ISSUE31_REQUIRED=NO
 ISSUE31_IMPLEMENTATION=EXCLUDED
 IMPLEMENTATION_STATUS=PAUSED_PLAN_REVALIDATION
 EXISTING_IMPLEMENTATION_PRESENT=YES
+EXISTING_WEB_UI=LOGIN_LOGOUT_LANGUAGE_OVERVIEW_NETWORK_RECONFIGURE_SERVICE_UNLOCK_PASSWORD_MODE_ALERT_SURFACE_BOUNDED_POLLING_BASE
+REMAINING_WEB_UI_DELTA=OWNER_APPROVAL_REQUIRED
+SERVICE_LEASE_BROWSER_DISPLAY=REMAINING
+ALERT_LIST_ACK_MUTE=REMAINING
+ISSUE28_DIAGNOSTICS_CHART_HISTORY_EXPORT_OWNERSHIP=YES
 REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ACTUATOR_RELEASE=NO
 PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
-OPEN_REVIEW_BLOCKERS=6
-PLAN_REVISION_REASON=IMPLEMENTATION_REVIEW_WEB_UI_ROUTE_TEST_CONFIRMATION_GUARD_SELF_CHECK_KDF_RESOURCE
+OPEN_REVIEW_BLOCKERS=3
+PLAN_OPEN_BLOCKERS=3
+PLAN_REVISION_REASON=PLAN_REVIEW_WEBUI_OWNERSHIP_EXISTING_UI_STATIC_ANALYSIS
 WEB_FULL_SCOPE=PLAN_REVALIDATED_ON_APPLICATION_OWNED_CONTRACT
 PLAN_REVIEW_REQUIRED=YES
 OWNER_PLAN_APPROVAL_REQUIRED=YES
 PLAN_FIX_VERIFICATION=REQUIRED
 PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
-NEXT_GATE=OWNER_PLAN_APPROVAL_OF_REVISED_PLAN
+NEXT_GATE=INDEPENDENT_PLAN_FIX_VERIFICATION
 IMPLEMENTATION_AUTHORIZATION=NO
 ```
