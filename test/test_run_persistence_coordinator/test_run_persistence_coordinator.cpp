@@ -2819,7 +2819,6 @@ RunAdjustmentCommandRequest targetAdjustmentRequest(
                         true,
                         std::nullopt};
     request.targetTemperatureCelsius = target;
-    request.safetyAllowsChange = true;
     return request;
 }
 
@@ -8360,7 +8359,6 @@ CommandDecision continueWithAirDecision(const RunCommandState& state,
                         true,
                         std::nullopt};
     request.action = SensorSelectionUserAction::ContinueWithAir;
-    request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
     plausibility.air = coordinatorValidSensorSnapshot();
     plausibility.product = coordinatorFailedSensorSnapshot();
@@ -8456,7 +8454,6 @@ void test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempo
                         true,
                         std::nullopt};
     request.action = SensorSelectionUserAction::RecheckProduct;
-    request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
     plausibility.air = coordinatorValidSensorSnapshot();
     plausibility.product = coordinatorValidSensorSnapshot();
@@ -8570,7 +8567,6 @@ void test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision
                         true,
                         std::nullopt};
     request.action = SensorSelectionUserAction::RecheckProduct;
-    request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
     plausibility.air = coordinatorValidSensorSnapshot();
     plausibility.product = coordinatorValidSensorSnapshot();
@@ -9385,7 +9381,6 @@ void test_r1_fermenting_mutation_requires_trusted_utc_before_apply() {
                            true,
                            std::nullopt};
     adjustment.remainingDurationMinutes = 80U;
-    adjustment.safetyAllowsChange = true;
     const auto decision = decideRunAdjustment(state, adjustment);
     TEST_ASSERT_TRUE(decision.proposed());
 
@@ -9616,7 +9611,6 @@ void test_r1_adjust_run_rebases_phase_timer_without_observed_runtime_reuse() {
                            true,
                            std::nullopt};
     adjustment.remainingDurationMinutes = 80U;
-    adjustment.safetyAllowsChange = true;
     const auto decision = decideRunAdjustment(state, adjustment);
     TEST_ASSERT_TRUE(decision.proposed());
     const auto adjusted = seed.persistCommand(

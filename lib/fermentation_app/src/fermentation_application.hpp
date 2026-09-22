@@ -18,6 +18,7 @@
 #include "application_run_identity.hpp"
 #include "application_lifecycle.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_projector.hpp"
 #include "http_server_lifecycle.hpp"
 #include "secure_random_source.hpp"
 #include "connectivity_credentials.hpp"
@@ -43,26 +44,13 @@ enum class AuthBootstrapStatus : std::uint8_t;
 class RunPersistenceCoordinator;
 struct RunPersistenceResult;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
+class FermentationApplicationTestAccess;
 
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
 namespace issue_90_slice7 {
 class Harness;
 }
 #endif
-
-// Already evaluated evidence supplied by the owning application/orchestrator
-// boundary. This is a composition input, not a UI-controlled safety or
-// sensor decision and contains no fallback policy.
-struct FermentationApplicationOwningEvidence {
-    bool safetyAllowsStart{false};
-    bool safetyAllowsCooling{false};
-    bool safetyAllowsChange{false};
-    bool airSensorValid{false};
-    bool coolingSensorValid{false};
-    bool productSensorValid{false};
-    std::optional<FaultResetEvaluation> faultResetEvaluation;
-    std::optional<CrossRolePlausibilityContext> sensorPlausibility;
-};
 
 class FermentationApplication {
    public:
@@ -114,6 +102,11 @@ class FermentationApplication {
     networkAccessPointInfo() const;
     // Secret-free canonical mode input for the renderer-independent UI view.
     [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
+    // Sole application-owned runtime evidence handoff. Producers such as
+    // #30 may publish the already evaluated role snapshots here; UI, touch
+    // and web adapters never provide runtime evidence.
+    void publishOwningRuntimeEvidence(
+        const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
     [[nodiscard]] std::optional<device_platform::StorageEpoch>
     currentStorageEpoch() const noexcept;
@@ -138,34 +131,28 @@ class FermentationApplication {
     // and expected revisions only.
     [[nodiscard]] FermentationApplicationRequestResult prepareStartProgram(
         const FermentationUiCommandContext& context,
-        const FermentationUiStartProgramIntent& intent,
-        const FermentationApplicationOwningEvidence& evidence);
+        const FermentationUiStartProgramIntent& intent);
     [[nodiscard]] FermentationApplicationRequestResult
     prepareStartManualHolding(
         const FermentationUiCommandContext& context,
-        const FermentationUiStartManualHoldingIntent& intent,
-        const FermentationApplicationOwningEvidence& evidence);
+        const FermentationUiStartManualHoldingIntent& intent);
     [[nodiscard]] FermentationApplicationRequestResult prepareStartManualTimed(
         const FermentationUiCommandContext& context,
-        const ManualTimedRunValues& values,
-        const FermentationApplicationOwningEvidence& evidence);
+        const ManualTimedRunValues& values);
     [[nodiscard]] FermentationApplicationRequestResult prepareStop(
         const FermentationUiCommandContext& context,
-        const FermentationUiStopRunIntent& intent,
-        const FermentationApplicationOwningEvidence& evidence);
+        const FermentationUiStopRunIntent& intent);
     [[nodiscard]] FermentationApplicationRequestResult prepareCompletion(
         const FermentationUiCommandContext& context,
-        const FermentationUiCompleteRunIntent& intent,
-        const FermentationApplicationOwningEvidence& evidence);
+        const FermentationUiCompleteRunIntent& intent);
     [[nodiscard]] FermentationApplicationRequestResult prepareEnvelope(
         const FermentationUiCommandContext& context,
-        const FermentationUiEnvelopePayload& payload,
-        const FermentationApplicationOwningEvidence& evidence);
+        const FermentationUiEnvelopePayload& payload);
     // Confirmation reuses the already application-bound request.  It only
     // changes the existing envelope confirmation bit; it never allocates a
     // new CommandId or derives a replacement runId.
-    [[nodiscard]] static FermentationApplicationRequestResult confirmPrepared(
-        const FermentationApplicationRequestResult& prepared) noexcept;
+    [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
+        const FermentationApplicationRequestResult& prepared);
     [[nodiscard]] RunPersistenceResult applyPreparedRequest(
         const FermentationApplicationPreparedRequest& request);
 
@@ -186,6 +173,21 @@ class FermentationApplication {
         const FermentationUiResumeFallbackCommand& command);
 
    private:
+    struct ApplicationRuntimeEvidence {
+        CrossRolePlausibilityContext plausibility;
+        bool safetyAllowsStart{false};
+        bool safetyAllowsCooling{false};
+        bool airSensorValid{false};
+        bool coolingSensorValid{false};
+        bool productSensorValid{false};
+    };
+
+    [[nodiscard]] ApplicationRuntimeEvidence resolveRuntimeEvidence() const;
+    [[nodiscard]] bool applicationReadiness() const;
+    [[nodiscard]] static bool validSensor(
+        const device_platform::SensorQualitySnapshot& snapshot) noexcept;
+    [[nodiscard]] bool revalidatePreparedRequest(
+        FermentationApplicationPreparedRequest& request);
     template <typename Request>
     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
         Request request,
@@ -193,12 +195,12 @@ class FermentationApplication {
             std::nullopt);
     template <typename Intent>
     [[nodiscard]] FermentationApplicationRequestResult
-    prepareAdditionalEnvelope(
-        const FermentationUiCommandContext& context, const Intent& intent,
-        const FermentationApplicationOwningEvidence& evidence);
+    prepareAdditionalEnvelope(const FermentationUiCommandContext& context,
+                              const Intent& intent);
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     friend class issue_90_slice7::Harness;
 #endif
+    friend class FermentationApplicationTestAccess;
     void requireService(FaultCode faultCode,
                         bool applicationAllocationFailure = false) noexcept;
     [[nodiscard]] bool publishStandby();
@@ -266,6 +268,8 @@ class FermentationApplication {
     std::unique_ptr<RunCommandState> pendingFallbackResume_;
     std::unique_ptr<RunCommandState> pendingRecoverySource_;
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
+    CrossRolePlausibilityContext owningRuntimeEvidence_{};
+    mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
     std::optional<RecoveryDisposition> recoveryDisposition_;

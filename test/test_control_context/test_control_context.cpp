@@ -200,7 +200,7 @@ void test_live_state_projection_uses_effective_targets_and_completion_target() {
     adjustment.timestamp = {100U, std::nullopt};
     const auto decision = state.activeProgramRun->decideAdjustment(
         adjustment,
-        RunAdjustmentContext{true, true, 0U, 0U,
+        RunAdjustmentContext{true, 0U, 0U,
                              RunAdjustmentPhaseContext::BeforeFermentation});
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_TRUE(

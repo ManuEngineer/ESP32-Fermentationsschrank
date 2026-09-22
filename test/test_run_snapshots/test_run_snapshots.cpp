@@ -98,7 +98,7 @@ ProgramDocument makeCommissionedUserProgram() {
     return *document;
 }
 
-RunAdjustmentContext adjustableContext() { return {true, true, 0U, 0U}; }
+RunAdjustmentContext adjustableContext() { return {true, 0U, 0U}; }
 
 RunAdjustmentRequest targetAdjustment(double target,
                                       std::uint64_t monotonicMillis) {
@@ -416,12 +416,6 @@ void test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected() {
             run->decideAdjustment(request, adjustableContext()).status));
 
     request.confirmed = true;
-    auto unsafe = adjustableContext();
-    unsafe.safetyAllowsChange = false;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunAdjustmentStatus::SafetyRejected),
-        static_cast<int>(run->decideAdjustment(request, unsafe).status));
-
     auto completed = adjustableContext();
     completed.completedStageCount = 1U;
     TEST_ASSERT_EQUAL_INT(

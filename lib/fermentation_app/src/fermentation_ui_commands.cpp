@@ -464,8 +464,6 @@ FermentationUiCommandBridge::decidePreparedCommand(
                                          PreparedMuteMessage>) {
                 decision = ::fermentation::decideMuteMessage(current,
                                                              prepared.request);
-            } else if constexpr (std::is_same_v<Request, FaultResetRequest>) {
-                decision = ::fermentation::decideFaultReset(current, prepared);
             } else {
                 if (!request.owningPlausibility().has_value())
                     return std::nullopt;
