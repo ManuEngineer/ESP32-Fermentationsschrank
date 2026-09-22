@@ -14,7 +14,8 @@ PRIOR_FIX_VERIFICATION_RESULT=4_OF_5_CLOSED_1_BLOCKER_OPEN
 PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
-OWNER_SAFETY_SEMANTICS_DECISION_REQUIRED=YES
+OWNER_SAFETY_SEMANTICS_DECISION=PASS
+OWNER_DECISIONS_PENDING=0
 CONSUMER=ISSUE_27_PR167_AFTER_ISSUE168_MERGE
 ACTUATOR_RELEASE=NO
 ```
@@ -26,15 +27,16 @@ Plan-Commit bis zur ausdruecklichen Freigabe genau dieses Plan-Commits.
 
 Diese Revision behebt vier der fuenf Blocker aus dem Independent Plan Review
 von `PREVIOUS_REVIEWED_PLAN_SHA=2aca6ce5ce8eb1c7ba6e37cf6a1ebd27a4e4cad1` und
-praezisiert den verbleibenden Rest-Blocker aus der gezielten Fix
-Verification auf `PRIOR_FIX_VERIFICATION_PLAN_SHA=
-ef875d8e22a72135fed25a8629949cfdfc762ace` (konkrete Pre-Command-Safety-
-Semantik). Der Scope selbst (Application als alleiniger Runtime-Evidence-
-Owner vor #27) ist unveraendert richtig und bleibt bestehen.
-`OWNER_SAFETY_SEMANTICS_DECISION_REQUIRED=YES` markiert, dass vier konkrete
-Safety-Formeln (Blocker 2) noch eine Ownerentscheidung benoetigen, bevor
-`IMPLEMENTATION_AUTHORIZATION=YES` fuer die betroffenen Commands moeglich
-ist (siehe Blocker 2, Abschnitt "Offene Owner-Entscheidungen").
+integriert die vier verbindlichen Ownerentscheidungen aus dem
+Provenienzkommentar `5772310484` in den verbleibenden Rest-Blocker aus der
+gezielten Fix Verification auf
+`PRIOR_FIX_VERIFICATION_PLAN_SHA=ef875d8e22a72135fed25a8629949cfdfc762ace`
+(konkrete Pre-Command-Safety-Semantik). Der Scope selbst (Application als
+alleiniger Runtime-Evidence-Owner vor #27) ist unveraendert richtig und bleibt
+bestehen. `OWNER_SAFETY_SEMANTICS_DECISION=PASS` und
+`OWNER_DECISIONS_PENDING=0` schliessen die vier Planentscheidungen; die
+separate Ownerfreigabe dieser neuen exakten Plan-SHA bleibt erforderlich,
+bevor Implementation beginnen darf.
 
 ## Anlass und Problem
 
@@ -74,7 +76,7 @@ Vorgaengers konsumieren; #27 wird in diesem Scope nicht weiterimplementiert.
 | Sensorwerte und Qualitaet | `device_platform::TemperatureReading` (`temperature_source.hpp:41-70`) -> `device_platform::ITemperatureSource::read()` (`temperature_source.hpp:94-107`) -> `device_platform::SensorQualityPipeline::ingest()/snapshot()` (`sensor_quality_pipeline.hpp:27,44,53`) -> `device_platform::SensorQualitySnapshot` (`sensor_quality_snapshot.hpp:27`) mit `SensorQuality::{Valid,Stale,Failed}` (`sensor_quality.hpp:13-17`) | Einzige produktive Raw-/Processed-Grenze; `fermentation_app` konsumiert ausschliesslich `SensorQualitySnapshot`, niemals `TemperatureReading` direkt (Bestandspruefung: kein Treffer). Kein paralleler Handoff. |
 | Rollen und Plausibilitaet | `CrossRolePlausibilityContext` (`lib/fermentation_app/src/sensor_selection.hpp:34-42`) mit je einem `device_platform::SensorQualitySnapshot` fuer `air`/`product`/`cooling` (Z.37-39) | Bereits die kanonische, application-seitige Zusammenfuehrung der drei Rollen-Snapshots; wird in diesem Scope wiederverwendet, nicht neu erfunden. |
 | Safety und post-commit Aktorfreigabe | `ActuationInterlock::evaluate()` (`actuation_interlock.hpp:74-75`, `actuation_interlock.cpp:221-230`), `ActuationEvidence` (`actuation_interlock.hpp:39-65`) | Bleibt alleinige tatsaechliche Aktorfreigabe (`ActuatorSafetyGateStatus`); wird strikt post-commit nach Persistenz-/Apply-Handoff ausgewertet (siehe Zielvertrag, Blocker 2). |
-| Pre-Command-Safety-Evidence | Bereits vorhandene, von `ActuationEvidence` unabhaengig benoetigte Felder `safetyAllowsStart`/`safetyAllowsCooling`/`safetyAllowsChange`/Sensorvaliditaet in `ProgramStartRequest`, `ManualStartRequest`, `StopRequest`, `CompletionRequest`, `RunAdjustmentCommandRequest`, `SensorSelectionCommandRequest` (`run_commands.hpp:156-235`) | Werden aktuell extern injiziert; werden in diesem Scope stattdessen application-intern aus denselben kanonischen Quellen aufgeloest, die die Application ohnehin schon besitzt (siehe Blocker 2). |
+| Pre-Command-Safety-Evidence | Bestehende, von `ActuationEvidence` unabhaengige Felder `safetyAllowsStart`/`safetyAllowsCooling` und Sensorvaliditaet in `ProgramStartRequest`, `ManualStartRequest`, `StopRequest` und `CompletionRequest` (`run_commands.hpp:156-235`); die bisherigen Change-Signale in `RunAdjustmentCommandRequest`/`SensorSelectionCommandRequest` werden abgebaut | Start-/Cooling-Readiness wird application-intern aus den kanonischen Application-/Konfigurations-/Persistenzzustaenden aufgeloest; Sensorvaliditaet bleibt #20/#21; die Change-Entscheidungen verwenden ihre bestehenden State-/Revisions-/Fachregeln ohne Ersatz-Boolean. |
 | Konfiguration und Revisionen | `ConfigurationService`, User-Configuration-/Lease-Vertraege, `RunCommandState` und vorhandene Revisionen | Snapshot und Kommandos lesen die vorhandenen Revisionen aus dem Application-Owner. |
 | UI-Projektion | `FermentationUiProjectionInput`, `FermentationUiProjector`, `FermentationUiSnapshot` und `TemperatureView` | Projector bleibt pure Projektion; die Application liefert den kanonisch zusammengesetzten Input. |
 | Fachkommandos und Confirmation | `FermentationApplication::prepareStartProgram`, `prepareStartManualHolding`, `prepareStartManualTimed`, `prepareStop`, `prepareCompletion`, `prepareEnvelope`, `FermentationApplicationPreparedRequest` (`fermentation_ui_commands.hpp:142-187`), `confirmPrepared()` (`fermentation_application.hpp:146-147`, `.cpp:534-544`) | Caller liefern nur Intent, Werte, Bestaetigung und erwartete Revisionen; Evidence wird intern aufgeloest, bei Confirm erneut (siehe Blocker 3). |
@@ -148,9 +150,10 @@ fuer denselben Aufruf aufgeloest wird (jeder Snapshot-/Command-Aufruf bildet
 einen frischen aktuellen Kontext, siehe Einleitungssatz der bisherigen
 Zielvertrag-Beschreibung), oder (b) `SensorQuality` fuer die betroffene Rolle
 zwischenzeitlich auf `Stale`/`Failed` uebergegangen ist. Es gibt keinen
-dauerhaft gespeicherten positiven `safetyAllowsStart`, `safetyAllowsCooling`,
-`safetyAllowsChange` oder Sensorvaliditaets-Flag; diese Felder werden bei
-jeder Aufloesung neu berechnet, nie zwischengespeichert und wiederverwendet.
+dauerhaft gespeicherten positiven `safetyAllowsStart`, `safetyAllowsCooling`
+oder Sensorvaliditaets-Flag; diese Felder werden bei jeder Aufloesung neu
+berechnet, nie zwischengespeichert und wiederverwendet. Das entfernte
+`safetyAllowsChange` wird nicht durch einen gespeicherten Ersatz ersetzt.
 
 ### BLOCKER 2 – Pre-Command-Evidence getrennt von post-commit `ActuationInterlock::Allowed`
 
@@ -171,8 +174,8 @@ safetyAllowsChange` (Z.210,235).
 Getrennt werden:
 
 1. **Pre-Command-/Decision-Evidence** fuer `safetyAllowsStart`,
-   `safetyAllowsCooling`, `safetyAllowsChange`, Fault-Reset und
-   Sensorselection. Sie entsteht ausschliesslich application-intern; sie darf
+   `safetyAllowsCooling` und Sensorselection. Sie entsteht ausschliesslich
+   application-intern; sie darf
    `activationPersistenceResult` und `processActivationApplied`
    (`actuation_interlock.hpp:53-54`, nur gelesen in
    `activationEvidenceComplete()` Z.412-429, in Produktionscode nirgends
@@ -202,112 +205,181 @@ device_platform::SensorQuality::Valid` fuer die jeweilige Rolle
 akzeptierten #21-Semantik in die interne Aufloesung, keine neue Regel, und
 schliesst dieses Teilstueck vollstaendig.
 
-#### Offene Owner-Entscheidungen: `safetyAllowsStart`/`Cooling`/`Change` und Fault-Reset
+#### Ownerentscheidungen integriert: Readiness, Cooling, Change und Fault-Reset
 
-Fuer die verbleibenden vier Evidence-Arten existiert **keine** bereits
-beschlossene kanonische Berechnungsformel im Repository oder in den
-#20-/#21-/#24-Planvertraegen. Bestandspruefung (repository-first, vor
-Planfreigabe durchgefuehrt, nicht in die Implementierung verschoben):
+Die verbindliche Ownerentscheidung aus
+`OWNER_DECISION_PROVENANCE=PR-169-COMMENT-5772310484` wird in diesem Plan
+konkret umgesetzt. Sie ersetzt keine bestehende Safety-State-Machine und
+vermischt keine Pre-Command-Evidence mit der post-commit-
+`ActuationInterlock`-Freigabe.
 
-- Alle vier Felder werden aktuell ausschliesslich als reine externe
-  Passthrough-Parameter gefuehrt: `fermentation_application.cpp:281,310,347,
-  375,411,459,495` kopiert `request.safetyAllowsX = evidence.safetyAllowsX`
-  unveraendert aus dem heute extern injizierten
-  `FermentationApplicationOwningEvidence`. Es gibt keinen weiteren
-  Produktionsaufrufer, der diese Felder aus einer Formel berechnet;
-  ausserhalb davon setzen nur Diagnose-/Testharnesse
-  (`main/issue_90_slice7_harness.cpp:542,582`,
-  `main/issue_29_bringup_probe.cpp:206`) hartcodierte Werte.
-- `ActuationEvidence`s eigene Vorbedingungsfelder
-  `bootValidationComplete`, `persistenceValidated`, `plannerEvidenceValidated`
-  (`actuation_interlock.hpp:41-46`) haben **keinen einzigen** Produktions-Setter
-  im gesamten Repository; sie koennen daher aktuell keine Formel fuer
-  Boot-/Persistenz-Bereitschaft liefern, ohne eine neue Regel zu erfinden.
-- Zwei verwandte, bereits bestehende reine Praedikate existieren, sind aber
-  **nicht** unveraendert fuer den Pre-Command-Zweck ratifiziert:
-  `hasFreshConfigurationEvidence(evidence)` (`actuation_interlock.cpp:36-58`)
-  und `hasFreshSensorEvidence(evidence)` (`actuation_interlock.cpp:60-69`),
-  beide anonymous namespace. Beide sind aktuell ausschliesslich
-  Teilausdruecke der post-commit `ActuationInterlock::evaluate()`-Berechnung
-  (`activationEvidenceComplete()`, Z.412-429). Sie unveraendert auf einem
-  Pre-Command-Pfad erneut aufzurufen, wuerde demselben Praedikat zwei
-  Aufrufer mit zwei unterschiedlichen Bedeutungen geben — exakt das
-  Parallelwahrheit-Muster, das Blocker 1 bereits ausschliesst. Diese
-  Praedikate sind daher nur **Kandidaten**, keine bereits entschiedene
-  Wiederverwendung.
-- `hasFreshSensorEvidence` ist zudem `peltierSensor`-/`SensorPeltierPermission`-
-  skaliert (ein einzelner Aktorsensor), nicht rollenbezogen im Sinne von
-  `air`/`product`/`cooling` — sie kann eine cooling-spezifische Pruefung fuer
-  `safetyAllowsCooling` nicht ohne Weiteres begruenden.
-- `SensorSelectionCommandRequest.safetyAllowsChange`
-  (`run_commands.hpp:229-235`) hat einen woertlichen Kommentar, der das Feld
-  als reines additives externes Signal festlegt: *"`safetyAllowsChange` ist
-  wie `ProgramStartRequest::safetyAllowsStart` ein zusaetzliches externes
-  Pruefsignal - es ersetzt weder die interne
-  `criticalSafetyEventPending`-Invariante noch wird es von ihr ersetzt."*
-  Das legt die Rolle des Felds fest, nicht seine Berechnung.
-- `FaultResetEvaluation` (`run_commands.hpp:304-312`, Felder `allowed`,
-  `causeStillActive`, `safetyChecksPassed`, `authorizationSatisfied`,
-  `otherBlockingFaultActive`, `faultRevision`, `rejection`, konsumiert in
-  `decideFaultReset()` Z.1373-1378) wird im gesamten Repository **nirgends**
-  berechnet — nur in `fermentation_application.cpp:433,488` unveraendert
-  durchgereicht. Vollstaendige Luecke, keine Kandidaten vorhanden.
+##### `safetyAllowsStart`: schmales Application-Readiness-Gate
 
-Gemaess Auftragsvorgabe wird hier **nicht geraten**. Diese vier Punkte sind
-explizite, vor Ownerfreigabe zu klaerende Planentscheidungen und blockieren
-`IMPLEMENTATION_AUTHORIZATION=YES` fuer die betroffenen Commands, bis der
-Owner entscheidet:
+`safetyAllowsStart == true` darf die Application nur ableiten, wenn alle
+folgenden bereits vorhandenen Application-/Boot-/Lifecycle-Zustaende fuer den
+aktuellen Aufruf gueltig sind:
 
-1. **`safetyAllowsStart`**: Ist `hasFreshConfigurationEvidence(evidence)`
-   (`actuation_interlock.cpp:36-58`) als Pre-Command-Formel ratifiziert? Die
-   Funktion prueft exakt: `configurationValidated == true` ist zwingend
-   erforderlich, UND zusaetzlich mindestens eine der drei Bedingungen
-   `configurationRecoveryStatus ∈ {RuntimeReady,
-   FactoryInitializationCompleted, FactoryResetCompleted}` ODER
-   `configurationServiceMode == Operational` ODER `configurationCommitStatus
-   ∈ {Activated, NoChange}`. Falls ratifiziert: reicht diese Formel allein
-   fuer `safetyAllowsStart`, oder ist zusaetzlich eine Persistenz-/
-   Boot-Klassifikationsbedingung vorzugeben (fuer die aktuell — siehe oben —
-   keine `ActuationEvidence`-Vorbedingung produktiv befuellt wird)?
-2. **`safetyAllowsCooling`**: Welche kanonische Formel gilt, wenn das Feld
-   tatsaechlich konsultiert wird (nur bei `StopOption::AbortAndCool`
-   bzw. `CompletionRequest`-Cooling-Pfad, siehe Testvertrag unten)?
-3. **`safetyAllowsChange`**: Welche kanonische Formel gilt fuer
-   `RunAdjustmentCommandRequest`/`SensorSelectionCommandRequest`, zusaetzlich
-   zur bereits bestehenden internen `criticalSafetyEventPending`-Invariante?
-4. **`FaultResetEvaluation`**: Aus welchen bestehenden kanonischen Zustaenden
-   werden `allowed`, `causeStillActive`, `safetyChecksPassed`,
-   `authorizationSatisfied`, `otherBlockingFaultActive` und `rejection`
-   application-intern bestimmt?
+1. `FermentationApplication::lifecycleState_` ist
+   `ApplicationLifecycleState::Ready`; ein Initializing- oder
+   `ServiceRequired`-Zustand ist fail-closed.
+2. Der bestehende Konfigurationsowner ist vertrauenswuerdig: die
+   `ConfigurationRecoveryService`-Boot-/Revalidierung hat keinen
+   `ConfigurationRecoveryStatus`-Fehler geliefert und der bestehende
+   `ConfigurationService`-Runtime-Lease ist fuer die aktuelle
+   `StorageEpoch` erteilt. Dazu gehoeren die bereits vorhandenen positiven
+   Runtime-/Factory-Handoff-Zustaende (`RuntimeReady`,
+   `FactoryInitializationCompleted`, `FactoryResetCompleted`), nicht jedoch
+   `ConfigurationUnavailable`, Integritaets-, Read-, Write- oder
+   Indeterminate-Zustaende.
+3. Der bestehende `RunPersistenceCoordinator` ist fuer den aktuellen
+   `StorageEpoch` vertrauenswuerdig: `persistenceLoadStatus_` ist bekannt und
+   nicht Safe-Boot/unklar, `loadDisposition_` ist nicht
+   `RunLoadDisposition::SafeBoot`, und der Coordinator befindet sich in einem
+   bestehenden committed/trusted Zustand (`ReadyEmpty`, `Ready` oder
+   `LoadedActiveRun`). `Uninitialized`, `Busy`, `BlockedIndeterminate`,
+   `FallbackRecoveryPending` und `PersistenceCommittedApplyFailed` sind
+   nicht ausreichend.
+4. Im aktuellen `RunCommandState` besteht kein offener kritischer
+   Safety-Zustand, der normalen Betrieb blockiert; insbesondere bleibt die
+   bestehende `criticalSafetyEventPending`-Invariante wirksam.
 
-Bis diese vier Punkte geklaert sind, bleibt die Umsetzung der betroffenen
-`prepare*`-Pfade (Start, Cooling-Aktivierung, Change, Fault-Reset,
-Sensorselection) angehalten; die uebrigen Teile dieses Scopes (Blocker 1,
-3, 4, Sensorvaliditaet oben) sind davon unabhaengig umsetzbar.
+Dieses Readiness-Gate enthaelt ausschliesslich Application-, Boot-,
+Konfigurations-, Run-Persistenz- und kritische Safety-Bereitschaft. Es
+enthaelt **nicht** Sensorrollen/-qualitaet (#20/#21), Planner-/Aktorfreigabe,
+`activationPersistenceResult`, `processActivationApplied`, konkrete
+thermische/#35-Grenzen oder produktives
+`ActuatorSafetyGateStatus::Allowed` aus #106. Die bestehenden
+`airSensorValid`, `coolingSensorValid` und `productSensorValid` werden
+separat aus `CrossRolePlausibilityContext` geprueft.
+
+Die vorhandenen Zustands- und Lease-Owner werden fuer die Ableitung
+verwendet; falls die laufende Application einen Zustand nur ueber eine
+bestehende Owner-Methode abfragen kann, wird diese Methode verwendet. Es
+werden keine neuen globalen Flags, keine parallele Readiness-Wahrheit und
+keine neue Safety-State-Machine eingefuehrt.
+
+##### `safetyAllowsCooling`: gleiche Grundbereitschaft, nur fuer Cooling-Start
+
+`safetyAllowsCooling` verwendet exakt dieselbe grundlegende Application-
+Readiness aus dem vorherigen Abschnitt und wird nur ausgewertet, wenn die
+angeforderte Mutation tatsaechlich einen neuen Cooling-Run startet:
+
+- `StopOption::AbortAndCool` konsultiert das Gate;
+- Completion mit `startCooling=true` konsultiert das Gate;
+- `StopOption::AbortAndTurnOff` darf niemals von diesem Gate abhaengen;
+- Completion ohne Cooling darf niemals von diesem Gate abhaengen.
+
+Air-/Cooling-Sensorvaliditaet bleibt separat #20/#21. Konkrete thermische
+Grenzwerte bleiben #35; eine produktive Aktorfreigabe bleibt #106. Das Gate
+ist nur Pre-Command-Readiness und kein Ersatz fuer den post-commit-
+`ActuationInterlock`.
+
+##### `safetyAllowsChange`: vollstaendiger Abbau des generischen Signals
+
+Das generische externe Zusatzsignal `safetyAllowsChange` wird entfernt; es
+gibt keine Ersatz-Boolean und keine neue generische Change-Safety-Policy.
+Massgeblich bleiben die bereits bestehenden Regeln:
+
+- `RunAdjustment`-State-, Revisions- und Fachregeln in
+  `ActiveRun::decideAdjustment()`;
+- die #21-Sensorselection-Matrix und ihr
+  `criticalSafetyEventPending`-Verhalten;
+- aktuelle Plausibilitaets-/Sensorevidenz;
+- Confirmation-, Persistenz- und Exactly-once-Semantik.
+
+Repository-first direkt betroffene Produktionsstellen fuer den gezielten
+Vertragsabbau sind `FermentationApplicationOwningEvidence` und die
+Passthrough-Zeilen in `fermentation_application.{hpp,cpp}`,
+`RunAdjustmentCommandRequest`/`SensorSelectionCommandRequest` und die
+zugehoerigen Entscheidungen in `run_commands.{hpp,cpp}` sowie der
+`FermentationUiCommandBridge` in `fermentation_ui_commands.{hpp,cpp}`.
+`RunAdjustmentContext::safetyAllowsChange` in `run_snapshot.hpp/.cpp` ist
+ebenfalls kein neuer Owner; der bestehende interne Aufruf wird auf die
+kanonischen Run-Adjustment-State-/Fachregeln reduziert, ohne eine neue
+Boolean einzufuehren. Die bestehende `criticalSafetyEventPending`-Matrix
+wird nicht abgeschwaecht.
+
+Direkt betroffene native Tests/Harnessstellen sind die
+`safetyAllowsChange`-Fixtures und Erwartungen in
+`test/test_run_commands/test_run_commands.cpp`,
+`test/test_run_snapshots/test_run_snapshots.cpp`,
+`test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`,
+`test/test_issue144_run_identity/test_issue144_run_identity.cpp`,
+`test/test_local_touch_ui/test_local_touch_ui.cpp` und
+`test/test_fermentation_ui_commands/test_fermentation_ui_commands.cpp`.
+Weitere Treffer in den bestehenden NVS-/Smoke-Harnesses werden nur
+angepasst, wenn sie die geaenderte Produktionssignatur direkt kompilieren;
+keine Testhilfe darf ein externes Safety-Signal als neue Wahrheit behalten.
+
+##### Fault-Reset: kein generischer R1-Fault-Clearer
+
+Der bestehende generische `FaultResetEvaluation`-/`FaultResetRequest`-
+Vertrag ist fuer R1 redundant: Im Repository wird keine kanonische
+Berechnung seiner Felder vorgenommen. Er wird daher aus der
+Application-/UI-Command-Grenze und dem generischen Run-Command-Vertrag
+entfernt, statt `allowed`, `authorizationSatisfied` oder eine neue
+PIN-/Berechtigungslogik zu erfinden. Betroffen sind
+`fermentation_application.{hpp,cpp}`, `run_commands.{hpp,cpp}`,
+`fermentation_ui_commands.{hpp,cpp}` sowie der bestehende
+`FermentationUiResetFaultIntent`-/Touch-Workspace-Bridgepfad und die direkt
+zugehoerigen nativen Tests.
+
+Der einzige R1-Resetpfad bleibt der bereits kanonische Current-Boot-Request-
+Watchdog-Ownerpfad:
+
+`ActuationInterlock::resetRequestWatchdog(...)` prueft frische gueltige
+`ActuationEvidence` und ruft ausschliesslich
+`ActuatorPlanner::applyExternalWatchdogFaultReset(...)` auf. Nur dieser
+Ownerpfad darf den Watchdog-Fault mutieren. Configuration-, Persistence- und
+Sensorfehler werden ausschliesslich durch ihre Producer-/Revalidierungs-
+pfade gesund; Ack/Mute aendert keine Safetyfreigabe. Ein UI-/Command-Bridge-
+vertrag bleibt nur erhalten, wenn er technisch fuer genau diesen bestehenden
+Watchdog-Ownerpfad benoetigt wird; dann enthaelt er keine generische
+`FaultResetEvaluation`, kein Service-PIN und keinen zweiten Watchdog-
+Resetpfad. `authorizationSatisfied` wird nicht als neue
+PIN-/Berechtigungsplattform interpretiert.
+
+Die bestehenden Watchdog-Tests in
+`test/test_actuation_interlock/test_actuation_interlock.cpp` und
+`test/test_actuator_planner/test_actuator_planner.cpp` werden als Owner-
+Regression erweitert bzw. direkt verwendet. Generische
+`decideFaultReset()`-Tests werden entfernt oder auf die bestehende
+Watchdog-Semantik umgestellt; kein generischer Fault-Clearer bleibt als
+scheinbar produktiver R1-Pfad bestehen.
+
+Damit sind die vier Ownerentscheidungen vollständig in den Plan übersetzt;
+die betroffenen `prepare*`-Pfade sind nicht mehr wegen ungeklärter
+Owner-Semantik blockiert. Ihre Umsetzung bleibt dennoch bis zur Freigabe
+dieser neuen exakten Plan-SHA ausgeschlossen.
 
 Direkter Testvertrag (soweit bereits durch bestehende Semantik entschieden):
 
 - Ein fachlich zulaessiger Fresh Start darf vorbereitet und entschieden
-  werden (`decideProgramStart()` liefert eine positive Entscheidung),
-  waehrend die post-commit `ActuationInterlock`-Aktorfreigabe noch
-  `Unresolved` ist. Reale Freigabe entsteht erst nach Persistenz/Apply/
-  Interlock. `ACTUATOR_RELEASE=NO` bleibt davon unberuehrt, da dieser Scope
-  keine Aktorfreigabe einfuehrt.
+  werden (`decideProgramStart()` liefert eine positive Entscheidung), wenn
+  das neue Readiness-Gate positiv ist, waehrend die post-commit
+  `ActuationInterlock`-Aktorfreigabe noch `Unresolved` ist. Reale Freigabe
+  entsteht erst nach Persistenz/Apply/Interlock. `ACTUATOR_RELEASE=NO` bleibt
+  davon unberuehrt, da dieser Scope keine Aktorfreigabe einfuehrt.
+- Positive und negative Application-Readiness werden fuer Start und einen
+  tatsaechlichen Cooling-Start geprueft. `AbortAndCool` und Completion mit
+  `startCooling=true` weisen bei fehlender Readiness ab.
 - Ein sicherer Stop/Completion ohne Cooling (`StopOption` ungleich
   `AbortAndCool` bzw. ohne `startCooling`) konsultiert `safetyAllowsCooling`
   nicht und wird dadurch nicht blockiert (`decideStop()`,
-  `run_commands.cpp:970-973`: `safetyAllowsCooling` wird ausschliesslich
-  innerhalb `if (request.option == StopOption::AbortAndCool)` geprueft;
-  analoger Completion-Pfad `run_commands.cpp:1061`) — dieser Testfall ist
-  unabhaengig von den vier offenen Owner-Entscheidungen bereits heute
-  pruefbar.
+  `run_commands.cpp:970-973`, und der analoge Completion-Pfad
+  `run_commands.cpp:1061`).
 - `airSensorValid`/`coolingSensorValid`/`productSensorValid` je Rolle positiv
   und einzeln negativ (`SensorQuality::Valid` vs. `Stale`/`Failed`) fuer
   Start; `air`/`cooling` sind Pflicht, `product` beeinflusst nur
   `resolveProgramStartSensorMode()`.
-- Zeilen fuer `safetyAllowsStart`/`Cooling`/`Change`/`FaultResetEvaluation`
-  selbst werden erst nach der jeweiligen Owner-Entscheidung ergaenzt, nicht
-  als Platzhalter vorab spezifiziert.
+- Nach Entfernung von `safetyAllowsChange` bleiben Run-Adjustment-State-/
+  Revisionsregeln und die #21-Sensorselection-Matrix mit
+  `criticalSafetyEventPending` aktiv; kein entfernter Boolwert darf eine
+  Mutation wieder freigeben.
+- Der generische Fault-Reset-Command ist nicht mehr Bestandteil der
+  Application-/UI-Grenze. Der bestehende Watchdog-Reset wird mit frischer
+  gueltiger Evidence positiv und mit fehlender/staler/inkompatibler Evidence
+  fail-closed geprueft.
 
 ### BLOCKER 3 – Confirmation validiert aktuelle Evidence erneut
 
@@ -338,8 +410,8 @@ Die Revision legt fest:
 - Ist die erneut aufgeloeste Evidence stale, fehlend oder gegenueber dem
   Vorbereitungszeitpunkt verschlechtert (z. B. `SensorQuality` fuer eine
   beteiligte Rolle von `Valid` auf `Stale`/`Failed` gewechselt, ein zuvor
-  erfuellbares `safetyAllowsStart`/`safetyAllowsCooling`/`safetyAllowsChange`
-  nicht mehr erfuellbar, oder der betroffene Konfigurations-/
+   erfuellbares `safetyAllowsStart`/`safetyAllowsCooling` nicht mehr
+   erfuellbar, oder der betroffene Konfigurations-/
   Persistenzzustand nicht mehr gueltig), wird die Confirmation typisiert
   abgelehnt, ohne den vorbereiteten Kandidaten, die Command-ID oder `runId`
   zu mutieren. Fruehere positive Evidence aus der Vorbereitungsphase ist
@@ -443,14 +515,14 @@ nur zulaessig, wenn ein bereits bestehender abstrakter Temperatur-/Qualitaets-
 Vertrag konkret in den Application-Handoff eingebunden werden muss; neue
 fermentation-spezifische Ports gehoeren nicht dorthin.
 
-Die konkrete Berechnung von `safetyAllowsStart`, `safetyAllowsCooling`,
-`safetyAllowsChange` und `FaultResetEvaluation` (Blocker 2, "Offene
-Owner-Entscheidungen") ist **nicht** Teil des mit dieser Plan-SHA
-freigebbaren Implementierungsumfangs, solange die zugehoerige
-Ownerentscheidung fehlt. Die uebrige Application-interne
-Evidence-Aufloesung — einschliesslich der bereits entschiedenen
-Sensorvaliditaet (`airSensorValid`/`coolingSensorValid`/`productSensorValid`
-aus `CrossRolePlausibilityContext`) — ist davon unabhaengig umsetzbar.
+Die konkrete Berechnung von `safetyAllowsStart` und
+`safetyAllowsCooling` folgt verbindlich dem Readiness-Vertrag dieses Plans;
+`safetyAllowsChange` und der generische `FaultResetEvaluation`-Vertrag werden
+entfernt. Die Application-interne Evidence-Aufloesung — einschliesslich der
+bereits entschiedenen Sensorvaliditaet
+(`airSensorValid`/`coolingSensorValid`/`productSensorValid` aus
+`CrossRolePlausibilityContext`) — ist damit vollstaendig spezifiziert. Die
+post-commit-Aktorfreigabe bleibt trotzdem ausserhalb dieses Scopes.
 
 ## Nicht im Scope
 
@@ -497,10 +569,10 @@ Parallelvertrag einfuehren:
    werden je Rolle positiv und einzeln negativ geprueft (`air`/`cooling`
    Pflicht, `product` nur fuer `resolveProgramStartSensorMode()`). Ein
    sicherer Stop/Completion ohne Cooling konsultiert `safetyAllowsCooling`
-   nicht und wird dadurch nicht blockiert. Testzeilen fuer die konkrete
-   Formel von `safetyAllowsStart`/`Cooling`/`Change`/`FaultResetEvaluation`
-   folgen erst nach den vier Owner-Entscheidungen aus Blocker 2 und sind
-   hier bewusst nicht vorab spezifiziert.
+   nicht und wird dadurch nicht blockiert. Positive und negative
+   Application-Readiness fuer Start und Cooling werden getrennt geprueft;
+   `AbortAndTurnOff` und Completion ohne Cooling bleiben bei fehlender
+   Cooling-Readiness zulaessig.
 5. `Prepare gueltig -> Evidence stale/failed vor Confirm -> Confirm ->
    typisierte Ablehnung ohne Mutation, Command-ID/`runId` unveraendert`
    (Blocker 3).
@@ -588,13 +660,13 @@ eindeutige, bisher unbenutzte Kennung. Technischer Scope bleibt unveraendert.
 5. Danach gelten fuer #27 wieder dessen eigene unabhängige Review-,
    Pre-Ready-, CI- und Merge-Gates.
 
-## Offene Entscheidungen vor Umsetzung
+## Bedingungen vor Umsetzung
 
-- Die vier in Blocker 2 unter "Offene Owner-Entscheidungen" benannten Punkte
-  (`safetyAllowsStart`, `safetyAllowsCooling`, `safetyAllowsChange`,
-  `FaultResetEvaluation`) sind vor Ownerfreigabe zu klaeren; sie sind nicht
-  Implementierungsentscheidungen und werden nicht in die Umsetzung
-  verschoben (siehe `OWNER_SAFETY_SEMANTICS_DECISION_REQUIRED` unten).
+- Die vier Ownerentscheidungen sind durch
+  `OWNER_SAFETY_SEMANTICS_DECISION=PASS`,
+  `OWNER_DECISIONS_PENDING=0` und Provenienzkommentar `5772310484` in dieser
+  Planrevision geschlossen. Die exakte neue Plan-SHA benoetigt weiterhin die
+  separate Owner-Planfreigabe.
 - Die Implementierung muss zuerst bestaetigen, dass
   `FermentationApplication::uiSnapshot()` und die bestehende interne
   Application-Komposition ohne neue allgemeine Provider-/Event-Infrastruktur
@@ -619,7 +691,9 @@ Nach dieser Planrevision:
 ```text
 PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
 IMPLEMENTATION_AUTHORIZATION=NO
-OWNER_SAFETY_SEMANTICS_DECISION_REQUIRED=YES
+OWNER_SAFETY_SEMANTICS_DECISION=PASS
+OWNER_DECISIONS_PENDING=0
+OWNER_PLAN_APPROVAL=NO
 ACTUATOR_RELEASE=NO
 OWNER_PLAN_APPROVAL_REQUIRED=YES
 ```
