@@ -1,9 +1,11 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -19,6 +21,7 @@
 #include "fermentation_ui_commands.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "run_persistence_coordinator.hpp"
+#include "run_commands.hpp"
 #include "sensor_quality_config.hpp"
 #include "sensor_quality_pipeline.hpp"
 #include "state_store.hpp"
@@ -62,6 +65,37 @@ class FermentationApplicationTestAccess {
     static RunPersistenceCoordinator& runPersistenceCoordinator(
         FermentationApplication& application) {
         return *application.runPersistenceCoordinator_;
+    }
+
+    static std::uint32_t stateSequence(
+        const FermentationApplication& application) {
+        return application.runtimeRunState_->processState.transitionSequence;
+    }
+
+    static std::optional<fermentation::CommandDecision> decidePrepared(
+        const fermentation::FermentationApplication& application,
+        const fermentation::FermentationApplicationPreparedRequest& request) {
+        if (application.runtimeRunState_ == nullptr) {
+            return std::nullopt;
+        }
+        return std::visit(
+            [&application](const auto& prepared)
+                -> std::optional<fermentation::CommandDecision> {
+                using Request = std::decay_t<decltype(prepared)>;
+                if constexpr (std::is_same_v<
+                                  Request, fermentation::ProgramStartRequest>) {
+                    return fermentation::decideProgramStart(
+                        *application.runtimeRunState_, prepared);
+                } else if constexpr (std::is_same_v<
+                                         Request,
+                                         fermentation::ManualStartRequest>) {
+                    return fermentation::decideManualStart(
+                        *application.runtimeRunState_, prepared);
+                } else {
+                    return std::nullopt;
+                }
+            },
+            request.storage());
     }
 
     static void setLifecycleState(FermentationApplication& application,
@@ -480,6 +514,174 @@ void test_confirmation_preserves_canonical_product_selection_paths() {
                              confirmed.request->commandId());
     TEST_ASSERT_EQUAL_STRING(prepared.request->runId()->c_str(),
                              confirmed.request->runId()->c_str());
+}
+
+std::optional<fermentation::ProgramCatalogRevision>
+installRunnableStoredProductProgram(
+    fermentation::FermentationApplication& application, const char* programId) {
+    auto& service =
+        fermentation::FermentationApplicationTestAccess::configurationService(
+            application);
+    auto build = service.beginPreview();
+    if (build.status != fermentation::ConfigurationPreviewStatus::Success ||
+        !build.lease.valid()) {
+        return std::nullopt;
+    }
+    auto& programs = build.lease.programCatalog().programs;
+    const auto found = std::find_if(
+        programs.begin(), programs.end(),
+        [programId](const fermentation::ProgramDocument& document) {
+            return document.program.id == programId;
+        });
+    if (found == programs.end()) {
+        return std::nullopt;
+    }
+    auto& program = found->program;
+    if (program.fermentationStages.empty()) {
+        return std::nullopt;
+    }
+    program.sensorPreference =
+        fermentation::SensorPreference::ProductIfAvailableElseAir;
+    program.productSensorFailure.fallbackDelaySeconds = 30U;
+    program.fermentationStages.front().targetTemperatureCelsius = 30.0;
+    program.fermentationStages.front().durationMinutes = 60U;
+    program.targetQualification.bandCelsius = 0.5;
+    program.targetQualification.durationMinutes = 10U;
+    program.maximumTargetReachMinutes = 180U;
+    if (program.preheat) {
+        program.maximumProductWaitMinutes = 30U;
+    }
+    if (program.completion.mode !=
+        fermentation::CompletionMode::FinishWithoutCooling) {
+        program.completion.coolingTargetCelsius = 8.0;
+    }
+
+    const auto installed = service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    if (installed.status != fermentation::ConfigurationPreviewStatus::Success ||
+        !installed.preview.has_value()) {
+        return std::nullopt;
+    }
+    const auto committed = service.confirmPreview(installed.preview->handle);
+    if (committed.status !=
+        fermentation::ConfigurationCommitStatus::Activated) {
+        return std::nullopt;
+    }
+    const auto runtime = service.acquireRuntime();
+    if (runtime.status !=
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    return runtime.lease.get().programCatalogRevision();
+}
+
+void test_application_product_paths_revalidate_before_canonical_decision() {
+    {
+        device_platform::DevicePlatform platform;
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        fermentation::FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+        const auto revision =
+            installRunnableStoredProductProgram(application, "yogurt-mild");
+        TEST_ASSERT_TRUE(revision.has_value());
+
+        auto productStale = owningEvidence();
+        productStale.product.quality = device_platform::SensorQuality::Stale;
+        application.publishOwningRuntimeEvidence(productStale);
+
+        fermentation::FermentationUiCommandContext context;
+        context.expected.expectedStateSequence =
+            fermentation::FermentationApplicationTestAccess::stateSequence(
+                application);
+        context.expected.expectedRunRevision = 0U;
+        context.expected.expectedProgramCatalogRevision = *revision;
+        fermentation::FermentationUiStartProgramIntent intent;
+        intent.candidate.programId = "yogurt-mild";
+        intent.candidate.sensorMode = fermentation::RunSensorMode::Product;
+        const auto prepared = application.prepareStartProgram(context, intent);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(prepared.status));
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+
+        const auto confirmed = application.confirmPrepared(prepared);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(confirmed.status));
+        TEST_ASSERT_TRUE(confirmed.request.has_value());
+        const auto decision =
+            fermentation::FermentationApplicationTestAccess::decidePrepared(
+                application, *confirmed.request);
+        TEST_ASSERT_TRUE(decision.has_value());
+        TEST_ASSERT_TRUE(decision->proposed());
+        TEST_ASSERT_TRUE(decision->after.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RunSensorMode::Air),
+            static_cast<int>(*decision->after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::SensorSelectionPhase::AirFallbackActive),
+            static_cast<int>(decision->after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_TRUE(decision->startSensorSelectionNotice.has_value());
+    }
+
+    {
+        device_platform::DevicePlatform platform;
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        fermentation::FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+
+        auto productFailed = owningEvidence();
+        productFailed.product.quality = device_platform::SensorQuality::Failed;
+        application.publishOwningRuntimeEvidence(productFailed);
+
+        fermentation::FermentationUiCommandContext context;
+        context.expected.expectedStateSequence =
+            fermentation::FermentationApplicationTestAccess::stateSequence(
+                application);
+        context.expected.expectedRunRevision = 0U;
+        fermentation::FermentationUiStartManualHoldingIntent intent;
+        intent.plan.targetTemperatureCelsius = 30.0;
+        intent.plan.sensorMode = fermentation::RunSensorMode::Product;
+        intent.plan.qualificationBandCelsius = 0.5;
+        intent.plan.qualificationDurationMinutes = 10U;
+        intent.plan.maximumTargetReachMinutes = 180U;
+        const auto prepared =
+            application.prepareStartManualHolding(context, intent);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(prepared.status));
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+
+        const auto confirmed = application.confirmPrepared(prepared);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(confirmed.status));
+        TEST_ASSERT_TRUE(confirmed.request.has_value());
+        const auto decision =
+            fermentation::FermentationApplicationTestAccess::decidePrepared(
+                application, *confirmed.request);
+        TEST_ASSERT_TRUE(decision.has_value());
+        TEST_ASSERT_TRUE(decision->proposed());
+        TEST_ASSERT_TRUE(decision->after.activeManualRun.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::SensorSelectionPhase::UserDecisionRequired),
+            static_cast<int>(decision->after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::SensorPeltierPermission::Blocked),
+            static_cast<int>(
+                decision->after.sensorSelectionRuntime.permission));
+    }
 }
 
 void test_pipeline_handoff_drives_application_snapshot_and_confirmation() {
@@ -1038,6 +1240,8 @@ int main(int, char**) {
     RUN_TEST(test_application_projects_default_runtime_evidence_fail_closed);
     RUN_TEST(test_application_readiness_rejects_each_plan_condition);
     RUN_TEST(test_confirmation_preserves_canonical_product_selection_paths);
+    RUN_TEST(
+        test_application_product_paths_revalidate_before_canonical_decision);
     RUN_TEST(
         test_pipeline_handoff_drives_application_snapshot_and_confirmation);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);

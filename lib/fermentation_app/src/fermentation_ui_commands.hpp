@@ -13,6 +13,7 @@
 namespace fermentation {
 
 class FermentationApplication;
+class FermentationApplicationTestAccess;
 
 enum class FermentationUiAction : std::uint8_t {
     StartProgram,
@@ -181,6 +182,7 @@ class FermentationApplicationPreparedRequest {
 
     friend class FermentationApplication;
     friend class FermentationUiCommandBridge;
+    friend class FermentationApplicationTestAccess;
 
     Storage storage_;
     std::optional<CrossRolePlausibilityContext> owningPlausibility_;
