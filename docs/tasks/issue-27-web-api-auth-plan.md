@@ -29,6 +29,8 @@ PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
 IMPLEMENTATION_STATUS=PAUSED_PLAN_REVALIDATION
 EXISTING_IMPLEMENTATION_PRESENT=YES
+EXISTING_WEB_UI=LOGIN_OVERVIEW_NETWORK_SERVICE_PASSWORD_ALERTS_LOGOUT_BOUNDED_POLLING_BASE
+REMAINING_WEB_UI_DELTA=OWNER_APPROVAL_REQUIRED
 REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ESP_IDF_VERSION=v6.1.0
 ESP_IDF_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
@@ -931,6 +933,31 @@ Teile sind in PR #167 bereits vorhanden und bleiben unverändert erhalten:
   Application-/UI-Regressionen sowie die zugehörigen Dokumentations- und
   Lockstände.
 
+Die aktuell ausgelieferten compile-time-Assets bilden jedoch noch nicht den
+vollständigen §6.2-/§6.3-R1-Scope ab. Der verifizierte Bestand
+`EXISTING_WEB_UI` umfasst derzeit:
+
+- Login/Logout sowie die bestehende DE/EN/ES-Sprachumschaltung;
+- eine read-only-Übersichtsprojektion aus dem vorhandenen Snapshot;
+- Netzwerkmoduswahl und explizite WLAN-Rekonfiguration über die bestehenden
+  Routen;
+- Service-PIN-Unlock, Lease-Status und Passwortmodus;
+- die vorhandene Meldungsfläche ohne vollständige Acknowledge-/Mute-Bedienung;
+- den vorhandenen bounded Polling-/Offline-/Stale-Grundmechanismus.
+
+Die ausgelieferten Assets konsumieren den neuen `/internal/ui/run`-Endpoint
+noch nicht. Damit bleibt als fachlicher Web-Scope
+`REMAINING_WEB_UI_DELTA` offen: Übersicht mit Start/Manuell, Programme mit
+den bestehenden Preview-/Commitpfaden, manueller Betrieb, vollständige
+Meldungs-/Protokollaktionen, Einstellungen, read-only Diagnose, Service mit
+sichtbarer Lease-/Timeout-Bestätigung, System-/Recovery-/Build-Informationen
+sowie die aktuelle Laufansicht mit Ist/Soll, Qualitätslücken,
+Ereignismarkern und dem vertraglich begrenzten Polling-/Reconnect-Verhalten.
+Diese Lücke wird ausschließlich mit den bestehenden
+`uiSnapshot()`-/typed-Command-/Preview-/Commitpfaden und den kleinen
+compile-time HTML/CSS/JavaScript-Assets geschlossen; es entsteht kein zweiter
+UI-Kern, kein Framework, kein WebSocket/SSE und kein LittleFS-Assetmodell.
+
 PR #169 hat innerhalb dieses Bestands die kanonische Application-Grenze
 ersetzt bzw. bestätigt: `uiSnapshot()` projektiert aus Application-owned
 Quellen, `confirmPrepared()` revalidiert gegen aktuelle Evidence fail-closed,
@@ -1000,6 +1027,19 @@ Nach Freigabe dieser Plan-SHA ist ausschließlich Folgendes noch auszuführen:
   `RunPersistenceResult`-Durability, `PersistenceIndeterminate`,
   `PersistenceCommittedApplyFailed`, Recovery-/Blocked-Zustände und fehlende
   Aktorfreigabe nicht in einen HTTP-Erfolg umgedeutet werden;
+- `REMAINING_WEB_UI_DELTA` mit den vorhandenen compile-time-Assets umsetzen:
+  Übersicht mit Start/Manuell, Programme über die bestehenden
+  Preview-/Commitpfade, manueller Betrieb, Acknowledge/Mute für Meldungen,
+  Einstellungen, read-only Diagnose, Service-Lease/Timeout und Bestätigung,
+  System-/Recovery-/Build-Informationen sowie die aktuelle Laufansicht mit
+  Ist/Soll, Qualitätslücken und Ereignismarkern;
+- die Assets müssen `/internal/ui/run` für die bestehenden Start-, Stop-,
+  Completion-, Adjustment-, Acknowledge- und Mute-Intents tatsächlich über
+  `prepare*()`/`confirmPrepared()`/`applyPreparedRequest()` verwenden;
+- bounded Polling, sichtbarer Offline-/Stale-Zustand, Reconnect-Snapshot und
+  der aktuelle Laufchart werden aus `FermentationApplication::uiSnapshot()`
+  und den vorhandenen Projektionen konsumiert; Browsercode erfindet keine
+  Runtime-, Sensor-, Safety- oder Persistenz-Evidence;
 - ausschließlich die noch fehlende integrierte ArduinoJson-/Firmware-
   Ressourcen-Evidence sowie die im Plan offenen KDF-/Hardware-/Browser-
   Nachweise erheben; keine bereits bestandenen Auth-/Session-/Codec-Verträge
@@ -1015,8 +1055,8 @@ Der verbleibende Delta-Schnitt muss mindestens nachweisen:
 - Web-Intent erreicht ausschließlich die Application-Prepare-/Confirm-/Apply-
   Kette; externe Evidence-Injektion bleibt unmöglich;
 - `prepareEnvelope(...) -> applyPreparedRequest(unconfirmed)` mit einem
-  vorhandenen Requesttyp, dessen Domain-Decider nicht selbst generell das
-  Envelope-Confirmation-Bit prüft (z. B. Run-Adjustment oder Acknowledge/Mute),
+  vorhandenen `AcknowledgeMessage`- oder `MuteMessage`-Requesttyp, dessen
+  Domain-Decider nicht selbst generell das Envelope-Confirmation-Bit prüft,
   liefert den typisierten abgelehnten Outcome, ruft keine Domain-Decision und
   keine Persistenz auf und lässt `RunCommandState` unverändert;
 - `prepareEnvelope(...) -> confirmPrepared(...) ->
@@ -1030,6 +1070,13 @@ Der verbleibende Delta-Schnitt muss mindestens nachweisen:
 - `PersistenceIndeterminate`, `PersistenceCommittedApplyFailed`,
   `RecoveryPending`, `Blocked` und fehlende Runtime-/Aktorfreigabe bleiben
   fail-closed und werden korrekt auf den internen HTTP-Outcome abgebildet;
+- ein produktnaher nativer Route-/Adaptertest ruft den internen
+  `/internal/ui/run`-Pfad mit bounded Web-DTO, Session-/CSRF-/Mutation-Seq-
+  Kontext und erwarteten Revisionen auf und weist die vollständige Kette
+  `Web-Intent -> prepare -> confirm -> apply -> RunPersistenceCoordinator`
+  nach; er deckt zusätzlich Replay ohne zweite Mutation, gleiche Sequenz mit
+  anderem Payload, fehlende Runtime-/Aktorfreigabe sowie die Outcome-Status
+  für Stale, Indeterminate, CommittedApplyFailed, Recovery und Blocked ab;
 - Startpfade `ProgramStartRequest`/Stored-Program und `ManualStartRequest`
   bleiben über die bestehende Decision-Matrix Eigentum der Domain, ohne
   Fallbackregeln im Web zu duplizieren.
@@ -1070,7 +1117,8 @@ führen:
 | API-Grenze | keine offizielle externe Write-Operation in OpenAPI-/Route-/Dokumentationsfläche |
 | Live | 2-s/10-s Polling, Backoff, Offline/Stale, vollständiger Snapshot nach Reconnect |
 | Chart | Ist/Soll, Einheit/Zeitbasis, Qualitätslücken, Phasen-/Warn-/Unterbrechungsmarker |
-| UI | mobile/tablet/desktop, DE/EN/ES, englischer dann technischer Fallback, kein Horizontalzwang |
+| UI | mobile/tablet/desktop, Übersicht mit Start/Manuell, Programme, manueller Betrieb, Meldungen/Acknowledge/Mute, Einstellungen, Diagnose, Service-Lease/Bestätigung, System/Recovery/Build, DE/EN/ES, englischer dann technischer Fallback, kein Horizontalzwang |
+| Web-Route-Integration | `/internal/ui/run` wird aus den compile-time-Assets mit bounded DTO, Session-/CSRF-/Mutation-Seq-Schutz und aktuellen Revisionen aufgerufen; confirmed/unconfirmed, stale, Replay, Indeterminate, CommittedApplyFailed, Recovery und Blocked werden end-to-end truthful abgebildet |
 | Netzwerk | #164 Setup-Routen gewinnen im Setup-Flow; kein zweiter Server/Store/SSID-/Passwortpfad |
 | Isolation | Browserabbruch, WLANverlust, langsame/zu große Anfrage beeinflusst Prozess/Safety nicht |
 | Ressourcen | Flash, statischer RAM, freier/minimaler Heap, größter Block, Pollinglast, Jitter, Watchdog, max. 4 Sessions |
@@ -1105,7 +1153,9 @@ PSRAM-, OTA-, Cloud-, Filesystem- oder Frameworkausweitung.
 1. Planfreigabe der exakten `PLAN_SHA`.
 2. Implementierungs-Dependency-/KDF-/JSON-Revalidierung gegen ESP-IDF 6.1;
    bei materiellem Widerspruch Planrevision vor Code.
-3. Bounded DTO-/Route-/Asset-Prototyp und native Auth-/Policy-Tests.
+3. Bounded DTO-/Route-/Asset-Prototyp sowie die produktnahe native
+   Web-Route-/Adapter-Regression; Web-UI-Assets konsumieren danach denselben
+   bestehenden Command-/Snapshot-Vertrag.
 4. Authentication-Record-/Readback-/Lockout-Schnitt mit nativen Cutpoint-
    Tests; erst danach Web-Mutation.
 5. gemeinsamer Snapshot-/Command-Adapter und read-only API.
@@ -1132,7 +1182,10 @@ implementierte PR-167-Bestand:
    Status-/Provenienz-Metadaten;
 3. die explizite Entscheidung für `applyPreparedRequest()` als schmalen
    Application-Owner und die dazugehörige verbleibende Regression-/Outcome-
-   Matrix.
+   Matrix;
+4. die repository-first Trennung von `EXISTING_WEB_UI` und
+   `REMAINING_WEB_UI_DELTA` einschließlich der fehlenden
+   Route-/Asset-/Laufansicht-Regressionen.
 
 Die frühere Mergeauflösung hat den doppelten `uiRefreshTracker_`-Member als
 rein technische Konfliktbereinigung entfernt; daraus wird keine neue
@@ -1223,11 +1276,13 @@ EXISTING_IMPLEMENTATION_PRESENT=YES
 REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ACTUATOR_RELEASE=NO
 PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
-OPEN_REVIEW_BLOCKERS=0
+OPEN_REVIEW_BLOCKERS=6
+PLAN_REVISION_REASON=IMPLEMENTATION_REVIEW_WEB_UI_ROUTE_TEST_CONFIRMATION_GUARD_SELF_CHECK_KDF_RESOURCE
 WEB_FULL_SCOPE=PLAN_REVALIDATED_ON_APPLICATION_OWNED_CONTRACT
 PLAN_REVIEW_REQUIRED=YES
 OWNER_PLAN_APPROVAL_REQUIRED=YES
 PLAN_FIX_VERIFICATION=REQUIRED
-NEXT_GATE=INDEPENDENT_PLAN_FIX_VERIFICATION
+PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
+NEXT_GATE=OWNER_PLAN_APPROVAL_OF_REVISED_PLAN
 IMPLEMENTATION_AUTHORIZATION=NO
 ```
