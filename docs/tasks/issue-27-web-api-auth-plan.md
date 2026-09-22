@@ -3,10 +3,11 @@
 ## Status, Zweck und harte Basis
 
 Dies ist die vollständige, eigenständig reviewfähige Planrevision für Issue
-#27 auf dem aktuellen kanonischen `main`. Sie ist ein Plan-only-Artefakt. In
-dieser Revision werden keine Produktmodule, Authentifizierungsdaten, HTTP-
-Routen, Webassets, Tests, Abhängigkeiten, Persistenzschemas oder
-Hardwarepfade implementiert.
+#27 auf dem aktuellen kanonischen `main`. Sie ist ein Delta-Plan zur
+Fortsetzung des bereits implementierten PR-167-Stands. Die frühere
+Implementation/Fix-Runde bleibt erhalten; diese Reviewrunde ändert keine
+Produktlogik. Nach Freigabe dieser neuen Plan-SHA werden ausschließlich die
+unten als verbleibendes Delta bezeichneten Lücken weitergeführt.
 
 Die Live-Prüfung wurde am 2026-09-22 in einem frischen Arbeitsbaum gegen
 GitHub-`origin/main` durchgeführt. Diese Revision aktualisiert PR #167 nach
@@ -21,12 +22,14 @@ PR=167
 PR_STATUS=DRAFT
 BASE_BRANCH=main
 BASE_SHA=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
-CURRENT_HEAD=8cff0b1a49f0c68cadc3794e4d516299c8f9d509
-PLAN_REVISION=APPLICATION_OWNED_RUNTIME_EVIDENCE_REVALIDATION_AFTER_PR169
+CURRENT_HEAD=b0c52f44a5d6aa8dcbab473b9d9b6407f4442fcc
+PLAN_REVISION=CONTINUATION_DELTA_ON_EXISTING_PR167_AFTER_PR169
 PLAN_STATUS=DRAFT_OWNER_APPROVAL_REQUIRED
 PLAN_SHA=EXACT_COMMIT_RECORDED_AFTER_THIS_REVISION
 IMPLEMENTATION_AUTHORIZATION=NO
-PRODUCT_IMPLEMENTATION=NOT_STARTED
+IMPLEMENTATION_STATUS=PAUSED_PLAN_REVALIDATION
+EXISTING_IMPLEMENTATION_PRESENT=YES
+REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ESP_IDF_VERSION=v6.1.0
 ESP_IDF_COMMIT=fff9895c82d744c7237be8847347bdd1b07c6643
 TARGET=ESP32-WROOM-32E
@@ -90,26 +93,34 @@ Schritt.
 
 ### 1.2 Aktuelle Codeinventur
 
-Die Planumsetzung muss diese vorhandenen Grenzen direkt verwenden:
+Die frühere, bereits implementierte PR-167-Runde und die Mergeauflösung auf
+PR-169 haben folgende Bestandteile nachweisbar in diesem Branch hinterlassen.
+Sie sind Bestand, keine neue Umsetzungsliste:
 
 | Bestand | Verifiziert vorhanden | Verwendung in #27 |
 |---|---|---|
-| HTTP-Port | `device_platform::IHttpServerLifecycle`, `IHttpRouteSink`, `HttpRequest`, `HttpResponse` | einzige Request-/Response-Grenze; keine zweite Serverinstanz |
+| HTTP-Port und bounded Metadaten | `device_platform::IHttpServerLifecycle`, `IHttpRouteSink`, `HttpRequest`, `HttpResponse`, `http_server_lifecycle.*` | einzige Request-/Response-Grenze; keine zweite Serverinstanz |
 | ESP-IDF-Adapter | `EspIdfHttpServerLifecycle` mit `esp_http_server`, PIMPL und begrenztem Body | technische Start-/Stop-/Übersetzung bleibt Adapter-/#164-Eigentum |
 | #164-Routen | `NetworkSetupRoutes` für `/`, `/api/network/status`, `/api/network/scan` und Kandidat/Commit | Setup-Routen bleiben aktiv und werden vor normalen Webrouten delegiert |
 | Netzwerk | `FermentationApplication`, `NetworkConfigurationService`, `ConnectivityCredentialStore`, `NetworkAccessPointInfo` | #27 liest Status; Modus, Candidate/Commit und Credentials werden nicht dupliziert |
 | UI-Snapshot | `FermentationUiSnapshot`, `FermentationUiProjector`, `FermentationUiExpectedRevisions`, secret-freies `FermentationNetworkModeView` | Web und Touch erhalten dieselbe Projektion; fehlende Werte bleiben ungültig/unverfügbar |
 | UI-Commands | `FermentationUiCommand`, `FermentationUiCommandBridge`, Konfigurations-/Netzwerkcommands und erwartete Revisionen | Webadapter liefert nur typisierte Werte und Revisionen; die Anwendung entscheidet |
 | Application-Runtime-Evidence | `FermentationApplication::publishOwningRuntimeEvidence()`, `uiSnapshot()`, `prepare*()` und `confirmPrepared()` | #168/#169 besitzen Runtime-/Sensor-/Safety-Provenienz und Confirmation-Revalidierung; Web erzeugt oder übergibt keine Evidence und rekonstruiert keine Safetyentscheidung |
+| Authentication und Bootstrap | `authentication_records.*`, `configuration_bootstrap.*`, `configuration_bootstrap_store.*`, Auth-Root/`auth0`-Store und Schema-3-Handoff | bestehende Auth-/Epoch-/Readback-/Recovery-Semantik behalten; keine zweite Persistenzwahrheit |
+| Sessions und Browserpolicy | `web_session.*`, `web_browser_policy.*`, bounded CSRF/Cookie-/Mutation-Sequence-Handling | bestehende flüchtige Session- und Replay-Verträge behalten; kein neues Sessionmodell |
+| Web/API/Assets | `web_application_routes.*`, `web_api_codec.*`, `web_assets.hpp` sowie `/api/v1/*` und interne Auth-/Network-Routen | bestehende compile-time Weboberfläche, Read-only-API und ein Dispatcher bleiben erhalten |
 | Service-Policy | `ServiceSessionPolicy`, `ServiceSessionLease`, `fermentationWebServicePolicy()` | 5 Minuten Inaktivität / 15 Minuten absolut, getrennt von Touch |
-| Persistenz | `IStateStore`, `StorageEnvelope`, `StorageEpoch`, Readback und `CommitOutcomeUnknown` | Authentifizierungsdomäne wird erster realer Auth-Consumer auf diesem Backend |
-| Zufall/Zeit | `ISecureRandomSource`, ESP-IDF-Zufallsadapter, `ITimeSource` | Session-/CSRF-Zufall und Zeitouts; keine URL-/Log-Secrets |
-| Tests | native `test/`-Komponenten und bestehender Test-Support | Auth-, Route-, Redaction-, Konflikt- und Reconnecttests im vorhandenen Muster |
+| Persistenz | `IStateStore`, `StorageEnvelope`, `StorageEpoch`, Readback und `CommitOutcomeUnknown` | Authentifizierungsdomäne bleibt erster realer Auth-Consumer auf diesem Backend |
+| JSON-Abhängigkeit | ArduinoJson `7.4.3`, Registry-/Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`, bounded Codec in `web_api_codec.*` | integriert und gelockt; Resource-Evidence bleibt offen |
+| Tests | `test_authentication_records`, `test_http_server_lifecycle`, `test_web_api_codec`, `test_web_browser_policy`, `test_web_session` und bestehende native Konsumententests | bestehende Nachweise behalten; verbleibende Ownerpfad-/Ressourcenlücken gezielt ergänzen |
 
-Es gibt aktuell keine normalen Webassets, keine Websessionverwaltung, keinen
-Webpasswort-Verifier, keine Authentication-Domäne und keinen normalen
-Web-API-Routenadapter. Diese Lücken sind der eigentliche #27-Scope; sie
-werden nicht durch eine zweite HTTP-, UI- oder Persistenzplattform gefüllt.
+Damit ist `EXISTING_IMPLEMENTATION_PRESENT=YES` repository-first belegt:
+Auth-Domäne/Store, Schema-3-First-Consumer-Handoff, Sessions,
+Browserpolicy, Web/API-Codecs, compile-time Assets, HTTP-Metadatenübersetzung,
+Composition und die zugehörigen nativen Tests existieren bereits. Sie werden
+nicht erneut als neue Module geplant. Das verbleibende Delta ist ausschließlich
+die nachstehend präzisierte Application-Anbindung und die noch offenen
+Nachweise.
 
 #### 1.2.1 Bounded HTTP-Metadatenvertrag vor der Umsetzung
 
@@ -870,14 +881,17 @@ Charts und eine neue Langzeitdatenbank gehören nicht zu #27.
 JSON bleibt ausschließlich an der HTTP-/DTO-Grenze. Fachmodelle, Persistenz-
 Wireformat, Commands, Rechte, Konflikte und Redaction bleiben projektseitig.
 
-ArduinoJson `7.4.3` ist der aktuelle Evaluationskandidat aus dem
-Adopt-or-build-Audit. Vor seiner Übernahme sind offizielle Herkunft,
-MIT-Lizenz, exakter Registry-/Git-Commit, transitive Lizenzen, v6.1-Build,
-begrenzte Tiefe/Bodygröße, Grenzwert-/Fuzz-/Redaction- und Ressourcenmessung
-zu dokumentieren. Bibliothekstypen dürfen `fermentation_app`, Storage- oder
-gemeinsame UI-Contracts nicht leaken. Scheitert der Kandidat, wird nicht
-vorsorglich ein zweiter JSON-Provider oder Parserframework eingeführt; ein
-konkreter Ersatz bedarf eines neuen Ownerentscheids.
+ArduinoJson `7.4.3` ist im bestehenden PR-167-Stand bereits als bounded
+HTTP-/API-Codec integriert und über den Registry-/Tag-Commit
+`77771d3c07668e01d8f52acb03910c1110bb373f` gelockt. Herkunft, MIT-Lizenz und
+fehlende transitive Runtime-Abhängigkeiten sind in den bestehenden
+Komponenten-/Auditdokumenten festgehalten. Bibliothekstypen bleiben auf
+`web_api_codec.cpp` begrenzt und leaken nicht in `fermentation_app`, Storage-
+oder gemeinsame UI-Contracts. Offen bleibt ausschließlich die noch nicht
+abgeschlossene integrierte Resource-Evidence (Flash, Heapspitze/-minimum,
+größter Block, Fragmentierung und Laufzeit pro Profil). Es wird kein zweiter
+JSON-Provider oder Parserframework eingeführt; ein Ersatz wäre eine neue
+Ownerentscheidung.
 
 ### 7.3 Kryptografie und Herkunft
 
@@ -893,83 +907,114 @@ konkreter Ersatz bedarf eines neuen Ownerentscheids.
 - `dependencies.lock` wird ausschließlich mit dem fixierten ESP-IDF-6.1-
   Component Manager regeneriert; er wird nicht von Hand kosmetisch editiert.
 
-## 8. Konkreter Umsetzungsschnitt nach Planfreigabe
+## 8. Bestehender Bestand und verbleibendes Delta nach Planfreigabe
 
-Die folgende Liste ist geschlossen genug für die Umsetzung, ohne jetzt Code
-anzulegen. Jede Erweiterung außerhalb dieser Liste erfordert Planrevision und
-erneute Ownerfreigabe.
+Die frühere Umsetzungsschnittfolge ist nicht erneut auszuführen. Die folgenden
+Teile sind in PR #167 bereits vorhanden und bleiben unverändert erhalten:
 
-### 8.1 Gemeinsame Application-/UI-Grenze
+### 8.1 Bereits implementiert und zu behalten (`EXISTING_IMPLEMENTATION`)
 
-- `lib/fermentation_app/src/fermentation_application.hpp/.cpp`: kleinste
-  öffentliche Read-Facade für einen aktuellen `FermentationUiSnapshot`,
-  gemeinsame Route-Komposition und Auth-/Session-Integration am Application-
-  Boundary; keine Webtypen im Fachkern.
-- `lib/fermentation_app/src/fermentation_ui_projector.*` und, falls der
-  aktuelle Application-State es erfordert, `fermentation_ui_models.*`:
-  nur fehlende kanonische Projektionsinputs/Revisionen ergänzen; keine
-  Web-Schattenmodelle.
-- `fermentation_ui_commands.*`/`run_commands.*` nur dann ändern, wenn die
-  bestehende Source-/Service-Web-Auditsemantik den kleinen gemeinsamen
-  Contract-Ausbau verlangt; keine private Web-Enum oder Stringquelle.
-- `lib/device_platform/src/device_ui_contracts.hpp` und
-  `fermentation_ui_commands.*` für `UiSurface::WebService`;
-- `run_commands.*`, `run_snapshot.*`, `configuration_graph.*`,
-  `run_persistence_codec.*` und die zugehörigen Tests für den stabilen
-  `ServiceWeb`-Provenienzwert; keine private Web-Enum oder Stringquelle.
+- bounded HTTP-Request-/Response-Metadaten und ESP-IDF-Übersetzung in
+  `device_platform`/`device_platform_esp_idf`;
+- `ServiceWeb`-/UI-Provenienzwerte und die gemeinsame UI-/Command-Grenze;
+- Authentication-Records, `auth0`/`authroot0`, Schema-3-First-Consumer-Handoff,
+  Storage-Epoch-/Mutation-Lease-/Readback-/Recoverysemantik, Lockouts und
+  Credentialwechsel;
+- flüchtige Websessions, Cookie-/CSRF-/Origin-/Referer-/Fetch-Metadata-Schutz,
+  bounded `X-UI-Mutation-Seq` inklusive Resync-/Replay-Fenster;
+- read-only `/api/v1/`-Routen, interne Auth-/Network-Routen, compile-time
+  DE/EN/ES-Webassets, bounded Polling-/Snapshot-Codec und Webdispatcher vor
+  den #164-Setup-Routen;
+- ArduinoJson `7.4.3` als gelockter bounded Codec, ohne Bibliothekstypen in
+  Application-/Storage-/UI-Contracts;
+- native Auth-, HTTP-, Browserpolicy-, Session-, API- und bestehende
+  Application-/UI-Regressionen sowie die zugehörigen Dokumentations- und
+  Lockstände.
 
-### 8.2 Authentication und Sessions
+PR #169 hat innerhalb dieses Bestands die kanonische Application-Grenze
+ersetzt bzw. bestätigt: `uiSnapshot()` projektiert aus Application-owned
+Quellen, `confirmPrepared()` revalidiert gegen aktuelle Evidence fail-closed,
+und Web-/Renderer-Code liefert keine Sensor-, Planner- oder Safety-Evidence.
+Diese Grenze ist nicht erneut zu modellieren.
 
-- neue kleine #27-Anwendungsmodule für typisierte Authentication-Credential-
-  Record-/Store- und `AuthProvisioningRoot`-Codec/Store, Verifier/KDF-
-  Auswahl, Lockout und Credentialwechsel;
-- neuer bounded Web-Session-Manager mit flüchtigen Session-/CSRF-Records und
-  Wiederverwendung von `ServiceSessionLease` für die Web-Servicelease;
-- `configuration_storage_contract.*` nur für den geprüften Auth-Recordtyp /
-  Schema-/Keyvertrag;
-- `configuration_bootstrap.*` und `configuration_bootstrap_store.*` nur für
-  den versionierten Schema-3-`AuthDomainHandoff`, gebunden an die vorhandene
-  Bootstrap-Sequenz, `StorageEpoch`, Mutation-Lease und Recoverysemantik;
-- `IStateStore`, `StorageEnvelope`, `StorageEpoch`,
-  `CommitOutcomeUnknown` unverändert verwenden; keine zweite
-  Backendimplementierung;
-- native Tests für Store-Cutpoints, Readback, Epochwechsel, Reset, Lockout und
-  Secret-Redaction.
+### 8.2 Kanonischer Mutation-Owner für das verbleibende Delta
 
-### 8.3 HTTP-/API-/Webadapter
+Der branch-eigene Pfad
+`FermentationApplication::applyPreparedRequest()` ist auf
+`main@b8d963e...` nicht vorhanden und gehört zum vorhandenen #27-Delta. Er ist
+der beabsichtigte schmale Application-Owner für interne Web-Run-Mutationen.
+Der verbleibende Adapterpfad ist deshalb verbindlich:
 
-- neue kleine `web_application_routes.*`, `web_api_codec.*` und
-  `web_assets.*` innerhalb der zulässigen Application-/Composition-Grenze;
-- gemeinsamer Dispatcher vor `NetworkSetupRoutes`, kein zweiter Lifecycle;
-- `/api/v1/status`, `/api/v1/temperatures`, `/api/v1/alerts` und bounded
-  vollständiger UI-Snapshot für Polling;
-- interne, ausdrücklich nicht öffentliche UI-Write-DTOs mit Auth-/CSRF-/Origin-
-  Prüfung, erwarteten Revisionen und monotone `X-UI-Mutation-Seq`;
-- `lib/device_platform/src/http_server_lifecycle.hpp` erhält nur den in
-  Abschnitt 1.2.1 definierten bounded Request-/Response-Metadatenvertrag;
-- `lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp` extrahiert
-  und begrenzt die genannten ESP-IDF-Header, weist Response-Status und die
-  beiden typisierten Response-Metadaten zu und leakt keine ESP-IDF-Typen in
-  Application-Contracts;
-- `main/app_main.cpp` und ggf. `lib/fermentation_app/CMakeLists.txt` nur für
-  Composition und compile-time Assets; keine Produkt- oder Hardwareänderung;
-- `lib/device_platform_esp_idf` wird nur geändert, falls der bestehende
-  Adapter für die bereits vereinbarte Route-Delegation eine nachweislich
-  notwendige, gekapselte Übersetzung braucht. Keine ESP-IDF-Typen in
-  Application-Headern.
+```text
+Web-Request/DTO
+  -> typisierte FermentationUi*-Intent + erwartete Revisionen
+  -> FermentationApplication::prepare*()/prepareEnvelope()
+  -> FermentationApplication::confirmPrepared()
+  -> FermentationApplication::applyPreparedRequest()
+  -> FermentationUiCommandBridge::decidePreparedCommand()
+  -> RunPersistenceCoordinator::persistCommand() /
+     persistFreshStartCommand()
+  -> bestehender Domain-/Persistenz-Owner und tatsächlicher Outcome
+```
 
-### 8.4 Tests und Dokumentation im späteren Implementierungs-PR
+`FermentationUiCommandBridge::decidePreparedCommand()` bleibt dabei die
+kanonische fachliche Entscheidungsprojektion; sie ist kein zweiter Commandbus.
+Nur ein bestätigtes Application-Request darf `applyPreparedRequest()`
+erreichen. Web konstruiert weder `CommandDecision`, Runtime-/Sensor-/Safety-
+Evidence noch Persistenzresultate und wendet keine Fachmutation selbst an.
+Der Application-Pfad besitzt stale-Confirmation-/Revision-Prüfung sowie die
+Anbindung an den bestehenden `RunPersistenceCoordinator`; seine
+`RunPersistenceResult`-Durability-/Recoveryzustände werden unverändert an den
+internen Adapter zurückgegeben.
 
-- neue native Testkomponenten nach bestehendem `test/`-Muster für Auth,
-  Sessions, HTTP-Policy, API-Redaction, DTO-Grenzen, Konflikte, Idempotenz,
-  Polling-Stale/Reconnect und Language-Fallback;
-- direkte Konsumententests für bestehende UI-Command-/Configuration-/Network-
-  Verträge;
-- ESP-IDF-Build-/Lock-/Asset-/Heap-/Flash-/Jitterevidence in den beiden
-  bestehenden Profilen;
-- kanonische Dokumente nur mit dem nachgewiesenen Implementierungsdelta
-  aktualisieren. Plan, PR, Issue und genau ein aktueller Handover bleiben
-  Statusquellen; Anforderungen werden nicht in mehrere Fachverträge kopiert.
+Damit bleibt der Pfad mit dem gemergten #168-Vertrag vereinbar: aktuelle
+owning Evidence kommt ausschließlich aus der Application-/Orchestrator-Grenze,
+`confirmPrepared()` blockiert eine zwischenzeitliche Regression, und
+`ACTUATOR_RELEASE=NO` bleibt bestehen. `#24`-Persistenz-/Recovery-Owner werden
+nicht dupliziert; die Grenzen von `#106` und `#35` bleiben außerhalb von #27.
+`ResetFault` bleibt `Unavailable`, solange kein kanonischer Planner-Owner aus
+dem vorgesehenen Downstream-Scope gebunden ist.
+
+### 8.3 Verbleibendes Implementierungsdelta (`REMAINING_IMPLEMENTATION_DELTA`)
+
+Nach Freigabe dieser Plan-SHA ist ausschließlich Folgendes noch auszuführen:
+
+- die bestehenden internen Web-Run-Intents für Start, Stop, Completion und
+  die bereits im Contract vorgesehenen Aktionen an den oben beschriebenen
+  `prepare -> confirm -> applyPreparedRequest`-Pfad binden;
+- Application- und Route-Resultate so abbilden, dass Stale-Confirmation,
+  `RunPersistenceResult`-Durability, `PersistenceIndeterminate`,
+  `PersistenceCommittedApplyFailed`, Recovery-/Blocked-Zustände und fehlende
+  Aktorfreigabe nicht in einen HTTP-Erfolg umgedeutet werden;
+- ausschließlich die noch fehlende integrierte ArduinoJson-/Firmware-
+  Ressourcen-Evidence sowie die im Plan offenen KDF-/Hardware-/Browser-
+  Nachweise erheben; keine bereits bestandenen Auth-/Session-/Codec-Verträge
+  neu implementieren.
+
+Keine neue Commandbus-, Service-, Provider-, Runtime-Evidence- oder
+Snapshot-Abstraktion und keine zweite Persistenz-/Safety-/Recovery-Wahrheit.
+
+### 8.4 Gezielte Regressionen für den verbleibenden Ownerpfad
+
+Der verbleibende Delta-Schnitt muss mindestens nachweisen:
+
+- Web-Intent erreicht ausschließlich die Application-Prepare-/Confirm-/Apply-
+  Kette; externe Evidence-Injektion bleibt unmöglich;
+- unbestätigte, stale oder nach `Valid -> Stale/Failed` revalidierte Requests
+  mutieren nichts;
+- bestätigte Requests erzeugen genau eine `CommandId`-/Persistenzmutation;
+  identische Wiederholung liefert den bestehenden owning Outcome ohne zweite
+  Mutation;
+- `PersistenceIndeterminate`, `PersistenceCommittedApplyFailed`,
+  `RecoveryPending`, `Blocked` und fehlende Runtime-/Aktorfreigabe bleiben
+  fail-closed und werden korrekt auf den internen HTTP-Outcome abgebildet;
+- Startpfade `ProgramStartRequest`/Stored-Program und `ManualStartRequest`
+  bleiben über die bestehende Decision-Matrix Eigentum der Domain, ohne
+  Fallbackregeln im Web zu duplizieren.
+
+Die bereits vorhandenen Auth-/Session-/HTTP-/API-Regressionen werden als
+Bestand weiter ausgeführt; neue Tests sind auf diesen Ownerpfad und die noch
+offenen Ressourcen-/Nachweisgates begrenzt.
 
 ## 9. Test- und Evidence-Matrix
 
@@ -994,6 +1039,7 @@ führen:
 | Cookie/CSRF | Cookieflags, Set-Cookie, gültiger/missing/falscher Token, same-origin Handoff, keine URL-Tokens |
 | Browsergrenze | Methode, Content-Type, Origin, Referer-Ersatz, Fetch-Metadata, fehlende/duplizierte/zu große Header fail-closed, Statusmapping statt 500, CORS-Ablehnung |
 | Revision | stale User-/Program-/Run-/Message-/Network-Revision -> Conflict, kein Überschreiben |
+| Application-Ownerpfad | Web-Intent -> `prepare*()` -> `confirmPrepared()` -> `applyPreparedRequest()` -> `RunPersistenceCoordinator`; unbestätigt/stale/indeterminate/committed-apply-failed ohne zweite Mutation und ohne fehlende Aktorfreigabe als Erfolg zu melden |
 | Idempotenz | mehr als acht sequenzielle Mutationen in derselben Session funktionieren; identischer aktueller Retry erzeugt keine zweite Mutation; retirierter Replay und gleiche Sequenz mit anderem Payload werden ohne Mutation abgelehnt; `InFlight` wird nicht verdrängt; bounded Speicher bleibt konstant; parallele Display-/Webrevision bleibt konfliktfest |
 | Mutation-Resync | Reload/Browser-Restore/Reconnect derselben Session erhält autoritatives `nextMutationSeq`; zwei Tabs reservieren gleichzeitig höchstens eine Mutation; unterlegener Tab resynchronisiert Fachrevisionen ohne blindes Replay; `UINT64_MAX`/Overflow bleibt fail-closed |
 | Safety | formal gültige Webaktion wird bei fehlender Safety-/Fach-Evidenz abgelehnt |
@@ -1055,20 +1101,22 @@ umgangen werden.
 
 ## 12. Dokumentationsdelta dieser Planrevision
 
-Plan-only werden geändert:
+Das tatsächliche Delta dieser Runde ist bewusst kleiner als der bereits
+implementierte PR-167-Bestand:
 
-1. diese Datei als vollständige versionierte Planrevision;
-2. `docs/ROADMAP.md` minimal auf `main @ 1f1755e…`, gemergtes #164 und den
-   neuen #27-Plan-/Ownerstatus synchronisieren;
-3. `docs/WEB_UI.md` ausschließlich um die am 2026-09-21 getroffene
-   Ownerentscheidung zur R1-Webpasswortpolicy synchronisieren;
-4. der PR-Body und genau ein aktueller `SESSION HANDOVER` als GitHub-
-   Metadaten.
+1. diese Datei als vollständige versionierte Delta-Planrevision;
+2. der PR-Body, Issue #27 und genau ein bestehender `SESSION HANDOVER` als
+   Status-/Provenienz-Metadaten;
+3. die explizite Entscheidung für `applyPreparedRequest()` als schmalen
+   Application-Owner und die dazugehörige verbleibende Regression-/Outcome-
+   Matrix.
 
-Nicht geändert werden in dieser Runde Produktcode, CMake, Lockfiles,
-Configuration-/Auth-Schemas, API-Dokumente, Webassets, Tests, Workflows,
-ESP-IDF-Konfiguration, Partitionen, Hardware, Ready-/Merge-/Issue-Close-
-Status oder Aktorfreigaben.
+Die frühere Mergeauflösung hat den doppelten `uiRefreshTracker_`-Member als
+rein technische Konfliktbereinigung entfernt; daraus wird keine neue
+Produktänderung abgeleitet. `docs/ROADMAP.md`, `docs/WEB_UI.md`, alle
+Auth-/API-/Storage-Dokumente, Produktcode, CMake, Lockfiles, Tests, Workflows,
+ESP-IDF-Konfiguration, Partitionen, Hardware, Ready-/Merge-/Issue-Close-Status
+und Aktorfreigaben werden durch diese Planreview nicht erneut geändert.
 
 ## 13. Nicht-Ziele und Hardware-/Clientaussage
 
@@ -1147,7 +1195,9 @@ PUBLIC_API=READ_ONLY
 WEB_MUTATIONS=INTERNAL_COMMAND_ADAPTER_ONLY
 ISSUE31_REQUIRED=NO
 ISSUE31_IMPLEMENTATION=EXCLUDED
-PRODUCT_IMPLEMENTATION=NOT_STARTED
+IMPLEMENTATION_STATUS=PAUSED_PLAN_REVALIDATION
+EXISTING_IMPLEMENTATION_PRESENT=YES
+REMAINING_IMPLEMENTATION_DELTA=OWNER_APPROVAL_REQUIRED
 ACTUATOR_RELEASE=NO
 PASSWORD_POLICY_OWNER_DECISION=ACCEPTED_2026-09-21
 OPEN_REVIEW_BLOCKERS=0
