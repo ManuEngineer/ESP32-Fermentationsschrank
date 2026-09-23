@@ -12,7 +12,9 @@ ISSUE=31
 PR=156
 FIRMWARE_SOURCE_HEAD=882c3364b59bef0f21576bf6dd4bbabe516995dc
 DOCUMENTATION_BASELINE_HEAD=882c3364b59bef0f21576bf6dd4bbabe516995dc
-APPROVED_PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855
+APPROVED_PLAN_SHA=63fd88372b883887668566047c8a6acac48addcd
+PLAN_REVIEW=GO
+FIX_VERIFICATION=PASS
 ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
 TARGET=ESP32-WROOM-32E
 FLASH=4MB
@@ -22,8 +24,8 @@ RESET_TOPOLOGY=MSP2807_RESET->EN_CHIP_PU_UNCHANGED
 FT232_RTS_EN=REMOTE_FLASH_DEBUG_ALLOWED
 PRODUCT_REPRESENTATIVE_COLDSTART=RTS_EN_DISCONNECTED
 STAGE_2_TOUCH_STATIC_EVIDENCE=REUSED_WITHOUT_RETEST
-STAGE_3=BLOCKED
-OPEN_STAGE_3_FINDINGS=1
+STAGE_3=PASS
+OPEN_STAGE_3_FINDINGS=0
 STAGE_4=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -137,25 +139,28 @@ anwendungsseitigen Low-Level- oder Bustask; deshalb ist der Main-Task-HWM der
 relevante Task-Nachweis dieses Harnesses. Es wurde kein zusaetzlicher Task
 fuer die Messung eingefuehrt.
 
-## Offener Stage-3-Befund
+## Stage-3-Abschluss nach Planrevision
 
-Der freigegebene Stage-3-Vertrag verlangt zusaetzlich zu den wiederverwendeten
-Stage-2-Punkten Raw-Touch an Kanten sowie einen Kontakt-/Druckverlauf. Stage 2
-hat Ecken und Mitte real nachgewiesen, aber keine separaten Kantenpunkte und
-keinen Stage-3-spezifischen Verlauf. Der kombinierte Stresslauf hatte keine
-neue physische Beruehrung.
+Die revidierte und ownerfreigegebene Stage-3-Regel akzeptiert die vorhandene
+Stage-2-Evidence fuer reale Touchfunktion, Ecken, Mitte, Polling, IRQ sowie
+statische Kontakt-/`strength`-Werte. Die zusaetzlichen Kantenmittenkontakte und
+ein neuer Kontakt-/Druckverlauf sind keine Stage-3-Abschlusskriterien mehr;
+die fuenf Stage-2-Positionen wurden nicht erneut manuell getestet.
 
 ```text
-STAGE_3_EDGE_TOUCH_MATRIX=NOT_RUN
-STAGE_3_CONTACT_PRESSURE_PROGRESSION=NOT_RUN
-OPEN_STAGE_3_FINDING_1=NEW_EDGE_AND_CONTACT_PRESSURE_EVIDENCE_REQUIRED
+STAGE_2_TOUCH_STATIC_EVIDENCE=REUSED_WITHOUT_RETEST
+STAGE_2_STATIC_CONTACT_PRESSURE_SAMPLES=REUSED
+STAGE_3_EDGE_TOUCH_MATRIX=NOT_REQUIRED_FOR_LOW_LEVEL_SELECTION
+STAGE_3_CONTACT_PRESSURE_PROGRESSION=DEFERRED_TO_TOUCH_CALIBRATION_INTEGRATION
+OPEN_STAGE_3_FINDINGS=0
+STAGE_3=PASS
 ```
 
-Das ist kein Herabstufen der Stage-2-Evidence und kein Fehlerbefund des
-Treiber-/Bus-Stresslaufs. Fuer den Abschluss ist genau eine neue physische
-Eigenschaft zu pruefen: definierte Touchkontakte an den vier Kantenmitten
-und ein kontrollierter Kontakt-/Loslassverlauf, ohne die bereits bestandenen
-fünf Stage-2-Positionen erneut zu messen. Bis dahin bleibt `STAGE_3=BLOCKED`.
+Die vorhandene automatisierte Zusatzmatrix bleibt unveraendert gueltig: Sie
+belegt Display-Wiederholung, kombinierten Draw-/Touch-/SPI-Stress,
+fail-closed Fehlerreaktionen, Ressourcen, Timing und Stabilitaet in Polling
+und IRQ. Es wurden fuer diesen Abschluss keine neuen Hardware- oder
+Owner-Touchtests ausgefuehrt.
 
 ## Reproduzierbarkeit
 
