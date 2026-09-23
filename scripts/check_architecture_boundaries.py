@@ -312,6 +312,9 @@ COMPONENT_REQUIRES_ALLOWLIST = {
         "private": frozenset(
             {
                 "esp_event",
+                "esp_driver_gpio",
+                "esp_driver_spi",
+                "esp_lcd",
                 "esp_http_server",
                 "esp_timer",
                 "esp_netif",
@@ -320,6 +323,9 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "lwip",
                 "esp-idf-lib__ds3231",
                 "esp-idf-lib__i2cdev",
+                "espressif__esp_lcd_ili9341",
+                "espressif__esp_lcd_touch",
+                "atanisoft__esp_lcd_touch_xpt2046",
             }
         ),
     },
@@ -331,6 +337,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "fermentation_app",
                 "device_platform_esp_idf",
                 "nvs_flash",
+                "esp_timer",
             }
         ),
     },
@@ -1005,14 +1012,18 @@ def create_clean_fixture(root: Path) -> None:
         "lib/device_platform_esp_idf/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
             'REQUIRES device_platform nvs_flash PRIV_REQUIRES '
-            'esp_event esp_http_server esp_netif esp_wifi mdns esp_timer '
-            'lwip esp-idf-lib__ds3231 esp-idf-lib__i2cdev)\n'
+            'esp_event esp_driver_gpio esp_driver_spi esp_lcd '
+            'esp_http_server esp_netif esp_wifi mdns esp_timer lwip '
+            'esp-idf-lib__ds3231 esp-idf-lib__i2cdev '
+            'espressif__esp_lcd_ili9341 espressif__esp_lcd_touch '
+            'atanisoft__esp_lcd_touch_xpt2046)\n'
         ),
         "main/app_main.cpp": '#include "device_platform.hpp"\n',
         "main/CMakeLists.txt": (
             'idf_component_register(SRCS "app_main.cpp" '
             'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
-            "device_platform fermentation_app device_platform_esp_idf nvs_flash)\n"
+            "device_platform fermentation_app device_platform_esp_idf nvs_flash "
+            "esp_timer)\n"
         ),
         # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
         # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die

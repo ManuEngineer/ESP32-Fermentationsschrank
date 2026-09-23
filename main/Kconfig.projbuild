@@ -15,3 +15,19 @@ choice APP_ESP32_PROFILE
         bool "ESP32 release profile"
 
 endchoice
+
+config APP_ISSUE31_RENDERER_COMPARISON
+    bool "Issue #31 renderer comparison runner"
+    default n
+    help
+        Builds the explicit, actor-free Lean/LVGL comparison runner only.
+        This is not enabled by either product profile and does not select a
+        production renderer.
+
+config APP_ISSUE31_LEAN_RUNNER
+    bool "Issue #31 Lean-only representative screen runner"
+    default n
+    help
+        Builds the explicit actor-free Lean-only representative screen runner
+        for the Stage-4 comparison. This is not enabled by either product
+        profile and does not select a production renderer.

@@ -28,6 +28,10 @@
 #include "issue_29_bringup_probe.hpp"
 #endif
 
+#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
+#include "issue31_renderer_comparison.hpp"
+#endif
+
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_system.h"
@@ -196,6 +200,10 @@ device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
 }  // namespace
 
 extern "C" void app_main(void) {
+#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
+    fermentation::main_ui::runIssue31RendererComparison();
+    return;
+#endif
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
         // No recovery/application path is started if the owning context
