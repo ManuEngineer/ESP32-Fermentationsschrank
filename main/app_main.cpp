@@ -20,6 +20,7 @@
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
+#include "fermentation_ui_press_dispatcher.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
 #include "touch_calibration.hpp"
@@ -411,48 +412,31 @@ extern "C" void app_main(void) {
                 loopPresentation.canonicalTimeZoneId};
             const auto loopSnapshot = application.uiSnapshot();
 
-            // Touch is polled and routed against exactly one screen built
-            // for this tick: targetAt()/routePress() must agree on the
-            // same bottom-slot layout the user was actually looking at,
-            // and the pressedTarget passed to render() below must match
-            // it too (BLOCKER 3/4 of the follow-up Auftrag). This is the
-            // existing #26 target/interaction path
-            // (fermentation_ui_renderer.hpp); no second event/command
-            // state machine is introduced. Navigation, pager movement and
-            // visible press feedback already take full effect via
-            // routePress()'s existing workspace-owned state mutation.
+            // The existing #26 target/interaction path (calibrated touch
+            // -> targetAt()/Workspace::press() -> existing typed
+            // FermentationApplication/FermentationUiCommandBridge entry
+            // points) is owned entirely by this one app-specific adapter;
+            // main/app_main.cpp never builds a RepresentativeScreen or
+            // calls targetAt()/routePress() itself. No second event/
+            // command state machine is introduced.
             const auto touchPoll = displayRenderer->pollTouch();
-            const auto tickScreen = fermentation::main_ui::makeRepresentativeScreen(
-                loopSnapshot, uiWorkspace, uiTextPacks,
-                loopPresentation.displayLocale, std::nullopt,
-                &loopPresentation.programCatalog, loopNetworkStatus, loopClock);
-
-            std::optional<device_platform::DeviceUiTarget> pressedTarget;
-            if (touchPoll.point.has_value()) {
-                pressedTarget = fermentation::main_ui::targetAt(
-                    tickScreen, touchPoll.point->x, touchPoll.point->y);
-            }
-            if (touchPoll.freshPressEdge && pressedTarget.has_value()) {
-                const auto press = fermentation::main_ui::routePress(
-                    uiWorkspace, loopSnapshot, tickScreen, touchPoll.point->x,
-                    touchPoll.point->y, &loopPresentation.programCatalog);
-                // No application-command dispatcher exists yet for any
-                // input surface (touch, web, or otherwise); a typed
-                // payload here is observed, not silently dropped, but not
-                // yet forwarded anywhere - see the session handover.
-                if (press.action.has_value() ||
-                    press.transitionAction.has_value() ||
-                    press.resumeFallback.has_value() ||
-                    press.programEdit.has_value()) {
-                    ESP_LOGI(kTag,
-                             "touch produced a typed command payload with no "
-                             "application dispatcher yet");
-                }
+            const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
+                application, uiWorkspace, loopSnapshot, uiTextPacks,
+                loopPresentation.displayLocale, &loopPresentation.programCatalog,
+                loopNetworkStatus, loopClock, touchPoll.contactHeld,
+                touchPoll.point.has_value() ? touchPoll.point->x : 0U,
+                touchPoll.point.has_value() ? touchPoll.point->y : 0U,
+                touchPoll.freshPressEdge, timeSource.monotonicMillis());
+            if (touchTick.dispatch.outcome !=
+                fermentation::main_ui::WorkspacePressDispatchOutcome::
+                    NoTypedPayload) {
+                ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
+                         static_cast<int>(touchTick.dispatch.outcome));
             }
 
             static_cast<void>(displayRenderer->render(
                 loopSnapshot, uiWorkspace, uiTextPacks,
-                loopPresentation.displayLocale, pressedTarget,
+                loopPresentation.displayLocale, touchTick.pressedTarget,
                 &loopPresentation.programCatalog, loopNetworkStatus,
                 loopClock));
         }
