@@ -539,9 +539,17 @@ Damit gilt `DISPLAY_RESET_NET_VERIFICATION=PASS`; die direkte
 `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung ist vom Owner bestätigt und als
 `DISPLAY_RESET_CONNECTED=YES` dokumentiert. Actor-free Boot, Auto-Reset,
 Flash ohne Taster und der gemeinsame ESP32-/Display-Reset sind bereits
-funktional verifiziert. Damit ist Stage 0 abgeschlossen; nur die
-Display-/Touch-Controlleridentitaet und -funktion bleiben bis zum ersten
-aktiven Low-Level-Smoke deferred.
+funktional verifiziert. Damit ist Stage 0 abgeschlossen. Historisch blieben
+Display-/Touch-Controlleridentitaet und -funktion im Stage-0-Gate bis zu einem
+aktiven Low-Level-Smoke deferred; dieser Smoke wurde inzwischen in Stage 2
+ausgefuehrt und ist PASS:
+
+```text
+DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS
+TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
+STAGE_2_DISPLAY_FUNCTION=PASS
+STAGE_2_TOUCH_FUNCTION=PASS
+```
 
 - reale Boardfamilie passend zur Repository-Referenz und das tatsaechliche
   ESP32-Modul/der Chip;
@@ -549,9 +557,10 @@ aktiven Low-Level-Smoke deferred.
   eindeutige Carrier-Revisionskennung, wird ausschliesslich
   `board_revision=TBD_HARDWARE_NO_IDENTIFIABLE_MARKING` dokumentiert; die
   unbekannte Nummer blockiert #31 nicht dauerhaft;
-- einen spaeteren funktionalen Low-Level-Smoke mit vorhandenem Treiberpfad zur
-  Bestaetigung der erwarteten Display-/Touchcontroller; ILI9341 und XPT2046
-  bleiben bis dahin erwartete Kandidaten, nicht reale Identitaets-PASS;
+- den inzwischen ausgefuehrten funktionalen Low-Level-Smoke aus der Stage-2-
+  Evidence; die damals erwarteten Kandidaten ILI9341 und XPT2046 sind durch
+  `DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS` und
+  `TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS` funktional bestaetigt;
 - reale TFT-/Touch-CS-, D/C-, Reset-, Backlight-, IRQ-, SPI- und
   Masseverbindungen gegen das Boardprofil;
 - keine widerspruechliche revisionsabhaengige Eigenschaft, insbesondere keine
