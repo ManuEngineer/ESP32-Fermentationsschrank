@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "device_ui_text.hpp"
@@ -33,7 +34,9 @@ class ProductiveLvglRenderer final {
         const FermentationUiSnapshot& snapshot,
         FermentationTouchWorkspace& workspace,
         const std::vector<device_platform::TextPackManifest>& textPacks,
-        const device_platform::LocaleId& locale);
+        const device_platform::LocaleId& locale,
+        std::optional<device_platform::DeviceUiTarget> pressedTarget =
+            std::nullopt);
     [[nodiscard]] bool initialized() const noexcept;
 
    private:

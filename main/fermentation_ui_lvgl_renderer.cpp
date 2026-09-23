@@ -64,7 +64,7 @@ struct ProductiveLvglRenderer::Impl final {
     bool initialized{false};
     bool touchCalibrationAvailable{false};
     bool touchCalibrationWarningLogged{false};
-    std::optional<device_platform::UiRefreshRevision> renderedRevision;
+    std::optional<ScreenRenderKey> renderedKey;
 
     static void readTouchFailClosed(lv_indev_t* indev,
                                     lv_indev_data_t* data) {
@@ -157,18 +157,26 @@ bool ProductiveLvglRenderer::initialize() {
 bool ProductiveLvglRenderer::render(
     const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
-    const device_platform::LocaleId& locale) {
+    const device_platform::LocaleId& locale,
+    std::optional<device_platform::DeviceUiTarget> pressedTarget) {
     auto& state = *impl_;
     if (!state.initialized || state.display == nullptr || state.root == nullptr)
         return false;
-    if (snapshot.refreshRevision.has_value() &&
-        state.renderedRevision == snapshot.refreshRevision) {
+
+    // Building the screen model is a cheap pure projection; only the LVGL
+    // widget rebuild below is expensive. The render key captures every
+    // semantic input relevant to the visible projection (application
+    // revision, local workspace/page/pager/dialog state, locale and header
+    // values), so a page/pager/locale change is never masked by an unchanged
+    // application UiRefreshRevision.
+    const auto screen = makeRepresentativeScreen(snapshot, workspace, textPacks,
+                                                  locale, pressedTarget);
+    const auto key = makeScreenRenderKey(screen);
+    if (state.renderedKey.has_value() && *state.renderedKey == key) {
         return true;
     }
     if (!lvgl_port_lock(1000U)) return false;
 
-    const auto screen = makeRepresentativeScreen(snapshot, workspace, textPacks,
-                                                  locale);
     lv_obj_clean(state.root);
     lv_obj_set_style_bg_color(
         state.root,
@@ -194,7 +202,7 @@ bool ProductiveLvglRenderer::render(
     }
     lv_obj_invalidate(state.root);
     lvgl_port_unlock();
-    state.renderedRevision = snapshot.refreshRevision;
+    state.renderedKey = key;
     return true;
 }
 

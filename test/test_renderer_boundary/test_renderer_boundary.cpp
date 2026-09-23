@@ -39,8 +39,12 @@ void test_representative_screen_uses_existing_workspace_and_three_locales() {
     TEST_ASSERT_EQUAL_STRING("ES", es.commands[3].text.c_str());
     TEST_ASSERT_EQUAL_UINT16(168U, de.commands[2].rect.width);
     TEST_ASSERT_EQUAL_UINT16(24U, de.commands[2].rect.height);
-    TEST_ASSERT_EQUAL_UINT16(80U, de.commands.back().rect.width);
-    TEST_ASSERT_EQUAL_UINT16(200U, de.commands.back().rect.top);
+    // The last bottom slot's fill is the second-to-last command; its label
+    // is the actual last command since no touch is held (BLOCKER 4: no
+    // PressFeedback command without an actual held touch).
+    const auto& lastSlotFill = de.commands[de.commands.size() - 2U];
+    TEST_ASSERT_EQUAL_UINT16(80U, lastSlotFill.rect.width);
+    TEST_ASSERT_EQUAL_UINT16(200U, lastSlotFill.rect.top);
     TEST_ASSERT_EQUAL_STRING(
         "assets/branding/manuengineer/ManuEngineer.svg",
         de.commands[2].assetPath.c_str());
@@ -94,6 +98,117 @@ void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
     TEST_ASSERT_TRUE(target.has_value());
 }
 
+void test_render_key_stable_for_same_snapshot_and_workspace() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto first = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto second = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_TRUE(fermentation::main_ui::makeScreenRenderKey(first) ==
+                     fermentation::main_ui::makeScreenRenderKey(second));
+}
+
+void test_render_key_changes_on_workspace_navigation() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto home = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    workspace.setPage(fermentation::FermentationUiPage::Messages);
+    const auto messages = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(home) ==
+                      fermentation::main_ui::makeScreenRenderKey(messages));
+}
+
+void test_render_key_changes_on_pager_move() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::RuntimeMessage first;
+    first.id = 1U;
+    first.active = true;
+    fermentation::RuntimeMessage second;
+    second.id = 2U;
+    second.active = true;
+    snapshot.messages.push_back({first});
+    snapshot.messages.push_back({second});
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Messages);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto beforeMove = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    // Real navigation goes through the existing typed press path (the "down"
+    // bottom slot), which is what synchronizes the workspace-local pager with
+    // the current item count; calling movePagerDown() directly without a
+    // prior press leaves it at its default zero item count.
+    const auto press = fermentation::main_ui::routePress(
+        workspace, snapshot, beforeMove, 180U, 220U);
+    TEST_ASSERT_TRUE(press.navigated);
+    const auto afterMove = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeMove) ==
+                      fermentation::main_ui::makeScreenRenderKey(afterMove));
+}
+
+void test_render_key_changes_on_locale_change() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto de = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"de"});
+    const auto en = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(de) ==
+                      fermentation::main_ui::makeScreenRenderKey(en));
+}
+
+void test_no_touch_means_no_press_feedback_command() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_FALSE(std::any_of(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.kind ==
+                  fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        }));
+}
+
+void test_held_bottom_slot_renders_press_feedback_for_that_slot_only() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const device_platform::DeviceUiTarget held{
+        device_platform::DeviceUiTargetKind::BottomSlot, 2U};
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, held);
+
+    const auto feedback = std::find_if(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.kind ==
+                  fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        });
+    TEST_ASSERT_TRUE(feedback != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(160U, feedback->rect.left);
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -111,5 +226,11 @@ int main() {
     RUN_TEST(test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
+    RUN_TEST(test_render_key_stable_for_same_snapshot_and_workspace);
+    RUN_TEST(test_render_key_changes_on_workspace_navigation);
+    RUN_TEST(test_render_key_changes_on_pager_move);
+    RUN_TEST(test_render_key_changes_on_locale_change);
+    RUN_TEST(test_no_touch_means_no_press_feedback_command);
+    RUN_TEST(test_held_bottom_slot_renders_press_feedback_for_that_slot_only);
     return UNITY_END();
 }

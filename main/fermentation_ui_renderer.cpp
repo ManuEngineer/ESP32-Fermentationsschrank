@@ -148,7 +148,8 @@ std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
 RepresentativeScreen makeRepresentativeScreen(
     const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
-    const device_platform::LocaleId& locale) {
+    const device_platform::LocaleId& locale,
+    std::optional<device_platform::DeviceUiTarget> pressedTarget) {
     RepresentativeScreen screen;
     screen.locale = locale;
     screen.header.locale = locale;
@@ -175,6 +176,8 @@ RepresentativeScreen makeRepresentativeScreen(
                      device_platform::ThemeToken::OnStatusError,
                      device_platform::ThemeToken::OnOverlay}};
     screen.logoAssetPath = kLogoAssetPath;
+    screen.refreshRevision = snapshot.refreshRevision;
+    screen.pressedTarget = pressedTarget;
     screen.workspace = workspace.view(snapshot);
     auto& commands = screen.commands;
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
@@ -271,13 +274,61 @@ RepresentativeScreen makeRepresentativeScreen(
                 slot.enabled ? device_platform::ThemeToken::PrimaryAction
                              : device_platform::ThemeToken::SecondaryAction);
     }
-    // A bounded pressed-state command is part of the same #26 shell model;
-    // later input plumbing toggles it from the existing DeviceUiTarget result.
-    commands.push_back({ScreenDrawKind::PressFeedback, {0U, kControlTop, 80U,
-                                                         kControlHeight},
-                        device_platform::ThemeToken::SecondaryAction,
-                        device_platform::ThemeToken::PrimaryAction, {}, {}});
+    if (pressedTarget.has_value() &&
+        pressedTarget->kind == device_platform::DeviceUiTargetKind::BottomSlot &&
+        pressedTarget->slotIndex < screen.workspace.bottomSlots.size()) {
+        const auto left =
+            static_cast<std::uint16_t>(pressedTarget->slotIndex * 80U);
+        commands.push_back({ScreenDrawKind::PressFeedback,
+                            {left, kControlTop, 80U, kControlHeight},
+                            device_platform::ThemeToken::SecondaryAction,
+                            device_platform::ThemeToken::PrimaryAction, {}, {}});
+    }
     return screen;
+}
+
+bool operator==(const ScreenRenderKey& left,
+                const ScreenRenderKey& right) noexcept {
+    return left.refreshRevision == right.refreshRevision &&
+          left.locale == right.locale && left.page == right.page &&
+          left.pagerCurrentIndex == right.pagerCurrentIndex &&
+          left.pagerItemCount == right.pagerItemCount &&
+          left.hasConfirmationWarning == right.hasConfirmationWarning &&
+          left.confirmationProgramName == right.confirmationProgramName &&
+          left.completionLocked == right.completionLocked &&
+          left.blockedReason == right.blockedReason &&
+          left.unavailableCapabilityCount == right.unavailableCapabilityCount &&
+          left.programListSize == right.programListSize &&
+          left.pressedBottomSlotIndex == right.pressedBottomSlotIndex &&
+          left.networkStatus == right.networkStatus &&
+          left.trustedUtc == right.trustedUtc && left.themeId == right.themeId;
+}
+
+ScreenRenderKey makeScreenRenderKey(
+    const RepresentativeScreen& screen) noexcept {
+    ScreenRenderKey key;
+    key.refreshRevision = screen.refreshRevision;
+    key.locale = screen.locale;
+    key.page = screen.workspace.page;
+    key.pagerCurrentIndex = screen.workspace.pager.currentIndex;
+    key.pagerItemCount = screen.workspace.pager.itemCount;
+    key.hasConfirmationWarning = screen.workspace.confirmationWarning.has_value();
+    key.confirmationProgramName =
+        screen.workspace.confirmationProgramName.value_or(std::string{});
+    key.completionLocked = screen.workspace.completionLocked;
+    key.blockedReason = screen.workspace.blockedReason;
+    key.unavailableCapabilityCount =
+        screen.workspace.unavailableCapabilities.size();
+    key.programListSize = screen.workspace.programList.size();
+    if (screen.pressedTarget.has_value() &&
+        screen.pressedTarget->kind ==
+            device_platform::DeviceUiTargetKind::BottomSlot) {
+        key.pressedBottomSlotIndex = screen.pressedTarget->slotIndex;
+    }
+    key.networkStatus = screen.header.networkStatus;
+    key.trustedUtc = screen.header.clock.trustedUtc;
+    key.themeId = screen.theme.id;
+    return key;
 }
 
 std::optional<device_platform::DeviceUiTarget> targetAt(
