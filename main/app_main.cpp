@@ -29,6 +29,10 @@
 #include "issue_90_slice7_harness.hpp"
 #endif
 
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
+#include "issue_31_touch_calibration_harness.hpp"
+#endif
+
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
 #endif
@@ -232,6 +236,11 @@ device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
 }  // namespace
 
 extern "C" void app_main(void) {
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
+    fermentation::issue_31_touch_calibration::run();
+    return;
+#endif
+
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
         // No recovery/application path is started if the owning context
@@ -348,8 +357,7 @@ extern "C" void app_main(void) {
         const auto fallbackCalibration = touchCalibrationStore.load(
             device_platform::TouchCalibrationSlot::Fallback,
             kBoardControllerId);
-        ESP_LOGI(kTag,
-                 "touch calibration: active_status=%d fallback_status=%d",
+        ESP_LOGI(kTag, "touch calibration: active_status=%d fallback_status=%d",
                  static_cast<int>(activeCalibration.status),
                  static_cast<int>(fallbackCalibration.status));
         switch (activeCalibration.status) {
@@ -422,8 +430,9 @@ extern "C" void app_main(void) {
             const auto touchPoll = displayRenderer->pollTouch();
             const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
                 application, uiWorkspace, loopSnapshot, uiTextPacks,
-                loopPresentation.displayLocale, &loopPresentation.programCatalog,
-                loopNetworkStatus, loopClock, touchPoll.contactHeld,
+                loopPresentation.displayLocale,
+                &loopPresentation.programCatalog, loopNetworkStatus, loopClock,
+                touchPoll.contactHeld,
                 touchPoll.point.has_value() ? touchPoll.point->x : 0U,
                 touchPoll.point.has_value() ? touchPoll.point->y : 0U,
                 touchPoll.freshPressEdge, timeSource.monotonicMillis());
