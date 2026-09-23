@@ -16,17 +16,25 @@ namespace fermentation {
 // the caller maps a positive detection onto the existing
 // FermentationUiSafeBootTarget::RawTouchRecovery capability itself.
 //
-// minimumStrength and requiredHoldMicros are real hardware-derived
-// parameters (the controller's contact/Z threshold and the exact hold
-// duration this board needs to reliably distinguish a deliberate held
-// contact from noise). Neither has a default: this type cannot be
-// constructed with an invented value, so a composition root without
-// owner-approved values for both cannot wire this detector into the boot
-// path at all - touch recovery stays unavailable, not silently guessed.
+// The >=10 s hold duration itself is NOT a hardware-measurement gate: the
+// approved plan (section 8) already decides it canonically
+// ("Raw-Touch mindestens 10 Sekunden halten", ">=10-s-Wert ist kanonisch
+// entschieden"). A composition root never needs an owner decision to use
+// it. Only minimumStrength - the controller's real contact/Z threshold -
+// remains genuinely hardware-derived and has no default: this type cannot
+// be constructed without it, so a composition root without an
+// owner-approved threshold cannot wire this detector at all. Tests may
+// still pass a smaller explicit requiredHoldMicros than the canonical
+// value to keep runtime short; production code uses the default.
 class RawTouchRecoveryDetector final {
    public:
-    RawTouchRecoveryDetector(std::uint16_t minimumStrength,
-                             std::uint64_t requiredHoldMicros) noexcept
+    // The plan's frozen, owner-decided raw-touch recovery hold duration.
+    // This is not TBD_HARDWARE; see the class comment above.
+    static constexpr std::uint64_t kCanonicalMinHoldMicros = 10'000'000ULL;
+
+    explicit RawTouchRecoveryDetector(
+        std::uint16_t minimumStrength,
+        std::uint64_t requiredHoldMicros = kCanonicalMinHoldMicros) noexcept
         : minimumStrength_(minimumStrength),
           requiredHoldMicros_(requiredHoldMicros) {}
 

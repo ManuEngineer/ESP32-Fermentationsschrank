@@ -374,6 +374,59 @@ void test_render_key_changes_on_network_status_and_clock() {
                       fermentation::main_ui::makeScreenRenderKey(clocked));
 }
 
+void test_render_key_unchanged_workspace_remains_equal() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto first = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto second = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_TRUE(fermentation::main_ui::makeScreenRenderKey(first) ==
+                     fermentation::main_ui::makeScreenRenderKey(second));
+}
+
+void test_render_key_changes_when_manual_holding_values_enable_confirm() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ManualHolding);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto beforeValues = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    TEST_ASSERT_FALSE(beforeValues.workspace.bottomSlots[2].enabled);
+
+    workspace.setManualHoldingValues(fermentation::FermentationUiManualRunPlanValues{});
+    const auto afterValues = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeValues) ==
+                      fermentation::main_ui::makeScreenRenderKey(afterValues));
+}
+
+void test_render_key_changes_when_program_edit_candidate_enables_save() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramEdit);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto beforeCandidate = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    TEST_ASSERT_FALSE(beforeCandidate.workspace.bottomSlots[3].enabled);
+
+    workspace.setProgramEditCandidate(fermentation::ProgramDocument{});
+    const auto afterCandidate = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    TEST_ASSERT_TRUE(afterCandidate.workspace.bottomSlots[3].enabled);
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeCandidate) ==
+                      fermentation::main_ui::makeScreenRenderKey(afterCandidate));
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -407,5 +460,8 @@ int main() {
     RUN_TEST(test_network_status_changes_wlan_label_token);
     RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);
     RUN_TEST(test_render_key_changes_on_network_status_and_clock);
+    RUN_TEST(test_render_key_unchanged_workspace_remains_equal);
+    RUN_TEST(test_render_key_changes_when_manual_holding_values_enable_confirm);
+    RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     return UNITY_END();
 }

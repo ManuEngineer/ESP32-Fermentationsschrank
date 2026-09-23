@@ -20,8 +20,18 @@ using device_platform_test_support::SimulatedPersistentStateStore;
 
 constexpr char kBoardId[] = "esp32_32e_quad_mosfet_r1+ili9341+xpt2046";
 
-TouchCalibrationModel identityModel() {
+// A fully, explicitly measured-form fixture that happens to be the
+// identity transform. It must set every coefficient itself: a
+// default-constructed TouchCalibrationModel is deliberately unmeasured
+// (NaN) and must never be mistaken for a valid identity calibration.
+TouchCalibrationModel measuredFixtureModel() {
     TouchCalibrationModel model;
+    model.a = 1.0;
+    model.b = 0.0;
+    model.c = 0.0;
+    model.d = 0.0;
+    model.e = 1.0;
+    model.f = 0.0;
     model.boardControllerId = kBoardId;
     return model;
 }
@@ -39,7 +49,7 @@ TouchCalibrationModel affineModel() {
 }
 
 void test_apply_identity_model_returns_raw_coordinates() {
-    const auto model = identityModel();
+    const auto model = measuredFixtureModel();
     const CalibratedTouchPoint point =
         device_platform::applyTouchCalibration(model, 100U, 200U);
     TEST_ASSERT_EQUAL_DOUBLE(100.0, point.x);
@@ -55,7 +65,7 @@ void test_apply_affine_model_scales_and_offsets() {
 }
 
 void test_well_formed_requires_matching_board_controller_id() {
-    const auto model = identityModel();
+    const auto model = measuredFixtureModel();
     TEST_ASSERT_TRUE(
         device_platform::touchCalibrationModelIsWellFormed(model, kBoardId));
     TEST_ASSERT_FALSE(device_platform::touchCalibrationModelIsWellFormed(
@@ -65,7 +75,7 @@ void test_well_formed_requires_matching_board_controller_id() {
 }
 
 void test_well_formed_rejects_non_finite_coefficients() {
-    auto model = identityModel();
+    auto model = measuredFixtureModel();
     model.a = std::numeric_limits<double>::quiet_NaN();
     TEST_ASSERT_FALSE(
         device_platform::touchCalibrationModelIsWellFormed(model, kBoardId));
@@ -91,7 +101,7 @@ void test_codec_roundtrip_preserves_model() {
 }
 
 void test_codec_rejects_oversized_board_controller_id() {
-    auto model = identityModel();
+    auto model = measuredFixtureModel();
     model.boardControllerId = std::string(
         device_platform::kMaximumTouchCalibrationBoardControllerIdBytes + 1U,
         'x');
@@ -133,7 +143,7 @@ void test_store_write_then_load_active_returns_committed_model() {
 void test_store_active_and_fallback_slots_are_independent() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
-    auto active = identityModel();
+    auto active = measuredFixtureModel();
     auto fallback = affineModel();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationWriteStatus::Committed),
@@ -158,7 +168,7 @@ void test_store_active_and_fallback_slots_are_independent() {
 void test_store_load_rejects_mismatched_board_controller_id() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
-    const auto model = identityModel();
+    const auto model = measuredFixtureModel();
     static_cast<void>(calibration.write(TouchCalibrationSlot::Active, model, 1U));
 
     const auto loaded =
@@ -173,7 +183,7 @@ void test_store_load_detects_corruption_as_invalid_record() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
     static_cast<void>(
-        calibration.write(TouchCalibrationSlot::Active, identityModel(), 1U));
+        calibration.write(TouchCalibrationSlot::Active, measuredFixtureModel(), 1U));
     store.injectCorruption(
         TouchCalibrationStore::key(TouchCalibrationSlot::Active),
         std::string("not-a-valid-envelope"));
@@ -189,7 +199,7 @@ void test_store_load_classifies_other_epoch_and_unsupported_schema() {
     TouchCalibrationStore calibration(store);
     std::string payload;
     static_cast<void>(
-        device_platform::encodeTouchCalibrationPayload(identityModel(), payload));
+        device_platform::encodeTouchCalibrationPayload(measuredFixtureModel(), payload));
 
     std::string wrongEpochEnvelope;
     static_cast<void>(device_platform::encodeEnvelope(
@@ -228,10 +238,47 @@ void test_store_write_rejects_zero_record_sequence() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
     const auto written = calibration.write(TouchCalibrationSlot::Active,
-                                           identityModel(), /*recordSequence=*/0U);
+                                           measuredFixtureModel(), /*recordSequence=*/0U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationWriteStatus::WriteFailure),
         static_cast<int>(written.status));
+}
+
+void test_default_constructed_model_is_unmeasured_and_not_well_formed() {
+    TouchCalibrationModel model;
+    model.boardControllerId = kBoardId;
+    TEST_ASSERT_FALSE(std::isfinite(model.a));
+    TEST_ASSERT_FALSE(std::isfinite(model.b));
+    TEST_ASSERT_FALSE(std::isfinite(model.c));
+    TEST_ASSERT_FALSE(std::isfinite(model.d));
+    TEST_ASSERT_FALSE(std::isfinite(model.e));
+    TEST_ASSERT_FALSE(std::isfinite(model.f));
+    TEST_ASSERT_FALSE(
+        device_platform::touchCalibrationModelIsWellFormed(model, kBoardId));
+}
+
+void test_default_constructed_model_is_not_encodable_or_writable() {
+    TouchCalibrationModel model;
+    model.boardControllerId = kBoardId;
+
+    std::string payload;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::TouchCalibrationCodecStatus::InvalidWireValue),
+        static_cast<int>(
+            device_platform::encodeTouchCalibrationPayload(model, payload)));
+
+    SimulatedPersistentStateStore store;
+    TouchCalibrationStore calibration(store);
+    const auto written =
+        calibration.write(TouchCalibrationSlot::Active, model, 1U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TouchCalibrationWriteStatus::CapacityFailure),
+        static_cast<int>(written.status));
+    // No record was ever committed for this unmeasured model.
+    const auto loaded = calibration.load(TouchCalibrationSlot::Active, kBoardId);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TouchCalibrationLoadStatus::NotFound),
+                          static_cast<int>(loaded.status));
 }
 
 }  // namespace
@@ -251,5 +298,7 @@ int main() {
     RUN_TEST(test_store_load_detects_corruption_as_invalid_record);
     RUN_TEST(test_store_load_classifies_other_epoch_and_unsupported_schema);
     RUN_TEST(test_store_write_rejects_zero_record_sequence);
+    RUN_TEST(test_default_constructed_model_is_unmeasured_and_not_well_formed);
+    RUN_TEST(test_default_constructed_model_is_not_encodable_or_writable);
     return UNITY_END();
 }

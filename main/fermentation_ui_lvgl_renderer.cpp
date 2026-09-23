@@ -34,6 +34,13 @@ void styleObject(lv_obj_t* object, device_platform::ThemeToken foreground,
     lv_obj_set_style_radius(object, 0U, 0U);
 }
 
+std::uint16_t clampToDisplay(double value, std::uint16_t maxInclusive) {
+    if (value < 0.0) return 0U;
+    const auto upper = static_cast<double>(maxInclusive);
+    if (value > upper) return maxInclusive;
+    return static_cast<std::uint16_t>(value);
+}
+
 }  // namespace
 
 struct ProductiveLvglRenderer::Impl final {
@@ -41,6 +48,14 @@ struct ProductiveLvglRenderer::Impl final {
         : config(std::move(value)) {}
 
     ~Impl() {
+        // lvgl_port_deinit() only clears a flag the LVGL task observes on
+        // its next loop iteration - it does not synchronously stop the
+        // task. The lock is therefore what actually prevents deleting
+        // touchInput/display while the LVGL task could still be mid-tick
+        // using them; lv_indev_delete() also fully unregisters the indev
+        // from LVGL's own list, so the task never revisits it afterward
+        // regardless of exact task-exit timing.
+        const bool locked = portStarted && lvgl_port_lock(1000U);
         if (touchInput != nullptr) {
             lv_indev_delete(touchInput);
             touchInput = nullptr;
@@ -48,6 +63,9 @@ struct ProductiveLvglRenderer::Impl final {
         if (display != nullptr) {
             (void)lvgl_port_remove_disp(display);
             display = nullptr;
+        }
+        if (locked) {
+            lvgl_port_unlock();
         }
         if (portStarted) {
             (void)lvgl_port_deinit();
@@ -65,10 +83,26 @@ struct ProductiveLvglRenderer::Impl final {
     bool initialized{false};
     // Set only from a real TouchCalibrationLoadStatus::Available
     // classification (see ProductiveLvglRenderer::setTouchCalibration()).
-    // No default/placeholder model is ever substituted here.
+    // No default/placeholder model is ever substituted here. Written from
+    // the caller's task under lvgl_port_lock(); read from the LVGL task,
+    // which already holds the same (recursive) lock for the whole duration
+    // of the indev read callback (see esp_lvgl_port's task loop, which
+    // wraps lv_indev_read() in lvgl_port_lock()) - no additional lock is
+    // taken on that read side.
     std::optional<device_platform::TouchCalibrationModel> touchCalibrationModel;
     bool touchCalibrationWarningLogged{false};
     std::optional<ScreenRenderKey> renderedKey;
+
+    // Touch poll state the LVGL task's read callback publishes and
+    // ProductiveLvglRenderer::pollTouch() (caller's task) consumes, both
+    // under lvgl_port_lock() on the consuming side. This is the only touch
+    // sampling point; pollTouch() never re-samples the adapter itself, so
+    // the LVGL pointer and the #26 target/press path always agree on the
+    // same observed contact.
+    bool touchPressActive{false};
+    std::uint16_t touchPressX{0U};
+    std::uint16_t touchPressY{0U};
+    bool touchPressEdgePending{false};
 
     static void readTouchFailClosed(lv_indev_t* indev,
                                     lv_indev_data_t* data) {
@@ -87,10 +121,12 @@ struct ProductiveLvglRenderer::Impl final {
                     "issue31_ui",
                     "touch input held released until calibration is available");
             }
+            state->touchPressActive = false;
             return;
         }
         if (sample.status != device_platform::RawTouchSampleStatus::Contact ||
             !sample.contact) {
+            state->touchPressActive = false;
             return;
         }
         const auto calibrated = device_platform::applyTouchCalibration(
@@ -98,22 +134,20 @@ struct ProductiveLvglRenderer::Impl final {
         // Clamp to the fixed 320x240 display surface: a calibration record
         // is trusted for its coefficients, never for guaranteeing every
         // transformed point stays on-screen.
-        const auto clampedX = static_cast<lv_coord_t>(
-            calibrated.x < 0.0
-                ? 0
-                : (calibrated.x > static_cast<double>(RepresentativeScreen::kWidth - 1U)
-                       ? RepresentativeScreen::kWidth - 1U
-                       : static_cast<std::uint16_t>(calibrated.x)));
-        const auto clampedY = static_cast<lv_coord_t>(
-            calibrated.y < 0.0
-                ? 0
-                : (calibrated.y >
-                          static_cast<double>(RepresentativeScreen::kHeight - 1U)
-                       ? RepresentativeScreen::kHeight - 1U
-                       : static_cast<std::uint16_t>(calibrated.y)));
-        data->point.x = clampedX;
-        data->point.y = clampedY;
+        const auto clampedX =
+            clampToDisplay(calibrated.x, RepresentativeScreen::kWidth - 1U);
+        const auto clampedY =
+            clampToDisplay(calibrated.y, RepresentativeScreen::kHeight - 1U);
+        data->point.x = static_cast<lv_coord_t>(clampedX);
+        data->point.y = static_cast<lv_coord_t>(clampedY);
         data->state = LV_INDEV_STATE_PRESSED;
+
+        if (!state->touchPressActive) {
+            state->touchPressEdgePending = true;
+        }
+        state->touchPressActive = true;
+        state->touchPressX = clampedX;
+        state->touchPressY = clampedY;
     }
 };
 
@@ -130,7 +164,43 @@ ProductiveLvglRenderer::~ProductiveLvglRenderer() = default;
 
 void ProductiveLvglRenderer::setTouchCalibration(
     std::optional<device_platform::TouchCalibrationModel> activeModel) {
-    impl_->touchCalibrationModel = std::move(activeModel);
+    auto& state = *impl_;
+    if (!state.portStarted) {
+        // The LVGL task does not exist yet; there is nothing to serialize
+        // against.
+        state.touchCalibrationModel = std::move(activeModel);
+        return;
+    }
+    if (!lvgl_port_lock(1000U)) {
+        ESP_LOGW("issue31_ui",
+                 "touch calibration update dropped: lvgl port lock timeout, "
+                 "previous calibration state unchanged");
+        return;
+    }
+    state.touchCalibrationModel = std::move(activeModel);
+    lvgl_port_unlock();
+}
+
+ProductiveLvglRenderer::TouchPollResult ProductiveLvglRenderer::pollTouch() {
+    TouchPollResult result;
+    auto& state = *impl_;
+    if (!state.initialized || !state.portStarted) {
+        // No event, rather than fabricating a release.
+        return result;
+    }
+    if (!lvgl_port_lock(1000U)) {
+        return result;
+    }
+    result.contactHeld = state.touchPressActive;
+    if (state.touchPressActive) {
+        result.point = TouchPoint{state.touchPressX, state.touchPressY};
+    }
+    if (state.touchPressEdgePending) {
+        result.freshPressEdge = true;
+        state.touchPressEdgePending = false;
+    }
+    lvgl_port_unlock();
+    return result;
 }
 
 bool ProductiveLvglRenderer::initialize() {

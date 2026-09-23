@@ -367,6 +367,15 @@ RepresentativeScreen makeRepresentativeScreen(
 
 bool operator==(const ScreenRenderKey& left,
                 const ScreenRenderKey& right) noexcept {
+    for (std::size_t index = 0U; index < left.bottomSlots.size(); ++index) {
+        const auto& leftSlot = left.bottomSlots[index];
+        const auto& rightSlot = right.bottomSlots[index];
+        if (leftSlot.kind != rightSlot.kind ||
+            leftSlot.label != rightSlot.label ||
+            leftSlot.enabled != rightSlot.enabled) {
+            return false;
+        }
+    }
     return left.refreshRevision == right.refreshRevision &&
           left.locale == right.locale && left.page == right.page &&
           left.pagerCurrentIndex == right.pagerCurrentIndex &&
@@ -398,6 +407,7 @@ ScreenRenderKey makeScreenRenderKey(
     key.unavailableCapabilityCount =
         screen.workspace.unavailableCapabilities.size();
     key.programListSize = screen.workspace.programList.size();
+    key.bottomSlots = screen.workspace.bottomSlots;
     if (screen.pressedTarget.has_value() &&
         screen.pressedTarget->kind ==
             device_platform::DeviceUiTargetKind::BottomSlot) {

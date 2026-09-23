@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -88,6 +89,13 @@ struct ScreenRenderKey {
     std::optional<device_platform::TextKey> blockedReason;
     std::size_t unavailableCapabilityCount{0U};
     std::size_t programListSize{0U};
+    // Bottom slots are local, renderer-independent workspace/interaction
+    // state that can change within the same page and the same application
+    // UiRefreshRevision (e.g. setManualHoldingValues() enabling the confirm
+    // slot, or a program-edit dirty state enabling save) - see BLOCKER 1,
+    // docs/tasks/issue-31-renderer-display-touch-calibration-plan.md's
+    // follow-up Auftrag.
+    std::array<device_platform::BottomSlot, 4U> bottomSlots{};
     std::optional<std::uint8_t> pressedBottomSlotIndex;
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};

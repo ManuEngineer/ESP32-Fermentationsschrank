@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -42,13 +43,23 @@ inline constexpr std::size_t kMaximumTouchCalibrationEnvelopeBytes = 256U;
 // or defaulted to a plausible-looking value by this port; every value
 // this type ever carries at runtime comes from a record an owner-approved
 // calibration workflow actually wrote.
+//
+// A default-constructed model is deliberately NOT a valid identity
+// calibration: every coefficient defaults to NaN, so it fails
+// touchCalibrationModelIsWellFormed() and is rejected by
+// encodeTouchCalibrationPayload()/TouchCalibrationStore::write() until all
+// six coefficients are explicitly set from a real measurement. There is no
+// public "valid by default" state this type can silently fall back to.
 struct TouchCalibrationModel {
-    double a{1.0};
-    double b{0.0};
-    double c{0.0};
-    double d{0.0};
-    double e{1.0};
-    double f{0.0};
+    static constexpr double kUnmeasured =
+        std::numeric_limits<double>::quiet_NaN();
+
+    double a{kUnmeasured};
+    double b{kUnmeasured};
+    double c{kUnmeasured};
+    double d{kUnmeasured};
+    double e{kUnmeasured};
+    double f{kUnmeasured};
     // Identifies the board/controller combination this model was measured
     // against. This port never hardcodes a concrete board or controller
     // name; the caller supplies the identity it expects and compares

@@ -399,9 +399,50 @@ extern "C" void app_main(void) {
             const device_platform::ClockViewInput loopClock{
                 timeSource.unixTimeSeconds(),
                 loopPresentation.canonicalTimeZoneId};
-            static_cast<void>(displayRenderer->render(
-                application.uiSnapshot(), uiWorkspace, uiTextPacks,
+            const auto loopSnapshot = application.uiSnapshot();
+
+            // Touch is polled and routed against exactly one screen built
+            // for this tick: targetAt()/routePress() must agree on the
+            // same bottom-slot layout the user was actually looking at,
+            // and the pressedTarget passed to render() below must match
+            // it too (BLOCKER 3/4 of the follow-up Auftrag). This is the
+            // existing #26 target/interaction path
+            // (fermentation_ui_renderer.hpp); no second event/command
+            // state machine is introduced. Navigation, pager movement and
+            // visible press feedback already take full effect via
+            // routePress()'s existing workspace-owned state mutation.
+            const auto touchPoll = displayRenderer->pollTouch();
+            const auto tickScreen = fermentation::main_ui::makeRepresentativeScreen(
+                loopSnapshot, uiWorkspace, uiTextPacks,
                 loopPresentation.displayLocale, std::nullopt,
+                &loopPresentation.programCatalog, loopNetworkStatus, loopClock);
+
+            std::optional<device_platform::DeviceUiTarget> pressedTarget;
+            if (touchPoll.point.has_value()) {
+                pressedTarget = fermentation::main_ui::targetAt(
+                    tickScreen, touchPoll.point->x, touchPoll.point->y);
+            }
+            if (touchPoll.freshPressEdge && pressedTarget.has_value()) {
+                const auto press = fermentation::main_ui::routePress(
+                    uiWorkspace, loopSnapshot, tickScreen, touchPoll.point->x,
+                    touchPoll.point->y, &loopPresentation.programCatalog);
+                // No application-command dispatcher exists yet for any
+                // input surface (touch, web, or otherwise); a typed
+                // payload here is observed, not silently dropped, but not
+                // yet forwarded anywhere - see the session handover.
+                if (press.action.has_value() ||
+                    press.transitionAction.has_value() ||
+                    press.resumeFallback.has_value() ||
+                    press.programEdit.has_value()) {
+                    ESP_LOGI(kTag,
+                             "touch produced a typed command payload with no "
+                             "application dispatcher yet");
+                }
+            }
+
+            static_cast<void>(displayRenderer->render(
+                loopSnapshot, uiWorkspace, uiTextPacks,
+                loopPresentation.displayLocale, pressedTarget,
                 &loopPresentation.programCatalog, loopNetworkStatus,
                 loopClock));
         }
