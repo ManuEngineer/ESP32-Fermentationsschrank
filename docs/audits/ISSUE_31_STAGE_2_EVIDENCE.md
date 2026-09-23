@@ -1,6 +1,6 @@
 # Issue #31 – Stage-2-Hardware-Smoke-Evidence
 
-Stand: 2026-09-20. Diese Evidence bezieht sich auf den freigegebenen
+Stand: 2026-09-23. Diese Evidence bezieht sich auf den freigegebenen
 Stage-1-/Stage-2-Vertrag und enthält ausschließlich den nichtproduktiven,
 actor-free Low-Level-Smoke.
 
@@ -10,7 +10,10 @@ actor-free Low-Level-Smoke.
 ISSUE=31
 PR=156
 PR156_HEAD_BEFORE_STAGE_2=802c205f7f11ac9b91eb35e09d77c88544138033
+MAIN_SYNC_BASE=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
 APPROVED_PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855
+MAIN_SYNC_APPLICATION_UI_CONTRACT_REVALIDATION=PASS
+PLAN_CHANGED=NO
 REVIEWED_STAGE_1_HEAD=802c205f7f11ac9b91eb35e09d77c88544138033
 OWNER_STAGE_2_APPROVED=YES
 ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
@@ -22,27 +25,29 @@ ACTUATORS_DISABLED=PASS
 STAGE_2_HARNESS_LOG_RESULT=PASS
 STAGE_2_DISPLAY_DRIVER_INIT=PASS
 STAGE_2_DISPLAY_VISIBLE_OUTPUT_AFTER_FLASH=PASS
-STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=FAILED
-STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE
+STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3
+STAGE_2_DISPLAY_FUNCTION=PASS
 STAGE_2_TOUCH_FUNCTION=POLLING_PASS_IRQ_PASS
-DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS_WARM_COLDSTART_REPRODUCIBILITY_FAILED
+DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS
 TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
-COLDSTART_BOOT=PASS_WITH_BROWNOUT_MARKER_OBSERVED
-HISTORICAL_COLDSTART_DIAGNOSTIC_REPEAT=PASS
-HISTORICAL_COLDSTART_DIAGNOSTIC_BROWNOUT_CURRENT_REPEAT=NOT_OBSERVED
-HISTORICAL_COLDSTART_DIAGNOSIS=INTERMITTENT_FAILURE_NOT_REPRODUCED
-COLDSTART_ROOT_CAUSE=UNDETERMINED
+COLDSTART_WITH_RTS_EN_DISCONNECTED=PASS_3_OF_3
+COLDSTART_PRODUCT_REPRESENTATIVE_SETUP=RTS_EN_DISCONNECTED
+FT232_RTS_EN_DEBUG_CONNECTION=ALLOWED_FOR_REMOTE_FLASH_AND_TEST
+COLDSTART_WITH_RTS_EN_CONNECTED=NOT_PRODUCT_REPRESENTATIVE
+COLDSTART_ROOT_CAUSE_CLASS=FT232_RTS_EN_DEBUG_PATH_INTERFERENCE
+COLDSTART_ELECTRICAL_MECHANISM=NOT_DETERMINED
+PRODUCT_HARDWARE_CHANGE_REQUIRED=NO
+RESET_SSOT_CHANGE_REQUIRED=NO
 SMOKE_PANEL_RESET_PATH=PASS
 PANEL_RESET_BEFORE_INIT=YES
 PANEL_RESET_GPIO_NUM=GPIO_NUM_NC
 POST_STABLE_RAIL_SHARED_EN_RESET_RECOVERY=PASS
 POST_STABLE_RAIL_SHARED_EN_RESET_PATTERN=TL_WHITE_TR_GREEN_BL_RED_BR_BLUE
 POST_STABLE_RAIL_SHARED_EN_RESET=RTS_ONLY_NO_FLASH_NO_DTR_GPIO0
-COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED
-HISTORICAL_NORMAL_COLDSTART_RETEST=FAIL
-HISTORICAL_NORMAL_COLDSTART_OFF_TIME_SECONDS=APPROX_30
-HISTORICAL_NORMAL_COLDSTART_BROWNOUT=REPRODUCED
-HISTORICAL_NORMAL_COLDSTART_DISPLAY=ONLY_WHITE
+HISTORICAL_RTS_EN_CONNECTED_COLDSTART_RETEST=FAIL
+HISTORICAL_RTS_EN_CONNECTED_COLDSTART_OFF_TIME_SECONDS=APPROX_30
+HISTORICAL_RTS_EN_CONNECTED_BROWNOUT=REPRODUCED
+HISTORICAL_RTS_EN_CONNECTED_DISPLAY=ONLY_WHITE
 DELAYED_EN_POWERON_RETEST=PASS_3_OF_3
 DELAYED_EN_POWERON_OFF_TIME=AT_LEAST_10_SECONDS_EACH
 DELAYED_EN_POWERON_SEQUENCE=RTS_ASSERTED_BEFORE_POWER_ON_HOLD_1S_THEN_RELEASE
@@ -50,8 +55,8 @@ DELAYED_EN_BROWNOUT_MARKER=NOT_OBSERVED_RUNS_1_TO_3
 DELAYED_EN_RUN_1_DISPLAY=PATTERN_PASS
 DELAYED_EN_RUN_2_DISPLAY=PATTERN_PASS
 DELAYED_EN_RUN_3_DISPLAY=PATTERN_PASS
-HARDWARE_SPIKE_STAGE_2=FAILED
-STAGE_2=FAILED
+HARDWARE_SPIKE_STAGE_2=PASS
+STAGE_2=PASS
 STAGE_3=NOT_RUN
 STAGE_4=NOT_RUN
 PRODUCT_IMPLEMENTATION=NOT_STARTED
@@ -81,19 +86,50 @@ logischen Ecken darf über die bereits getesteten `swap_xy`-/Mirror-/Rotation-
 Einstellungen erfolgen; ein Wenden des Moduls ist nicht erforderlich. Der
 Eckenzuordnungsbefund ist daher kein zusätzlicher Stage-2-Fehler.
 
-Beim vorherigen realen Kaltstart nach Stromunterbrechung meldete der UART den
-vollständigen Boot und den Start des gleichen Smoke-Pfads, der Owner sah dabei
-jedoch nur weißes Backlight ohne das erwartete Farbmuster:
+Beim historischen Kaltstart mit direkt verbundenem FT232-RTS/EN-Debugpfad
+meldete der UART den vollständigen Boot und den Start des gleichen Smoke-Pfads,
+der Owner sah dabei jedoch nur weißes Backlight ohne das erwartete Farbmuster:
 
 ```text
 OWNER_DISPLAY_OBSERVATION_COLDSTART=ONLY_WHITE_BACKLIGHT_NO_EXPECTED_COLOR_PATTERN
 DISPLAY_COLDSTART_VISUAL=FAILED
 ```
 
-Dieser konkrete Widerspruch wird fail-closed als fehlende Kaltstart-
-Reproduzierbarkeit gewertet. Die spätere sichtbare Ausgabe nach erneutem
-Flash/Hard-Reset hebt den Kaltstartbefund nicht stillschweigend auf. Deshalb
-ist Stage 2 insgesamt `FAILED`; Stage 3 und Stage 4 wurden nicht gestartet.
+Dieser historische konkrete Widerspruch bleibt unverändert dokumentiert. Er
+ist wegen des dauerhaft für Remote-Flash/Debug erlaubten FT232-RTS/EN-Pfads
+jedoch kein produktrepräsentativer Kaltstart. Die elektrische Mechanik ist
+nicht bestimmt; daraus folgen weder eine Hardware- noch eine Reset-SSOT-
+Änderung. Stage 3 und Stage 4 bleiben nicht gestartet.
+
+### Produktrepräsentativer Kaltstart mit getrenntem RTS/EN
+
+Der Owner trennte für drei echte Kaltstarts ausschließlich `RTS -> EN`. USB,
+TX/RX/GND und `DTR -> GPIO0` blieben angeschlossen. Alle drei Läufe starteten
+den ESP32 und initialisierten das Display normal mit dem erwarteten
+Vier-Ecken-Pattern:
+
+```text
+COLDSTART_WITH_RTS_EN_DISCONNECTED=PASS_3_OF_3
+COLDSTART_PRODUCT_REPRESENTATIVE_SETUP=RTS_EN_DISCONNECTED
+FT232_RTS_EN_DEBUG_CONNECTION=ALLOWED_FOR_REMOTE_FLASH_AND_TEST
+COLDSTART_WITH_RTS_EN_CONNECTED=NOT_PRODUCT_REPRESENTATIVE
+COLDSTART_ROOT_CAUSE_CLASS=FT232_RTS_EN_DEBUG_PATH_INTERFERENCE
+COLDSTART_ELECTRICAL_MECHANISM=NOT_DETERMINED
+PRODUCT_HARDWARE_CHANGE_REQUIRED=NO
+RESET_SSOT_CHANGE_REQUIRED=NO
+STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3
+STAGE_2_DISPLAY_FUNCTION=PASS
+STAGE_2_TOUCH_FUNCTION=PASS
+HARDWARE_SPIKE_STAGE_2=PASS
+STAGE_2=PASS
+```
+
+Die Evidence isoliert die historische Abweichung operativ auf den
+FT232-RTS/EN-Debugpfad. Sie behauptet keine konkrete elektrische Ursache. Für
+Remote-Flash und -Test darf `RTS -> EN` weiterhin verbunden bleiben; ein
+Kaltstart in dieser Debugtopologie ist nur nicht als Produkt-Kaltstart zu
+werten. Im Produktbetrieb ist der FT232 getrennt beziehungsweise `RTS -> EN`
+nicht dauerhaft verbunden.
 
 ### Gezielte Kaltstartdiagnose
 
@@ -139,10 +175,10 @@ POST_STABLE_RAIL_SHARED_EN_RESET_PATTERN=TL_WHITE_TR_GREEN_BL_RED_BR_BLUE
 POST_STABLE_RAIL_SHARED_EN_RESET=RTS_ONLY_NO_FLASH_NO_DTR_GPIO0
 ```
 
-Die erfolgreiche Wiederherstellung durch den gemeinsamen EN-Reset stützt die
-Fehlerklasse `POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED`; sie beweist keine
-konkrete Versorgungskomponente und ändert `COLDSTART_ROOT_CAUSE=UNDETERMINED`
-nicht.
+Die erfolgreiche Wiederherstellung durch den gemeinsamen EN-Reset ist
+historische Diagnose-Evidence. Sie beweist keine konkrete
+Versorgungskomponente; die spätere RTS-getrennte 3/3-Evidence ersetzt keine
+elektrische Mechanismushypothese.
 
 Anschließend wurde historisch genau ein normaler kontrollierter Kaltstart mit unveränderter
 Verdrahtung, demselben offiziellen IRQ-Smoke und actor-free Bedingungen
@@ -157,8 +193,8 @@ HISTORICAL_NORMAL_COLDSTART_BROWNOUT=REPRODUCED
 HISTORICAL_NORMAL_COLDSTART_DISPLAY=ONLY_WHITE
 HISTORICAL_NORMAL_COLDSTART_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
 HISTORICAL_NORMAL_COLDSTART_BROWNOUT_TIMING=POST_POWER_ON_BOOT_CAPTURE_EXACT_OFFSET_NOT_INSTRUMENTED
-COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED
-COLDSTART_ROOT_CAUSE=UNDETERMINED
+HISTORICAL_COLDSTART_FAILURE_CLASS=POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED
+HISTORICAL_COLDSTART_ROOT_CAUSE=UNDETERMINED
 ```
 
 Dieser historische Brownout-Marker wurde zeitlich nur dem Boot-Capture nach
@@ -196,17 +232,16 @@ DELAYED_EN_RUN_2_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_
 DELAYED_EN_RUN_2_DISPLAY=PATTERN_PASS
 DELAYED_EN_RUN_3_UART=POWERON_RESET_SPI_FAST_FLASH_BOOT_STAGE2_START_PANEL_INIT_PASS
 DELAYED_EN_RUN_3_DISPLAY=PATTERN_PASS
-COLDSTART_ROOT_CAUSE=UNDETERMINED
+HISTORICAL_COLDSTART_ROOT_CAUSE=UNDETERMINED
 ```
 
 In allen drei verzögerten Läufen wurde im vollständigen UART-Fenster vom
 Power-On über Boot, Panel-Init und erste Draw-Ausgabe kein Brownout-Marker
 beobachtet; alle drei Owner-Sichtprüfungen bestätigten das erwartete Muster.
 Die verzögerte EN-Sequenz ist damit `PASS_3_OF_3`, beweist aber keine konkrete
-Root Cause für die historische normale Kaltstartabweichung. Es wurden keine
-Hardware-/SSOT-Änderung, keine Produktkorrektur und keine Stage-3-/Stage-4-
-Arbeit begonnen. Stage 2 bleibt wegen der historischen normalen
-Kaltstartabweichung `FAILED`.
+Root Cause für die historische Kaltstartabweichung. Es wurden keine Hardware-/
+SSOT-Änderung, keine Produktkorrektur und keine Stage-3-/Stage-4-Arbeit
+begonnen. Der historische Befund bleibt als Debugpfad-Evidence erhalten.
 
 ### Historischer Kaltstart-Konvergenz-Retest
 
@@ -229,7 +264,7 @@ DISPLAY_CONTROLLER_DRIVER=ILI9341_CREATE_PASS_AFTER_POWER_RESTORE
 TOUCH_CONTROLLER_DRIVER=XPT2046_CREATE_PASS_AFTER_POWER_RESTORE
 DISPLAY_VISUAL_UART_MARKER=PASS_AFTER_POWER_RESTORE
 HISTORICAL_COLDSTART_ROOT_CAUSE=UNDETERMINED
-STAGE_2=FAILED
+HISTORICAL_STAGE_2_STATUS_AT_TIME_OF_RETEST=FAILED
 ```
 
 Läufe 2–5 wurden nach dem ersten Brownout-/Displayfehler nicht gestartet.
@@ -300,8 +335,9 @@ cycle5: 320x240 swap_xy=1 mirror_x=0 mirror_y=0
 Für jeden Zyklus meldete der Harness Schwarz/Weiß/Rot/Grün/Blau, vier Ecken,
 Backlight-Aus/Ein und `REPEAT_CYCLE=PASS`. Diese UART-Marker belegen die
 Treiberaufrufe und die vollständigen Schleifen; sie ersetzen nicht die
-physische Sichtprüfung. Der spätere sichtbare Lauf bestätigte die vier Farben,
-aber nicht die Kaltstart-Reproduzierbarkeit.
+physische Sichtprüfung. Die Owner-Evidence bestätigte die vier Farben und
+anschließend die produktrepräsentative Kaltstart-Reproduzierbarkeit mit
+getrenntem `RTS -> EN`.
 
 ## Touch-Evidence
 
@@ -324,9 +360,11 @@ Stage-2-Smokes `PASS`; dies ist kein Kalibrierungs- oder Produkt-UI-Nachweis.
 ## Abschluss
 
 ```text
-STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE
+STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3
+STAGE_2_DISPLAY_FUNCTION=PASS
 STAGE_2_TOUCH_FUNCTION=PASS
-STAGE_2=FAILED
+HARDWARE_SPIKE_STAGE_2=PASS
+STAGE_2=PASS
 STAGE_3=NOT_RUN
 STAGE_4=NOT_RUN
 PRODUCT_CODE_CHANGED=NO
@@ -334,7 +372,8 @@ PLAN_CHANGED=NO
 ACTUATOR_RELEASE=NO
 ```
 
-Der nächste zulässige Schritt ist ausschließlich die gezielte Diagnose der
-konkreten Display-Kaltstartabweichung. Keine Stage-3-/Stage-4-Matrix,
-Produktimplementation, Renderer-/LVGL-Auswahl, Ready-/Merge-Aktion oder
-Aktorfreigabe ist aus dieser Evidence abgeleitet.
+Der nächste zulässige Schritt ist die unabhängige Fix Verification dieser
+Main-Synchronisation und Evidence-Korrektur. Erst nach deren PASS und einer
+ausdrücklichen Ownerfreigabe darf Stage 3 beginnen. Keine Stage-3-/Stage-4-
+Matrix, Produktimplementation, Renderer-/LVGL-Auswahl, Ready-/Merge-Aktion
+oder Aktorfreigabe ist aus dieser Evidence abgeleitet.
