@@ -149,7 +149,8 @@ RepresentativeScreen makeRepresentativeScreen(
     const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
-    std::optional<device_platform::DeviceUiTarget> pressedTarget) {
+    std::optional<device_platform::DeviceUiTarget> pressedTarget,
+    const ProgramCatalog* catalog) {
     RepresentativeScreen screen;
     screen.locale = locale;
     screen.header.locale = locale;
@@ -178,7 +179,7 @@ RepresentativeScreen makeRepresentativeScreen(
     screen.logoAssetPath = kLogoAssetPath;
     screen.refreshRevision = snapshot.refreshRevision;
     screen.pressedTarget = pressedTarget;
-    screen.workspace = workspace.view(snapshot);
+    screen.workspace = workspace.view(snapshot, catalog);
     auto& commands = screen.commands;
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
             device_platform::ThemeToken::Canvas);
@@ -202,41 +203,88 @@ RepresentativeScreen makeRepresentativeScreen(
     addText(commands, textPacks, locale, screen.workspace.title,
             {8U, 40U, 144U, 16U}, device_platform::ThemeToken::TextPrimary,
             device_platform::ThemeToken::Canvas);
-    addText(commands, textPacks, locale, homeModeKey(snapshot.home.mode),
-            {168U, 40U, 144U, 16U},
-            device_platform::ThemeToken::StatusInformation,
-            device_platform::ThemeToken::Canvas);
 
-    const auto temperatureCount = std::min<std::size_t>(
-        snapshot.temperatures.size(), 3U);
-    for (std::size_t index = 0U; index < temperatureCount; ++index) {
-        const auto left = static_cast<std::uint16_t>(8U + index * 104U);
-        addFill(commands, {left, 68U, 96U, 48U},
-                device_platform::ThemeToken::Surface);
-        addText(commands, textPacks, locale, appKey("status"),
-                {static_cast<std::uint16_t>(left + 4U), 72U, 88U, 10U},
-                device_platform::ThemeToken::TextSecondary,
-                device_platform::ThemeToken::Surface);
-        commands.push_back({ScreenDrawKind::Text,
-                            {static_cast<std::uint16_t>(left + 4U), 90U, 88U, 14U},
-                            device_platform::ThemeToken::StatusInformation,
-                            device_platform::ThemeToken::Surface,
-                            temperatureText(snapshot.temperatures[index]), {}});
+    // The content area below the title/home-mode row is page-specific: the
+    // #26 workspace already carries the page-specific payload (home status,
+    // program list, confirmation target, blocked reason, unavailable
+    // recovery capabilities); only Home draws the home summary.
+    if (screen.workspace.page == FermentationUiPage::Home) {
+        addText(commands, textPacks, locale, homeModeKey(snapshot.home.mode),
+                {168U, 40U, 144U, 16U},
+                device_platform::ThemeToken::StatusInformation,
+                device_platform::ThemeToken::Canvas);
+
+        const auto temperatureCount = std::min<std::size_t>(
+            snapshot.temperatures.size(), 3U);
+        for (std::size_t index = 0U; index < temperatureCount; ++index) {
+            const auto left = static_cast<std::uint16_t>(8U + index * 104U);
+            addFill(commands, {left, 68U, 96U, 48U},
+                    device_platform::ThemeToken::Surface);
+            addText(commands, textPacks, locale, appKey("status"),
+                    {static_cast<std::uint16_t>(left + 4U), 72U, 88U, 10U},
+                    device_platform::ThemeToken::TextSecondary,
+                    device_platform::ThemeToken::Surface);
+            commands.push_back(
+                {ScreenDrawKind::Text,
+                 {static_cast<std::uint16_t>(left + 4U), 90U, 88U, 14U},
+                 device_platform::ThemeToken::StatusInformation,
+                 device_platform::ThemeToken::Surface,
+                 temperatureText(snapshot.temperatures[index]), {}});
+        }
+        addText(commands, textPacks, locale, appKey("messages"),
+                {8U, 128U, 88U, 14U}, device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+        addText(commands, textPacks, locale,
+                snapshot.service.available ? appKey("service")
+                                           : appKey("service-locked"),
+                {112U, 128U, 96U, 14U},
+                snapshot.service.available
+                    ? device_platform::ThemeToken::PrimaryAction
+                    : device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+        addText(commands, textPacks, locale, appKey("network"),
+                {224U, 128U, 88U, 14U},
+                device_platform::ThemeToken::StatusInformation,
+                device_platform::ThemeToken::Canvas);
+    } else {
+        if (!screen.workspace.programList.empty()) {
+            const auto rowCount =
+                std::min<std::size_t>(screen.workspace.programList.size(), 3U);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& entry = screen.workspace.programList[index];
+                const auto top =
+                    static_cast<std::uint16_t>(68U + index * 18U);
+                addFill(commands, {8U, top, 304U, 16U},
+                        device_platform::ThemeToken::Surface);
+                addRawText(commands,
+                          {12U, static_cast<std::uint16_t>(top + 2U), 296U, 12U},
+                          entry.program.program.name,
+                          entry.startable
+                              ? device_platform::ThemeToken::TextPrimary
+                              : device_platform::ThemeToken::TextSecondary,
+                          device_platform::ThemeToken::Surface);
+            }
+        } else if (screen.workspace.confirmationProgramName.has_value()) {
+            addRawText(commands, {8U, 68U, 304U, 16U},
+                      *screen.workspace.confirmationProgramName,
+                      device_platform::ThemeToken::TextPrimary,
+                      device_platform::ThemeToken::Canvas);
+        }
+        if (screen.workspace.blockedReason.has_value()) {
+            addText(commands, textPacks, locale,
+                    *screen.workspace.blockedReason, {8U, 128U, 304U, 14U},
+                    device_platform::ThemeToken::StatusWarning,
+                    device_platform::ThemeToken::Canvas);
+        } else if (!screen.workspace.unavailableCapabilities.empty()) {
+            addRawText(
+                commands, {8U, 128U, 304U, 14U},
+                resolve(textPacks, locale, appKey("unavailable")).value + " " +
+                    std::to_string(
+                        screen.workspace.unavailableCapabilities.size()),
+                device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+        }
     }
-    addText(commands, textPacks, locale, appKey("messages"),
-            {8U, 128U, 88U, 14U}, device_platform::ThemeToken::StatusWarning,
-            device_platform::ThemeToken::Canvas);
-    addText(commands, textPacks, locale,
-            snapshot.service.available ? appKey("service")
-                                       : appKey("service-locked"),
-            {112U, 128U, 96U, 14U},
-            snapshot.service.available ? device_platform::ThemeToken::PrimaryAction
-                                       : device_platform::ThemeToken::StatusWarning,
-            device_platform::ThemeToken::Canvas);
-    addText(commands, textPacks, locale, appKey("network"),
-            {224U, 128U, 88U, 14U},
-            device_platform::ThemeToken::StatusInformation,
-            device_platform::ThemeToken::Canvas);
 
     if (screen.workspace.pager.itemCount > 0U &&
         screen.workspace.pager.valid()) {

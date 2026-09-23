@@ -64,7 +64,8 @@ struct RepresentativeScreen {
     const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
-    std::optional<device_platform::DeviceUiTarget> pressedTarget = std::nullopt);
+    std::optional<device_platform::DeviceUiTarget> pressedTarget = std::nullopt,
+    const ProgramCatalog* catalog = nullptr);
 
 // Identifies every semantic input the concrete renderer must redraw for, so
 // it stays independent of the application's UiRefreshRevision. The workspace

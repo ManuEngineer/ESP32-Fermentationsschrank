@@ -36,7 +36,8 @@ class ProductiveLvglRenderer final {
         const std::vector<device_platform::TextPackManifest>& textPacks,
         const device_platform::LocaleId& locale,
         std::optional<device_platform::DeviceUiTarget> pressedTarget =
-            std::nullopt);
+            std::nullopt,
+        const ProgramCatalog* catalog = nullptr);
     [[nodiscard]] bool initialized() const noexcept;
 
    private:

@@ -209,6 +209,89 @@ void test_held_bottom_slot_renders_press_feedback_for_that_slot_only() {
     TEST_ASSERT_EQUAL_UINT16(160U, feedback->rect.left);
 }
 
+void test_program_list_page_shows_catalog_program_names() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::ProgramCatalog catalog;
+    fermentation::ProgramDocument document;
+    document.program.id = "p1";
+    document.program.name = "Sauerkraut";
+    catalog.programs.push_back(document);
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, std::nullopt, &catalog);
+
+    TEST_ASSERT_TRUE(hasText(screen, "Sauerkraut"));
+}
+
+fermentation::ProgramCatalog makeRunnableCatalogForTest() {
+    // Mirrors the runnable catalog fixture used by the workspace tests:
+    // the factory catalog needs its stage/qualification numbers filled in
+    // to pass ValidationPurpose::Runnable, which selectProgram() requires.
+    auto catalog = fermentation::makeFactoryProgramCatalog();
+    auto& program = catalog.programs.back().program;
+    program.name = "Miso";
+    program.fermentationStages.front().targetTemperatureCelsius = 25.0;
+    program.fermentationStages.front().durationMinutes = 60U;
+    program.targetQualification.bandCelsius = 0.5;
+    program.targetQualification.durationMinutes = 10U;
+    program.maximumTargetReachMinutes = 180U;
+    program.productSensorFailure.fallbackDelaySeconds = 60U;
+    return catalog;
+}
+
+void test_delete_confirmation_page_shows_selected_program_name() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeRunnableCatalogForTest();
+    const auto selectedId = catalog.programs.back().program.id;
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram(selectedId, catalog));
+    workspace.setPage(
+        fermentation::FermentationUiPage::ProgramDeleteConfirmation);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, std::nullopt, &catalog);
+
+    TEST_ASSERT_TRUE(hasText(screen, "Miso"));
+}
+
+void test_service_page_shows_blocked_reason() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    snapshot.service.available = false;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Service);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    const auto expected = device_platform::resolveText(
+        packs, device_platform::LocaleId{"en"},
+        fermentation::fermentationTextKey("service-locked"));
+    TEST_ASSERT_TRUE(hasText(screen, expected.value));
+}
+
+void test_recovery_page_shows_unavailable_capability_count() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Recovery;
+    snapshot.home.processState = fermentation::ProcessState::SafeBoot;
+    snapshot.recovery.mode =
+        fermentation::RecoveryViewMode::FallbackSelectionRequired;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Recovery);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    const auto expected = device_platform::resolveText(
+        packs, device_platform::LocaleId{"en"},
+        fermentation::fermentationTextKey("unavailable"));
+    TEST_ASSERT_TRUE(hasText(screen, expected.value + " 4"));
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -232,5 +315,9 @@ int main() {
     RUN_TEST(test_render_key_changes_on_locale_change);
     RUN_TEST(test_no_touch_means_no_press_feedback_command);
     RUN_TEST(test_held_bottom_slot_renders_press_feedback_for_that_slot_only);
+    RUN_TEST(test_program_list_page_shows_catalog_program_names);
+    RUN_TEST(test_delete_confirmation_page_shows_selected_program_name);
+    RUN_TEST(test_service_page_shows_blocked_reason);
+    RUN_TEST(test_recovery_page_shows_unavailable_capability_count);
     return UNITY_END();
 }

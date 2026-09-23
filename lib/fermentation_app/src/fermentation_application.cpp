@@ -908,6 +908,25 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     return FermentationUiProjector::project(input);
 }
 
+FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
+    const {
+    FermentationUiPresentationSource source;
+    if (configurationService_ == nullptr) return source;
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return source;
+    }
+    const auto& userConfiguration = runtime.lease.get().userConfiguration();
+    if (!userConfiguration.displayLanguageId.empty()) {
+        source.displayLocale =
+            device_platform::LocaleId{userConfiguration.displayLanguageId};
+    }
+    source.canonicalTimeZoneId = device_platform::TimeZoneId{
+        runtime.lease.get().preparedTimeZone().canonicalIdentifier};
+    source.programCatalog = runtime.lease.get().programCatalog();
+    return source;
+}
+
 bool FermentationApplication::beginPersistent(
     device_platform::IPlatformServices& platformServices,
     device_platform::IStateStore& store,

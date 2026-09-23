@@ -90,6 +90,12 @@ class FermentationApplication {
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
+    // The single renderer-independent source for display locale, the
+    // canonical prepared time zone and the program catalog needed by the
+    // local UI workspace/renderer. It never duplicates persistence or
+    // recovery policy; a failed configuration read yields safe defaults
+    // (English, an empty catalog) rather than blocking presentation.
+    [[nodiscard]] FermentationUiPresentationSource uiPresentationSource() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
