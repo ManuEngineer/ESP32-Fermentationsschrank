@@ -966,10 +966,11 @@ Die ausgelieferten Assets konsumieren den neuen `/internal/ui/run`-Endpoint
 noch nicht. Damit bleibt als fachlicher Web-Scope
 `REMAINING_WEB_UI_DELTA` offen: Übersicht mit Start/Manuell, Programme mit
 den bestehenden Preview-/Commitpfaden, manueller Betrieb, vollständige
-Meldungs-/Protokollaktionen, Einstellungen, read-only Diagnose, Service mit
-sichtbarer Lease-/Timeout-Bestätigung, System-/Recovery-/Build-Informationen
-sowie die aktuelle Laufansicht mit Ist/Soll, Qualitätslücken,
-Ereignismarkern und dem vertraglich begrenzten Polling-/Reconnect-Verhalten.
+Meldungs-/Protokollaktionen, Einstellungen, Service mit sichtbarer
+Lease-/Timeout-Bestätigung sowie einfache System-/Recovery-/Build-Informationen
+aus vorhandenen kanonischen secret-freien Producern und dem vertraglich
+begrenzten Polling-/Reconnect-Verhalten. Die #28-Diagnose-, Chart-,
+Zeitreihen-, History- und Exportscope bleiben ausgeschlossen.
 Diese Lücke wird ausschließlich mit den bestehenden
 `uiSnapshot()`-/typed-Command-/Preview-/Commitpfaden und den kleinen
 compile-time HTML/CSS/JavaScript-Assets geschlossen; es entsteht kein zweiter
