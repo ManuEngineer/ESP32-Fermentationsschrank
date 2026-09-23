@@ -335,7 +335,8 @@ RepresentativeScreen makeRepresentativeScreen(
             device_platform::ThemeToken::StatusInformation,
             device_platform::ThemeToken::Canvas);
 
-    if (screen.workspace.pager.valid()) {
+    if (screen.workspace.pager.itemCount > 0U &&
+        screen.workspace.pager.valid()) {
         addRawText(commands, {8U, 156U, 72U, 14U},
                    std::to_string(screen.workspace.pager.currentIndex + 1U) +
                        "/" + std::to_string(screen.workspace.pager.itemCount),

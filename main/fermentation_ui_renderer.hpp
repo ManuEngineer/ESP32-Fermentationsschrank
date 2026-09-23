@@ -76,9 +76,12 @@ struct LvglRenderSummary {
     std::size_t taskStackBytes{0U};
     bool frameSubmitted{false};
     bool frameFullyFlushed{false};
-    std::uint64_t frameSubmitTimeUs{0U};
-    std::uint64_t frameFullyFlushedTimeUs{0U};
-    std::size_t taskStackHighWaterMarkWords{0U};
+    bool lastFlushCompletion{false};
+    bool callbackLifetimeReleased{false};
+    std::uint64_t renderStartTimestampUs{0U};
+    std::uint64_t frameSubmitTimestampUs{0U};
+    std::uint64_t frameCompleteTimestampUs{0U};
+    std::size_t taskStackHighWaterMarkBytes{0U};
 };
 
 [[nodiscard]] std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept;

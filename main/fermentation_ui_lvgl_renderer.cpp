@@ -4,8 +4,11 @@
 #include "lvgl.h"
 
 #include "esp_idf_display_touch_adapter_private.hpp"
+#include "esp_idf_display_touch_adapter_comparison_private.hpp"
 #include "esp_idf_display_touch_adapter.hpp"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 namespace fermentation::main_ui {
@@ -21,9 +24,31 @@ lv_color_t color565ToLv(std::uint16_t color) {
     return lv_color_make(red8, green8, blue8);
 }
 
-void lvglTransferDone(void* context) noexcept {
-    auto* display = static_cast<lv_display_t*>(context);
-    if (display != nullptr) lv_display_flush_ready(display);
+struct LvglFrameCompletion {
+    lv_display_t* display{nullptr};
+    SemaphoreHandle_t lastFlushDone{nullptr};
+    bool lastFlushCompleted{false};
+    std::uint64_t completeTimestampUs{0U};
+};
+
+bool lvglTransferDone(void* context,
+                      std::uint64_t completionTimestampUs) noexcept {
+    auto* frame = static_cast<LvglFrameCompletion*>(context);
+    if (frame == nullptr || frame->display == nullptr) return false;
+
+    // LVGL owns the partial-refresh sequence. It must be told about every
+    // completed transfer, but only the completion of its last flush completes
+    // the comparison frame.
+    const bool lastFlush = lv_display_flush_is_last(frame->display);
+    lv_display_flush_ready(frame->display);
+    if (!lastFlush || frame->lastFlushDone == nullptr) return false;
+
+    frame->lastFlushCompleted = true;
+    frame->completeTimestampUs = completionTimestampUs;
+    BaseType_t higherPriorityTaskWoken = pdFALSE;
+    (void)xSemaphoreGiveFromISR(frame->lastFlushDone,
+                                &higherPriorityTaskWoken);
+    return higherPriorityTaskWoken == pdTRUE;
 }
 
 }  // namespace
@@ -57,7 +82,13 @@ LvglRenderSummary renderLvgl(
         (void)lvgl_port_deinit();
         return {};
     }
-    if (!adapter.setDisplayTransferObserver(&lvglTransferDone, display)) {
+    LvglFrameCompletion frame;
+    frame.display = display;
+    frame.lastFlushDone = xSemaphoreCreateBinary();
+    if (frame.lastFlushDone == nullptr ||
+        !device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            installObserver(adapter, &lvglTransferDone, &frame)) {
+        if (frame.lastFlushDone != nullptr) vSemaphoreDelete(frame.lastFlushDone);
         (void)lvgl_port_remove_disp(display);
         (void)lvgl_port_deinit();
         return {};
@@ -71,6 +102,9 @@ LvglRenderSummary renderLvgl(
     lv_indev_t* touch = lvgl_port_add_touch(&touchConfig);
     if (touch == nullptr || !lvgl_port_lock(1000U)) {
         if (touch != nullptr) (void)lvgl_port_remove_touch(touch);
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            clearObserver(adapter);
+        vSemaphoreDelete(frame.lastFlushDone);
         (void)lvgl_port_remove_disp(display);
         (void)lvgl_port_deinit();
         return {};
@@ -80,6 +114,8 @@ LvglRenderSummary renderLvgl(
     result.drawCommands = screen.commands.size();
     result.partialBufferPixels = displayConfig.buffer_size;
     result.taskStackBytes = static_cast<std::size_t>(portConfig.task_stack);
+    result.renderStartTimestampUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
     lv_obj_t* root = lv_screen_active();
     lv_obj_set_style_bg_color(root,
                               color565ToLv(themeColor565(
@@ -114,31 +150,43 @@ LvglRenderSummary renderLvgl(
             lv_obj_set_style_radius(fill, 0U, 0U);
         }
     }
-    adapter.resetFrameTransferMetrics();
-    if (!adapter.beginExternalDisplayTransfer()) {
-        lvgl_port_unlock();
-        (void)lvgl_port_remove_touch(touch);
-        (void)lvgl_port_remove_disp(display);
-        (void)lvgl_port_deinit();
-        vTaskDelay(2U);
-        return {};
-    }
     lv_obj_invalidate(root);
+    result.frameSubmitTimestampUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
     lv_refr_now(display);
     lvgl_port_unlock();
-    result.frameSubmitted = adapter.firstFrameTransferSubmitUs() != 0U;
-    result.frameSubmitTimeUs = adapter.firstFrameTransferSubmitUs();
-    result.success = adapter.waitForDisplayTransfer(1000U);
-    result.frameFullyFlushed = result.success && adapter.frameTransferCompleted();
-    result.frameFullyFlushedTimeUs = adapter.lastFrameTransferCompleteUs();
-    result.success = result.success && result.frameSubmitted &&
-                     result.frameFullyFlushed;
+    result.frameSubmitted = result.frameSubmitTimestampUs != 0U;
+    const bool lastFlushSignaled =
+        xSemaphoreTake(frame.lastFlushDone, pdMS_TO_TICKS(1000U)) == pdTRUE;
+    result.lastFlushCompletion =
+        lastFlushSignaled && frame.lastFlushCompleted;
+    result.frameCompleteTimestampUs = frame.completeTimestampUs;
+    result.frameFullyFlushed = result.lastFlushCompletion &&
+                               result.frameCompleteTimestampUs >=
+                                   result.frameSubmitTimestampUs;
+    result.success = result.frameSubmitted && result.frameFullyFlushed;
 
     if (const auto task = xTaskGetHandle("taskLVGL"); task != nullptr) {
-        result.taskStackHighWaterMarkWords =
+        result.taskStackHighWaterMarkBytes =
             static_cast<std::size_t>(uxTaskGetStackHighWaterMark(task));
     }
 
+    if (!result.success) {
+        // A timed-out frame may still own the LVGL display. Remove the
+        // comparison callback so it cannot retain this stack context, but do
+        // not free the display/touch/port while transfer completion is absent.
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            clearObserver(adapter);
+        vSemaphoreDelete(frame.lastFlushDone);
+        return result;
+    }
+
+    // No callback retains lv_display_t after this point. The last transfer is
+    // confirmed, so comparison-only LVGL resources can now be removed safely.
+    device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+        clearObserver(adapter);
+    result.callbackLifetimeReleased = true;
+    vSemaphoreDelete(frame.lastFlushDone);
     (void)lvgl_port_remove_touch(touch);
     (void)lvgl_port_remove_disp(display);
     (void)lvgl_port_deinit();

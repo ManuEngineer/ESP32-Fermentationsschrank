@@ -1,10 +1,13 @@
 #include "issue31_renderer_comparison.hpp"
 
 #include <cinttypes>
+#include <algorithm>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "esp_heap_caps.h"
+#include "esp_idf_display_touch_adapter_comparison_private.hpp"
 #include "esp_idf_display_touch_adapter.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -64,6 +67,17 @@ std::vector<RepresentativeScreen> makeLocaleScreens(
     }
     return screens;
 }
+
+bool hasText(const RepresentativeScreen& screen, std::string_view text) {
+    return std::any_of(screen.commands.begin(), screen.commands.end(),
+                       [text](const ScreenDrawCommand& command) {
+                           return command.text == text;
+                       });
+}
+
+std::uint64_t elapsedUs(std::uint64_t start, std::uint64_t end) {
+    return start != 0U && end >= start ? end - start : 0U;
+}
 }  // namespace
 
 void runIssue31RendererComparison() {
@@ -83,55 +97,103 @@ void runIssue31RendererComparison() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
-    auto screens = makeLocaleScreens(snapshot, workspace);
+    const auto home = makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    if (hasText(home, "1/0")) {
+        ESP_LOGE(kTag, "HOME_EMPTY_PAGER_RENDERING=FAIL");
+        return;
+    }
+
+    auto pagerSnapshot = snapshot;
+    fermentation::RuntimeMessage message;
+    message.id = 1U;
+    message.active = true;
+    pagerSnapshot.messages.push_back({message});
+    fermentation::FermentationTouchWorkspace pagerWorkspace;
+    pagerWorkspace.setPage(fermentation::FermentationUiPage::Messages);
+    auto screens = makeLocaleScreens(pagerSnapshot, pagerWorkspace);
     if (screens.size() != 3U || screens[0].commands.size() !=
                                     screens[1].commands.size() ||
-        screens[0].commands.size() != screens[2].commands.size()) {
+        screens[0].commands.size() != screens[2].commands.size() ||
+        screens[1].workspace.pager.itemCount == 0U ||
+        !hasText(screens[1], "1/1")) {
         ESP_LOGE(kTag, "LOCALE_MODEL_MATRIX=FAIL");
         return;
     }
-    ESP_LOGI(kTag, "LOCALE_MODEL_MATRIX=PASS_DE_EN_ES_SHARED_COMMANDS");
+    ESP_LOGI(kTag,
+             "LOCALE_MODEL_MATRIX=PASS_DE_EN_ES_SHARED_COMMANDS "
+             "HOME_EMPTY_PAGER_RENDERING=PASS_NO_1_OF_0 "
+             "REPRESENTATIVE_PAGER_OR_DIALOG_CASE=PASS_MESSAGES_PAGER_1_OF_1");
     const auto& screen = screens[1];
 
-    adapter.resetFrameTransferMetrics();
+    device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+        resetFrameMetrics(adapter);
+    const auto leanRenderStartUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
     const auto lean = renderLean(adapter, screen);
     const auto leanAfter = heapSnapshot();
-    const auto leanSubmitUs = adapter.firstFrameTransferSubmitUs();
-    const auto leanCompleteUs = adapter.lastFrameTransferCompleteUs();
+    const auto leanSubmitUs =
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            firstSubmitTimestampUs(adapter);
+    const auto leanCompleteUs =
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            lastCompleteTimestampUs(adapter);
+    const bool leanFrameComplete =
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            frameTransferCompleted(adapter);
+    const bool leanSuccess = lean.success && lean.frameSubmitted &&
+                             lean.frameFullyFlushed && leanFrameComplete;
     ESP_LOGI(kTag,
              "LEAN_FUNCTIONAL_RESULT=%s LEAN_DRAW_COMMANDS=%u "
              "LEAN_TEXT_BYTES=%u LEAN_FILLED_PIXELS=%u "
-             "LEAN_DISPLAY_SUBMISSIONS=%u LEAN_FRAME_SUBMIT_TIME_US=%" PRIu64
-             " LEAN_FRAME_FULLY_FLUSHED_TIME_US=%" PRIu64
+             "LEAN_DISPLAY_SUBMISSIONS=%u "
+             "LEAN_FRAME_SUBMIT_TIMESTAMP_US=%" PRIu64
+             " LEAN_FRAME_COMPLETE_TIMESTAMP_US=%" PRIu64
+             " LEAN_SUBMIT_TO_COMPLETE_US=%" PRIu64
+             " LEAN_RENDER_START_TO_COMPLETE_US=%" PRIu64
              " LEAN_FRAME_COMPLETION=%s",
-             lean.success ? "PASS" : "FAIL",
+             leanSuccess ? "PASS" : "FAIL",
              static_cast<unsigned>(lean.drawCommands),
              static_cast<unsigned>(lean.textBytes),
              static_cast<unsigned>(lean.filledPixels),
              static_cast<unsigned>(lean.displaySubmissions), leanSubmitUs,
-             leanCompleteUs, lean.frameFullyFlushed ? "PASS" : "FAIL");
+             leanCompleteUs, elapsedUs(leanSubmitUs, leanCompleteUs),
+             elapsedUs(leanRenderStartUs, leanCompleteUs),
+             leanFrameComplete ? "PASS" : "FAIL");
     logHeap("LEAN_AFTER", leanAfter);
-    ESP_LOGI(kTag, "LEAN_MAIN_TASK_STACK_HWM_WORDS=%u",
+    ESP_LOGI(kTag, "LEAN_MAIN_TASK_STACK_HWM_BYTES=%u",
              static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
 
 #ifdef APP_ISSUE31_RENDERER_COMPARISON
     const auto lvglBefore = heapSnapshot();
     const auto lvgl = renderLvgl(adapter, screen);
     const auto lvglAfter = heapSnapshot();
+    const auto lvglSubmitToCompleteUs = elapsedUs(
+        lvgl.frameSubmitTimestampUs, lvgl.frameCompleteTimestampUs);
+    const auto lvglRenderToCompleteUs = elapsedUs(
+        lvgl.renderStartTimestampUs, lvgl.frameCompleteTimestampUs);
     ESP_LOGI(kTag,
              "LVGL_FUNCTIONAL_RESULT=%s LVGL_DRAW_COMMANDS=%u "
              "LVGL_TEXT_BYTES=%u LVGL_PARTIAL_BUFFER_PIXELS=%u "
-             "LVGL_TASK_STACK_BYTES=%u LVGL_FRAME_SUBMIT_TIME_US=%" PRIu64
-             " LVGL_FRAME_FULLY_FLUSHED_TIME_US=%" PRIu64
-             " LVGL_FRAME_COMPLETION=%s LVGL_TASK_STACK_HWM_WORDS=%u",
+             "LVGL_TASK_STACK_BYTES=%u LVGL_FRAME_SUBMIT_TIMESTAMP_US=%" PRIu64
+             " LVGL_FRAME_COMPLETE_TIMESTAMP_US=%" PRIu64
+             " LVGL_SUBMIT_TO_COMPLETE_US=%" PRIu64
+             " LVGL_RENDER_START_TO_COMPLETE_US=%" PRIu64
+             " LVGL_FRAME_COMPLETION=%s "
+             "LVGL_LAST_FLUSH_COMPLETION=%s LVGL_CALLBACK_LIFETIME=%s "
+             "LVGL_TASK_STACK_HWM_BYTES=%u",
              lvgl.success ? "PASS" : "FAIL",
              static_cast<unsigned>(lvgl.drawCommands),
              static_cast<unsigned>(lvgl.textBytes),
              static_cast<unsigned>(lvgl.partialBufferPixels),
              static_cast<unsigned>(lvgl.taskStackBytes),
-             lvgl.frameSubmitTimeUs, lvgl.frameFullyFlushedTimeUs,
+             lvgl.frameSubmitTimestampUs, lvgl.frameCompleteTimestampUs,
+             lvglSubmitToCompleteUs, lvglRenderToCompleteUs,
              lvgl.frameFullyFlushed ? "PASS" : "FAIL",
-             static_cast<unsigned>(lvgl.taskStackHighWaterMarkWords));
+             lvgl.lastFlushCompletion ? "PASS" : "FAIL",
+             lvgl.callbackLifetimeReleased ? "PASS" : "FAIL",
+             static_cast<unsigned>(lvgl.taskStackHighWaterMarkBytes));
     logHeap("LVGL_BEFORE", lvglBefore);
     logHeap("LVGL_AFTER", lvglAfter);
 #endif

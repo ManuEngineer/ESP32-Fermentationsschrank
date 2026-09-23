@@ -1,7 +1,9 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 #include "../../main/fermentation_ui_renderer.hpp"
@@ -42,6 +44,14 @@ class RecordingDisplay final : public device_platform::IDisplayTouchPort {
     std::size_t calls{0U};
     std::size_t pixels{0U};
 };
+
+bool hasText(const fermentation::main_ui::RepresentativeScreen& screen,
+             std::string_view text) {
+    return std::any_of(screen.commands.begin(), screen.commands.end(),
+                       [text](const auto& command) {
+                           return command.text == text;
+                       });
+}
 
 void test_representative_screen_uses_existing_workspace_and_three_locales() {
     fermentation::FermentationUiSnapshot snapshot;
@@ -105,6 +115,34 @@ void test_lean_flush_is_bounded_and_bottom_press_returns_existing_target() {
         static_cast<int>(press.interaction.outcome));
 }
 
+void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
+    fermentation::FermentationUiSnapshot homeSnapshot;
+    homeSnapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace homeWorkspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto home = fermentation::main_ui::makeRepresentativeScreen(
+        homeSnapshot, homeWorkspace, packs, device_platform::LocaleId{"en"});
+    TEST_ASSERT_FALSE(hasText(home, "1/0"));
+
+    auto messagesSnapshot = homeSnapshot;
+    fermentation::RuntimeMessage message;
+    message.id = 1U;
+    message.active = true;
+    messagesSnapshot.messages.push_back({message});
+    fermentation::FermentationTouchWorkspace messagesWorkspace;
+    messagesWorkspace.setPage(fermentation::FermentationUiPage::Messages);
+    const auto messages = fermentation::main_ui::makeRepresentativeScreen(
+        messagesSnapshot, messagesWorkspace, packs,
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_EQUAL_UINT32(1U, messages.workspace.pager.itemCount);
+    TEST_ASSERT_TRUE(hasText(messages, "1/1"));
+
+    RecordingDisplay display;
+    const auto result = fermentation::main_ui::renderLean(display, messages);
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_TRUE(result.frameFullyFlushed);
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -121,5 +159,6 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_lean_flush_is_bounded_and_bottom_press_returns_existing_target);
+    RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     return UNITY_END();
 }

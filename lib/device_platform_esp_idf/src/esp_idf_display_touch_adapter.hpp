@@ -12,6 +12,7 @@ class EspIdfDisplayTouchAdapter;
 
 namespace detail {
 struct EspIdfDisplayTouchHandles;
+struct ComparisonDisplayTransferAccess;
 [[nodiscard]] bool bindEspIdfDisplayTouchHandles(
     const EspIdfDisplayTouchAdapter& adapter,
     EspIdfDisplayTouchHandles& handles) noexcept;
@@ -57,22 +58,11 @@ class EspIdfDisplayTouchAdapter final
         std::size_t pixelCount) override;
     [[nodiscard]] device_platform::RawTouchSample sampleTouch() override;
 
-    using DisplayTransferObserver = void (*)(void* context) noexcept;
-
-    [[nodiscard]] bool setDisplayTransferObserver(
-        DisplayTransferObserver observer, void* context) noexcept;
-    [[nodiscard]] bool beginExternalDisplayTransfer() noexcept;
-    [[nodiscard]] bool waitForDisplayTransfer(
-        std::uint32_t timeoutMs) noexcept;
-    void resetFrameTransferMetrics() noexcept;
-    [[nodiscard]] std::uint64_t firstFrameTransferSubmitUs() const noexcept;
-    [[nodiscard]] std::uint64_t lastFrameTransferCompleteUs() const noexcept;
-    [[nodiscard]] bool frameTransferCompleted() const noexcept;
-
    private:
     friend bool detail::bindEspIdfDisplayTouchHandles(
         const EspIdfDisplayTouchAdapter& adapter,
         detail::EspIdfDisplayTouchHandles& handles) noexcept;
+    friend struct detail::ComparisonDisplayTransferAccess;
     class Impl;
     std::unique_ptr<Impl> impl_;
 };
