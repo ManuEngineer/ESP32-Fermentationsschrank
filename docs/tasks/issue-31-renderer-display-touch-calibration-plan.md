@@ -14,7 +14,7 @@
 | Planstatus | `OWNER_PLAN_APPROVAL_REQUIRED` |
 | ESP-IDF-Vertrag | `v6.1@fff9895c82d744c7237be8847347bdd1b07c6643` |
 | Issue-164-Baseline | `PR165=MERGED`; `ISSUE164=OPEN`; reale WLAN-Evidence wartet auf physischen Modus-Einstieg aus #31 |
-| Implementation | `NOT_STARTED` |
+| Produktimplementation | `PRODUCT_IMPLEMENTATION=NOT_STARTED` |
 | Hardware-Spike | `STAGE_0=PASS`; `STAGE_1=PASS`; `STAGE_2=PASS`; `STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL`; `STAGE_4=NOT_RUN` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
 | LVGL-Auswahl | `DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION` |
@@ -32,8 +32,8 @@
 | DISPLAY_RESET_NET_VERIFICATION | `PASS` (Dokumentationsbasis und bekannte Modulvariante) |
 | EXPECTED_DISPLAY_CONTROLLER | `ILI9341` (bekannte MSP2807-Dokumentation / bestehende Projektbasis) |
 | EXPECTED_TOUCH_CONTROLLER | `XPT2046` (bekannte MSP2807-Dokumentation / bestehende Projektbasis) |
-| DISPLAY_CONTROLLER_IDENTITY | `DEFERRED_TO_FUNCTIONAL_SMOKE` |
-| TOUCH_CONTROLLER_IDENTITY | `DEFERRED_TO_FUNCTIONAL_SMOKE` |
+| DISPLAY_CONTROLLER_IDENTITY | `FUNCTIONAL_VISUAL_PASS` |
+| TOUCH_CONTROLLER_IDENTITY | `FUNCTIONAL_RAW_TOUCH_PASS` |
 | STAGE_0_SSOT_CONFORMANCE | `PASS` |
 | STAGE_0_BASELINE | `PASS` |
 | Stage-0-Status | `STAGE_0_OVERALL=PASS` |
@@ -91,17 +91,21 @@ Kandidatenmenge wird berichtet, aber nicht als Ownerauswahl erteilt.
 ### Korrektur dieser Planrevision: Stage-0-Controlleridentitaet
 
 Stage 0 wird anhand der bereits vorhandenen realen Evidence als abgeschlossen
-bewertet. Die bekannte MSP2807-Dokumentation / bestehende Projektbasis liefert
+bewertet. Historisch lieferte die bekannte MSP2807-Dokumentation / bestehende
+Projektbasis zu diesem Zeitpunkt nur die erwarteten Kandidaten
 `EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
-`EXPECTED_TOUCH_CONTROLLER=XPT2046`, aber keine vorgezogene reale
-Controlleridentitaet. Da der unveraenderte Bring-up-Pfad Display und Touch
-noch nicht initialisiert, gelten
-`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
-`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Der erste aktive
-Low-Level-Smoke bestaetigt die Controller funktional, sobald der jeweilige
-Treiberpfad existiert. Diese Korrektur fuehrt weder Produktcode noch einen
-Rendererentscheid ein und verlangt keine weitere Owner-Bestaetigung von
-Aufdrucken, Modulvariante oder Dokumentationsuebereinstimmung.
+`EXPECTED_TOUCH_CONTROLLER=XPT2046`; der Bring-up-Pfad initialisierte Display
+und Touch damals noch nicht. Dieser historische Stage-0-Zustand ist durch die
+separate funktionale Stage-2-Evidence abgelöst:
+
+```text
+DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS
+TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
+```
+
+Diese Korrektur führt weder Produktcode noch einen Rendererentscheid ein und
+verlangt keine weitere Owner-Bestaetigung von Aufdrucken, Modulvariante oder
+Dokumentationsuebereinstimmung.
 
 Das naechste Gate ist ausschliesslich die Ownerfreigabe dieser exakten neuen
 Plan-SHA. Danach darf die bereits ausgefuehrte Stage-3-Zusatzmatrix ohne neue
@@ -135,17 +139,18 @@ Audits und die Governancequellen live abgeglichen.
   die relevanten Baselinewerte bilden damit den abgeschlossenen
   `STAGE_0_OVERALL=PASS`; `STAGE_1=PASS`, `STAGE_2=PASS`,
   `STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL` und `STAGE_4=NOT_RUN`.
-  `SSOT_CONFORMANCE=PASS`, während
-  `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt. Die erwarteten
+  `SSOT_CONFORMANCE=PASS`. `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt
+  als projektweiter Status fuer die noch ausstehende produktive
+  Display-/Touch-Integration; dies stellt den bestandenen Stage-2-Smoke nicht
+  in Frage. Die erwarteten
   Controller sind `EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
   `EXPECTED_TOUCH_CONTROLLER=XPT2046` aus der bekannten
-  MSP2807-Dokumentation / bestehenden Projektbasis. Ihre reale Identität wird
-  ausdrücklich erst im ersten aktiven Low-Level-Smoke mit vorhandenem
-  Treiberpfad geprüft:
-  `DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE` und
-  `TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`. Lieferantenangaben,
-  Silkscreen oder Doku-Uebereinstimmung werden davor nicht als reale
-  Controlleridentität behauptet.
+  MSP2807-Dokumentation / bestehenden Projektbasis. Die kanonische Stage-2-
+  Evidence bestätigt inzwischen
+  `DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS` und
+  `TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS`; Lieferantenangaben,
+  Silkscreen oder Doku-Uebereinstimmung sind dafür nicht die alleinige
+  Evidenz.
 - PR #155 / Issue #154 ist abgeschlossen: PR #155 ist gemergt und Issue #154
   geschlossen. Der in der Roadmap dokumentierte Plan ist
   `3824bf54f1aebc5e3453739fd083ab9c317ef868`; der PR-Source-Head war
@@ -169,7 +174,7 @@ Audits und die Governancequellen live abgeglichen.
 Die alten Audits sind Ausgangslage, aber keine aktuelle Versions- oder
 Produktionsauswahl. Diese Planrevision wurde am 2026-09-18 gegen den
 kanonischen lokalen ESP-IDF-6.1-Vertrag und die auf `main` gemergten #164-
-Netzwerk-/UI-Vertraege revalidiert. Die spaetere Stage-1-Pruefung bleibt an
+Netzwerk-/UI-Vertraege revalidiert. Die bestandene Stage-1-Evidence bleibt an
 die fixierte lokale ESP-IDF-6.1-Toolchain und ihre exakten Lockdaten gebunden.
 
 ## 2. Ziel, Nichtziele und unveraenderliche Grenzen
@@ -188,10 +193,10 @@ Produktivauswahl.
 
 ### Nichtziele
 
-- Keine Implementation vor Ownerfreigabe der exakten Plan-SHA.
-- Keine Stage-1-/Stage-2-/Stage-3-/Stage-4-Ausfuehrung vor Ownerfreigabe der
-  exakten Plan-SHA; die bereits abgeschlossene Stage-0-Evidence bleibt davon
-  unberuehrt.
+- Keine Produktimplementation vor Ownerfreigabe der exakten Plan-SHA.
+- In diesem Plan-Revisionscommit keine neuen Stage-1-/Stage-2-/Stage-3- oder
+  Stage-4-Tests; die bestehende Stage-1-, Stage-2- und Stage-3-Evidence bleibt
+  unveraendert gueltig.
 - Keine neue UI-, Command-, Navigation-, PIN-, Recovery-, Programm- oder
   Persistenzlogik neben den gemergten #25/#26- und bestehenden Recovery-
   Vertraegen.
@@ -444,18 +449,25 @@ gemessene Ressourcenwerte sind nachgewiesen. Display und Touch sind physisch
 angeschlossen; der `MSP2807_RESET`-Pad ist direkt mit `EN_CHIP_PU` verbunden
 und `DISPLAY_RESET_NET_VERIFICATION=PASS`.
 
-Stage 0 verlangt keinen funktionalen Controlleridentitaetsnachweis, solange
-der unveraenderte Bring-up-Pfad noch keinen Display-/Touch-Treiberpfad besitzt.
-Die bekannte MSP2807-Dokumentation und die bestehende Projektbasis liefern
-deshalb nur die erwarteten Kandidaten
-`EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
-`EXPECTED_TOUCH_CONTROLLER=XPT2046`. Die reale Identitaet bleibt bis zum
-ersten aktiven Low-Level-Smoke mit vorhandenem Treiberpfad ausdruecklich
-offen:
+Historische Stage-0-Semantik: Stage 0 verlangte keinen funktionalen
+Controlleridentitaetsnachweis, solange der unveraenderte Bring-up-Pfad noch
+keinen Display-/Touch-Treiberpfad besass. Die bekannte MSP2807-Dokumentation
+und die bestehende Projektbasis lieferten damals nur die erwarteten
+Kandidaten `EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
+`EXPECTED_TOUCH_CONTROLLER=XPT2046`. Der damalige Identitaetsstatus war:
 
 ```text
 DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE
 TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE
+```
+
+Diese Werte beschreiben ausschließlich den damaligen Stage-0-Zustand. Die
+kanonische Stage-2-Evidence hat die Controller inzwischen funktional
+bestätigt:
+
+```text
+DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS
+TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
 ```
 
 Die bereits vorhandene Evidence fuer reale Hardware, SSOT-Verdrahtung und
@@ -463,10 +475,21 @@ Resetpfad, actor-free Flash/Boot/Reset, No-PSRAM und Baselinewerte schliesst
 Stage 0 ab:
 `STAGE_0_SSOT_CONFORMANCE=PASS`, `STAGE_0_BASELINE=PASS`,
 `SSOT_CONFORMANCE=PASS` und `STAGE_0_OVERALL=PASS`.
-`FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt korrekt, weil der
-Display-/Touch-Smoke noch nicht ausgefuehrt wurde. Bis zu dessen Start bleiben
-`STAGE_1` bis `STAGE_4` `NOT_RUN`; es gibt keine Stage-1/2/3/4-Implementation
-und keine Renderer-/Bibliotheksauswahl.
+`FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bezeichnet weiterhin die noch
+ausstehende produktive Display-/Touch-Integration und nicht einen fehlenden
+Stage-2-Smoke. Aktuell gilt:
+
+```text
+STAGE_0=PASS
+STAGE_1=PASS
+STAGE_2=PASS
+STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL
+STAGE_4=NOT_RUN
+PRODUCT_IMPLEMENTATION=NOT_STARTED
+```
+
+Die Stage-1-/Stage-2-Evidence und die ausgeführte Stage-3-Zusatzmatrix sind
+keine Produktimplementation und keine Renderer-/Bibliotheksauswahl.
 
 Die begrenzte actor-free Reset-/Boot-Prüfung ist auf dem exakten
 `HEAD=6d803d0895cf6d906c99792d7d2ee20024c22881` erfolgt: Das gebaute
@@ -477,14 +500,20 @@ Die begrenzte actor-free Reset-/Boot-Prüfung ist auf dem exakten
 (`BOOT=PASS`; kein Guru Meditation Error, Stack Overflow, Watchdog oder
 Brownout). Der EN-Reset-Puls wurde nach der direkten
 `MSP2807_RESET -> EN_CHIP_PU`-Verdrahtung ausgeführt
-(`ESP32_EN_RESET_PULSE=PASS`). Dies bestätigt den gemeinsamen Resetpfad; die
-Die Display-/Touch-Controlleridentität und die eigentliche Display-/Touchfunktion
-werden nicht aus diesem Bring-up-Log abgeleitet. Sie sind fuer den ersten
-aktiven Low-Level-Smoke vorgesehen; bis dahin gelten
-`DISPLAY_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`,
-`TOUCH_CONTROLLER_IDENTITY=DEFERRED_TO_FUNCTIONAL_SMOKE`,
-`STAGE_0_DISPLAY_FUNCTION=NOT_RUN` und
-`STAGE_0_TOUCH_FUNCTION=NOT_RUN`.
+(`ESP32_EN_RESET_PULSE=PASS`). Dies bestätigt den gemeinsamen Resetpfad. Die
+Display-/Touch-Controlleridentitaet und die eigentliche Display-/Touchfunktion
+wurden nicht aus diesem Bring-up-Log abgeleitet, sondern inzwischen durch die
+getrennte Stage-2-Evidence:
+
+```text
+DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS
+TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS
+STAGE_2_DISPLAY_FUNCTION=PASS
+STAGE_2_TOUCH_FUNCTION=PASS
+```
+
+Die Aussage, dass der Bring-up-Pfad selbst keine Display-/Touchfunktion
+pruefte, ist historische Stage-0-Abgrenzung und kein aktueller NOT_RUN-Status.
 
 #### Stage-0-Reihenfolge fuer das Reset-Netz
 
@@ -544,10 +573,10 @@ aktiven Low-Level-Smoke deferred.
 - Resetnetz `EN_CHIP_PU -> MSP2807_RESET` und Boot-/Reset-Safe-Zustaende.
 
 Die vorhandene Hardware-/SSOT-/Reset-Evidence und die actor-free Baseline sind
-ausreichend fuer Stage 0; die Controlleridentitaet wird bewusst nicht aus
-Lieferantentext, Silkscreen oder Doku-Uebereinstimmung als PASS abgeleitet.
-Der Builder bestaetigt sie erst im ersten aktiven Low-Level-Smoke mit
-vorhandenem Treiberpfad. Die unbekannte Carrier-Revisionsnummer oder ein
+ausreichend fuer Stage 0. Historisch wurde die Controlleridentitaet bewusst
+nicht aus Lieferantentext, Silkscreen oder Doku-Uebereinstimmung als PASS
+abgeleitet; der aktive Low-Level-Smoke hat sie inzwischen funktional bestaetigt.
+Die unbekannte Carrier-Revisionsnummer oder ein
 fehlender Modulaufdruck allein sind kein Stage-0-Blocker. Nur wenn ein
 konkreter Widerspruch bei Pinbelegung, Versorgung, Resetnetz oder
 Logic-Domain entsteht, stoppt #31 und erfordert einen separaten SSOT-/
@@ -903,9 +932,9 @@ eine Owner-Bestaetigung physischer Tatsachen:
    Eine fehlende Carrier-Revisionskennung oder ein fehlender Modulaufdruck
    erzeugt ohne konkrete relevante Abweichung kein weiteres Owner-Gate.
    UART-/FT232RL-Zugang und actor-free Testbedingungen sind vorhanden. Die
-   praktische Display-/Touch-Controlleridentifikation wird nicht vorgezogen;
-   sie erfolgt erst im ersten aktiven Low-Level-Smoke mit vorhandenem
-   Treiberpfad.
+   praktische Display-/Touch-Controlleridentifikation wurde historisch nicht
+   vorgezogen; sie ist inzwischen durch die kanonische Stage-2-Evidence
+   funktional bestätigt.
 2. Zugang zur realen Verdrahtung von SCK/MISO/MOSI, TFT-CS, D/C, Reset,
    Backlight, Touch-CS, IRQ und GND gegen das Boardprofil. Der Builder
    dokumentiert Konformitaet oder Abweichung als Evidence; eine Abweichung ist
@@ -985,15 +1014,22 @@ zweite UI-Architektur zu schaffen.
 
 Zulaessig sind nur Dokument-/Routingpruefungen, etwa Branch-/HEAD-/Issue-/PR-
 Abgleich, `git diff --check` und die Pruefung der Plan-/Roadmapreferenzen.
-Firmwarebuilds, native Volltests, ESP-IDF-Builds und reale Hardwaretests sind
-in dieser Phase `NOT_RUN` und werden nicht als bestanden behauptet.
+Fuer diesen Plan-Revisionscommit werden keine neuen Firmwarebuilds, nativen
+Volltests, ESP-IDF-Builds oder realen Hardwaretests ausgefuehrt. Die bestehende
+Stage-1-, Stage-2- und Stage-3-Evidence bleibt unveraendert gueltig und wird
+nicht als neu ausgefuehrt behauptet.
 
 ### Nach Ownerfreigabe der exakten Plan-SHA
 
-- Stage-1-Kandidatenbuilds; nach Low-Level-Auswahl gezielte native
-  Contract-/Kalibrierungstests;
-- Adapter-/Composition-Tests ohne App- oder Aktorfreigabe;
-- gezielte ESP-IDF-Profiltests und actor-free Stage-2-/Stage-3-Evidence;
+- die bereits ausgefuehrte Stage-3-Zusatzmatrix ohne neue Stage-1-/Stage-2-/
+  Stage-3-Hardwaretests konsistent als `STAGE_3=PASS` abschliessen;
+- danach die Stage-4-Bewertung aufgrund
+  `OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES` ohne weiteres Ausfuehrungsgate
+  durchfuehren; die finale Auswahl bleibt
+  `STAGE_4_SELECTION=OWNER_DECISION_REQUIRED`;
+- erst nach dieser Auswahl die im Plan vorgesehenen Adapter-/Composition-,
+  Contract-/Kalibrierungs- und gezielten Implementations-/Integrationstests
+  ausfuehren, ohne App- oder Aktorfreigabe;
 - Architektur-/Abhaengigkeitspruefung: kein LVGL/ESP-IDF in
   `fermentation_app`, kein neuer zweiter Contractpfad;
 - `scripts/check_architecture_boundaries.py` auf dem tatsaechlichen finalen
