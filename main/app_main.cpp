@@ -21,6 +21,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
 #include "fermentation_ui_text.hpp"
+#include "touch_calibration.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 #include "issue_90_slice7_harness.hpp"
@@ -55,6 +56,16 @@ constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
 constexpr TickType_t kCooperativeYieldTicks = 1;
 constexpr const char* kNtpServers[] = {"pool.ntp.org"};
+
+// The R1 board/controller identity a persisted touch calibration record
+// must match to be trusted (Stage-2 evidence confirmed
+// DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS and
+// TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS for exactly this
+// combination; see
+// docs/tasks/issue-31-renderer-display-touch-calibration-plan.md). A record
+// written for a different board or controller is never silently accepted.
+constexpr char kBoardControllerId[] =
+    "esp32_32e_quad_mosfet_r1+ili9341+xpt2046";
 
 // No board profile with verified RTC bus pins exists yet.  The disabled
 // profile is therefore intentional and is the supported NTP-only mode; a
@@ -309,11 +320,48 @@ extern "C" void app_main(void) {
     if (displayRenderer == nullptr || !displayRenderer->initialize()) {
         ESP_LOGW(kTag,
                  "productive LVGL display unavailable; UI remains fail-closed");
-    } else if (!displayRenderer->render(
-                   application.uiSnapshot(), uiWorkspace, uiTextPacks,
-                   uiPresentation.displayLocale, std::nullopt,
-                   &uiPresentation.programCatalog, uiNetworkStatus, uiClock)) {
-        ESP_LOGW(kTag, "productive LVGL initial projection failed");
+    } else {
+        // Boot-time load/classify only (Schnitt 9): calibration never
+        // changes at runtime without an explicit future calibration
+        // workflow writing a new record, so this is not re-read per loop
+        // tick. Every status other than Available keeps touch fail-closed,
+        // including UnsupportedSchema - a newer schema this firmware does
+        // not understand must invalidate, not degrade into a guessed
+        // interpretation. The fallback slot is loaded and classified for
+        // diagnostics only; it never replaces an invalid active record
+        // here (see the session handover for that open policy question).
+        device_platform::TouchCalibrationStore touchCalibrationStore(
+            stateStoreContext->store());
+        const auto activeCalibration = touchCalibrationStore.load(
+            device_platform::TouchCalibrationSlot::Active, kBoardControllerId);
+        const auto fallbackCalibration = touchCalibrationStore.load(
+            device_platform::TouchCalibrationSlot::Fallback,
+            kBoardControllerId);
+        ESP_LOGI(kTag,
+                 "touch calibration: active_status=%d fallback_status=%d",
+                 static_cast<int>(activeCalibration.status),
+                 static_cast<int>(fallbackCalibration.status));
+        switch (activeCalibration.status) {
+            case device_platform::TouchCalibrationLoadStatus::Available:
+                displayRenderer->setTouchCalibration(
+                    activeCalibration.record->model);
+                break;
+            case device_platform::TouchCalibrationLoadStatus::NotFound:
+            case device_platform::TouchCalibrationLoadStatus::OtherEpoch:
+            case device_platform::TouchCalibrationLoadStatus::UnsupportedSchema:
+            case device_platform::TouchCalibrationLoadStatus::InvalidRecord:
+            case device_platform::TouchCalibrationLoadStatus::ReadError:
+            case device_platform::TouchCalibrationLoadStatus::CapacityError:
+                displayRenderer->setTouchCalibration(std::nullopt);
+                break;
+        }
+
+        if (!displayRenderer->render(
+                application.uiSnapshot(), uiWorkspace, uiTextPacks,
+                uiPresentation.displayLocale, std::nullopt,
+                &uiPresentation.programCatalog, uiNetworkStatus, uiClock)) {
+            ESP_LOGW(kTag, "productive LVGL initial projection failed");
+        }
     }
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS

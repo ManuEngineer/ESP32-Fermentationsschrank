@@ -8,6 +8,7 @@
 #include "esp_idf_display_touch_adapter.hpp"
 #include "fermentation_ui_models.hpp"
 #include "fermentation_ui_renderer.hpp"
+#include "touch_calibration.hpp"
 
 namespace fermentation::main_ui {
 
@@ -30,6 +31,14 @@ class ProductiveLvglRenderer final {
     ProductiveLvglRenderer& operator=(ProductiveLvglRenderer&&) = delete;
 
     [[nodiscard]] bool initialize();
+    // Sets or clears the active calibration model the touch input callback
+    // uses. Passing std::nullopt (the default until this is called) keeps
+    // the touch path fail-closed. The caller is responsible for the load/
+    // classify decision (device_platform::TouchCalibrationStore) and for
+    // only ever passing a model from a TouchCalibrationLoadStatus::Available
+    // result; this renderer never loads, classifies or invents one itself.
+    void setTouchCalibration(
+        std::optional<device_platform::TouchCalibrationModel> activeModel);
     [[nodiscard]] bool render(
         const FermentationUiSnapshot& snapshot,
         FermentationTouchWorkspace& workspace,

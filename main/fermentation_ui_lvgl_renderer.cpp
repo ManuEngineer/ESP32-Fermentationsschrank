@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
+#include "touch_calibration.hpp"
 
 namespace fermentation::main_ui {
 namespace {
@@ -62,7 +63,10 @@ struct ProductiveLvglRenderer::Impl final {
     lv_indev_t* touchInput{nullptr};
     bool portStarted{false};
     bool initialized{false};
-    bool touchCalibrationAvailable{false};
+    // Set only from a real TouchCalibrationLoadStatus::Available
+    // classification (see ProductiveLvglRenderer::setTouchCalibration()).
+    // No default/placeholder model is ever substituted here.
+    std::optional<device_platform::TouchCalibrationModel> touchCalibrationModel;
     bool touchCalibrationWarningLogged{false};
     std::optional<ScreenRenderKey> renderedKey;
 
@@ -73,17 +77,43 @@ struct ProductiveLvglRenderer::Impl final {
         if (state == nullptr || state->adapter == nullptr) return;
 
         // The XPT2046 adapter intentionally exposes controller-native raw
-        // values. Until the planned, persisted board calibration is
-        // available, do not invent a coordinate transform and do not turn
-        // raw values into actions.
+        // values. Without an available, well-formed persisted calibration,
+        // raw values are never turned into a coordinate or an action.
         const auto sample = state->adapter->sampleTouch();
-        if (!state->touchCalibrationAvailable &&
-            !state->touchCalibrationWarningLogged) {
-            state->touchCalibrationWarningLogged = true;
-            ESP_LOGW("issue31_ui",
-                     "touch input held released until calibration is available");
-            (void)sample;
+        if (!state->touchCalibrationModel.has_value()) {
+            if (!state->touchCalibrationWarningLogged) {
+                state->touchCalibrationWarningLogged = true;
+                ESP_LOGW(
+                    "issue31_ui",
+                    "touch input held released until calibration is available");
+            }
+            return;
         }
+        if (sample.status != device_platform::RawTouchSampleStatus::Contact ||
+            !sample.contact) {
+            return;
+        }
+        const auto calibrated = device_platform::applyTouchCalibration(
+            *state->touchCalibrationModel, sample.rawX, sample.rawY);
+        // Clamp to the fixed 320x240 display surface: a calibration record
+        // is trusted for its coefficients, never for guaranteeing every
+        // transformed point stays on-screen.
+        const auto clampedX = static_cast<lv_coord_t>(
+            calibrated.x < 0.0
+                ? 0
+                : (calibrated.x > static_cast<double>(RepresentativeScreen::kWidth - 1U)
+                       ? RepresentativeScreen::kWidth - 1U
+                       : static_cast<std::uint16_t>(calibrated.x)));
+        const auto clampedY = static_cast<lv_coord_t>(
+            calibrated.y < 0.0
+                ? 0
+                : (calibrated.y >
+                          static_cast<double>(RepresentativeScreen::kHeight - 1U)
+                       ? RepresentativeScreen::kHeight - 1U
+                       : static_cast<std::uint16_t>(calibrated.y)));
+        data->point.x = clampedX;
+        data->point.y = clampedY;
+        data->state = LV_INDEV_STATE_PRESSED;
     }
 };
 
@@ -97,6 +127,11 @@ ProductiveLvglRenderer::ProductiveLvglRenderer(
     : impl_(std::make_unique<Impl>(std::move(config))) {}
 
 ProductiveLvglRenderer::~ProductiveLvglRenderer() = default;
+
+void ProductiveLvglRenderer::setTouchCalibration(
+    std::optional<device_platform::TouchCalibrationModel> activeModel) {
+    impl_->touchCalibrationModel = std::move(activeModel);
+}
 
 bool ProductiveLvglRenderer::initialize() {
     auto& state = *impl_;
