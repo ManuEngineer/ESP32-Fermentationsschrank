@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <optional>
 
 #include "device_ui_hardware_ports.hpp"
 
@@ -52,8 +52,21 @@ class EspIdfDisplayTouchAdapter final
     [[nodiscard]] bool setBacklight(bool enabled) override;
     [[nodiscard]] bool fillRect(device_platform::DisplayRect rect,
                                 std::uint16_t rgb565) override;
-    [[nodiscard]] std::optional<device_platform::RawTouchSample>
-    sampleTouch() override;
+    [[nodiscard]] bool flushRgb565(
+        device_platform::DisplayRect rect, const std::uint16_t* pixels,
+        std::size_t pixelCount) override;
+    [[nodiscard]] device_platform::RawTouchSample sampleTouch() override;
+
+    using DisplayTransferObserver = void (*)(void* context) noexcept;
+
+    [[nodiscard]] bool setDisplayTransferObserver(
+        DisplayTransferObserver observer, void* context) noexcept;
+    [[nodiscard]] bool waitForDisplayTransfer(
+        std::uint32_t timeoutMs) noexcept;
+    void resetFrameTransferMetrics() noexcept;
+    [[nodiscard]] std::uint64_t firstFrameTransferSubmitUs() const noexcept;
+    [[nodiscard]] std::uint64_t lastFrameTransferCompleteUs() const noexcept;
+    [[nodiscard]] bool frameTransferCompleted() const noexcept;
 
    private:
     friend bool detail::bindEspIdfDisplayTouchHandles(

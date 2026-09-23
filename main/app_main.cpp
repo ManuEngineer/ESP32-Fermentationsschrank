@@ -200,10 +200,6 @@ device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
 }  // namespace
 
 extern "C" void app_main(void) {
-#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
-    fermentation::main_ui::runIssue31RendererComparison();
-    return;
-#endif
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
         // No recovery/application path is started if the owning context
@@ -281,6 +277,12 @@ extern "C" void app_main(void) {
 #endif
 
     logResources();
+
+#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
+    // Run only after the normal composition root and application graph are
+    // alive so resource evidence represents the real R1 graph.
+    fermentation::main_ui::runIssue31RendererComparison();
+#endif
 
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
     if (!fermentation::issue_29_bringup::run()) {

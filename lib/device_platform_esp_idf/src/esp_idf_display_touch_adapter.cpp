@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <limits>
 #include <utility>
 
@@ -15,7 +16,11 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_touch.h"
 #include "esp_lcd_touch_xpt2046.h"
+#include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 namespace device_platform_esp_idf {
 namespace {
@@ -34,6 +39,13 @@ class EspIdfDisplayTouchAdapter::Impl final {
     explicit Impl(EspIdfDisplayTouchConfig value) : config(std::move(value)) {}
 
     ~Impl() {
+        // esp_lcd_panel_draw_bitmap() retains the DMA buffer until its
+        // on_color_trans_done callback. Never free or recycle it before the
+        // callback, even on the teardown path.
+        if (transferPending && transferDone != nullptr) {
+            (void)xSemaphoreTake(transferDone, portMAX_DELAY);
+            transferPending = false;
+        }
         if (touch != nullptr) {
             (void)esp_lcd_touch_del(touch);
             touch = nullptr;
@@ -58,6 +70,10 @@ class EspIdfDisplayTouchAdapter::Impl final {
             heap_caps_free(dmaPixels);
             dmaPixels = nullptr;
         }
+        if (transferDone != nullptr) {
+            vSemaphoreDelete(transferDone);
+            transferDone = nullptr;
+        }
         if (validPin(config.backlightPin)) {
             (void)gpio_reset_pin(gpio(config.backlightPin));
         }
@@ -71,8 +87,47 @@ class EspIdfDisplayTouchAdapter::Impl final {
     std::uint16_t* dmaPixels{nullptr};
     bool busInitialized{false};
     bool initialized{false};
+    SemaphoreHandle_t transferDone{nullptr};
+    bool transferPending{false};
+    bool transferFaulted{false};
+    EspIdfDisplayTouchAdapter::DisplayTransferObserver observer{nullptr};
+    void* observerContext{nullptr};
+    std::uint64_t firstSubmitUs{0U};
+    std::uint64_t lastCompleteUs{0U};
     device_platform::DisplayRotation rotation{
         device_platform::DisplayRotation::Rotate0};
+
+    static bool IRAM_ATTR onColorTransferDone(
+        esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*,
+        void* userContext) noexcept {
+        auto* state = static_cast<Impl*>(userContext);
+        if (state == nullptr) return false;
+        state->transferPending = false;
+        state->lastCompleteUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        BaseType_t higherPriorityTaskWoken = pdFALSE;
+        if (state->transferDone != nullptr) {
+            (void)xSemaphoreGiveFromISR(state->transferDone,
+                                        &higherPriorityTaskWoken);
+        }
+        if (state->observer != nullptr) {
+            state->observer(state->observerContext);
+        }
+        if (higherPriorityTaskWoken == pdTRUE) {
+            portYIELD_FROM_ISR();
+        }
+        return higherPriorityTaskWoken == pdTRUE;
+    }
+
+    [[nodiscard]] bool waitForTransfer(TickType_t timeoutTicks) noexcept {
+        if (!transferPending) return !transferFaulted;
+        if (transferDone == nullptr ||
+            xSemaphoreTake(transferDone, timeoutTicks) != pdTRUE) {
+            transferFaulted = true;
+            return false;
+        }
+        return !transferFaulted;
+    }
 };
 
 EspIdfDisplayTouchAdapter::EspIdfDisplayTouchAdapter(
@@ -105,6 +160,9 @@ bool EspIdfDisplayTouchAdapter::initialize() {
         return false;
     }
 
+    state.transferDone = xSemaphoreCreateBinary();
+    if (state.transferDone == nullptr) return false;
+
     spi_bus_config_t busConfig{};
     busConfig.sclk_io_num = state.config.sclkPin;
     busConfig.mosi_io_num = state.config.mosiPin;
@@ -128,6 +186,12 @@ bool EspIdfDisplayTouchAdapter::initialize() {
     displayIoConfig.lcd_param_bits = 8;
     if (esp_lcd_new_panel_io_spi(kSpiHost, &displayIoConfig,
                                  &state.displayIo) != ESP_OK) {
+        return false;
+    }
+    esp_lcd_panel_io_callbacks_t displayCallbacks{};
+    displayCallbacks.on_color_trans_done = &Impl::onColorTransferDone;
+    if (esp_lcd_panel_io_register_event_callbacks(
+            state.displayIo, &displayCallbacks, &state) != ESP_OK) {
         return false;
     }
 
@@ -158,8 +222,11 @@ bool EspIdfDisplayTouchAdapter::initialize() {
     }
 
     esp_lcd_touch_config_t touchConfig{};
-    touchConfig.x_max = state.config.width;
-    touchConfig.y_max = state.config.height;
+    // The application port is explicitly controller-native. The XPT2046
+    // component must be built with coordinate conversion disabled; these
+    // limits therefore describe the raw 12-bit ADC domain only.
+    touchConfig.x_max = 4095U;
+    touchConfig.y_max = 4095U;
     touchConfig.rst_gpio_num = GPIO_NUM_NC;
     touchConfig.int_gpio_num =
         validPin(state.config.touchInterruptPin)
@@ -184,7 +251,7 @@ bool EspIdfDisplayTouchAdapter::initialize() {
 bool EspIdfDisplayTouchAdapter::setRotation(
     device_platform::DisplayRotation rotation) {
     auto& state = *impl_;
-    if (!state.initialized && state.panel == nullptr) {
+    if (!state.initialized || state.panel == nullptr) {
         return false;
     }
 
@@ -208,12 +275,10 @@ bool EspIdfDisplayTouchAdapter::setRotation(
             break;
     }
 
+    // Rotation is a display concern. Raw touch samples must not be silently
+    // calibrated or transformed at this adapter boundary.
     if (esp_lcd_panel_swap_xy(state.panel, swap) != ESP_OK ||
-        esp_lcd_panel_mirror(state.panel, mirrorX, mirrorY) != ESP_OK ||
-        (state.touch != nullptr &&
-         (esp_lcd_touch_set_swap_xy(state.touch, swap) != ESP_OK ||
-          esp_lcd_touch_set_mirror_x(state.touch, mirrorX) != ESP_OK ||
-          esp_lcd_touch_set_mirror_y(state.touch, mirrorY) != ESP_OK))) {
+        esp_lcd_panel_mirror(state.panel, mirrorX, mirrorY) != ESP_OK) {
         return false;
     }
     state.rotation = rotation;
@@ -239,40 +304,143 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
         return false;
     }
 
+    if (state.transferFaulted) return false;
     std::fill_n(state.dmaPixels, kPartialBufferPixels, rgb565);
     std::uint16_t remainingRows = rect.height;
     std::uint16_t row = rect.top;
     while (remainingRows > 0U) {
         const auto rows = static_cast<std::uint16_t>(std::min<std::size_t>(
             remainingRows, kPartialBufferPixels / rect.width));
-        if (rows == 0U ||
-            esp_lcd_panel_draw_bitmap(
-                state.panel, rect.left, row, rect.left + rect.width,
-                row + rows, state.dmaPixels) != ESP_OK) {
+        if (rows == 0U || state.transferPending) {
             return false;
         }
+        state.transferPending = true;
+        if (state.firstSubmitUs == 0U) {
+            state.firstSubmitUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+        }
+        if (esp_lcd_panel_draw_bitmap(
+                state.panel, rect.left, row, rect.left + rect.width,
+                row + rows, state.dmaPixels) != ESP_OK) {
+            state.transferPending = false;
+            state.transferFaulted = true;
+            return false;
+        }
+        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) return false;
         row = static_cast<std::uint16_t>(row + rows);
         remainingRows = static_cast<std::uint16_t>(remainingRows - rows);
     }
     return true;
 }
 
-std::optional<device_platform::RawTouchSample>
-EspIdfDisplayTouchAdapter::sampleTouch() {
+bool EspIdfDisplayTouchAdapter::flushRgb565(
+    device_platform::DisplayRect rect, const std::uint16_t* pixels,
+    std::size_t pixelCount) {
     auto& state = *impl_;
+    const auto expectedPixels = static_cast<std::size_t>(rect.width) *
+                                static_cast<std::size_t>(rect.height);
+    if (!state.initialized || state.panel == nullptr || state.dmaPixels == nullptr ||
+        pixels == nullptr || pixelCount != expectedPixels || rect.width == 0U ||
+        rect.height == 0U ||
+        static_cast<std::uint32_t>(rect.left) + rect.width > state.config.width ||
+        static_cast<std::uint32_t>(rect.top) + rect.height > state.config.height ||
+        state.transferFaulted) {
+        return false;
+    }
+
+    std::size_t sourceOffset = 0U;
+    std::uint16_t row = rect.top;
+    while (row < static_cast<std::uint16_t>(rect.top + rect.height)) {
+        const auto rows = static_cast<std::uint16_t>(std::min<std::size_t>(
+            rect.height - (row - rect.top), kPartialBufferPixels / rect.width));
+        if (rows == 0U || state.transferPending) return false;
+        const auto chunkPixels = static_cast<std::size_t>(rows) * rect.width;
+        std::memcpy(state.dmaPixels, pixels + sourceOffset,
+                    chunkPixels * sizeof(std::uint16_t));
+        state.transferPending = true;
+        if (state.firstSubmitUs == 0U) {
+            state.firstSubmitUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+        }
+        if (esp_lcd_panel_draw_bitmap(
+                state.panel, rect.left, row, rect.left + rect.width,
+                row + rows, state.dmaPixels) != ESP_OK) {
+            state.transferPending = false;
+            state.transferFaulted = true;
+            return false;
+        }
+        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) return false;
+        sourceOffset += chunkPixels;
+        row = static_cast<std::uint16_t>(row + rows);
+    }
+    return true;
+}
+
+device_platform::RawTouchSample EspIdfDisplayTouchAdapter::sampleTouch() {
+    auto& state = *impl_;
+    const auto now = static_cast<std::uint64_t>(esp_timer_get_time());
     if (!state.initialized || state.touch == nullptr ||
         esp_lcd_touch_read_data(state.touch) != ESP_OK) {
-        return std::nullopt;
+        return {device_platform::RawTouchSampleStatus::ControllerError,
+                0U, 0U, 0U, now, false};
     }
 
     esp_lcd_touch_point_data_t point[1]{};
     std::uint8_t points = 0U;
-    if (esp_lcd_touch_get_data(state.touch, point, &points, 1U) != ESP_OK ||
-        points == 0U) {
-        return device_platform::RawTouchSample{0U, 0U, 0U, false};
+    if (esp_lcd_touch_get_data(state.touch, point, &points, 1U) != ESP_OK) {
+        return {device_platform::RawTouchSampleStatus::ControllerError,
+                0U, 0U, 0U, now, false};
     }
-    return device_platform::RawTouchSample{point[0].x, point[0].y,
-                                           point[0].strength, true};
+    if (points == 0U) {
+        return {device_platform::RawTouchSampleStatus::NoContact,
+                0U, 0U, 0U, now, false};
+    }
+    return {device_platform::RawTouchSampleStatus::Contact,
+            point[0].x, point[0].y, point[0].strength, now, true};
+}
+
+bool EspIdfDisplayTouchAdapter::setDisplayTransferObserver(
+    DisplayTransferObserver observer, void* context) noexcept {
+    auto& state = *impl_;
+    if (!state.initialized || state.displayIo == nullptr || observer == nullptr) {
+        return false;
+    }
+    state.observer = observer;
+    state.observerContext = context;
+    esp_lcd_panel_io_callbacks_t callbacks{};
+    callbacks.on_color_trans_done = &Impl::onColorTransferDone;
+    return esp_lcd_panel_io_register_event_callbacks(state.displayIo, &callbacks,
+                                                     &state) == ESP_OK;
+}
+
+bool EspIdfDisplayTouchAdapter::waitForDisplayTransfer(
+    std::uint32_t timeoutMs) noexcept {
+    auto& state = *impl_;
+    if (timeoutMs == UINT32_MAX) {
+        return state.waitForTransfer(portMAX_DELAY);
+    }
+    const auto ticks = std::max<TickType_t>(1, pdMS_TO_TICKS(timeoutMs));
+    return state.waitForTransfer(ticks);
+}
+
+void EspIdfDisplayTouchAdapter::resetFrameTransferMetrics() noexcept {
+    auto& state = *impl_;
+    state.firstSubmitUs = 0U;
+    state.lastCompleteUs = 0U;
+    state.transferFaulted = false;
+}
+
+std::uint64_t EspIdfDisplayTouchAdapter::firstFrameTransferSubmitUs() const noexcept {
+    return impl_->firstSubmitUs;
+}
+
+std::uint64_t EspIdfDisplayTouchAdapter::lastFrameTransferCompleteUs() const noexcept {
+    return impl_->lastCompleteUs;
+}
+
+bool EspIdfDisplayTouchAdapter::frameTransferCompleted() const noexcept {
+    return impl_->firstSubmitUs != 0U && impl_->lastCompleteUs >= impl_->firstSubmitUs &&
+           !impl_->transferPending && !impl_->transferFaulted;
 }
 
 namespace detail {

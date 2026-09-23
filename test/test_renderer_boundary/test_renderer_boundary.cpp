@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include "../../main/fermentation_ui_renderer.hpp"
@@ -24,8 +23,20 @@ class RecordingDisplay final : public device_platform::IDisplayTouchPort {
         pixels += static_cast<std::size_t>(rect.width) * rect.height;
         return true;
     }
-    std::optional<device_platform::RawTouchSample> sampleTouch() override {
-        return std::nullopt;
+    bool flushRgb565(device_platform::DisplayRect rect,
+                     const std::uint16_t*, std::size_t pixelCount) override {
+        if (rect.left + rect.width > 320U || rect.top + rect.height > 240U ||
+            rect.width == 0U || rect.height == 0U ||
+            pixelCount != static_cast<std::size_t>(rect.width) * rect.height) {
+            return false;
+        }
+        ++calls;
+        pixels += pixelCount;
+        return true;
+    }
+    device_platform::RawTouchSample sampleTouch() override {
+        return {device_platform::RawTouchSampleStatus::NoContact,
+                0U, 0U, 0U, 1U, false};
     }
 
     std::size_t calls{0U};
@@ -48,9 +59,16 @@ void test_representative_screen_uses_existing_workspace_and_three_locales() {
 
     TEST_ASSERT_EQUAL(de.commands.size(), en.commands.size());
     TEST_ASSERT_EQUAL(de.commands.size(), es.commands.size());
-    TEST_ASSERT_EQUAL_STRING("Bereit", de.commands[3].text.c_str());
-    TEST_ASSERT_EQUAL_STRING("Ready", en.commands[3].text.c_str());
-    TEST_ASSERT_EQUAL_STRING("Listo", es.commands[3].text.c_str());
+    TEST_ASSERT_EQUAL_STRING("DE", de.commands[3].text.c_str());
+    TEST_ASSERT_EQUAL_STRING("EN", en.commands[3].text.c_str());
+    TEST_ASSERT_EQUAL_STRING("ES", es.commands[3].text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(168U, de.commands[2].rect.width);
+    TEST_ASSERT_EQUAL_UINT16(24U, de.commands[2].rect.height);
+    TEST_ASSERT_EQUAL_UINT16(80U, de.commands.back().rect.width);
+    TEST_ASSERT_EQUAL_UINT16(200U, de.commands.back().rect.top);
+    TEST_ASSERT_EQUAL_STRING(
+        "assets/branding/manuengineer/ManuEngineer.svg",
+        de.commands[2].assetPath.c_str());
     TEST_ASSERT_TRUE(de.workspace.bottomSlots[0].enabled);
     TEST_ASSERT_TRUE(de.workspace.bottomSlots[0].label.valid());
 }
@@ -71,6 +89,8 @@ void test_lean_flush_is_bounded_and_bottom_press_returns_existing_target() {
     TEST_ASSERT_TRUE(result.textBytes > 0U);
     TEST_ASSERT_TRUE(display.calls > 0U);
     TEST_ASSERT_TRUE(display.pixels > 0U);
+    TEST_ASSERT_TRUE(result.frameSubmitted);
+    TEST_ASSERT_TRUE(result.frameFullyFlushed);
 
     const auto target = fermentation::main_ui::targetAt(screen, 20U, 220U);
     TEST_ASSERT_TRUE(target.has_value());

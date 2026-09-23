@@ -317,6 +317,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "esp_lcd",
                 "esp_http_server",
                 "esp_timer",
+                "freertos",
                 "esp_netif",
                 "esp_wifi",
                 "mdns",
@@ -342,6 +343,40 @@ COMPONENT_REQUIRES_ALLOWLIST = {
         ),
     },
 }
+
+# Issue #31: the composition root wires the selected comparison runner, while
+# renderer files only translate the existing UI view/command model. These are
+# narrow role guards, not a new framework or a product-policy parser.
+UI_COMPOSITION_ROOT_FILES = ("main/app_main.cpp",)
+UI_COMPOSITION_FORBIDDEN_TOKENS = (
+    "ScreenDrawCommand",
+    "lv_obj_",
+    "renderLean(",
+    "renderLvgl(",
+    "fillRect(",
+)
+UI_RENDERER_FILES = (
+    "main/fermentation_ui_renderer.hpp",
+    "main/fermentation_ui_renderer.cpp",
+    "main/fermentation_ui_lvgl_renderer.cpp",
+)
+UI_RENDERER_FORBIDDEN_INCLUDES = (
+    "fermentation_application.hpp",
+    "configuration_service.hpp",
+    "nvs_state_store.hpp",
+    "recovery_evaluation.hpp",
+)
+UI_RENDERER_FORBIDDEN_TOKENS = (
+    "FermentationApplication",
+    "IStateStore",
+    "ActuatorPlanner",
+    "ActuationInterlock",
+    "safetyAllowsStart",
+    "safetyAllowsCooling",
+    "safetyAllowsChange",
+    "RecoveryEvaluation",
+    "ConfigurationService",
+)
 # Bekannte idf_component_register()-Schluesselwoerter: jedes davon beendet
 # eine gerade offene REQUIRES-/PRIV_REQUIRES-Liste. Bewusst nur diese kleine,
 # risikobasierte Menge -- keine vollstaendige CMake-Grammatik.
@@ -902,6 +937,46 @@ def add_component_requires_violations(violations: list[str], root: Path) -> None
             )
 
 
+def add_ui_role_violations(violations: list[str], root: Path) -> None:
+    for relative_path in UI_COMPOSITION_ROOT_FILES:
+        path = root / relative_path
+        if not path.exists():
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        masked = mask_cxx_comments_and_strings(source)
+        for token in UI_COMPOSITION_FORBIDDEN_TOKENS:
+            if token in masked:
+                violations.append(
+                    f"{path}: Composition Root enthaelt renderer-spezifisches "
+                    f"Token {token!r}"
+                )
+
+    for relative_path in UI_RENDERER_FILES:
+        path = root / relative_path
+        if not path.exists():
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        masked = mask_cxx_comments_and_strings(source)
+        for include in INCLUDE_PATTERN.findall(source):
+            if include in UI_RENDERER_FORBIDDEN_INCLUDES:
+                violations.append(
+                    f"{path}: Renderer darf fachfremden Include nicht "
+                    f"verwenden: {include!r}"
+                )
+        for token in UI_RENDERER_FORBIDDEN_TOKENS:
+            if token in masked:
+                violations.append(
+                    f"{path}: Renderer darf Fach-/Safety-Owner-Token nicht "
+                    f"verwenden: {token!r}"
+                )
+
+
 def check(root: Path) -> list[str]:
     violations: list[str] = []
     platform = root / "lib" / "device_platform"
@@ -980,6 +1055,7 @@ def check(root: Path) -> list[str]:
     add_run_persistence_bypass_violations(violations, root)
     add_planner_binding_boundary_violations(violations, root)
     add_component_requires_violations(violations, root)
+    add_ui_role_violations(violations, root)
     add_sensor_selection_include_cycle_violations(violations, root)
     add_sensor_selection_canonical_function_violations(violations, root)
 
@@ -1013,7 +1089,7 @@ def create_clean_fixture(root: Path) -> None:
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
             'REQUIRES device_platform nvs_flash PRIV_REQUIRES '
             'esp_event esp_driver_gpio esp_driver_spi esp_lcd '
-            'esp_http_server esp_netif esp_wifi mdns esp_timer lwip '
+            'freertos esp_http_server esp_netif esp_wifi mdns esp_timer lwip '
             'esp-idf-lib__ds3231 esp-idf-lib__i2cdev '
             'espressif__esp_lcd_ili9341 espressif__esp_lcd_touch '
             'atanisoft__esp_lcd_touch_xpt2046)\n'
@@ -1174,6 +1250,20 @@ IDF_LEAK_VIOLATION_CASES = {
     "composition_root_gibt_transition_messages_ueber_zeiger_frei": (
         "main/app_main.cpp",
         "void f() { transitionDecision->messages; }\n",
+    ),
+}
+UI_ROLE_VIOLATION_CASES = {
+    "composition_renderer_token": (
+        "main/app_main.cpp",
+        "void f() { ScreenDrawCommand command{}; }\n",
+    ),
+    "renderer_policy_include": (
+        "main/fermentation_ui_renderer.cpp",
+        '#include "fermentation_application.hpp"\n',
+    ),
+    "renderer_safety_token": (
+        "main/fermentation_ui_lvgl_renderer.cpp",
+        "void f() { safetyAllowsStart(); }\n",
     ),
 }
 
@@ -1609,6 +1699,11 @@ def selftest() -> int:
     for name, (relative_path, content) in IDF_LEAK_VIOLATION_CASES.items():
         if not _check_clean_fixture_with_extra_file(relative_path, content):
             print(f"{FAILED}: IDF-Leak-Verstossfall {name!r} wurde nicht erkannt")
+            return 1
+
+    for name, (relative_path, content) in UI_ROLE_VIOLATION_CASES.items():
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(f"{FAILED}: UI-Rollenverstoß {name!r} wurde nicht erkannt")
             return 1
 
     for name, (relative_path, content) in RUN_PERSISTENCE_BYPASS_CASES.items():

@@ -19,6 +19,11 @@ lv_color_t color565ToLv(std::uint16_t color) {
     return lv_color_make(red8, green8, blue8);
 }
 
+void lvglTransferDone(void* context) noexcept {
+    auto* display = static_cast<lv_display_t*>(context);
+    if (display != nullptr) lv_display_flush_ready(display);
+}
+
 }  // namespace
 
 LvglRenderSummary renderLvgl(
@@ -50,6 +55,11 @@ LvglRenderSummary renderLvgl(
         (void)lvgl_port_deinit();
         return {};
     }
+    if (!adapter.setDisplayTransferObserver(&lvglTransferDone, display)) {
+        (void)lvgl_port_remove_disp(display);
+        (void)lvgl_port_deinit();
+        return {};
+    }
 
     lvgl_port_touch_cfg_t touchConfig{};
     touchConfig.disp = display;
@@ -67,28 +77,50 @@ LvglRenderSummary renderLvgl(
     result.partialBufferPixels = displayConfig.buffer_size;
     result.taskStackBytes = static_cast<std::size_t>(portConfig.task_stack);
     lv_obj_t* root = lv_screen_active();
-    lv_obj_set_style_bg_color(root, color565ToLv(0x0000U), 0U);
+    lv_obj_set_style_bg_color(root,
+                              color565ToLv(themeColor565(
+                                  device_platform::ThemeToken::Canvas)),
+                              0U);
+    lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0U);
     for (const auto& command : screen.commands) {
-        if (command.kind == ScreenDrawKind::Text) {
+        if (command.kind == ScreenDrawKind::Text ||
+            command.kind == ScreenDrawKind::Logo) {
             ++result.textCommands;
             result.textBytes += command.text.size();
             lv_obj_t* label = lv_label_create(root);
             lv_label_set_text(label, command.text.c_str());
             lv_obj_set_pos(label, command.rect.left, command.rect.top);
             lv_obj_set_size(label, command.rect.width, command.rect.height);
-            lv_obj_set_style_text_color(label, color565ToLv(command.color565),
+            lv_obj_set_style_text_color(label,
+                                        color565ToLv(themeColor565(command.token)),
                                         0U);
-        } else {
+            lv_obj_set_style_bg_color(
+                label, color565ToLv(themeColor565(command.backgroundToken)), 0U);
+            lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0U);
+        } else if (command.kind == ScreenDrawKind::Fill ||
+                   command.kind == ScreenDrawKind::PressFeedback) {
             lv_obj_t* fill = lv_obj_create(root);
             lv_obj_set_pos(fill, command.rect.left, command.rect.top);
             lv_obj_set_size(fill, command.rect.width, command.rect.height);
-            lv_obj_set_style_bg_color(fill, color565ToLv(command.color565), 0U);
+            lv_obj_set_style_bg_color(fill,
+                                      color565ToLv(themeColor565(command.token)),
+                                      0U);
+            lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0U);
             lv_obj_set_style_border_width(fill, 0U, 0U);
             lv_obj_set_style_radius(fill, 0U, 0U);
         }
     }
+    adapter.resetFrameTransferMetrics();
+    lv_obj_invalidate(root);
+    lv_refr_now(display);
     lvgl_port_unlock();
-    result.success = true;
+    result.frameSubmitted = adapter.firstFrameTransferSubmitUs() != 0U;
+    result.frameSubmitTimeUs = adapter.firstFrameTransferSubmitUs();
+    result.success = adapter.waitForDisplayTransfer(1000U);
+    result.frameFullyFlushed = result.success && adapter.frameTransferCompleted();
+    result.frameFullyFlushedTimeUs = adapter.lastFrameTransferCompleteUs();
+    result.success = result.success && result.frameSubmitted &&
+                     result.frameFullyFlushed;
     return result;
 }
 

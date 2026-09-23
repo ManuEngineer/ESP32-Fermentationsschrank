@@ -7,6 +7,8 @@
 
 #include "device_ui_hardware_ports.hpp"
 #include "device_ui_interaction.hpp"
+#include "device_ui_shell.hpp"
+#include "device_ui_theme.hpp"
 #include "device_ui_text.hpp"
 #include "fermentation_touch_workspace.hpp"
 #include "fermentation_ui_text.hpp"
@@ -16,13 +18,18 @@ namespace fermentation::main_ui {
 enum class ScreenDrawKind : std::uint8_t {
     Fill,
     Text,
+    Logo,
+    PressFeedback,
 };
 
 struct ScreenDrawCommand {
     ScreenDrawKind kind{ScreenDrawKind::Fill};
     device_platform::DisplayRect rect;
-    std::uint16_t color565{0U};
+    device_platform::ThemeToken token{device_platform::ThemeToken::Canvas};
+    device_platform::ThemeToken backgroundToken{
+        device_platform::ThemeToken::Canvas};
     std::string text;
+    std::string assetPath;
 };
 
 struct RepresentativeScreen {
@@ -30,6 +37,19 @@ struct RepresentativeScreen {
     static constexpr std::uint16_t kHeight = 240U;
 
     device_platform::LocaleId locale{"en"};
+    device_platform::DeviceShellHeader header{
+        device_platform::BrandingId{"manuengineer"},
+        device_platform::LocaleId{"en"},
+        device_platform::DeviceUiNetworkStatus::Unavailable,
+        {}};
+    device_platform::ThemeDescriptor theme{
+        device_platform::ThemeId{"manuengineer-dark"}, {}};
+    std::string clockText{"--:--"};
+    std::string logoAssetPath{"assets/branding/manuengineer/ManuEngineer.svg"};
+    std::string logoAssetSha256{
+        "b35788628e5cbda7a82552d5b6969c34a813494392ef9545d69dae4489b1484b"};
+    std::size_t logoAssetBytes{12242U};
+    std::string fontProfileId{"issue31-bounded-5x7-ascii"};
     FermentationUiWorkspaceView workspace;
     std::vector<ScreenDrawCommand> commands;
 };
@@ -40,6 +60,11 @@ struct LeanRenderSummary {
     std::size_t textCommands{0U};
     std::size_t textBytes{0U};
     std::size_t filledPixels{0U};
+    std::size_t displaySubmissions{0U};
+    bool frameSubmitted{false};
+    bool frameFullyFlushed{false};
+    std::uint64_t frameSubmitTimeUs{0U};
+    std::uint64_t frameFullyFlushedTimeUs{0U};
 };
 
 struct LvglRenderSummary {
@@ -49,7 +74,13 @@ struct LvglRenderSummary {
     std::size_t textBytes{0U};
     std::size_t partialBufferPixels{0U};
     std::size_t taskStackBytes{0U};
+    bool frameSubmitted{false};
+    bool frameFullyFlushed{false};
+    std::uint64_t frameSubmitTimeUs{0U};
+    std::uint64_t frameFullyFlushedTimeUs{0U};
 };
+
+[[nodiscard]] std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept;
 
 [[nodiscard]] RepresentativeScreen makeRepresentativeScreen(
     const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
