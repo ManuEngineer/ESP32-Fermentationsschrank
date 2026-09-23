@@ -1,15 +1,17 @@
-# Issue #31 – Stage-4-Low-Level-Auswahl und Lean-vs.-LVGL-Vergleich
+# Issue #31 – Stage-4-Auswahl und produktiver LVGL-Integrationsstand
 
-Stand: 2026-09-23. Diese Evidence dokumentiert die auf dem realen Testboard
-ausgeführte Stage-4-Auswertung. Die produktive Lean-vs.-LVGL-Ownerentscheidung
-wird nicht vorweggenommen.
+Stand: 2026-09-23. Diese Evidence bewahrt die auf dem realen Testboard
+ausgeführte Stage-4-Auswertung als historische Entscheidungsgrundlage und
+dokumentiert den anschließenden Ownerentscheid sowie den produktiven
+LVGL-Integrationsstand.
 
 ## Status
 
 ```text
 ISSUE=31
 PR=156
-TESTED_IMPLEMENTATION_HEAD=cc36e9dab5db3a0361b715027f7574526d4a8acb
+COMPARISON_EVIDENCE_HEAD=cc36e9dab5db3a0361b715027f7574526d4a8acb
+CURRENT_IMPLEMENTATION_HEAD=2f787f8688f61c699ddbbbdf34c5962d7142605d
 APPROVED_PLAN_SHA=63fd88372b883887668566047c8a6acac48addcd
 STAGE_0=PASS
 STAGE_1=PASS
@@ -25,19 +27,25 @@ RAW_TOUCH_CONTRACT=PASS
 DMA_BUFFER_LIFECYCLE=PASS
 REPRESENTATIVE_26_SCREEN=PASS
 ARCHITECTURE_ROLE_GUARDS=PASS
-LEAN_COMPARISON=PASS
-LVGL_COMPARISON=PASS
+LEAN_COMPARISON=HISTORICAL_PASS
+LVGL_COMPARISON=HISTORICAL_PASS
 R1_COMPATIBILITY_MATRIX=PASS
 MEASURED_R1_ADVANTAGE_LVGL=INCONCLUSIVE
-OWNER_DECISION_REQUIRED=LEAN_VS_LVGL
-OWNER_RENDERER_SELECTION=NOT_YET_GRANTED
-PRODUCT_IMPLEMENTATION=NOT_STARTED
+OWNER_RENDERER_SELECTION=LVGL
+LVGL_INTEGRATION=ESP_LVGL_PORT
+LEAN_PRODUCT_PATH=REJECTED
+CUSTOM_RENDERER_FRAMEWORK=NO
+CUSTOM_WIDGET_FRAMEWORK=NO
+OWNER_DECISION_REQUIRED=NONE_FOR_RENDERER
+PRODUCT_IMPLEMENTATION=IN_PROGRESS
+TOUCH_INPUT=FAIL_CLOSED_UNTIL_PERSISTED_CALIBRATION
 ACTUATOR_RELEASE=NO
 ```
 
-`STAGE_4_SELECTION=OWNER_APPROVED` bezeichnet ausschließlich die bereits
-festgelegte Low-Level-Grundlage. `OWNER_DECISION_REQUIRED=LEAN_VS_LVGL` ist
-die davon getrennte noch offene produktive Rendererentscheidung.
+`STAGE_4_SELECTION=OWNER_APPROVED` bezeichnet die festgelegte
+Low-Level-Grundlage. Die Lean-/LVGL-Messwerte darunter bleiben historische
+Vergleichsevidence; der Owner hat die produktive Entscheidung mit
+`OWNER_RENDERER_SELECTION=LVGL` und `LVGL_INTEGRATION=ESP_LVGL_PORT` getroffen.
 
 ## Provenienz und Bedingungen
 
@@ -54,8 +62,8 @@ Implementierungscommit `b433e34…` ist nicht die Evidence-Provenienz.
 | `espressif/esp_lcd_ili9341` | `2.1.0`, Commit `93460b932beba7022a8a4ec4186e0d6b7533d05f` | Apache-2.0 |
 | `espressif/esp_lcd_touch` | `1.2.1`, Commit `c927778a85eed239dd403c1719d4f543ad56e693` | Apache-2.0 |
 | `atanisoft/esp_lcd_touch_xpt2046` | `1.0.6`, Commit `05f4ecb82f19e4aa11b855a8e57539ba34e9629c` | MIT |
-| `espressif/esp_lvgl_port` (nur Vergleich) | `2.9.0` | Apache-2.0 |
-| `lvgl/lvgl` (nur Vergleich) | `9.6.0~1` | MIT |
+| `espressif/esp_lvgl_port` (produktiver Integrationspfad) | `2.9.0` | Apache-2.0 |
+| `lvgl/lvgl` (produktiver Integrationspfad) | `9.6.0~1` | MIT |
 
 Der Component-Lock war bei beiden Builds unverändert:
 `SHA256=b43981b0aee6503510d94ba9014f71ab860d821fcf1c16e9a0e0034a00aec861`.
@@ -108,10 +116,11 @@ LVGL_TASK_STACK_BYTES=7168
 LVGL_FRAME_SUBMIT_TIME_US=823998
 LVGL_FRAME_FULLY_FLUSHED_TIME_US=990871
 LVGL_FRAME_COMPLETION=PASS
-LVGL_TASK_STACK_HWM_WORDS=4688
+STACK_HWM_UNIT=BYTES
+LVGL_TASK_STACK_HWM_BYTES=4688
 ```
 
-Die Lean-Adapterfläche beträgt `320x8` RGB565-Pixel im internen DMA-Speicher
+Die historische Lean-Adapterfläche beträgt `320x8` RGB565-Pixel im internen DMA-Speicher
 (`5120` Bytes); der LVGL-Port verwendet einen `320x20`-Partialbuffer
 (`6400` Pixel). Beide werden bis zur Transfer-Completion nicht mutiert.
 `RAW_TOUCH_CONTRACT=CONTROLLER_NATIVE_NO_TRANSFORM` und
@@ -133,7 +142,7 @@ LEAN_AFTER_MIN_FREE_HEAP=167100
 LEAN_AFTER_LARGEST_BLOCK=110592
 LEAN_AFTER_INTERNAL_FREE=215132
 LEAN_AFTER_IRAM_FREE=0
-LEAN_MAIN_TASK_STACK_HWM_WORDS=6596
+LEAN_MAIN_TASK_STACK_HWM_BYTES=6596
 
 LVGL_FULL_GRAPH_BASELINE_FREE_HEAP=133028
 LVGL_FULL_GRAPH_BASELINE_MIN_FREE_HEAP=129056
@@ -145,8 +154,9 @@ LVGL_AFTER_MIN_FREE_HEAP=92088
 LVGL_AFTER_LARGEST_BLOCK=110592
 LVGL_AFTER_INTERNAL_FREE=146072
 LVGL_AFTER_IRAM_FREE=0
-LVGL_MAIN_TASK_STACK_HWM_WORDS=6592
-LVGL_TASK_STACK_HWM_WORDS=4688
+STACK_HWM_UNIT=BYTES
+LVGL_MAIN_TASK_STACK_HWM_BYTES=6592
+LVGL_TASK_STACK_HWM_BYTES=4688
 ```
 
 Beide UART-Captures meldeten `ACTUATORS_DISABLED=PASS`, keine Panic-/Assert-
@@ -171,9 +181,10 @@ produktive UI- oder Kalibrierungsimplementierung.
 | Backlight / Dimming | Composition und neutraler Backlight-Port | Portaufruf, kein eigener Zustand | Portaufruf, kein eigener Zustand | NO |
 
 `R1_COMPATIBILITY_MATRIX=PASS` bedeutet, dass beide Darstellungsvarianten an
-die bestehenden Ownergrenzen anschließen können. Die produktive Composition,
-Kalibrierung, WakeOnly-/Recovery-Integration und Rendererwahl bleiben bis zur
-Ownerentscheidung offen.
+die bestehenden Ownergrenzen anschließen können. Die produktive Composition
+wird nun mit LVGL weitergeführt. Kalibrierung und WakeOnly-/Recovery-
+Integration bleiben bis zum Vorliegen eines realen, persistierten
+Kalibrierungsdatensatzes fail-closed; es werden keine Rohgrenzen erfunden.
 
 ## Ergebnis und Stop-Gate
 
@@ -185,10 +196,15 @@ ausreichender eindeutiger R1-Vorteil:
 
 ```text
 MEASURED_R1_ADVANTAGE_LVGL=INCONCLUSIVE
-OWNER_DECISION_REQUIRED=LEAN_VS_LVGL
-OWNER_RENDERER_SELECTION=NOT_YET_GRANTED
+OWNER_RENDERER_SELECTION=LVGL
+LVGL_INTEGRATION=ESP_LVGL_PORT
+LEAN_PRODUCT_PATH=REJECTED
+CUSTOM_RENDERER_FRAMEWORK=NO
+CUSTOM_WIDGET_FRAMEWORK=NO
+OWNER_DECISION_REQUIRED=NONE_FOR_RENDERER
 ACTUATOR_RELEASE=NO
 ```
 
-Es wurde keine Produktimplementation, keine Stage-4-Auswahländerung, keine
-Aktorfreigabe und kein Ready-/Merge-Schritt aus dieser Evidence abgeleitet.
+Es wurde keine Stage-4-Auswahländerung, keine Aktorfreigabe und kein
+Ready-/Merge-Schritt aus dieser Evidence abgeleitet. Die produktive
+Implementierung läuft auf dem aktuellen Implementierungsstand weiter.
