@@ -159,7 +159,9 @@ bool ProductiveLvglRenderer::render(
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
     std::optional<device_platform::DeviceUiTarget> pressedTarget,
-    const ProgramCatalog* catalog) {
+    const ProgramCatalog* catalog,
+    device_platform::DeviceUiNetworkStatus networkStatus,
+    device_platform::ClockViewInput clock) {
     auto& state = *impl_;
     if (!state.initialized || state.display == nullptr || state.root == nullptr)
         return false;
@@ -170,8 +172,9 @@ bool ProductiveLvglRenderer::render(
     // revision, local workspace/page/pager/dialog state, locale and header
     // values), so a page/pager/locale change is never masked by an unchanged
     // application UiRefreshRevision.
-    const auto screen = makeRepresentativeScreen(
-        snapshot, workspace, textPacks, locale, pressedTarget, catalog);
+    const auto screen =
+        makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
+                                 pressedTarget, catalog, networkStatus, clock);
     const auto key = makeScreenRenderKey(screen);
     if (state.renderedKey.has_value() && *state.renderedKey == key) {
         return true;

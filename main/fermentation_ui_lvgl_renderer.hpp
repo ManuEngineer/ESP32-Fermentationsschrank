@@ -37,7 +37,10 @@ class ProductiveLvglRenderer final {
         const device_platform::LocaleId& locale,
         std::optional<device_platform::DeviceUiTarget> pressedTarget =
             std::nullopt,
-        const ProgramCatalog* catalog = nullptr);
+        const ProgramCatalog* catalog = nullptr,
+        device_platform::DeviceUiNetworkStatus networkStatus =
+            device_platform::DeviceUiNetworkStatus::Unavailable,
+        device_platform::ClockViewInput clock = {});
     [[nodiscard]] bool initialized() const noexcept;
 
    private:

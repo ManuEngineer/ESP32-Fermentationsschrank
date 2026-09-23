@@ -292,6 +292,88 @@ void test_recovery_page_shows_unavailable_capability_count() {
     TEST_ASSERT_TRUE(hasText(screen, expected.value + " 4"));
 }
 
+void test_clock_text_dash_when_untrusted() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_EQUAL_STRING("--:--", screen.clockText.c_str());
+}
+
+void test_clock_text_formats_trusted_utc_as_hh_mm() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const device_platform::ClockViewInput clock{3661, {}};  // 01:01:01 UTC
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, clock);
+
+    TEST_ASSERT_EQUAL_STRING("01:01", screen.clockText.c_str());
+}
+
+void test_network_status_changes_wlan_label_token() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto connected = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Connected);
+    const auto unavailable = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable);
+
+    const auto findWlan = [](const auto& screen) {
+        return std::find_if(screen.commands.begin(), screen.commands.end(),
+                            [](const auto& command) {
+                                return command.text == "WLAN";
+                            });
+    };
+    const auto connectedWlan = findWlan(connected);
+    const auto unavailableWlan = findWlan(unavailable);
+    TEST_ASSERT_TRUE(connectedWlan != connected.commands.end());
+    TEST_ASSERT_TRUE(unavailableWlan != unavailable.commands.end());
+    TEST_ASSERT_FALSE(connectedWlan->token == unavailableWlan->token);
+}
+
+void test_theme_is_sourced_from_canonical_r1_catalog() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    const auto buildCatalog = fermentation::makeFermentationR1DeviceUiBuildCatalog();
+    TEST_ASSERT_TRUE(screen.theme.id == buildCatalog.defaultTheme);
+    TEST_ASSERT_FALSE(screen.theme.declaredTokens.empty());
+}
+
+void test_render_key_changes_on_network_status_and_clock() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto unavailable = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto connected = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Connected);
+    const device_platform::ClockViewInput clock{3661, {}};
+    const auto clocked = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr, device_platform::DeviceUiNetworkStatus::Unavailable,
+        clock);
+
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(unavailable) ==
+                      fermentation::main_ui::makeScreenRenderKey(connected));
+    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(unavailable) ==
+                      fermentation::main_ui::makeScreenRenderKey(clocked));
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -302,6 +384,7 @@ void test_recovery_page_shows_unavailable_capability_count() {
 #include "../../lib/device_platform/src/device_ui_text.cpp"
 #include "../../lib/fermentation_app/src/fermentation_touch_workspace.cpp"
 #include "../../lib/fermentation_app/src/fermentation_ui_text.cpp"
+#include "../../lib/fermentation_app/src/fermentation_ui_models.cpp"
 #include "../../main/fermentation_ui_renderer.cpp"
 
 int main() {
@@ -319,5 +402,10 @@ int main() {
     RUN_TEST(test_delete_confirmation_page_shows_selected_program_name);
     RUN_TEST(test_service_page_shows_blocked_reason);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);
+    RUN_TEST(test_clock_text_dash_when_untrusted);
+    RUN_TEST(test_clock_text_formats_trusted_utc_as_hh_mm);
+    RUN_TEST(test_network_status_changes_wlan_label_token);
+    RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);
+    RUN_TEST(test_render_key_changes_on_network_status_and_clock);
     return UNITY_END();
 }

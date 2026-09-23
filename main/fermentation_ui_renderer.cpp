@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <ctime>
 #include <string_view>
 #include <utility>
 
@@ -139,6 +141,36 @@ std::string temperatureText(const TemperatureView& temperature) {
     return result;
 }
 
+// No real IANA time zone database is part of this port (see
+// docs/tasks/issue-31-renderer-display-touch-calibration-plan.md, section 3);
+// this therefore formats the trusted UTC instant directly rather than
+// pretending to apply canonicalTimeZoneId as a local-time offset.
+std::string formatClockText(
+    const device_platform::ClockViewInput& clock) noexcept {
+    if (!clock.trustedUtc.has_value()) return "--:--";
+    const auto epoch = static_cast<std::time_t>(*clock.trustedUtc);
+    std::tm calendar{};
+    gmtime_r(&epoch, &calendar);
+    char buffer[6];
+    const auto written = std::snprintf(buffer, sizeof(buffer), "%02d:%02d",
+                                       calendar.tm_hour, calendar.tm_min);
+    if (written != 5) return "--:--";
+    return std::string(buffer, 5U);
+}
+
+device_platform::ThemeToken networkStatusToken(
+    device_platform::DeviceUiNetworkStatus status) noexcept {
+    switch (status) {
+        case device_platform::DeviceUiNetworkStatus::Connected:
+            return device_platform::ThemeToken::StatusInformation;
+        case device_platform::DeviceUiNetworkStatus::Disconnected:
+            return device_platform::ThemeToken::StatusWarning;
+        case device_platform::DeviceUiNetworkStatus::Unavailable:
+            return device_platform::ThemeToken::TextSecondary;
+    }
+    return device_platform::ThemeToken::TextSecondary;
+}
+
 }  // namespace
 
 std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
@@ -150,33 +182,31 @@ RepresentativeScreen makeRepresentativeScreen(
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
     std::optional<device_platform::DeviceUiTarget> pressedTarget,
-    const ProgramCatalog* catalog) {
+    const ProgramCatalog* catalog,
+    device_platform::DeviceUiNetworkStatus networkStatus,
+    device_platform::ClockViewInput clock) {
     RepresentativeScreen screen;
     screen.locale = locale;
     screen.header.locale = locale;
     screen.header.branding = device_platform::BrandingId{"manuengineer"};
-    screen.header.networkStatus =
-        device_platform::DeviceUiNetworkStatus::Unavailable;
-    screen.theme = {device_platform::ThemeId{"manuengineer-dark"},
-                    {device_platform::ThemeToken::Canvas,
-                     device_platform::ThemeToken::Surface,
-                     device_platform::ThemeToken::PrimaryAction,
-                     device_platform::ThemeToken::SecondaryAction,
-                     device_platform::ThemeToken::TextPrimary,
-                     device_platform::ThemeToken::TextSecondary,
-                     device_platform::ThemeToken::StatusInformation,
-                     device_platform::ThemeToken::StatusWarning,
-                     device_platform::ThemeToken::StatusError,
-                     device_platform::ThemeToken::Overlay,
-                     device_platform::ThemeToken::OnCanvas,
-                     device_platform::ThemeToken::OnSurface,
-                     device_platform::ThemeToken::OnPrimaryAction,
-                     device_platform::ThemeToken::OnSecondaryAction,
-                     device_platform::ThemeToken::OnStatusInformation,
-                     device_platform::ThemeToken::OnStatusWarning,
-                     device_platform::ThemeToken::OnStatusError,
-                     device_platform::ThemeToken::OnOverlay}};
+    screen.header.networkStatus = networkStatus;
+    screen.header.clock = clock;
+    // The single canonical R1 theme/fallback contract: R1 ships exactly one
+    // theme, so this reads it from the same catalog the platform build uses
+    // instead of duplicating its id and token list as a second literal.
+    const auto buildCatalog = makeFermentationR1DeviceUiBuildCatalog();
+    const auto themeDescriptors = makeFermentationR1ThemeDescriptors();
+    const auto themeIt = std::find_if(
+        themeDescriptors.begin(), themeDescriptors.end(),
+        [&buildCatalog](const device_platform::ThemeDescriptor& descriptor) {
+            return descriptor.id == buildCatalog.defaultTheme;
+        });
+    screen.theme = themeIt != themeDescriptors.end()
+                       ? *themeIt
+                       : device_platform::ThemeDescriptor{
+                             buildCatalog.defaultTheme, {}};
     screen.logoAssetPath = kLogoAssetPath;
+    screen.clockText = formatClockText(clock);
     screen.refreshRevision = snapshot.refreshRevision;
     screen.pressedTarget = pressedTarget;
     screen.workspace = workspace.view(snapshot, catalog);
@@ -195,7 +225,7 @@ RepresentativeScreen makeRepresentativeScreen(
                device_platform::ThemeToken::TextPrimary,
                device_platform::ThemeToken::Surface);
     addRawText(commands, {220U, 4U, 44U, 24U}, "WLAN",
-               device_platform::ThemeToken::StatusInformation,
+               networkStatusToken(networkStatus),
                device_platform::ThemeToken::Surface);
     addRawText(commands, {264U, 4U, 52U, 24U}, screen.clockText,
                device_platform::ThemeToken::TextSecondary,

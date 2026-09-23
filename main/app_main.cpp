@@ -195,6 +195,27 @@ device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
     return {std::string("Fermentation-") + suffix, std::move(password), {}};
 }
 
+// Maps the existing renderer-independent #164 network lifecycle state to the
+// existing renderer-independent header status contract. No new network
+// state is introduced; SetupAccessPoint/ConnectingHome/CandidateTesting are
+// presented as Disconnected (a transition is in progress, not yet usable).
+device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
+    device_platform::NetworkLifecycleState state) noexcept {
+    switch (state) {
+        case device_platform::NetworkLifecycleState::AccessPointOnly:
+        case device_platform::NetworkLifecycleState::HomeConnected:
+            return device_platform::DeviceUiNetworkStatus::Connected;
+        case device_platform::NetworkLifecycleState::SetupAccessPoint:
+        case device_platform::NetworkLifecycleState::ConnectingHome:
+        case device_platform::NetworkLifecycleState::CandidateTesting:
+            return device_platform::DeviceUiNetworkStatus::Disconnected;
+        case device_platform::NetworkLifecycleState::Stopped:
+        case device_platform::NetworkLifecycleState::Failed:
+            return device_platform::DeviceUiNetworkStatus::Unavailable;
+    }
+    return device_platform::DeviceUiNetworkStatus::Unavailable;
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -277,12 +298,21 @@ extern "C" void app_main(void) {
         18, 23, 19, 5, 15, 2, 4, 39, 320U, 240U, true});
     fermentation::FermentationTouchWorkspace uiWorkspace;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
-    const device_platform::LocaleId uiLocale{"de"};
+    // The single renderer-independent source for locale, the program catalog
+    // and the canonical prepared time zone; see
+    // FermentationApplication::uiPresentationSource().
+    const auto uiPresentation = application.uiPresentationSource();
+    const auto uiNetworkStatus =
+        toDeviceUiNetworkStatus(networkLifecycle.status().state);
+    const device_platform::ClockViewInput uiClock{
+        timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
     if (displayRenderer == nullptr || !displayRenderer->initialize()) {
         ESP_LOGW(kTag,
                  "productive LVGL display unavailable; UI remains fail-closed");
-    } else if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
-                                        uiTextPacks, uiLocale)) {
+    } else if (!displayRenderer->render(
+                   application.uiSnapshot(), uiWorkspace, uiTextPacks,
+                   uiPresentation.displayLocale, std::nullopt,
+                   &uiPresentation.programCatalog, uiNetworkStatus, uiClock)) {
         ESP_LOGW(kTag, "productive LVGL initial projection failed");
     }
 
@@ -315,8 +345,17 @@ extern "C" void app_main(void) {
         sntp.poll();
         application.update();
         if (displayRenderer != nullptr && displayRenderer->initialized()) {
+            const auto loopPresentation = application.uiPresentationSource();
+            const auto loopNetworkStatus =
+                toDeviceUiNetworkStatus(networkLifecycle.status().state);
+            const device_platform::ClockViewInput loopClock{
+                timeSource.unixTimeSeconds(),
+                loopPresentation.canonicalTimeZoneId};
             static_cast<void>(displayRenderer->render(
-                application.uiSnapshot(), uiWorkspace, uiTextPacks, uiLocale));
+                application.uiSnapshot(), uiWorkspace, uiTextPacks,
+                loopPresentation.displayLocale, std::nullopt,
+                &loopPresentation.programCatalog, loopNetworkStatus,
+                loopClock));
         }
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
