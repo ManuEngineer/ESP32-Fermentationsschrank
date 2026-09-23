@@ -27,6 +27,7 @@ lv_color_t color565ToLv(std::uint16_t color) {
 struct LvglFrameCompletion {
     lv_display_t* display{nullptr};
     SemaphoreHandle_t lastFlushDone{nullptr};
+    bool comparisonFrameArmed{false};
     bool lastFlushCompleted{false};
     std::uint64_t completeTimestampUs{0U};
 };
@@ -43,8 +44,11 @@ bool lvglTransferDone(void* context,
     lv_display_flush_ready(frame->display);
     if (!lastFlush || frame->lastFlushDone == nullptr) return false;
 
-    frame->lastFlushCompleted = true;
-    frame->completeTimestampUs = completionTimestampUs;
+    if (frame->comparisonFrameArmed) {
+        frame->comparisonFrameArmed = false;
+        frame->lastFlushCompleted = true;
+        frame->completeTimestampUs = completionTimestampUs;
+    }
     BaseType_t higherPriorityTaskWoken = pdFALSE;
     (void)xSemaphoreGiveFromISR(frame->lastFlushDone,
                                 &higherPriorityTaskWoken);
@@ -110,6 +114,22 @@ LvglRenderSummary renderLvgl(
         return {};
     }
 
+    // Drain the display-add flush before arming the comparison frame. A
+    // callback from LVGL setup is valid, but must not become the measured
+    // frame's completion timestamp.
+    while (xSemaphoreTake(frame.lastFlushDone, 0U) == pdTRUE) {
+    }
+    lv_obj_invalidate(lv_screen_active());
+    lv_refr_now(display);
+    lvgl_port_unlock();
+    if (xSemaphoreTake(frame.lastFlushDone, pdMS_TO_TICKS(1000U)) != pdTRUE ||
+        !lvgl_port_lock(1000U)) {
+        device_platform_esp_idf::detail::ComparisonDisplayTransferAccess::
+            clearObserver(adapter);
+        vSemaphoreDelete(frame.lastFlushDone);
+        return {};
+    }
+
     LvglRenderSummary result;
     result.drawCommands = screen.commands.size();
     result.partialBufferPixels = displayConfig.buffer_size;
@@ -150,9 +170,12 @@ LvglRenderSummary renderLvgl(
             lv_obj_set_style_radius(fill, 0U, 0U);
         }
     }
-    lv_obj_invalidate(root);
+    frame.lastFlushCompleted = false;
+    frame.completeTimestampUs = 0U;
+    frame.comparisonFrameArmed = true;
     result.frameSubmitTimestampUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
+    lv_obj_invalidate(root);
     lv_refr_now(display);
     lvgl_port_unlock();
     result.frameSubmitted = result.frameSubmitTimestampUs != 0U;
