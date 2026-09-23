@@ -5,6 +5,8 @@
 
 #include "esp_idf_display_touch_adapter_private.hpp"
 #include "esp_idf_display_touch_adapter.hpp"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace fermentation::main_ui {
 namespace {
@@ -66,7 +68,9 @@ LvglRenderSummary renderLvgl(
     touchConfig.handle = handles.touch;
     touchConfig.scale.x = 1.0F;
     touchConfig.scale.y = 1.0F;
-    if (lvgl_port_add_touch(&touchConfig) == nullptr || !lvgl_port_lock(1000U)) {
+    lv_indev_t* touch = lvgl_port_add_touch(&touchConfig);
+    if (touch == nullptr || !lvgl_port_lock(1000U)) {
+        if (touch != nullptr) (void)lvgl_port_remove_touch(touch);
         (void)lvgl_port_remove_disp(display);
         (void)lvgl_port_deinit();
         return {};
@@ -111,6 +115,14 @@ LvglRenderSummary renderLvgl(
         }
     }
     adapter.resetFrameTransferMetrics();
+    if (!adapter.beginExternalDisplayTransfer()) {
+        lvgl_port_unlock();
+        (void)lvgl_port_remove_touch(touch);
+        (void)lvgl_port_remove_disp(display);
+        (void)lvgl_port_deinit();
+        vTaskDelay(2U);
+        return {};
+    }
     lv_obj_invalidate(root);
     lv_refr_now(display);
     lvgl_port_unlock();
@@ -121,6 +133,19 @@ LvglRenderSummary renderLvgl(
     result.frameFullyFlushedTimeUs = adapter.lastFrameTransferCompleteUs();
     result.success = result.success && result.frameSubmitted &&
                      result.frameFullyFlushed;
+
+    if (const auto task = xTaskGetHandle("taskLVGL"); task != nullptr) {
+        result.taskStackHighWaterMarkWords =
+            static_cast<std::size_t>(uxTaskGetStackHighWaterMark(task));
+    }
+
+    (void)lvgl_port_remove_touch(touch);
+    (void)lvgl_port_remove_disp(display);
+    (void)lvgl_port_deinit();
+    // The LVGL port task owns the LVGL/timer primitives and releases them
+    // after deinit is requested. Give it a bounded scheduling opportunity
+    // before the next resource probe starts.
+    vTaskDelay(2U);
     return result;
 }
 

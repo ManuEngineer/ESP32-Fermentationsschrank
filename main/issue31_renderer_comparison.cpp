@@ -39,14 +39,6 @@ HeapSnapshot heapSnapshot() {
             static_cast<std::size_t>(heap_caps_get_free_size(MALLOC_CAP_IRAM_8BIT))};
 }
 
-#ifdef APP_ISSUE31_RENDERER_COMPARISON
-std::optional<UBaseType_t> lvglTaskHighWaterMark() {
-    const auto task = xTaskGetHandle("taskLVGL");
-    if (task == nullptr) return std::nullopt;
-    return uxTaskGetStackHighWaterMark(task);
-}
-#endif
-
 void logHeap(const char* prefix, const HeapSnapshot& heap) {
     ESP_LOGI(kTag,
              "%s_FREE_HEAP=%u %s_MIN_FREE_HEAP=%u %s_LARGEST_BLOCK=%u "
@@ -126,7 +118,6 @@ void runIssue31RendererComparison() {
     const auto lvglBefore = heapSnapshot();
     const auto lvgl = renderLvgl(adapter, screen);
     const auto lvglAfter = heapSnapshot();
-    const auto lvglTaskHwm = lvglTaskHighWaterMark();
     ESP_LOGI(kTag,
              "LVGL_FUNCTIONAL_RESULT=%s LVGL_DRAW_COMMANDS=%u "
              "LVGL_TEXT_BYTES=%u LVGL_PARTIAL_BUFFER_PIXELS=%u "
@@ -140,7 +131,7 @@ void runIssue31RendererComparison() {
              static_cast<unsigned>(lvgl.taskStackBytes),
              lvgl.frameSubmitTimeUs, lvgl.frameFullyFlushedTimeUs,
              lvgl.frameFullyFlushed ? "PASS" : "FAIL",
-             static_cast<unsigned>(lvglTaskHwm.value_or(0U)));
+             static_cast<unsigned>(lvgl.taskStackHighWaterMarkWords));
     logHeap("LVGL_BEFORE", lvglBefore);
     logHeap("LVGL_AFTER", lvglAfter);
 #endif

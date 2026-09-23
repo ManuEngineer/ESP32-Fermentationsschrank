@@ -61,6 +61,7 @@ class EspIdfDisplayTouchAdapter final
 
     [[nodiscard]] bool setDisplayTransferObserver(
         DisplayTransferObserver observer, void* context) noexcept;
+    [[nodiscard]] bool beginExternalDisplayTransfer() noexcept;
     [[nodiscard]] bool waitForDisplayTransfer(
         std::uint32_t timeoutMs) noexcept;
     void resetFrameTransferMetrics() noexcept;

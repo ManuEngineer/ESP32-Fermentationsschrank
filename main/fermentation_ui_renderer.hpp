@@ -78,6 +78,7 @@ struct LvglRenderSummary {
     bool frameFullyFlushed{false};
     std::uint64_t frameSubmitTimeUs{0U};
     std::uint64_t frameFullyFlushedTimeUs{0U};
+    std::size_t taskStackHighWaterMarkWords{0U};
 };
 
 [[nodiscard]] std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept;

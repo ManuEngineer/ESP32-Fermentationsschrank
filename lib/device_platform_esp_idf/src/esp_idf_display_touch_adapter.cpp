@@ -413,6 +413,18 @@ bool EspIdfDisplayTouchAdapter::setDisplayTransferObserver(
                                                      &state) == ESP_OK;
 }
 
+bool EspIdfDisplayTouchAdapter::beginExternalDisplayTransfer() noexcept {
+    auto& state = *impl_;
+    if (!state.initialized || state.displayIo == nullptr ||
+        state.transferDone == nullptr || state.transferPending ||
+        state.transferFaulted) {
+        return false;
+    }
+    state.transferPending = true;
+    state.firstSubmitUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    return true;
+}
+
 bool EspIdfDisplayTouchAdapter::waitForDisplayTransfer(
     std::uint32_t timeoutMs) noexcept {
     auto& state = *impl_;
