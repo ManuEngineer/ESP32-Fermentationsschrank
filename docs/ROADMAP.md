@@ -37,7 +37,7 @@ nicht kopiert, sondern verlinkt.
 | 1 | Issue #168 – Application-owned Runtime-Evidence und UI-/Command-Projection | `PLAN_FIRST=YES`; `BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16`; `APPROVED_PLAN_SHA=ac56052c011b92d38866bc0be0d31de2d5e1fb90`; `PLAN_STATUS=APPROVED`; `OWNER_PLAN_APPROVAL=PASS`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `CONSUMER=ISSUE27_PR167_AFTER_ISSUE168_MERGE`; `ACTUATOR_RELEASE=NO`. | Builder-Self-Check abschliessen, danach Independent Full Review; #27 bleibt bis zum Merge dieses Vorgängers pausiert |
 | 2 | Issue #27 / PR #167 – Web/API/Auth | `CONSUMER_PREDECESSOR=ISSUE168`; `IMPLEMENTATION=PAUSED_PENDING_PREDECESSOR`; `ACTUATOR_RELEASE=NO`. | #168 mergen, PR #167 auf aktuellen `main` revalidieren und den #27-Plan als Verbraucher revidieren |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
-| 1 | Issue #31 / PR #156 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`; `APPROVED_PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `STAGE_0=PASS`; `STAGE_1=PASS`; `COLDSTART_WITH_RTS_EN_DISCONNECTED=PASS_3_OF_3`; `COLDSTART_PRODUCT_REPRESENTATIVE_SETUP=RTS_EN_DISCONNECTED`; `FT232_RTS_EN_DEBUG_CONNECTION=ALLOWED_FOR_REMOTE_FLASH_AND_TEST`; `COLDSTART_WITH_RTS_EN_CONNECTED=NOT_PRODUCT_REPRESENTATIVE`; `COLDSTART_ROOT_CAUSE_CLASS=FT232_RTS_EN_DEBUG_PATH_INTERFERENCE`; `COLDSTART_ELECTRICAL_MECHANISM=NOT_DETERMINED`; `PRODUCT_HARDWARE_CHANGE_REQUIRED=NO`; `RESET_SSOT_CHANGE_REQUIRED=NO`; `STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3`; `STAGE_2_DISPLAY_FUNCTION=PASS`; `STAGE_2_TOUCH_FUNCTION=PASS`; `STAGE_2=PASS`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `ACTUATOR_RELEASE=NO` | Stage 2 ist mit produktrepräsentativ getrenntem FT232-RTS/EN-Pfad abgeschlossen. Die historische Abweichung bei verbundenem Debugpfad bleibt dokumentiert; elektrische Mechanik unbestimmt. Nächstes Gate: unabhängige Fix Verification, danach erst Ownerfreigabe für Stage 3 |
+| 1 | Issue #31 / PR #156 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`; `APPROVED_PLAN_SHA=ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; `STAGE_0=PASS`; `STAGE_1=PASS`; `COLDSTART_WITH_RTS_EN_DISCONNECTED=PASS_3_OF_3`; `COLDSTART_PRODUCT_REPRESENTATIVE_SETUP=RTS_EN_DISCONNECTED`; `FT232_RTS_EN_DEBUG_CONNECTION=ALLOWED_FOR_REMOTE_FLASH_AND_TEST`; `COLDSTART_WITH_RTS_EN_CONNECTED=NOT_PRODUCT_REPRESENTATIVE`; `COLDSTART_ROOT_CAUSE_CLASS=FT232_RTS_EN_DEBUG_PATH_INTERFERENCE`; `COLDSTART_ELECTRICAL_MECHANISM=NOT_DETERMINED`; `PRODUCT_HARDWARE_CHANGE_REQUIRED=NO`; `RESET_SSOT_CHANGE_REQUIRED=NO`; `STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3`; `STAGE_2_DISPLAY_FUNCTION=PASS`; `STAGE_2_TOUCH_FUNCTION=PASS`; `STAGE_2=PASS`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `OWNER_STAGE_3_APPROVED=YES`; `ACTUATOR_RELEASE=NO` | Stage 2 ist mit produktrepräsentativ getrenntem FT232-RTS/EN-Pfad abgeschlossen. Die historische Abweichung bei verbundenem Debugpfad bleibt dokumentiert; elektrische Mechanik unbestimmt. Nächstes Gate: unabhängige Fix Verification dieses ROADMAP-Deltas, danach Stage 3 |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
 | 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
@@ -63,22 +63,25 @@ vier Farben; die Software-Rotation darf die physische Einbaulage ausgleichen.
 Der Harness-Resetpfad ist direkt gegen die Quelle verifiziert:
 `esp_lcd_panel_reset(panel)` steht unmittelbar vor
 `esp_lcd_panel_init(panel)`, während `reset_gpio_num=GPIO_NUM_NC` den
-unveränderten gemeinsamen physischen Resetpfad belässt. Der stabile
-Versorgungslauf mit genau einem gemeinsamen EN-Reset über RTS-only stellte das
-erwartete Muster `TL=WHITE, TR=GREEN, BL=RED, BR=BLUE` wieder her. Die
-anschließende verzögerte EN-Power-On-Sequenz bestand in drei echten Läufen mit
-mindestens 10 Sekunden Auszeit und 1 Sekunde EN-Haltezeit; kein Lauf zeigte im
-UART-Fenster vom Power-On bis zur ersten Draw-Ausgabe einen Brownout-Marker,
-und alle drei Sichtprüfungen waren PASS. Die Fehlerklasse
-`POWER_ON_OR_RESET_SEQUENCE_STRONGLY_SUPPORTED` bleibt damit gestützt, die
-konkrete Root Cause bleibt jedoch `UNDETERMINED`. Der historische normale
-Kaltstart mit Brownout und nur weißem Display bleibt unverändert als Fehler-
-Evidence bestehen. Deshalb bleibt
-`STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`, während
-`STAGE_2_TOUCH_FUNCTION=PASS` separat bleibt. `STAGE_2=FAILED`,
-`STAGE_3=NOT_RUN` und `STAGE_4=NOT_RUN`; Produktimplementation und
-Aktorfreigabe bleiben ausgeschlossen. Es gab keine Hardware-/SSOT- oder
-Produktänderung.
+unveränderten gemeinsamen physischen Resetpfad belässt.
+
+Aktuell produktrepräsentativ ist `RTS -> EN` getrennt: Die verzögerte
+EN-Power-On-Sequenz bestand in drei echten Läufen mit mindestens 10 Sekunden
+Auszeit und 1 Sekunde EN-Haltezeit; kein Lauf zeigte im UART-Fenster vom
+Power-On bis zur ersten Draw-Ausgabe einen Brownout-Marker, und alle drei
+Sichtprüfungen waren PASS. Damit gilt: drei echte Kaltstarts PASS,
+Displayfunktion PASS, Touchfunktion PASS und `STAGE_2=PASS`.
+
+Historisch bleibt separat dokumentiert: Bei verbundenem `RTS -> EN` wurde eine
+Brownout-/White-Display-Abweichung beobachtet; die elektrische Mechanik wurde
+nicht bestimmt. Diese Debugtopologie darf für Remote-Flash und Test verbunden
+bleiben, ist aber kein produktrepräsentativer Kaltstart. Es gab keine
+Hardware-/SSOT- oder Produktänderung.
+
+`OWNER_STAGE_3_APPROVED=YES` ist ausschließlich ein Ausführungsgate. Stage 3
+beginnt erst nach unabhängiger Fix Verification dieses ROADMAP-Deltas; bis
+dahin bleiben `STAGE_3=NOT_RUN`, `STAGE_4=NOT_RUN` und
+`ACTUATOR_RELEASE=NO`.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
