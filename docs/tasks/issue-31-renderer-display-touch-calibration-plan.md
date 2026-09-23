@@ -577,11 +577,28 @@ Alternativen dieselben rendererunabhaengigen Low-Level-Tests ausgefuehrt:
 - 100 wiederholte Pixel-, Rechteck- und Vollflaechenfolgen je Farbe mit dem
   identischen kleinen Raster-/Bitmap-Fixture, ohne #26-UI-Projektion;
 - Rotation, Reset und Backlight jeweils einzeln sowie in Wiederholzyklen;
-- Raw-Touch an Ecken, Kanten und Mitte inklusive Kontakt-/Druckverlauf;
+- die unveraenderte Stage-2-Evidence fuer reale Touchfunktion, Ecken, Mitte,
+  Polling, IRQ und statische Kontakt-/`strength`-Werte wiederverwenden;
 - IRQ- und Pollingpfad, getrennte CS-Zugriffe und gemeinsamer SPI-Bus;
 - 1000 wechselnde Raw-Touch-/Draw-/Buszyklen mit Fehler- und Latenzprotokoll;
 - absichtlich eingebrachte Initialisierungs-, Bus-, CS-, Reset- und Touchfehler
   mit definierter, fail-closed Low-Level-Reaktion.
+
+Die Stage-2-Evidence mit vier realen Ecken und der Mitte belegt den fuer die
+rendererunabhaengige Low-Level-Auswahl notwendigen nutzbaren Raw-Touch-Bereich.
+Die vorhandenen realen Kontakt-/`strength`-Werte belegen, dass der
+ausgewaehlte XPT2046-Pfad Kontakt-/Druckinformation liefert. Zusaetzliche
+Kantenmittenkontakte, ein neuer kontrollierter Kontakt-/Druckverlauf und ein
+physisch gehaltener Touch waehrend des 1000-Zyklen-Draw-/Touch-/Busstresses
+sind deshalb keine Stage-3-Abschlusskriterien und keine neue manuelle
+Owner-Interaktion.
+
+Exakte Raw-Grenzen, Z-/Kontakt-/Druckschwellen, Entprellung,
+Kontaktstabilitaet, Hold-/Release-Semantik und Transformparameter werden nur
+spaeter als hardwareabhaengige Kalibrierungs-/Integrations-Evidence erhoben,
+soweit der dann tatsaechlich implementierte Kalibrierungs-/Kontaktvertrag sie
+erfordert. Es wird keine vorsorgliche vollstaendige Touch-Messmatrix fuer
+Stage 3 festgeschrieben.
 
 Kalibrierung, `WakeOnly`, Raw-Touch-Recovery, UI-Commands und die vollstaendige
 Fehlerisolation gegen die bestehende Fachlogik sind keine Stage-0-bis-4-
@@ -869,11 +886,11 @@ eine Owner-Bestaetigung physischer Tatsachen:
 
 Die Owner-Hardwaremitwirkung stellt also Hardware, Zugriff und sichere
 Testbedingungen bereit. Die bereits bestaetigte Hardware-/SSOT-/Reset-
-Evidence schliesst Stage 0; die reale Controlleridentitaet, Rotation,
-Raw-Grenzen, Druck-/Kontaktwerte und Stabilitaetseigenschaften werden erst im
-aktiven Low-Level-Smoke als Builder-Evidence erhoben. Keine weitere
-Owner-Bestaetigung von Aufdrucken, Modulvariante oder Doku-Uebereinstimmung
-ist dafuer erforderlich, solange kein konkreter Widerspruch auftritt.
+Evidence schliesst Stage 0; Stage 2 und Stage 3 liefern die erforderliche
+rendererunabhaengige Controller-, Display-, Touch-, Bus-, Fehler-, Ressourcen-
+und Stabilitaetsevidence. Keine weitere Owner-Bestaetigung von Aufdrucken,
+Modulvariante oder Doku-Uebereinstimmung ist dafuer erforderlich, solange kein
+konkreter Widerspruch auftritt.
 
 ## 10. Spaetere Umsetzungsschnitte nach Planfreigabe
 
@@ -968,10 +985,14 @@ Die folgenden Punkte sind aktuell offen:
    einen separaten SSOT-/Ownerentscheid einholen; die physische Tatsache selbst
    bleibt Evidence und wird nicht durch Ownerentscheidung bestaetigt.
 
-Die konkrete Controlleridentitaet, Rotation, Raw-Grenzen, Kontakt-/Druckwerte,
-Entprellung und Verwechslungsschutz sind keine Stage-0-Voraussetzungen,
-sondern werden im ersten aktiven Low-Level-Smoke und danach in der
-Stage-3-Matrix als Builder-Evidence erhoben. Eine fehlende identifizierbare
+Die konkrete Controlleridentitaet, Rotation sowie die vorhandenen statischen
+Raw-/Kontakt-/`strength`-Werte sind keine Stage-0-Voraussetzungen und werden
+durch die bestehende Stage-2-Evidence sowie die Stage-3-Matrix als
+Builder-Evidence belegt. Exakte Raw-Grenzen, Kontakt-/Druckschwellen,
+Entprellung, Hold-/Release-Semantik und Verwechslungsschutz sind keine
+Stage-3-Abschlusskriterien, sondern spaetere Kalibrierungs-/Integrations-
+Evidence, soweit der tatsaechlich implementierte Vertrag sie erfordert. Eine
+fehlende identifizierbare
 Carrier-Revisionsmarkierung oder ein fehlender Aufdruck blockiert nicht ohne
 konkrete relevante Mehrdeutigkeit. Der `>=10 s`-Raw-Touch-Recoveryvertrag ist
 bereits entschieden; offen bleiben nur die hardwareabhaengigen Parameter
