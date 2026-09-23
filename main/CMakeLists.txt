@@ -4,6 +4,7 @@ idf_component_register(
     SRCS "app_main.cpp" "fermentation_ui_renderer.cpp"
          "fermentation_ui_lvgl_renderer.cpp"
          "fermentation_ui_press_dispatcher.cpp"
+         "generated/manuengineer_logo_168x24.cpp"
     PRIV_INCLUDE_DIRS "../include"
                   "../lib/device_platform_esp_idf/private"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf

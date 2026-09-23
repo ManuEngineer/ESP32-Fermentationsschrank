@@ -427,6 +427,46 @@ void test_render_key_changes_when_program_edit_candidate_enables_save() {
                       fermentation::main_ui::makeScreenRenderKey(afterCandidate));
 }
 
+// Branding FOLLOW-UP layout proof: the Logo command's rect must be exactly
+// the generated asset's native 168x24 size (no stretch/crop - see
+// scripts/generate_branding_asset.py) and must not overlap the DE/EN/ES,
+// WLAN or clock header boxes. This is a pure command-rect check; it needs
+// no LVGL/LVGL image asset to run natively.
+void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    const auto logo = std::find_if(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.kind == fermentation::main_ui::ScreenDrawKind::Logo;
+        });
+    TEST_ASSERT_TRUE(logo != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(168U, logo->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(24U, logo->rect.height);
+
+    const auto overlapsLogo = [&logo](const device_platform::DisplayRect& other) {
+        const auto logoRight = logo->rect.left + logo->rect.width;
+        const auto logoBottom = logo->rect.top + logo->rect.height;
+        const auto otherRight = other.left + other.width;
+        const auto otherBottom = other.top + other.height;
+        return logo->rect.left < otherRight && other.left < logoRight &&
+              logo->rect.top < otherBottom && other.top < logoBottom;
+    };
+    std::size_t headerBoxesChecked = 0U;
+    for (const auto& command : screen.commands) {
+        if (command.rect.top != logo->rect.top || &command == &*logo) continue;
+        // Every other command sharing the logo's header row must not
+        // overlap it (the DE/EN/ES, WLAN and clock boxes all sit at the
+        // same top=4U row per fermentation_ui_renderer.cpp).
+        TEST_ASSERT_FALSE(overlapsLogo(command.rect));
+        ++headerBoxesChecked;
+    }
+    TEST_ASSERT_TRUE(headerBoxesChecked >= 3U);
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -463,5 +503,6 @@ int main() {
     RUN_TEST(test_render_key_unchanged_workspace_remains_equal);
     RUN_TEST(test_render_key_changes_when_manual_holding_values_enable_confirm);
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
+    RUN_TEST(test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
     return UNITY_END();
 }

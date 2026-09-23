@@ -8,6 +8,7 @@
 #include "esp_idf_display_touch_adapter_private.hpp"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "generated/manuengineer_logo_168x24.h"
 #include "lvgl.h"
 #include "touch_calibration.hpp"
 
@@ -315,8 +316,17 @@ bool ProductiveLvglRenderer::render(
     lv_obj_set_style_bg_opa(state.root, LV_OPA_COVER, 0U);
 
     for (const auto& command : screen.commands) {
-        if (command.kind == ScreenDrawKind::Text ||
-            command.kind == ScreenDrawKind::Logo) {
+        if (command.kind == ScreenDrawKind::Logo) {
+            // The generated asset (scripts/generate_branding_asset.py,
+            // main/generated/manuengineer_logo_168x24.{c,h}) is exactly
+            // 168x24, matching this command's rect exactly - no stretch or
+            // crop. ScreenDrawCommand carries no image-descriptor pointer
+            // (it stays a renderer-independent model); this main-side
+            // compile-time constant is looked up here only.
+            auto* logo = lv_image_create(state.root);
+            lv_image_set_src(logo, &manuengineer_logo_168x24);
+            lv_obj_set_pos(logo, command.rect.left, command.rect.top);
+        } else if (command.kind == ScreenDrawKind::Text) {
             auto* label = lv_label_create(state.root);
             lv_label_set_text(label, command.text.c_str());
             lv_obj_set_pos(label, command.rect.left, command.rect.top);
