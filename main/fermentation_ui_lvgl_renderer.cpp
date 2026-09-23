@@ -55,19 +55,31 @@ struct ProductiveLvglRenderer::Impl final {
         // using them; lv_indev_delete() also fully unregisters the indev
         // from LVGL's own list, so the task never revisits it afterward
         // regardless of exact task-exit timing.
-        const bool locked = portStarted && lvgl_port_lock(1000U);
-        if (touchInput != nullptr) {
-            lv_indev_delete(touchInput);
-            touchInput = nullptr;
-        }
-        if (display != nullptr) {
-            (void)lvgl_port_remove_disp(display);
-            display = nullptr;
-        }
-        if (locked) {
-            lvgl_port_unlock();
-        }
+        //
+        // lvgl_port_lock(0) blocks indefinitely (esp_lvgl_port maps a 0 ms
+        // timeout to portMAX_DELAY, confirmed against esp_lvgl_port.c) -
+        // this is the documented, intended teardown contract, not merely a
+        // best-effort attempt. There is deliberately no unprotected
+        // fallback delete on a lock failure: a partially initialized
+        // handle (initialize() failed after creating some, but not all,
+        // objects) is torn down the same way, under the same lock.
         if (portStarted) {
+            if (lvgl_port_lock(0U)) {
+                if (touchInput != nullptr) {
+                    lv_indev_delete(touchInput);
+                    touchInput = nullptr;
+                }
+                if (display != nullptr) {
+                    (void)lvgl_port_remove_disp(display);
+                    display = nullptr;
+                }
+                lvgl_port_unlock();
+            }
+            // If the lock could not be taken (should never happen with an
+            // indefinite wait, but this is the exact case the Auftrag
+            // names), touchInput/display are deliberately left non-null
+            // rather than deleted unprotected: a leak, not a possible
+            // use-after-free.
             (void)lvgl_port_deinit();
             portStarted = false;
         }
@@ -167,7 +179,7 @@ void ProductiveLvglRenderer::setTouchCalibration(
     auto& state = *impl_;
     if (!state.portStarted) {
         // The LVGL task does not exist yet; there is nothing to serialize
-        // against.
+        // against, and no touch state has been published yet either.
         state.touchCalibrationModel = std::move(activeModel);
         return;
     }
@@ -178,6 +190,16 @@ void ProductiveLvglRenderer::setTouchCalibration(
         return;
     }
     state.touchCalibrationModel = std::move(activeModel);
+    // A calibration change/clear invalidates any already-published touch
+    // state: a contact or fresh-press edge observed under the previous
+    // model must never be consumed under the new one. Only a genuinely new
+    // raw contact sampled after this point may produce a fresh press
+    // again. This is the same published state pollTouch() reads, reset
+    // under the same lock - no second event state is introduced.
+    state.touchPressActive = false;
+    state.touchPressEdgePending = false;
+    state.touchPressX = 0U;
+    state.touchPressY = 0U;
     lvgl_port_unlock();
 }
 

@@ -21,6 +21,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
 #include "fermentation_ui_text.hpp"
+#include "generated/board_profile_r1.hpp"
 #include "touch_calibration.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
@@ -302,11 +303,20 @@ extern "C" void app_main(void) {
     }
 
     // Issue #31's selected product renderer is composed here, at the
-    // application boundary. The selected Stage-2 SSOT pins are passed to the
-    // concrete adapter; no display, touch, LVGL or command policy enters the
-    // application component.
-    auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer({
-        18, 23, 19, 5, 15, 2, 4, 39, 320U, 240U, true});
+    // application boundary. The pin numbers are the single deterministic
+    // build-time derivation from config/board_profiles/
+    // esp32_32e_quad_mosfet_r1.yaml (see main/generated/board_profile_r1.hpp
+    // and scripts/generate_board_profile_header.py) - no second
+    // hand-maintained pin list. Width/height are a panel property, not a
+    // GPIO assignment, and stay a composition-root constant. No display,
+    // touch, LVGL or command policy enters the application component.
+    namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
+    auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer(
+        {r1_pins::kSpiSckPin, r1_pins::kSpiMosiPin, r1_pins::kSpiMisoPin,
+         r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,
+         r1_pins::kDisplayDataCommandPin, r1_pins::kBacklightPin,
+         r1_pins::kTouchInterruptPin, 320U, 240U,
+         r1_pins::kBacklightActiveHigh});
     fermentation::FermentationTouchWorkspace uiWorkspace;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
     // The single renderer-independent source for locale, the program catalog
