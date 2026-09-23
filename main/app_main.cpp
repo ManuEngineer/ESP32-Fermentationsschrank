@@ -19,6 +19,8 @@
 #include "nvs_flash.h"
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
+#include "fermentation_ui_lvgl_renderer.hpp"
+#include "fermentation_ui_text.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 #include "issue_90_slice7_harness.hpp"
@@ -26,10 +28,6 @@
 
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
-#endif
-
-#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
-#include "issue31_renderer_comparison.hpp"
 #endif
 
 #include "esp_log.h"
@@ -206,6 +204,7 @@ extern "C" void app_main(void) {
         // cannot initialize and open its persistent store.
         return;
     }
+
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     ESP_LOGI(kTag,
              "ISSUE90_NVS_PARTITION_INIT=PASS ISSUE90_NVS_STORE_OPEN=PASS");
@@ -270,6 +269,23 @@ extern "C" void app_main(void) {
         return;
     }
 
+    // Issue #31's selected product renderer is composed here, at the
+    // application boundary. The selected Stage-2 SSOT pins are passed to the
+    // concrete adapter; no display, touch, LVGL or command policy enters the
+    // application component.
+    auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer({
+        18, 23, 19, 5, 15, 2, 4, 39, 320U, 240U, true});
+    fermentation::FermentationTouchWorkspace uiWorkspace;
+    const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
+    const device_platform::LocaleId uiLocale{"de"};
+    if (displayRenderer == nullptr || !displayRenderer->initialize()) {
+        ESP_LOGW(kTag,
+                 "productive LVGL display unavailable; UI remains fail-closed");
+    } else if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
+                                        uiTextPacks, uiLocale)) {
+        ESP_LOGW(kTag, "productive LVGL initial projection failed");
+    }
+
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     fermentation::issue_90_slice7::Harness issue90Harness(application,
                                                           timeSource);
@@ -277,12 +293,6 @@ extern "C" void app_main(void) {
 #endif
 
     logResources();
-
-#if defined(APP_ISSUE31_RENDERER_COMPARISON) || defined(APP_ISSUE31_LEAN_RUNNER)
-    // Run only after the normal composition root and application graph are
-    // alive so resource evidence represents the real R1 graph.
-    fermentation::main_ui::runIssue31RendererComparison();
-#endif
 
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
     if (!fermentation::issue_29_bringup::run()) {
@@ -304,6 +314,10 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
+        if (displayRenderer != nullptr && displayRenderer->initialized()) {
+            static_cast<void>(displayRenderer->render(
+                application.uiSnapshot(), uiWorkspace, uiTextPacks, uiLocale));
+        }
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif

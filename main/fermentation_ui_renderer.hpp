@@ -46,42 +46,8 @@ struct RepresentativeScreen {
         device_platform::ThemeId{"manuengineer-dark"}, {}};
     std::string clockText{"--:--"};
     std::string logoAssetPath{"assets/branding/manuengineer/ManuEngineer.svg"};
-    std::string logoAssetSha256{
-        "b35788628e5cbda7a82552d5b6969c34a813494392ef9545d69dae4489b1484b"};
-    std::size_t logoAssetBytes{12242U};
-    std::string fontProfileId{"issue31-bounded-5x7-ascii"};
     FermentationUiWorkspaceView workspace;
     std::vector<ScreenDrawCommand> commands;
-};
-
-struct LeanRenderSummary {
-    bool success{false};
-    std::size_t drawCommands{0U};
-    std::size_t textCommands{0U};
-    std::size_t textBytes{0U};
-    std::size_t filledPixels{0U};
-    std::size_t displaySubmissions{0U};
-    bool frameSubmitted{false};
-    bool frameFullyFlushed{false};
-    std::uint64_t frameSubmitTimeUs{0U};
-    std::uint64_t frameFullyFlushedTimeUs{0U};
-};
-
-struct LvglRenderSummary {
-    bool success{false};
-    std::size_t drawCommands{0U};
-    std::size_t textCommands{0U};
-    std::size_t textBytes{0U};
-    std::size_t partialBufferPixels{0U};
-    std::size_t taskStackBytes{0U};
-    bool frameSubmitted{false};
-    bool frameFullyFlushed{false};
-    bool lastFlushCompletion{false};
-    bool callbackLifetimeReleased{false};
-    std::uint64_t renderStartTimestampUs{0U};
-    std::uint64_t frameSubmitTimestampUs{0U};
-    std::uint64_t frameCompleteTimestampUs{0U};
-    std::size_t taskStackHighWaterMarkBytes{0U};
 };
 
 [[nodiscard]] std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept;
@@ -94,14 +60,6 @@ struct LvglRenderSummary {
 [[nodiscard]] std::optional<device_platform::DeviceUiTarget>
 targetAt(const RepresentativeScreen& screen, std::uint16_t x,
          std::uint16_t y) noexcept;
-
-// This is the deliberately small immediate-mode comparison renderer.  It
-// consumes the same command list that the later LVGL comparison consumes and
-// returns input only as a DeviceUiTarget; application command ownership stays
-// in FermentationTouchWorkspace/FermentationApplication.
-[[nodiscard]] LeanRenderSummary renderLean(
-    device_platform::IDisplayTouchPort& display,
-    const RepresentativeScreen& screen);
 
 [[nodiscard]] FermentationUiWorkspacePress routePress(
     FermentationTouchWorkspace& workspace, const FermentationUiSnapshot& snapshot,

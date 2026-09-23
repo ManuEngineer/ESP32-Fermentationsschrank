@@ -1,6 +1,5 @@
 #include "esp_idf_display_touch_adapter.hpp"
 
-#include "../private/esp_idf_display_touch_adapter_comparison_private.hpp"
 #include "../private/esp_idf_display_touch_adapter_private.hpp"
 
 #include <algorithm>
@@ -91,10 +90,6 @@ class EspIdfDisplayTouchAdapter::Impl final {
     SemaphoreHandle_t transferDone{nullptr};
     bool transferPending{false};
     bool transferFaulted{false};
-    detail::ComparisonDisplayTransferObserver observer{nullptr};
-    void* observerContext{nullptr};
-    std::uint64_t firstSubmitUs{0U};
-    std::uint64_t lastCompleteUs{0U};
     device_platform::DisplayRotation rotation{
         device_platform::DisplayRotation::Rotate0};
 
@@ -104,16 +99,10 @@ class EspIdfDisplayTouchAdapter::Impl final {
         auto* state = static_cast<Impl*>(userContext);
         if (state == nullptr) return false;
         state->transferPending = false;
-        state->lastCompleteUs =
-            static_cast<std::uint64_t>(esp_timer_get_time());
         BaseType_t higherPriorityTaskWoken = pdFALSE;
         if (state->transferDone != nullptr) {
             (void)xSemaphoreGiveFromISR(state->transferDone,
                                         &higherPriorityTaskWoken);
-        }
-        if (state->observer != nullptr &&
-            state->observer(state->observerContext, state->lastCompleteUs)) {
-            higherPriorityTaskWoken = pdTRUE;
         }
         if (higherPriorityTaskWoken == pdTRUE) {
             portYIELD_FROM_ISR();
@@ -317,10 +306,6 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
             return false;
         }
         state.transferPending = true;
-        if (state.firstSubmitUs == 0U) {
-            state.firstSubmitUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
-        }
         if (esp_lcd_panel_draw_bitmap(
                 state.panel, rect.left, row, rect.left + rect.width,
                 row + rows, state.dmaPixels) != ESP_OK) {
@@ -360,10 +345,6 @@ bool EspIdfDisplayTouchAdapter::flushRgb565(
         std::memcpy(state.dmaPixels, pixels + sourceOffset,
                     chunkPixels * sizeof(std::uint16_t));
         state.transferPending = true;
-        if (state.firstSubmitUs == 0U) {
-            state.firstSubmitUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
-        }
         if (esp_lcd_panel_draw_bitmap(
                 state.panel, rect.left, row, rect.left + rect.width,
                 row + rows, state.dmaPixels) != ESP_OK) {
@@ -413,64 +394,7 @@ bool bindEspIdfDisplayTouchHandles(
     }
     handles.displayIo = adapter.impl_->displayIo;
     handles.panel = adapter.impl_->panel;
-    handles.touch = adapter.impl_->touch;
     return true;
-}
-
-bool ComparisonDisplayTransferAccess::installObserver(
-    EspIdfDisplayTouchAdapter& adapter,
-    ComparisonDisplayTransferObserver observer, void* context) noexcept {
-    if (adapter.impl_ == nullptr || !adapter.impl_->initialized ||
-        adapter.impl_->displayIo == nullptr || observer == nullptr) {
-        return false;
-    }
-    adapter.impl_->observer = observer;
-    adapter.impl_->observerContext = context;
-    esp_lcd_panel_io_callbacks_t callbacks{};
-    callbacks.on_color_trans_done =
-        &EspIdfDisplayTouchAdapter::Impl::onColorTransferDone;
-    if (esp_lcd_panel_io_register_event_callbacks(adapter.impl_->displayIo,
-                                                  &callbacks,
-                                                  adapter.impl_.get()) != ESP_OK) {
-        adapter.impl_->observer = nullptr;
-        adapter.impl_->observerContext = nullptr;
-        return false;
-    }
-    return true;
-}
-
-void ComparisonDisplayTransferAccess::clearObserver(
-    EspIdfDisplayTouchAdapter& adapter) noexcept {
-    if (adapter.impl_ == nullptr) return;
-    adapter.impl_->observer = nullptr;
-    adapter.impl_->observerContext = nullptr;
-}
-
-void ComparisonDisplayTransferAccess::resetFrameMetrics(
-    EspIdfDisplayTouchAdapter& adapter) noexcept {
-    if (adapter.impl_ == nullptr) return;
-    adapter.impl_->firstSubmitUs = 0U;
-    adapter.impl_->lastCompleteUs = 0U;
-    adapter.impl_->transferFaulted = false;
-}
-
-std::uint64_t ComparisonDisplayTransferAccess::firstSubmitTimestampUs(
-    const EspIdfDisplayTouchAdapter& adapter) noexcept {
-    return adapter.impl_ == nullptr ? 0U : adapter.impl_->firstSubmitUs;
-}
-
-std::uint64_t ComparisonDisplayTransferAccess::lastCompleteTimestampUs(
-    const EspIdfDisplayTouchAdapter& adapter) noexcept {
-    return adapter.impl_ == nullptr ? 0U : adapter.impl_->lastCompleteUs;
-}
-
-bool ComparisonDisplayTransferAccess::frameTransferCompleted(
-    const EspIdfDisplayTouchAdapter& adapter) noexcept {
-    if (adapter.impl_ == nullptr) return false;
-    const auto& state = *adapter.impl_;
-    return state.firstSubmitUs != 0U &&
-           state.lastCompleteUs >= state.firstSubmitUs &&
-           !state.transferPending && !state.transferFaulted;
 }
 
 }  // namespace detail

@@ -1,7 +1,6 @@
 #include "fermentation_ui_renderer.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -15,8 +14,6 @@ constexpr std::uint16_t kHeaderHeight = 32U;
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr char kLogoAssetPath[] = "assets/branding/manuengineer/ManuEngineer.svg";
-constexpr char kLogoAssetSha256[] =
-    "b35788628e5cbda7a82552d5b6969c34a813494392ef9545d69dae4489b1484b";
 
 std::uint16_t rgb565(std::uint32_t rgb) noexcept {
     const auto red = static_cast<std::uint16_t>((rgb >> 16U) & 0xFFU);
@@ -142,102 +139,6 @@ std::string temperatureText(const TemperatureView& temperature) {
     return result;
 }
 
-std::uint8_t glyphColumn(char value, std::size_t column) noexcept {
-    const char upper = value >= 'a' && value <= 'z'
-                           ? static_cast<char>(value - ('a' - 'A'))
-                           : value;
-    constexpr std::array<std::array<std::uint8_t, 5U>, 44U> glyphs{{
-        {{0x3EU, 0x09U, 0x09U, 0x3EU, 0x00U}},  // A
-        {{0x3FU, 0x25U, 0x25U, 0x1AU, 0x00U}},  // B
-        {{0x1EU, 0x21U, 0x21U, 0x12U, 0x00U}},  // C
-        {{0x3FU, 0x21U, 0x21U, 0x1EU, 0x00U}},  // D
-        {{0x3FU, 0x25U, 0x25U, 0x21U, 0x00U}},  // E
-        {{0x3FU, 0x05U, 0x05U, 0x01U, 0x00U}},  // F
-        {{0x1EU, 0x21U, 0x29U, 0x3AU, 0x00U}},  // G
-        {{0x3FU, 0x04U, 0x04U, 0x3FU, 0x00U}},  // H
-        {{0x21U, 0x3FU, 0x21U, 0x00U, 0x00U}},  // I
-        {{0x10U, 0x20U, 0x21U, 0x1FU, 0x00U}},  // J
-        {{0x3FU, 0x0CU, 0x12U, 0x21U, 0x00U}},  // K
-        {{0x3FU, 0x20U, 0x20U, 0x20U, 0x00U}},  // L
-        {{0x3FU, 0x02U, 0x04U, 0x02U, 0x3FU}},  // M
-        {{0x3FU, 0x02U, 0x04U, 0x08U, 0x3FU}},  // N
-        {{0x1EU, 0x21U, 0x21U, 0x1EU, 0x00U}},  // O
-        {{0x3FU, 0x09U, 0x09U, 0x06U, 0x00U}},  // P
-        {{0x1EU, 0x21U, 0x31U, 0x5EU, 0x00U}},  // Q
-        {{0x3FU, 0x09U, 0x19U, 0x26U, 0x00U}},  // R
-        {{0x26U, 0x25U, 0x25U, 0x19U, 0x00U}},  // S
-        {{0x01U, 0x3FU, 0x01U, 0x01U, 0x00U}},  // T
-        {{0x1FU, 0x20U, 0x20U, 0x1FU, 0x00U}},  // U
-        {{0x0FU, 0x30U, 0x30U, 0x0FU, 0x00U}},  // V
-        {{0x1FU, 0x20U, 0x18U, 0x20U, 0x1FU}},  // W
-        {{0x33U, 0x0CU, 0x0CU, 0x33U, 0x00U}},  // X
-        {{0x03U, 0x04U, 0x38U, 0x04U, 0x03U}},  // Y
-        {{0x31U, 0x29U, 0x25U, 0x23U, 0x00U}},  // Z
-        {{0x1EU, 0x21U, 0x29U, 0x1EU, 0x00U}},  // 0
-        {{0x00U, 0x22U, 0x3FU, 0x20U, 0x00U}},  // 1
-        {{0x32U, 0x29U, 0x29U, 0x26U, 0x00U}},  // 2
-        {{0x12U, 0x21U, 0x25U, 0x1AU, 0x00U}},  // 3
-        {{0x0CU, 0x0AU, 0x3FU, 0x08U, 0x00U}},  // 4
-        {{0x17U, 0x25U, 0x25U, 0x19U, 0x00U}},  // 5
-        {{0x1EU, 0x25U, 0x25U, 0x18U, 0x00U}},  // 6
-        {{0x01U, 0x39U, 0x05U, 0x03U, 0x00U}},  // 7
-        {{0x1AU, 0x25U, 0x25U, 0x1AU, 0x00U}},  // 8
-        {{0x06U, 0x29U, 0x29U, 0x1EU, 0x00U}},  // 9
-        {{0x00U, 0x00U, 0x24U, 0x00U, 0x00U}},  // .
-        {{0x00U, 0x00U, 0x08U, 0x00U, 0x00U}},  // -
-        {{0x00U, 0x00U, 0x00U, 0x00U, 0x00U}},  // space
-        {{0x00U, 0x06U, 0x09U, 0x06U, 0x00U}},  // :
-        {{0x00U, 0x00U, 0x04U, 0x00U, 0x00U}},  // _
-        {{0x02U, 0x04U, 0x08U, 0x10U, 0x20U}},  // /
-        {{0x00U, 0x00U, 0x3FU, 0x00U, 0x00U}},  // =
-        {{0x00U, 0x00U, 0x00U, 0x00U, 0x00U}},  // ?
-    }};
-    std::size_t index = 41U;
-    if (upper >= 'A' && upper <= 'Z') index = static_cast<std::size_t>(upper - 'A');
-    else if (upper >= '0' && upper <= '9') index = 26U + static_cast<std::size_t>(upper - '0');
-    else if (upper == '.') index = 36U;
-    else if (upper == '-') index = 37U;
-    else if (upper == ' ') index = 38U;
-    else if (upper == ':') index = 39U;
-    else if (upper == '_') index = 40U;
-    else if (upper == '/') index = 41U;
-    else if (upper == '=') index = 42U;
-    return glyphs[index][column];
-}
-
-void renderText(device_platform::IDisplayTouchPort& display,
-                const ScreenDrawCommand& command, LeanRenderSummary& summary) {
-    constexpr std::uint16_t kGlyphWidth = 6U;
-    constexpr std::uint16_t kGlyphHeight = 7U;
-    const auto maxChars = std::min<std::size_t>(
-        command.text.size(), command.rect.width / kGlyphWidth);
-    if (command.rect.width == 0U || command.rect.height == 0U) {
-        summary.success = false;
-        return;
-    }
-    std::vector<std::uint16_t> pixels(
-        static_cast<std::size_t>(command.rect.width) * command.rect.height,
-        themeColor565(command.backgroundToken));
-    for (std::size_t character = 0U; character < maxChars; ++character) {
-        for (std::size_t column = 0U; column < 5U; ++column) {
-            const auto bits = glyphColumn(command.text[character], column);
-            for (std::uint16_t row = 0U; row < kGlyphHeight; ++row) {
-                if ((bits & (1U << row)) == 0U) continue;
-                const auto x = character * kGlyphWidth + column;
-                if (x >= command.rect.width || row >= command.rect.height) continue;
-                pixels[static_cast<std::size_t>(row) * command.rect.width + x] =
-                    themeColor565(command.token);
-                ++summary.filledPixels;
-            }
-        }
-    }
-    if (!display.flushRgb565(command.rect, pixels.data(), pixels.size())) {
-        summary.success = false;
-        return;
-    }
-    ++summary.displaySubmissions;
-}
-
 }  // namespace
 
 std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
@@ -274,7 +175,6 @@ RepresentativeScreen makeRepresentativeScreen(
                      device_platform::ThemeToken::OnStatusError,
                      device_platform::ThemeToken::OnOverlay}};
     screen.logoAssetPath = kLogoAssetPath;
-    screen.logoAssetSha256 = kLogoAssetSha256;
     screen.workspace = workspace.view(snapshot);
     auto& commands = screen.commands;
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
@@ -393,41 +293,6 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
     }
     return device_platform::DeviceUiTarget{
         device_platform::DeviceUiTargetKind::BottomSlot, index};
-}
-
-LeanRenderSummary renderLean(device_platform::IDisplayTouchPort& display,
-                             const RepresentativeScreen& screen) {
-    LeanRenderSummary summary;
-    summary.drawCommands = screen.commands.size();
-    for (const auto& command : screen.commands) {
-        if (command.kind == ScreenDrawKind::Text ||
-            command.kind == ScreenDrawKind::Logo) {
-            ++summary.textCommands;
-            summary.textBytes += command.text.size();
-            renderText(display, command, summary);
-        } else if (command.kind == ScreenDrawKind::Fill ||
-                   command.kind == ScreenDrawKind::PressFeedback) {
-            if (command.rect.width == 0U || command.rect.height == 0U ||
-                !display.fillRect(command.rect,
-                                 themeColor565(command.token))) {
-                summary.success = false;
-                return summary;
-            }
-            ++summary.displaySubmissions;
-        } else {
-            summary.success = false;
-            return summary;
-        }
-        if (command.kind == ScreenDrawKind::Fill ||
-            command.kind == ScreenDrawKind::PressFeedback) {
-            summary.filledPixels +=
-                static_cast<std::size_t>(command.rect.width) * command.rect.height;
-        }
-    }
-    summary.success = true;
-    summary.frameSubmitted = summary.displaySubmissions > 0U;
-    summary.frameFullyFlushed = summary.frameSubmitted;
-    return summary;
 }
 
 FermentationUiWorkspacePress routePress(

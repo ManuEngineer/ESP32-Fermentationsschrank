@@ -339,20 +339,19 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "device_platform_esp_idf",
                 "nvs_flash",
                 "esp_timer",
+                "espressif__esp_lvgl_port",
             }
         ),
     },
 }
 
-# Issue #31: the composition root wires the selected comparison runner, while
+# Issue #31: the composition root wires the selected LVGL renderer, while the
 # renderer files only translate the existing UI view/command model. These are
 # narrow role guards, not a new framework or a product-policy parser.
 UI_COMPOSITION_ROOT_FILES = ("main/app_main.cpp",)
 UI_COMPOSITION_FORBIDDEN_TOKENS = (
     "ScreenDrawCommand",
     "lv_obj_",
-    "renderLean(",
-    "renderLvgl(",
     "fillRect(",
 )
 UI_RENDERER_FILES = (

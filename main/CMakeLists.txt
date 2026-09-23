@@ -2,34 +2,14 @@
 # Profilvariablen fuer die private Quellenisolierung verwendet werden.
 idf_component_register(
     SRCS "app_main.cpp" "fermentation_ui_renderer.cpp"
+         "fermentation_ui_lvgl_renderer.cpp"
     PRIV_INCLUDE_DIRS "../include"
+                  "../lib/device_platform_esp_idf/private"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
                   nvs_flash
                   esp_timer
+                  espressif__esp_lvgl_port
 )
-
-if(CONFIG_APP_ISSUE31_RENDERER_COMPARISON OR CONFIG_APP_ISSUE31_LEAN_RUNNER)
-    target_sources(${COMPONENT_LIB} PRIVATE
-        "issue31_renderer_comparison.cpp"
-    )
-    target_include_directories(${COMPONENT_LIB} PRIVATE
-        "../lib/device_platform_esp_idf/private"
-    )
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE
-        APP_ISSUE31_LEAN_RUNNER=1
-    )
-endif()
-
-if(CONFIG_APP_ISSUE31_RENDERER_COMPARISON)
-    idf_component_optional_requires(PRIVATE espressif__esp_lvgl_port)
-    idf_component_optional_requires(PRIVATE espressif__esp_lcd_touch)
-    target_sources(${COMPONENT_LIB} PRIVATE
-        "fermentation_ui_lvgl_renderer.cpp"
-    )
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE
-        APP_ISSUE31_RENDERER_COMPARISON=1
-    )
-endif()
 
 # ESP-IDF 6.1 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt
 # haelt gnu++17 (siehe platformio.ini und

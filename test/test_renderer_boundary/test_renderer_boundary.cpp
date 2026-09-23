@@ -10,41 +10,6 @@
 
 namespace {
 
-class RecordingDisplay final : public device_platform::IDisplayTouchPort {
-   public:
-    bool initialize() override { return true; }
-    bool setRotation(device_platform::DisplayRotation) override { return true; }
-    bool setBacklight(bool) override { return true; }
-    bool fillRect(device_platform::DisplayRect rect,
-                  std::uint16_t) override {
-        if (rect.left + rect.width > 320U || rect.top + rect.height > 240U ||
-            rect.width == 0U || rect.height == 0U) {
-            return false;
-        }
-        ++calls;
-        pixels += static_cast<std::size_t>(rect.width) * rect.height;
-        return true;
-    }
-    bool flushRgb565(device_platform::DisplayRect rect,
-                     const std::uint16_t*, std::size_t pixelCount) override {
-        if (rect.left + rect.width > 320U || rect.top + rect.height > 240U ||
-            rect.width == 0U || rect.height == 0U ||
-            pixelCount != static_cast<std::size_t>(rect.width) * rect.height) {
-            return false;
-        }
-        ++calls;
-        pixels += pixelCount;
-        return true;
-    }
-    device_platform::RawTouchSample sampleTouch() override {
-        return {device_platform::RawTouchSampleStatus::NoContact,
-                0U, 0U, 0U, 1U, false};
-    }
-
-    std::size_t calls{0U};
-    std::size_t pixels{0U};
-};
-
 bool hasText(const fermentation::main_ui::RepresentativeScreen& screen,
              std::string_view text) {
     return std::any_of(screen.commands.begin(), screen.commands.end(),
@@ -83,25 +48,13 @@ void test_representative_screen_uses_existing_workspace_and_three_locales() {
     TEST_ASSERT_TRUE(de.workspace.bottomSlots[0].label.valid());
 }
 
-void test_lean_flush_is_bounded_and_bottom_press_returns_existing_target() {
+void test_bottom_press_returns_existing_target() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
     const auto screen = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
         device_platform::LocaleId{"en"});
-    RecordingDisplay display;
-    const auto result =
-        fermentation::main_ui::renderLean(display, screen);
-    TEST_ASSERT_TRUE(result.success);
-    TEST_ASSERT_TRUE(result.drawCommands > 0U);
-    TEST_ASSERT_TRUE(result.textCommands > 0U);
-    TEST_ASSERT_TRUE(result.textBytes > 0U);
-    TEST_ASSERT_TRUE(display.calls > 0U);
-    TEST_ASSERT_TRUE(display.pixels > 0U);
-    TEST_ASSERT_TRUE(result.frameSubmitted);
-    TEST_ASSERT_TRUE(result.frameFullyFlushed);
-
     const auto target = fermentation::main_ui::targetAt(screen, 20U, 220U);
     TEST_ASSERT_TRUE(target.has_value());
     TEST_ASSERT_EQUAL(static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
@@ -137,10 +90,8 @@ void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
     TEST_ASSERT_EQUAL_UINT32(1U, messages.workspace.pager.itemCount);
     TEST_ASSERT_TRUE(hasText(messages, "1/1"));
 
-    RecordingDisplay display;
-    const auto result = fermentation::main_ui::renderLean(display, messages);
-    TEST_ASSERT_TRUE(result.success);
-    TEST_ASSERT_TRUE(result.frameFullyFlushed);
+    const auto target = fermentation::main_ui::targetAt(messages, 20U, 220U);
+    TEST_ASSERT_TRUE(target.has_value());
 }
 
 }  // namespace
@@ -158,7 +109,7 @@ void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_representative_screen_uses_existing_workspace_and_three_locales);
-    RUN_TEST(test_lean_flush_is_bounded_and_bottom_press_returns_existing_target);
+    RUN_TEST(test_bottom_press_returns_existing_target);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     return UNITY_END();
 }
