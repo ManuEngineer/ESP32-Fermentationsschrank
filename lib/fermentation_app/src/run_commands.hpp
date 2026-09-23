@@ -74,7 +74,6 @@ enum class CommandKind : std::uint8_t {
     ApplyRecoveryTimeCorrection,
     AcknowledgeMessage,
     MuteMessage,
-    ResetFault,
     ApplySensorSelectionAction,
 };
 
@@ -207,7 +206,6 @@ struct RunAdjustmentCommandRequest {
     CommandEnvelope envelope;
     std::optional<double> targetTemperatureCelsius;
     std::optional<std::uint32_t> remainingDurationMinutes;
-    bool safetyAllowsChange{false};
 };
 
 struct ApplyRecoveryTimeCorrectionRequest {
@@ -226,13 +224,9 @@ struct RunAdjustmentPreview {
 // Manuelle Sensoraktion (#21, 6.11/6.14.3). `action` liegt in
 // sensor_selection_types.hpp (dependency-frei); dieser Vertrag bindet
 // zusaetzlich CommandEnvelope und gehoert deshalb hierher, nicht dorthin.
-// `safetyAllowsChange` ist wie `ProgramStartRequest::safetyAllowsStart` ein
-// zusaetzliches externes Pruefsignal - es ersetzt weder die interne
-// `criticalSafetyEventPending`-Invariante noch wird es von ihr ersetzt.
 struct SensorSelectionCommandRequest {
     CommandEnvelope envelope;
     SensorSelectionUserAction action{SensorSelectionUserAction::RecheckProduct};
-    bool safetyAllowsChange{false};
 };
 
 enum class MessageCode : std::uint8_t {
@@ -292,30 +286,6 @@ struct MessageCommandRequest {
     std::uint32_t messageId{0U};
 };
 
-enum class FaultResetRejection : std::uint8_t {
-    None,
-    CauseStillActive,
-    SafetyChecksFailed,
-    AuthorizationMissing,
-    OtherActiveFault,
-    StaleEvaluation,
-};
-
-struct FaultResetEvaluation {
-    bool allowed{false};
-    bool causeStillActive{true};
-    bool safetyChecksPassed{false};
-    bool authorizationSatisfied{false};
-    bool otherBlockingFaultActive{false};
-    std::uint32_t faultRevision{0U};
-    FaultResetRejection rejection{FaultResetRejection::CauseStillActive};
-};
-
-struct FaultResetRequest {
-    CommandEnvelope envelope;
-    FaultResetEvaluation evaluation;
-};
-
 enum class CommandEffect : std::uint8_t {
     RunStarted,
     RunAborted,
@@ -326,7 +296,6 @@ enum class CommandEffect : std::uint8_t {
     CompletionAcknowledged,
     MessageAcknowledged,
     AcousticMuted,
-    FaultResetAuthorized,
     // #21, 6.14.4: transports only that #21's factual precondition for
     // Peltier control changed (peltierPermission). It is NOT a direct actor
     // release - #23/#24 still evaluate every remaining actor safety gate
@@ -474,8 +443,6 @@ void decideManualStartInto(const RunCommandState& current,
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideMuteMessage(
     const RunCommandState& current, const MessageCommandRequest& request);
-[[nodiscard]] CommandDecision decideFaultReset(
-    const RunCommandState& current, const FaultResetRequest& request);
 // #21, 6.14.3: ruft applySensorSelectionDecision (sensor_selection.hpp) auf
 // derselben Kandidatenkopie wie der automatische Coordinator-Pfad auf - keine
 // zweite Regelimplementierung. `plausibility` ist ein eigener Parameter statt

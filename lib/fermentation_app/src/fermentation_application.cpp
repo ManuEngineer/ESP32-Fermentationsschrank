@@ -219,8 +219,8 @@ FermentationApplication::~FermentationApplication() = default;
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartProgram(
     const FermentationUiCommandContext& context,
-    const FermentationUiStartProgramIntent& intent,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiStartProgramIntent& intent) {
+    const auto evidence = resolveRuntimeEvidence();
     if (configurationService_ == nullptr || runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -282,14 +282,14 @@ FermentationApplication::prepareStartProgram(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualHolding(
     const FermentationUiCommandContext& context,
-    const FermentationUiStartManualHoldingIntent& intent,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiStartManualHoldingIntent& intent) {
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -311,14 +311,14 @@ FermentationApplication::prepareStartManualHolding(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualTimed(
     const FermentationUiCommandContext& context,
-    const ManualTimedRunValues& values,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const ManualTimedRunValues& values) {
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -348,13 +348,13 @@ FermentationApplication::prepareStartManualTimed(
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
     request.productSensorValid = evidence.productSensorValid;
-    return makePreparedRequest(std::move(request));
+    return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
 FermentationApplicationRequestResult FermentationApplication::prepareStop(
     const FermentationUiCommandContext& context,
-    const FermentationUiStopRunIntent& intent,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiStopRunIntent& intent) {
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -390,8 +390,8 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
 
 FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
     const FermentationUiCommandContext& context,
-    const FermentationUiCompleteRunIntent& intent,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiCompleteRunIntent& intent) {
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -427,20 +427,15 @@ FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
 template <typename Intent>
 FermentationApplicationRequestResult
 FermentationApplication::prepareAdditionalEnvelope(
-    const FermentationUiCommandContext& context, const Intent& intent,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiCommandContext& context, const Intent& intent) {
     if constexpr (std::is_same_v<Intent, FermentationUiResetFaultIntent>) {
-        if (!evidence.faultResetEvaluation.has_value()) {
-            return requestFailure(
-                FermentationApplicationRequestStatus::Unavailable);
-        }
+        // #24's Planner/Watchdog owner is not part of the current #168
+        // composition. Do not manufacture a second owner or a generic reset
+        // request; the typed UI intent remains explicitly unavailable.
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
     }
-    if constexpr (std::is_same_v<Intent, FermentationUiSensorSelectionIntent>) {
-        if (!evidence.sensorPlausibility.has_value()) {
-            return requestFailure(
-                FermentationApplicationRequestStatus::Unavailable);
-        }
-    }
+    const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
@@ -456,7 +451,6 @@ FermentationApplication::prepareAdditionalEnvelope(
         request.envelope = envelope;
         request.targetTemperatureCelsius = intent.targetTemperatureCelsius;
         request.remainingDurationMinutes = intent.remainingDurationMinutes;
-        request.safetyAllowsChange = evidence.safetyAllowsChange;
         return makePreparedRequest(request);
     } else if constexpr (std::is_same_v<
                              Intent,
@@ -482,63 +476,58 @@ FermentationApplication::prepareAdditionalEnvelope(
             FermentationApplicationPreparedRequest::PreparedMuteMessage{
                 request});
     } else if constexpr (std::is_same_v<Intent,
-                                        FermentationUiResetFaultIntent>) {
-        FaultResetRequest request;
-        request.envelope = envelope;
-        request.evaluation = *evidence.faultResetEvaluation;
-        return makePreparedRequest(request);
-    } else if constexpr (std::is_same_v<Intent,
                                         FermentationUiSensorSelectionIntent>) {
         SensorSelectionCommandRequest request;
         request.envelope = envelope;
         request.action = intent.action;
-        request.safetyAllowsChange = evidence.safetyAllowsChange;
-        return makePreparedRequest(request, evidence.sensorPlausibility);
+        return makePreparedRequest(request, evidence.plausibility);
     }
     return requestFailure(FermentationApplicationRequestStatus::InvalidInput);
 }
 
 FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
     const FermentationUiCommandContext& context,
-    const FermentationUiEnvelopePayload& payload,
-    const FermentationApplicationOwningEvidence& evidence) {
+    const FermentationUiEnvelopePayload& payload) {
     return std::visit(
-        [this, &context, &evidence](
-            const auto& intent) -> FermentationApplicationRequestResult {
+        [this,
+         &context](const auto& intent) -> FermentationApplicationRequestResult {
             using Intent = std::decay_t<decltype(intent)>;
             if constexpr (std::is_same_v<Intent,
                                          FermentationUiStartProgramIntent>) {
-                return prepareStartProgram(context, intent, evidence);
+                return prepareStartProgram(context, intent);
             } else if constexpr (std::is_same_v<
                                      Intent,
                                      FermentationUiStartManualHoldingIntent>) {
-                return prepareStartManualHolding(context, intent, evidence);
+                return prepareStartManualHolding(context, intent);
             } else if constexpr (std::is_same_v<
                                      Intent,
                                      FermentationUiStartManualTimedIntent>) {
-                return prepareStartManualTimed(context, intent.values,
-                                               evidence);
+                return prepareStartManualTimed(context, intent.values);
             } else if constexpr (std::is_same_v<Intent,
                                                 FermentationUiStopRunIntent>) {
-                return prepareStop(context, intent, evidence);
+                return prepareStop(context, intent);
             } else if constexpr (std::is_same_v<
                                      Intent, FermentationUiCompleteRunIntent>) {
-                return prepareCompletion(context, intent, evidence);
+                return prepareCompletion(context, intent);
             } else {
-                return prepareAdditionalEnvelope(context, intent, evidence);
+                return prepareAdditionalEnvelope(context, intent);
             }
         },
         payload);
 }
 
 FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
-    const FermentationApplicationRequestResult& prepared) noexcept {
+    const FermentationApplicationRequestResult& prepared) {
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
         return requestFailure(
             FermentationApplicationRequestStatus::Unavailable);
     }
     auto confirmed = prepared;
+    if (!revalidatePreparedRequest(*confirmed.request)) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
     confirmed.request->confirm();
     return confirmed;
 }
@@ -558,6 +547,8 @@ bool FermentationApplication::begin(
     configurationRecoveryService_.reset();
     runPersistenceCoordinator_.reset();
     recoveryDisposition_.reset();
+    owningRuntimeEvidence_ = CrossRolePlausibilityContext{};
+    uiRefreshTracker_ = FermentationUiRefreshRevisionTracker{};
     lifecycleState_ = ApplicationLifecycleState::Ready;
     presentationState_ = PresentationState{};
     presentationState_.resetCause = resetCauseSource == nullptr
@@ -727,6 +718,196 @@ device_platform::NetworkMode FermentationApplication::networkMode()
     return networkConfigurationService_->selectedMode();
 }
 
+bool FermentationApplication::validSensor(
+    const device_platform::SensorQualitySnapshot& snapshot) noexcept {
+    return snapshot.quality == device_platform::SensorQuality::Valid;
+}
+
+bool FermentationApplication::applicationReadiness() const {
+    if (lifecycleState_ != ApplicationLifecycleState::Ready ||
+        configurationService_ == nullptr ||
+        runPersistenceCoordinator_ == nullptr || runtimeRunState_ == nullptr ||
+        !storageEpoch_.has_value() || !persistenceLoadStatus_.has_value()) {
+        return false;
+    }
+
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted ||
+        runtime.lease.get().storageEpoch() != *storageEpoch_) {
+        return false;
+    }
+
+    switch (*persistenceLoadStatus_) {
+        case RunPersistenceLoadStatus::NoPersistedRun:
+        case RunPersistenceLoadStatus::NoActiveRun:
+        case RunPersistenceLoadStatus::Current:
+        case RunPersistenceLoadStatus::FallbackRecovered:
+            break;
+        default:
+            return false;
+    }
+    if (loadDisposition_ == RunLoadDisposition::SafeBoot) {
+        return false;
+    }
+
+    switch (runPersistenceCoordinator_->state()) {
+        case RunPersistenceCoordinatorState::ReadyEmpty:
+        case RunPersistenceCoordinatorState::Ready:
+        case RunPersistenceCoordinatorState::LoadedActiveRun:
+            break;
+        default:
+            return false;
+    }
+    return !runtimeRunState_->criticalSafetyEventPending;
+}
+
+FermentationApplication::ApplicationRuntimeEvidence
+FermentationApplication::resolveRuntimeEvidence() const {
+    ApplicationRuntimeEvidence evidence;
+    evidence.plausibility = owningRuntimeEvidence_;
+    evidence.safetyAllowsStart = applicationReadiness();
+    evidence.safetyAllowsCooling = evidence.safetyAllowsStart;
+    evidence.airSensorValid = validSensor(evidence.plausibility.air);
+    evidence.coolingSensorValid = validSensor(evidence.plausibility.cooling);
+    evidence.productSensorValid = validSensor(evidence.plausibility.product);
+    return evidence;
+}
+
+bool FermentationApplication::revalidatePreparedRequest(
+    FermentationApplicationPreparedRequest& request) {
+    const auto evidence = resolveRuntimeEvidence();
+    bool valid = true;
+    const auto productEvidenceRegressed = [&request, &evidence] {
+        return request.owningPlausibility_.has_value() &&
+               request.owningPlausibility_->product.quality ==
+                   device_platform::SensorQuality::Valid &&
+               evidence.plausibility.product.quality !=
+                   device_platform::SensorQuality::Valid;
+    };
+    std::visit(
+        [&request, &evidence, &valid,
+         &productEvidenceRegressed](auto& prepared) {
+            using Request = std::decay_t<decltype(prepared)>;
+            if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
+                prepared.safetyAllowsStart = evidence.safetyAllowsStart;
+                prepared.airSensorValid = evidence.airSensorValid;
+                prepared.coolingSensorValid = evidence.coolingSensorValid;
+                prepared.productSensorValid = evidence.productSensorValid;
+                valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
+                        prepared.coolingSensorValid &&
+                        !(prepared.sensorMode == RunSensorMode::Product &&
+                          productEvidenceRegressed());
+            } else if constexpr (std::is_same_v<Request, ManualStartRequest>) {
+                prepared.safetyAllowsStart = evidence.safetyAllowsStart;
+                prepared.airSensorValid = evidence.airSensorValid;
+                prepared.coolingSensorValid = evidence.coolingSensorValid;
+                prepared.productSensorValid = evidence.productSensorValid;
+                valid = prepared.safetyAllowsStart && prepared.airSensorValid &&
+                        prepared.coolingSensorValid &&
+                        !(prepared.plan.sensorMode == RunSensorMode::Product &&
+                          productEvidenceRegressed());
+            } else if constexpr (std::is_same_v<Request, StopRequest>) {
+                if (prepared.option == StopOption::AbortAndCool) {
+                    prepared.safetyAllowsCooling = evidence.safetyAllowsCooling;
+                    prepared.airSensorValid = evidence.airSensorValid;
+                    prepared.coolingSensorValid = evidence.coolingSensorValid;
+                    valid = prepared.safetyAllowsCooling &&
+                            prepared.airSensorValid &&
+                            prepared.coolingSensorValid;
+                }
+            } else if constexpr (std::is_same_v<Request, CompletionRequest>) {
+                if (prepared.startCooling) {
+                    prepared.safetyAllowsCooling = evidence.safetyAllowsCooling;
+                    prepared.airSensorValid = evidence.airSensorValid;
+                    prepared.coolingSensorValid = evidence.coolingSensorValid;
+                    valid = prepared.safetyAllowsCooling &&
+                            prepared.airSensorValid &&
+                            prepared.coolingSensorValid;
+                }
+            } else if constexpr (std::is_same_v<
+                                     Request, SensorSelectionCommandRequest>) {
+                const auto previous = request.owningPlausibility_;
+                request.owningPlausibility_ = evidence.plausibility;
+                if (!previous.has_value()) {
+                    valid = false;
+                    return;
+                }
+                const auto regressed = [](const auto& before, const auto& now) {
+                    return before.quality ==
+                               device_platform::SensorQuality::Valid &&
+                           now.quality != device_platform::SensorQuality::Valid;
+                };
+                valid = !regressed(previous->air, evidence.plausibility.air) &&
+                        !regressed(previous->product,
+                                   evidence.plausibility.product) &&
+                        !regressed(previous->cooling,
+                                   evidence.plausibility.cooling);
+            }
+        },
+        request.storage_);
+    return valid;
+}
+
+void FermentationApplication::publishOwningRuntimeEvidence(
+    const CrossRolePlausibilityContext& evidence) {
+    owningRuntimeEvidence_ = evidence;
+}
+
+FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
+    FermentationUiProjectionInput input;
+    input.runState = runtimeRunState_.get();
+    if (runtimeRunState_ != nullptr) {
+        input.revisions.expectedStateSequence =
+            runtimeRunState_->processState.transitionSequence;
+        input.revisions.expectedRunRevision = runtimeRunState_->runRevision;
+        input.revisions.expectedMessageRevision =
+            runtimeRunState_->messageRevision;
+        input.revisions.expectedFaultRevision = runtimeRunState_->faultRevision;
+        input.revisions.expectedRecoveryEpisodeRevision =
+            runtimeRunState_->recoveryEpisodeRevision;
+    }
+    if (configurationService_ != nullptr) {
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status ==
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            input.revisions.expectedUserConfigurationRevision =
+                runtime.lease.get().userConfigurationRevision();
+            input.revisions.expectedProgramCatalogRevision =
+                runtime.lease.get().programCatalogRevision();
+        }
+    }
+
+    const auto valueOf = [](const device_platform::SensorQualitySnapshot& value)
+        -> std::optional<double> {
+        if (value.filteredCelsius.has_value()) {
+            return value.filteredCelsius;
+        }
+        if (value.correctedCelsius.has_value()) {
+            return value.correctedCelsius;
+        }
+        return value.rawCelsius;
+    };
+    const auto evidence = resolveRuntimeEvidence();
+    input.temperatures = {
+        {FermentationTemperatureRole::CabinetAir,
+         valueOf(evidence.plausibility.air), evidence.plausibility.air},
+        {FermentationTemperatureRole::Product,
+         valueOf(evidence.plausibility.product), evidence.plausibility.product},
+        {FermentationTemperatureRole::Cooling,
+         valueOf(evidence.plausibility.cooling),
+         evidence.plausibility.cooling}};
+    input.recoveryDisposition = recoveryDisposition_;
+    input.persistenceLoadStatus = persistenceLoadStatus_;
+    if (runPersistenceCoordinator_ != nullptr) {
+        input.coordinatorState = runPersistenceCoordinator_->state();
+    }
+    input.application.lifecycleState = lifecycleState_;
+    input.application.presentation = presentationState_;
+    input.network.currentMode = networkMode();
+    input.refreshTracker = &uiRefreshTracker_;
+    return FermentationUiProjector::project(input);
+}
+
 bool FermentationApplication::beginPersistent(
     device_platform::IPlatformServices& platformServices,
     device_platform::IStateStore& store,
@@ -759,6 +940,8 @@ bool FermentationApplication::beginPersistent(
     pendingResume_.reset();
     pendingFallbackResume_.reset();
     owningRecoveryEvidence_.reset();
+    owningRuntimeEvidence_ = CrossRolePlausibilityContext{};
+    uiRefreshTracker_ = FermentationUiRefreshRevisionTracker{};
     pendingRecoverySource_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
