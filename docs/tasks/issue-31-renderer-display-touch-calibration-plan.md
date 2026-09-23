@@ -6,16 +6,16 @@
 |---|---|
 | Issue | #31 – `[E5.3] Renderer, Display-/Touchadapter und Kalibrierung nach Hardwarebeweis` |
 | Basisbranch | `main` |
-| Basis-SHA | `1f1755e5e706fb668472920545b5302fcef1df16` |
+| Basis-SHA | `b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9` |
 | Arbeitsbranch | `agent/issue-31-renderer-display-touch-plan` |
 | Planpfad | `docs/tasks/issue-31-renderer-display-touch-calibration-plan.md` |
-| Vorherige freigegebene Plan-SHA | `64c0b7f96b5f17e74585888448a76e7f57f1b02f` |
-| Normaler Main-Sync-Commit | `bdd4ab7` (`0b54b4c639bcc9af9bd3b1bec30d855074bb0dc2` + `1f1755e5e706fb668472920545b5302fcef1df16`) |
+| Vorherige freigegebene Plan-SHA | `ec6d6b596bd0bc926dbcccb8b3d13b132ed81855` |
+| Historischer Main-Sync-Commit | `bdd4ab7` (`0b54b4c639bcc9af9bd3b1bec30d855074bb0dc2` + `1f1755e5e706fb668472920545b5302fcef1df16`); alte Basis, nicht aktuelle Statusbasis |
 | Planstatus | `OWNER_PLAN_APPROVAL_REQUIRED` |
 | ESP-IDF-Vertrag | `v6.1@fff9895c82d744c7237be8847347bdd1b07c6643` |
 | Issue-164-Baseline | `PR165=MERGED`; `ISSUE164=OPEN`; reale WLAN-Evidence wartet auf physischen Modus-Einstieg aus #31 |
 | Implementation | `NOT_STARTED` |
-| Hardware-Spike | `STAGE_0=PASS`; `STAGE_1_TO_4=NOT_STARTED` |
+| Hardware-Spike | `STAGE_0=PASS`; `STAGE_1=PASS`; `STAGE_2=PASS`; `STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL`; `STAGE_4=NOT_RUN` |
 | Renderer-Auswahl | `FINAL_SELECTION_PENDING` |
 | LVGL-Auswahl | `DEFERRED_UNTIL_POST_STAGE4_DRIVER_SELECTION` |
 | Renderer-Owner-Architektur | `EXISTING_MAIN_COMPONENT` |
@@ -37,20 +37,56 @@
 | STAGE_0_SSOT_CONFORMANCE | `PASS` |
 | STAGE_0_BASELINE | `PASS` |
 | Stage-0-Status | `STAGE_0_OVERALL=PASS` |
-| Stage-1-bis-4-Status | `STAGE_1=NOT_RUN`; `STAGE_2=NOT_RUN`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN` |
+| Stage-1-bis-4-Status | `STAGE_1=PASS`; `STAGE_2=PASS`; `STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL`; `STAGE_4=NOT_RUN` |
 | Hardwarestatus | `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` |
 | GPIO-/SSOT-Status | `SSOT_CONFORMANCE=PASS` |
 | Elektrische Messung | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED` |
 | Aktorfreigabe | `NO` |
+| Stehende Ausführungsfreigabe für nicht entscheidungspflichtige Stufen | `OWNER_NON_DECISION_STAGE_EXECUTION_AUTHORIZATION=YES` |
+| Stage-4-Ausführung | `OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES` |
+| Stage-4-Auswahl | `STAGE_4_SELECTION=OWNER_DECISION_REQUIRED` |
 
-Diese vollständige neue Planrevision ist auf dem aktuellen kanonischen
-`main=1f1755e5e706fb668472920545b5302fcef1df16` revalidiert. Sie ersetzt nach
-Ownerfreigabe die vorherige freigegebene Plan-SHA
-`64c0b7f96b5f17e74585888448a76e7f57f1b02f`; die neue Plan-SHA ist erst nach
+Diese Planrevision ist auf dem aktuellen kanonischen
+`main=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9` revalidiert. Sie ersetzt nach
+Ownerfreigabe die unmittelbar vorher freigegebene Plan-SHA
+`ec6d6b596bd0bc926dbcccb8b3d13b132ed81855`; die neue Plan-SHA ist erst nach
 dem Plan-Commit bekannt und wird nicht vorgezogen. Die bereits
-ownerautorisierte Stage-0-Evidence bleibt gueltig. Stage 1 bis 4, eine
-Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein Merge sind bis zur
-Ownerfreigabe genau dieser neuen Plan-SHA ausgeschlossen.
+ownerautorisierte Stage-0-Evidence sowie die bestandene Stage-1- und
+Stage-2-Evidence bleiben gueltig. Die ausgefuehrte Stage-3-Zusatzmatrix ist
+verwertbar; bis zur Ownerfreigabe dieser Planrevision bleibt ihr Status
+`STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL`. `STAGE_4=NOT_RUN`, eine
+Renderer-/Bibliotheksauswahl, ein Ready-Wechsel und ein Merge werden nicht
+vorgezogen.
+
+### Stehende Ownerfreigabe für die weitere Ausführung
+
+Für Issue #31 / PR #156 gilt zusätzlich zur Ownerfreigabe dieser exakten
+Planrevision:
+
+```text
+OWNER_NON_DECISION_STAGE_EXECUTION_AUTHORIZATION=YES
+OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES
+STAGE_4_SELECTION=OWNER_DECISION_REQUIRED
+```
+
+Sobald die Voraussetzungen der jeweiligen nachfolgenden Stufe erfüllt sind,
+darf die Ausführung innerhalb dieses freigegebenen Plans ohne ein weiteres
+Zwischengate fortgesetzt werden, sofern keine neue Ownerentscheidung
+erforderlich ist. Diese stehende Freigabe ist auf Issue #31 / PR #156
+begrenzt und ersetzt keine Ownerentscheidung. Codex hält weiterhin an bei
+`OWNER_DECISION_REQUIRED=YES`, `MATERIAL_PLAN_CHANGE=YES`,
+`MATERIAL_SCOPE_OR_ARCHITECTURE_CHANGE=YES`,
+`NEW_UNPLANNED_HARDWARE_INTERACTION_REQUIRED=YES`,
+`ACTUATOR_RELEASE_REQUESTED=YES` oder beim Erreichen eines
+`READY_OR_MERGE_GATE`.
+
+Stage 4 ist damit als Ausführung freigegeben, sobald `STAGE_3=PASS` vorliegt.
+Stage 4 darf die zulässigen Kandidaten anhand von Funktion, Stabilität,
+Ressourcen, reproduzierbarem Build, Lizenz, Upstreampflege sowie
+Adapter-/Wartungsumfang bewerten und einen sachlichen Auswahlvorschlag
+vorbereiten. Die finale Low-Level-Auswahl bleibt jedoch
+`STAGE_4_SELECTION=OWNER_DECISION_REQUIRED`; eine eindeutige verbleibende
+Kandidatenmenge wird berichtet, aber nicht als Ownerauswahl erteilt.
 
 ### Korrektur dieser Planrevision: Stage-0-Controlleridentitaet
 
@@ -68,11 +104,12 @@ Rendererentscheid ein und verlangt keine weitere Owner-Bestaetigung von
 Aufdrucken, Modulvariante oder Dokumentationsuebereinstimmung.
 
 Das naechste Gate ist ausschliesslich die Ownerfreigabe dieser exakten neuen
-Plan-SHA. Erst danach startet `STAGE_1` mit Quelle, Lizenz,
-Kompatibilitaet und reproduzierbarem Build. Erst bei `STAGE_1=PASS` folgt
-`STAGE_2` mit dem aktiven Low-Level-Smoke und der funktionalen
-Controllerbestaetigung. `STAGE_1` bis `STAGE_4` sind bis dahin nicht gestartet;
-Stage 0 bleibt abgeschlossen.
+Plan-SHA. Danach darf die bereits ausgefuehrte Stage-3-Zusatzmatrix ohne neue
+manuelle Stage-2-Touchtests als `STAGE_3=PASS` konsistent abgeschlossen werden;
+die stehende Ausfuehrungsfreigabe gilt fuer diesen nicht entscheidungs-
+pflichtigen Schritt. Erst danach darf Stage 4 ausgefuehrt werden. Die
+finale Low-Level-Auswahl bleibt `STAGE_4_SELECTION=OWNER_DECISION_REQUIRED`;
+`STAGE_4=NOT_RUN` bleibt bis dahin unveraendert.
 
 ## 1. Ausgangslage und aktuelle Live-Baseline
 
@@ -80,9 +117,11 @@ Vor diesem Plan wurden Repository, Branch, `HEAD`, Issue #31, die vorhandenen
 Draft-/Merge-Zustaende, Roadmap, Hardware-SSOT, die #25/#26-Vertraege, die
 Audits und die Governancequellen live abgeglichen.
 
-- `origin/main` und die revalidierte Arbeitsbasis sind exakt
-  `1f1755e5e706fb668472920545b5302fcef1df16`; PR #156 wurde ohne Force-Push
-  per normalem Merge von der alten Basis synchronisiert.
+- `origin/main` und die aktuelle revalidierte Arbeitsbasis sind exakt
+  `b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`. Der historische normale
+  Main-Sync von PR #156 (`bdd4ab7`) verwendete noch die alte Basis
+  `1f1755e5e706fb668472920545b5302fcef1df16`; diese historische SHA ist nicht
+  die aktuelle Statusbasis.
 - Issue #31 ist offen; Display und Touch sind physisch angeschlossen und der
   Display-RESET ist direkt mit `EN_CHIP_PU` verbunden. Es gilt
   `DISPLAY_CONNECTED=YES`, `TOUCH_CONNECTED=YES`,
@@ -94,7 +133,8 @@ Audits und die Governancequellen live abgeglichen.
   Flash ohne Taster sind real nachgewiesen. Die physische Verbindung, die
   SSOT-Verdrahtung, der Resetpfad, actor-free Flash/Boot/Reset, No-PSRAM und
   die relevanten Baselinewerte bilden damit den abgeschlossenen
-  `STAGE_0_OVERALL=PASS`; `STAGE_1` bis `STAGE_4` bleiben `NOT_RUN`.
+  `STAGE_0_OVERALL=PASS`; `STAGE_1=PASS`, `STAGE_2=PASS`,
+  `STAGE_3=BLOCKED_PENDING_REVISED_PLAN_APPROVAL` und `STAGE_4=NOT_RUN`.
   `SSOT_CONFORMANCE=PASS`, während
   `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING` bleibt. Die erwarteten
   Controller sind `EXPECTED_DISPLAY_CONTROLLER=ILI9341` und
