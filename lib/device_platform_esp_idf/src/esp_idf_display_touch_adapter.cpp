@@ -245,30 +245,13 @@ bool EspIdfDisplayTouchAdapter::setRotation(
         return false;
     }
 
-    bool swap = false;
-    bool mirrorX = false;
-    bool mirrorY = false;
-    switch (rotation) {
-        case device_platform::DisplayRotation::Rotate0:
-            break;
-        case device_platform::DisplayRotation::Rotate90:
-            swap = true;
-            mirrorX = true;
-            break;
-        case device_platform::DisplayRotation::Rotate180:
-            mirrorX = true;
-            mirrorY = true;
-            break;
-        case device_platform::DisplayRotation::Rotate270:
-            swap = true;
-            mirrorY = true;
-            break;
-    }
+    const auto transform = displayRotationTransform(rotation);
 
     // Rotation is a display concern. Raw touch samples must not be silently
     // calibrated or transformed at this adapter boundary.
-    if (esp_lcd_panel_swap_xy(state.panel, swap) != ESP_OK ||
-        esp_lcd_panel_mirror(state.panel, mirrorX, mirrorY) != ESP_OK) {
+    if (esp_lcd_panel_swap_xy(state.panel, transform.swap_xy) != ESP_OK ||
+        esp_lcd_panel_mirror(state.panel, transform.mirror_x,
+                             transform.mirror_y) != ESP_OK) {
         return false;
     }
     state.rotation = rotation;

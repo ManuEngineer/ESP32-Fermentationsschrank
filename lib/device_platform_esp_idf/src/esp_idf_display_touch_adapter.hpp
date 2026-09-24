@@ -8,6 +8,27 @@
 
 namespace device_platform_esp_idf {
 
+struct DisplayRotationTransform final {
+    bool swap_xy{false};
+    bool mirror_x{false};
+    bool mirror_y{false};
+};
+
+[[nodiscard]] constexpr DisplayRotationTransform displayRotationTransform(
+    device_platform::DisplayRotation rotation) noexcept {
+    switch (rotation) {
+        case device_platform::DisplayRotation::Rotate0:
+            return {false, false, false};
+        case device_platform::DisplayRotation::Rotate90:
+            return {true, true, false};
+        case device_platform::DisplayRotation::Rotate180:
+            return {false, true, true};
+        case device_platform::DisplayRotation::Rotate270:
+            return {true, false, true};
+    }
+    return {false, false, false};
+}
+
 class EspIdfDisplayTouchAdapter;
 
 namespace detail {

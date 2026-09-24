@@ -42,21 +42,6 @@ std::uint16_t clampToDisplay(double value, std::uint16_t maxInclusive) {
     return static_cast<std::uint16_t>(value);
 }
 
-lvgl_port_rotation_cfg_t toLvglRotation(
-    device_platform::DisplayRotation rotation) noexcept {
-    switch (rotation) {
-        case device_platform::DisplayRotation::Rotate0:
-            return {.swap_xy = false, .mirror_x = false, .mirror_y = false};
-        case device_platform::DisplayRotation::Rotate90:
-            return {.swap_xy = true, .mirror_x = true, .mirror_y = false};
-        case device_platform::DisplayRotation::Rotate180:
-            return {.swap_xy = false, .mirror_x = true, .mirror_y = true};
-        case device_platform::DisplayRotation::Rotate270:
-            return {.swap_xy = true, .mirror_x = false, .mirror_y = true};
-    }
-    return {.swap_xy = false, .mirror_x = false, .mirror_y = false};
-}
-
 }  // namespace
 
 struct ProductiveLvglRenderer::Impl final {
@@ -272,7 +257,11 @@ bool ProductiveLvglRenderer::initialize() {
     // Keep LVGL's initial hardware rotation aligned with the same R1
     // rotation already applied by the adapter. The LVGL port otherwise
     // restores its zero-initialized rotation and undoes the landscape setup.
-    displayConfig.rotation = toLvglRotation(state.config.rotation);
+    const auto rotation = device_platform_esp_idf::displayRotationTransform(
+        state.config.rotation);
+    displayConfig.rotation.swap_xy = rotation.swap_xy;
+    displayConfig.rotation.mirror_x = rotation.mirror_x;
+    displayConfig.rotation.mirror_y = rotation.mirror_y;
     displayConfig.color_format = LV_COLOR_FORMAT_RGB565;
     displayConfig.flags.buff_dma = 1U;
     displayConfig.flags.buff_spiram = 0U;
