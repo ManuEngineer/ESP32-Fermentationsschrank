@@ -2,3 +2,5 @@
 # 1 is the smallest non-zero value accepted by the driver without triggering
 # -Wtype-limits; the product-like default 400 remains completely bypassed.
 CONFIG_XPT2046_Z_THRESHOLD=1
+# Keep the actor-free capture gate on the controller's active-low PENIRQ.
+CONFIG_XPT2046_INTERRUPT_MODE=y

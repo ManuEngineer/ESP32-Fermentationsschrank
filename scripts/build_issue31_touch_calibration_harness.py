@@ -21,9 +21,10 @@ import check_build_profiles
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = ROOT / "build" / "esp32_bringup_issue31_touch_calibration"
 SDKCONFIG = BUILD_DIR / "sdkconfig"
-# The last overlay deliberately disables the driver's product-like Z filter.
-# It is private to this actor-free measurement build and is never inherited by
-# normal bring-up or release profiles.
+# The last overlay deliberately selects the controller-native PENIRQ gate and
+# disables the driver's product-like Z filter. It is private to this actor-
+# free measurement build and is never inherited by normal bring-up or release
+# profiles.
 DEFAULTS = (
     "sdkconfig.defaults;sdkconfig.defaults.bringup;"
     "sdkconfig.defaults.issue31_touch_calibration"
@@ -95,8 +96,14 @@ def verify_effective_configuration() -> None:
             "harness sdkconfig must set CONFIG_XPT2046_Z_THRESHOLD=1 for "
             "unfiltered measurement evidence"
         )
+    if values.get("CONFIG_XPT2046_INTERRUPT_MODE") != "y":
+        raise SystemExit(
+            "harness sdkconfig must enable CONFIG_XPT2046_INTERRUPT_MODE "
+            "for the PENIRQ no-touch gate"
+        )
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_PROFILE=ESP32_BRINGUP")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_XPT2046_Z_THRESHOLD=1")
+    print("PASS: ISSUE31_CALIBRATION_CAPTURE_PENIRQ_GATE=ENABLED")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_ACTUATORS=DISABLED")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_NVS_WRITES=NONE_BY_DESIGN")

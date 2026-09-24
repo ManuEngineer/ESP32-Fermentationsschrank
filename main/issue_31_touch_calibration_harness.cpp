@@ -11,6 +11,7 @@
 #include "device_ui_hardware_ports.hpp"
 #include "esp_idf_display_touch_adapter.hpp"
 #include "esp_log.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "generated/board_profile_r1.hpp"
@@ -30,6 +31,7 @@ constexpr std::uint16_t kFitColor = 0x07E0U;
 constexpr std::uint16_t kValidationColor = 0x001FU;
 constexpr std::uint16_t kHoldColor = 0xF800U;
 constexpr TickType_t kSamplePeriodTicks = pdMS_TO_TICKS(20U);
+constexpr std::uint32_t kIdleBaselineSamples = 50U;
 constexpr std::uint32_t kMinimumContactSamples = 15U;
 constexpr std::uint8_t kStableReleaseSamples = 5U;
 
@@ -211,6 +213,55 @@ void logSummary(const ReferencePoint& point,
              stats.lastContactUs);
 }
 
+[[nodiscard]] bool runIdleBaseline(
+    device_platform_esp_idf::EspIdfDisplayTouchAdapter& adapter,
+    int interruptGpio) noexcept {
+    std::uint32_t contactSamples = 0U;
+    std::uint32_t controllerErrors = 0U;
+    const int initialPenirqLevel =
+        gpio_get_level(static_cast<gpio_num_t>(interruptGpio));
+
+    for (std::uint32_t sampleIndex = 0U;
+         sampleIndex < kIdleBaselineSamples; ++sampleIndex) {
+        const auto sample = adapter.sampleTouch();
+        if (sample.status == device_platform::RawTouchSampleStatus::Contact &&
+            sample.contact) {
+            ++contactSamples;
+        } else if (sample.status ==
+                   device_platform::RawTouchSampleStatus::ControllerError) {
+            ++controllerErrors;
+        }
+        vTaskDelay(kSamplePeriodTicks);
+    }
+
+    const int finalPenirqLevel =
+        gpio_get_level(static_cast<gpio_num_t>(interruptGpio));
+    if (contactSamples != 0U || controllerErrors != 0U) {
+        ESP_LOGE(
+            kTag,
+            "CALIBRATION_IDLE_BASELINE=FAILED samples=%" PRIu32
+            " contacts=%" PRIu32 " controller_errors=%" PRIu32
+            " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
+            " penirq_level_final=%d",
+            kIdleBaselineSamples, contactSamples, controllerErrors,
+            interruptGpio, initialPenirqLevel, finalPenirqLevel);
+        ESP_LOGE(kTag,
+                 "CALIBRATION_CAPTURE_HARNESS=FAILED "
+                 "reason=IDLE_CONTACT_GATE");
+        return false;
+    }
+
+    ESP_LOGI(
+        kTag,
+        "CALIBRATION_IDLE_BASELINE=PASS samples=%" PRIu32
+        " contacts=%" PRIu32 " controller_errors=%" PRIu32
+        " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
+        " penirq_level_final=%d",
+        kIdleBaselineSamples, contactSamples, controllerErrors, interruptGpio,
+        initialPenirqLevel, finalPenirqLevel);
+    return true;
+}
+
 void captureContact(device_platform_esp_idf::EspIdfDisplayTouchAdapter& adapter,
                     const ReferencePoint& point) noexcept {
     ContactStats stats;
@@ -309,6 +360,11 @@ void run() noexcept {
              "CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE "
              "XPT2046_Z_THRESHOLD=%d",
              CONFIG_XPT2046_Z_THRESHOLD);
+    ESP_LOGI(kTag,
+             "CALIBRATION_CAPTURE_PENIRQ_GATE=ENABLED "
+             "gpio=%d active_level=LOW",
+             r1_pins::kTouchInterruptPin);
+    if (!runIdleBaseline(adapter, r1_pins::kTouchInterruptPin)) return;
     ESP_LOGI(kTag,
              "CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_"
              "VALIDATION_2_INDEPENDENT");
