@@ -118,6 +118,41 @@ bool schema2Plausible(const ConfigurationBootstrapRecord& record) {
     return false;
 }
 
+bool authHandoffPlausible(AuthDomainHandoffState state);
+
+bool schema3Plausible(const ConfigurationBootstrapRecord& record) {
+    if (record.sequence.value() < 3U || record.storageEpoch.value() == 0U ||
+        record.storageFormatVersion != kConfigurationStorageFormatVersion1 ||
+        !authHandoffPlausible(record.authDomainHandoff)) {
+        return false;
+    }
+    if (record.state == ConfigurationBootstrapState::Initializing) {
+        return record.storageEpoch.value() == 1U &&
+               record.sequence.value() == 1U && noHandoffBinding(record) &&
+               record.authDomainHandoff == AuthDomainHandoffState::None;
+    }
+    if (record.state == ConfigurationBootstrapState::Resetting) {
+        return record.handoff == RunEpochHandoffState::None &&
+               noHandoffBinding(record) &&
+               record.authDomainHandoff == AuthDomainHandoffState::None;
+    }
+    if (record.state != ConfigurationBootstrapState::Initialized) {
+        return false;
+    }
+    if (record.handoff == RunEpochHandoffState::None) {
+        return noHandoffBinding(record);
+    }
+    return boundToEpoch(record);
+}
+
+bool authHandoffPlausible(AuthDomainHandoffState state) {
+    return state == AuthDomainHandoffState::None ||
+           state == AuthDomainHandoffState::Unconsumed ||
+           state == AuthDomainHandoffState::InProgress ||
+           state == AuthDomainHandoffState::Consumed ||
+           state == AuthDomainHandoffState::Indeterminate;
+}
+
 bool sameBinding(const ConfigurationBootstrapRecord& left,
                  const ConfigurationBootstrapRecord& right) {
     return left.previousEpoch == right.previousEpoch &&
@@ -215,7 +250,8 @@ bool operator==(const ConfigurationBootstrapRecord& left,
            left.schemaVersion == right.schemaVersion &&
            left.handoff == right.handoff &&
            left.previousEpoch == right.previousEpoch &&
-           left.currentEpoch == right.currentEpoch;
+           left.currentEpoch == right.currentEpoch &&
+           left.authDomainHandoff == right.authDomainHandoff;
 }
 
 bool isPlausible(const ConfigurationBootstrapRecord& record) {
@@ -224,6 +260,9 @@ bool isPlausible(const ConfigurationBootstrapRecord& record) {
     }
     if (record.schemaVersion == kConfigurationBootstrapSchemaVersion2) {
         return schema2Plausible(record);
+    }
+    if (record.schemaVersion == kConfigurationBootstrapSchemaVersion3) {
+        return schema3Plausible(record);
     }
     return false;
 }
@@ -256,8 +295,56 @@ bool isAllowedBootstrapSuccessor(const ConfigurationBootstrapRecord& previous,
         return next.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
                schema1ToSchema2Successor(previous, next);
     }
-    return previous.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
-           next.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
+    if (previous.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
+        next.schemaVersion == kConfigurationBootstrapSchemaVersion3) {
+        return previous.state == ConfigurationBootstrapState::Initialized &&
+               next.state == previous.state &&
+               next.storageEpoch == previous.storageEpoch &&
+               next.handoff == previous.handoff &&
+               next.previousEpoch == previous.previousEpoch &&
+               next.currentEpoch == previous.currentEpoch &&
+               next.authDomainHandoff == AuthDomainHandoffState::Unconsumed;
+    }
+    if (previous.schemaVersion != kConfigurationBootstrapSchemaVersion2) {
+        if (previous.schemaVersion != kConfigurationBootstrapSchemaVersion3 ||
+            next.schemaVersion != kConfigurationBootstrapSchemaVersion3) {
+            return false;
+        }
+        const bool sameConfiguration =
+            previous.state == next.state &&
+            previous.storageEpoch == next.storageEpoch &&
+            previous.handoff == next.handoff &&
+            previous.previousEpoch == next.previousEpoch &&
+            previous.currentEpoch == next.currentEpoch;
+        const bool authStep =
+            sameConfiguration &&
+            ((previous.authDomainHandoff == AuthDomainHandoffState::None &&
+              next.authDomainHandoff == AuthDomainHandoffState::Unconsumed) ||
+             (previous.authDomainHandoff ==
+                  AuthDomainHandoffState::Unconsumed &&
+              next.authDomainHandoff == AuthDomainHandoffState::InProgress) ||
+             (previous.authDomainHandoff ==
+                  AuthDomainHandoffState::InProgress &&
+              (next.authDomainHandoff == AuthDomainHandoffState::Consumed ||
+               next.authDomainHandoff ==
+                   AuthDomainHandoffState::Indeterminate)));
+        const bool configurationStep =
+            [&] {
+                auto previousLegacy = previous;
+                auto nextLegacy = next;
+                previousLegacy.schemaVersion =
+                    kConfigurationBootstrapSchemaVersion2;
+                nextLegacy.schemaVersion =
+                    kConfigurationBootstrapSchemaVersion2;
+                return schema2ToSchema2Successor(previousLegacy, nextLegacy);
+            }() &&
+            ((next.state == ConfigurationBootstrapState::Initialized &&
+              next.authDomainHandoff == previous.authDomainHandoff) ||
+             (next.state == ConfigurationBootstrapState::Resetting &&
+              next.authDomainHandoff == AuthDomainHandoffState::None));
+        return authStep || configurationStep;
+    }
+    return next.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
            schema2ToSchema2Successor(previous, next);
 }
 

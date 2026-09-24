@@ -15,6 +15,8 @@ class NetworkSetupRoutes final : public device_platform::IHttpRouteSink {
 
     [[nodiscard]] bool handle(const device_platform::HttpRequest& request,
                               device_platform::HttpResponse& response) override;
+    [[nodiscard]] bool ownsRoute(
+        const device_platform::HttpRequest& request) const noexcept;
 
    private:
     NetworkConfigurationService& networkService_;

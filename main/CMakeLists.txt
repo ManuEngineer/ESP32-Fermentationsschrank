@@ -4,13 +4,14 @@ idf_component_register(
     SRCS "app_main.cpp"
     PRIV_INCLUDE_DIRS "../include"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
-                  nvs_flash
+                  nvs_flash mbedtls
 )
 
 # ESP-IDF 6.1 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt
 # haelt gnu++17 (siehe platformio.ini und
 # docs/tasks/issue-72-implementation-plan.md, Abschnitt 5).
 target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
+target_sources(${COMPONENT_LIB} PRIVATE "esp_idf_authentication_kdf.cpp")
 
 # The #121 static product-stack gate reuses the existing GCC stack-usage and
 # callgraph artefacts.  This is analysis-only instrumentation; it does not

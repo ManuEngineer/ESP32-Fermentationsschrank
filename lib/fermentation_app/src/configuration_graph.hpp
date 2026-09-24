@@ -27,6 +27,7 @@ enum class ChangeOriginKind : std::uint8_t {
     LocalDisplay,
     WebInterface,
     Unknown,
+    ServiceWeb,
 };
 
 struct ChangeOrigin {

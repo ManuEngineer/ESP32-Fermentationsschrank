@@ -63,6 +63,7 @@ struct TextKey {
 enum class UiSurface : std::uint8_t {
     LocalDisplay,
     WebInterface,
+    WebService,
 };
 
 struct UiRequestId {

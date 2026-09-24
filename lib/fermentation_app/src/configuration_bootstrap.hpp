@@ -38,6 +38,15 @@ enum class RunEpochHandoffState : std::uint8_t {
 
 inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion1 = 1U;
 inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion2 = 2U;
+inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion3 = 3U;
+
+enum class AuthDomainHandoffState : std::uint8_t {
+    None = 0U,
+    Unconsumed = 1U,
+    InProgress = 2U,
+    Consumed = 3U,
+    Indeterminate = 4U,
+};
 
 struct ConfigurationBootstrapRecord {
     ConfigurationBootstrapSequence sequence;
@@ -52,6 +61,7 @@ struct ConfigurationBootstrapRecord {
     RunEpochHandoffState handoff;
     std::optional<device_platform::StorageEpoch> previousEpoch;
     std::optional<device_platform::StorageEpoch> currentEpoch;
+    AuthDomainHandoffState authDomainHandoff;
 
     ConfigurationBootstrapRecord(
         ConfigurationBootstrapSequence sequenceValue,
@@ -64,7 +74,9 @@ struct ConfigurationBootstrapRecord {
         std::optional<device_platform::StorageEpoch> previousEpochValue =
             std::nullopt,
         std::optional<device_platform::StorageEpoch> currentEpochValue =
-            std::nullopt)
+            std::nullopt,
+        AuthDomainHandoffState authDomainHandoffValue =
+            AuthDomainHandoffState::None)
         : sequence(sequenceValue),
           storageFormatVersion(storageFormatVersionValue),
           storageEpoch(storageEpochValue),
@@ -72,7 +84,8 @@ struct ConfigurationBootstrapRecord {
           schemaVersion(schemaVersionValue),
           handoff(handoffValue),
           previousEpoch(previousEpochValue),
-          currentEpoch(currentEpochValue) {}
+          currentEpoch(currentEpochValue),
+          authDomainHandoff(authDomainHandoffValue) {}
 };
 
 inline constexpr ConfigurationStorageFormatVersion

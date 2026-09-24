@@ -64,6 +64,7 @@ bool validCommandSource(CommandSource source) {
     switch (source) {
         case CommandSource::LocalDisplay:
         case CommandSource::WebInterface:
+        case CommandSource::ServiceWeb:
             return true;
     }
     return false;
@@ -322,9 +323,15 @@ bool applyTransition(RunCommandState& state, ProcessEvent event,
 }
 
 RunChangeSource changeSource(CommandSource source) {
-    return source == CommandSource::WebInterface
-               ? RunChangeSource::WebInterface
-               : RunChangeSource::LocalDisplay;
+    switch (source) {
+        case CommandSource::WebInterface:
+            return RunChangeSource::WebInterface;
+        case CommandSource::ServiceWeb:
+            return RunChangeSource::ServiceWeb;
+        case CommandSource::LocalDisplay:
+            return RunChangeSource::LocalDisplay;
+    }
+    return RunChangeSource::LocalDisplay;
 }
 
 std::optional<ManualRunPlan> makeManualPlan(const ManualRunPlanRequest& request,

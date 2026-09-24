@@ -173,6 +173,34 @@ Diese Regeln gelten, wenn der normale Webpasswortschutz aktiviert ist.
 - getrennt von der vierstelligen Service-PIN
 - kein Benutzerkonten- oder Rollenmodell im ersten Release
 - Passwort wird bei der Eingabe verdeckt dargestellt
+- die vom Owner am 2026-09-21 festgelegte R1-Passwortpolicy ist:
+  - mindestens 15 Unicode-Codepoints;
+  - hoechstens 64 Unicode-Codepoints;
+  - zusaetzlich hoechstens 256 Bytes in gueltiger UTF-8-Darstellung;
+  - keine Zeichenklassen-/Kompositionsregeln;
+  - kein Abschneiden oder stilles Trunkieren;
+  - Passwortmanager, Autofill und Einfuegen/Paste sind erlaubt;
+- die Zeichenlaenge wird in Unicode-Codepoints bewertet; jedes akzeptierte
+  Passwort muss zugleich die Codepoint- und UTF-8-Bytegrenze einhalten
+- Leerzeichen und Unicode-Zeichen sind grundsaetzlich erlaubt; eine leere
+  Eingabe bleibt ungueltig
+- der Owner hat fuer Webpasswort und Service-PIN den bereits implementierten
+  PBKDF2-HMAC-SHA-256-Pfad mit folgendem R1-Produktwert freigegeben:
+  ```text
+  KDF_ALGORITHM=PBKDF2_HMAC_SHA256
+  KDF_WORK_FACTOR=10000
+  KDF_WORK_FACTOR_FALLBACK=NONE
+  ```
+  Die reale ESP32-WROOM-32E-Messung lag bei ca. 3,78 s fuer 10.000
+  Iterationen; waehrend der Messung trat kein Watchdog-Reset und kein
+  nachgewiesener Regelzyklus-/Timer-Jitter auf. Diese Entscheidung behauptet
+  keine besondere Hochsicherheit oder OWASP-Konformitaet; die dokumentierte
+  Restgrenze gegen Offline-Angriffe und das Security-Release-Gate fuer
+  NVS-/Flash-Schutz bleiben unveraendert.
+- diese Policy orientiert sich fuer Laengen- und Bedienregeln an
+  NIST SP 800-63B-4, behauptet aber keine vollstaendige NIST-Konformitaet;
+  insbesondere bleibt der direkte lokale HTTP-Betrieb ohne authentisierten
+  geschuetzten Transport eine dokumentierte R1-Grenze
 - Fehlversuche werden global pro Credential gezaehlt: nach fuenf falschen
   Passwortpruefungen 30 Sekunden Sperre, weitere Fehlversuchsbloecke
   verdoppeln bis hoechstens 15 Minuten
@@ -385,6 +413,8 @@ Phase 6 und Phase 9 festgelegt.
 - [x] Sprache je Browser unabhaengig von der Displaysprache
 - [x] Deutsch, Spanisch und Englisch auch im Web
 - [x] gemaess ADR-017 keine dauerhafte Anmeldung in Release 1
+- [x] Webpasswort: 15 bis 64 Unicode-Codepoints, maximal 256 UTF-8-Bytes,
+      keine Kompositionsregeln, keine Trunkierung, Passwortmanager/Paste erlaubt
 - [x] fluechtige serverseitige Sessions mit 30 Minuten Inaktivitaet,
       12 Stunden absoluter Dauer und Widerruf beim Geraeteneustart; ein reiner
       Browserneustart ist kein garantiertes Widerrufsereignis
@@ -396,7 +426,6 @@ Phase 6 und Phase 9 festgelegt.
 
 ## Noch offen fuer Phase 5C und spaeter
 
-- konkrete Passwortmindestanforderungen
 - technische Auswahl fuer Live-Aktualisierung
 - weitere HTTP-Schutzheader ueber den verbindlichen Cookie-/CSRF-Vertrag hinaus
 - maximale Anzahl paralleler Webverbindungen

@@ -10,10 +10,14 @@
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "authentication_records.hpp"
 #include "connectivity_credentials.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "fermentation_ui_projector.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "web_application_routes.hpp"
+#include "web_session.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -214,6 +218,7 @@ FermentationApplication::makePreparedRequest(
             device_platform::UiRequestId{uiRequestId}};
 }
 
+FermentationApplication::FermentationApplication() = default;
 FermentationApplication::~FermentationApplication() = default;
 
 FermentationApplicationRequestResult
@@ -532,6 +537,119 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     return confirmed;
 }
 
+RunPersistenceResult FermentationApplication::applyPreparedRequest(
+    const FermentationApplicationPreparedRequest& request) {
+    RunPersistenceResult unavailable;
+    unavailable.status = RunPersistenceResultStatus::NotInitialized;
+    unavailable.coordinatorState =
+        RunPersistenceCoordinatorState::Uninitialized;
+    // This is the last application-owned mutation boundary.  Callers still
+    // use prepare -> confirm -> apply, but the owner must not rely on a
+    // transport preserving that order: several domain deciders intentionally
+    // accept an unconfirmed request for decision-only evaluation.
+    if (!request.commandEnvelope().confirmed) {
+        unavailable.status = RunPersistenceResultStatus::InvalidDecision;
+        return unavailable;
+    }
+    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr ||
+        timeSource_ == nullptr) {
+        return unavailable;
+    }
+    const auto decision = FermentationUiCommandBridge::decidePreparedCommand(
+        *runtimeRunState_, request);
+    if (!decision.has_value()) {
+        unavailable.status = RunPersistenceResultStatus::InvalidDecision;
+        return unavailable;
+    }
+    if (!decision->proposed()) {
+        unavailable.status = decision->status == CommandStatus::StaleState
+                                 ? RunPersistenceResultStatus::StaleDecision
+                                 : RunPersistenceResultStatus::InvalidDecision;
+        return unavailable;
+    }
+    const auto& owningPlausibility = request.owningPlausibility();
+    const auto* plausibility =
+        owningPlausibility.has_value() ? &owningPlausibility.value() : nullptr;
+    const auto time = currentCheckpointTime();
+    if (decision->kind == CommandKind::StartProgram ||
+        decision->kind == CommandKind::StartManualHolding) {
+        if (configurationService_ == nullptr) {
+            unavailable.status = RunPersistenceResultStatus::NotInitialized;
+            return unavailable;
+        }
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status !=
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            unavailable.status = RunPersistenceResultStatus::Blocked;
+            return unavailable;
+        }
+        const auto provenance =
+            FreshStartSnapshotProvenance::fromRuntimeLease(runtime.lease);
+        return runPersistenceCoordinator_->persistFreshStartCommand(
+            *runtimeRunState_, *decision, provenance, time, plausibility);
+    }
+    return runPersistenceCoordinator_->persistCommand(
+        *runtimeRunState_, *decision, time, plausibility);
+}
+
+std::optional<std::vector<FermentationUiProgramListEntry>>
+FermentationApplication::uiProgramList() const {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
+    if (configurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    return makeFermentationUiProgramList(runtime.lease->programCatalog());
+}
+
+ConfigurationPreviewInstallResult FermentationApplication::prepareProgramEdit(
+    ProgramCatalogRevision expectedRevision,
+    FermentationUiProgramEditRequest request, ChangeOrigin origin) {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable,
+                std::nullopt};
+    }
+    auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return {ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable,
+                std::nullopt};
+    }
+    // The web DTO can rename only an existing canonical document. It cannot
+    // author a full ProgramDocument or alter its protected attributes.
+    if (request.operation == FermentationUiProgramEditOperation::Edit &&
+        !request.candidate.has_value() && request.name.has_value()) {
+        const auto session =
+            openProgramEditSession(runtime.lease.get(), request.programId);
+        if (!session.has_value()) {
+            return {ConfigurationPreviewStatus::InvalidCandidate, std::nullopt};
+        }
+        request.candidate = session->candidate;
+        request.candidate->program.name = *request.name;
+    }
+    return applyProgramEditPreview(
+        *configurationService_, expectedRevision, request,
+        makeFermentationUiProgramUsageEvidence(*runtimeRunState_), origin);
+}
+
+ConfigurationCommitResult FermentationApplication::confirmConfigurationPreview(
+    const FermentationUiConfigurationCommitCommand& command) {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
+    if (configurationService_ == nullptr) {
+        return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+    }
+    const auto result = FermentationUiCommandBridge::commitConfiguration(
+        *configurationService_, command);
+    if (const auto* status =
+            std::get_if<ConfigurationCommitStatus>(&result.detail)) {
+        return {*status};
+    }
+    return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+}
+
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {
@@ -583,17 +701,24 @@ bool FermentationApplication::begin(
     const device_platform::ITimeSource& timeSource,
     device_platform::INetworkLifecycle& networkLifecycle,
     device_platform::IHttpServerLifecycle& httpServerLifecycle,
-    const device_platform::IResetCauseSource* resetCauseSource) {
+    const device_platform::IResetCauseSource* resetCauseSource,
+    device_platform::ISecureRandomSource* randomSource,
+    IAuthenticationKdf* authenticationKdf) {
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
-                           &httpServerLifecycle);
+                           &httpServerLifecycle, randomSource,
+                           authenticationKdf);
 }
 
+// fail-closed composition sequence is intentionally kept as one ordered
+// startup transaction; splitting it would change its recovery boundary.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool FermentationApplication::initializeNetwork(
     device_platform::IStateStore& store,
     device_platform::StorageEpoch storageEpoch,
     device_platform::NetworkMode selectedMode,
-    const std::string& canonicalDeviceName) {
+    const std::string& canonicalDeviceName,
+    bool positiveAuthenticationEpochEvidence) {
     if (networkLifecycle_ == nullptr || httpServerLifecycle_ == nullptr) {
         return true;
     }
@@ -617,6 +742,126 @@ bool FermentationApplication::initializeNetwork(
         requireService(FaultCode::None, true);
         return false;
     }
+    if (randomSource_ != nullptr && authenticationKdf_ != nullptr &&
+        timeSource_ != nullptr) {
+        authenticationStore_ = std::unique_ptr<AuthenticationRecordStore>{
+            new (std::nothrow) AuthenticationRecordStore(store)};
+        authenticationDomain_ = std::unique_ptr<AuthenticationDomain>{
+            authenticationStore_ == nullptr
+                ? nullptr
+                : new (std::nothrow) AuthenticationDomain(*authenticationStore_,
+                                                          *authenticationKdf_,
+                                                          *randomSource_)};
+        webSessionManager_ = std::unique_ptr<WebSessionManager>{
+            new (std::nothrow) WebSessionManager(
+                *randomSource_, fermentationWebServicePolicy())};
+        if (authenticationStore_ == nullptr ||
+            authenticationDomain_ == nullptr || webSessionManager_ == nullptr) {
+            requireService(FaultCode::None, true);
+            return false;
+        }
+        if (mutationCoordinator_ == nullptr) {
+            requireService(FaultCode::ConfigurationUnavailable);
+            return false;
+        }
+        auto authMutation = mutationCoordinator_->tryAcquire();
+        if (authMutation.status !=
+            ConfigurationMutationAcquireStatus::Acquired) {
+            requireService(FaultCode::ConfigurationUnavailable);
+            return false;
+        }
+        auto bootstrap = bootstrapStore_->scan();
+        const auto root = authenticationStore_->readRoot(storageEpoch);
+        if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
+            !bootstrap.loaded.has_value()) {
+            requireService(FaultCode::ConfigurationUnavailable);
+            return false;
+        }
+        if (bootstrap.loaded->record.authDomainHandoff ==
+            AuthDomainHandoffState::None) {
+            const bool rootCanProveFreshEpoch =
+                root.status == AuthenticationReadStatus::NotFound ||
+                root.status == AuthenticationReadStatus::DifferentEpoch ||
+                (root.status == AuthenticationReadStatus::Success &&
+                 root.value.has_value() &&
+                 root.value->state == AuthProvisioningState::Unprovisioned);
+            if (!positiveAuthenticationEpochEvidence ||
+                !rootCanProveFreshEpoch) {
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+            const auto migrated = bootstrapStore_->writeAuthDomainHandoff(
+                *bootstrap.loaded, AuthDomainHandoffState::Unconsumed,
+                authMutation.lease);
+            if (migrated.status != ConfigurationBootstrapWriteStatus::Success ||
+                !migrated.loaded.has_value()) {
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+            bootstrap.loaded = migrated.loaded;
+        }
+        const auto authHandoff = bootstrap.loaded->record.authDomainHandoff;
+        if (authHandoff == AuthDomainHandoffState::Consumed) {
+            if (root.status != AuthenticationReadStatus::Success ||
+                !root.value.has_value() ||
+                root.value->state != AuthProvisioningState::Provisioned) {
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+        } else if (authHandoff == AuthDomainHandoffState::Unconsumed) {
+            const bool rootCanBeInitialized =
+                root.status == AuthenticationReadStatus::NotFound ||
+                root.status == AuthenticationReadStatus::DifferentEpoch ||
+                (root.status == AuthenticationReadStatus::Success &&
+                 root.value.has_value() &&
+                 root.value->state == AuthProvisioningState::Unprovisioned);
+            if (!rootCanBeInitialized) {
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+            const auto inProgress = bootstrapStore_->writeAuthDomainHandoff(
+                *bootstrap.loaded, AuthDomainHandoffState::InProgress,
+                authMutation.lease);
+            if (inProgress.status !=
+                    ConfigurationBootstrapWriteStatus::Success ||
+                !inProgress.loaded.has_value() ||
+                authenticationDomain_->initializeUnprovisioned(storageEpoch) !=
+                    AuthBootstrapStatus::BootstrapAllowed) {
+                if (inProgress.loaded.has_value()) {
+                    static_cast<void>(bootstrapStore_->writeAuthDomainHandoff(
+                        *inProgress.loaded,
+                        AuthDomainHandoffState::Indeterminate,
+                        authMutation.lease));
+                }
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+            const auto consumed = bootstrapStore_->writeAuthDomainHandoff(
+                *inProgress.loaded, AuthDomainHandoffState::Consumed,
+                authMutation.lease);
+            if (consumed.status != ConfigurationBootstrapWriteStatus::Success) {
+                requireService(FaultCode::ConfigurationUnavailable);
+                return false;
+            }
+        } else {
+            requireService(FaultCode::ConfigurationUnavailable);
+            return false;
+        }
+        webApplicationRoutes_ = std::unique_ptr<WebApplicationRoutes>{
+            new (std::nothrow)
+                WebApplicationRoutes(*this, *authenticationDomain_,
+                                     *webSessionManager_, *timeSource_)};
+        webRouteDispatcher_ = std::unique_ptr<WebRouteDispatcher>{
+            webApplicationRoutes_ == nullptr
+                ? nullptr
+                : new (std::nothrow) WebRouteDispatcher(
+                      *networkSetupRoutes_, *webApplicationRoutes_)};
+        if (webApplicationRoutes_ == nullptr ||
+            webRouteDispatcher_ == nullptr) {
+            requireService(FaultCode::None, true);
+            return false;
+        }
+    }
     const auto hostname = networkHostnameFromDeviceName(canonicalDeviceName);
     if (!hostname.has_value() ||
         networkLifecycle_->setHostname(*hostname).status !=
@@ -627,7 +872,12 @@ bool FermentationApplication::initializeNetwork(
     const auto networkStart =
         networkConfigurationService_->start(selectedMode, storageEpoch);
     if (networkStart.status == NetworkConfigurationStatus::Applied &&
-        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        !httpServerLifecycle_->start(
+            webRouteDispatcher_ != nullptr
+                ? static_cast<device_platform::IHttpRouteSink&>(
+                      *webRouteDispatcher_)
+                : static_cast<device_platform::IHttpRouteSink&>(
+                      *networkSetupRoutes_))) {
         requireService(FaultCode::ConfigurationUnavailable);
         return false;
     }
@@ -640,12 +890,21 @@ bool FermentationApplication::initializeNetwork(
 }
 
 NetworkConfigurationResult FermentationApplication::applyNetworkMode(
-    device_platform::NetworkMode selectedMode) {
+    device_platform::NetworkMode selectedMode,
+    std::optional<UserConfigurationRevision> expectedRevision,
+    ChangeOriginKind origin) {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (configurationService_ == nullptr ||
         networkConfigurationService_ == nullptr || stateStore_ == nullptr ||
         !storageEpoch_.has_value() || storageEpoch_->value() == 0U ||
         !device_platform::isSelectableNetworkMode(selectedMode)) {
         return {NetworkConfigurationStatus::InvalidMode};
+    }
+    if (expectedRevision.has_value()) {
+        const auto current = configurationService_->userConfigurationRevision();
+        if (!current.has_value() || *current != *expectedRevision) {
+            return {NetworkConfigurationStatus::StateChanged};
+        }
     }
     auto build = configurationService_->beginPreview();
     if (build.status != ConfigurationPreviewStatus::Success ||
@@ -654,7 +913,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     }
     build.lease.userConfiguration().networkMode = selectedMode;
     const auto installed = configurationService_->installPreview(
-        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+        std::move(build.lease), {origin, 2U},
         {ChangeOperationKind::NormalEdit, 1U});
     if (installed.status != ConfigurationPreviewStatus::Success ||
         !installed.preview.has_value()) {
@@ -694,8 +953,22 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     return {NetworkConfigurationStatus::Applied};
 }
 
+AuthBootstrapStatus FermentationApplication::bootstrapAuthentication(
+    const FermentationUiCommandContext& context,
+    const FermentationUiBootstrapAuthenticationCommand& command) {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
+    if (context.surface != device_platform::UiSurface::LocalDisplay ||
+        !command.confirmed || authenticationDomain_ == nullptr ||
+        !storageEpoch_.has_value()) {
+        return AuthBootstrapStatus::InvalidInput;
+    }
+    return authenticationDomain_->bootstrap(*storageEpoch_, command.password,
+                                            command.servicePin);
+}
+
 NetworkConfigurationResult
 FermentationApplication::beginHomeWifiReconfiguration() {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (networkConfigurationService_ == nullptr) {
         return {NetworkConfigurationStatus::NotInitialized};
     }
@@ -704,6 +977,7 @@ FermentationApplication::beginHomeWifiReconfiguration() {
 
 std::optional<device_platform::NetworkAccessPointInfo>
 FermentationApplication::networkAccessPointInfo() const {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (networkConfigurationService_ == nullptr) {
         return std::nullopt;
     }
@@ -712,6 +986,7 @@ FermentationApplication::networkAccessPointInfo() const {
 
 device_platform::NetworkMode FermentationApplication::networkMode()
     const noexcept {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (networkConfigurationService_ == nullptr) {
         return device_platform::NetworkMode::UNSELECTED;
     }
@@ -854,6 +1129,7 @@ void FermentationApplication::publishOwningRuntimeEvidence(
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     FermentationUiProjectionInput input;
     input.runState = runtimeRunState_.get();
     if (runtimeRunState_ != nullptr) {
@@ -915,7 +1191,9 @@ bool FermentationApplication::beginPersistent(
     const device_platform::ITimeSource* timeSource,
     const device_platform::IResetCauseSource* resetCauseSource,
     device_platform::INetworkLifecycle* networkLifecycle,
-    device_platform::IHttpServerLifecycle* httpServerLifecycle) {
+    device_platform::IHttpServerLifecycle* httpServerLifecycle,
+    device_platform::ISecureRandomSource* randomSource,
+    IAuthenticationKdf* authenticationKdf) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -925,6 +1203,8 @@ bool FermentationApplication::beginPersistent(
     stateStore_ = &store;
     networkLifecycle_ = networkLifecycle;
     httpServerLifecycle_ = httpServerLifecycle;
+    randomSource_ = randomSource;
+    authenticationKdf_ = authenticationKdf;
     storageEpoch_.reset();
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
@@ -948,6 +1228,11 @@ bool FermentationApplication::beginPersistent(
     runPersistenceCoordinator_.reset();
     configurationRecoveryService_.reset();
     networkSetupRoutes_.reset();
+    webRouteDispatcher_.reset();
+    webApplicationRoutes_.reset();
+    webSessionManager_.reset();
+    authenticationDomain_.reset();
+    authenticationStore_.reset();
     networkConfigurationService_.reset();
     connectivityCredentialStore_.reset();
     configurationService_.reset();
@@ -1007,9 +1292,15 @@ bool FermentationApplication::beginPersistent(
     const auto epoch = runtime.lease.get().storageEpoch();
     storageEpoch_ = epoch;
 
-    if (!initializeNetwork(
-            store, epoch, runtime.lease.get().userConfiguration().networkMode,
-            runtime.lease.get().userConfiguration().deviceName)) {
+    const bool positiveAuthenticationEpochEvidence =
+        configurationResult.status ==
+            ConfigurationRecoveryStatus::FactoryInitializationCompleted ||
+        configurationResult.status ==
+            ConfigurationRecoveryStatus::FactoryResetCompleted;
+    if (!initializeNetwork(store, epoch,
+                           runtime.lease.get().userConfiguration().networkMode,
+                           runtime.lease.get().userConfiguration().deviceName,
+                           positiveAuthenticationEpochEvidence)) {
         return true;
     }
 
@@ -1203,6 +1494,7 @@ bool FermentationApplication::processTerminalClassification(
 }
 
 void FermentationApplication::update() {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     if (networkLifecycle_ != nullptr) {
         networkLifecycle_->poll();
     }
@@ -1296,8 +1588,9 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     return outcome.persistenceResult;
 }
 
-ConfigurationRecoveryResult
-FermentationApplication::beginAuthorizedFactoryReset() {
+// factory-reset transaction preserves the ordered epoch/auth/run handoff.
+ConfigurationRecoveryResult FermentationApplication::
+    beginAuthorizedFactoryReset() {  // NOLINT(readability-function-cognitive-complexity)
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
     if (configurationRecoveryService_ == nullptr ||
@@ -1397,6 +1690,78 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
 
+    // Factory reset creates a genuinely new authentication epoch. The old
+    // root/credential records remain physically present in the shared store,
+    // but their epoch binding makes them unreachable. Establish the new
+    // unprovisioned root through the same persisted first-consumer handoff as
+    // cold boot, and revoke all old sessions/service leases immediately.
+    if (authenticationDomain_ != nullptr && authenticationStore_ != nullptr &&
+        webSessionManager_ != nullptr && bootstrapStore_ != nullptr &&
+        mutationCoordinator_ != nullptr) {
+        auto authMutation = mutationCoordinator_->tryAcquire();
+        auto bootstrap = bootstrapStore_->scan();
+        const auto root = authenticationStore_->readRoot(currentEpoch);
+        bool authenticationResetCompleted = false;
+        if (authMutation.status ==
+                ConfigurationMutationAcquireStatus::Acquired &&
+            bootstrap.status == ConfigurationBootstrapScanStatus::Available &&
+            bootstrap.loaded.has_value() &&
+            (root.status == AuthenticationReadStatus::NotFound ||
+             root.status == AuthenticationReadStatus::DifferentEpoch)) {
+            if (bootstrap.loaded->record.authDomainHandoff ==
+                AuthDomainHandoffState::None) {
+                const auto unconsumed = bootstrapStore_->writeAuthDomainHandoff(
+                    *bootstrap.loaded, AuthDomainHandoffState::Unconsumed,
+                    authMutation.lease);
+                if (unconsumed.status ==
+                        ConfigurationBootstrapWriteStatus::Success &&
+                    unconsumed.loaded.has_value()) {
+                    bootstrap.loaded = unconsumed.loaded;
+                }
+            }
+            if (bootstrap.loaded->record.authDomainHandoff ==
+                AuthDomainHandoffState::Unconsumed) {
+                const auto inProgress = bootstrapStore_->writeAuthDomainHandoff(
+                    *bootstrap.loaded, AuthDomainHandoffState::InProgress,
+                    authMutation.lease);
+                if (inProgress.status ==
+                        ConfigurationBootstrapWriteStatus::Success &&
+                    inProgress.loaded.has_value() &&
+                    authenticationDomain_->initializeUnprovisioned(
+                        currentEpoch) ==
+                        AuthBootstrapStatus::BootstrapAllowed) {
+                    const auto consumed =
+                        bootstrapStore_->writeAuthDomainHandoff(
+                            *inProgress.loaded,
+                            AuthDomainHandoffState::Consumed,
+                            authMutation.lease);
+                    authenticationResetCompleted =
+                        consumed.status ==
+                        ConfigurationBootstrapWriteStatus::Success;
+                    if (!authenticationResetCompleted) {
+                        static_cast<void>(
+                            bootstrapStore_->writeAuthDomainHandoff(
+                                *inProgress.loaded,
+                                AuthDomainHandoffState::Indeterminate,
+                                authMutation.lease));
+                    }
+                } else if (inProgress.loaded.has_value()) {
+                    static_cast<void>(bootstrapStore_->writeAuthDomainHandoff(
+                        *inProgress.loaded,
+                        AuthDomainHandoffState::Indeterminate,
+                        authMutation.lease));
+                }
+            }
+        }
+        if (!authenticationResetCompleted) {
+            requireService(FaultCode::ConfigurationUnavailable);
+            return {
+                ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
+                reset.diagnostics};
+        }
+        webSessionManager_->revokeAll();
+    }
+
     auto loadResult = std::unique_ptr<RunPersistenceLoadResult>{
         new (std::nothrow) RunPersistenceLoadResult{}};
     if (loadResult == nullptr) {
@@ -1494,7 +1859,14 @@ void FermentationApplication::reevaluateWaitingForTrustedTime() {
 }
 
 bool FermentationApplication::ready() const {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
     return lifecycleState_ == ApplicationLifecycleState::Ready;
+}
+
+std::optional<device_platform::StorageEpoch>
+FermentationApplication::currentStorageEpoch() const noexcept {
+    const std::lock_guard<std::recursive_mutex> lock(stateMutex_);
+    return storageEpoch_;
 }
 
 std::optional<ProcessRuntimeState>

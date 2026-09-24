@@ -35,6 +35,7 @@ NetworkConfigurationResult NetworkConfigurationService::start(
     device_platform::NetworkMode selectedMode,
     device_platform::StorageEpoch storageEpoch,
     bool explicitHomeWifiReconfiguration) {
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!device_platform::isValidNetworkMode(selectedMode) ||
         storageEpoch.value() == 0U) {
         return {NetworkConfigurationStatus::InvalidMode};
@@ -92,6 +93,7 @@ NetworkConfigurationResult NetworkConfigurationService::start(
 }
 
 NetworkConfigurationScanResult NetworkConfigurationService::scan() {
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!initialized_ || !setupFlowActive_ ||
         selectedMode_ == device_platform::NetworkMode::UNSELECTED) {
         const auto status = initialized_
@@ -108,6 +110,7 @@ NetworkConfigurationScanResult NetworkConfigurationService::scan() {
 
 NetworkConfigurationResult NetworkConfigurationService::beginCandidate(
     std::string ssid, std::string password) {
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!initialized_ || !setupFlowActive_ ||
         selectedMode_ != device_platform::NetworkMode::HOME_WIFI) {
         return {initialized_ ? NetworkConfigurationStatus::SetupNotAvailable
@@ -125,6 +128,7 @@ NetworkConfigurationResult NetworkConfigurationService::beginCandidate(
 }
 
 NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!initialized_ || !setupFlowActive_ || !candidate_.has_value() ||
         !candidate_->homeWifi.has_value()) {
         return {NetworkConfigurationStatus::CandidateRejected};
@@ -199,15 +203,12 @@ NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
 
 NetworkConfigurationResult
 NetworkConfigurationService::beginHomeWifiReconfiguration() {
+    const std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (selectedMode_ != device_platform::NetworkMode::HOME_WIFI ||
         storageEpoch_.value() == 0U) {
         return {NetworkConfigurationStatus::SetupNotAvailable};
     }
     return start(device_platform::NetworkMode::HOME_WIFI, storageEpoch_, true);
-}
-
-void NetworkConfigurationService::discardCandidate() noexcept {
-    candidate_.reset();
 }
 
 }  // namespace fermentation

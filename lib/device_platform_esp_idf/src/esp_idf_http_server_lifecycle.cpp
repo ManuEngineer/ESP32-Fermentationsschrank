@@ -1,10 +1,14 @@
 #include "esp_idf_http_server_lifecycle.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <strings.h>
 
 #include "esp_http_server.h"
+#include "esp_httpd_priv.h"
 
 namespace device_platform_esp_idf {
 namespace {
@@ -40,9 +44,93 @@ const char* statusLine(std::uint16_t status) {
             return "422 Unprocessable Content";
         case 503U:
             return "503 Service Unavailable";
+        case 204U:
+            return "204 No Content";
+        case 401U:
+            return "401 Unauthorized";
+        case 403U:
+            return "403 Forbidden";
+        case 405U:
+            return "405 Method Not Allowed";
+        case 413U:
+            return "413 Content Too Large";
+        case 415U:
+            return "415 Unsupported Media Type";
+        case 429U:
+            return "429 Too Many Requests";
+        case 431U:
+            return "431 Request Header Fields Too Large";
         default:
             return "500 Internal Server Error";
     }
+}
+
+std::size_t headerOccurrences(httpd_req_t* request, const char* name) {
+    if (request == nullptr || request->aux == nullptr || name == nullptr)
+        return 0U;
+    const auto* auxiliary = static_cast<const httpd_req_aux*>(request->aux);
+    const char* headerField = auxiliary->scratch;
+    std::size_t matches = 0U;
+    unsigned remaining = auxiliary->req_hdrs_count;
+    while (remaining-- > 0U && headerField != nullptr) {
+        const char* colon = std::strchr(headerField, ':');
+        if (colon == nullptr) break;
+        const auto fieldLength = static_cast<std::size_t>(colon - headerField);
+        if (fieldLength == std::strlen(name) &&
+            ::strncasecmp(headerField, name, fieldLength) == 0) {
+            ++matches;
+        }
+        if (remaining == 0U) break;
+        headerField = std::strchr(colon + 1, '\0');
+        if (headerField == nullptr) break;
+        ++headerField;
+        while (*headerField == '\0') ++headerField;
+    }
+    return matches;
+}
+
+std::optional<std::string> header(httpd_req_t* request, const char* name,
+                                  std::size_t maximum, bool& invalid) {
+    const auto occurrences = headerOccurrences(request, name);
+    if (occurrences > 1U) {
+        invalid = true;
+        return std::nullopt;
+    }
+    if (occurrences == 0U) return std::nullopt;
+    const std::size_t length = httpd_req_get_hdr_value_len(request, name);
+    if (length == 0U) {
+        invalid = true;
+        return std::nullopt;
+    }
+    if (length > maximum) {
+        invalid = true;
+        return std::nullopt;
+    }
+    std::string value(length, '\0');
+    if (httpd_req_get_hdr_value_str(request, name, value.data(),
+                                    value.size() + 1U) != ESP_OK) {
+        invalid = true;
+        return std::nullopt;
+    }
+    return value;
+}
+
+device_platform::HttpRequestMetadata requestMetadata(httpd_req_t* request,
+                                                     bool& invalid) {
+    device_platform::HttpRequestMetadata metadata;
+    metadata.host = header(request, "Host", 256U, invalid);
+    metadata.contentType = header(request, "Content-Type", 64U, invalid);
+    metadata.cookie = header(request, "Cookie", 512U, invalid);
+    metadata.csrfToken = header(request, "X-CSRF-Token", 64U, invalid);
+    metadata.mutationSeq = header(request, "X-UI-Mutation-Seq", 20U, invalid);
+    metadata.origin = header(request, "Origin", 256U, invalid);
+    metadata.referer = header(request, "Referer", 512U, invalid);
+    metadata.secFetchSite = header(request, "Sec-Fetch-Site", 32U, invalid);
+    if (device_platform::validateHttpRequestMetadata(metadata) !=
+        device_platform::HttpMetadataValidation::Valid) {
+        invalid = true;
+    }
+    return metadata;
 }
 
 }  // namespace
@@ -69,6 +157,7 @@ bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 1U;
+    config.max_req_hdr_len = 2048U;
     config.uri_match_fn = httpd_uri_match_wildcard;
     if (httpd_start(&impl_->server, &config) != ESP_OK) {
         impl_->server = nullptr;
@@ -119,9 +208,19 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         std::lock_guard<std::mutex> lock(self->mutex);
         routes = self->routes;
     }
-    if (routes == nullptr || request->content_len > kMaximumHttpBodyBytes) {
+    if (routes == nullptr) {
         return httpd_resp_send_err(request, HTTPD_400_BAD_REQUEST,
                                    "invalid request");
+    }
+    if (request->content_len > kMaximumHttpBodyBytes) {
+        return httpd_resp_send_err(request, HTTPD_413_CONTENT_TOO_LARGE,
+                                   "request body too large");
+    }
+    bool invalidMetadata = false;
+    auto metadata = requestMetadata(request, invalidMetadata);
+    if (invalidMetadata) {
+        return httpd_resp_send_err(request, HTTPD_431_REQ_HDR_FIELDS_TOO_LARGE,
+                                   "invalid request metadata");
     }
     std::string body(request->content_len, '\0');
     std::size_t received = 0U;
@@ -137,7 +236,7 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
     device_platform::HttpResponse response;
     const device_platform::HttpRequest input{
         methodName(static_cast<http_method>(request->method)), request->uri,
-        std::move(body)};
+        std::move(body), std::move(metadata)};
     if (!routes->handle(input, response)) {
         return httpd_resp_send_err(request, HTTPD_404_NOT_FOUND, "not found");
     }
@@ -145,6 +244,18 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         httpd_resp_set_status(request, statusLine(response.statusCode)));
     static_cast<void>(
         httpd_resp_set_type(request, response.contentType.c_str()));
+    if (!device_platform::validateHttpResponseMetadata(response.metadata)) {
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "invalid response metadata");
+    }
+    if (response.metadata.setCookie.has_value()) {
+        static_cast<void>(httpd_resp_set_hdr(
+            request, "Set-Cookie", response.metadata.setCookie->c_str()));
+    }
+    if (response.metadata.retryAfter.has_value()) {
+        static_cast<void>(httpd_resp_set_hdr(
+            request, "Retry-After", response.metadata.retryAfter->c_str()));
+    }
     return httpd_resp_send(request, response.body.data(), response.body.size());
 }
 

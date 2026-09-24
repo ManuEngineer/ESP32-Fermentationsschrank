@@ -129,7 +129,7 @@ void test_newer_bootstrap_schema_is_fail_closed_without_partial_value() {
     TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
                          {fermentation::configuration_storage_contract::
                               kConfigurationBootstrapRecordType,
-                          3U, device_platform::StorageEpoch{1U}, 1U,
+                          4U, device_platform::StorageEpoch{1U}, 1U,
                           std::nullopt, std::string(6U, '\0')},
                          bytes, 64U) ==
                      device_platform::EnvelopeEncodeStatus::Success);

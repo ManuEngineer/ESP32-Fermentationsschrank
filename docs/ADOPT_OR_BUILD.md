@@ -127,10 +127,12 @@ allgemeine Connectivity-Plattform.
 ## JSON an externen Grenzen
 
 Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
-allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist dafuer der
-bevorzugte Release-1-Kandidat, wird aber erst nach einem begrenzten Build-,
-Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernommen. Eine
-Alternative wird nur bei einem konkret belegten Release-1-Problem untersucht.
+allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist im bounded
+Web-/API-Codec integriert. Quelle, Tag-Commit, MIT-Lizenz, verwendete Header
+und die direkte ESP-IDF-Komponenteneinbindung sind in den technischen
+Registern fixiert. Die integrierten Flash-/Heap-/Fragmentierungs-/Jitterwerte
+bleiben bis zum Ressourcen-Gate offen; eine Alternative wird nur bei einem
+konkret belegten Release-1-Problem untersucht.
 
 Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
 Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und
@@ -176,12 +178,16 @@ fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
 
 ## Authentisierung und Secret-Schutz
 
-Bewaehrte Kryptoprimitive und vorhandene Plattformfunktionen werden erst nach
+Bewaehrte Kryptoprimitiven und vorhandene Plattformfunktionen werden erst nach
 reproduzierbarer Toolchain-, Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und
 Watchdogpruefung adoptiert. PBKDF2-HMAC-SHA-256 aus dem fixierten
-mbedTLS-/ESP32-Pfad ist nur erster Evaluationskandidat; Work Factor,
-Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
-festgelegt.
+mbedTLS-/ESP32-Pfad ist fuer R1 mit `KDF_WORK_FACTOR=10000` ownerfreigegeben.
+Die reale ESP32-WROOM-32E-Messung lag bei ca. 3,78 s ohne Watchdog-Reset oder
+nachgewiesenen Regelzyklus-/Timer-Jitter; es gibt keinen automatischen
+Fallback auf einen kleineren Work Factor. Die Auswahl behauptet weder
+Hochsicherheit noch OWASP-Konformitaet. Zufallsintegration und
+Plattformverschluesselung bleiben eigene technische beziehungsweise
+Security-Release-Gates.
 
 Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
 PIN-Credentials, atomar neustartfeste Vor-Sperr-Zaehler/Sperrzustaende,

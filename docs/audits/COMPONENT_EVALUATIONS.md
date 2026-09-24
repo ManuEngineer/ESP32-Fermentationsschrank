@@ -9,14 +9,13 @@ Stand: 2026-07-27 (Original-Audit). Repository-Basis:
 
 Synchronisiert am: 2026-08-05 gemaess der Espressif-first-Regel
 (`docs/ENGINEERING_PRINCIPLES.md`) nach dem Wechsel der Produktionstoolchain auf
-ESP-IDF `6.0.2` (Issue #71 / PR #79, Basis-Commit
-`7101770dc6db2667b3c477cc31365dd1acd6db4e`).
+ESP-IDF `v6.1` (Commit `fff9895c82d744c7237be8847347bdd1b07c6643`).
 
 Dieses Dokument bewertet Kandidaten, bindet aber keine Bibliothek ein und trifft
 keine endgueltige Auswahl. "Unterstuetzt" bezeichnet eine Aussage der
 offiziellen Projektquelle; reale Kompatibilitaet mit dem bestellten Board ist
 bis zum Spike unbestaetigt. Die Zieltoolchain fuer Produktionsprofile ist
-ESP-IDF `6.0.2` (`esp32_bringup`/`esp32_release`, Composition Root
+ESP-IDF `v6.1` (`esp32_bringup`/`esp32_release`, Composition Root
 `main/app_main.cpp`); PlatformIO ist ausschliesslich der native Hosttestpfad.
 Ein Arduino-Produktionspfad besteht nicht (`AGENTS.md`). Zielhardware bleibt
 ESP32-32E, 4 MB Flash und ohne PSRAM. Herkunft und Lizenzen stehen im
@@ -250,14 +249,14 @@ diesen Teilschnitt wird keine neue Bibliothek ausgewaehlt.
 |---|---|
 | Aufgabe | begrenzte Web-API-, Konfigurations-, Programm-, Diagnose-, nur lesende Laufexport-, secret-freie Backup- und getrennte Importformate; keine interne Journal-, Historien- oder Kontrollpunktpersistenz |
 | Release-1-Anforderung | korrekte UTF-8-/Escape-/Zahlenverarbeitung, feste Byte-/Struktur-/Feldgrenzen, stabile Projektfehler, Redaction, Importvorschau ohne Aktivierung und Streaming/Pagination grosser Ausgaben |
-| Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
-| Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; Paketmanifest, konkret verwendete Header/Features, transitive Bestandteile und Notices im Spike pruefen |
-| Kompatibilitaet | isolierter reproduzierbarer Build mit ESP-IDF `6.0.2` (`esp32_bringup`/`esp32_release`, Composition Root `main/app_main.cpp`), C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
+| Auswahl | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; bounded Web-/API-Codec integriert, Bibliothekstypen bleiben in der Codec-/Integrationsgrenze |
+| Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; `LICENSE.txt` SHA-256 `4a7ee9c96b28cbf30c5bf7c2d211a0ef57179f0328e68ad7b7fa7d754b7da1a2`; keine transitive Runtime-Abhaengigkeit im Manifest |
+| Kompatibilitaet | reproduzierbarer Build mit kanonischem ESP-IDF-v6.1-Vertrag (`esp32_bringup`/`esp32_release`), C++17, ESP32-WROOM-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit; beide Profile muessen nach dem Korrekturcommit erneut gebaut werden |
 | Ressourcen | ArduinoJson 7 verwaltet Dokumente dynamisch; Modell, alter Ausgabezustand und neuer Serialisierungspfad koennen gleichzeitig leben. Flash, statisches RAM, Heapspitze/-minimum/-blockgroesse, Fragmentierung und Zeiten pro Profil real messen |
 | Adapter | kleine konkrete DTO-/Codecgrenze in ESP32-/Transportintegration; Bibliotheksfehler vollstaendig in stabile Projektfehler uebersetzen; kein `IJsonProvider`, Pluginregister oder Dummy-Zweitcodec |
 | Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Trennung von Export/Backup und Import, vollstaendiger Importkandidat, Vorschau, Bestaetigung und atomare OD-01-Aktivierung |
 | Alternative | andere Bibliothek oder Eigenloesung nur nach belegtem Toolchain-, Ressourcen-, Stabilitaets-, Limitierungs- oder Publikationsproblem; kein eigener allgemeiner Parser/Serializer |
-| Empfehlung/Status | bevorzugter R1-Kandidat fuer #19/#27/#28 mit `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING`; Richtungsentscheid getroffen, endgueltige Uebernahme erst nach vollstaendigem Nachweis |
+| Empfehlung/Status | fuer #27 als bounded Codec uebernommen; native Bounded-/Negativ-/Redaction-Nachweise und Source-/Lizenzprovenienz liegen vor; integrierte Flash-/Heap-/Fragmentierungs-/Jitterwerte bleiben vor finaler Ressourcenfreigabe `PENDING` |
 
 ### Release-1-Nutzungs- und Architekturgrenze
 
@@ -730,7 +729,7 @@ Revision/Konfliktschutz und sichtbarer Warnung bleibt erforderlich.
 
 | Kandidat oder Pfad | Gepruefter Stand | Aufgabe | Status | Verbindlicher Nachweis |
 |---|---|---|---|---|
-| PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; konkrete Funktion, Version, Lizenz-/Noticeumfang und Build im Spike pruefen | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bekannte Testvektoren, mindestens 128-Bit-Salt und 256-Bit-Verifier mit Parameterkennung, konstanter Vergleich, Laufzeit, Stack, Heap, Jitter, Watchdog und parallele Anfragen; Iterationszahl erst danach |
+| PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; reale ESP32-WROOM-32E-Messung und Ownerentscheidung liegen vor | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier; R1-Wert `KDF_WORK_FACTOR=10000` | `OWNER_SELECTED_R1`, `EVIDENCE_COMPLETE_FOR_OWNER_DECISION`, `TARGETED_FIX_VERIFICATION_PENDING` | 16-Byte-Salt, 32-Byte-Verifier, Parameterkennung, konstanter Vergleich sowie Laufzeit-, Stack-, Heap-, Jitter- und Watchdog-Evidence sind erhalten; 10.000 Iterationen dauern ca. 3,78 s ohne nachgewiesenen Jitter/Reset; kein automatischer kleinerer Fallback |
 | `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG | fixierter ESP32-/mbedTLS-Pfad, konkrete Integration offen | kryptografischer Zufall fuer Salts, Sessionkennungen und CSRF-Tokens | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | Initialisierung/Fehlerpfad, wiederholte Bildung und Plausibilitaetspruefung; keine schwachen Ersatzwerte und keine Entropiebehauptung ueber die Plattformgarantie hinaus |
 | NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; zwingendes ergebnisoffenes Security-Gate vor #37 | Toolchain, Boot, Partitionierung, Provisionierung, Schluesselentstehung/-speicherung/-verlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, UART-Neuflash, Update/Migration, Ressourcen und Stabilitaet; danach vor #37 expliziter Ownerentscheid fuer produktive Auswahl samt Provisionierungs-/Recovery-/Regressionstest oder begruendete Nichtauswahl mit Rest-Risiken und Schutzgrenzen |
 
@@ -743,8 +742,8 @@ bleiben `fail closed`, waehrend aktiver Sperre gibt es weder KDF noch einen
 Write je Ablehnung. Ein Pepper im selben ungeschuetzten Flash ist
 keine Schutzgrenze. Ohne aktivierte und getestete Plattformverschluesselung wird
 kein Schutz gegen physischen Flashzugriff behauptet. Es wird keine zusaetzliche
-Kryptobibliothek, allgemeine Authplattform oder endgueltige Kryptokonfiguration
-gewaehlt.
+Kryptobibliothek oder allgemeine Authplattform gewaehlt; die konkrete
+PBKDF2-/Work-Factor-Entscheidung ist fuer R1 mit `10000` dokumentiert.
 
 Der Plattformverschluesselungs-Spike und sein dokumentierter Ownerentscheid
 sind zwingend vor #37 abzuschliessen. Eine Auswahl verlangt die produktive
@@ -754,7 +753,7 @@ ausdrueckliche Ownerfreigabe. Diese Evaluation nimmt keines der Ergebnisse
 vorweg.
 
 Produktive Webmutationen bleiben ueber den Policyentscheid hinaus gesperrt,
-bis die je Modus erforderlichen KDF-/Work-Factor-, Zufalls-, Credential-,
+bis die je Modus erforderlichen Zufalls-, Credential-,
 Sperr-, Session-/Cookie-, CSRF-/HTTP-, Revisions-/Wiederholungs-, Ressourcen-,
 Jitter-, Watchdog-, Abbruch-, Neustart-, Webserver- und JSON-Nachweise
 ownerfreigegeben sind. Servicefunktionen benoetigen zusaetzlich PIN-KDF,

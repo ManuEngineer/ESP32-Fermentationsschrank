@@ -4,10 +4,8 @@
 
 namespace {
 
-device_platform::DevicePlatform platform;
-fermentation::FermentationApplication application;
-
-bool startApplication() {
+bool startApplication(device_platform::DevicePlatform& platform,
+                      fermentation::FermentationApplication& application) {
     const device_platform::PlatformStartupContext startupContext{
         app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
     };
@@ -18,7 +16,9 @@ bool startApplication() {
 }  // namespace
 
 int main() {
-    if (!startApplication()) {
+    device_platform::DevicePlatform platform;
+    fermentation::FermentationApplication application;
+    if (!startApplication(platform, application)) {
         return 1;
     }
 

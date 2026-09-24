@@ -387,7 +387,7 @@ FermentationUiProgramEditResult applyProgramEdit(
 ConfigurationPreviewInstallResult applyProgramEditPreview(
     ConfigurationService& service, ProgramCatalogRevision expectedRevision,
     const FermentationUiProgramEditRequest& request,
-    const FermentationUiProgramUsageEvidence& usage) {
+    const FermentationUiProgramUsageEvidence& usage, ChangeOrigin origin) {
     if (isDeletionOperation(request.operation) &&
         usage.isInUse(request.programId)) {
         return {ConfigurationPreviewStatus::NotAllowed, std::nullopt};
@@ -403,10 +403,11 @@ ConfigurationPreviewInstallResult applyProgramEditPreview(
         request.operation == FermentationUiProgramEditOperation::Reset
             ? ChangeOperationKind::StandardProgramReset
             : ChangeOperationKind::NormalEdit,
-        0U};
-    return service.installPreview(std::move(build.lease),
-                                  {ChangeOriginKind::LocalDisplay, 0U},
-                                  operation);
+        static_cast<std::uint8_t>(
+            request.operation == FermentationUiProgramEditOperation::Reset
+                ? 6U
+                : 1U)};
+    return service.installPreview(std::move(build.lease), origin, operation);
 }
 
 std::optional<FermentationUiProgramEditSession> openProgramEditSession(

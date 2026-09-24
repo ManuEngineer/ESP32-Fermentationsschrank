@@ -197,4 +197,12 @@ bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
     return false;
 }
 
+bool NetworkSetupRoutes::ownsRoute(
+    const device_platform::HttpRequest& request) const noexcept {
+    if (!networkService_.setupFlowActive()) return false;
+    return request.path == "/" || request.path == "/api/network/status" ||
+           request.path == "/api/network/scan" ||
+           request.path == "/api/network/candidate";
+}
+
 }  // namespace fermentation

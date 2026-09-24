@@ -33,9 +33,11 @@ bool validChangeOrigin(const ChangeOrigin& origin) {
             return origin.wireValue == 2U;
         case ChangeOriginKind::WebInterface:
             return origin.wireValue == 3U;
+        case ChangeOriginKind::ServiceWeb:
+            return origin.wireValue == 4U;
         case ChangeOriginKind::Unknown:
             return origin.wireValue != 1U && origin.wireValue != 2U &&
-                   origin.wireValue != 3U;
+                   origin.wireValue != 3U && origin.wireValue != 4U;
     }
     return false;
 }
@@ -113,6 +115,8 @@ ChangeOrigin decodeChangeOrigin(std::uint8_t wireValue) {
             return {ChangeOriginKind::LocalDisplay, wireValue};
         case 3U:
             return {ChangeOriginKind::WebInterface, wireValue};
+        case 4U:
+            return {ChangeOriginKind::ServiceWeb, wireValue};
         default:
             return {ChangeOriginKind::Unknown, wireValue};
     }

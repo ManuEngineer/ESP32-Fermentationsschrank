@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@ enum class NetworkConfigurationStatus : std::uint8_t {
     TransportFailure,
     CandidateRejected,
     PersistenceFailure,
+    StateChanged,
     CommitIndeterminate,
     RecoveryRequired,
     SetupNotAvailable,
@@ -59,25 +61,34 @@ class NetworkConfigurationService final {
         std::string ssid, std::string password);
     [[nodiscard]] NetworkConfigurationResult testCandidate();
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
-    void discardCandidate() noexcept;
+    void discardCandidate() noexcept {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
+        candidate_.reset();
+    }
 
     [[nodiscard]] device_platform::NetworkStatus status() const {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return lifecycle_.status();
     }
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     accessPointInfo() const {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return lifecycle_.accessPointInfo();
     }
     [[nodiscard]] device_platform::NetworkMode selectedMode() const noexcept {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return selectedMode_;
     }
     [[nodiscard]] bool candidatePending() const noexcept {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return candidate_.has_value();
     }
     [[nodiscard]] bool setupFlowActive() const noexcept {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return setupFlowActive_;
     }
     [[nodiscard]] bool recoveryRequired() const noexcept {
+        const std::lock_guard<std::recursive_mutex> lock(mutex_);
         return recoveryRequired_;
     }
 
@@ -96,6 +107,7 @@ class NetworkConfigurationService final {
     bool initialized_{false};
     bool setupFlowActive_{false};
     bool recoveryRequired_{false};
+    mutable std::recursive_mutex mutex_;
 };
 
 }  // namespace fermentation

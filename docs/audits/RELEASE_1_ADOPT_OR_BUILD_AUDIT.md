@@ -19,6 +19,17 @@ dabei nicht geaendert.
 
 ## Gepruefter Stand
 
+### Current implementation addendum – Issue #27
+
+ArduinoJson `7.4.3` is now the bounded external Web/API codec used by PR #167.
+The resolved tag commit is
+`77771d3c07668e01d8f52acb03910c1110bb373f`; the package is MIT-licensed and
+has no transitive runtime dependency in its ESP-IDF manifest. Native
+bounded/negative/redaction coverage and the source/license register are
+present. Integrated flash, heap, fragmentation and jitter measurements remain
+`RESOURCE_EVIDENCE_PENDING`; historical candidate rows below are retained as
+audit history and do not create a second dependency or parser choice.
+
 | Gegenstand | Stand |
 |---|---|
 | Repository | `ManuEngineer/ESP32-Fermentationsschrank` |
@@ -27,7 +38,7 @@ dabei nicht geaendert.
 | Abruf-/Auditdatum | 2026-07-27 (Original-Audit) |
 | Toolchain im Repository (Original-Audit) | PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17` (`dcc1105b`), C++17 |
 | Synchronisiert am | 2026-08-05 gegen Baseline `8d65b50326c4419dc45bbc024615c0a1c592e1aa` (Espressif-first-Audit-Sync) |
-| Toolchain im Repository (aktuell) | ESP-IDF `v6.0.2` (`7101770dc6db2667b3c477cc31365dd1acd6db4e`, Issue #71 / PR #79); PlatformIO ausschliesslich nativer Hosttestpfad; Arduino-ESP32 keine aktive Produktionsbasis |
+| Toolchain im Repository (aktuell) | ESP-IDF `v6.1` (`fff9895c82d744c7237be8847347bdd1b07c6643`); PlatformIO ausschliesslich nativer Hosttestpfad; Arduino-ESP32 keine aktive Produktionsbasis |
 | Zielbasis | ESP32-32E, 4 MB Flash, keine PSRAM-Abhaengigkeit |
 | betrachtete Implementierungs-/Tracking-Issues | #16–#37, #56/#57 sowie #89/#90: 26 Eintraege; nicht alle zwingend aktuell offen, z. B. ist #17 nach PR #84 abgeschlossen |
 | Konfigurationsstand | #54 und #55 gemergt; #16 bleibt Tracking; #56/#57 `BLOCKED_DEPENDENCY` |
@@ -879,16 +890,16 @@ Die spaetere Abnahme prueft pro Bereich mindestens:
 
 ### 15. OD-09: Authentisierung, Sessions, CSRF und Secret-at-rest
 
-OD-09 ist als fachlicher R1-Vertrag entschieden. Technische Kandidaten und
-Messwerte bleiben bewusst hinter Spikes: PBKDF2-HMAC-SHA-256 aus dem in
-ESP-IDF `6.0.2` enthaltenen mbedTLS ist `FIRST_EVALUATION_CANDIDATE`,
-`SPIKE_REQUIRED` und `FINAL_SELECTION_PENDING`; Iterationszahl,
-Verifikationsdauer, Stack-/Heapbudget
-und Scheduling werden erst nach reproduzierbaren Messungen festgelegt. Eine
-einzelne schnelle SHA-256-Pruefung ist unzulaessig. Der Vergleich abgeleiteter
-Pruefnachweise muss zeitkonstant erfolgen. Initial werden mindestens 128 Bit
-zufaelliger Salt, ein 256-Bit-Pruefnachweis und eine explizite
-KDF-Parameterkennung beziehungsweise KDF-Schemaversion evaluiert. Ein Pepper
+OD-09 ist als fachlicher R1-Vertrag entschieden. Die reale
+ESP32-WROOM-32E-Messung hat den bereits implementierten
+PBKDF2-HMAC-SHA-256-Pfad mit 10.000 Iterationen als Ownerentscheidung
+freigegeben: ca. 3,78 s ohne Watchdog-Reset oder nachgewiesenen
+Regelzyklus-/Timer-Jitter. Es gibt keinen automatischen kleineren Work-Factor-
+Fallback. Eine einzelne schnelle SHA-256-Pruefung ist unzulaessig. Der
+Vergleich abgeleiteter Pruefnachweise muss zeitkonstant erfolgen. Initial
+werden mindestens 128 Bit zufaelliger Salt, ein 256-Bit-Pruefnachweis und eine
+explizite KDF-Parameterkennung beziehungsweise KDF-Schemaversion verwendet.
+Die Auswahl behauptet keine Hochsicherheit oder OWASP-Konformitaet. Ein Pepper
 ist ohne einen vom normalen Flash getrennten geschuetzten Geraeteschluessel
 keine belastbare Schutzgrenze.
 
@@ -1337,9 +1348,11 @@ Die vorgeschlagene Reihenfolge steht in
 
 Die fachlichen Ownerentscheidungen der aktuellen Auditliste sind damit
 vollstaendig bearbeitet. Die Tabelle enthaelt nur noch mess- und
-evaluationsabhaengige Auswahlentscheide. OD-09 ist entschieden; PBKDF2,
-Work Factor, Zufallspfad und Plattformverschluesselung bleiben technische
-Spike-Gates und duerfen nicht als endgueltig ausgewaehlt gelten.
+evaluationsabhaengige Auswahlentscheide. OD-09 ist entschieden; PBKDF2 und
+Work Factor sind fuer R1 mit `PBKDF2_HMAC_SHA256` und `10000` ownerfreigegeben.
+Zufallspfad und Plattformverschluesselung bleiben technische Spike- und
+Security-Release-Gates; aus der KDF-Entscheidung folgt keine Hochsicherheits-
+oder OWASP-Konformitaetsbehauptung.
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
 Detailpruefung, ob Dokumentrevisionen und Rootsequenz die bisherige Funktion
