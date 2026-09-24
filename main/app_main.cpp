@@ -33,6 +33,10 @@
 #include "issue_31_touch_calibration_harness.hpp"
 #endif
 
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+#include "issue_31_touch_calibration_provision.hpp"
+#endif
+
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
 #include "issue_29_bringup_probe.hpp"
 #endif
@@ -72,6 +76,28 @@ constexpr const char* kNtpServers[] = {"pool.ntp.org"};
 // written for a different board or controller is never silently accepted.
 constexpr char kBoardControllerId[] =
     "esp32_32e_quad_mosfet_r1+ili9341+xpt2046";
+
+[[nodiscard]] const char* touchCalibrationLoadStatusName(
+    device_platform::TouchCalibrationLoadStatus status) noexcept {
+    using device_platform::TouchCalibrationLoadStatus;
+    switch (status) {
+        case TouchCalibrationLoadStatus::Available:
+            return "Available";
+        case TouchCalibrationLoadStatus::NotFound:
+            return "NotFound";
+        case TouchCalibrationLoadStatus::OtherEpoch:
+            return "OtherEpoch";
+        case TouchCalibrationLoadStatus::UnsupportedSchema:
+            return "UnsupportedSchema";
+        case TouchCalibrationLoadStatus::InvalidRecord:
+            return "InvalidRecord";
+        case TouchCalibrationLoadStatus::ReadError:
+            return "ReadError";
+        case TouchCalibrationLoadStatus::CapacityError:
+            return "CapacityError";
+    }
+    return "Unknown";
+}
 
 // No board profile with verified RTC bus pins exists yet.  The disabled
 // profile is therefore intentional and is the supported NTP-only mode; a
@@ -236,6 +262,11 @@ device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
 }  // namespace
 
 extern "C" void app_main(void) {
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+    fermentation::issue_31_touch_calibration_provision::run();
+    return;
+#endif
+
 #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
     fermentation::issue_31_touch_calibration::run();
     return;
@@ -357,9 +388,10 @@ extern "C" void app_main(void) {
         const auto fallbackCalibration = touchCalibrationStore.load(
             device_platform::TouchCalibrationSlot::Fallback,
             kBoardControllerId);
-        ESP_LOGI(kTag, "touch calibration: active_status=%d fallback_status=%d",
-                 static_cast<int>(activeCalibration.status),
-                 static_cast<int>(fallbackCalibration.status));
+        ESP_LOGI(kTag,
+                 "touch calibration: active_status=%s fallback_status=%s",
+                 touchCalibrationLoadStatusName(activeCalibration.status),
+                 touchCalibrationLoadStatusName(fallbackCalibration.status));
         switch (activeCalibration.status) {
             case device_platform::TouchCalibrationLoadStatus::Available:
                 displayRenderer->setTouchCalibration(
