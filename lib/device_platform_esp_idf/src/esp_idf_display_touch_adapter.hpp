@@ -20,7 +20,10 @@ struct DisplayRotationTransform final {
         case device_platform::DisplayRotation::Rotate0:
             return {false, false, false};
         case device_platform::DisplayRotation::Rotate90:
-            return {true, true, false};
+            // The R1 panel needs the landscape axis swap and a physical
+            // 180-degree correction. Both mirror axes are required; using
+            // only mirror_x leaves the visible product image upside down.
+            return {true, true, true};
         case device_platform::DisplayRotation::Rotate180:
             return {false, true, true};
         case device_platform::DisplayRotation::Rotate270:

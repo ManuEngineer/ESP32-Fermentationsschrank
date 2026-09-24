@@ -21,7 +21,7 @@ void test_rotate0_uses_native_panel_geometry() {
 }
 
 void test_rotate90_uses_r1_landscape_geometry() {
-    assertTransform(DisplayRotation::Rotate90, {true, true, false});
+    assertTransform(DisplayRotation::Rotate90, {true, true, true});
 }
 
 void test_rotate180_mirrors_without_axis_swap() {

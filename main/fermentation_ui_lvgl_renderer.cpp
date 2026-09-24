@@ -140,8 +140,19 @@ struct ProductiveLvglRenderer::Impl final {
             state->touchPressActive = false;
             return;
         }
-        const auto calibrated = device_platform::applyTouchCalibration(
+        auto calibrated = device_platform::applyTouchCalibration(
             *state->touchCalibrationModel, sample.rawX, sample.rawY);
+        // tc0 was measured before the final R1 panel correction that made
+        // the product image upright. With the panel's swapped-axis
+        // transform, that correction reverses the logical screen X axis for
+        // the already-calibrated product coordinates. Keep the reviewed
+        // record unchanged and apply only this proven product-side mapping.
+        if (state->config.rotation ==
+            device_platform::DisplayRotation::Rotate90) {
+            calibrated.x =
+                static_cast<double>(RepresentativeScreen::kWidth - 1U) -
+                calibrated.x;
+        }
         // Clamp to the fixed 320x240 display surface: a calibration record
         // is trusted for its coefficients, never for guaranteeing every
         // transformed point stays on-screen.

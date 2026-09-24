@@ -192,7 +192,7 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         + ("true;" if resolved["backlight_active_high"] else "false;"),
         f"inline constexpr int kTouchInterruptPin = {pins['touch_irq']};",
         "inline constexpr device_platform::DisplayRotation kR1DisplayRotation =",
-        "    device_platform::DisplayRotation::Rotate270;",
+        "    device_platform::DisplayRotation::Rotate90;",
         "",
         "}  // namespace board_profile::esp32_32e_quad_mosfet_r1",
         "",
