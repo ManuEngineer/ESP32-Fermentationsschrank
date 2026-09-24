@@ -43,8 +43,7 @@ class EspIdfDisplayTouchAdapter final
     EspIdfDisplayTouchAdapter& operator=(const EspIdfDisplayTouchAdapter&) =
         delete;
     EspIdfDisplayTouchAdapter(EspIdfDisplayTouchAdapter&&) = delete;
-    EspIdfDisplayTouchAdapter& operator=(EspIdfDisplayTouchAdapter&&) =
-        delete;
+    EspIdfDisplayTouchAdapter& operator=(EspIdfDisplayTouchAdapter&&) = delete;
 
     [[nodiscard]] bool initialize() override;
     [[nodiscard]] bool setRotation(
@@ -52,9 +51,9 @@ class EspIdfDisplayTouchAdapter final
     [[nodiscard]] bool setBacklight(bool enabled) override;
     [[nodiscard]] bool fillRect(device_platform::DisplayRect rect,
                                 std::uint16_t rgb565) override;
-    [[nodiscard]] bool flushRgb565(
-        device_platform::DisplayRect rect, const std::uint16_t* pixels,
-        std::size_t pixelCount) override;
+    [[nodiscard]] bool flushRgb565(device_platform::DisplayRect rect,
+                                   const std::uint16_t* pixels,
+                                   std::size_t pixelCount) override;
     [[nodiscard]] device_platform::RawTouchSample sampleTouch() override;
 
    private:

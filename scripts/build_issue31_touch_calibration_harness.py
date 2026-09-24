@@ -21,7 +21,13 @@ import check_build_profiles
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_DIR = ROOT / "build" / "esp32_bringup_issue31_touch_calibration"
 SDKCONFIG = BUILD_DIR / "sdkconfig"
-DEFAULTS = "sdkconfig.defaults;sdkconfig.defaults.bringup"
+# The last overlay deliberately disables the driver's product-like Z filter.
+# It is private to this actor-free measurement build and is never inherited by
+# normal bring-up or release profiles.
+DEFAULTS = (
+    "sdkconfig.defaults;sdkconfig.defaults.bringup;"
+    "sdkconfig.defaults.issue31_touch_calibration"
+)
 HARNESS_DEFINE = "APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS"
 
 
@@ -84,7 +90,14 @@ def verify_effective_configuration() -> None:
         raise SystemExit("harness sdkconfig did not select esp32_bringup")
     if values.get("CONFIG_APP_PROFILE_ESP32_RELEASE") == "y":
         raise SystemExit("harness sdkconfig selected the release profile")
+    if values.get("CONFIG_XPT2046_Z_THRESHOLD") != "1":
+        raise SystemExit(
+            "harness sdkconfig must set CONFIG_XPT2046_Z_THRESHOLD=1 for "
+            "unfiltered measurement evidence"
+        )
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_PROFILE=ESP32_BRINGUP")
+    print("PASS: ISSUE31_CALIBRATION_CAPTURE_XPT2046_Z_THRESHOLD=1")
+    print("PASS: ISSUE31_CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_ACTUATORS=DISABLED")
     print("PASS: ISSUE31_CALIBRATION_CAPTURE_NVS_WRITES=NONE_BY_DESIGN")
 

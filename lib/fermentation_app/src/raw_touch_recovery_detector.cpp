@@ -5,7 +5,7 @@ namespace fermentation {
 bool RawTouchRecoveryDetector::isHeldContact(
     const device_platform::RawTouchSample& sample) const noexcept {
     return sample.status == device_platform::RawTouchSampleStatus::Contact &&
-          sample.contact && sample.strength >= minimumStrength_;
+           sample.contact && sample.strength >= minimumStrength_;
 }
 
 bool RawTouchRecoveryDetector::observe(

@@ -14,6 +14,7 @@ namespace fermentation {
 
 class FermentationApplication;
 class FermentationApplicationTestAccess;
+struct CommandDecision;
 
 enum class FermentationUiAction : std::uint8_t {
     StartProgram,
@@ -290,7 +291,9 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult fromCommandStatus(
         CommandStatus status,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
-            std::nullopt);
+            std::nullopt,
+        FermentationUiCommandPhase phase =
+            FermentationUiCommandPhase::DecisionOnly);
     [[nodiscard]] static FermentationUiCommandResult fromTransitionDecision(
         DecisionStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromRunPersistenceResult(
@@ -315,7 +318,8 @@ class FermentationUiCommandBridge {
         const RunCommandState& current,
         const FermentationApplicationPreparedRequest& request,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
-            std::nullopt);
+            std::nullopt,
+        CommandDecision* decisionOut = nullptr);
     [[nodiscard]] static FermentationUiCommandResult fromFallbackResult(
         RunPersistenceResultStatus status);
 

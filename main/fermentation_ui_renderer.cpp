@@ -15,7 +15,8 @@ namespace {
 constexpr std::uint16_t kHeaderHeight = 32U;
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
-constexpr char kLogoAssetPath[] = "assets/branding/manuengineer/ManuEngineer.svg";
+constexpr char kLogoAssetPath[] =
+    "assets/branding/manuengineer/ManuEngineer.svg";
 
 std::uint16_t rgb565(std::uint32_t rgb) noexcept {
     const auto red = static_cast<std::uint16_t>((rgb >> 16U) & 0xFFU);
@@ -84,24 +85,27 @@ void addText(std::vector<ScreenDrawCommand>& commands,
              device_platform::ThemeToken token,
              device_platform::ThemeToken background =
                  device_platform::ThemeToken::Canvas) {
-    commands.push_back({ScreenDrawKind::Text, rect, token, background,
-                        resolve(packs, locale, key).value, {}});
+    commands.push_back({ScreenDrawKind::Text,
+                        rect,
+                        token,
+                        background,
+                        resolve(packs, locale, key).value,
+                        {}});
 }
 
 void addRawText(std::vector<ScreenDrawCommand>& commands,
                 device_platform::DisplayRect rect, std::string text,
                 device_platform::ThemeToken token,
                 device_platform::ThemeToken background) {
-    commands.push_back({ScreenDrawKind::Text, rect, token, background,
-                        std::move(text), {}});
+    commands.push_back(
+        {ScreenDrawKind::Text, rect, token, background, std::move(text), {}});
 }
 
 void addLogo(std::vector<ScreenDrawCommand>& commands,
              device_platform::DisplayRect rect) {
-    commands.push_back({ScreenDrawKind::Logo, rect,
-                        device_platform::ThemeToken::TextPrimary,
-                        device_platform::ThemeToken::Surface, "ManuEngineer",
-                        kLogoAssetPath});
+    commands.push_back(
+        {ScreenDrawKind::Logo, rect, device_platform::ThemeToken::TextPrimary,
+         device_platform::ThemeToken::Surface, "ManuEngineer", kLogoAssetPath});
 }
 
 device_platform::TextKey appKey(std::string_view value) {
@@ -130,7 +134,8 @@ device_platform::TextKey homeModeKey(FermentationHomeMode mode) {
 
 std::string temperatureText(const TemperatureView& temperature) {
     if (!temperature.valueCelsius.has_value()) return "--.- C";
-    const auto scaled = static_cast<int>(temperature.valueCelsius.value() * 10.0);
+    const auto scaled =
+        static_cast<int>(temperature.valueCelsius.value() * 10.0);
     const auto absolute = scaled < 0 ? -scaled : scaled;
     std::string result;
     if (scaled < 0) result.push_back('-');
@@ -178,7 +183,8 @@ std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
 }
 
 RepresentativeScreen makeRepresentativeScreen(
-    const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
+    const FermentationUiSnapshot& snapshot,
+    FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
     std::optional<device_platform::DeviceUiTarget> pressedTarget,
@@ -201,10 +207,10 @@ RepresentativeScreen makeRepresentativeScreen(
         [&buildCatalog](const device_platform::ThemeDescriptor& descriptor) {
             return descriptor.id == buildCatalog.defaultTheme;
         });
-    screen.theme = themeIt != themeDescriptors.end()
-                       ? *themeIt
-                       : device_platform::ThemeDescriptor{
-                             buildCatalog.defaultTheme, {}};
+    screen.theme =
+        themeIt != themeDescriptors.end()
+            ? *themeIt
+            : device_platform::ThemeDescriptor{buildCatalog.defaultTheme, {}};
     screen.logoAssetPath = kLogoAssetPath;
     screen.clockText = formatClockText(clock);
     screen.refreshRevision = snapshot.refreshRevision;
@@ -244,8 +250,8 @@ RepresentativeScreen makeRepresentativeScreen(
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
 
-        const auto temperatureCount = std::min<std::size_t>(
-            snapshot.temperatures.size(), 3U);
+        const auto temperatureCount =
+            std::min<std::size_t>(snapshot.temperatures.size(), 3U);
         for (std::size_t index = 0U; index < temperatureCount; ++index) {
             const auto left = static_cast<std::uint16_t>(8U + index * 104U);
             addFill(commands, {left, 68U, 96U, 48U},
@@ -259,10 +265,12 @@ RepresentativeScreen makeRepresentativeScreen(
                  {static_cast<std::uint16_t>(left + 4U), 90U, 88U, 14U},
                  device_platform::ThemeToken::StatusInformation,
                  device_platform::ThemeToken::Surface,
-                 temperatureText(snapshot.temperatures[index]), {}});
+                 temperatureText(snapshot.temperatures[index]),
+                 {}});
         }
         addText(commands, textPacks, locale, appKey("messages"),
-                {8U, 128U, 88U, 14U}, device_platform::ThemeToken::StatusWarning,
+                {8U, 128U, 88U, 14U},
+                device_platform::ThemeToken::StatusWarning,
                 device_platform::ThemeToken::Canvas);
         addText(commands, textPacks, locale,
                 snapshot.service.available ? appKey("service")
@@ -282,23 +290,23 @@ RepresentativeScreen makeRepresentativeScreen(
                 std::min<std::size_t>(screen.workspace.programList.size(), 3U);
             for (std::size_t index = 0U; index < rowCount; ++index) {
                 const auto& entry = screen.workspace.programList[index];
-                const auto top =
-                    static_cast<std::uint16_t>(68U + index * 18U);
+                const auto top = static_cast<std::uint16_t>(68U + index * 18U);
                 addFill(commands, {8U, top, 304U, 16U},
                         device_platform::ThemeToken::Surface);
-                addRawText(commands,
-                          {12U, static_cast<std::uint16_t>(top + 2U), 296U, 12U},
-                          entry.program.program.name,
-                          entry.startable
-                              ? device_platform::ThemeToken::TextPrimary
-                              : device_platform::ThemeToken::TextSecondary,
-                          device_platform::ThemeToken::Surface);
+                addRawText(
+                    commands,
+                    {12U, static_cast<std::uint16_t>(top + 2U), 296U, 12U},
+                    entry.program.program.name,
+                    entry.startable
+                        ? device_platform::ThemeToken::TextPrimary
+                        : device_platform::ThemeToken::TextSecondary,
+                    device_platform::ThemeToken::Surface);
             }
         } else if (screen.workspace.confirmationProgramName.has_value()) {
             addRawText(commands, {8U, 68U, 304U, 16U},
-                      *screen.workspace.confirmationProgramName,
-                      device_platform::ThemeToken::TextPrimary,
-                      device_platform::ThemeToken::Canvas);
+                       *screen.workspace.confirmationProgramName,
+                       device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas);
         }
         if (screen.workspace.blockedReason.has_value()) {
             addText(commands, textPacks, locale,
@@ -306,13 +314,13 @@ RepresentativeScreen makeRepresentativeScreen(
                     device_platform::ThemeToken::StatusWarning,
                     device_platform::ThemeToken::Canvas);
         } else if (!screen.workspace.unavailableCapabilities.empty()) {
-            addRawText(
-                commands, {8U, 128U, 304U, 14U},
-                resolve(textPacks, locale, appKey("unavailable")).value + " " +
-                    std::to_string(
-                        screen.workspace.unavailableCapabilities.size()),
-                device_platform::ThemeToken::StatusWarning,
-                device_platform::ThemeToken::Canvas);
+            addRawText(commands, {8U, 128U, 304U, 14U},
+                       resolve(textPacks, locale, appKey("unavailable")).value +
+                           " " +
+                           std::to_string(
+                               screen.workspace.unavailableCapabilities.size()),
+                       device_platform::ThemeToken::StatusWarning,
+                       device_platform::ThemeToken::Canvas);
         }
     }
 
@@ -340,8 +348,7 @@ RepresentativeScreen makeRepresentativeScreen(
          ++index) {
         const auto left = static_cast<std::uint16_t>(index * 80U);
         const auto& slot = screen.workspace.bottomSlots[index];
-        addFill(commands,
-                {left, kControlTop, 80U, kControlHeight},
+        addFill(commands, {left, kControlTop, 80U, kControlHeight},
                 slot.enabled ? device_platform::ThemeToken::PrimaryAction
                              : device_platform::ThemeToken::SecondaryAction);
         addText(commands, textPacks, locale, slot.label,
@@ -353,14 +360,17 @@ RepresentativeScreen makeRepresentativeScreen(
                              : device_platform::ThemeToken::SecondaryAction);
     }
     if (pressedTarget.has_value() &&
-        pressedTarget->kind == device_platform::DeviceUiTargetKind::BottomSlot &&
+        pressedTarget->kind ==
+            device_platform::DeviceUiTargetKind::BottomSlot &&
         pressedTarget->slotIndex < screen.workspace.bottomSlots.size()) {
         const auto left =
             static_cast<std::uint16_t>(pressedTarget->slotIndex * 80U);
         commands.push_back({ScreenDrawKind::PressFeedback,
                             {left, kControlTop, 80U, kControlHeight},
                             device_platform::ThemeToken::SecondaryAction,
-                            device_platform::ThemeToken::PrimaryAction, {}, {}});
+                            device_platform::ThemeToken::PrimaryAction,
+                            {},
+                            {}});
     }
     return screen;
 }
@@ -377,18 +387,19 @@ bool operator==(const ScreenRenderKey& left,
         }
     }
     return left.refreshRevision == right.refreshRevision &&
-          left.locale == right.locale && left.page == right.page &&
-          left.pagerCurrentIndex == right.pagerCurrentIndex &&
-          left.pagerItemCount == right.pagerItemCount &&
-          left.hasConfirmationWarning == right.hasConfirmationWarning &&
-          left.confirmationProgramName == right.confirmationProgramName &&
-          left.completionLocked == right.completionLocked &&
-          left.blockedReason == right.blockedReason &&
-          left.unavailableCapabilityCount == right.unavailableCapabilityCount &&
-          left.programListSize == right.programListSize &&
-          left.pressedBottomSlotIndex == right.pressedBottomSlotIndex &&
-          left.networkStatus == right.networkStatus &&
-          left.trustedUtc == right.trustedUtc && left.themeId == right.themeId;
+           left.locale == right.locale && left.page == right.page &&
+           left.pagerCurrentIndex == right.pagerCurrentIndex &&
+           left.pagerItemCount == right.pagerItemCount &&
+           left.hasConfirmationWarning == right.hasConfirmationWarning &&
+           left.confirmationProgramName == right.confirmationProgramName &&
+           left.completionLocked == right.completionLocked &&
+           left.blockedReason == right.blockedReason &&
+           left.unavailableCapabilityCount ==
+               right.unavailableCapabilityCount &&
+           left.programListSize == right.programListSize &&
+           left.pressedBottomSlotIndex == right.pressedBottomSlotIndex &&
+           left.networkStatus == right.networkStatus &&
+           left.trustedUtc == right.trustedUtc && left.themeId == right.themeId;
 }
 
 ScreenRenderKey makeScreenRenderKey(
@@ -399,7 +410,8 @@ ScreenRenderKey makeScreenRenderKey(
     key.page = screen.workspace.page;
     key.pagerCurrentIndex = screen.workspace.pager.currentIndex;
     key.pagerItemCount = screen.workspace.pager.itemCount;
-    key.hasConfirmationWarning = screen.workspace.confirmationWarning.has_value();
+    key.hasConfirmationWarning =
+        screen.workspace.confirmationWarning.has_value();
     key.confirmationProgramName =
         screen.workspace.confirmationProgramName.value_or(std::string{});
     key.completionLocked = screen.workspace.completionLocked;
@@ -434,10 +446,11 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         device_platform::DeviceUiTargetKind::BottomSlot, index};
 }
 
-FermentationUiWorkspacePress routePress(
-    FermentationTouchWorkspace& workspace, const FermentationUiSnapshot& snapshot,
-    const RepresentativeScreen& screen, std::uint16_t x, std::uint16_t y,
-    const ProgramCatalog* catalog) {
+FermentationUiWorkspacePress routePress(FermentationTouchWorkspace& workspace,
+                                        const FermentationUiSnapshot& snapshot,
+                                        const RepresentativeScreen& screen,
+                                        std::uint16_t x, std::uint16_t y,
+                                        const ProgramCatalog* catalog) {
     const auto target = targetAt(screen, x, y);
     if (!target.has_value()) return {};
     return workspace.press(snapshot, target.value(), catalog);

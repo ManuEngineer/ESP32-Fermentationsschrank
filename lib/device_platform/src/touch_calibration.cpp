@@ -15,7 +15,7 @@ bool writeString(ByteWriter& writer, const std::string& value) {
     if (value.size() > 0xFFFFU) return false;
     return big_endian::writeUint16(writer,
                                    static_cast<std::uint16_t>(value.size())) &&
-          writer.writeBytes(value.data(), value.size());
+           writer.writeBytes(value.data(), value.size());
 }
 
 bool readString(ByteReader& reader, std::size_t maximumBytes,
@@ -50,7 +50,7 @@ CalibratedTouchPoint applyTouchCalibration(const TouchCalibrationModel& model,
     const auto x = static_cast<double>(rawX);
     const auto y = static_cast<double>(rawY);
     return {model.a * x + model.b * y + model.c,
-           model.d * x + model.e * y + model.f};
+            model.d * x + model.e * y + model.f};
 }
 
 bool touchCalibrationModelIsWellFormed(
@@ -59,8 +59,8 @@ bool touchCalibrationModelIsWellFormed(
     if (expectedBoardControllerId.empty()) return false;
     if (model.boardControllerId != expectedBoardControllerId) return false;
     return std::isfinite(model.a) && std::isfinite(model.b) &&
-          std::isfinite(model.c) && std::isfinite(model.d) &&
-          std::isfinite(model.e) && std::isfinite(model.f);
+           std::isfinite(model.c) && std::isfinite(model.d) &&
+           std::isfinite(model.e) && std::isfinite(model.f);
 }
 
 TouchCalibrationCodecStatus encodeTouchCalibrationPayload(
@@ -150,12 +150,13 @@ TouchCalibrationLoadResult TouchCalibrationStore::load(
     if (decoded.envelope->storageEpoch != kTouchCalibrationStorageEpoch) {
         return {TouchCalibrationLoadStatus::OtherEpoch, std::nullopt};
     }
-    const auto payload = decodeTouchCalibrationPayload(decoded.envelope->payload);
+    const auto payload =
+        decodeTouchCalibrationPayload(decoded.envelope->payload);
     if (!payload.model.has_value()) {
         return {TouchCalibrationLoadStatus::InvalidRecord, std::nullopt};
     }
     if (!touchCalibrationModelIsWellFormed(*payload.model,
-                                          expectedBoardControllerId)) {
+                                           expectedBoardControllerId)) {
         return {TouchCalibrationLoadStatus::InvalidRecord, std::nullopt};
     }
     return {TouchCalibrationLoadStatus::Available,

@@ -33,7 +33,8 @@ gepinnten LVGL-eigenen Konverter.
 
 Provenienz (Eingabe-SHA256, rsvg-convert-Version, LVGL-Version/
 Converterpfad, Konvertierungsargumente, generierte Groesse,
-Ausgabe-SHA256) wird als Kommentarblock in die generierte .c-Datei
+clang-format-Version und Ausgabe-SHA256) wird als Kommentarblock in die
+generierte .c-Datei
 geschrieben und zusaetzlich auf stdout ausgegeben, damit sie unabhaengig
 vom generierten Artefakt nachvollziehbar bleibt.
 """
@@ -82,6 +83,37 @@ def run_capture(cmd: list) -> str:
             f"command failed ({' '.join(cmd)}):\n{result.stderr}"
         )
     return result.stdout
+
+
+def format_generated_sources(*paths: Path) -> str:
+    formatter = shutil.which("clang-format-18")
+    if formatter is None:
+        raise BrandingAssetError(
+            "clang-format-18 not found on PATH; generated branding output "
+            "must pass the repository's existing format gate"
+        )
+    version = run_capture([formatter, "--version"]).strip()
+    result = subprocess.run(
+        [formatter, "-i", *(str(path) for path in paths)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise BrandingAssetError(
+            f"clang-format-18 failed for generated branding output:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+    return version
+
+
+def clang_format_version() -> str:
+    formatter = shutil.which("clang-format-18")
+    if formatter is None:
+        raise BrandingAssetError(
+            "clang-format-18 not found on PATH; generated branding output "
+            "must pass the repository's existing format gate"
+        )
+    return run_capture([formatter, "--version"]).strip()
 
 
 def rsvg_convert_version() -> str:
@@ -259,6 +291,7 @@ def generate(*, keep_intermediate_png: Path | None = None) -> dict:
     input_sha256 = sha256_of(MASTER_SVG)
     rsvg_version = rsvg_convert_version()
     lvgl_ver = lvgl_version()
+    clang_format_ver = clang_format_version()
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -290,6 +323,7 @@ def generate(*, keep_intermediate_png: Path | None = None) -> dict:
         f"//   rsvg-convert version: {rsvg_version}",
         f"//   LVGL version (managed_components/lvgl__lvgl): {lvgl_ver}",
         "//   LVGL converter: managed_components/lvgl__lvgl/scripts/LVGLImage.py",
+        f"//   clang-format version: {clang_format_ver}",
         f"//   conversion: {args_display}",
         f"//   output size: {TARGET_WIDTH}x{TARGET_HEIGHT}, color format {COLOR_FORMAT}",
         "//",
@@ -312,6 +346,9 @@ def generate(*, keep_intermediate_png: Path | None = None) -> dict:
     # reported on stdout and in a small sidecar provenance note, not
     # inside the hashed file itself.
     output_h_path.write_text(render_header(ASSET_NAME), encoding="utf-8")
+    clang_format_ver = format_generated_sources(output_c_path, output_h_path)
+    output_sha256 = sha256_of(output_c_path)
+    output_size_bytes = output_c_path.stat().st_size
 
     provenance_md_path = OUTPUT_DIR / f"{ASSET_NAME}.PROVENANCE.md"
     provenance_md_path.write_text(
@@ -330,6 +367,7 @@ def generate(*, keep_intermediate_png: Path | None = None) -> dict:
                 f"- rsvg-convert version: `{rsvg_version}`",
                 f"- LVGL version (managed_components/lvgl__lvgl): `{lvgl_ver}`",
                 "- LVGL converter: `managed_components/lvgl__lvgl/scripts/LVGLImage.py`",
+                f"- clang-format version: `{clang_format_ver}`",
                 f"- Conversion: `{args_display}`",
                 f"- Output size: {TARGET_WIDTH}x{TARGET_HEIGHT}, color format {COLOR_FORMAT}",
                 f"- Output file: `{output_c_path.relative_to(REPO_ROOT)}`",
@@ -346,6 +384,7 @@ def generate(*, keep_intermediate_png: Path | None = None) -> dict:
         "input_sha256": input_sha256,
         "rsvg_convert_version": rsvg_version,
         "lvgl_version": lvgl_ver,
+        "clang_format_version": clang_format_ver,
         "conversion_args": args_display,
         "output_width": TARGET_WIDTH,
         "output_height": TARGET_HEIGHT,

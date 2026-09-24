@@ -60,8 +60,8 @@ void test_apply_affine_model_scales_and_offsets() {
     const auto model = affineModel();
     const CalibratedTouchPoint point =
         device_platform::applyTouchCalibration(model, 100U, 40U);
-    TEST_ASSERT_EQUAL_DOUBLE(60.0, point.x);   // 0.5*100 + 10
-    TEST_ASSERT_EQUAL_DOUBLE(7.0, point.y);    // 0.25*40 - 3
+    TEST_ASSERT_EQUAL_DOUBLE(60.0, point.x);  // 0.5*100 + 10
+    TEST_ASSERT_EQUAL_DOUBLE(7.0, point.y);   // 0.25*40 - 3
 }
 
 void test_well_formed_requires_matching_board_controller_id() {
@@ -92,7 +92,8 @@ void test_codec_roundtrip_preserves_model() {
         static_cast<int>(
             device_platform::encodeTouchCalibrationPayload(model, payload)));
 
-    const auto decoded = device_platform::decodeTouchCalibrationPayload(payload);
+    const auto decoded =
+        device_platform::decodeTouchCalibrationPayload(payload);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::TouchCalibrationCodecStatus::Success),
         static_cast<int>(decoded.status));
@@ -118,8 +119,9 @@ void test_store_load_without_prior_write_is_not_found() {
     TouchCalibrationStore calibration(store);
     const auto result =
         calibration.load(TouchCalibrationSlot::Active, kBoardId);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TouchCalibrationLoadStatus::NotFound),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TouchCalibrationLoadStatus::NotFound),
+        static_cast<int>(result.status));
 }
 
 void test_store_write_then_load_active_returns_committed_model() {
@@ -132,9 +134,11 @@ void test_store_write_then_load_active_returns_committed_model() {
         static_cast<int>(TouchCalibrationWriteStatus::Committed),
         static_cast<int>(written.status));
 
-    const auto loaded = calibration.load(TouchCalibrationSlot::Active, kBoardId);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TouchCalibrationLoadStatus::Available),
-                          static_cast<int>(loaded.status));
+    const auto loaded =
+        calibration.load(TouchCalibrationSlot::Active, kBoardId);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TouchCalibrationLoadStatus::Available),
+        static_cast<int>(loaded.status));
     TEST_ASSERT_TRUE(loaded.record.has_value());
     TEST_ASSERT_TRUE(loaded.record->model == model);
     TEST_ASSERT_EQUAL_UINT64(1U, loaded.record->recordSequence);
@@ -148,12 +152,13 @@ void test_store_active_and_fallback_slots_are_independent() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationWriteStatus::Committed),
         static_cast<int>(
-            calibration.write(TouchCalibrationSlot::Active, active, 1U).status));
+            calibration.write(TouchCalibrationSlot::Active, active, 1U)
+                .status));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationWriteStatus::Committed),
-        static_cast<int>(calibration
-                             .write(TouchCalibrationSlot::Fallback, fallback, 1U)
-                             .status));
+        static_cast<int>(
+            calibration.write(TouchCalibrationSlot::Fallback, fallback, 1U)
+                .status));
 
     const auto loadedActive =
         calibration.load(TouchCalibrationSlot::Active, kBoardId);
@@ -169,7 +174,8 @@ void test_store_load_rejects_mismatched_board_controller_id() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
     const auto model = measuredFixtureModel();
-    static_cast<void>(calibration.write(TouchCalibrationSlot::Active, model, 1U));
+    static_cast<void>(
+        calibration.write(TouchCalibrationSlot::Active, model, 1U));
 
     const auto loaded =
         calibration.load(TouchCalibrationSlot::Active, "a-different-board");
@@ -182,13 +188,14 @@ void test_store_load_rejects_mismatched_board_controller_id() {
 void test_store_load_detects_corruption_as_invalid_record() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
-    static_cast<void>(
-        calibration.write(TouchCalibrationSlot::Active, measuredFixtureModel(), 1U));
+    static_cast<void>(calibration.write(TouchCalibrationSlot::Active,
+                                        measuredFixtureModel(), 1U));
     store.injectCorruption(
         TouchCalibrationStore::key(TouchCalibrationSlot::Active),
         std::string("not-a-valid-envelope"));
 
-    const auto loaded = calibration.load(TouchCalibrationSlot::Active, kBoardId);
+    const auto loaded =
+        calibration.load(TouchCalibrationSlot::Active, kBoardId);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationLoadStatus::InvalidRecord),
         static_cast<int>(loaded.status));
@@ -198,8 +205,8 @@ void test_store_load_classifies_other_epoch_and_unsupported_schema() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
     std::string payload;
-    static_cast<void>(
-        device_platform::encodeTouchCalibrationPayload(measuredFixtureModel(), payload));
+    static_cast<void>(device_platform::encodeTouchCalibrationPayload(
+        measuredFixtureModel(), payload));
 
     std::string wrongEpochEnvelope;
     static_cast<void>(device_platform::encodeEnvelope(
@@ -237,8 +244,9 @@ void test_store_load_classifies_other_epoch_and_unsupported_schema() {
 void test_store_write_rejects_zero_record_sequence() {
     SimulatedPersistentStateStore store;
     TouchCalibrationStore calibration(store);
-    const auto written = calibration.write(TouchCalibrationSlot::Active,
-                                           measuredFixtureModel(), /*recordSequence=*/0U);
+    const auto written =
+        calibration.write(TouchCalibrationSlot::Active, measuredFixtureModel(),
+                          /*recordSequence=*/0U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TouchCalibrationWriteStatus::WriteFailure),
         static_cast<int>(written.status));
@@ -276,9 +284,11 @@ void test_default_constructed_model_is_not_encodable_or_writable() {
         static_cast<int>(TouchCalibrationWriteStatus::CapacityFailure),
         static_cast<int>(written.status));
     // No record was ever committed for this unmeasured model.
-    const auto loaded = calibration.load(TouchCalibrationSlot::Active, kBoardId);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TouchCalibrationLoadStatus::NotFound),
-                          static_cast<int>(loaded.status));
+    const auto loaded =
+        calibration.load(TouchCalibrationSlot::Active, kBoardId);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TouchCalibrationLoadStatus::NotFound),
+        static_cast<int>(loaded.status));
 }
 
 }  // namespace

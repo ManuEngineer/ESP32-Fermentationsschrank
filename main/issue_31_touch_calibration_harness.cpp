@@ -14,6 +14,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "generated/board_profile_r1.hpp"
+#include "sdkconfig.h"
 
 namespace fermentation::issue_31_touch_calibration {
 namespace {
@@ -195,7 +196,7 @@ void logSummary(const ReferencePoint& point,
     ESP_LOGI(kTag,
              "CALIBRATION_POINT_SUMMARY id=%s role=%s target_x=%u target_y=%u "
              "samples=%" PRIu32
-             "raw_x_min=%u raw_x_max=%u raw_y_min=%u "
+             " raw_x_min=%u raw_x_max=%u raw_y_min=%u "
              "raw_y_max=%u strength_min=%u strength_max=%u first_us=%" PRIu64
              " last_us=%" PRIu64,
              point.id, roleName(point.role),
@@ -304,6 +305,10 @@ void run() noexcept {
              "CALIBRATION_CAPTURE_HARNESS=READY "
              "ACTUATOR_RELEASE=NO CALIBRATION_RECORD_WRITTEN=NO "
              "RAW_SAMPLE_SOURCE=ESP_IDF_XPT2046_NATIVE");
+    ESP_LOGI(kTag,
+             "CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE "
+             "XPT2046_Z_THRESHOLD=%d",
+             CONFIG_XPT2046_Z_THRESHOLD);
     ESP_LOGI(kTag,
              "CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_"
              "VALIDATION_2_INDEPENDENT");

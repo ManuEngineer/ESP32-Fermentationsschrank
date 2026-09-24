@@ -26,10 +26,10 @@ lv_color_t color565ToLv(std::uint16_t color) {
 
 void styleObject(lv_obj_t* object, device_platform::ThemeToken foreground,
                  device_platform::ThemeToken background) {
-    lv_obj_set_style_text_color(object,
-                                color565ToLv(themeColor565(foreground)), 0U);
-    lv_obj_set_style_bg_color(object,
-                              color565ToLv(themeColor565(background)), 0U);
+    lv_obj_set_style_text_color(object, color565ToLv(themeColor565(foreground)),
+                                0U);
+    lv_obj_set_style_bg_color(object, color565ToLv(themeColor565(background)),
+                              0U);
     lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0U);
     lv_obj_set_style_border_width(object, 0U, 0U);
     lv_obj_set_style_radius(object, 0U, 0U);
@@ -87,8 +87,7 @@ struct ProductiveLvglRenderer::Impl final {
     }
 
     device_platform_esp_idf::EspIdfDisplayTouchConfig config;
-    std::unique_ptr<device_platform_esp_idf::EspIdfDisplayTouchAdapter>
-        adapter;
+    std::unique_ptr<device_platform_esp_idf::EspIdfDisplayTouchAdapter> adapter;
     lv_display_t* display{nullptr};
     lv_obj_t* root{nullptr};
     lv_indev_t* touchInput{nullptr};
@@ -117,8 +116,7 @@ struct ProductiveLvglRenderer::Impl final {
     std::uint16_t touchPressY{0U};
     bool touchPressEdgePending{false};
 
-    static void readTouchFailClosed(lv_indev_t* indev,
-                                    lv_indev_data_t* data) {
+    static void readTouchFailClosed(lv_indev_t* indev, lv_indev_data_t* data) {
         auto* state = static_cast<Impl*>(lv_indev_get_user_data(indev));
         data->state = LV_INDEV_STATE_RELEASED;
         if (state == nullptr || state->adapter == nullptr) return;
@@ -230,10 +228,12 @@ bool ProductiveLvglRenderer::initialize() {
     auto& state = *impl_;
     if (state.initialized) return true;
 
-    state.adapter = std::make_unique<
-        device_platform_esp_idf::EspIdfDisplayTouchAdapter>(state.config);
+    state.adapter =
+        std::make_unique<device_platform_esp_idf::EspIdfDisplayTouchAdapter>(
+            state.config);
     if (state.adapter == nullptr || !state.adapter->initialize() ||
-        !state.adapter->setRotation(device_platform::DisplayRotation::Rotate0) ||
+        !state.adapter->setRotation(
+            device_platform::DisplayRotation::Rotate0) ||
         !state.adapter->setBacklight(true)) {
         return false;
     }
@@ -283,7 +283,8 @@ bool ProductiveLvglRenderer::initialize() {
 }
 
 bool ProductiveLvglRenderer::render(
-    const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
+    const FermentationUiSnapshot& snapshot,
+    FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
     std::optional<device_platform::DeviceUiTarget> pressedTarget,

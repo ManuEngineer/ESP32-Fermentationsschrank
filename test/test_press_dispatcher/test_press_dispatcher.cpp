@@ -1,12 +1,14 @@
 #include <unity.h>
 
 #include <optional>
+#include <variant>
 
 #include "device_platform.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_text.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "virtual_time_source.hpp"
 
 #include "../../main/fermentation_ui_press_dispatcher.hpp"
 
@@ -44,6 +46,45 @@ ManualTimedRunValues validManualTimedValues() {
     return values;
 }
 
+CrossRolePlausibilityContext validOwningEvidence() {
+    CrossRolePlausibilityContext evidence;
+    evidence.air.quality = device_platform::SensorQuality::Valid;
+    evidence.cooling.quality = device_platform::SensorQuality::Valid;
+    evidence.product.quality = device_platform::SensorQuality::Valid;
+    return evidence;
+}
+
+struct OwningAppFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    FermentationApplication application;
+
+    OwningAppFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        timeSource.setUnixTimeSeconds(1'700'000'000LL);
+        TEST_ASSERT_TRUE(
+            application.begin(platform, store, timeZoneResolver, timeSource));
+        application.publishOwningRuntimeEvidence(validOwningEvidence());
+    }
+};
+
+void assertAppliedOwningResult(const WorkspacePressDispatchResult& result) {
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.commandResult->phase));
+    TEST_ASSERT_TRUE(std::holds_alternative<RunPersistenceResultStatus>(
+        result.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(std::get<RunPersistenceResultStatus>(
+                              result.commandResult->detail)));
+}
+
 void test_dispatch_no_typed_payload_is_reported_as_such() {
     AppFixture fixture;
     FermentationUiWorkspacePress press;
@@ -67,8 +108,9 @@ void test_dispatch_action_reaches_prepare_and_confirm() {
 
     const auto result =
         dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(WorkspacePressDispatchOutcome::Dispatched),
-                          static_cast<int>(result.outcome));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::DecisionOnly),
+        static_cast<int>(result.outcome));
     TEST_ASSERT_TRUE(result.prepareStatus.has_value());
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
@@ -96,8 +138,9 @@ void test_dispatch_resume_fallback_is_forwarded_unmodified() {
 
     const auto result =
         dispatchWorkspacePress(fixture.application, {}, press, 1000U);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(WorkspacePressDispatchOutcome::Dispatched),
-                          static_cast<int>(result.outcome));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::DecisionOnly),
+        static_cast<int>(result.outcome));
     TEST_ASSERT_FALSE(result.prepareStatus.has_value());
     TEST_ASSERT_TRUE(result.resumeFallbackStatus.has_value());
     // No recovery is pending in this fresh application: the existing
@@ -107,6 +150,131 @@ void test_dispatch_resume_fallback_is_forwarded_unmodified() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::NotInitialized),
         static_cast<int>(*result.resumeFallbackStatus));
+}
+
+void test_prepared_request_has_no_owning_mutation_before_handoff() {
+    OwningAppFixture fixture;
+    const auto before = fixture.application.uiSnapshot();
+    FermentationUiCommandContext context;
+    context.expected = before.revisions;
+    context.monotonicMillis = fixture.timeSource.monotonicMillis();
+    const FermentationUiEnvelopePayload payload =
+        FermentationUiStartManualTimedIntent{validManualTimedValues()};
+
+    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::Prepared),
+        static_cast<int>(prepared.status));
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
+
+    const auto after = fixture.application.uiSnapshot();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Standby),
+                          static_cast<int>(after.home.mode));
+    TEST_ASSERT_EQUAL_UINT32(before.revisions.expectedStateSequence,
+                             after.revisions.expectedStateSequence);
+}
+
+void test_confirmed_manual_start_reaches_existing_owning_persist_path() {
+    OwningAppFixture fixture;
+    const auto snapshot = fixture.application.uiSnapshot();
+    FermentationUiWorkspacePress press;
+    press.action = FermentationUiEnvelopePayload{
+        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
+
+    const auto result =
+        dispatchWorkspacePress(fixture.application, snapshot, press,
+                               fixture.timeSource.monotonicMillis());
+    assertAppliedOwningResult(result);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::ActiveRun),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+void test_confirmed_stop_reaches_existing_owning_persist_path() {
+    OwningAppFixture fixture;
+    FermentationUiWorkspacePress start;
+    start.action = FermentationUiEnvelopePayload{
+        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
+    const auto started = dispatchWorkspacePress(
+        fixture.application, fixture.application.uiSnapshot(), start,
+        fixture.timeSource.monotonicMillis());
+    assertAppliedOwningResult(started);
+
+    fixture.timeSource.advanceMonotonicMillis(1U);
+    FermentationUiWorkspacePress stop;
+    FermentationUiStopRunIntent stopIntent;
+    stopIntent.option = StopOption::AbortAndTurnOff;
+    stop.action = FermentationUiEnvelopePayload{stopIntent};
+    const auto stopped = dispatchWorkspacePress(
+        fixture.application, fixture.application.uiSnapshot(), stop,
+        fixture.timeSource.monotonicMillis());
+    assertAppliedOwningResult(stopped);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::Standby),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+void test_revalidation_failure_does_not_enter_owning_path() {
+    OwningAppFixture fixture;
+    const auto snapshot = fixture.application.uiSnapshot();
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = fixture.timeSource.monotonicMillis();
+    const FermentationUiEnvelopePayload payload =
+        FermentationUiStartManualTimedIntent{validManualTimedValues()};
+    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+
+    fixture.application.publishOwningRuntimeEvidence(
+        CrossRolePlausibilityContext{});
+    const auto rejected = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(rejected.status));
+    TEST_ASSERT_FALSE(rejected.request.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::Standby),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+void test_duplicate_confirmed_request_preserves_owner_idempotency() {
+    OwningAppFixture fixture;
+    const auto snapshot = fixture.application.uiSnapshot();
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = fixture.timeSource.monotonicMillis();
+    const FermentationUiEnvelopePayload payload =
+        FermentationUiStartManualTimedIntent{validManualTimedValues()};
+    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    const auto confirmed = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    const auto commandId = confirmed.request->commandId();
+
+    const auto first =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(first.phase));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(first.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(first.detail)));
+    TEST_ASSERT_EQUAL_UINT64(commandId, confirmed.request->commandId());
+
+    const auto replay =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::DecisionOnly),
+        static_cast<int>(replay.phase));
+    TEST_ASSERT_TRUE(std::holds_alternative<CommandStatus>(replay.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::AlreadyProcessed),
+        static_cast<int>(std::get<CommandStatus>(replay.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::ActiveRun),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
 }
 
 void test_dispatch_transition_action_is_unavailable_no_owner() {
@@ -238,6 +406,11 @@ int main() {
     RUN_TEST(test_dispatch_no_typed_payload_is_reported_as_such);
     RUN_TEST(test_dispatch_action_reaches_prepare_and_confirm);
     RUN_TEST(test_dispatch_resume_fallback_is_forwarded_unmodified);
+    RUN_TEST(test_prepared_request_has_no_owning_mutation_before_handoff);
+    RUN_TEST(test_confirmed_manual_start_reaches_existing_owning_persist_path);
+    RUN_TEST(test_confirmed_stop_reaches_existing_owning_persist_path);
+    RUN_TEST(test_revalidation_failure_does_not_enter_owning_path);
+    RUN_TEST(test_duplicate_confirmed_request_preserves_owner_idempotency);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
     RUN_TEST(test_process_touch_without_contact_yields_no_target);

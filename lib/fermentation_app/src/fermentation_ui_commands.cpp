@@ -225,9 +225,9 @@ FermentationUiCommandBridge::confirmationRequest(
 
 FermentationUiCommandResult FermentationUiCommandBridge::fromCommandStatus(
     CommandStatus status,
-    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
-    auto result = makeResult(categoryFor(status), status,
-                             FermentationUiCommandPhase::DecisionOnly);
+    const std::optional<FermentationUiConfirmationRequest>& confirmation,
+    FermentationUiCommandPhase phase) {
+    auto result = makeResult(categoryFor(status), status, phase);
     if (status == CommandStatus::NotConfirmed && confirmation.has_value()) {
         result.confirmation = confirmation;
     }
@@ -367,9 +367,10 @@ FermentationUiCommandBridge::decideProductInsertedConfirmed(
 FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
     const RunCommandState& current,
     const FermentationApplicationPreparedRequest& request,
-    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    const std::optional<FermentationUiConfirmationRequest>& confirmation,
+    CommandDecision* decisionOut) {
     return std::visit(
-        [&current, &request, &confirmation](const auto& prepared) {
+        [&current, &request, &confirmation, decisionOut](const auto& prepared) {
             using Request = std::decay_t<decltype(prepared)>;
             CommandDecision decision;
             if constexpr (std::is_same_v<Request, ProgramStartRequest>) {
@@ -408,6 +409,7 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
                 decision = decideApplySensorSelectionAction(
                     current, prepared, *request.owningPlausibility());
             }
+            if (decisionOut != nullptr) *decisionOut = decision;
             return FermentationUiCommandBridge::fromCommandStatus(
                 decision.status, confirmation);
         },

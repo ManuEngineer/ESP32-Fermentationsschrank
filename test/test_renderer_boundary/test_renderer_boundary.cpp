@@ -12,10 +12,9 @@ namespace {
 
 bool hasText(const fermentation::main_ui::RepresentativeScreen& screen,
              std::string_view text) {
-    return std::any_of(screen.commands.begin(), screen.commands.end(),
-                       [text](const auto& command) {
-                           return command.text == text;
-                       });
+    return std::any_of(
+        screen.commands.begin(), screen.commands.end(),
+        [text](const auto& command) { return command.text == text; });
 }
 
 void test_representative_screen_uses_existing_workspace_and_three_locales() {
@@ -45,9 +44,8 @@ void test_representative_screen_uses_existing_workspace_and_three_locales() {
     const auto& lastSlotFill = de.commands[de.commands.size() - 2U];
     TEST_ASSERT_EQUAL_UINT16(80U, lastSlotFill.rect.width);
     TEST_ASSERT_EQUAL_UINT16(200U, lastSlotFill.rect.top);
-    TEST_ASSERT_EQUAL_STRING(
-        "assets/branding/manuengineer/ManuEngineer.svg",
-        de.commands[2].assetPath.c_str());
+    TEST_ASSERT_EQUAL_STRING("assets/branding/manuengineer/ManuEngineer.svg",
+                             de.commands[2].assetPath.c_str());
     TEST_ASSERT_TRUE(de.workspace.bottomSlots[0].enabled);
     TEST_ASSERT_TRUE(de.workspace.bottomSlots[0].label.valid());
 }
@@ -61,12 +59,13 @@ void test_bottom_press_returns_existing_target() {
         device_platform::LocaleId{"en"});
     const auto target = fermentation::main_ui::targetAt(screen, 20U, 220U);
     TEST_ASSERT_TRUE(target.has_value());
-    TEST_ASSERT_EQUAL(static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
-                      static_cast<int>(target->kind));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(target->kind));
     TEST_ASSERT_EQUAL_UINT8(0U, target->slotIndex);
 
-    const auto press = fermentation::main_ui::routePress(
-        workspace, snapshot, screen, 20U, 220U);
+    const auto press = fermentation::main_ui::routePress(workspace, snapshot,
+                                                         screen, 20U, 220U);
     TEST_ASSERT_NOT_EQUAL(
         static_cast<int>(device_platform::DeviceUiInteractionOutcome::Ignored),
         static_cast<int>(press.interaction.outcome));
@@ -184,9 +183,10 @@ void test_no_touch_means_no_press_feedback_command() {
         device_platform::LocaleId{"en"});
 
     TEST_ASSERT_FALSE(std::any_of(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
             return command.kind ==
-                  fermentation::main_ui::ScreenDrawKind::PressFeedback;
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
         }));
 }
 
@@ -201,9 +201,10 @@ void test_held_bottom_slot_renders_press_feedback_for_that_slot_only() {
         device_platform::LocaleId{"en"}, held);
 
     const auto feedback = std::find_if(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
             return command.kind ==
-                  fermentation::main_ui::ScreenDrawKind::PressFeedback;
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
         });
     TEST_ASSERT_TRUE(feedback != screen.commands.end());
     TEST_ASSERT_EQUAL_UINT16(160U, feedback->rect.left);
@@ -328,10 +329,9 @@ void test_network_status_changes_wlan_label_token() {
         device_platform::DeviceUiNetworkStatus::Unavailable);
 
     const auto findWlan = [](const auto& screen) {
-        return std::find_if(screen.commands.begin(), screen.commands.end(),
-                            [](const auto& command) {
-                                return command.text == "WLAN";
-                            });
+        return std::find_if(
+            screen.commands.begin(), screen.commands.end(),
+            [](const auto& command) { return command.text == "WLAN"; });
     };
     const auto connectedWlan = findWlan(connected);
     const auto unavailableWlan = findWlan(unavailable);
@@ -347,7 +347,8 @@ void test_theme_is_sourced_from_canonical_r1_catalog() {
         snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
         device_platform::LocaleId{"en"});
 
-    const auto buildCatalog = fermentation::makeFermentationR1DeviceUiBuildCatalog();
+    const auto buildCatalog =
+        fermentation::makeFermentationR1DeviceUiBuildCatalog();
     TEST_ASSERT_TRUE(screen.theme.id == buildCatalog.defaultTheme);
     TEST_ASSERT_FALSE(screen.theme.declaredTokens.empty());
 }
@@ -365,8 +366,8 @@ void test_render_key_changes_on_network_status_and_clock() {
     const device_platform::ClockViewInput clock{3661, {}};
     const auto clocked = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"},
-        std::nullopt, nullptr, device_platform::DeviceUiNetworkStatus::Unavailable,
-        clock);
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, clock);
 
     TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(unavailable) ==
                       fermentation::main_ui::makeScreenRenderKey(connected));
@@ -399,13 +400,15 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_FALSE(beforeValues.workspace.bottomSlots[2].enabled);
 
-    workspace.setManualHoldingValues(fermentation::FermentationUiManualRunPlanValues{});
+    workspace.setManualHoldingValues(
+        fermentation::FermentationUiManualRunPlanValues{});
     const auto afterValues = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
 
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeValues) ==
-                      fermentation::main_ui::makeScreenRenderKey(afterValues));
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeScreenRenderKey(beforeValues) ==
+        fermentation::main_ui::makeScreenRenderKey(afterValues));
 }
 
 void test_render_key_changes_when_program_edit_candidate_enables_save() {
@@ -414,8 +417,9 @@ void test_render_key_changes_when_program_edit_candidate_enables_save() {
     workspace.setPage(fermentation::FermentationUiPage::ProgramEdit);
     const auto packs = fermentation::makeFermentationUiTextPacks();
 
-    const auto beforeCandidate = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto beforeCandidate =
+        fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_FALSE(beforeCandidate.workspace.bottomSlots[3].enabled);
 
     workspace.setProgramEditCandidate(fermentation::ProgramDocument{});
@@ -423,8 +427,9 @@ void test_render_key_changes_when_program_edit_candidate_enables_save() {
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_TRUE(afterCandidate.workspace.bottomSlots[3].enabled);
 
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeCandidate) ==
-                      fermentation::main_ui::makeScreenRenderKey(afterCandidate));
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeScreenRenderKey(beforeCandidate) ==
+        fermentation::main_ui::makeScreenRenderKey(afterCandidate));
 }
 
 // Branding FOLLOW-UP layout proof: the Logo command's rect must be exactly
@@ -440,21 +445,23 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
         device_platform::LocaleId{"en"});
 
     const auto logo = std::find_if(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
             return command.kind == fermentation::main_ui::ScreenDrawKind::Logo;
         });
     TEST_ASSERT_TRUE(logo != screen.commands.end());
     TEST_ASSERT_EQUAL_UINT16(168U, logo->rect.width);
     TEST_ASSERT_EQUAL_UINT16(24U, logo->rect.height);
 
-    const auto overlapsLogo = [&logo](const device_platform::DisplayRect& other) {
-        const auto logoRight = logo->rect.left + logo->rect.width;
-        const auto logoBottom = logo->rect.top + logo->rect.height;
-        const auto otherRight = other.left + other.width;
-        const auto otherBottom = other.top + other.height;
-        return logo->rect.left < otherRight && other.left < logoRight &&
-              logo->rect.top < otherBottom && other.top < logoBottom;
-    };
+    const auto overlapsLogo =
+        [&logo](const device_platform::DisplayRect& other) {
+            const auto logoRight = logo->rect.left + logo->rect.width;
+            const auto logoBottom = logo->rect.top + logo->rect.height;
+            const auto otherRight = other.left + other.width;
+            const auto otherBottom = other.top + other.height;
+            return logo->rect.left < otherRight && other.left < logoRight &&
+                   logo->rect.top < otherBottom && other.top < logoBottom;
+        };
     std::size_t headerBoxesChecked = 0U;
     for (const auto& command : screen.commands) {
         if (command.rect.top != logo->rect.top || &command == &*logo) continue;
@@ -482,7 +489,8 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
 
 int main() {
     UNITY_BEGIN();
-    RUN_TEST(test_representative_screen_uses_existing_workspace_and_three_locales);
+    RUN_TEST(
+        test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     RUN_TEST(test_render_key_stable_for_same_snapshot_and_workspace);
@@ -503,6 +511,7 @@ int main() {
     RUN_TEST(test_render_key_unchanged_workspace_remains_equal);
     RUN_TEST(test_render_key_changes_when_manual_holding_values_enable_confirm);
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
-    RUN_TEST(test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
+    RUN_TEST(
+        test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
     return UNITY_END();
 }

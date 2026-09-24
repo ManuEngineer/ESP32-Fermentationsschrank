@@ -11,8 +11,9 @@ python3 scripts/generate_branding_asset.py
 - rsvg-convert version: `rsvg-convert version 2.60.0`
 - LVGL version (managed_components/lvgl__lvgl): `9.6.0~1`
 - LVGL converter: `managed_components/lvgl__lvgl/scripts/LVGLImage.py`
+- clang-format version: `Debian clang-format version 18.1.8 (18+b1)`
 - Conversion: `rsvg-convert -w 168 -h 24 --format=png <ManuEngineer.svg> -o <tmp.png>  |  LVGLImage.py --ofmt C --cf RGB565A8 --name manuengineer_logo_168x24 <tmp.png>`
 - Output size: 168x24, color format RGB565A8
 - Output file: `main/generated/manuengineer_logo_168x24.cpp`
-- Output file size: 62474 bytes
-- Output file SHA-256: `f1296cf17eae26b8b2f3d5ab4eece92cdfd736534e2271e878d00b95fa7ba96b`
+- Output file size: 87736 bytes
+- Output file SHA-256: `0de7721871d9db85a0f7c409271fbbf2a87e197d607aa24397e9c050fd223607`

@@ -98,6 +98,11 @@ verify_host_toolchain() {
     verify_python3
 }
 
+verify_board_profile_generation() {
+    python3 scripts/generate_board_profile_header.py --check
+    printf 'BOARD_PROFILE_SINGLE_SOURCE=PASS\n'
+}
+
 verify_expected_esp_environment() {
     verify_python3
     if [[ -z "${IDF_PATH:-}" || ! -d "$IDF_PATH" ]]; then
@@ -189,6 +194,7 @@ collect_changed_c_cpp_files() {
 run_self_check() {
     verify_self_check_base
     verify_host_toolchain
+    verify_board_profile_generation
 
     local format_files=()
     mapfile -t format_files < <(collect_changed_c_cpp_files format)
@@ -215,6 +221,7 @@ run_self_check() {
 
 run_host_gates() {
     verify_host_toolchain
+    verify_board_profile_generation
 
     clang-format --dry-run --Werror \
         $(find src include lib test main -type f \( \

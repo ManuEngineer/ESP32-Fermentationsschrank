@@ -21,7 +21,14 @@ python3 scripts/build_issue31_touch_calibration_harness.py
 
 Der Build verwendet ausschließlich `esp32_bringup` und definiert
 `APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS`. Der normale Firmware-/CI-Pfad
-kompiliert den Harness nicht.
+kompiliert den Harness nicht. Zusätzlich wird nur in diesem privaten
+Harness-Build `sdkconfig.defaults.issue31_touch_calibration` als letzte
+Defaults-Schicht verwendet. Sie setzt den Treiber-Vorfilter
+`CONFIG_XPT2046_Z_THRESHOLD=1`, dem kleinsten nicht-null Wert, den der
+Treiber ohne `-Wtype-limits` akzeptiert. Damit wird der
+produktartige Vorfilterwert 400 nicht vorweggenommen und der Harness kann die
+Kontakt-/No-Contact- und Near-Contact-Verteilung messen. Das ist kein
+Produktwert und wird nicht in Bring-up-/Release-Profile übernommen.
 
 Nach dem Build kann der Owner den erzeugten Bring-up-Stand ueber den ueblichen
 UART-/`idf.py flash monitor`-Pfad flashen und beobachten. Das Flashen ist
@@ -78,6 +85,7 @@ Erwartete Abschlussmarker:
 
 ```text
 CALIBRATION_CAPTURE_HARNESS=READY
+CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE XPT2046_Z_THRESHOLD=1
 CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_VALIDATION_2_INDEPENDENT
 CALIBRATION_HOLD_RELEASE_SEQUENCE=READY
 CALIBRATION_CAPTURE_HARNESS=COMPLETE

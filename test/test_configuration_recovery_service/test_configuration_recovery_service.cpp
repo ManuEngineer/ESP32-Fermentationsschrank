@@ -490,16 +490,19 @@ void test_factory_reset_preserves_real_touch_calibration_record() {
     model.f = 2.5;
     model.boardControllerId = kBoardId;
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::TouchCalibrationWriteStatus::Committed),
         static_cast<int>(
-            calibration.write(device_platform::TouchCalibrationSlot::Active,
-                              model, /*recordSequence=*/1U)
+            device_platform::TouchCalibrationWriteStatus::Committed),
+        static_cast<int>(
+            calibration
+                .write(device_platform::TouchCalibrationSlot::Active, model,
+                       /*recordSequence=*/1U)
                 .status));
 
     const auto beforeReset = calibration.load(
         device_platform::TouchCalibrationSlot::Active, kBoardId);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::TouchCalibrationLoadStatus::Available),
+        static_cast<int>(
+            device_platform::TouchCalibrationLoadStatus::Available),
         static_cast<int>(beforeReset.status));
 
     const auto reset = fixture.recovery->beginAuthorizedFactoryReset();
@@ -517,7 +520,8 @@ void test_factory_reset_preserves_real_touch_calibration_record() {
     const auto afterReset = calibration.load(
         device_platform::TouchCalibrationSlot::Active, kBoardId);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::TouchCalibrationLoadStatus::Available),
+        static_cast<int>(
+            device_platform::TouchCalibrationLoadStatus::Available),
         static_cast<int>(afterReset.status));
     TEST_ASSERT_TRUE(afterReset.record.has_value());
     TEST_ASSERT_TRUE(afterReset.record->model == model);

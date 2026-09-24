@@ -69,8 +69,8 @@ struct TouchCalibrationModel {
     friend bool operator==(const TouchCalibrationModel& left,
                            const TouchCalibrationModel& right) noexcept {
         return left.a == right.a && left.b == right.b && left.c == right.c &&
-              left.d == right.d && left.e == right.e && left.f == right.f &&
-              left.boardControllerId == right.boardControllerId;
+               left.d == right.d && left.e == right.e && left.f == right.f &&
+               left.boardControllerId == right.boardControllerId;
     }
     friend bool operator!=(const TouchCalibrationModel& left,
                            const TouchCalibrationModel& right) noexcept {
@@ -119,8 +119,8 @@ struct TouchCalibrationPayloadDecodeResult {
     std::optional<TouchCalibrationModel> model;
 };
 
-[[nodiscard]] TouchCalibrationPayloadDecodeResult
-decodeTouchCalibrationPayload(const std::string& payload);
+[[nodiscard]] TouchCalibrationPayloadDecodeResult decodeTouchCalibrationPayload(
+    const std::string& payload);
 
 struct TouchCalibrationRecord {
     TouchCalibrationModel model;

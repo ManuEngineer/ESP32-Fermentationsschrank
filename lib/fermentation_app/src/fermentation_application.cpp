@@ -14,6 +14,7 @@
 #include "fermentation_ui_commands.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -532,6 +533,63 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     return confirmed;
 }
 
+FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
+    const FermentationApplicationPreparedRequest& confirmed) {
+    if (!confirmed.commandEnvelope().confirmed) {
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::NotConfirmed);
+    }
+    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        // No owning path was entered. Keep this a decision-only result instead
+        // of mislabelling an unavailable application as a persisted outcome.
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::ContextMissing);
+    }
+
+    CommandDecision decision;
+    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+        *runtimeRunState_, confirmed, std::nullopt, &decision);
+    if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
+        std::get<CommandStatus>(decisionResult.detail) !=
+            CommandStatus::Proposed) {
+        return decisionResult;
+    }
+
+    // Message acknowledgement/muting is an existing RAM-owned command path;
+    // messages are deliberately outside the run-persistence wire projection.
+    if (decision.kind == CommandKind::AcknowledgeMessage ||
+        decision.kind == CommandKind::MuteMessage) {
+        return FermentationUiCommandBridge::fromCommandStatus(
+            applyRunCommand(*runtimeRunState_, decision), std::nullopt,
+            FermentationUiCommandPhase::OwningOutcome);
+    }
+
+    const auto checkpointTime = currentCheckpointTime();
+    RunPersistenceResult persisted;
+    const auto* liveEvidence = &owningRuntimeEvidence_;
+    if (decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding) {
+        FreshStartSnapshotProvenance provenance =
+            FreshStartSnapshotProvenance::absent();
+        if (configurationService_ != nullptr) {
+            const auto runtime = configurationService_->acquireRuntime();
+            if (runtime.status ==
+                RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+                provenance = FreshStartSnapshotProvenance::fromRuntimeLease(
+                    runtime.lease);
+            }
+        }
+        persisted = runPersistenceCoordinator_->persistFreshStartCommand(
+            *runtimeRunState_, decision, provenance, checkpointTime,
+            liveEvidence);
+    } else {
+        persisted = runPersistenceCoordinator_->persistCommand(
+            *runtimeRunState_, decision, checkpointTime, liveEvidence);
+    }
+    return FermentationUiCommandBridge::fromRunPersistenceResult(
+        persisted.status);
+}
+
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {
@@ -911,7 +969,9 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
 FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
     const {
     FermentationUiPresentationSource source;
-    if (configurationService_ == nullptr) return source;
+    if (configurationService_ == nullptr) {
+        return source;
+    }
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         return source;

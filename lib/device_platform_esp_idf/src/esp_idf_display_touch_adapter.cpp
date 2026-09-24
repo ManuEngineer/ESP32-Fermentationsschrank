@@ -93,9 +93,9 @@ class EspIdfDisplayTouchAdapter::Impl final {
     device_platform::DisplayRotation rotation{
         device_platform::DisplayRotation::Rotate0};
 
-    static bool IRAM_ATTR onColorTransferDone(
-        esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*,
-        void* userContext) noexcept {
+    static bool IRAM_ATTR onColorTransferDone(esp_lcd_panel_io_handle_t,
+                                              esp_lcd_panel_io_event_data_t*,
+                                              void* userContext) noexcept {
         auto* state = static_cast<Impl*>(userContext);
         if (state == nullptr) return false;
         state->transferPending = false;
@@ -219,10 +219,9 @@ bool EspIdfDisplayTouchAdapter::initialize() {
     touchConfig.x_max = 4095U;
     touchConfig.y_max = 4095U;
     touchConfig.rst_gpio_num = GPIO_NUM_NC;
-    touchConfig.int_gpio_num =
-        validPin(state.config.touchInterruptPin)
-            ? gpio(state.config.touchInterruptPin)
-            : GPIO_NUM_NC;
+    touchConfig.int_gpio_num = validPin(state.config.touchInterruptPin)
+                                   ? gpio(state.config.touchInterruptPin)
+                                   : GPIO_NUM_NC;
     touchConfig.levels.reset = 0U;
     touchConfig.levels.interrupt = 0U;
     if (esp_lcd_touch_new_spi_xpt2046(state.touchIo, &touchConfig,
@@ -288,10 +287,12 @@ bool EspIdfDisplayTouchAdapter::setBacklight(bool enabled) {
 bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
                                          std::uint16_t rgb565) {
     auto& state = *impl_;
-    if (!state.initialized || state.panel == nullptr || state.dmaPixels == nullptr ||
-        rect.width == 0U || rect.height == 0U ||
-        static_cast<std::uint32_t>(rect.left) + rect.width > state.config.width ||
-        static_cast<std::uint32_t>(rect.top) + rect.height > state.config.height) {
+    if (!state.initialized || state.panel == nullptr ||
+        state.dmaPixels == nullptr || rect.width == 0U || rect.height == 0U ||
+        static_cast<std::uint32_t>(rect.left) + rect.width >
+            state.config.width ||
+        static_cast<std::uint32_t>(rect.top) + rect.height >
+            state.config.height) {
         return false;
     }
 
@@ -306,9 +307,9 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
             return false;
         }
         state.transferPending = true;
-        if (esp_lcd_panel_draw_bitmap(
-                state.panel, rect.left, row, rect.left + rect.width,
-                row + rows, state.dmaPixels) != ESP_OK) {
+        if (esp_lcd_panel_draw_bitmap(state.panel, rect.left, row,
+                                      rect.left + rect.width, row + rows,
+                                      state.dmaPixels) != ESP_OK) {
             state.transferPending = false;
             state.transferFaulted = true;
             return false;
@@ -320,17 +321,19 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
     return true;
 }
 
-bool EspIdfDisplayTouchAdapter::flushRgb565(
-    device_platform::DisplayRect rect, const std::uint16_t* pixels,
-    std::size_t pixelCount) {
+bool EspIdfDisplayTouchAdapter::flushRgb565(device_platform::DisplayRect rect,
+                                            const std::uint16_t* pixels,
+                                            std::size_t pixelCount) {
     auto& state = *impl_;
     const auto expectedPixels = static_cast<std::size_t>(rect.width) *
                                 static_cast<std::size_t>(rect.height);
-    if (!state.initialized || state.panel == nullptr || state.dmaPixels == nullptr ||
-        pixels == nullptr || pixelCount != expectedPixels || rect.width == 0U ||
-        rect.height == 0U ||
-        static_cast<std::uint32_t>(rect.left) + rect.width > state.config.width ||
-        static_cast<std::uint32_t>(rect.top) + rect.height > state.config.height ||
+    if (!state.initialized || state.panel == nullptr ||
+        state.dmaPixels == nullptr || pixels == nullptr ||
+        pixelCount != expectedPixels || rect.width == 0U || rect.height == 0U ||
+        static_cast<std::uint32_t>(rect.left) + rect.width >
+            state.config.width ||
+        static_cast<std::uint32_t>(rect.top) + rect.height >
+            state.config.height ||
         state.transferFaulted) {
         return false;
     }
@@ -345,9 +348,9 @@ bool EspIdfDisplayTouchAdapter::flushRgb565(
         std::memcpy(state.dmaPixels, pixels + sourceOffset,
                     chunkPixels * sizeof(std::uint16_t));
         state.transferPending = true;
-        if (esp_lcd_panel_draw_bitmap(
-                state.panel, rect.left, row, rect.left + rect.width,
-                row + rows, state.dmaPixels) != ESP_OK) {
+        if (esp_lcd_panel_draw_bitmap(state.panel, rect.left, row,
+                                      rect.left + rect.width, row + rows,
+                                      state.dmaPixels) != ESP_OK) {
             state.transferPending = false;
             state.transferFaulted = true;
             return false;
@@ -365,21 +368,37 @@ device_platform::RawTouchSample EspIdfDisplayTouchAdapter::sampleTouch() {
     if (!state.initialized || state.touch == nullptr ||
         esp_lcd_touch_read_data(state.touch) != ESP_OK) {
         return {device_platform::RawTouchSampleStatus::ControllerError,
-                0U, 0U, 0U, now, false};
+                0U,
+                0U,
+                0U,
+                now,
+                false};
     }
 
     esp_lcd_touch_point_data_t point[1]{};
     std::uint8_t points = 0U;
     if (esp_lcd_touch_get_data(state.touch, point, &points, 1U) != ESP_OK) {
         return {device_platform::RawTouchSampleStatus::ControllerError,
-                0U, 0U, 0U, now, false};
+                0U,
+                0U,
+                0U,
+                now,
+                false};
     }
     if (points == 0U) {
         return {device_platform::RawTouchSampleStatus::NoContact,
-                0U, 0U, 0U, now, false};
+                0U,
+                0U,
+                0U,
+                now,
+                false};
     }
     return {device_platform::RawTouchSampleStatus::Contact,
-            point[0].x, point[0].y, point[0].strength, now, true};
+            point[0].x,
+            point[0].y,
+            point[0].strength,
+            now,
+            true};
 }
 
 namespace detail {
@@ -388,8 +407,8 @@ bool bindEspIdfDisplayTouchHandles(
     const EspIdfDisplayTouchAdapter& adapter,
     EspIdfDisplayTouchHandles& handles) noexcept {
     if (adapter.impl_ == nullptr || !adapter.impl_->initialized ||
-        adapter.impl_->displayIo == nullptr || adapter.impl_->panel == nullptr ||
-        adapter.impl_->touch == nullptr) {
+        adapter.impl_->displayIo == nullptr ||
+        adapter.impl_->panel == nullptr || adapter.impl_->touch == nullptr) {
         return false;
     }
     handles.displayIo = adapter.impl_->displayIo;

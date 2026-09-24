@@ -53,7 +53,8 @@ struct RepresentativeScreen {
     std::vector<ScreenDrawCommand> commands;
 };
 
-[[nodiscard]] std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept;
+[[nodiscard]] std::uint16_t themeColor565(
+    device_platform::ThemeToken token) noexcept;
 
 // pressedTarget reflects only the existing #26 interaction result
 // (DeviceUiInteractionResult::visiblePressFeedback) for the currently held
@@ -62,7 +63,8 @@ struct RepresentativeScreen {
 // calibration is available, the only reachable production value), no
 // PressFeedback command is drawn.
 [[nodiscard]] RepresentativeScreen makeRepresentativeScreen(
-    const FermentationUiSnapshot& snapshot, FermentationTouchWorkspace& workspace,
+    const FermentationUiSnapshot& snapshot,
+    FermentationTouchWorkspace& workspace,
     const std::vector<device_platform::TextPackManifest>& textPacks,
     const device_platform::LocaleId& locale,
     std::optional<device_platform::DeviceUiTarget> pressedTarget = std::nullopt,
@@ -113,13 +115,13 @@ struct ScreenRenderKey {
 [[nodiscard]] ScreenRenderKey makeScreenRenderKey(
     const RepresentativeScreen& screen) noexcept;
 
-[[nodiscard]] std::optional<device_platform::DeviceUiTarget>
-targetAt(const RepresentativeScreen& screen, std::uint16_t x,
-         std::uint16_t y) noexcept;
+[[nodiscard]] std::optional<device_platform::DeviceUiTarget> targetAt(
+    const RepresentativeScreen& screen, std::uint16_t x,
+    std::uint16_t y) noexcept;
 
 [[nodiscard]] FermentationUiWorkspacePress routePress(
-    FermentationTouchWorkspace& workspace, const FermentationUiSnapshot& snapshot,
-    const RepresentativeScreen& screen, std::uint16_t x, std::uint16_t y,
-    const ProgramCatalog* catalog = nullptr);
+    FermentationTouchWorkspace& workspace,
+    const FermentationUiSnapshot& snapshot, const RepresentativeScreen& screen,
+    std::uint16_t x, std::uint16_t y, const ProgramCatalog* catalog = nullptr);
 
 }  // namespace fermentation::main_ui

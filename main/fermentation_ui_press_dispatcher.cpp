@@ -16,19 +16,42 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         const auto prepared =
             application.prepareEnvelope(context, *press.action);
         WorkspacePressDispatchResult result;
-        result.outcome = WorkspacePressDispatchOutcome::Dispatched;
         result.prepareStatus = prepared.status;
         if (prepared.status == FermentationApplicationRequestStatus::Prepared) {
             const auto confirmed = application.confirmPrepared(prepared);
             result.confirmStatus = confirmed.status;
+            if (confirmed.status ==
+                    FermentationApplicationRequestStatus::Prepared &&
+                confirmed.request.has_value()) {
+                result.commandResult =
+                    application.applyConfirmedPrepared(*confirmed.request);
+                result.outcome =
+                    result.commandResult->phase ==
+                            FermentationUiCommandPhase::OwningOutcome
+                        ? WorkspacePressDispatchOutcome::OwningOutcome
+                        : WorkspacePressDispatchOutcome::DecisionOnly;
+            } else {
+                result.outcome = WorkspacePressDispatchOutcome::DecisionOnly;
+            }
+        } else {
+            result.outcome = WorkspacePressDispatchOutcome::DecisionOnly;
         }
         return result;
     }
     if (press.resumeFallback.has_value()) {
-        const auto result = application.resumeFallback(*press.resumeFallback);
         WorkspacePressDispatchResult dispatched;
-        dispatched.outcome = WorkspacePressDispatchOutcome::Dispatched;
-        dispatched.resumeFallbackStatus = result.status;
+        dispatched.commandResult = FermentationUiCommandBridge::resumeFallback(
+            application, *press.resumeFallback);
+        dispatched.outcome = dispatched.commandResult->phase ==
+                                     FermentationUiCommandPhase::OwningOutcome
+                                 ? WorkspacePressDispatchOutcome::OwningOutcome
+                                 : WorkspacePressDispatchOutcome::DecisionOnly;
+        if (std::holds_alternative<RunPersistenceResultStatus>(
+                dispatched.commandResult->detail)) {
+            dispatched.resumeFallbackStatus =
+                std::get<RunPersistenceResultStatus>(
+                    dispatched.commandResult->detail);
+        }
         return dispatched;
     }
     if (press.transitionAction.has_value() || press.programEdit.has_value()) {
@@ -40,8 +63,9 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         //    boundary does not have access to;
         //  - program editing (Reset/Uninstall/Delete/SaveProgram) has no
         //    application-side catalog-mutation entry point at all yet.
-        return {WorkspacePressDispatchOutcome::UnavailableNoOwner, std::nullopt,
-               std::nullopt, std::nullopt};
+        WorkspacePressDispatchResult unavailable;
+        unavailable.outcome = WorkspacePressDispatchOutcome::UnavailableNoOwner;
+        return unavailable;
     }
     return {};
 }
@@ -73,8 +97,8 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     if (freshPressEdge && result.pressedTarget.has_value()) {
         const auto press =
             routePress(workspace, snapshot, screen, touchX, touchY, catalog);
-        result.dispatch =
-            dispatchWorkspacePress(application, snapshot, press, monotonicMillis);
+        result.dispatch = dispatchWorkspacePress(application, snapshot, press,
+                                                 monotonicMillis);
     }
     return result;
 }

@@ -33,7 +33,7 @@ RawTouchSample releasedSample(std::uint64_t monotonicTimeUs) {
 
 void test_triggers_exactly_at_required_hold_duration() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     TEST_ASSERT_FALSE(detector.observe(heldSample(0U)));
     TEST_ASSERT_TRUE(detector.holding());
     TEST_ASSERT_FALSE(detector.observe(heldSample(kRequiredHoldMicros - 1U)));
@@ -42,19 +42,18 @@ void test_triggers_exactly_at_required_hold_duration() {
 
 void test_does_not_trigger_below_required_duration() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     TEST_ASSERT_FALSE(detector.observe(heldSample(0U)));
     TEST_ASSERT_FALSE(detector.observe(heldSample(kRequiredHoldMicros / 2U)));
 }
 
 void test_release_before_threshold_gives_no_partial_credit() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     TEST_ASSERT_FALSE(detector.observe(heldSample(0U)));
+    TEST_ASSERT_FALSE(detector.observe(heldSample(kRequiredHoldMicros / 2U)));
     TEST_ASSERT_FALSE(
-        detector.observe(heldSample(kRequiredHoldMicros / 2U)));
-    TEST_ASSERT_FALSE(detector.observe(releasedSample(kRequiredHoldMicros / 2U +
-                                                       1U)));
+        detector.observe(releasedSample(kRequiredHoldMicros / 2U + 1U)));
     TEST_ASSERT_FALSE(detector.holding());
     // A fresh hold starting right after release needs the full duration
     // again, not just the remainder.
@@ -66,15 +65,14 @@ void test_release_before_threshold_gives_no_partial_credit() {
 
 void test_below_minimum_strength_does_not_count_as_held() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
-    TEST_ASSERT_FALSE(
-        detector.observe(heldSample(0U, kMinimumStrength - 1U)));
+                                                    kRequiredHoldMicros);
+    TEST_ASSERT_FALSE(detector.observe(heldSample(0U, kMinimumStrength - 1U)));
     TEST_ASSERT_FALSE(detector.holding());
 }
 
 void test_controller_error_does_not_count_as_held() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     RawTouchSample sample = heldSample(0U);
     sample.status = RawTouchSampleStatus::ControllerError;
     TEST_ASSERT_FALSE(detector.observe(sample));
@@ -83,7 +81,7 @@ void test_controller_error_does_not_count_as_held() {
 
 void test_no_retrigger_while_still_held_after_first_trigger() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     static_cast<void>(detector.observe(heldSample(0U)));
     TEST_ASSERT_TRUE(detector.observe(heldSample(kRequiredHoldMicros)));
     TEST_ASSERT_FALSE(
@@ -92,7 +90,7 @@ void test_no_retrigger_while_still_held_after_first_trigger() {
 
 void test_reset_allows_a_new_detection_cycle() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     static_cast<void>(detector.observe(heldSample(0U)));
     TEST_ASSERT_TRUE(detector.observe(heldSample(kRequiredHoldMicros)));
     detector.reset();
@@ -103,7 +101,7 @@ void test_reset_allows_a_new_detection_cycle() {
 
 void test_backwards_monotonic_time_restarts_hold_instead_of_faulting() {
     fermentation::RawTouchRecoveryDetector detector(kMinimumStrength,
-                                                     kRequiredHoldMicros);
+                                                    kRequiredHoldMicros);
     TEST_ASSERT_FALSE(detector.observe(heldSample(1'000'000ULL)));
     // A regression in the monotonic source must not be interpreted as an
     // already-elapsed duration.
