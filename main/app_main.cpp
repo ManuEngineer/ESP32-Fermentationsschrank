@@ -343,6 +343,15 @@ extern "C" void app_main(void) {
         return;
     }
 
+#ifdef APP_ISSUE_29_BRINGUP_PROBE
+    if (!fermentation::issue_29_bringup::run()) {
+        ESP_LOGE(kTag,
+                 "Issue 29 bring-up probe failed; stopping before the"
+                 " heartbeat smoke");
+        return;
+    }
+#endif
+
     // Issue #31's selected product renderer is composed here, at the
     // application boundary. The pin numbers are the single deterministic
     // build-time derivation from config/board_profiles/
@@ -421,15 +430,6 @@ extern "C" void app_main(void) {
 #endif
 
     logResources();
-
-#ifdef APP_ISSUE_29_BRINGUP_PROBE
-    if (!fermentation::issue_29_bringup::run()) {
-        ESP_LOGE(kTag,
-                 "Issue 29 bring-up probe failed; stopping before the"
-                 " heartbeat smoke");
-        return;
-    }
-#endif
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
