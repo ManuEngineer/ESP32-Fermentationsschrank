@@ -388,8 +388,7 @@ extern "C" void app_main(void) {
         const auto fallbackCalibration = touchCalibrationStore.load(
             device_platform::TouchCalibrationSlot::Fallback,
             kBoardControllerId);
-        ESP_LOGI(kTag,
-                 "touch calibration: active_status=%s fallback_status=%s",
+        ESP_LOGI(kTag, "touch calibration: active_status=%s fallback_status=%s",
                  touchCalibrationLoadStatusName(activeCalibration.status),
                  touchCalibrationLoadStatusName(fallbackCalibration.status));
         switch (activeCalibration.status) {
