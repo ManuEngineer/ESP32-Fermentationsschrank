@@ -314,31 +314,79 @@ behandelt und nicht aus dem Enum-Namen theoretisch abgeleitet.
 
 ### 8.2 Nach Owner-Freigabe verbindliche Reihenfolge
 
-Erst nach Freigabe der exakten Plan-SHA wird in kleinen Schnitten umgesetzt:
+Erst nach Freigabe der exakten Plan-SHA wird in kleinen Schnitten umgesetzt.
+Eine neue FIT-/Validation-/Hold-Erfassung ist für diese Korrektur nicht
+erforderlich.
 
-1. Die Renderer-Kompensation entfernen und gezielte Tests ergänzen, die
-   belegen, dass der Produktpfad nur über `applyTouchCalibration()` arbeitet.
-   Der bestehende Paneltransform-Test wird auf die finale R1-Abbildung
-   ausgerichtet; die LVGL-Portrotation muss weiterhin dieselbe technische
-   Quelle konsumieren.
-2. Den bestehenden Issue-31-Capturepfad auf der bereits bestätigten
-   `ROTATE90`-/320x240-Geometrie bauen und actor-free ausführen. Es werden
-   unverändert `FIT_TOP_LEFT`, `FIT_TOP_RIGHT`, `FIT_BOTTOM_LEFT`,
-   `FIT_BOTTOM_RIGHT`, `VALIDATION_CENTER`, `VALIDATION_TOP_MID` und
-   `HOLD_PROBE` erfasst. Der PENIRQ-, Kontakt-, Release- und
-   ControllerError-Vertrag bleibt unverändert.
-3. Das neue affine Modell ausschließlich aus den Medianen der vier FIT-Punkte
-   ableiten. Center und Top-Mid bleiben unabhängige Validation und gehen nicht
-   in den Fit ein. Rohlog, alle Samples, Summaries, Retries, Releasezeilen und
-   SHA256 bleiben vollständig erhalten.
-4. Den bestehenden `TouchCalibrationStore`-Pfad actor-free kontrolliert für
-   `tc0` verwenden: final-reviewed Modell schreiben, danach exakt
-   zurücklesen/verifizieren; `tc1` bleibt unverändert. Kein neuer Codec und
-   keine zweite Provisionierungsstrecke.
-5. Den normalen Produktpfad ohne Rendererkompensation bauen und laden lassen.
-   Erst wenn `tc0` verfügbar ist, den ungefährlichen Product-Touch-Smoke mit
-   `Home`, `System`, `App` und `Info` wiederholen. Jeder Treffer muss allein
-   über die persistierte Kalibrierung und den finalen Paneltransform erfolgen.
+1. Das bestehende reviewed `tc0`-Modell mit `recordSequence=1` und die
+   aktuelle produktive X-Komposition unabhängig reproduzieren. Die bestehende
+   Produkttransformation ist affin:
+
+   ```text
+   x_final = 319 - (a*raw_x + b*raw_y + c)
+   y_final = d*raw_x + e*raw_y + f
+   ```
+
+   Deshalb wird ausschließlich das vorhandene Modell komponiert:
+
+   ```text
+   a' = -a
+   b' = -b
+   c' = 319 - c
+   d' = d
+   e' = e
+   f' = f
+   ```
+
+   Für das aktuell reviewed Modell muss die unabhängige Rechnung exakt diese
+   Werte reproduzieren; es werden keine neuen Messwerte erfunden:
+
+   ```text
+   a' = -0.00009043639686374949
+   b' =  0.08753007024919984
+   c' = -25.146273472211817
+   d' =  0.06559259340326797
+   e' =  0.0007485020274466806
+   f' = -15.832052617145878
+   ```
+
+   Die vorhandene Raw-Capture-Evidence bleibt unverändert. Für eine
+   mathematische Regression werden vorhandene Zielkoordinaten nur mit
+   `x_final=319-x_old` umgerechnet; Center/Top-Mid werden nicht in einen
+   neuen Fit aufgenommen.
+
+2. Den bestehenden Provisioner um genau die kontrollierte `tc0`-Migration
+   ergänzen. Der Vergleich umfasst Modell, Board-/Controller-ID und
+   `recordSequence`; `tc1` wird nie beschrieben:
+
+   ```text
+   tc0 == old reviewed model, sequence=1
+       -> new composed model, sequence=2 schreiben
+       -> exakten Readback verifizieren
+
+   tc0 == new composed model, sequence=2
+       -> idempotent NOT_NEEDED
+
+   tc0 == irgendetwas anderes, einschließlich NotFound/ungültigem Record
+       -> STOP; nicht überschreiben
+
+   tc1 -> UNCHANGED
+   ```
+
+   Es gibt kein NVS-Erase, kein generisches Force-Overwrite, keinen neuen
+   Codec und keine zweite Provisionierungsstrecke.
+
+3. Die Renderer-X-Kompensation vollständig entfernen und gezielte Tests
+   ergänzen, die belegen, dass der Produktpfad ausschließlich
+   `applyTouchCalibration()` verwendet. Der bestehende Paneltransform-Test
+   prüft weiterhin die finale R1-Abbildung; Adapter und LVGL-Port konsumieren
+   dieselbe technische Quelle.
+
+4. Nach erfolgreichem `tc0`-Readback den normalen `esp32_bringup`-Produktpfad
+   ohne Rendererkompensation bauen und laden lassen. `tc0` muss als
+   `Available` erscheinen. Danach den ungefährlichen Product-Touch-Smoke mit
+   `Home`, `System`, `App` und `Info` wiederholen; jeder Treffer muss allein
+   über das komponierte Modell und den finalen Paneltransform erfolgen.
 
 Die bestehenden Text-, WiFi-, `Service aus`- und Branding-Korrekturen, die
 Rotation `ROTATE90`, der produktive Z-/Strength-Threshold, `tc1`, der
@@ -355,10 +403,8 @@ DISPLAY_LANDSCAPE_320X240=OWNER_CONFIRMED_PASS
 DISPLAY_CLIPPING=NONE
 RENDERER_TOUCH_COORDINATE_COMPENSATION=FORBIDDEN
 TOUCH_MODEL_MUST_MATCH_FINAL_PANEL_GEOMETRY=YES
-NEW_OWNER_UART_CAPTURE=COMPLETE
-NEW_CALIBRATION_FIT=FIT4_ONLY
-VALIDATION_CENTER=INDEPENDENT
-VALIDATION_TOP_MID=INDEPENDENT
+NEW_CALIBRATION_CAPTURE=NOT_REQUIRED
+TC0_MIGRATION=SEQUENCE_1_TO_SEQUENCE_2
 TC0_READBACK=PASS
 TC1=UNCHANGED
 PRODUCT_TOUCH_SMOKE=PASS
@@ -371,8 +417,8 @@ Bis zur Owner-Freigabe dieser Planergänzung gilt fail-closed:
 
 ```text
 IMPLEMENTATION=NOT_STARTED_FOR_THIS_REVISION
-OWNER_UART_CAPTURE=NOT_RUN
-TC0_UPDATE=NOT_RUN
-PRODUCT_TOUCH_SMOKE_RECAPTURE=NOT_RUN
+NEW_CALIBRATION_CAPTURE=NOT_REQUIRED
+TC0_MIGRATION=NOT_RUN
+PRODUCT_TOUCH_SMOKE=NOT_RUN_FOR_THIS_REVISION
 ACTUATOR_RELEASE=NO
 ```
