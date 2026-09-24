@@ -9,8 +9,10 @@
 | Branch | `agent/issue-31-renderer-display-touch-plan` |
 | Korrekturtyp | Materielle Planrevision nach realem Hardwarebefund |
 | Ausgangs-HEAD | `9ed1dd6b729b95e92c62a36ff59dc5867dcd68da` |
+| Aktueller Plan-HEAD | `55b9b9b03a135b2d67b21003917b605aa26e9d24` |
 | Bisher freigegebener Plan | `63fd88372b883887668566047c8a6acac48addcd` |
 | Neue Planfreigabe | `OWNER_APPROVAL_REQUIRED` |
+| Erster Capture | `COMPLETE; RAW_TOUCH_VALID; POSITION_FIT_REJECTED` |
 | Aktorfreigabe | `NO` |
 | Produktive Kalibrierung | `NO` |
 | Implementation | `NOT_STARTED_FOR_THIS_CORRECTION` |
@@ -41,19 +43,17 @@ Strength/Z-Verteilung, Kontaktstabilität, Releaseverhalten und
 ControllerErrors. Sie wird nicht für affine Koeffizienten oder unabhängige
 Positionsvalidation verwendet.
 
-Die lokal vorhandene Rohdatei des ersten Captures wird in der
-Umsetzungsphase bytegenau in ein dauerhaftes Repository-Evidence-Artefakt
-übernommen, bevor neue Messdaten entstehen:
+Das unveränderte Raw-Artefakt ist bereits dauerhaft unter einem nicht
+ignorierten Textpfad gesichert; es hängt nicht von einem später noch
+vorhandenen `/tmp`-Pfad ab:
 
 ```text
-SOURCE=/tmp/issue31-plan-revalidation.Ao1NTF/build/issue31_owner_touch_capture_uart_20260924.log
-SOURCE_SHA256=e19b5caf3d6f19614a12b878ce8d973a0a3a2e0a263737b11c406f7ce9c20f08
-TARGET=docs/audits/ISSUE_31_TOUCH_CAPTURE_20260924_INVALID_DISPLAY_GEOMETRY_RAW.log
+TARGET=docs/audits/ISSUE_31_TOUCH_CAPTURE_20260924_INVALID_DISPLAY_GEOMETRY_RAW.txt
+TARGET_SHA256=e19b5caf3d6f19614a12b878ce8d973a0a3a2e0a263737b11c406f7ce9c20f08
 ```
 
-Die zugehörige SHA256-Datei wird neben dem Artefakt abgelegt. Der bisherige
-Harness bleibt als Roh-Touch-Provenienz erhalten; kein historischer Log wird
-durch eine Summary ersetzt.
+Der bisherige Harness bleibt als Roh-Touch-Provenienz erhalten; kein
+historischer Log wird durch eine Summary ersetzt.
 
 ## 2. Unveränderliche fachliche Grenzen
 
@@ -82,20 +82,30 @@ Aktorfreigabe.
 
 ### 3.1 Eine Rotationsquelle
 
-Die bestehende `EspIdfDisplayTouchConfig` erhält genau ein
-`device_platform::DisplayRotation`-Feld. Die bestehende Port-Enumeration und
-die bestehende Adapterlogik werden wiederverwendet.
+Die Umsetzung benennt genau einen gemeinsamen R1-Wert
+`kR1DisplayRotation` an der kleinsten bereits vorhandenen, von Product und
+Harness erreichbaren R1-Konfigurationsstelle. Die konkrete Ablage wird bei
+der Umsetzung anhand der bestehenden Composition-/Konfigurationsgrenzen
+gewählt; es entsteht dafür keine neue Display- oder Board-Konfigurations-
+architektur. Product-LVGL und Capture-Harness konsumieren diesen einen Wert;
+kein Consumer setzt einen eigenen `Rotate*`-Wert.
 
-- Product-Composition und Issue-31-Capture-Harness setzen dasselbe
-  R1-Rotationsfeld.
+Die bestehende `EspIdfDisplayTouchConfig` erhält, falls sie die gewählte
+bestehende Ablage benötigt, genau ein
+`device_platform::DisplayRotation`-Feld. Die bestehende Port-Enumeration und
+Adapterlogik werden wiederverwendet.
+
+- `kR1DisplayRotation` wird genau einmal nach der realen Probe auf den
+  akzeptierten Landscape-Kandidaten gesetzt und von beiden Pfaden gelesen.
 - `EspIdfDisplayTouchAdapter::initialize()` wendet die Konfiguration genau
   einmal nach Panel-Init an.
-- Die harten `setRotation(Rotate0)`-Aufrufe aus Product und Harness entfallen.
+- Harte `setRotation(Rotate0)`-Aufrufe aus Product und Harness entfallen.
 - LVGL erhält keine zusätzliche Rotation.
 - `Rotate0` und `Rotate180` werden für den R1-320x240-Vertrag nicht als
   Landscape-Kandidaten verwendet.
 
-Die zwei zulässigen Kandidaten werden ausschließlich real unterschieden:
+Der Wert von `kR1DisplayRotation` wird nicht theoretisch vorentschieden. Die
+zwei zulässigen Kandidaten werden ausschließlich real unterschieden:
 
 ```text
 Rotate90  -> swap_xy=true, mirror_x=true,  mirror_y=false
@@ -183,28 +193,17 @@ Die Umsetzung bleibt auf die vorhandenen Grenzen beschränkt:
 | `main/fermentation_ui_lvgl_renderer.cpp` | produktiven `Rotate0`-Aufruf entfernen; bestehende Config verwenden |
 | `main/app_main.cpp` | bestehende R1-Produktkonfiguration mit derselben Rotation versorgen |
 | `main/issue_31_touch_calibration_harness.cpp` | dieselbe Rotation und actor-free Geometrieprobe; keine Fit-/NVS-Logik |
-| `docs/audits/` | alter Rohlog unverändert sichern, neuer Rohlog und SHA nach Hardwarelauf |
-| PR-/Issue-Handover | Rotations-, Geometrie-, Capture- und Evidence-Status synchronisieren |
+| `docs/audits/` | neuer Rohlog und SHA nach Hardwarelauf; bestehendes `.txt`-Artefakt bleibt unverändert |
 
 Keine neue öffentliche Portfunktion und keine Änderung an
 `fermentation_app`.
 
-## 5. Verifikation und Gates
+## 5. Korrektur-spezifische Reihenfolge
 
-Nach der Umsetzung werden gezielt und getrennt ausgewiesen:
-
-```text
-NATIVE_TESTS=PASS
-RENDERER_BOUNDARY_TESTS=PASS
-ARCHITECTURE_GUARD=PASS
-BOARD_PROFILE_SINGLE_SOURCE=PASS
-GIT_DIFF_CHECK=PASS
-ESP32_BRINGUP_BUILD=PASS
-ESP32_RELEASE_BUILD=PASS
-ISSUE31_CAPTURE_HARNESS_BUILD=PASS
-```
-
-Die Hardwarereihenfolge ist verbindlich:
+Die bestehenden direkt betroffenen Test-/Buildverträge werden nach der
+Umsetzung gemäß dem Repository-CI-Vertrag ausgeführt und separat berichtet;
+dieser Plan wiederholt die allgemeinen Gates nicht. Die Hardwarereihenfolge
+ist verbindlich:
 
 ```text
 exact HEAD / binary provenance
@@ -240,8 +239,8 @@ ACTUATOR_RELEASE=NO
 NEXT_STEP=INDEPENDENT_CAPTURE_REVIEW_AND_PARAMETER_DERIVATION
 ```
 
-Danach werden keine Koeffizienten, NVS-Datensätze, produktiven
-Strength/Z-Werte, Ready-/Merge-Aktionen oder Aktorfreigaben vorgenommen.
+Danach werden keine Koeffizienten, NVS-Datensätze, produktiven Strength/Z-
+Werte oder Aktorfreigaben vorgenommen.
 Die unabhängige Auswertung erhält alle sieben Summaryzeilen, den vollständigen
 Rohlog mit Samples, Idle-Baseline, ControllerErrors, Retries und Complete-
 Marker sowie die Owner-Geometrieevidence.

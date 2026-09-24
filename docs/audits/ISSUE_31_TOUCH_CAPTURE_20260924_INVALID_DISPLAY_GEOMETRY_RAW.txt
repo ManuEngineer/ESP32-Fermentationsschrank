@@ -1,0 +1,288 @@
+Script started on 2026-09-24 17:54:15+02:00 [COMMAND="idf.py -B build/esp32_bringup_issue31_touch_calibration -p /dev/ttyUSB0 monitor" TERM="dumb" TTY="/dev/pts/4" COLUMNS="80" LINES="24"]
+Executing action: monitor
+Running idf_monitor in directory /tmp/issue31-plan-revalidation.Ao1NTF
+Executing "/home/manuel/.espressif/python_env/idf6.1_py3.13_env/bin/python /var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/tools/idf_monitor.py -p /dev/ttyUSB0 -b 115200 --toolchain-prefix xtensa-esp32-elf- --target esp32 --revision 0 /tmp/issue31-plan-revalidation.Ao1NTF/build/esp32_bringup_issue31_touch_calibration/esp32_fermentationsschrank.elf /tmp/issue31-plan-revalidation.Ao1NTF/build/esp32_bringup_issue31_touch_calibration/bootloader/bootloader.elf -m '/home/manuel/.espressif/python_env/idf6.1_py3.13_env/bin/python' '/var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/tools/idf.py' '-B' 'build/esp32_bringup_issue31_touch_calibration' '-p' '/dev/ttyUSB0'"...
+--- esp-idf-monitor 1.10.0 on /dev/ttyUSB0 115200
+--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+--- 0x40080400: _invalid_pc_placeholder at /var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/components/xtensa/xtensa_vectors.S:2259
+entry 0x40080644
+--- 0x40080644: call_start_cpu0 at /var/lib/docker/data/ESP32-Projekte/opt/espressif/esp-idf-v6.1/components/bootloader/subproject/main/bootloader_start.c:27
+[0;32mI (27) boot: ESP-IDF v6.1 2nd stage bootloader[0m
+[0;32mI (27) boot: compile time Sep 24 2026 13:40:12[0m
+[0;32mI (27) boot: Multicore bootloader[0m
+[0;32mI (29) boot: chip revision: v3.1[0m
+[0;32mI (31) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (35) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (39) boot.esp32: SPI Flash Size : 4MB[0m
+[0;32mI (42) boot: Enabling RNG early entropy source...[0m
+[0;32mI (47) boot: Partition Table:[0m
+[0;32mI (49) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (69) boot:  2 factory          factory app      00 00 00010000 002f0000[0m
+[0;32mI (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000[0m
+[0;32mI (82) boot: End of partition table[0m
+[0;32mI (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=0c1ach ( 49580) map[0m
+[0;32mI (110) esp_image: segment 1: paddr=0001c1d4 vaddr=3ffb0000 size=02dach ( 11692) load[0m
+[0;32mI (115) esp_image: segment 2: paddr=0001ef88 vaddr=40080000 size=01090h (  4240) load[0m
+[0;32mI (117) esp_image: segment 3: paddr=00020020 vaddr=400d0020 size=1429ch ( 82588) map[0m
+[0;32mI (151) esp_image: segment 4: paddr=000342c4 vaddr=40081090 size=0c928h ( 51496) load[0m
+[0;32mI (172) esp_image: segment 5: paddr=00040bf4 vaddr=50000000 size=00028h (    40) load[0m
+[0;32mI (180) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (180) boot: Disabling RNG early entropy source...[0m
+[0;32mI (191) cpu_start: Multicore app[0m
+[0;32mI (199) cpu_start: GPIO 3 and 1 are used as console UART I/O pins[0m
+[0;32mI (199) cpu_start: Pro cpu start user code[0m
+[0;32mI (199) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (201) app_init: Application information:[0m
+[0;32mI (205) app_init: Project name:     esp32_fermentationsschrank[0m
+[0;32mI (210) app_init: App version:      9ed1dd6[0m
+[0;32mI (214) app_init: Compile time:     Sep 24 2026 13:40:31[0m
+[0;32mI (219) app_init: ELF file SHA256:  11b6dc4ac...[0m
+[0;32mI (223) app_init: ESP-IDF:          v6.1[0m
+[0;32mI (227) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (231) efuse_init: Max chip rev:     v3.99 [0m
+[0;32mI (235) efuse_init: Chip rev:         v3.1[0m
+[0;32mI (239) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (245) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM[0m
+[0;32mI (250) heap_init: At 3FFB3858 len 0002C7A8 (177 KiB): DRAM[0m
+[0;32mI (255) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (261) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (266) heap_init: At 4008D9B8 len 00012648 (73 KiB): IRAM[0m
+[0;32mI (273) spi_flash: detected chip: generic[0m
+[0;32mI (275) spi_flash: flash io: dio[0m
+[0;32mI (280) main_task: Started on CPU0[0m
+[0;32mI (280) main_task: Calling app_main()[0m
+[0;32mI (280) ili9341: LCD panel create success, version: 2.1.0[0m
+[0;32mI (410) issue31_capture: CALIBRATION_CAPTURE_HARNESS=READY ACTUATOR_RELEASE=NO CALIBRATION_RECORD_WRITTEN=NO RAW_SAMPLE_SOURCE=ESP_IDF_XPT2046_NATIVE[0m
+[0;32mI (410) issue31_capture: CALIBRATION_CAPTURE_PREFILTER=MEASUREMENT_SAFE XPT2046_Z_THRESHOLD=1[0m
+[0;32mI (420) issue31_capture: CALIBRATION_CAPTURE_PENIRQ_GATE=ENABLED gpio=39 active_level=LOW[0m
+[0;32mI (1430) issue31_capture: CALIBRATION_IDLE_BASELINE=PASS samples=50 contacts=0 controller_errors=0 gate=PENIRQ_ACTIVE_LOW gpio=39 penirq_level_initial=1 penirq_level_final=1[0m
+[0;32mI (1430) issue31_capture: CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_VALIDATION_2_INDEPENDENT[0m
+[0;32mI (1480) issue31_capture: CALIBRATION_POINT_READY id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (449500) issue31_capture: CALIBRATION_CONTACT_BEGIN id=FIT_TOP_LEFT role=FIT[0m
+[0;32mI (449500) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3332 raw_y=3581 strength=1361 time_us=449227931 contact=1[0m
+[0;32mI (449530) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3320 raw_y=3552 strength=1485 time_us=449257931 contact=1[0m
+[0;32mI (449550) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3324 raw_y=3552 strength=1526 time_us=449277931 contact=1[0m
+[0;32mI (449570) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3332 raw_y=3572 strength=1548 time_us=449297931 contact=1[0m
+[0;32mI (449590) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3337 raw_y=3536 strength=1671 time_us=449317931 contact=1[0m
+[0;32mI (449610) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3319 raw_y=3527 strength=1657 time_us=449337931 contact=1[0m
+[0;32mI (449630) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3330 raw_y=3531 strength=1656 time_us=449357931 contact=1[0m
+[0;32mI (449650) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3301 raw_y=3519 strength=1608 time_us=449377931 contact=1[0m
+[0;32mI (449670) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3323 raw_y=3505 strength=1729 time_us=449397931 contact=1[0m
+[0;32mI (449690) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3331 raw_y=3524 strength=1743 time_us=449417931 contact=1[0m
+[0;32mI (449710) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3320 raw_y=3499 strength=1728 time_us=449437931 contact=1[0m
+[0;32mI (449730) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3301 raw_y=3483 strength=1696 time_us=449457931 contact=1[0m
+[0;32mI (449750) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3312 raw_y=3486 strength=1740 time_us=449477931 contact=1[0m
+[0;32mI (449770) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3321 raw_y=3478 strength=1729 time_us=449497931 contact=1[0m
+[0;32mI (449790) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3317 raw_y=3504 strength=1691 time_us=449517931 contact=1[0m
+[0;32mI (449810) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3309 raw_y=3488 strength=1725 time_us=449537931 contact=1[0m
+[0;32mI (449830) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3326 raw_y=3490 strength=1760 time_us=449557931 contact=1[0m
+[0;32mI (449850) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3331 raw_y=3479 strength=1731 time_us=449577931 contact=1[0m
+[0;32mI (449870) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3301 raw_y=3463 strength=1761 time_us=449597931 contact=1[0m
+[0;32mI (449890) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3311 raw_y=3497 strength=1712 time_us=449617931 contact=1[0m
+[0;32mI (449910) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3315 raw_y=3479 strength=1704 time_us=449637931 contact=1[0m
+[0;32mI (449930) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3327 raw_y=3486 strength=1806 time_us=449657931 contact=1[0m
+[0;32mI (449950) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3315 raw_y=3495 strength=1735 time_us=449677931 contact=1[0m
+[0;32mI (449970) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3354 raw_y=3486 strength=1761 time_us=449697931 contact=1[0m
+[0;32mI (449990) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=CONTACT raw_x=3394 raw_y=3540 strength=1625 time_us=449717931 contact=1[0m
+[0;32mI (450010) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=449737931 contact=0[0m
+[0;32mI (450090) issue31_capture: CALIBRATION_POINT_SUMMARY id=FIT_TOP_LEFT role=FIT target_x=32 target_y=32 samples=25 raw_x_min=3301 raw_x_max=3394 raw_y_min=3463 raw_y_max=3581 strength_min=1361 strength_max=1806 first_us=449227931 last_us=449717931[0m
+[0;32mI (450380) issue31_capture: CALIBRATION_POINT_READY id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (456620) issue31_capture: CALIBRATION_CONTACT_BEGIN id=FIT_TOP_RIGHT role=FIT[0m
+[0;32mI (456620) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=338 raw_y=3543 strength=417 time_us=456347931 contact=1[0m
+[0;32mI (456650) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=324 raw_y=3494 strength=819 time_us=456377931 contact=1[0m
+[0;32mI (456670) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=328 raw_y=3525 strength=819 time_us=456397931 contact=1[0m
+[0;32mI (456690) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=317 raw_y=3522 strength=744 time_us=456417931 contact=1[0m
+[0;32mI (456710) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=327 raw_y=3534 strength=852 time_us=456437931 contact=1[0m
+[0;32mI (456730) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=327 raw_y=3521 strength=805 time_us=456457931 contact=1[0m
+[0;32mI (456750) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=327 raw_y=3511 strength=840 time_us=456477931 contact=1[0m
+[0;32mI (456770) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=318 raw_y=3541 strength=799 time_us=456497931 contact=1[0m
+[0;32mI (456790) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=317 raw_y=3520 strength=869 time_us=456517931 contact=1[0m
+[0;32mI (456810) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=325 raw_y=3523 strength=864 time_us=456537931 contact=1[0m
+[0;32mI (456830) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=318 raw_y=3526 strength=839 time_us=456557931 contact=1[0m
+[0;32mI (456850) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=317 raw_y=3503 strength=804 time_us=456577931 contact=1[0m
+[0;32mI (456870) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=299 raw_y=3525 strength=819 time_us=456597931 contact=1[0m
+[0;32mI (456890) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=291 raw_y=3554 strength=763 time_us=456617931 contact=1[0m
+[0;32mI (456910) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=300 raw_y=3546 strength=764 time_us=456637931 contact=1[0m
+[0;32mI (456930) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=284 raw_y=3535 strength=789 time_us=456657931 contact=1[0m
+[0;32mI (456950) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=285 raw_y=3542 strength=788 time_us=456677931 contact=1[0m
+[0;32mI (456970) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=286 raw_y=3554 strength=850 time_us=456697931 contact=1[0m
+[0;32mI (456990) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=288 raw_y=3563 strength=777 time_us=456717931 contact=1[0m
+[0;32mI (457010) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=284 raw_y=3518 strength=805 time_us=456737931 contact=1[0m
+[0;32mI (457030) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=CONTACT raw_x=286 raw_y=3550 strength=755 time_us=456757931 contact=1[0m
+[0;32mI (457050) issue31_capture: CALIBRATION_SAMPLE id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=456777931 contact=0[0m
+[0;32mI (457130) issue31_capture: CALIBRATION_POINT_SUMMARY id=FIT_TOP_RIGHT role=FIT target_x=287 target_y=32 samples=21 raw_x_min=284 raw_x_max=338 raw_y_min=3494 raw_y_max=3563 strength_min=417 strength_max=869 first_us=456347931 last_us=456757931[0m
+[0;32mI (457420) issue31_capture: CALIBRATION_POINT_READY id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (458360) issue31_capture: CALIBRATION_CONTACT_BEGIN id=FIT_BOTTOM_LEFT role=FIT[0m
+[0;32mI (458360) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3352 raw_y=1567 strength=2135 time_us=458087931 contact=1[0m
+[0;32mI (458390) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3321 raw_y=1564 strength=2292 time_us=458117931 contact=1[0m
+[0;32mI (458410) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3324 raw_y=1558 strength=2261 time_us=458137931 contact=1[0m
+[0;32mI (458430) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3325 raw_y=1553 strength=2241 time_us=458157931 contact=1[0m
+[0;32mI (458450) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3311 raw_y=1548 strength=2281 time_us=458177931 contact=1[0m
+[0;32mI (458470) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3350 raw_y=1559 strength=2287 time_us=458197931 contact=1[0m
+[0;32mI (458490) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3406 raw_y=1565 strength=2310 time_us=458217931 contact=1[0m
+[0;32mI (458510) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3336 raw_y=1557 strength=2306 time_us=458237931 contact=1[0m
+[0;32mI (458530) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3344 raw_y=1561 strength=2256 time_us=458257931 contact=1[0m
+[0;32mI (458550) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3350 raw_y=1563 strength=2240 time_us=458277931 contact=1[0m
+[0;32mI (458570) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3344 raw_y=1562 strength=2226 time_us=458297931 contact=1[0m
+[0;32mI (458590) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3373 raw_y=1586 strength=2200 time_us=458317931 contact=1[0m
+[0;32mI (458610) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=458337931 contact=0[0m
+[0;33mW (458690) issue31_capture: CALIBRATION_CONTACT_TOO_SHORT id=FIT_BOTTOM_LEFT samples=12 required=15 restart=YES[0m
+[0;32mI (461450) issue31_capture: CALIBRATION_CONTACT_BEGIN id=FIT_BOTTOM_LEFT role=FIT[0m
+[0;32mI (461450) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3406 raw_y=1598 strength=2136 time_us=461177931 contact=1[0m
+[0;32mI (461480) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3425 raw_y=1575 strength=2225 time_us=461207931 contact=1[0m
+[0;32mI (461500) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3473 raw_y=1559 strength=2190 time_us=461227931 contact=1[0m
+[0;32mI (461520) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3458 raw_y=1554 strength=2292 time_us=461247931 contact=1[0m
+[0;32mI (461540) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3464 raw_y=1548 strength=2304 time_us=461267931 contact=1[0m
+[0;32mI (461560) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3463 raw_y=1550 strength=2260 time_us=461287931 contact=1[0m
+[0;32mI (461580) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3445 raw_y=1558 strength=2258 time_us=461307931 contact=1[0m
+[0;32mI (461600) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3446 raw_y=1560 strength=2273 time_us=461327931 contact=1[0m
+[0;32mI (461620) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3443 raw_y=1560 strength=2264 time_us=461347931 contact=1[0m
+[0;32mI (461640) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3448 raw_y=1554 strength=2280 time_us=461367931 contact=1[0m
+[0;32mI (461660) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3441 raw_y=1548 strength=2281 time_us=461387931 contact=1[0m
+[0;32mI (461680) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3448 raw_y=1558 strength=2288 time_us=461407931 contact=1[0m
+[0;32mI (461700) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3456 raw_y=1564 strength=2288 time_us=461427931 contact=1[0m
+[0;32mI (461720) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3429 raw_y=1593 strength=2231 time_us=461447931 contact=1[0m
+[0;32mI (461740) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=CONTACT raw_x=3420 raw_y=1633 strength=2224 time_us=461467931 contact=1[0m
+[0;32mI (461760) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=461487931 contact=0[0m
+[0;32mI (461840) issue31_capture: CALIBRATION_POINT_SUMMARY id=FIT_BOTTOM_LEFT role=FIT target_x=32 target_y=207 samples=15 raw_x_min=3406 raw_x_max=3473 raw_y_min=1548 raw_y_max=1633 strength_min=2136 strength_max=2304 first_us=461177931 last_us=461467931[0m
+[0;32mI (462130) issue31_capture: CALIBRATION_POINT_READY id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (463240) issue31_capture: CALIBRATION_CONTACT_BEGIN id=FIT_BOTTOM_RIGHT role=FIT[0m
+[0;32mI (463240) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=339 raw_y=1515 strength=1653 time_us=462967931 contact=1[0m
+[0;32mI (463270) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=317 raw_y=1515 strength=1741 time_us=462997931 contact=1[0m
+[0;32mI (463290) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=302 raw_y=1514 strength=1722 time_us=463017931 contact=1[0m
+[0;32mI (463310) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=302 raw_y=1530 strength=1764 time_us=463037931 contact=1[0m
+[0;32mI (463330) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=274 raw_y=1544 strength=1802 time_us=463057931 contact=1[0m
+[0;32mI (463350) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=295 raw_y=1537 strength=1816 time_us=463077931 contact=1[0m
+[0;32mI (463370) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=275 raw_y=1540 strength=1793 time_us=463097931 contact=1[0m
+[0;32mI (463390) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=281 raw_y=1544 strength=1768 time_us=463117931 contact=1[0m
+[0;32mI (463410) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=265 raw_y=1552 strength=1823 time_us=463137931 contact=1[0m
+[0;32mI (463430) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=268 raw_y=1550 strength=1811 time_us=463157931 contact=1[0m
+[0;32mI (463450) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=247 raw_y=1544 strength=1801 time_us=463177931 contact=1[0m
+[0;32mI (463470) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=264 raw_y=1537 strength=1793 time_us=463197931 contact=1[0m
+[0;32mI (463490) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=258 raw_y=1549 strength=1810 time_us=463217931 contact=1[0m
+[0;32mI (463510) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=268 raw_y=1550 strength=1767 time_us=463237931 contact=1[0m
+[0;32mI (463530) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=290 raw_y=1552 strength=1815 time_us=463257931 contact=1[0m
+[0;32mI (463550) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=CONTACT raw_x=302 raw_y=1557 strength=1698 time_us=463277931 contact=1[0m
+[0;32mI (463570) issue31_capture: CALIBRATION_SAMPLE id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=463297931 contact=0[0m
+[0;32mI (463650) issue31_capture: CALIBRATION_POINT_SUMMARY id=FIT_BOTTOM_RIGHT role=FIT target_x=287 target_y=207 samples=16 raw_x_min=247 raw_x_max=339 raw_y_min=1514 raw_y_max=1557 strength_min=1653 strength_max=1823 first_us=462967931 last_us=463277931[0m
+[0;32mI (463940) issue31_capture: CALIBRATION_POINT_READY id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (465130) issue31_capture: CALIBRATION_CONTACT_BEGIN id=VALIDATION_CENTER role=VALIDATION[0m
+[0;32mI (465130) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1470 raw_y=2589 strength=1693 time_us=464857931 contact=1[0m
+[0;32mI (465160) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1459 raw_y=2602 strength=1684 time_us=464887931 contact=1[0m
+[0;32mI (465180) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1456 raw_y=2598 strength=1703 time_us=464907931 contact=1[0m
+[0;32mI (465200) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1464 raw_y=2617 strength=1691 time_us=464927931 contact=1[0m
+[0;32mI (465220) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1467 raw_y=2590 strength=1730 time_us=464947931 contact=1[0m
+[0;32mI (465240) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1475 raw_y=2609 strength=1734 time_us=464967931 contact=1[0m
+[0;32mI (465260) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1441 raw_y=2583 strength=1710 time_us=464987931 contact=1[0m
+[0;32mI (465280) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1472 raw_y=2589 strength=1684 time_us=465007931 contact=1[0m
+[0;32mI (465300) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1472 raw_y=2611 strength=1772 time_us=465027931 contact=1[0m
+[0;32mI (465320) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1474 raw_y=2596 strength=1768 time_us=465047931 contact=1[0m
+[0;32mI (465340) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1465 raw_y=2603 strength=1733 time_us=465067931 contact=1[0m
+[0;32mI (465360) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1444 raw_y=2576 strength=1644 time_us=465087931 contact=1[0m
+[0;32mI (465380) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=465107931 contact=0[0m
+[0;33mW (465460) issue31_capture: CALIBRATION_CONTACT_TOO_SHORT id=VALIDATION_CENTER samples=12 required=15 restart=YES[0m
+[0;32mI (466840) issue31_capture: CALIBRATION_CONTACT_BEGIN id=VALIDATION_CENTER role=VALIDATION[0m
+[0;32mI (466840) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1450 raw_y=2598 strength=1472 time_us=466567931 contact=1[0m
+[0;32mI (466870) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1467 raw_y=2580 strength=1692 time_us=466597931 contact=1[0m
+[0;32mI (466890) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1460 raw_y=2574 strength=1682 time_us=466617931 contact=1[0m
+[0;32mI (466910) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1460 raw_y=2598 strength=1699 time_us=466637931 contact=1[0m
+[0;32mI (466930) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1457 raw_y=2556 strength=1759 time_us=466657931 contact=1[0m
+[0;32mI (466950) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1438 raw_y=2564 strength=1728 time_us=466677931 contact=1[0m
+[0;32mI (466970) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1440 raw_y=2569 strength=1737 time_us=466697931 contact=1[0m
+[0;32mI (466990) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1432 raw_y=2565 strength=1748 time_us=466717931 contact=1[0m
+[0;32mI (467010) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1435 raw_y=2557 strength=1708 time_us=466737931 contact=1[0m
+[0;32mI (467030) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1413 raw_y=2554 strength=1769 time_us=466757931 contact=1[0m
+[0;32mI (467050) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1404 raw_y=2569 strength=1669 time_us=466777931 contact=1[0m
+[0;32mI (467070) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1398 raw_y=2555 strength=1672 time_us=466797931 contact=1[0m
+[0;32mI (467090) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1392 raw_y=2566 strength=1740 time_us=466817931 contact=1[0m
+[0;32mI (467110) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1392 raw_y=2549 strength=1712 time_us=466837931 contact=1[0m
+[0;32mI (467130) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1387 raw_y=2553 strength=1680 time_us=466857931 contact=1[0m
+[0;32mI (467150) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1405 raw_y=2565 strength=1736 time_us=466877931 contact=1[0m
+[0;32mI (467170) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1402 raw_y=2560 strength=1742 time_us=466897931 contact=1[0m
+[0;32mI (467190) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1405 raw_y=2566 strength=1703 time_us=466917931 contact=1[0m
+[0;32mI (467210) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1420 raw_y=2566 strength=1756 time_us=466937931 contact=1[0m
+[0;32mI (467230) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1401 raw_y=2564 strength=1754 time_us=466957931 contact=1[0m
+[0;32mI (467250) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1412 raw_y=2584 strength=1753 time_us=466977931 contact=1[0m
+[0;32mI (467270) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1409 raw_y=2559 strength=1770 time_us=466997931 contact=1[0m
+[0;32mI (467290) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1414 raw_y=2552 strength=1750 time_us=467017931 contact=1[0m
+[0;32mI (467310) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1432 raw_y=2556 strength=1743 time_us=467037931 contact=1[0m
+[0;32mI (467330) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1413 raw_y=2598 strength=1721 time_us=467057931 contact=1[0m
+[0;32mI (467350) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1429 raw_y=2568 strength=1757 time_us=467077931 contact=1[0m
+[0;32mI (467370) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1434 raw_y=2558 strength=1722 time_us=467097931 contact=1[0m
+[0;32mI (467390) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1441 raw_y=2555 strength=1732 time_us=467117931 contact=1[0m
+[0;32mI (467410) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1467 raw_y=2559 strength=1777 time_us=467137931 contact=1[0m
+[0;32mI (467430) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1461 raw_y=2565 strength=1813 time_us=467157931 contact=1[0m
+[0;32mI (467450) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1441 raw_y=2543 strength=1737 time_us=467177931 contact=1[0m
+[0;32mI (467470) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=CONTACT raw_x=1349 raw_y=2658 strength=1452 time_us=467197931 contact=1[0m
+[0;32mI (467490) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=467217931 contact=0[0m
+[0;32mI (467570) issue31_capture: CALIBRATION_POINT_SUMMARY id=VALIDATION_CENTER role=VALIDATION target_x=160 target_y=120 samples=32 raw_x_min=1349 raw_x_max=1467 raw_y_min=2543 raw_y_max=2658 strength_min=1452 strength_max=1813 first_us=466567931 last_us=467197931[0m
+[0;32mI (467860) issue31_capture: CALIBRATION_POINT_READY id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (468590) issue31_capture: CALIBRATION_CONTACT_BEGIN id=VALIDATION_TOP_MID role=VALIDATION[0m
+[0;32mI (468590) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1381 raw_y=3388 strength=1177 time_us=468317931 contact=1[0m
+[0;32mI (468620) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1364 raw_y=3404 strength=1175 time_us=468347931 contact=1[0m
+[0;32mI (468640) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1392 raw_y=3398 strength=1229 time_us=468367931 contact=1[0m
+[0;32mI (468660) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1399 raw_y=3402 strength=1289 time_us=468387931 contact=1[0m
+[0;32mI (468680) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1412 raw_y=3382 strength=1331 time_us=468407931 contact=1[0m
+[0;32mI (468700) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1413 raw_y=3393 strength=1320 time_us=468427931 contact=1[0m
+[0;32mI (468720) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1406 raw_y=3364 strength=1244 time_us=468447931 contact=1[0m
+[0;32mI (468740) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1433 raw_y=3356 strength=1356 time_us=468467931 contact=1[0m
+[0;32mI (468760) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1447 raw_y=3349 strength=1332 time_us=468487931 contact=1[0m
+[0;32mI (468780) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1448 raw_y=3347 strength=1332 time_us=468507931 contact=1[0m
+[0;32mI (468800) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1452 raw_y=3344 strength=1344 time_us=468527931 contact=1[0m
+[0;32mI (468820) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1438 raw_y=3367 strength=1288 time_us=468547931 contact=1[0m
+[0;32mI (468840) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1458 raw_y=3341 strength=1364 time_us=468567931 contact=1[0m
+[0;32mI (468860) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1471 raw_y=3353 strength=1353 time_us=468587931 contact=1[0m
+[0;32mI (468880) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1430 raw_y=3355 strength=1344 time_us=468607931 contact=1[0m
+[0;32mI (468900) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1467 raw_y=3343 strength=1347 time_us=468627931 contact=1[0m
+[0;32mI (468920) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1438 raw_y=3365 strength=1347 time_us=468647931 contact=1[0m
+[0;32mI (468940) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1441 raw_y=3351 strength=1320 time_us=468667931 contact=1[0m
+[0;32mI (468960) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1433 raw_y=3349 strength=1304 time_us=468687931 contact=1[0m
+[0;32mI (468980) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1437 raw_y=3356 strength=1377 time_us=468707931 contact=1[0m
+[0;32mI (469000) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1439 raw_y=3336 strength=1380 time_us=468727931 contact=1[0m
+[0;32mI (469020) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1430 raw_y=3346 strength=1316 time_us=468747931 contact=1[0m
+[0;32mI (469040) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1449 raw_y=3348 strength=1345 time_us=468767931 contact=1[0m
+[0;32mI (469060) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1437 raw_y=3349 strength=1306 time_us=468787931 contact=1[0m
+[0;32mI (469080) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=CONTACT raw_x=1396 raw_y=3375 strength=1245 time_us=468807931 contact=1[0m
+[0;32mI (469100) issue31_capture: CALIBRATION_SAMPLE id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=468827931 contact=0[0m
+[0;32mI (469180) issue31_capture: CALIBRATION_POINT_SUMMARY id=VALIDATION_TOP_MID role=VALIDATION target_x=160 target_y=48 samples=25 raw_x_min=1364 raw_x_max=1471 raw_y_min=3336 raw_y_max=3404 strength_min=1175 strength_max=1380 first_us=468317931 last_us=468807931[0m
+[0;32mI (469470) issue31_capture: CALIBRATION_HOLD_RELEASE_SEQUENCE=READY purpose=contact_stability_strength_debounce[0m
+[0;32mI (469470) issue31_capture: CALIBRATION_POINT_READY id=HOLD_PROBE role=HOLD target_x=160 target_y=120 instruction=touch_center_hold_lums_then_release[0m
+[0;32mI (470260) issue31_capture: CALIBRATION_CONTACT_BEGIN id=HOLD_PROBE role=HOLD[0m
+[0;32mI (470260) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1431 raw_y=2576 strength=1689 time_us=469987931 contact=1[0m
+[0;32mI (470290) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1423 raw_y=2577 strength=1786 time_us=470017931 contact=1[0m
+[0;32mI (470310) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1419 raw_y=2569 strength=1692 time_us=470037931 contact=1[0m
+[0;32mI (470330) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1442 raw_y=2574 strength=1749 time_us=470057931 contact=1[0m
+[0;32mI (470350) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1459 raw_y=2539 strength=1749 time_us=470077931 contact=1[0m
+[0;32mI (470370) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1441 raw_y=2568 strength=1791 time_us=470097931 contact=1[0m
+[0;32mI (470390) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1442 raw_y=2557 strength=1802 time_us=470117931 contact=1[0m
+[0;32mI (470410) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1431 raw_y=2543 strength=1771 time_us=470137931 contact=1[0m
+[0;32mI (470430) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1431 raw_y=2542 strength=1780 time_us=470157931 contact=1[0m
+[0;32mI (470450) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1424 raw_y=2547 strength=1767 time_us=470177931 contact=1[0m
+[0;32mI (470470) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1418 raw_y=2521 strength=1788 time_us=470197931 contact=1[0m
+[0;32mI (470490) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1418 raw_y=2537 strength=1760 time_us=470217931 contact=1[0m
+[0;32mI (470510) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1423 raw_y=2545 strength=1866 time_us=470237931 contact=1[0m
+[0;32mI (470530) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1419 raw_y=2547 strength=1865 time_us=470257931 contact=1[0m
+[0;32mI (470550) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1421 raw_y=2540 strength=1814 time_us=470277931 contact=1[0m
+[0;32mI (470570) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1423 raw_y=2537 strength=1863 time_us=470297931 contact=1[0m
+[0;32mI (470590) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1384 raw_y=2525 strength=1792 time_us=470317931 contact=1[0m
+[0;32mI (470610) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1423 raw_y=2536 strength=1815 time_us=470337931 contact=1[0m
+[0;32mI (470630) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1424 raw_y=2527 strength=1829 time_us=470357931 contact=1[0m
+[0;32mI (470650) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1447 raw_y=2502 strength=1808 time_us=470377931 contact=1[0m
+[0;32mI (470670) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1437 raw_y=2541 strength=1792 time_us=470397931 contact=1[0m
+[0;32mI (470690) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=CONTACT raw_x=1429 raw_y=2538 strength=1756 time_us=470417931 contact=1[0m
+[0;32mI (470710) issue31_capture: CALIBRATION_SAMPLE id=HOLD_PROBE role=HOLD target_x=160 target_y=120 status=RELEASE raw_x=0 raw_y=0 strength=0 time_us=470437931 contact=0[0m
+[0;32mI (470790) issue31_capture: CALIBRATION_POINT_SUMMARY id=HOLD_PROBE role=HOLD target_x=160 target_y=120 samples=22 raw_x_min=1384 raw_x_max=1459 raw_y_min=2502 raw_y_max=2577 strength_min=1689 strength_max=1866 first_us=469987931 last_us=470417931[0m
+[0;32mI (470800) issue31_capture: CALIBRATION_CAPTURE_HARNESS=COMPLETE CALIBRATION_RECORD_WRITTEN=NO FIT_VALUES_COMPUTED=NO OWNER_NEXT=offline_fit_then_independent_validation[0m
+
+Script done on 2026-09-24 18:03:36+02:00 [COMMAND_EXIT_CODE="143"]
