@@ -9,7 +9,7 @@
 | Branch | `agent/issue-31-renderer-display-touch-plan` |
 | Korrekturtyp | Materielle Planrevision nach realem Hardwarebefund |
 | Ausgangs-HEAD | `9ed1dd6b729b95e92c62a36ff59dc5867dcd68da` |
-| Aktueller Plan-HEAD | `c85aa595c43368f0faac5189fc0c12239aeacbeb` |
+| Vorgänger-Korrekturplan-HEAD | `c85aa595c43368f0faac5189fc0c12239aeacbeb` |
 | Bisher freigegebener Plan | `63fd88372b883887668566047c8a6acac48addcd` |
 | Neue Planfreigabe | `OWNER_APPROVAL_REQUIRED` |
 | Erster Capture | `COMPLETE; RAW_TOUCH_VALID; POSITION_FIT_REJECTED` |
