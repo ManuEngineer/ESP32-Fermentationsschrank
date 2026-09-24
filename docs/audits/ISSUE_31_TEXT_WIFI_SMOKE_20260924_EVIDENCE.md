@@ -1,8 +1,8 @@
 # Issue #31 – final text/WiFi renderer smoke evidence
 
 ```text
-SOURCE_HEAD=71681193df314b45dd8db6a0d20d5ca764ea2180
-HARDWARE_FIRMWARE_HEAD=71681193df314b45dd8db6a0d20d5ca764ea2180
+SOURCE_HEAD=6c712d0d01a27c184188e82eccae685c6c06a7ec
+HARDWARE_FIRMWARE_HEAD=6c712d0d01a27c184188e82eccae685c6c06a7ec
 R1_DISPLAY_ROTATION=ROTATE90
 DISPLAY_LANDSCAPE_320X240=OWNER_CONFIRMED_PASS
 TOUCH_CALIBRATION_ACTIVE=YES
@@ -13,7 +13,8 @@ PRODUCT_ACTIVE_LOAD=PASS
 TEXT_CLIPPING=OWNER_CONFIRMED_PASS
 WIFI_HEADER_ICON=OWNER_CONFIRMED_PASS
 HEADER_SPACING=OWNER_CONFIRMED_PASS
-HOME_COMPACT_SERVICE_STATUS=IMPLEMENTED_AND_NATIVE_TESTED
+HOME_COMPACT_SERVICE_STATUS=OWNER_CONFIRMED_PASS
+BRANDING_MANU_CONTRAST=OWNER_CONFIRMED_PASS
 TOUCH_ALIGNMENT=OWNER_CONFIRMED_PASS
 PRODUCT_TOUCH_SMOKE=PASS
 ONE_ACTION_PER_PRESS=PASS
@@ -35,6 +36,7 @@ UART_LOG_RAW=docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_RAW.txt
 UART_LOG_RAW_SHA256=5cb4bf726fcd532f3e2549ecfc43ca737de5abea2a6a015139305e24d2936f2f
 UART_LOG_READABLE=docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_READABLE.txt
 UART_LOG_READABLE_SHA256=cc10a945c365ad10c1b6d3280deb9dd1fa7918a1ae8937b613de5acf4e34b181
+```
 
 The compact Home service projection was verified on the final hardware
 firmware in German as fully readable `Service aus`:
@@ -46,11 +48,24 @@ COMPACT_SERVICE_UART_READABLE=docs/audits/ISSUE_31_COMPACT_SERVICE_HOME_20260924
 COMPACT_SERVICE_UART_READABLE_SHA256=9b343ba14305df319133fd00b23bb34ee8b8e9a5ac828ac475d28aa4647ee15e
 COMPACT_SERVICE_HOME=OWNER_CONFIRMED_PASS
 ```
+
+The final branding firmware was visually verified by the Owner: `Manu` is
+clearly readable on the dark header, `Engineer` remains orange, and the logo
+is complete without crop or distortion. The master SVG and regenerated LVGL
+asset are preserved in commit `6c712d0d01a27c184188e82eccae685c6c06a7ec`.
+
+```text
+BRANDING_UART_RAW=docs/audits/ISSUE_31_BRANDING_CONTRAST_20260924_6C712D0_RAW.txt
+BRANDING_UART_RAW_SHA256=bccc90d3fb4a7ee6ed5494ca6ddca3a3d0d30ab4b7933cd617b495acae9a3076
+BRANDING_UART_READABLE=docs/audits/ISSUE_31_BRANDING_CONTRAST_20260924_6C712D0_READABLE.txt
+BRANDING_UART_READABLE_SHA256=c694ec622dfb6a7b4750b09c4c2e1b819548f6ff07461d0e0a20eaee67441772
+MANU_FILL=#fbf7ef
+ENGINEER_FILL=#d89a3b
+BRANDING_GENERATOR=PASS
 ```
 
 The final hardware geometry remains unchanged. The logo is positioned at
 `x=4..171`; the DE/WiFi/clock header group is right-aligned as a block at
 `x=188..315`, leaving the same four-pixel right margin as the logo's left
-margin. The latest local change only adjusted the reserved locale slot to
-make that spacing explicit; touch calibration, rotation, and actor policy
-were not changed.
+margin. The branding change only adjusts the `Manu` fill; touch calibration,
+rotation, service text, and actor policy were not changed.
