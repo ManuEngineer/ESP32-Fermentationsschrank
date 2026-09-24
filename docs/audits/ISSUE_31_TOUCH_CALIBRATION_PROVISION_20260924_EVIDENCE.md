@@ -1,93 +1,94 @@
-# Issue #31 – Touch-Kalibrierung: Provisionierungs-Evidence
+# Issue #31 – kontrollierte tc0-Migration und Product-Touch-Smoke
 
 ```text
 ISSUE=31
 PR=156
-HARDWARE_SOURCE_HEAD=49dad74c2980bc6fcb5c622adefd1bdc52fc42ad
+SOURCE_HEAD=c39b420ac6c2fec1c989fe8691ebe88cf3e44731
+APPROVED_PLAN_SUPPLEMENT_SHA=5a52f0147e9d277fc38f5b65489e7126301ebda6
 R1_DISPLAY_ROTATION=ROTATE90
+FINAL_R1_PANEL_TRANSFORM=swap_xy:true,mirror_x:true,mirror_y:true
 ACTUATOR_RELEASE=NO
 ```
 
-## Reviewed model
+## Deterministische Modellkomposition
 
-Die vier FIT-Punkt-Mediane wurden aus dem unveränderten Capture neu berechnet.
-Die unabhängige affine Least-Squares-Rechnung reproduzierte das reviewed Modell
-bis auf Floating-Point-Rundung. Center und Top-Mid blieben aus dem Fit
-ausgeschlossen.
+Die bestehende, reviewed `tc0`-Sequenz 1 wurde unabhängig mit
+`x_final=319-x_old` komponiert. Die sechs Koeffizienten reproduzieren die
+freigegebenen Werte bis auf normale IEEE-754-Rundung; es wurde kein neuer
+FIT-/Validation-/Hold-Capture durchgeführt.
 
 ```text
 SOURCE_CAPTURE_SHA256=d2ec93bed9723d1cbe1e8c460c2c601e2b469323a57fdad3f781704e932ae827
-AFFINE_MODEL=REVIEWED_AND_PROVISIONED
-FIT_TOP_LEFT_MEDIAN=(677.0,3566.5)
-FIT_TOP_RIGHT_MEDIAN=(733.5,654.0)
-FIT_BOTTOM_LEFT_MEDIAN=(3368.0,3570.0)
-FIT_BOTTOM_RIGHT_MEDIAN=(3378.0,656.0)
-VALIDATION_CENTER=(159.2070,121.2653), error=1.4933 px
-VALIDATION_TOP_MID=(159.9813,47.9909), error=0.0208 px
+OLD_MODEL_SEQUENCE=1
+COMPOSED_MODEL_SEQUENCE=2
+COMPOSED_MODEL=(-0.00009043639686374949,0.08753007024919984,-25.146273472211817,0.06559259340326797,0.0007485020274466806,-15.832052617145878)
+ACTIVE_SLOT=tc0
+FALLBACK_SLOT=tc1_UNCHANGED
 ```
 
-## Actor-free provision
+## Actor-free Provisionierung
 
-Die Provisionierungsfirmware lief auf dem exakt oben genannten Source-HEAD und
-verwendete ausschließlich den bestehenden `TouchCalibrationStore`-Active-Slot
-`tc0`. Der erste Lauf schrieb den zuvor nicht vorhandenen Record; ein zweiter
-Lauf bestätigte die Idempotenz ohne erneutes Schreiben. `tc1` wurde nicht
-beschrieben.
+Der erste Flash-Reset führte die Sequenz-1-zu-Sequenz-2-Migration aus, bevor
+der UART-Monitor angehängt war. Der angehängte vollständige Monitorlauf ist
+deshalb bewusst als idempotenter Readback-Check dokumentiert und behauptet
+nicht, den nicht mitgeschnittenen `COMMITTED`-Marker erneut zu belegen.
 
 ```text
-HARNESS_BINARY_SHA256=258ea354362d2a218c3d74603ffe7c5616fb8fa1617caebbe988cc2b01fe8b93
-ACTIVE_SLOT=tc0
-FALLBACK_SLOT=UNCHANGED
-FIRST_PROVISION_ACTIVE_PRESTATE=NOT_FOUND
-FIRST_PROVISION_WRITE=COMMITTED
-FIRST_PROVISION_READBACK=PASS
-REPEAT_PROVISION_ACTIVE_PRESTATE=MATCHING
-REPEAT_PROVISION_WRITE=NOT_NEEDED
-REPEAT_PROVISION_READBACK=PASS
-PROVISION_UART_LOG=docs/audits/ISSUE_31_TOUCH_CALIBRATION_PROVISION_UART_20260924_FINAL_HEAD_RAW.txt
-PROVISION_UART_LOG_SHA256=27d21f2073252007105bac6e66eb84025b6891622347c2f75851cca7265c6285
+HARNESS_BINARY_SHA256=193087890fb6e8109aaa5f12aad452b1fe1d3ad79292efd81590c46d1351af92
+PROVISION_IDEMPOTENT_CHECK=PASS
+ACTIVE_PRESTATE=COMPOSED_SEQUENCE_2
+WRITE=NOT_NEEDED
+READBACK=PASS
 PRODUCT_Z_THRESHOLD=UNCHANGED
 ```
 
-## Product-load attempt
-
-Der normale `esp32_bringup`-Build ohne Provisionierungsdefine wurde auf denselben
-Source-HEAD gebaut und geflasht. Der Produktpfad meldete den Active-Record als
-verfügbar:
+Lesbare UART-Evidence:
 
 ```text
-PRODUCT_BINARY_SHA256=c71360b52aba68d31c92c116dafc3b8a1e5f7023d20e07098ad78fb09a383032
+PROVISION_UART_RAW=docs/audits/ISSUE_31_TOUCH_CALIBRATION_PROVISION_UART_20260924_COMPOSED_MIGRATION_RAW.txt
+PROVISION_UART_RAW_SHA256=4207237b2b36f7d4b0528d99045c004391268b0b2139bcb5bdff700b5bc9f846
+PROVISION_UART_READABLE=docs/audits/ISSUE_31_TOUCH_CALIBRATION_PROVISION_UART_20260924_COMPOSED_MIGRATION_READABLE.txt
+PROVISION_UART_READABLE_SHA256=1f42cda07d7d26280f082d0d46f72ff3dca1d97d9c099a5fe4a28d957b41b0f8
+```
+
+## Normaler Product-Smoke
+
+Der normale `esp32_bringup`-Build lief ohne Provisionierungsdefine. Issue-29
+bestand vor der UI-Initialisierung; der Produktpfad lud `tc0` als verfügbar
+und blieb im sicheren Runtime-Loop. Die Owner-Taps wurden einzeln und nur auf
+Navigation/Statuspfaden ausgeführt: linker Start-Slot öffnete Rezepte,
+Home kehrte zurück, Status öffnete Status, Meldungen öffnete Meldungen; der
+rechte Details-Tap blieb mangels verfügbarer Meldung ein sicherer No-op.
+
+```text
+PRODUCT_BINARY_SHA256=69238ffa32aec075782b47f865c27596c6c7615275f6b284db0ca98cf7cb7c9f
+ISSUE29_PROBE=PASS
 PRODUCT_ACTIVE_LOAD=PASS
-UART_MARKER=touch calibration: active_status=Available fallback_status=NotFound
+PRODUCT_TOUCH_LEFT=PASS
+PRODUCT_TOUCH_MID_LEFT=PASS
+PRODUCT_TOUCH_MID_RIGHT=PASS
+PRODUCT_TOUCH_RIGHT=PASS_SAFE_NOOP
+ONE_ACTION_PER_PRESS=PASS
+RELEASE_STOPS_PRESS_FEEDBACK=PASS
+NO_GHOST_TOUCH=PASS
 ```
 
-Der Touch-Smoke konnte in diesem Lauf noch nicht stattfinden: Der bestehende
-`esp32_bringup`-Issue-29-Diagnosepfad meldete unmittelbar danach
-`diagnostic task creation failed` und beendete den Produktpfad fail-closed, bevor
-Owner-Navigationstouches möglich waren. Die vollständige UART-Evidence ist
-deshalb als Blockerlog erhalten; es werden keine Touch-PASS-Marker behauptet.
-
 ```text
-PRODUCT_TOUCH_SMOKE=BLOCKED
-PRODUCT_TOUCH_SMOKE_UART_LOG=docs/audits/ISSUE_31_PRODUCT_TOUCH_SMOKE_UART_20260924_FINAL_HEAD_BLOCKED_RAW.txt
-PRODUCT_TOUCH_SMOKE_UART_LOG_SHA256=731bd5498f250fd0ecefd6797b449b31283741fd47cd93c5d21dbb20cb60935b
-PRODUCT_TOUCH_LEFT=NOT_RUN
-PRODUCT_TOUCH_MID_LEFT=NOT_RUN
-PRODUCT_TOUCH_MID_RIGHT=NOT_RUN
-PRODUCT_TOUCH_RIGHT=NOT_RUN
-ONE_ACTION_PER_PRESS=NOT_RUN
-RELEASE_STOPS_PRESS_FEEDBACK=NOT_RUN
-NO_GHOST_TOUCH=NOT_RUN
+PRODUCT_UART_RAW=docs/audits/ISSUE_31_PRODUCT_TOUCH_SMOKE_20260924_COMPOSED_MODEL_RAW.txt
+PRODUCT_UART_RAW_SHA256=00e0a9a9603ece2f548ccbfe1aab93ffa2eea5e6435d4325e9004c80b59668bd
+PRODUCT_UART_READABLE=docs/audits/ISSUE_31_PRODUCT_TOUCH_SMOKE_20260924_COMPOSED_MODEL_READABLE.txt
+PRODUCT_UART_READABLE_SHA256=b23dd295cef9ed2720f93f170c25e9f7a6ae807eac45ae649da05c55b9014479
 ```
 
-Weitere Checks: `esp32_bringup` und `esp32_release` wurden ohne aktiven
-Provisionierungsdefine gebaut und validiert. Der alte abgebrochene Capture
-bleibt erhalten, weil die Datei nicht leer ist. `PROBE_FAIL_CLOSED_GT_60S` bleibt
-korrekt `NOT_VERIFIED`.
-
 ```text
-PROVISION_READBACK=PASS
-CALIBRATION_FIT_NOT_YET_PRODUCTIZED=YES
+CALIBRATION_MODEL_PROVISIONED=YES
+PRODUCT_ACTIVE_LOAD=PASS
+PRODUCT_TOUCH_SMOKE=PASS
+PRODUCT_Z_THRESHOLD=UNCHANGED
 ACTUATOR_RELEASE=NO
-NEXT_STEP=RESOLVE_EXISTING_ISSUE29_BRINGUP_BLOCKER_THEN_REPEAT_PRODUCT_TOUCH_SMOKE
+PROBE_FAIL_CLOSED_GT_60S=NOT_VERIFIED
+NEXT_STEP=INDEPENDENT_FIX_VERIFICATION
 ```
+
+Die historische Raw-Capture-Evidence bleibt unverändert; `tc1`, Touch-
+Thresholds, Text/WiFi/Service/Branding und Aktorpolicy wurden nicht geändert.
