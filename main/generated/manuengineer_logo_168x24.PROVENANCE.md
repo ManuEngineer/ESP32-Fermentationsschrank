@@ -7,7 +7,7 @@ python3 scripts/generate_branding_asset.py
 ```
 
 - Input: `assets/branding/manuengineer/ManuEngineer.svg`
-- Input SHA-256: `b35788628e5cbda7a82552d5b6969c34a813494392ef9545d69dae4489b1484b`
+- Input SHA-256: `42a11d8cd528154148f890abe4ae49d506c6a748642be3d1261fc0362486b244`
 - rsvg-convert version: `rsvg-convert version 2.60.0`
 - LVGL version (managed_components/lvgl__lvgl): `9.6.0~1`
 - LVGL converter: `managed_components/lvgl__lvgl/scripts/LVGLImage.py`
@@ -16,4 +16,4 @@ python3 scripts/generate_branding_asset.py
 - Output size: 168x24, color format RGB565A8
 - Output file: `main/generated/manuengineer_logo_168x24.cpp`
 - Output file size: 87736 bytes
-- Output file SHA-256: `0de7721871d9db85a0f7c409271fbbf2a87e197d607aa24397e9c050fd223607`
+- Output file SHA-256: `041c5aad465bde94e49d5b554a83d05a950adbd60a69b9e476cad7c51e49d027`
