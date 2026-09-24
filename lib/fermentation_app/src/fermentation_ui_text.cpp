@@ -19,7 +19,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 54U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 55U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -44,6 +44,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"confirm", "Confirm"},
         std::pair{"cancel", "Cancel"},
         std::pair{"service-locked", "Service unavailable"},
+        std::pair{"service-home-locked", "Service off"},
         std::pair{"resume-fallback", "Resume fallback"},
         std::pair{"manual", "Manual"},
         std::pair{"manual-holding", "Manual holding"},
@@ -83,7 +84,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 54U> de{
+            const std::array<std::pair<const char*, const char*>, 55U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -108,6 +109,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"confirm", "Bestaetigen"},
                  {"cancel", "Abbrechen"},
                  {"service-locked", "Service gesperrt"},
+                 {"service-home-locked", "Service aus"},
                  {"resume-fallback", "Fallback fortsetzen"},
                  {"manual", "Manuell"},
                  {"manual-holding", "Manuelles Halten"},
@@ -147,7 +149,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 54U> es{
+            const std::array<std::pair<const char*, const char*>, 55U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -172,6 +174,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"confirm", "Confirmar"},
                  {"cancel", "Cancelar"},
                  {"service-locked", "Servicio bloqueado"},
+                 {"service-home-locked", "Servicio off"},
                  {"resume-fallback", "Reanudar respaldo"},
                  {"manual", "Manual"},
                  {"manual-holding", "Mantenimiento manual"},

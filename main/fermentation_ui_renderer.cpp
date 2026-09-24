@@ -290,7 +290,7 @@ RepresentativeScreen makeRepresentativeScreen(
                 device_platform::ThemeToken::Canvas);
         addText(commands, textPacks, locale,
                 snapshot.service.available ? appKey("service")
-                                           : appKey("service-locked"),
+                                           : appKey("service-home-locked"),
                 {112U, 128U, 96U, RepresentativeScreen::kTextLineHeight},
                 snapshot.service.available
                     ? device_platform::ThemeToken::PrimaryAction

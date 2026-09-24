@@ -275,6 +275,34 @@ void test_service_page_shows_blocked_reason() {
     TEST_ASSERT_TRUE(hasText(screen, expected.value));
 }
 
+void test_home_service_status_uses_compact_locale_projection() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    snapshot.service.available = false;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    for (const auto locale : {"de", "en", "es"}) {
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{locale});
+        const auto expected = device_platform::resolveText(
+            packs, device_platform::LocaleId{locale},
+            fermentation::fermentationTextKey("service-home-locked"));
+        const auto expectedValue =
+            std::string_view{locale} == "de"
+                ? "Service aus"
+                : (std::string_view{locale} == "en" ? "Service off"
+                                                    : "Servicio off");
+        TEST_ASSERT_EQUAL_STRING(expectedValue, expected.value.c_str());
+        TEST_ASSERT_TRUE(hasText(screen, expected.value));
+        TEST_ASSERT_FALSE(hasText(
+            screen, device_platform::resolveText(
+                        packs, device_platform::LocaleId{locale},
+                        fermentation::fermentationTextKey("service-locked"))
+                        .value));
+    }
+}
+
 void test_recovery_page_shows_unavailable_capability_count() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Recovery;
@@ -526,6 +554,7 @@ int main() {
     RUN_TEST(test_program_list_page_shows_catalog_program_names);
     RUN_TEST(test_delete_confirmation_page_shows_selected_program_name);
     RUN_TEST(test_service_page_shows_blocked_reason);
+    RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);
     RUN_TEST(test_clock_text_dash_when_untrusted);
     RUN_TEST(test_clock_text_formats_trusted_utc_as_hh_mm);

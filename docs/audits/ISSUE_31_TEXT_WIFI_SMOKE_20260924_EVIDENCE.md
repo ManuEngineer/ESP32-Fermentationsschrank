@@ -1,0 +1,45 @@
+# Issue #31 – final text/WiFi renderer smoke evidence
+
+```text
+SOURCE_HEAD=05422aa31b8f51fc51dde62650adc82d996d7f2b
+HARDWARE_FIRMWARE_HEAD=717776c9a719684933dff4900518b643ccbe9027
+R1_DISPLAY_ROTATION=ROTATE90
+DISPLAY_LANDSCAPE_320X240=OWNER_CONFIRMED_PASS
+TOUCH_CALIBRATION_ACTIVE=YES
+ACTIVE_SLOT=tc0
+
+ISSUE29_PROBE=PASS
+PRODUCT_ACTIVE_LOAD=PASS
+TEXT_CLIPPING=OWNER_CONFIRMED_PASS
+WIFI_HEADER_ICON=OWNER_CONFIRMED_PASS
+HEADER_SPACING=OWNER_CONFIRMED_PASS
+HOME_COMPACT_SERVICE_STATUS=IMPLEMENTED_AND_NATIVE_TESTED
+TOUCH_ALIGNMENT=OWNER_CONFIRMED_PASS
+PRODUCT_TOUCH_SMOKE=PASS
+ONE_ACTION_PER_PRESS=PASS
+RELEASE_STOPS_PRESS_FEEDBACK=PASS
+NO_GHOST_TOUCH=PASS
+
+ACTUATOR_RELEASE=NO
+PRODUCT_Z_THRESHOLD=UNCHANGED
+PROBE_FAIL_CLOSED_GT_60S=NOT_VERIFIED
+PR_STATE=DRAFT
+NEXT_STEP=INDEPENDENT_FIX_VERIFICATION
+```
+
+The final actor-free `esp32_bringup` UART capture is preserved unchanged in
+the raw text artifact and in its readable companion:
+
+```text
+UART_LOG_RAW=docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_RAW.txt
+UART_LOG_RAW_SHA256=5cb4bf726fcd532f3e2549ecfc43ca737de5abea2a6a015139305e24d2936f2f
+UART_LOG_READABLE=docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_READABLE.txt
+UART_LOG_READABLE_SHA256=cc10a945c365ad10c1b6d3280deb9dd1fa7918a1ae8937b613de5acf4e34b181
+```
+
+The final hardware geometry remains unchanged. The logo is positioned at
+`x=4..171`; the DE/WiFi/clock header group is right-aligned as a block at
+`x=188..315`, leaving the same four-pixel right margin as the logo's left
+margin. The latest local change only adjusted the reserved locale slot to
+make that spacing explicit; touch calibration, rotation, and actor policy
+were not changed.
