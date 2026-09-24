@@ -28,6 +28,6 @@ inline constexpr int kBacklightPin = 4;
 inline constexpr bool kBacklightActiveHigh = true;
 inline constexpr int kTouchInterruptPin = 39;
 inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
-    device_platform::DisplayRotation::Rotate90;
+    device_platform::DisplayRotation::Rotate270;
 
 }  // namespace board_profile::esp32_32e_quad_mosfet_r1
