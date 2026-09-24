@@ -50,14 +50,17 @@ nicht kopiert, sondern verlinkt.
 ### Issue #31 current correction gate
 
 PR #156 remains `OPEN_DRAFT` on
-`CURRENT_HEAD=19c6779564f1a49b3b71ab11bbb121b9b372ea11`. The existing
+`CURRENT_HEAD=5a52f0147e9d277fc38f5b65489e7126301ebda6`. The exact
+`PLAN_SUPPLEMENT_SHA=5a52f0147e9d277fc38f5b65489e7126301ebda6` is awaiting
+Owner approval. The existing
 Display-/Touch-/Branding-Evidence remains valid, but the final review reopened
 two narrow blockers: the LVGL renderer must not mirror calibrated X
 coordinates, and the real R1 panel transform is
 `swap_xy:true,mirror_x:true,mirror_y:true`. The compact plan supplement is
 `docs/tasks/issue-31-display-rotation-capture-correction-plan.md` and waits for
-Owner approval of its new exact commit. No new capture, `tc0` update, product
-touch-smoke repeat or actuator release is authorized before that gate.
+Owner approval of its new exact commit. No new FIT capture is required; the
+controlled `tc0` sequence-1-to-sequence-2 migration, renderer cleanup and
+product touch-smoke repeat remain unauthorized before that gate.
 
 ## Parallele Governance-Arbeit
 
