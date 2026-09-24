@@ -47,6 +47,18 @@ nicht kopiert, sondern verlinkt.
 | 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 9 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
+### Issue #31 current correction gate
+
+PR #156 remains `OPEN_DRAFT` on
+`CURRENT_HEAD=19c6779564f1a49b3b71ab11bbb121b9b372ea11`. The existing
+Display-/Touch-/Branding-Evidence remains valid, but the final review reopened
+two narrow blockers: the LVGL renderer must not mirror calibrated X
+coordinates, and the real R1 panel transform is
+`swap_xy:true,mirror_x:true,mirror_y:true`. The compact plan supplement is
+`docs/tasks/issue-31-display-rotation-capture-correction-plan.md` and waits for
+Owner approval of its new exact commit. No new capture, `tc0` update, product
+touch-smoke repeat or actuator release is authorized before that gate.
+
 ## Parallele Governance-Arbeit
 
 - Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.

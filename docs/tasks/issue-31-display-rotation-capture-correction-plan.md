@@ -257,3 +257,122 @@ HARDWARE_ROTATION_PROBE=NOT_RUN
 NEW_OWNER_UART_CAPTURE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
+
+## 8. Plan-Ergänzung: Kalibrierungs-Ownership und finaler R1-Paneltransform
+
+Diese kurze Revision ergänzt den freigegebenen Korrekturplan ausschließlich um
+die zwei nachgelagerten Review-Blocker. Sie ändert weder die bereits bestätigte
+Display-/Layout-/Branding-Evidence noch die Aktorgrenze. Die widersprechende
+theoretische R1-Abbildung aus Abschnitt 3.1 wird für die konkrete R1-Hardware
+durch den folgenden gemessenen Befund ersetzt.
+
+```text
+REVISION_BASE_HEAD=19c6779564f1a49b3b71ab11bbb121b9b372ea11
+PREVIOUS_APPROVED_CORRECTION_PLAN_SHA=ff79695e39c9af933b2788a0d8777aa663a0347e
+PLAN_STATUS=OWNER_APPROVAL_REQUIRED
+IMPLEMENTATION=NOT_STARTED_FOR_THIS_REVISION
+FINAL_R1_PANEL_TRANSFORM=swap_xy:true,mirror_x:true,mirror_y:true
+R1_DISPLAY_ROTATION=ROTATE90
+DISPLAY_LANDSCAPE_320X240=OWNER_CONFIRMED_PASS
+DISPLAY_CLIPPING=NONE
+RENDERER_TOUCH_COORDINATE_COMPENSATION=FORBIDDEN
+TOUCH_MODEL_MUST_MATCH_FINAL_PANEL_GEOMETRY=YES
+ACTUATOR_RELEASE=NO
+```
+
+### 8.1 Ownership und technische Grenze
+
+Der bestehende `device_platform::applyTouchCalibration()`-Pfad bleibt der
+einzige Owner der gespeicherten Raw->Screen-Kalibrierung. Die zusätzliche
+produktseitige X-Spiegelung nach `applyTouchCalibration()` in
+`main/fermentation_ui_lvgl_renderer.cpp` wird nach Freigabe vollständig
+entfernt. Der Renderer darf keine zweite Touch-, Spiegelungs- oder
+Rotationspolicy enthalten; er übernimmt ausschließlich das Ergebnis des
+Kalibrierungsowners und begrenzt es auf die bestehende 320x240-Fläche.
+
+Die bestehende technische Abbildung an der
+`device_platform_esp_idf`-Adaptergrenze bleibt die einzige Paneltransform-
+Quelle: `displayRotationTransform()` in
+`lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.hpp` speist
+Adapter und LVGL-Port. Für den bereits ausgewählten R1-Kandidaten wird dort
+explizit die real bestätigte ILI9341-Transformabbildung dokumentiert und
+getestet:
+
+```text
+R1 / DisplayRotation::Rotate90
+swap_xy=true
+mirror_x=true
+mirror_y=true
+```
+
+`DisplayRotation` bleibt dabei ein bestehender Auswahlwert; es wird keine neue
+Displayarchitektur und keine zweite R1-/Renderer-Konfiguration eingeführt. Die
+R1-Auswahl kommt weiterhin ausschließlich aus dem gemeinsamen generierten
+`kR1DisplayRotation`-Wert. Die konkrete ESP-IDF-Panelabbildung wird an dieser
+bestehenden Adaptergrenze ausdrücklich als hardwareabhängiger R1-Befund
+behandelt und nicht aus dem Enum-Namen theoretisch abgeleitet.
+
+### 8.2 Nach Owner-Freigabe verbindliche Reihenfolge
+
+Erst nach Freigabe der exakten Plan-SHA wird in kleinen Schnitten umgesetzt:
+
+1. Die Renderer-Kompensation entfernen und gezielte Tests ergänzen, die
+   belegen, dass der Produktpfad nur über `applyTouchCalibration()` arbeitet.
+   Der bestehende Paneltransform-Test wird auf die finale R1-Abbildung
+   ausgerichtet; die LVGL-Portrotation muss weiterhin dieselbe technische
+   Quelle konsumieren.
+2. Den bestehenden Issue-31-Capturepfad auf der bereits bestätigten
+   `ROTATE90`-/320x240-Geometrie bauen und actor-free ausführen. Es werden
+   unverändert `FIT_TOP_LEFT`, `FIT_TOP_RIGHT`, `FIT_BOTTOM_LEFT`,
+   `FIT_BOTTOM_RIGHT`, `VALIDATION_CENTER`, `VALIDATION_TOP_MID` und
+   `HOLD_PROBE` erfasst. Der PENIRQ-, Kontakt-, Release- und
+   ControllerError-Vertrag bleibt unverändert.
+3. Das neue affine Modell ausschließlich aus den Medianen der vier FIT-Punkte
+   ableiten. Center und Top-Mid bleiben unabhängige Validation und gehen nicht
+   in den Fit ein. Rohlog, alle Samples, Summaries, Retries, Releasezeilen und
+   SHA256 bleiben vollständig erhalten.
+4. Den bestehenden `TouchCalibrationStore`-Pfad actor-free kontrolliert für
+   `tc0` verwenden: final-reviewed Modell schreiben, danach exakt
+   zurücklesen/verifizieren; `tc1` bleibt unverändert. Kein neuer Codec und
+   keine zweite Provisionierungsstrecke.
+5. Den normalen Produktpfad ohne Rendererkompensation bauen und laden lassen.
+   Erst wenn `tc0` verfügbar ist, den ungefährlichen Product-Touch-Smoke mit
+   `Home`, `System`, `App` und `Info` wiederholen. Jeder Treffer muss allein
+   über die persistierte Kalibrierung und den finalen Paneltransform erfolgen.
+
+Die bestehenden Text-, WiFi-, `Service aus`- und Branding-Korrekturen, die
+Rotation `ROTATE90`, der produktive Z-/Strength-Threshold, `tc1`, der
+Issue-29-Probe und `ACTUATOR_RELEASE=NO` bleiben außerhalb dieses Deltas
+unverändert.
+
+### 8.3 Revalidierungs- und Stop-Vertrag
+
+Die unabhängige Review erhält mindestens:
+
+```text
+FINAL_R1_PANEL_TRANSFORM=swap_xy:true,mirror_x:true,mirror_y:true
+DISPLAY_LANDSCAPE_320X240=OWNER_CONFIRMED_PASS
+DISPLAY_CLIPPING=NONE
+RENDERER_TOUCH_COORDINATE_COMPENSATION=FORBIDDEN
+TOUCH_MODEL_MUST_MATCH_FINAL_PANEL_GEOMETRY=YES
+NEW_OWNER_UART_CAPTURE=COMPLETE
+NEW_CALIBRATION_FIT=FIT4_ONLY
+VALIDATION_CENTER=INDEPENDENT
+VALIDATION_TOP_MID=INDEPENDENT
+TC0_READBACK=PASS
+TC1=UNCHANGED
+PRODUCT_TOUCH_SMOKE=PASS
+PRODUCT_Z_THRESHOLD=UNCHANGED
+ACTUATOR_RELEASE=NO
+NEXT_STEP=INDEPENDENT_FIX_VERIFICATION
+```
+
+Bis zur Owner-Freigabe dieser Planergänzung gilt fail-closed:
+
+```text
+IMPLEMENTATION=NOT_STARTED_FOR_THIS_REVISION
+OWNER_UART_CAPTURE=NOT_RUN
+TC0_UPDATE=NOT_RUN
+PRODUCT_TOUCH_SMOKE_RECAPTURE=NOT_RUN
+ACTUATOR_RELEASE=NO
+```
