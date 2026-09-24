@@ -13,6 +13,8 @@ namespace fermentation::main_ui {
 namespace {
 
 constexpr std::uint16_t kHeaderHeight = 32U;
+constexpr std::uint16_t kHeaderLocaleLeft = 180U;
+constexpr std::uint16_t kHeaderLocaleWidth = 40U;
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
@@ -236,7 +238,9 @@ RepresentativeScreen makeRepresentativeScreen(
                    [](unsigned char value) {
                        return static_cast<char>(std::toupper(value));
                    });
-    addRawText(commands, {176U, 4U, 44U, RepresentativeScreen::kTextLineHeight},
+    addRawText(commands,
+               {kHeaderLocaleLeft, 4U, kHeaderLocaleWidth,
+                RepresentativeScreen::kTextLineHeight},
                std::move(localeText), device_platform::ThemeToken::TextPrimary,
                device_platform::ThemeToken::Surface);
     addNetworkStatusIcon(commands,
