@@ -184,6 +184,19 @@ Diese Regeln gelten, wenn der normale Webpasswortschutz aktiviert ist.
   Passwort muss zugleich die Codepoint- und UTF-8-Bytegrenze einhalten
 - Leerzeichen und Unicode-Zeichen sind grundsaetzlich erlaubt; eine leere
   Eingabe bleibt ungueltig
+- der Owner hat fuer Webpasswort und Service-PIN den bereits implementierten
+  PBKDF2-HMAC-SHA-256-Pfad mit folgendem R1-Produktwert freigegeben:
+  ```text
+  KDF_ALGORITHM=PBKDF2_HMAC_SHA256
+  KDF_WORK_FACTOR=10000
+  KDF_WORK_FACTOR_FALLBACK=NONE
+  ```
+  Die reale ESP32-WROOM-32E-Messung lag bei ca. 3,78 s fuer 10.000
+  Iterationen; waehrend der Messung trat kein Watchdog-Reset und kein
+  nachgewiesener Regelzyklus-/Timer-Jitter auf. Diese Entscheidung behauptet
+  keine besondere Hochsicherheit oder OWASP-Konformitaet; die dokumentierte
+  Restgrenze gegen Offline-Angriffe und das Security-Release-Gate fuer
+  NVS-/Flash-Schutz bleiben unveraendert.
 - diese Policy orientiert sich fuer Laengen- und Bedienregeln an
   NIST SP 800-63B-4, behauptet aber keine vollstaendige NIST-Konformitaet;
   insbesondere bleibt der direkte lokale HTTP-Betrieb ohne authentisierten

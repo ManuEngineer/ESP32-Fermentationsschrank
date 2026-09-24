@@ -178,12 +178,16 @@ fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
 
 ## Authentisierung und Secret-Schutz
 
-Bewaehrte Kryptoprimitive und vorhandene Plattformfunktionen werden erst nach
+Bewaehrte Kryptoprimitiven und vorhandene Plattformfunktionen werden erst nach
 reproduzierbarer Toolchain-, Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und
 Watchdogpruefung adoptiert. PBKDF2-HMAC-SHA-256 aus dem fixierten
-mbedTLS-/ESP32-Pfad ist nur erster Evaluationskandidat; Work Factor,
-Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
-festgelegt.
+mbedTLS-/ESP32-Pfad ist fuer R1 mit `KDF_WORK_FACTOR=10000` ownerfreigegeben.
+Die reale ESP32-WROOM-32E-Messung lag bei ca. 3,78 s ohne Watchdog-Reset oder
+nachgewiesenen Regelzyklus-/Timer-Jitter; es gibt keinen automatischen
+Fallback auf einen kleineren Work Factor. Die Auswahl behauptet weder
+Hochsicherheit noch OWASP-Konformitaet. Zufallsintegration und
+Plattformverschluesselung bleiben eigene technische beziehungsweise
+Security-Release-Gates.
 
 Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
 PIN-Credentials, atomar neustartfeste Vor-Sperr-Zaehler/Sperrzustaende,

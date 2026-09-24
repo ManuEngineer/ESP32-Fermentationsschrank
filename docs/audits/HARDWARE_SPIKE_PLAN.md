@@ -1026,9 +1026,13 @@ implementiert weder Exportframework noch Berichtsimport.
 
 OD-09 ist fachlich entschieden; dieser aktorfreie Spike weist die technische
 Eignung nach und implementiert keine produktiven Endpunkte. PBKDF2-HMAC-SHA-256
-aus der fixierten mbedTLS-/ESP32-Toolchain ist
-`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
-`FINAL_SELECTION_PENDING`. Mindestens geprueft werden:
+aus der fixierten mbedTLS-/ESP32-Toolchain ist fuer R1 mit
+`KDF_WORK_FACTOR=10000` ownerfreigegeben. Die Messung auf dem
+ESP32-WROOM-32E ergab ca. 3,78 s ohne Watchdog-Reset oder nachgewiesenen
+Regelzyklus-/Timer-Jitter; ein automatischer kleinerer Work-Factor-Fallback
+ist ausgeschlossen. Die Auswahl behauptet keine Hochsicherheit oder
+OWASP-Konformitaet. Die technischen Nachweise und Gates bleiben im uebrigen
+Scope des Spikes. Mindestens geprueft werden:
 
 - reproduzierbarer Build und bekannte KDF-Testvektoren;
 - getrennte zufaellige Salts mit mindestens 128 Bit, 256-Bit-Verifier,
@@ -1051,9 +1055,10 @@ aus der fixierten mbedTLS-/ESP32-Toolchain ist
 - keine Teilaktivierung, kein Rueckfall auf eine alte Credential-Epoche und
   keine Secrets in Testlogs oder Artefakten.
 
-Der Spike legt keine Iterationszahl, KDF-Produktionswahl, Stack-/Heapgarantie
-oder Schedulingstrategie fest. Danach entscheidet der Owner KDF und Work
-Factor. NVS-/Flashverschluesselung wird separat als
+Der Spike legt keine Stack-/Heapgarantie oder Schedulingstrategie fest. Die
+Ownerentscheidung setzt fuer R1 den PBKDF2-HMAC-SHA-256-Work-Factor auf 10.000;
+die gemessenen Laufzeiten bleiben unveraendert als Evidence erhalten. Eine
+produktive Freigabe ist damit nicht behauptet. NVS-/Flashverschluesselung wird separat als
 `EVALUATE_BEFORE_RELEASE` auf Toolchain, Partitionierung, Provisionierung,
 Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset,
 Updatepfad, Ressourcen und dokumentierte physische Schutzgrenze geprueft. Sie

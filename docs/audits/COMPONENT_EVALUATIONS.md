@@ -729,7 +729,7 @@ Revision/Konfliktschutz und sichtbarer Warnung bleibt erforderlich.
 
 | Kandidat oder Pfad | Gepruefter Stand | Aufgabe | Status | Verbindlicher Nachweis |
 |---|---|---|---|---|
-| PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; konkrete Funktion, Version, Lizenz-/Noticeumfang und Build im Spike pruefen | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bekannte Testvektoren, mindestens 128-Bit-Salt und 256-Bit-Verifier mit Parameterkennung, konstanter Vergleich, Laufzeit, Stack, Heap, Jitter, Watchdog und parallele Anfragen; Iterationszahl erst danach |
+| PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; reale ESP32-WROOM-32E-Messung und Ownerentscheidung liegen vor | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier; R1-Wert `KDF_WORK_FACTOR=10000` | `OWNER_SELECTED_R1`, `EVIDENCE_COMPLETE_FOR_OWNER_DECISION`, `TARGETED_FIX_VERIFICATION_PENDING` | 16-Byte-Salt, 32-Byte-Verifier, Parameterkennung, konstanter Vergleich sowie Laufzeit-, Stack-, Heap-, Jitter- und Watchdog-Evidence sind erhalten; 10.000 Iterationen dauern ca. 3,78 s ohne nachgewiesenen Jitter/Reset; kein automatischer kleinerer Fallback |
 | `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG | fixierter ESP32-/mbedTLS-Pfad, konkrete Integration offen | kryptografischer Zufall fuer Salts, Sessionkennungen und CSRF-Tokens | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | Initialisierung/Fehlerpfad, wiederholte Bildung und Plausibilitaetspruefung; keine schwachen Ersatzwerte und keine Entropiebehauptung ueber die Plattformgarantie hinaus |
 | NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; zwingendes ergebnisoffenes Security-Gate vor #37 | Toolchain, Boot, Partitionierung, Provisionierung, Schluesselentstehung/-speicherung/-verlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, UART-Neuflash, Update/Migration, Ressourcen und Stabilitaet; danach vor #37 expliziter Ownerentscheid fuer produktive Auswahl samt Provisionierungs-/Recovery-/Regressionstest oder begruendete Nichtauswahl mit Rest-Risiken und Schutzgrenzen |
 
@@ -742,8 +742,8 @@ bleiben `fail closed`, waehrend aktiver Sperre gibt es weder KDF noch einen
 Write je Ablehnung. Ein Pepper im selben ungeschuetzten Flash ist
 keine Schutzgrenze. Ohne aktivierte und getestete Plattformverschluesselung wird
 kein Schutz gegen physischen Flashzugriff behauptet. Es wird keine zusaetzliche
-Kryptobibliothek, allgemeine Authplattform oder endgueltige Kryptokonfiguration
-gewaehlt.
+Kryptobibliothek oder allgemeine Authplattform gewaehlt; die konkrete
+PBKDF2-/Work-Factor-Entscheidung ist fuer R1 mit `10000` dokumentiert.
 
 Der Plattformverschluesselungs-Spike und sein dokumentierter Ownerentscheid
 sind zwingend vor #37 abzuschliessen. Eine Auswahl verlangt die produktive
@@ -753,7 +753,7 @@ ausdrueckliche Ownerfreigabe. Diese Evaluation nimmt keines der Ergebnisse
 vorweg.
 
 Produktive Webmutationen bleiben ueber den Policyentscheid hinaus gesperrt,
-bis die je Modus erforderlichen KDF-/Work-Factor-, Zufalls-, Credential-,
+bis die je Modus erforderlichen Zufalls-, Credential-,
 Sperr-, Session-/Cookie-, CSRF-/HTTP-, Revisions-/Wiederholungs-, Ressourcen-,
 Jitter-, Watchdog-, Abbruch-, Neustart-, Webserver- und JSON-Nachweise
 ownerfreigegeben sind. Servicefunktionen benoetigen zusaetzlich PIN-KDF,
