@@ -84,6 +84,15 @@ RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
 RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN = re.compile(
     r"\b(?:applyRunCommand|applyProcessTransition)\b"
 )
+# The Application owns the one confirmed RAM-only message handoff. Keep this
+# exception at the exact call-site rather than allowlisting the whole
+# application source file or weakening the coordinator boundary generally.
+RUN_PERSISTENCE_APPLICATION_HANDOFF_FILE = (
+    "lib/fermentation_app/src/fermentation_application.cpp"
+)
+RUN_PERSISTENCE_APPLICATION_HANDOFF_LINE = (
+    "const auto applied = applyRunCommand(*runtimeRunState_, decision);"
+)
 # `auto`/`const auto`, optionally bound as `&`/`&&`, assigned from a
 # (possibly namespace-qualified) decide*() call.
 RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
@@ -595,6 +604,12 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 return code.count("\n", 0, position) + 1
 
             for match in RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN.finditer(code):
+                match_line = lines[line_number(match.start()) - 1].strip()
+                if (
+                    relative == RUN_PERSISTENCE_APPLICATION_HANDOFF_FILE
+                    and match_line == RUN_PERSISTENCE_APPLICATION_HANDOFF_LINE
+                ):
+                    continue
                 violations.append(
                     f"{path}:{line_number(match.start())}: produktiver "
                     "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
@@ -1098,7 +1113,7 @@ def create_clean_fixture(root: Path) -> None:
             'idf_component_register(SRCS "app_main.cpp" '
             'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
             "device_platform fermentation_app device_platform_esp_idf nvs_flash "
-            "esp_timer)\n"
+            "esp_timer espressif__esp_lvgl_port)\n"
         ),
         # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
         # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die
@@ -1573,6 +1588,12 @@ PLANNER_BINDING_BOUNDARY_VIOLATION_CASES = {
 # must not turn into a repository-wide ban on unrelated members with the same
 # spelling.
 RUN_PERSISTENCE_CLEAN_CASES = {
+    "application_owned_ram_message_handoff": (
+        RUN_PERSISTENCE_APPLICATION_HANDOFF_FILE,
+        "void f() {\n"
+        f"    {RUN_PERSISTENCE_APPLICATION_HANDOFF_LINE}\n"
+        "}\n",
+    ),
     "reused_result_name_is_not_a_bypass": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void a() { auto result = decideRun(); }\n"

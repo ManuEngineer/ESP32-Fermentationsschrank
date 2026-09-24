@@ -225,13 +225,20 @@ FermentationUiCommandBridge::confirmationRequest(
 
 FermentationUiCommandResult FermentationUiCommandBridge::fromCommandStatus(
     CommandStatus status,
-    const std::optional<FermentationUiConfirmationRequest>& confirmation,
-    FermentationUiCommandPhase phase) {
-    auto result = makeResult(categoryFor(status), status, phase);
+    const std::optional<FermentationUiConfirmationRequest>& confirmation) {
+    auto result = makeResult(categoryFor(status), status,
+                             FermentationUiCommandPhase::DecisionOnly);
     if (status == CommandStatus::NotConfirmed && confirmation.has_value()) {
         result.confirmation = confirmation;
     }
     return result;
+}
+
+FermentationUiCommandResult
+FermentationUiCommandBridge::fromOwningCommandApplyStatus(
+    CommandStatus status) {
+    return makeResult(categoryFor(status), status,
+                      FermentationUiCommandPhase::OwningOutcome);
 }
 
 FermentationUiCommandResult FermentationUiCommandBridge::fromTransitionDecision(

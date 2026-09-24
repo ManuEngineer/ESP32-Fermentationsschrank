@@ -559,14 +559,14 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     // messages are deliberately outside the run-persistence wire projection.
     if (decision.kind == CommandKind::AcknowledgeMessage ||
         decision.kind == CommandKind::MuteMessage) {
-        const auto messageResult =
-            runPersistenceCoordinator_->applyMessageCommand(*runtimeRunState_,
-                                                            decision);
-        return FermentationUiCommandBridge::fromRunPersistenceResult(
-            messageResult.status);
+        const auto applied = applyRunCommand(*runtimeRunState_, decision);
+        return FermentationUiCommandBridge::fromOwningCommandApplyStatus(
+            applied);
     }
 
-    const auto checkpointTime = currentCheckpointTime();
+    auto checkpointTime = currentCheckpointTime();
+    checkpointTime.monotonicMillis =
+        confirmed.commandEnvelope().monotonicMillis;
     RunPersistenceResult persisted;
     const auto* liveEvidence = &owningRuntimeEvidence_;
     if (decision.kind == CommandKind::StartProgram ||

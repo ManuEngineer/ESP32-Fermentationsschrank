@@ -291,9 +291,12 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult fromCommandStatus(
         CommandStatus status,
         const std::optional<FermentationUiConfirmationRequest>& confirmation =
-            std::nullopt,
-        FermentationUiCommandPhase phase =
-            FermentationUiCommandPhase::DecisionOnly);
+            std::nullopt);
+    // Only call this after the Application owner has actually executed the
+    // canonical RAM command apply. Decision/proposal statuses must continue
+    // to use fromCommandStatus() and remain DecisionOnly.
+    [[nodiscard]] static FermentationUiCommandResult
+    fromOwningCommandApplyStatus(CommandStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromTransitionDecision(
         DecisionStatus status);
     [[nodiscard]] static FermentationUiCommandResult fromRunPersistenceResult(

@@ -233,12 +233,6 @@ class RunPersistenceCoordinator {
         const FreshStartSnapshotProvenance& provenance,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
-    // Message acknowledgement/muting is an existing RAM-only owning command
-    // path. It deliberately does not create a run-persistence record, but it
-    // keeps the canonical applyRunCommand() and idempotency ownership inside
-    // the coordinator instead of exposing that mutation to an adapter.
-    [[nodiscard]] RunPersistenceResult applyMessageCommand(
-        RunCommandState& current, const CommandDecision& decision);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
         const RunCheckpointTime& time,

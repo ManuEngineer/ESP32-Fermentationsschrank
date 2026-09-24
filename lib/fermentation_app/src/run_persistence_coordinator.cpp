@@ -2574,44 +2574,6 @@ RunPersistenceResult RunPersistenceCoordinator::persistFreshStartCommand(
                                   &provenance);
 }
 
-RunPersistenceResult RunPersistenceCoordinator::applyMessageCommand(
-    RunCommandState& current, const CommandDecision& decision) {
-    if (state_ != RunPersistenceCoordinatorState::Ready &&
-        state_ != RunPersistenceCoordinatorState::ReadyEmpty) {
-        return unavailableResult();
-    }
-    if (!decision.proposed() ||
-        (decision.kind != CommandKind::AcknowledgeMessage &&
-         decision.kind != CommandKind::MuteMessage)) {
-        return result(decision.proposed()
-                          ? RunPersistenceResultStatus::NotEligible
-                          : RunPersistenceResultStatus::InvalidDecision);
-    }
-    if (decision.effectCount > decision.effects.size()) {
-        return result(RunPersistenceResultStatus::InvalidDecision,
-                      RunPersistenceStep::CandidateApply,
-                      RunPersistenceTechnicalReason::InvalidProjection);
-    }
-
-    const auto applied = applyRunCommand(current, decision);
-    if (applied == CommandStatus::AlreadyProcessed) {
-        return result(RunPersistenceResultStatus::AlreadyProcessed,
-                      RunPersistenceStep::RamApply);
-    }
-    if (applied != CommandStatus::Applied) {
-        return result(applied == CommandStatus::StaleState
-                          ? RunPersistenceResultStatus::StaleDecision
-                          : RunPersistenceResultStatus::InvalidDecision,
-                      RunPersistenceStep::CandidateApply);
-    }
-
-    auto owning = result(RunPersistenceResultStatus::Applied,
-                         RunPersistenceStep::RamApply);
-    owning.effects = decision.effects;
-    owning.effectCount = decision.effectCount;
-    return owning;
-}
-
 RunPersistenceResult RunPersistenceCoordinator::persistCommandInternal(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,

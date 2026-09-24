@@ -7,15 +7,89 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_text.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "run_persistence_codec.hpp"
+#include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "state_store_key.hpp"
 #include "virtual_time_source.hpp"
 
 #include "../../main/fermentation_ui_press_dispatcher.hpp"
+
+namespace fermentation {
+
+class FermentationApplicationTestAccess {
+   public:
+    static RunCommandState& runtimeState(FermentationApplication& application) {
+        return *application.runtimeRunState_;
+    }
+
+    static RunPersistenceCoordinator& runPersistenceCoordinator(
+        FermentationApplication& application) {
+        return *application.runPersistenceCoordinator_;
+    }
+};
+
+}  // namespace fermentation
 
 namespace {
 
 using namespace fermentation;
 using namespace fermentation::main_ui;
+
+device_platform::StateStoreKey persistenceKey(const char* name) {
+    const auto created = device_platform::StateStoreKey::create(name);
+    TEST_ASSERT_TRUE(created.key.has_value());
+    return *created.key;
+}
+
+device_platform::StateStoreReadResult readHead(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    return store.read(persistenceKey("rh0"), 8240U);
+}
+
+void assertSameHead(const device_platform::StateStoreReadResult& expected,
+                    const device_platform::StateStoreReadResult& actual) {
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(expected.status),
+                          static_cast<int>(actual.status));
+    TEST_ASSERT_EQUAL_STRING(expected.value.c_str(), actual.value.c_str());
+}
+
+void installMessage(FermentationApplication& application, std::uint32_t id) {
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    state.messageCount = 1U;
+    state.messageRevision = 0U;
+    state.messages[0] = RuntimeMessage{};
+    state.messages[0].id = id;
+}
+
+FermentationApplicationRequestResult prepareConfirmedMessage(
+    FermentationApplication& application, std::uint32_t messageId, bool mute) {
+    const auto snapshot = application.uiSnapshot();
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = 10U;
+    const FermentationUiEnvelopePayload payload =
+        mute ? FermentationUiEnvelopePayload{FermentationUiMuteMessageIntent{
+                   messageId}}
+             : FermentationUiEnvelopePayload{
+                   FermentationUiAcknowledgeMessageIntent{messageId}};
+    const auto prepared = application.prepareEnvelope(context, payload);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    const auto confirmed = application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    return confirmed;
+}
+
+void assertCommandStatus(const FermentationUiCommandResult& result,
+                         CommandStatus expected,
+                         FermentationUiCommandPhase phase) {
+    TEST_ASSERT_TRUE(std::holds_alternative<CommandStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(expected),
+        static_cast<int>(std::get<CommandStatus>(result.detail)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(phase),
+                          static_cast<int>(result.phase));
+}
 
 // Matches the existing test_renderer_boundary.cpp/test_local_touch_ui.cpp
 // bottom-slot coordinate convention (index*80 + 20, y=220).
@@ -191,6 +265,54 @@ void test_confirmed_manual_start_reaches_existing_owning_persist_path() {
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
 }
 
+void test_confirmed_start_reuses_prepared_envelope_monotonic_time() {
+    OwningAppFixture fixture;
+    const auto snapshot = fixture.application.uiSnapshot();
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = fixture.timeSource.monotonicMillis();
+    const FermentationUiEnvelopePayload payload =
+        FermentationUiStartManualTimedIntent{validManualTimedValues()};
+
+    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    const auto envelopeMonotonicMillis =
+        prepared.request->commandEnvelope().monotonicMillis;
+    const auto confirmed = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+
+    fixture.timeSource.advanceMonotonicMillis(5U);
+    const auto applied =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(applied.phase));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(applied.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(applied.detail)));
+
+    const auto headRead = readHead(fixture.store);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(headRead.status));
+    const auto head = decodeRunPersistenceHead(
+        headRead.value, device_platform::StorageEpoch(1U));
+    TEST_ASSERT_TRUE(head.has_value());
+    const auto recordName = head->current.slot == 0U ? "rc0" : "rc1";
+    const auto recordRead =
+        fixture.store.read(persistenceKey(recordName), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(recordRead.status));
+    const auto record = decodeRunPersistenceRecord(
+        recordRead.value, device_platform::StorageEpoch(1U));
+    TEST_ASSERT_TRUE(record.has_value());
+    TEST_ASSERT_EQUAL_UINT64(envelopeMonotonicMillis,
+                             record->snapshot.checkpointMonotonicMillis);
+}
+
 void test_confirmed_stop_reaches_existing_owning_persist_path() {
     OwningAppFixture fixture;
     FermentationUiWorkspacePress start;
@@ -275,6 +397,119 @@ void test_duplicate_confirmed_request_preserves_owner_idempotency() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationHomeMode::ActiveRun),
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+void test_acknowledge_message_is_ram_owned_and_persistence_ineligible() {
+    OwningAppFixture fixture;
+    installMessage(fixture.application, 7U);
+    const auto confirmed =
+        prepareConfirmedMessage(fixture.application, 7U, false);
+    const auto headBefore = readHead(fixture.store);
+
+    CommandDecision decision;
+    const auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+        FermentationApplicationTestAccess::runtimeState(fixture.application),
+        *confirmed.request, std::nullopt, &decision);
+    assertCommandStatus(decisionResult, CommandStatus::Proposed,
+                        FermentationUiCommandPhase::DecisionOnly);
+    const auto persistenceResult =
+        FermentationApplicationTestAccess::runPersistenceCoordinator(
+            fixture.application)
+            .persistCommand(
+                FermentationApplicationTestAccess::runtimeState(
+                    fixture.application),
+                decision,
+                RunCheckpointTime{
+                    confirmed.request->commandEnvelope().monotonicMillis,
+                    1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(persistenceResult.status));
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acknowledged);
+
+    const auto applied =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(applied, CommandStatus::Applied,
+                        FermentationUiCommandPhase::OwningOutcome);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acknowledged);
+    assertSameHead(headBefore, readHead(fixture.store));
+
+    const auto replay =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(replay, CommandStatus::AlreadyProcessed,
+                        FermentationUiCommandPhase::DecisionOnly);
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_mute_message_is_ram_owned_and_persistence_ineligible() {
+    OwningAppFixture fixture;
+    installMessage(fixture.application, 8U);
+    const auto confirmed =
+        prepareConfirmedMessage(fixture.application, 8U, true);
+    const auto headBefore = readHead(fixture.store);
+
+    CommandDecision decision;
+    const auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+        FermentationApplicationTestAccess::runtimeState(fixture.application),
+        *confirmed.request, std::nullopt, &decision);
+    assertCommandStatus(decisionResult, CommandStatus::Proposed,
+                        FermentationUiCommandPhase::DecisionOnly);
+    const auto persistenceResult =
+        FermentationApplicationTestAccess::runPersistenceCoordinator(
+            fixture.application)
+            .persistCommand(
+                FermentationApplicationTestAccess::runtimeState(
+                    fixture.application),
+                decision,
+                RunCheckpointTime{
+                    confirmed.request->commandEnvelope().monotonicMillis,
+                    1'700'000'000LL});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(persistenceResult.status));
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acousticMuted);
+
+    const auto applied =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(applied, CommandStatus::Applied,
+                        FermentationUiCommandPhase::OwningOutcome);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acousticMuted);
+    assertSameHead(headBefore, readHead(fixture.store));
+
+    const auto replay =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(replay, CommandStatus::AlreadyProcessed,
+                        FermentationUiCommandPhase::DecisionOnly);
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_command_status_projection_keeps_decisions_only() {
+    const auto proposed =
+        FermentationUiCommandBridge::fromCommandStatus(CommandStatus::Proposed);
+    assertCommandStatus(proposed, CommandStatus::Proposed,
+                        FermentationUiCommandPhase::DecisionOnly);
+    const auto replay = FermentationUiCommandBridge::fromCommandStatus(
+        CommandStatus::AlreadyProcessed);
+    assertCommandStatus(replay, CommandStatus::AlreadyProcessed,
+                        FermentationUiCommandPhase::DecisionOnly);
+
+    const auto owning =
+        FermentationUiCommandBridge::fromOwningCommandApplyStatus(
+            CommandStatus::Applied);
+    assertCommandStatus(owning, CommandStatus::Applied,
+                        FermentationUiCommandPhase::OwningOutcome);
 }
 
 void test_dispatch_transition_action_is_unavailable_no_owner() {
@@ -408,9 +643,13 @@ int main() {
     RUN_TEST(test_dispatch_resume_fallback_is_forwarded_unmodified);
     RUN_TEST(test_prepared_request_has_no_owning_mutation_before_handoff);
     RUN_TEST(test_confirmed_manual_start_reaches_existing_owning_persist_path);
+    RUN_TEST(test_confirmed_start_reuses_prepared_envelope_monotonic_time);
     RUN_TEST(test_confirmed_stop_reaches_existing_owning_persist_path);
     RUN_TEST(test_revalidation_failure_does_not_enter_owning_path);
     RUN_TEST(test_duplicate_confirmed_request_preserves_owner_idempotency);
+    RUN_TEST(test_acknowledge_message_is_ram_owned_and_persistence_ineligible);
+    RUN_TEST(test_mute_message_is_ram_owned_and_persistence_ineligible);
+    RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
     RUN_TEST(test_process_touch_without_contact_yields_no_target);
