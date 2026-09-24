@@ -15,6 +15,7 @@ namespace {
 constexpr std::uint16_t kHeaderHeight = 32U;
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
+constexpr std::uint16_t kProgramRowHeight = 18U;
 constexpr char kLogoAssetPath[] =
     "assets/branding/manuengineer/ManuEngineer.svg";
 
@@ -99,6 +100,14 @@ void addRawText(std::vector<ScreenDrawCommand>& commands,
                 device_platform::ThemeToken background) {
     commands.push_back(
         {ScreenDrawKind::Text, rect, token, background, std::move(text), {}});
+}
+
+void addNetworkStatusIcon(std::vector<ScreenDrawCommand>& commands,
+                          device_platform::DisplayRect rect,
+                          device_platform::ThemeToken token,
+                          device_platform::ThemeToken background) {
+    commands.push_back(
+        {ScreenDrawKind::NetworkStatusIcon, rect, token, background, {}, {}});
 }
 
 void addLogo(std::vector<ScreenDrawCommand>& commands,
@@ -227,17 +236,19 @@ RepresentativeScreen makeRepresentativeScreen(
                    [](unsigned char value) {
                        return static_cast<char>(std::toupper(value));
                    });
-    addRawText(commands, {176U, 4U, 44U, 24U}, std::move(localeText),
-               device_platform::ThemeToken::TextPrimary,
+    addRawText(commands, {176U, 4U, 44U, RepresentativeScreen::kTextLineHeight},
+               std::move(localeText), device_platform::ThemeToken::TextPrimary,
                device_platform::ThemeToken::Surface);
-    addRawText(commands, {220U, 4U, 44U, 24U}, "WLAN",
-               networkStatusToken(networkStatus),
-               device_platform::ThemeToken::Surface);
-    addRawText(commands, {264U, 4U, 52U, 24U}, screen.clockText,
-               device_platform::ThemeToken::TextSecondary,
+    addNetworkStatusIcon(commands,
+                         {220U, 4U, 44U, RepresentativeScreen::kTextLineHeight},
+                         networkStatusToken(networkStatus),
+                         device_platform::ThemeToken::Surface);
+    addRawText(commands, {264U, 4U, 52U, RepresentativeScreen::kTextLineHeight},
+               screen.clockText, device_platform::ThemeToken::TextSecondary,
                device_platform::ThemeToken::Surface);
     addText(commands, textPacks, locale, screen.workspace.title,
-            {8U, 40U, 144U, 16U}, device_platform::ThemeToken::TextPrimary,
+            {8U, 40U, 144U, RepresentativeScreen::kTextLineHeight},
+            device_platform::ThemeToken::TextPrimary,
             device_platform::ThemeToken::Canvas);
 
     // The content area below the title/home-mode row is page-specific: the
@@ -246,7 +257,7 @@ RepresentativeScreen makeRepresentativeScreen(
     // recovery capabilities); only Home draws the home summary.
     if (screen.workspace.page == FermentationUiPage::Home) {
         addText(commands, textPacks, locale, homeModeKey(snapshot.home.mode),
-                {168U, 40U, 144U, 16U},
+                {168U, 40U, 144U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
 
@@ -257,31 +268,32 @@ RepresentativeScreen makeRepresentativeScreen(
             addFill(commands, {left, 68U, 96U, 48U},
                     device_platform::ThemeToken::Surface);
             addText(commands, textPacks, locale, appKey("status"),
-                    {static_cast<std::uint16_t>(left + 4U), 72U, 88U, 10U},
+                    {static_cast<std::uint16_t>(left + 4U), 72U, 88U,
+                     RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::TextSecondary,
                     device_platform::ThemeToken::Surface);
-            commands.push_back(
-                {ScreenDrawKind::Text,
-                 {static_cast<std::uint16_t>(left + 4U), 90U, 88U, 14U},
-                 device_platform::ThemeToken::StatusInformation,
-                 device_platform::ThemeToken::Surface,
-                 temperatureText(snapshot.temperatures[index]),
-                 {}});
+            commands.push_back({ScreenDrawKind::Text,
+                                {static_cast<std::uint16_t>(left + 4U), 90U,
+                                 88U, RepresentativeScreen::kTextLineHeight},
+                                device_platform::ThemeToken::StatusInformation,
+                                device_platform::ThemeToken::Surface,
+                                temperatureText(snapshot.temperatures[index]),
+                                {}});
         }
         addText(commands, textPacks, locale, appKey("messages"),
-                {8U, 128U, 88U, 14U},
+                {8U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusWarning,
                 device_platform::ThemeToken::Canvas);
         addText(commands, textPacks, locale,
                 snapshot.service.available ? appKey("service")
                                            : appKey("service-locked"),
-                {112U, 128U, 96U, 14U},
+                {112U, 128U, 96U, RepresentativeScreen::kTextLineHeight},
                 snapshot.service.available
                     ? device_platform::ThemeToken::PrimaryAction
                     : device_platform::ThemeToken::StatusWarning,
                 device_platform::ThemeToken::Canvas);
         addText(commands, textPacks, locale, appKey("network"),
-                {224U, 128U, 88U, 14U},
+                {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
     } else {
@@ -291,11 +303,11 @@ RepresentativeScreen makeRepresentativeScreen(
             for (std::size_t index = 0U; index < rowCount; ++index) {
                 const auto& entry = screen.workspace.programList[index];
                 const auto top = static_cast<std::uint16_t>(68U + index * 18U);
-                addFill(commands, {8U, top, 304U, 16U},
+                addFill(commands, {8U, top, 304U, kProgramRowHeight},
                         device_platform::ThemeToken::Surface);
                 addRawText(
                     commands,
-                    {12U, static_cast<std::uint16_t>(top + 2U), 296U, 12U},
+                    {12U, top, 296U, RepresentativeScreen::kTextLineHeight},
                     entry.program.program.name,
                     entry.startable
                         ? device_platform::ThemeToken::TextPrimary
@@ -303,18 +315,21 @@ RepresentativeScreen makeRepresentativeScreen(
                     device_platform::ThemeToken::Surface);
             }
         } else if (screen.workspace.confirmationProgramName.has_value()) {
-            addRawText(commands, {8U, 68U, 304U, 16U},
+            addRawText(commands,
+                       {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
                        *screen.workspace.confirmationProgramName,
                        device_platform::ThemeToken::TextPrimary,
                        device_platform::ThemeToken::Canvas);
         }
         if (screen.workspace.blockedReason.has_value()) {
             addText(commands, textPacks, locale,
-                    *screen.workspace.blockedReason, {8U, 128U, 304U, 14U},
+                    *screen.workspace.blockedReason,
+                    {8U, 128U, 304U, RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::StatusWarning,
                     device_platform::ThemeToken::Canvas);
         } else if (!screen.workspace.unavailableCapabilities.empty()) {
-            addRawText(commands, {8U, 128U, 304U, 14U},
+            addRawText(commands,
+                       {8U, 128U, 304U, RepresentativeScreen::kTextLineHeight},
                        resolve(textPacks, locale, appKey("unavailable")).value +
                            " " +
                            std::to_string(
@@ -326,7 +341,8 @@ RepresentativeScreen makeRepresentativeScreen(
 
     if (screen.workspace.pager.itemCount > 0U &&
         screen.workspace.pager.valid()) {
-        addRawText(commands, {8U, 156U, 72U, 14U},
+        addRawText(commands,
+                   {8U, 156U, 72U, RepresentativeScreen::kTextLineHeight},
                    std::to_string(screen.workspace.pager.currentIndex + 1U) +
                        "/" + std::to_string(screen.workspace.pager.itemCount),
                    device_platform::ThemeToken::TextSecondary,
@@ -336,12 +352,14 @@ RepresentativeScreen makeRepresentativeScreen(
         addFill(commands, {32U, 148U, 256U, 44U},
                 device_platform::ThemeToken::Overlay);
         addText(commands, textPacks, locale,
-                *screen.workspace.confirmationWarning, {40U, 154U, 240U, 14U},
+                *screen.workspace.confirmationWarning,
+                {40U, 154U, 240U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::TextPrimary,
                 device_platform::ThemeToken::Overlay);
-        addRawText(commands, {40U, 174U, 224U, 12U}, "cancel  confirm",
-                   device_platform::ThemeToken::PrimaryAction,
-                   device_platform::ThemeToken::Overlay);
+        addRawText(
+            commands, {40U, 174U, 224U, RepresentativeScreen::kTextLineHeight},
+            "cancel  confirm", device_platform::ThemeToken::PrimaryAction,
+            device_platform::ThemeToken::Overlay);
     }
 
     for (std::size_t index = 0U; index < screen.workspace.bottomSlots.size();
@@ -351,13 +369,17 @@ RepresentativeScreen makeRepresentativeScreen(
         addFill(commands, {left, kControlTop, 80U, kControlHeight},
                 slot.enabled ? device_platform::ThemeToken::PrimaryAction
                              : device_platform::ThemeToken::SecondaryAction);
-        addText(commands, textPacks, locale, slot.label,
-                {static_cast<std::uint16_t>(left + 4U),
-                 static_cast<std::uint16_t>(kControlTop + 15U), 68U, 10U},
-                slot.enabled ? device_platform::ThemeToken::OnPrimaryAction
-                             : device_platform::ThemeToken::TextSecondary,
-                slot.enabled ? device_platform::ThemeToken::PrimaryAction
-                             : device_platform::ThemeToken::SecondaryAction);
+        addText(
+            commands, textPacks, locale, slot.label,
+            {static_cast<std::uint16_t>(left + 4U),
+             static_cast<std::uint16_t>(
+                 kControlTop +
+                 (kControlHeight - RepresentativeScreen::kTextLineHeight) / 2U),
+             68U, RepresentativeScreen::kTextLineHeight},
+            slot.enabled ? device_platform::ThemeToken::OnPrimaryAction
+                         : device_platform::ThemeToken::TextSecondary,
+            slot.enabled ? device_platform::ThemeToken::PrimaryAction
+                         : device_platform::ThemeToken::SecondaryAction);
     }
     if (pressedTarget.has_value() &&
         pressedTarget->kind ==

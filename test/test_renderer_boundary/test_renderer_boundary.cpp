@@ -315,7 +315,7 @@ void test_clock_text_formats_trusted_utc_as_hh_mm() {
     TEST_ASSERT_EQUAL_STRING("01:01", screen.clockText.c_str());
 }
 
-void test_network_status_changes_wlan_label_token() {
+void test_network_status_icon_changes_token_and_has_r1_line_height() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
     const auto packs = fermentation::makeFermentationUiTextPacks();
@@ -328,16 +328,40 @@ void test_network_status_changes_wlan_label_token() {
         std::nullopt, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable);
 
-    const auto findWlan = [](const auto& screen) {
+    const auto findIcon = [](const auto& screen) {
         return std::find_if(
             screen.commands.begin(), screen.commands.end(),
-            [](const auto& command) { return command.text == "WLAN"; });
+            [](const auto& command) {
+                return command.kind ==
+                       fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
+            });
     };
-    const auto connectedWlan = findWlan(connected);
-    const auto unavailableWlan = findWlan(unavailable);
-    TEST_ASSERT_TRUE(connectedWlan != connected.commands.end());
-    TEST_ASSERT_TRUE(unavailableWlan != unavailable.commands.end());
-    TEST_ASSERT_FALSE(connectedWlan->token == unavailableWlan->token);
+    const auto connectedIcon = findIcon(connected);
+    const auto unavailableIcon = findIcon(unavailable);
+    TEST_ASSERT_TRUE(connectedIcon != connected.commands.end());
+    TEST_ASSERT_TRUE(unavailableIcon != unavailable.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(
+        fermentation::main_ui::RepresentativeScreen::kTextLineHeight,
+        connectedIcon->rect.height);
+    TEST_ASSERT_FALSE(connectedIcon->token == unavailableIcon->token);
+}
+
+void test_all_single_line_commands_have_r1_text_line_height() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    for (const auto& command : screen.commands) {
+        if (command.kind == fermentation::main_ui::ScreenDrawKind::Text ||
+            command.kind ==
+                fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon) {
+            TEST_ASSERT_TRUE(
+                command.rect.height >=
+                fermentation::main_ui::RepresentativeScreen::kTextLineHeight);
+        }
+    }
 }
 
 void test_theme_is_sourced_from_canonical_r1_catalog() {
@@ -505,7 +529,8 @@ int main() {
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);
     RUN_TEST(test_clock_text_dash_when_untrusted);
     RUN_TEST(test_clock_text_formats_trusted_utc_as_hh_mm);
-    RUN_TEST(test_network_status_changes_wlan_label_token);
+    RUN_TEST(test_network_status_icon_changes_token_and_has_r1_line_height);
+    RUN_TEST(test_all_single_line_commands_have_r1_text_line_height);
     RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);
     RUN_TEST(test_render_key_changes_on_network_status_and_clock);
     RUN_TEST(test_render_key_unchanged_workspace_remains_equal);

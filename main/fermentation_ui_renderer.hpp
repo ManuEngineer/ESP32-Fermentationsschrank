@@ -19,6 +19,7 @@ namespace fermentation::main_ui {
 enum class ScreenDrawKind : std::uint8_t {
     Fill,
     Text,
+    NetworkStatusIcon,
     Logo,
     PressFeedback,
 };
@@ -36,6 +37,9 @@ struct ScreenDrawCommand {
 struct RepresentativeScreen {
     static constexpr std::uint16_t kWidth = 320U;
     static constexpr std::uint16_t kHeight = 240U;
+    // R1 uses LVGL's Montserrat 14 default font (16 px line height). The
+    // extra two pixels keep glyphs clear of the label clip boundary.
+    static constexpr std::uint16_t kTextLineHeight = 18U;
 
     device_platform::LocaleId locale{"en"};
     device_platform::DeviceShellHeader header{

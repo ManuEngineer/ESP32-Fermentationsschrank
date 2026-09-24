@@ -1,5 +1,6 @@
 #include "fermentation_ui_lvgl_renderer.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -344,11 +345,19 @@ bool ProductiveLvglRenderer::render(
             auto* logo = lv_image_create(state.root);
             lv_image_set_src(logo, &manuengineer_logo_168x24);
             lv_obj_set_pos(logo, command.rect.left, command.rect.top);
-        } else if (command.kind == ScreenDrawKind::Text) {
+        } else if (command.kind == ScreenDrawKind::Text ||
+                   command.kind == ScreenDrawKind::NetworkStatusIcon) {
             auto* label = lv_label_create(state.root);
-            lv_label_set_text(label, command.text.c_str());
+            const char* text = command.kind == ScreenDrawKind::NetworkStatusIcon
+                                   ? LV_SYMBOL_WIFI
+                                   : command.text.c_str();
+            lv_label_set_text(label, text);
             lv_obj_set_pos(label, command.rect.left, command.rect.top);
-            lv_obj_set_size(label, command.rect.width, command.rect.height);
+            lv_obj_set_style_text_font(label, LV_FONT_DEFAULT, 0U);
+            const auto lineHeight = std::max<lv_coord_t>(
+                static_cast<lv_coord_t>(command.rect.height),
+                lv_font_get_line_height(LV_FONT_DEFAULT));
+            lv_obj_set_size(label, command.rect.width, lineHeight);
             lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
             styleObject(label, command.token, command.backgroundToken);
         } else if (command.kind == ScreenDrawKind::Fill ||
