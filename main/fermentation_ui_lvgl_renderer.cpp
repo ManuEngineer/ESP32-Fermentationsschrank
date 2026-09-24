@@ -232,8 +232,6 @@ bool ProductiveLvglRenderer::initialize() {
         std::make_unique<device_platform_esp_idf::EspIdfDisplayTouchAdapter>(
             state.config);
     if (state.adapter == nullptr || !state.adapter->initialize() ||
-        !state.adapter->setRotation(
-            device_platform::DisplayRotation::Rotate0) ||
         !state.adapter->setBacklight(true)) {
         return false;
     }

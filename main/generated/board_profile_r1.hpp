@@ -9,7 +9,12 @@
 // R1 display/touch GPIO assignment from the canonical wiring SSOT
 // (Issue #130). No second hand-maintained pin list is permitted in
 // main/app_main.cpp, CMake, or any other configuration file.
+// The R1 display rotation below is the single shared candidate used
+// by the productive renderer and the Issue #31 capture harness; its
+// physical selection is accepted only after the actor-free probe.
 #pragma once
+
+#include "device_ui_hardware_ports.hpp"
 
 namespace board_profile::esp32_32e_quad_mosfet_r1 {
 
@@ -22,5 +27,7 @@ inline constexpr int kDisplayDataCommandPin = 2;
 inline constexpr int kBacklightPin = 4;
 inline constexpr bool kBacklightActiveHigh = true;
 inline constexpr int kTouchInterruptPin = 39;
+inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
+    device_platform::DisplayRotation::Rotate90;
 
 }  // namespace board_profile::esp32_32e_quad_mosfet_r1

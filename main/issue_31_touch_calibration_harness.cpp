@@ -30,10 +30,17 @@ constexpr std::uint16_t kBackgroundColor = 0x0000U;
 constexpr std::uint16_t kFitColor = 0x07E0U;
 constexpr std::uint16_t kValidationColor = 0x001FU;
 constexpr std::uint16_t kHoldColor = 0xF800U;
+constexpr std::uint16_t kProbeFrameColor = 0xFFFFU;
+constexpr std::uint16_t kProbeTopLeftColor = 0xF800U;
+constexpr std::uint16_t kProbeTopRightColor = 0x07E0U;
+constexpr std::uint16_t kProbeBottomLeftColor = 0x001FU;
+constexpr std::uint16_t kProbeBottomRightColor = 0xFFE0U;
+constexpr std::uint16_t kProbeCenterColor = 0xF81FU;
 constexpr TickType_t kSamplePeriodTicks = pdMS_TO_TICKS(20U);
 constexpr std::uint32_t kIdleBaselineSamples = 50U;
 constexpr std::uint32_t kMinimumContactSamples = 15U;
 constexpr std::uint8_t kStableReleaseSamples = 5U;
+constexpr TickType_t kRotationProbeHoldTicks = pdMS_TO_TICKS(60000U);
 
 enum class ReferenceRole : std::uint8_t { Fit, Validation, Hold };
 
@@ -146,6 +153,95 @@ void observeContact(ContactStats& stats,
     return true;
 }
 
+[[nodiscard]] bool drawRotationProbe(
+    device_platform_esp_idf::EspIdfDisplayTouchAdapter& adapter) noexcept {
+    if (!adapter.fillRect({0U, 0U, kDisplayWidth, kDisplayHeight},
+                          kBackgroundColor)) {
+        return false;
+    }
+
+    constexpr std::uint16_t kFrameOffset = 2U;
+    constexpr std::uint16_t kFrameThickness = 3U;
+    constexpr std::uint16_t kMarkerSize = 24U;
+    constexpr std::uint16_t kMarkerInset = 10U;
+    constexpr std::uint16_t kCenterSize = 28U;
+    constexpr std::uint16_t kCenter = kDisplayWidth / 2U;
+    constexpr std::uint16_t kMiddle = kDisplayHeight / 2U;
+
+    if (!adapter.fillRect(
+            {kFrameOffset, kFrameOffset,
+             static_cast<std::uint16_t>(kDisplayWidth - 2U * kFrameOffset),
+             kFrameThickness},
+            kProbeFrameColor) ||
+        !adapter.fillRect(
+            {kFrameOffset,
+             static_cast<std::uint16_t>(kDisplayHeight - kFrameOffset -
+                                        kFrameThickness),
+             static_cast<std::uint16_t>(kDisplayWidth - 2U * kFrameOffset),
+             kFrameThickness},
+            kProbeFrameColor) ||
+        !adapter.fillRect(
+            {kFrameOffset, kFrameOffset, kFrameThickness,
+             static_cast<std::uint16_t>(kDisplayHeight - 2U * kFrameOffset)},
+            kProbeFrameColor) ||
+        !adapter.fillRect(
+            {static_cast<std::uint16_t>(kDisplayWidth - kFrameOffset -
+                                        kFrameThickness),
+             kFrameOffset, kFrameThickness,
+             static_cast<std::uint16_t>(kDisplayHeight - 2U * kFrameOffset)},
+            kProbeFrameColor) ||
+        !adapter.fillRect(
+            {kMarkerInset, kMarkerInset, kMarkerSize, kMarkerSize},
+            kProbeTopLeftColor) ||
+        !adapter.fillRect({static_cast<std::uint16_t>(
+                               kDisplayWidth - kMarkerInset - kMarkerSize),
+                           kMarkerInset, kMarkerSize, kMarkerSize},
+                          kProbeTopRightColor) ||
+        !adapter.fillRect({kMarkerInset,
+                           static_cast<std::uint16_t>(
+                               kDisplayHeight - kMarkerInset - kMarkerSize),
+                           kMarkerSize, kMarkerSize},
+                          kProbeBottomLeftColor) ||
+        !adapter.fillRect({static_cast<std::uint16_t>(
+                               kDisplayWidth - kMarkerInset - kMarkerSize),
+                           static_cast<std::uint16_t>(
+                               kDisplayHeight - kMarkerInset - kMarkerSize),
+                           kMarkerSize, kMarkerSize},
+                          kProbeBottomRightColor) ||
+        !adapter.fillRect(
+            {static_cast<std::uint16_t>(kCenter - kCenterSize / 2U),
+             static_cast<std::uint16_t>(kMiddle - kCenterSize / 2U),
+             kCenterSize, kCenterSize},
+            kProbeCenterColor)) {
+        return false;
+    }
+
+    // Cut a black cross into the center marker so its location is unambiguous
+    // at a glance while retaining the five distinct probe regions.
+    return adapter.fillRect(
+               {static_cast<std::uint16_t>(kCenter - 2U),
+                static_cast<std::uint16_t>(kMiddle - 10U), 4U, 20U},
+               kBackgroundColor) &&
+           adapter.fillRect({static_cast<std::uint16_t>(kCenter - 10U),
+                             static_cast<std::uint16_t>(kMiddle - 2U), 20U, 4U},
+                            kBackgroundColor);
+}
+
+[[nodiscard]] const char* rotationName(
+    device_platform::DisplayRotation rotation) noexcept {
+    switch (rotation) {
+        case device_platform::DisplayRotation::Rotate0:
+            return "ROTATE0";
+        case device_platform::DisplayRotation::Rotate90:
+            return "ROTATE90";
+        case device_platform::DisplayRotation::Rotate180:
+            return "ROTATE180";
+        case device_platform::DisplayRotation::Rotate270:
+            return "ROTATE270";
+    }
+    return "UNKNOWN";
+}
+
 void logReady(const ReferencePoint& point) noexcept {
     ESP_LOGI(kTag,
              "CALIBRATION_POINT_READY id=%s role=%s target_x=%u target_y=%u "
@@ -221,8 +317,8 @@ void logSummary(const ReferencePoint& point,
     const int initialPenirqLevel =
         gpio_get_level(static_cast<gpio_num_t>(interruptGpio));
 
-    for (std::uint32_t sampleIndex = 0U;
-         sampleIndex < kIdleBaselineSamples; ++sampleIndex) {
+    for (std::uint32_t sampleIndex = 0U; sampleIndex < kIdleBaselineSamples;
+         ++sampleIndex) {
         const auto sample = adapter.sampleTouch();
         if (sample.status == device_platform::RawTouchSampleStatus::Contact &&
             sample.contact) {
@@ -237,28 +333,26 @@ void logSummary(const ReferencePoint& point,
     const int finalPenirqLevel =
         gpio_get_level(static_cast<gpio_num_t>(interruptGpio));
     if (contactSamples != 0U || controllerErrors != 0U) {
-        ESP_LOGE(
-            kTag,
-            "CALIBRATION_IDLE_BASELINE=FAILED samples=%" PRIu32
-            " contacts=%" PRIu32 " controller_errors=%" PRIu32
-            " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
-            " penirq_level_final=%d",
-            kIdleBaselineSamples, contactSamples, controllerErrors,
-            interruptGpio, initialPenirqLevel, finalPenirqLevel);
+        ESP_LOGE(kTag,
+                 "CALIBRATION_IDLE_BASELINE=FAILED samples=%" PRIu32
+                 " contacts=%" PRIu32 " controller_errors=%" PRIu32
+                 " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
+                 " penirq_level_final=%d",
+                 kIdleBaselineSamples, contactSamples, controllerErrors,
+                 interruptGpio, initialPenirqLevel, finalPenirqLevel);
         ESP_LOGE(kTag,
                  "CALIBRATION_CAPTURE_HARNESS=FAILED "
                  "reason=IDLE_CONTACT_GATE");
         return false;
     }
 
-    ESP_LOGI(
-        kTag,
-        "CALIBRATION_IDLE_BASELINE=PASS samples=%" PRIu32
-        " contacts=%" PRIu32 " controller_errors=%" PRIu32
-        " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
-        " penirq_level_final=%d",
-        kIdleBaselineSamples, contactSamples, controllerErrors, interruptGpio,
-        initialPenirqLevel, finalPenirqLevel);
+    ESP_LOGI(kTag,
+             "CALIBRATION_IDLE_BASELINE=PASS samples=%" PRIu32
+             " contacts=%" PRIu32 " controller_errors=%" PRIu32
+             " gate=PENIRQ_ACTIVE_LOW gpio=%d penirq_level_initial=%d"
+             " penirq_level_final=%d",
+             kIdleBaselineSamples, contactSamples, controllerErrors,
+             interruptGpio, initialPenirqLevel, finalPenirqLevel);
     return true;
 }
 
@@ -340,12 +434,11 @@ void run() noexcept {
         r1_pins::kTouchInterruptPin,
         kDisplayWidth,
         kDisplayHeight,
+        r1_pins::kR1DisplayRotation,
         r1_pins::kBacklightActiveHigh,
     });
 
-    if (!adapter.initialize() ||
-        !adapter.setRotation(device_platform::DisplayRotation::Rotate0) ||
-        !adapter.setBacklight(true)) {
+    if (!adapter.initialize() || !adapter.setBacklight(true)) {
         ESP_LOGE(kTag,
                  "CALIBRATION_CAPTURE_HARNESS=FAILED "
                  "reason=DISPLAY_TOUCH_INITIALIZATION");
@@ -364,6 +457,24 @@ void run() noexcept {
              "CALIBRATION_CAPTURE_PENIRQ_GATE=ENABLED "
              "gpio=%d active_level=LOW",
              r1_pins::kTouchInterruptPin);
+    if (!drawRotationProbe(adapter)) {
+        ESP_LOGE(kTag,
+                 "CALIBRATION_CAPTURE_HARNESS=FAILED "
+                 "reason=ROTATION_PROBE_DRAW");
+        return;
+    }
+    ESP_LOGI(kTag,
+             "DISPLAY_ROTATION_PROBE=READY logical_width=%u "
+             "logical_height=%u rotation=%s actor_release=NO "
+             "owner_visual_confirmation=REQUIRED",
+             static_cast<unsigned>(kDisplayWidth),
+             static_cast<unsigned>(kDisplayHeight),
+             rotationName(r1_pins::kR1DisplayRotation));
+    ESP_LOGI(kTag,
+             "DISPLAY_ROTATION_PROBE_HOLD_MS=60000 "
+             "DISPLAY_LANDSCAPE_320X240=OWNER_CHECK_REQUIRED "
+             "DISPLAY_CLIPPING=OWNER_CHECK_REQUIRED");
+    vTaskDelay(kRotationProbeHoldTicks);
     if (!runIdleBaseline(adapter, r1_pins::kTouchInterruptPin)) return;
     ESP_LOGI(kTag,
              "CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_"

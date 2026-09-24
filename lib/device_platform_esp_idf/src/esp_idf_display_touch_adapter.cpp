@@ -235,7 +235,7 @@ bool EspIdfDisplayTouchAdapter::initialize() {
         return false;
     }
     state.initialized = true;
-    return setRotation(device_platform::DisplayRotation::Rotate0);
+    return setRotation(state.config.rotation);
 }
 
 bool EspIdfDisplayTouchAdapter::setRotation(

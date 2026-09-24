@@ -30,6 +30,8 @@ struct EspIdfDisplayTouchConfig {
     int touchInterruptPin{-1};
     std::uint16_t width{320U};
     std::uint16_t height{240U};
+    device_platform::DisplayRotation rotation{
+        device_platform::DisplayRotation::Rotate0};
     bool backlightActiveHigh{true};
 };
 
