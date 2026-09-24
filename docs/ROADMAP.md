@@ -49,8 +49,9 @@ nicht kopiert, sondern verlinkt.
 
 ### Issue #31 current correction gate
 
-PR #156 remains `OPEN_DRAFT` on
-`CURRENT_HEAD=5a52f0147e9d277fc38f5b65489e7126301ebda6`. The exact
+PR #156 remains `OPEN_DRAFT`; the exact
+`CURRENT_PLAN_HEAD=5a52f0147e9d277fc38f5b65489e7126301ebda6` is the plan
+commit awaiting Owner approval. The exact
 `PLAN_SUPPLEMENT_SHA=5a52f0147e9d277fc38f5b65489e7126301ebda6` is awaiting
 Owner approval. The existing
 Display-/Touch-/Branding-Evidence remains valid, but the final review reopened
