@@ -259,6 +259,112 @@ device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
     return device_platform::DeviceUiNetworkStatus::Unavailable;
 }
 
+void loadTouchCalibration(
+    device_platform::IStateStore& stateStore,
+    fermentation::main_ui::ProductiveLvglRenderer& displayRenderer) {
+    // Boot-time load/classify only (Schnitt 9): calibration never changes at
+    // runtime without an explicit future calibration workflow writing a new
+    // record, so this is not re-read per loop tick. The fallback slot is
+    // loaded and classified for diagnostics only; it never replaces an
+    // invalid active record here (see the session handover for that open
+    // policy question).
+    const device_platform::TouchCalibrationStore touchCalibrationStore(
+        stateStore);
+    const auto activeCalibration = touchCalibrationStore.load(
+        device_platform::TouchCalibrationSlot::Active, kBoardControllerId);
+    const auto fallbackCalibration = touchCalibrationStore.load(
+        device_platform::TouchCalibrationSlot::Fallback, kBoardControllerId);
+    ESP_LOGI(kTag, "touch calibration: active_status=%s fallback_status=%s",
+             touchCalibrationLoadStatusName(activeCalibration.status),
+             touchCalibrationLoadStatusName(fallbackCalibration.status));
+
+    if (activeCalibration.status ==
+            device_platform::TouchCalibrationLoadStatus::Available &&
+        activeCalibration.record.has_value()) {
+        displayRenderer.setTouchCalibration(activeCalibration.record->model);
+        return;
+    }
+
+    if (activeCalibration.status ==
+        device_platform::TouchCalibrationLoadStatus::Available) {
+        ESP_LOGE(kTag,
+                 "touch calibration: active record missing; keeping touch "
+                 "fail-closed");
+    }
+    // Every non-Available result, including an inconsistent Available result,
+    // must leave the renderer without a calibration model. No fallback or
+    // guessed interpretation is permitted.
+    displayRenderer.setTouchCalibration(std::nullopt);
+}
+
+void initializeProductUi(
+    fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
+    device_platform::IStateStore& stateStore,
+    fermentation::FermentationApplication& application,
+    fermentation::FermentationTouchWorkspace& uiWorkspace,
+    const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    const fermentation::FermentationUiPresentationSource& uiPresentation,
+    device_platform::DeviceUiNetworkStatus uiNetworkStatus,
+    const device_platform::ClockViewInput& uiClock) {
+    if (displayRenderer == nullptr || !displayRenderer->initialize()) {
+        ESP_LOGW(kTag,
+                 "productive LVGL display unavailable; UI remains fail-closed");
+        return;
+    }
+
+    loadTouchCalibration(stateStore, *displayRenderer);
+    if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
+                                 uiTextPacks, uiPresentation.displayLocale,
+                                 std::nullopt, &uiPresentation.programCatalog,
+                                 uiNetworkStatus, uiClock)) {
+        ESP_LOGW(kTag, "productive LVGL initial projection failed");
+    }
+}
+
+void updateProductUi(
+    fermentation::FermentationApplication& application,
+    fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
+    fermentation::FermentationTouchWorkspace& uiWorkspace,
+    const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    const device_platform::ITimeSource& timeSource) {
+    if (displayRenderer == nullptr || !displayRenderer->initialized()) {
+        return;
+    }
+
+    const auto loopPresentation = application.uiPresentationSource();
+    const auto loopNetworkStatus =
+        toDeviceUiNetworkStatus(networkLifecycle.status().state);
+    const device_platform::ClockViewInput loopClock{
+        timeSource.unixTimeSeconds(), loopPresentation.canonicalTimeZoneId};
+    const auto loopSnapshot = application.uiSnapshot();
+
+    // The existing #26 target/interaction path (calibrated touch
+    // -> targetAt()/Workspace::press() -> existing typed
+    // FermentationApplication/FermentationUiCommandBridge entry points) is
+    // owned entirely by this one app-specific adapter; main/app_main.cpp
+    // never builds a RepresentativeScreen or calls targetAt()/routePress()
+    // itself. No second event/command state machine is introduced.
+    const auto touchPoll = displayRenderer->pollTouch();
+    const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
+        application, uiWorkspace, loopSnapshot, uiTextPacks,
+        loopPresentation.displayLocale, &loopPresentation.programCatalog,
+        loopNetworkStatus, loopClock, touchPoll.contactHeld,
+        touchPoll.point.has_value() ? touchPoll.point->x : 0U,
+        touchPoll.point.has_value() ? touchPoll.point->y : 0U,
+        touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    if (touchTick.dispatch.outcome !=
+        fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
+        ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
+                 static_cast<int>(touchTick.dispatch.outcome));
+    }
+
+    static_cast<void>(displayRenderer->render(
+        loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
+        touchTick.pressedTarget, &loopPresentation.programCatalog,
+        loopNetworkStatus, loopClock));
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -377,51 +483,9 @@ extern "C" void app_main(void) {
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
     const device_platform::ClockViewInput uiClock{
         timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
-    if (displayRenderer == nullptr || !displayRenderer->initialize()) {
-        ESP_LOGW(kTag,
-                 "productive LVGL display unavailable; UI remains fail-closed");
-    } else {
-        // Boot-time load/classify only (Schnitt 9): calibration never
-        // changes at runtime without an explicit future calibration
-        // workflow writing a new record, so this is not re-read per loop
-        // tick. Every status other than Available keeps touch fail-closed,
-        // including UnsupportedSchema - a newer schema this firmware does
-        // not understand must invalidate, not degrade into a guessed
-        // interpretation. The fallback slot is loaded and classified for
-        // diagnostics only; it never replaces an invalid active record
-        // here (see the session handover for that open policy question).
-        device_platform::TouchCalibrationStore touchCalibrationStore(
-            stateStoreContext->store());
-        const auto activeCalibration = touchCalibrationStore.load(
-            device_platform::TouchCalibrationSlot::Active, kBoardControllerId);
-        const auto fallbackCalibration = touchCalibrationStore.load(
-            device_platform::TouchCalibrationSlot::Fallback,
-            kBoardControllerId);
-        ESP_LOGI(kTag, "touch calibration: active_status=%s fallback_status=%s",
-                 touchCalibrationLoadStatusName(activeCalibration.status),
-                 touchCalibrationLoadStatusName(fallbackCalibration.status));
-        switch (activeCalibration.status) {
-            case device_platform::TouchCalibrationLoadStatus::Available:
-                displayRenderer->setTouchCalibration(
-                    activeCalibration.record->model);
-                break;
-            case device_platform::TouchCalibrationLoadStatus::NotFound:
-            case device_platform::TouchCalibrationLoadStatus::OtherEpoch:
-            case device_platform::TouchCalibrationLoadStatus::UnsupportedSchema:
-            case device_platform::TouchCalibrationLoadStatus::InvalidRecord:
-            case device_platform::TouchCalibrationLoadStatus::ReadError:
-            case device_platform::TouchCalibrationLoadStatus::CapacityError:
-                displayRenderer->setTouchCalibration(std::nullopt);
-                break;
-        }
-
-        if (!displayRenderer->render(
-                application.uiSnapshot(), uiWorkspace, uiTextPacks,
-                uiPresentation.displayLocale, std::nullopt,
-                &uiPresentation.programCatalog, uiNetworkStatus, uiClock)) {
-            ESP_LOGW(kTag, "productive LVGL initial projection failed");
-        }
-    }
+    initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
+                        application, uiWorkspace, uiTextPacks, uiPresentation,
+                        uiNetworkStatus, uiClock);
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     fermentation::issue_90_slice7::Harness issue90Harness(application,
@@ -442,44 +506,8 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-        if (displayRenderer != nullptr && displayRenderer->initialized()) {
-            const auto loopPresentation = application.uiPresentationSource();
-            const auto loopNetworkStatus =
-                toDeviceUiNetworkStatus(networkLifecycle.status().state);
-            const device_platform::ClockViewInput loopClock{
-                timeSource.unixTimeSeconds(),
-                loopPresentation.canonicalTimeZoneId};
-            const auto loopSnapshot = application.uiSnapshot();
-
-            // The existing #26 target/interaction path (calibrated touch
-            // -> targetAt()/Workspace::press() -> existing typed
-            // FermentationApplication/FermentationUiCommandBridge entry
-            // points) is owned entirely by this one app-specific adapter;
-            // main/app_main.cpp never builds a RepresentativeScreen or
-            // calls targetAt()/routePress() itself. No second event/
-            // command state machine is introduced.
-            const auto touchPoll = displayRenderer->pollTouch();
-            const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
-                application, uiWorkspace, loopSnapshot, uiTextPacks,
-                loopPresentation.displayLocale,
-                &loopPresentation.programCatalog, loopNetworkStatus, loopClock,
-                touchPoll.contactHeld,
-                touchPoll.point.has_value() ? touchPoll.point->x : 0U,
-                touchPoll.point.has_value() ? touchPoll.point->y : 0U,
-                touchPoll.freshPressEdge, timeSource.monotonicMillis());
-            if (touchTick.dispatch.outcome !=
-                fermentation::main_ui::WorkspacePressDispatchOutcome::
-                    NoTypedPayload) {
-                ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
-                         static_cast<int>(touchTick.dispatch.outcome));
-            }
-
-            static_cast<void>(displayRenderer->render(
-                loopSnapshot, uiWorkspace, uiTextPacks,
-                loopPresentation.displayLocale, touchTick.pressedTarget,
-                &loopPresentation.programCatalog, loopNetworkStatus,
-                loopClock));
-        }
+        updateProductUi(application, displayRenderer.get(), uiWorkspace,
+                        uiTextPacks, networkLifecycle, timeSource);
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
