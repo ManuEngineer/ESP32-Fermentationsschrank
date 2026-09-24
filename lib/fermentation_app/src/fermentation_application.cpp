@@ -559,9 +559,11 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     // messages are deliberately outside the run-persistence wire projection.
     if (decision.kind == CommandKind::AcknowledgeMessage ||
         decision.kind == CommandKind::MuteMessage) {
-        return FermentationUiCommandBridge::fromCommandStatus(
-            applyRunCommand(*runtimeRunState_, decision), std::nullopt,
-            FermentationUiCommandPhase::OwningOutcome);
+        const auto messageResult =
+            runPersistenceCoordinator_->applyMessageCommand(*runtimeRunState_,
+                                                            decision);
+        return FermentationUiCommandBridge::fromRunPersistenceResult(
+            messageResult.status);
     }
 
     const auto checkpointTime = currentCheckpointTime();
