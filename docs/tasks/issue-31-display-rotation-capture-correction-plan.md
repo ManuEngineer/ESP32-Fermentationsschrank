@@ -422,3 +422,91 @@ TC0_MIGRATION=NOT_RUN
 PRODUCT_TOUCH_SMOKE=NOT_RUN_FOR_THIS_REVISION
 ACTUATOR_RELEASE=NO
 ```
+
+
+## 9. Owner-Scope-Erweiterung: Host-Clang auf Major 21
+
+Der Owner hat waehrend des finalen Pre-Ready-Laufs ausdruecklich entschieden,
+die veraltete Host-Werkzeuglinie 18 noch in PR #156 zu bereinigen. Diese
+Tooling-Erweiterung aendert keine Firmwarefunktion, keine Display-/Touch-
+Semantik und keine Aktorgrenze, ist wegen Build-/Toolchain-Wirkung aber eine
+materielle Planrevision und wird deshalb vor der Umsetzung erneut exakt
+commitgebunden freigegeben.
+
+```text
+OWNER_SCOPE_DECISION=INCLUDE_HOST_CLANG21_IN_PR156
+REVISION_BASE_HEAD=8e7ee3facf8eeba16326767d6193fa57cba2acda
+HOST_CLANG_MAJOR=21
+HOST_CLANG_PATCH=NOT_A_PROJECT_CONTRACT
+ESP_CLANG_EXISTING_PIN=21.1.3
+ACTUATOR_RELEASE=NO
+PLAN_STATUS=OWNER_APPROVAL_REQUIRED
+```
+
+### 9.1 KISS-Toolchainvertrag
+
+Der Hostvertrag fuer `clang-format` und `clang-tidy` wird gemeinsam von
+Major 18 auf Major 21 angehoben. Der Patchlevel bleibt wie bisher kein
+allgemeiner Hostvertrag.
+
+Fuer GitHub-CI wird **keine** dritte LLVM-Quelle eingefuehrt und der Runner
+bleibt auf `ubuntu-24.04`. Das dortige Standardimage liefert fuer diese
+Werkzeuge weiterhin nur bis Major 18. CI verwendet deshalb den bereits fuer
+ESP-IDF v6.1 kanonisch gepinnten und gecachten Espressif-`esp-clang`-
+Werkzeugsatz `21.1.3` auch fuer die Host-`clang-format`-/`clang-tidy`-
+Binaries. Lokal ist jeder nachweisliche Major-21-Werkzeugsatz zulaessig; die
+aktuelle ESP-IDF-Umgebung liefert bereits `21.1.3`.
+
+Es gibt keinen Wechsel auf Ubuntu 26.04, kein `apt.llvm.org`, keinen neuen
+Toolchain-Downloader und keinen zweiten Versions-SSOT.
+
+### 9.2 Betroffenes Delta
+
+Nach Freigabe werden nur die aktiven Vertragsstellen angepasst:
+
+- `scripts/run_pre_ready_gates.sh`: Host-Pruefung von Major 18 auf Major 21;
+- `.github/workflows/build.yml`: die expliziten `clang-*-18`-Symlinks
+  entfernen; nach der ohnehin vorhandenen Installation von `esp-clang`
+  dessen `bin`-Verzeichnis fuer die Host-Phase voranstellen, danach die
+  bestehende ESP-Phase unveraendert mit derselben gepinnten Toolchain fahren;
+- `.clang-format` und `.clang-tidy`: aktive Werkzeugkommentare auf die
+  neue Host-Major-Linie synchronisieren;
+- `docs/CI_AND_QUALITY_GATES.md`: aktiven Hostvertrag und CI-Reihenfolge
+  synchronisieren.
+
+Historische Plaene, Changelog-Eintraege und abgeschlossene Audit-Evidence
+werden nicht rueckwirkend umgeschrieben.
+
+### 9.3 Kompatibilitaetsgrenze
+
+Vor irgendwelchen breitflächigen Codeaenderungen wird Major 21 gegen den
+bestehenden Baum ausgefuehrt.
+
+- Wenn `clang-format` 21 den bestehenden kanonischen Baum ohne neue
+  Formatabweichungen akzeptiert, wird **kein** Source-Reformat erzeugt.
+- Wenn `clang-tidy` 21 die bestehende kanonische Dateiliste ohne neue
+  nichttriviale Befunde akzeptiert, bleibt der Produktionscode unveraendert.
+- Falls der Versionswechsel einen breiten Formatdiff, neue nichttriviale
+  Analysebefunde oder weitere Toolchain-/OS-Aenderungen erzwingen wuerde:
+  **STOP**; keine Massennachformatierung und keine opportunistische
+  Codebereinigung in PR #156.
+
+### 9.4 Verifikation und Pre-Ready-Wirkung
+
+Mindestens nachzuweisen:
+
+```text
+HOST_CLANG_FORMAT_MAJOR=21
+HOST_CLANG_TIDY_MAJOR=21
+HOST_FORMAT_FULL_TREE=PASS
+HOST_CLANG_TIDY_CANONICAL_LIST=PASS
+PRE_READY_HOST=PASS
+PRE_READY_ESP=PASS
+GITHUB_CI_HOST_TOOL_SOURCE=PINNED_ESP_CLANG_21_1_3
+ACTUATOR_RELEASE=NO
+```
+
+Der bereits auf `8e7ee3f...` gestartete Pre-Ready-Lauf kann nach einem
+Toolchain-Commit nicht als finaler Nachweis gelten, weil das verbindliche
+Pre-Ready-Gate auf dem exakten finalen `HEAD` laufen muss. Hardware wird
+dafuer nicht erneut geflasht oder wiederholt getestet.
