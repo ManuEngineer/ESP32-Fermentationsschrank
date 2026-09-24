@@ -24,9 +24,14 @@ constexpr char kBoardControllerId[] =
 // These are the reviewed affine coefficients derived from the committed
 // Rotate90 capture. They intentionally exist only in this explicit,
 // bring-up-only provisioning source; TouchCalibrationModel has no defaults.
-const device_platform::TouchCalibrationModel kReviewedModel{
+const device_platform::TouchCalibrationModel kOldReviewedModel{
     0.00009043639686374949, -0.08753007024919984,  344.1462734722118,
     0.06559259340326797,    0.0007485020274466806, -15.832052617145878,
+    kBoardControllerId};
+
+const device_platform::TouchCalibrationModel kComposedModel{
+    -0.00009043639686374949, 0.08753007024919984,   -25.146273472211817,
+    0.06559259340326797,     0.0007485020274466806, -15.832052617145878,
     kBoardControllerId};
 
 class NvsPartitionLifetime final {
@@ -76,12 +81,15 @@ class NvsPartitionLifetime final {
     return "Unknown";
 }
 
-[[nodiscard]] bool isExactReviewedRecord(
-    const device_platform::TouchCalibrationLoadResult& loaded) noexcept {
+[[nodiscard]] bool isExactRecord(
+    const device_platform::TouchCalibrationLoadResult& loaded,
+    const device_platform::TouchCalibrationModel& expectedModel,
+    std::uint32_t expectedSequence) noexcept {
     return loaded.status ==
                device_platform::TouchCalibrationLoadStatus::Available &&
-           loaded.record.has_value() && loaded.record->recordSequence == 1U &&
-           loaded.record->model == kReviewedModel;
+           loaded.record.has_value() &&
+           loaded.record->recordSequence == expectedSequence &&
+           loaded.record->model == expectedModel;
 }
 
 void logFailure(const char* reason) noexcept {
@@ -126,34 +134,31 @@ void run() noexcept {
     ESP_LOGI(kTag, "ISSUE31_CALIBRATION_ACTIVE_STATUS=%s",
              loadStatusName(active.status));
 
-    if (active.status ==
-        device_platform::TouchCalibrationLoadStatus::NotFound) {
-        ESP_LOGI(kTag, "ISSUE31_CALIBRATION_ACTIVE_PRESTATE=NOT_FOUND");
+    if (isExactRecord(active, kOldReviewedModel, 1U)) {
+        ESP_LOGI(kTag,
+                 "ISSUE31_CALIBRATION_ACTIVE_PRESTATE="
+                 "OLD_REVIEWED_SEQUENCE_1");
         const auto write = calibration.write(
-            device_platform::TouchCalibrationSlot::Active, kReviewedModel, 1U);
+            device_platform::TouchCalibrationSlot::Active, kComposedModel, 2U);
         if (write.status !=
             device_platform::TouchCalibrationWriteStatus::Committed) {
             logFailure("ACTIVE_WRITE_NOT_COMMITTED");
             return;
         }
         ESP_LOGI(kTag, "ISSUE31_CALIBRATION_WRITE=COMMITTED");
-    } else if (active.status ==
-                   device_platform::TouchCalibrationLoadStatus::Available &&
-               isExactReviewedRecord(active)) {
-        ESP_LOGI(kTag, "ISSUE31_CALIBRATION_ACTIVE_PRESTATE=MATCHING");
+    } else if (isExactRecord(active, kComposedModel, 2U)) {
+        ESP_LOGI(kTag,
+                 "ISSUE31_CALIBRATION_ACTIVE_PRESTATE="
+                 "COMPOSED_SEQUENCE_2");
         ESP_LOGI(kTag, "ISSUE31_CALIBRATION_WRITE=NOT_NEEDED");
-    } else if (active.status ==
-               device_platform::TouchCalibrationLoadStatus::Available) {
-        logFailure("ACTIVE_RECORD_CONFLICT_NOT_OVERWRITTEN");
-        return;
     } else {
-        logFailure("ACTIVE_RECORD_STATUS_NOT_WRITABLE");
+        logFailure("ACTIVE_RECORD_MIGRATION_PRECONDITION");
         return;
     }
 
     const auto readback = calibration.load(
         device_platform::TouchCalibrationSlot::Active, kBoardControllerId);
-    if (!isExactReviewedRecord(readback)) {
+    if (!isExactRecord(readback, kComposedModel, 2U)) {
         logFailure("ACTIVE_READBACK_MISMATCH");
         return;
     }

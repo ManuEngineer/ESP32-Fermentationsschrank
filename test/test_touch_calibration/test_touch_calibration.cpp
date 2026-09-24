@@ -1,6 +1,8 @@
 #include <unity.h>
 
+#include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <string>
 
@@ -48,6 +50,26 @@ TouchCalibrationModel affineModel() {
     return model;
 }
 
+TouchCalibrationModel reviewedOldModel() {
+    return TouchCalibrationModel{0.00009043639686374949,
+                                 -0.08753007024919984,
+                                 344.1462734722118,
+                                 0.06559259340326797,
+                                 0.0007485020274466806,
+                                 -15.832052617145878,
+                                 kBoardId};
+}
+
+TouchCalibrationModel reviewedComposedModel() {
+    return TouchCalibrationModel{-0.00009043639686374949,
+                                 0.08753007024919984,
+                                 -25.146273472211817,
+                                 0.06559259340326797,
+                                 0.0007485020274466806,
+                                 -15.832052617145878,
+                                 kBoardId};
+}
+
 void test_apply_identity_model_returns_raw_coordinates() {
     const auto model = measuredFixtureModel();
     const CalibratedTouchPoint point =
@@ -62,6 +84,22 @@ void test_apply_affine_model_scales_and_offsets() {
         device_platform::applyTouchCalibration(model, 100U, 40U);
     TEST_ASSERT_EQUAL_DOUBLE(60.0, point.x);  // 0.5*100 + 10
     TEST_ASSERT_EQUAL_DOUBLE(7.0, point.y);   // 0.25*40 - 3
+}
+
+void test_composed_model_replaces_product_x_reflection() {
+    const auto oldModel = reviewedOldModel();
+    const auto composedModel = reviewedComposedModel();
+    constexpr std::uint16_t rawX[] = {100U, 1700U, 3000U};
+    constexpr std::uint16_t rawY[] = {200U, 500U, 1200U};
+
+    for (std::size_t index = 0U; index < 3U; ++index) {
+        const auto oldPoint = device_platform::applyTouchCalibration(
+            oldModel, rawX[index], rawY[index]);
+        const auto composedPoint = device_platform::applyTouchCalibration(
+            composedModel, rawX[index], rawY[index]);
+        TEST_ASSERT_EQUAL_DOUBLE(319.0 - oldPoint.x, composedPoint.x);
+        TEST_ASSERT_EQUAL_DOUBLE(oldPoint.y, composedPoint.y);
+    }
 }
 
 void test_well_formed_requires_matching_board_controller_id() {
@@ -297,6 +335,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_apply_identity_model_returns_raw_coordinates);
     RUN_TEST(test_apply_affine_model_scales_and_offsets);
+    RUN_TEST(test_composed_model_replaces_product_x_reflection);
     RUN_TEST(test_well_formed_requires_matching_board_controller_id);
     RUN_TEST(test_well_formed_rejects_non_finite_coefficients);
     RUN_TEST(test_codec_roundtrip_preserves_model);
