@@ -40,7 +40,6 @@ constexpr TickType_t kSamplePeriodTicks = pdMS_TO_TICKS(20U);
 constexpr std::uint32_t kIdleBaselineSamples = 50U;
 constexpr std::uint32_t kMinimumContactSamples = 15U;
 constexpr std::uint8_t kStableReleaseSamples = 5U;
-constexpr TickType_t kRotationProbeHoldTicks = pdMS_TO_TICKS(60000U);
 
 enum class ReferenceRole : std::uint8_t { Fit, Validation, Hold };
 
@@ -245,11 +244,78 @@ void observeContact(ContactStats& stats,
 void logReady(const ReferencePoint& point) noexcept {
     ESP_LOGI(kTag,
              "CALIBRATION_POINT_READY id=%s role=%s target_x=%u target_y=%u "
-             "instruction=touch_center_hold_" PRIu32 "ms_then_release",
+             "instruction=touch_center_hold_%" PRIu32 "ms_then_release",
              point.id, roleName(point.role),
              static_cast<unsigned>(point.targetX),
              static_cast<unsigned>(point.targetY),
              static_cast<std::uint32_t>(kMinimumContactSamples * 20U));
+}
+
+void waitForOwnerGeometryConfirmation(
+    device_platform_esp_idf::EspIdfDisplayTouchAdapter& adapter) noexcept {
+    std::uint32_t contactSamples = 0U;
+    std::uint8_t stableReleaseSamples = 0U;
+    bool contactSession = false;
+
+    ESP_LOGI(kTag,
+             "DISPLAY_ROTATION_PROBE_WAITING=YES "
+             "instruction=owner_visually_confirm_geometry_then_"
+             "touch_center_hold_%" PRIu32 "ms_and_release",
+             static_cast<std::uint32_t>(kMinimumContactSamples * 20U));
+
+    // This loop has no timeout by design. A display probe is not accepted by
+    // elapsed time; only an explicit, complete Owner touch gesture can allow
+    // the harness to enter the separate idle-baseline/capture phase.
+    for (;;) {
+        const auto sample = adapter.sampleTouch();
+        if (sample.status == device_platform::RawTouchSampleStatus::Contact &&
+            sample.contact) {
+            if (!contactSession) {
+                contactSession = true;
+                contactSamples = 0U;
+                stableReleaseSamples = 0U;
+                ESP_LOGI(kTag,
+                         "DISPLAY_ROTATION_PROBE_CONFIRMATION_BEGIN "
+                         "owner_gesture=CONTACT_HOLD_THEN_RELEASE");
+            }
+            ++contactSamples;
+            stableReleaseSamples = 0U;
+        } else if (sample.status ==
+                   device_platform::RawTouchSampleStatus::NoContact) {
+            if (contactSession) {
+                if (stableReleaseSamples < kStableReleaseSamples) {
+                    ++stableReleaseSamples;
+                }
+                if (stableReleaseSamples >= kStableReleaseSamples) {
+                    if (contactSamples >= kMinimumContactSamples) {
+                        ESP_LOGI(kTag,
+                                 "DISPLAY_ROTATION_PROBE_CONFIRMATION=PASS "
+                                 "contact_samples=%" PRIu32
+                                 " release_samples=%u",
+                                 contactSamples,
+                                 static_cast<unsigned>(stableReleaseSamples));
+                        return;
+                    }
+                    ESP_LOGW(kTag,
+                             "DISPLAY_ROTATION_PROBE_CONFIRMATION=RETRY "
+                             "reason=CONTACT_TOO_SHORT samples=%" PRIu32
+                             " required=%" PRIu32 " restart=YES",
+                             contactSamples, kMinimumContactSamples);
+                    contactSession = false;
+                    contactSamples = 0U;
+                    stableReleaseSamples = 0U;
+                }
+            }
+        } else {
+            ESP_LOGW(kTag,
+                     "DISPLAY_ROTATION_PROBE_CONFIRMATION=RETRY "
+                     "reason=CONTROLLER_ERROR restart=YES");
+            contactSession = false;
+            contactSamples = 0U;
+            stableReleaseSamples = 0U;
+        }
+        vTaskDelay(kSamplePeriodTicks);
+    }
 }
 
 void logContactSample(const ReferencePoint& point,
@@ -471,10 +537,9 @@ void run() noexcept {
              static_cast<unsigned>(kDisplayHeight),
              rotationName(r1_pins::kR1DisplayRotation));
     ESP_LOGI(kTag,
-             "DISPLAY_ROTATION_PROBE_HOLD_MS=60000 "
              "DISPLAY_LANDSCAPE_320X240=OWNER_CHECK_REQUIRED "
              "DISPLAY_CLIPPING=OWNER_CHECK_REQUIRED");
-    vTaskDelay(kRotationProbeHoldTicks);
+    waitForOwnerGeometryConfirmation(adapter);
     if (!runIdleBaseline(adapter, r1_pins::kTouchInterruptPin)) return;
     ESP_LOGI(kTag,
              "CALIBRATION_CAPTURE_LAYOUT=FIT_4_NONCOLLINEAR_PLUS_"
