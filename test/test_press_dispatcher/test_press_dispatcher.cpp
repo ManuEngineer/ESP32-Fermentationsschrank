@@ -580,10 +580,9 @@ void test_dispatch_network_touch_actions_use_existing_application_bridge() {
         static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
         static_cast<int>(selectedResult.outcome));
     TEST_ASSERT_TRUE(selectedResult.commandResult.has_value());
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(NetworkConfigurationStatus::Applied),
-        static_cast<int>(std::get<NetworkConfigurationStatus>(
-            selectedResult.commandResult->detail)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              selectedResult.commandResult->detail)));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::NetworkMode::AP_ONLY),
         static_cast<int>(application.networkMode()));
@@ -595,10 +594,9 @@ void test_dispatch_network_touch_actions_use_existing_application_bridge() {
     TEST_ASSERT_TRUE(changedToHome.applyNetworkMode.has_value());
     const auto homeResult =
         dispatchWorkspacePress(application, snapshot, changedToHome, 1001U);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(NetworkConfigurationStatus::Applied),
-        static_cast<int>(std::get<NetworkConfigurationStatus>(
-            homeResult.commandResult->detail)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              homeResult.commandResult->detail)));
 
     snapshot = application.uiSnapshot();
     workspace.setPage(FermentationUiPage::HeaderNetwork);
@@ -607,10 +605,9 @@ void test_dispatch_network_touch_actions_use_existing_application_bridge() {
     TEST_ASSERT_TRUE(reconfigure.beginHomeWifiReconfiguration.has_value());
     const auto reconfigureResult =
         dispatchWorkspacePress(application, snapshot, reconfigure, 1002U);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(NetworkConfigurationStatus::Applied),
-        static_cast<int>(std::get<NetworkConfigurationStatus>(
-            reconfigureResult.commandResult->detail)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              reconfigureResult.commandResult->detail)));
 }
 
 void test_process_touch_without_contact_yields_no_target() {

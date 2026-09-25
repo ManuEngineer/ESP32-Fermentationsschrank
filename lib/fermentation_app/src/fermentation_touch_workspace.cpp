@@ -81,8 +81,7 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::NavigateClock:
         case FermentationUiWorkspaceSlotAction::ApplyNetworkModeApOnly:
         case FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi:
-        case FermentationUiWorkspaceSlotAction::
-            BeginHomeWifiReconfiguration:
+        case FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration:
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
         case FermentationUiWorkspaceSlotAction::MovePagerDown:
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
@@ -768,11 +767,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi,
                     snapshot.network.currentMode !=
                         device_platform::NetworkMode::HOME_WIFI);
-            setSlot(view, 3U, "network-reconfigure",
-                    FermentationUiWorkspaceSlotAction::
-                        BeginHomeWifiReconfiguration,
-                    snapshot.network.currentMode ==
-                        device_platform::NetworkMode::HOME_WIFI);
+            setSlot(
+                view, 3U, "network-reconfigure",
+                FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration,
+                snapshot.network.currentMode ==
+                    device_platform::NetworkMode::HOME_WIFI);
             break;
         case FermentationUiPage::HeaderClock:
             view.title = key("clock");

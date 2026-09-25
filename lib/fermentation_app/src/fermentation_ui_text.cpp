@@ -156,10 +156,12 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-reconfigure", "WLAN einrichten"},
                  {"network-current", "Aktueller Modus"},
                  {"network-unselected", "Nicht ausgewaehlt"},
-                 {"network-browser-setup", "Zugangsdaten: lokales Browser-Setup"},
+                 {"network-browser-setup",
+                  "Zugangsdaten: lokales Browser-Setup"},
                  {"network-ssid", "SSID: "},
                  {"network-password", "Passwort: "},
-                 {"network-access-unavailable", "Zugangsdaten nicht verfuegbar"},
+                 {"network-access-unavailable",
+                  "Zugangsdaten nicht verfuegbar"},
                  {"network-ip-unavailable", "nicht verfuegbar"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
@@ -231,10 +233,12 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-reconfigure", "Configurar Wi-Fi"},
                  {"network-current", "Modo actual"},
                  {"network-unselected", "Sin seleccionar"},
-                 {"network-browser-setup", "Credenciales: configuracion local en navegador"},
+                 {"network-browser-setup",
+                  "Credenciales: configuracion local en navegador"},
                  {"network-ssid", "SSID: "},
                  {"network-password", "Clave: "},
-                 {"network-access-unavailable", "Datos de acceso no disponibles"},
+                 {"network-access-unavailable",
+                  "Datos de acceso no disponibles"},
                  {"network-ip-unavailable", "no disponible"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {

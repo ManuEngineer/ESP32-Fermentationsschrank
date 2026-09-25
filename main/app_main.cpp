@@ -363,8 +363,7 @@ void updateProductUi(
     static_cast<void>(displayRenderer->render(
         loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
         touchTick.pressedTarget, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock,
-        application.networkAccessPointInfo()));
+        loopNetworkStatus, loopClock, application.networkAccessPointInfo()));
 }
 
 }  // namespace
