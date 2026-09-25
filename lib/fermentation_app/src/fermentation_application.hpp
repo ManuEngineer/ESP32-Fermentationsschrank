@@ -90,6 +90,12 @@ class FermentationApplication {
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
+    // The single renderer-independent source for display locale, the
+    // canonical prepared time zone and the program catalog needed by the
+    // local UI workspace/renderer. It never duplicates persistence or
+    // recovery policy; a failed configuration read yields safe defaults
+    // (English, an empty catalog) rather than blocking presentation.
+    [[nodiscard]] FermentationUiPresentationSource uiPresentationSource() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -133,6 +139,12 @@ class FermentationApplication {
     // new CommandId or derives a replacement runId.
     [[nodiscard]] FermentationApplicationRequestResult confirmPrepared(
         const FermentationApplicationRequestResult& prepared);
+    // The single confirmed envelope handoff for local and future UI
+    // adapters. It reuses decidePrepared() and then enters the existing
+    // application-owned apply/persistence path without allocating a new
+    // identity or carrying UI-side evidence into the owner.
+    [[nodiscard]] FermentationUiCommandResult applyConfirmedPrepared(
+        const FermentationApplicationPreparedRequest& confirmed);
 
     // Existing configuration recovery remains the authorization owner. This
     // application entry point composes its FactoryResetCompleted result with

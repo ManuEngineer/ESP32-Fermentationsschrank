@@ -557,6 +557,16 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
     return outcome;
 }
 
+bool validStopOption(StopOption option) {
+    switch (option) {
+        case StopOption::Back:
+        case StopOption::AbortAndTurnOff:
+        case StopOption::AbortAndCool:
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
@@ -911,16 +921,6 @@ CommandDecision decideManualStart(const RunCommandState& current,
     CommandDecision decision;
     decideManualStartInto(current, request, decision);
     return decision;
-}
-
-bool validStopOption(StopOption option) {
-    switch (option) {
-        case StopOption::Back:
-        case StopOption::AbortAndTurnOff:
-        case StopOption::AbortAndCool:
-            return true;
-    }
-    return false;
 }
 
 CommandDecision decideStop(const RunCommandState& current,

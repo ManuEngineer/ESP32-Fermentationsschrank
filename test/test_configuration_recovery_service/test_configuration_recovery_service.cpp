@@ -25,6 +25,7 @@
 #include "state_store.hpp"
 #include "storage_envelope.hpp"
 #include "time_zone_resolver.hpp"
+#include "touch_calibration.hpp"
 
 namespace fermentation {
 class ConfigurationServiceTestAccess {
@@ -464,6 +465,67 @@ void test_factory_reset_advances_epoch_and_preserves_touch_key() {
     TEST_ASSERT_TRUE(fixture.store.value("touch-calibration").has_value());
     TEST_ASSERT_EQUAL_STRING("sentinel",
                              fixture.store.value("touch-calibration")->c_str());
+}
+
+// The plan (section 8) requires the touch calibration record to survive a
+// normal factory reset while the configuration StorageEpoch advances. This
+// exercises the real device_platform::TouchCalibrationStore/codec/envelope
+// path (not just an arbitrary sentinel key) against the existing,
+// unmodified authorized factory reset path - no new reset logic is added.
+void test_factory_reset_preserves_real_touch_calibration_record() {
+    constexpr char kBoardId[] = "esp32_32e_quad_mosfet_r1+ili9341+xpt2046";
+    Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+
+    device_platform::TouchCalibrationStore calibration(fixture.store);
+    device_platform::TouchCalibrationModel model;
+    model.a = 1.02;
+    model.b = 0.01;
+    model.c = -3.5;
+    model.d = 0.0;
+    model.e = 0.99;
+    model.f = 2.5;
+    model.boardControllerId = kBoardId;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::TouchCalibrationWriteStatus::Committed),
+        static_cast<int>(
+            calibration
+                .write(device_platform::TouchCalibrationSlot::Active, model,
+                       /*recordSequence=*/1U)
+                .status));
+
+    const auto beforeReset = calibration.load(
+        device_platform::TouchCalibrationSlot::Active, kBoardId);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::TouchCalibrationLoadStatus::Available),
+        static_cast<int>(beforeReset.status));
+
+    const auto reset = fixture.recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(reset.status));
+    auto runtime = fixture.service.acquireRuntime();
+    // The configuration StorageEpoch advanced...
+    TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
+
+    // ...but the touch calibration record, in its own independent
+    // StorageEpoch namespace, is untouched: same status, same model, same
+    // record sequence.
+    const auto afterReset = calibration.load(
+        device_platform::TouchCalibrationSlot::Active, kBoardId);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::TouchCalibrationLoadStatus::Available),
+        static_cast<int>(afterReset.status));
+    TEST_ASSERT_TRUE(afterReset.record.has_value());
+    TEST_ASSERT_TRUE(afterReset.record->model == model);
+    TEST_ASSERT_EQUAL_UINT64(1U, afterReset.record->recordSequence);
 }
 
 // The reset preparation status is diagnostic detail.  The real recovery
@@ -1981,6 +2043,7 @@ int main() {
     RUN_TEST(test_rootless_same_epoch_generation_is_integrity_failure);
     RUN_TEST(test_reboot_loads_initialized_graph);
     RUN_TEST(test_factory_reset_advances_epoch_and_preserves_touch_key);
+    RUN_TEST(test_factory_reset_preserves_real_touch_calibration_record);
     RUN_TEST(
         test_reset_prepare_failure_keeps_operational_runtime_without_producer);
     RUN_TEST(test_root_unknown_new_is_resolved_without_publishing_early);

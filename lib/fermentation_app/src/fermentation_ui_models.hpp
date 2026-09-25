@@ -123,6 +123,18 @@ struct FermentationUiSnapshot {
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 
+// Renderer-independent presentation input outside the run/fault/recovery
+// snapshot: it changes only with configuration, not with process state, so
+// it is read separately rather than folded into FermentationUiSnapshot. This
+// is the sole source for these values; a local renderer/composition helper
+// never re-reads UserConfiguration, the runtime program catalog, or the
+// prepared time zone on its own.
+struct FermentationUiPresentationSource {
+    device_platform::LocaleId displayLocale{"en"};
+    device_platform::TimeZoneId canonicalTimeZoneId;
+    ProgramCatalog programCatalog;
+};
+
 struct FermentationUiTemperatureInput {
     FermentationTemperatureRole role{FermentationTemperatureRole::CabinetAir};
     std::optional<double> valueCelsius;

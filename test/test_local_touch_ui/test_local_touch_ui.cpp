@@ -485,7 +485,7 @@ void test_sim_26_shell_locale_and_service_boundaries() {
     device_platform_test_support::SimulatedDeviceShell shell;
     TEST_ASSERT_TRUE(shell.frame().valid());
     const auto packs = makeFermentationUiTextPacks();
-    const std::array<const char*, 54U> keys{"standby",
+    const std::array<const char*, 55U> keys{"standby",
                                             "running",
                                             "waiting",
                                             "completed",
@@ -509,6 +509,7 @@ void test_sim_26_shell_locale_and_service_boundaries() {
                                             "confirm",
                                             "cancel",
                                             "service-locked",
+                                            "service-home-locked",
                                             "resume-fallback",
                                             "manual",
                                             "manual-holding",

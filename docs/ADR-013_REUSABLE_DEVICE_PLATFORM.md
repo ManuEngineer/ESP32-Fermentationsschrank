@@ -82,6 +82,46 @@ Rueckwaertsabhaengigkeiten sind unzulaessig. Insbesondere darf:
 - `device_platform` keine Fermentationsprogramme, Fermentationszustaende oder
   produktspezifischen UI-Texte kennen.
 
+### Normative Application-Adapterrolle unter `main/`
+
+Fuer eine app-spezifische Darstellung oder Eingabeintegration darf die
+bestehende ESP-IDF-Composition-Komponente kleine lokale Adapter-Helfer unter
+`main/` enthalten. Diese Rolle ist keine neue allgemeine Rendererplattform und
+wird nicht in `device_platform_esp_idf` oder eine neue Produktionsbibliothek
+ausgelagert, solange die kleine Grenze genuegt.
+
+```text
+main/app_main.cpp
+    -> nur Composition, Lebenszyklus und Verdrahtung
+
+main/<application-adapter-helper>.*
+    -> darf fermentation_app-View-Modelle kennen
+    -> darf den ausgewaehlten UI-Renderer kennen
+    -> keine Fachentscheidung
+    -> keine Persistenzpolicy
+    -> keine Recovery-/Safetypolicy
+    -> keine zweite UI-State-Machine
+```
+
+Die Abhaengigkeitsrichtung fuer diesen Adapter ist verbindlich:
+
+```text
+main application adapter
+    -> fermentation_app
+    -> device_platform
+    -> device_platform_esp_idf / ausgewaehlter Renderer
+
+device_platform_esp_idf -X-> fermentation_app
+fermentation_app -X-> ESP-IDF/LVGL/konkreter Treiber
+```
+
+Der Architekturguard schuetzt diese Rolle gezielt mit den Dateiklassen-,
+Include-, Symbol- und Negativfixture-Regeln fuer Composition und Application-
+Adapter. Eine reine Erweiterung von CMake-Allowlisten ist dafuer nicht
+ausreichend. Der Application-Adapter darf nur bestehende App-View-Modelle und
+typed Commands weiterleiten; Fach-, Persistenz-, Recovery-/Safetyentscheidungen
+bleiben in ihren kanonischen Owners.
+
 ## Regeln fuer neue Module
 
 Ein Modul gehoert zur Geraeteplattform, wenn es:

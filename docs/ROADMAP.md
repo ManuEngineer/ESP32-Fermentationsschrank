@@ -25,6 +25,7 @@ nicht kopiert, sondern verlinkt.
 | Issue #144 / PR #147 | `ISSUE144_STATUS=CLOSED_COMPLETED`; `PR147=MERGED`; `PR147_SOURCE_HEAD=81bb985146d2ad926dfc156ab1136f8fefe2b3cb`; `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`; `RUN_IDENTITY_PROVENANCE=MERGED`; `ACTUATOR_RELEASE=NO` |
 | Issue #152 / PR #153 | `ISSUE152_STATUS=CLOSED_COMPLETED`; `PR153=MERGED`; `PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`; `PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`; `PLAN_COMMIT=292a8096b981c2137545bb88961f92b9b7a52139`; `IMPLEMENTATION=MERGED`; `OWNER_ISSUE_CLOSE=COMPLETED`; `DOWNSTREAM_ISSUE=26`; `ACTUATOR_RELEASE=NO` |
 | Issue #26 / PR #143 | `ISSUE26_STATUS=CLOSED_COMPLETED`; `PR143=MERGED`; `PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`; `PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`; `PRE_READY_LOCAL_GATES=PASS`; `ACTUATOR_RELEASE=NO` |
+| Issue #154 / PR #155 | `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO` |
 | Issue #159 / PR #160 | `ISSUE159=CLOSED_COMPLETED`; `PR160=MERGED @ dc017f4ee7c4f33be240fac23c1686606f340225`; `APPROVED_PLAN_SHA=b7747dc270a513f5dea45bb86f274a85ae2bf1cf`; `IMPLEMENTATION=BUILDER_COMPLETE`; `FULL_PROFILE_BUILDS=PASS`; `FULL_ESP_CLANG=PASS`; `HARDWARE_PARITY=PASS_WITH_OWNER_WAIVER`; `TARGET=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643`; `ACTUATOR_RELEASE=NO` |
 | Kein Issue / PR #161 – GitHub-CI ESP-IDF-Setup beschleunigen | `PR161=MERGED`; `PR161_SOURCE_HEAD=6fed57dc5e58c6e6aa3124f7b2a9ee3a1796c34e`; `PR161_MERGE_COMMIT=0f37004121355e1ad5efbf76e44b88004d0789f8`; `APPROVED_PLAN_SHA=e354b2026a5a73450a96be661a9e4b87f1a5e027`; `INDEPENDENT_REVIEW=PASS`; `OPEN_BLOCKERS=0`; `GITHUB_CI=PASS`; `CACHE_HIT_EVIDENCE=ZWEITER_LAUF_CA_5MIN_VS_CA_10MIN_BASELINE`; `ACTUATOR_RELEASE=NO` |
 
@@ -36,7 +37,7 @@ nicht kopiert, sondern verlinkt.
 | 1 | Issue #168 – Application-owned Runtime-Evidence und UI-/Command-Projection | `PLAN_FIRST=YES`; `BASE_SHA=1f1755e5e706fb668472920545b5302fcef1df16`; `APPROVED_PLAN_SHA=ac56052c011b92d38866bc0be0d31de2d5e1fb90`; `PLAN_STATUS=APPROVED`; `OWNER_PLAN_APPROVAL=PASS`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `CONSUMER=ISSUE27_PR167_AFTER_ISSUE168_MERGE`; `ACTUATOR_RELEASE=NO`. | Builder-Self-Check abschliessen, danach Independent Full Review; #27 bleibt bis zum Merge dieses Vorgängers pausiert |
 | 2 | Issue #27 / PR #167 – Web/API/Auth | `CONSUMER_PREDECESSOR=ISSUE168`; `IMPLEMENTATION=PAUSED_PENDING_PREDECESSOR`; `ACTUATOR_RELEASE=NO`. | #168 mergen, PR #167 auf aktuellen `main` revalidieren und den #27-Plan als Verbraucher revidieren |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
-| 1 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PLAN_APPROVED=YES`; `DISPLAY_CONNECTED=YES`; `TOUCH_CONNECTED=YES`; `STAGE_0=PASS`; `STAGE_1=PASS`; `STAGE_2=FAILED`; `STAGE_2_DISPLAY_FUNCTION=FAILED_COLDSTART_NOT_REPRODUCIBLE`; `STAGE_2_TOUCH_FUNCTION=PASS`; `COLDSTART_ROOT_CAUSE=UNDETERMINED`; `STAGE_3=NOT_RUN`; `STAGE_4=NOT_RUN`; `ACTUATOR_RELEASE=NO`. | Coldstart-Root-Cause fuer Stage 2 klaeren, danach Stage 3/4 SSOT-/Kalibrierungs-/Recovery-/Fehlerisolationsnachweise und reale Funktionstests ohne generelles Pegelmessgate |
+| 1 | Issue #31 / PR #156 – realer Renderer, Display, Touch und Kalibrierung nach Hardwarebeweis | `PR156=OPEN_DRAFT`; `PR156_BASELINE_MAIN=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`; `APPROVED_PLAN_SHA=63fd88372b883887668566047c8a6acac48addcd`; `CURRENT_IMPLEMENTATION_HEAD=32b8f6e7cd3fbfc1d108484c9705175d3cc73c56`; `STAGE_0=PASS`; `STAGE_1=PASS`; `STAGE_2=PASS`; `STAGE_3=PASS`; `OPEN_STAGE_3_FINDINGS=0`; `STAGE_3_EVIDENCE=docs/audits/ISSUE_31_STAGE_3_EVIDENCE.md`; `STAGE_4=PASS`; `STAGE_4_EVIDENCE=docs/audits/ISSUE_31_STAGE_4_EVALUATION.md`; `STAGE_4_SELECTION=OWNER_APPROVED`; `SELECTED_LOW_LEVEL=ESP_IDF_ESP_LCD_ILI9341_ESP_LCD_TOUCH_XPT2046`; `FALLBACK_CANDIDATE=NONE`; `LOW_LEVEL_BOUNDARY_IMPLEMENTATION=PASS`; `RAW_TOUCH_CONTRACT=PASS`; `DMA_BUFFER_LIFECYCLE=PASS`; `REPRESENTATIVE_26_SCREEN=PASS`; `ARCHITECTURE_ROLE_GUARDS=PASS`; `LEAN_COMPARISON=HISTORICAL_PASS`; `LVGL_COMPARISON=HISTORICAL_PASS`; `R1_COMPATIBILITY_MATRIX=PASS`; `MEASURED_R1_ADVANTAGE_LVGL=INCONCLUSIVE`; `OWNER_RENDERER_SELECTION=LVGL`; `LVGL_INTEGRATION=ESP_LVGL_PORT`; `LEAN_PRODUCT_PATH=REJECTED`; `CUSTOM_RENDERER_FRAMEWORK=NO`; `CUSTOM_WIDGET_FRAMEWORK=NO`; `OWNER_DECISION_REQUIRED=NONE_FOR_RENDERER`; `OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES`; `COLDSTART_WITH_RTS_EN_DISCONNECTED=PASS_3_OF_3`; `COLDSTART_PRODUCT_REPRESENTATIVE_SETUP=RTS_EN_DISCONNECTED`; `FT232_RTS_EN_DEBUG_CONNECTION=ALLOWED_FOR_REMOTE_FLASH_AND_TEST`; `COLDSTART_WITH_RTS_EN_CONNECTED=NOT_PRODUCT_REPRESENTATIVE`; `COLDSTART_ROOT_CAUSE_CLASS=FT232_RTS_EN_DEBUG_PATH_INTERFERENCE`; `COLDSTART_ELECTRICAL_MECHANISM=NOT_DETERMINED`; `PRODUCT_HARDWARE_CHANGE_REQUIRED=NO`; `RESET_SSOT_CHANGE_REQUIRED=NO`; `STAGE_2_DISPLAY_COLDSTART_REPRODUCIBILITY=PASS_3_OF_3`; `STAGE_2_DISPLAY_FUNCTION=PASS`; `STAGE_2_TOUCH_FUNCTION=PASS`; `PRODUCT_IMPLEMENTATION=COMPLETE`; `HOST_CLANG21_SCOPE=OWNER_APPROVED`; `HOST_CLANG21_PLAN_SHA=c2b2dfa8635eb4077efd8bc6d6a3ce87604724c8`; `HOST_CLANG21_REVISED_PLAN_SHA=5c92d09aac0fe69fd2a88a8d0c16776dc157b1de`; `HOST_CLANG21_BASELINE_EVIDENCE=docs/audits/ISSUE_31_HOST_CLANG21_UNCHANGED_BASELINE_RAW.txt`; `HOST_CLANG21_IMPLEMENTATION=BUILDER_COMPLETE`; `HOST_CLANG21_SOURCE_CHANGES=IMPLEMENTATION_COMMITTED`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `TARGETED_REGRESSIONS=PASS`; `PRE_READY_LOCAL_GATES=NOT_RUN_PENDING_INDEPENDENT_REVIEW`; `ACTUATOR_RELEASE=NO` | Stage 3 und 4 sowie die produktive LVGL-Umsetzung sind abgeschlossen; die kontrollierte tc0-Migration und der Product-Smoke sind belegt. Die freigegebene Host-Clang-21-Planrevision ist umgesetzt auf `32b8f6e7cd3fbfc1d108484c9705175d3cc73c56`; Self-Check und gezielte Regressionen sind PASS. Der unabhängige Review steht noch aus; bis dahin kein Pre-Ready, Ready-Wechsel oder Merge. |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
 | 4 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. R_IS/L_IS sind fuer R1 bewusst unbeschaltet und deaktiviert, als ADC1-Reserve fuer eine moegliche spaetere Integration `FUTURE_RELEASE` reserviert und nicht verworfen; `R1_BLOCKED_BY_R_IS_L_IS=NO`. | SSOT-/Funktionsnachweis, H-Brücken-Adapter-Safety mit Mutual Exclusion/Break-before-make/fail-closed/Boot-disabled und begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
@@ -46,13 +47,71 @@ nicht kopiert, sondern verlinkt.
 | 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 9 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
+### Issue #31 current correction gate
+
+PR #156 remains `OPEN_DRAFT`; the approved plan supplement is
+`5a52f0147e9d277fc38f5b65489e7126301ebda6` and implementation is complete on
+`CURRENT_IMPLEMENTATION_HEAD=c39b420ac6c2fec1c989fe8691ebe88cf3e44731`.
+The existing reviewed model was composed deterministically into `tc0` sequence
+2; the idempotent hardware readback is PASS, the renderer-side X compensation
+is removed, and the owner-confirmed R1 panel transform remains
+`swap_xy:true,mirror_x:true,mirror_y:true`. Issue-29, product active-load and
+the actor-free navigation/status smoke are PASS. No new FIT capture was made;
+`tc1`, thresholds and actor policy remain unchanged. Evidence is recorded in
+`docs/audits/ISSUE_31_TOUCH_CALIBRATION_PROVISION_20260924_EVIDENCE.md`.
+`PROBE_FAIL_CLOSED_GT_60S=NOT_VERIFIED`; `ACTUATOR_RELEASE=NO`. Die revidierte Host-Clang-21-Planfassung `5c92d09aac0fe69fd2a88a8d0c16776dc157b1de` ist ownerfreigegeben und auf `CURRENT_IMPLEMENTATION_HEAD=32b8f6e7cd3fbfc1d108484c9705175d3cc73c56` umgesetzt. Self-Check und gezielte Regressionen sind PASS; der unabhängige Review steht noch aus. Die `prepareStop`-InvalidInput-Pruefung bleibt vor der Identity-Allocation; die ungueltige Anfrage verbraucht keine Command-ID. Der vollstaendige Pre-Ready bleibt bis zum Review-Gate `NOT_RUN`.
+
 ## Parallele Governance-Arbeit
 
 - Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.
 - Issue #150 / PR #151 – Pre-Ready-CI-Parity-Gate vor `Ready for review` abgeschlossen: `ISSUE150_STATUS=CLOSED_COMPLETED`; `PR151=MERGED`; `PR151_MERGE_COMMIT=913f4c90084b77684ba37674e9070d288b22f5c1`; `IMPLEMENTATION=COMPLETE`; `ACTUATOR_RELEASE=NO`; `SEPARATE_FROM_ISSUE147=YES`.
-- Issue #154 – Static-Analysis-Self-Check vor Independent Review als parallele Governance-Arbeit: `PLAN_FIRST`; `IMPLEMENTATION=NOT_STARTED`; `OWNER_PLAN_APPROVAL_REQUIRED=YES`; `PRE_READY_CONTRACT_UNCHANGED=YES`; `ACTUATOR_RELEASE=NO`.
+- Issue #154 / PR #155 – Static-Analysis-Self-Check als parallele Governance-Arbeit abgeschlossen: `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO`.
 
 ## Naechste fachliche Arbeit
+
+PR #165 ist auf `main` gemergt. Issue #164 bleibt offen, weil die reale
+WLAN-Evidence auf den physischen Modus-Einstieg aus Issue #31 wartet. Issue #31
+ist der naechste aktive Hardware-Scope; Stage 0, Stage 1, Stage 2, Stage 3 und
+Stage 4 sind PASS. Die ownerseitig ausgewählte
+ESP-IDF-/LCD-/Touch-/XPT2046-Grundlage ist hinter einer schmalen
+rendererunabhängigen Grenze umgesetzt; die historische Lean-/LVGL-
+Vergleichsevidence ist abgeschlossen. Die produktive Umsetzung läuft auf
+`CURRENT_IMPLEMENTATION_HEAD=2f787f8688f61c699ddbbbdf34c5962d7142605d`
+mit `OWNER_RENDERER_SELECTION=LVGL` und
+`LVGL_INTEGRATION=ESP_LVGL_PORT`; `LEAN_PRODUCT_PATH=REJECTED`.
+Der offizielle actor-free Stage-2-Smoke initialisierte Display und Touch und
+zeigte vier Farben; die Software-Rotation darf die physische Einbaulage
+ausgleichen. Die Stage-3-Zusatzmatrix lief in Polling und IRQ fuer Display-
+Wiederholung, kombinierten Draw/Touch/SPI-Stress, Fehlerreaktion, Ressourcen,
+Timing und Stabilitaet; die vorhandene statische Touch-Evidence wurde gemaess
+Reuse-before-Retest wiederverwendet.
+Der Harness-Resetpfad ist direkt gegen die Quelle verifiziert:
+`esp_lcd_panel_reset(panel)` steht unmittelbar vor
+`esp_lcd_panel_init(panel)`, während `reset_gpio_num=GPIO_NUM_NC` den
+unveränderten gemeinsamen physischen Resetpfad belässt.
+
+Aktuell produktrepräsentativ ist `RTS -> EN` getrennt: Die verzögerte
+EN-Power-On-Sequenz bestand in drei echten Läufen mit mindestens 10 Sekunden
+Auszeit und 1 Sekunde EN-Haltezeit; kein Lauf zeigte im UART-Fenster vom
+Power-On bis zur ersten Draw-Ausgabe einen Brownout-Marker, und alle drei
+Sichtprüfungen waren PASS. Damit gilt: drei echte Kaltstarts PASS,
+Displayfunktion PASS, Touchfunktion PASS und `STAGE_2=PASS`.
+
+Historisch bleibt separat dokumentiert: Bei verbundenem `RTS -> EN` wurde eine
+Brownout-/White-Display-Abweichung beobachtet; die elektrische Mechanik wurde
+nicht bestimmt. Diese Debugtopologie darf für Remote-Flash und Test verbunden
+bleiben, ist aber kein produktrepräsentativer Kaltstart. Es gab keine
+Hardware-/SSOT- oder Produktänderung.
+
+`OWNER_NON_DECISION_STAGE_EXECUTION_AUTHORIZATION=YES` und
+`OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES` gelten. `STAGE_3=PASS` basiert auf der
+akzeptierten Wiederverwendung der unveränderten Stage-2-Touch-Evidence und der
+bereits ausgeführten Stage-3-Zusatzmatrix. `STAGE_4=PASS` und
+`STAGE_4_SELECTION=OWNER_APPROVED`; die produktive Rendererentscheidung ist
+`OWNER_RENDERER_SELECTION=LVGL`.
+`PRODUCT_IMPLEMENTATION=IN_PROGRESS`, Kalibrierung bleibt ohne realen
+persistierten Datensatz fail-closed, und `ACTUATOR_RELEASE=NO` bleibt
+unverändert.
 
 Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
 `main` promoted. PR #149 / Issue #148 hat `main` als normale
@@ -61,10 +120,13 @@ mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
 ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
 blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
 abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
-Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Die reale
-Hardware-Reihenfolge bleibt #31 -> #30 -> #32 -> #33; fehlende Hardware- und
-Commissioning-Nachweise werden nicht vorweggenommen. Issue #154 ist davon
-getrennte parallele Governance-Arbeit und ändert keine Fachlogik.
+Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Fuer #31
+ist nach dem Full Review eine Planrevision erforderlich; die Umsetzung bleibt
+bis zur unabhaengigen Plan-Fix-Verifikation und der Freigabe der exakten neuen
+Plan-SHA angehalten. Die reale Hardware-Reihenfolge bleibt #31 -> #30 -> #32
+-> #33; fehlende Hardware- und Commissioning-Nachweise werden nicht
+vorweggenommen. Issue #154 / PR #155 ist als getrennte parallele
+Governance-Arbeit abgeschlossen und ändert keine Fachlogik.
 `ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
 `PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
 `ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
@@ -205,9 +267,9 @@ ist geschlossene historische Persistenzprovenienz.
   manuellen Zeit-/Temperaturlauf; Issue #152 ist geschlossen. #26 / PR #143
   ist ebenfalls abgeschlossen und konsumiert den Vertrag ausschließlich über
   seine bestehenden Grenzen.
-- Issue #154 ist ein separater Plan-first-Governance-Scope für den
-  Builder-Self-Check; er ändert den vollständigen Pre-Ready-Vertrag nicht und
-  blockiert die reale Hardware-Reihenfolge nicht.
+- Issue #154 / PR #155 ist als separater Plan-first-Governance-Scope für den
+  Builder-Self-Check abgeschlossen; er ändert den vollständigen Pre-Ready-
+  Vertrag nicht und blockiert die reale Hardware-Reihenfolge nicht.
 - Reale Hardware-, GPIO-, Display-/Touch-, Sensor-, Aktor- und
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen

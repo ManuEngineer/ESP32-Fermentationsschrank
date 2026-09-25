@@ -3,3 +3,5 @@
 # Konfiguration bleibt in sdkconfig.defaults (siehe
 # docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.2).
 CONFIG_APP_PROFILE_ESP32_RELEASE=y
+# Issue #31 raw-touch contract.
+CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n

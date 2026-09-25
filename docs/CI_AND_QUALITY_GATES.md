@@ -10,13 +10,16 @@ ausschliesslich im versionierten Runner
 `scripts/run_pre_ready_gates.sh`; GitHub-CI-only Artefakt-/Privacy-Gates stehen
 im Workflow.
 
-Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
-verwenden ESP-IDF `v6.1` am Commit
+Der Host-Gate-Pfad verwendet PlatformIO `6.1.19` und PyYAML `6.0.3` als direkte
+Python-Abhaengigkeiten; GitHub-CI provisioniert beide Pins mit Python 3.13.
+PyYAML wird fuer den Board-Profile-SSOT-Check benoetigt. Der reine
+Firmwarebuild liest nur den eingecheckten generierten Header und benoetigt
+PyYAML nicht. Die ESP32-Produktionsprofile verwenden ESP-IDF `v6.1` am Commit
 `fff9895c82d744c7237be8847347bdd1b07c6643`.
 
 Der gemeinsame versionierte Gate-Owner ist
 `scripts/run_pre_ready_gates.sh`. Er verifiziert vor den Gates PlatformIO
-`6.1.19`, clang-format und clang-tidy aus der Major-Linie 18 sowie fuer die
+`6.1.19`, clang-format und clang-tidy aus der Major-Linie 21 sowie fuer die
 ESP-Phase die bestehende exakte ESP-IDF-/esp-clang-Provenienz. Installation und
 Provisionierung der Werkzeuge bleiben Umgebungsaufgabe; eine Abweichung wird
 vom Runner als `BLOCKED` oder `FAILED` behandelt und kann keinen lokalen
@@ -68,7 +71,7 @@ Commit verifizierbar sein; ein frei gesetzter `STATIC_ANALYSIS_BASE_SHA` wird
 fail-closed abgelehnt. Dadurch kann ein spaeterer PR-Commit die frueheren
 PR-Aenderungen nicht aus dem Self-Check-Scope entfernen.
 
-clang-format-18 prueft frueh nur die geaenderten C/C++-Dateien. Sobald eine
+clang-format-21 prueft frueh nur die geaenderten C/C++-Dateien. Sobald eine
 relevante C/C++-Aenderung im hardwareunabhaengigen nativen Produktionskern oder
 seinen Headern erkannt wird, erzeugt der Runner die native
 Kompilierungsdatenbank und fuehrt die vollstaendige bestehende kanonische
@@ -117,9 +120,9 @@ mit `python3`, `IDF_PATH` und `idf.py` vor dem ersten ESP-Build. Die
 detaillierte esp-clang-Pfad-, Versions-, `tools.json`- und `pyclang`-Pruefung
 bleibt beim bestehenden Static-Analysis-Owner.
 
-`host` umfasst den vollständigen clang-format-18-Check, nativen Build und
+`host` umfasst den vollständigen clang-format-21-Check, nativen Build und
 Ressourcenbericht, komplette native Tests, Compile-Datenbank und den exakten
-clang-tidy-18-Lauf sowie Architekturguard und Quality-Gate-Selbsttests. `esp`
+clang-tidy-21-Lauf sowie Architekturguard und Quality-Gate-Selbsttests. `esp`
 umfasst Bring-up-/Release-Build, Ressourcenbericht und esp-clang-Static-
 Analysis. Nur wenn beide Aufrufe mit dem gleichen `PRE_READY_EXPECTED_HEAD`
 erfolgreich sind, darf
@@ -259,8 +262,8 @@ Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
 
 | Werkzeug | Version | Umfang |
 |---|---:|---|
-| clang-format | 18 | C/C++ unter `src/`, `include/`, `lib/`, `test/`, `main/` |
-| clang-tidy | 18 | hardwareunabhaengiger Produktionskern ueber die native Kompilierungsdatenbank |
+| clang-format | 21 | C/C++ unter `src/`, `include/`, `lib/`, `test/`, `main/` |
+| clang-tidy | 21 | hardwareunabhaengiger Produktionskern ueber die native Kompilierungsdatenbank |
 | esp-clang | zur ESP-IDF-6.1-Toolchain passend (`esp-21.1.3_20260408`) | beide ESP-IDF-Profile |
 
 Die vollständige Formatprüfung, die native Kompilierungsdatenbank und die
@@ -332,24 +335,25 @@ Fehlgeschlagene Builds sichern den verfuegbaren Buildlog.
 Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 
 1. Checkout und Python;
-2. PlatformIO installieren; clang-format/clang-tidy 18 sind auf
-   `ubuntu-24.04` bereits vorinstalliert und werden nur verlinkt;
-3. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
-   Format, Build, Tests oder clang-tidy fail-fast ab;
-4. ESP-IDF `v6.1` am exakten Commit installieren und verifizieren; Checkout
+2. PlatformIO installieren;
+3. ESP-IDF `v6.1` am exakten Commit installieren und verifizieren; Checkout
    und `IDF_TOOLS_PATH` werden dabei ueber `actions/cache` wiederverwendet
    (siehe „ESP-IDF-Checkout- und Tools-Caching" oben), die Provenienz-
    verifikation laeuft unveraendert bei jedem Lauf;
-5. esp-clang installieren (uebersprungen bei gueltigem Tools-Cache-Treffer),
-   die ESP-IDF-Umgebung aktivieren und den gemeinsamen Runner in der
+4. esp-clang installieren (uebersprungen bei gueltigem Tools-Cache-Treffer),
+   dessen `bin`-Verzeichnis fuer Host und ESP voranstellen und die Version
+   verifizieren;
+5. den gemeinsamen Runner in der `host`-Phase ausfuehren; dieser bricht bei
+   Format, Build, Tests oder clang-tidy fail-fast ab;
+6. die ESP-IDF-Umgebung aktivieren und den gemeinsamen Runner in der
    `esp`-Phase ausfuehren;
-6. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
+7. die GitHub-CI-only Artefakt-Scanabdeckung und Artefakt-/Privacy-Pruefung
    ausfuehren;
-7. Berichte und Buildartefakte sichern.
+8. Berichte und Buildartefakte sichern.
 
-Damit bleiben die billigen Host-Gates vor der teuren ESP-IDF-Provisionierung,
-waehrend der lokale Ownerlauf beide portablen Runner-Phasen auf demselben
-finalen HEAD vollstaendig ausfuehrt. Die GitHub-CI-only Gates laufen nur im
+Damit verwenden Host- und ESP-Phase denselben gepinnten `esp-clang`-Werkzeug-
+satz; der lokale Ownerlauf fuehrt beide portablen Runner-Phasen auf demselben
+finalen HEAD vollstaendig aus. Die GitHub-CI-only Gates laufen nur im
 Workflow.
 
 `concurrency` bricht einen veralteten Lauf desselben Pull Requests ab, sobald

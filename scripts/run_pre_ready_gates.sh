@@ -80,8 +80,8 @@ verify_clang_major() {
     local version_line
     version_line=$("$command_name" --version 2>&1 | head -n 1)
     if ! printf '%s\n' "$version_line" | grep -Eq \
-        '(^|[^0-9])18(\.[0-9]+)*([^0-9]|$)'; then
-        printf 'FAILED: %s aus Major-Linie 18 erwartet, gefunden:\n%s\n' \
+        '(^|[^0-9])21(\.[0-9]+)*([^0-9]|$)'; then
+        printf 'FAILED: %s aus Major-Linie 21 erwartet, gefunden:\n%s\n' \
             "$command_name" "$version_line" >&2
         exit 1
     fi
@@ -98,6 +98,11 @@ verify_host_toolchain() {
     verify_python3
 }
 
+verify_board_profile_generation() {
+    python3 scripts/generate_board_profile_header.py --check
+    printf 'BOARD_PROFILE_SINGLE_SOURCE=PASS\n'
+}
+
 verify_expected_esp_environment() {
     verify_python3
     if [[ -z "${IDF_PATH:-}" || ! -d "$IDF_PATH" ]]; then
@@ -112,7 +117,10 @@ verify_expected_esp_environment() {
 }
 
 run_clang_tidy() {
-    clang-tidy -p . "$@"
+    clang-tidy \
+        --extra-arg-before=--target=x86_64-linux-gnu \
+        --extra-arg-before=--gcc-toolchain=/usr \
+        -p . "$@"
 }
 
 verify_self_check_base() {
@@ -189,6 +197,7 @@ collect_changed_c_cpp_files() {
 run_self_check() {
     verify_self_check_base
     verify_host_toolchain
+    verify_board_profile_generation
 
     local format_files=()
     mapfile -t format_files < <(collect_changed_c_cpp_files format)
@@ -215,6 +224,7 @@ run_self_check() {
 
 run_host_gates() {
     verify_host_toolchain
+    verify_board_profile_generation
 
     clang-format --dry-run --Werror \
         $(find src include lib test main -type f \( \

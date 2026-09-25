@@ -14,6 +14,7 @@
 #include "fermentation_ui_commands.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
 
 namespace fermentation {
@@ -359,10 +360,13 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
     }
-    if (intent.option == StopOption::AbortAndCool &&
-        !intent.coolingPlan.has_value()) {
-        return requestFailure(
-            FermentationApplicationRequestStatus::InvalidInput);
+    const FermentationUiManualRunPlanValues* coolingPlan = nullptr;
+    if (intent.option == StopOption::AbortAndCool) {
+        if (!intent.coolingPlan.has_value()) {
+            return requestFailure(
+                FermentationApplicationRequestStatus::InvalidInput);
+        }
+        coolingPlan = &intent.coolingPlan.value();
     }
     const auto identity = runIdentity_->allocateForApplication();
     if (!identity.identity.has_value()) {
@@ -375,15 +379,14 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
     request.safetyAllowsCooling = evidence.safetyAllowsCooling;
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
-    if (intent.option == StopOption::AbortAndCool) {
+    if (coolingPlan != nullptr) {
         const auto runId =
             runIdentity_->makeRunId(identity.identity->commandId());
         if (!runId.has_value()) {
             return requestFailure(
                 FermentationApplicationRequestStatus::Unavailable);
         }
-        request.coolingPlan =
-            makeManualRunPlanRequest(*intent.coolingPlan, *runId);
+        request.coolingPlan = makeManualRunPlanRequest(*coolingPlan, *runId);
     }
     return makePreparedRequest(std::move(request));
 }
@@ -530,6 +533,65 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     }
     confirmed.request->confirm();
     return confirmed;
+}
+
+FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
+    const FermentationApplicationPreparedRequest& confirmed) {
+    if (!confirmed.commandEnvelope().confirmed) {
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::NotConfirmed);
+    }
+    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        // No owning path was entered. Keep this a decision-only result instead
+        // of mislabelling an unavailable application as a persisted outcome.
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::ContextMissing);
+    }
+
+    CommandDecision decision;
+    auto decisionResult = FermentationUiCommandBridge::decidePrepared(
+        *runtimeRunState_, confirmed, std::nullopt, &decision);
+    if (!std::holds_alternative<CommandStatus>(decisionResult.detail) ||
+        std::get<CommandStatus>(decisionResult.detail) !=
+            CommandStatus::Proposed) {
+        return decisionResult;
+    }
+
+    // Message acknowledgement/muting is an existing RAM-owned command path;
+    // messages are deliberately outside the run-persistence wire projection.
+    if (decision.kind == CommandKind::AcknowledgeMessage ||
+        decision.kind == CommandKind::MuteMessage) {
+        const auto applied = applyRunCommand(*runtimeRunState_, decision);
+        return FermentationUiCommandBridge::fromOwningCommandApplyStatus(
+            applied);
+    }
+
+    auto checkpointTime = currentCheckpointTime();
+    checkpointTime.monotonicMillis =
+        confirmed.commandEnvelope().monotonicMillis;
+    RunPersistenceResult persisted;
+    const auto* liveEvidence = &owningRuntimeEvidence_;
+    if (decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding) {
+        FreshStartSnapshotProvenance provenance =
+            FreshStartSnapshotProvenance::absent();
+        if (configurationService_ != nullptr) {
+            const auto runtime = configurationService_->acquireRuntime();
+            if (runtime.status ==
+                RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+                provenance = FreshStartSnapshotProvenance::fromRuntimeLease(
+                    runtime.lease);
+            }
+        }
+        persisted = runPersistenceCoordinator_->persistFreshStartCommand(
+            *runtimeRunState_, decision, provenance, checkpointTime,
+            liveEvidence);
+    } else {
+        persisted = runPersistenceCoordinator_->persistCommand(
+            *runtimeRunState_, decision, checkpointTime, liveEvidence);
+    }
+    return FermentationUiCommandBridge::fromRunPersistenceResult(
+        persisted.status);
 }
 
 bool FermentationApplication::begin(
@@ -906,6 +968,27 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     input.network.currentMode = networkMode();
     input.refreshTracker = &uiRefreshTracker_;
     return FermentationUiProjector::project(input);
+}
+
+FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
+    const {
+    FermentationUiPresentationSource source;
+    if (configurationService_ == nullptr) {
+        return source;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return source;
+    }
+    const auto& userConfiguration = runtime.lease.get().userConfiguration();
+    if (!userConfiguration.displayLanguageId.empty()) {
+        source.displayLocale =
+            device_platform::LocaleId{userConfiguration.displayLanguageId};
+    }
+    source.canonicalTimeZoneId = device_platform::TimeZoneId{
+        runtime.lease.get().preparedTimeZone().canonicalIdentifier};
+    source.programCatalog = runtime.lease.get().programCatalog();
+    return source;
 }
 
 bool FermentationApplication::beginPersistent(

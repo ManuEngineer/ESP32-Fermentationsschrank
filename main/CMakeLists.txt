@@ -1,10 +1,16 @@
 # Die Component muss registriert werden, bevor die aus Kconfig erzeugten
 # Profilvariablen fuer die private Quellenisolierung verwendet werden.
 idf_component_register(
-    SRCS "app_main.cpp"
+    SRCS "app_main.cpp" "fermentation_ui_renderer.cpp"
+         "fermentation_ui_lvgl_renderer.cpp"
+         "fermentation_ui_press_dispatcher.cpp"
+         "generated/manuengineer_logo_168x24.cpp"
     PRIV_INCLUDE_DIRS "../include"
+                  "../lib/device_platform_esp_idf/private"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
                   nvs_flash
+                  esp_timer
+                  espressif__esp_lvgl_port
 )
 
 # ESP-IDF 6.1 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt
@@ -110,6 +116,53 @@ if(APP_ISSUE_90_SLICE7_HARNESS)
     )
 endif()
 
+set(APP_ISSUE_31_TOUCH_CALIBRATION_COMPILE_DEFINITIONS)
+if(APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #31 touch calibration harness is allowed only in "
+            "esp32_bringup"
+        )
+    endif()
+    if(APP_ISSUE_90_SLICE7_HARNESS)
+        message(FATAL_ERROR
+            "Issue #31 touch calibration harness cannot be combined with "
+            "the Issue #90 Slice-7 harness"
+        )
+    endif()
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_31_touch_calibration_harness.cpp"
+    )
+    list(APPEND APP_ISSUE_31_TOUCH_CALIBRATION_COMPILE_DEFINITIONS
+        APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS=1
+    )
+endif()
+
+set(APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS)
+if(APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #31 touch calibration provisioner is allowed only in "
+            "esp32_bringup"
+        )
+    endif()
+    if(APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS OR
+       APP_ISSUE_90_SLICE7_HARNESS)
+        message(FATAL_ERROR
+            "Issue #31 calibration provisioner cannot be combined with "
+            "another Issue #31/#90 harness"
+        )
+    endif()
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_31_touch_calibration_provision.cpp"
+    )
+    list(APPEND APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS
+        APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -120,6 +173,8 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_PROFILE_DEFINE}
     ${APP_ISSUE_29_COMPILE_DEFINITIONS}
     ${APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_31_TOUCH_CALIBRATION_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS}
     ${APP_SOURCE_GIT_SHA_DEFINE}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0

@@ -19,9 +19,22 @@
 #include "nvs_flash.h"
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
+#include "fermentation_ui_lvgl_renderer.hpp"
+#include "fermentation_ui_press_dispatcher.hpp"
+#include "fermentation_ui_text.hpp"
+#include "generated/board_profile_r1.hpp"
+#include "touch_calibration.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 #include "issue_90_slice7_harness.hpp"
+#endif
+
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
+#include "issue_31_touch_calibration_harness.hpp"
+#endif
+
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+#include "issue_31_touch_calibration_provision.hpp"
 #endif
 
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
@@ -53,6 +66,38 @@ constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
 constexpr TickType_t kCooperativeYieldTicks = 1;
 constexpr const char* kNtpServers[] = {"pool.ntp.org"};
+
+// The R1 board/controller identity a persisted touch calibration record
+// must match to be trusted (Stage-2 evidence confirmed
+// DISPLAY_CONTROLLER_IDENTITY=FUNCTIONAL_VISUAL_PASS and
+// TOUCH_CONTROLLER_IDENTITY=FUNCTIONAL_RAW_TOUCH_PASS for exactly this
+// combination; see
+// docs/tasks/issue-31-renderer-display-touch-calibration-plan.md). A record
+// written for a different board or controller is never silently accepted.
+constexpr char kBoardControllerId[] =
+    "esp32_32e_quad_mosfet_r1+ili9341+xpt2046";
+
+[[nodiscard]] const char* touchCalibrationLoadStatusName(
+    device_platform::TouchCalibrationLoadStatus status) noexcept {
+    using device_platform::TouchCalibrationLoadStatus;
+    switch (status) {
+        case TouchCalibrationLoadStatus::Available:
+            return "Available";
+        case TouchCalibrationLoadStatus::NotFound:
+            return "NotFound";
+        case TouchCalibrationLoadStatus::OtherEpoch:
+            return "OtherEpoch";
+        case TouchCalibrationLoadStatus::UnsupportedSchema:
+            return "UnsupportedSchema";
+        case TouchCalibrationLoadStatus::InvalidRecord:
+            return "InvalidRecord";
+        case TouchCalibrationLoadStatus::ReadError:
+            return "ReadError";
+        case TouchCalibrationLoadStatus::CapacityError:
+            return "CapacityError";
+    }
+    return "Unknown";
+}
 
 // No board profile with verified RTC bus pins exists yet.  The disabled
 // profile is therefore intentional and is the supported NTP-only mode; a
@@ -193,15 +238,153 @@ device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
     return {std::string("Fermentation-") + suffix, std::move(password), {}};
 }
 
+// Maps the existing renderer-independent #164 network lifecycle state to the
+// existing renderer-independent header status contract. No new network
+// state is introduced; SetupAccessPoint/ConnectingHome/CandidateTesting are
+// presented as Disconnected (a transition is in progress, not yet usable).
+device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
+    device_platform::NetworkLifecycleState state) noexcept {
+    switch (state) {
+        case device_platform::NetworkLifecycleState::AccessPointOnly:
+        case device_platform::NetworkLifecycleState::HomeConnected:
+            return device_platform::DeviceUiNetworkStatus::Connected;
+        case device_platform::NetworkLifecycleState::SetupAccessPoint:
+        case device_platform::NetworkLifecycleState::ConnectingHome:
+        case device_platform::NetworkLifecycleState::CandidateTesting:
+            return device_platform::DeviceUiNetworkStatus::Disconnected;
+        case device_platform::NetworkLifecycleState::Stopped:
+        case device_platform::NetworkLifecycleState::Failed:
+            return device_platform::DeviceUiNetworkStatus::Unavailable;
+    }
+    return device_platform::DeviceUiNetworkStatus::Unavailable;
+}
+
+void loadTouchCalibration(
+    device_platform::IStateStore& stateStore,
+    fermentation::main_ui::ProductiveLvglRenderer& displayRenderer) {
+    // Boot-time load/classify only (Schnitt 9): calibration never changes at
+    // runtime without an explicit future calibration workflow writing a new
+    // record, so this is not re-read per loop tick. The fallback slot is
+    // loaded and classified for diagnostics only; it never replaces an
+    // invalid active record here (see the session handover for that open
+    // policy question).
+    const device_platform::TouchCalibrationStore touchCalibrationStore(
+        stateStore);
+    const auto activeCalibration = touchCalibrationStore.load(
+        device_platform::TouchCalibrationSlot::Active, kBoardControllerId);
+    const auto fallbackCalibration = touchCalibrationStore.load(
+        device_platform::TouchCalibrationSlot::Fallback, kBoardControllerId);
+    ESP_LOGI(kTag, "touch calibration: active_status=%s fallback_status=%s",
+             touchCalibrationLoadStatusName(activeCalibration.status),
+             touchCalibrationLoadStatusName(fallbackCalibration.status));
+
+    if (activeCalibration.status ==
+            device_platform::TouchCalibrationLoadStatus::Available &&
+        activeCalibration.record.has_value()) {
+        displayRenderer.setTouchCalibration(activeCalibration.record->model);
+        return;
+    }
+
+    if (activeCalibration.status ==
+        device_platform::TouchCalibrationLoadStatus::Available) {
+        ESP_LOGE(kTag,
+                 "touch calibration: active record missing; keeping touch "
+                 "fail-closed");
+    }
+    // Every non-Available result, including an inconsistent Available result,
+    // must leave the renderer without a calibration model. No fallback or
+    // guessed interpretation is permitted.
+    displayRenderer.setTouchCalibration(std::nullopt);
+}
+
+void initializeProductUi(
+    fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
+    device_platform::IStateStore& stateStore,
+    fermentation::FermentationApplication& application,
+    fermentation::FermentationTouchWorkspace& uiWorkspace,
+    const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    const fermentation::FermentationUiPresentationSource& uiPresentation,
+    device_platform::DeviceUiNetworkStatus uiNetworkStatus,
+    const device_platform::ClockViewInput& uiClock) {
+    if (displayRenderer == nullptr || !displayRenderer->initialize()) {
+        ESP_LOGW(kTag,
+                 "productive LVGL display unavailable; UI remains fail-closed");
+        return;
+    }
+
+    loadTouchCalibration(stateStore, *displayRenderer);
+    if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
+                                 uiTextPacks, uiPresentation.displayLocale,
+                                 std::nullopt, &uiPresentation.programCatalog,
+                                 uiNetworkStatus, uiClock)) {
+        ESP_LOGW(kTag, "productive LVGL initial projection failed");
+    }
+}
+
+void updateProductUi(
+    fermentation::FermentationApplication& application,
+    fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
+    fermentation::FermentationTouchWorkspace& uiWorkspace,
+    const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    const device_platform::ITimeSource& timeSource) {
+    if (displayRenderer == nullptr || !displayRenderer->initialized()) {
+        return;
+    }
+
+    const auto loopPresentation = application.uiPresentationSource();
+    const auto loopNetworkStatus =
+        toDeviceUiNetworkStatus(networkLifecycle.status().state);
+    const device_platform::ClockViewInput loopClock{
+        timeSource.unixTimeSeconds(), loopPresentation.canonicalTimeZoneId};
+    const auto loopSnapshot = application.uiSnapshot();
+
+    // The existing #26 target/interaction path (calibrated touch
+    // -> targetAt()/Workspace::press() -> existing typed
+    // FermentationApplication/FermentationUiCommandBridge entry points) is
+    // owned entirely by this one app-specific adapter; main/app_main.cpp
+    // never builds a RepresentativeScreen or calls targetAt()/routePress()
+    // itself. No second event/command state machine is introduced.
+    const auto touchPoll = displayRenderer->pollTouch();
+    const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
+        application, uiWorkspace, loopSnapshot, uiTextPacks,
+        loopPresentation.displayLocale, &loopPresentation.programCatalog,
+        loopNetworkStatus, loopClock, touchPoll.contactHeld,
+        touchPoll.point.has_value() ? touchPoll.point->x : 0U,
+        touchPoll.point.has_value() ? touchPoll.point->y : 0U,
+        touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    if (touchTick.dispatch.outcome !=
+        fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
+        ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
+                 static_cast<int>(touchTick.dispatch.outcome));
+    }
+
+    static_cast<void>(displayRenderer->render(
+        loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
+        touchTick.pressedTarget, &loopPresentation.programCatalog,
+        loopNetworkStatus, loopClock));
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+    fermentation::issue_31_touch_calibration_provision::run();
+    return;
+#endif
+
+#ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
+    fermentation::issue_31_touch_calibration::run();
+    return;
+#endif
+
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
         // No recovery/application path is started if the owning context
         // cannot initialize and open its persistent store.
         return;
     }
+
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     ESP_LOGI(kTag,
              "ISSUE90_NVS_PARTITION_INIT=PASS ISSUE90_NVS_STORE_OPEN=PASS");
@@ -266,14 +449,6 @@ extern "C" void app_main(void) {
         return;
     }
 
-#ifdef APP_ISSUE_90_SLICE7_HARNESS
-    fermentation::issue_90_slice7::Harness issue90Harness(application,
-                                                          timeSource);
-    issue90Harness.start();
-#endif
-
-    logResources();
-
 #ifdef APP_ISSUE_29_BRINGUP_PROBE
     if (!fermentation::issue_29_bringup::run()) {
         ESP_LOGE(kTag,
@@ -282,6 +457,43 @@ extern "C" void app_main(void) {
         return;
     }
 #endif
+
+    // Issue #31's selected product renderer is composed here, at the
+    // application boundary. The pin numbers are the single deterministic
+    // build-time derivation from config/board_profiles/
+    // esp32_32e_quad_mosfet_r1.yaml (see main/generated/board_profile_r1.hpp
+    // and scripts/generate_board_profile_header.py) - no second
+    // hand-maintained pin list. Width/height are a panel property, not a
+    // GPIO assignment, and stay a composition-root constant. No display,
+    // touch, LVGL or command policy enters the application component.
+    namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
+    auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer(
+        {r1_pins::kSpiSckPin, r1_pins::kSpiMosiPin, r1_pins::kSpiMisoPin,
+         r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,
+         r1_pins::kDisplayDataCommandPin, r1_pins::kBacklightPin,
+         r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
+         r1_pins::kBacklightActiveHigh});
+    fermentation::FermentationTouchWorkspace uiWorkspace;
+    const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
+    // The single renderer-independent source for locale, the program catalog
+    // and the canonical prepared time zone; see
+    // FermentationApplication::uiPresentationSource().
+    const auto uiPresentation = application.uiPresentationSource();
+    const auto uiNetworkStatus =
+        toDeviceUiNetworkStatus(networkLifecycle.status().state);
+    const device_platform::ClockViewInput uiClock{
+        timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
+    initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
+                        application, uiWorkspace, uiTextPacks, uiPresentation,
+                        uiNetworkStatus, uiClock);
+
+#ifdef APP_ISSUE_90_SLICE7_HARNESS
+    fermentation::issue_90_slice7::Harness issue90Harness(application,
+                                                          timeSource);
+    issue90Harness.start();
+#endif
+
+    logResources();
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -294,6 +506,8 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
+        updateProductUi(application, displayRenderer.get(), uiWorkspace,
+                        uiTextPacks, networkLifecycle, timeSource);
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif

@@ -102,9 +102,20 @@ void test_big_endian_unsigned_golden_bytes() {
     TEST_ASSERT_TRUE(be::writeUint32(writer, 0x01020304U));
     TEST_ASSERT_TRUE(be::writeUint64(writer, 0x0102030405060708ULL));
     const std::string expected = bytesOf({
-        0x01U, 0x02U,                                            // uint16
-        0x01U, 0x02U, 0x03U, 0x04U,                              // uint32
-        0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U,  // uint64
+        0x01U,
+        0x02U,  // uint16
+        0x01U,
+        0x02U,
+        0x03U,
+        0x04U,  // uint32
+        0x01U,
+        0x02U,
+        0x03U,
+        0x04U,
+        0x05U,
+        0x06U,
+        0x07U,
+        0x08U,  // uint64
     });
     TEST_ASSERT_EQUAL_UINT32(expected.size(), writer.size());
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), writer.bytes().data(),
@@ -165,10 +176,21 @@ void test_big_endian_signed_two_complement_golden_bytes() {
     TEST_ASSERT_TRUE(be::writeInt32(writer, -3));
     TEST_ASSERT_TRUE(be::writeInt64(writer, -4));
     const std::string expected = bytesOf({
-        0xFFU,                                                   // -1 as int8
-        0xFFU, 0xFEU,                                            // -2 as int16
-        0xFFU, 0xFFU, 0xFFU, 0xFDU,                              // -3 as int32
-        0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFCU,  // -4 as int64
+        0xFFU,  // -1 as int8
+        0xFFU,
+        0xFEU,  // -2 as int16
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFDU,  // -3 as int32
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFFU,
+        0xFCU,  // -4 as int64
     });
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), writer.bytes().data(),
                              expected.size());
