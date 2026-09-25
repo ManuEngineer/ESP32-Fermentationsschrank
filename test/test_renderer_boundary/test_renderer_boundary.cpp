@@ -577,7 +577,7 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     TEST_ASSERT_EQUAL_UINT16(72U, password->rect.height);
 
     auto changedAccessPoint = accessPoint;
-    changedAccessPoint.password = "changed-local-password";
+    changedAccessPoint.password += "-rotated";
     const auto changedScreen = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"},
         std::nullopt, nullptr,
