@@ -493,10 +493,13 @@ Nach Freigabe werden nur die aktiven Vertragsstellen angepasst:
 - `docs/CI_AND_QUALITY_GATES.md`: aktiven Hostvertrag und CI-Reihenfolge
   synchronisieren.
 - `lib/fermentation_app/src/fermentation_application.cpp`: die bestehende
-  `AbortAndCool`-Vorbedingung direkt in den nachfolgenden Block schneiden,
-  sodass `intent.coolingPlan` vor `makeManualRunPlanRequest()` nachweisbar
-  guarded ist. InvalidInput, die bestehende Command-/Run-ID-Reihenfolge und
-  alle sonstigen Semantiken bleiben unveraendert; kein `NOLINT`.
+  fruehe `AbortAndCool && !intent.coolingPlan.has_value()`-Pruefung bleibt
+  unveraendert vor `runIdentity_->allocateForApplication()`. Erst nach dieser
+  erfolgreichen Pruefung wird lokal eine nachweisbar gueltige Referenz auf den
+  Cooling-Plan gebunden und spaeter an `makeManualRunPlanRequest()` verwendet.
+  Die Allocation-Reihenfolge, `InvalidInput`, Command-/Run-ID-Semantik und
+  alle sonstigen Verhaltensvertraege bleiben unveraendert; kein `NOLINT` und
+  keine Verlagerung der InvalidInput-Pruefung hinter die Allocation.
 - `lib/fermentation_app/src/process_state_machine.hpp`: in
   `elapsedWithPrior()` nur die Addition nach der Division explizit klammern;
   keine Rechenlogik aendern.
@@ -529,6 +532,9 @@ bestehenden Baum ausgefuehrt.
 - Fuer `prepareStop` werden gezielt beide Verhaltensfaelle regressiert:
   `AbortAndCool` ohne Cooling-Plan bleibt `InvalidInput`; ein gueltiger Plan
   bleibt erfolgreich und behaelt die bestehende Command-/Run-ID-Semantik.
+  Die ungueltige Anfrage darf keine Command-ID verbrauchen; die naechste
+  gueltige Command-ID bleibt unveraendert und der gueltige Stop behaelt seine
+  bestehende Run-ID.
   Die bestehenden Process-State-Machine- und Run-Command-Tests muessen
   unveraendert PASS bleiben.
 - Der Formatdiff beschraenkt sich auf zwei kommentierte Byte-Array-Bloecke in
@@ -578,8 +584,10 @@ Gezielte Regression vor dem vollstaendigen Pre-Ready umfasst:
 
 ```text
 PREPARE_STOP_ABORT_AND_COOL_WITHOUT_PLAN=INVALID_INPUT
+INVALID_ABORT_AND_COOL_CONSUMES_COMMAND_ID=NO
+NEXT_VALID_COMMAND_ID=UNCHANGED
 PREPARE_STOP_ABORT_AND_COOL_WITH_VALID_PLAN=PASS
-PREPARE_STOP_COMMAND_RUN_ID_SEMANTICS=UNCHANGED
+PREPARE_STOP_VALID_RUN_ID=UNCHANGED
 PROCESS_STATE_MACHINE_TESTS=PASS
 RUN_COMMAND_TESTS=PASS
 ```
