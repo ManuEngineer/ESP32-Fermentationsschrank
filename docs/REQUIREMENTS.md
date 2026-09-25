@@ -160,8 +160,14 @@ weder Resume noch `Allowed`.
 - Der normale Webzugang kann mit einem Webpasswort geschuetzt werden.
 - Service-PIN- und Hardware-Servicefunktionen sind spaetere Service-Gates und
   nicht Teil des #24-R1-Safety-Resetvertrags.
-- WLAN-Ersteinrichtung erfolgt bevorzugt ueber ein geschuetztes Einrichtungs-WLAN
-  mit QR-Code und Captive Portal; lokale Eingabe bleibt moeglich.
+- WLAN-Ersteinrichtung erfolgt in R1 ueber ein geschuetztes Einrichtungs-WLAN
+  und den browserbasierten Setup-Pfad mit direkter lokaler IP beziehungsweise
+  mDNS; ein Captive Portal ist nicht erforderlich.
+- Die Ownerentscheidung fuer Issue #164 (`VARIANT_B`) deferiert die lokale
+  HOME_WIFI-SSID-/Passworteingabe am Touchdisplay, die dafuer erforderliche
+  Bildschirmtastatur und den WLAN-QR mit individuellen SoftAP-Zugangsdaten
+  aus R1. SSID, individuelles SoftAP-Passwort und direkte IP bleiben lokal am
+  Display sichtbar.
 - Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.
 - Direkte Internet-Portfreigabe auf den ESP32 ist nicht vorgesehen.
 - Eine dokumentierte lokale Lese-API ist zulaessig; keine offizielle externe

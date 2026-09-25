@@ -10,9 +10,19 @@ PR165=MERGED
 PR165_MERGE_COMMIT=1f1755e5e706fb668472920545b5302fcef1df16
 PREVIOUS_APPROVED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e
 CURRENT_COMPLETION_SCOPE=LOCAL_NETWORK_TOUCH_PAGE_AND_SOFTAP_ACCESS_INFO
+OWNER_DECISION=VARIANT_B
+R1_LOCAL_NETWORK_MODE_SELECTION=YES
+R1_LOCAL_SOFTAP_SSID_DISPLAY=YES
+R1_LOCAL_SOFTAP_PASSWORD_DISPLAY=YES
+R1_LOCAL_DIRECT_IP_DISPLAY=YES
+R1_HOME_WIFI_BROWSER_SETUP=YES
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED_VARIANT_B
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED_VARIANT_B
+R1_WLAN_QR=DEFERRED_VARIANT_B
+PRIMARY_R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
 ISSUE164_STATUS=OPEN
 HARDWARE_CLIENT_EVIDENCE=NOT_RUN_PENDING_HARDWARE
-PLAN_STATUS=OWNER_APPROVAL_REQUIRED
+PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_REQUIRED
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_IMPLEMENTATION=NOT_STARTED
 PRODUCT_TESTS=NOT_RUN_PLAN_ONLY
@@ -26,6 +36,16 @@ für diesen engeren Abschluss-Scope und ersetzt nicht rückwirkend den
 gemergten Implementierungsplan oder dessen historische Evidence. Vor einer
 Freigabe dieses exakten Plan-Commits werden weder Produktcode noch Tests,
 ESP-IDF-Builds oder Hardwareläufe geändert beziehungsweise ausgeführt.
+
+Die Ownerentscheidung für die zwei offenen R1-Funktionen ist ausdrücklich
+`VARIANT_B`: Die lokale Eingabe von HOME_WIFI-SSID und -Passwort am
+Touchdisplay, die dafür erforderliche Bildschirmtastatur sowie der WLAN-QR
+mit individuellen SoftAP-Zugangsdaten werden aus R1/#164 deferiert. `HOME_WIFI`
+selbst, die Display-Moduswahl, die lokale Anzeige der individuellen
+SoftAP-SSID/-Zugangsdaten und direkten IP sowie der browserbasierte
+Setup-/Test-before-Commit-Pfad bleiben R1/#164. Der Browser ist damit der
+einzige R1-Eingabepfad für Heim-WLAN-Credentials; es entsteht kein zweiter
+Credential-, UI- oder Persistenzpfad.
 
 ## 1. Verifizierte Ausgangslage
 
@@ -43,8 +63,10 @@ ESP-IDF-Builds oder Hardwareläufe geändert beziehungsweise ausgeführt.
   #164-Netzwerkbedienung jetzt ausdrücklich Issue #164 zu. Das ist eine
   Scope-Klarstellung gegenüber der bisherigen #164-Plan-/Issue-Formulierung,
   nach der physische Touchinteraktion vollständig Issue #31 zugeordnet war.
-  Diese Klarstellung wird erst nach Ownerfreigabe des exakten Plan-SHA in den
-  betroffenen aktuellen Statusoberflächen synchronisiert.
+- Die Ownerentscheidung `VARIANT_B` nimmt die lokale Credentialeingabe samt
+  Bildschirmtastatur und den WLAN-QR ausdrücklich aus diesem Completion-Scope
+  und aus R1 heraus. Die SSOT-Synchronisierung erfolgt mit dieser
+  Planrevision; der browserbasierte Setup-Pfad bleibt unverändert R1.
 
 Relevante aktuelle Bausteine auf der Baseline:
 
@@ -72,7 +94,10 @@ Relevante aktuelle Bausteine auf der Baseline:
 Die bestehende lokale `HeaderNetwork`-Seite macht die #164-Moduswahl und die
 explizite Heim-WLAN-Neukonfiguration über Touch erreichbar. Sie verwendet
 ausschließlich die vorhandenen typisierten Commands und den bestehenden
-Application-Ownerpfad.
+Application-Ownerpfad. Die Heim-WLAN-Credentials werden für R1 weiterhin über
+die bestehende Browser-Setup-Seite eingegeben; lokale Touch-Credentialeingabe,
+Bildschirmtastatur und WLAN-QR sind nach der Ownerentscheidung `VARIANT_B`
+keine Abnahmekriterien dieses Plans.
 
 ```text
 UNSELECTED -> AP_ONLY oder HOME_WIFI auswählen
@@ -83,6 +108,10 @@ UNSELECTED_NOT_USER_SELECTABLE=YES
 SECOND_NETWORK_STATE_MACHINE=NO
 SECOND_NETWORK_COMMAND_PATH=NO
 DIRECT_ESP_IDF_CALL_FROM_UI=NO
+R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED_VARIANT_B
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED_VARIANT_B
+R1_WLAN_QR=DEFERRED_VARIANT_B
 ```
 
 Wenn `networkAccessPointInfo()` aktuelle Informationen des aktiven SoftAP
@@ -102,9 +131,10 @@ SECOND_HTTP_SERVER=NO
 
 Die Anzeige bleibt eine kurzlebige lokale Projektion. Geheimnisse werden
 weder in den gemeinsamen normalen UI-/Web-Snapshot aufgenommen noch in
-Logs, Diagnose, Export, URL oder Persistenz kopiert. Es wird kein QR-Stack
-eingeführt. Die vorhandenen Setup-Routen, der AP-/STA-Lifecycle,
-Test-before-commit und die Netzwerkpersistenz bleiben unverändert.
+Logs, Diagnose, Export, URL oder Persistenz kopiert. Nach `VARIANT_B` wird kein
+WLAN-QR-Stack und kein lokaler Touch-Credentialpfad eingeführt. Die vorhandene
+browserbasierte Setup-Seite, der AP-/STA-Lifecycle, Test-before-commit und die
+Netzwerkpersistenz bleiben unverändert.
 
 ## 3. Scope und Nicht-Ziele
 
@@ -121,6 +151,9 @@ betroffen sind:
 - `docs/NETWORK.md`, nur für die nötige Klarstellung zwischen abgeschlossenem
   physischem Touch-/Kalibrierungsnachweis aus #31 und der jetzt #164
   zugeordneten Netzwerkseitenbedienung
+- `docs/FUTURE_SCOPE.md` und `docs/REQUIREMENTS.md` für die synchronisierte
+  `VARIANT_B`-Abgrenzung der deferierten Touch-Credentialeingabe,
+  Bildschirmtastatur und WLAN-QR-Funktion
 - vorhandene passende Text-/UI-Contracts und Tests unter `test/`
 
 `FermentationApplication`, `NetworkConfigurationService`,
@@ -135,7 +168,9 @@ Nicht-Ziele:
 - neue Netzwerk-, Command-, Credential-, HTTP- oder Persistenzpfade;
 - Änderungen an `RecordTypeId=9`, `cc0`, Credential-Schema,
   Setup-Routen oder Test-before-commit;
-- QR-Code, #27 Auth/Session/CSRF/Weboberfläche oder #28-Diagnostik;
+- lokale HOME_WIFI-SSID-/Passworteingabe, Bildschirmtastatur und WLAN-QR
+  (`DEFERRED_VARIANT_B`), zusätzlich #27 Auth/Session/CSRF/Weboberfläche und
+  #28-Diagnostik;
 - Hardwaretests, Flash oder Aktorfreigabe.
 
 ## 4. Umsetzungs- und Commit-Slices
@@ -190,7 +225,9 @@ pio test -e native -f test_renderer_boundary
   Projektbefehlen bauen. Die Builds sind Softwareevidence; kein Flash und
   keine Hardware-/Clientbehauptung daraus ableiten.
 - Nur tatsächlich benötigte Status-/Vertragsdokumentation synchronisieren,
-  insbesondere Roadmap, PR #164 und Issue #164. Issue #164 bleibt offen.
+  insbesondere `docs/NETWORK.md`, `docs/FUTURE_SCOPE.md`,
+  `docs/REQUIREMENTS.md`, Roadmap, PR #171 und Issue #164. Issue #164 bleibt
+  offen.
 - Commits pushen und danach für unabhängige Review/Fix Verification des
   begrenzten Completion-Diffs stoppen. Kein Ready-Wechsel oder Merge.
 
@@ -206,6 +243,10 @@ UNSELECTED_NOT_USER_SELECTABLE=PASS
 HOME_WIFI_RECONFIGURATION_UI=PASS
 NETWORK_MODE_COMMAND_OWNER=EXISTING_APPLICATION_PATH
 SOFTAP_ACCESS_DATA_LOCAL_DISPLAY_PATH=PASS
+R1_HOME_WIFI_BROWSER_SETUP=RETAINED
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED_VARIANT_B
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED_VARIANT_B
+R1_WLAN_QR=DEFERRED_VARIANT_B
 SOFTAP_SECRET_LOGGING=NO
 SECOND_NETWORK_STATE_MACHINE=NO
 SECOND_HTTP_SERVER=NO
@@ -219,16 +260,22 @@ HARDWARE_CLIENT_EVIDENCE=NOT_RUN_OWNER_HARDWARE_UNAVAILABLE
 ACTUATOR_RELEASE=NO
 ```
 
-Nicht Bestandteil dieser Runde sind reale `AP_ONLY`-/`HOME_WIFI`-Touchläufe,
-Android-Client, direkter AP-IP-/mDNS-, Setup-, gespeicherter Boot- oder
-Reconnect-Nachweise. Sie bleiben `NOT_RUN` bis reale Hardware und Clients
-verfügbar sind und ein passender Owner-Gate sie autorisiert. Der unabhängige
-Review dieses Folgeplans muss vor jeglicher Produktimplementation erfolgen.
+Nicht Bestandteil dieser Runde sind lokale HOME_WIFI-SSID-/Passworteingabe,
+Bildschirmtastatur und WLAN-QR; diese drei Funktionen sind durch die
+Ownerentscheidung `VARIANT_B` aus R1/#164 deferiert. Der browserbasierte
+Setup-/Test-before-Commit-Pfad bleibt dagegen R1 und wird durch die bestehende
+Integration konsumiert. Ebenfalls nicht Bestandteil dieser Runde sind reale
+`AP_ONLY`-/`HOME_WIFI`-Touchläufe, Android-Client, direkter AP-IP-/mDNS-,
+Setup-, gespeicherter Boot- oder Reconnect-Nachweise. Sie bleiben `NOT_RUN`,
+bis reale Hardware und Clients verfügbar sind und ein passender Owner-Gate sie
+autorisiert. Der unabhängige Plan-Fix-Review muss vor jeglicher
+Produktimplementation erfolgen.
 
 ## 6. Quellen und Owner-Gates
 
 - `docs/AGENT_WORKFLOW.md`, `docs/ENGINEERING_PRINCIPLES.md`
-- `docs/NETWORK.md`, `docs/ROADMAP.md`
+- `docs/NETWORK.md`, `docs/FUTURE_SCOPE.md`, `docs/REQUIREMENTS.md`,
+  `docs/ROADMAP.md`
 - `docs/tasks/issue-164-r1-wlan-native-http-integration-plan.md` als
   unveränderte Historie und Referenz der bestehenden #164-Verträge
 - Issue #164 sowie der gemergte PR #165
@@ -238,6 +285,8 @@ Review dieses Folgeplans muss vor jeglicher Produktimplementation erfolgen.
 ```text
 OWNER_APPROVAL_REQUIRED_FOR_EXACT_PLAN_SHA=YES
 PRODUCT_IMPLEMENTATION_BEFORE_PLAN_APPROVAL=NO
+OWNER_DECISION_VARIANT_B=RECORDED
+INDEPENDENT_PLAN_FIX_VERIFICATION_REQUIRED=YES
 PR_READY=NO
 PR_MERGE=NO
 ISSUE164_CLOSE=NO

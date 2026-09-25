@@ -7,6 +7,13 @@ WLAN-Ersteinrichtung, Geraetename, Adressierung und die grundlegende
 Absicherung der lokalen Weboberflaeche. R1 unterstuetzt genau ein gespeichertes
 Heim-WLAN oder den ausdruecklichen AP-only-Modus.
 
+Die Ownerentscheidung fuer Issue #164 lautet `VARIANT_B`: Die lokale
+HOME_WIFI-SSID-/Passworteingabe am Touchdisplay, die dafuer erforderliche
+Bildschirmtastatur und der WLAN-QR mit individuellen SoftAP-Zugangsdaten sind
+aus R1 deferiert. R1 verwendet dafuer den browserbasierten Setup-Pfad; die
+Display-Moduswahl und die lokale Anzeige der individuellen SoftAP-Zugangsdaten
+und der direkten IP bleiben R1.
+
 Die genaue Weboberflaeche, Sitzungsverwaltung und Konfliktbehandlung werden in
 `WEB_UI.md` ergaenzt.
 
@@ -96,8 +103,11 @@ DIRECT_IP_FALLBACK=REQUIRED
 SPECIAL_APP_OR_CLI_REQUIRED=NO
 ```
 
-Der WLAN-QR darf den Beitritt zum geschuetzten SoftAP vereinfachen. Ein
-zusaetzlicher QR-Code nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
+Ein WLAN-QR fuer den Beitritt zum geschuetzten SoftAP ist nach der
+Ownerentscheidung `VARIANT_B` kein R1-Bestandteil. SSID, individuelles
+Passwort und direkte lokale IP werden stattdessen auf dem lokalen Display
+angezeigt; der Client verbindet sich manuell. Ein zusaetzlicher QR-Code nur
+zum Oeffnen der Webseite ist ebenfalls nicht R1-pflichtig.
 
 ### Heim-WLAN-Modus
 
@@ -139,8 +149,8 @@ CLI-Zwang:
 ```text
 Display waehlt HOME_WIFI
   -> temporaeren geschuetzten Setup-SoftAP starten
-  -> SSID, Passwort, QR und direkte Setup-IP lokal anzeigen
-  -> Client verbindet sich per WLAN-QR oder manuell
+  -> SSID, individuelles Passwort und direkte Setup-IP lokal anzeigen
+  -> Client verbindet sich manuell mit SSID und Passwort
   -> Benutzer oeffnet die normale Setup-Seite per Browser, mDNS oder direkter IP
   -> Heim-WLAN scannen und auswaehlen oder SSID manuell eingeben
   -> Passwort eingeben
@@ -155,39 +165,31 @@ fehlgeschlagenen Test bleibt die bisherige gueltige Konfiguration unveraendert.
 Ein automatischer produktiver Commit in eine zweite ESP-WiFi-/Component-NVS-
 Wahrheit ist unzulaessig.
 
-### Bedeutung des WLAN-QR-Codes
+### Bewusst aus R1 deferierte lokale Komfort- und Eingabepfade
 
-Der WLAN-QR-Code enthaelt ausschliesslich die individuellen Zugangsdaten des
-geschuetzten Setup- oder AP-only-SoftAPs in einem gaengigen WLAN-QR-Format.
-Zusaetzlich werden fuer den direkten Fallback lokal angezeigt:
+Die folgenden Funktionen sind durch die Ownerentscheidung `VARIANT_B` bewusst
+aus R1/#164 deferiert und werden in dieser R1-Integration weder spezifiziert
+noch als Abnahmekriterium vorausgesetzt:
 
-- SSID des geschuetzten SoftAPs;
-- individuelles Passwort;
-- lokale Setup-Adresse beziehungsweise AP-IP;
-- Moeglichkeit, den QR-Code erneut anzuzeigen.
+```text
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED_VARIANT_B
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED_VARIANT_B
+R1_WLAN_QR=DEFERRED_VARIANT_B
+PRIMARY_R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
+```
 
-Ein Webseiten-QR ist davon getrennt und bleibt optionaler Future Scope.
-
-### Lokale Eingabe am Touchdisplay
-
-SSID und WLAN-Passwort koennen zusaetzlich am Touchdisplay eingegeben werden.
-Dieser Weg ist insbesondere als Not- und Offlineweg vorgesehen, nicht als
-bevorzugte Eingabemethode fuer lange Passwoerter mit vielen Sonderzeichen.
-
-Die Bildschirmtastatur muss deshalb auch bei WLAN-Zugangsdaten mindestens
-unterstuetzen:
-
-- Gross- und Kleinbuchstaben
-- Ziffern
-- Leerzeichen, soweit fuer SSIDs erforderlich
-- gaengige Sonderzeichen
-- verdeckte Passwortanzeige mit optionaler kurzzeitiger Sichtbarkeit
-- Loeschen, Rueckschritt, Abbrechen und Uebernehmen
+Ein späterer Touch-Credentialpfad oder WLAN-QR benötigt eine neue
+Ownerentscheidung, einen eigenen Plan und aktualisierte Acceptance Criteria.
+Der browserbasierte Setup-Assistent bleibt der einzige R1-Eingabepfad für
+HOME_WIFI-SSID und -Passwort.
 
 ## Inhalt des Heim-WLAN-Setup-Assistenten
 
 Dieser browserbasierte Assistent gilt fuer den explizit am Display gewaehlten
 Modus `HOME_WIFI`. Er fuehrt mindestens durch:
+
+Er ist der verbindliche und einzige R1-Eingabepfad fuer HOME_WIFI-SSID und
+-Passwort; die deferierte Touch-Tastatur ist kein alternativer R1-Weg.
 
 1. Sprache auswaehlen
 2. verfuegbare WLANs suchen und anzeigen
@@ -216,7 +218,7 @@ Verbindliche Regeln:
 
 - kein allgemeines, fuer alle Geraete identisches Standardpasswort
 - geraetespezifisches, ausreichend zufaelliges Initialpasswort
-- Anzeige lokal am Display und als QR-Code
+- Anzeige lokal am Display
 - spaetere Aenderung in den Netzwerkeinstellungen moeglich
 - Passwort niemals im Quellcode oder Repository hinterlegen
 - Passwort nicht in normalen Ereignisprotokollen oder Diagnoseanzeigen
