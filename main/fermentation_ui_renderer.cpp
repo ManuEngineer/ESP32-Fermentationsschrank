@@ -15,6 +15,8 @@ namespace {
 constexpr std::uint16_t kHeaderHeight = 32U;
 constexpr std::uint16_t kHeaderLocaleLeft = 188U;
 constexpr std::uint16_t kHeaderLocaleWidth = 32U;
+constexpr device_platform::DisplayRect kHeaderNetworkRect{
+    220U, 4U, 44U, RepresentativeScreen::kTextLineHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
@@ -328,8 +330,7 @@ RepresentativeScreen makeRepresentativeScreen(
                 RepresentativeScreen::kTextLineHeight},
                std::move(localeText), device_platform::ThemeToken::TextPrimary,
                device_platform::ThemeToken::Surface);
-    addNetworkStatusIcon(commands,
-                         {220U, 4U, 44U, RepresentativeScreen::kTextLineHeight},
+    addNetworkStatusIcon(commands, kHeaderNetworkRect,
                          networkStatusToken(networkStatus),
                          device_platform::ThemeToken::Surface);
     addRawText(commands, {264U, 4U, 52U, RepresentativeScreen::kTextLineHeight},
@@ -599,8 +600,15 @@ ScreenRenderKey makeScreenRenderKey(
 std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,
     std::uint16_t y) noexcept {
-    if (y < kControlTop || y >= kControlTop + kControlHeight ||
-        x >= screen.kWidth) {
+    if (x >= screen.kWidth) return std::nullopt;
+    if (x >= kHeaderNetworkRect.left &&
+        x < kHeaderNetworkRect.left + kHeaderNetworkRect.width &&
+        y >= kHeaderNetworkRect.top &&
+        y < kHeaderNetworkRect.top + kHeaderNetworkRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderNetwork, 0U};
+    }
+    if (y < kControlTop || y >= kControlTop + kControlHeight) {
         return std::nullopt;
     }
     const auto index = static_cast<std::uint8_t>(x / 80U);

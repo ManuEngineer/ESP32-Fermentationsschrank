@@ -105,12 +105,11 @@ WorkspaceTouchTickResult processWorkspaceTouch(
         return result;
     }
     // The screen is built once here and reused for both targetAt() and
-    // routePress() (when a fresh press fires), so the two never disagree
-    // about the bottom-slot layout the user was actually looking at. This
-    // is deliberately the same set of inputs render() itself uses to
-    // rebuild its own screen for drawing, with pressedTarget left unset:
-    // this screen represents the state as displayed *before* this press
-    // is routed.
+    // routePress() (when a fresh press fires), so they use the same header and
+    // bottom-slot geometry the user was actually looking at. This is
+    // deliberately the same set of inputs render() itself uses to rebuild its
+    // own screen for drawing, with pressedTarget left unset: this screen
+    // represents the state as displayed *before* this press is routed.
     const auto screen =
         makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
                                  std::nullopt, catalog, networkStatus, clock);

@@ -71,6 +71,54 @@ void test_bottom_press_returns_existing_target() {
         static_cast<int>(press.interaction.outcome));
 }
 
+void test_network_header_target_matches_rendered_status_icon_rect() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    const auto icon = std::find_if(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
+        });
+    TEST_ASSERT_TRUE(icon != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(220U, icon->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(4U, icon->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(44U, icon->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, icon->rect.height);
+
+    const auto assertNetworkTarget = [&screen](std::uint16_t x,
+                                               std::uint16_t y) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(device_platform::DeviceUiTargetKind::HeaderNetwork),
+            static_cast<int>(target->kind));
+    };
+    assertNetworkTarget(220U, 4U);
+    assertNetworkTarget(263U, 21U);
+    assertNetworkTarget(240U, 12U);
+
+    const auto assertNoTarget = [&screen](std::uint16_t x, std::uint16_t y) {
+        TEST_ASSERT_FALSE(
+            fermentation::main_ui::targetAt(screen, x, y).has_value());
+    };
+    assertNoTarget(219U, 12U);
+    assertNoTarget(264U, 12U);
+    assertNoTarget(240U, 3U);
+    assertNoTarget(240U, 22U);
+
+    const auto bottom = fermentation::main_ui::targetAt(screen, 20U, 220U);
+    TEST_ASSERT_TRUE(bottom.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(bottom->kind));
+    TEST_ASSERT_EQUAL_UINT8(0U, bottom->slotIndex);
+}
+
 void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
     fermentation::FermentationUiSnapshot homeSnapshot;
     homeSnapshot.home.mode = fermentation::FermentationHomeMode::Standby;
@@ -678,6 +726,7 @@ int main() {
     RUN_TEST(
         test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);
+    RUN_TEST(test_network_header_target_matches_rendered_status_icon_rect);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     RUN_TEST(test_render_key_stable_for_same_snapshot_and_workspace);
     RUN_TEST(test_render_key_changes_on_workspace_navigation);

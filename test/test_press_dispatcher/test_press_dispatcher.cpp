@@ -676,6 +676,71 @@ void test_process_touch_fresh_edge_on_valid_slot_navigates() {
                           static_cast<int>(workspace.page()));
 }
 
+void test_process_touch_from_home_reaches_network_page_and_application_owner() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http));
+
+    auto snapshot = application.uiSnapshot();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Standby),
+                          static_cast<int>(snapshot.home.mode));
+    FermentationTouchWorkspace workspace;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Home),
+                          static_cast<int>(workspace.page()));
+    const auto packs = makeFermentationUiTextPacks();
+
+    const auto headerTouch = processWorkspaceTouch(
+        application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/true, 240U, 12U, /*freshPressEdge=*/true, 1000U);
+    TEST_ASSERT_TRUE(headerTouch.pressedTarget.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderNetwork),
+        static_cast<int>(headerTouch.pressedTarget->kind));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderNetwork),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+        static_cast<int>(headerTouch.dispatch.outcome));
+
+    snapshot = application.uiSnapshot();
+    const auto actionTouch = processWorkspaceTouch(
+        application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/true, bottomX(1U), kBottomY,
+        /*freshPressEdge=*/true, 1001U);
+    TEST_ASSERT_TRUE(actionTouch.pressedTarget.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(actionTouch.pressedTarget->kind));
+    TEST_ASSERT_EQUAL_UINT8(1U, actionTouch.pressedTarget->slotIndex);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(actionTouch.dispatch.outcome));
+    TEST_ASSERT_TRUE(actionTouch.dispatch.commandResult.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(actionTouch.dispatch.commandResult->phase));
+    TEST_ASSERT_TRUE(std::holds_alternative<NetworkConfigurationStatus>(
+        actionTouch.dispatch.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(std::get<NetworkConfigurationStatus>(
+            actionTouch.dispatch.commandResult->detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::AP_ONLY),
+        static_cast<int>(application.networkMode()));
+}
+
 void test_process_touch_fresh_edge_off_target_does_not_navigate() {
     AppFixture fixture;
     FermentationTouchWorkspace workspace;
@@ -729,6 +794,8 @@ int main() {
     RUN_TEST(test_process_touch_without_contact_yields_no_target);
     RUN_TEST(test_process_touch_held_without_fresh_edge_does_not_navigate);
     RUN_TEST(test_process_touch_fresh_edge_on_valid_slot_navigates);
+    RUN_TEST(
+        test_process_touch_from_home_reaches_network_page_and_application_owner);
     RUN_TEST(test_process_touch_fresh_edge_off_target_does_not_navigate);
     return UNITY_END();
 }
