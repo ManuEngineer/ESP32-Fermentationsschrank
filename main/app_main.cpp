@@ -379,6 +379,17 @@ extern "C" void app_main(void) {
     return;
 #endif
 
+    // ESP-IDF's Wi-Fi driver opens the default NVS partition during
+    // esp_wifi_init(), even though HOME_WIFI credentials are owned by the
+    // separate state_store and the network adapter selects WIFI_STORAGE_RAM.
+    // Initialize the default partition, but never erase or repair it here.
+    const esp_err_t defaultNvsStatus = nvs_flash_init();
+    if (defaultNvsStatus != ESP_OK) {
+        ESP_LOGE(kTag, "default ESP-IDF NVS initialization failed: %s",
+                 esp_err_to_name(defaultNvsStatus));
+        return;
+    }
+
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
         // No recovery/application path is started if the owning context
