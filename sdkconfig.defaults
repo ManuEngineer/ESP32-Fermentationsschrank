@@ -23,3 +23,7 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 # Issue #31 raw-touch contract: conversion/calibration remains above the
 # controller adapter boundary.
 CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n
+
+# Issue #164 SoftAP join QR uses the QR widget already included in the pinned
+# LVGL component; no separate QR dependency or encoder is added.
+CONFIG_LV_USE_QRCODE=y

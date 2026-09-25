@@ -21,6 +21,7 @@ enum class ScreenDrawKind : std::uint8_t {
     Fill,
     Text,
     NetworkStatusIcon,
+    QrCode,
     Logo,
     PressFeedback,
 };
@@ -62,6 +63,12 @@ struct RepresentativeScreen {
 
 [[nodiscard]] std::uint16_t themeColor565(
     device_platform::ThemeToken token) noexcept;
+
+// Standard WLAN QR payload for locally joining the active protected SoftAP.
+// This renderer-only projection has no URL/IP input and is never added to the
+// general application UI snapshot.
+[[nodiscard]] std::optional<std::string> makeSoftApWifiQrPayload(
+    const device_platform::NetworkAccessPointInfo& accessPoint);
 
 // pressedTarget reflects only the existing #26 interaction result
 // (DeviceUiInteractionResult::visiblePressFeedback) for the currently held

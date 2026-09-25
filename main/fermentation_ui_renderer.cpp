@@ -99,10 +99,14 @@ void addText(std::vector<ScreenDrawCommand>& commands,
 void addRawText(std::vector<ScreenDrawCommand>& commands,
                 device_platform::DisplayRect rect, std::string text,
                 device_platform::ThemeToken token,
-                device_platform::ThemeToken background,
-                bool wrapText = false) {
-    commands.push_back({ScreenDrawKind::Text, rect, token, background,
-                        std::move(text), {}, wrapText});
+                device_platform::ThemeToken background, bool wrapText = false) {
+    commands.push_back({ScreenDrawKind::Text,
+                        rect,
+                        token,
+                        background,
+                        std::move(text),
+                        {},
+                        wrapText});
 }
 
 void addNetworkStatusIcon(std::vector<ScreenDrawCommand>& commands,
@@ -188,8 +192,7 @@ device_platform::ThemeToken networkStatusToken(
     return device_platform::ThemeToken::TextSecondary;
 }
 
-device_platform::TextKey networkModeTextKey(
-    device_platform::NetworkMode mode) {
+device_platform::TextKey networkModeTextKey(device_platform::NetworkMode mode) {
     switch (mode) {
         case device_platform::NetworkMode::AP_ONLY:
             return fermentationTextKey("network-ap-only");
@@ -240,6 +243,32 @@ std::uint64_t networkInfoFingerprint(
 
 std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
     return tokenColor(token);
+}
+
+std::optional<std::string> makeSoftApWifiQrPayload(
+    const device_platform::NetworkAccessPointInfo& accessPoint) {
+    if (accessPoint.ssid.empty() || accessPoint.password.empty()) {
+        return std::nullopt;
+    }
+    const auto escape = [](std::string_view value) {
+        std::string escaped;
+        escaped.reserve(value.size());
+        for (const auto character : value) {
+            if (character == '\\' || character == ';' || character == ',' ||
+                character == ':' || character == '"') {
+                escaped.push_back('\\');
+            }
+            escaped.push_back(character);
+        }
+        return escaped;
+    };
+
+    std::string payload{"WIFI:T:WPA;S:"};
+    payload += escape(accessPoint.ssid);
+    payload += ";P:";
+    payload += escape(accessPoint.password);
+    payload += ";;";
+    return payload;
 }
 
 RepresentativeScreen makeRepresentativeScreen(
@@ -367,8 +396,8 @@ RepresentativeScreen makeRepresentativeScreen(
         if (networkAccessPointInfo.has_value() &&
             !networkAccessPointInfo->ssid.empty() &&
             !networkAccessPointInfo->password.empty()) {
-            const auto ssidPrefix = resolve(
-                textPacks, locale, fermentationTextKey("network-ssid"));
+            const auto ssidPrefix =
+                resolve(textPacks, locale, fermentationTextKey("network-ssid"));
             const auto passwordPrefix = resolve(
                 textPacks, locale, fermentationTextKey("network-password"));
             addRawText(commands, {8U, 68U, 184U, 36U},
@@ -379,16 +408,27 @@ RepresentativeScreen makeRepresentativeScreen(
                        passwordPrefix.value + networkAccessPointInfo->password,
                        device_platform::ThemeToken::TextPrimary,
                        device_platform::ThemeToken::Canvas, true);
-            addRawText(
-                commands, {8U, 182U, 184U, 18U},
-                std::string{"IP: "} +
-                    (networkAccessPointInfo->ipv4Address.has_value()
-                         ? ipv4Text(*networkAccessPointInfo->ipv4Address)
-                         : resolve(textPacks, locale,
-                                   fermentationTextKey("network-ip-unavailable"))
-                               .value),
-                device_platform::ThemeToken::TextPrimary,
-                device_platform::ThemeToken::Canvas);
+            addRawText(commands, {8U, 182U, 184U, 18U},
+                       std::string{"IP: "} +
+                           (networkAccessPointInfo->ipv4Address.has_value()
+                                ? ipv4Text(*networkAccessPointInfo->ipv4Address)
+                                : resolve(textPacks, locale,
+                                          fermentationTextKey(
+                                              "network-ip-unavailable"))
+                                      .value),
+                       device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas);
+            if (const auto payload =
+                    makeSoftApWifiQrPayload(*networkAccessPointInfo);
+                payload.has_value()) {
+                commands.push_back({ScreenDrawKind::QrCode,
+                                    {200U, 68U, 112U, 112U},
+                                    device_platform::ThemeToken::TextPrimary,
+                                    device_platform::ThemeToken::Canvas,
+                                    *payload,
+                                    {},
+                                    false});
+            }
         } else {
             addText(commands, textPacks, locale,
                     fermentationTextKey("network-access-unavailable"),

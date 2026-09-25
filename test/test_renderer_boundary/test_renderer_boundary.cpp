@@ -543,15 +543,32 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     TEST_ASSERT_TRUE(hasText(screen, "SSID: Ferment-Setup"));
     TEST_ASSERT_TRUE(hasText(screen, "Password: local-only-password"));
     TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
+    const auto qr =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(qr != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING(
+        "WIFI:T:WPA;S:Ferment-Setup;P:local-only-password;;", qr->text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(200U, qr->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(68U, qr->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(112U, qr->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(112U, qr->rect.height);
+    TEST_ASSERT_TRUE(qr->text.find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(qr->text.find("192.168.4.1") == std::string::npos);
     TEST_ASSERT_NOT_EQUAL(0U, screen.localNetworkInfoFingerprint);
-    const auto ssid = std::find_if(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
-            return command.text == "SSID: Ferment-Setup";
-        });
-    const auto password = std::find_if(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
-            return command.text == "Password: local-only-password";
-        });
+    const auto ssid =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "SSID: Ferment-Setup";
+                     });
+    const auto password =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "Password: local-only-password";
+                     });
     TEST_ASSERT_TRUE(ssid != screen.commands.end());
     TEST_ASSERT_TRUE(password != screen.commands.end());
     TEST_ASSERT_TRUE(ssid->wrapText);
@@ -569,25 +586,67 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     TEST_ASSERT_FALSE(
         fermentation::main_ui::makeScreenRenderKey(screen) ==
         fermentation::main_ui::makeScreenRenderKey(changedScreen));
+    const auto changedQr =
+        std::find_if(changedScreen.commands.begin(),
+                     changedScreen.commands.end(), [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(changedQr != changedScreen.commands.end());
+    TEST_ASSERT_TRUE(changedQr->text != qr->text);
 
     workspace.setPage(fermentation::FermentationUiPage::Home);
-    const auto ordinaryScreen =
-        fermentation::main_ui::makeRepresentativeScreen(
-            snapshot, workspace, packs, device_platform::LocaleId{"en"},
-            std::nullopt, nullptr,
-            device_platform::DeviceUiNetworkStatus::Unavailable, {},
-            accessPoint);
+    const auto ordinaryScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
     TEST_ASSERT_FALSE(hasText(ordinaryScreen, "Ferment-Setup"));
     TEST_ASSERT_FALSE(hasText(ordinaryScreen, "local-only-password"));
-    TEST_ASSERT_EQUAL_UINT64(0U,
-                             ordinaryScreen.localNetworkInfoFingerprint);
+    TEST_ASSERT_EQUAL_UINT64(0U, ordinaryScreen.localNetworkInfoFingerprint);
 
     for (const auto& command : screen.commands) {
-        TEST_ASSERT_LESS_OR_EQUAL_UINT16(320U,
-                                         command.rect.left + command.rect.width);
-        TEST_ASSERT_LESS_OR_EQUAL_UINT16(240U,
-                                         command.rect.top + command.rect.height);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            320U, command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            240U, command.rect.top + command.rect.height);
     }
+}
+
+void test_softap_wifi_qr_escapes_reserved_characters_deterministically() {
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        R"(semi;comma,colon:quote"slash\end)", R"(pass;word,:"\x)",
+        0x0104A8C0U};
+    const auto first =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    const auto second =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    TEST_ASSERT_TRUE(first.has_value());
+    TEST_ASSERT_TRUE(second.has_value());
+    TEST_ASSERT_EQUAL_STRING(
+        R"(WIFI:T:WPA;S:semi\;comma\,colon\:quote\"slash\\end;P:pass\;word\,\:\"\\x;;)",
+        first->c_str());
+    TEST_ASSERT_EQUAL_STRING(first->c_str(), second->c_str());
+    TEST_ASSERT_TRUE(first->find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(first->find("192.168.4.1") == std::string::npos);
+
+    auto changed = accessPoint;
+    changed.ssid += "-other";
+    const auto changedPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPayload != *first);
+
+    changed = accessPoint;
+    changed.password += "-other";
+    const auto changedPasswordPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPasswordPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPasswordPayload != *first);
+
+    device_platform::NetworkAccessPointInfo incomplete;
+    incomplete.ssid = "no-password";
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeSoftApWifiQrPayload(incomplete).has_value());
 }
 
 void test_network_page_missing_softap_info_is_explicit() {
@@ -642,7 +701,9 @@ int main() {
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
-    RUN_TEST(test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(
+        test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }

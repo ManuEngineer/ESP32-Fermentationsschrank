@@ -36,6 +36,19 @@ void styleObject(lv_obj_t* object, device_platform::ThemeToken foreground,
     lv_obj_set_style_radius(object, 0U, 0U);
 }
 
+void showQrUnavailable(lv_obj_t* parent,
+                       const device_platform::DisplayRect& rect) {
+    auto* label = lv_label_create(parent);
+    if (label == nullptr) return;
+    lv_label_set_text(label, "QR unavailable");
+    lv_obj_set_pos(label, rect.left, rect.top);
+    lv_obj_set_style_text_font(label, LV_FONT_DEFAULT, 0U);
+    lv_obj_set_size(label, rect.width,
+                    lv_font_get_line_height(LV_FONT_DEFAULT));
+    styleObject(label, device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+}
+
 std::uint16_t clampToDisplay(double value, std::uint16_t maxInclusive) {
     if (value < 0.0) return 0U;
     const auto upper = static_cast<double>(maxInclusive);
@@ -310,10 +323,9 @@ bool ProductiveLvglRenderer::render(
     // revision, local workspace/page/pager/dialog state, locale and header
     // values), so a page/pager/locale change is never masked by an unchanged
     // application UiRefreshRevision.
-    const auto screen =
-        makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
-                                 pressedTarget, catalog, networkStatus, clock,
-                                 networkAccessPointInfo);
+    const auto screen = makeRepresentativeScreen(
+        snapshot, workspace, textPacks, locale, pressedTarget, catalog,
+        networkStatus, clock, networkAccessPointInfo);
     const auto key = makeScreenRenderKey(screen);
     if (state.renderedKey.has_value() && *state.renderedKey == key) {
         return true;
@@ -337,6 +349,20 @@ bool ProductiveLvglRenderer::render(
             auto* logo = lv_image_create(state.root);
             lv_image_set_src(logo, &manuengineer_logo_168x24);
             lv_obj_set_pos(logo, command.rect.left, command.rect.top);
+        } else if (command.kind == ScreenDrawKind::QrCode) {
+            auto* qrCode = lv_qrcode_create(state.root);
+            if (qrCode == nullptr) {
+                showQrUnavailable(state.root, command.rect);
+                continue;
+            }
+            lv_qrcode_set_size(qrCode, command.rect.width);
+            lv_obj_set_pos(qrCode, command.rect.left, command.rect.top);
+            const auto updateResult = lv_qrcode_update(
+                qrCode, command.text.data(),
+                static_cast<std::uint32_t>(command.text.size()));
+            if (updateResult != LV_RESULT_OK) {
+                showQrUnavailable(state.root, command.rect);
+            }
         } else if (command.kind == ScreenDrawKind::Text ||
                    command.kind == ScreenDrawKind::NetworkStatusIcon) {
             auto* label = lv_label_create(state.root);
@@ -350,9 +376,9 @@ bool ProductiveLvglRenderer::render(
                 static_cast<lv_coord_t>(command.rect.height),
                 lv_font_get_line_height(LV_FONT_DEFAULT));
             lv_obj_set_size(label, command.rect.width, lineHeight);
-            lv_label_set_long_mode(
-                label, command.wrapText ? LV_LABEL_LONG_WRAP
-                                        : LV_LABEL_LONG_CLIP);
+            lv_label_set_long_mode(label, command.wrapText
+                                              ? LV_LABEL_LONG_WRAP
+                                              : LV_LABEL_LONG_CLIP);
             styleObject(label, command.token, command.backgroundToken);
         } else if (command.kind == ScreenDrawKind::Fill ||
                    command.kind == ScreenDrawKind::PressFeedback) {
