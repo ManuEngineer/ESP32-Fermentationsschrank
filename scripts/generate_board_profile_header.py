@@ -16,10 +16,11 @@ Es interpretiert die YAML zur Build-/Generierungszeit auf dem
 Entwicklungsrechner, niemals zur Laufzeit auf dem ESP32 (keine
 YAML-Laufzeitinterpretation auf dem Zielsystem).
 
-Der generierte Header wird eingecheckt: ein normaler Firmware-/CI-Build
-liest nur die bereits generierte Datei und benoetigt PyYAML nicht. Dieses
-Skript laeuft nur beim bewussten Regenerieren (nach einer SSOT-Aenderung)
-und validiert dabei fail-fast:
+Der generierte Header wird eingecheckt. Der reine Firmwarebuild liest nur die
+bereits generierte Datei und benoetigt PyYAML nicht. Der Host-/Pre-Ready-
+SSOT-Check ruft dieses Skript mit `--check` auf und benoetigt dafuer PyYAML.
+Beim bewussten Regenerieren nach einer SSOT-Aenderung validiert dieses Skript
+ebenfalls fail-fast:
 
 - jede der acht benoetigten Funktionen kommt in der SSOT genau einmal vor;
 - der zugehoerige GPIO-Schluessel ist syntaktisch `gpio<N>` mit

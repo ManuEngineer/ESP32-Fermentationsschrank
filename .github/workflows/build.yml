@@ -50,7 +50,7 @@ jobs:
           python-version: "3.13"
 
       - name: PlatformIO fuer nativen Hostpfad installieren
-        run: python3 -m pip install platformio==6.1.19
+        run: python3 -m pip install platformio==6.1.19 PyYAML==6.0.3
 
       - name: ESP-IDF-Checkout cachen
         id: cache-esp-idf-checkout

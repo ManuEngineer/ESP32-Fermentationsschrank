@@ -10,8 +10,11 @@ ausschliesslich im versionierten Runner
 `scripts/run_pre_ready_gates.sh`; GitHub-CI-only Artefakt-/Privacy-Gates stehen
 im Workflow.
 
-Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
-verwenden ESP-IDF `v6.1` am Commit
+Der Host-Gate-Pfad verwendet PlatformIO `6.1.19` und PyYAML `6.0.3` als direkte
+Python-Abhaengigkeiten; GitHub-CI provisioniert beide Pins mit Python 3.13.
+PyYAML wird fuer den Board-Profile-SSOT-Check benoetigt. Der reine
+Firmwarebuild liest nur den eingecheckten generierten Header und benoetigt
+PyYAML nicht. Die ESP32-Produktionsprofile verwenden ESP-IDF `v6.1` am Commit
 `fff9895c82d744c7237be8847347bdd1b07c6643`.
 
 Der gemeinsame versionierte Gate-Owner ist
