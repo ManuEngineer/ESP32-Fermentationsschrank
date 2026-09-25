@@ -176,12 +176,13 @@ fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
 
 ## Authentisierung und Secret-Schutz
 
-Bewaehrte Kryptoprimitive und vorhandene Plattformfunktionen werden erst nach
-reproduzierbarer Toolchain-, Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und
-Watchdogpruefung adoptiert. PBKDF2-HMAC-SHA-256 aus dem fixierten
-mbedTLS-/ESP32-Pfad ist nur erster Evaluationskandidat; Work Factor,
-Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
-festgelegt.
+Fuer R1 ist PBKDF2-HMAC-SHA-256 ueber die PSA-KDF-API der fixierten
+ESP-IDF-6.1-Plattform mit exakt 10000 Iterationen festgelegt; es gibt keinen
+automatischen Work-Factor-Fallback. Das ist die Ownerentscheidung fuer den
+Algorithmus und Parameter, keine Freigabe der integrierten Weblast oder ein
+Versprechen gegen physischen Flashzugriff. Zufallsintegration,
+Toolchain-/Testvektor-, Stack-, Heap-, Jitter- und Watchdognachweise bleiben
+fuer die jeweils betroffenen Produkt- und Release-Gates erforderlich.
 
 Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
 PIN-Credentials, atomar neustartfeste Vor-Sperr-Zaehler/Sperrzustaende,

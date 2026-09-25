@@ -47,9 +47,14 @@ inline constexpr std::size_t kMaxConcurrentFullPreviewBuilds = 1U;
 inline constexpr std::size_t kConfigurationBootstrapSchema1PayloadBytes = 5U;
 inline constexpr std::size_t kConfigurationBootstrapPayloadBytes = 6U;
 inline constexpr std::size_t kConfigurationBootstrapBoundPayloadBytes = 22U;
+inline constexpr std::size_t kConfigurationBootstrapSchema3PayloadBytes = 15U;
+inline constexpr std::size_t kConfigurationBootstrapSchema3BoundPayloadBytes =
+    31U;
 inline constexpr std::size_t
     kMaximumConfigurationBootstrapSchema1EnvelopeBytes = 42U;
 inline constexpr std::size_t kMaximumConfigurationBootstrapEnvelopeBytes = 59U;
+inline constexpr std::size_t
+    kMaximumConfigurationBootstrapSchema3EnvelopeBytes = 68U;
 inline constexpr std::size_t kConfigurationBootstrapSlotCount = 2U;
 inline constexpr std::size_t kConfigurationFactoryScanKeyCount = 19U;
 // Worst-case mode transitions in one bounded call, including entry/exit of a

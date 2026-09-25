@@ -206,6 +206,85 @@ bool isResetEligibleNoRuntimeGraph(const ConfigurationGraphLoadResult& graph) {
            !graph.diagnostics.persistentIdentityCollision;
 }
 
+struct AuthenticationRecordInventory {
+    bool valid{false};
+    bool mayReplaceOldEpoch{false};
+    std::uint64_t nextDomainGeneration{1U};
+};
+
+AuthenticationRecordInventory inspectAuthenticationInventory(
+    const AuthenticationRecordStore& authStore,
+    device_platform::StorageEpoch currentEpoch, bool allowPriorEpochRecords) {
+    const auto root = authStore.readRoot(currentEpoch);
+    const auto credentials = authStore.readCredentials(currentEpoch);
+    const bool rootAbsent = root.status == AuthenticationReadStatus::NotFound;
+    const bool credentialsAbsent =
+        credentials.status == AuthenticationReadStatus::NotFound;
+    if (!allowPriorEpochRecords) {
+        if (!rootAbsent || !credentialsAbsent) return {};
+        return {true, false, 1U};
+    }
+
+    const auto acceptablePriorStatus = [](AuthenticationReadStatus status) {
+        return status == AuthenticationReadStatus::NotFound ||
+               status == AuthenticationReadStatus::DifferentEpoch;
+    };
+    if (!acceptablePriorStatus(root.status) ||
+        !acceptablePriorStatus(credentials.status)) {
+        return {};
+    }
+    if (root.value.has_value() &&
+        root.value->storageEpoch.value() >= currentEpoch.value()) {
+        return {};
+    }
+    if (credentials.value.has_value() &&
+        credentials.value->storageEpoch.value() >= currentEpoch.value()) {
+        return {};
+    }
+    if (root.value.has_value() &&
+        root.value->state == AuthProvisioningState::Provisioned &&
+        (!credentials.value.has_value() ||
+         credentials.value->storageEpoch != root.value->storageEpoch)) {
+        return {};
+    }
+    if (root.value.has_value() && credentials.value.has_value() &&
+        root.value->storageEpoch == credentials.value->storageEpoch &&
+        root.value->state == AuthProvisioningState::Unprovisioned) {
+        return {};
+    }
+    std::uint64_t generation = 1U;
+    if (root.value.has_value()) {
+        if (root.value->authDomainGeneration ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            return {};
+        }
+        generation = root.value->authDomainGeneration + 1U;
+    }
+    return {true, true, generation};
+}
+
+AuthenticationBootstrapResolutionStatus mapAuthHandoffWrite(
+    ConfigurationBootstrapWriteStatus status) {
+    switch (status) {
+        case ConfigurationBootstrapWriteStatus::Success:
+            return AuthenticationBootstrapResolutionStatus::Ready;
+        case ConfigurationBootstrapWriteStatus::CounterOverflow:
+            return AuthenticationBootstrapResolutionStatus::CounterOverflow;
+        case ConfigurationBootstrapWriteStatus::ReadError:
+        case ConfigurationBootstrapWriteStatus::CapacityError:
+        case ConfigurationBootstrapWriteStatus::WriteError:
+        case ConfigurationBootstrapWriteStatus::WriteCapacityError:
+        case ConfigurationBootstrapWriteStatus::CommitNotEffective:
+            return AuthenticationBootstrapResolutionStatus::PersistenceFailure;
+        case ConfigurationBootstrapWriteStatus::InvalidTransition:
+        case ConfigurationBootstrapWriteStatus::IntegrityFailure:
+        case ConfigurationBootstrapWriteStatus::UnsupportedNewerSchema:
+        case ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate:
+            return AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+    }
+    return AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+}
+
 }  // namespace
 
 std::unique_ptr<ConfigurationRecoveryService>
@@ -228,6 +307,190 @@ ConfigurationRecoveryService::create(
         new (std::nothrow) ConfigurationRecoveryService(
             store, bootstrapStore, graphStore, configurationService,
             mutationCoordinator));
+}
+
+AuthenticationBootstrapResolutionResult
+ConfigurationRecoveryService::resolveAuthenticationBootstrap(
+    AuthenticationRecordStore& authStore) {
+    auto acquired = mutationCoordinator_.tryAcquire();
+    if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
+        return {AuthenticationBootstrapResolutionStatus::MutationBusy,
+                std::nullopt};
+    }
+    if (authStore.storeIdentity() != &store_ ||
+        configurationService_.mode() != ConfigurationServiceMode::Operational) {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+    const auto runtime = configurationService_.acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+    const auto epoch = runtime.lease.get().storageEpoch();
+    auto scanned = bootstrapStore_.scan();
+    if (scanned.status != ConfigurationBootstrapScanStatus::Available ||
+        !scanned.loaded.has_value() ||
+        scanned.loaded->record.state !=
+            ConfigurationBootstrapState::Initialized ||
+        scanned.loaded->record.storageEpoch != epoch ||
+        (scanned.loaded->record.handoff != RunEpochHandoffState::None &&
+         scanned.loaded->record.handoff != RunEpochHandoffState::Consumed)) {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+
+    auto current = *scanned.loaded;
+    auto handoff = current.record.authDomainHandoff;
+    bool mayReplaceOldEpoch = false;
+    std::uint64_t nextDomainGeneration = 1U;
+
+    if (handoff == AuthDomainHandoffState::None) {
+        const bool resetEpoch =
+            current.record.storageEpoch.value() > 1U &&
+            (current.record.schemaVersion ==
+                 kConfigurationBootstrapSchemaVersion3 ||
+             (current.record.schemaVersion ==
+                  kConfigurationBootstrapSchemaVersion2 &&
+              current.record.handoff == RunEpochHandoffState::Consumed));
+        if (current.record.schemaVersion !=
+                kConfigurationBootstrapSchemaVersion2 &&
+            !resetEpoch) {
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+        const auto inventory =
+            inspectAuthenticationInventory(authStore, epoch, resetEpoch);
+        if (!inventory.valid) {
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+        mayReplaceOldEpoch = inventory.mayReplaceOldEpoch;
+        nextDomainGeneration = inventory.nextDomainGeneration;
+        const auto opened = bootstrapStore_.writeAuthDomainHandoff(
+            current, AuthDomainHandoffState::Unconsumed, acquired.lease);
+        const auto mapped = mapAuthHandoffWrite(opened.status);
+        if (mapped != AuthenticationBootstrapResolutionStatus::Ready ||
+            !opened.loaded.has_value()) {
+            return {mapped, std::nullopt};
+        }
+        current = *opened.loaded;
+        handoff = current.record.authDomainHandoff;
+    } else if (handoff == AuthDomainHandoffState::Unconsumed) {
+        const auto inventory = inspectAuthenticationInventory(
+            authStore, epoch, current.record.storageEpoch.value() > 1U);
+        if (!inventory.valid) {
+            const auto inProgress = bootstrapStore_.writeAuthDomainHandoff(
+                current, AuthDomainHandoffState::InProgress, acquired.lease);
+            if (inProgress.loaded.has_value()) {
+                static_cast<void>(bootstrapStore_.writeAuthDomainHandoff(
+                    *inProgress.loaded, AuthDomainHandoffState::Indeterminate,
+                    acquired.lease));
+            }
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+        mayReplaceOldEpoch = inventory.mayReplaceOldEpoch;
+        nextDomainGeneration = inventory.nextDomainGeneration;
+    }
+
+    if (handoff == AuthDomainHandoffState::Unconsumed) {
+        const auto inProgress = bootstrapStore_.writeAuthDomainHandoff(
+            current, AuthDomainHandoffState::InProgress, acquired.lease);
+        const auto mapped = mapAuthHandoffWrite(inProgress.status);
+        if (mapped != AuthenticationBootstrapResolutionStatus::Ready ||
+            !inProgress.loaded.has_value()) {
+            return {mapped, std::nullopt};
+        }
+        current = *inProgress.loaded;
+        const AuthProvisioningRoot root{
+            epoch, 1U, AuthProvisioningState::Unprovisioned,
+            nextDomainGeneration, current.record.authHandoffSequence.value()};
+        const auto rootWrite =
+            authStore.writeInitialRoot(root, mayReplaceOldEpoch);
+        if (rootWrite != AuthenticationWriteStatus::Success) {
+            static_cast<void>(bootstrapStore_.writeAuthDomainHandoff(
+                current, AuthDomainHandoffState::Indeterminate,
+                acquired.lease));
+            return {
+                rootWrite == AuthenticationWriteStatus::CounterOverflow
+                    ? AuthenticationBootstrapResolutionStatus::CounterOverflow
+                    : AuthenticationBootstrapResolutionStatus::
+                          PersistenceFailure,
+                std::nullopt};
+        }
+        const auto consumed = bootstrapStore_.writeAuthDomainHandoff(
+            current, AuthDomainHandoffState::Consumed, acquired.lease);
+        const auto mappedConsumed = mapAuthHandoffWrite(consumed.status);
+        if (mappedConsumed != AuthenticationBootstrapResolutionStatus::Ready ||
+            !consumed.loaded.has_value()) {
+            return {mappedConsumed, std::nullopt};
+        }
+        current = *consumed.loaded;
+        handoff = current.record.authDomainHandoff;
+    } else if (handoff == AuthDomainHandoffState::InProgress) {
+        const auto root = authStore.readRoot(epoch);
+        const bool rootConfirmsHandoff =
+            root.status == AuthenticationReadStatus::Success &&
+            root.value.has_value() &&
+            root.value->state == AuthProvisioningState::Unprovisioned &&
+            root.value->bootstrapSequenceBinding ==
+                current.record.authHandoffSequence.value();
+        const auto credentials = authStore.readCredentials(epoch);
+        const bool noCurrentCredentials =
+            credentials.status == AuthenticationReadStatus::NotFound ||
+            credentials.status == AuthenticationReadStatus::DifferentEpoch;
+        if (!rootConfirmsHandoff || !noCurrentCredentials) {
+            static_cast<void>(bootstrapStore_.writeAuthDomainHandoff(
+                current, AuthDomainHandoffState::Indeterminate,
+                acquired.lease));
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+        const auto consumed = bootstrapStore_.writeAuthDomainHandoff(
+            current, AuthDomainHandoffState::Consumed, acquired.lease);
+        const auto mapped = mapAuthHandoffWrite(consumed.status);
+        if (mapped != AuthenticationBootstrapResolutionStatus::Ready ||
+            !consumed.loaded.has_value()) {
+            return {mapped, std::nullopt};
+        }
+        current = *consumed.loaded;
+        handoff = current.record.authDomainHandoff;
+    }
+
+    if (handoff != AuthDomainHandoffState::Consumed) {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+    const auto root = authStore.readRoot(epoch);
+    if (root.status != AuthenticationReadStatus::Success ||
+        !root.value.has_value() ||
+        root.value->bootstrapSequenceBinding !=
+            current.record.authHandoffSequence.value()) {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+    if (root.value->state == AuthProvisioningState::Unprovisioned) {
+        const auto credentials = authStore.readCredentials(epoch);
+        if (credentials.status != AuthenticationReadStatus::NotFound &&
+            credentials.status != AuthenticationReadStatus::DifferentEpoch) {
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+    } else if (root.value->state == AuthProvisioningState::Provisioned) {
+        const auto credentials = authStore.readCredentials(epoch);
+        if (credentials.status != AuthenticationReadStatus::Success ||
+            !credentials.value.has_value()) {
+            return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                    std::nullopt};
+        }
+    } else {
+        return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
+                std::nullopt};
+    }
+    return {AuthenticationBootstrapResolutionStatus::Ready,
+            AuthenticationBootstrapContext{
+                store_, epoch, current.record.authHandoffSequence.value()}};
 }
 
 ConfigurationRecoveryStatus ConfigurationRecoveryService::verifyFactoryEmpty()
@@ -346,7 +609,8 @@ ConfigurationRecoveryService::classifyBootstrapFinalization(
 
 void ConfigurationRecoveryService::armAuthorizedRunEpochHandoff(
     const ConfigurationBootstrapRecord& record) noexcept {
-    if (record.schemaVersion != kConfigurationBootstrapSchemaVersion2 ||
+    if ((record.schemaVersion != kConfigurationBootstrapSchemaVersion2 &&
+         record.schemaVersion != kConfigurationBootstrapSchemaVersion3) ||
         record.state != ConfigurationBootstrapState::Initialized ||
         (record.handoff != RunEpochHandoffState::Pending &&
          record.handoff != RunEpochHandoffState::Committed) ||
@@ -391,8 +655,10 @@ ConfigurationRecoveryService::commitAuthorizedRunEpochHandoff(
     auto bootstrap = bootstrapStore_.scan();
     if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
         !bootstrap.loaded.has_value() ||
-        bootstrap.loaded->record.schemaVersion !=
-            kConfigurationBootstrapSchemaVersion2 ||
+        (bootstrap.loaded->record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion2 &&
+         bootstrap.loaded->record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion3) ||
         bootstrap.loaded->record.state !=
             ConfigurationBootstrapState::Initialized ||
         !bootstrap.loaded->record.previousEpoch.has_value() ||
@@ -444,8 +710,10 @@ ConfigurationRecoveryService::consumeAuthorizedRunEpochHandoff(
     auto bootstrap = bootstrapStore_.scan();
     if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
         !bootstrap.loaded.has_value() ||
-        bootstrap.loaded->record.schemaVersion !=
-            kConfigurationBootstrapSchemaVersion2 ||
+        (bootstrap.loaded->record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion2 &&
+         bootstrap.loaded->record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion3) ||
         bootstrap.loaded->record.state !=
             ConfigurationBootstrapState::Initialized ||
         !bootstrap.loaded->record.previousEpoch.has_value() ||
@@ -829,7 +1097,7 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                 ConfigurationRecoveryStatus::RuntimePreparationFailure,
                 loaded.diagnostics);
         }
-        // Only the persisted schema-2 handoff phase can mint the capability.
+        // Only a supported persisted handoff phase can mint the capability.
         // A historical FactoryReset manifest is not sufficient: after the
         // handoff reaches Consumed, later boots must not re-authorize it.
         armAuthorizedRunEpochHandoff(bootstrap.loaded->record);

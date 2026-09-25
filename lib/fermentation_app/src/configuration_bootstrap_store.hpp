@@ -80,6 +80,10 @@ class ConfigurationBootstrapStore {
     [[nodiscard]] ConfigurationBootstrapWriteResult writeHandoffSuccessor(
         const LoadedConfigurationBootstrap& expected,
         RunEpochHandoffState targetHandoff);
+    [[nodiscard]] ConfigurationBootstrapWriteResult writeAuthDomainHandoff(
+        const LoadedConfigurationBootstrap& expected,
+        AuthDomainHandoffState targetHandoff,
+        const ConfigurationMutationLease& mutationLease);
     [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
         return &store_;
     }
