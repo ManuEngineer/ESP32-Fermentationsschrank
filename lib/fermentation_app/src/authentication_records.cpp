@@ -248,6 +248,24 @@ bool validUtf8(const std::string& value, std::size_t& codePoints) noexcept {
     return true;
 }
 
+AuthBootstrapStatus mapCredentialVerification(AuthCheckStatus status) noexcept {
+    switch (status) {
+        case AuthCheckStatus::Authenticated:
+            return AuthBootstrapStatus::BootstrapAllowed;
+        case AuthCheckStatus::Disabled:
+            return AuthBootstrapStatus::AuthenticationDisabled;
+        case AuthCheckStatus::Invalid:
+            return AuthBootstrapStatus::AuthenticationDenied;
+        case AuthCheckStatus::LockedOut:
+            return AuthBootstrapStatus::LockedOut;
+        case AuthCheckStatus::RecoveryRequired:
+            return AuthBootstrapStatus::RecoveryRequired;
+        case AuthCheckStatus::KdfUnavailable:
+            return AuthBootstrapStatus::KdfUnavailable;
+    }
+    return AuthBootstrapStatus::RecoveryRequired;
+}
+
 }  // namespace
 
 bool operator==(const AuthVerifier& left, const AuthVerifier& right) noexcept {
@@ -547,10 +565,14 @@ AuthenticationWriteStatus AuthenticationRecordStore::writeInitialCredentials(
         return AuthenticationWriteStatus::CapacityError;
     if (existing.status == device_platform::StateStoreReadStatus::Success) {
         const auto decoded = decodeAuthenticationCredential(existing.value);
-        if (!decoded.value.has_value())
+        if (!decoded.value.has_value() &&
+            (!authorizedEpochReplacement ||
+             decoded.status ==
+                 AuthenticationRecordCodecStatus::UnsupportedSchema))
             return AuthenticationWriteStatus::IntegrityFailure;
-        if (!authorizedEpochReplacement ||
-            decoded.value->storageEpoch == record.storageEpoch)
+        if (decoded.value.has_value() &&
+            (!authorizedEpochReplacement ||
+             decoded.value->storageEpoch == record.storageEpoch))
             return AuthenticationWriteStatus::InvalidTransition;
     }
     std::string encoded;
@@ -575,10 +597,14 @@ AuthenticationWriteStatus AuthenticationRecordStore::writeInitialRoot(
         return AuthenticationWriteStatus::CapacityError;
     if (existing.status == device_platform::StateStoreReadStatus::Success) {
         const auto decoded = decodeAuthProvisioningRoot(existing.value);
-        if (!decoded.value.has_value())
+        if (!decoded.value.has_value() &&
+            (!authorizedEpochReplacement ||
+             decoded.status ==
+                 AuthenticationRecordCodecStatus::UnsupportedSchema))
             return AuthenticationWriteStatus::IntegrityFailure;
-        if (!authorizedEpochReplacement ||
-            decoded.value->storageEpoch == root.storageEpoch)
+        if (decoded.value.has_value() &&
+            (!authorizedEpochReplacement ||
+             decoded.value->storageEpoch == root.storageEpoch))
             return AuthenticationWriteStatus::InvalidTransition;
     }
     std::string encoded;
@@ -651,7 +677,10 @@ AuthBootstrapStatus AuthenticationDomain::inspect(
         const auto credentials = store_.readCredentials(context.storageEpoch());
         return credentials.status == AuthenticationReadStatus::NotFound ||
                        credentials.status ==
-                           AuthenticationReadStatus::DifferentEpoch
+                           AuthenticationReadStatus::DifferentEpoch ||
+                       (context.mayReplacePriorEpochRecords_ &&
+                        credentials.status ==
+                            AuthenticationReadStatus::IntegrityFailure)
                    ? AuthBootstrapStatus::BootstrapAllowed
                    : AuthBootstrapStatus::RecoveryRequired;
     }
@@ -666,16 +695,22 @@ AuthBootstrapStatus AuthenticationDomain::inspect(
 }
 
 std::uint64_t AuthenticationDomain::effectiveLockoutRemaining(
-    const AuthLockoutState& persisted, std::uint64_t recordSequence,
+    const AuthLockoutState& persisted,
+    device_platform::StorageEpoch storageEpoch, std::uint64_t credentialEpoch,
     std::uint64_t nowMs, LockoutClock& clock) const noexcept {
     if (persisted.lockoutRemainingMs == 0U) {
         clock = LockoutClock{};
         return 0U;
     }
-    if (!clock.initialized || clock.recordSequence != recordSequence ||
-        nowMs < clock.anchorMs) {
-        clock = LockoutClock{recordSequence, nowMs,
-                             persisted.lockoutRemainingMs, true};
+    if (!clock.initialized || clock.storageEpoch != storageEpoch ||
+        clock.credentialEpoch != credentialEpoch ||
+        !(clock.persisted == persisted) || nowMs < clock.anchorMs) {
+        clock = LockoutClock{storageEpoch,
+                             credentialEpoch,
+                             persisted,
+                             nowMs,
+                             persisted.lockoutRemainingMs,
+                             true};
         return clock.remainingMs;
     }
     const auto elapsed = nowMs - clock.anchorMs;
@@ -716,7 +751,10 @@ AuthBootstrapStatus AuthenticationDomain::bootstrap(
         return AuthBootstrapStatus::RecoveryRequired;
     const auto credentialsBefore = store_.readCredentials(epoch);
     if (credentialsBefore.status != AuthenticationReadStatus::NotFound &&
-        credentialsBefore.status != AuthenticationReadStatus::DifferentEpoch)
+        credentialsBefore.status != AuthenticationReadStatus::DifferentEpoch &&
+        !(context.mayReplacePriorEpochRecords_ &&
+          credentialsBefore.status ==
+              AuthenticationReadStatus::IntegrityFailure))
         return AuthBootstrapStatus::RecoveryRequired;
 
     auto provisioning = *rootResult.value;
@@ -788,8 +826,9 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
     const auto expected = record;
     if (!record.webPasswordEnabled) return AuthCheckStatus::Disabled;
     auto& lockout = record.webLockout;
-    auto remaining = effectiveLockoutRemaining(lockout, record.recordSequence,
-                                               nowMs, webLockoutClock_);
+    auto remaining = effectiveLockoutRemaining(lockout, context.storageEpoch(),
+                                               record.webCredentialEpoch, nowMs,
+                                               webLockoutClock_);
     if (remaining != 0U) {
         retryAfterMs = remaining;
         return AuthCheckStatus::LockedOut;
@@ -819,8 +858,12 @@ AuthCheckStatus AuthenticationDomain::verifyWebPassword(
     const auto persisted = store_.writeCredentials(expected, target);
     if (persisted != AuthenticationWriteStatus::Success)
         return AuthCheckStatus::RecoveryRequired;
-    webLockoutClock_ = LockoutClock{target.recordSequence, nowMs,
-                                    target.webLockout.lockoutRemainingMs, true};
+    webLockoutClock_ = LockoutClock{context.storageEpoch(),
+                                    target.webCredentialEpoch,
+                                    target.webLockout,
+                                    nowMs,
+                                    target.webLockout.lockoutRemainingMs,
+                                    true};
     return constantTimeEqual(derived, record.webPassword.verifier)
                ? AuthCheckStatus::Authenticated
                : AuthCheckStatus::Invalid;
@@ -843,7 +886,8 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     const auto expected = record;
     auto& lockout = record.servicePinLockout;
     const auto remaining = effectiveLockoutRemaining(
-        lockout, record.recordSequence, nowMs, servicePinLockoutClock_);
+        lockout, context.storageEpoch(), record.servicePinCredentialEpoch,
+        nowMs, servicePinLockoutClock_);
     if (remaining != 0U) {
         retryAfterMs = remaining;
         return AuthCheckStatus::LockedOut;
@@ -876,8 +920,12 @@ AuthCheckStatus AuthenticationDomain::verifyServicePin(
     if (persisted != AuthenticationWriteStatus::Success)
         return AuthCheckStatus::RecoveryRequired;
     servicePinLockoutClock_ =
-        LockoutClock{target.recordSequence, nowMs,
-                     target.servicePinLockout.lockoutRemainingMs, true};
+        LockoutClock{context.storageEpoch(),
+                     target.servicePinCredentialEpoch,
+                     target.servicePinLockout,
+                     nowMs,
+                     target.servicePinLockout.lockoutRemainingMs,
+                     true};
     return authenticated ? AuthCheckStatus::Authenticated
                          : AuthCheckStatus::Invalid;
 }
@@ -892,9 +940,10 @@ AuthBootstrapStatus AuthenticationDomain::changeWebPassword(
     if (validateWebPassword(replacement) != AuthInputStatus::Valid)
         return AuthBootstrapStatus::InvalidInput;
     std::uint64_t retryAfter = 0U;
-    if (verifyWebPassword(context, current, nowMs, retryAfter) !=
-        AuthCheckStatus::Authenticated)
-        return AuthBootstrapStatus::RecoveryRequired;
+    const auto verification =
+        verifyWebPassword(context, current, nowMs, retryAfter);
+    if (verification != AuthCheckStatus::Authenticated)
+        return mapCredentialVerification(verification);
     auto rootRead = readActiveRoot(context);
     auto credentialRead = store_.readCredentials(epoch);
     if (!rootRead.value || !credentialRead.value)
@@ -948,9 +997,10 @@ AuthBootstrapStatus AuthenticationDomain::changeServicePin(
     if (validateServicePin(replacement) != AuthInputStatus::Valid)
         return AuthBootstrapStatus::InvalidInput;
     std::uint64_t retryAfter = 0U;
-    if (verifyServicePin(context, current, nowMs, retryAfter) !=
-        AuthCheckStatus::Authenticated)
-        return AuthBootstrapStatus::RecoveryRequired;
+    const auto verification =
+        verifyServicePin(context, current, nowMs, retryAfter);
+    if (verification != AuthCheckStatus::Authenticated)
+        return mapCredentialVerification(verification);
     auto rootRead = readActiveRoot(context);
     auto credentialRead = store_.readCredentials(epoch);
     if (!rootRead.value || !credentialRead.value)

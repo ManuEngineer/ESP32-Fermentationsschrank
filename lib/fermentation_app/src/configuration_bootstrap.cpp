@@ -297,8 +297,11 @@ bool schema3ConfigurationSuccessor(const ConfigurationBootstrapRecord& previous,
     }
     if (next.state == ConfigurationBootstrapState::Resetting) {
         std::uint64_t nextEpoch = 0U;
-        return previous.authDomainHandoff == AuthDomainHandoffState::Consumed &&
-               (previous.handoff == RunEpochHandoffState::None ||
+        // An explicitly authorized full reset starts a new configuration
+        // epoch and is the recovery path for an incomplete/indeterminate auth
+        // handoff as well. The target Resetting record clears the old auth
+        // binding; ordinary boot never takes this transition.
+        return (previous.handoff == RunEpochHandoffState::None ||
                 previous.handoff == RunEpochHandoffState::Consumed) &&
                checkedIncrement(previous.storageEpoch.value(), nextEpoch) &&
                next.storageEpoch.value() == nextEpoch &&

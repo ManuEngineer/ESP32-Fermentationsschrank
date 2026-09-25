@@ -214,14 +214,17 @@ class AuthenticationBootstrapContext final {
     friend class AuthenticationBootstrapContextTestAccess;
     AuthenticationBootstrapContext(const device_platform::IStateStore& store,
                                    device_platform::StorageEpoch storageEpoch,
-                                   std::uint64_t bootstrapSequence) noexcept
+                                   std::uint64_t bootstrapSequence,
+                                   bool mayReplacePriorEpochRecords) noexcept
         : storeIdentity_(&store),
           storageEpoch_(storageEpoch),
-          bootstrapSequence_(bootstrapSequence) {}
+          bootstrapSequence_(bootstrapSequence),
+          mayReplacePriorEpochRecords_(mayReplacePriorEpochRecords) {}
 
     const device_platform::IStateStore* storeIdentity_;
     device_platform::StorageEpoch storageEpoch_;
     std::uint64_t bootstrapSequence_;
+    bool mayReplacePriorEpochRecords_{false};
 };
 
 enum class AuthenticationBootstrapResolutionStatus : std::uint8_t {
@@ -260,6 +263,9 @@ enum class AuthBootstrapStatus : std::uint8_t {
     RecoveryRequired,
     AlreadyProvisioned,
     InvalidInput,
+    AuthenticationDenied,
+    LockedOut,
+    AuthenticationDisabled,
     KdfUnavailable,
     PersistenceFailure,
     CommitOutcomeUnknown,
@@ -310,15 +316,19 @@ class AuthenticationDomain final {
 
    private:
     struct LockoutClock {
-        std::uint64_t recordSequence{0U};
+        device_platform::StorageEpoch storageEpoch;
+        std::uint64_t credentialEpoch{0U};
+        AuthLockoutState persisted;
         std::uint64_t anchorMs{0U};
         std::uint64_t remainingMs{0U};
         bool initialized{false};
     };
 
     [[nodiscard]] std::uint64_t effectiveLockoutRemaining(
-        const AuthLockoutState& persisted, std::uint64_t recordSequence,
-        std::uint64_t nowMs, LockoutClock& clock) const noexcept;
+        const AuthLockoutState& persisted,
+        device_platform::StorageEpoch storageEpoch,
+        std::uint64_t credentialEpoch, std::uint64_t nowMs,
+        LockoutClock& clock) const noexcept;
     [[nodiscard]] bool makeVerifier(const std::string& secret,
                                     AuthVerifier& out);
     [[nodiscard]] AuthenticationCredentialReadResult readActiveCredentials(

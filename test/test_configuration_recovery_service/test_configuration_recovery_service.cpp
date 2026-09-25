@@ -248,6 +248,39 @@ struct Fixture {
             store, bootstrap, graph, service, coordinator);
 };
 
+void consumeAuthorizedRunEpochHandoff(Fixture& fixture,
+                                      std::uint64_t targetEpoch) {
+    auto proof = fixture.recovery->takeAuthorizedRunEpochHandoffProof();
+    TEST_ASSERT_TRUE(proof.has_value());
+    fermentation::RunPersistenceCoordinator runPersistence(
+        fixture.store, device_platform::StorageEpoch{targetEpoch},
+        fermentation::RunCheckpointSchedule{});
+    auto prepared = runPersistence.prepareAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(
+            fixture.recovery
+                ->commitAuthorizedRunEpochHandoff(*proof, *prepared.evidence)
+                .status));
+    auto finalized = runPersistence.finalizeAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_TRUE(finalized.evidence.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(
+            fixture.recovery
+                ->consumeAuthorizedRunEpochHandoff(*proof, *finalized.evidence)
+                .status));
+}
+
 struct FreshBootResult {
     fermentation::ConfigurationRecoveryStatus status;
     std::uint64_t runtimeEpoch{0U};
@@ -572,6 +605,68 @@ void test_authentication_handoff_waits_for_run_reset_and_rebinds_new_epoch() {
     TEST_ASSERT_EQUAL_UINT64(afterReset.context->bootstrapSequence(),
                              root.value->bootstrapSequenceBinding);
     TEST_ASSERT_EQUAL_UINT64(2U, root.value->authDomainGeneration);
+}
+
+void test_authorized_reset_recovers_indeterminate_handoff_and_corrupt_auth() {
+    Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    fermentation::AuthenticationRecordStore authStore(fixture.store);
+    fixture.store.faultWrite(fermentation::configuration_storage_contract::
+                                 kAuthenticationRootStoreKey,
+                             device_platform::StateStoreWriteStatus::WriteError,
+                             false);
+    const auto interrupted =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationBootstrapResolutionStatus::
+                             PersistenceFailure),
+        static_cast<int>(interrupted.status));
+    fixture.store.clearFaults();
+
+    const auto indeterminate = fixture.bootstrap.scan();
+    TEST_ASSERT_TRUE(indeterminate.loaded.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthDomainHandoffState::Indeterminate),
+        static_cast<int>(indeterminate.loaded->record.authDomainHandoff));
+
+    // The explicitly authorized full reset may discard old/corrupt auth data
+    // only by advancing to a new StorageEpoch and reinitializing the handoff.
+    fixture.store.put(fermentation::configuration_storage_contract::
+                          kAuthenticationRootStoreKey,
+                      "corrupt old auth root");
+    fixture.store.put(
+        fermentation::configuration_storage_contract::kAuthenticationStoreKey,
+        "corrupt old credentials");
+    const auto reset = fixture.recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(reset.status));
+    consumeAuthorizedRunEpochHandoff(fixture, 2U);
+
+    const auto resolved =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationBootstrapResolutionStatus::Ready),
+        static_cast<int>(resolved.status));
+    TEST_ASSERT_TRUE(resolved.context.has_value());
+    const auto newRoot = authStore.readRoot(device_platform::StorageEpoch{2U});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::Success),
+        static_cast<int>(newRoot.status));
+    TEST_ASSERT_TRUE(newRoot.value.has_value());
+    TEST_ASSERT_EQUAL_UINT64(resolved.context->bootstrapSequence(),
+                             newRoot.value->bootstrapSequenceBinding);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationReadStatus::IntegrityFailure),
+        static_cast<int>(
+            authStore.readCredentials(device_platform::StorageEpoch{2U})
+                .status));
 }
 
 void test_factory_reset_advances_epoch_and_preserves_touch_key() {
@@ -2172,6 +2267,8 @@ int main() {
         test_authentication_bootstrap_migrates_schema2_once_and_binds_root);
     RUN_TEST(
         test_authentication_handoff_waits_for_run_reset_and_rebinds_new_epoch);
+    RUN_TEST(
+        test_authorized_reset_recovers_indeterminate_handoff_and_corrupt_auth);
     RUN_TEST(test_factory_reset_advances_epoch_and_preserves_touch_key);
     RUN_TEST(test_factory_reset_preserves_real_touch_calibration_record);
     RUN_TEST(

@@ -225,10 +225,13 @@ AuthenticationRecordInventory inspectAuthenticationInventory(
         return {true, false, 1U};
     }
 
-    const auto acceptablePriorStatus = [](AuthenticationReadStatus status) {
-        return status == AuthenticationReadStatus::NotFound ||
-               status == AuthenticationReadStatus::DifferentEpoch;
-    };
+    const auto acceptablePriorStatus =
+        [allowPriorEpochRecords](AuthenticationReadStatus status) {
+            return status == AuthenticationReadStatus::NotFound ||
+                   status == AuthenticationReadStatus::DifferentEpoch ||
+                   (allowPriorEpochRecords &&
+                    status == AuthenticationReadStatus::IntegrityFailure);
+        };
     if (!acceptablePriorStatus(root.status) ||
         !acceptablePriorStatus(credentials.status)) {
         return {};
@@ -473,7 +476,10 @@ ConfigurationRecoveryService::resolveAuthenticationBootstrap(
     if (root.value->state == AuthProvisioningState::Unprovisioned) {
         const auto credentials = authStore.readCredentials(epoch);
         if (credentials.status != AuthenticationReadStatus::NotFound &&
-            credentials.status != AuthenticationReadStatus::DifferentEpoch) {
+            credentials.status != AuthenticationReadStatus::DifferentEpoch &&
+            !(mayReplaceOldEpoch &&
+              credentials.status ==
+                  AuthenticationReadStatus::IntegrityFailure)) {
             return {AuthenticationBootstrapResolutionStatus::RecoveryRequired,
                     std::nullopt};
         }
@@ -490,7 +496,8 @@ ConfigurationRecoveryService::resolveAuthenticationBootstrap(
     }
     return {AuthenticationBootstrapResolutionStatus::Ready,
             AuthenticationBootstrapContext{
-                store_, epoch, current.record.authHandoffSequence.value()}};
+                store_, epoch, current.record.authHandoffSequence.value(),
+                mayReplaceOldEpoch}};
 }
 
 ConfigurationRecoveryStatus ConfigurationRecoveryService::verifyFactoryEmpty()

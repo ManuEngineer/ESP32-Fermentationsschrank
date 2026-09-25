@@ -16,8 +16,10 @@ class AuthenticationBootstrapContextTestAccess {
    public:
     static AuthenticationBootstrapContext create(
         const device_platform::IStateStore& store,
-        device_platform::StorageEpoch epoch, std::uint64_t sequence) {
-        return AuthenticationBootstrapContext{store, epoch, sequence};
+        device_platform::StorageEpoch epoch, std::uint64_t sequence,
+        bool mayReplacePriorEpochRecords = false) {
+        return AuthenticationBootstrapContext{store, epoch, sequence,
+                                              mayReplacePriorEpochRecords};
     }
 };
 }  // namespace fermentation
@@ -218,6 +220,36 @@ void test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets()
             auth.verifyServicePin(context, "1234", 11U, retryAfterMs)));
 }
 
+void test_authorized_new_epoch_bootstrap_replaces_corrupt_prior_credentials() {
+    LocalStore store;
+    seedRoot(store);
+    store.put(
+        fermentation::configuration_storage_contract::kAuthenticationStoreKey,
+        "corrupt prior-epoch credentials");
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, device_platform::StorageEpoch{4U}, 12U,
+            /*mayReplacePriorEpochRecords=*/true);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(auth.inspect(context)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(
+            auth.bootstrap(context, device_platform::UiSurface::LocalDisplay,
+                           true, longPassword(), "1234")));
+    const auto credentials =
+        records.readCredentials(device_platform::StorageEpoch{4U});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::Success),
+        static_cast<int>(credentials.status));
+    TEST_ASSERT_TRUE(credentials.value.has_value());
+}
+
 void test_lockout_is_persisted_and_skips_kdf_while_active_and_after_reboot() {
     LocalStore store;
     seedRoot(store);
@@ -257,6 +289,115 @@ void test_lockout_is_persisted_and_skips_kdf_while_active_and_after_reboot() {
         static_cast<int>(rebooted.verifyWebPassword(context, longPassword(), 1U,
                                                     retryAfterMs)));
     TEST_ASSERT_EQUAL_UINT64(callsAfterLock, kdf.calls);
+}
+
+void test_credential_change_reports_denial_and_lockout_separately() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, device_platform::StorageEpoch{4U}, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(
+            auth.bootstrap(context, device_platform::UiSurface::LocalDisplay,
+                           true, longPassword(), "1234")));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthBootstrapStatus::AuthenticationDenied),
+        static_cast<int>(auth.changeWebPassword(context,
+                                                "a wrong long password value",
+                                                "another long password", 1U)));
+    std::uint64_t retryAfterMs = 0U;
+    for (std::uint8_t attempt = 2U; attempt <= 5U; ++attempt) {
+        static_cast<void>(auth.verifyWebPassword(
+            context, "a wrong long password value", attempt, retryAfterMs));
+    }
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::LockedOut),
+        static_cast<int>(auth.changeWebPassword(context, longPassword(),
+                                                "another long password", 10U)));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthBootstrapStatus::AuthenticationDenied),
+        static_cast<int>(auth.changeServicePin(context, "9999", "5678", 11U)));
+    for (std::uint8_t attempt = 2U; attempt <= 3U; ++attempt) {
+        static_cast<void>(
+            auth.verifyServicePin(context, "9999", attempt, retryAfterMs));
+    }
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::LockedOut),
+        static_cast<int>(auth.changeServicePin(context, "1234", "5678", 20U)));
+}
+
+void test_other_credential_mutations_do_not_restart_lockout_duration() {
+    {
+        LocalStore store;
+        seedRoot(store);
+        fermentation::AuthenticationRecordStore records(store);
+        DeterministicTestKdf kdf;
+        TestRandom random;
+        fermentation::AuthenticationDomain auth(records, kdf, random);
+        const auto context =
+            fermentation::AuthenticationBootstrapContextTestAccess::create(
+                store, device_platform::StorageEpoch{4U}, 12U);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::AuthBootstrapStatus::BootstrapAllowed),
+            static_cast<int>(auth.bootstrap(
+                context, device_platform::UiSurface::LocalDisplay, true,
+                longPassword(), "1234")));
+
+        std::uint64_t retryAfterMs = 0U;
+        for (std::uint8_t attempt = 1U; attempt <= 5U; ++attempt) {
+            static_cast<void>(auth.verifyWebPassword(
+                context, "a wrong long password value", attempt, retryAfterMs));
+        }
+        static_cast<void>(
+            auth.verifyServicePin(context, "9999", 10U, retryAfterMs));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
+            static_cast<int>(auth.verifyWebPassword(context, longPassword(),
+                                                    15005U, retryAfterMs)));
+        TEST_ASSERT_EQUAL_UINT64(15000U, retryAfterMs);
+    }
+
+    {
+        LocalStore store;
+        seedRoot(store);
+        fermentation::AuthenticationRecordStore records(store);
+        DeterministicTestKdf kdf;
+        TestRandom random;
+        fermentation::AuthenticationDomain auth(records, kdf, random);
+        const auto context =
+            fermentation::AuthenticationBootstrapContextTestAccess::create(
+                store, device_platform::StorageEpoch{4U}, 12U);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::AuthBootstrapStatus::BootstrapAllowed),
+            static_cast<int>(auth.bootstrap(
+                context, device_platform::UiSurface::LocalDisplay, true,
+                longPassword(), "1234")));
+
+        std::uint64_t retryAfterMs = 0U;
+        for (std::uint8_t attempt = 1U; attempt <= 3U; ++attempt) {
+            static_cast<void>(
+                auth.verifyServicePin(context, "9999", attempt, retryAfterMs));
+        }
+        static_cast<void>(auth.verifyWebPassword(
+            context, "a wrong long password value", 10U, retryAfterMs));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::AuthCheckStatus::LockedOut),
+            static_cast<int>(
+                auth.verifyServicePin(context, "1234", 15003U, retryAfterMs)));
+        TEST_ASSERT_EQUAL_UINT64(15000U, retryAfterMs);
+    }
 }
 
 void test_epoch_and_bootstrap_binding_mismatches_fail_closed() {
@@ -359,7 +500,11 @@ int main() {
     RUN_TEST(
         test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets);
     RUN_TEST(
+        test_authorized_new_epoch_bootstrap_replaces_corrupt_prior_credentials);
+    RUN_TEST(
         test_lockout_is_persisted_and_skips_kdf_while_active_and_after_reboot);
+    RUN_TEST(test_credential_change_reports_denial_and_lockout_separately);
+    RUN_TEST(test_other_credential_mutations_do_not_restart_lockout_duration);
     RUN_TEST(test_epoch_and_bootstrap_binding_mismatches_fail_closed);
     RUN_TEST(
         test_codec_rejects_crc_corruption_and_store_rejects_stale_sequence);
