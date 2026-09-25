@@ -435,12 +435,13 @@ commitgebunden freigegeben.
 
 ```text
 OWNER_SCOPE_DECISION=INCLUDE_HOST_CLANG21_IN_PR156
-REVISION_BASE_HEAD=8e7ee3facf8eeba16326767d6193fa57cba2acda
+REVISION_BASE_HEAD=9ff03e25cd395fb7f6d8d617ff06123e2e49270d
 HOST_CLANG_MAJOR=21
 HOST_CLANG_PATCH=NOT_A_PROJECT_CONTRACT
 ESP_CLANG_EXISTING_PIN=21.1.3
 PLAN_REVISION_REASON=CLANG21_POLICY_DRIFT_IN_CHECK_FAMILIES
 BASELINE_EVIDENCE=docs/audits/ISSUE_31_HOST_CLANG21_UNCHANGED_BASELINE_RAW.txt
+PLAN_REVIEW_CORRECTIONS=THREE_LOCAL_CLANG21_COMPATIBILITY_FIXES_AND_FINAL_GATE_SPLIT
 ACTUATOR_RELEASE=NO
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
 IMPLEMENTATION=NOT_STARTED_FOR_REVISED_CONTRACT
@@ -491,6 +492,20 @@ Nach Freigabe werden nur die aktiven Vertragsstellen angepasst:
   oben genannten, begruendeten Einzel-Ausschluesse;
 - `docs/CI_AND_QUALITY_GATES.md`: aktiven Hostvertrag und CI-Reihenfolge
   synchronisieren.
+- `lib/fermentation_app/src/fermentation_application.cpp`: die bestehende
+  `AbortAndCool`-Vorbedingung direkt in den nachfolgenden Block schneiden,
+  sodass `intent.coolingPlan` vor `makeManualRunPlanRequest()` nachweisbar
+  guarded ist. InvalidInput, die bestehende Command-/Run-ID-Reihenfolge und
+  alle sonstigen Semantiken bleiben unveraendert; kein `NOLINT`.
+- `lib/fermentation_app/src/process_state_machine.hpp`: in
+  `elapsedWithPrior()` nur die Addition nach der Division explizit klammern;
+  keine Rechenlogik aendern.
+- `lib/fermentation_app/src/run_commands.cpp`: `validStopOption()` in die
+  bereits vorhandene anonyme Namespace-Grenze verschieben, ohne API oder
+  Verhalten zu aendern.
+- `test/test_storage_wireformat/test_storage_wireformat.cpp`: ausschliesslich
+  die zwei von Clang 21 betroffenen kommentierten Byte-Array-Bloecke
+  mechanisch formatieren.
 
 Historische Plaene, Changelog-Eintraege und abgeschlossene Audit-Evidence
 werden nicht rueckwirkend umgeschrieben.
@@ -507,20 +522,25 @@ bestehenden Baum ausgefuehrt.
   Neben den beiden nicht uebernommenen Policy-Checks meldet Clang 21 auf dem
   unveraenderten Bestand `bugprone-unchecked-optional-access`,
   `readability-math-missing-parentheses` und `misc-use-internal-linkage`.
-  Diese Befunde haben Correctness-/Wartbarkeitswirkung und werden nicht
-  unterdrueckt; die Umsetzung bleibt bis zu ihrer separaten Owner-/Review-
-  Entscheidung gestoppt.
-- Wenn nach der gezielten Policy-Ausnahme keine weiteren solchen Befunde
-  verbleiben, bleibt der Produktionscode unveraendert.
+  Diese drei Befunde werden nach Freigabe dieses revidierten Plans mit den
+  oben genannten kleinsten lokalen Korrekturen behoben; sie werden nicht
+  unterdrueckt und nicht auf eine weitere Owner-/Review-Entscheidung
+  verschoben.
+- Fuer `prepareStop` werden gezielt beide Verhaltensfaelle regressiert:
+  `AbortAndCool` ohne Cooling-Plan bleibt `InvalidInput`; ein gueltiger Plan
+  bleibt erfolgreich und behaelt die bestehende Command-/Run-ID-Semantik.
+  Die bestehenden Process-State-Machine- und Run-Command-Tests muessen
+  unveraendert PASS bleiben.
 - Der Formatdiff beschraenkt sich auf zwei kommentierte Byte-Array-Bloecke in
   `test/test_storage_wireformat/test_storage_wireformat.cpp` und darf nach
   Freigabe mechanisch formatiert werden. Ein breiter Diff oder weitere
   Toolchain-/OS-Aenderungen bleibt ein **STOP**; keine Massennachformatierung
   und keine opportunistische Codebereinigung in PR #156.
 
-### 9.4 Verifikation und Pre-Ready-Wirkung
+### 9.4 Baseline-/Planphase
 
-Mindestens nachzuweisen:
+Die bereits gesicherte Baseline darf den Zwischenstand ausdruecken; sie ist
+kein finaler Gate-Nachweis:
 
 ```text
 HOST_CLANG_FORMAT_MAJOR=21
@@ -529,10 +549,39 @@ HOST_FORMAT_FULL_TREE=NOT_RUN_AFTER_REVISED_POLICY
 HOST_CLANG_TIDY_CANONICAL_LIST=BLOCKED_BASELINE_CORRECTNESS_DIAGNOSTICS
 HOST_CLANG21_BASELINE_DIAGNOSTIC_COUNT=75
 HOST_CLANG21_POLICY_EXCLUSIONS=2_EXPLICIT_CHECKS_ONLY
+PRE_READY_HOST=NOT_RUN
+PRE_READY_ESP=NOT_RUN
+PRE_READY_LOCAL_GATES=NOT_RUN
+ACTUATOR_RELEASE=NO
+```
+
+### 9.5 Finaler Abschlussvertrag nach Implementation
+
+Nach der Owner-Freigabe, den drei lokalen Korrekturen, den gezielten
+Regressionstests und der Synchronisierung von Runner, CI und
+Werkzeugdokumentation gilt ausschliesslich dieser finale Vertrag:
+
+```text
+HOST_CLANG_FORMAT_MAJOR=21
+HOST_CLANG_TIDY_MAJOR=21
+HOST_FORMAT_FULL_TREE=PASS
+HOST_CLANG_TIDY_CANONICAL_LIST=PASS
+ESP_CLANG_BRINGUP=PASS
+ESP_CLANG_RELEASE=PASS
 PRE_READY_HOST=PASS
 PRE_READY_ESP=PASS
-GITHUB_CI_HOST_TOOL_SOURCE=PINNED_ESP_CLANG_21_1_3
+PRE_READY_LOCAL_GATES=PASS
 ACTUATOR_RELEASE=NO
+```
+
+Gezielte Regression vor dem vollstaendigen Pre-Ready umfasst:
+
+```text
+PREPARE_STOP_ABORT_AND_COOL_WITHOUT_PLAN=INVALID_INPUT
+PREPARE_STOP_ABORT_AND_COOL_WITH_VALID_PLAN=PASS
+PREPARE_STOP_COMMAND_RUN_ID_SEMANTICS=UNCHANGED
+PROCESS_STATE_MACHINE_TESTS=PASS
+RUN_COMMAND_TESTS=PASS
 ```
 
 Der bereits auf `8e7ee3f...` gestartete Pre-Ready-Lauf kann nach einem
@@ -540,5 +589,6 @@ Toolchain-Commit nicht als finaler Nachweis gelten, weil das verbindliche
 Pre-Ready-Gate auf dem exakten finalen `HEAD` laufen muss. Hardware wird
 dafuer nicht erneut geflasht oder wiederholt getestet. Nach Freigabe dieser
 revidierten Plan-SHA muessen zuerst die zwei expliziten Policy-Ausschluesse
-implementiert, die drei Correctness-/Wartbarkeitsbefunde separat geklaert und
-danach die vollstaendige Verifikation auf dem finalen HEAD ausgefuehrt werden.
+implementiert, die drei lokalen Korrekturen und die gezielten Regressionen
+ausgefuehrt und danach die vollstaendige Verifikation auf dem finalen HEAD
+ausgefuehrt werden.
