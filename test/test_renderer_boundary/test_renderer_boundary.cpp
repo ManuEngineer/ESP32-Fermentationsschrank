@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -589,7 +590,7 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         std::nullopt, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
 
-    TEST_ASSERT_TRUE(hasText(screen, "Home Wi-Fi"));
+    TEST_ASSERT_TRUE(hasText(screen, "Home WiFi"));
     TEST_ASSERT_TRUE(hasText(screen, "SSID: Ferment-Setup"));
     TEST_ASSERT_TRUE(hasText(screen, "Password: local-only-password"));
     TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
@@ -660,6 +661,62 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         TEST_ASSERT_LESS_OR_EQUAL_UINT16(
             240U, command.rect.top + command.rect.height);
     }
+}
+
+void assertNetworkBottomLabelsFit(
+    const fermentation::main_ui::RepresentativeScreen& screen) {
+    std::size_t labelCount = 0U;
+    for (const auto& command : screen.commands) {
+        if (command.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+            command.rect.top < 200U || command.rect.width != 76U) {
+            continue;
+        }
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            320U, command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            240U, command.rect.top + command.rect.height);
+        ++labelCount;
+    }
+    TEST_ASSERT_EQUAL_UINT(4U, labelCount);
+
+    constexpr std::array<std::uint16_t, 4U> slotCenters{40U, 120U, 200U, 280U};
+    for (const auto x : slotCenters) {
+        const auto target = fermentation::main_ui::targetAt(
+            screen, static_cast<std::uint16_t>(x), 220U);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+            static_cast<int>(target->kind));
+        TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(x / 80U),
+                                target->slotIndex);
+    }
+}
+
+void test_network_action_labels_fit_without_changing_bottom_hit_targets() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto de = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"de"});
+    const auto en = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto es = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"es"});
+
+    TEST_ASSERT_TRUE(hasText(de, "Nur AP"));
+    TEST_ASSERT_TRUE(hasText(de, "Heimnetz"));
+    TEST_ASSERT_TRUE(hasText(de, "Setup"));
+    TEST_ASSERT_TRUE(hasText(en, "AP only"));
+    TEST_ASSERT_TRUE(hasText(en, "Home WiFi"));
+    TEST_ASSERT_TRUE(hasText(en, "WiFi setup"));
+    TEST_ASSERT_TRUE(hasText(es, "Solo AP"));
+    TEST_ASSERT_TRUE(hasText(es, "WiFi casa"));
+    TEST_ASSERT_TRUE(hasText(es, "Ajustes"));
+
+    assertNetworkBottomLabelsFit(de);
+    assertNetworkBottomLabelsFit(en);
+    assertNetworkBottomLabelsFit(es);
 }
 
 void test_softap_wifi_qr_escapes_reserved_characters_deterministically() {
@@ -754,6 +811,8 @@ int main() {
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
     RUN_TEST(
         test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(
+        test_network_action_labels_fit_without_changing_bottom_hit_targets);
     RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();

@@ -507,20 +507,32 @@ RepresentativeScreen makeRepresentativeScreen(
          ++index) {
         const auto left = static_cast<std::uint16_t>(index * 80U);
         const auto& slot = screen.workspace.bottomSlots[index];
+        const auto labelRect =
+            screen.workspace.page == FermentationUiPage::HeaderNetwork
+                ? device_platform::
+                      DisplayRect{static_cast<std::uint16_t>(left + 2U),
+                                  static_cast<std::uint16_t>(
+                                      kControlTop +
+                                      (kControlHeight -
+                                       RepresentativeScreen::kTextLineHeight) /
+                                          2U),
+                                  76U, RepresentativeScreen::kTextLineHeight}
+                : device_platform::DisplayRect{
+                      static_cast<std::uint16_t>(left + 4U),
+                      static_cast<std::uint16_t>(
+                          kControlTop +
+                          (kControlHeight -
+                           RepresentativeScreen::kTextLineHeight) /
+                              2U),
+                      68U, RepresentativeScreen::kTextLineHeight};
         addFill(commands, {left, kControlTop, 80U, kControlHeight},
                 slot.enabled ? device_platform::ThemeToken::PrimaryAction
                              : device_platform::ThemeToken::SecondaryAction);
-        addText(
-            commands, textPacks, locale, slot.label,
-            {static_cast<std::uint16_t>(left + 4U),
-             static_cast<std::uint16_t>(
-                 kControlTop +
-                 (kControlHeight - RepresentativeScreen::kTextLineHeight) / 2U),
-             68U, RepresentativeScreen::kTextLineHeight},
-            slot.enabled ? device_platform::ThemeToken::OnPrimaryAction
-                         : device_platform::ThemeToken::TextSecondary,
-            slot.enabled ? device_platform::ThemeToken::PrimaryAction
-                         : device_platform::ThemeToken::SecondaryAction);
+        addText(commands, textPacks, locale, slot.label, labelRect,
+                slot.enabled ? device_platform::ThemeToken::OnPrimaryAction
+                             : device_platform::ThemeToken::TextSecondary,
+                slot.enabled ? device_platform::ThemeToken::PrimaryAction
+                             : device_platform::ThemeToken::SecondaryAction);
     }
     if (pressedTarget.has_value() &&
         pressedTarget->kind ==
