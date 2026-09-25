@@ -526,25 +526,79 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
     TEST_ASSERT_TRUE(headerBoxesChecked >= 3U);
 }
 
-void test_network_page_projects_current_mode_and_browser_setup_locally() {
+void test_network_page_projects_softap_data_only_in_local_display_model() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
     fermentation::FermentationTouchWorkspace workspace;
     workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
     const auto packs = fermentation::makeFermentationUiTextPacks();
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        "Ferment-Setup", "local-only-password", 0x0104A8C0U};
     const auto screen = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
 
-    TEST_ASSERT_TRUE(hasText(screen, "Current mode"));
     TEST_ASSERT_TRUE(hasText(screen, "Home Wi-Fi"));
-    TEST_ASSERT_TRUE(
-        hasText(screen, "Credentials: local browser setup"));
+    TEST_ASSERT_TRUE(hasText(screen, "SSID: Ferment-Setup"));
+    TEST_ASSERT_TRUE(hasText(screen, "Password: local-only-password"));
+    TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
+    TEST_ASSERT_NOT_EQUAL(0U, screen.localNetworkInfoFingerprint);
+    const auto ssid = std::find_if(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.text == "SSID: Ferment-Setup";
+        });
+    const auto password = std::find_if(
+        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+            return command.text == "Password: local-only-password";
+        });
+    TEST_ASSERT_TRUE(ssid != screen.commands.end());
+    TEST_ASSERT_TRUE(password != screen.commands.end());
+    TEST_ASSERT_TRUE(ssid->wrapText);
+    TEST_ASSERT_TRUE(password->wrapText);
+    TEST_ASSERT_EQUAL_UINT16(184U, password->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(72U, password->rect.height);
+
+    auto changedAccessPoint = accessPoint;
+    changedAccessPoint.password = "changed-local-password";
+    const auto changedScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        changedAccessPoint);
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeScreenRenderKey(screen) ==
+        fermentation::main_ui::makeScreenRenderKey(changedScreen));
+
+    workspace.setPage(fermentation::FermentationUiPage::Home);
+    const auto ordinaryScreen =
+        fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{"en"},
+            std::nullopt, nullptr,
+            device_platform::DeviceUiNetworkStatus::Unavailable, {},
+            accessPoint);
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "Ferment-Setup"));
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "local-only-password"));
+    TEST_ASSERT_EQUAL_UINT64(0U,
+                             ordinaryScreen.localNetworkInfoFingerprint);
+
     for (const auto& command : screen.commands) {
         TEST_ASSERT_LESS_OR_EQUAL_UINT16(320U,
                                          command.rect.left + command.rect.width);
         TEST_ASSERT_LESS_OR_EQUAL_UINT16(240U,
                                          command.rect.top + command.rect.height);
     }
+}
+
+void test_network_page_missing_softap_info_is_explicit() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_TRUE(hasText(screen, "Access data unavailable"));
+    TEST_ASSERT_EQUAL_UINT64(0U, screen.localNetworkInfoFingerprint);
 }
 
 }  // namespace
@@ -588,6 +642,7 @@ int main() {
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
-    RUN_TEST(test_network_page_projects_current_mode_and_browser_setup_locally);
+    RUN_TEST(test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }

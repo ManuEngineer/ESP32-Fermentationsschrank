@@ -316,7 +316,8 @@ void initializeProductUi(
     if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
                                  uiTextPacks, uiPresentation.displayLocale,
                                  std::nullopt, &uiPresentation.programCatalog,
-                                 uiNetworkStatus, uiClock)) {
+                                 uiNetworkStatus, uiClock,
+                                 application.networkAccessPointInfo())) {
         ESP_LOGW(kTag, "productive LVGL initial projection failed");
     }
 }
@@ -362,7 +363,8 @@ void updateProductUi(
     static_cast<void>(displayRenderer->render(
         loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
         touchTick.pressedTarget, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock));
+        loopNetworkStatus, loopClock,
+        application.networkAccessPointInfo()));
 }
 
 }  // namespace

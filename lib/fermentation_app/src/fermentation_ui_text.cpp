@@ -19,7 +19,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 61U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 65U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -81,6 +81,10 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"network-current", "Current mode"},
         std::pair{"network-unselected", "Not selected"},
         std::pair{"network-browser-setup", "Credentials: local browser setup"},
+        std::pair{"network-ssid", "SSID: "},
+        std::pair{"network-password", "Password: "},
+        std::pair{"network-access-unavailable", "Access data unavailable"},
+        std::pair{"network-ip-unavailable", "unavailable"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -90,7 +94,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 61U> de{
+            const std::array<std::pair<const char*, const char*>, 65U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -152,7 +156,11 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-reconfigure", "WLAN einrichten"},
                  {"network-current", "Aktueller Modus"},
                  {"network-unselected", "Nicht ausgewaehlt"},
-                 {"network-browser-setup", "Zugangsdaten: lokales Browser-Setup"}}};
+                 {"network-browser-setup", "Zugangsdaten: lokales Browser-Setup"},
+                 {"network-ssid", "SSID: "},
+                 {"network-password", "Passwort: "},
+                 {"network-access-unavailable", "Zugangsdaten nicht verfuegbar"},
+                 {"network-ip-unavailable", "nicht verfuegbar"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -161,7 +169,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 61U> es{
+            const std::array<std::pair<const char*, const char*>, 65U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -223,7 +231,11 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-reconfigure", "Configurar Wi-Fi"},
                  {"network-current", "Modo actual"},
                  {"network-unselected", "Sin seleccionar"},
-                 {"network-browser-setup", "Credenciales: configuracion local en navegador"}}};
+                 {"network-browser-setup", "Credenciales: configuracion local en navegador"},
+                 {"network-ssid", "SSID: "},
+                 {"network-password", "Clave: "},
+                 {"network-access-unavailable", "Datos de acceso no disponibles"},
+                 {"network-ip-unavailable", "no disponible"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

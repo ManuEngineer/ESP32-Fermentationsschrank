@@ -297,7 +297,9 @@ bool ProductiveLvglRenderer::render(
     std::optional<device_platform::DeviceUiTarget> pressedTarget,
     const ProgramCatalog* catalog,
     device_platform::DeviceUiNetworkStatus networkStatus,
-    device_platform::ClockViewInput clock) {
+    device_platform::ClockViewInput clock,
+    const std::optional<device_platform::NetworkAccessPointInfo>&
+        networkAccessPointInfo) {
     auto& state = *impl_;
     if (!state.initialized || state.display == nullptr || state.root == nullptr)
         return false;
@@ -310,7 +312,8 @@ bool ProductiveLvglRenderer::render(
     // application UiRefreshRevision.
     const auto screen =
         makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
-                                 pressedTarget, catalog, networkStatus, clock);
+                                 pressedTarget, catalog, networkStatus, clock,
+                                 networkAccessPointInfo);
     const auto key = makeScreenRenderKey(screen);
     if (state.renderedKey.has_value() && *state.renderedKey == key) {
         return true;
@@ -347,7 +350,9 @@ bool ProductiveLvglRenderer::render(
                 static_cast<lv_coord_t>(command.rect.height),
                 lv_font_get_line_height(LV_FONT_DEFAULT));
             lv_obj_set_size(label, command.rect.width, lineHeight);
-            lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+            lv_label_set_long_mode(
+                label, command.wrapText ? LV_LABEL_LONG_WRAP
+                                        : LV_LABEL_LONG_CLIP);
             styleObject(label, command.token, command.backgroundToken);
         } else if (command.kind == ScreenDrawKind::Fill ||
                    command.kind == ScreenDrawKind::PressFeedback) {
