@@ -80,7 +80,8 @@ void test_network_header_target_matches_rendered_status_icon_rect() {
         device_platform::LocaleId{"en"});
 
     const auto icon = std::find_if(
-        screen.commands.begin(), screen.commands.end(), [](const auto& command) {
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
             return command.kind ==
                    fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
         });
@@ -95,7 +96,8 @@ void test_network_header_target_matches_rendered_status_icon_rect() {
         const auto target = fermentation::main_ui::targetAt(screen, x, y);
         TEST_ASSERT_TRUE(target.has_value());
         TEST_ASSERT_EQUAL(
-            static_cast<int>(device_platform::DeviceUiTargetKind::HeaderNetwork),
+            static_cast<int>(
+                device_platform::DeviceUiTargetKind::HeaderNetwork),
             static_cast<int>(target->kind));
     };
     assertNetworkTarget(220U, 4U);

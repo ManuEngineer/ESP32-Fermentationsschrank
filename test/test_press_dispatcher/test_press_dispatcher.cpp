@@ -732,10 +732,9 @@ void test_process_touch_from_home_reaches_network_page_and_application_owner() {
         static_cast<int>(actionTouch.dispatch.commandResult->phase));
     TEST_ASSERT_TRUE(std::holds_alternative<NetworkConfigurationStatus>(
         actionTouch.dispatch.commandResult->detail));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(NetworkConfigurationStatus::Applied),
-        static_cast<int>(std::get<NetworkConfigurationStatus>(
-            actionTouch.dispatch.commandResult->detail)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(std::get<NetworkConfigurationStatus>(
+                              actionTouch.dispatch.commandResult->detail)));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::NetworkMode::AP_ONLY),
         static_cast<int>(application.networkMode()));
