@@ -12,6 +12,7 @@
 
 #include "big_endian_codec.hpp"
 #include "byte_buffer.hpp"
+#include "authentication_records.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_bootstrap_codec.hpp"
 #include "configuration_graph_codec.hpp"
@@ -446,6 +447,131 @@ void test_reboot_loads_initialized_graph() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationServiceMode::Operational),
         static_cast<int>(service.mode()));
+}
+
+void test_authentication_bootstrap_migrates_schema2_once_and_binds_root() {
+    Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    fermentation::AuthenticationRecordStore authStore(fixture.store);
+    const auto resolved =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationBootstrapResolutionStatus::Ready),
+        static_cast<int>(resolved.status));
+    TEST_ASSERT_TRUE(resolved.context.has_value());
+    TEST_ASSERT_TRUE(resolved.context->validFor(fixture.store));
+
+    const auto bootstrap = fixture.bootstrap.scan();
+    TEST_ASSERT_TRUE(bootstrap.loaded.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kConfigurationBootstrapSchemaVersion3,
+        bootstrap.loaded->record.schemaVersion);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthDomainHandoffState::Consumed),
+        static_cast<int>(bootstrap.loaded->record.authDomainHandoff));
+    TEST_ASSERT_EQUAL_UINT64(
+        resolved.context->bootstrapSequence(),
+        bootstrap.loaded->record.authHandoffSequence.value());
+
+    const auto root = authStore.readRoot(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::Success),
+        static_cast<int>(root.status));
+    TEST_ASSERT_TRUE(root.value.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthProvisioningState::Unprovisioned),
+        static_cast<int>(root.value->state));
+    TEST_ASSERT_EQUAL_UINT64(resolved.context->bootstrapSequence(),
+                             root.value->bootstrapSequenceBinding);
+
+    const auto writesBeforeRepeat = fixture.store.writeCount();
+    const auto repeated =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationBootstrapResolutionStatus::Ready),
+        static_cast<int>(repeated.status));
+    TEST_ASSERT_EQUAL_UINT64(resolved.context->bootstrapSequence(),
+                             repeated.context->bootstrapSequence());
+    TEST_ASSERT_EQUAL_UINT32(writesBeforeRepeat, fixture.store.writeCount());
+}
+
+void test_authentication_handoff_waits_for_run_reset_and_rebinds_new_epoch() {
+    Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    fermentation::AuthenticationRecordStore authStore(fixture.store);
+    const auto initial =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationBootstrapResolutionStatus::Ready),
+        static_cast<int>(initial.status));
+    const auto reset = fixture.recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(reset.status));
+    const auto blocked =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationBootstrapResolutionStatus::
+                             RecoveryRequired),
+        static_cast<int>(blocked.status));
+    TEST_ASSERT_FALSE(blocked.context.has_value());
+
+    auto proof = fixture.recovery->takeAuthorizedRunEpochHandoffProof();
+    TEST_ASSERT_TRUE(proof.has_value());
+    fermentation::RunPersistenceCoordinator runPersistence(
+        fixture.store, device_platform::StorageEpoch{2U},
+        fermentation::RunCheckpointSchedule{});
+    auto prepared = runPersistence.prepareAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(prepared.persistenceResult.status));
+    TEST_ASSERT_TRUE(prepared.evidence.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(
+            fixture.recovery
+                ->commitAuthorizedRunEpochHandoff(*proof, *prepared.evidence)
+                .status));
+    auto finalized = runPersistence.finalizeAuthorizedEpochHandoff(*proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::RunPersistenceResultStatus::Applied),
+        static_cast<int>(finalized.persistenceResult.status));
+    TEST_ASSERT_TRUE(finalized.evidence.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(
+            fixture.recovery
+                ->consumeAuthorizedRunEpochHandoff(*proof, *finalized.evidence)
+                .status));
+
+    const auto afterReset =
+        fixture.recovery->resolveAuthenticationBootstrap(authStore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthenticationBootstrapResolutionStatus::Ready),
+        static_cast<int>(afterReset.status));
+    TEST_ASSERT_EQUAL_UINT64(2U, afterReset.context->storageEpoch().value());
+    TEST_ASSERT_NOT_EQUAL(initial.context->bootstrapSequence(),
+                          afterReset.context->bootstrapSequence());
+    const auto root = authStore.readRoot(device_platform::StorageEpoch{2U});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::Success),
+        static_cast<int>(root.status));
+    TEST_ASSERT_EQUAL_UINT64(afterReset.context->bootstrapSequence(),
+                             root.value->bootstrapSequenceBinding);
+    TEST_ASSERT_EQUAL_UINT64(2U, root.value->authDomainGeneration);
 }
 
 void test_factory_reset_advances_epoch_and_preserves_touch_key() {
@@ -2042,6 +2168,10 @@ int main() {
     RUN_TEST(test_existing_bytes_without_bootstrap_are_not_factory_initialized);
     RUN_TEST(test_rootless_same_epoch_generation_is_integrity_failure);
     RUN_TEST(test_reboot_loads_initialized_graph);
+    RUN_TEST(
+        test_authentication_bootstrap_migrates_schema2_once_and_binds_root);
+    RUN_TEST(
+        test_authentication_handoff_waits_for_run_reset_and_rebinds_new_epoch);
     RUN_TEST(test_factory_reset_advances_epoch_and_preserves_touch_key);
     RUN_TEST(test_factory_reset_preserves_real_touch_calibration_record);
     RUN_TEST(

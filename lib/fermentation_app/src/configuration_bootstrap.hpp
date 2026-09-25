@@ -36,8 +36,20 @@ enum class RunEpochHandoffState : std::uint8_t {
     Consumed = 3U,
 };
 
+// One-time handoff for initializing the first productive Authentication
+// domain. The sequence binding is the sequence of the Unconsumed record and
+// remains stable while the marker advances through later records.
+enum class AuthDomainHandoffState : std::uint8_t {
+    None = 0U,
+    Unconsumed = 1U,
+    InProgress = 2U,
+    Consumed = 3U,
+    Indeterminate = 4U,
+};
+
 inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion1 = 1U;
 inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion2 = 2U;
+inline constexpr std::uint32_t kConfigurationBootstrapSchemaVersion3 = 3U;
 
 struct ConfigurationBootstrapRecord {
     ConfigurationBootstrapSequence sequence;
@@ -52,6 +64,8 @@ struct ConfigurationBootstrapRecord {
     RunEpochHandoffState handoff;
     std::optional<device_platform::StorageEpoch> previousEpoch;
     std::optional<device_platform::StorageEpoch> currentEpoch;
+    AuthDomainHandoffState authDomainHandoff;
+    ConfigurationBootstrapSequence authHandoffSequence;
 
     ConfigurationBootstrapRecord(
         ConfigurationBootstrapSequence sequenceValue,
@@ -64,7 +78,11 @@ struct ConfigurationBootstrapRecord {
         std::optional<device_platform::StorageEpoch> previousEpochValue =
             std::nullopt,
         std::optional<device_platform::StorageEpoch> currentEpochValue =
-            std::nullopt)
+            std::nullopt,
+        AuthDomainHandoffState authDomainHandoffValue =
+            AuthDomainHandoffState::None,
+        ConfigurationBootstrapSequence authHandoffSequenceValue =
+            ConfigurationBootstrapSequence{0U})
         : sequence(sequenceValue),
           storageFormatVersion(storageFormatVersionValue),
           storageEpoch(storageEpochValue),
@@ -72,7 +90,9 @@ struct ConfigurationBootstrapRecord {
           schemaVersion(schemaVersionValue),
           handoff(handoffValue),
           previousEpoch(previousEpochValue),
-          currentEpoch(currentEpochValue) {}
+          currentEpoch(currentEpochValue),
+          authDomainHandoff(authDomainHandoffValue),
+          authHandoffSequence(authHandoffSequenceValue) {}
 };
 
 inline constexpr ConfigurationStorageFormatVersion

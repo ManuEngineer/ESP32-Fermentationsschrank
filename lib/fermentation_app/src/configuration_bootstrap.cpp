@@ -25,6 +25,11 @@ bool noHandoffBinding(const ConfigurationBootstrapRecord& record) {
            !record.currentEpoch.has_value();
 }
 
+bool noAuthHandoffBinding(const ConfigurationBootstrapRecord& record) {
+    return record.authDomainHandoff == AuthDomainHandoffState::None &&
+           record.authHandoffSequence.value() == 0U;
+}
+
 bool boundToEpoch(const ConfigurationBootstrapRecord& record) {
     if (record.handoff == RunEpochHandoffState::None ||
         !record.previousEpoch.has_value() || !record.currentEpoch.has_value() ||
@@ -40,7 +45,7 @@ bool boundToEpoch(const ConfigurationBootstrapRecord& record) {
 bool schema1Plausible(const ConfigurationBootstrapRecord& record) {
     if (record.sequence.value() == 0U || record.storageEpoch.value() == 0U ||
         record.storageFormatVersion != kConfigurationStorageFormatVersion1 ||
-        !noHandoffBinding(record)) {
+        !noHandoffBinding(record) || !noAuthHandoffBinding(record)) {
         return false;
     }
     std::uint64_t twiceEpoch = 0U;
@@ -86,7 +91,8 @@ bool schema2PhasePlausible(const ConfigurationBootstrapRecord& record,
 
 bool schema2Plausible(const ConfigurationBootstrapRecord& record) {
     if (record.sequence.value() == 0U || record.storageEpoch.value() == 0U ||
-        record.storageFormatVersion != kConfigurationStorageFormatVersion1) {
+        record.storageFormatVersion != kConfigurationStorageFormatVersion1 ||
+        !noAuthHandoffBinding(record)) {
         return false;
     }
     if (record.state == ConfigurationBootstrapState::Initializing) {
@@ -116,6 +122,62 @@ bool schema2Plausible(const ConfigurationBootstrapRecord& record) {
             return false;
     }
     return false;
+}
+
+bool authHandoffStateKnown(AuthDomainHandoffState state) {
+    switch (state) {
+        case AuthDomainHandoffState::None:
+        case AuthDomainHandoffState::Unconsumed:
+        case AuthDomainHandoffState::InProgress:
+        case AuthDomainHandoffState::Consumed:
+        case AuthDomainHandoffState::Indeterminate:
+            return true;
+    }
+    return false;
+}
+
+bool authHandoffBindingPlausible(const ConfigurationBootstrapRecord& record) {
+    const auto handoffSequence = record.authHandoffSequence.value();
+    if (record.authDomainHandoff == AuthDomainHandoffState::None) {
+        return handoffSequence == 0U;
+    }
+    if (handoffSequence == 0U || handoffSequence > record.sequence.value()) {
+        return false;
+    }
+    if (record.authDomainHandoff == AuthDomainHandoffState::Unconsumed) {
+        return handoffSequence == record.sequence.value();
+    }
+    if (record.authDomainHandoff == AuthDomainHandoffState::InProgress) {
+        return handoffSequence != std::numeric_limits<std::uint64_t>::max() &&
+               record.sequence.value() == handoffSequence + 1U;
+    }
+    if (handoffSequence > std::numeric_limits<std::uint64_t>::max() - 2U) {
+        return false;
+    }
+    return record.sequence.value() >= handoffSequence + 2U;
+}
+
+bool schema3Plausible(const ConfigurationBootstrapRecord& record) {
+    if (record.sequence.value() < 3U || record.storageEpoch.value() == 0U ||
+        record.storageFormatVersion != kConfigurationStorageFormatVersion1 ||
+        !authHandoffStateKnown(record.authDomainHandoff) ||
+        !authHandoffBindingPlausible(record)) {
+        return false;
+    }
+    if (record.state == ConfigurationBootstrapState::Initializing) return false;
+    if (record.state == ConfigurationBootstrapState::Resetting) {
+        return record.storageEpoch.value() >= 2U &&
+               record.handoff == RunEpochHandoffState::None &&
+               noHandoffBinding(record) &&
+               record.authDomainHandoff == AuthDomainHandoffState::None;
+    }
+    if (record.state != ConfigurationBootstrapState::Initialized) {
+        return false;
+    }
+    if (record.handoff == RunEpochHandoffState::None) {
+        return noHandoffBinding(record);
+    }
+    return boundToEpoch(record);
 }
 
 bool sameBinding(const ConfigurationBootstrapRecord& left,
@@ -204,6 +266,96 @@ bool schema2ToSchema2Successor(const ConfigurationBootstrapRecord& previous,
     return false;
 }
 
+bool schema3ConfigurationSuccessor(const ConfigurationBootstrapRecord& previous,
+                                   const ConfigurationBootstrapRecord& next) {
+    std::uint64_t nextSequence = 0U;
+    if (!checkedIncrement(previous.sequence.value(), nextSequence) ||
+        next.sequence.value() != nextSequence) {
+        return false;
+    }
+    if (previous.state == ConfigurationBootstrapState::Initializing) {
+        return next.state == ConfigurationBootstrapState::Initialized &&
+               next.storageEpoch == previous.storageEpoch &&
+               next.handoff == RunEpochHandoffState::None &&
+               noHandoffBinding(next) &&
+               next.authDomainHandoff == AuthDomainHandoffState::None;
+    }
+    if (previous.state == ConfigurationBootstrapState::Resetting) {
+        return next.state == ConfigurationBootstrapState::Initialized &&
+               next.storageEpoch == previous.storageEpoch &&
+               next.handoff == RunEpochHandoffState::Pending &&
+               next.authDomainHandoff == AuthDomainHandoffState::None &&
+               next.authHandoffSequence.value() == 0U &&
+               next.previousEpoch ==
+                   std::optional<device_platform::StorageEpoch>{
+                       device_platform::StorageEpoch{
+                           previous.storageEpoch.value() - 1U}} &&
+               next.currentEpoch == next.storageEpoch;
+    }
+    if (previous.state != ConfigurationBootstrapState::Initialized) {
+        return false;
+    }
+    if (next.state == ConfigurationBootstrapState::Resetting) {
+        std::uint64_t nextEpoch = 0U;
+        return previous.authDomainHandoff == AuthDomainHandoffState::Consumed &&
+               (previous.handoff == RunEpochHandoffState::None ||
+                previous.handoff == RunEpochHandoffState::Consumed) &&
+               checkedIncrement(previous.storageEpoch.value(), nextEpoch) &&
+               next.storageEpoch.value() == nextEpoch &&
+               next.handoff == RunEpochHandoffState::None &&
+               noHandoffBinding(next) &&
+               next.authDomainHandoff == AuthDomainHandoffState::None &&
+               next.authHandoffSequence.value() == 0U;
+    }
+    if (next.state != ConfigurationBootstrapState::Initialized ||
+        next.storageEpoch != previous.storageEpoch ||
+        next.authDomainHandoff != previous.authDomainHandoff ||
+        next.authHandoffSequence != previous.authHandoffSequence) {
+        return false;
+    }
+    if (previous.handoff == RunEpochHandoffState::Pending) {
+        return next.handoff == RunEpochHandoffState::Committed &&
+               sameBinding(previous, next);
+    }
+    if (previous.handoff == RunEpochHandoffState::Committed) {
+        return next.handoff == RunEpochHandoffState::Consumed &&
+               sameBinding(previous, next);
+    }
+    return false;
+}
+
+bool schema3AuthHandoffSuccessor(const ConfigurationBootstrapRecord& previous,
+                                 const ConfigurationBootstrapRecord& next) {
+    std::uint64_t nextSequence = 0U;
+    if (!checkedIncrement(previous.sequence.value(), nextSequence) ||
+        next.sequence.value() != nextSequence) {
+        return false;
+    }
+    if (previous.state != ConfigurationBootstrapState::Initialized ||
+        next.state != previous.state ||
+        next.storageEpoch != previous.storageEpoch ||
+        next.handoff != previous.handoff ||
+        next.previousEpoch != previous.previousEpoch ||
+        next.currentEpoch != previous.currentEpoch) {
+        return false;
+    }
+    if (previous.authDomainHandoff == AuthDomainHandoffState::None) {
+        return next.authDomainHandoff == AuthDomainHandoffState::Unconsumed &&
+               next.authHandoffSequence == next.sequence;
+    }
+    if (previous.authDomainHandoff == AuthDomainHandoffState::Unconsumed) {
+        return next.authDomainHandoff == AuthDomainHandoffState::InProgress &&
+               next.authHandoffSequence == previous.authHandoffSequence;
+    }
+    if (previous.authDomainHandoff == AuthDomainHandoffState::InProgress) {
+        return (next.authDomainHandoff == AuthDomainHandoffState::Consumed ||
+                next.authDomainHandoff ==
+                    AuthDomainHandoffState::Indeterminate) &&
+               next.authHandoffSequence == previous.authHandoffSequence;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool operator==(const ConfigurationBootstrapRecord& left,
@@ -215,7 +367,9 @@ bool operator==(const ConfigurationBootstrapRecord& left,
            left.schemaVersion == right.schemaVersion &&
            left.handoff == right.handoff &&
            left.previousEpoch == right.previousEpoch &&
-           left.currentEpoch == right.currentEpoch;
+           left.currentEpoch == right.currentEpoch &&
+           left.authDomainHandoff == right.authDomainHandoff &&
+           left.authHandoffSequence == right.authHandoffSequence;
 }
 
 bool isPlausible(const ConfigurationBootstrapRecord& record) {
@@ -224,6 +378,9 @@ bool isPlausible(const ConfigurationBootstrapRecord& record) {
     }
     if (record.schemaVersion == kConfigurationBootstrapSchemaVersion2) {
         return schema2Plausible(record);
+    }
+    if (record.schemaVersion == kConfigurationBootstrapSchemaVersion3) {
+        return schema3Plausible(record);
     }
     return false;
 }
@@ -255,6 +412,27 @@ bool isAllowedBootstrapSuccessor(const ConfigurationBootstrapRecord& previous,
         }
         return next.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
                schema1ToSchema2Successor(previous, next);
+    }
+    if (previous.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
+        next.schemaVersion == kConfigurationBootstrapSchemaVersion3) {
+        std::uint64_t nextSequence = 0U;
+        if (!checkedIncrement(previous.sequence.value(), nextSequence) ||
+            next.sequence.value() != nextSequence) {
+            return false;
+        }
+        return previous.state == ConfigurationBootstrapState::Initialized &&
+               next.state == previous.state &&
+               next.storageEpoch == previous.storageEpoch &&
+               next.handoff == previous.handoff &&
+               next.previousEpoch == previous.previousEpoch &&
+               next.currentEpoch == previous.currentEpoch &&
+               next.authDomainHandoff == AuthDomainHandoffState::Unconsumed &&
+               next.authHandoffSequence == next.sequence;
+    }
+    if (previous.schemaVersion == kConfigurationBootstrapSchemaVersion3 &&
+        next.schemaVersion == kConfigurationBootstrapSchemaVersion3) {
+        return schema3AuthHandoffSuccessor(previous, next) ||
+               schema3ConfigurationSuccessor(previous, next);
     }
     return previous.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
            next.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&

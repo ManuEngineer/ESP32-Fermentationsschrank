@@ -6,6 +6,7 @@
 #include <optional>
 #include <utility>
 
+#include "authentication_records.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_graph_store.hpp"
 #include "configuration_mutation_coordinator.hpp"
@@ -106,6 +107,12 @@ class ConfigurationRecoveryService {
     ~ConfigurationRecoveryService() = default;
 
     [[nodiscard]] ConfigurationRecoveryResult boot();
+    // Resolves the one-time Authentication-domain handoff only after the
+    // canonical configuration has reached an operational runtime. The
+    // returned context is bound to this StateStore, epoch and stable
+    // BootstrapSequence; callers cannot construct one themselves.
+    [[nodiscard]] AuthenticationBootstrapResolutionResult
+    resolveAuthenticationBootstrap(AuthenticationRecordStore& authStore);
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
     // Minted only after canonical reset completion and consumed once by the
     // application when it hands the new epoch to run persistence. The phase

@@ -35,6 +35,13 @@ class ConfigurationBootstrapStoreTestAccess {
         ConfigurationBootstrapState target) {
         return store.writeSuccessor(expected, target);
     }
+    static ConfigurationBootstrapWriteResult advanceAuthHandoff(
+        ConfigurationBootstrapStore& store,
+        const LoadedConfigurationBootstrap& expected,
+        AuthDomainHandoffState target,
+        const ConfigurationMutationLease& lease) {
+        return store.writeAuthDomainHandoff(expected, target, lease);
+    }
 };
 
 class FactoryNoveltyProofTestAccess {
@@ -346,7 +353,7 @@ void test_write_successor_detects_newer_schema_during_rescan() {
     TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
                          {fermentation::configuration_storage_contract::
                               kConfigurationBootstrapRecordType,
-                          3U, device_platform::StorageEpoch{1U}, 1U,
+                          4U, device_platform::StorageEpoch{1U}, 1U,
                           std::nullopt, std::string(6U, '\0')},
                          newerSchemaBytes, 64U) ==
                      device_platform::EnvelopeEncodeStatus::Success);
@@ -523,6 +530,116 @@ void test_factory_novelty_proof_mismatch_falls_back_to_real_scan_without_write()
     TEST_ASSERT_FALSE(result.loaded.has_value());
 }
 
+void test_auth_domain_handoff_upgrades_schema2_and_binds_stable_sequence() {
+    LocalStore store;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    auto initializing =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            bootstrap);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(initializing.status));
+    auto initialized =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advance(
+            bootstrap, *initializing.loaded,
+            fermentation::ConfigurationBootstrapState::Initialized);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(initialized.status));
+
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto unconsumed =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advanceAuthHandoff(
+            bootstrap, *initialized.loaded,
+            fermentation::AuthDomainHandoffState::Unconsumed, acquired.lease);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(unconsumed.status));
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kConfigurationBootstrapSchemaVersion3,
+        unconsumed.loaded->record.schemaVersion);
+    TEST_ASSERT_EQUAL_UINT64(3U, unconsumed.loaded->record.sequence.value());
+    TEST_ASSERT_EQUAL_UINT64(
+        unconsumed.loaded->record.sequence.value(),
+        unconsumed.loaded->record.authHandoffSequence.value());
+
+    auto inProgress =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advanceAuthHandoff(
+            bootstrap, *unconsumed.loaded,
+            fermentation::AuthDomainHandoffState::InProgress, acquired.lease);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(inProgress.status));
+    TEST_ASSERT_EQUAL_UINT64(4U, inProgress.loaded->record.sequence.value());
+    TEST_ASSERT_EQUAL_UINT64(
+        unconsumed.loaded->record.sequence.value(),
+        inProgress.loaded->record.authHandoffSequence.value());
+
+    auto consumed =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advanceAuthHandoff(
+            bootstrap, *inProgress.loaded,
+            fermentation::AuthDomainHandoffState::Consumed, acquired.lease);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(consumed.status));
+    TEST_ASSERT_EQUAL_UINT64(5U, consumed.loaded->record.sequence.value());
+    TEST_ASSERT_EQUAL_UINT64(
+        unconsumed.loaded->record.sequence.value(),
+        consumed.loaded->record.authHandoffSequence.value());
+
+    const auto decoded = fermentation::decodeConfigurationBootstrapRecord(
+        consumed.loaded->canonicalRecordBytes);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapCodecStatus::Success),
+        static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.value.has_value());
+    TEST_ASSERT_TRUE(*decoded.value == consumed.loaded->record);
+    const auto invalidRepeat =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advanceAuthHandoff(
+            bootstrap, *consumed.loaded,
+            fermentation::AuthDomainHandoffState::Unconsumed, acquired.lease);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::InvalidTransition),
+        static_cast<int>(invalidRepeat.status));
+}
+
+void test_auth_domain_handoff_rejects_nonconsecutive_bootstrap_history() {
+    const fermentation::ConfigurationBootstrapRecord previous{
+        fermentation::ConfigurationBootstrapSequence{7U},
+        fermentation::kConfigurationStorageFormatVersion1,
+        device_platform::StorageEpoch{1U},
+        fermentation::ConfigurationBootstrapState::Initialized,
+        fermentation::kConfigurationBootstrapSchemaVersion3,
+        fermentation::RunEpochHandoffState::None,
+        std::nullopt,
+        std::nullopt,
+        fermentation::AuthDomainHandoffState::Unconsumed,
+        fermentation::ConfigurationBootstrapSequence{7U}};
+    const fermentation::ConfigurationBootstrapRecord skipped{
+        fermentation::ConfigurationBootstrapSequence{9U},
+        fermentation::kConfigurationStorageFormatVersion1,
+        device_platform::StorageEpoch{1U},
+        fermentation::ConfigurationBootstrapState::Initialized,
+        fermentation::kConfigurationBootstrapSchemaVersion3,
+        fermentation::RunEpochHandoffState::None,
+        std::nullopt,
+        std::nullopt,
+        fermentation::AuthDomainHandoffState::Consumed,
+        fermentation::ConfigurationBootstrapSequence{7U}};
+    TEST_ASSERT_TRUE(fermentation::isPlausible(previous));
+    TEST_ASSERT_TRUE(fermentation::isPlausible(skipped));
+    TEST_ASSERT_FALSE(
+        fermentation::isAllowedBootstrapSuccessor(previous, skipped));
+}
+
 }  // namespace
 
 int main() {
@@ -546,5 +663,8 @@ int main() {
     RUN_TEST(test_factory_novelty_proof_rejects_double_bootstrap_write);
     RUN_TEST(
         test_factory_novelty_proof_mismatch_falls_back_to_real_scan_without_write);
+    RUN_TEST(
+        test_auth_domain_handoff_upgrades_schema2_and_binds_stable_sequence);
+    RUN_TEST(test_auth_domain_handoff_rejects_nonconsecutive_bootstrap_history);
     return UNITY_END();
 }
