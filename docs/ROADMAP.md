@@ -36,7 +36,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `NEW_PR=DRAFT`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `INDEPENDENT_PLAN_FIX_VERIFICATION=PASS`; `OPEN_PLAN_BLOCKERS=0`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=IN_PROGRESS`; `OLD_PR167=SUPERSEDED_REFERENCE_ONLY`; `KDF_ALGORITHM=PBKDF2_HMAC_SHA256`; `KDF_WORK_FACTOR=10000`; `KDF_WORK_FACTOR_FALLBACK=NONE`; `ACTUATOR_RELEASE=NO` | Plan-Schnitt 1: Auth-Records/KDF/Bootstrap-Handoff samt gezielten Regressionstests; danach planmaessig fortsetzen |
+| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `NEW_PR=DRAFT`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `INDEPENDENT_PLAN_FIX_VERIFICATION=PASS`; `OPEN_PLAN_BLOCKERS=0`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=PAUSED_FOR_INDEPENDENT_SLICE_REVIEW`; `AUTH_FOUNDATION_COMMIT=65ffde83b7affdf40ebce13541d52f8218c70a4a`; `AUTH_DOMAIN_IN_FERMENTATION_APPLICATION=NOT_YET_WIRED`; `TARGETED_TESTS=102_OF_102_PASS`; `BUILDER_SELF_CHECK=NOT_RUN_INCOMPLETE_IMPLEMENTATION`; `OLD_PR167=SUPERSEDED_REFERENCE_ONLY`; `KDF_ALGORITHM=PBKDF2_HMAC_SHA256`; `KDF_WORK_FACTOR=10000`; `KDF_WORK_FACTOR_FALLBACK=NONE`; `ACTUATOR_RELEASE=NO` | Unabhaengige Review des begrenzten Auth-Storage-/Recovery-Fundaments; erst danach Umsetzung fortsetzen |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -62,11 +62,13 @@ Hardware- und Auditnachweise bleiben in ihren Fachdateien, nicht als
 aktuelle offene #31-Arbeit in dieser Roadmap. Issue #164 bleibt fuer
 reale WLAN-/Client-Evidence offen.
 
-Issue #27 startet auf `main@b871375f494701bed1834013cfeb789856983e3a`
-mit einem neuen Branch und Draft-PR als Planreview. PR #167 ist nur
-Prototype- und Evidence-Quelle; weder alter Apply-Owner noch alte
-RecordTypeId-10-Zuordnung werden uebernommen. Vor Freigabe der exakten
-neuen Plan-SHA findet keine #27-Produktimplementation statt.
+Issue #27 basiert auf `main@b871375f494701bed1834013cfeb789856983e3a`; die
+exakte Plan-SHA `46e0ea470b307a34867e24337b63a9d38166d771` ist freigegeben.
+Der gepushte erste Slice enthaelt nur Auth-Storage-/Recovery-Fundament und
+Regressionstests; die Application-/Webverdrahtung ist noch nicht erfolgt.
+PR #167 bleibt Prototype- und Evidence-Quelle. Weder alter Apply-Owner noch
+alte RecordTypeId-10-Zuordnung werden uebernommen. Naechstes Gate ist die
+unabhaengige Review dieses begrenzten Slice vor weiterer Umsetzung.
 
 Die spaetere Hardware-Reihenfolge #30 -> #32 -> #33 und die getrennten
 #28-Diagnose-/Chart-/Exportgates bleiben unberuehrt; `ACTUATOR_RELEASE=NO`.
