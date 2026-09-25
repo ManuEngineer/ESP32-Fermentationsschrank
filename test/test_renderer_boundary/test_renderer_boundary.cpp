@@ -526,6 +526,27 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
     TEST_ASSERT_TRUE(headerBoxesChecked >= 3U);
 }
 
+void test_network_page_projects_current_mode_and_browser_setup_locally() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_TRUE(hasText(screen, "Current mode"));
+    TEST_ASSERT_TRUE(hasText(screen, "Home Wi-Fi"));
+    TEST_ASSERT_TRUE(
+        hasText(screen, "Credentials: local browser setup"));
+    for (const auto& command : screen.commands) {
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(320U,
+                                         command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(240U,
+                                         command.rect.top + command.rect.height);
+    }
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -567,5 +588,6 @@ int main() {
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
+    RUN_TEST(test_network_page_projects_current_mode_and_browser_setup_locally);
     return UNITY_END();
 }

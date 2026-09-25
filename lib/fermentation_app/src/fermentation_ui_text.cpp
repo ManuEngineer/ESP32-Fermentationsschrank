@@ -19,7 +19,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 55U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 61U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -75,6 +75,12 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"program-disabled", "Program disabled"},
         std::pair{"program-invalid", "Program invalid"},
         std::pair{"factory-reset-required", "Restore only via factory reset"},
+        std::pair{"network-ap-only", "AP only"},
+        std::pair{"network-home-wifi", "Home Wi-Fi"},
+        std::pair{"network-reconfigure", "Set up Wi-Fi"},
+        std::pair{"network-current", "Current mode"},
+        std::pair{"network-unselected", "Not selected"},
+        std::pair{"network-browser-setup", "Credentials: local browser setup"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -84,7 +90,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 55U> de{
+            const std::array<std::pair<const char*, const char*>, 61U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -140,7 +146,13 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"program-disabled", "Programm deaktiviert"},
                  {"program-invalid", "Programm ungueltig"},
                  {"factory-reset-required",
-                  "Wiederherstellung nur durch Werksreset"}}};
+                  "Wiederherstellung nur durch Werksreset"},
+                 {"network-ap-only", "Nur Access Point"},
+                 {"network-home-wifi", "Heim-WLAN"},
+                 {"network-reconfigure", "WLAN einrichten"},
+                 {"network-current", "Aktueller Modus"},
+                 {"network-unselected", "Nicht ausgewaehlt"},
+                 {"network-browser-setup", "Zugangsdaten: lokales Browser-Setup"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -149,7 +161,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 55U> es{
+            const std::array<std::pair<const char*, const char*>, 61U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -205,7 +217,13 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"program-disabled", "Programa desactivado"},
                  {"program-invalid", "Programa no valido"},
                  {"factory-reset-required",
-                  "Restaurar solo mediante restablecimiento de fabrica"}}};
+                  "Restaurar solo mediante restablecimiento de fabrica"},
+                 {"network-ap-only", "Solo punto de acceso"},
+                 {"network-home-wifi", "Wi-Fi domestico"},
+                 {"network-reconfigure", "Configurar Wi-Fi"},
+                 {"network-current", "Modo actual"},
+                 {"network-unselected", "Sin seleccionar"},
+                 {"network-browser-setup", "Credenciales: configuracion local en navegador"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

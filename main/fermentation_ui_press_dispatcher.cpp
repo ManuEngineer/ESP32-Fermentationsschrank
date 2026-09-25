@@ -38,6 +38,27 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         }
         return result;
     }
+    if (press.applyNetworkMode.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::applyNetworkMode(
+            application, *press.applyNetworkMode);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
+    if (press.beginHomeWifiReconfiguration.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult =
+            FermentationUiCommandBridge::beginHomeWifiReconfiguration(
+                application, *press.beginHomeWifiReconfiguration);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.resumeFallback.has_value()) {
         WorkspacePressDispatchResult dispatched;
         dispatched.commandResult = FermentationUiCommandBridge::resumeFallback(

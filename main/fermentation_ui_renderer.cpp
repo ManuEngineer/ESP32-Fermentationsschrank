@@ -187,6 +187,19 @@ device_platform::ThemeToken networkStatusToken(
     return device_platform::ThemeToken::TextSecondary;
 }
 
+device_platform::TextKey networkModeTextKey(
+    device_platform::NetworkMode mode) {
+    switch (mode) {
+        case device_platform::NetworkMode::AP_ONLY:
+            return fermentationTextKey("network-ap-only");
+        case device_platform::NetworkMode::HOME_WIFI:
+            return fermentationTextKey("network-home-wifi");
+        case device_platform::NetworkMode::UNSELECTED:
+            return fermentationTextKey("network-unselected");
+    }
+    return fermentationTextKey("network-unselected");
+}
+
 }  // namespace
 
 std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
@@ -299,6 +312,22 @@ RepresentativeScreen makeRepresentativeScreen(
         addText(commands, textPacks, locale, appKey("network"),
                 {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
+                device_platform::ThemeToken::Canvas);
+    } else if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
+        addText(commands, textPacks, locale,
+                fermentationTextKey("network-current"),
+                {8U, 68U, 136U, RepresentativeScreen::kTextLineHeight},
+                device_platform::ThemeToken::TextSecondary,
+                device_platform::ThemeToken::Canvas);
+        addText(commands, textPacks, locale,
+                networkModeTextKey(snapshot.network.currentMode),
+                {144U, 68U, 168U, RepresentativeScreen::kTextLineHeight},
+                device_platform::ThemeToken::StatusInformation,
+                device_platform::ThemeToken::Canvas);
+        addText(commands, textPacks, locale,
+                fermentationTextKey("network-browser-setup"),
+                {8U, 92U, 304U, RepresentativeScreen::kTextLineHeight},
+                device_platform::ThemeToken::TextPrimary,
                 device_platform::ThemeToken::Canvas);
     } else {
         if (!screen.workspace.programList.empty()) {
