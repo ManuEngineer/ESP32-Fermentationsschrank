@@ -7,11 +7,12 @@ FUTURE_SCOPE_REFERENCE_NON_NORMATIVE
 FUTURE_SCOPE_TRACKING_ISSUE=163
 R1_IMPLEMENTATION_ISSUE=164
 R1_GATE=NOT_APPLICABLE
-ISSUE164_OWNER_DECISION=VARIANT_B
+ISSUE164_OWNER_DECISION=VARIANT_B_QR_RETAINED
 R1_BROWSER_HOME_WIFI_SETUP=RETAINED
-R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED_VARIANT_B
-R1_TOUCH_WIFI_KEYBOARD=DEFERRED_VARIANT_B
-R1_WLAN_QR=DEFERRED_VARIANT_B
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED
+R1_WLAN_QR_TO_JOIN_SOFTAP=REQUIRED
+R1_WEBSITE_QR=DEFERRED
 IMPLEMENTATION_AUTHORIZATION=NO
 ```
 
@@ -80,21 +81,13 @@ Aktivierung benoetigt einen konkreten UX-/Betriebsbedarf, einen neuen Plan und
 ein eigenes Owner-Gate; sie darf keinen zweiten Credential- oder
 Persistenzpfad erzeugen.
 
-### WLAN-QR fuer individuelle SoftAP-Zugangsdaten
-
-Der WLAN-QR mit individuellen Zugangsdaten des Setup- oder AP-only-SoftAPs ist
-nach derselben Ownerentscheidung ein spaeterer Komfortpfad und kein R1-Gate.
-SSID, individuelles Passwort und direkte lokale IP bleiben fuer den
-manuellen SoftAP-Beitritt auf dem Display sichtbar. Ein spaeterer QR darf
-keinen zweiten Credentialpfad oder Webserver einfuehren und benoetigt einen
-eigenen Plan sowie neue Acceptance Criteria.
-
 ### Zusaetzlicher Webseiten-QR
 
 Ein optionaler QR-Code koennte direkt die lokale Webadresse oeffnen. Er ist
-zusammen mit dem WLAN-QR ein spaeterer Komfortpfad und kein R1-
-Pflichtbestandteil. Er darf nicht als Ersatz fuer den direkten-IP-Fallback
-oder als zweiter Credentialpfad eingefuehrt werden.
+vom R1-WLAN-QR zum Beitritt am geschuetzten SoftAP getrennt und bleibt als
+Webseiten-QR ein spaeterer Komfortpfad sowie kein R1-Pflichtbestandteil. Er darf
+nicht als Ersatz fuer den direkten-IP-Fallback oder als zweiter Credentialpfad
+eingefuehrt werden.
 
 ## Erweiterte Qualifikation nur bei realem Bedarf
 
@@ -104,8 +97,9 @@ ausgeloest:
 - laenger dauernder Reconnect-Stress;
 - Clientlast-Untersuchungen zu Leaks, Handles, Watchdog und Jitter;
 - eine weitergehende Plattformmatrix;
-- der physische Display-/Kamera-QR-Nachweis, soweit er nach angeschlossener
-  Displayhardware noch relevant ist.
+- keine zusaetzliche QR-Funktion: Der WLAN-QR zum SoftAP-Beitritt ist R1;
+  der reale Kamera-/Client-Scan ist dessen spaetere Hardware-/Client-Evidence
+  und kein eigener Future-Scope-Produktpfad.
 
 Ein konkreter spaeterer Produktbedarf, ein reproduzierbares Fehlerbild oder
 belastbare UX-Evidence muss den jeweiligen Nachweis begruenden. Erst danach

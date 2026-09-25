@@ -163,11 +163,13 @@ weder Resume noch `Allowed`.
 - WLAN-Ersteinrichtung erfolgt in R1 ueber ein geschuetztes Einrichtungs-WLAN
   und den browserbasierten Setup-Pfad mit direkter lokaler IP beziehungsweise
   mDNS; ein Captive Portal ist nicht erforderlich.
-- Die Ownerentscheidung fuer Issue #164 (`VARIANT_B`) deferiert die lokale
-  HOME_WIFI-SSID-/Passworteingabe am Touchdisplay, die dafuer erforderliche
-  Bildschirmtastatur und den WLAN-QR mit individuellen SoftAP-Zugangsdaten
-  aus R1. SSID, individuelles SoftAP-Passwort und direkte IP bleiben lokal am
-  Display sichtbar.
+- Die Ownerentscheidung fuer Issue #164 (`VARIANT_B_QR_RETAINED`) deferiert die
+  lokale HOME_WIFI-SSID-/Passworteingabe am Touchdisplay und die dafuer
+  erforderliche Bildschirmtastatur aus R1. Der WLAN-QR zum Beitritt in den
+  geschuetzten Setup-/AP-only-SoftAP mit individuellen SoftAP-Zugangsdaten ist
+  R1-pflichtig; ein separater Webseiten-QR bleibt Future Scope. SSID,
+  individuelles SoftAP-Passwort und direkte IP bleiben lokal am Display
+  sichtbar.
 - Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.
 - Direkte Internet-Portfreigabe auf den ESP32 ist nicht vorgesehen.
 - Eine dokumentierte lokale Lese-API ist zulaessig; keine offizielle externe
