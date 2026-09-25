@@ -15,6 +15,8 @@ namespace {
 constexpr std::uint16_t kHeaderHeight = 32U;
 constexpr std::uint16_t kHeaderLocaleLeft = 188U;
 constexpr std::uint16_t kHeaderLocaleWidth = 32U;
+constexpr device_platform::DisplayRect kHeaderNetworkRect{
+    220U, 4U, 44U, RepresentativeScreen::kTextLineHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
@@ -99,9 +101,14 @@ void addText(std::vector<ScreenDrawCommand>& commands,
 void addRawText(std::vector<ScreenDrawCommand>& commands,
                 device_platform::DisplayRect rect, std::string text,
                 device_platform::ThemeToken token,
-                device_platform::ThemeToken background) {
-    commands.push_back(
-        {ScreenDrawKind::Text, rect, token, background, std::move(text), {}});
+                device_platform::ThemeToken background, bool wrapText = false) {
+    commands.push_back({ScreenDrawKind::Text,
+                        rect,
+                        token,
+                        background,
+                        std::move(text),
+                        {},
+                        wrapText});
 }
 
 void addNetworkStatusIcon(std::vector<ScreenDrawCommand>& commands,
@@ -187,10 +194,83 @@ device_platform::ThemeToken networkStatusToken(
     return device_platform::ThemeToken::TextSecondary;
 }
 
+device_platform::TextKey networkModeTextKey(device_platform::NetworkMode mode) {
+    switch (mode) {
+        case device_platform::NetworkMode::AP_ONLY:
+            return fermentationTextKey("network-ap-only");
+        case device_platform::NetworkMode::HOME_WIFI:
+            return fermentationTextKey("network-home-wifi");
+        case device_platform::NetworkMode::UNSELECTED:
+            return fermentationTextKey("network-unselected");
+    }
+    return fermentationTextKey("network-unselected");
+}
+
+std::string ipv4Text(std::uint32_t address) {
+    return std::to_string(address & 0xFFU) + "." +
+           std::to_string((address >> 8U) & 0xFFU) + "." +
+           std::to_string((address >> 16U) & 0xFFU) + "." +
+           std::to_string((address >> 24U) & 0xFFU);
+}
+
+std::uint64_t networkInfoFingerprint(
+    const device_platform::NetworkAccessPointInfo& info) noexcept {
+    constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+    constexpr std::uint64_t kPrime = 1099511628211ULL;
+    auto hash = kOffset;
+    const auto append = [&hash](const std::string& value) {
+        for (const auto character : value) {
+            hash ^= static_cast<unsigned char>(character);
+            hash *= kPrime;
+        }
+        hash ^= 0xFFU;
+        hash *= kPrime;
+    };
+    append(info.ssid);
+    append(info.password);
+    if (info.ipv4Address.has_value()) {
+        const auto address = *info.ipv4Address;
+        for (unsigned int shift = 0U; shift < 32U; shift += 8U) {
+            hash ^= static_cast<std::uint8_t>(address >> shift);
+            hash *= kPrime;
+        }
+    } else {
+        hash ^= 0U;
+        hash *= kPrime;
+    }
+    return hash;
+}
+
 }  // namespace
 
 std::uint16_t themeColor565(device_platform::ThemeToken token) noexcept {
     return tokenColor(token);
+}
+
+std::optional<std::string> makeSoftApWifiQrPayload(
+    const device_platform::NetworkAccessPointInfo& accessPoint) {
+    if (accessPoint.ssid.empty() || accessPoint.password.empty()) {
+        return std::nullopt;
+    }
+    const auto escape = [](std::string_view value) {
+        std::string escaped;
+        escaped.reserve(value.size());
+        for (const auto character : value) {
+            if (character == '\\' || character == ';' || character == ',' ||
+                character == ':' || character == '"') {
+                escaped.push_back('\\');
+            }
+            escaped.push_back(character);
+        }
+        return escaped;
+    };
+
+    std::string payload{"WIFI:T:WPA;S:"};
+    payload += escape(accessPoint.ssid);
+    payload += ";P:";
+    payload += escape(accessPoint.password);
+    payload += ";;";
+    return payload;
 }
 
 RepresentativeScreen makeRepresentativeScreen(
@@ -201,7 +281,9 @@ RepresentativeScreen makeRepresentativeScreen(
     std::optional<device_platform::DeviceUiTarget> pressedTarget,
     const ProgramCatalog* catalog,
     device_platform::DeviceUiNetworkStatus networkStatus,
-    device_platform::ClockViewInput clock) {
+    device_platform::ClockViewInput clock,
+    const std::optional<device_platform::NetworkAccessPointInfo>&
+        networkAccessPointInfo) {
     RepresentativeScreen screen;
     screen.locale = locale;
     screen.header.locale = locale;
@@ -227,6 +309,11 @@ RepresentativeScreen makeRepresentativeScreen(
     screen.refreshRevision = snapshot.refreshRevision;
     screen.pressedTarget = pressedTarget;
     screen.workspace = workspace.view(snapshot, catalog);
+    if (screen.workspace.page == FermentationUiPage::HeaderNetwork &&
+        networkAccessPointInfo.has_value()) {
+        screen.localNetworkInfoFingerprint =
+            networkInfoFingerprint(*networkAccessPointInfo);
+    }
     auto& commands = screen.commands;
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
             device_platform::ThemeToken::Canvas);
@@ -243,8 +330,7 @@ RepresentativeScreen makeRepresentativeScreen(
                 RepresentativeScreen::kTextLineHeight},
                std::move(localeText), device_platform::ThemeToken::TextPrimary,
                device_platform::ThemeToken::Surface);
-    addNetworkStatusIcon(commands,
-                         {220U, 4U, 44U, RepresentativeScreen::kTextLineHeight},
+    addNetworkStatusIcon(commands, kHeaderNetworkRect,
                          networkStatusToken(networkStatus),
                          device_platform::ThemeToken::Surface);
     addRawText(commands, {264U, 4U, 52U, RepresentativeScreen::kTextLineHeight},
@@ -254,6 +340,13 @@ RepresentativeScreen makeRepresentativeScreen(
             {8U, 40U, 144U, RepresentativeScreen::kTextLineHeight},
             device_platform::ThemeToken::TextPrimary,
             device_platform::ThemeToken::Canvas);
+    if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
+        addText(commands, textPacks, locale,
+                networkModeTextKey(snapshot.network.currentMode),
+                {160U, 40U, 152U, RepresentativeScreen::kTextLineHeight},
+                device_platform::ThemeToken::StatusInformation,
+                device_platform::ThemeToken::Canvas);
+    }
 
     // The content area below the title/home-mode row is page-specific: the
     // #26 workspace already carries the page-specific payload (home status,
@@ -300,6 +393,50 @@ RepresentativeScreen makeRepresentativeScreen(
                 {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
+    } else if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
+        if (networkAccessPointInfo.has_value() &&
+            !networkAccessPointInfo->ssid.empty() &&
+            !networkAccessPointInfo->password.empty()) {
+            const auto ssidPrefix =
+                resolve(textPacks, locale, fermentationTextKey("network-ssid"));
+            const auto passwordPrefix = resolve(
+                textPacks, locale, fermentationTextKey("network-password"));
+            addRawText(commands, {8U, 68U, 184U, 36U},
+                       ssidPrefix.value + networkAccessPointInfo->ssid,
+                       device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas, true);
+            addRawText(commands, {8U, 108U, 184U, 72U},
+                       passwordPrefix.value + networkAccessPointInfo->password,
+                       device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas, true);
+            addRawText(commands, {8U, 182U, 184U, 18U},
+                       std::string{"IP: "} +
+                           (networkAccessPointInfo->ipv4Address.has_value()
+                                ? ipv4Text(*networkAccessPointInfo->ipv4Address)
+                                : resolve(textPacks, locale,
+                                          fermentationTextKey(
+                                              "network-ip-unavailable"))
+                                      .value),
+                       device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas);
+            if (const auto payload =
+                    makeSoftApWifiQrPayload(*networkAccessPointInfo);
+                payload.has_value()) {
+                commands.push_back({ScreenDrawKind::QrCode,
+                                    {200U, 68U, 112U, 112U},
+                                    device_platform::ThemeToken::TextPrimary,
+                                    device_platform::ThemeToken::Canvas,
+                                    *payload,
+                                    {},
+                                    false});
+            }
+        } else {
+            addText(commands, textPacks, locale,
+                    fermentationTextKey("network-access-unavailable"),
+                    {8U, 68U, 184U, RepresentativeScreen::kTextLineHeight},
+                    device_platform::ThemeToken::StatusWarning,
+                    device_platform::ThemeToken::Canvas);
+        }
     } else {
         if (!screen.workspace.programList.empty()) {
             const auto rowCount =
@@ -425,6 +562,8 @@ bool operator==(const ScreenRenderKey& left,
            left.programListSize == right.programListSize &&
            left.pressedBottomSlotIndex == right.pressedBottomSlotIndex &&
            left.networkStatus == right.networkStatus &&
+           left.localNetworkInfoFingerprint ==
+               right.localNetworkInfoFingerprint &&
            left.trustedUtc == right.trustedUtc && left.themeId == right.themeId;
 }
 
@@ -452,6 +591,7 @@ ScreenRenderKey makeScreenRenderKey(
         key.pressedBottomSlotIndex = screen.pressedTarget->slotIndex;
     }
     key.networkStatus = screen.header.networkStatus;
+    key.localNetworkInfoFingerprint = screen.localNetworkInfoFingerprint;
     key.trustedUtc = screen.header.clock.trustedUtc;
     key.themeId = screen.theme.id;
     return key;
@@ -460,8 +600,15 @@ ScreenRenderKey makeScreenRenderKey(
 std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,
     std::uint16_t y) noexcept {
-    if (y < kControlTop || y >= kControlTop + kControlHeight ||
-        x >= screen.kWidth) {
+    if (x >= screen.kWidth) return std::nullopt;
+    if (x >= kHeaderNetworkRect.left &&
+        x < kHeaderNetworkRect.left + kHeaderNetworkRect.width &&
+        y >= kHeaderNetworkRect.top &&
+        y < kHeaderNetworkRect.top + kHeaderNetworkRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderNetwork, 0U};
+    }
+    if (y < kControlTop || y >= kControlTop + kControlHeight) {
         return std::nullopt;
     }
     const auto index = static_cast<std::uint8_t>(x / 80U);

@@ -7,6 +7,12 @@ FUTURE_SCOPE_REFERENCE_NON_NORMATIVE
 FUTURE_SCOPE_TRACKING_ISSUE=163
 R1_IMPLEMENTATION_ISSUE=164
 R1_GATE=NOT_APPLICABLE
+ISSUE164_OWNER_DECISION=VARIANT_B_QR_RETAINED
+R1_BROWSER_HOME_WIFI_SETUP=RETAINED
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED
+R1_WLAN_QR_TO_JOIN_SOFTAP=REQUIRED
+R1_WEBSITE_QR=DEFERRED
 IMPLEMENTATION_AUTHORIZATION=NO
 ```
 
@@ -26,7 +32,8 @@ Das zugehoerige allgemeine Tracking-Issue ist [#163 – Product enhancements /
 deferred scope](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/163).
 Die separate R1-Integration ist als [#164 – R1 WLAN AP-only und Heim-WLAN ueber
 nativen ESP-IDF-HTTP-Pfad integrieren](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/164)
-angelegt, aber noch nicht zur Umsetzung freigegeben.
+angelegt. PR #165 ist auf `main` integriert; der offene lokale
+Touch-Abschluss wird ueber PR #171 plan- und owner-gesteuert weitergefuehrt.
 
 ## WLAN: bewusst nicht R1
 
@@ -64,12 +71,23 @@ Mehrfach-WLAN-Abstraktion im R1-Scope. Aktivierung setzt einen realen
 Produktbedarf und einen neuen, gegen den Persistenzvertrag geprueften Plan
 voraus.
 
+### Lokale HOME_WIFI-Credentialeingabe und Bildschirmtastatur
+
+Die direkte Eingabe von HOME_WIFI-SSID und -Passwort am Touchdisplay sowie die
+dafuer erforderliche Bildschirmtastatur sind nach der Ownerentscheidung fuer
+Issue #164 (`VARIANT_B`) bewusst nicht Teil von R1. Der browserbasierte
+Setup-Assistent bleibt der vollstaendige lokale R1-Eingabepfad. Eine spaetere
+Aktivierung benoetigt einen konkreten UX-/Betriebsbedarf, einen neuen Plan und
+ein eigenes Owner-Gate; sie darf keinen zweiten Credential- oder
+Persistenzpfad erzeugen.
+
 ### Zusaetzlicher Webseiten-QR
 
-Ein optionaler QR-Code koennte direkt die lokale Webadresse oeffnen. Er bleibt
-vom WLAN-QR zum Beitritt am geschuetzten SoftAP getrennt und ist kein R1-
-Pflichtbestandteil. Er darf nicht als Ersatz fuer den direkten-IP-Fallback
-oder als zweiter Credentialpfad eingefuehrt werden.
+Ein optionaler QR-Code koennte direkt die lokale Webadresse oeffnen. Er ist
+vom R1-WLAN-QR zum Beitritt am geschuetzten SoftAP getrennt und bleibt als
+Webseiten-QR ein spaeterer Komfortpfad sowie kein R1-Pflichtbestandteil. Er darf
+nicht als Ersatz fuer den direkten-IP-Fallback oder als zweiter Credentialpfad
+eingefuehrt werden.
 
 ## Erweiterte Qualifikation nur bei realem Bedarf
 
@@ -79,8 +97,9 @@ ausgeloest:
 - laenger dauernder Reconnect-Stress;
 - Clientlast-Untersuchungen zu Leaks, Handles, Watchdog und Jitter;
 - eine weitergehende Plattformmatrix;
-- der physische Display-/Kamera-QR-Nachweis, soweit er nach angeschlossener
-  Displayhardware noch relevant ist.
+- keine zusaetzliche QR-Funktion: Der WLAN-QR zum SoftAP-Beitritt ist R1;
+  der reale Kamera-/Client-Scan ist dessen spaetere Hardware-/Client-Evidence
+  und kein eigener Future-Scope-Produktpfad.
 
 Ein konkreter spaeterer Produktbedarf, ein reproduzierbares Fehlerbild oder
 belastbare UX-Evidence muss den jeweiligen Nachweis begruenden. Erst danach

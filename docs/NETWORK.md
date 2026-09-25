@@ -7,6 +7,15 @@ WLAN-Ersteinrichtung, Geraetename, Adressierung und die grundlegende
 Absicherung der lokalen Weboberflaeche. R1 unterstuetzt genau ein gespeichertes
 Heim-WLAN oder den ausdruecklichen AP-only-Modus.
 
+Die Ownerentscheidung fuer Issue #164 lautet `VARIANT_B_QR_RETAINED`: Die lokale
+HOME_WIFI-SSID-/Passworteingabe am Touchdisplay, die dafuer erforderliche
+Bildschirmtastatur sind aus R1 deferiert. Der WLAN-QR zum Beitritt in den
+geschuetzten Setup-/AP-only-SoftAP mit individuellen SoftAP-Zugangsdaten ist
+R1-pflichtig; nur ein separater Webseiten-QR bleibt Future Scope. R1 verwendet
+fuer Heim-WLAN-Credentials den browserbasierten Setup-Pfad; Display-Moduswahl
+und lokale Anzeige der individuellen SoftAP-Zugangsdaten sowie der direkten IP
+bleiben R1.
+
 Die genaue Weboberflaeche, Sitzungsverwaltung und Konfliktbehandlung werden in
 `WEB_UI.md` ergaenzt.
 
@@ -96,8 +105,11 @@ DIRECT_IP_FALLBACK=REQUIRED
 SPECIAL_APP_OR_CLI_REQUIRED=NO
 ```
 
-Der WLAN-QR darf den Beitritt zum geschuetzten SoftAP vereinfachen. Ein
-zusaetzlicher QR-Code nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
+Ein WLAN-QR fuer den Beitritt zum geschuetzten SoftAP ist nach der
+Ownerentscheidung `VARIANT_B_QR_RETAINED` ein R1-Bestandteil. SSID,
+individuelles Passwort und direkte lokale IP werden zusaetzlich auf dem lokalen
+Display angezeigt und bleiben der manuelle Fallback. Ein zusaetzlicher QR-Code
+nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
 
 ### Heim-WLAN-Modus
 
@@ -139,8 +151,8 @@ CLI-Zwang:
 ```text
 Display waehlt HOME_WIFI
   -> temporaeren geschuetzten Setup-SoftAP starten
-  -> SSID, Passwort, QR und direkte Setup-IP lokal anzeigen
-  -> Client verbindet sich per WLAN-QR oder manuell
+  -> SSID, individuelles Passwort, WLAN-QR und direkte Setup-IP lokal anzeigen
+  -> Client verbindet sich per WLAN-QR oder manuell mit SSID und Passwort
   -> Benutzer oeffnet die normale Setup-Seite per Browser, mDNS oder direkter IP
   -> Heim-WLAN scannen und auswaehlen oder SSID manuell eingeben
   -> Passwort eingeben
@@ -155,39 +167,54 @@ fehlgeschlagenen Test bleibt die bisherige gueltige Konfiguration unveraendert.
 Ein automatischer produktiver Commit in eine zweite ESP-WiFi-/Component-NVS-
 Wahrheit ist unzulaessig.
 
-### Bedeutung des WLAN-QR-Codes
+### Bewusst aus R1 deferierte lokale Eingabepfade
 
-Der WLAN-QR-Code enthaelt ausschliesslich die individuellen Zugangsdaten des
-geschuetzten Setup- oder AP-only-SoftAPs in einem gaengigen WLAN-QR-Format.
-Zusaetzlich werden fuer den direkten Fallback lokal angezeigt:
+Die folgenden Funktionen sind durch die Ownerentscheidung `VARIANT_B` bewusst
+aus R1/#164 deferiert und werden in dieser R1-Integration weder spezifiziert
+noch als Abnahmekriterium vorausgesetzt:
 
-- SSID des geschuetzten SoftAPs;
-- individuelles Passwort;
-- lokale Setup-Adresse beziehungsweise AP-IP;
-- Moeglichkeit, den QR-Code erneut anzuzeigen.
+```text
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED
+PRIMARY_R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
+```
 
-Ein Webseiten-QR ist davon getrennt und bleibt optionaler Future Scope.
+Ein späterer Touch-Credentialpfad benötigt eine neue Ownerentscheidung, einen
+eigenen Plan und aktualisierte Acceptance Criteria. Der browserbasierte
+Setup-Assistent bleibt der einzige R1-Eingabepfad für HOME_WIFI-SSID und
+-Passwort.
 
-### Lokale Eingabe am Touchdisplay
+### WLAN-QR zum SoftAP-Beitritt
 
-SSID und WLAN-Passwort koennen zusaetzlich am Touchdisplay eingegeben werden.
-Dieser Weg ist insbesondere als Not- und Offlineweg vorgesehen, nicht als
-bevorzugte Eingabemethode fuer lange Passwoerter mit vielen Sonderzeichen.
+Der WLAN-QR ist R1-Pflicht und dient ausschließlich dem Beitritt in den
+geschützten Setup-/AP-only-SoftAP. Er wird aus derselben lokalen
+`networkAccessPointInfo()`-Quelle wie die sichtbare SSID-/Passwort-/IP-
+Projektion erzeugt:
 
-Die Bildschirmtastatur muss deshalb auch bei WLAN-Zugangsdaten mindestens
-unterstuetzen:
+```text
+QR_PURPOSE=JOIN_SOFTAP
+QR_SOURCE=networkAccessPointInfo()
+QR_PAYLOAD=INDIVIDUAL_SOFTAP_SSID_AND_PASSWORD
+QR_CONTAINS_WEB_URL=NO
+QR_CONTAINS_AP_IP=NO
+MANUAL_FALLBACK=SSID_PASSWORD_DIRECT_IP_VISIBLE
+SECOND_CREDENTIAL_SOURCE=NO
+SECRET_LOGGING=NO
+```
 
-- Gross- und Kleinbuchstaben
-- Ziffern
-- Leerzeichen, soweit fuer SSIDs erforderlich
-- gaengige Sonderzeichen
-- verdeckte Passwortanzeige mit optionaler kurzzeitiger Sichtbarkeit
-- Loeschen, Rueckschritt, Abbrechen und Uebernehmen
+Der Payload verwendet das übliche WLAN-QR-Format mit korrektem Escaping
+relevanter Sonderzeichen. Der QR wird nur in der lokalen Displayprojektion
+verwendet; es gibt keine Kopie in allgemeine UI-Snapshots, Web/API, Logs,
+Diagnose, Export oder Persistenz. Ein separater Webseiten-QR bleibt Future
+Scope.
 
 ## Inhalt des Heim-WLAN-Setup-Assistenten
 
 Dieser browserbasierte Assistent gilt fuer den explizit am Display gewaehlten
 Modus `HOME_WIFI`. Er fuehrt mindestens durch:
+
+Er ist der verbindliche und einzige R1-Eingabepfad fuer HOME_WIFI-SSID und
+-Passwort; die deferierte Touch-Tastatur ist kein alternativer R1-Weg.
 
 1. Sprache auswaehlen
 2. verfuegbare WLANs suchen und anzeigen

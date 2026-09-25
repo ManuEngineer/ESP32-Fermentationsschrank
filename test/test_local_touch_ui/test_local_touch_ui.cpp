@@ -909,6 +909,42 @@ void test_sim_26_message_sensor_and_recovery_actions() {
             *correction.action));
 }
 
+void test_network_page_exposes_only_the_two_modes_and_explicit_setup_action() {
+    auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderNetwork);
+
+    auto view = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+    const auto apOnly = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_TRUE(apOnly.applyNetworkMode.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::AP_ONLY),
+        static_cast<int>(apOnly.applyNetworkMode->selectedMode));
+    const auto homeWifi = workspace.press(snapshot, bottom(2));
+    TEST_ASSERT_TRUE(homeWifi.applyNetworkMode.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::NetworkMode::HOME_WIFI),
+        static_cast<int>(homeWifi.applyNetworkMode->selectedMode));
+
+    snapshot.network.currentMode = device_platform::NetworkMode::AP_ONLY;
+    view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+
+    snapshot.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
+    view = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);
+    const auto reconfigure = workspace.press(snapshot, bottom(3));
+    TEST_ASSERT_TRUE(reconfigure.beginHomeWifiReconfiguration.has_value());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -930,5 +966,7 @@ int main(int, char**) {
     RUN_TEST(test_sim_26_program_delete_owner_usage_gate);
     RUN_TEST(test_sim_26_standard_delete_uses_two_confirmations);
     RUN_TEST(test_sim_26_message_sensor_and_recovery_actions);
+    RUN_TEST(
+        test_network_page_exposes_only_the_two_modes_and_explicit_setup_action);
     return UNITY_END();
 }

@@ -79,6 +79,9 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::NavigateLanguage:
         case FermentationUiWorkspaceSlotAction::NavigateNetwork:
         case FermentationUiWorkspaceSlotAction::NavigateClock:
+        case FermentationUiWorkspaceSlotAction::ApplyNetworkModeApOnly:
+        case FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi:
+        case FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration:
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
         case FermentationUiWorkspaceSlotAction::MovePagerDown:
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
@@ -754,10 +757,21 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::HeaderNetwork:
             view.title = key("network");
-            setSlot(view, 1U, "language",
-                    FermentationUiWorkspaceSlotAction::NavigateLanguage);
-            setSlot(view, 2U, "clock",
-                    FermentationUiWorkspaceSlotAction::NavigateClock);
+            setSlot(view, 0U, "back",
+                    FermentationUiWorkspaceSlotAction::NavigateBack);
+            setSlot(view, 1U, "network-ap-only",
+                    FermentationUiWorkspaceSlotAction::ApplyNetworkModeApOnly,
+                    snapshot.network.currentMode !=
+                        device_platform::NetworkMode::AP_ONLY);
+            setSlot(view, 2U, "network-home-wifi",
+                    FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi,
+                    snapshot.network.currentMode !=
+                        device_platform::NetworkMode::HOME_WIFI);
+            setSlot(
+                view, 3U, "network-reconfigure",
+                FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration,
+                snapshot.network.currentMode ==
+                    device_platform::NetworkMode::HOME_WIFI);
             break;
         case FermentationUiPage::HeaderClock:
             view.title = key("clock");
@@ -1080,6 +1094,18 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                         *recoveryTimeCorrectionSeconds_}};
             }
             break;
+        case FermentationUiWorkspaceSlotAction::ApplyNetworkModeApOnly:
+            result.applyNetworkMode = FermentationUiApplyNetworkModeCommand{
+                device_platform::NetworkMode::AP_ONLY};
+            break;
+        case FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi:
+            result.applyNetworkMode = FermentationUiApplyNetworkModeCommand{
+                device_platform::NetworkMode::HOME_WIFI};
+            break;
+        case FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration:
+            result.beginHomeWifiReconfiguration =
+                FermentationUiBeginHomeWifiReconfigurationCommand{};
+            break;
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
             result.navigated = pager_.moveUp();
             break;
@@ -1289,6 +1315,9 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
             result.transitionAction = pressed.transitionAction;
             result.resumeFallback = pressed.resumeFallback;
             result.programEdit = pressed.programEdit;
+            result.applyNetworkMode = pressed.applyNetworkMode;
+            result.beginHomeWifiReconfiguration =
+                pressed.beginHomeWifiReconfiguration;
             return result;
         }
         case device_platform::DeviceUiTargetKind::None:

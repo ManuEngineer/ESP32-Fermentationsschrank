@@ -88,7 +88,9 @@ class ProductiveLvglRenderer final {
         const ProgramCatalog* catalog = nullptr,
         device_platform::DeviceUiNetworkStatus networkStatus =
             device_platform::DeviceUiNetworkStatus::Unavailable,
-        device_platform::ClockViewInput clock = {});
+        device_platform::ClockViewInput clock = {},
+        const std::optional<device_platform::NetworkAccessPointInfo>&
+            networkAccessPointInfo = std::nullopt);
     [[nodiscard]] bool initialized() const noexcept;
 
    private:

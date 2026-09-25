@@ -71,6 +71,56 @@ void test_bottom_press_returns_existing_target() {
         static_cast<int>(press.interaction.outcome));
 }
 
+void test_network_header_target_matches_rendered_status_icon_rect() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    const auto icon = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
+        });
+    TEST_ASSERT_TRUE(icon != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(220U, icon->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(4U, icon->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(44U, icon->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, icon->rect.height);
+
+    const auto assertNetworkTarget = [&screen](std::uint16_t x,
+                                               std::uint16_t y) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(
+                device_platform::DeviceUiTargetKind::HeaderNetwork),
+            static_cast<int>(target->kind));
+    };
+    assertNetworkTarget(220U, 4U);
+    assertNetworkTarget(263U, 21U);
+    assertNetworkTarget(240U, 12U);
+
+    const auto assertNoTarget = [&screen](std::uint16_t x, std::uint16_t y) {
+        TEST_ASSERT_FALSE(
+            fermentation::main_ui::targetAt(screen, x, y).has_value());
+    };
+    assertNoTarget(219U, 12U);
+    assertNoTarget(264U, 12U);
+    assertNoTarget(240U, 3U);
+    assertNoTarget(240U, 22U);
+
+    const auto bottom = fermentation::main_ui::targetAt(screen, 20U, 220U);
+    TEST_ASSERT_TRUE(bottom.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(bottom->kind));
+    TEST_ASSERT_EQUAL_UINT8(0U, bottom->slotIndex);
+}
+
 void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
     fermentation::FermentationUiSnapshot homeSnapshot;
     homeSnapshot.home.mode = fermentation::FermentationHomeMode::Standby;
@@ -526,6 +576,140 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
     TEST_ASSERT_TRUE(headerBoxesChecked >= 3U);
 }
 
+void test_network_page_projects_softap_data_only_in_local_display_model() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        "Ferment-Setup", "local-only-password", 0x0104A8C0U};
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+
+    TEST_ASSERT_TRUE(hasText(screen, "Home Wi-Fi"));
+    TEST_ASSERT_TRUE(hasText(screen, "SSID: Ferment-Setup"));
+    TEST_ASSERT_TRUE(hasText(screen, "Password: local-only-password"));
+    TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
+    const auto qr =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(qr != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING(
+        "WIFI:T:WPA;S:Ferment-Setup;P:local-only-password;;", qr->text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(200U, qr->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(68U, qr->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(112U, qr->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(112U, qr->rect.height);
+    TEST_ASSERT_TRUE(qr->text.find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(qr->text.find("192.168.4.1") == std::string::npos);
+    TEST_ASSERT_NOT_EQUAL(0U, screen.localNetworkInfoFingerprint);
+    const auto ssid =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "SSID: Ferment-Setup";
+                     });
+    const auto password =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "Password: local-only-password";
+                     });
+    TEST_ASSERT_TRUE(ssid != screen.commands.end());
+    TEST_ASSERT_TRUE(password != screen.commands.end());
+    TEST_ASSERT_TRUE(ssid->wrapText);
+    TEST_ASSERT_TRUE(password->wrapText);
+    TEST_ASSERT_EQUAL_UINT16(184U, password->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(72U, password->rect.height);
+
+    auto changedAccessPoint = accessPoint;
+    changedAccessPoint.password += "-rotated";
+    const auto changedScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        changedAccessPoint);
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeScreenRenderKey(screen) ==
+        fermentation::main_ui::makeScreenRenderKey(changedScreen));
+    const auto changedQr =
+        std::find_if(changedScreen.commands.begin(),
+                     changedScreen.commands.end(), [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(changedQr != changedScreen.commands.end());
+    TEST_ASSERT_TRUE(changedQr->text != qr->text);
+
+    workspace.setPage(fermentation::FermentationUiPage::Home);
+    const auto ordinaryScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "Ferment-Setup"));
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "local-only-password"));
+    TEST_ASSERT_EQUAL_UINT64(0U, ordinaryScreen.localNetworkInfoFingerprint);
+
+    for (const auto& command : screen.commands) {
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            320U, command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            240U, command.rect.top + command.rect.height);
+    }
+}
+
+void test_softap_wifi_qr_escapes_reserved_characters_deterministically() {
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        R"(semi;comma,colon:quote"slash\end)", R"(pass;word,:"\x)",
+        0x0104A8C0U};
+    const auto first =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    const auto second =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    TEST_ASSERT_TRUE(first.has_value());
+    TEST_ASSERT_TRUE(second.has_value());
+    TEST_ASSERT_EQUAL_STRING(
+        R"(WIFI:T:WPA;S:semi\;comma\,colon\:quote\"slash\\end;P:pass\;word\,\:\"\\x;;)",
+        first->c_str());
+    TEST_ASSERT_EQUAL_STRING(first->c_str(), second->c_str());
+    TEST_ASSERT_TRUE(first->find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(first->find("192.168.4.1") == std::string::npos);
+
+    auto changed = accessPoint;
+    changed.ssid += "-other";
+    const auto changedPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPayload != *first);
+
+    changed = accessPoint;
+    changed.password += "-other";
+    const auto changedPasswordPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPasswordPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPasswordPayload != *first);
+
+    device_platform::NetworkAccessPointInfo incomplete;
+    incomplete.ssid = "no-password";
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeSoftApWifiQrPayload(incomplete).has_value());
+}
+
+void test_network_page_missing_softap_info_is_explicit() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_TRUE(hasText(screen, "Access data unavailable"));
+    TEST_ASSERT_EQUAL_UINT64(0U, screen.localNetworkInfoFingerprint);
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -544,6 +728,7 @@ int main() {
     RUN_TEST(
         test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);
+    RUN_TEST(test_network_header_target_matches_rendered_status_icon_rect);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     RUN_TEST(test_render_key_stable_for_same_snapshot_and_workspace);
     RUN_TEST(test_render_key_changes_on_workspace_navigation);
@@ -567,5 +752,9 @@ int main() {
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
+    RUN_TEST(
+        test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
+    RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }
