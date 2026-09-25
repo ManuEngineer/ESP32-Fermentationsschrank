@@ -921,6 +921,14 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_FALSE(preparedComplete.request->runId().has_value());
 
     stop.option = fermentation::StopOption::AbortAndCool;
+    const auto invalidCoolingStop = application.prepareStop(context, stop);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::FermentationApplicationRequestStatus::InvalidInput),
+        static_cast<int>(invalidCoolingStop.status));
+    TEST_ASSERT_FALSE(invalidCoolingStop.request.has_value());
+    TEST_ASSERT_FALSE(invalidCoolingStop.uiRequestId.has_value());
+
     stop.coolingPlan = coolingValues();
     const auto preparedCoolingStop = application.prepareStop(context, stop);
     TEST_ASSERT_TRUE(preparedCoolingStop.request.has_value());

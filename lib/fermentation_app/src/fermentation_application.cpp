@@ -360,10 +360,13 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
         return requestFailure(
             FermentationApplicationRequestStatus::NotInitialized);
     }
-    if (intent.option == StopOption::AbortAndCool &&
-        !intent.coolingPlan.has_value()) {
-        return requestFailure(
-            FermentationApplicationRequestStatus::InvalidInput);
+    const FermentationUiManualRunPlanValues* coolingPlan = nullptr;
+    if (intent.option == StopOption::AbortAndCool) {
+        if (!intent.coolingPlan.has_value()) {
+            return requestFailure(
+                FermentationApplicationRequestStatus::InvalidInput);
+        }
+        coolingPlan = &intent.coolingPlan.value();
     }
     const auto identity = runIdentity_->allocateForApplication();
     if (!identity.identity.has_value()) {
@@ -376,15 +379,14 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
     request.safetyAllowsCooling = evidence.safetyAllowsCooling;
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;
-    if (intent.option == StopOption::AbortAndCool) {
+    if (coolingPlan != nullptr) {
         const auto runId =
             runIdentity_->makeRunId(identity.identity->commandId());
         if (!runId.has_value()) {
             return requestFailure(
                 FermentationApplicationRequestStatus::Unavailable);
         }
-        request.coolingPlan =
-            makeManualRunPlanRequest(*intent.coolingPlan, *runId);
+        request.coolingPlan = makeManualRunPlanRequest(*coolingPlan, *runId);
     }
     return makePreparedRequest(std::move(request));
 }

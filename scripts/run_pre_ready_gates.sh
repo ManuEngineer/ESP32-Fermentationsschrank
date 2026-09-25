@@ -80,8 +80,8 @@ verify_clang_major() {
     local version_line
     version_line=$("$command_name" --version 2>&1 | head -n 1)
     if ! printf '%s\n' "$version_line" | grep -Eq \
-        '(^|[^0-9])18(\.[0-9]+)*([^0-9]|$)'; then
-        printf 'FAILED: %s aus Major-Linie 18 erwartet, gefunden:\n%s\n' \
+        '(^|[^0-9])21(\.[0-9]+)*([^0-9]|$)'; then
+        printf 'FAILED: %s aus Major-Linie 21 erwartet, gefunden:\n%s\n' \
             "$command_name" "$version_line" >&2
         exit 1
     fi

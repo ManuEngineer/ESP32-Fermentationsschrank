@@ -191,7 +191,7 @@ struct PriorBootPhaseElapsed {
                                            std::uint64_t startedAt,
                                            std::uint32_t durationMinutes,
                                            std::uint32_t priorSeconds) {
-    return (now - startedAt) / 1000U + priorSeconds >=
+    return (((now - startedAt) / 1000U) + priorSeconds) >=
            static_cast<std::uint64_t>(durationMinutes) * 60U;
 }
 

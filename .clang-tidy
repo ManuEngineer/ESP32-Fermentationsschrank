@@ -1,5 +1,5 @@
 # Versionierte Static-Analysis-Konfiguration. Gepruefte Werkzeuglinie:
-# clang-tidy-18 (Major 18; der Patchlevel ist kein Projektvertrag; siehe
+# clang-tidy-21 (Major 21; der Patchlevel ist kein Projektvertrag; siehe
 # .github/workflows/build.yml und docs/CI_AND_QUALITY_GATES.md).
 #
 # Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/) ueber
@@ -31,6 +31,11 @@
 #   Datentraeger wie `ProfilePolicy` nicht sinnvoll.
 # - bugprone-easily-swappable-parameters: erzeugt auf kleinen,
 #   dokumentierten Zeit-/Policy-Funktionen mehr Rauschen als Nutzen.
+# - portability-avoid-pragma-once: bestehender projektweiter Headerstil; eine
+#   Umstellung von ueber 100 Headern waere fuer PR #156 reine Scope-Ausweitung.
+# - readability-use-concise-preprocessor-directives: rein stilistische
+#   Umschreibung des bestehenden Praeprozessors, nicht neue Pflichtregel fuer
+#   diesen PR.
 #
 # CheckOptions readability-function-cognitive-complexity.IgnoreMacros:
 # main/app_main.cpp meldete ueber den ESP-IDF-Analysepfad einen
@@ -59,7 +64,9 @@ Checks: >
   -readability-magic-numbers,
   -cppcoreguidelines-avoid-magic-numbers,
   -misc-non-private-member-variables-in-classes,
-  -bugprone-easily-swappable-parameters
+  -bugprone-easily-swappable-parameters,
+  -portability-avoid-pragma-once,
+  -readability-use-concise-preprocessor-directives
 WarningsAsErrors: "*"
 HeaderFilterRegex: "^(include|lib|main)/.*"
 CheckOptions:
