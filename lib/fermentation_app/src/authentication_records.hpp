@@ -191,6 +191,10 @@ class AuthenticationBootstrapContext final {
         default;
     AuthenticationBootstrapContext& operator=(
         const AuthenticationBootstrapContext&) = default;
+    AuthenticationBootstrapContext(AuthenticationBootstrapContext&&) = default;
+    AuthenticationBootstrapContext& operator=(
+        AuthenticationBootstrapContext&&) = default;
+    ~AuthenticationBootstrapContext() = default;
 
     [[nodiscard]] bool validFor(
         const device_platform::IStateStore& store) const noexcept {
