@@ -1,0 +1,274 @@
+# Issue #31 Host-Clang-21 unchanged-baseline evidence
+
+CAPTURE_HEAD=9ff03e25cd395fb7f6d8d617ff06123e2e49270d
+BASELINE_UNCHANGED=YES
+HOST_CLANG_TOOL=esp-21.1.3_20260408
+HOST_CLANG_FORMAT_VERSION=Espressif clang-format version 21.1.3
+HOST_CLANG_TIDY_VERSION=Espressif LLVM version 21.1.3
+HOST_COMPILE_DATABASE=PlatformIO native compile_commands.json
+HOST_GCC_PROVENANCE=--target=x86_64-linux-gnu --gcc-toolchain=/usr
+CANONICAL_FILE_COUNT=10
+DIAGNOSTIC_COUNT=75
+WARNINGS_GENERATED=407751
+EXIT_STATUS=1
+NEWLY_EMITTED_CHECK=portability-avoid-pragma-once, readability-use-concise-preprocessor-directives, bugprone-unchecked-optional-access, readability-math-missing-parentheses, misc-use-internal-linkage
+FILES=/tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp, lib/device_platform/src/device_platform.hpp, lib/device_platform/src/device_ui_contracts.hpp, lib/device_platform/src/device_ui_session.hpp, lib/device_platform/src/device_ui_theme.hpp, lib/device_platform/src/http_server_lifecycle.hpp, lib/device_platform/src/network_lifecycle.hpp, lib/device_platform/src/network_mode.hpp, lib/device_platform/src/platform_services.hpp, lib/device_platform/src/reset_cause.hpp, lib/device_platform/src/sensor_identity.hpp, lib/device_platform/src/sensor_quality.hpp, lib/device_platform/src/sensor_quality_snapshot.hpp, lib/device_platform/src/state_store.hpp, lib/device_platform/src/state_store_key.hpp, lib/device_platform/src/storage_types.hpp, lib/device_platform/src/time_source.hpp, lib/device_platform/src/time_zone_resolver.hpp, lib/device_platform/src/virtual_time_source.hpp, lib/fermentation_app/src/actuation_interlock.hpp, lib/fermentation_app/src/actuator_plan_types.hpp, lib/fermentation_app/src/application_lifecycle.hpp, lib/fermentation_app/src/application_run_identity.hpp, lib/fermentation_app/src/boot_classification.hpp, lib/fermentation_app/src/configuration_bootstrap.hpp, lib/fermentation_app/src/configuration_bootstrap_store.hpp, lib/fermentation_app/src/configuration_documents.hpp, lib/fermentation_app/src/configuration_graph.hpp, lib/fermentation_app/src/configuration_graph_store.hpp, lib/fermentation_app/src/configuration_mutation_coordinator.hpp, lib/fermentation_app/src/configuration_recovery_service.hpp, lib/fermentation_app/src/configuration_service.hpp, lib/fermentation_app/src/connectivity_credentials.hpp, lib/fermentation_app/src/control_context.hpp, lib/fermentation_app/src/control_context_types.hpp, lib/fermentation_app/src/fermentation_application.cpp, lib/fermentation_app/src/fermentation_application.hpp, lib/fermentation_app/src/fermentation_ui_commands.hpp, lib/fermentation_app/src/fermentation_ui_models.hpp, lib/fermentation_app/src/fermentation_ui_projector.hpp, lib/fermentation_app/src/network_configuration_service.hpp, lib/fermentation_app/src/network_setup_routes.hpp, lib/fermentation_app/src/network_startup_policy.hpp, lib/fermentation_app/src/presentation_state.hpp, lib/fermentation_app/src/process_signal_types.hpp, lib/fermentation_app/src/process_state_machine.hpp, lib/fermentation_app/src/program_limits.hpp, lib/fermentation_app/src/program_model.hpp, lib/fermentation_app/src/run_checkpoint_schedule.hpp, lib/fermentation_app/src/run_command_limits.hpp, lib/fermentation_app/src/run_commands.cpp, lib/fermentation_app/src/run_commands.hpp, lib/fermentation_app/src/run_limits.hpp, lib/fermentation_app/src/run_persistence_contract.hpp, lib/fermentation_app/src/run_persistence_coordinator.hpp, lib/fermentation_app/src/run_persistence_store.hpp, lib/fermentation_app/src/run_progress_weighting.hpp, lib/fermentation_app/src/run_recovery_time.hpp, lib/fermentation_app/src/run_recovery_types.hpp, lib/fermentation_app/src/run_snapshot.hpp, lib/fermentation_app/src/runtime_configuration_snapshot.hpp, lib/fermentation_app/src/sensor_selection.hpp, lib/fermentation_app/src/sensor_selection_types.hpp, lib/fermentation_app/src/standard_program_catalog.hpp, lib/fermentation_app/src/temperature_control_types.hpp
+COMMAND=clang-tidy --quiet --extra-arg-before=--target=x86_64-linux-gnu --extra-arg-before=--gcc-toolchain=/usr -p . include/app_config.hpp lib/device_platform/src/device_platform.cpp lib/device_platform/src/virtual_time_source.cpp lib/fermentation_app/src/fermentation_application.cpp lib/fermentation_app/src/process_state_machine.cpp lib/fermentation_app/src/program_model.cpp lib/fermentation_app/src/run_commands.cpp lib/fermentation_app/src/run_snapshot.cpp lib/fermentation_app/src/standard_program_catalog.cpp src/main.cpp
+
+RAW_CLANG_TIDY_OUTPUT_BEGIN
+[1/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp.
+2275 warnings generated.
+[2/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/device_platform/src/device_platform.cpp.
+2277 warnings generated.
+[3/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/device_platform/src/virtual_time_source.cpp.
+11986 warnings generated.
+[4/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/fermentation_application.cpp.
+83554 warnings generated.
+[5/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/process_state_machine.cpp.
+127028 warnings generated.
+[6/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/program_model.cpp.
+181290 warnings generated.
+[7/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/run_commands.cpp.
+238475 warnings generated.
+[8/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/run_snapshot.cpp.
+295346 warnings generated.
+[9/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/lib/fermentation_app/src/standard_program_catalog.cpp.
+336631 warnings generated.
+[10/10] Processing file /tmp/issue31-plan-revalidation.Ao1NTF/src/main.cpp.
+407751 warnings generated.
+/tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+/tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp:135:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+  135 | #if defined(APP_PROFILE_NATIVE)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_PROFILE_NATIVE
+/tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+/tmp/issue31-plan-revalidation.Ao1NTF/include/app_config.hpp:135:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+  135 | #if defined(APP_PROFILE_NATIVE)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_PROFILE_NATIVE
+lib/device_platform/src/device_platform.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/device_ui_contracts.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/device_ui_session.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/device_ui_theme.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/http_server_lifecycle.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/network_lifecycle.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/network_mode.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/platform_services.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/reset_cause.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/sensor_identity.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/sensor_quality.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/sensor_quality_snapshot.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/state_store.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/state_store_key.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/storage_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/time_source.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/time_zone_resolver.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/device_platform/src/virtual_time_source.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/actuation_interlock.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/actuator_plan_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/application_lifecycle.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/application_run_identity.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/boot_classification.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_bootstrap.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_bootstrap_store.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_documents.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_graph.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_graph_store.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_mutation_coordinator.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_recovery_service.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/configuration_service.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/connectivity_credentials.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/control_context.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/control_context_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/fermentation_application.cpp:387:39: error: unchecked access to optional value [bugprone-unchecked-optional-access,-warnings-as-errors]
+  387 |             makeManualRunPlanRequest(*intent.coolingPlan, *runId);
+      |                                       ^~~~~~~~~~~~~~~~~~
+lib/fermentation_app/src/fermentation_application.cpp:1018:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+ 1018 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_application.cpp:1078:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+ 1078 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_application.cpp:1393:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+ 1393 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_application.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/fermentation_application.hpp:39:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+   39 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_application.hpp:190:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+  190 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_application.hpp:256:2: error: preprocessor condition can be written more concisely using '#ifdef' [readability-use-concise-preprocessor-directives,-warnings-as-errors]
+  256 | #if defined(APP_ISSUE_90_SLICE7_HARNESS)
+      |  ^~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |  ifdef APP_ISSUE_90_SLICE7_HARNESS
+lib/fermentation_app/src/fermentation_ui_commands.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/fermentation_ui_models.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/fermentation_ui_projector.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/network_configuration_service.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/network_setup_routes.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/network_startup_policy.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/presentation_state.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/process_signal_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/process_state_machine.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/process_state_machine.hpp:194:12: error: '/' has higher precedence than '+'; add parentheses to explicitly specify the order of operations [readability-math-missing-parentheses,-warnings-as-errors]
+  194 |     return (now - startedAt) / 1000U + priorSeconds >=
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~
+      |            (                        )
+lib/fermentation_app/src/program_limits.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/program_model.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_checkpoint_schedule.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_command_limits.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_commands.cpp:916:6: error: function 'validStopOption' can be made static or moved into an anonymous namespace to enforce internal linkage [misc-use-internal-linkage,-warnings-as-errors]
+  916 | bool validStopOption(StopOption option) {
+      |      ^
+      | static
+lib/fermentation_app/src/run_commands.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_limits.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_persistence_contract.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_persistence_coordinator.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_persistence_store.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_progress_weighting.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_recovery_time.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_recovery_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/run_snapshot.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/runtime_configuration_snapshot.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/sensor_selection.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/sensor_selection_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/standard_program_catalog.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+lib/fermentation_app/src/temperature_control_types.hpp:1:1: error: avoid 'pragma once' directive; use include guards instead [portability-avoid-pragma-once,-warnings-as-errors]
+    1 | #pragma once
+      | ^
+RAW_CLANG_TIDY_OUTPUT_END

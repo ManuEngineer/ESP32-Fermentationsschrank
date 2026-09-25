@@ -424,7 +424,7 @@ ACTUATOR_RELEASE=NO
 ```
 
 
-## 9. Owner-Scope-Erweiterung: Host-Clang auf Major 21
+## 9. Owner-Scope-Erweiterung: Host-Clang auf Major 21 (revidiert)
 
 Der Owner hat waehrend des finalen Pre-Ready-Laufs ausdruecklich entschieden,
 die veraltete Host-Werkzeuglinie 18 noch in PR #156 zu bereinigen. Diese
@@ -439,15 +439,21 @@ REVISION_BASE_HEAD=8e7ee3facf8eeba16326767d6193fa57cba2acda
 HOST_CLANG_MAJOR=21
 HOST_CLANG_PATCH=NOT_A_PROJECT_CONTRACT
 ESP_CLANG_EXISTING_PIN=21.1.3
+PLAN_REVISION_REASON=CLANG21_POLICY_DRIFT_IN_CHECK_FAMILIES
+BASELINE_EVIDENCE=docs/audits/ISSUE_31_HOST_CLANG21_UNCHANGED_BASELINE_RAW.txt
 ACTUATOR_RELEASE=NO
 PLAN_STATUS=OWNER_APPROVAL_REQUIRED
+IMPLEMENTATION=NOT_STARTED_FOR_REVISED_CONTRACT
 ```
 
 ### 9.1 KISS-Toolchainvertrag
 
 Der Hostvertrag fuer `clang-format` und `clang-tidy` wird gemeinsam von
 Major 18 auf Major 21 angehoben. Der Patchlevel bleibt wie bisher kein
-allgemeiner Hostvertrag.
+allgemeiner Hostvertrag. Der Versionswechsel darf keine neue Coding-Policy
+einfuehren: bestehende fachliche, Correctness-, Safety- und Security-Checks
+bleiben aktiv; neue reine Stil-, Praeprozessor- oder theoretische
+Portabilitaetschecks werden nicht automatisch zum Merge-Gate.
 
 Fuer GitHub-CI wird **keine** dritte LLVM-Quelle eingefuehrt und der Runner
 bleibt auf `ubuntu-24.04`. Das dortige Standardimage liefert fuer diese
@@ -460,6 +466,17 @@ aktuelle ESP-IDF-Umgebung liefert bereits `21.1.3`.
 Es gibt keinen Wechsel auf Ubuntu 26.04, kein `apt.llvm.org`, keinen neuen
 Toolchain-Downloader und keinen zweiten Versions-SSOT.
 
+Die Baseline-Inventur auf `9ff03e2` ergab 75 als Fehler behandelte Diagnostics
+ueber zehn kanonische Dateien. Die beiden neuen reinen Policy-Checks
+`portability-avoid-pragma-once` und
+`readability-use-concise-preprocessor-directives` werden fuer dieses Projekt
+nicht uebernommen: `#pragma once` ist etablierter Projektstil und eine
+Umstellung von mehr als 100 Headern waere Scope-Ausweitung; die
+Praeprozessor-Umschreibungen waeren in diesem PR ebenfalls rein stilistisch.
+Nur diese beiden konkreten Checks duerfen nach Owner-Freigabe gezielt in
+`.clang-tidy` ausgeschlossen werden. Es werden keine ganzen Checkfamilien
+pauschal abgeschaltet.
+
 ### 9.2 Betroffenes Delta
 
 Nach Freigabe werden nur die aktiven Vertragsstellen angepasst:
@@ -470,7 +487,8 @@ Nach Freigabe werden nur die aktiven Vertragsstellen angepasst:
   dessen `bin`-Verzeichnis fuer die Host-Phase voranstellen, danach die
   bestehende ESP-Phase unveraendert mit derselben gepinnten Toolchain fahren;
 - `.clang-format` und `.clang-tidy`: aktive Werkzeugkommentare auf die
-  neue Host-Major-Linie synchronisieren;
+  neue Host-Major-Linie synchronisieren; `.clang-tidy` erhaelt nur die beiden
+  oben genannten, begruendeten Einzel-Ausschluesse;
 - `docs/CI_AND_QUALITY_GATES.md`: aktiven Hostvertrag und CI-Reihenfolge
   synchronisieren.
 
@@ -484,12 +502,21 @@ bestehenden Baum ausgefuehrt.
 
 - Wenn `clang-format` 21 den bestehenden kanonischen Baum ohne neue
   Formatabweichungen akzeptiert, wird **kein** Source-Reformat erzeugt.
-- Wenn `clang-tidy` 21 die bestehende kanonische Dateiliste ohne neue
-  nichttriviale Befunde akzeptiert, bleibt der Produktionscode unveraendert.
-- Falls der Versionswechsel einen breiten Formatdiff, neue nichttriviale
-  Analysebefunde oder weitere Toolchain-/OS-Aenderungen erzwingen wuerde:
-  **STOP**; keine Massennachformatierung und keine opportunistische
-  Codebereinigung in PR #156.
+- Die vollstaendige Baseline-Ausgabe ist unter
+  `docs/audits/ISSUE_31_HOST_CLANG21_UNCHANGED_BASELINE_RAW.txt` erhalten.
+  Neben den beiden nicht uebernommenen Policy-Checks meldet Clang 21 auf dem
+  unveraenderten Bestand `bugprone-unchecked-optional-access`,
+  `readability-math-missing-parentheses` und `misc-use-internal-linkage`.
+  Diese Befunde haben Correctness-/Wartbarkeitswirkung und werden nicht
+  unterdrueckt; die Umsetzung bleibt bis zu ihrer separaten Owner-/Review-
+  Entscheidung gestoppt.
+- Wenn nach der gezielten Policy-Ausnahme keine weiteren solchen Befunde
+  verbleiben, bleibt der Produktionscode unveraendert.
+- Der Formatdiff beschraenkt sich auf zwei kommentierte Byte-Array-Bloecke in
+  `test/test_storage_wireformat/test_storage_wireformat.cpp` und darf nach
+  Freigabe mechanisch formatiert werden. Ein breiter Diff oder weitere
+  Toolchain-/OS-Aenderungen bleibt ein **STOP**; keine Massennachformatierung
+  und keine opportunistische Codebereinigung in PR #156.
 
 ### 9.4 Verifikation und Pre-Ready-Wirkung
 
@@ -498,8 +525,10 @@ Mindestens nachzuweisen:
 ```text
 HOST_CLANG_FORMAT_MAJOR=21
 HOST_CLANG_TIDY_MAJOR=21
-HOST_FORMAT_FULL_TREE=PASS
-HOST_CLANG_TIDY_CANONICAL_LIST=PASS
+HOST_FORMAT_FULL_TREE=NOT_RUN_AFTER_REVISED_POLICY
+HOST_CLANG_TIDY_CANONICAL_LIST=BLOCKED_BASELINE_CORRECTNESS_DIAGNOSTICS
+HOST_CLANG21_BASELINE_DIAGNOSTIC_COUNT=75
+HOST_CLANG21_POLICY_EXCLUSIONS=2_EXPLICIT_CHECKS_ONLY
 PRE_READY_HOST=PASS
 PRE_READY_ESP=PASS
 GITHUB_CI_HOST_TOOL_SOURCE=PINNED_ESP_CLANG_21_1_3
@@ -509,4 +538,7 @@ ACTUATOR_RELEASE=NO
 Der bereits auf `8e7ee3f...` gestartete Pre-Ready-Lauf kann nach einem
 Toolchain-Commit nicht als finaler Nachweis gelten, weil das verbindliche
 Pre-Ready-Gate auf dem exakten finalen `HEAD` laufen muss. Hardware wird
-dafuer nicht erneut geflasht oder wiederholt getestet.
+dafuer nicht erneut geflasht oder wiederholt getestet. Nach Freigabe dieser
+revidierten Plan-SHA muessen zuerst die zwei expliziten Policy-Ausschluesse
+implementiert, die drei Correctness-/Wartbarkeitsbefunde separat geklaert und
+danach die vollstaendige Verifikation auf dem finalen HEAD ausgefuehrt werden.
