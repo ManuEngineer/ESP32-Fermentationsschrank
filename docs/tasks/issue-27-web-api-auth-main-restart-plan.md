@@ -25,7 +25,8 @@ PR169=MERGED_AT_b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9
 ESP_IDF=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643
 HOST_CLANG_MAJOR=21
 PYYAML_CI_PIN=6.0.3
-PLAN_STATUS=OWNER_PLAN_REVIEW_REQUIRED
+PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_PENDING
+OWNER_PLAN_APPROVAL=REQUIRED_AFTER_FIX_VERIFICATION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_IMPLEMENTATION_THIS_ROUND=NO
 ACTUATOR_RELEASE=NO
@@ -33,7 +34,7 @@ CONTEXT_BASELINE_BRANCH=main
 CONTEXT_BASELINE_SHA=b871375f494701bed1834013cfeb789856983e3a
 CONTEXT_REFRESH_MODE=FULL
 CONTEXT_DELTA=PR156_PRODUCT_TOUCH_CLANG21_AND_CI_ON_TOP_OF_PR169
-SOURCE_OF_TRUTH_CONFLICT=OLD_PR167_AUTH_RECORD_TYPE_10_COLLIDES_WITH_MAIN_TOUCH_CALIBRATION
+SOURCE_OF_TRUTH_CONFLICT=OLD_PR167_AUTH_RECORD_ID_10_OBSOLETE_NUMERIC_NAMESPACE_CONFLICT
 ```
 
 Quellen in Prioritaetsreihenfolge: `docs/SPECIFICATION_REVIEW.md`, akzeptierte
@@ -176,21 +177,38 @@ mit Work-Factor 10000 darf die alte reale KDF-Primitive-Messung erben.
 Neue Auth-Daten verwenden denselben `IStateStore`/Envelope-Backend und die
 aktuelle `StorageEpoch`; weder LittleFS noch Konfigurationsdokumente werden
 zweite Auth-Stores. Vorgeschlagene **neue** Recordzuordnung auf dieser
-Baseline (mit Ownerfreigabe dieses Plans verbindlich):
+Baseline (mit Ownerfreigabe dieses Plans verbindlich, sofern die
+repositoryweite Freiheitspruefung auf dem Implementierungs-Baseline-HEAD
+PASS ist):
 
 | Key | RecordTypeId | Schema | Inhalt |
 |---|---:|---:|---|
 | `auth0` | 11 | 1 | gemeinsamer Credential-Record: Passwort/PIN-Algorithmus, Parameter, getrennte Salts/Verifier/Epochen, Lockout, monotone Recordsequenz |
 | `authroot0` | 12 | 1 | Provisionierungszustand, Domain-Generation, Epoch, Sequenz; keine Credentials |
 
-`RecordTypeId=10` gehoert auf `main` der Touchkalibrierung; PR #167 hatte ihn
-historisch fuer `auth0` vorgesehen. Die aktuelle Code-/Key-Inventur zeigt
-keine Nutzung von `auth0`/`authroot0` oder Recordtyp 11/12 auf der Baseline.
-Vor dem ersten Implementierungscommit wird diese Kollisionsfreiheit erneut
-gegen den dann aktuellen `main` verifiziert. Es gibt keine automatische
-Migration alter PR-167-Prototyp-Records. Ein unerwarteter alter Record auf
-einem Testgeraet ist kein positiver Auth-Bootstrapnachweis und fuehrt bis zu
-einem explizit autorisierten Recoveryweg fail-closed.
+```text
+TOUCH_CALIBRATION_RECORD_TYPE=10
+TOUCH_CALIBRATION_KEYS=tc0,tc1
+TOUCH_CALIBRATION_SCHEMA=1
+TOUCH_CALIBRATION_CHANGE=NO
+TOUCH_RECALIBRATION=NO
+OLD_PR167_AUTH_RECORD_ID_10=OBSOLETE_CONFLICT_WITH_CANONICAL_RECORD_TYPE_NAMESPACE
+AUTH_RECORD_TYPES=11,12
+TOUCH_CALIBRATION_RECORD_TYPE_10=UNCHANGED
+```
+
+Der Konflikt betrifft ausschliesslich die historische numerische
+RecordTypeId-Zuordnung im nicht gemergten PR #167: Dort war Typ 10 fuer Auth
+vorgesehen; Typ 10 gehoert kanonisch und unveraendert der Touchkalibrierung.
+Es gibt weder einen funktionalen Konflikt noch Touch-Aenderungs- oder
+Rekalibrierungsbedarf. Die aktuelle Code-/Key-Inventur zeigt keine Nutzung
+von `auth0`/`authroot0` oder Recordtyp 11/12 auf der Baseline.
+`AUTH_RECORD_TYPES=11,12` bleibt nur verbindlich, wenn die repositoryweite
+Freiheitspruefung auf dem Implementierungs-Baseline-HEAD erneut PASS ist.
+Es gibt keine automatische Migration alter PR-167-Prototyp-Records. Ein
+unerwarteter alter Record auf einem Testgeraet ist kein positiver
+Auth-Bootstrapnachweis und fuehrt bis zu einem explizit autorisierten
+Recoveryweg fail-closed.
 
 Provisionierung beginnt nur mit positiv readback-validiertem
 `UNPROVISIONED`-Root in der aktuellen Epoch. Ein fehlender, korrupter,
@@ -265,14 +283,23 @@ Fallback. Bounded Polling zeigt Offline/Stale und laedt nach Reconnect den
 vollstaendigen aktuellen Snapshot. Es entsteht keine neue Zeitreihe, kein
 Chart, keine History und kein Diagnose-/Exportpfad aus Issue #28.
 
-Falls service_web als eigene persistente Provenienz erforderlich ist, ist
-dieser Plan die vorgeschlagene explizite Wire-Erweiterung:
-`UiSurface::WebService=2`, `CommandSource::ServiceWeb=2`,
-`RunChangeSource::ServiceWeb=3`, `ChangeOriginKind::ServiceWeb=4`.
-Die bisher belegten Werte und Unknown-Sentinel bleiben unveraendert;
-betroffene Codecs, Validierung und Konsumententests muessen gemeinsam
-aktualisiert werden. Bis zur freigegebenen und getesteten Umsetzung wird
-keine neue Service-Web-Quelle behauptet oder protokolliert.
+```text
+WEB_COMMAND_SOURCE=WebInterface
+WEB_SERVICE_LEASE_IS_AUTHORIZATION_ONLY=YES
+SERVICE_WEB_WIRE_EXTENSION=NO
+COMMAND_SOURCE_SCHEMA_CHANGE=NO
+RUN_CHANGE_SOURCE_SCHEMA_CHANGE=NO
+CHANGE_ORIGIN_SCHEMA_CHANGE=NO
+```
+
+Die sitzungsgebundene Web-Servicefreigabe ist ausschliesslich eine
+Autorisierungs-/Lease-Grenze und kein eigener persistenter
+Command-Provenienzkanal. R1 verwendet die kanonische Quelle
+`WebInterface`; diese Planrevision autorisiert keine Enum-, Codec- oder
+Wire-Aenderung. Sollte eine spaetere konkrete Anforderung eine getrennte
+persistent gespeicherte Service-Web-Provenienz verlangen, ist das eine neue
+materielle Wire-/Persistenzentscheidung mit eigener Planrevision und
+Ownerfreigabe.
 
 ## 6. Evidence und spaetere Verifikation
 
