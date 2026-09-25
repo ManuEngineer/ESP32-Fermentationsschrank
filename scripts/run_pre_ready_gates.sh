@@ -117,7 +117,10 @@ verify_expected_esp_environment() {
 }
 
 run_clang_tidy() {
-    clang-tidy -p . "$@"
+    clang-tidy \
+        --extra-arg-before=--target=x86_64-linux-gnu \
+        --extra-arg-before=--gcc-toolchain=/usr \
+        -p . "$@"
 }
 
 verify_self_check_base() {
