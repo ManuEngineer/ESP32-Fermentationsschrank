@@ -42,6 +42,7 @@
 #endif
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_mac.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -201,12 +202,57 @@ void logHeartbeat(uint64_t uptimeMs) {
     ESP_LOGI(kTag, "heartbeat: safe test mode, uptime_ms=%" PRIu64, uptimeMs);
 }
 
-void logResources() {
+[[nodiscard]] const char* networkModeName(
+    device_platform::NetworkMode mode) noexcept {
+    switch (mode) {
+        case device_platform::NetworkMode::UNSELECTED:
+            return "UNSELECTED";
+        case device_platform::NetworkMode::AP_ONLY:
+            return "AP_ONLY";
+        case device_platform::NetworkMode::HOME_WIFI:
+            return "HOME_WIFI";
+    }
+    return "UNKNOWN";
+}
+
+[[nodiscard]] const char* networkLifecycleStateName(
+    device_platform::NetworkLifecycleState state) noexcept {
+    switch (state) {
+        case device_platform::NetworkLifecycleState::Stopped:
+            return "Stopped";
+        case device_platform::NetworkLifecycleState::SetupAccessPoint:
+            return "SetupAccessPoint";
+        case device_platform::NetworkLifecycleState::AccessPointOnly:
+            return "AccessPointOnly";
+        case device_platform::NetworkLifecycleState::ConnectingHome:
+            return "ConnectingHome";
+        case device_platform::NetworkLifecycleState::HomeConnected:
+            return "HomeConnected";
+        case device_platform::NetworkLifecycleState::CandidateTesting:
+            return "CandidateTesting";
+        case device_platform::NetworkLifecycleState::Failed:
+            return "Failed";
+    }
+    return "Unknown";
+}
+
+void logResources(const char* samplePoint,
+                  device_platform::NetworkMode selectedMode,
+                  device_platform::NetworkLifecycleState lifecycleState) {
     const uint32_t freeHeapBytes = esp_get_free_heap_size();
+    const uint32_t minimumFreeHeapBytes = esp_get_minimum_free_heap_size();
+    const size_t largestFreeBlockBytes =
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     const UBaseType_t stackHighWaterMarkBytes =
         uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGI(kTag, "resources: free_heap_bytes=%" PRIu32 " stack_hwm_bytes=%u",
-             freeHeapBytes, static_cast<unsigned>(stackHighWaterMarkBytes));
+    ESP_LOGI(kTag,
+             "resources: point=%s network_mode=%s network_state=%s "
+             "free_heap_bytes=%" PRIu32 " minimum_free_heap_bytes=%" PRIu32
+             " largest_free_block_8bit_bytes=%zu stack_hwm_bytes=%u",
+             samplePoint, networkModeName(selectedMode),
+             networkLifecycleStateName(lifecycleState), freeHeapBytes,
+             minimumFreeHeapBytes, largestFreeBlockBytes,
+             static_cast<unsigned>(stackHighWaterMarkBytes));
 }
 
 device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
@@ -347,6 +393,13 @@ void updateProductUi(
     // never builds a RepresentativeScreen or calls targetAt()/routePress()
     // itself. No second event/command state machine is introduced.
     const auto touchPoll = displayRenderer->pollTouch();
+    const bool sampleNetworkPagePress =
+        touchPoll.freshPressEdge &&
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    if (sampleNetworkPagePress) {
+        logResources("network_page_press_before", application.networkMode(),
+                     networkLifecycle.status().state);
+    }
     const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
         application, uiWorkspace, loopSnapshot, uiTextPacks,
         loopPresentation.displayLocale, &loopPresentation.programCatalog,
@@ -354,6 +407,10 @@ void updateProductUi(
         touchPoll.point.has_value() ? touchPoll.point->x : 0U,
         touchPoll.point.has_value() ? touchPoll.point->y : 0U,
         touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    if (sampleNetworkPagePress) {
+        logResources("network_page_press_after", application.networkMode(),
+                     networkLifecycle.status().state);
+    }
     if (touchTick.dispatch.outcome !=
         fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
         ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
@@ -378,6 +435,16 @@ extern "C" void app_main(void) {
     fermentation::issue_31_touch_calibration::run();
     return;
 #endif
+
+    const esp_err_t defaultNvsStatus = nvs_flash_init();
+    if (defaultNvsStatus != ESP_OK) {
+        ESP_LOGE(kTag,
+                 "default NVS initialization for ESP-IDF PHY data failed: "
+                 "err=0x%x; Wi-Fi startup is stopped",
+                 static_cast<unsigned>(defaultNvsStatus));
+        return;
+    }
+    ESP_LOGI(kTag, "default NVS initialized for ESP-IDF PHY system data");
 
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
@@ -494,7 +561,8 @@ extern "C" void app_main(void) {
     issue90Harness.start();
 #endif
 
-    logResources();
+    logResources("startup", application.networkMode(),
+                 networkLifecycle.status().state);
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -502,6 +570,9 @@ extern "C" void app_main(void) {
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;
+    auto lastObservedNetworkMode = application.networkMode();
+    auto lastObservedNetworkState = networkLifecycle.status().state;
+    bool hasObservedNetworkState = false;
 
     for (;;) {
         platform.update();
@@ -509,6 +580,34 @@ extern "C" void app_main(void) {
         application.update();
         updateProductUi(application, displayRenderer.get(), uiWorkspace,
                         uiTextPacks, networkLifecycle, timeSource);
+
+        const auto networkStatus = networkLifecycle.status();
+        const auto selectedNetworkMode = application.networkMode();
+        const bool stableApOnly =
+            networkStatus.state ==
+            device_platform::NetworkLifecycleState::AccessPointOnly;
+        const bool stableHomeWifi =
+            selectedNetworkMode == device_platform::NetworkMode::HOME_WIFI &&
+            (networkStatus.state ==
+                 device_platform::NetworkLifecycleState::HomeConnected ||
+             networkStatus.state ==
+                 device_platform::NetworkLifecycleState::SetupAccessPoint);
+        const bool networkStatusChanged =
+            !hasObservedNetworkState ||
+            selectedNetworkMode != lastObservedNetworkMode ||
+            networkStatus.state != lastObservedNetworkState;
+        if (networkStatusChanged && (stableApOnly || stableHomeWifi)) {
+            const char* samplePoint =
+                stableApOnly ? "stable_ap_only"
+                : networkStatus.state ==
+                        device_platform::NetworkLifecycleState::HomeConnected
+                    ? "stable_home_wifi"
+                    : "stable_home_wifi_setup_access_point";
+            logResources(samplePoint, selectedNetworkMode, networkStatus.state);
+        }
+        lastObservedNetworkMode = selectedNetworkMode;
+        lastObservedNetworkState = networkStatus.state;
+        hasObservedNetworkState = true;
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
@@ -522,7 +621,9 @@ extern "C" void app_main(void) {
         if (!secondResourceLogDone &&
             nowMs - startMs >= kSecondResourceLogAfterMs) {
             secondResourceLogDone = true;
-            logResources();
+            const auto currentNetworkStatus = networkLifecycle.status();
+            logResources("periodic_30s", application.networkMode(),
+                         currentNetworkStatus.state);
         }
 
         vTaskDelay(kCooperativeYieldTicks);
