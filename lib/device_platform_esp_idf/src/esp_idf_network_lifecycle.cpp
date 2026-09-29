@@ -132,6 +132,7 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
         return false;
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+    init.nvs_enable = 0;
     if (esp_wifi_init(&init) != ESP_OK) {
         cleanupInitialization();
         return false;
