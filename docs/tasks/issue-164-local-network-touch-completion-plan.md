@@ -387,8 +387,18 @@ pio test -e native -f test_renderer_boundary
   `state_store`-Partitionsinitialisierung bleibt bestehen. Kein NVS-Erase,
   keine NVS-Reparatur und kein zweiter Speicherpfad.
 - Gezielte Hostregressionen decken Modus-/Credential-Commit und den
-  produktiven Dispatcherpfad ab. Danach beide ESP-IDF-Profile bauen und
-  validieren; kein Profilbuild gilt als Hardwareevidence.
+  produktiven Dispatcherpfad ab: `test_network_configuration`,
+  `test_press_dispatcher`, `test_local_touch_ui` und
+  `test_renderer_boundary`; `test_fermentation_ui_commands` nur falls der
+  Korrekturdiff dessen Ownervertrag berührt. Danach beide ESP-IDF-Profile
+  bauen und validieren; kein Profilbuild gilt als Hardwareevidence.
+
+```bash
+pio test -e native -f test_network_configuration
+pio test -e native -f test_press_dispatcher
+pio test -e native -f test_local_touch_ui
+pio test -e native -f test_renderer_boundary
+```
 
 ### Slice 6 – Konvergenz, Builds und Status
 
