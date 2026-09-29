@@ -8,9 +8,11 @@ BASE_BRANCH=main
 BASE_SHA=b871375f494701bed1834013cfeb789856983e3a
 PR165=MERGED
 PR165_MERGE_COMMIT=1f1755e5e706fb668472920545b5302fcef1df16
-PREVIOUS_APPROVED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e
-OWNER_APPROVED_PLAN_SHA=931db488125a6e7eca76b1e8bb88ffc98b97a073
-CURRENT_COMPLETION_SCOPE=LOCAL_NETWORK_TOUCH_PAGE_SOFTAP_ACCESS_INFO_AND_QR
+PREVIOUS_COMPLETION_PLAN_SHA=a514544321807ad47abce5de27a68595085079d3
+PREVIOUS_OWNER_APPROVED_PLAN_SHA=931db488125a6e7eca76b1e8bb88ffc98b97a073
+PLAN_REVISION_BASE_HEAD=e84555baea8ccbf99aacf2898ff3333cd33464ec
+PLAN_REVISION_REASON=HARDWARE_TOUCH_FAILURE_MAIN_STACK_AND_WIFI_NVS
+CURRENT_COMPLETION_SCOPE=LOCAL_NETWORK_TOUCH_PAGE_SOFTAP_QR_AND_HARDWARE_CORRECTION_EVIDENCE
 OWNER_DECISION=VARIANT_B_QR_RETAINED
 R1_LOCAL_NETWORK_MODE_SELECTION=YES
 R1_LOCAL_SOFTAP_SSID_DISPLAY=YES
@@ -23,28 +25,37 @@ R1_WLAN_QR_TO_JOIN_SOFTAP=REQUIRED
 R1_WEBSITE_QR=DEFERRED
 PRIMARY_R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
 ISSUE164_STATUS=OPEN
-HARDWARE_CLIENT_EVIDENCE=NOT_RUN_PENDING_HARDWARE
-PLAN_STATUS=IMPLEMENTATION_COMPLETE_PENDING_INDEPENDENT_REVIEW
-PLAN_FIX_VERIFICATION=PASS
-IMPLEMENTATION_AUTHORIZATION=YES
-IMPLEMENTATION_HEAD=2e31e1ca00df13180e3722237107fd4ed227f351
-NATIVE_TESTS_HEAD=bdd1a12e3616b0f600413e856ade06edaa3e2922
-SELF_CHECK_HEAD=bdd1a12e3616b0f600413e856ade06edaa3e2922
-PRODUCT_IMPLEMENTATION=COMPLETE_DIGITAL
-PRODUCT_TESTS=PASS_TARGETED_NATIVE
-BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
-ESP32_BRINGUP_BUILD=PASS
-ESP32_RELEASE_BUILD=PASS
-HARDWARE_TESTS=NOT_RUN
+PR171_STATUS=OPEN_DRAFT
+PLAN_STATUS=REVISION_REQUIRES_INDEPENDENT_PLAN_FIX_VERIFICATION
+OWNER_APPROVAL_FOR_THIS_PLAN_REVISION=REQUIRED
+IMPLEMENTATION_AUTHORIZATION_FOR_FOLLOWUP=NO_PENDING_PLAN_APPROVAL
+LAST_PRODUCT_IMPLEMENTATION_HEAD=e84555baea8ccbf99aacf2898ff3333cd33464ec
+STACK_CORRECTION=24576_BYTES_BOTH_ESP32_PROFILES
+WIFI_NVS_POLICY=DISABLED_VIA_WIFI_INIT_CONFIG_NVS_ENABLE_ZERO
+DEFAULT_NVS_INIT_FOR_WIFI=NOT_REQUIRED
+STATE_STORE=SOLE_CREDENTIAL_PERSISTENCE
+WIFI_STORAGE=WIFI_STORAGE_RAM
+PRIOR_TARGETED_NATIVE_TESTS=PASS_ON_PREVIOUS_HEADS
+PRIOR_BUILDER_SELF_CHECK=PASS_ON_PREVIOUS_HEADS
+PRIOR_ESP32_PROFILE_BUILDS=PASS_ON_PREVIOUS_HEADS
+CURRENT_REVISION_TESTS=NOT_RUN_PLAN_ONLY
+CURRENT_REVISION_BUILDS=NOT_RUN_PLAN_ONLY
+HARDWARE_TESTS=PARTIAL_BRINGUP_BOOT_ONLY_PRODUCT_TOUCH_NOT_VERIFIED
+HARDWARE_CLIENT_EVIDENCE=NOT_RUN_PENDING_APPROVED_RELEASE_RUN
+HARDWARE_REVIEW=CHANGES_REQUIRED
+OPEN_HARDWARE_BLOCKERS=2
+HARDWARE_PROFILE=esp32_release
 ACTUATOR_RELEASE=NO
 ```
 
-Dieser Folgeplan gilt nur für den nach PR #165 noch offenen Softwareabschluss
-der lokalen Netzwerkseite. Er ist eine vollständige, eigenständige Grundlage
-für diesen engeren Abschluss-Scope und ersetzt nicht rückwirkend den
-gemergten Implementierungsplan oder dessen historische Evidence. Vor einer
-Freigabe dieses exakten Plan-Commits werden weder Produktcode noch Tests,
-ESP-IDF-Builds oder Hardwareläufe geändert beziehungsweise ausgeführt.
+Diese vollständige Revision ersetzt die bisherige Completion-Plan-Fassung
+für PR #171 und Issue #164. Sie übernimmt deren bestätigte R1-Abgrenzung und
+QR-Vertrag und ergänzt die seitdem erforderlichen Touch-/Layout-, Main-Task-
+Stack- und Wi-Fi-Initialisierungskorrekturen samt Hardware-Evidence. Sie
+ändert nicht rückwirkend den gemergten Implementierungsplan oder historische
+Evidence. Vor Ownerfreigabe dieser exakten Planrevision erfolgen keine weitere
+Produktcodeänderung und kein Flash. Diese Planrevision selbst führt keine
+Tests oder Builds aus.
 
 Die Ownerentscheidung präzisiert `VARIANT_B`: Die lokale Eingabe von
 HOME_WIFI-SSID und -Passwort am Touchdisplay sowie die dafür erforderliche
@@ -73,6 +84,42 @@ zweite Credential-, UI- oder Persistenzwahrheit.
   #164-Netzwerkbedienung jetzt ausdrücklich Issue #164 zu. Das ist eine
   Scope-Klarstellung gegenüber der bisherigen #164-Plan-/Issue-Formulierung,
   nach der physische Touchinteraktion vollständig Issue #31 zugeordnet war.
+- Der aktuelle PR-Branch steht auf
+  `e84555baea8ccbf99aacf2898ff3333cd33464ec`. Die jüngsten Korrektur-Commits
+  erweitern den 320x240-WLAN-Header-Hit-Test, setzen den gemeinsamen
+  ESP-Main-Task-Stack auf 24 KiB und initialisieren aktuell Default-NVS vor
+  `esp_wifi_init()`. Gezielte native Tests, Builder-Self-Check und beide
+  ESP-IDF-Profilbuilds sind auf diesem HEAD laut Live-PR PASS; diese digitale
+  Evidence ersetzt nicht die jetzt geforderte reale Touch-/Mode-Evidence.
+- Die Hardwarebeobachtung war ein kurz weißer und danach wieder auf Home
+  stehender Bildschirm bei `AP_ONLY`/`HOME_WIFI`; der Owner berichtete
+  zusätzlich einen schwarzen Bildschirm nach `AP_ONLY`. Die Diagnose ordnet
+  die synchrone Netzwerkmodus-/NVS-Arbeit dem Main-Task zu: dessen bisherige
+  16 KiB reichen dafür nicht aus. Der Stack wurde auf 24 KiB für beide
+  ESP32-Profile erhöht. Diese Korrektur ist digital gebaut, aber auf dem
+  Produkt-Touchpfad noch nicht real bestätigt.
+- Der letzte `esp32_bringup`-Boot auf dem aktuellen HEAD initialisierte die
+  Default-NVS und startete den SoftAP, bevor der separate Issue-29-Probe seine
+  98.304-Byte-Task nicht erzeugen konnte und vor Displayinitialisierung
+  endete. Issue #29 ist für diese #164-Evidence ausdrücklich out of scope;
+  die Ownerentscheidung bestimmt `esp32_release` als Hardwareprofil. Es gab
+  nach dieser Entscheidung keinen weiteren Flash.
+- Auf dem aktuellen HEAD initialisiert `app_main` die ESP-IDF-Default-NVS
+  vor `esp_wifi_init()`. Das ist keine Credential-Persistenz: Credentials
+  bleiben Eigentum des vorhandenen `state_store`, und der Wi-Fi-Adapter setzt
+  bereits `WIFI_STORAGE_RAM`. Die Prüfung des einfacheren offiziellen
+  `wifi_init_config_t.nvs_enable = 0`-Pfads ergibt, dass er den R1-Vertrag
+  erfüllt: Die v6.1-API beschreibt `nvs_enable` als Wi-Fi-NVS-Flash-Schalter,
+  Espressifs v6.1-Testcode initialisiert Wi-Fi mit `nvs_enable=false`, und
+  `WIFI_STORAGE_RAM` hält Wi-Fi-Konfiguration ausschließlich im RAM. R1
+  braucht keine zweite Wi-Fi-Flash-Konfiguration, weil der bestehende
+  `state_store` Credentials lädt/speichert und der Lifecycle sie zur Laufzeit
+  an den RAM-Adapter übergibt. Daher bevorzugt dieser Plan `nvs_enable=0` und
+  entfernt die dafür allein eingeführte Default-NVS-Initialisierung. Das ist
+  eine aus den offiziellen API-/Testverträgen und dem vorhandenen Ownerpfad
+  abgeleitete Entscheidung; sie wird nach Planfreigabe durch gezielte Tests
+  und `esp32_release`-Hardware-Evidence verifiziert. Es gibt kein NVS-Erase,
+  keine NVS-Reparatur und keinen neuen Persistenzpfad.
 - Die Ownerentscheidung `VARIANT_B_QR_RETAINED` nimmt nur die lokale
   Credentialeingabe samt Bildschirmtastatur aus diesem Completion-Scope und
   aus R1 heraus. Der WLAN-QR zum SoftAP-Beitritt bleibt R1-Pflicht und wird in
@@ -99,6 +146,10 @@ Relevante aktuelle Bausteine auf der Baseline:
 - `networkAccessPointInfo()` ist ein eigener Application-Accessor und
   absichtlich kein Teil der gemeinsamen, geheimnisfreien
   `FermentationNetworkModeView`.
+- `sdkconfig.defaults` wird von beiden kanonischen ESP-IDF-Profilen verwendet;
+  `sdkconfig.defaults.bringup` und `sdkconfig.defaults.release` überschreiben
+  die Stackgröße nicht. `CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576` gilt damit
+  gemeinsam für `esp32_bringup` und `esp32_release`.
 
 ## 2. Ziel und Abnahmekriterien
 
@@ -125,6 +176,10 @@ R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
 R1_TOUCH_WIFI_KEYBOARD=DEFERRED
 R1_WLAN_QR_TO_JOIN_SOFTAP=REQUIRED
 R1_WEBSITE_QR=DEFERRED
+NETWORK_MODE_SELECTION_MUST_KEEP_PAGE_RENDERED=YES
+WHITE_OR_BLACK_SCREEN_AFTER_MODE_SELECTION=FAIL
+MCU_RESET_PANIC_WATCHDOG_BROWNOUT=NO
+NETWORK_LABELS_FULLY_VISIBLE_AT_320X240=YES
 ```
 
 Wenn `networkAccessPointInfo()` aktuelle Informationen des aktiven SoftAP
@@ -148,6 +203,16 @@ SECOND_CREDENTIAL_SOURCE=NO
 SECRET_LOGGING=NO
 SECOND_CREDENTIAL_STORE=NO
 SECOND_HTTP_SERVER=NO
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
+STACK_SIZE_APPLIES_TO=ESP32_BRINGUP_AND_ESP32_RELEASE
+NETWORK_MODE_PATH_REMAINS_SYNCHRONOUS=YES
+NEW_NETWORK_WORKER_TASK=NO
+WIFI_INIT_CONFIG_NVS_ENABLE=0
+DEFAULT_NVS_INIT_FOR_WIFI=NO
+WIFI_CONFIGURATION_STORAGE=WIFI_STORAGE_RAM
+CREDENTIAL_PERSISTENCE=EXISTING_STATE_STORE_ONLY
+NVS_ERASE_OR_REPAIR=NO
+HARDWARE_STACK_HWM_HEAP_EVIDENCE=REQUIRED_AP_ONLY_AND_HOME_WIFI
 ```
 
 Die Anzeige bleibt eine kurzlebige lokale Projektion. Geheimnisse werden
@@ -170,9 +235,17 @@ betroffen sind:
 
 - `lib/fermentation_app/src/fermentation_touch_workspace.*`
 - `main/fermentation_ui_renderer.*`
+- `main/fermentation_ui_text.*`
 - `main/fermentation_ui_press_dispatcher.*`
-- `main/app_main.cpp`, nur falls zur kurzlebigen lokalen Übergabe der bereits
-  vorhandenen AP-Information zwingend erforderlich
+- `main/app_main.cpp`, um die nicht benötigte Default-NVS-Initialisierung
+  nach Umstellung des Wi-Fi-Init-Vertrags zu entfernen
+- `lib/device_platform_esp_idf/src/esp_idf_network_lifecycle.*`, nur um den
+  bestehenden `WIFI_INIT_CONFIG_DEFAULT()`-Wert gezielt mit
+  `nvs_enable=0` zu initialisieren; `WIFI_STORAGE_RAM` bleibt bestehen
+- `sdkconfig.defaults`, nur mit dem gemeinsamen Main-Task-Stack von 24 KiB
+- `test/test_press_dispatcher`, `test/test_local_touch_ui`,
+  `test/test_renderer_boundary` und – falls der Ownerpfad durch den
+  Korrekturdiff betroffen ist – `test/test_fermentation_ui_commands`
 - `docs/NETWORK.md`, nur für die nötige Klarstellung zwischen abgeschlossenem
   physischem Touch-/Kalibrierungsnachweis aus #31 und der jetzt #164
   zugeordneten Netzwerkseitenbedienung
@@ -182,9 +255,13 @@ betroffen sind:
 - vorhandene passende Text-/UI-Contracts und Tests unter `test/`
 
 `FermentationApplication`, `NetworkConfigurationService`,
-`EspIdfNetworkLifecycle`, Persistenz und Credential-Code werden nicht geändert.
-Falls die Implementierung einen bislang fehlenden fachlichen Ownervertrag
-offenlegt, stoppt der Builder vor dieser Änderung und meldet den Befund.
+Credential-Schema und `state_store`-Ownervertrag werden nicht geändert.
+`EspIdfNetworkLifecycle` erhält ausschließlich die beschriebene
+`nvs_enable=0`-Konfiguration; die existierende `WIFI_STORAGE_RAM`-Auswahl und
+der bestehende NetworkConfigurationService-/Application-Pfad bleiben
+unverändert. Falls die Implementierung einen bislang fehlenden fachlichen
+Ownervertrag offenlegt, stoppt der Builder vor dieser Änderung und meldet den
+Befund.
 
 Nicht-Ziele:
 
@@ -196,7 +273,11 @@ Nicht-Ziele:
 - lokale HOME_WIFI-SSID-/Passworteingabe und Bildschirmtastatur (`DEFERRED`),
   ein separater Webseiten-QR sowie #27
   Auth/Session/CSRF/Weboberfläche und #28-Diagnostik;
-- Hardwaretests, Flash oder Aktorfreigabe.
+- Issue-29-Probe-/Bring-up-Diagnostik; der reale #164-Hardwarelauf nutzt nach
+  Ownerentscheidung `esp32_release`;
+- neue Tasks, asynchrone Netzwerk-/NVS-Pipelines, Navigation oder allgemeine
+  Layout-/QR-Abstraktionen;
+- Aktorfreigabe unter allen Umständen (`ACTUATOR_RELEASE=NO`).
 
 ## 4. Umsetzungs- und Commit-Slices
 
@@ -266,14 +347,61 @@ pio test -e native -f test_renderer_boundary
   `test_renderer_boundary` um den bestehenden beziehungsweise neu anzulegenden
   QR-Payload-/Renderer-Test in der vorhandenen Testumgebung.
 
-### Slice 4 – Konvergenz, Builds und Status
+### Slice 4 – produktiver Touch-Hit-Test und 320x240-Lesbarkeit
+
+- Der bestehende gerenderte WLAN-Headerbereich ist über den produktiven
+  `pollTouch()` → `processWorkspaceTouch()` → `targetAt()` → `routePress()` →
+  `FermentationTouchWorkspace::press()`-Pfad erreichbar. Der Hit-Test bleibt
+  deckungsgleich mit dem gerenderten WLAN-Symbol; Bottom-Slots,
+  Touchkalibrierung und Paneltransformation bleiben unverändert.
+- Regression vom normalen Home-/Standby-Zustand: frischer Header-Touch setzt
+  `pressedTarget=HeaderNetwork` und wechselt zur `HeaderNetwork`-Seite; danach
+  löst derselbe produktive Pfad `AP_ONLY` aus und erreicht den bestehenden
+  Bridge-/Application-Ownerpfad.
+- Die bereits vorhandenen Moduslabels werden auf 320x240 vollständig lesbar
+  dargestellt. Es entsteht keine neue Layoutabstraktion.
+- Gezielte Regressionen: `test_press_dispatcher`, `test_local_touch_ui` und
+  `test_renderer_boundary`; `test_fermentation_ui_commands` nur, falls der
+  Korrekturdiff diesen Ownervertrag tatsächlich berührt.
+
+### Slice 5 – Main-Task-Stack und Wi-Fi-NVS-Lifecycle
+
+- Reale Diagnose: der bisherige 16-KiB-Main-Task-Stack reicht für den
+  synchronen Touch → Netzwerkmodus → `NetworkConfigurationService` → NVS-
+  Credentialpfad nicht aus. Die Korrektur bleibt synchron im bestehenden
+  Ownerpfad und setzt `CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576` in den
+  gemeinsamen `sdkconfig.defaults`; damit gilt derselbe Wert für beide
+  ESP32-Profile.
+- 24 KiB ist die kleinste robuste Korrektur im vorhandenen Design: 16 KiB sind
+  durch die reale Stackerschöpfung als unzureichend belegt; der gemeinsame
+  24-KiB-Wert ist die bereits gewählte und profilübergreifend gebaute
+  Konfiguration. Ein kleinerer Zwischenwert wäre ohne einen Messnachweis
+  willkürlich. Ein zusätzlicher Worker, asynchrone Übergabe oder geänderte
+  Command-/NVS-Ownership würde deutlich mehr Zustands- und Testoberfläche
+  schaffen, ohne für diesen synchronen Pfad erforderlich zu sein.
+- ESP-IDF v6.1 bietet `wifi_init_config_t.nvs_enable`; der offizielle
+  `nvs_enable=false`-Initpfad wird verwendet. `WIFI_STORAGE_RAM` bleibt
+  bestehen, `state_store` bleibt einziger Credential-Persistenzowner. Die
+  mit der aktuellen Korrektur eingeführte separate `nvs_flash_init()`-
+  Initialisierung der Defaultpartition wird entfernt; die unabhängige
+  `state_store`-Partitionsinitialisierung bleibt bestehen. Kein NVS-Erase,
+  keine NVS-Reparatur und kein zweiter Speicherpfad.
+- Gezielte Hostregressionen decken Modus-/Credential-Commit und den
+  produktiven Dispatcherpfad ab. Danach beide ESP-IDF-Profile bauen und
+  validieren; kein Profilbuild gilt als Hardwareevidence.
+
+### Slice 6 – Konvergenz, Builds und Status
 
 - Alle gezielten Tests aus Slice 1 bis 3 auf dem finalen Implementierungs-HEAD
-  ausführen; danach `git diff --check` und
+  sowie die Korrekturen aus Slice 4 und 5 ausführen; danach `git diff --check` und
   `bash scripts/run_pre_ready_gates.sh self-check` auf exakt diesem HEAD.
 - ESP-IDF-Profile `bringup` und `release` mit den dokumentierten
   Projektbefehlen bauen. Die Builds sind Softwareevidence; kein Flash und
   keine Hardware-/Clientbehauptung daraus ableiten.
+- Der Builder-Self-Check ist kein unabhängiger Review. Nach gezielten Tests,
+  Builds und Self-Check für unabhängige Fix Verification anhalten. Erst nach
+  deren Abschluss, `OPEN_BLOCKERS=0` und ausdrücklicher Ownerautorisierung den
+  Hardwarelauf gemäß Abschnitt 5 beginnen.
 - Nur tatsächlich benötigte Status-/Vertragsdokumentation synchronisieren,
   insbesondere `docs/NETWORK.md`, `docs/FUTURE_SCOPE.md`,
   `docs/REQUIREMENTS.md`, Roadmap, PR #171 und Issue #164. Issue #164 bleibt
@@ -281,66 +409,103 @@ pio test -e native -f test_renderer_boundary
 - Commits pushen und danach für unabhängige Review/Fix Verification des
   begrenzten Completion-Diffs stoppen. Kein Ready-Wechsel oder Merge.
 
-## 5. Verifikation und offene Evidence
+## 5. Verifikation und Hardware-Evidence
 
-Abnahme nach Umsetzung:
+Softwareevidence auf früheren Heads bleibt historische Evidence; die
+Planrevision selbst führt keine Tests, Builds oder Hardwareläufe aus. Nach
+Ownerfreigabe der neuen exakten Plan-SHA wird die Default-NVS-Umstellung
+implementiert. Danach sind gezielte Regressionen und beide Profilbuilds auf
+dem finalen Implementierungs-HEAD erforderlich. `esp32_bringup` ist für
+diesen Hardwarelauf ungeeignet, weil sein Issue-29-Probe vor
+Displayinitialisierung endet. Für #164 ist ausschließlich `esp32_release` zu
+verwenden; das Releaseprofil hebt Hardware- oder Aktorgates nicht auf.
+
+Vor dem Flash müssen Planfreigabe, unabhängige Fix Verification und die
+erforderliche Ownerautorisierung für den Hardwarelauf vorliegen. Dann wird
+genau der finale, gebaute Implementierungs-HEAD mit dem kanonischen
+ESP-IDF-/Repository-Flashpfad als `esp32_release` geflasht. Keine
+Rebuild-on-flash-, Vollerase- oder NVS-Erase-/Repair-Aktion. Source-HEAD,
+Buildartefakt, Profil, Flashverifikation und UART-Log werden gemeinsam
+protokolliert. Der Testaufbau ist ein Entwickler-/Bring-up-Aufbau am PC; er
+weist weder einen Fermentationslauf noch funktionale Aktor- oder
+Leistungspfad-Evidence nach.
+
+Erster UART-Lauf klassifiziert jeden Bildschirmabbruch als MCU-Reset,
+Brownout, Panic, Watchdog oder UI-/Renderer-/Network-Lifecycle-Fehler.
+Während Touch und Moduswechsel sind UART und Display gemeinsam zu beobachten.
+Bei Reset, Panic, Watchdog, Brownout, erneut schwarzem/weißem Bildschirm oder
+unerwarteter Aktoraktivität abbrechen, UART-Evidence sichern und keine
+Erfolgswerte für nachgelagerte Schritte setzen.
+
+Die Owner-geführten realen Abnahmeschritte auf exakt diesem HEAD:
+
+1. Normalen Home-/Standby-Zustand booten und das WLAN-Symbol im produktiven
+   Touchpfad öffnen; `HeaderNetwork` muss sichtbar bleiben.
+2. Prüfen, dass `AP_ONLY` und `HOME_WIFI` vollständig lesbar und auswählbar
+   sind, `UNSELECTED` nicht auswählbar ist und beide Modusaktionen die
+   Netzwerkseite nicht verlassen oder den Bildschirm löschen.
+3. `AP_ONLY` auswählen; SoftAP-Start, individuelle SSID, Passwort, direkte
+   lokale IP und WLAN-QR visuell prüfen. Alle Labels müssen auf 320x240 ohne
+   Abschneiden lesbar sein.
+4. WLAN-QR mit einem geeigneten Handy scannen und den Client-Join prüfen;
+   danach direkte AP-IP im Browser aufrufen. Manueller Join mit angezeigter
+   SSID/Passwort bleibt verfügbar.
+5. `HOME_WIFI` auswählen und Browser-Setup öffnen; Credentials über den
+   bestehenden Browserpfad eingeben, Test-before-commit erfolgreich
+   durchlaufen und nur danach committen.
+6. Neustart mit gespeicherter HOME_WIFI-Konfiguration ausführen, Verbindung
+   bestätigen, das Heim-WLAN kurz unterbrechen und den grundlegenden
+   Reconnect bestätigen.
+7. Während `AP_ONLY` und `HOME_WIFI` Main-Task-Stack-High-Water-Mark sowie
+   freien, niedrigsten und größten freien Heap dokumentieren. Je Modus
+   Messpunkte vor/nach Moduswechsel und im stabilen Zustand erfassen; der
+   Stack-HWM ist kumulativ seit Boot und ist als solcher zu kennzeichnen.
+   Keine neuen numerischen Freigabeschwellen erfinden. Fehlgeschlagene
+   Allokationen, Stackerschöpfung oder Reset bedeuten FAIL.
 
 ```text
-NETWORK_PAGE_TOUCH_PATH=IMPLEMENTED_NATIVE_TESTED_HARDWARE_NOT_RUN
-AP_ONLY_SELECTION_UI=NATIVE_TESTED
-HOME_WIFI_SELECTION_UI=NATIVE_TESTED
-UNSELECTED_NOT_USER_SELECTABLE=NATIVE_TESTED
-HOME_WIFI_RECONFIGURATION_UI=NATIVE_TESTED
-NETWORK_MODE_COMMAND_OWNER=EXISTING_APPLICATION_PATH
-SOFTAP_ACCESS_DATA_LOCAL_DISPLAY_PATH=NATIVE_TESTED
-R1_HOME_WIFI_BROWSER_SETUP=RETAINED
-R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
-R1_TOUCH_WIFI_KEYBOARD=DEFERRED
-R1_WLAN_QR_TO_JOIN_SOFTAP=SOFTWARE_IMPLEMENTED_CLIENT_SCAN_NOT_RUN
-R1_WEBSITE_QR=DEFERRED
-QR_PURPOSE=JOIN_SOFTAP
-QR_SOURCE=networkAccessPointInfo()
-QR_PAYLOAD=INDIVIDUAL_SOFTAP_SSID_AND_PASSWORD
-QR_CONTAINS_WEB_URL=NO
-QR_CONTAINS_AP_IP=NO
-MANUAL_FALLBACK=SSID_PASSWORD_DIRECT_IP_VISIBLE
-SECOND_CREDENTIAL_SOURCE=NO
-SOFTAP_SECRET_LOGGING=NO
-QR_SOFTWARE_PAYLOAD_ESCAPING_CREDENTIAL_CHANGE=PASS
-QR_SOFTWARE_NO_WEB_URL_OR_AP_IP=PASS
-QR_320X240_RENDERER_LAYOUT=PASS
-SECOND_NETWORK_STATE_MACHINE=NO
-SECOND_HTTP_SERVER=NO
-TOUCH_CALIBRATION_CHANGE=NO
-TARGETED_NATIVE_REGRESSIONS=PASS
-TEST_LOCAL_TOUCH_UI=PASS_15
-TEST_PRESS_DISPATCHER=PASS_19
-TEST_FERMENTATION_UI_COMMANDS=PASS_10
-TEST_RENDERER_BOUNDARY=PASS_27
-REPOSITORY_SECRET_SCAN=PASS
-GIT_DIFF_CHECK=PASS
-BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
-ESP32_BRINGUP_BUILD=PASS
-ESP32_RELEASE_BUILD=PASS
-HARDWARE_CLIENT_EVIDENCE=NOT_RUN_PENDING_HARDWARE
+PROFILE=esp32_release
+FLASH_SOURCE_HEAD=EXACT_FINAL_IMPLEMENTATION_HEAD
+BUILD_ARTIFACT_HEAD=MUST_MATCH_FLASH_SOURCE_HEAD
+ERASE_ALL=NO
+NVS_ERASE_OR_REPAIR=NO
+REBUILD_DURING_FLASH=NO
+PRODUCT_TOUCH_NETWORK_ENTRY=PASS/FAIL/NOT_RUN
+NETWORK_PAGE_STAYS_RENDERED_FOR_BOTH_MODES=PASS/FAIL/NOT_RUN
+AP_ONLY_SELECTION=PASS/FAIL/NOT_RUN
+HOME_WIFI_SELECTION=PASS/FAIL/NOT_RUN
+UNSELECTED_NOT_USER_SELECTABLE=PASS/FAIL/NOT_RUN
+NETWORK_LABELS_READABLE_320X240=PASS/FAIL/NOT_RUN
+SOFTAP_STARTED=PASS/FAIL/NOT_RUN
+SOFTAP_SSID_PASSWORD_DIRECT_IP_DISPLAY=PASS/FAIL/NOT_RUN
+WLAN_QR_DISPLAY=PASS/FAIL/NOT_RUN
+WLAN_QR_CAMERA_SCAN=PASS/FAIL/NOT_RUN
+SOFTAP_CLIENT_JOIN_QR=PASS/FAIL/NOT_RUN
+DIRECT_AP_IP_BROWSER=PASS/FAIL/NOT_RUN
+HOME_WIFI_BROWSER_SETUP=PASS/FAIL/NOT_RUN
+HOME_WIFI_TEST_BEFORE_COMMIT=PASS/FAIL/NOT_RUN
+HOME_WIFI_COMMIT_AFTER_SUCCESS_ONLY=PASS/FAIL/NOT_RUN
+HOME_WIFI_BOOT_WITH_STORED_CREDENTIAL=PASS/FAIL/NOT_RUN
+HOME_WIFI_BASIC_RECONNECT=PASS/FAIL/NOT_RUN
+MAIN_TASK_STACK_HWM_AP_ONLY=RECORDED_BYTES_OR_NOT_RUN
+MAIN_TASK_STACK_HWM_HOME_WIFI=RECORDED_BYTES_OR_NOT_RUN
+FREE_MIN_LARGEST_HEAP_AP_ONLY=RECORDED_BYTES_OR_NOT_RUN
+FREE_MIN_LARGEST_HEAP_HOME_WIFI=RECORDED_BYTES_OR_NOT_RUN
+UART_BOOT=PASS/FAIL/NOT_RUN
+UART_PANIC=NO/YES/NOT_RUN
+UART_WATCHDOG=NO/YES/NOT_RUN
+UART_BROWNOUT=NO/YES/NOT_RUN
+UART_UNEXPECTED_RESET=NO/YES/NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
 
-Nicht Bestandteil dieser Runde sind lokale HOME_WIFI-SSID-/Passworteingabe und
-Bildschirmtastatur; diese Funktionen sind durch die Ownerentscheidung
-`VARIANT_B` aus R1/#164 deferiert. Der browserbasierte
+Lokale HOME_WIFI-SSID-/Passworteingabe und Bildschirmtastatur bleiben durch
+die Ownerentscheidung `VARIANT_B` aus R1/#164 deferiert. Der browserbasierte
 Setup-/Test-before-Commit-Pfad und der WLAN-QR zum SoftAP-Beitritt bleiben
-dagegen R1. Der reale Kamera-/Client-Scan des auf dem Produktdisplay
-angezeigten WLAN-QR bleibt bis zur Hardwareverfügbarkeit `NOT_RUN`, ist aber
-vor dem finalen Abschluss von Issue #164 nachzuholen. Ebenfalls nicht
-Bestandteil dieser Runde sind reale `AP_ONLY`-/`HOME_WIFI`-Touchläufe,
-Android-Client, direkter AP-IP-/mDNS-, Setup-, gespeicherter Boot- oder
-Reconnect-Nachweise. Sie bleiben `NOT_RUN`, bis reale Hardware und Clients
-verfügbar sind und ein passender Owner-Gate sie autorisiert. Die
-Plan-Fix-Verifikation auf `OWNER_APPROVED_PLAN_SHA` war vor der autorisierten
-Implementation erfolgreich; als nächstes folgt die unabhängige Review/Fix
-Verification des Implementierungs-Diffs. Der reale Kamera-/Client-Scan bleibt
-ein eigenes Abschluss-Gate vor Issue-Schließung.
+R1. Der reale Kamera-/Client-Scan des auf dem Produktdisplay angezeigten
+WLAN-QR ist vor dem finalen Abschluss von Issue #164 erforderlich. Nicht
+ausgeführte Hardwarepunkte bleiben `NOT_RUN`. Der Hardwarelauf gibt keine
+Aktorfreigabe und behauptet keinen Fermentationslauf.
 
 ## 6. Quellen und Owner-Gates
 
@@ -354,16 +519,27 @@ ein eigenes Abschluss-Gate vor Issue-Schließung.
 - Issue #164 sowie der gemergte PR #165
 - ADR-013 und die bestehenden Touch-/Renderer-/Network-Tests auf
   `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`
+- ESP-IDF v6.1 Wi-Fi API für `wifi_init_config_t.nvs_enable` und
+  `WIFI_STORAGE_RAM`:
+  [Wi-Fi API Reference](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32/api-reference/network/esp_wifi.html),
+  und Espressifs [v6.1 Wi-Fi-Test mit `nvs_enable=false`](https://github.com/espressif/esp-idf/blob/v6.1/components/esp_wifi/test_apps/wifi_function/main/test_wifi_country.c)
+- `docs/HARDWARE.md`, `docs/OPEN_POINTS.md` und
+  `docs/ESP_IDF_UPGRADE_CONTRACT.md` für Hardware-, Ressourcen- und Profil-
+  Grenzen
 
 ```text
-OWNER_APPROVAL_REQUIRED_FOR_EXACT_PLAN_SHA=NO
-OWNER_APPROVED_PLAN_SHA=931db488125a6e7eca76b1e8bb88ffc98b97a073
-PRODUCT_IMPLEMENTATION_BEFORE_PLAN_APPROVAL=NO
+OWNER_APPROVAL_REQUIRED_FOR_EXACT_PLAN_SHA=YES
+PREVIOUS_OWNER_APPROVED_PLAN_SHA=931db488125a6e7eca76b1e8bb88ffc98b97a073
+PLAN_REVISION_BASE_HEAD=e84555baea8ccbf99aacf2898ff3333cd33464ec
+PRODUCT_CODE_CHANGE_DURING_PLAN_REVISION=NO
+FLASH_DURING_PLAN_REVISION=NO
+PRODUCT_TESTS_DURING_PLAN_REVISION=NOT_RUN_PLAN_ONLY
+PRODUCT_BUILDS_DURING_PLAN_REVISION=NOT_RUN_PLAN_ONLY
 OWNER_DECISION_VARIANT_B_QR_RETAINED=RECORDED
-INDEPENDENT_PLAN_FIX_VERIFICATION=PASS
-INDEPENDENT_IMPLEMENTATION_REVIEW=REQUIRED
-IMPLEMENTATION_AUTHORIZATION=YES
-PRODUCT_IMPLEMENTATION=COMPLETE_DIGITAL
+INDEPENDENT_PLAN_FIX_VERIFICATION=REQUIRED
+FOLLOWUP_IMPLEMENTATION_AUTHORIZATION=REQUIRES_OWNER_APPROVAL_OF_THIS_EXACT_PLAN_SHA
+HARDWARE_PROFILE=esp32_release
+HARDWARE_EVIDENCE=REQUIRED_BEFORE_ISSUE164_CLOSE
 HARDWARE_CLIENT_SCAN_BEFORE_ISSUE_CLOSE=REQUIRED
 PR_READY=NO
 PR_MERGE=NO
