@@ -373,17 +373,34 @@ void updateProductUi(
     fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
     fermentation::FermentationTouchWorkspace& uiWorkspace,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    const device_platform::LocaleId& initialDisplayLocale,
+    const device_platform::TimeZoneId& initialTimeZoneId,
     device_platform::INetworkLifecycle& networkLifecycle,
     const device_platform::ITimeSource& timeSource) {
     if (displayRenderer == nullptr || !displayRenderer->initialized()) {
         return;
     }
 
-    const auto loopPresentation = application.uiPresentationSource();
+    const bool networkPageBeforeTouch =
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    fermentation::FermentationUiPresentationSource loopPresentation;
+    if (!networkPageBeforeTouch) {
+        loopPresentation = application.uiPresentationSource();
+    }
+    // HeaderNetwork does not consume ProgramCatalog; do not keep its full
+    // copy alive while a network-mode touch is committed.
+    const auto& touchDisplayLocale = networkPageBeforeTouch
+                                         ? initialDisplayLocale
+                                         : loopPresentation.displayLocale;
+    const auto& touchTimeZoneId = networkPageBeforeTouch
+                                      ? initialTimeZoneId
+                                      : loopPresentation.canonicalTimeZoneId;
+    const auto* touchProgramCatalog =
+        networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
     const device_platform::ClockViewInput loopClock{
-        timeSource.unixTimeSeconds(), loopPresentation.canonicalTimeZoneId};
+        timeSource.unixTimeSeconds(), touchTimeZoneId};
     const auto loopSnapshot = application.uiSnapshot();
 
     // The existing #26 target/interaction path (calibrated touch
@@ -401,9 +418,9 @@ void updateProductUi(
                      networkLifecycle.status().state);
     }
     const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
-        application, uiWorkspace, loopSnapshot, uiTextPacks,
-        loopPresentation.displayLocale, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock, touchPoll.contactHeld,
+        application, uiWorkspace, loopSnapshot, uiTextPacks, touchDisplayLocale,
+        touchProgramCatalog, loopNetworkStatus, loopClock,
+        touchPoll.contactHeld,
         touchPoll.point.has_value() ? touchPoll.point->x : 0U,
         touchPoll.point.has_value() ? touchPoll.point->y : 0U,
         touchPoll.freshPressEdge, timeSource.monotonicMillis());
@@ -417,10 +434,21 @@ void updateProductUi(
                  static_cast<int>(touchTick.dispatch.outcome));
     }
 
+    if (networkPageBeforeTouch &&
+        uiWorkspace.page() != fermentation::FermentationUiPage::HeaderNetwork) {
+        loopPresentation = application.uiPresentationSource();
+    }
+    const bool networkPageAfterTouch =
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    const auto& renderDisplayLocale = networkPageAfterTouch
+                                          ? initialDisplayLocale
+                                          : loopPresentation.displayLocale;
+    const auto* renderProgramCatalog =
+        networkPageAfterTouch ? nullptr : &loopPresentation.programCatalog;
     static_cast<void>(displayRenderer->render(
-        loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
-        touchTick.pressedTarget, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock, application.networkAccessPointInfo()));
+        loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
+        touchTick.pressedTarget, renderProgramCatalog, loopNetworkStatus,
+        loopClock, application.networkAccessPointInfo()));
 }
 
 }  // namespace
@@ -543,17 +571,22 @@ extern "C" void app_main(void) {
          r1_pins::kBacklightActiveHigh});
     fermentation::FermentationTouchWorkspace uiWorkspace;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
-    // The single renderer-independent source for locale, the program catalog
-    // and the canonical prepared time zone; see
-    // FermentationApplication::uiPresentationSource().
-    const auto uiPresentation = application.uiPresentationSource();
-    const auto uiNetworkStatus =
-        toDeviceUiNetworkStatus(networkLifecycle.status().state);
-    const device_platform::ClockViewInput uiClock{
-        timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
-    initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
-                        application, uiWorkspace, uiTextPacks, uiPresentation,
-                        uiNetworkStatus, uiClock);
+    device_platform::LocaleId uiDisplayLocale{"en"};
+    device_platform::TimeZoneId uiTimeZoneId;
+    // The single renderer-independent source for locale, program catalog and
+    // canonical prepared time zone is needed here only for initial UI setup.
+    {
+        auto uiPresentation = application.uiPresentationSource();
+        const auto uiNetworkStatus =
+            toDeviceUiNetworkStatus(networkLifecycle.status().state);
+        const device_platform::ClockViewInput uiClock{
+            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
+        initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
+                            application, uiWorkspace, uiTextPacks,
+                            uiPresentation, uiNetworkStatus, uiClock);
+        uiDisplayLocale = std::move(uiPresentation.displayLocale);
+        uiTimeZoneId = std::move(uiPresentation.canonicalTimeZoneId);
+    }
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     fermentation::issue_90_slice7::Harness issue90Harness(application,
@@ -579,7 +612,8 @@ extern "C" void app_main(void) {
         sntp.poll();
         application.update();
         updateProductUi(application, displayRenderer.get(), uiWorkspace,
-                        uiTextPacks, networkLifecycle, timeSource);
+                        uiTextPacks, uiDisplayLocale, uiTimeZoneId,
+                        networkLifecycle, timeSource);
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();

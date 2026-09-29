@@ -110,13 +110,21 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     // deliberately the same set of inputs render() itself uses to rebuild its
     // own screen for drawing, with pressedTarget left unset: this screen
     // represents the state as displayed *before* this press is routed.
-    const auto screen =
-        makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
-                                 std::nullopt, catalog, networkStatus, clock);
-    result.pressedTarget = targetAt(screen, touchX, touchY);
-    if (freshPressEdge && result.pressedTarget.has_value()) {
-        const auto press =
-            routePress(workspace, snapshot, screen, touchX, touchY, catalog);
+    // Destroy its vector/string storage before a typed press can mutate owners.
+    FermentationUiWorkspacePress press;
+    bool shouldDispatch = false;
+    {
+        const auto screen = makeRepresentativeScreen(
+            snapshot, workspace, textPacks, locale, std::nullopt, catalog,
+            networkStatus, clock);
+        result.pressedTarget = targetAt(screen, touchX, touchY);
+        if (freshPressEdge && result.pressedTarget.has_value()) {
+            press = routePress(workspace, snapshot, screen, touchX, touchY,
+                               catalog);
+            shouldDispatch = true;
+        }
+    }
+    if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
     }

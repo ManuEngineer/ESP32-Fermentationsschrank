@@ -757,16 +757,16 @@ void enableServiceWriteForTest(
     TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestRecord(
                          prepared.newGraph.active.manifest,
                          prepared.slotPlan.manifestGeneration, epoch,
-                         std::nullopt,
-                         prepared.newGraph.active
-                             .canonicalManifestRecordBytes) ==
+                         std::nullopt, prepared.manifestRecordBytes) ==
                      fermentation::ConfigurationGraphCodecStatus::Success);
+    prepared.newGraph.active.canonicalManifestRecordBytes =
+        prepared.manifestRecordBytes;
     prepared.newGraph.root.active = prepared.newGraph.active.manifestReference;
     TEST_ASSERT_TRUE(fermentation::encodeConfigurationRootRecord(
                          prepared.newGraph.root, prepared.slotPlan.rootSequence,
-                         epoch, std::nullopt,
-                         prepared.newGraph.canonicalRootRecordBytes) ==
+                         epoch, std::nullopt, prepared.rootRecordBytes) ==
                      fermentation::ConfigurationGraphCodecStatus::Success);
+    prepared.newGraph.canonicalRootRecordBytes = prepared.rootRecordBytes;
 }
 
 void test_prepares_high_water_values_and_exact_fallback_before_writes() {

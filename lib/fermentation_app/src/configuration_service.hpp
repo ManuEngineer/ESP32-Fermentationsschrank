@@ -330,9 +330,10 @@ class ConfigurationService {
                                ConfigurationRuntimeFailureCause cause);
     void publishPreparedLocked(
         PreparedConfigurationCommit& persistent,
+        std::unique_ptr<LoadedConfigurationGraph>& preparedGraph,
         std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
-        std::shared_ptr<const RuntimeConfigurationSnapshot>&
-            retiredRuntime) noexcept;
+        std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
+        std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept;
     [[nodiscard]] bool completeRuntimeRetirement(
         std::uint64_t generationId) noexcept;
     void invokeTestHook(TestPoint point) const;
