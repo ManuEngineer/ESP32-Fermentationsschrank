@@ -901,6 +901,36 @@ void test_envelope_decode_rejects_crc_errors_in_header_and_payload() {
         static_cast<int>(device_platform::EnvelopeDecodeStatus::CrcMismatch),
         static_cast<int>(
             device_platform::decodeEnvelope(payloadCorrupted).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeDecodeStatus::CrcMismatch),
+        static_cast<int>(device_platform::decodeEnvelopePayloadView(
+                             payloadCorrupted)
+                             .status));
+}
+
+void test_envelope_payload_view_matches_owned_decode() {
+    const auto source = validEnvelope();
+    std::string encoded;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(source, encoded, 1024U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+
+    const auto view = device_platform::decodeEnvelopePayloadView(encoded);
+    const auto owned = device_platform::decodeEnvelope(encoded);
+    TEST_ASSERT_TRUE(view.envelope.has_value());
+    TEST_ASSERT_TRUE(owned.envelope.has_value());
+    TEST_ASSERT_EQUAL_UINT32(owned.envelope->payload.size(),
+                             view.envelope->payload.size());
+    TEST_ASSERT_EQUAL_MEMORY(owned.envelope->payload.data(),
+                             view.envelope->payload.data(),
+                             owned.envelope->payload.size());
+    TEST_ASSERT_EQUAL_UINT32(owned.envelope->recordTypeId.value(),
+                             view.envelope->metadata.recordTypeId.value());
+    TEST_ASSERT_EQUAL_UINT32(owned.envelope->schemaVersion,
+                             view.envelope->metadata.schemaVersion);
+    TEST_ASSERT_EQUAL_UINT64(owned.envelope->storageEpoch.value(),
+                             view.envelope->metadata.storageEpoch.value());
+    TEST_ASSERT_EQUAL_UINT64(owned.envelope->versionValue,
+                             view.envelope->metadata.versionValue);
 }
 
 void test_checked_increment_advances_valid_value_by_one() {
@@ -1177,5 +1207,6 @@ int main() {
     RUN_TEST(test_envelope_decode_rejects_invalid_utc_tag);
     RUN_TEST(test_envelope_decode_rejects_wrong_and_overflowing_lengths);
     RUN_TEST(test_envelope_decode_rejects_crc_errors_in_header_and_payload);
+    RUN_TEST(test_envelope_payload_view_matches_owned_decode);
     return UNITY_END();
 }

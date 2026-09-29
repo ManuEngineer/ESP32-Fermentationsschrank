@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "storage_types.hpp"
 
@@ -65,6 +66,18 @@ struct EnvelopeMetadataResult {
     std::optional<EnvelopeMetadata> metadata;
 };
 
+// A validated, non-owning payload view. It remains valid only while the input
+// byte string remains alive and unchanged.
+struct EnvelopePayloadView {
+    EnvelopeMetadata metadata;
+    std::string_view payload;
+};
+
+struct EnvelopePayloadViewResult {
+    EnvelopeDecodeStatus status{EnvelopeDecodeStatus::LengthMismatch};
+    std::optional<EnvelopePayloadView> envelope;
+};
+
 // Technischer, anwendungsneutraler Baustein: liefert dieselbe
 // Groessenentscheidung wie `encodeEnvelope()` (einschliesslich der
 // 32-Bit-Laengenfeldgrenze fuer die Payload), ohne einen Puffer anzulegen.
@@ -114,6 +127,11 @@ struct EnvelopeSizeCheckResult {
 // fuer Aufrufer, die zunaechst nur die Kandidateneigenschaften (z. B.
 // `versionValue`) brauchen und die Payload erst spaeter gezielt laden.
 [[nodiscard]] EnvelopeMetadataResult decodeEnvelopeMetadata(
+    const std::string& bytes);
+
+// Validates the same fields and CRC as `decodeEnvelope()` but returns the
+// payload as a non-owning view instead of allocating and copying it.
+[[nodiscard]] EnvelopePayloadViewResult decodeEnvelopePayloadView(
     const std::string& bytes);
 
 }  // namespace device_platform

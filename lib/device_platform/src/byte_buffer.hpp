@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace device_platform {
@@ -69,6 +70,7 @@ class ByteWriter {
 class ByteReader {
    public:
     explicit ByteReader(const std::string& bytes) : bytes_(bytes) {}
+    explicit ByteReader(std::string_view bytes) : bytes_(bytes) {}
 
     // `length == 0`: `out` darf `nullptr` sein, erfolgreicher No-op ohne
     // Positionsaenderung. Positive Laenge: `nullptr` wird beobachtbar mit
@@ -110,7 +112,7 @@ class ByteReader {
     [[nodiscard]] std::size_t totalSize() const { return bytes_.size(); }
 
    private:
-    const std::string& bytes_;
+    std::string_view bytes_;
     std::size_t position_{0U};
 };
 

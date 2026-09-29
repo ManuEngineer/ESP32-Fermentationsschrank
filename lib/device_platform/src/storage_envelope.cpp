@@ -335,4 +335,25 @@ EnvelopeMetadataResult decodeEnvelopeMetadata(const std::string& bytes) {
     return {EnvelopeDecodeStatus::Success, metadata};
 }
 
+EnvelopePayloadViewResult decodeEnvelopePayloadView(
+    const std::string& bytes) {
+    const auto validated = validateEnvelope(bytes);
+    if (validated.status != EnvelopeDecodeStatus::Success) {
+        return {validated.status, std::nullopt};
+    }
+    const auto& core = validated.core;
+
+    EnvelopeMetadata metadata;
+    metadata.recordTypeId = RecordTypeId(core.recordTypeRaw);
+    metadata.schemaVersion = core.schemaVersion;
+    metadata.storageEpoch = StorageEpoch(core.storageEpochRaw);
+    metadata.versionValue = core.versionValue;
+    metadata.utcUnixSeconds = validated.utcUnixSeconds;
+    metadata.payloadLength = core.payloadLength;
+    const std::string_view payload(bytes.data() + validated.payloadOffset,
+                                   core.payloadLength);
+    return {EnvelopeDecodeStatus::Success,
+            EnvelopePayloadView{std::move(metadata), payload}};
+}
+
 }  // namespace device_platform

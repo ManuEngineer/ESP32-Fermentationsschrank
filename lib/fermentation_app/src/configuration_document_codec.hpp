@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "configuration_documents.hpp"
 
@@ -65,7 +66,7 @@ decodeProgramCatalogPayload(std::uint32_t schemaVersion,
 // is therefore suitable for ValidationOnly graph scans while active and
 // preview model generations are already resident.
 [[nodiscard]] ConfigurationCodecStatus validateProgramCatalogPayload(
-    std::uint32_t schemaVersion, const std::string& payload,
+    std::uint32_t schemaVersion, std::string_view payload,
     const ProgramCatalog* expected = nullptr);
 
 }  // namespace fermentation

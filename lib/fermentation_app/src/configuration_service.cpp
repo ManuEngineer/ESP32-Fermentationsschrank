@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <new>
+#include <type_traits>
 #include <utility>
 
 #include "configuration_document_codec.hpp"
@@ -40,13 +42,14 @@ struct RuntimePreparationBinding {
 
 struct ConfigurationService::ResolutionContext {
     PreparedConfigurationCommit persistent;
-    std::unique_ptr<LoadedConfigurationGraph> preparedGraph;
     std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime;
     RuntimePreparationBinding runtimeBinding;
     ConfigurationCommitIndeterminateCause indeterminateCause{
         ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome};
     bool runtimePreparationRetryConsumed{false};
 };
+
+static_assert(std::is_nothrow_move_assignable_v<LoadedConfigurationGraph>);
 
 namespace {
 
@@ -1047,13 +1050,44 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         return {ConfigurationCommitStatus::ConfigurationConflictFailure};
     }
 
+    const auto abandonUnwrittenCommit = [this, &captured]() {
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            capturedPreview_.reset();
+        }
+        captured.reset();
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        previewModelReserved_ = false;
+        mode_ = ConfigurationServiceMode::Operational;
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return false;
+        }
+        return true;
+    };
+
+    // Reserve the long-lived context before metadata scanning can fragment the
+    // heap. The commit still performs all validation and writes in the same
+    // order; only this bounded reservation moves ahead of temporary scan work.
+    auto resolution = std::unique_ptr<ResolutionContext>(
+        new (std::nothrow) ResolutionContext{});
+    if (resolution == nullptr) {
+        return {abandonUnwrittenCommit()
+                    ? ConfigurationCommitStatus::ConfigurationValidationFailure
+                    : ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+    }
+
     const ConfigurationCommitCandidate candidate{
         captured->candidate->userConfiguration,
         captured->candidate->serviceConfiguration,
         captured->candidate->programCatalog};
     auto prepared = graphStore_.prepareCommit(
-        current, candidate, captured->origin, captured->operation);
+        std::move(current), candidate, captured->origin, captured->operation);
+    current = LoadedConfigurationGraph{};
     if (!prepared.prepared.has_value()) {
+        resolution.reset();
         const bool failClosed =
             prepared.status ==
                 ConfigurationCommitPrepareStatus::IntegrityFailure ||
@@ -1134,40 +1168,30 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         return {ConfigurationCommitStatus::PersistenceFailure};
     }
 
-    auto preparedRuntime =
-        prepareSnapshot(prepared.prepared->newGraph, nextRuntimeGeneration_);
-    if (!preparedRuntime) {
-        {
-            const std::lock_guard<std::mutex> lock(stateMutex_);
-            capturedPreview_.reset();
-        }
-        captured.reset();
+    resolution->persistent = std::move(*prepared.prepared);
+    prepared.prepared.reset();
+    {
         const std::lock_guard<std::mutex> lock(stateMutex_);
-        previewModelReserved_ = false;
-        mode_ = ConfigurationServiceMode::Operational;
-        if (!incrementStateRevisionLocked()) {
-            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
-                                  ConfigurationRuntimeFailureCause::
-                                      ServiceStateInvariantViolation);
-            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
-        }
-        return {ConfigurationCommitStatus::ConfigurationValidationFailure};
+        capturedPreview_.reset();
+    }
+    captured.reset();
+
+    auto preparedRuntime = prepareSnapshot(resolution->persistent.newGraph,
+                                           nextRuntimeGeneration_);
+    if (!preparedRuntime) {
+        return {abandonUnwrittenCommit()
+                    ? ConfigurationCommitStatus::ConfigurationValidationFailure
+                    : ConfigurationCommitStatus::ConfigurationRuntimeFailure};
     }
 
-    auto publishedGraph =
-        std::make_unique<LoadedConfigurationGraph>(prepared.prepared->newGraph);
-    const auto runtimeBinding =
-        makeRuntimeBinding(*publishedGraph, *preparedRuntime);
-    auto resolution = std::make_unique<ResolutionContext>(ResolutionContext{
-        std::move(*prepared.prepared), std::move(publishedGraph),
-        std::move(preparedRuntime), runtimeBinding,
-        ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome, false});
+    resolution->runtimeBinding =
+        makeRuntimeBinding(resolution->persistent.newGraph, *preparedRuntime);
+    resolution->preparedRuntime = std::move(preparedRuntime);
     const auto execution =
         graphStore_.executePreparedCommit(resolution->persistent);
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
         invokeTestHook(TestPoint::BeforePublish);
         std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
-        std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
         std::uint64_t retiredGeneration = 0U;
         {
             const std::lock_guard<std::mutex> lock(stateMutex_);
@@ -1177,16 +1201,15 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
                     ConfigurationRuntimeFailureCause::PublishContractViolation);
                 return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
             }
-            publishPreparedLocked(
-                resolution->persistent, resolution->preparedGraph,
-                std::move(resolution->preparedRuntime), retired, retiredGraph);
+            publishPreparedLocked(resolution->persistent,
+                                  std::move(resolution->preparedRuntime),
+                                  retired);
             retiredGeneration = retired->volatileGenerationId();
             ++nextRuntimeGeneration_;
             capturedPreview_.reset();
         }
         invokeTestHook(TestPoint::BeforeRetirementRelease);
         retired.reset();
-        retiredGraph.reset();
         resolution.reset();
         captured.reset();
         (void)completeRuntimeRetirement(retiredGeneration);
@@ -1381,12 +1404,11 @@ ConfigurationCommitResolutionStatus ConfigurationService::
             resolutionContext_->runtimeBinding = rebuiltBinding;
         }
         std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
-        std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
         std::unique_ptr<ResolutionContext> completed;
         std::uint64_t retiredGeneration = 0U;
         {
             const std::lock_guard<std::mutex> lock(stateMutex_);
-            if (resolutionContext_.get() != context ||
+            if (resolutionContext_.get() != context || !currentGraph_ ||
                 !runtimeBindingMatches(resolutionContext_->runtimeBinding,
                                        resolutionContext_->persistent.newGraph,
                                        *resolutionContext_->preparedRuntime)) {
@@ -1399,16 +1421,13 @@ ConfigurationCommitResolutionStatus ConfigurationService::
             }
             publishPreparedLocked(
                 resolutionContext_->persistent,
-                resolutionContext_->preparedGraph,
-                std::move(resolutionContext_->preparedRuntime), retired,
-                retiredGraph);
+                std::move(resolutionContext_->preparedRuntime), retired);
             retiredGeneration = retired->volatileGenerationId();
             ++nextRuntimeGeneration_;
             completed = std::move(resolutionContext_);
         }
         invokeTestHook(TestPoint::BeforeRetirementRelease);
         retired.reset();
-        retiredGraph.reset();
         completed.reset();
         (void)completeRuntimeRetirement(retiredGeneration);
         {
@@ -1521,28 +1540,25 @@ ConfigurationService::recoverRuntimeFailure() {
     const auto binding =
         makeRuntimeBinding(context->persistent.newGraph, *preparedRuntime);
     std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
-    std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
     std::unique_ptr<ResolutionContext> completed;
     std::uint64_t retiredGeneration = 0U;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
-        if (resolutionContext_.get() != context) {
+        if (resolutionContext_.get() != context || !currentGraph_) {
             return ConfigurationCommitResolutionStatus::
                 ResolutionRuntimeFailure;
         }
         resolutionContext_->preparedRuntime = std::move(preparedRuntime);
         resolutionContext_->runtimeBinding = binding;
         publishPreparedLocked(resolutionContext_->persistent,
-                              resolutionContext_->preparedGraph,
                               std::move(resolutionContext_->preparedRuntime),
-                              retired, retiredGraph);
+                              retired);
         retiredGeneration = retired->volatileGenerationId();
         ++nextRuntimeGeneration_;
         completed = std::move(resolutionContext_);
     }
     invokeTestHook(TestPoint::BeforeRetirementRelease);
     retired.reset();
-    retiredGraph.reset();
     completed.reset();
     const bool retirementCompleted =
         completeRuntimeRetirement(retiredGeneration);
@@ -1704,19 +1720,16 @@ void ConfigurationService::enterFailClosedLocked(
 
 void ConfigurationService::publishPreparedLocked(
     PreparedConfigurationCommit& persistent,
-    std::unique_ptr<LoadedConfigurationGraph>& preparedGraph,
     std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
-    std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
-    std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept {
+    std::shared_ptr<const RuntimeConfigurationSnapshot>&
+        retiredRuntime) noexcept {
     retiredRuntime.swap(activeRuntime_);
     activeRuntime_.swap(preparedRuntime);
     retiredGenerationId_ = retiredRuntime->volatileGenerationId();
     retiredGenerationReadLeases_ = activeGenerationReadLeases_;
     activeGenerationReadLeases_ = 0U;
     retirementOwnerPending_ = true;
-    retiredGraph.swap(currentGraph_);
-    currentGraph_.swap(preparedGraph);
-    (void)persistent;
+    *currentGraph_ = std::move(persistent.newGraph);
 }
 
 bool ConfigurationService::completeRuntimeRetirement(

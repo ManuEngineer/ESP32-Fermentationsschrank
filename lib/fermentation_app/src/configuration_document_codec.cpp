@@ -745,8 +745,41 @@ ConfigurationCodecStatus encodeUserConfigurationPayload(
         UserConfigurationStatus::Success) {
         return ConfigurationCodecStatus::InvalidDocument;
     }
-    ByteWriter writer(
-        configuration_limits::kMaximumUserConfigurationPayloadBytes);
+    constexpr auto maximumPayloadBytes =
+        configuration_limits::kMaximumUserConfigurationPayloadBytes;
+    std::size_t payloadCapacity = 0U;
+    const auto addStringCapacity =
+        [&payloadCapacity](const std::string& value) {
+            std::size_t fieldCapacity = 0U;
+            std::size_t totalCapacity = 0U;
+            if (!device_platform::checkedAddSize(
+                    value.size(), 2U, maximumPayloadBytes, fieldCapacity) ||
+                !device_platform::checkedAddSize(payloadCapacity, fieldCapacity,
+                                                 maximumPayloadBytes,
+                                                 totalCapacity)) {
+                return false;
+            }
+            payloadCapacity = totalCapacity;
+            return true;
+        };
+    if (!addStringCapacity(configuration.displayLanguageId) ||
+        !addStringCapacity(configuration.timeZoneId) ||
+        !addStringCapacity(configuration.deviceName) ||
+        (schemaVersion >=
+             static_cast<std::uint32_t>(UserConfigurationSchema::Version2) &&
+         !addStringCapacity(configuration.activeThemeId))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    if (schemaVersion >=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version3)) {
+        std::size_t totalCapacity = 0U;
+        if (!device_platform::checkedAddSize(
+                payloadCapacity, 1U, maximumPayloadBytes, totalCapacity)) {
+            return ConfigurationCodecStatus::CapacityExceeded;
+        }
+        payloadCapacity = totalCapacity;
+    }
+    ByteWriter writer(payloadCapacity);
     if (!writeString(writer, configuration.displayLanguageId) ||
         !writeString(writer, configuration.timeZoneId) ||
         !writeString(writer, configuration.deviceName) ||
@@ -959,7 +992,7 @@ ConfigurationDecodeResult<ProgramCatalog> decodeProgramCatalogPayload(
 }
 
 ConfigurationCodecStatus validateProgramCatalogPayload(
-    std::uint32_t schemaVersion, const std::string& payload,
+    std::uint32_t schemaVersion, std::string_view payload,
     const ProgramCatalog* expected) {
     if (schemaVersion !=
         static_cast<std::uint32_t>(ProgramCatalogSchema::Version1)) {

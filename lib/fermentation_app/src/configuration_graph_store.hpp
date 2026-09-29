@@ -131,8 +131,6 @@ struct PreparedConfigurationCommit {
     LoadedConfigurationGraph newGraph;
     ConfigurationChangeMask changes;
     ConfigurationSlotPlan slotPlan;
-    std::string manifestRecordBytes;
-    std::string rootRecordBytes;
     std::optional<std::string> previousTargetRootRecordBytes;
 };
 
@@ -314,7 +312,7 @@ class ConfigurationGraphStore {
         ConfigurationChangeMask changes);
 
     [[nodiscard]] ConfigurationCommitPrepareResult prepareCommit(
-        const LoadedConfigurationGraph& current,
+        LoadedConfigurationGraph current,
         const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
         ChangeOperation operation) const;
 
