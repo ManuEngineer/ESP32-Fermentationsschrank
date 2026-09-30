@@ -36,7 +36,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `IMPLEMENTATION_SLICE_COMMIT=df9573ce13900c5def34ce896aee8c34b4fff8f1`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_STATUS=APPROVED`; `CURRENT_SLICE=HTTP_METADATA_BROWSER_POLICY_SESSION_REPLAY_FOUNDATIONS_COMPLETE`; `IMPLEMENTATION=PAUSED_FOR_ISSUE164_COMPLETION`; `AUTH_FOUNDATION_COMMIT=65ffde83b7affdf40ebce13541d52f8218c70a4a`; `AUTH_DOMAIN_IN_FERMENTATION_APPLICATION=NOT_YET_WIRED`; `TARGETED_TESTS=HTTP_METADATA_5_OF_5;BROWSER_POLICY_2_OF_2;SESSION_8_OF_8;NETWORK_CONFIGURATION_15_OF_15;AUTH_6_OF_6;CONFIGURATION_RECOVERY_43_OF_43`; `BUILDER_SELF_CHECK=PASS`; `ESP32_BRINGUP_BUILD=PASS`; `ESP32_RELEASE_BUILD=NOT_RUN`; `HARDWARE_TESTS=NOT_RUN`; `OLD_PR167=SUPERSEDED_REFERENCE_ONLY`; `KDF_ALGORITHM=PBKDF2_HMAC_SHA256`; `KDF_WORK_FACTOR=10000`; `KDF_WORK_FACTOR_FALLBACK=NONE`; `ACTUATOR_RELEASE=NO` | #27 pausiert; zuerst den von Owner angeordneten #164-Completion-Scope separat auf main bearbeiten und mergen; danach PR #170 an den dann aktuellen main integrieren |
+| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `IMPLEMENTATION_HEAD=f34f1114ba3408d216836f5aaa41039e9e39094a`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_STATUS=APPROVED`; `SLICE=AUTH_STORAGE_RECOVERY_FOUNDATION`; `SLICE1_REVIEW_BLOCKERS=4_CLOSED`; `LOCAL_FIX_VERIFICATION=PASS`; `INDEPENDENT_FIX_VERIFICATION=PENDING`; `AUTH_DOMAIN_IN_FERMENTATION_APPLICATION=NOT_YET_WIRED`; `HTTP_SESSION_UI_API=NOT_IMPLEMENTED`; `TARGETED_TESTS=AUTH_9_OF_9;BOOTSTRAP_STORE_20_OF_20;BOOTSTRAP_CODEC_9_OF_9;RECOVERY_44_OF_44;ISSUE90_ORACLE_15_OF_15;ISSUE144_IDENTITY_18_OF_18;HTTP_METADATA_5_OF_5;BROWSER_POLICY_2_OF_2;SESSION_8_OF_8`; `ESP_PROFILE_BUILD_SOURCE_HEAD=4648240256e62d8c0fa6d0ff6719f6e09e63486b`; `ESP32_BRINGUP_BUILD=PASS;ESP32_RELEASE_BUILD=PASS`; `BUILDER_SELF_CHECK=PASS`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `HARDWARE_TESTS=NOT_RUN`; `ACTUATOR_RELEASE=NO` | Independent Fix Verification fuer Slice 1; vor einem spaeteren Ready bei Bedarf gegen dann aktuellen `main` revalidieren; kein Merge-Gate unter Umgehung der separaten #171-Governance |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -64,14 +64,20 @@ reale WLAN-/Client-Evidence offen.
 
 Issue #27 basiert auf `main@b871375f494701bed1834013cfeb789856983e3a`; die
 exakte Plan-SHA `46e0ea470b307a34867e24337b63a9d38166d771` ist freigegeben.
-Der Implementierungsschnitt `df9573ce13900c5def34ce896aee8c34b4fff8f1`
-enthaelt das Auth-Storage-/Recovery-Fundament und den abgeschlossenen
-HTTP-Metadaten-/Browser-Policy-/Session-Replay-Grundlagenschnitt. Auth-Domain-
-Application-Wiring, Webrouten, UI und Assets bleiben ausstehende #27-Slices.
-PR #170 ist bis zum Abschluss des von Owner angeordneten #164-Completion-PR
-pausiert. Danach ist dessen Merge in #170 zu integrieren, bevor #27 fortgesetzt
-wird. PR #167 bleibt Prototype- und Evidence-Quelle; weder alter Apply-Owner
-noch alte RecordTypeId-10-Zuordnung werden uebernommen.
+Der aktuelle Slice 1 schliesst die vier Findings des Independent Slice Review:
+autorisierter Vollreset aus unbestimmtem Auth-Handoff, typisierte normale
+Credential-Ablehnung/Lockout, unabhaengige Web-/PIN-Lockout-Zeitanker sowie
+die fehlende Adapter-/Profil-/Builder-Evidence. Die Regressionen und beide
+ESP-IDF-Profile bestehen; der Builder-Self-Check ist PASS. Auth-Domain-
+Application-Wiring, Webrouten, UI und Assets bleiben ausstehende #27-Slices;
+die vorhandenen HTTP-Metadaten-/Browser-Policy-/Session-Replay-Grundlagen
+werden in dieser Korrektur nicht erweitert. PR #170 bleibt Draft und haelt
+jetzt fuer Independent Fix Verification. PR #171 bleibt separat auf seinem
+Hardware-Gate, ohne Integration in diesen Branch; PR #167 bleibt historische
+Referenz und ist keine Commitquelle. Vor einem spaeteren Ready wird der Branch
+bei Bedarf gegen den dann aktuellen `main` revalidiert; die bestehende
+Merge-Reihenfolge darf PR #171 nicht ueberspringen. Kein Ready, Merge,
+Issue-Abschluss, Hardwaretest oder Aktorfreigabe ist erfolgt.
 
 Die spaetere Hardware-Reihenfolge #30 -> #32 -> #33 und die getrennten
 #28-Diagnose-/Chart-/Exportgates bleiben unberuehrt; `ACTUATOR_RELEASE=NO`.
