@@ -1374,6 +1374,18 @@ Audit ausgeschlossen. Daher gilt fuer den aktuellen konkreten Vertrag
 `FINAL_SELECTION_PENDING=YES`. Es wurde keine Alternative ausgewaehlt oder
 implementiert; Owner-/Planentscheidung ist vor Fortsetzung erforderlich.
 
+Ergebnisoffene Folgepruefung vom 2026-09-30: Espressifs offizielles
+`espressif/cjson 1.7.19~2` (Commit
+`1387cec28a9b40654be7892114bd7d26fcd3869c`) erkennt Duplicate-Member mit
+seiner oeffentlichen Baumstruktur, scheitert aber am konkreten Slice-4B-
+Vertrag: `uint64_t`-Maximum kollabiert numerisch mit `2^64`, escaped/raw NUL
+werden akzeptiert und abgeschnitten, ungueltiges UTF-8 wird akzeptiert.
+Ergebnis: `ESPRESSIF_CJSON_1_7_19_2=FAIL_CANDIDATE`,
+`FINAL_SELECTION_PENDING=YES`. Keine dritte Bibliothek oder Parseralternative
+wird ohne unabhaengige Pruefung und Ownerentscheidung untersucht. Die genaue
+Build-, Grenz- und Lizenz-Evidence steht im
+[`Komponentenevaluationssupplement`](COMPONENT_EVALUATIONS.md#issue-27-espressif-cjson-kandidatensupplement-2026-09-30).
+
 OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
 in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Der
 urspruengliche Audit vom 2026-07-27 aenderte keine Live-Issues. Die

@@ -91,6 +91,54 @@ ersetzt weder das Originalaudit noch die ausstehende Ownerauswahl.
   `PASS_CANDIDATE`-Status ist durch dieses Finding ueberholt. Die offene
   Heap-/Vier-Session/no-PSRAM-Messung bleibt zusaetzlich ausstehend.
 
+### Issue #27 Espressif-cJSON-Kandidatensupplement (2026-09-30)
+
+Dieses Supplement dokumentiert den ergebnisoffenen zweiten JSON-Kandidatenspike
+nach dem belegten ArduinoJson-Fehler. Es ist keine Produktbibliotheksauswahl
+und aendert weder Codec noch produktive Dependencies oder Composition.
+
+- Exakter Kandidat: Espressif Component Registry
+  [`espressif/cjson 1.7.19~2`](https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2/readme),
+  Quellrepository `espressif/idf-extra-components/cjson`, Commit
+  `1387cec28a9b40654be7892114bd7d26fcd3869c`; das SBOM identifiziert das
+  Upstream-Submodul [DaveGamble/cJSON 1.7.19](https://github.com/DaveGamble/cJSON/commit/b2890c8d76bbb64e710585ebc0a917196b9c67e7)
+  bei Commit `b2890c8d76bbb64e710585ebc0a917196b9c67e7`. Der isolierte Spike pinnt
+  `=1.7.19~2`; das IDF-6.1-Lockfile enthaelt Component-Hash
+  `e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469`.
+  Die Registry-Lizenz ist
+  [MIT](https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2/license);
+  die bezogene Lizenzdatei hat SHA-256
+  `a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c`.
+- Kompatibilitaet: Der direkte ESP-IDF-6.1-Build fuer `esp32` kompiliert die
+  C-Komponente und den C++17-Verbraucher. Der gleiche Probequelltext ist nativ
+  mit C99-cJSON plus C++17-Consumer gebaut und ausgefuehrt. Das belegt den
+  Hostpfad und den ESP32-Targetbuild, nicht ein exaktes WROOM-32E-Modul oder
+  Laufzeit-/Hardwareverhalten.
+- Die Probe verwendet die konkreten Slice-4B-Grenzen: Mutation-Body 480 Byte,
+  Tiefe 4, Program-ID 48 Byte, hoechstens drei Temperaturprojektionen,
+  sechzehn Alerts und je Read-only-Antwort 3072 Byte. Der maximale konkrete
+  Mutationsbody ist 337 Byte; ein 480-Byte-Body wird akzeptiert und 481 Byte
+  vor dem Parser abgewiesen. Maximale Status-/Temperatur-/Alertantworten
+  serialisieren begrenzt in 346/247/3048 Byte und bleiben unter 3072 Byte.
+- Die oeffentliche cJSON-Objektstruktur (`child`/`next`/`string`) behaelt
+  doppelte Member; ein begrenzter Baumdurchlauf erkennt Duplikate in Root,
+  Revision, Intent und verschachteltem Programmkandidaten. Allowlist-,
+  Pflichtfeld- und Root-Typpruefungen koennen unbekannte, fehlende und falsch
+  typisierte Felder ablehnen. Truncated/malformed JSON wird abgelehnt; die
+  konfigurierte Nestingtiefe 4 wird erzwungen und Tiefe 5 abgewiesen.
+- Drei wesentliche Vertragsfehler bleiben reproduziert: `uint64_t`-Maximum
+  und `2^64` werden auf denselben `double`-Wert gerundet; escaped und raw NUL
+  werden akzeptiert und als C-String abgeschnitten; ungueltiges UTF-8 wird
+  akzeptiert. `1e999` wird als Infinity geparst und erfordert zusaetzliche
+  `isfinite`-Validierung; `uint32_t`-Overflow ist durch Wertebereichspruefung
+  erkennbar. Der Native-Probeprozess endet deshalb erwartungsgemaess mit
+  Exit-Code 1 fuer die Vertragsfehler.
+- Ergebnis: `ESPRESSIF_CJSON_1_7_19_2=FAIL_CANDIDATE` und
+  `FINAL_SELECTION_PENDING=YES`. Keine dritte Bibliothek, kein eigener
+  JSON-Lexer, Fork oder Workaround wurde ausgewaehlt/implementiert. Die
+  ArduinoJson-Duplicate-Regressions bleiben unveraendert. Produktive Routes,
+  `main/app_main.cpp`-Composition, Hardware und Flash bleiben unberuehrt.
+
 ### Upstream-Aktivitaet und deklarierte Plattformbreite
 
 Die Aktivitaet ist nur ein Wartungsindikator. Sie beweist weder Fehlerfreiheit
