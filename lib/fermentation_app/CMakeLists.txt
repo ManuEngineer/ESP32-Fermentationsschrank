@@ -1,7 +1,7 @@
 idf_component_register(
     SRC_DIRS "src"
     INCLUDE_DIRS "src"
-    REQUIRES device_platform
+    REQUIRES device_platform ArduinoJson
 )
 
 # ESP-IDF 6.0.2 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt

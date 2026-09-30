@@ -3,6 +3,7 @@
 #include <utility>
 #include <variant>
 
+#include "web_json_codec.hpp"
 #include "web_browser_policy.hpp"
 
 namespace fermentation {
@@ -10,6 +11,13 @@ namespace {
 
 constexpr char kRoutePath[] = "/internal/ui/run";
 constexpr char kJsonContentType[] = "application/json; charset=utf-8";
+constexpr char kStatusApiPath[] = "/api/v1/status";
+constexpr char kTemperaturesApiPath[] = "/api/v1/temperatures";
+constexpr char kAlertsApiPath[] = "/api/v1/alerts";
+static_assert(kMaximumWebRunMutationBodyBytes + sizeof("POST") +
+                      sizeof(kRoutePath) + 4U <=
+                  kMaximumMutationFingerprintBytes,
+              "maximum run DTO must fit the session replay fingerprint");
 
 WebMutationOutcome outcome(std::uint16_t status, const char* body) {
     return {status, kJsonContentType, body};
@@ -204,7 +212,6 @@ WebMutationOutcome WebRunMutationHandler::projectCommandResult(
 }
 
 bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
-                                   const WebRunMutationDto& dto,
                                    device_platform::HttpResponse& response) {
     if (request.path != kRoutePath) return false;
     if (request.method != "POST") {
@@ -234,6 +241,18 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
     if (request.body.empty()) {
         setResponse(response,
                     requestError(400U, "{\"error\":\"body-required\"}"));
+        return true;
+    }
+
+    WebRunMutationDto dto;
+    const auto decodeStatus = decodeWebRunMutation(request.body, dto);
+    if (decodeStatus != WebRunMutationDecodeStatus::Success) {
+        const auto tooLarge =
+            decodeStatus == WebRunMutationDecodeStatus::TooLarge;
+        setResponse(response,
+                    requestError(tooLarge ? kTooLarge : 400U,
+                                 tooLarge ? "{\"error\":\"request-too-large\"}"
+                                          : "{\"error\":\"invalid-json\"}"));
         return true;
     }
 
@@ -330,6 +349,40 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
     setResponse(response, projected);
+    return true;
+}
+
+bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
+                                   device_platform::HttpResponse& response) {
+    const bool status = request.path == kStatusApiPath;
+    const bool temperatures = request.path == kTemperaturesApiPath;
+    const bool alerts = request.path == kAlertsApiPath;
+    if (!status && !temperatures && !alerts) return false;
+    if (request.method != "GET") {
+        setResponse(response,
+                    requestError(405U, "{\"error\":\"method-not-allowed\"}"));
+        return true;
+    }
+    if (!request.body.empty()) {
+        setResponse(response,
+                    requestError(400U, "{\"error\":\"body-not-allowed\"}"));
+        return true;
+    }
+
+    const auto snapshot = application_.uiSnapshot();
+    std::string body;
+    const bool encoded = status ? encodeWebApiStatus(snapshot, body)
+                         : temperatures
+                             ? encodeWebApiTemperatures(snapshot, body)
+                             : encodeWebApiAlerts(snapshot, body);
+    if (!encoded || body.size() > kMaximumWebApiResponseBodyBytes) {
+        setResponse(response, unavailable());
+        return true;
+    }
+    response.statusCode = 200U;
+    response.contentType = kJsonContentType;
+    response.body = std::move(body);
+    response.metadata = {};
     return true;
 }
 

@@ -1,4 +1,12 @@
 dependencies:
+  ArduinoJson:
+    component_hash: 9f0030cd2a9bd0d80544c914eaed21c8681f8c189ecd32eba461544b06d24c2c
+    dependencies: []
+    source:
+      git: https://github.com/bblanchon/ArduinoJson.git
+      path: .
+      type: git
+    version: 77771d3c07668e01d8f52acb03910c1110bb373f
   atanisoft/esp_lcd_touch_xpt2046:
     component_hash: 7e6381b67b6e487379118368b8e91624dc87036ef5734818de1db9eb35697998
     dependencies:
@@ -173,6 +181,7 @@ dependencies:
       type: service
     version: 9.6.0~1
 direct_dependencies:
+- ArduinoJson
 - atanisoft/esp_lcd_touch_xpt2046
 - esp-idf-lib/ds3231
 - esp-idf-lib/i2cdev
@@ -180,6 +189,6 @@ direct_dependencies:
 - espressif/esp_lcd_touch
 - espressif/esp_lvgl_port
 - espressif/mdns
-manifest_hash: 6693a62ce376e496ab7e8d31578f3674bdc5ff06263cfe4414c06fb6cc2d5ba9
+manifest_hash: 543302b8a2d345d0a29fd88ef3ef88b4d0b259e0c77ebe4a464071e5114083ba
 target: esp32
 version: 3.0.0

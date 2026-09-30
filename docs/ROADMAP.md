@@ -74,27 +74,37 @@ Content-Type, 256 Bytes Body, hoechstens acht Outcomes plus eine
 In-Flight-Anfrage je Session; der Vier-Session-Rohpayload ist auf 29.952 Bytes
 und `WebSessionManager` zur Compile-Zeit auf 32 KiB begrenzt.
 
-Slice 4 ist auf Implementierungscommit `0463ded` softwareseitig vorbereitet:
-`WebRunMutationHandler` verarbeitet intern `POST /internal/ui/run` mit einem
-typisierten bounded DTO, validiert die vorhandenen HTTP-/Session-/CSRF-/
-Origin-/Sequence-/Replay-Gates und verwendet ausschliesslich
-`prepareEnvelope -> confirmPrepared -> applyConfirmedPrepared`. Die
-Outcome-Matrix ist fail-closed; native Handlerregressionen decken Konflikt,
-stale, busy, rejected/capacity, Recovery pending, blocked, indeterminate,
-committed-apply-failed, RAM-eigenes Ack/Mute ohne Run-Persistenz und erfolgreiche
-Run-Mutation ab. Ein physischer Touch-Konsumententest sichert den gleichen
-Application-Ownerpfad. Beide ESP-IDF-6.1-Profile bauen auf dem exakt
-entsprechenden `0463ded`-Quellbaum; 236 gezielte Native-Regressions bestehen.
-Der Builder-Self-Check wird noch auf dem finalen Status-HEAD ausgefuehrt.
+Slice 4A ist auf `9ad1b68071d57322e07163983e64d82f6f54be30` unabhaengig
+reviewt (`PASS / GO`). `WebRunMutationHandler` verarbeitet intern
+`POST /internal/ui/run` fail-closed ueber
+`prepareEnvelope -> confirmPrepared -> applyConfirmedPrepared`; die
+Anwendung bleibt alleiniger Apply-/Persistenz-Owner. Die Produktcomposition
+bleibt ausstehend.
 
-Der Handler ist absichtlich weder in `main/` registriert noch produktiv
-komponiert. Der integrierte Vier-Session-Ressourcennachweis auf dem
-no-PSRAM-Ziel bleibt zwingend vor dieser Aktivierung. Es wurde kein JSON-Codec
-und kein ArduinoJson eingefuehrt; der Handler konsumiert nur das typisierte
-DTO. Keine Hardwaretests oder Flasharbeit. PR #170 bleibt Draft und Issue #27
+Slice 4B implementiert softwareseitig die read-only-Endpunkte
+`GET /api/v1/status`, `/api/v1/temperatures` und `/api/v1/alerts`, ausschliesslich
+aus `FermentationApplication::uiSnapshot()` und ohne Registrierung in
+`main/app_main.cpp`. Der interne Run-Handler dekodiert den DTO genau einmal aus
+dem exakten `HttpRequest::body`, der anschliessend unveraendert den Replay-
+Fingerprint bildet. Body 480 B, JSON-Nesting 4, Programm-ID 48 B,
+Temperaturarray 3, Alertarray 16 und API-Antwort 3072 B sind fail-closed
+begrenzt; das Replay-Fingerprintbudget bleibt 512 B.
+
+ArduinoJson `7.4.3` (Commit
+`77771d3c07668e01d8f52acb03910c1110bb373f`, MIT) besteht den softwareseitigen
+Kandidaten-Spike einschliesslich Native-Regressionen und direktem ESP-IDF-6.1-
+Build beider Profile. Die Auswahl bleibt `FINAL_SELECTION_PENDING` und die
+Gesamtbewertung `HARDWARE_EVIDENCE_PENDING`: `JsonDocument` nutzt dynamischen
+Heap; es gibt keinen integrierten no-PSRAM-Ressourcen-/Hardware-Nachweis. Die
+Vier-Session-Ressourcenmessung bleibt zwingend vor produktiver Mutation.
+
+Der Handler und die Read-only-Routen sind absichtlich weder registriert noch
+produktiv komponiert. Vor Composition bleiben ausserdem HTTP-/Application-
+Aufrufserialisierung und produktive Auth-/Session-Verdrahtung erforderlich.
+Keine Hardwaretests oder Flasharbeit. PR #170 bleibt Draft und Issue #27
 offen; PR #171 bleibt separat und PR #167 historische Referenz ohne
-Commituebernahme. Nach dem finalen Self-Check STOP fuer Independent Slice
-Review. Kein Ready, Merge, Issue-Abschluss oder Aktorfreigabe ist erfolgt.
+Commituebernahme. `ACTUATOR_RELEASE=NO`; naechster Schritt ist Independent
+Slice Review.
 
 Die spaetere Hardware-Reihenfolge #30 -> #32 -> #33 und die getrennten
 #28-Diagnose-/Chart-/Exportgates bleiben unberuehrt; `ACTUATOR_RELEASE=NO`.

@@ -30,6 +30,49 @@ Nachweisarten:
 - **Repository:** bereits implementierter und getesteter Projektstand;
 - **Messung:** erst nach einem definierten Hardware-Spike; derzeit offen.
 
+### Issue #27 ArduinoJson-Kandidatensupplement (2026-09-30)
+
+Dieses Supplement dokumentiert ausschliesslich den softwareseitigen Spike; es
+ersetzt weder das Originalaudit noch die ausstehende Ownerauswahl.
+
+- Kandidat: ArduinoJson `7.4.3`, offizieller Tag-Commit
+  `77771d3c07668e01d8f52acb03910c1110bb373f`; bezogene `LICENSE.txt` ist MIT
+  (SHA-256 `4a7ee9c96b28cbf30c5bf7c2d211a0ef57179f0328e68ad7b7fa7d754b7da1a2`).
+  Der ESP-IDF Component Manager lockt denselben Commit; das native PlatformIO-
+  Manifest pinnt denselben Git-SHA.
+- Konkrete Grenzen: Run-Mutation-Body 480 Byte (innerhalb des bestehenden
+  512-Byte-Replay-Fingerprints), maximale JSON-Nestingtiefe 4, Program-ID
+  48 Byte, Temperaturprojektion 3 Eintraege, Alerts 16 Eintraege und jede
+  Read-only-Antwort maximal 3072 Byte. DTO-Objekte lehnen fehlende
+  Pflichtfelder, falsche Typen, zusaetzliche Felder, NUL-in-Strings/-Keys sowie
+  malformed/truncated JSON fail-closed ab. Der Maximaltest verwendet eine
+  reale Program-Startmutation mit allen Overrides und maximalen Revisionswerten.
+- Das interne Body-Schema hat Version 1: Root `v`/`r`/`i` (Version,
+  erwartete Revisionen, Intent); Revisionsschluessel `s`/`r`/`m`/`f`/`e`/
+  `u`/`c` (State, Run, Meldungen, Fault, Recovery-Episode,
+  User-Konfiguration, Programmkatalog). Intent `t` ist einer von
+  `start-program`, `start-manual-holding`, `start-manual-timed`, `stop-run`,
+  `complete-run`, `adjust-run`, `recovery-time-correction`, `ack-message`,
+  `mute-message`, `reset-fault` oder `sensor-selection`. Payloadfelder sind
+  im Codec streng allowlisted; Programmstart nutzt Kandidat `c` mit `p` (ID),
+  `x` (Ziel), `d` (Dauer), `h` (Vorheizen), `s` (Sensor), `c` (Completion),
+  `k` (Kuehlziel), `l` (Haltezeit). Read-only-Ausgaben whitelisten Status-/
+  Revisionsfelder, je Temperatur Rolle/Qualitaet/Gueltigkeit/Wert und je Alert
+  ID/Code/Schwere/Aktiv-/Ack-/Decision-/Mute-Zustand; interne Sensorrohdaten,
+  Kalibrierkoeffizienten und Laufzeitstempel werden nicht ausgegeben.
+- Verifikation: gezielte Native-Codec-/API-/Handlerregressionen sowie beide
+  ESP-IDF-6.1-Profile bestehen. `esp32_bringup` erzeugte 1,554,240 Byte
+  Firmwarebinary (ELF text/data/bss 1,359,348/210,835/90,082 Byte);
+  `esp32_release` 1,542,224 Byte (1,349,292/208,867/90,082 Byte). Codec und
+  Handler sind nicht in `main/app_main.cpp` komponiert; ihre Symbole sind nicht
+  im Firmware-ELF, daher ist daraus kein produktiver Flash-/RAM-Delta-Nachweis
+  abzuleiten.
+- Ergebnis: `SPIKE_RESULT=PASS_CANDIDATE`, Gesamtbewertung
+  `HARDWARE_EVIDENCE_PENDING`; `FINAL_SELECTION_PENDING` bleibt. ArduinoJson 7
+  `JsonDocument` allokiert dynamisch. Integrierte Heap-, Fragmentierungs-,
+  Laufzeit- und Vier-Session/no-PSRAM-Messungen sind mangels Hardware nicht
+  erfolgt und werden nicht aus Host-/Builddaten abgeleitet.
+
 ### Upstream-Aktivitaet und deklarierte Plattformbreite
 
 Die Aktivitaet ist nur ein Wartungsindikator. Sie beweist weder Fehlerfreiheit
