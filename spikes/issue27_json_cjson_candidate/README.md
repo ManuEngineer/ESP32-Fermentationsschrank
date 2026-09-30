@@ -86,6 +86,7 @@ VALID_CANONICAL_PROGRAM_ID=PASS
 HISTORICAL_INVALID_UTF8=ACCEPTED_NOT_R1_MUST
 HISTORICAL_SPIKE_RESULT=FAIL_CANDIDATE_UNDER_STRICT_DUPLICATE_NUL_UTF8_CONTRACT
 CURRENT_R1_CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST
+PLAN_REVISION_SHA=aa695b43f5b68edefea23669678d877f5b830c17
 FINAL_SELECTION_PENDING=YES
 ```
 
@@ -96,7 +97,7 @@ observations and exits zero only when the current bounded R1 properties pass.
 The current R1 comparison changes only which properties are MUST;
 the old duplicate/UTF-8 observations and probe outcomes are not rewritten.
 The new probe gate first enforces the 480-byte body bound, then rejects raw NUL
-bytes and the bounded six-byte sequence `\\u0000` before calling cJSON. It neither
+bytes and the bounded six-byte sequence backslash + `u0000` before cJSON. It neither
 tokenizes JSON nor tracks strings, escapes, or structure. The current closed
 ASCII allowlists and canonical Program-ID validator remain responsible for
 post-parse values; they accept the actual valid intent/enum samples and a

@@ -139,6 +139,47 @@ und aendert weder Codec noch produktive Dependencies oder Composition.
   ArduinoJson-Duplicate-Regressions bleiben unveraendert. Produktive Routes,
   `main/app_main.cpp`-Composition, Hardware und Flash bleiben unberuehrt.
 
+### Issue #27 cJSON Candidate Completion gegen proportionalen JSON-R1-Vertrag (2026-09-30)
+
+Dieser neue Probe-Nachweis korrigiert nicht die historische Messung oben,
+sondern ergänzt den im Planreview verlangten kleinen Gate für den aktuellen
+ASCII-only R1-Bodyvertrag.
+
+- Basis-HEAD: `c792c4ac1791ddbeb96864ee32fcff249e3389ae`; isolierter
+  Probe-Commit: `b5b26c204f00e63c4e3944feacde4dccdcb4ae06`.
+- Revalidierte Planrevision: `aa695b43f5b68edefea23669678d877f5b830c17`;
+  PR #170 bleibt Draft, finale Bibliothekswahl bleibt Ownerentscheidung.
+- `containsForbiddenNulInput()` läuft erst nach der 480-Byte-Grenze und
+  prüft rohe NUL-Bytes sowie die sechs Literalbytes: Backslash, `u`, vier
+  Nullen. Das ist ein begrenzter Byte-Scan ohne JSON-Tokenizing,
+  String-/Escape-State-Machine, Strukturwissen, private cJSON-Interna oder
+  Fork.
+- Native C99-cJSON/C++17-Probe: Exit-Code 0. `RAW_NUL_REJECTED_BY_BOUNDED_GATE`
+  und `DECODED_NUL_ESCAPE_REJECTED_BY_BOUNDED_GATE` sind PASS. Ein separater
+  Parse desselben escaped-NUL-Vektors bestätigt weiterhin die historische
+  cJSON-Dekodierung/C-String-Kürzung; verworfen wird er vor dem Parser.
+- Die aktuelle maximale Mutation mit Dezimalstring-`uint64`-Revisionen ist
+  341/480 Byte. Gültiges `start-program`, Enumwerte `product` und
+  `cool-and-hold-until-manual-stop` bleiben parsebar. Die 48-Byte-Program-ID
+  besteht danach den tatsächlichen Projektvalidator
+  `validateLowercaseIdentifier()`. Maximalantworten bleiben Status 346,
+  Temperaturen 247 und Alerts 3048 von 3072 Byte.
+- ESP-IDF 6.1 / ESP32 Build des isolierten cJSON-Probes und des realen
+  Projekt-ID-Validators: PASS. Es wurde weder geflasht noch auf Hardware
+  ausgeführt; daraus folgt kein integrierter Heap-/no-PSRAM-Ressourcennachweis.
+- Duplicate-Member-Rejection und generische UTF-8-Ablehnung bleiben
+  Hardening, nicht MUST. Der historische numerische `uint64`-Kollisionsbefund
+  bleibt wahr, wird aber durch die gemeinsame Dezimalstring-Wiredarstellung
+  aus dem R1-JSON-number-Pfad entfernt.
+- Ergebnis gegen den proportionalen aktuellen Vertrag:
+  `CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST`. ArduinoJson bleibt
+  `PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA`; dies ist keine finale
+  Ownerauswahl. Es gibt keinen gemessenen Ressourcen-Sieger. Die offizielle
+  Espressif-Herkunft ist ein legitimer ESP-IDF-Wartungs-/Wiederverwendungs-
+  Tie-Breaker; vorhandener ungemergter Codeccode ist nur ein kleiner
+  Migrationskostenfaktor. Produktcodec, Dependency, Composition und Hardware
+  bleiben unverändert.
+
 ### Upstream-Aktivitaet und deklarierte Plattformbreite
 
 Die Aktivitaet ist nur ein Wartungsindikator. Sie beweist weder Fehlerfreiheit

@@ -36,7 +36,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `SPIKE_BASE_HEAD=1f49cc9ed0066d106b79ef45fa091b2ce25b83ba`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_REVISION=JSON_R1_PROPORTIONAL_CONTRACT`; `PLAN_REVISION_BASE_HEAD=04d2546dd89e1b67e30a0e0e055280d5cb6361a8`; `PLAN_FIX_BASE_HEAD=025fafca27d940dce8ed9e0d496073c121c9989c`; `SUPERSEDES_PLAN_SHA=c7c5a5c06d3cc07b4f8bf3de7d3c39a07c8d97f4`; `PLAN_REVISION_SHA=031ba2ada63de08ff4a99547d4ec911fcbc6f864`; `PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_PENDING`; `OWNER_PLAN_APPROVAL=REQUIRED_AFTER_FIX_VERIFICATION`; `SLICE=4B_READ_ONLY_API_AND_BOUNDED_JSON_CODEC`; `READ_ONLY_API=IMPLEMENTED_NOT_COMPOSED`; `R1_JSON_MUST=BOUNDS_SCHEMA_TYPES_FINITE_RANGES_EXACT_REVISIONS_CANONICAL_TEXT_MISSING_UNTRUSTED_EXPLICIT_SINGLE_DECODE_SECRET_FREE_EXACT_REPLAY_BODY`; `R1_JSON_HARDENING=DUPLICATE_REJECTION_GENERIC_UTF8_GENERIC_ESCAPE_POLICY`; `UINT64_WEB_REPRESENTATION=DECIMAL_STRING`; `VALID_RANGE=1..18446744073709551615`; `ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION`; `REVISION_ZERO=INVALID`; `ARDUINOJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA`; `CJSON_REASSESSMENT=CONDITIONAL_PASS_CANDIDATE_WITH_BOUNDED_NUL_AND_FIELD_GATES`; `RECOMMENDED_CANDIDATE=ArduinoJson_7.4.3`; `RECOMMENDATION_REASON=KISS_YAGNI_CORRECTNESS`; `FINAL_LIBRARY_SELECTION=OWNER_PENDING`; `MAX_MUTATION=337_OF_480_BYTES`; `MAX_READ_ONLY_RESPONSES=346_247_3048_OF_3072_BYTES`; `HISTORICAL_SPIKE_EVIDENCE=UNCHANGED`; `PRODUCT_CODE_OR_DEPENDENCY_CHANGED=NO`; `PRODUCT_TESTS=NOT_RUN_PLAN_ONLY`; `BUILDER_SELF_CHECK=NOT_RUN_PLAN_ONLY`; `HARDWARE=NOT_RUN`; `FLASH=NOT_RUN`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `ACTUATOR_RELEASE=NO` | STOP fuer Independent Plan Fix Verification; Owner-Planfreigabe erst danach; keine dritte JSON-Bibliothek evaluieren, keine Bibliotheksauswahl/Product-Codec-Umsetzung oder Route-Composition ohne exakte Freigabe |
+| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `SPIKE_BASE_HEAD=1f49cc9ed0066d106b79ef45fa091b2ce25b83ba`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_REVISION=JSON_R1_PROPORTIONAL_CONTRACT`; `PLAN_REVISION_BASE_HEAD=04d2546dd89e1b67e30a0e0e055280d5cb6361a8`; `PLAN_FIX_BASE_HEAD=025fafca27d940dce8ed9e0d496073c121c9989c`; `PREVIOUS_PLAN_SHA=031ba2ada63de08ff4a99547d4ec911fcbc6f864`; `PLAN_REVISION_SHA=aa695b43f5b68edefea23669678d877f5b830c17`; `PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_PENDING`; `OWNER_PLAN_APPROVAL=REQUIRED_AFTER_FIX_VERIFICATION`; `SLICE=4B_READ_ONLY_API_AND_BOUNDED_JSON_CODEC`; `READ_ONLY_API=IMPLEMENTED_NOT_COMPOSED`; `R1_JSON_MUST=BOUNDS_SCHEMA_TYPES_FINITE_RANGES_EXACT_REVISIONS_CANONICAL_TEXT_MISSING_UNTRUSTED_EXPLICIT_SINGLE_DECODE_SECRET_FREE_EXACT_REPLAY_BODY`; `R1_JSON_HARDENING=DUPLICATE_REJECTION_GENERIC_UTF8_GENERIC_ESCAPE_POLICY`; `UINT64_WEB_REPRESENTATION=DECIMAL_STRING`; `VALID_RANGE=1..18446744073709551615`; `ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION`; `REVISION_ZERO=INVALID`; `ARDUINOJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA`; `CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST`; `RECOMMENDED_CANDIDATE=OWNER_SELECTION_AFTER_FAIR_COMPARISON`; `RECOMMENDATION_REASON=NO_CLEAR_MUST_OR_RESOURCE_WINNER;ESPRESSIF_ORIGIN_VALID_TIEBREAKER;EXISTING_CODEC_SMALL_COST_ONLY`; `FINAL_LIBRARY_SELECTION=OWNER_PENDING`; `CJSON_SPIKE_COMMIT=b5b26c204f00e63c4e3944feacde4dccdcb4ae06;CJSON_SPIKE_NATIVE=PASS;CJSON_SPIKE_ESP_IDF_6_1_ESP32_BUILD=PASS;MAX_MUTATION=341_OF_480_BYTES`; `MAX_READ_ONLY_RESPONSES=346_247_3048_OF_3072_BYTES`; `HISTORICAL_SPIKE_EVIDENCE=UNCHANGED`; `PRODUCT_CODE_OR_DEPENDENCY_CHANGED=NO`; `PRODUCT_TESTS=NOT_RUN`; `BUILDER_SELF_CHECK=NOT_RUN_PLAN_ONLY`; `HARDWARE=NOT_RUN`; `FLASH=NOT_RUN`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `ACTUATOR_RELEASE=NO` | STOP fuer Independent Plan Fix Verification; Owner-Planfreigabe erst danach; keine dritte JSON-Bibliothek evaluieren, keine Bibliotheksauswahl/Product-Codec-Umsetzung oder Route-Composition ohne exakte Freigabe |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -101,19 +101,27 @@ range-gepruefte Zahlen, exakte Revision-/Konfliktsemantik, kanonische
 Feldvalidierung, einen deterministischen einmaligen DTO-Decode, Secretfreiheit
 und die Bindung des Replay-Fingerprints an die exakten Requestbytes.
 
-Die Neubewertung empfiehlt ArduinoJson 7.4.3 als kleinsten vorhandenen
-Codec-Delta-Kandidaten; cJSON 1.7.19~2 bleibt bedingt moeglich mit bounded
-Raw-/Escaped-NUL- und ASCII-Feld-Gates. Das ist eine Engineering-Empfehlung,
-keine finale Ownerauswahl. Beide alten Spike-Berichte und vier
-Duplicate-Testvektoren bleiben unveraendert historische Evidence. Revision:
+Der abgeschlossene cJSON-Kandidatenabschluss prueft im isolierten Spike nach
+der 480-Byte-Grenze rohe NUL-Bytes und die Sequenz Backslash gefolgt von
+`u0000` ohne Tokenizing oder Lexer; Native-Probe und
+ESP-IDF-6.1-ESP32-Build bestehen. Gueltige ASCII-Intent-/
+Enum-Beispiele und eine Program-ID ueber den vorhandenen Projektvalidator
+bestehen ebenfalls. Beide Kandidaten sind nun `PASS_CANDIDATE` gegen denselben
+proportionalen R1-MUST-Vertrag. Es gibt keinen gemessenen Ressourcen-Sieger;
+Espressif-Herkunft ist ein legitimer ESP-IDF-Tie-Breaker, der vorhandene
+ArduinoJson-Codec nur ein kleiner Migrationskostenfaktor. Beide alten
+Spike-Berichte und vier Duplicate-Testvektoren bleiben unveraendert historische
+Evidence. Revision:
 `UINT64_WEB_REPRESENTATION=DECIMAL_STRING` fuer
 `UserConfigurationRevision` und `ProgramCatalogRevision` mit
 `VALID_RANGE=1..18446744073709551615`, `ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION`
 und `REVISION_ZERO=INVALID`; Dezimalstrings bleiben für exakte Browser-
 Darstellung über den gesamten `uint64_t`-Bereich. Status: Independent Plan Fix
-Verification ausstehend, Owner-Planfreigabe erst danach; keine Produktcode-,
-Dependency-, Test-, Hardware- oder Flashaenderung in dieser Runde. Die Vier-Session/no-PSRAM-
-Ressourcenmessung bleibt vor produktiver Mutation zwingend.
+Verification ausstehend; Owner waehlt erst danach die finale JSON-Bibliothek.
+Produktcodec/-dependency/-composition blieben unveraendert; Produktregressionen
+sind `NOT_RUN`, isolierte cJSON-Probe/Targetbuild sind `PASS`, Hardware und
+Flash `NOT_RUN`. Die Vier-Session/no-PSRAM-Ressourcenmessung bleibt vor
+produktiver Mutation zwingend.
 
 Der Handler und die Read-only-Routen sind absichtlich weder registriert noch
 produktiv komponiert. Vor Composition bleiben ausserdem HTTP-/Application-
