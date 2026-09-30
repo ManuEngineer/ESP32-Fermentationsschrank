@@ -19,9 +19,11 @@ ISSUE_STATE=OPEN
 BASELINE_MAIN=b871375f494701bed1834013cfeb789856983e3a
 PLAN_REVISION_BASE_HEAD=04d2546dd89e1b67e30a0e0e055280d5cb6361a8
 PLAN_REVISION_DATE=2026-09-30
+PLAN_FIX_BASE_HEAD=025fafca27d940dce8ed9e0d496073c121c9989c
+SUPERSEDES_PLAN_SHA=c7c5a5c06d3cc07b4f8bf3de7d3c39a07c8d97f4
 PREVIOUS_APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771
-PLAN_STATUS=INDEPENDENT_PLAN_REVIEW_PENDING
-OWNER_PLAN_APPROVAL=REQUIRED
+PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_PENDING
+OWNER_PLAN_APPROVAL=REQUIRED_AFTER_FIX_VERIFICATION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_CODEC_OR_DEPENDENCY_CHANGE=NO
 PRODUCT_COMPOSITION=NOT_STARTED
@@ -91,12 +93,17 @@ Body-Bounds gelten auch für den jeweils maximalen konkreten DTO-Fall.
 ```text
 UINT64_WEB_REPRESENTATION=DECIMAL_STRING
 FIELDS=UserConfigurationRevision,ProgramCatalogRevision
+VALID_RANGE=1..18446744073709551615
+ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION
+"0"=INVALID
 ```
 
 Beide Felder werden in Request und Read-only-Revisionprojektion als kanonische
 dezimal kodierte JSON-Strings übertragen: 1 bis 20 ASCII-Ziffern, keine
-führenden Nullen ausser beim Wert `0`, kein Vorzeichen, Dezimalpunkt oder
-Exponent. Gültiger Zahlenbereich ist exakt `0..18446744073709551615`.
+führenden Nullen, kein Vorzeichen, Dezimalpunkt oder Exponent. Gültiger
+Zahlenbereich ist exakt `1..18446744073709551615`; `0` ist reserviert und
+ungültig. Ein fehlendes optionales Feld bedeutet `NO_EXPECTED_REVISION` und
+wird nicht als numerischer Wert `0` interpretiert.
 
 Browser-JavaScript-`Number` unterscheidet Integer nur bis
 `Number.MAX_SAFE_INTEGER = 2^53-1`: beispielsweise werden `2^53` und `2^53+1`
@@ -177,6 +184,9 @@ Einführen freier Inbound-Texte wäre diese Annahme neu zu prüfen.
 R1_JSON_MUST=HARD_BOUNDS_480_3072;VALID_COMPLETE_JSON;CLOSED_VERSIONED_SCHEMA;REQUIRED_FIELDS;EXACT_TYPES;FINITE_RANGE_CHECKED_NUMBERS;EXACT_REVISION_CONFLICTS;CANONICAL_ACTUAL_TEXT_AND_IDS;MISSING_UNTRUSTED_EXPLICIT;DETERMINISTIC_SINGLE_DECODE;NO_SECRETS;CODEC_LOCAL_LIBRARY_TYPES;EXACT_BODY_REPLAY_FINGERPRINT
 R1_JSON_HARDENING=DUPLICATE_MEMBER_REJECTION;GENERIC_UTF8_REJECTION_FOR_ASCII_ONLY_FIELDS;GENERIC_ESCAPE_CONTROL_POLICY_BEYOND_JSON_SYNTAX_AND_REAL_FIELDS
 UINT64_WEB_REPRESENTATION=DECIMAL_STRING
+VALID_RANGE=1..18446744073709551615
+ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION
+"0"=INVALID
 ARDUINOJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA
 CJSON_REASSESSMENT=CONDITIONAL_PASS_CANDIDATE_FOR_R1_MUST_WITH_BOUNDED_NUL_AND_FIELD_GATES
 RECOMMENDED_CANDIDATE=ArduinoJson_7.4.3
@@ -211,11 +221,23 @@ Plan-Commits:
 3. Die vier Duplicate-Testvektoren behalten, aber als nichtblockierende
    Hardening-Evidence klassifizieren. Der R1-Testvertrag darf keine
    kandidatenspezifische Duplicate-Interpretation verlangen.
-4. Native Tests für beide `uint64_t`-Grenzen, Dezimalformat/Overflow,
-   Revisionkonflikte ohne Mutation, Pflicht-/Zusatzfelder, Typen, finite und
-   fachliche Zahlenranges, kanonische IDs/Texte, vollständigen JSON-Verbrauch,
-   Raw-/Escaped-NUL soweit kandidatenspezifisch nötig, maximale konkrete DTOs,
-   Replay-Bodybindung und alle Responsegrenzen ergänzen/ausführen.
+4. Native Tests für Dezimalformat/Overflow und die optionalen
+   Revision-Grenzfälle ergänzen/ausführen:
+
+   | JSON-Feldzustand | Ergebnis |
+   |---|---|
+   | `"0"` | reject |
+   | `"00"` | reject |
+   | `"01"` | reject |
+   | `"1"` | accept |
+   | `"18446744073709551615"` | accept |
+   | `"18446744073709551616"` | reject |
+   | Feld fehlt | `NO_EXPECTED_REVISION` |
+
+   Dazu Revisionkonflikte ohne Mutation, Pflicht-/Zusatzfelder, Typen, finite
+   und fachliche Zahlenranges, kanonische IDs/Texte, vollständigen
+   JSON-Verbrauch, Raw-/Escaped-NUL soweit kandidatenspezifisch nötig,
+   maximale konkrete DTOs, Replay-Bodybindung und alle Responsegrenzen testen.
 5. Betroffene bestehende Route-/Session-/Application-Regressionen, beide
    ESP-IDF-Profile bei Produkt-/Dependency-Änderung, Builder Self-Check und
    `git diff --check` ausführen. Separate No-PSRAM-/Vier-Session-
