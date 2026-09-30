@@ -169,12 +169,12 @@ Hardening-Evidence statt Vertragsblocker.
 | Kandidat | R1-MUST-Fit und konkrete Delta | Hardening-/Restpunkt | Neubewertung |
 |---|---|---|---|
 | ArduinoJson 7.4.3 | Bereits vorhandener konkreter Codec; bestehende Tests belegen exakte interne `uint64_t`-Verarbeitung. `JsonString::size()` erlaubt längenbewusste Prüfung von embedded NUL. Nötiges R1-Delta: `u`/`c` dezimale Strings, Überlauf-Parser, kanonische ID-Validierung und bestehende Bounds/Typ-/Finite-Checks als Gate. | Doppelte Member werden deterministisch last-value-wins zusammengeführt; die öffentliche API bietet keinen Event-Hook zur Duplicate-Ablehnung. Das ist unter dem revidierten Vertrag Hardening, kein Blocker. | `PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA` |
-| Espressif cJSON 1.7.19~2 | Vorherige Host-/ESP-IDF-6.1-/ESP32-/C++17-Evidence bleibt erhalten; der neue isolierte Probe-Gate ist Host und ESP-IDF-Build PASS. Dezimalstring-Revisionen beseitigen die `double`-`uint64_t`-Kollision im Wirevertrag; `isfinite()` und Wertebereiche bleiben Codecvalidierung. Nach cJSON-Parse wird der bestehende Program-ID-Validator benutzt. | Der bounded NUL-Gate prüft nach der 480-Byte-Grenze rohe NUL-Bytes und die sechs Bytes `\\u0000`. Er verwendet weder Tokenizing noch JSON-Zustand; die Probe akzeptiert gültige ASCII-Intent-/Enum-Beispiele und kanonische Program-IDs. Duplicate-/UTF-8-Verhalten bleibt Hardening. | `PASS_CANDIDATE_FOR_R1_MUST` |
+| Espressif cJSON 1.7.19~2 | Vorherige Host-/ESP-IDF-6.1-/ESP32-/C++17-Evidence bleibt erhalten; der neue isolierte Probe-Gate ist Host und ESP-IDF-Build PASS. Dezimalstring-Revisionen beseitigen die `double`-`uint64_t`-Kollision im Wirevertrag; `isfinite()` und Wertebereiche bleiben Codecvalidierung. Nach cJSON-Parse wird der bestehende Program-ID-Validator benutzt. | Der bounded NUL-Gate prüft nach der 480-Byte-Grenze rohe NUL-Bytes und die sechs Bytes `Backslash-u0000`. Er verwendet weder Tokenizing noch JSON-Zustand; die Probe akzeptiert gültige ASCII-Intent-/Enum-Beispiele und kanonische Program-IDs. Duplicate-/UTF-8-Verhalten bleibt Hardening. | `PASS_CANDIDATE_FOR_R1_MUST` |
 
 Der bisherige cJSON-Spike hat `uint64`-Kollision, NUL-Verhalten und
 invalid-UTF-8-Akzeptanz unter dem früheren strengeren Vertrag gemessen; diese
 historischen Ergebnisse bleiben unverändert. Die aktuelle Planrevision
-ergänzt die begrenzte Suche nach rohem NUL und `\\u0000` und belegt mit dem
+ergänzt die begrenzte Suche nach rohem NUL und `\u0000` und belegt mit dem
 aktuellen ASCII-Intent-/Enum-Sample sowie dem vorhandenen
 `validateLowercaseIdentifier()` die Fortgeltung erlaubter Werte. Der Gate
 scannt höchstens 480 Bytes und hat weder Tokenisierung noch String-, Escape-
