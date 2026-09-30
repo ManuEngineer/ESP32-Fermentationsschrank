@@ -1,7 +1,9 @@
 #include <unity.h>
 
-#include <cstring>
+#include <array>
+#include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -23,6 +25,7 @@
 #include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
 #include "run_persistence_coordinator.hpp"
+#include "secure_random_source.hpp"
 #include "state_store.hpp"
 #include "storage_envelope.hpp"
 #include "time_zone_resolver.hpp"
@@ -667,6 +670,26 @@ void test_authorized_reset_recovers_indeterminate_handoff_and_corrupt_auth() {
         static_cast<int>(
             authStore.readCredentials(device_platform::StorageEpoch{2U})
                 .status));
+
+    class UnusedAuthenticationKdf final
+        : public fermentation::IAuthenticationKdf {
+       public:
+        bool derive(
+            const std::string&, const fermentation::AuthVerifier&,
+            std::array<std::uint8_t,
+                       fermentation::kAuthenticationVerifierBytes>&) override {
+            return false;
+        }
+    } kdf;
+    class UnusedSecureRandom final
+        : public device_platform::ISecureRandomSource {
+       public:
+        bool fill(void*, std::size_t) override { return false; }
+    } random;
+    fermentation::AuthenticationDomain authentication(authStore, kdf, random);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(authentication.inspect(*resolved.context)));
 }
 
 void test_factory_reset_advances_epoch_and_preserves_touch_key() {
