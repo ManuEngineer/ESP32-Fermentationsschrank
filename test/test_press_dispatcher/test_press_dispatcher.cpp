@@ -622,6 +622,46 @@ void test_process_touch_fresh_edge_off_target_does_not_navigate() {
                           static_cast<int>(workspace.page()));
 }
 
+void test_physical_touch_manual_start_uses_the_application_owner_path() {
+    OwningAppFixture fixture;
+    FermentationTouchWorkspace workspace;
+    const auto snapshot = fixture.application.uiSnapshot();
+    const auto packs = makeFermentationUiTextPacks();
+    workspace.setPage(FermentationUiPage::ManualModeSelection);
+    workspace.setManualTimedValues(validManualTimedValues());
+
+    const auto modeSelection = processWorkspaceTouch(
+        fixture.application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/true, bottomX(2), kBottomY,
+        /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
+    TEST_ASSERT_TRUE(modeSelection.pressedTarget.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ManualTimed),
+                          static_cast<int>(workspace.page()));
+
+    const auto released = processWorkspaceTouch(
+        fixture.application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/false, bottomX(2), kBottomY,
+        /*freshPressEdge=*/false, fixture.timeSource.monotonicMillis());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+        static_cast<int>(released.dispatch.outcome));
+
+    const auto start = processWorkspaceTouch(
+        fixture.application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/true, bottomX(2), kBottomY,
+        /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
+    assertAppliedOwningResult(start.dispatch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::ActiveRun),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component, so
@@ -656,5 +696,6 @@ int main() {
     RUN_TEST(test_process_touch_held_without_fresh_edge_does_not_navigate);
     RUN_TEST(test_process_touch_fresh_edge_on_valid_slot_navigates);
     RUN_TEST(test_process_touch_fresh_edge_off_target_does_not_navigate);
+    RUN_TEST(test_physical_touch_manual_start_uses_the_application_owner_path);
     return UNITY_END();
 }
