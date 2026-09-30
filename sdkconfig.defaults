@@ -18,6 +18,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store.csv"
 # Measured Release-1 main-task baseline; keep this shared across profiles.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 
+# Keep the parser bound aligned with the closed Issue #27 DTO depth.
+CONFIG_CJSON_NESTING_LIMIT=4
+
 # Kein PSRAM-Eintrag: CONFIG_SPIRAM ist im ESP-IDF-Default bereits
 # deaktiviert; Release 1 darf keine PSRAM-Abhaengigkeit einfuehren.
 # Issue #31 raw-touch contract: conversion/calibration remains above the

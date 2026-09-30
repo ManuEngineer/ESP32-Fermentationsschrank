@@ -263,11 +263,13 @@ std::string expectedJson(const FermentationUiExpectedRevisions& expected) {
         json << ",\"f\":" << *expected.expectedFaultRevision;
     if (expected.expectedRecoveryEpisodeRevision.has_value())
         json << ",\"e\":" << *expected.expectedRecoveryEpisodeRevision;
-    if (expected.expectedUserConfigurationRevision.has_value())
-        json << ",\"u\":"
-             << expected.expectedUserConfigurationRevision->value();
+    if (expected.expectedUserConfigurationRevision.has_value()) {
+        json << ",\"u\":\""
+             << expected.expectedUserConfigurationRevision->value() << '"';
+    }
     if (expected.expectedProgramCatalogRevision.has_value())
-        json << ",\"c\":" << expected.expectedProgramCatalogRevision->value();
+        json << ",\"c\":\"" << expected.expectedProgramCatalogRevision->value()
+             << '"';
     json << '}';
     return json.str();
 }
@@ -334,7 +336,7 @@ std::string mutationBody(const WebRunMutationDto& dto) {
                     json << ",\"k\":" << *intent.candidate.coolingTargetCelsius;
                 if (intent.candidate.holdDurationMinutes.has_value())
                     json << ",\"l\":" << *intent.candidate.holdDurationMinutes;
-                json << "}}";
+                json << "}";
             }
         },
         dto.intent);
@@ -572,6 +574,9 @@ void test_mutation_codec_rejects_invalid_bodies_without_partial_dto() {
                 .messageId);
     };
 
+    auto rawNul = valid;
+    rawNul.push_back('\0');
+    rejectsWithoutMutation(rawNul);
     rejectsWithoutMutation("{\"v\":1,\"r\":{},\"i\":{\"t\":\"reset-fault\"}}");
     rejectsWithoutMutation(
         "{\"v\":1,\"r\":{\"s\":7},\"extra\":true,"
@@ -580,6 +585,18 @@ void test_mutation_codec_rejects_invalid_bodies_without_partial_dto() {
         "{\"v\":1,\"r\":{\"s\":7},"
         "\"i\":{\"t\":\"start-manual-timed\","
         "\"x\":30,\"d\":1,\"s\":\"air\",\"h\":\"false\","
+        "\"q\":0.5,\"qd\":10,\"tr\":180,"
+        "\"c\":\"finish-without-cooling\"}}");
+    rejectsWithoutMutation(
+        "{\"v\":1,\"r\":{\"s\":7},"
+        "\"i\":{\"t\":\"start-manual-timed\","
+        "\"x\":1e999,\"d\":1,\"s\":\"air\",\"h\":false,"
+        "\"q\":0.5,\"qd\":10,\"tr\":180,"
+        "\"c\":\"finish-without-cooling\"}}");
+    rejectsWithoutMutation(
+        "{\"v\":1,\"r\":{\"s\":7},"
+        "\"i\":{\"t\":\"start-manual-timed\","
+        "\"x\":30,\"d\":4294967296,\"s\":\"air\",\"h\":false,"
         "\"q\":0.5,\"qd\":10,\"tr\":180,"
         "\"c\":\"finish-without-cooling\"}}");
     rejectsWithoutMutation(valid.substr(0U, valid.size() - 1U));
@@ -595,6 +612,15 @@ void test_mutation_codec_rejects_invalid_bodies_without_partial_dto() {
     rejectsWithoutMutation(
         "{\"v\":1,\"r\":{\"s\":0},\"i\":{"
         "\"t\":\"start-program\",\"c\":{\"p\":\"ab\\u0000cd\"}}}");
+    rejectsWithoutMutation(
+        "{\"v\":1,\"r\":{\"s\":0},\"i\":{"
+        "\"t\":\"start-program\",\"c\":{\"p\":\"Upper-case\"}}}");
+    rejectsWithoutMutation(
+        "{\"v\":1,\"r\":{\"s\":0},\"i\":{"
+        "\"t\":\"start-program\",\"c\":{\"p\":\"bad--id\"}}}");
+    rejectsWithoutMutation(
+        "{\"v\":1,\"r\":{\"s\":0},\"i\":{"
+        "\"t\":\"start-program\",\"c\":{\"p\":\"-leading\"}}}");
     const std::string overlongProgramId =
         "{\"v\":1,\"r\":{\"s\":0},\"i\":{"
         "\"t\":\"start-program\",\"c\":{\"p\":\"" +
@@ -606,6 +632,14 @@ void test_mutation_codec_rejects_invalid_bodies_without_partial_dto() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(WebRunMutationDecodeStatus::TooLarge),
         static_cast<int>(decodeWebRunMutation(oversized, sentinel)));
+    auto exactLimit = valid;
+    exactLimit.append(kMaximumWebRunMutationBodyBytes - exactLimit.size(), ' ');
+    TEST_ASSERT_EQUAL_UINT32(kMaximumWebRunMutationBodyBytes,
+                             exactLimit.size());
+    WebRunMutationDto exactLimitDecoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebRunMutationDecodeStatus::Success),
+        static_cast<int>(decodeWebRunMutation(exactLimit, exactLimitDecoded)));
     for (std::size_t index = 0U; index < valid.size(); ++index) {
         auto changed = valid;
         changed[index] = (index % 2U) == 0U ? '\\' : '\0';
@@ -652,39 +686,67 @@ void test_mutation_codec_decodes_every_closed_application_intent() {
     }
 }
 
-void assertDuplicateMemberRejected(const char* body) {
-    WebRunMutationDto decoded;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(
-        static_cast<int>(WebRunMutationDecodeStatus::Invalid),
-        static_cast<int>(decodeWebRunMutation(body, decoded)), body);
-}
+void test_mutation_codec_uses_canonical_decimal_revision_strings() {
+    const auto bodyForRevision = [](const char* key, const char* value) {
+        return std::string("{\"v\":1,\"r\":{\"s\":0,\"") + key + "\":\"" +
+               value + "\"},\"i\":{\"t\":\"reset-fault\"}}";
+    };
+    const auto expectAccepted = [](const std::string& body,
+                                   bool userConfiguration,
+                                   std::uint64_t expected) {
+        WebRunMutationDto decoded;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WebRunMutationDecodeStatus::Success),
+            static_cast<int>(decodeWebRunMutation(body, decoded)));
+        if (userConfiguration) {
+            TEST_ASSERT_TRUE(
+                decoded.expected.expectedUserConfigurationRevision.has_value());
+            TEST_ASSERT_FALSE(
+                decoded.expected.expectedProgramCatalogRevision.has_value());
+            TEST_ASSERT_EQUAL_UINT64(
+                expected,
+                decoded.expected.expectedUserConfigurationRevision->value());
+        } else {
+            TEST_ASSERT_FALSE(
+                decoded.expected.expectedUserConfigurationRevision.has_value());
+            TEST_ASSERT_TRUE(
+                decoded.expected.expectedProgramCatalogRevision.has_value());
+            TEST_ASSERT_EQUAL_UINT64(
+                expected,
+                decoded.expected.expectedProgramCatalogRevision->value());
+        }
+    };
+    const auto expectRejected = [](const std::string& body) {
+        WebRunMutationDto decoded;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WebRunMutationDecodeStatus::Invalid),
+            static_cast<int>(decodeWebRunMutation(body, decoded)));
+    };
 
-void test_mutation_codec_rejects_conflicting_duplicate_at_root() {
-    assertDuplicateMemberRejected(
-        "{\"v\":1,\"r\":{\"s\":0},"
-        "\"i\":{\"t\":\"reset-fault\"},"
-        "\"i\":{\"t\":\"ack-message\",\"id\":7}}");
-}
+    const std::array<const char*, 2U> revisionKeys{{"u", "c"}};
+    for (const auto* key : revisionKeys) {
+        const bool userConfiguration = std::strcmp(key, "u") == 0;
+        expectRejected(bodyForRevision(key, "0"));
+        expectRejected(bodyForRevision(key, "00"));
+        expectRejected(bodyForRevision(key, "01"));
+        expectAccepted(bodyForRevision(key, "1"), userConfiguration, 1U);
+        expectAccepted(bodyForRevision(key, "18446744073709551615"),
+                       userConfiguration, UINT64_MAX);
+        expectRejected(bodyForRevision(key, "18446744073709551616"));
+        expectRejected(std::string("{\"v\":1,\"r\":{\"s\":0,\"") + key +
+                       "\":1},\"i\":{\"t\":\"reset-fault\"}}");
+    }
 
-void test_mutation_codec_rejects_conflicting_duplicate_in_revisions() {
-    assertDuplicateMemberRejected(
-        "{\"v\":1,\"r\":{\"s\":0,\"s\":1},"
-        "\"i\":{\"t\":\"reset-fault\"}}");
-}
-
-void test_mutation_codec_rejects_conflicting_duplicate_in_intent() {
-    assertDuplicateMemberRejected(
-        "{\"v\":1,\"r\":{\"s\":0},"
-        "\"i\":{\"t\":\"reset-fault\","
-        "\"t\":\"ack-message\",\"id\":7}}");
-}
-
-void test_mutation_codec_rejects_conflicting_duplicate_in_candidate() {
-    assertDuplicateMemberRejected(
-        "{\"v\":1,\"r\":{\"s\":0},"
-        "\"i\":{\"t\":\"start-program\","
-        "\"c\":{\"p\":\"old-program\","
-        "\"p\":\"new-program\"}}}");
+    WebRunMutationDto absent;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebRunMutationDecodeStatus::Success),
+        static_cast<int>(decodeWebRunMutation("{\"v\":1,\"r\":{\"s\":0},"
+                                              "\"i\":{\"t\":\"reset-fault\"}}",
+                                              absent)));
+    TEST_ASSERT_FALSE(
+        absent.expected.expectedUserConfigurationRevision.has_value());
+    TEST_ASSERT_FALSE(
+        absent.expected.expectedProgramCatalogRevision.has_value());
 }
 
 void test_maximum_product_mutation_fits_body_and_exact_replay_budget() {
@@ -775,6 +837,10 @@ void test_read_only_api_projection_bounds_and_untrusted_values() {
     std::string status;
     TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
     TEST_ASSERT_TRUE(status.size() <= kMaximumWebApiResponseBodyBytes);
+    TEST_ASSERT_NOT_NULL(std::strstr(
+        status.c_str(), "\"userConfiguration\":\"18446744073709551615\""));
+    TEST_ASSERT_NOT_NULL(std::strstr(
+        status.c_str(), "\"programCatalog\":\"18446744073709551615\""));
     TEST_ASSERT_NOT_NULL(
         std::strstr(status.c_str(), "\"networkMode\":\"selection-required\""));
     TEST_ASSERT_NULL(std::strstr(status.c_str(), "UNSELECTED"));
@@ -860,10 +926,7 @@ int main() {
         test_handler_maps_stale_revision_and_invalid_program_without_mutation);
     RUN_TEST(test_mutation_codec_rejects_invalid_bodies_without_partial_dto);
     RUN_TEST(test_mutation_codec_decodes_every_closed_application_intent);
-    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_at_root);
-    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_revisions);
-    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_intent);
-    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_candidate);
+    RUN_TEST(test_mutation_codec_uses_canonical_decimal_revision_strings);
     RUN_TEST(test_maximum_product_mutation_fits_body_and_exact_replay_budget);
     RUN_TEST(test_read_only_api_projection_bounds_and_untrusted_values);
     RUN_TEST(test_read_only_api_routes_are_get_only_and_uncomposed);

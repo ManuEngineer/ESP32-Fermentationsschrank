@@ -19,8 +19,8 @@ enum class WebRunMutationDecodeStatus : unsigned char {
     Invalid,
 };
 
-// ArduinoJson is confined to this codec implementation. The decoder accepts
-// one strict, versioned schema and publishes no partial DTO on failure.
+// cJSON is confined to this codec implementation. The decoder accepts one
+// versioned schema and publishes no partial DTO on failure.
 [[nodiscard]] WebRunMutationDecodeStatus decodeWebRunMutation(
     const std::string& exactBody, WebRunMutationDto& output);
 

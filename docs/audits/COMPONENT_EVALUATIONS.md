@@ -936,3 +936,39 @@ Quellen: [Arduino PID](https://github.com/br3ttb/Arduino-PID-Library),
 - NVS-Kapazitaet, reale Flashatomizitaet und Lebensdauer sind nicht gemessen.
 - Es wird keine reale Heapreserve, PSRAM, GPIO-Belegung oder aktive Polaritaet
   behauptet.
+
+### Issue #27 – owner-ausgewaehlter cJSON-Codec implementiert (2026-09-30)
+
+Plan `aa695b43f5b68edefea23669678d877f5b830c17` wurde fuer die finale
+Bibliotheksauswahl ownerfreigegeben. Ausgewaehlt ist ausschliesslich
+Espressif Registry `espressif/cjson 1.7.19~2`, Komponentencommit
+`1387cec28a9b40654be7892114bd7d26fcd3869c`, Upstream cJSON Commit
+`b2890c8d76bbb64e710585ebc0a917196b9c67e7`, Component-Hash
+`e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469`.
+Die MIT-Lizenzdatei hat SHA-256
+`a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c`.
+ArduinoJson ist aus Manifest, Lockfile, CMake und PlatformIO entfernt.
+
+- `web_json_codec.cpp` verwendet cJSON nur an der konkreten Codecgrenze;
+  CMake deklariert `cjson` als private Dependency. `uint64`-Revisionen bleiben
+  kanonische bounded Dezimalstrings; Zahlen, Pflichtfelder und geschlossene
+  Schemas werden projektspezifisch validiert. Der 480-Byte-Bodybound wird vor
+  NUL-Scan und Parse erzwungen; Responses sind auf 3072 Byte begrenzt.
+- Native Regressionen nach Implementierung: Web-Application-Routes 16/16,
+  Web-Session 16/16, Browser-Policy 4/4, HTTP-Lifecycle 5/5, lokale Touch-UI
+  14/14, UI-Commands 10/10, Run-Identity 18/18 und
+  Run-Persistence-Coordinator 163/163. Die geaenderte Route-/Codec-Suite
+  bestand nach clang-format-21 nochmals 16/16.
+- ESP-IDF `esp32_bringup` und `esp32_release` sowie abschliessender
+  PlatformIO-Profilvertrag: PASS. Board-Profile-Single-Source und
+  Builder-Static-Analysis-Self-Check unter clang-format/tidy 21: PASS;
+  `git diff --check`: PASS.
+- Read-only-Antwortgroessen im gemessenen nativen Produktpfad: Status 345,
+  Temperaturen 247 und Alerts 3048 Byte, jeweils innerhalb 3072 Byte.
+  Dies ist kein integrierter Vier-Session-/no-PSRAM-Ressourcennachweis.
+- `GET /api/v1/*` und der interne Run-Handler bleiben unregistriert und
+  unkomponiert; kein `main/app_main.cpp`-Delta. Die Auth-/Session-Composition,
+  Application-Aufrufserialisierung und das Vier-Session-/no-PSRAM-Gate bleiben
+  vor produktiver Webmutation offen. Hardware und Flash: `NOT_RUN`;
+  `ACTUATOR_RELEASE=NO`. Ergebnis: softwareseitiger Slice abgeschlossen,
+  STOP fuer Independent Slice Review.

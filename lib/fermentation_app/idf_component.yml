@@ -1,5 +1,4 @@
 dependencies:
-  # Candidate-only Issue #27 codec spike; final library selection is pending.
-  ArduinoJson:
-    git: https://github.com/bblanchon/ArduinoJson.git
-    version: 77771d3c07668e01d8f52acb03910c1110bb373f
+  espressif/cjson:
+    version: "=1.7.19~2"
+    require: private

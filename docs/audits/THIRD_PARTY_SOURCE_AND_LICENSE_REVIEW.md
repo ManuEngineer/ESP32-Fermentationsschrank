@@ -144,3 +144,25 @@ Lieferantenangaben besitzen gemaess `docs/HARDWARE.md` nur den Status
    Begleitdokumentation bewerten.
 7. erst danach den Status im dauerhaften Komponentenregister auf eine
    ownerfreigegebene Auswahl setzen.
+
+## Issue #27 – aktuelle Ownerauswahl und Codec-Umsetzung (2026-09-30)
+
+Die historische cJSON- und ArduinoJson-Kandidatenevidence oben bleibt
+unveraendert. Gegen den ownerfreigegebenen proportionalen JSON-R1-Vertrag
+(Plan `aa695b43f5b68edefea23669678d877f5b830c17`) wurde final
+`espressif/cjson 1.7.19~2` gewaehlt. Quelle ist die offizielle
+[Espressif Component Registry](https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2/readme)
+mit Registry-Komponentencommit `1387cec28a9b40654be7892114bd7d26fcd3869c`
+und Upstream [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON/commit/b2890c8d76bbb64e710585ebc0a917196b9c67e7)
+Commit `b2890c8d76bbb64e710585ebc0a917196b9c67e7`. Der ESP-IDF-6.1-
+Component-Hash ist `e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469`.
+Die enthaltene MIT-Lizenzdatei hat SHA-256
+`a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c`.
+
+Die direkte Dependency ist exakt gepinnt und privat; die Librarytypen bleiben
+auf `web_json_codec.cpp` begrenzt. ArduinoJson bleibt nur historische
+Spike-Evidence und ist keine Produktdependency. Der produktive Codec und beide
+ESP-IDF-Profile bauen; native und Builder-Self-Check-Gates bestehen. Dies
+aktualisiert die aktuelle Auswahl-/Umsetzungsstatuszeile, nicht die frueheren
+Kandidatentests. Route-Composition, Hardware, Flash und der integrierte
+Vier-Session-/no-PSRAM-Ressourcennachweis bleiben ausstehend.

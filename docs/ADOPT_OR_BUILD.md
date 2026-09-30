@@ -132,13 +132,15 @@ Espressif-cJSON-1.7.19~2-Spikes bleiben historische Messungen gegen den damals
 strengeren Duplicate-/NUL-/UTF-8-Vertrag; diese Resultate werden nicht
 umgeschrieben. Die proportionale JSON-R1-Planrevision bewertet Duplicate-
 Ablehnung und generische UTF-8-/Escape-Hardening-Regeln für die aktuellen
-ASCII-only DTO-Textfelder nicht automatisch als MUST. Sie empfiehlt
-ArduinoJson 7.4.3 als Engineering-Kandidaten mit kleinem bestehendem
-Codec-Delta; cJSON bleibt mit bounded NUL- und realen Feldvalidierungen
-bedingt möglich. Die finale Bibliotheksauswahl bleibt Ownerentscheidung und
-`FINAL_SELECTION_PENDING=YES`; eine dritte Alternative wird nicht evaluiert.
-Diese Neubewertung ist bis zum Abschluss der unabhängigen Planprüfung und
-Ownerfreigabe ein Vorschlag und ändert noch keine Produktabhängigkeit.
+ASCII-only DTO-Textfelder nicht automatisch als MUST. Der Owner hat mit
+Freigabe von Plan `aa695b43f5b68edefea23669678d877f5b830c17` Espressif
+`espressif/cjson 1.7.19~2` final ausgewaehlt. Die Produktabhängigkeit ist
+exakt gepinnt, privat auf der `fermentation_app`-Buildgrenze und ausschliesslich
+im konkreten Web-JSON-Codec verwendet; ArduinoJson ist daraus entfernt.
+`FINAL_SELECTION_PENDING=NO`; eine dritte Alternative wird nicht evaluiert.
+Der cJSON-Codec lehnt raw NUL und die bounded erkannte `\u0000`-Form vor dem
+Parse ab; Duplikat-Member-Ablehnung und generische UTF-8-Prüfung bleiben
+Hardening, nicht R1-MUST.
 
 Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
 Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und

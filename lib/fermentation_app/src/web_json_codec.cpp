@@ -1,37 +1,47 @@
 #include "web_json_codec.hpp"
 
-#include <ArduinoJson.h>
+#include <cJSON.h>
 
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
+#include <memory>
+#include <string>
 #include <type_traits>
 #include <utility>
 
 #include "configuration_limits.hpp"
+#include "configuration_text.hpp"
 
 namespace fermentation {
 namespace {
 
-using JsonObjectConst = ArduinoJson::JsonObjectConst;
-using JsonVariantConst = ArduinoJson::JsonVariantConst;
+struct CJsonDeleter {
+    void operator()(cJSON* value) const { cJSON_Delete(value); }
+};
 
-bool hasOnlyKeys(JsonObjectConst object,
+using CJsonDocument = std::unique_ptr<cJSON, CJsonDeleter>;
+
+constexpr std::size_t kCJsonPrintSafetyMarginBytes = 5U;
+constexpr std::size_t kMaximumRevisionDecimalBytes = 20U;
+static_assert(CJSON_NESTING_LIMIT == kMaximumWebJsonNesting,
+              "cJSON and the Issue #27 schema depth must stay aligned");
+
+const cJSON* member(const cJSON* object, const char* name) {
+    return cJSON_GetObjectItemCaseSensitive(object, name);
+}
+
+bool hasOnlyKeys(const cJSON* object,
                  std::initializer_list<const char*> allowed) {
-    for (const auto pair : object) {
-        const auto memberName = pair.key();
-        const auto memberLength = memberName.size();
-        if (memberName.isNull() || memberName.c_str() == nullptr ||
-            std::memchr(memberName.c_str(), '\0', memberLength) != nullptr) {
-            return false;
-        }
+    if (!cJSON_IsObject(object)) return false;
+    for (auto* item = object->child; item != nullptr; item = item->next) {
+        if (item->string == nullptr) return false;
         bool matched = false;
         for (const auto* key : allowed) {
-            const auto keyLength = std::strlen(key);
-            if (memberLength == keyLength &&
-                std::memcmp(memberName.c_str(), key, keyLength) == 0) {
+            if (std::strcmp(item->string, key) == 0) {
                 matched = true;
                 break;
             }
@@ -41,83 +51,139 @@ bool hasOnlyKeys(JsonObjectConst object,
     return true;
 }
 
-bool readString(JsonVariantConst value, std::size_t maximumBytes,
-                std::string& output) {
-    if (!value.is<ArduinoJson::JsonString>()) return false;
-    const auto text = value.as<ArduinoJson::JsonString>();
-    const auto length = text.size();
-    if (text.isNull() || text.c_str() == nullptr ||
-        std::memchr(text.c_str(), '\0', length) != nullptr) {
-        return false;
+bool containsForbiddenNulInput(const std::string& body) {
+    if (body.find('\0') != std::string::npos) return true;
+    constexpr char kDecodedNulEscape[] = {'\\', 'u', '0', '0', '0', '0'};
+    if (body.size() < sizeof(kDecodedNulEscape)) return false;
+    for (std::size_t index = 0U;
+         index <= body.size() - sizeof(kDecodedNulEscape); ++index) {
+        if (std::memcmp(body.data() + index, kDecodedNulEscape,
+                        sizeof(kDecodedNulEscape)) == 0) {
+            return true;
+        }
     }
+    return false;
+}
+
+bool readString(const cJSON* value, std::size_t maximumBytes,
+                std::string& output) {
+    if (!cJSON_IsString(value) || value->valuestring == nullptr) return false;
+    const auto length = std::strlen(value->valuestring);
     if (length == 0U || length > maximumBytes) return false;
-    output.assign(text.c_str(), length);
+    output.assign(value->valuestring, length);
     return true;
 }
 
 template <typename Integer>
-bool readInteger(JsonVariantConst value, Integer& output) {
+bool readInteger(const cJSON* value, Integer& output) {
     static_assert(std::is_integral_v<Integer> && std::is_unsigned_v<Integer>,
                   "web DTO integer fields are unsigned");
-    if (!value.is<Integer>()) return false;
-    output = value.as<Integer>();
+    if (!cJSON_IsNumber(value) || !std::isfinite(value->valuedouble) ||
+        value->valuedouble < 0.0 ||
+        value->valuedouble >
+            static_cast<double>(std::numeric_limits<Integer>::max()) ||
+        std::floor(value->valuedouble) != value->valuedouble) {
+        return false;
+    }
+    output = static_cast<Integer>(value->valuedouble);
     return true;
 }
 
 template <typename Integer>
-bool readOptionalInteger(JsonObjectConst object, const char* key,
+bool readOptionalInteger(const cJSON* object, const char* key,
                          std::optional<Integer>& output) {
-    if (object[key].isUnbound()) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
         output.reset();
         return true;
     }
-    Integer value{};
-    if (!readInteger(object[key], value)) return false;
-    output = value;
+    Integer parsed{};
+    if (!readInteger(value, parsed)) return false;
+    output = parsed;
     return true;
 }
 
-bool readDouble(JsonVariantConst value, double& output) {
-    if (!value.is<double>()) return false;
-    const auto number = value.as<double>();
-    if (!std::isfinite(number)) return false;
-    output = number;
+bool readRevisionDecimal(const cJSON* value, std::uint64_t& output) {
+    if (!cJSON_IsString(value) || value->valuestring == nullptr) return false;
+    const auto* text = value->valuestring;
+    const auto length = std::strlen(text);
+    if (length == 0U || length > kMaximumRevisionDecimalBytes ||
+        text[0] == '0') {
+        return false;
+    }
+
+    std::uint64_t parsed = 0U;
+    constexpr auto kMaximum = std::numeric_limits<std::uint64_t>::max();
+    for (std::size_t index = 0U; index < length; ++index) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if (byte < static_cast<unsigned char>('0') ||
+            byte > static_cast<unsigned char>('9')) {
+            return false;
+        }
+        const auto digit = static_cast<std::uint64_t>(byte - '0');
+        if (parsed > (kMaximum - digit) / 10U) return false;
+        parsed = parsed * 10U + digit;
+    }
+    if (parsed == 0U) return false;
+    output = parsed;
     return true;
 }
 
-bool readOptionalDouble(JsonObjectConst object, const char* key,
+bool readOptionalRevision(const cJSON* object, const char* key,
+                          std::optional<std::uint64_t>& output) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
+        output.reset();
+        return true;
+    }
+    std::uint64_t parsed{};
+    if (!readRevisionDecimal(value, parsed)) return false;
+    output = parsed;
+    return true;
+}
+
+bool readDouble(const cJSON* value, double& output) {
+    if (!cJSON_IsNumber(value) || !std::isfinite(value->valuedouble)) {
+        return false;
+    }
+    output = value->valuedouble;
+    return true;
+}
+
+bool readOptionalDouble(const cJSON* object, const char* key,
                         std::optional<double>& output) {
-    if (object[key].isUnbound()) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
         output.reset();
         return true;
     }
-    double value{};
-    if (!readDouble(object[key], value)) return false;
-    output = value;
+    double parsed{};
+    if (!readDouble(value, parsed)) return false;
+    output = parsed;
     return true;
 }
 
-bool readOptionalBool(JsonObjectConst object, const char* key,
+bool readOptionalBool(const cJSON* object, const char* key,
                       std::optional<bool>& output) {
-    if (object[key].isUnbound()) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
         output.reset();
         return true;
     }
-    const auto value = object[key];
-    if (!value.is<bool>()) return false;
-    output = value.as<bool>();
+    if (!cJSON_IsBool(value)) return false;
+    output = cJSON_IsTrue(value);
     return true;
 }
 
-bool readRequiredBool(JsonObjectConst object, const char* key, bool& output) {
-    const auto value = object[key];
-    if (!value.is<bool>()) return false;
-    output = value.as<bool>();
+bool readRequiredBool(const cJSON* object, const char* key, bool& output) {
+    const auto* value = member(object, key);
+    if (!cJSON_IsBool(value)) return false;
+    output = cJSON_IsTrue(value);
     return true;
 }
 
 template <typename Enum, std::size_t Count>
-bool readEnum(JsonVariantConst value,
+bool readEnum(const cJSON* value,
               const std::array<std::pair<const char*, Enum>, Count>& choices,
               Enum& output) {
     std::string text;
@@ -151,66 +217,66 @@ constexpr std::array<std::pair<const char*, SensorSelectionUserAction>, 3U>
          {"return-to-product", SensorSelectionUserAction::ReturnToProduct},
          {"recheck-product", SensorSelectionUserAction::RecheckProduct}}};
 
-bool readOptionalEnum(JsonObjectConst object, const char* key,
+bool readOptionalEnum(const cJSON* object, const char* key,
                       std::optional<RunSensorMode>& output) {
-    if (object[key].isUnbound()) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
         output.reset();
         return true;
     }
-    RunSensorMode value{};
-    if (!readEnum(object[key], kSensorModes, value)) return false;
-    output = value;
+    RunSensorMode parsed{};
+    if (!readEnum(value, kSensorModes, parsed)) return false;
+    output = parsed;
     return true;
 }
 
-bool readOptionalCompletionMode(JsonObjectConst object, const char* key,
+bool readOptionalCompletionMode(const cJSON* object, const char* key,
                                 std::optional<CompletionMode>& output) {
-    if (object[key].isUnbound()) {
+    const auto* value = member(object, key);
+    if (value == nullptr) {
         output.reset();
         return true;
     }
-    CompletionMode value{};
-    if (!readEnum(object[key], kCompletionModes, value)) return false;
-    output = value;
+    CompletionMode parsed{};
+    if (!readEnum(value, kCompletionModes, parsed)) return false;
+    output = parsed;
     return true;
 }
 
-bool readManualPlan(JsonVariantConst value,
+bool readManualPlan(const cJSON* value,
                     FermentationUiManualRunPlanValues& output) {
-    if (!value.is<JsonObjectConst>()) return false;
-    const auto object = value.as<JsonObjectConst>();
-    if (!hasOnlyKeys(object, {"x", "s", "h", "w", "q", "qd", "tr"})) {
+    if (!cJSON_IsObject(value) ||
+        !hasOnlyKeys(value, {"x", "s", "h", "w", "q", "qd", "tr"})) {
         return false;
     }
-    if (!readDouble(object["x"], output.targetTemperatureCelsius) ||
-        !readEnum(object["s"], kSensorModes, output.sensorMode) ||
-        !readRequiredBool(object, "h", output.preheatEnabled) ||
-        !readOptionalInteger(object, "w", output.maximumProductWaitMinutes) ||
-        !readDouble(object["q"], output.qualificationBandCelsius) ||
-        !readInteger(object["qd"], output.qualificationDurationMinutes) ||
-        !readInteger(object["tr"], output.maximumTargetReachMinutes)) {
+    if (!readDouble(member(value, "x"), output.targetTemperatureCelsius) ||
+        !readEnum(member(value, "s"), kSensorModes, output.sensorMode) ||
+        !readRequiredBool(value, "h", output.preheatEnabled) ||
+        !readOptionalInteger(value, "w", output.maximumProductWaitMinutes) ||
+        !readDouble(member(value, "q"), output.qualificationBandCelsius) ||
+        !readInteger(member(value, "qd"),
+                     output.qualificationDurationMinutes) ||
+        !readInteger(member(value, "tr"), output.maximumTargetReachMinutes)) {
         return false;
     }
     return true;
 }
 
-bool readExpected(JsonVariantConst value,
-                  FermentationUiExpectedRevisions& output) {
-    if (!value.is<JsonObjectConst>()) return false;
-    const auto object = value.as<JsonObjectConst>();
-    if (!hasOnlyKeys(object, {"s", "r", "m", "f", "e", "u", "c"}) ||
-        !readInteger(object["s"], output.expectedStateSequence) ||
-        !readOptionalInteger(object, "r", output.expectedRunRevision) ||
-        !readOptionalInteger(object, "m", output.expectedMessageRevision) ||
-        !readOptionalInteger(object, "f", output.expectedFaultRevision) ||
-        !readOptionalInteger(object, "e",
+bool readExpected(const cJSON* value, FermentationUiExpectedRevisions& output) {
+    if (!cJSON_IsObject(value) ||
+        !hasOnlyKeys(value, {"s", "r", "m", "f", "e", "u", "c"}) ||
+        !readInteger(member(value, "s"), output.expectedStateSequence) ||
+        !readOptionalInteger(value, "r", output.expectedRunRevision) ||
+        !readOptionalInteger(value, "m", output.expectedMessageRevision) ||
+        !readOptionalInteger(value, "f", output.expectedFaultRevision) ||
+        !readOptionalInteger(value, "e",
                              output.expectedRecoveryEpisodeRevision)) {
         return false;
     }
     std::optional<std::uint64_t> userRevision;
     std::optional<std::uint64_t> catalogRevision;
-    if (!readOptionalInteger(object, "u", userRevision) ||
-        !readOptionalInteger(object, "c", catalogRevision)) {
+    if (!readOptionalRevision(value, "u", userRevision) ||
+        !readOptionalRevision(value, "c", catalogRevision)) {
         return false;
     }
     if (userRevision.has_value()) {
@@ -224,37 +290,39 @@ bool readExpected(JsonVariantConst value,
     return true;
 }
 
-bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
-    if (!value.is<JsonObjectConst>()) return false;
-    const auto object = value.as<JsonObjectConst>();
+bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
+    if (!cJSON_IsObject(value)) return false;
     std::string type;
-    if (!readString(object["t"], 40U, type)) return false;
+    if (!readString(member(value, "t"), 40U, type)) return false;
 
     if (type == "start-program") {
-        if (!hasOnlyKeys(object, {"t", "c"}) ||
-            !object["c"].is<JsonObjectConst>()) {
-            return false;
-        }
-        const auto candidateObject = object["c"].as<JsonObjectConst>();
-        if (!hasOnlyKeys(candidateObject,
+        const auto* candidateValue = member(value, "c");
+        if (!hasOnlyKeys(value, {"t", "c"}) ||
+            !cJSON_IsObject(candidateValue) ||
+            !hasOnlyKeys(candidateValue,
                          {"p", "x", "d", "h", "s", "c", "k", "l"})) {
             return false;
         }
         FermentationUiStartCandidate candidate;
-        if (!readString(candidateObject["p"],
+        if (!readString(member(candidateValue, "p"),
                         configuration_limits::kMaximumProgramIdBytes,
                         candidate.programId) ||
-            !readOptionalDouble(candidateObject, "x",
+            validateLowercaseIdentifier(
+                candidate.programId,
+                configuration_limits::kMinimumProgramIdBytes,
+                configuration_limits::kMaximumProgramIdBytes) !=
+                ConfigurationTextStatus::Success ||
+            !readOptionalDouble(candidateValue, "x",
                                 candidate.targetTemperatureCelsius) ||
-            !readOptionalInteger(candidateObject, "d",
+            !readOptionalInteger(candidateValue, "d",
                                  candidate.fermentationDurationMinutes) ||
-            !readOptionalBool(candidateObject, "h", candidate.preheatEnabled) ||
-            !readOptionalEnum(candidateObject, "s", candidate.sensorMode) ||
-            !readOptionalCompletionMode(candidateObject, "c",
+            !readOptionalBool(candidateValue, "h", candidate.preheatEnabled) ||
+            !readOptionalEnum(candidateValue, "s", candidate.sensorMode) ||
+            !readOptionalCompletionMode(candidateValue, "c",
                                         candidate.completionMode) ||
-            !readOptionalDouble(candidateObject, "k",
+            !readOptionalDouble(candidateValue, "k",
                                 candidate.coolingTargetCelsius) ||
-            !readOptionalInteger(candidateObject, "l",
+            !readOptionalInteger(candidateValue, "l",
                                  candidate.holdDurationMinutes)) {
             return false;
         }
@@ -263,23 +331,26 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "start-manual-timed") {
-        if (!hasOnlyKeys(object, {"t", "x", "d", "s", "h", "w", "q", "qd", "tr",
-                                  "c", "k", "l"})) {
+        if (!hasOnlyKeys(value, {"t", "x", "d", "s", "h", "w", "q", "qd", "tr",
+                                 "c", "k", "l"})) {
             return false;
         }
         ManualTimedRunValues values;
-        if (!readDouble(object["x"], values.targetTemperatureCelsius) ||
-            !readInteger(object["d"], values.durationMinutes) ||
-            !readEnum(object["s"], kSensorModes, values.sensorMode) ||
-            !readRequiredBool(object, "h", values.preheatEnabled) ||
-            !readOptionalInteger(object, "w",
+        if (!readDouble(member(value, "x"), values.targetTemperatureCelsius) ||
+            !readInteger(member(value, "d"), values.durationMinutes) ||
+            !readEnum(member(value, "s"), kSensorModes, values.sensorMode) ||
+            !readRequiredBool(value, "h", values.preheatEnabled) ||
+            !readOptionalInteger(value, "w",
                                  values.maximumProductWaitMinutes) ||
-            !readDouble(object["q"], values.qualificationBandCelsius) ||
-            !readInteger(object["qd"], values.qualificationDurationMinutes) ||
-            !readInteger(object["tr"], values.maximumTargetReachMinutes) ||
-            !readEnum(object["c"], kCompletionModes, values.completionMode) ||
-            !readOptionalDouble(object, "k", values.coolingTargetCelsius) ||
-            !readOptionalInteger(object, "l", values.holdDurationMinutes)) {
+            !readDouble(member(value, "q"), values.qualificationBandCelsius) ||
+            !readInteger(member(value, "qd"),
+                         values.qualificationDurationMinutes) ||
+            !readInteger(member(value, "tr"),
+                         values.maximumTargetReachMinutes) ||
+            !readEnum(member(value, "c"), kCompletionModes,
+                      values.completionMode) ||
+            !readOptionalDouble(value, "k", values.coolingTargetCelsius) ||
+            !readOptionalInteger(value, "l", values.holdDurationMinutes)) {
             return false;
         }
         output = FermentationUiStartManualTimedIntent{values};
@@ -287,23 +358,21 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "start-manual-holding") {
-        if (!hasOnlyKeys(object, {"t", "p"})) return false;
+        if (!hasOnlyKeys(value, {"t", "p"})) return false;
         FermentationUiManualRunPlanValues plan;
-        if (!readManualPlan(object["p"], plan)) return false;
+        if (!readManualPlan(member(value, "p"), plan)) return false;
         output = FermentationUiStartManualHoldingIntent{std::move(plan)};
         return true;
     }
 
     if (type == "stop-run") {
-        if (!hasOnlyKeys(object, {"t", "o", "p"})) {
-            return false;
-        }
+        if (!hasOnlyKeys(value, {"t", "o", "p"})) return false;
         StopOption option{};
-        if (!readEnum(object["o"], kStopOptions, option)) return false;
+        if (!readEnum(member(value, "o"), kStopOptions, option)) return false;
         std::optional<FermentationUiManualRunPlanValues> plan;
-        if (!object["p"].isUnbound()) {
+        if (const auto* planValue = member(value, "p"); planValue != nullptr) {
             FermentationUiManualRunPlanValues parsed;
-            if (!readManualPlan(object["p"], parsed)) return false;
+            if (!readManualPlan(planValue, parsed)) return false;
             plan = std::move(parsed);
         }
         output = FermentationUiStopRunIntent{option, std::move(plan)};
@@ -311,17 +380,13 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "complete-run") {
-        if (!hasOnlyKeys(object, {"t", "c", "p"})) {
-            return false;
-        }
+        if (!hasOnlyKeys(value, {"t", "c", "p"})) return false;
         bool startCooling{};
-        if (!readRequiredBool(object, "c", startCooling)) {
-            return false;
-        }
+        if (!readRequiredBool(value, "c", startCooling)) return false;
         std::optional<FermentationUiManualRunPlanValues> plan;
-        if (!object["p"].isUnbound()) {
+        if (const auto* planValue = member(value, "p"); planValue != nullptr) {
             FermentationUiManualRunPlanValues parsed;
-            if (!readManualPlan(object["p"], parsed)) return false;
+            if (!readManualPlan(planValue, parsed)) return false;
             plan = std::move(parsed);
         }
         output = FermentationUiCompleteRunIntent{startCooling, std::move(plan)};
@@ -329,13 +394,10 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "adjust-run") {
-        if (!hasOnlyKeys(object, {"t", "x", "d"})) {
-            return false;
-        }
+        if (!hasOnlyKeys(value, {"t", "x", "d"})) return false;
         FermentationUiAdjustRunIntent intent;
-        if (!readOptionalDouble(object, "x", intent.targetTemperatureCelsius) ||
-            !readOptionalInteger(object, "d",
-                                 intent.remainingDurationMinutes)) {
+        if (!readOptionalDouble(value, "x", intent.targetTemperatureCelsius) ||
+            !readOptionalInteger(value, "d", intent.remainingDurationMinutes)) {
             return false;
         }
         output = intent;
@@ -343,19 +405,17 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "recovery-time-correction") {
-        if (!hasOnlyKeys(object, {"t", "d"})) return false;
+        if (!hasOnlyKeys(value, {"t", "d"})) return false;
         FermentationUiRecoveryTimeCorrectionIntent intent;
-        if (!readInteger(object["d"], intent.secondsDelta)) {
-            return false;
-        }
+        if (!readInteger(member(value, "d"), intent.secondsDelta)) return false;
         output = intent;
         return true;
     }
 
     if (type == "ack-message" || type == "mute-message") {
-        if (!hasOnlyKeys(object, {"t", "id"})) return false;
+        if (!hasOnlyKeys(value, {"t", "id"})) return false;
         std::uint32_t id{};
-        if (!readInteger(object["id"], id)) return false;
+        if (!readInteger(member(value, "id"), id)) return false;
         output =
             type == "ack-message"
                 ? FermentationUiEnvelopePayload{FermentationUiAcknowledgeMessageIntent{
@@ -366,15 +426,15 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     }
 
     if (type == "reset-fault") {
-        if (!hasOnlyKeys(object, {"t"})) return false;
+        if (!hasOnlyKeys(value, {"t"})) return false;
         output = FermentationUiResetFaultIntent{};
         return true;
     }
 
     if (type == "sensor-selection") {
-        if (!hasOnlyKeys(object, {"t", "a"})) return false;
+        if (!hasOnlyKeys(value, {"t", "a"})) return false;
         SensorSelectionUserAction action{};
-        if (!readEnum(object["a"], kSensorActions, action)) return false;
+        if (!readEnum(member(value, "a"), kSensorActions, action)) return false;
         output = FermentationUiSensorSelectionIntent{action};
         return true;
     }
@@ -382,18 +442,34 @@ bool readIntent(JsonVariantConst value, FermentationUiEnvelopePayload& output) {
     return false;
 }
 
-template <typename Document>
-bool serializeBounded(const Document& document, std::size_t maximumBytes,
-                      std::string& output) {
-    if (document.overflowed()) return false;
-    const auto measured = ArduinoJson::measureJson(document);
-    if (measured == 0U || measured > maximumBytes) return false;
-    std::string buffer(measured + 1U, '\0');
-    const auto written =
-        ArduinoJson::serializeJson(document, buffer.data(), buffer.size());
-    if (written != measured || written > maximumBytes) return false;
-    buffer.resize(written);
-    output = std::move(buffer);
+bool addString(cJSON* object, const char* key, const char* value) {
+    return value != nullptr &&
+           cJSON_AddStringToObject(object, key, value) != nullptr;
+}
+
+bool addNumber(cJSON* object, const char* key, double value) {
+    return std::isfinite(value) &&
+           cJSON_AddNumberToObject(object, key, value) != nullptr;
+}
+
+bool serializeBounded(cJSON* document, std::string& output) {
+    constexpr auto kBufferBytes =
+        kMaximumWebApiResponseBodyBytes + kCJsonPrintSafetyMarginBytes + 1U;
+    static_assert(kBufferBytes <=
+                      static_cast<std::size_t>(std::numeric_limits<int>::max()),
+                  "cJSON print buffer length must fit its API");
+    std::array<char, kBufferBytes> buffer{};
+    if (document == nullptr ||
+        !cJSON_PrintPreallocated(document, buffer.data(),
+                                 static_cast<int>(buffer.size()), false)) {
+        return false;
+    }
+    const auto* terminator = static_cast<const char*>(
+        std::memchr(buffer.data(), '\0', buffer.size()));
+    if (terminator == nullptr) return false;
+    const auto length = static_cast<std::size_t>(terminator - buffer.data());
+    if (length == 0U || length > kMaximumWebApiResponseBodyBytes) return false;
+    output.assign(buffer.data(), length);
     return true;
 }
 
@@ -535,25 +611,25 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     if (exactBody.size() > kMaximumWebRunMutationBodyBytes) {
         return WebRunMutationDecodeStatus::TooLarge;
     }
-
-    ArduinoJson::JsonDocument document;
-    const auto error = ArduinoJson::deserializeJson(
-        document, exactBody.data(), exactBody.size(),
-        ArduinoJson::DeserializationOption::NestingLimit{
-            kMaximumWebJsonNesting});
-    if (error || document.overflowed() || !document.is<JsonObjectConst>()) {
+    if (containsForbiddenNulInput(exactBody)) {
         return WebRunMutationDecodeStatus::Invalid;
     }
-    const auto root = document.as<JsonObjectConst>();
+
+    CJsonDocument document(cJSON_ParseWithLengthOpts(
+        exactBody.c_str(), exactBody.size() + 1U, nullptr, true));
+    if (!document || !cJSON_IsObject(document.get())) {
+        return WebRunMutationDecodeStatus::Invalid;
+    }
+    const auto* const root = document.get();
     std::uint32_t version{};
     if (!hasOnlyKeys(root, {"v", "r", "i"}) ||
-        !readInteger(root["v"], version) || version != 1U) {
+        !readInteger(member(root, "v"), version) || version != 1U) {
         return WebRunMutationDecodeStatus::Invalid;
     }
 
     WebRunMutationDto parsed;
-    if (!readExpected(root["r"], parsed.expected) ||
-        !readIntent(root["i"], parsed.intent) || document.overflowed()) {
+    if (!readExpected(member(root, "r"), parsed.expected) ||
+        !readIntent(member(root, "i"), parsed.intent)) {
         return WebRunMutationDecodeStatus::Invalid;
     }
     output = std::move(parsed);
@@ -567,44 +643,80 @@ bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
     const auto* networkMode = networkModeName(
         snapshot.network.currentMode, snapshot.network.selectionRequired);
     if (homeMode == nullptr || processState == nullptr ||
-        networkMode == nullptr)
+        networkMode == nullptr) {
         return false;
+    }
 
-    ArduinoJson::JsonDocument document;
-    auto root = document.to<ArduinoJson::JsonObject>();
-    root["version"] = 1U;
-    root["ready"] = snapshot.status.ready;
-    root["homeMode"] = homeMode;
-    root["processState"] = processState;
-    root["networkMode"] = networkMode;
-    root["selectionRequired"] = snapshot.network.selectionRequired;
-    auto revisions = root["revisions"].to<ArduinoJson::JsonObject>();
-    revisions["stateSequence"] = snapshot.revisions.expectedStateSequence;
-    if (snapshot.revisions.expectedRunRevision.has_value())
-        revisions["run"] = *snapshot.revisions.expectedRunRevision;
-    if (snapshot.revisions.expectedMessageRevision.has_value())
-        revisions["messages"] = *snapshot.revisions.expectedMessageRevision;
-    if (snapshot.revisions.expectedFaultRevision.has_value())
-        revisions["fault"] = *snapshot.revisions.expectedFaultRevision;
-    if (snapshot.revisions.expectedRecoveryEpisodeRevision.has_value())
-        revisions["recoveryEpisode"] =
-            *snapshot.revisions.expectedRecoveryEpisodeRevision;
-    if (snapshot.revisions.expectedUserConfigurationRevision.has_value())
-        revisions["userConfiguration"] =
-            snapshot.revisions.expectedUserConfigurationRevision->value();
-    if (snapshot.revisions.expectedProgramCatalogRevision.has_value())
-        revisions["programCatalog"] =
-            snapshot.revisions.expectedProgramCatalogRevision->value();
-    return serializeBounded(document, kMaximumWebApiResponseBodyBytes, output);
+    CJsonDocument document(cJSON_CreateObject());
+    if (!document ||
+        cJSON_AddNumberToObject(document.get(), "version", 1.0) == nullptr ||
+        cJSON_AddBoolToObject(document.get(), "ready", snapshot.status.ready) ==
+            nullptr ||
+        !addString(document.get(), "homeMode", homeMode) ||
+        !addString(document.get(), "processState", processState) ||
+        !addString(document.get(), "networkMode", networkMode) ||
+        cJSON_AddBoolToObject(document.get(), "selectionRequired",
+                              snapshot.network.selectionRequired) == nullptr) {
+        return false;
+    }
+    auto* revisions = cJSON_AddObjectToObject(document.get(), "revisions");
+    if (revisions == nullptr ||
+        cJSON_AddNumberToObject(revisions, "stateSequence",
+                                snapshot.revisions.expectedStateSequence) ==
+            nullptr) {
+        return false;
+    }
+    if (snapshot.revisions.expectedRunRevision.has_value() &&
+        cJSON_AddNumberToObject(revisions, "run",
+                                *snapshot.revisions.expectedRunRevision) ==
+            nullptr) {
+        return false;
+    }
+    if (snapshot.revisions.expectedMessageRevision.has_value() &&
+        cJSON_AddNumberToObject(revisions, "messages",
+                                *snapshot.revisions.expectedMessageRevision) ==
+            nullptr) {
+        return false;
+    }
+    if (snapshot.revisions.expectedFaultRevision.has_value() &&
+        cJSON_AddNumberToObject(revisions, "fault",
+                                *snapshot.revisions.expectedFaultRevision) ==
+            nullptr) {
+        return false;
+    }
+    if (snapshot.revisions.expectedRecoveryEpisodeRevision.has_value() &&
+        cJSON_AddNumberToObject(
+            revisions, "recoveryEpisode",
+            *snapshot.revisions.expectedRecoveryEpisodeRevision) == nullptr) {
+        return false;
+    }
+    if (snapshot.revisions.expectedUserConfigurationRevision.has_value()) {
+        const auto revision = std::to_string(
+            snapshot.revisions.expectedUserConfigurationRevision->value());
+        if (!addString(revisions, "userConfiguration", revision.c_str())) {
+            return false;
+        }
+    }
+    if (snapshot.revisions.expectedProgramCatalogRevision.has_value()) {
+        const auto revision = std::to_string(
+            snapshot.revisions.expectedProgramCatalogRevision->value());
+        if (!addString(revisions, "programCatalog", revision.c_str())) {
+            return false;
+        }
+    }
+    return serializeBounded(document.get(), output);
 }
 
 bool encodeWebApiTemperatures(const FermentationUiSnapshot& snapshot,
                               std::string& output) {
     if (snapshot.temperatures.size() > 3U) return false;
-    ArduinoJson::JsonDocument document;
-    auto root = document.to<ArduinoJson::JsonObject>();
-    root["version"] = 1U;
-    auto temperatures = root["temperatures"].to<ArduinoJson::JsonArray>();
+    CJsonDocument document(cJSON_CreateObject());
+    if (!document ||
+        cJSON_AddNumberToObject(document.get(), "version", 1.0) == nullptr) {
+        return false;
+    }
+    auto* temperatures = cJSON_AddArrayToObject(document.get(), "temperatures");
+    if (temperatures == nullptr) return false;
     for (const auto& view : snapshot.temperatures) {
         const auto* role = temperatureRoleName(view.role);
         const auto* quality = qualityName(view.quality.quality);
@@ -612,42 +724,60 @@ bool encodeWebApiTemperatures(const FermentationUiSnapshot& snapshot,
         const bool valid =
             view.quality.quality == device_platform::SensorQuality::Valid &&
             view.valueCelsius.has_value() && std::isfinite(*view.valueCelsius);
-        auto item = temperatures.add<ArduinoJson::JsonObject>();
-        item["role"] = role;
-        item["quality"] = quality;
-        item["valid"] = valid;
-        if (valid)
-            item["valueCelsius"] = *view.valueCelsius;
-        else
-            item["valueCelsius"] = nullptr;
+        auto* item = cJSON_CreateObject();
+        if (item == nullptr) return false;
+        const bool added =
+            addString(item, "role", role) &&
+            addString(item, "quality", quality) &&
+            cJSON_AddBoolToObject(item, "valid", valid) != nullptr &&
+            (valid ? addNumber(item, "valueCelsius", *view.valueCelsius)
+                   : cJSON_AddNullToObject(item, "valueCelsius") != nullptr);
+        if (!added || !cJSON_AddItemToArray(temperatures, item)) {
+            cJSON_Delete(item);
+            return false;
+        }
     }
-    return serializeBounded(document, kMaximumWebApiResponseBodyBytes, output);
+    return serializeBounded(document.get(), output);
 }
 
 bool encodeWebApiAlerts(const FermentationUiSnapshot& snapshot,
                         std::string& output) {
     if (snapshot.messages.size() > kMaximumWebApiAlertCount) return false;
-    ArduinoJson::JsonDocument document;
-    auto root = document.to<ArduinoJson::JsonObject>();
-    root["version"] = 1U;
-    auto alerts = root["alerts"].to<ArduinoJson::JsonArray>();
+    CJsonDocument document(cJSON_CreateObject());
+    if (!document ||
+        cJSON_AddNumberToObject(document.get(), "version", 1.0) == nullptr) {
+        return false;
+    }
+    auto* alerts = cJSON_AddArrayToObject(document.get(), "alerts");
+    if (alerts == nullptr) return false;
     for (const auto& view : snapshot.messages) {
         const auto& message = view.message;
         const auto* code = messageCodeName(message.code);
         const auto* severity = messageSeverityName(message.messageClass);
         if (code == nullptr || severity == nullptr) return false;
-        auto item = alerts.add<ArduinoJson::JsonObject>();
-        item["id"] = message.id;
-        item["code"] = code;
-        item["severity"] = severity;
-        item["active"] = message.active;
-        item["acknowledged"] = message.acknowledged;
-        item["resolved"] = message.resolved;
-        item["decisionRequired"] = message.decisionRequired;
-        item["muted"] = message.acousticMuted;
-        item["revision"] = message.revision;
+        auto* item = cJSON_CreateObject();
+        if (item == nullptr) return false;
+        const bool added =
+            cJSON_AddNumberToObject(item, "id", message.id) != nullptr &&
+            addString(item, "code", code) &&
+            addString(item, "severity", severity) &&
+            cJSON_AddBoolToObject(item, "active", message.active) != nullptr &&
+            cJSON_AddBoolToObject(item, "acknowledged", message.acknowledged) !=
+                nullptr &&
+            cJSON_AddBoolToObject(item, "resolved", message.resolved) !=
+                nullptr &&
+            cJSON_AddBoolToObject(item, "decisionRequired",
+                                  message.decisionRequired) != nullptr &&
+            cJSON_AddBoolToObject(item, "muted", message.acousticMuted) !=
+                nullptr &&
+            cJSON_AddNumberToObject(item, "revision", message.revision) !=
+                nullptr;
+        if (!added || !cJSON_AddItemToArray(alerts, item)) {
+            cJSON_Delete(item);
+            return false;
+        }
     }
-    return serializeBounded(document, kMaximumWebApiResponseBodyBytes, output);
+    return serializeBounded(document.get(), output);
 }
 
 }  // namespace fermentation

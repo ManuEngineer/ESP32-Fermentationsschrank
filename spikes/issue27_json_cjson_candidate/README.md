@@ -103,3 +103,21 @@ ASCII allowlists and canonical Program-ID validator remain responsible for
 post-parse values; they accept the actual valid intent/enum samples and a
 canonical maximum-length Program-ID. cJSON remains a candidate only under this
 proportional R1 contract; no product selection or codec change is made.
+
+### Duplicate-key vectors reclassified as non-gating hardening evidence
+
+The earlier route-test assertions that required duplicate-member rejection
+were removed from the R1 pass/fail gate after the approved plan classified that
+policy as Hardening. Their four conflicting vectors remain recorded here and
+in the probe above; they do not define product rejection behavior:
+
+```json
+{"v":1,"r":{"s":0},"i":{"t":"reset-fault"},"i":{"t":"ack-message","id":7}}
+{"v":1,"r":{"s":0,"s":1},"i":{"t":"reset-fault"}}
+{"v":1,"r":{"s":0},"i":{"t":"reset-fault","t":"ack-message","id":7}}
+{"v":1,"r":{"s":0},"i":{"t":"start-program","c":{"p":"old-program","p":"new-program"}}}
+```
+
+No recursive duplicate-key policy is implemented in the product codec. The
+current requirement is deterministic single decoding against the exact body;
+the original candidate-specific duplicate behavior remains historical evidence.
