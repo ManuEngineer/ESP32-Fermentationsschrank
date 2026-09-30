@@ -1,5 +1,282 @@
 # Plan – Issue #164: lokale Touch-Netzwerkbedienung vervollständigen
 
+## Konsolidierte Planrevision – QR-/SoftAP-UX und begrenzter WLAN-Scan
+
+```text
+ISSUE=164
+PR=171
+PLAN_REVISION=CONSOLIDATED_QR_SOFTAP_SCAN_PLAN_2026-09-30
+BASE_HEAD=b24f39fffffaf8fd4db21e94d1625ecca2660e5e
+PR_STATE=OPEN_DRAFT
+WORKTREE=/tmp/issue164-network-ui.M4vluy
+BRANCH=agent/issue-164-network-ui-completion
+LVGL_PIN=9.6.0~1_UNCHANGED
+SOFTAP_SSID=Fermentation
+SOFTAP_PASSWORD_LENGTH=16
+SOFTAP_PASSWORD_ALPHABET_SIZE=42
+SOFTAP_PASSWORD_ENTROPY_TARGET_BITS=86.27
+SOFTAP_PASSWORD_RANDOM_SOURCE=EXISTING_SECURE_RANDOM_SOURCE
+SOFTAP_PASSWORD_DERIVATION=NONE
+SOFTAP_AUTH=WPA2_PSK_UNCHANGED
+QR_PURPOSE=JOIN_SOFTAP
+QR_PAYLOAD=SSID_AND_PASSWORD_ONLY
+QR_QUIET_ZONE=REQUIRED
+QR_SIZE=DERIVE_INTEGER_MODULE_SCALE_TARGET_APPROX_180PX
+QR_CONTRAST=BLACK_ON_WHITE
+QR_INTERPOLATION=NO
+QR_ANTIALIASING=NO
+NETWORK_SCAN_RESULT_BOUND=16
+NETWORK_SCAN_HTTP_BOUND=16
+FTDI_DISPLAY_COUPLING=REPRODUCED
+FIRMWARE_CRASH=NOT_PROVEN
+PRODUCT_CODE_CHANGED=NO
+BUILD=NOT_RUN_PLAN_ONLY
+FLASH=NOT_RUN_PLAN_ONLY
+IMPLEMENTATION_ALLOWED=NO_PENDING_OWNER_PLAN_APPROVAL
+ACTUATOR_RELEASE=NO
+```
+
+Diese konsolidierte Revision ersetzt für die nächste Umsetzung die bisherige
+offene Completion-Plan-Fassung. Der bestehende LVGL-Stack bleibt unverändert:
+Im Checkout ist `lvgl/lvgl` auf `9.6.0~1` gepinnt. Es gibt keinen Downgrade auf
+9.5, kein Upgrade, keine neue QR-/ECC-Bibliothek und keine eigene
+QR-Implementierung. Die bestehende LVGL-QR-Komponente mit ECC Medium bleibt
+der einzige QR-Pfad.
+
+Diese Phase ist ausschließlich Planarbeit. Vor Ownerfreigabe der exakten
+Plan-Commit-SHA werden kein Produktcode geändert, keine Build- oder
+Regressionstests ausgeführt und kein Gerät geflasht. Historische Evidence und
+frühere Hardwareberichte werden nicht rückwirkend umgeschrieben. PR #171
+bleibt Draft; es gibt keinen neuen Branch oder PR, keinen Merge, keinen
+Ready-Wechsel, keine Issue-Schließung und keine Aktuatorfreigabe.
+
+### 1. Bereits bestätigte Korrekturen erhalten
+
+Die Umsetzung baut auf dem exakten `BASE_HEAD` auf und erhält ohne
+Neuentwurf:
+
+- die verkürzten Presentation-/UI-Lifetimes vor Owning-Mutationen;
+- die Zerstörung von `RepresentativeScreen` vor `dispatchWorkspacePress()`;
+- den HeaderNetwork-Pfad ohne unnötig lebenden vollständigen `ProgramCatalog`;
+- die Vorreservierung der maximal 21 `ScreenDrawCommand`-Einträge;
+- das Verschieben der QR-Payload beim Einfügen statt einer zusätzlichen
+  Stringkopie;
+- den lokalisierten Auswahlhinweis für den internen Zustand `UNSELECTED`.
+
+Es werden keine neue Graph-, Persistence-, Configuration-, Codec- oder
+Network-Ownership-Architektur, keine zweite State-Machine und kein neuer
+Netzwerk-Task eingeführt.
+
+### 2. SoftAP-Zugangsdaten
+
+`makeNetworkConfig()` setzt die SoftAP-SSID ohne MAC-Lesen und ohne Suffix
+exakt auf `Fermentation`. Die WPA2-PSK-Konfiguration im ESP-IDF-Adapter bleibt
+unverändert.
+
+Das Passwort wird bei jedem App-Boot ausschließlich über die bestehende
+`ISecureRandomSource`-Schnittstelle erzeugt. Der bestehende
+`EspIdfSecureRandomSource`/`esp_fill_random()`-Pfad wird wiederverwendet; es
+werden keine neue Random-Abstraktion und keine Ableitung aus MAC, Geräte-ID,
+Zeit oder sonstigen vorhersagbaren Werten eingeführt. Das Passwort hat exakt
+16 Zeichen.
+
+Als einheitliches, sicht- und QR-freundliches Alphabet wird für die Umsetzung
+folgende ASCII-Menge festgelegt:
+
+```text
+ACDEFHJKMNPQRTUVWXYacdefhjkmnpqrtuvwxy3479
+```
+
+Sie enthält 42 Symbole und lässt die leicht verwechselbaren Gruppen `0/O`,
+`1/I/l`, `2/Z`, `5/S`, `6/G`, `8/B` sowie `i/l/o` aus. Die Auswahl erfolgt
+gleichverteilt mit Rejection Sampling, damit kein Modulo-Bias entsteht. Bei
+16 unabhängigen Zeichen beträgt der Zielraum
+`16 * log2(42) = 86.27` Bit und liegt damit über dem Owner-Ziel von ca. 80
+Bit. Bei einem Fehler der Zufallsquelle wird kein vorhersehbarer Ersatzwert
+gebildet; der bestehende fail-closed Startup-/Konfigurationspfad bleibt
+maßgeblich.
+
+Das Passwort bleibt ausschließlich in der flüchtigen SoftAP-Konfiguration
+und der lokalen `networkAccessPointInfo()`-Projektion für die Display-/QR-
+Darstellung. Es wird nicht geloggt, nicht über HTTP/API oder Diagnose
+ausgegeben und nicht in Persistenz kopiert. SSID, Passwort und direkte IP
+bleiben manuell sichtbar.
+
+### 3. QR-Layout und produktiver LVGL-Pfad
+
+Die vorhandene WLAN-Payload bleibt unverändert semantisch:
+`WIFI:T:WPA;S:<escaped-SSID>;P:<escaped-password>;;`. Sie enthält exakt die
+aktuellen SoftAP-Werte, keine URL und keine IP.
+
+Der Renderer erhält eine neue, innerhalb 320x240 geprüfte Geometrie. Die
+Implementierung leitet die konkrete Kantenlänge aus der LVGL-ECC-Medium-
+Modulgröße und ganzzahliger Skalierung ab; als Ziel wird eine
+`184x184`-Command-Fläche (ca. 180 px, ohne Überlappung) an der rechten Seite
+des Netzwerkbildschirms vorgesehen. Der manuelle Bereich bleibt links mit
+SSID, Passwort und IP sichtbar und wird bei Bedarf vertikal/zeilenweise
+geordnet. Die tatsächlichen Draw-Commands müssen vollständig in 320x240
+liegen.
+
+Im produktiven LVGL-Zweig werden für jedes QR-Objekt explizit gesetzt:
+
+```cpp
+lv_qrcode_set_size(qrCode, <gepruefte_ganzzahlige_qr_groesse>);
+lv_qrcode_set_quiet_zone(qrCode, true);
+lv_qrcode_set_dark_color(qrCode, lv_color_black());
+lv_qrcode_set_light_color(qrCode, lv_color_white());
+```
+
+Die vorhandene I1-/LVGL-Darstellung bleibt ohne Interpolation und ohne
+Antialiasing. Es wird kein Bild-Scaling außerhalb des LVGL-QR-Widgets
+eingeführt. Die Aufrufreihenfolge stellt sicher, dass Quiet-Zone, Größe und
+Payload vor der gültigen QR-Renderprüfung wirksam sind.
+
+### 4. WLAN-Scan begrenzen
+
+Der ESP-IDF-Scan erhält einen gemeinsamen, kleinen R1-Grenzwert von **16
+AP-Einträgen**. Das genügt für die Auswahl eines Heimnetzes und begrenzt bei
+dem bestehenden ESP32-Heap die `wifi_ap_record_t`-Arbeitsmenge auf ungefähr
+16 Datensätze statt auf die unbeschränkte vom Treiber gemeldete Anzahl. Die
+Grenze wird als geteilter Netzwerkvertrag definiert, damit Adapter und
+HTTP-Route nicht auseinanderlaufen.
+
+Die Umsetzung liest die vollständige Treiberanzahl nur als Zählwert, klemmt
+die Kapazität vor jeder großen Result-Allokation auf 16 und verwendet für die
+ESP-IDF-Records einen festen begrenzten Puffer. Danach entsteht nur die
+gebundene `NetworkScanEntry`-Liste; eine zweite ungebundene Record-Liste wird
+nicht aufgebaut. Die SSID-Längenbegrenzung von 32 Bytes bleibt bestehen. Eine
+zusätzliche Sortier- oder Worker-Architektur wird nicht eingeführt; es werden
+die ersten vom ESP-IDF-Scan gelieferten begrenzten Ergebnisse übernommen.
+
+Die HTTP-Route wendet dieselbe Grenze defensiv nochmals an und reserviert für
+die Antwort höchstens `16 * (32 + 1)` Bytes für SSID-Zeilen. Damit können weder
+Adapter noch Test-/Mockdaten mehr als 16 Einträge in die Browserantwort
+durchreichen. Fehler-Scan und leerer Scan bleiben deterministisch getrennt:
+Fehler liefern weiterhin `503 scan unavailable`, ein erfolgreicher leerer
+Scan eine leere `200`-Antwort.
+
+Die Owner-Beobachtung eines Ausfalls beim Browser-`Scan` bleibt
+`ROOT_CAUSE=UNPROVEN`. Der bisherige ungebundene Heap-Pfad wird als realer
+Defekt behoben, aber nicht nachträglich als bewiesene Ursache des konkreten
+Hardwarefehlers behauptet.
+
+### 5. Dokumentationssynchronisation in der Umsetzung
+
+Nach Planfreigabe synchronisiert der Implementierungsdiff mindestens:
+
+- `docs/REQUIREMENTS.md`;
+- `docs/NETWORK.md`;
+- dieses Task-/Plan-Dokument.
+
+Aktive R1-Aussagen werden auf feste SSID `Fermentation`, individuelles
+flüchtiges 16-Zeichen-Passwort, 42er Alphabet, mindestens 80 Bit Zielraum,
+`QR_QUIET_ZONE=REQUIRED`, die neue integer-skalierte QR-Geometrie und den
+16er-Scan-Grenzwert gebracht. Veraltete aktive Aussagen zu individueller
+SSID, 32 Hexzeichen oder 112x112 werden korrigiert. Historische Evidence,
+frühere Messwerte und alte HEAD-/Flashberichte bleiben unverändert und werden
+als historisch kenntlich gehalten. Weitere aktive Vertragsstellen werden nur
+nach `git grep` auf dieselbe Weise synchronisiert; Secrets werden nicht in
+Dokumentation, Logs oder Testausgaben eingetragen.
+
+### 6. Gezielte Regressionen nach Planfreigabe
+
+Die Tests werden auf den neuen Contract begrenzt und decken mindestens ab:
+
+- SoftAP-SSID exakt `Fermentation`;
+- Passwort exakt 16 Zeichen;
+- jedes Zeichen liegt im definierten 42er Alphabet;
+- Alphabetgröße und berechneter Zielraum erfüllen mindestens ca. 80 Bit;
+- zwei kontrolliert unterschiedliche Eingabesequenzen der bestehenden
+  Zufallsquelle ergeben unterschiedliche Passwörter;
+- Zufallsquellenfehler erzeugt keinen deterministischen Ersatzwert;
+- QR-Payload enthält exakt aktuelle SSID und aktuelles Passwort;
+- QR-Payload enthält weder URL noch IP;
+- QR-Draw-Command hat die neue konkrete Geometrie und bleibt in 320x240;
+- manuelle SSID-/Passwort-/IP-Commands bleiben sichtbar;
+- der produktive LVGL-Pfad aktiviert die Quiet-Zone und Schwarz/Weiß-
+  Konfiguration;
+- Scanresultate oberhalb des Limits werden bereits vor großen Allokationen
+  und nochmals in der HTTP-Antwort auf 16 begrenzt;
+- Fehler- und Empty-Scan bleiben deterministisch;
+- bestehende direkt betroffene Netzwerk-, Renderer- und Touch-Regressionen
+  bleiben grün.
+
+Gezielt zu ermitteln sind die konkreten Testdateien beim Implementierungsstart;
+voraussichtlich berührt werden die bestehenden Renderer-/Netzwerk-Tests und
+ein Adapter-/Route-Test für den begrenzten Scan. Unveränderte, nicht direkt
+betroffene Tests werden nicht unnötig erneut ausgeführt.
+
+### 7. Hardware-Gate nach Implementation
+
+Erst nach Ownerfreigabe dieser exakten Plan-Commit-SHA und nach Umsetzung,
+Independent Fix Verification sowie Builder Self-Check folgen die nativen
+Regressionen, beide `esp32_bringup`-/`esp32_release`-Builds und der
+autorisierte exakte `esp32_release`-Flash. Es werden ausschließlich die
+notwendigen drei Firmware-Images geschrieben; kein `erase-all`, kein Löschen
+oder Reparieren von NVS/state_store und kein Rebuild während des Flashens.
+
+Der UART-Capture wird vor dem Beginn des interaktiven Tests einmal geöffnet
+und danach kontinuierlich offen gehalten. Es gibt keinen zusätzlichen
+Port-Open mitten im Test. Source-SHA, Profil, `application: ready`, LCD-/LVGL-
+Initialisierung, Heartbeats sowie Panic, Abort, Watchdog, Brownout und
+unerwartete Resetmarker werden aus dem Rohmitschnitt geprüft. Die bestehende
+FTDI-/Display-Kopplung bleibt getrennt zu bewerten:
+
+```text
+FTDI_DISPLAY_COUPLING=REPRODUCED
+FIRMWARE_CRASH=NOT_PROVEN
+```
+
+Wenn QR oder Browser-Scan Abort, Panic oder Reset auslösen, werden der exakte
+UART-Ausschnitt, Resetursache und symbolisierte PC/Backtrace gesichert und
+der Lauf anschließend beendet. Wenn nur das Display schwarz wird, während
+Heartbeats weiterlaufen und keine Resetmarker erscheinen, wird dies als
+FTDI-/Display-Kopplungsbefund dokumentiert, nicht als Firmware-Crash.
+
+Nach stabilem Boot werden ausschließlich mit Owner am Gerät AP_ONLY,
+Netzwerkseite, QR-Anzeige, Smartphone-Scan innerhalb weniger Sekunden,
+SoftAP-Join, DHCP, `192.168.4.1`, Browser-Scan mit Heap-/größtem-
+8-Bit-Block-Messung sowie HOME_WIFI-Test-before-Commit, Persistenz, Reboot
+und Reconnect durchgeführt. Nicht tatsächlich ausgeführte Felder bleiben
+`NOT_RUN`. Bei schwarzem Display oder einem nicht erklärten Hardwarefehler
+gilt STOP ohne spekulative Folgeänderung.
+
+### 8. Plan-Gate
+
+```text
+ISSUE=164
+PR=171
+BASE_HEAD=b24f39fffffaf8fd4db21e94d1625ecca2660e5e
+LVGL_PIN=9.6.0~1_UNCHANGED
+SOFTAP_SSID=Fermentation
+SOFTAP_PASSWORD_LENGTH=16
+SOFTAP_ENTROPY_TARGET_BITS>=80
+QR_QUIET_ZONE=REQUIRED
+QR_SIZE=DERIVE_FOR_INTEGER_MODULE_SCALE_TARGET_APPROX_180PX
+NETWORK_SCAN_RESULT_BOUND=16
+FTDI_BLACK_DISPLAY_FIRMWARE_CRASH=NOT_PROVEN
+PRODUCT_CODE_CHANGED=NO
+BUILD=NOT_RUN_PLAN_ONLY
+FLASH=NOT_RUN_PLAN_ONLY
+IMPLEMENTATION_ALLOWED=NO
+PR_DRAFT=YES
+MERGE=NO
+READY=NO
+ISSUE164_CLOSE=NO
+ACTUATOR_RELEASE=NO
+```
+
+Danach stoppt diese Phase für Owner Review der exakten Plan-Commit-SHA.
+Erst deren ausdrückliche Freigabe erlaubt die Umsetzung im bestehenden PR.
+
+## Vorherige Planbasis und Provenienz
+
+Der folgende Abschnitt bleibt als unveränderte Provenienz der vorherigen
+Completion-Plan- und Hardware-Gates erhalten. Seine unqualifizierten
+SoftAP-/QR-Aussagen werden für die nächste Umsetzung durch die obenstehende
+konsolidierte Revision ersetzt; historische Evidence wird nicht rückwirkend
+umgeschrieben.
+
 ## Planstatus und Provenienz
 
 ```text
