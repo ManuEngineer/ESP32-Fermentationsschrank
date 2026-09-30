@@ -3,7 +3,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -18,6 +17,18 @@ inline constexpr std::size_t kMaximumWebSessions = 4U;
 inline constexpr std::uint64_t kWebSessionIdleLimitMs = 30ULL * 60ULL * 1000ULL;
 inline constexpr std::uint64_t kWebSessionAbsoluteLimitMs =
     12ULL * 60ULL * 60ULL * 1000ULL;
+inline constexpr std::size_t kMaximumCompletedMutationOutcomes = 8U;
+inline constexpr std::size_t kMaximumMutationFingerprintBytes = 512U;
+inline constexpr std::size_t kMaximumReplayOutcomeContentTypeBytes = 64U;
+inline constexpr std::size_t kMaximumReplayOutcomeBodyBytes = 256U;
+inline constexpr std::size_t kMaximumReplayOutcomeBytes =
+    kMaximumReplayOutcomeContentTypeBytes + kMaximumReplayOutcomeBodyBytes;
+// Raw replay payload only: four sessions, eight outcomes plus one in-flight
+// fingerprint each. Fixed entry metadata is covered by the manager size check.
+inline constexpr std::size_t kMaximumWebSessionReplayPayloadBytes =
+    kMaximumWebSessions * (kMaximumCompletedMutationOutcomes + 1U) *
+    (kMaximumMutationFingerprintBytes + kMaximumReplayOutcomeBytes);
+inline constexpr std::size_t kMaximumWebSessionManagerBytes = 32U * 1024U;
 
 struct WebSessionHandle {
     std::size_t slot{0U};
@@ -61,6 +72,8 @@ struct WebMutationOutcome {
     std::string contentType{"application/json; charset=utf-8"};
     std::string body;
 };
+
+struct WebSessionManagerTestAccess;
 
 enum class MutationReservationStatus : std::uint8_t {
     Reserved,
@@ -134,8 +147,13 @@ class WebSessionManager final {
    private:
     struct CompletedMutation {
         std::uint64_t sequence{0U};
-        std::string fingerprint;
-        WebMutationOutcome outcome;
+        std::array<char, kMaximumMutationFingerprintBytes> fingerprint{};
+        std::uint16_t fingerprintLength{0U};
+        std::uint16_t statusCode{500U};
+        std::array<char, kMaximumReplayOutcomeContentTypeBytes> contentType{};
+        std::uint16_t contentTypeLength{0U};
+        std::array<char, kMaximumReplayOutcomeBodyBytes> body{};
+        std::uint16_t bodyLength{0U};
     };
     struct Session {
         bool active{false};
@@ -147,9 +165,13 @@ class WebSessionManager final {
         std::uint64_t highWater{0U};
         std::uint64_t replayFloor{0U};
         std::optional<CompletedMutation> inFlight;
-        std::deque<CompletedMutation> completed;
+        std::array<CompletedMutation, kMaximumCompletedMutationOutcomes>
+            completed{};
+        std::size_t completedCount{0U};
         device_platform::ServiceSessionLease serviceLease;
     };
+
+    friend struct WebSessionManagerTestAccess;
 
     [[nodiscard]] Session* get(WebSessionHandle handle, std::uint64_t nowMs);
     [[nodiscard]] const Session* get(WebSessionHandle handle,
@@ -160,6 +182,16 @@ class WebSessionManager final {
                                            std::array<std::uint8_t, 16U>& id);
     [[nodiscard]] static bool equalId(const Session& session,
                                       const std::array<std::uint8_t, 16U>& id);
+    static void clearMutation(CompletedMutation& mutation) noexcept;
+    static void clearMutationState(Session& session) noexcept;
+    [[nodiscard]] static bool fingerprintMatches(
+        const CompletedMutation& mutation,
+        const std::string& fingerprint) noexcept;
+    [[nodiscard]] static bool storeOutcome(
+        const WebMutationOutcome& outcome,
+        CompletedMutation& mutation) noexcept;
+    [[nodiscard]] static WebMutationOutcome restoreOutcome(
+        const CompletedMutation& mutation);
 
     device_platform::ISecureRandomSource& random_;
     device_platform::ServiceSessionPolicy servicePolicy_;

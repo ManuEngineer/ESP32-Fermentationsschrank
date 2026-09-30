@@ -244,6 +244,19 @@ Unabhaengig von der spaeteren konkreten Bibliothek gelten:
 - Sitzungs- und Servicefreigaben werden nicht in normale Diagnoseexporte
   aufgenommen.
 
+Mutation-Sequenzen sind pro Session monoton und atomar reserviert. Eine Session
+haelt hoechstens acht abgeschlossene Replay-Outcomes und eine In-Flight-Anfrage;
+nach Abschluss erhalten identische Retrys exakt dasselbe Outcome. Eine
+konkurrierende In-Flight-Anfrage, Payloadwechsel, Sequenzluecken, abgelaufene
+Sequenzen und `uint64`-Overflow bleiben fail-closed. Der exakte
+Request-Fingerprint ist auf 512 Bytes
+begrenzt. Ein Replay-Outcome enthaelt hoechstens 64 Bytes Content-Type und 256
+Bytes Body. Fuer vier Sessions samt je acht Outcomes und einer In-Flight-Anfrage
+bleibt der rohe Replay-Payload auf 29.952 Bytes begrenzt; die feste
+`WebSessionManager`-Speichergroesse wird zusaetzlich zur Compile-Zeit auf 32 KiB
+begrenzt. Vor Aktivierung der ersten Web-Mutationsroute ist weiterhin der
+integrierte Vier-Session-Ressourcennachweis erforderlich.
+
 ## Servicebereich in der Weboberflaeche
 
 Der Web-Servicebereich wird durch dieselbe vierstellige Service-PIN geschuetzt
