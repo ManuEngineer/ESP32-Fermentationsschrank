@@ -52,7 +52,7 @@ void test_response_metadata_is_bounded_and_ascii() {
     TEST_ASSERT_FALSE(device_platform::validateHttpResponseMetadata(metadata));
 }
 
-void test_raw_request_header_validation_rejects_security_header_duplicates() {
+void test_normalized_request_validation_rejects_security_header_duplicates() {
     const std::string valid =
         "POST /internal/ui/run HTTP/1.1\r\n"
         "Host: fermentation.local\r\n"
@@ -71,7 +71,7 @@ void test_raw_request_header_validation_rejects_security_header_duplicates() {
         device_platform::validateUniqueHttpRequestMetadataHeaders(duplicate));
 }
 
-void test_raw_request_header_validation_fails_closed_on_malformed_blocks() {
+void test_normalized_request_validation_fails_closed_on_malformed_blocks() {
     TEST_ASSERT_FALSE(device_platform::validateUniqueHttpRequestMetadataHeaders(
         "POST / HTTP/1.1\r\n X-CSRF-Token: folded\r\n\r\n"));
     TEST_ASSERT_FALSE(device_platform::validateUniqueHttpRequestMetadataHeaders(
@@ -94,8 +94,8 @@ int main() {
     RUN_TEST(test_http_metadata_rejects_control_and_capacity_values);
     RUN_TEST(test_response_metadata_is_bounded_and_ascii);
     RUN_TEST(
-        test_raw_request_header_validation_rejects_security_header_duplicates);
+        test_normalized_request_validation_rejects_security_header_duplicates);
     RUN_TEST(
-        test_raw_request_header_validation_fails_closed_on_malformed_blocks);
+        test_normalized_request_validation_fails_closed_on_malformed_blocks);
     return UNITY_END();
 }

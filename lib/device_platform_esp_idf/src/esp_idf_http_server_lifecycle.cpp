@@ -1,5 +1,6 @@
 #include "esp_idf_http_server_lifecycle.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -64,22 +65,56 @@ const char* statusLine(std::uint16_t status) {
 bool validateBrowserHeaderBlock(httpd_req_t* request) {
     if (request == nullptr) return false;
     const std::size_t rawLength = httpd_get_raw_req_data_len(request);
-    if (rawLength == 0U ||
-        rawLength > device_platform::kMaximumRawHttpRequestDataBytes) {
+    if (rawLength < 4U) return false;
+
+    // ESP-IDF 6.1 exposes the parsed header block here, not the original
+    // request line. CRLF terminators have been replaced by NUL bytes. The
+    // final empty line is therefore four consecutive NULs. Limit the copy to
+    // the configured header block; any already-buffered request body follows
+    // that terminator and is deliberately ignored.
+    const std::size_t copyLength = std::min(
+        rawLength, device_platform::kMaximumHttpRequestHeaderBlockBytes);
+    std::string raw(copyLength, '\0');
+    if (httpd_get_raw_req_data(request, raw.data(), copyLength) != ESP_OK) {
         return false;
     }
 
-    std::string raw(rawLength, '\0');
-    if (httpd_get_raw_req_data(request, raw.data(), raw.size()) != ESP_OK) {
+    const std::string headerTerminator(4U, '\0');
+    const auto headerEnd = raw.find(headerTerminator);
+    if (headerEnd == std::string::npos ||
+        headerEnd + 4U > device_platform::kMaximumHttpRequestHeaderBlockBytes) {
         return false;
     }
-    return device_platform::validateUniqueHttpRequestMetadataHeaders(raw);
+
+    const std::string lineTerminator(2U, '\0');
+    std::string normalized{"GET / HTTP/1.1\r\n"};
+    std::size_t start = 0U;
+    while (start < headerEnd) {
+        const auto lineEnd = raw.find(lineTerminator, start);
+        if (lineEnd == std::string::npos || lineEnd > headerEnd ||
+            lineEnd == start) {
+            return false;
+        }
+        normalized.append(raw, start, lineEnd - start);
+        normalized.append("\r\n");
+        start = lineEnd + lineTerminator.size();
+    }
+    normalized.append("\r\n");
+    return device_platform::validateUniqueHttpRequestMetadataHeaders(
+        normalized);
 }
 
 std::optional<std::string> browserHeader(httpd_req_t* request, const char* name,
                                          std::size_t maximum, bool& invalid) {
     const std::size_t length = httpd_req_get_hdr_value_len(request, name);
-    if (length == 0U) return std::nullopt;
+    if (length == 0U) {
+        char emptyValue[1]{};
+        const auto result = httpd_req_get_hdr_value_str(
+            request, name, emptyValue, sizeof(emptyValue));
+        if (result == ESP_ERR_NOT_FOUND) return std::nullopt;
+        invalid = true;
+        return std::nullopt;
+    }
     if (length > maximum) {
         invalid = true;
         return std::nullopt;

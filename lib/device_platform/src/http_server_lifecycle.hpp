@@ -49,10 +49,11 @@ enum class HttpMetadataValidation : std::uint8_t {
 
 [[nodiscard]] HttpMetadataValidation validateHttpRequestMetadata(
     const HttpRequestMetadata& metadata) noexcept;
-// Validates the bounded raw request-line/header block returned by the HTTP
-// transport and rejects duplicate or empty browser-security metadata fields.
+// Validates a bounded CRLF-normalized HTTP request-line/header block and
+// rejects duplicate or empty browser-security metadata fields. Concrete
+// adapters normalize their handler-time representation before calling this.
 [[nodiscard]] bool validateUniqueHttpRequestMetadataHeaders(
-    const std::string& rawRequestData) noexcept;
+    const std::string& normalizedRequestData) noexcept;
 [[nodiscard]] bool validateHttpResponseMetadata(
     const HttpResponseMetadata& metadata) noexcept;
 

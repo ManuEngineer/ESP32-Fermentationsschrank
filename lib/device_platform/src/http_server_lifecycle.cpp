@@ -96,62 +96,66 @@ HttpMetadataValidation validateHttpRequestMetadata(
 }
 
 bool validateUniqueHttpRequestMetadataHeaders(
-    const std::string& rawRequestData) noexcept {
-    if (rawRequestData.size() < 4U ||
-        rawRequestData.size() > kMaximumRawHttpRequestDataBytes) {
+    const std::string& normalizedRequestData) noexcept {
+    if (normalizedRequestData.size() < 4U ||
+        normalizedRequestData.size() > kMaximumRawHttpRequestDataBytes) {
         return false;
     }
-    const auto requestLineEnd = rawRequestData.find("\r\n");
+    const auto requestLineEnd = normalizedRequestData.find("\r\n");
     if (requestLineEnd == std::string::npos || requestLineEnd == 0U ||
         requestLineEnd > kMaximumHttpRequestUriBytes +
                              kMaximumHttpRequestLineOverheadBytes) {
         return false;
     }
     for (std::size_t index = 0U; index < requestLineEnd; ++index) {
-        const auto byte = static_cast<unsigned char>(rawRequestData[index]);
+        const auto byte =
+            static_cast<unsigned char>(normalizedRequestData[index]);
         if (byte < 0x20U || byte > 0x7EU) return false;
     }
 
     std::array<std::size_t, kBrowserMetadataHeaders.size()> occurrences{};
     std::size_t headerBytes = 0U;
     std::size_t start = requestLineEnd + 2U;
-    while (start < rawRequestData.size()) {
-        const auto lineEnd = rawRequestData.find("\r\n", start);
+    while (start < normalizedRequestData.size()) {
+        const auto lineEnd = normalizedRequestData.find("\r\n", start);
         if (lineEnd == std::string::npos) return false;
         if (lineEnd == start) {
             return headerBytes <= kMaximumHttpRequestHeaderBlockBytes &&
-                   lineEnd + 2U == rawRequestData.size();
+                   lineEnd + 2U == normalizedRequestData.size();
         }
         headerBytes += lineEnd - start + 2U;
         if (headerBytes > kMaximumHttpRequestHeaderBlockBytes ||
-            rawRequestData[start] == ' ' || rawRequestData[start] == '\t') {
+            normalizedRequestData[start] == ' ' ||
+            normalizedRequestData[start] == '\t') {
             return false;
         }
 
-        const auto colon = rawRequestData.find(':', start);
+        const auto colon = normalizedRequestData.find(':', start);
         if (colon == std::string::npos || colon >= lineEnd || colon == start) {
             return false;
         }
         for (std::size_t index = start; index < colon; ++index) {
             if (!isHeaderNameCharacter(
-                    static_cast<unsigned char>(rawRequestData[index]))) {
+                    static_cast<unsigned char>(normalizedRequestData[index]))) {
                 return false;
             }
         }
         for (std::size_t index = colon + 1U; index < lineEnd; ++index) {
-            const auto byte = static_cast<unsigned char>(rawRequestData[index]);
+            const auto byte =
+                static_cast<unsigned char>(normalizedRequestData[index]);
             if ((byte < 0x20U && byte != '\t') || byte == 0x7FU) return false;
         }
 
         for (std::size_t index = 0U; index < kBrowserMetadataHeaders.size();
              ++index) {
-            if (!asciiEqualIgnoreCase(rawRequestData, start, colon - start,
+            if (!asciiEqualIgnoreCase(normalizedRequestData, start,
+                                      colon - start,
                                       kBrowserMetadataHeaders[index])) {
                 continue;
             }
             if (++occurrences[index] > 1U) return false;
             const auto valueStart =
-                rawRequestData.find_first_not_of(" \t", colon + 1U);
+                normalizedRequestData.find_first_not_of(" \t", colon + 1U);
             if (valueStart == std::string::npos || valueStart >= lineEnd) {
                 return false;
             }

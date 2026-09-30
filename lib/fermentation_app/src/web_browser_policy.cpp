@@ -40,11 +40,12 @@ std::string trim(std::string value) {
 }  // namespace
 
 bool sameOrigin(const device_platform::HttpRequest& request) {
-    if (!request.metadata.secFetchSite.has_value()) return false;
-    const auto fetchSite = lower(*request.metadata.secFetchSite);
-    if (fetchSite != "same-origin" && fetchSite != "same-site" &&
-        fetchSite != "none") {
-        return false;
+    if (request.metadata.secFetchSite.has_value()) {
+        const auto fetchSite = lower(*request.metadata.secFetchSite);
+        if (fetchSite != "same-origin" && fetchSite != "same-site" &&
+            fetchSite != "none") {
+            return false;
+        }
     }
 
     // Origin is authoritative when present. Referer is only a fallback when
