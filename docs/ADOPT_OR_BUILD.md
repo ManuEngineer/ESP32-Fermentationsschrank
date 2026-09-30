@@ -127,12 +127,18 @@ allgemeine Connectivity-Plattform.
 ## JSON an externen Grenzen
 
 Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
-allgemeiner Parser neu entwickelt. Der zuerst evaluierte ArduinoJson-Kandidat
-`7.4.3` scheitert am strikten Duplicate-Member-Vertrag. Der danach gemaess
-Espressif-first evaluierte `espressif/cjson 1.7.19~2`-Kandidat scheitert an
-`uint64`-Praezision und NUL-/UTF-8-Verhalten. Es ist kein geeigneter Kandidat
-ausgewaehlt; `FINAL_SELECTION_PENDING=YES`. Eine weitere Alternative wird nur
-nach unabhaengiger Pruefung und Ownerentscheidung untersucht.
+allgemeiner Parser neu entwickelt. Die reproduzierten ArduinoJson-7.4.3- und
+Espressif-cJSON-1.7.19~2-Spikes bleiben historische Messungen gegen den damals
+strengeren Duplicate-/NUL-/UTF-8-Vertrag; diese Resultate werden nicht
+umgeschrieben. Die proportionale JSON-R1-Planrevision bewertet Duplicate-
+Ablehnung und generische UTF-8-/Escape-Hardening-Regeln für die aktuellen
+ASCII-only DTO-Textfelder nicht automatisch als MUST. Sie empfiehlt
+ArduinoJson 7.4.3 als Engineering-Kandidaten mit kleinem bestehendem
+Codec-Delta; cJSON bleibt mit bounded NUL- und realen Feldvalidierungen
+bedingt möglich. Die finale Bibliotheksauswahl bleibt Ownerentscheidung und
+`FINAL_SELECTION_PENDING=YES`; eine dritte Alternative wird nicht evaluiert.
+Diese Neubewertung ist bis zum Abschluss der unabhängigen Planprüfung und
+Ownerfreigabe ein Vorschlag und ändert noch keine Produktabhängigkeit.
 
 Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
 Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und
