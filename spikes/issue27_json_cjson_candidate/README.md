@@ -33,20 +33,26 @@ component=spikes/issue27_json_cjson_candidate/managed_components/espressif__cjso
 gcc -std=c99 -Wall -Wextra -Werror -DCJSON_NESTING_LIMIT=4 \
   -I "$component/cJSON" -c "$component/cJSON/cJSON.c" \
   -o /tmp/issue27-cjson.o
+g++ -std=c++17 -Wall -Wextra -Werror \
+  -I lib/fermentation_app/src \
+  -c lib/fermentation_app/src/configuration_text.cpp \
+  -o /tmp/issue27-configuration-text.o
 g++ -std=c++17 -Wall -Wextra -Werror -DCJSON_NESTING_LIMIT=4 \
-  -I "$component/cJSON" \
+  -I "$component/cJSON" -I lib/fermentation_app/src \
   spikes/issue27_json_cjson_candidate/main/cjson_candidate_probe.cpp \
-  /tmp/issue27-cjson.o -lm -o /tmp/issue27-cjson-probe
+  /tmp/issue27-cjson.o /tmp/issue27-configuration-text.o -lm \
+  -o /tmp/issue27-cjson-probe
 /tmp/issue27-cjson-probe
 ```
 
-The host executable reports contract-capability evidence. Some assertions are
-deliberately expected to fail: the executable is an evaluation probe, not a
-claim that cJSON passes the complete #27 contract. It covers the actual
+The host executable reports current R1-MUST capability evidence and retained
+historical hardening observations. A zero exit means the bounded R1 properties
+in this probe pass; it is not a claim of final product-code selection. It covers the actual
 maximum mutation DTO/body ceiling, root/revision/intent/nested-candidate
-duplicates, closed field-shape checks, NUL/UTF-8 behavior, malformed input,
-nesting, numeric edge cases, and preallocated serialization of the three
-bounded read-only response shapes.
+duplicates, closed field-shape checks, the bounded pre-parse raw/escaped-NUL
+gate, canonical Program-ID validation through the existing project validator,
+malformed input, nesting, numeric edge cases, and preallocated serialization
+of the three bounded read-only response shapes.
 
 ## Recorded result
 
@@ -60,7 +66,8 @@ LICENSE=MIT
 LICENSE_SHA256=a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c
 ESP_IDF_6_1_ESP32_CXX17_BUILD=PASS
 PUBLIC_TREE_DUPLICATE_CHECK=PASS_ROOT_REVISION_INTENT_CANDIDATE
-MAX_MUTATION_DTO_BYTES=337_OF_480
+ORIGINAL_NUMERIC_REVISION_FIXTURE_BYTES=337
+CURRENT_DECIMAL_STRING_REVISION_FIXTURE_BYTES=341_OF_480
 BODY_AT_480_BYTES_ACCEPTED=PASS
 OVERSIZED_BODY_REJECTED_BEFORE_PARSE=PASS
 STRICT_SCHEMA_ROOT_SHAPE=PASS_UNKNOWN_MISSING_WRONG_ROOT_TYPE_REJECTABLE
@@ -71,18 +78,27 @@ NONFINITE_1E999=PARSES_INFINITY_REQUIRES_EXPLICIT_ISFINITE_REJECTION
 MAX_READ_ONLY_RESPONSE_BYTES=346_STATUS_247_TEMPERATURES_3048_ALERTS
 MAX_READ_ONLY_RESPONSE_LIMIT=3072
 UINT64_MAX=ROUNDS_TO_18446744073709551616_SAME_AS_UINT64_MAX_PLUS_1
-ESCAPED_AND_RAW_NUL=ACCEPTED_AND_C_STRING_TRUNCATED
-INVALID_UTF8=ACCEPTED
-SPIKE_RESULT=FAIL_CANDIDATE
+HISTORICAL_ESCAPED_AND_RAW_NUL=ACCEPTED_AND_C_STRING_TRUNCATED
+RAW_NUL_BOUNDED_GATE=PASS
+DECODED_NUL_ESCAPE_BOUNDED_GATE=PASS
+VALID_ASCII_INTENT_AND_ENUMS=PASS
+VALID_CANONICAL_PROGRAM_ID=PASS
+HISTORICAL_INVALID_UTF8=ACCEPTED_NOT_R1_MUST
+HISTORICAL_SPIKE_RESULT=FAIL_CANDIDATE_UNDER_STRICT_DUPLICATE_NUL_UTF8_CONTRACT
+CURRENT_R1_CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST
 FINAL_SELECTION_PENDING=YES
 ```
 
-The native probe exits nonzero for the demonstrated contract failures; this is
-expected evidence, not a successful codec test. Although the public cJSON
-`child`/`next`/`string` tree retains repeated object members and permits a
-bounded duplicate walk, cJSON `double` values cannot represent the valid
-`uint64` maximum revision distinctly from overflow. Escaped/raw NUL and invalid
-UTF-8 are also accepted by this version. Rejecting NUL before the tree loses
-the distinction would require a second JSON-aware source scanner, which is
-outside this spike's allowed approach. Therefore cJSON is not a candidate for
-the unchanged #27 JSON contract; no replacement or product selection is made.
+The original native probe exited nonzero for the demonstrated contract
+failures under its historical stricter contract; this current candidate-
+completion probe records those duplicate/UTF-8 outcomes as non-MUST
+observations and exits zero only when the current bounded R1 properties pass.
+The current R1 comparison changes only which properties are MUST;
+the old duplicate/UTF-8 observations and probe outcomes are not rewritten.
+The new probe gate first enforces the 480-byte body bound, then rejects raw NUL
+bytes and the bounded six-byte sequence `\\u0000` before calling cJSON. It neither
+tokenizes JSON nor tracks strings, escapes, or structure. The current closed
+ASCII allowlists and canonical Program-ID validator remain responsible for
+post-parse values; they accept the actual valid intent/enum samples and a
+canonical maximum-length Program-ID. cJSON remains a candidate only under this
+proportional R1 contract; no product selection or codec change is made.

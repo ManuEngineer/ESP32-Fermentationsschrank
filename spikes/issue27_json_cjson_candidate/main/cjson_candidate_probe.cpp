@@ -1,12 +1,17 @@
 #include <cJSON.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <iterator>
 #include <string>
+
+#include "configuration_limits.hpp"
+#include "configuration_text.hpp"
 
 namespace {
 
@@ -38,8 +43,17 @@ cJSON* parseExact(const std::string& body) {
     return root;
 }
 
+bool containsForbiddenNulInput(const std::string& body) {
+    if (body.size() > kMutationBodyLimit) return true;
+    if (body.find('\0') != std::string::npos) return true;
+    constexpr char kDecodedNulEscape[] = {'\\', 'u', '0', '0', '0', '0'};
+    return std::search(body.begin(), body.end(), std::begin(kDecodedNulEscape),
+                       std::end(kDecodedNulEscape)) != body.end();
+}
+
 cJSON* parseMutationBody(const std::string& body) {
     if (body.size() > kMutationBodyLimit) return nullptr;
+    if (containsForbiddenNulInput(body)) return nullptr;
     return parseExact(body);
 }
 
@@ -100,10 +114,20 @@ bool hasKeys(const cJSON* object, const char* const* required,
 }
 
 std::string maximumMutationBody() {
-    return std::string(
+    std::string body = std::string(
                R"({"v":1,"r":{"s":4294967295,"r":4294967295,"m":4294967295,"f":4294967295,"e":4294967295,"u":18446744073709551615,"c":18446744073709551615},"i":{"t":"start-program","c":{"p":")") +
            std::string(48U, 'p') +
            R"(","x":42.75,"d":4294967295,"h":false,"s":"product","c":"cool-and-hold-until-manual-stop","k":-12.5,"l":4294967295}}})";
+    const std::string oldRevisions =
+        "\"u\":18446744073709551615,\"c\":18446744073709551615";
+    const std::string decimalStringRevisions =
+        "\"u\":\"18446744073709551615\",\"c\":\"18446744073709551615\"";
+    const auto revisionsOffset = body.find(oldRevisions);
+    if (revisionsOffset != std::string::npos) {
+        body.replace(revisionsOffset, oldRevisions.size(),
+                     decimalStringRevisions);
+    }
+    return body;
 }
 
 bool appendNumber(cJSON* object, const char* key, double value) {
@@ -156,10 +180,10 @@ bool maxResponsesFitBoundedBuffers() {
              appendNumber(ownedRevisions, "messages", UINT32_MAX) &&
              appendNumber(ownedRevisions, "fault", UINT32_MAX) &&
              appendNumber(ownedRevisions, "recoveryEpisode", UINT32_MAX) &&
-             appendNumber(ownedRevisions, "userConfiguration",
-                          static_cast<double>(UINT64_MAX)) &&
-             appendNumber(ownedRevisions, "programCatalog",
-                          static_cast<double>(UINT64_MAX));
+             cJSON_AddStringToObject(ownedRevisions, "userConfiguration",
+                                     "18446744073709551615") != nullptr &&
+             cJSON_AddStringToObject(ownedRevisions, "programCatalog",
+                                     "18446744073709551615") != nullptr;
         ok = ok && printWithinResponseLimit(status, "STATUS");
     }
     cJSON_Delete(revisions);
@@ -261,7 +285,8 @@ int runProbe() {
 
     const char* const rootAllowed[] = {"v", "r", "i"};
     const char* const rootRequired[] = {"v", "r", "i"};
-    auto* valid = parseExact(R"({"v":1,"r":{"s":0},"i":{"t":"reset-fault"}})");
+    auto* valid = parseMutationBody(
+        R"({"v":1,"r":{"s":1},"i":{"t":"reset-fault"}})");
     const bool closedSchema =
         valid != nullptr && !hasDuplicateMembers(valid) &&
         hasOnlyKeys(valid, rootAllowed, 3U) &&
@@ -292,12 +317,63 @@ int runProbe() {
         maximum == nullptr ? nullptr
                            : cJSON_GetObjectItemCaseSensitive(maximum, "r");
     const auto* userRevision = cJSON_GetObjectItemCaseSensitive(revisions, "u");
+    const auto* catalogRevision =
+        cJSON_GetObjectItemCaseSensitive(revisions, "c");
     const bool maximumBodyWithinLimit =
         maximumBody.size() <= kMutationBodyLimit;
     std::printf("MAX_PRODUCT_MUTATION_BYTES=%zu;LIMIT=%zu\n",
                 maximumBody.size(), kMutationBodyLimit);
     ok &= require(maximumBodyWithinLimit, "MAX_PRODUCT_MUTATION_BODY_480B");
     ok &= require(maximum != nullptr, "MAX_PRODUCT_MUTATION_PARSE");
+    const auto* intent = maximum == nullptr
+                             ? nullptr
+                             : cJSON_GetObjectItemCaseSensitive(
+                                   cJSON_GetObjectItemCaseSensitive(maximum,
+                                                                    "i"),
+                                   "t");
+    const auto* candidate = maximum == nullptr
+                                ? nullptr
+                                : cJSON_GetObjectItemCaseSensitive(
+                                      cJSON_GetObjectItemCaseSensitive(
+                                          cJSON_GetObjectItemCaseSensitive(
+                                              maximum, "i"),
+                                          "c"),
+                                      "p");
+    const auto* sensorMode = maximum == nullptr
+                                 ? nullptr
+                                 : cJSON_GetObjectItemCaseSensitive(
+                                       cJSON_GetObjectItemCaseSensitive(
+                                           cJSON_GetObjectItemCaseSensitive(
+                                               maximum, "i"),
+                                           "c"),
+                                       "s");
+    const auto* completionMode = maximum == nullptr
+                                     ? nullptr
+                                     : cJSON_GetObjectItemCaseSensitive(
+                                           cJSON_GetObjectItemCaseSensitive(
+                                               cJSON_GetObjectItemCaseSensitive(
+                                                   maximum, "i"),
+                                               "c"),
+                                           "c");
+    const bool validAsciiIntentAndEnums =
+        intent != nullptr && cJSON_IsString(intent) &&
+        std::strcmp(intent->valuestring, "start-program") == 0 &&
+        sensorMode != nullptr && cJSON_IsString(sensorMode) &&
+        std::strcmp(sensorMode->valuestring, "product") == 0 &&
+        completionMode != nullptr && cJSON_IsString(completionMode) &&
+        std::strcmp(completionMode->valuestring,
+                    "cool-and-hold-until-manual-stop") == 0;
+    ok &= require(validAsciiIntentAndEnums,
+                  "VALID_ASCII_INTENT_AND_ENUMS_ACCEPTED");
+    const bool validCanonicalProgramId =
+        candidate != nullptr && cJSON_IsString(candidate) &&
+        fermentation::validateLowercaseIdentifier(
+            candidate->valuestring,
+            fermentation::configuration_limits::kMinimumProgramIdBytes,
+            fermentation::configuration_limits::kMaximumProgramIdBytes) ==
+            fermentation::ConfigurationTextStatus::Success;
+    ok &= require(validCanonicalProgramId,
+                  "VALID_CANONICAL_PROGRAM_ID_ACCEPTED");
     std::string bodyAtLimit = maximumBody;
     bodyAtLimit.append(kMutationBodyLimit - bodyAtLimit.size(), ' ');
     auto* atLimit = parseMutationBody(bodyAtLimit);
@@ -309,20 +385,31 @@ int runProbe() {
     auto* overLimit = parseMutationBody(oversizedBody);
     ok &= require(overLimit == nullptr, "OVERSIZED_BODY_REJECTED_BEFORE_PARSE");
     cJSON_Delete(overLimit);
-    const auto maxValue =
-        userRevision == nullptr ? 0.0 : userRevision->valuedouble;
-    const std::string overflowBody = R"({"x":18446744073709551616})";
-    auto* overflow = parseExact(overflowBody);
-    const auto* overflowValue =
-        overflow == nullptr ? nullptr
-                            : cJSON_GetObjectItemCaseSensitive(overflow, "x");
-    const bool uint64AliasesOverflow = userRevision != nullptr &&
-                                       overflowValue != nullptr &&
-                                       maxValue == overflowValue->valuedouble;
-    std::printf("U64_MAX_AS_DOUBLE=%.0f\n", maxValue);
-    ok &= require(!uint64AliasesOverflow,
-                  "UINT64_MAX_DISTINGUISHABLE_FROM_OVERFLOW");
-    cJSON_Delete(overflow);
+    const bool maximumRevisionsRemainExactStrings =
+        userRevision != nullptr && cJSON_IsString(userRevision) &&
+        std::strcmp(userRevision->valuestring,
+                    "18446744073709551615") == 0 &&
+        catalogRevision != nullptr && cJSON_IsString(catalogRevision) &&
+        std::strcmp(catalogRevision->valuestring,
+                    "18446744073709551615") == 0;
+    ok &= require(maximumRevisionsRemainExactStrings,
+                  "UINT64_MAX_DECIMAL_STRINGS_REMAIN_EXACT");
+    auto* numericRevisions =
+        parseExact(R"({"u":18446744073709551615,"c":18446744073709551616})");
+    const auto* numericUserRevision =
+        numericRevisions == nullptr
+            ? nullptr
+            : cJSON_GetObjectItemCaseSensitive(numericRevisions, "u");
+    const auto* numericCatalogRevision =
+        numericRevisions == nullptr
+            ? nullptr
+            : cJSON_GetObjectItemCaseSensitive(numericRevisions, "c");
+    const bool historicalNumericCollision =
+        numericUserRevision != nullptr && numericCatalogRevision != nullptr &&
+        numericUserRevision->valuedouble == numericCatalogRevision->valuedouble;
+    ok &= require(historicalNumericCollision,
+                  "HISTORICAL_UINT64_NUMERIC_COLLISION_REPRODUCED");
+    cJSON_Delete(numericRevisions);
     cJSON_Delete(maximum);
 
     auto* uint32Overflow = parseExact(R"({"x":4294967296})");
@@ -336,30 +423,38 @@ int runProbe() {
                 "UINT32_OVERFLOW_REJECTABLE_BY_RANGE_CHECK");
     cJSON_Delete(uint32Overflow);
 
-    const std::string nulValue = R"({"x":"a\u0000b"})";
-    auto* nul = parseExact(nulValue);
-    const auto* nulString =
-        nul == nullptr ? nullptr : cJSON_GetObjectItemCaseSensitive(nul, "x");
-    const bool nulWouldBeAcceptedAsPrefix =
-        nulString != nullptr && cJSON_IsString(nulString) &&
-        std::strcmp(nulString->valuestring, "a") == 0;
-    ok &= require(!nulWouldBeAcceptedAsPrefix,
-                  "ESCAPED_NUL_REJECTED_WITHOUT_SOURCE_SCANNER");
-    cJSON_Delete(nul);
+    std::string rawNul =
+        R"({"v":1,"r":{"s":1},"i":{"t":"reset-fault"}})";
+    rawNul.insert(rawNul.find("reset-fault") + 6U, 1U, '\0');
+    ok &= require(containsForbiddenNulInput(rawNul) &&
+                      parseMutationBody(rawNul) == nullptr,
+                  "RAW_NUL_REJECTED_BY_BOUNDED_GATE");
 
-    std::string rawNul = R"({"x":"a)";
-    rawNul.push_back('\0');
-    rawNul += R"(b"})";
-    auto* rawNulParsed = parseExact(rawNul);
-    ok &= require(rawNulParsed == nullptr, "RAW_NUL_REJECTED");
-    cJSON_Delete(rawNulParsed);
+    const std::string escapedNul =
+        R"({"v":1,"r":{"s":1},"i":{"t":"reset\u0000-fault"}})";
+    auto* cjsonEscapedNul = parseExact(escapedNul);
+    const auto* parsedEscapedIntent =
+        cjsonEscapedNul == nullptr
+            ? nullptr
+            : cJSON_GetObjectItemCaseSensitive(
+                  cJSON_GetObjectItemCaseSensitive(cjsonEscapedNul, "i"),
+                  "t");
+    const bool cjsonStillAcceptsDecodedNul =
+        parsedEscapedIntent != nullptr && cJSON_IsString(parsedEscapedIntent);
+    const bool escapedNulRejectedByGate =
+        containsForbiddenNulInput(escapedNul) &&
+        parseMutationBody(escapedNul) == nullptr;
+    ok &= require(cjsonStillAcceptsDecodedNul && escapedNulRejectedByGate,
+                  "DECODED_NUL_ESCAPE_REJECTED_BY_BOUNDED_GATE");
+    cJSON_Delete(cjsonEscapedNul);
 
     std::string invalidUtf8 = R"({"x":")";
     invalidUtf8.push_back(static_cast<char>(0xc3));
     invalidUtf8 += R"("})";
     auto* utf8 = parseExact(invalidUtf8);
     const bool invalidUtf8Accepted = utf8 != nullptr;
-    ok &= require(!invalidUtf8Accepted, "INVALID_UTF8_REJECTED_BY_PARSER");
+    ok &= require(invalidUtf8Accepted,
+                  "HISTORICAL_INVALID_UTF8_ACCEPTED_NOT_R1_MUST");
     cJSON_Delete(utf8);
 
     auto* truncated = parseExact(R"({"x":1)");
