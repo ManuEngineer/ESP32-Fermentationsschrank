@@ -261,6 +261,85 @@ void test_session_expiry_and_capacity() {
         static_cast<int>(sessions.create(99U).status));
 }
 
+void test_repeated_find_does_not_extend_idle_deadline() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    const auto cookie = "FSSESSION=" + created.cookieValue;
+    constexpr std::uint64_t intervalMs = 60U * 1000U;
+
+    for (std::uint64_t nowMs = intervalMs;
+         nowMs < fermentation::kWebSessionIdleLimitMs; nowMs += intervalMs) {
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::WebSessionStatus::Found),
+            static_cast<int>(sessions.find(cookie, nowMs).status));
+    }
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Expired),
+        static_cast<int>(
+            sessions.find(cookie, fermentation::kWebSessionIdleLimitMs)
+                .status));
+}
+
+void test_touch_before_idle_expiry_extends_idle_deadline() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    const auto cookie = "FSSESSION=" + created.cookieValue;
+    constexpr auto touchAtMs = fermentation::kWebSessionIdleLimitMs / 2U;
+    TEST_ASSERT_TRUE(sessions.touch(*created.handle, touchAtMs));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Found),
+        static_cast<int>(
+            sessions.find(cookie, fermentation::kWebSessionIdleLimitMs)
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Expired),
+        static_cast<int>(
+            sessions
+                .find(cookie, touchAtMs + fermentation::kWebSessionIdleLimitMs)
+                .status));
+}
+
+void test_browser_reload_lookup_does_not_extend_idle_deadline() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    const auto cookie = "FSSESSION=" + created.cookieValue;
+    const auto reload =
+        sessions.find(cookie, fermentation::kWebSessionIdleLimitMs - 1U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Found),
+        static_cast<int>(reload.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Expired),
+        static_cast<int>(
+            sessions.find(cookie, fermentation::kWebSessionIdleLimitMs)
+                .status));
+}
+
+void test_repeated_touch_cannot_extend_absolute_session_limit() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    constexpr auto touchIntervalMs = fermentation::kWebSessionIdleLimitMs - 1U;
+
+    for (std::uint64_t nowMs = touchIntervalMs;
+         nowMs < fermentation::kWebSessionAbsoluteLimitMs - 1U;
+         nowMs += touchIntervalMs) {
+        TEST_ASSERT_TRUE(sessions.touch(*created.handle, nowMs));
+    }
+    TEST_ASSERT_TRUE(sessions.touch(
+        *created.handle, fermentation::kWebSessionAbsoluteLimitMs - 1U));
+    TEST_ASSERT_FALSE(sessions.touch(*created.handle,
+                                     fermentation::kWebSessionAbsoluteLimitMs));
+}
+
 void test_create_retires_all_expired_slots_before_capacity() {
     Random random;
     fermentation::WebSessionManager sessions(random);
@@ -482,6 +561,10 @@ int main() {
     RUN_TEST(test_replay_and_reuse_are_not_second_mutations);
     RUN_TEST(test_inflight_and_old_retired_values_fail_closed);
     RUN_TEST(test_session_expiry_and_capacity);
+    RUN_TEST(test_repeated_find_does_not_extend_idle_deadline);
+    RUN_TEST(test_touch_before_idle_expiry_extends_idle_deadline);
+    RUN_TEST(test_browser_reload_lookup_does_not_extend_idle_deadline);
+    RUN_TEST(test_repeated_touch_cannot_extend_absolute_session_limit);
     RUN_TEST(test_create_retires_all_expired_slots_before_capacity);
     RUN_TEST(test_service_lease_status_is_read_only_and_uses_its_policy);
     RUN_TEST(test_cookie_parser_rejects_duplicate_session_cookie);

@@ -277,7 +277,6 @@ WebSessionResult WebSessionManager::find(const std::string& cookie,
             const WebSessionHandle handle{slot, session.generation};
             if (get(handle, nowMs) == nullptr)
                 return {WebSessionStatus::Expired, std::nullopt, {}, {}};
-            session.lastActivityMs = nowMs;
             return {WebSessionStatus::Found, handle,
                     hex(session.id.data(), 16U), hex(session.csrf.data(), 16U)};
         }

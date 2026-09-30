@@ -197,6 +197,12 @@ Credential-/Moduswechsel, Werksreset oder einem anderen serverseitigen
 Widerruf gueltig. Browser-Fingerprints, `beforeunload`-Garantien oder andere
 Lifecycle-Hacks sind dafuer nicht vorgesehen.
 
+Die 30-Minuten-Inaktivitaetsfrist wird nur durch explizit erfasste relevante
+Benutzeraktivitaet verlaengert. Cookie-/Session-Lookup, Browser-Reload,
+read-only Polling und passive Snapshot-Aktualisierung verlaengern sie nicht;
+die absolute 12-Stunden-Grenze bleibt unabhaengig davon bestehen. Das separate
+Timing der Web-Servicelease bleibt davon unberuehrt.
+
 ### Betrieb ohne normales Webpasswort
 
 Ist der normale Webpasswortschutz bewusst deaktiviert:
