@@ -20,6 +20,7 @@ constexpr device_platform::DisplayRect kHeaderNetworkRect{
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
+constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr char kLogoAssetPath[] =
     "assets/branding/manuengineer/ManuEngineer.svg";
 
@@ -201,9 +202,9 @@ device_platform::TextKey networkModeTextKey(device_platform::NetworkMode mode) {
         case device_platform::NetworkMode::HOME_WIFI:
             return fermentationTextKey("network-home-wifi");
         case device_platform::NetworkMode::UNSELECTED:
-            return fermentationTextKey("network-unselected");
+            return fermentationTextKey("network-mode-required");
     }
-    return fermentationTextKey("network-unselected");
+    return fermentationTextKey("network-mode-required");
 }
 
 std::string ipv4Text(std::uint32_t address) {
@@ -315,6 +316,12 @@ RepresentativeScreen makeRepresentativeScreen(
             networkInfoFingerprint(*networkAccessPointInfo);
     }
     auto& commands = screen.commands;
+    if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
+        // The network projection emits at most 21 commands, including
+        // press feedback. Allocate that bounded capacity once so repeated
+        // network redraws do not grow and replace the vector buffer twice.
+        commands.reserve(kNetworkScreenDrawCommandCapacity);
+    }
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
             device_platform::ThemeToken::Canvas);
     addFill(commands, {0U, 0U, screen.kWidth, kHeaderHeight},
@@ -419,14 +426,13 @@ RepresentativeScreen makeRepresentativeScreen(
                                       .value),
                        device_platform::ThemeToken::TextPrimary,
                        device_platform::ThemeToken::Canvas);
-            if (const auto payload =
-                    makeSoftApWifiQrPayload(*networkAccessPointInfo);
+            if (auto payload = makeSoftApWifiQrPayload(*networkAccessPointInfo);
                 payload.has_value()) {
                 commands.push_back({ScreenDrawKind::QrCode,
                                     {200U, 68U, 112U, 112U},
                                     device_platform::ThemeToken::TextPrimary,
                                     device_platform::ThemeToken::Canvas,
-                                    *payload,
+                                    std::move(*payload),
                                     {},
                                     false});
             }

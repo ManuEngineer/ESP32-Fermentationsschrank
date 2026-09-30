@@ -646,6 +646,15 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     TEST_ASSERT_TRUE(changedQr != changedScreen.commands.end());
     TEST_ASSERT_TRUE(changedQr->text != qr->text);
 
+    const device_platform::DeviceUiTarget heldBottomSlot{
+        device_platform::DeviceUiTargetKind::BottomSlot, 2U};
+    const auto pressedScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        heldBottomSlot, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.size());
+    TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.capacity());
+
     workspace.setPage(fermentation::FermentationUiPage::Home);
     const auto ordinaryScreen = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"},
@@ -661,6 +670,42 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         TEST_ASSERT_LESS_OR_EQUAL_UINT16(
             240U, command.rect.top + command.rect.height);
     }
+}
+
+void test_unselected_network_mode_renders_localized_selection_prompt() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::UNSELECTED;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto de = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"de"});
+    const auto en = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto es = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"es"});
+
+    TEST_ASSERT_TRUE(hasText(de, "Modus waehlen"));
+    TEST_ASSERT_TRUE(hasText(en, "Select mode"));
+    TEST_ASSERT_TRUE(hasText(es, "Elegir modo"));
+    TEST_ASSERT_FALSE(hasText(de, "Nicht ausgewaehlt"));
+    TEST_ASSERT_FALSE(hasText(en, "Not selected"));
+    TEST_ASSERT_FALSE(hasText(es, "Sin seleccionar"));
+    TEST_ASSERT_FALSE(hasText(de, "network-unselected"));
+    TEST_ASSERT_FALSE(hasText(en, "network-unselected"));
+    TEST_ASSERT_FALSE(hasText(es, "network-unselected"));
+
+    const auto prompt = std::find_if(
+        de.commands.begin(), de.commands.end(),
+        [](const auto& command) { return command.text == "Modus waehlen"; });
+    TEST_ASSERT_TRUE(prompt != de.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(160U, prompt->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(40U, prompt->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(152U, prompt->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(
+        fermentation::main_ui::RepresentativeScreen::kTextLineHeight,
+        prompt->rect.height);
 }
 
 void assertNetworkBottomLabelsFit(
@@ -811,6 +856,7 @@ int main() {
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
     RUN_TEST(
         test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(test_unselected_network_mode_renders_localized_selection_prompt);
     RUN_TEST(
         test_network_action_labels_fit_without_changing_bottom_hit_targets);
     RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
