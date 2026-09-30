@@ -5,10 +5,10 @@
 Diese kleine Revision präzisiert ausschliesslich den JSON-R1-Vertrag für die
 bereits softwareseitig vorhandenen, noch nicht produktiv komponierten Slice-4B-
 DTOs. Sie trennt notwendige Korrektheit von zusätzlichem Parser-Hardening und
-bewertet nur die bereits gemessenen Kandidaten ArduinoJson 7.4.3 und Espressif
-cJSON 1.7.19~2 erneut. Die früheren Messungen bleiben unverändert; ihre
-damaligen `FAIL_CANDIDATE`-Resultate werden nicht rückwirkend umgeschrieben,
-sondern gegen den hier proportionalisierten Vertrag eingeordnet.
+gleicht die bestehenden Kandidaten ArduinoJson 7.4.3 und Espressif cJSON
+1.7.19~2 anhand desselben proportionalen Vertrags ab. Die historische
+cJSON-Messung bleibt unverändert; der isolierte Kandidatenabschluss ergänzt
+ausschliesslich einen bounded NUL-Input-Gate und aktuelle R1-Evidence.
 
 ```text
 ISSUE=27
@@ -20,17 +20,20 @@ BASELINE_MAIN=b871375f494701bed1834013cfeb789856983e3a
 PLAN_REVISION_BASE_HEAD=04d2546dd89e1b67e30a0e0e055280d5cb6361a8
 PLAN_REVISION_DATE=2026-09-30
 PLAN_FIX_BASE_HEAD=025fafca27d940dce8ed9e0d496073c121c9989c
-SUPERSEDES_PLAN_SHA=c7c5a5c06d3cc07b4f8bf3de7d3c39a07c8d97f4
+PREVIOUS_PLAN_SHA=031ba2ada63de08ff4a99547d4ec911fcbc6f864
+CANDIDATE_COMPLETION_BASE_HEAD=c792c4ac1791ddbeb96864ee32fcff249e3389ae
+CJSON_SPIKE_COMMIT=b5b26c204f00e63c4e3944feacde4dccdcb4ae06
 PREVIOUS_APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771
 PLAN_STATUS=INDEPENDENT_PLAN_FIX_VERIFICATION_PENDING
 OWNER_PLAN_APPROVAL=REQUIRED_AFTER_FIX_VERIFICATION
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCT_CODEC_OR_DEPENDENCY_CHANGE=NO
 PRODUCT_COMPOSITION=NOT_STARTED
-PRODUCT_TESTS=NOT_RUN_PLAN_ONLY
+PRODUCT_TESTS=NOT_RUN
 BUILDER_SELF_CHECK=NOT_RUN_PLAN_ONLY
-CANDIDATE_REASSESSMENT=EXISTING_EVIDENCE_AND_CURRENT_SOURCE_ONLY
-NEW_SPIKE_OR_BUILD=NOT_RUN
+CJSON_SPIKE=BOUNDED_NUL_GATE_COMPLETE
+CJSON_SPIKE_NATIVE=PASS
+CJSON_SPIKE_ESP_IDF_6_1_ESP32_BUILD=PASS
 HARDWARE=NOT_RUN
 FLASH=NOT_RUN
 ACTUATOR_RELEASE=NO
@@ -156,29 +159,43 @@ Pflicht:
 Die bisher vier auf strikte Duplicate-Ablehnung gerichteten Regressionen
 (Root, Revision, Intent, Nested Candidate) bleiben als dokumentierte
 Messvektoren erhalten. Sie sind nach dieser Revision kein R1-MUST-Gate mehr.
-Dieser Plan-only-Schritt ändert weder die Tests noch deren historische
-Spike-Ergebnisse; eine spätere Umsetzung muss sie nach Ownerfreigabe als
-Hardening-Evidence statt als Vertragsblocker einordnen.
+Die historischen Testergebnisse werden nicht umgeschrieben. Der separat
+abgeschlossene cJSON-Kandidatenspike ergänzt nur den bounded NUL-Gate und
+aktuelle ASCII-/ID-Akzeptanzbelege; Duplicate-/UTF-8-Verhalten bleibt
+Hardening-Evidence statt Vertragsblocker.
 
 ## 4. Kandidatenvergleich gegen denselben Vertrag
 
 | Kandidat | R1-MUST-Fit und konkrete Delta | Hardening-/Restpunkt | Neubewertung |
 |---|---|---|---|
 | ArduinoJson 7.4.3 | Bereits vorhandener konkreter Codec; bestehende Tests belegen exakte interne `uint64_t`-Verarbeitung. `JsonString::size()` erlaubt längenbewusste Prüfung von embedded NUL. Nötiges R1-Delta: `u`/`c` dezimale Strings, Überlauf-Parser, kanonische ID-Validierung und bestehende Bounds/Typ-/Finite-Checks als Gate. | Doppelte Member werden deterministisch last-value-wins zusammengeführt; die öffentliche API bietet keinen Event-Hook zur Duplicate-Ablehnung. Das ist unter dem revidierten Vertrag Hardening, kein Blocker. | `PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA` |
-| Espressif cJSON 1.7.19~2 | Bereits gemessene ESP-IDF-6.1-/ESP32-/C++17- und Native-Builds sowie begrenzte konkrete DTO-/Response-Tests bleiben gültige Candidate-Evidence. Dezimalstring-Revisionen beseitigen die cJSON-`double`-`uint64_t`-Kollision; `isfinite()` plus fachliche Rangechecks sind normale Codecvalidierung. Programm-IDs werden durch denselben vorhandenen ASCII-Projektvalidator geprüft. | Die öffentliche Baumstruktur erhält Duplikate; `GetObjectItemCaseSensitive()` allein reicht nicht, ein öffentlicher begrenzter Baumdurchlauf kann sie erkennen, muss sie aber nicht ablehnen. Wegen C-String-NUL ist vor cJSON ein kleiner bounded Gate nötig: nach Body-Längenprüfung rohe `NUL`-Bytes sowie die JSON-Escapeform (Backslash, `u`, vier Nullziffern) ablehnen. Kein Lexer: kein erlaubtes R1-Feld kann NUL enthalten; die festen ASCII-Text-/ID-Gates lehnen sonstige nichtkanonische Feldwerte ab. Generische UTF-8-Ablehnung ist nicht nötig. | `CONDITIONAL_PASS_CANDIDATE_FOR_R1_MUST_WITH_BOUNDED_NUL_AND_FIELD_GATES` |
+| Espressif cJSON 1.7.19~2 | Vorherige Host-/ESP-IDF-6.1-/ESP32-/C++17-Evidence bleibt erhalten; der neue isolierte Probe-Gate ist Host und ESP-IDF-Build PASS. Dezimalstring-Revisionen beseitigen die `double`-`uint64_t`-Kollision im Wirevertrag; `isfinite()` und Wertebereiche bleiben Codecvalidierung. Nach cJSON-Parse wird der bestehende Program-ID-Validator benutzt. | Der bounded NUL-Gate prüft nach der 480-Byte-Grenze rohe NUL-Bytes und die sechs Bytes `\\u0000`. Er verwendet weder Tokenizing noch JSON-Zustand; die Probe akzeptiert gültige ASCII-Intent-/Enum-Beispiele und kanonische Program-IDs. Duplicate-/UTF-8-Verhalten bleibt Hardening. | `PASS_CANDIDATE_FOR_R1_MUST` |
 
-Der cJSON-Spike hat `uint64`-Kollision, NUL-Verhalten und invalid-UTF-8-
-Akzeptanz unter dem früheren strikten Vertrag tatsächlich gemessen. Diese
-Messungen werden nicht umbenannt: die neue Revision beseitigt die
-`uint64`-Ursache durch das vorgegebene Wireformat und bindet NUL-/Textprüfung
-an die realen ASCII-only Schemafelder. Für cJSON sind diese gezielten
-Prüfungen bislang eine klar begrenzte Planauflage, keine bereits
-implementierte oder erneut ausgeführte PASS-Evidence. Falls sie sich nicht
-ohne zweiten Lexer fail-closed umsetzen lassen, ist cJSON für diesen Vertrag
-nicht geeignet; kein Lexer wird ergänzt. Die begrenzte Suche nach der
-NUL-Escapeform kann keine derzeit gültige Text-/ID-Eingabe ausschliessen, da
-keines der geschlossenen ASCII-Felder einen Backslash zulässt. Bei späterem
-Einführen freier Inbound-Texte wäre diese Annahme neu zu prüfen.
+Der bisherige cJSON-Spike hat `uint64`-Kollision, NUL-Verhalten und
+invalid-UTF-8-Akzeptanz unter dem früheren strengeren Vertrag gemessen; diese
+historischen Ergebnisse bleiben unverändert. Die aktuelle Planrevision
+ergänzt die begrenzte Suche nach rohem NUL und `\\u0000` und belegt mit dem
+aktuellen ASCII-Intent-/Enum-Sample sowie dem vorhandenen
+`validateLowercaseIdentifier()` die Fortgeltung erlaubter Werte. Der Gate
+scannt höchstens 480 Bytes und hat weder Tokenisierung noch String-, Escape-
+oder Strukturzustand. Die Probe zeigt separat, dass cJSON escaped NUL weiter
+dekodiert; die Eingangsschranke lehnt diese Form vor dem Parser ab.
+
+Der gleichwertige Kandidatenvergleich lautet:
+
+| Kriterium | ArduinoJson 7.4.3 | Espressif cJSON 1.7.19~2 |
+|---|---|---|
+| Correctness | R1-MUST erfüllbar; Dezimalstring-/Overflow- und Feldvalidierung bleiben lokales Codecdelta. Länge-bewusste NUL-Prüfung ist über die öffentliche String-API möglich. | R1-MUST nach bestandenem bounded NUL-Gate erfüllbar; R1-Wire verwendet Dezimalstrings. Endlichkeit, Wertebereiche und Projektvalidator bleiben nachgelagert. |
+| KISS / eigener Code | Vorhandener ungemergter Codec und Tests senken die unmittelbaren Änderungskosten; das ist nur ein kleiner Migrationsfaktor. | Zusatzcode ist ein begrenzter 480-Byte-Vorfilter ohne JSON-Parserlogik; weder Lexer noch generische JSON-Abstraktion. |
+| Ressourcen / Tests | Vorhandene Native- und ESP-IDF-Profilevidence; kein integrierter Vier-Session/no-PSRAM-Vergleich. | Native-Probe und ESP-IDF-6.1-ESP32-Targetbuild PASS; Mutation 341/480 B, Responses 346/247/3048 von 3072 B. Kein integrierter Heap-/Runtimevergleich, daher kein Ressourcen-Sieger. |
+| Wartung / Toolchain | Exakt gepinnt, MIT, mit dem bestehenden Projektcodec getestet; ESP-IDF-kompatibel, aber kein Espressif-Registry-Paket. | Offizielle Espressif-Komponente und MIT; exakt gepinnt und direkt mit ESP-IDF 6.1 sowie C++17-Consumer gebaut. |
+| ESP-IDF-Wiederverwendung | Breiter, nicht auf ESP-IDF beschränkter Einsatz und daher portabel. | Espressif-Herkunft und Component-Manager-Paket sind ein legitimer langfristiger ESP-IDF-Plattformvorteil, aber kein automatischer Sieger. |
+| Vorhandener ungemergter Code | Bestehender Codec ist ein kleiner Wechselkosten-Vorteil, nicht ausschlaggebend. | Ein begrenzter Codecwechsel wäre nötig; keine gemeinsame Plattform-/Provider-Abstraktion erforderlich. |
+
+Damit gibt es keinen eindeutigen Sieger aus R1-Correctness oder vergleichbarer
+Ressourcenevidence. Die Empfehlung bleibt deshalb Ownerauswahl nach
+Independent Plan Fix Verification; Espressif-Herkunft ist ein legitimer
+Tie-Breaker, der ArduinoJson-Bestand nur ein kleiner Migrationskostenfaktor.
 
 ```text
 R1_JSON_MUST=HARD_BOUNDS_480_3072;VALID_COMPLETE_JSON;CLOSED_VERSIONED_SCHEMA;REQUIRED_FIELDS;EXACT_TYPES;FINITE_RANGE_CHECKED_NUMBERS;EXACT_REVISION_CONFLICTS;CANONICAL_ACTUAL_TEXT_AND_IDS;MISSING_UNTRUSTED_EXPLICIT;DETERMINISTIC_SINGLE_DECODE;NO_SECRETS;CODEC_LOCAL_LIBRARY_TYPES;EXACT_BODY_REPLAY_FINGERPRINT
@@ -188,17 +205,16 @@ VALID_RANGE=1..18446744073709551615
 ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION
 "0"=INVALID
 ARDUINOJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA
-CJSON_REASSESSMENT=CONDITIONAL_PASS_CANDIDATE_FOR_R1_MUST_WITH_BOUNDED_NUL_AND_FIELD_GATES
-RECOMMENDED_CANDIDATE=ArduinoJson_7.4.3
-RECOMMENDATION_REASON=KISS_YAGNI_CORRECTNESS
+CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST
+RECOMMENDED_CANDIDATE=OWNER_SELECTION_AFTER_FAIR_COMPARISON
+RECOMMENDATION_REASON=NO_CLEAR_MUST_OR_RESOURCE_WINNER;ESPRESSIF_ORIGIN_VALID_TIEBREAKER;EXISTING_CODEC_SMALL_COST_ONLY
 FINAL_LIBRARY_SELECTION=OWNER_PENDING
 ```
 
-Die Empfehlung ist eine Engineering-Empfehlung, keine finale Ownerauswahl.
-ArduinoJson wird wegen der bereits vorhandenen Codecimplementierung und der
-kleinsten korrekt begrenzten Änderung empfohlen. cJSON bleibt ein möglicher
-Alternativkandidat nur unter den oben genannten kleinen Input-/Feld-Gates.
-Beide Kandidaten werden nicht gleichzeitig als Produktabhängigkeiten geführt.
+Beide Kandidaten stehen nun gegen denselben proportionalen R1-MUST-Vertrag.
+Diese Kandidatenbewertung ist keine finale Produktauswahl und autorisiert
+keinen Codecumbau. Beide Kandidaten werden nicht gleichzeitig als
+Produktabhängigkeiten geführt.
 
 Kandidatenprovenienz der vorhandenen Messungen: ArduinoJson 7.4.3 am Tag-Commit
 `77771d3c07668e01d8f52acb03910c1110bb373f`; Espressif Component Registry
@@ -212,10 +228,13 @@ unveränderte Rohmessungen bleiben in den verlinkten Auditdateien.
 Nach unabhängiger Planprüfung und ausdrücklicher Freigabe dieses exakten
 Plan-Commits:
 
-1. Ownerentscheidung für einen der beiden Kandidaten dokumentieren; weder
-   automatisch die Empfehlung übernehmen noch eine dritte Bibliothek
+1. Nach unabhängiger Plan-Fix-Verifikation trifft der Owner die finale
+   Bibliotheksauswahl zwischen diesen beiden R1-tauglichen Kandidaten;
+   Espressif-Herkunft ist ein legitimer Tie-Breaker, vorhandener ungemergter
+   Code nur ein kleiner Migrationskostenfaktor. Keine dritte Bibliothek
    evaluieren.
-2. Nur an der bestehenden privaten Codecgrenze das gewählte R1-MUST-Delta
+2. Nach exakter Ownerfreigabe nur an der bestehenden privaten Codecgrenze das
+   gewählte R1-MUST-Delta
    umsetzen. Keine Route in `main/` registrieren und keine produktive
    Composition.
 3. Die vier Duplicate-Testvektoren behalten, aber als nichtblockierende
