@@ -45,8 +45,11 @@ ersetzt weder das Originalaudit noch die ausstehende Ownerauswahl.
   48 Byte, Temperaturprojektion 3 Eintraege, Alerts 16 Eintraege und jede
   Read-only-Antwort maximal 3072 Byte. DTO-Objekte lehnen fehlende
   Pflichtfelder, falsche Typen, zusaetzliche Felder, NUL-in-Strings/-Keys sowie
-  malformed/truncated JSON fail-closed ab. Der Maximaltest verwendet eine
-  reale Program-Startmutation mit allen Overrides und maximalen Revisionswerten.
+  malformed/truncated JSON fail-closed ab. Doppelte Membernamen werden aber
+  waehrend `deserializeJson()` kollabiert und vom DTO-Validator nicht mehr
+  erkannt; deshalb erfuellt dieser Kandidatenpfad den strikten Duplicate-Key-
+  Vertrag nicht. Der Maximaltest verwendet eine reale Program-Startmutation
+  mit allen Overrides und maximalen Revisionswerten.
 - Das interne Body-Schema hat Version 1: Root `v`/`r`/`i` (Version,
   erwartete Revisionen, Intent); Revisionsschluessel `s`/`r`/`m`/`f`/`e`/
   `u`/`c` (State, Run, Meldungen, Fault, Recovery-Episode,
@@ -60,18 +63,33 @@ ersetzt weder das Originalaudit noch die ausstehende Ownerauswahl.
   Revisionsfelder, je Temperatur Rolle/Qualitaet/Gueltigkeit/Wert und je Alert
   ID/Code/Schwere/Aktiv-/Ack-/Decision-/Mute-Zustand; interne Sensorrohdaten,
   Kalibrierkoeffizienten und Laufzeitstempel werden nicht ausgegeben.
-- Verifikation: gezielte Native-Codec-/API-/Handlerregressionen sowie beide
-  ESP-IDF-6.1-Profile bestehen. `esp32_bringup` erzeugte 1,554,240 Byte
-  Firmwarebinary (ELF text/data/bss 1,359,348/210,835/90,082 Byte);
-  `esp32_release` 1,542,224 Byte (1,349,292/208,867/90,082 Byte). Codec und
-  Handler sind nicht in `main/app_main.cpp` komponiert; ihre Symbole sind nicht
-  im Firmware-ELF, daher ist daraus kein produktiver Flash-/RAM-Delta-Nachweis
-  abzuleiten.
-- Ergebnis: `SPIKE_RESULT=PASS_CANDIDATE`, Gesamtbewertung
-  `HARDWARE_EVIDENCE_PENDING`; `FINAL_SELECTION_PENDING` bleibt. ArduinoJson 7
-  `JsonDocument` allokiert dynamisch. Integrierte Heap-, Fragmentierungs-,
-  Laufzeit- und Vier-Session/no-PSRAM-Messungen sind mangels Hardware nicht
-  erfolgt und werden nicht aus Host-/Builddaten abgeleitet.
+- Verifikation vor dem Duplicate-Key-Finding: Native-Codec-/API-/Handler-
+  Regressionen und beide ESP-IDF-6.1-Profile bestanden. `esp32_bringup`
+  erzeugte 1,554,240 Byte Firmwarebinary (ELF text/data/bss
+  1,359,348/210,835/90,082 Byte); `esp32_release` 1,542,224 Byte
+  (1,349,292/208,867/90,082 Byte). Codec und Handler sind nicht in
+  `main/app_main.cpp` komponiert; ihre Symbole sind nicht im Firmware-ELF,
+  daher ist daraus kein produktiver Flash-/RAM-Delta-Nachweis abzuleiten.
+- Duplicate-Key-Reproduktion auf dem Slice-4B-HEAD
+  `a236effc625cc992fbd16e4e6cc72e36d2829940`: vier neue Regressionen verlangen
+  Ablehnung bei Root-, Revisions-, Intent- und Candidate-Duplikaten;
+  alle vier wurden unerwartet akzeptiert. Der Native-Route-Lauf endete deshalb
+  `ERRORED` (4 fehlgeschlagene Assertions, 15 andere Tests bestanden).
+- Oeffentliche ArduinoJson-v7-API-Pruefung: dokumentierte
+  [`deserializeJson()`-Optionen](https://arduinojson.org/v7/api/json/deserializejson/)
+  umfassen Filter und NestingLimit, aber keinen Duplicate-Key-Hook oder
+  Token-Visitor; die dokumentierten
+  [`DeserializationError`-Werte](https://arduinojson.org/v7/api/misc/deserializationerror/)
+  enthalten keinen Duplicate-Key-Fehler. `JsonObjectConst` stellt Iteration,
+  Lookup und Groesse der fertig geparsten Objektprojektion bereit, keine
+  Eingabeereignisse. Der oeffentliche Custom-Reader liefert nur Bytes; ein
+  Duplicate-Tracker davor muesste selbst JSON-Strings und Objektgrenzen lexen
+  und waere hier ein verbotener zweiter Parser.
+- Ergebnis: `ARDUINOJSON_7_4_3=FAIL_CANDIDATE_FOR_STRICT_DUPLICATE_FIELD_CONTRACT`;
+  `FINAL_SELECTION_PENDING=YES`. Keine alternative JSON-Bibliothek und kein
+  eigener Parser wurden ausgewaehlt oder implementiert. Der fruehere
+  `PASS_CANDIDATE`-Status ist durch dieses Finding ueberholt. Die offene
+  Heap-/Vier-Session/no-PSRAM-Messung bleibt zusaetzlich ausstehend.
 
 ### Upstream-Aktivitaet und deklarierte Plattformbreite
 

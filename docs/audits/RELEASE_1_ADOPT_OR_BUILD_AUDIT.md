@@ -1364,9 +1364,15 @@ bevorzugte Kandidat. Die endgueltige Kandidatenwahl bleibt ein Spike-Gate mit
 Nachweis des browserbasierten R1-Vertrags.
 
 Der JSON-Richtungsentscheid ist ebenfalls getroffen, ohne ein neues OD-Kuerzel
-zu vergeben: ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Offen bleibt nur
-die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
-und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
+zu vergeben: ArduinoJson `7.4.3` war der bevorzugte Kandidat fuer den
+konkreten Slice-4B-Codec. Die Duplicate-Key-Regressions zeigen jedoch, dass
+der Parser widerspruechliche Membernamen auf Root-, Revision-, Intent- und
+Candidate-Ebene akzeptiert. Die dokumentierte oeffentliche API bietet keinen
+Duplicate-Key-Hook oder Token-Visitor; ein eigener Vorparser bleibt nach dem
+Audit ausgeschlossen. Daher gilt fuer den aktuellen konkreten Vertrag
+`ARDUINOJSON_7_4_3=FAIL_CANDIDATE_FOR_STRICT_DUPLICATE_FIELD_CONTRACT` und
+`FINAL_SELECTION_PENDING=YES`. Es wurde keine Alternative ausgewaehlt oder
+implementiert; Owner-/Planentscheidung ist vor Fortsetzung erforderlich.
 
 OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
 in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Der

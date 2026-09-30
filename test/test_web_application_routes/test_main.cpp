@@ -652,6 +652,41 @@ void test_mutation_codec_decodes_every_closed_application_intent() {
     }
 }
 
+void assertDuplicateMemberRejected(const char* body) {
+    WebRunMutationDto decoded;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        static_cast<int>(WebRunMutationDecodeStatus::Invalid),
+        static_cast<int>(decodeWebRunMutation(body, decoded)), body);
+}
+
+void test_mutation_codec_rejects_conflicting_duplicate_at_root() {
+    assertDuplicateMemberRejected(
+        "{\"v\":1,\"r\":{\"s\":0},"
+        "\"i\":{\"t\":\"reset-fault\"},"
+        "\"i\":{\"t\":\"ack-message\",\"id\":7}}");
+}
+
+void test_mutation_codec_rejects_conflicting_duplicate_in_revisions() {
+    assertDuplicateMemberRejected(
+        "{\"v\":1,\"r\":{\"s\":0,\"s\":1},"
+        "\"i\":{\"t\":\"reset-fault\"}}");
+}
+
+void test_mutation_codec_rejects_conflicting_duplicate_in_intent() {
+    assertDuplicateMemberRejected(
+        "{\"v\":1,\"r\":{\"s\":0},"
+        "\"i\":{\"t\":\"reset-fault\","
+        "\"t\":\"ack-message\",\"id\":7}}");
+}
+
+void test_mutation_codec_rejects_conflicting_duplicate_in_candidate() {
+    assertDuplicateMemberRejected(
+        "{\"v\":1,\"r\":{\"s\":0},"
+        "\"i\":{\"t\":\"start-program\","
+        "\"c\":{\"p\":\"old-program\","
+        "\"p\":\"new-program\"}}}");
+}
+
 void test_maximum_product_mutation_fits_body_and_exact_replay_budget() {
     FermentationUiExpectedRevisions expected;
     expected.expectedStateSequence = UINT32_MAX;
@@ -825,6 +860,10 @@ int main() {
         test_handler_maps_stale_revision_and_invalid_program_without_mutation);
     RUN_TEST(test_mutation_codec_rejects_invalid_bodies_without_partial_dto);
     RUN_TEST(test_mutation_codec_decodes_every_closed_application_intent);
+    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_at_root);
+    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_revisions);
+    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_intent);
+    RUN_TEST(test_mutation_codec_rejects_conflicting_duplicate_in_candidate);
     RUN_TEST(test_maximum_product_mutation_fits_body_and_exact_replay_budget);
     RUN_TEST(test_read_only_api_projection_bounds_and_untrusted_values);
     RUN_TEST(test_read_only_api_routes_are_get_only_and_uncomposed);

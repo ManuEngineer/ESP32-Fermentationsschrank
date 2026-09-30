@@ -90,21 +90,25 @@ Fingerprint bildet. Body 480 B, JSON-Nesting 4, Programm-ID 48 B,
 Temperaturarray 3, Alertarray 16 und API-Antwort 3072 B sind fail-closed
 begrenzt; das Replay-Fingerprintbudget bleibt 512 B.
 
-ArduinoJson `7.4.3` (Commit
-`77771d3c07668e01d8f52acb03910c1110bb373f`, MIT) besteht den softwareseitigen
-Kandidaten-Spike einschliesslich Native-Regressionen und direktem ESP-IDF-6.1-
-Build beider Profile. Die Auswahl bleibt `FINAL_SELECTION_PENDING` und die
-Gesamtbewertung `HARDWARE_EVIDENCE_PENDING`: `JsonDocument` nutzt dynamischen
-Heap; es gibt keinen integrierten no-PSRAM-Ressourcen-/Hardware-Nachweis. Die
-Vier-Session-Ressourcenmessung bleibt zwingend vor produktiver Mutation.
+Der Duplicate-Key-Blocker widerlegt den bisherigen Kandidaten-PASS: vier
+konfligierende Duplikate in Root, Revisionen, Intent und Programmkandidat
+werden auf dem Slice-4B-Stand durch ArduinoJson 7.4.3 unerwartet akzeptiert.
+Die dokumentierte oeffentliche API hat keinen Duplicate-Key-Hook oder
+Token-Visitor; ein eigener Vorparser ist ausdruecklich ausgeschlossen. Status:
+`ARDUINOJSON_7_4_3=FAIL_CANDIDATE_FOR_STRICT_DUPLICATE_FIELD_CONTRACT`,
+`FINAL_SELECTION_PENDING=YES`. Es wurde keine Alternative gewaehlt und kein
+Parser-Workaround implementiert. Build-/Lizenz-Evidence bleibt historische
+Kandidaten-Evidence, erfuellt aber den strikten DTO-Vertrag nicht. Die
+Vier-Session/no-PSRAM-Ressourcenmessung bleibt unabhaengig davon vor
+produktiver Mutation zwingend.
 
 Der Handler und die Read-only-Routen sind absichtlich weder registriert noch
 produktiv komponiert. Vor Composition bleiben ausserdem HTTP-/Application-
 Aufrufserialisierung und produktive Auth-/Session-Verdrahtung erforderlich.
 Keine Hardwaretests oder Flasharbeit. PR #170 bleibt Draft und Issue #27
 offen; PR #171 bleibt separat und PR #167 historische Referenz ohne
-Commituebernahme. `ACTUATOR_RELEASE=NO`; naechster Schritt ist Independent
-Slice Review.
+Commituebernahme. `ACTUATOR_RELEASE=NO`; Produktarbeit stoppt fuer
+Independent Review/Ownerentscheidung zum JSON-Kandidaten.
 
 Die spaetere Hardware-Reihenfolge #30 -> #32 -> #33 und die getrennten
 #28-Diagnose-/Chart-/Exportgates bleiben unberuehrt; `ACTUATOR_RELEASE=NO`.
