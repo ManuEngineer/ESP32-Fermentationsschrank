@@ -5,8 +5,9 @@
 ```text
 ISSUE=164
 PR=171
-PLAN_REVISION=CONSOLIDATED_QR_SOFTAP_SCAN_PLAN_2026-09-30
+PLAN_REVISION=CONSOLIDATED_QR_SOFTAP_SCAN_PLAN_B1_B2_FIX_2026-09-30
 BASE_HEAD=b24f39fffffaf8fd4db21e94d1625ecca2660e5e
+PLAN_FIX_BASE_HEAD=e5d64fa1923863406863db1dc4f29564201037c3
 PR_STATE=OPEN_DRAFT
 WORKTREE=/tmp/issue164-network-ui.M4vluy
 BRANCH=agent/issue-164-network-ui-completion
@@ -21,12 +22,19 @@ SOFTAP_AUTH=WPA2_PSK_UNCHANGED
 QR_PURPOSE=JOIN_SOFTAP
 QR_PAYLOAD=SSID_AND_PASSWORD_ONLY
 QR_QUIET_ZONE=REQUIRED
-QR_SIZE=DERIVE_INTEGER_MODULE_SCALE_TARGET_APPROX_180PX
+QR_VERSION=4
+QR_MODULES_WITH_QUIET_ZONE=41
+QR_MODULE_SCALE=4
+QR_SIZE=164X164_EXACT
+QR_RECT_X=156
+QR_RECT_Y=34
+PAGE_TITLE_RECT={8,34,140,18}
 QR_CONTRAST=BLACK_ON_WHITE
 QR_INTERPOLATION=NO
 QR_ANTIALIASING=NO
 NETWORK_SCAN_RESULT_BOUND=16
 NETWORK_SCAN_HTTP_BOUND=16
+NETWORK_SCAN_HTTP_MAX_BYTES=528
 FTDI_DISPLAY_COUPLING=REPRODUCED
 FIRMWARE_CRASH=NOT_PROVEN
 PRODUCT_CODE_CHANGED=NO
@@ -108,14 +116,31 @@ Die vorhandene WLAN-Payload bleibt unverändert semantisch:
 `WIFI:T:WPA;S:<escaped-SSID>;P:<escaped-password>;;`. Sie enthält exakt die
 aktuellen SoftAP-Werte, keine URL und keine IP.
 
-Der Renderer erhält eine neue, innerhalb 320x240 geprüfte Geometrie. Die
-Implementierung leitet die konkrete Kantenlänge aus der LVGL-ECC-Medium-
-Modulgröße und ganzzahliger Skalierung ab; als Ziel wird eine
-`184x184`-Command-Fläche (ca. 180 px, ohne Überlappung) an der rechten Seite
-des Netzwerkbildschirms vorgesehen. Der manuelle Bereich bleibt links mit
-SSID, Passwort und IP sichtbar und wird bei Bedarf vertikal/zeilenweise
-geordnet. Die tatsächlichen Draw-Commands müssen vollständig in 320x240
-liegen.
+Der Renderer verwendet für den neuen festen Payload und ECC Medium QR-Version
+4. Die 33 QR-Module je Seite erhalten eine Quiet-Zone von 4 Modulen je Seite;
+damit sind 41 Module je Seite vorhanden. Bei exakt 4 px je Modul ergibt sich
+eine `164x164`-Command-Fläche. Der bisherige `184x184`-Vorschlag ist damit
+verworfen.
+
+Die konkrete Netzwerkseiten-Geometrie lautet:
+
+```text
+DISPLAY_BOUNDS             = {0, 0, 320, 240}
+HEADER_BOUNDS              = {0, 0, 320, 32}
+QR_RECT                    = {156, 34, 164, 164}
+PAGE_TITLE_RECT            = {8, 34, 140, 18}
+CURRENT_MODE_RECT          = {8, 52, 140, 18}
+SSID_RECT                  = {8, 72, 140, 36}
+PASSWORD_RECT              = {8, 110, 140, 54}
+IP_RECT                    = {8, 166, 140, 18}
+BOTTOM_CONTROLS_BOUNDS     = {0, 200, 320, 40}
+```
+
+Die rechte QR-Fläche liegt damit vollständig zwischen Header und Bottom-
+Controls (`y=34..197`). Current-Mode-Text, SSID, Passwort und IP liegen in
+der linken Spalte (`x=8..147`) und überlappen den QR nicht. Der bestehende
+Header-Touchbereich und die bestehenden Bottom-Control-Rechtecke bleiben
+unverändert; es entsteht keine neue Layoutarchitektur.
 
 Im produktiven LVGL-Zweig werden für jedes QR-Objekt explizit gesetzt:
 
@@ -140,16 +165,20 @@ dem bestehenden ESP32-Heap die `wifi_ap_record_t`-Arbeitsmenge auf ungefähr
 Grenze wird als geteilter Netzwerkvertrag definiert, damit Adapter und
 HTTP-Route nicht auseinanderlaufen.
 
-Die Umsetzung liest die vollständige Treiberanzahl nur als Zählwert, klemmt
-die Kapazität vor jeder großen Result-Allokation auf 16 und verwendet für die
-ESP-IDF-Records einen festen begrenzten Puffer. Danach entsteht nur die
-gebundene `NetworkScanEntry`-Liste; eine zweite ungebundene Record-Liste wird
-nicht aufgebaut. Die SSID-Längenbegrenzung von 32 Bytes bleibt bestehen. Eine
-zusätzliche Sortier- oder Worker-Architektur wird nicht eingeführt; es werden
-die ersten vom ESP-IDF-Scan gelieferten begrenzten Ergebnisse übernommen.
+Die Umsetzung liest die vollständige Treiberanzahl nur als Zählwert und klemmt
+vor jeder Result-Allokation auf `min(driver_count, 16)`. Der bestehende
+Heap-Vector-Pfad wird wiederverwendet: `wifi_ap_record_t`-Records werden in
+einem Heap-`std::vector` mit genau dieser begrenzten Größe gelesen; es wird
+kein neuer großer lokaler Stackpuffer (`std::array`, C-Array oder äquivalent)
+im synchronen HTTP-/Scanpfad eingeführt. Die anschließende
+`NetworkScanEntry`-Liste wird ebenfalls höchstens 16 Einträge groß. Eine
+zweite ungebundene Record-Liste wird nicht aufgebaut. Die SSID-Längenbegrenzung
+von 32 Bytes bleibt bestehen. Eine zusätzliche Sortier- oder Worker-
+Architektur wird nicht eingeführt; es werden die ersten vom ESP-IDF-Scan
+gelieferten begrenzten Ergebnisse übernommen.
 
 Die HTTP-Route wendet dieselbe Grenze defensiv nochmals an und reserviert für
-die Antwort höchstens `16 * (32 + 1)` Bytes für SSID-Zeilen. Damit können weder
+die Antwort höchstens `16 * (32 + 1) = 528` Bytes für SSID-Zeilen. Damit können weder
 Adapter noch Test-/Mockdaten mehr als 16 Einträge in die Browserantwort
 durchreichen. Fehler-Scan und leerer Scan bleiben deterministisch getrennt:
 Fehler liefern weiterhin `503 scan unavailable`, ein erfolgreicher leerer
@@ -170,9 +199,10 @@ Nach Planfreigabe synchronisiert der Implementierungsdiff mindestens:
 
 Aktive R1-Aussagen werden auf feste SSID `Fermentation`, individuelles
 flüchtiges 16-Zeichen-Passwort, 42er Alphabet, mindestens 80 Bit Zielraum,
-`QR_QUIET_ZONE=REQUIRED`, die neue integer-skalierte QR-Geometrie und den
-16er-Scan-Grenzwert gebracht. Veraltete aktive Aussagen zu individueller
-SSID, 32 Hexzeichen oder 112x112 werden korrigiert. Historische Evidence,
+`QR_QUIET_ZONE=REQUIRED`, die feste `164x164`-Geometrie mit 41 Modulen und
+4 px je Modul sowie den 16er-Scan-Grenzwert gebracht. Veraltete aktive
+Aussagen zu individueller SSID, 32 Hexzeichen, 112x112 oder 184x184 werden
+korrigiert. Historische Evidence,
 frühere Messwerte und alte HEAD-/Flashberichte bleiben unverändert und werden
 als historisch kenntlich gehalten. Weitere aktive Vertragsstellen werden nur
 nach `git grep` auf dieselbe Weise synchronisiert; Secrets werden nicht in
@@ -191,12 +221,18 @@ Die Tests werden auf den neuen Contract begrenzt und decken mindestens ab:
 - Zufallsquellenfehler erzeugt keinen deterministischen Ersatzwert;
 - QR-Payload enthält exakt aktuelle SSID und aktuelles Passwort;
 - QR-Payload enthält weder URL noch IP;
-- QR-Draw-Command hat die neue konkrete Geometrie und bleibt in 320x240;
+- QR-Draw-Command ist exakt `{156,34,164,164}` mit 41 Modulen und bleibt in
+  320x240;
+- Header-, Page-Title-, Current-Mode-, SSID-, Passwort-, IP- und
+  Bottom-Control-Rechtecke
+  bleiben innerhalb der Bounds; QR und manuelle Informationsrechtecke sowie
+  QR und Bottom-Controls überlappen nicht;
 - manuelle SSID-/Passwort-/IP-Commands bleiben sichtbar;
 - der produktive LVGL-Pfad aktiviert die Quiet-Zone und Schwarz/Weiß-
   Konfiguration;
-- Scanresultate oberhalb des Limits werden bereits vor großen Allokationen
-  und nochmals in der HTTP-Antwort auf 16 begrenzt;
+- Scanresultate oberhalb des Limits werden bereits vor großen Heap-Vector-
+  Allokationen und nochmals in der HTTP-Antwort auf 16 begrenzt;
+- kein neuer großer lokaler Stackpuffer im synchronen HTTP-/Scanpfad;
 - Fehler- und Empty-Scan bleiben deterministisch;
 - bestehende direkt betroffene Netzwerk-, Renderer- und Touch-Regressionen
   bleiben grün.
@@ -236,8 +272,10 @@ FTDI-/Display-Kopplungsbefund dokumentiert, nicht als Firmware-Crash.
 Nach stabilem Boot werden ausschließlich mit Owner am Gerät AP_ONLY,
 Netzwerkseite, QR-Anzeige, Smartphone-Scan innerhalb weniger Sekunden,
 SoftAP-Join, DHCP, `192.168.4.1`, Browser-Scan mit Heap-/größtem-
-8-Bit-Block-Messung sowie HOME_WIFI-Test-before-Commit, Persistenz, Reboot
-und Reconnect durchgeführt. Nicht tatsächlich ausgeführte Felder bleiben
+8-Bit-Block-Messung vor und nach dem Browser-Scan sowie dem bestehenden
+Task-Stack-HWM, sofern dieser im vorhandenen Ressourcenpfad zugänglich ist,
+sowie HOME_WIFI-Test-before-Commit, Persistenz, Reboot und Reconnect
+durchgeführt. Nicht tatsächlich ausgeführte Felder bleiben
 `NOT_RUN`. Bei schwarzem Display oder einem nicht erklärten Hardwarefehler
 gilt STOP ohne spekulative Folgeänderung.
 
@@ -252,8 +290,14 @@ SOFTAP_SSID=Fermentation
 SOFTAP_PASSWORD_LENGTH=16
 SOFTAP_ENTROPY_TARGET_BITS>=80
 QR_QUIET_ZONE=REQUIRED
-QR_SIZE=DERIVE_FOR_INTEGER_MODULE_SCALE_TARGET_APPROX_180PX
+QR_VERSION=4
+QR_MODULES_WITH_QUIET_ZONE=41
+QR_MODULE_SCALE=4
+QR_SIZE=164X164_EXACT
+QR_RECT={156,34,164,164}
 NETWORK_SCAN_RESULT_BOUND=16
+NETWORK_SCAN_HTTP_MAX_BYTES=528
+SCAN_LOCAL_STACK_BUFFER=FORBIDDEN
 FTDI_BLACK_DISPLAY_FIRMWARE_CRASH=NOT_PROVEN
 PRODUCT_CODE_CHANGED=NO
 BUILD=NOT_RUN_PLAN_ONLY
