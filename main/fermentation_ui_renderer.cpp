@@ -21,6 +21,16 @@ constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
+constexpr device_platform::DisplayRect kNetworkPageTitleRect{
+    8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
+constexpr device_platform::DisplayRect kNetworkCurrentModeRect{
+    8U, 52U, 140U, RepresentativeScreen::kTextLineHeight};
+constexpr device_platform::DisplayRect kNetworkSsidRect{8U, 72U, 140U, 36U};
+constexpr device_platform::DisplayRect kNetworkPasswordRect{8U, 110U, 140U,
+                                                            54U};
+constexpr device_platform::DisplayRect kNetworkIpRect{
+    8U, 166U, 140U, RepresentativeScreen::kTextLineHeight};
+constexpr device_platform::DisplayRect kNetworkQrRect{156U, 34U, 164U, 164U};
 constexpr char kLogoAssetPath[] =
     "assets/branding/manuengineer/ManuEngineer.svg";
 
@@ -344,13 +354,17 @@ RepresentativeScreen makeRepresentativeScreen(
                screen.clockText, device_platform::ThemeToken::TextSecondary,
                device_platform::ThemeToken::Surface);
     addText(commands, textPacks, locale, screen.workspace.title,
-            {8U, 40U, 144U, RepresentativeScreen::kTextLineHeight},
+            screen.workspace.page == FermentationUiPage::HeaderNetwork
+                ? kNetworkPageTitleRect
+                : device_platform::
+                      DisplayRect{8U, 40U, 144U,
+                                  RepresentativeScreen::kTextLineHeight},
             device_platform::ThemeToken::TextPrimary,
             device_platform::ThemeToken::Canvas);
     if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
         addText(commands, textPacks, locale,
                 networkModeTextKey(snapshot.network.currentMode),
-                {160U, 40U, 152U, RepresentativeScreen::kTextLineHeight},
+                kNetworkCurrentModeRect,
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
     }
@@ -408,15 +422,15 @@ RepresentativeScreen makeRepresentativeScreen(
                 resolve(textPacks, locale, fermentationTextKey("network-ssid"));
             const auto passwordPrefix = resolve(
                 textPacks, locale, fermentationTextKey("network-password"));
-            addRawText(commands, {8U, 68U, 184U, 36U},
+            addRawText(commands, kNetworkSsidRect,
                        ssidPrefix.value + networkAccessPointInfo->ssid,
                        device_platform::ThemeToken::TextPrimary,
                        device_platform::ThemeToken::Canvas, true);
-            addRawText(commands, {8U, 108U, 184U, 72U},
+            addRawText(commands, kNetworkPasswordRect,
                        passwordPrefix.value + networkAccessPointInfo->password,
                        device_platform::ThemeToken::TextPrimary,
                        device_platform::ThemeToken::Canvas, true);
-            addRawText(commands, {8U, 182U, 184U, 18U},
+            addRawText(commands, kNetworkIpRect,
                        std::string{"IP: "} +
                            (networkAccessPointInfo->ipv4Address.has_value()
                                 ? ipv4Text(*networkAccessPointInfo->ipv4Address)
@@ -429,7 +443,7 @@ RepresentativeScreen makeRepresentativeScreen(
             if (auto payload = makeSoftApWifiQrPayload(*networkAccessPointInfo);
                 payload.has_value()) {
                 commands.push_back({ScreenDrawKind::QrCode,
-                                    {200U, 68U, 112U, 112U},
+                                    kNetworkQrRect,
                                     device_platform::ThemeToken::TextPrimary,
                                     device_platform::ThemeToken::Canvas,
                                     std::move(*payload),

@@ -1,9 +1,11 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "configuration_document_codec.hpp"
 #include "configuration_documents.hpp"
@@ -400,6 +402,50 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
                       response.body.find("correct-horse-battery"));
 }
 
+void test_scan_route_bounds_entries_and_response_without_secret_expansion() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    MockNetworkLifecycle lifecycle;
+    NetworkConfigurationService service(credentials, lifecycle);
+    TEST_ASSERT_TRUE(
+        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+            .status == NetworkConfigurationStatus::Applied);
+
+    std::vector<device_platform::NetworkScanEntry> entries;
+    for (std::size_t index = 0U; index < 20U; ++index) {
+        entries.push_back({std::string(40U, static_cast<char>('A' + index)),
+                           static_cast<std::int8_t>(-index), true});
+    }
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Applied, entries});
+    NetworkSetupRoutes routes(service);
+
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL_UINT(device_platform::kMaximumNetworkScanResponseBytes,
+                           response.body.size());
+    TEST_ASSERT_EQUAL_UINT(
+        device_platform::kMaximumNetworkScanEntries,
+        static_cast<std::size_t>(
+            std::count(response.body.begin(), response.body.end(), '\n')));
+    TEST_ASSERT_EQUAL_UINT(device_platform::kMaximumNetworkSsidBytes,
+                           response.body.find('\n'));
+
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Applied, {}});
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.empty());
+
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Failed, {}});
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+}
+
 std::pair<std::uint16_t, std::string> submitCandidateRoute(
     device_platform::NetworkOperationStatus candidateStatus,
     std::optional<SimulatedPersistentStateStore::WriteFault> writeFault,
@@ -518,6 +564,8 @@ int main() {
     RUN_TEST(test_ap_only_does_not_infer_home_wifi_from_credentials);
     RUN_TEST(test_transport_stop_start_is_restartable);
     RUN_TEST(test_setup_routes_share_one_surface_and_redact_passwords);
+    RUN_TEST(
+        test_scan_route_bounds_entries_and_response_without_secret_expansion);
     RUN_TEST(
         test_candidate_route_distinguishes_persistence_and_recovery_outcomes);
     RUN_TEST(test_normal_home_routes_do_not_render_or_accept_setup_mutations);

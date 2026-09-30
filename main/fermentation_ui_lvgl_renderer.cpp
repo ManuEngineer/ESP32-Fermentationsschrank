@@ -356,6 +356,9 @@ bool ProductiveLvglRenderer::render(
                 continue;
             }
             lv_qrcode_set_size(qrCode, command.rect.width);
+            lv_qrcode_set_quiet_zone(qrCode, true);
+            lv_qrcode_set_dark_color(qrCode, lv_color_black());
+            lv_qrcode_set_light_color(qrCode, lv_color_white());
             lv_obj_set_pos(qrCode, command.rect.left, command.rect.top);
             const auto updateResult = lv_qrcode_update(
                 qrCode, command.text.data(),

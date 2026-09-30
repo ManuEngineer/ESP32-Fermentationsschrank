@@ -166,10 +166,21 @@ weder Resume noch `Allowed`.
 - Die Ownerentscheidung fuer Issue #164 (`VARIANT_B_QR_RETAINED`) deferiert die
   lokale HOME_WIFI-SSID-/Passworteingabe am Touchdisplay und die dafuer
   erforderliche Bildschirmtastatur aus R1. Der WLAN-QR zum Beitritt in den
-  geschuetzten Setup-/AP-only-SoftAP mit individuellen SoftAP-Zugangsdaten ist
-  R1-pflichtig; ein separater Webseiten-QR bleibt Future Scope. SSID,
-  individuelles SoftAP-Passwort und direkte IP bleiben lokal am Display
-  sichtbar.
+  geschuetzten Setup-/AP-only-SoftAP mit der festen SSID `Fermentation` und
+  einem bei jedem Boot neu erzeugten 16-stelligen Passwort aus dem festgelegten
+  42-Zeichen-Alphabet ist R1-pflichtig; ein separater Webseiten-QR bleibt
+  Future Scope. Das Passwort wird mit der bestehenden sicheren Zufallsquelle
+  per Rejection Sampling erzeugt, nicht aus vorhersagbaren Geraetewerten
+  abgeleitet und nicht persistiert. SSID, aktuelles SoftAP-Passwort und direkte
+  IP bleiben lokal am Display sichtbar.
+- Der SoftAP-WLAN-QR verwendet im bestehenden LVGL-9.6.0~1-Pfad ausschliesslich
+  SSID und Passwort, aktiviert die Quiet-Zone und wird als Schwarz auf Weiss in
+  `{156,34,164,164}` gezeichnet; URL und IP sind nicht Bestandteil des Payloads.
+- Der synchrone WLAN-Scan begrenzt Treiberrecords, Ergebnisliste und
+  HTTP-Antwort auf 16 Eintraege; die SSID-Zeilen der HTTP-Antwort sind auf
+  `16 x (32 + 1) = 528` Byte begrenzt. Scanfehler liefern `503`, ein leerer
+  erfolgreicher Scan `200` mit leerem Body; die beobachtete Hardwareursache
+  bleibt `ROOT_CAUSE_SCAN_FAILURE=UNPROVEN`.
 - Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.
 - Direkte Internet-Portfreigabe auf den ESP32 ist nicht vorgesehen.
 - Eine dokumentierte lokale Lese-API ist zulaessig; keine offizielle externe

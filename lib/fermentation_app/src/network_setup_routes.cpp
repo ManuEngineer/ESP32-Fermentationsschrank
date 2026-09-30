@@ -1,5 +1,6 @@
 #include "network_setup_routes.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <string>
@@ -134,10 +135,16 @@ bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
             setText(response, 503U, "scan unavailable");
             return true;
         }
+        const auto entryCount = std::min<std::size_t>(
+            scan.entries.size(), device_platform::kMaximumNetworkScanEntries);
         std::string body;
-        for (const auto& entry : scan.entries) {
-            body += entry.ssid;
-            body += '\n';
+        body.reserve(device_platform::kMaximumNetworkScanResponseBytes);
+        for (std::size_t index = 0U; index < entryCount; ++index) {
+            const auto& entry = scan.entries[index];
+            const auto ssidLength = std::min<std::size_t>(
+                entry.ssid.size(), device_platform::kMaximumNetworkSsidBytes);
+            body.append(entry.ssid, 0U, ssidLength);
+            body.push_back('\n');
         }
         setText(response, 200U, std::move(body));
         return true;

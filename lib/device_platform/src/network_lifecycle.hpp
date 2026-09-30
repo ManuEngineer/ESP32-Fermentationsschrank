@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -8,6 +9,11 @@
 #include "network_mode.hpp"
 
 namespace device_platform {
+
+inline constexpr std::size_t kMaximumNetworkSsidBytes = 32U;
+inline constexpr std::size_t kMaximumNetworkScanEntries = 16U;
+inline constexpr std::size_t kMaximumNetworkScanResponseBytes =
+    kMaximumNetworkScanEntries * (kMaximumNetworkSsidBytes + 1U);
 
 struct NetworkCredentials {
     std::string ssid;

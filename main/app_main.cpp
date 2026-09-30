@@ -1,5 +1,4 @@
 #include <cinttypes>
-#include <cstdio>
 #include <memory>
 #include <new>
 #include <string>
@@ -23,6 +22,7 @@
 #include "fermentation_ui_press_dispatcher.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
+#include "softap_credentials.hpp"
 #include "touch_calibration.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
@@ -43,7 +43,6 @@
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
-#include "esp_mac.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -257,31 +256,14 @@ void logResources(const char* samplePoint,
 
 device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
     device_platform::ISecureRandomSource& randomSource) {
-    std::uint8_t mac[6]{};
-    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
+    const auto credentials = fermentation::makeSoftApCredentials(randomSource);
+    if (!credentials.has_value()) {
         return {};
     }
-    char suffix[13]{};
-    const int written =
-        std::snprintf(suffix, sizeof(suffix), "%02X%02X%02X%02X%02X%02X",
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    if (written != 12) {
-        return {};
-    }
-    std::uint8_t randomBytes[16]{};
-    if (!randomSource.fill(randomBytes, sizeof(randomBytes))) {
-        return {};
-    }
-    static constexpr char kHex[] = "0123456789abcdef";
-    std::string password;
-    password.reserve(sizeof(randomBytes) * 2U);
-    for (const auto byte : randomBytes) {
-        password.push_back(kHex[(byte >> 4U) & 0x0FU]);
-        password.push_back(kHex[byte & 0x0FU]);
-    }
-    // The password is neither derived from the MAC nor exposed through logs
-    // or URLs. It exists only in the volatile adapter configuration.
-    return {std::string("Fermentation-") + suffix, std::move(password), {}};
+    // Credentials remain volatile and are never logged or copied to
+    // persistence. The SSID is intentionally fixed by the #164 owner
+    // contract; only the password is per-boot random.
+    return {credentials->ssid, credentials->password, {}};
 }
 
 // Maps the existing renderer-independent #164 network lifecycle state to the
