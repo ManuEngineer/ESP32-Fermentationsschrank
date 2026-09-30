@@ -36,7 +36,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `IMPLEMENTATION_HEAD=83e5bad090c8e30fe09ac3cc6c634d08ce96eecb`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_STATUS=APPROVED`; `SLICE=SESSION_CSRF_SEQUENCE_AND_REPLAY_BOUNDS`; `SLICE1_AUTH_RECOVERY_FINDINGS=4_CLOSED_UNCHANGED`; `HTTP_METADATA_AND_OPTIONAL_FETCH_SITE_FINDINGS=CORRECTED_UNCHANGED`; `SESSION_BROWSERPOLICY_REPLAY_DTO_REGRESSIONS=45_OF_45_PASS`; `ESP32_BRINGUP_BUILD=PASS_ON_83e5bad`; `ESP32_RELEASE_BUILD=PASS_ON_83e5bad`; `BUILDER_SELF_CHECK=PASS_ON_83e5bad`; `REPLAY_CACHE_RAM_FOLLOW_UP=CLOSED_FIXED_BOUNDS`; `REPLAY_PAYLOAD_MAX=29.952_BYTES`; `WEB_SESSION_MANAGER_MAX=32_KIB_COMPILE_TIME_ENFORCED`; `FOUR_SESSION_RUNTIME_RESOURCE_EVIDENCE=PENDING_BEFORE_FIRST_MUTATION_ROUTE`; `ARDUINOJSON=NOT_INTRODUCED_NO_CODEC_CONSUMER_YAGNI`; `HTTP_SESSION_UI_API=NOT_IMPLEMENTED`; `INDEPENDENT_SLICE_REVIEW=PENDING`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `HARDWARE_TESTS=NOT_RUN`; `FLASH=NOT_RUN`; `ACTUATOR_RELEASE=NO` | Independent Slice Review des abgeschlossenen Slice 3; vor spaeterem Ready bei Bedarf gegen dann aktuellen `main` revalidieren; kein Merge-Gate unter Umgehung der separaten #171-Governance |
+| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `IMPLEMENTATION_HEAD=f26de14`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_STATUS=APPROVED`; `SLICE=SLICE3_IDLE_ACTIVITY_FIX`; `SLICE1_AUTH_RECOVERY_FINDINGS=4_CLOSED_UNCHANGED`; `HTTP_METADATA_AND_OPTIONAL_FETCH_SITE_FINDINGS=CORRECTED_UNCHANGED`; `FIND_LOOKUP_NO_IDLE_RENEWAL=CORRECTED`; `TOUCH_ONLY_IDLE_RENEWAL=YES`; `ABSOLUTE_12H_LIMIT=UNCHANGED`; `SESSION_IDLE_REGRESSIONS=4_PASS`; `SESSION_SLICE3_NATIVE_REGRESSIONS=49_OF_49_PASS`; `ESP32_BRINGUP_BUILD=PASS_ON_f26de14`; `ESP32_RELEASE_BUILD=PASS_ON_f26de14`; `BUILDER_SELF_CHECK=PASS_ON_FINAL_STATUS_HEAD`; `REPLAY_CACHE_RAM_FOLLOW_UP=CLOSED_FIXED_BOUNDS`; `FOUR_SESSION_RUNTIME_RESOURCE_EVIDENCE=PENDING_BEFORE_FIRST_MUTATION_ROUTE`; `ARDUINOJSON=NOT_INTRODUCED_NO_CODEC_CONSUMER_YAGNI`; `HTTP_SESSION_UI_API=NOT_IMPLEMENTED`; `INDEPENDENT_FIX_VERIFICATION=PENDING`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `HARDWARE_TESTS=NOT_RUN`; `FLASH=NOT_RUN`; `ACTUATOR_RELEASE=NO` | Independent Fix Verification des lokal korrigierten Idle-Timing-Findings; vor spaeterem Ready bei Bedarf gegen dann aktuellen `main` revalidieren; kein Merge-Gate unter Umgehung der separaten #171-Governance |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -69,19 +69,25 @@ beiden danach lokal verifizierten Findings zu ESP-IDF-HTTP-Metadaten und
 optionalem `Sec-Fetch-Site` bleiben unveraendert korrigiert. Slice 3
 (`83e5bad090c8e30fe09ac3cc6c634d08ce96eecb`) vervollstaendigt Session-, CSRF-,
 Browser-Reload-/Zwei-Tab-, Retry-, Sequenzkonflikt- und `uint64`-Overflow-
-Regressionen. Der Replay-Cache speichert Fingerprints/Outcomes in festen
+Regressionen. Der lokale Slice-3-Fix `f26de14` laesst Session-Lookup/Reload die
+Idle-Frist nicht verlaengern; nur `touch()` erneuert sie, die absolute
+12-Stunden-Grenze bleibt bestehen. Vier gezielte Idle-Timing-Regressionen und
+alle gezielten Session-/Browserpolicy-/HTTP-/Setup-/Auth-Native-Regressionen
+sind 49/49 PASS. Beide ESP-IDF-6.1-Profile bauen und validieren auf `f26de14`;
+der abschliessende Builder-Self-Check einschliesslich Board-Profile-SSOT und
+Clang-21 ist auf dem finalen Status-HEAD PASS.
+Der Replay-Cache speichert Fingerprints/Outcomes in festen
 bounded Feldern: 512 Bytes Fingerprint, 64 Bytes Content-Type, 256 Bytes Body,
 maximal acht Outcomes plus eine In-Flight-Anfrage je Session; der rohe
 Vier-Session-Replay-Payload ist damit auf 29.952 Bytes begrenzt, und der
 Manager wird zur Compile-Zeit auf hoechstens 32 KiB beschraenkt. Das schliesst
 den Replay-Cache-RAM-FOLLOW-UP. Der integrierte Vier-Session-Ressourcennachweis
-bleibt vor Aktivierung der ersten Mutationsroute erforderlich. Native
-Regressionen sind 45/45 PASS; beide ESP-IDF-6.1-Profile und Builder
-Self-Check einschliesslich Board-Profile-SSOT und Clang-21 sind auf dem
-Implementierungs-HEAD PASS. ArduinoJson wurde mangels konkretem JSON-DTO-
+bleibt vor Aktivierung der ersten Mutationsroute erforderlich. Builder-
+Self-Check einschliesslich Board-Profile-SSOT und Clang-21 ist auf dem
+abschliessenden Status-HEAD PASS. ArduinoJson wurde mangels konkretem JSON-DTO-
 Konsumenten nicht eingefuehrt. Auth-Domain-Application-Wiring, interne
 Mutationsroute, Webrouten, UI und Assets bleiben ausstehende Slices. PR #170
-bleibt Draft und haelt jetzt fuer Independent Slice Review. PR #171 bleibt
+bleibt Draft und haelt jetzt fuer Independent Fix Verification. PR #171 bleibt
 separat auf seinem Hardware-Gate, ohne Integration in diesen Branch; PR #167
 bleibt historische Referenz und ist keine Commitquelle. Vor einem spaeteren
 Ready wird der Branch bei Bedarf gegen den dann aktuellen `main` revalidiert;
