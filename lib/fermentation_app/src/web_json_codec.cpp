@@ -15,6 +15,8 @@
 
 #include "configuration_limits.hpp"
 #include "configuration_text.hpp"
+#include "program_limits.hpp"
+#include "run_snapshot.hpp"
 
 namespace fermentation {
 namespace {
@@ -243,6 +245,113 @@ bool readOptionalCompletionMode(const cJSON* object, const char* key,
     return true;
 }
 
+bool validTemperature(double value) {
+    return std::isfinite(value) &&
+           value >= program_limits::kMinimumFermentationTemperatureCelsius &&
+           value <= program_limits::kMaximumFermentationTemperatureCelsius;
+}
+
+bool validQualificationBand(double value) {
+    return std::isfinite(value) &&
+           value >= program_limits::kMinimumQualificationBandCelsius &&
+           value <= program_limits::kMaximumQualificationBandCelsius;
+}
+
+bool validCoolingTarget(double value) {
+    return std::isfinite(value) &&
+           value >= program_limits::kMinimumCoolingTargetCelsius &&
+           value <= program_limits::kMaximumCoolingTargetCelsius;
+}
+
+bool validManualPlanValues(const FermentationUiManualRunPlanValues& values) {
+    const bool waitMatchesPreheat =
+        values.preheatEnabled == values.maximumProductWaitMinutes.has_value();
+    const bool waitValid = !values.maximumProductWaitMinutes.has_value() ||
+                           (*values.maximumProductWaitMinutes >=
+                                program_limits::kMinimumProductWaitMinutes &&
+                            *values.maximumProductWaitMinutes <=
+                                program_limits::kMaximumProductWaitMinutes);
+    return validTemperature(values.targetTemperatureCelsius) &&
+           validQualificationBand(values.qualificationBandCelsius) &&
+           values.qualificationDurationMinutes >=
+               program_limits::kMinimumQualificationDurationMinutes &&
+           values.qualificationDurationMinutes <=
+               program_limits::kMaximumQualificationDurationMinutes &&
+           values.maximumTargetReachMinutes >=
+               program_limits::kMinimumTargetReachMinutes &&
+           values.maximumTargetReachMinutes <=
+               program_limits::kMaximumTargetReachMinutes &&
+           waitMatchesPreheat && waitValid;
+}
+
+bool validCompletionCombination(
+    CompletionMode mode, const std::optional<double>& coolingTarget,
+    const std::optional<std::uint32_t>& holdDuration) {
+    const bool coolingTargetValid =
+        !coolingTarget.has_value() || validCoolingTarget(*coolingTarget);
+    const bool holdDurationValid =
+        !holdDuration.has_value() ||
+        *holdDuration >= program_limits::kMinimumHoldDurationMinutes;
+    if (!coolingTargetValid || !holdDurationValid) return false;
+
+    switch (mode) {
+        case CompletionMode::FinishWithoutCooling:
+            return !coolingTarget.has_value() && !holdDuration.has_value();
+        case CompletionMode::CoolThenFinish:
+        case CompletionMode::CoolAndHoldUntilManualStop:
+            return coolingTarget.has_value() && !holdDuration.has_value();
+        case CompletionMode::CoolAndHoldForDuration:
+            return coolingTarget.has_value() && holdDuration.has_value();
+    }
+    return false;
+}
+
+bool validOptionalCompletionCombination(
+    const std::optional<CompletionMode>& mode,
+    const std::optional<double>& coolingTarget,
+    const std::optional<std::uint32_t>& holdDuration) {
+    const bool coolingTargetValid =
+        !coolingTarget.has_value() || validCoolingTarget(*coolingTarget);
+    const bool holdDurationValid =
+        !holdDuration.has_value() ||
+        *holdDuration >= program_limits::kMinimumHoldDurationMinutes;
+    return coolingTargetValid && holdDurationValid &&
+           (!mode.has_value() ||
+            validCompletionCombination(*mode, coolingTarget, holdDuration));
+}
+
+bool validStartCandidate(const FermentationUiStartCandidate& candidate) {
+    const bool targetValid =
+        !candidate.targetTemperatureCelsius.has_value() ||
+        validTemperature(*candidate.targetTemperatureCelsius);
+    const bool durationValid =
+        !candidate.fermentationDurationMinutes.has_value() ||
+        (*candidate.fermentationDurationMinutes >=
+             program_limits::kMinimumFermentationDurationMinutes &&
+         *candidate.fermentationDurationMinutes <=
+             program_limits::kMaximumFermentationDurationMinutes);
+    return targetValid && durationValid &&
+           validOptionalCompletionCombination(candidate.completionMode,
+                                              candidate.coolingTargetCelsius,
+                                              candidate.holdDurationMinutes);
+}
+
+bool validManualTimedValues(const ManualTimedRunValues& values) {
+    ManualTimedRunSource source;
+    source.stage.targetTemperatureCelsius = values.targetTemperatureCelsius;
+    source.stage.durationMinutes = values.durationMinutes;
+    source.preheatEnabled = values.preheatEnabled;
+    source.maximumProductWaitMinutes = values.maximumProductWaitMinutes;
+    source.targetQualification.bandCelsius = values.qualificationBandCelsius;
+    source.targetQualification.durationMinutes =
+        values.qualificationDurationMinutes;
+    source.maximumTargetReachMinutes = values.maximumTargetReachMinutes;
+    source.completion.mode = values.completionMode;
+    source.completion.coolingTargetCelsius = values.coolingTargetCelsius;
+    source.completion.holdDurationMinutes = values.holdDurationMinutes;
+    return validateManualTimedRunSource(source);
+}
+
 bool readManualPlan(const cJSON* value,
                     FermentationUiManualRunPlanValues& output) {
     if (!cJSON_IsObject(value) ||
@@ -259,7 +368,7 @@ bool readManualPlan(const cJSON* value,
         !readInteger(member(value, "tr"), output.maximumTargetReachMinutes)) {
         return false;
     }
-    return true;
+    return validManualPlanValues(output);
 }
 
 bool readExpected(const cJSON* value, FermentationUiExpectedRevisions& output) {
@@ -326,6 +435,7 @@ bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
                                  candidate.holdDurationMinutes)) {
             return false;
         }
+        if (!validStartCandidate(candidate)) return false;
         output = FermentationUiStartProgramIntent{std::move(candidate)};
         return true;
     }
@@ -353,6 +463,7 @@ bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
             !readOptionalInteger(value, "l", values.holdDurationMinutes)) {
             return false;
         }
+        if (!validManualTimedValues(values)) return false;
         output = FermentationUiStartManualTimedIntent{values};
         return true;
     }
@@ -375,6 +486,9 @@ bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
             if (!readManualPlan(planValue, parsed)) return false;
             plan = std::move(parsed);
         }
+        if ((option == StopOption::AbortAndCool) != plan.has_value()) {
+            return false;
+        }
         output = FermentationUiStopRunIntent{option, std::move(plan)};
         return true;
     }
@@ -389,6 +503,7 @@ bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
             if (!readManualPlan(planValue, parsed)) return false;
             plan = std::move(parsed);
         }
+        if (startCooling != plan.has_value()) return false;
         output = FermentationUiCompleteRunIntent{startCooling, std::move(plan)};
         return true;
     }
@@ -398,6 +513,18 @@ bool readIntent(const cJSON* value, FermentationUiEnvelopePayload& output) {
         FermentationUiAdjustRunIntent intent;
         if (!readOptionalDouble(value, "x", intent.targetTemperatureCelsius) ||
             !readOptionalInteger(value, "d", intent.remainingDurationMinutes)) {
+            return false;
+        }
+        if (intent.targetTemperatureCelsius.has_value() &&
+            !validTemperature(*intent.targetTemperatureCelsius)) {
+            return false;
+        }
+        if (intent.remainingDurationMinutes.has_value() &&
+            *intent.remainingDurationMinutes != 0U &&
+            (*intent.remainingDurationMinutes <
+                 program_limits::kMinimumFermentationDurationMinutes ||
+             *intent.remainingDurationMinutes >
+                 program_limits::kMaximumFermentationDurationMinutes)) {
             return false;
         }
         output = intent;

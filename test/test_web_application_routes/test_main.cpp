@@ -13,6 +13,7 @@
 #include "configuration_limits.hpp"
 #include "fermentation_application.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "program_limits.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "virtual_time_source.hpp"
 #include "web_application_routes.hpp"
@@ -551,6 +552,78 @@ std::string validManualMutationJson() {
            "\"c\":\"finish-without-cooling\"}}";
 }
 
+std::string manualTimedMutationJson(
+    double targetTemperature, std::uint32_t duration, bool preheat,
+    std::optional<std::uint32_t> productWait, double qualificationBand,
+    std::uint32_t qualificationDuration, std::uint32_t targetReach,
+    const char* completionMode, std::optional<double> coolingTarget = {},
+    std::optional<std::uint32_t> holdDuration = {}) {
+    std::ostringstream body;
+    body << "{\"v\":1,\"r\":{\"s\":7},"
+            "\"i\":{\"t\":\"start-manual-timed\",\"x\":"
+         << targetTemperature << ",\"d\":" << duration
+         << ",\"s\":\"air\",\"h\":" << (preheat ? "true" : "false");
+    if (productWait.has_value()) body << ",\"w\":" << *productWait;
+    body << ",\"q\":" << qualificationBand
+         << ",\"qd\":" << qualificationDuration << ",\"tr\":" << targetReach
+         << ",\"c\":\"" << completionMode << "\"";
+    if (coolingTarget.has_value()) body << ",\"k\":" << *coolingTarget;
+    if (holdDuration.has_value()) body << ",\"l\":" << *holdDuration;
+    body << "}}";
+    return body.str();
+}
+
+std::string manualPlanJson(double targetTemperature = 30.0,
+                           bool preheat = false,
+                           std::optional<std::uint32_t> productWait = {},
+                           double qualificationBand = 0.5,
+                           std::uint32_t qualificationDuration = 10U,
+                           std::uint32_t targetReach = 180U) {
+    std::ostringstream body;
+    body << "{\"x\":" << targetTemperature
+         << ",\"s\":\"air\",\"h\":" << (preheat ? "true" : "false");
+    if (productWait.has_value()) body << ",\"w\":" << *productWait;
+    body << ",\"q\":" << qualificationBand
+         << ",\"qd\":" << qualificationDuration << ",\"tr\":" << targetReach
+         << "}";
+    return body.str();
+}
+
+std::string startProgramMutationJson(
+    const char* completionMode, std::optional<double> targetTemperature = {},
+    std::optional<std::uint32_t> duration = {},
+    std::optional<double> coolingTarget = {},
+    std::optional<std::uint32_t> holdDuration = {}) {
+    std::ostringstream body;
+    body << "{\"v\":1,\"r\":{\"s\":7},"
+            "\"i\":{\"t\":\"start-program\",\"c\":{\"p\":\"program\"";
+    if (targetTemperature.has_value()) body << ",\"x\":" << *targetTemperature;
+    if (duration.has_value()) body << ",\"d\":" << *duration;
+    if (completionMode != nullptr) {
+        body << ",\"c\":\"" << completionMode << "\"";
+    }
+    if (coolingTarget.has_value()) body << ",\"k\":" << *coolingTarget;
+    if (holdDuration.has_value()) body << ",\"l\":" << *holdDuration;
+    body << "}}}";
+    return body.str();
+}
+
+void assertMutationDecodeStatus(const std::string& body, bool expectedSuccess) {
+    WebRunMutationDto decoded;
+    decoded.intent = FermentationUiAcknowledgeMessageIntent{99U};
+    const auto status = decodeWebRunMutation(body, decoded);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(expectedSuccess ? WebRunMutationDecodeStatus::Success
+                                         : WebRunMutationDecodeStatus::Invalid),
+        static_cast<int>(status));
+    if (!expectedSuccess) {
+        TEST_ASSERT_EQUAL_UINT32(
+            99U,
+            std::get<FermentationUiAcknowledgeMessageIntent>(decoded.intent)
+                .messageId);
+    }
+}
+
 void test_mutation_codec_rejects_invalid_bodies_without_partial_dto() {
     WebRunMutationDto decoded;
     const auto valid = validManualMutationJson();
@@ -686,6 +759,184 @@ void test_mutation_codec_decodes_every_closed_application_intent() {
     }
 }
 
+void test_mutation_codec_validates_static_field_ranges_and_completion() {
+    const auto manual = [](double target, std::uint32_t duration,
+                           double qualificationBand) {
+        return manualTimedMutationJson(target, duration, false, std::nullopt,
+                                       qualificationBand, 10U, 180U,
+                                       "finish-without-cooling");
+    };
+
+    assertMutationDecodeStatus(
+        manual(program_limits::kMinimumFermentationTemperatureCelsius, 1U,
+               program_limits::kMinimumQualificationBandCelsius),
+        true);
+    assertMutationDecodeStatus(
+        manual(program_limits::kMaximumFermentationTemperatureCelsius,
+               program_limits::kMaximumFermentationDurationMinutes,
+               program_limits::kMaximumQualificationBandCelsius),
+        true);
+    assertMutationDecodeStatus(manual(3.99, 1U, 0.5), false);
+    assertMutationDecodeStatus(manual(45.01, 1U, 0.5), false);
+    assertMutationDecodeStatus(manual(30.0, 0U, 0.5), false);
+    assertMutationDecodeStatus(manual(30.0, 20161U, 0.5), false);
+    assertMutationDecodeStatus(manual(30.0, 1U, 0.09), false);
+    assertMutationDecodeStatus(manual(30.0, 1U, 2.01), false);
+
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, true,
+                                program_limits::kMinimumProductWaitMinutes, 0.5,
+                                10U, 180U, "finish-without-cooling"),
+        true);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, true,
+                                program_limits::kMaximumProductWaitMinutes, 0.5,
+                                10U, 180U, "finish-without-cooling"),
+        true);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, 1U, 0.5, 10U, 180U,
+                                "finish-without-cooling"),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, true, std::nullopt, 0.5, 10U, 180U,
+                                "finish-without-cooling"),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, true, 0U, 0.5, 10U, 180U,
+                                "finish-without-cooling"),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, true, 1441U, 0.5, 10U, 180U,
+                                "finish-without-cooling"),
+        false);
+
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "finish-without-cooling"),
+        true);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-then-finish", 4.0),
+        true);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-then-finish"),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-then-finish", 4.0, 1U),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-and-hold-for-duration", 25.0,
+                                program_limits::kMinimumHoldDurationMinutes),
+        true);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-and-hold-for-duration", 25.0),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-and-hold-for-duration", 25.0, 0U),
+        false);
+    assertMutationDecodeStatus(
+        manualTimedMutationJson(30.0, 1U, false, std::nullopt, 0.5, 10U, 180U,
+                                "cool-and-hold-until-manual-stop", 25.0),
+        true);
+}
+
+void test_mutation_codec_rejects_invalid_manual_plans_and_variant_shapes() {
+    const auto holding = [](const std::string& plan) {
+        return std::string(
+                   "{\"v\":1,\"r\":{\"s\":7},\"i\":{"
+                   "\"t\":\"start-manual-holding\",\"p\":") +
+               plan + "}}";
+    };
+    assertMutationDecodeStatus(holding(manualPlanJson()), true);
+    assertMutationDecodeStatus(holding(manualPlanJson(3.9)), false);
+    assertMutationDecodeStatus(holding(manualPlanJson(30.0, true)), false);
+    assertMutationDecodeStatus(
+        holding(manualPlanJson(30.0, true, 1U, 0.5, 10U, 180U)), true);
+    assertMutationDecodeStatus(holding(manualPlanJson(30.0, false, 1U)), false);
+    assertMutationDecodeStatus(
+        holding(manualPlanJson(30.0, false, std::nullopt, 0.5, 0U, 180U)),
+        false);
+
+    const auto stop = [](const char* option,
+                         const std::optional<std::string>& plan = {}) {
+        std::string body = std::string(
+                               "{\"v\":1,\"r\":{\"s\":7},"
+                               "\"i\":{\"t\":\"stop-run\","
+                               "\"o\":\"") +
+                           option + "\"";
+        if (plan.has_value()) body += ",\"p\":" + *plan;
+        return body + "}}";
+    };
+    assertMutationDecodeStatus(stop("back"), true);
+    assertMutationDecodeStatus(stop("back", manualPlanJson()), false);
+    assertMutationDecodeStatus(stop("abort-and-turn-off", manualPlanJson()),
+                               false);
+    assertMutationDecodeStatus(stop("abort-and-cool"), false);
+    assertMutationDecodeStatus(stop("abort-and-cool", manualPlanJson()), true);
+
+    const auto complete = [](bool startCooling,
+                             const std::optional<std::string>& plan = {}) {
+        std::string body = std::string(
+                               "{\"v\":1,\"r\":{\"s\":7},"
+                               "\"i\":{\"t\":\"complete-run\","
+                               "\"c\":") +
+                           (startCooling ? "true" : "false");
+        if (plan.has_value()) body += ",\"p\":" + *plan;
+        return body + "}}";
+    };
+    assertMutationDecodeStatus(complete(false), true);
+    assertMutationDecodeStatus(complete(false, manualPlanJson()), false);
+    assertMutationDecodeStatus(complete(true), false);
+    assertMutationDecodeStatus(complete(true, manualPlanJson()), true);
+
+    assertMutationDecodeStatus(
+        startProgramMutationJson(
+            "cool-and-hold-for-duration", 4.0,
+            program_limits::kMinimumFermentationDurationMinutes, 4.0, 1U),
+        true);
+    assertMutationDecodeStatus(
+        startProgramMutationJson(
+            "cool-and-hold-for-duration", 45.0,
+            program_limits::kMaximumFermentationDurationMinutes, 25.0,
+            program_limits::kMaximumHoldDurationMinutes),
+        true);
+    assertMutationDecodeStatus(
+        startProgramMutationJson("cool-and-hold-for-duration", 3.9, 1U, 4.0,
+                                 1U),
+        false);
+    assertMutationDecodeStatus(
+        startProgramMutationJson("cool-and-hold-for-duration", 30.0, 0U, 4.0,
+                                 1U),
+        false);
+    assertMutationDecodeStatus(
+        startProgramMutationJson("finish-without-cooling", 30.0, 1U, 4.0),
+        false);
+    assertMutationDecodeStatus(
+        startProgramMutationJson("cool-then-finish", 30.0, 1U, 4.0, 1U), false);
+
+    assertMutationDecodeStatus(
+        "{\"v\":1,\"r\":{\"s\":7},\"i\":{\"t\":\"adjust-run\","
+        "\"x\":4,\"d\":0}}",
+        true);
+    assertMutationDecodeStatus(
+        "{\"v\":1,\"r\":{\"s\":7},\"i\":{\"t\":\"adjust-run\","
+        "\"x\":45,\"d\":20160}}",
+        true);
+    assertMutationDecodeStatus(
+        "{\"v\":1,\"r\":{\"s\":7},\"i\":{\"t\":\"adjust-run\","
+        "\"x\":3.9,\"d\":1}}",
+        false);
+    assertMutationDecodeStatus(
+        "{\"v\":1,\"r\":{\"s\":7},\"i\":{\"t\":\"adjust-run\","
+        "\"x\":30,\"d\":20161}}",
+        false);
+}
+
 void test_mutation_codec_uses_canonical_decimal_revision_strings() {
     const auto bodyForRevision = [](const char* key, const char* value) {
         return std::string("{\"v\":1,\"r\":{\"s\":0,\"") + key + "\":\"" +
@@ -764,12 +1015,14 @@ void test_maximum_product_mutation_fits_body_and_exact_replay_budget() {
     candidate.programId.assign(configuration_limits::kMaximumProgramIdBytes,
                                'p');
     candidate.targetTemperatureCelsius = 42.75;
-    candidate.fermentationDurationMinutes = UINT32_MAX;
+    candidate.fermentationDurationMinutes =
+        program_limits::kMaximumFermentationDurationMinutes;
     candidate.preheatEnabled = false;
     candidate.sensorMode = RunSensorMode::Product;
-    candidate.completionMode = CompletionMode::CoolAndHoldUntilManualStop;
-    candidate.coolingTargetCelsius = -12.5;
-    candidate.holdDurationMinutes = UINT32_MAX;
+    candidate.completionMode = CompletionMode::CoolAndHoldForDuration;
+    candidate.coolingTargetCelsius =
+        program_limits::kMaximumCoolingTargetCelsius;
+    candidate.holdDurationMinutes = program_limits::kMaximumHoldDurationMinutes;
     const WebRunMutationDto source{expected,
                                    FermentationUiStartProgramIntent{candidate}};
     const auto body = mutationBody(source);
@@ -795,10 +1048,11 @@ void test_maximum_product_mutation_fits_body_and_exact_replay_budget() {
     TEST_ASSERT_EQUAL_UINT32(configuration_limits::kMaximumProgramIdBytes,
                              decodedCandidate.programId.size());
     TEST_ASSERT_FALSE(*decodedCandidate.preheatEnabled);
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX,
-                             *decodedCandidate.fermentationDurationMinutes);
+    TEST_ASSERT_EQUAL_UINT32(
+        program_limits::kMaximumFermentationDurationMinutes,
+        *decodedCandidate.fermentationDurationMinutes);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(CompletionMode::CoolAndHoldUntilManualStop),
+        static_cast<int>(CompletionMode::CoolAndHoldForDuration),
         static_cast<int>(*decodedCandidate.completionMode));
 }
 
@@ -926,6 +1180,9 @@ int main() {
         test_handler_maps_stale_revision_and_invalid_program_without_mutation);
     RUN_TEST(test_mutation_codec_rejects_invalid_bodies_without_partial_dto);
     RUN_TEST(test_mutation_codec_decodes_every_closed_application_intent);
+    RUN_TEST(test_mutation_codec_validates_static_field_ranges_and_completion);
+    RUN_TEST(
+        test_mutation_codec_rejects_invalid_manual_plans_and_variant_shapes);
     RUN_TEST(test_mutation_codec_uses_canonical_decimal_revision_strings);
     RUN_TEST(test_maximum_product_mutation_fits_body_and_exact_replay_budget);
     RUN_TEST(test_read_only_api_projection_bounds_and_untrusted_values);
