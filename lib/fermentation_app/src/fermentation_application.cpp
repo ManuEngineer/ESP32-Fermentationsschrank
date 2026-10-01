@@ -754,6 +754,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
         !device_platform::isSelectableNetworkMode(selectedMode)) {
         return {NetworkConfigurationStatus::InvalidMode};
     }
+    const auto previousMode = networkLifecycle_->status().selectedMode;
     auto build = configurationService_->beginPreview();
     if (build.status != ConfigurationPreviewStatus::Success ||
         !build.lease.valid()) {
@@ -802,6 +803,11 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
         }
         return applied;
     }
+    if (webSessionManager_ != nullptr && previousMode != selectedMode) {
+        // The network boundary has changed successfully. Existing browser
+        // sessions must not cross into the new transport boundary.
+        webSessionManager_->revokeAll();
+    }
     if (httpServerLifecycle_ != nullptr && !httpServerLifecycle_->running() &&
         webRouteDispatcher_ != nullptr &&
         !httpServerLifecycle_->start(*webRouteDispatcher_)) {
@@ -843,6 +849,11 @@ FermentationApplication::beginHomeWifiReconfiguration() {
             static_cast<void>(httpServerLifecycle_->stop());
         }
         return reconfigured;
+    }
+    if (webSessionManager_ != nullptr) {
+        // Entering HOME_WIFI setup is a trust-boundary transition even
+        // before a candidate credential is committed.
+        webSessionManager_->revokeAll();
     }
     if (httpServerLifecycle_ != nullptr && webRouteDispatcher_ != nullptr &&
         (httpServerLifecycle_->running() ||
@@ -1627,6 +1638,11 @@ FermentationApplication::beginAuthorizedFactoryReset() {
 #endif
     if (reset.status != ConfigurationRecoveryStatus::FactoryResetCompleted) {
         return reset;
+    }
+    if (webSessionManager_ != nullptr) {
+        // Revoke at the irreversible reset boundary. Later run-epoch handoff
+        // failures must not preserve pre-reset browser authority.
+        webSessionManager_->revokeAll();
     }
 
     auto authorizedRunEpochHandoff =

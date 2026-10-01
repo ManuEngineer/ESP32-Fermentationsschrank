@@ -51,6 +51,51 @@ class FermentationApplicationTestAccess {
                    device_platform::UiSurface::LocalDisplay, true, password,
                    servicePin) == AuthBootstrapStatus::BootstrapAllowed;
     }
+
+    static bool setWebPasswordEnabled(FermentationApplication& application,
+                                      bool enabled) {
+        if (application.stateStore_ == nullptr ||
+            !application.authenticationContext_.has_value()) {
+            return false;
+        }
+        AuthenticationRecordStore store(*application.stateStore_);
+        const auto read = store.readCredentials(
+            application.authenticationContext_->storageEpoch());
+        if (!read.value.has_value()) return false;
+        auto target = *read.value;
+        target.webPasswordEnabled = enabled;
+        ++target.recordSequence;
+        return store.writeCredentials(*read.value, target) ==
+               AuthenticationWriteStatus::Success;
+    }
+
+    static bool setAuthProvisioningState(FermentationApplication& application,
+                                         AuthProvisioningState state) {
+        if (application.stateStore_ == nullptr ||
+            !application.authenticationContext_.has_value()) {
+            return false;
+        }
+        AuthenticationRecordStore store(*application.stateStore_);
+        const auto read =
+            store.readRoot(application.authenticationContext_->storageEpoch());
+        if (!read.value.has_value()) return false;
+        if (state == AuthProvisioningState::RecoveryRequired &&
+            read.value->state == AuthProvisioningState::Provisioned) {
+            auto provisioning = *read.value;
+            provisioning.state = AuthProvisioningState::Provisioning;
+            ++provisioning.recordSequence;
+            if (store.writeRoot(*read.value, provisioning) !=
+                AuthenticationWriteStatus::Success) {
+                return false;
+            }
+            auto recovery = provisioning;
+            recovery.state = AuthProvisioningState::RecoveryRequired;
+            ++recovery.recordSequence;
+            return store.writeRoot(provisioning, recovery) ==
+                   AuthenticationWriteStatus::Success;
+        }
+        return false;
+    }
 };
 
 struct WebRunMutationHandlerTestAccess {
@@ -117,6 +162,7 @@ class CapturingHttpServerLifecycle final
     [[nodiscard]] bool start(device_platform::IHttpRouteSink& routes) override {
         ++startCount_;
         routes_ = &routes;
+        lastRoutes_ = &routes;
         running_ = true;
         return true;
     }
@@ -133,6 +179,10 @@ class CapturingHttpServerLifecycle final
         return routes_;
     }
 
+    [[nodiscard]] device_platform::IHttpRouteSink* lastRoutes() const noexcept {
+        return lastRoutes_;
+    }
+
     [[nodiscard]] std::size_t startCount() const noexcept {
         return startCount_;
     }
@@ -141,6 +191,7 @@ class CapturingHttpServerLifecycle final
     bool running_{false};
     std::size_t startCount_{0U};
     device_platform::IHttpRouteSink* routes_{nullptr};
+    device_platform::IHttpRouteSink* lastRoutes_{nullptr};
 };
 
 struct ComposedFixture {
@@ -154,13 +205,18 @@ struct ComposedFixture {
     CapturingHttpServerLifecycle http;
     FermentationApplication application;
 
-    ComposedFixture() {
+    explicit ComposedFixture(bool homeWifiConfigured = false) {
         TEST_ASSERT_TRUE(platform.begin({true}));
         ConnectivityCredentialStore credentials(store);
+        std::optional<device_platform::NetworkCredentials> homeWifi;
+        if (homeWifiConfigured) {
+            homeWifi = device_platform::NetworkCredentials{
+                "home-network", "home-network-password"};
+        }
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(ConnectivityCredentialWriteStatus::Committed),
             static_cast<int>(credentials
-                                 .write({std::nullopt, std::string(16U, 'A')},
+                                 .write({homeWifi, std::string(16U, 'A')},
                                         device_platform::StorageEpoch{1U}, 1U)
                                  .status));
         TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
@@ -225,6 +281,35 @@ device_platform::HttpRequest makeAuthenticatedRequest(
     request.metadata.cookie = "FSSESSION=" + cookie;
     if (!csrf.empty()) request.metadata.csrfToken = csrf;
     return request;
+}
+
+device_platform::HttpRequest makeLogoutRequest(const std::string& cookie,
+                                               const std::string& csrf) {
+    auto request =
+        makeAuthenticatedRequest("POST", "/api/v1/logout", cookie, csrf);
+    request.metadata.contentType = "application/json; charset=utf-8";
+    return request;
+}
+
+struct ComposedWebSession {
+    std::string cookie;
+    std::string csrf;
+};
+
+ComposedWebSession loginComposed(ComposedFixture& fixture) {
+    device_platform::HttpResponse response;
+    const auto request = makeLoginRequest("correct horse battery");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    return {sessionCookieValue(response), csrfToken(response)};
+}
+
+void assertComposedSessionRejected(ComposedFixture& fixture,
+                                   const std::string& cookie) {
+    auto request = makeAuthenticatedRequest("GET", "/api/v1/status", cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
 }
 
 FermentationUiCommandResult commandResult(Category category,
@@ -1342,7 +1427,7 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
-    request = makeWebRequest("GET", "/internal/ui/run");
+    request = makeWebRequest("POST", "/internal/ui/run");
     TEST_ASSERT_FALSE(routes->handle(request, response));
 
     const auto home = fixture.application.applyNetworkMode(
@@ -1363,6 +1448,148 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_EQUAL_UINT32(1U, fixture.http.startCount());
+}
+
+void test_composed_dispatcher_revokes_sessions_on_network_boundaries() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto first = loginComposed(fixture);
+    const auto second = loginComposed(fixture);
+
+    const auto noChange = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::AP_ONLY);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(noChange.status));
+    auto request =
+        makeAuthenticatedRequest("GET", "/api/v1/status", first.cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+
+    const auto changed = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(changed.status));
+    assertComposedSessionRejected(fixture, first.cookie);
+    assertComposedSessionRejected(fixture, second.cookie);
+}
+
+void test_composed_dispatcher_keeps_sessions_on_failed_network_change() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto session = loginComposed(fixture);
+    fixture.network.setStartStatus(
+        device_platform::NetworkOperationStatus::Failed);
+
+    const auto failed = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::TransportFailure),
+        static_cast<int>(failed.status));
+    auto* routes = fixture.http.lastRoutes();
+    TEST_ASSERT_NOT_NULL(routes);
+    auto request =
+        makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+}
+
+void test_composed_dispatcher_revokes_sessions_for_home_wifi_reconfiguration() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            fixture.application
+                .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                .status));
+    const auto first = loginComposed(fixture);
+    const auto second = loginComposed(fixture);
+
+    const auto reconfigured =
+        fixture.application.beginHomeWifiReconfiguration();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(reconfigured.status));
+    TEST_ASSERT_TRUE(fixture.application.networkSetupFlowActive());
+
+    auto request =
+        makeWebRequest("POST", "/api/network/candidate",
+                       "ssid=next-network&password=next-network-password");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("candidate committed") !=
+                     std::string::npos);
+    assertComposedSessionRejected(fixture, first.cookie);
+    assertComposedSessionRejected(fixture, second.cookie);
+}
+
+void test_composed_dispatcher_factory_reset_revokes_old_sessions() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto first = loginComposed(fixture);
+    const auto second = loginComposed(fixture);
+
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(
+        reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted ||
+        reset.status ==
+            ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable);
+    assertComposedSessionRejected(fixture, first.cookie);
+    assertComposedSessionRejected(fixture, second.cookie);
+}
+
+void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
+    ComposedFixture fixture;
+    auto request = makeWebRequest("GET", "/");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(
+        response.body.find("Local provisioning or recovery required") !=
+        std::string::npos);
+    request = makeWebRequest("GET", "/api/v1/status");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::setWebPasswordEnabled(
+        fixture.application, false));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordDisabled);
+    request = makeWebRequest("GET", "/");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(response.body.find("Password protection is disabled") !=
+                     std::string::npos);
+    TEST_ASSERT_TRUE(response.body.find("password-label") != std::string::npos);
+    const auto anonymousCookie = sessionCookieValue(response);
+    request =
+        makeAuthenticatedRequest("GET", "/api/v1/status", anonymousCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::setAuthProvisioningState(
+            fixture.application, AuthProvisioningState::RecoveryRequired));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::RecoveryRequired);
+    request = makeWebRequest("GET", "/");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    request =
+        makeAuthenticatedRequest("GET", "/api/v1/status", anonymousCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
 }
 
 void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
@@ -1393,6 +1620,14 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
                      std::string::npos);
     TEST_ASSERT_TRUE(response.metadata.setCookie->find("Secure") ==
                      std::string::npos);
+    request = makeAuthenticatedRequest("GET", "/", firstCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("const U=true") != std::string::npos);
+    TEST_ASSERT_TRUE(
+        response.body.find("document.documentElement.lang=locale") !=
+        std::string::npos);
+    TEST_ASSERT_TRUE(response.body.find("noSnapshot") != std::string::npos);
 
     request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
@@ -1409,11 +1644,27 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     request = makeAuthenticatedRequest("POST", "/api/v1/logout", firstCookie,
                                        firstCsrf);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(415U, response.statusCode);
+    request = makeLogoutRequest(firstCookie, firstCsrf);
+    request.metadata.contentType = "text/plain";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(415U, response.statusCode);
+
+    request = makeLoginRequest("correct horse battery");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    const auto secondCookie = sessionCookieValue(response);
+
+    request = makeLogoutRequest(firstCookie, firstCsrf);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
     request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+    request = makeAuthenticatedRequest("GET", "/api/v1/status", secondCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
 
     request = makeLoginRequest("correct horse battery");
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
@@ -1511,6 +1762,13 @@ int main() {
     RUN_TEST(test_read_only_api_routes_are_get_only_and_uncomposed);
     RUN_TEST(
         test_composed_dispatcher_preserves_setup_priority_and_single_server);
+    RUN_TEST(test_composed_dispatcher_revokes_sessions_on_network_boundaries);
+    RUN_TEST(test_composed_dispatcher_keeps_sessions_on_failed_network_change);
+    RUN_TEST(
+        test_composed_dispatcher_revokes_sessions_for_home_wifi_reconfiguration);
+    RUN_TEST(test_composed_dispatcher_factory_reset_revokes_old_sessions);
+    RUN_TEST(
+        test_composed_dispatcher_anonymous_and_recovery_states_fail_closed);
     RUN_TEST(
         test_composed_dispatcher_authenticates_read_only_sessions_and_expires);
     RUN_TEST(

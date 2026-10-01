@@ -142,8 +142,8 @@ std::string retryAfterSeconds(std::uint64_t retryAfterMs) {
     return std::to_string(seconds);
 }
 
-std::string webShell(WebAuthenticationState state,
-                     const std::string& csrfToken) {
+std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
+                     bool authenticated) {
     // This is intentionally a small static shell. It has no framework,
     // generated bundle, history, chart or mutation control. All three API
     // requests are repeated together so a reconnect receives a full snapshot.
@@ -157,7 +157,8 @@ std::string webShell(WebAuthenticationState state,
         "button,input{font:inherit;padding:.45rem}#connection{font-weight:600}"
         "</style></head><body><main><h1>Fermentation</h1>"
         "<p id=\"auth-state\"></p><p id=\"warning\" hidden></p>"
-        "<form id=\"login\"><label>Password <input id=\"password\""
+        "<form id=\"login\"><label><span id=\"password-label\">Password"
+        "</span> <input id=\"password\""
         "type=\"password\" autocomplete=\"current-password\"></label>"
         "<button>Login</button></form><button id=\"logout\" "
         "hidden>Logout</button>"
@@ -168,22 +169,35 @@ std::string webShell(WebAuthenticationState state,
     html += csrfToken;
     html += "';const A='";
     html += authenticationStateName(state);
+    html += "';const U=";
+    html += authenticated ? "true" : "false";
     html +=
-        "';const L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',"
+        ";const L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',"
         "stale:'Veraltet',online:'Online',warning:'Passwortschutz deaktiviert',"
-        "required:'Lokale Provisionierung oder Recovery erforderlich'},"
+        "required:'Lokale Provisionierung oder Recovery erforderlich',"
+        "password:'Passwort',noSnapshot:'Kein Snapshot',"
+        "protected:'Passwortschutz aktiv',disabled:'Passwortschutz "
+        "deaktiviert'},"
         "en:{login:'Login',logout:'Logout',offline:'Offline',stale:'Stale',"
         "online:'Online',warning:'Password protection is disabled',"
-        "required:'Local provisioning or recovery required'},"
+        "required:'Local provisioning or recovery "
+        "required',password:'Password',"
+        "noSnapshot:'No snapshot',protected:'Password protection enabled',"
+        "disabled:'Password protection disabled'},"
         "es:{login:'Iniciar sesion',logout:'Cerrar sesion',offline:'Sin "
         "conexion',"
         "stale:'Anticuado',online:'En linea',warning:'Proteccion por "
         "contrasena desactivada',"
-        "required:'Se requiere provision local o recuperacion'}};"
+        "required:'Se requiere provision local o recuperacion',"
+        "password:'Contrasena',noSnapshot:'Sin instantanea',"
+        "protected:'Proteccion por contrasena activa',"
+        "disabled:'Proteccion por contrasena desactivada'}};"
         "const lang=(navigator.language||'en').slice(0,2);const "
-        "T=L[lang]||L.en;"
+        "locale=L[lang]?lang:'en';const T=L[locale]||L.en;"
+        "document.documentElement.lang=locale;"
         "document.querySelector('#login button').textContent=T.login;"
         "document.querySelector('#logout').textContent=T.logout;"
+        "document.querySelector('#password-label').textContent=T.password;"
         "const "
         "auth=document.querySelector('#auth-state'),warning=document."
         "querySelector('#warning'),"
@@ -192,9 +206,12 @@ std::string webShell(WebAuthenticationState state,
         "connection=document.querySelector('#connection'),status=document."
         "querySelector('#status');"
         "auth.textContent=A==='unprovisioned'||A==='recovery-required'||A==='"
-        "indeterminate'?T.required:A;"
+        "indeterminate'?T.required:A==='password-protected'?T.protected:T."
+        "disabled;"
         "warning.textContent=T.warning;warning.hidden=A!=='password-disabled';"
-        "login.hidden=A!=='password-protected';"
+        "status.textContent=T.noSnapshot;login.hidden=A!=='password-protected'|"
+        "|U;"
+        "logout.hidden=!U;"
         "async function refresh(){try{const r=await "
         "Promise.all(['/api/v1/status',"
         "'/api/v1/temperatures','/api/v1/"
@@ -219,11 +236,12 @@ std::string webShell(WebAuthenticationState state,
         "refresh();}});"
         "logout.addEventListener('click',async()=>{await "
         "fetch('/api/v1/logout',{method:'POST',"
-        "credentials:'same-origin',headers:{'X-CSRF-Token':window.__WEB_CSRF__|"
+        "credentials:'same-origin',headers:{'Content-Type':'application/json',"
+        "'X-CSRF-Token':window.__WEB_CSRF__|"
         "|''}});"
         "window.__WEB_CSRF__='';logout.hidden=true;login.hidden=A!=='password-"
         "protected';});"
-        "window.__WEB_CSRF__=S;logout.hidden=!window.__WEB_CSRF__;refresh();"
+        "window.__WEB_CSRF__=S;refresh();"
         "setInterval(refresh,5000);</script></body></html>";
     return html;
 }
@@ -593,7 +611,7 @@ bool WebRouteDispatcher::handleShell(
 
     response.statusCode = 200U;
     response.contentType = kHtmlContentType;
-    response.body = webShell(state, csrf);
+    response.body = webShell(state, csrf, session.has_value());
     if (response.body.size() > kMaximumWebShellBytes) {
         setJsonResponse(response, 503U,
                         "{\"error\":\"web-shell-unavailable\"}");
@@ -696,6 +714,13 @@ bool WebRouteDispatcher::handleLogout(
         return true;
     }
     if (!validWebMetadata(request, response)) return true;
+    if (!request.metadata.contentType.has_value() ||
+        !web_browser_policy::exactJsonContentType(
+            *request.metadata.contentType)) {
+        setJsonResponse(response, 415U,
+                        "{\"error\":\"unsupported-media-type\"}");
+        return true;
+    }
     if (!request.body.empty()) {
         setJsonResponse(response, 400U, "{\"error\":\"body-not-allowed\"}");
         return true;
