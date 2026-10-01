@@ -7,6 +7,17 @@ WLAN-Ersteinrichtung, Geraetename, Adressierung und die grundlegende
 Absicherung der lokalen Weboberflaeche. R1 unterstuetzt genau ein gespeichertes
 Heim-WLAN oder den ausdruecklichen AP-only-Modus.
 
+Die Ownerentscheidung fuer Issue #164 lautet `VARIANT_B_QR_RETAINED`: Die lokale
+HOME_WIFI-SSID-/Passworteingabe am Touchdisplay, die dafuer erforderliche
+Bildschirmtastatur sind aus R1 deferiert. Der WLAN-QR zum Beitritt in den
+geschuetzten Setup-/AP-only-SoftAP mit einer aus dem aktuellen
+`UserConfiguration.deviceName` abgeleiteten SSID und einem pro `StorageEpoch`
+persistierten 16-stelligen SoftAP-Passwort ist R1-pflichtig;
+nur ein separater Webseiten-QR bleibt Future Scope. R1 verwendet fuer
+Heim-WLAN-Credentials den browserbasierten Setup-Pfad; Display-Moduswahl und
+lokale Anzeige der aktuellen SoftAP-Zugangsdaten sowie der direkten IP bleiben
+R1.
+
 Die genaue Weboberflaeche, Sitzungsverwaltung und Konfliktbehandlung werden in
 `WEB_UI.md` ergaenzt.
 
@@ -62,10 +73,12 @@ ein wiederverwendbares WLAN-Passwort.
 
 Factory-, V1- und V2-Records migrieren beim Lesen nach `UNSELECTED`. Sie leiten
 weder `HOME_WIFI` noch `AP_ONLY` implizit aus Credentials ab. Genau ein
-typisierter `ConnectivityCredential`-V1-Record liegt im bestehenden
-`IStateStore` unter `StateStoreKey=cc0` und `RecordTypeId=9`; SSID und Passwort
-liegen gemeinsam darin und sind an die `StorageEpoch` gebunden. Es gibt weder
-einen zweiten physischen Store noch eine zweite Credential-Wahrheit.
+typisierter `ConnectivityCredential`-Record (Schema 1 oder 2) liegt im bestehenden
+`IStateStore` unter `StateStoreKey=cc0` und `RecordTypeId=9`; HOME_WIFI-SSID
+und -Passwort sowie das SoftAP-Passwort liegen gemeinsam darin und sind an die
+`StorageEpoch` gebunden. Die SoftAP-SSID wird aus dem aktuellen Device-Name
+abgeleitet und nicht persistiert. Es gibt weder einen zweiten physischen Store
+noch eine zweite Credential-Wahrheit.
 
 Fehlende oder ungueltige Credentials starten im expliziten `HOME_WIFI`-Modus
 den Setup-Flow und leiten niemals automatisch nach `AP_ONLY` um.
@@ -96,15 +109,21 @@ DIRECT_IP_FALLBACK=REQUIRED
 SPECIAL_APP_OR_CLI_REQUIRED=NO
 ```
 
-Der WLAN-QR darf den Beitritt zum geschuetzten SoftAP vereinfachen. Ein
-zusaetzlicher QR-Code nur zum Oeffnen der Webseite ist nicht R1-pflichtig.
+Ein WLAN-QR fuer den Beitritt zum geschuetzten SoftAP ist nach der
+Ownerentscheidung `VARIANT_B_QR_RETAINED` ein R1-Bestandteil. Die SSID wird
+aus dem aktuellen `UserConfiguration.deviceName` abgeleitet und auf hoechstens
+24 rohe UTF-8-Bytes beziehungsweise 28 QR-escaped Bytes am Ende begrenzt; das
+pro `StorageEpoch` persistierte individuelle Passwort und die direkte lokale
+IP werden zusaetzlich auf dem lokalen Display angezeigt
+und bleiben der manuelle Fallback. Ein zusaetzlicher QR-Code nur zum Oeffnen
+der Webseite ist nicht R1-pflichtig.
 
 ### Heim-WLAN-Modus
 
 `AP_ONLY` und `HOME_WIFI` sind getrennte, explizit persistierbare
 Benutzerentscheidungen. Der aktive Modus und die Heim-WLAN-Credentials sind
 fachlich getrennte Werte. Die Credentials leben ausschliesslich im einen
-`ConnectivityCredential`-V1-Record des bestehenden `IStateStore`; das
+`ConnectivityCredential`-Record (Schema 1 oder 2) des bestehenden `IStateStore`; das
 Vorhandensein oder Fehlen von Credentials darf den Modus nicht implizit
 erraten oder aendern.
 
@@ -139,8 +158,8 @@ CLI-Zwang:
 ```text
 Display waehlt HOME_WIFI
   -> temporaeren geschuetzten Setup-SoftAP starten
-  -> SSID, Passwort, QR und direkte Setup-IP lokal anzeigen
-  -> Client verbindet sich per WLAN-QR oder manuell
+  -> abgeleitete SSID, individuelles Passwort, WLAN-QR und direkte Setup-IP lokal anzeigen
+  -> Client verbindet sich per WLAN-QR oder manuell mit SSID und Passwort
   -> Benutzer oeffnet die normale Setup-Seite per Browser, mDNS oder direkter IP
   -> Heim-WLAN scannen und auswaehlen oder SSID manuell eingeben
   -> Passwort eingeben
@@ -155,39 +174,63 @@ fehlgeschlagenen Test bleibt die bisherige gueltige Konfiguration unveraendert.
 Ein automatischer produktiver Commit in eine zweite ESP-WiFi-/Component-NVS-
 Wahrheit ist unzulaessig.
 
-### Bedeutung des WLAN-QR-Codes
+### Bewusst aus R1 deferierte lokale Eingabepfade
 
-Der WLAN-QR-Code enthaelt ausschliesslich die individuellen Zugangsdaten des
-geschuetzten Setup- oder AP-only-SoftAPs in einem gaengigen WLAN-QR-Format.
-Zusaetzlich werden fuer den direkten Fallback lokal angezeigt:
+Die folgenden Funktionen sind durch die Ownerentscheidung `VARIANT_B` bewusst
+aus R1/#164 deferiert und werden in dieser R1-Integration weder spezifiziert
+noch als Abnahmekriterium vorausgesetzt:
 
-- SSID des geschuetzten SoftAPs;
-- individuelles Passwort;
-- lokale Setup-Adresse beziehungsweise AP-IP;
-- Moeglichkeit, den QR-Code erneut anzuzeigen.
+```text
+R1_TOUCH_HOME_WIFI_CREDENTIAL_ENTRY=DEFERRED
+R1_TOUCH_WIFI_KEYBOARD=DEFERRED
+PRIMARY_R1_HOME_WIFI_CREDENTIAL_INPUT=BROWSER_SETUP
+```
 
-Ein Webseiten-QR ist davon getrennt und bleibt optionaler Future Scope.
+Ein späterer Touch-Credentialpfad benötigt eine neue Ownerentscheidung, einen
+eigenen Plan und aktualisierte Acceptance Criteria. Der browserbasierte
+Setup-Assistent bleibt der einzige R1-Eingabepfad für HOME_WIFI-SSID und
+-Passwort.
 
-### Lokale Eingabe am Touchdisplay
+### WLAN-QR zum SoftAP-Beitritt
 
-SSID und WLAN-Passwort koennen zusaetzlich am Touchdisplay eingegeben werden.
-Dieser Weg ist insbesondere als Not- und Offlineweg vorgesehen, nicht als
-bevorzugte Eingabemethode fuer lange Passwoerter mit vielen Sonderzeichen.
+Der WLAN-QR ist R1-Pflicht und dient ausschließlich dem Beitritt in den
+geschützten Setup-/AP-only-SoftAP. Er wird aus derselben lokalen
+`networkAccessPointInfo()`-Quelle wie die sichtbare SSID-/Passwort-/IP-
+Projektion erzeugt:
 
-Die Bildschirmtastatur muss deshalb auch bei WLAN-Zugangsdaten mindestens
-unterstuetzen:
+```text
+QR_PURPOSE=JOIN_SOFTAP
+QR_SOURCE=networkAccessPointInfo()
+QR_SSID=CURRENT_DEVICE_NAME_DERIVED_SSID
+QR_PASSWORD_LENGTH=16
+QR_PAYLOAD=CURRENT_DERIVED_SSID_AND_CURRENT_PERSISTED_PASSWORD
+QR_FORMAT=WIFI_T_WPA_S_CURRENT_DERIVED_SSID_P_16_CHARS
+QR_CONTAINS_WEB_URL=NO
+QR_CONTAINS_AP_IP=NO
+QR_RECT={156,34,164,164}
+QR_QUIET_ZONE=YES
+QR_CONTRAST=BLACK_ON_WHITE
+QR_INTERPOLATION=NO
+QR_ANTIALIASING=NO
+LVGL_VERSION=9.6.0~1
+MANUAL_FALLBACK=SSID_PASSWORD_DIRECT_IP_VISIBLE
+SECOND_CREDENTIAL_SOURCE=NO
+SECRET_LOGGING=NO
+```
 
-- Gross- und Kleinbuchstaben
-- Ziffern
-- Leerzeichen, soweit fuer SSIDs erforderlich
-- gaengige Sonderzeichen
-- verdeckte Passwortanzeige mit optionaler kurzzeitiger Sichtbarkeit
-- Loeschen, Rueckschritt, Abbrechen und Uebernehmen
+Der Payload verwendet das übliche WLAN-QR-Format mit korrektem Escaping
+relevanter Sonderzeichen. Der QR wird nur in der lokalen Displayprojektion
+verwendet; es gibt keine Kopie in allgemeine UI-Snapshots, Web/API, Logs,
+Diagnose, Export oder Persistenz. Ein separater Webseiten-QR bleibt Future
+Scope.
 
 ## Inhalt des Heim-WLAN-Setup-Assistenten
 
 Dieser browserbasierte Assistent gilt fuer den explizit am Display gewaehlten
 Modus `HOME_WIFI`. Er fuehrt mindestens durch:
+
+Er ist der verbindliche und einzige R1-Eingabepfad fuer HOME_WIFI-SSID und
+-Passwort; die deferierte Touch-Tastatur ist kein alternativer R1-Weg.
 
 1. Sprache auswaehlen
 2. verfuegbare WLANs suchen und anzeigen
@@ -207,25 +250,54 @@ aktiv, bis eine gueltige Konfiguration gespeichert oder der Assistent bewusst
 abgebrochen wurde. Ein Captive Portal ist fuer diesen Browserablauf nicht
 erforderlich.
 
-## Individuelles Passwort fuer Setup- und AP-only-SoftAP
+## SoftAP-Zugangsdaten fuer Setup- und AP-only-SoftAP
 
 Das temporaere Setup-WLAN und der persistente AP-only-SoftAP sind immer
 geschuetzt.
 
 Verbindliche Regeln:
 
-- kein allgemeines, fuer alle Geraete identisches Standardpasswort
-- geraetespezifisches, ausreichend zufaelliges Initialpasswort
-- Anzeige lokal am Display und als QR-Code
-- spaetere Aenderung in den Netzwerkeinstellungen moeglich
-- Passwort niemals im Quellcode oder Repository hinterlegen
-- Passwort nicht in normalen Ereignisprotokollen oder Diagnoseanzeigen
-  wiederholen
+- die SoftAP-SSID wird ausschliesslich aus dem aktuellen
+  `UserConfiguration.deviceName` abgeleitet; sie wird an vollstaendigen UTF-8-
+  Codepoint-Grenzen auf hoechstens 24 rohe und hoechstens 28 QR-escaped Bytes
+  am Ende begrenzt, ohne Suffix, Hash, MAC, Zeit oder Zufallsanteil
+- das Passwort hat exakt 16 ASCII-Zeichen aus
+  `ACDEFHJKMNPQRTUVWXYacdefhjkmnpqrtuvwxy3479`
+- die 42 Zeichen werden mit der bestehenden sicheren Zufallsquelle und
+  Rejection Sampling gleichverteilt ausgewaehlt (ca. 86,27 Bit fuer 16 Zeichen)
+- das Passwort wird fuer die aktuelle `StorageEpoch` einmal sicher erzeugt,
+  in `cc0`/RecordTypeId 9 als Schema-2-Credential bestaetigt persistiert und
+  bei normalen Boots, Moduswechseln und Device-Name-Aenderungen unveraendert
+  wiederverwendet
+- bei einem Fehler der Zufallsquelle gibt es keinen deterministischen Fallback
+- Anzeige lokal am Display und als QR-Code; WPA2-PSK bleibt aktiv
+- Passwort niemals im Quellcode, in Logs, Diagnose oder Web/API ausgeben; die
+  einzige Persistenz ist der bestehende `cc0`-Record mit Schema 1/2
 
-Ob Setup-WLAN und AP-only-SoftAP dasselbe geraetespezifische Passwort verwenden
-oder getrennte Passwoerter erhalten, wird in `SETTINGS_AND_STORAGE.md`
-festgelegt. Ein automatisch gestartetes Ersatz-WLAN nach Verlust des
+Schema 1 bleibt vollstaendig lesbar und wird beim naechsten Network-Start mit
+erhaltenen HOME_WIFI-Credentials in Schema 2 migriert. Schema 2 besitzt immer
+ein gueltiges 16-stelliges SoftAP-Passwort ohne Optionaltag im Wireformat; der
+aktuelle Writer schreibt ausschliesslich Schema 2. V1-Payload/Envelope sind
+auf 100/145 Bytes, V2 auf 118/163 Bytes begrenzt.
+
+Setup-WLAN und AP-only-SoftAP verwenden die aktuelle fluechtige SoftAP-
+Konfiguration. Ein automatisch gestartetes Ersatz-WLAN nach Verlust des
 Heim-WLANs ist kein R1-Verhalten; siehe [`FUTURE_SCOPE.md`](FUTURE_SCOPE.md).
+
+### Begrenzter WLAN-Scan
+
+Der synchrone WLAN-Scanpfad ist auf hoechstens 16 Access Points begrenzt.
+`driver_count` wird vor der `wifi_ap_record_t`-Allokation auf
+`min(driver_count, 16)` begrenzt; die bestehende Heap-Vector-Arbeitsmenge und
+die `NetworkScanEntry`-Liste werden ebenfalls auf 16 begrenzt. Es wird kein
+grosser lokaler Stackpuffer eingefuehrt.
+
+Die HTTP-Scanantwort enthaelt hoechstens 16 Eintraege und hoechstens
+`16 x (32 + 1) = 528` Byte SSID-Zeilen. Ein fehlgeschlagener Scan liefert
+weiterhin `503`; ein erfolgreicher leerer Scan liefert weiterhin `200` mit
+leerem Antwortkoerper. Der beobachtete Browser-Scan-Ausfall ist als
+`ROOT_CAUSE_SCAN_FAILURE=UNPROVEN` dokumentiert und wird nicht nachtraeglich
+als bewiesener OOM-Fehler bezeichnet.
 
 ## Verhalten ohne erreichbares Heim-WLAN
 
@@ -389,7 +461,9 @@ wird in `WEB_UI.md` spezifiziert.
 ## Aktuelle R1-Entscheidungen fuer die Integration
 
 - [x] lokale Displayauswahl zwischen `HOME_WIFI` und `AP_ONLY`
-- [x] `AP_ONLY` als unterstuetzter Modus mit persistentem geschuetztem SoftAP
+- [x] `AP_ONLY` als unterstuetzter Modus mit persistentem geschuetztem SoftAP,
+      aus `UserConfiguration.deviceName` abgeleiteter SSID und persistiertem
+      16-Zeichen-Passwort pro `StorageEpoch`
 - [x] lokaler HTTP-Zugang im `AP_ONLY`-Modus ueber den gemeinsamen Unterbau;
       die vollstaendige normale R1-Weboberflaeche bleibt Eigentum von Issue #27
 - [x] `HOME_WIFI` als unterstuetzter und empfohlener Modus
@@ -408,6 +482,10 @@ wird in `WEB_UI.md` spezifiziert.
 - [x] automatisches Fallback-AP und mehrere gespeicherte WLANs sind nicht R1
 - [x] physischer Display-/Kamera-QR-Test ist deferred und nicht
       auswahlblockierend
+- [x] QR-Layout `{156,34,164,164}` mit Quiet-Zone und Schwarz/Weiss-
+      Hochkontrast im bestehenden LVGL-Pfad
+- [x] synchroner WLAN-Scan und HTTP-Scanantwort auf 16 Eintraege begrenzt;
+      maximale SSID-Zeilenantwort 528 Byte
 - [x] grundlegender Reconnect zum selben gespeicherten Heim-WLAN ist R1
 - [x] normales Webpasswort und Service-PIN sind getrennt
 - [x] direkter lokaler HTTP-Zugriff ohne Internetfreigabe

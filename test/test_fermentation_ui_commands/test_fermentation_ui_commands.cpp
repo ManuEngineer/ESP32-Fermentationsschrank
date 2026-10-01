@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 #include "fermentation_application.hpp"
@@ -8,9 +9,44 @@
 #include "device_platform.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
 #include "virtual_time_source.hpp"
+
+namespace fermentation {
+
+class FermentationApplicationTestAccess {
+   public:
+    static bool rename(FermentationApplication& application,
+                       const char* deviceName) {
+        auto build = application.configurationService_->beginPreview();
+        if (build.status != ConfigurationPreviewStatus::Success ||
+            !build.lease.valid()) {
+            return false;
+        }
+        build.lease.userConfiguration().deviceName = deviceName;
+        const auto installed =
+            application.configurationService_->installPreview(
+                std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+                {ChangeOperationKind::NormalEdit, 1U});
+        if (installed.status != ConfigurationPreviewStatus::Success ||
+            !installed.preview.has_value()) {
+            return false;
+        }
+        const auto committed =
+            application.configurationService_->confirmPreview(
+                installed.preview->handle);
+        return committed.status == ConfigurationCommitStatus::Activated ||
+               committed.status == ConfigurationCommitStatus::NoChange;
+    }
+
+    static bool coreReady(const FermentationApplication& application) {
+        return application.applicationReadiness();
+    }
+};
+
+}  // namespace fermentation
 
 namespace {
 
@@ -28,6 +64,11 @@ class MockHttpServerLifecycle final
     : public device_platform::IHttpServerLifecycle {
    public:
     [[nodiscard]] bool start(device_platform::IHttpRouteSink&) override {
+        ++startCallCount_;
+        if (!startResult_) {
+            running_ = false;
+            return false;
+        }
         running_ = true;
         return true;
     }
@@ -39,9 +80,60 @@ class MockHttpServerLifecycle final
 
     [[nodiscard]] bool running() const override { return running_; }
 
+    void setStartResult(bool result) noexcept { startResult_ = result; }
+
+    [[nodiscard]] std::size_t startCallCount() const noexcept {
+        return startCallCount_;
+    }
+
    private:
     bool running_{false};
+    bool startResult_{true};
+    std::size_t startCallCount_{0U};
 };
+
+void seedApOnlyConfiguration(
+    device_platform_test_support::SimulatedPersistentStateStore& store,
+    device_platform_test_support::MockTimeZoneResolver& timeZoneResolver) {
+    device_platform::DevicePlatform platform;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http,
+                                       randomSource));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            application.applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                .status));
+}
+
+void seedHomeWifiSetupConfiguration(
+    device_platform_test_support::SimulatedPersistentStateStore& store,
+    device_platform_test_support::MockTimeZoneResolver& timeZoneResolver) {
+    seedApOnlyConfiguration(store, timeZoneResolver);
+
+    device_platform::DevicePlatform platform;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http,
+                                       randomSource));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            application
+                .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                .status));
+}
 
 RunCommandState standbyState() {
     RunCommandState state;
@@ -239,11 +331,13 @@ void test_network_ui_commands_use_the_owning_application_paths() {
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     FermentationUiCommand typedCommand;
     typedCommand.operation = FermentationUiApplyNetworkModeCommand{
@@ -269,7 +363,7 @@ void test_network_ui_commands_use_the_owning_application_paths() {
 
     const auto accessPoint = application.networkAccessPointInfo();
     TEST_ASSERT_TRUE(accessPoint.has_value());
-    TEST_ASSERT_EQUAL_STRING("mock-ap-password", accessPoint->password.c_str());
+    TEST_ASSERT_EQUAL_UINT(16U, accessPoint->password.size());
 
     const auto homeWifi = FermentationUiCommandBridge::applyNetworkMode(
         application, FermentationUiApplyNetworkModeCommand{
@@ -300,17 +394,262 @@ void test_network_ui_commands_use_the_owning_application_paths() {
     TEST_ASSERT_TRUE(network.startCallCount() >= 3U);
 }
 
+void test_application_network_restarts_refresh_hostname_and_preserve_password() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http,
+                                       randomSource));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            application.applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                .status));
+    const auto firstAccessPoint = application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(firstAccessPoint.has_value());
+    const auto firstPassword = firstAccessPoint->password;
+
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::rename(application, "Device-B"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            application.applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                .status));
+    const auto secondAccessPoint = application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(secondAccessPoint.has_value());
+    TEST_ASSERT_EQUAL_STRING("Device-B", secondAccessPoint->ssid.c_str());
+    TEST_ASSERT_EQUAL_STRING("device-b", network.hostname().c_str());
+    TEST_ASSERT_TRUE(secondAccessPoint->password == firstPassword);
+
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::rename(application, "Device-C"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(
+            application
+                .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                .status));
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::rename(application, "Device-D"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::Applied),
+        static_cast<int>(application.beginHomeWifiReconfiguration().status));
+    const auto reconfiguredAccessPoint = application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(reconfiguredAccessPoint.has_value());
+    TEST_ASSERT_EQUAL_STRING("Device-D", reconfiguredAccessPoint->ssid.c_str());
+    TEST_ASSERT_EQUAL_STRING("device-d", network.hostname().c_str());
+    TEST_ASSERT_TRUE(reconfiguredAccessPoint->password == firstPassword);
+}
+
+void test_home_wifi_reconfiguration_restores_http_after_boot_failure() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    seedHomeWifiSetupConfiguration(store, timeZoneResolver);
+
+    device_platform::DevicePlatform platform;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    http.setStartResult(false);
+    FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                       timeSource, network, http,
+                                       randomSource));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::coreReady(application));
+    TEST_ASSERT_FALSE(http.running());
+    TEST_ASSERT_TRUE(network.status().state ==
+                     device_platform::NetworkLifecycleState::Stopped);
+
+    http.setStartResult(true);
+    const auto recovered = application.beginHomeWifiReconfiguration();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(recovered.status));
+    TEST_ASSERT_TRUE(http.running());
+    TEST_ASSERT_TRUE(network.status().state !=
+                     device_platform::NetworkLifecycleState::Stopped);
+
+    TEST_ASSERT_TRUE(http.stop());
+    http.setStartResult(false);
+    const auto failedRetry = application.beginHomeWifiReconfiguration();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(NetworkConfigurationStatus::TransportFailure),
+        static_cast<int>(failedRetry.status));
+    TEST_ASSERT_FALSE(http.running());
+    TEST_ASSERT_TRUE(network.status().state ==
+                     device_platform::NetworkLifecycleState::Stopped);
+}
+
+void test_application_network_failures_keep_core_ready_and_fail_closed() {
+    {
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        seedApOnlyConfiguration(store, timeZoneResolver);
+        store.injectReadFailure(ConnectivityCredentialStore::key(), true);
+
+        device_platform::DevicePlatform platform;
+        device_platform::VirtualTimeSource timeSource;
+        device_platform_test_support::MockNetworkLifecycle network;
+        device_platform_test_support::MockSecureRandomSource randomSource;
+        MockHttpServerLifecycle http;
+        FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_TRUE(application.ready());
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::coreReady(application));
+        TEST_ASSERT_TRUE(network.status().state ==
+                         device_platform::NetworkLifecycleState::Stopped);
+        TEST_ASSERT_FALSE(http.running());
+    }
+
+    {
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        seedApOnlyConfiguration(store, timeZoneResolver);
+
+        device_platform::DevicePlatform platform;
+        device_platform::VirtualTimeSource timeSource;
+        device_platform_test_support::MockNetworkLifecycle network;
+        network.setStartStatus(device_platform::NetworkOperationStatus::Failed);
+        device_platform_test_support::MockSecureRandomSource randomSource;
+        MockHttpServerLifecycle http;
+        FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_TRUE(application.ready());
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::coreReady(application));
+        TEST_ASSERT_TRUE(network.status().state ==
+                         device_platform::NetworkLifecycleState::Stopped);
+        TEST_ASSERT_FALSE(http.running());
+    }
+
+    {
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        seedApOnlyConfiguration(store, timeZoneResolver);
+
+        device_platform::DevicePlatform platform;
+        device_platform::VirtualTimeSource timeSource;
+        device_platform_test_support::MockNetworkLifecycle network;
+        device_platform_test_support::MockSecureRandomSource randomSource;
+        MockHttpServerLifecycle http;
+        http.setStartResult(false);
+        FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_TRUE(application.ready());
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::coreReady(application));
+        TEST_ASSERT_TRUE(network.status().state ==
+                         device_platform::NetworkLifecycleState::Stopped);
+        TEST_ASSERT_FALSE(http.running());
+    }
+
+    {
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        seedApOnlyConfiguration(store, timeZoneResolver);
+
+        device_platform::DevicePlatform platform;
+        device_platform::VirtualTimeSource timeSource;
+        device_platform_test_support::MockNetworkLifecycle network;
+        device_platform_test_support::MockSecureRandomSource randomSource;
+        MockHttpServerLifecycle http;
+        FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(
+                application
+                    .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                    .status));
+        store.forceNotFound(ConnectivityCredentialStore::key(), true);
+        store.setNextWriteFault(
+            device_platform_test_support::SimulatedPersistentStateStore::
+                WriteFault::FailBeforeBegin);
+        const auto failedWrite = application.beginHomeWifiReconfiguration();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::PersistenceFailure),
+            static_cast<int>(failedWrite.status));
+        TEST_ASSERT_TRUE(application.ready());
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::coreReady(application));
+        TEST_ASSERT_TRUE(network.status().state ==
+                         device_platform::NetworkLifecycleState::Stopped);
+        TEST_ASSERT_FALSE(http.running());
+    }
+
+    {
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        seedApOnlyConfiguration(store, timeZoneResolver);
+
+        device_platform::DevicePlatform platform;
+        device_platform::VirtualTimeSource timeSource;
+        device_platform_test_support::MockNetworkLifecycle network;
+        device_platform_test_support::MockSecureRandomSource randomSource;
+        MockHttpServerLifecycle http;
+        FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(
+                application
+                    .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                    .status));
+        store.forceNotFound(ConnectivityCredentialStore::key(), true);
+        store.failNextReadAfterWrite();
+        const auto failedReadback = application.beginHomeWifiReconfiguration();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::CommitIndeterminate),
+            static_cast<int>(failedReadback.status));
+        TEST_ASSERT_TRUE(application.ready());
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::coreReady(application));
+        TEST_ASSERT_TRUE(network.status().state ==
+                         device_platform::NetworkLifecycleState::Stopped);
+        TEST_ASSERT_FALSE(http.running());
+    }
+}
+
 void test_unselected_network_command_is_rejected_without_a_third_ui_option() {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     const auto result = FermentationUiCommandBridge::applyNetworkMode(
         application, FermentationUiApplyNetworkModeCommand{
@@ -487,6 +826,10 @@ int main(int, char**) {
     RUN_TEST(test_canonical_validation_precedes_ui_confirmation);
     RUN_TEST(test_command_result_preserves_typed_app_details);
     RUN_TEST(test_network_ui_commands_use_the_owning_application_paths);
+    RUN_TEST(
+        test_application_network_restarts_refresh_hostname_and_preserve_password);
+    RUN_TEST(test_home_wifi_reconfiguration_restores_http_after_boot_failure);
+    RUN_TEST(test_application_network_failures_keep_core_ready_and_fail_closed);
     RUN_TEST(
         test_unselected_network_command_is_rejected_without_a_third_ui_option);
     RUN_TEST(test_ui_payloads_are_intents_and_not_owning_evidence);

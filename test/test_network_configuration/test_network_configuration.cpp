@@ -1,25 +1,35 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "big_endian_codec.hpp"
+#include "byte_buffer.hpp"
+#include "configuration_limits.hpp"
+#include "configuration_storage_contract.hpp"
 #include "configuration_document_codec.hpp"
 #include "configuration_documents.hpp"
 #include "connectivity_credential_codec.hpp"
 #include "connectivity_credentials.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
 #include "network_mode.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "softap_credentials.hpp"
+#include "storage_envelope.hpp"
 
 namespace {
 
 using device_platform::NetworkMode;
 using device_platform_test_support::MockNetworkLifecycle;
+using device_platform_test_support::MockSecureRandomSource;
 using device_platform_test_support::MockTimeZoneResolver;
 using device_platform_test_support::SimulatedPersistentStateStore;
 using fermentation::ConfigurationCodecStatus;
@@ -41,8 +51,50 @@ UserConfiguration validConfiguration() {
 }
 
 ConnectivityCredential validCredential() {
-    return ConnectivityCredential{device_platform::NetworkCredentials{
-        "Fermentation-WLAN", "correct-horse-battery"}};
+    return ConnectivityCredential{
+        device_platform::NetworkCredentials{"Fermentation-WLAN",
+                                            "correct-horse-battery"},
+        std::string(16U, 'A')};
+}
+
+bool writeV1CredentialRecord(SimulatedPersistentStateStore& store,
+                             device_platform::StorageEpoch epoch,
+                             const ConnectivityCredential& credential) {
+    device_platform::ByteWriter payloadWriter(100U);
+    const bool hasHomeWifi = credential.homeWifi.has_value();
+    if (!device_platform::big_endian::writeOptionalTag(payloadWriter,
+                                                       hasHomeWifi)) {
+        return false;
+    }
+    if (hasHomeWifi) {
+        const auto& homeWifi = *credential.homeWifi;
+        if (homeWifi.ssid.size() > 32U || homeWifi.password.size() > 63U ||
+            !device_platform::big_endian::writeUint16(
+                payloadWriter,
+                static_cast<std::uint16_t>(homeWifi.ssid.size())) ||
+            !payloadWriter.writeBytes(homeWifi.ssid.data(),
+                                      homeWifi.ssid.size()) ||
+            !device_platform::big_endian::writeUint16(
+                payloadWriter,
+                static_cast<std::uint16_t>(homeWifi.password.size())) ||
+            !payloadWriter.writeBytes(homeWifi.password.data(),
+                                      homeWifi.password.size())) {
+            return false;
+        }
+    }
+    const auto payload = payloadWriter.takeBytes();
+    std::string encoded;
+    if (device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConnectivityCredentialRecordType,
+             fermentation::configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV1,
+             epoch, 1U, std::nullopt, payload},
+            encoded, 145U) != device_platform::EnvelopeEncodeStatus::Success) {
+        return false;
+    }
+    return store.write(ConnectivityCredentialStore::key(), encoded) ==
+           device_platform::StateStoreWriteStatus::Success;
 }
 
 void test_mode_selection_has_internal_unselected_state() {
@@ -138,18 +190,121 @@ void test_connectivity_credential_codec_keeps_pair_together() {
                          credential, payload) ==
                      ConnectivityCredentialCodecStatus::Success);
     const auto decoded =
-        fermentation::decodeConnectivityCredentialPayload(1U, payload);
+        fermentation::decodeConnectivityCredentialPayload(2U, payload);
     TEST_ASSERT_TRUE(decoded.credential.has_value());
     TEST_ASSERT_TRUE(*decoded.credential == credential);
 
-    const ConnectivityCredential empty;
+    const ConnectivityCredential empty{std::nullopt, std::string(16U, 'A')};
     TEST_ASSERT_TRUE(
         fermentation::encodeConnectivityCredentialPayload(empty, payload) ==
         ConnectivityCredentialCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT(19U, payload.size());
+    TEST_ASSERT_EQUAL_UINT8(0U, static_cast<std::uint8_t>(payload[0]));
+    TEST_ASSERT_EQUAL_UINT8(0U, static_cast<std::uint8_t>(payload[1]));
+    TEST_ASSERT_EQUAL_UINT8(16U, static_cast<std::uint8_t>(payload[2]));
     const auto decodedEmpty =
-        fermentation::decodeConnectivityCredentialPayload(1U, payload);
+        fermentation::decodeConnectivityCredentialPayload(2U, payload);
     TEST_ASSERT_TRUE(decodedEmpty.credential.has_value());
     TEST_ASSERT_TRUE(decodedEmpty.credential->homeWifi == std::nullopt);
+
+    std::string legacyOptionalSoftAp{
+        static_cast<char>(0U), static_cast<char>(1U), static_cast<char>(0U),
+        static_cast<char>(16U)};
+    legacyOptionalSoftAp.append(16U, 'A');
+    const auto rejectedLegacy =
+        fermentation::decodeConnectivityCredentialPayload(2U,
+                                                          legacyOptionalSoftAp);
+    TEST_ASSERT_FALSE(rejectedLegacy.credential.has_value());
+}
+
+void test_connectivity_credential_wire_limits_and_v2_validation_goldens() {
+    TEST_ASSERT_EQUAL_UINT(100U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialV1PayloadBytes);
+    TEST_ASSERT_EQUAL_UINT(145U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialV1EnvelopeBytes);
+    TEST_ASSERT_EQUAL_UINT(118U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialPayloadBytes);
+    TEST_ASSERT_EQUAL_UINT(163U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialEnvelopeBytes);
+
+    const ConnectivityCredential maximum{
+        device_platform::NetworkCredentials{std::string(32U, 's'),
+                                            std::string(63U, 'p')},
+        std::string(16U, 'A')};
+    std::string v2Payload;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConnectivityCredentialPayload(maximum, v2Payload) ==
+        ConnectivityCredentialCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT(118U, v2Payload.size());
+    std::string v2Envelope;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConnectivityCredentialRecordType,
+             fermentation::configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV2,
+             device_platform::StorageEpoch{1U}, 1U, std::nullopt, v2Payload},
+            v2Envelope,
+            163U) == device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT(163U, v2Envelope.size());
+
+    device_platform::ByteWriter v1Writer(100U);
+    TEST_ASSERT_TRUE(
+        device_platform::big_endian::writeOptionalTag(v1Writer, true));
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint16(v1Writer, 32U));
+    TEST_ASSERT_TRUE(v1Writer.writeBytes(std::string(32U, 's').data(), 32U));
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint16(v1Writer, 63U));
+    TEST_ASSERT_TRUE(v1Writer.writeBytes(std::string(63U, 'p').data(), 63U));
+    const auto v1Payload = v1Writer.takeBytes();
+    TEST_ASSERT_EQUAL_UINT(100U, v1Payload.size());
+    std::string v1Envelope;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConnectivityCredentialRecordType,
+             fermentation::configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV1,
+             device_platform::StorageEpoch{1U}, 1U, std::nullopt, v1Payload},
+            v1Envelope,
+            145U) == device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT(145U, v1Envelope.size());
+
+    const ConnectivityCredential missingSoftAp{maximum.homeWifi, std::nullopt};
+    TEST_ASSERT_TRUE(
+        fermentation::validateConnectivityCredentialV2(missingSoftAp) ==
+        ConnectivityCredentialValidationStatus::MissingSoftApPassword);
+    TEST_ASSERT_TRUE(fermentation::encodeConnectivityCredentialPayload(
+                         missingSoftAp, v2Payload) ==
+                     ConnectivityCredentialCodecStatus::InvalidCredential);
+
+    for (const auto length : {15U, 17U}) {
+        auto wrongLength = maximum;
+        wrongLength.softApPassword = std::string(length, 'A');
+        TEST_ASSERT_TRUE(
+            fermentation::validateConnectivityCredentialV2(wrongLength) ==
+            ConnectivityCredentialValidationStatus::InvalidSoftApPassword);
+    }
+    auto wrongAlphabet = maximum;
+    wrongAlphabet.softApPassword = std::string(15U, 'A') + "!";
+    TEST_ASSERT_TRUE(
+        fermentation::validateConnectivityCredentialV2(wrongAlphabet) ==
+        ConnectivityCredentialValidationStatus::InvalidSoftApPassword);
+
+    std::string normalPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeConnectivityCredentialPayload(
+                         validCredential(), normalPayload) ==
+                     ConnectivityCredentialCodecStatus::Success);
+    auto trailing = normalPayload;
+    trailing.push_back('x');
+    const auto decodedTrailing =
+        fermentation::decodeConnectivityCredentialPayload(2U, trailing);
+    TEST_ASSERT_TRUE(decodedTrailing.status ==
+                     ConnectivityCredentialCodecStatus::TrailingBytes);
+    TEST_ASSERT_FALSE(decodedTrailing.credential.has_value());
 }
 
 void test_connectivity_credential_store_uses_cc0_and_epoch_binding() {
@@ -174,6 +329,137 @@ void test_connectivity_credential_store_uses_cc0_and_epoch_binding() {
                      ConnectivityCredentialLoadStatus::OtherEpoch);
 }
 
+void test_v1_load_migrates_home_credentials_to_v2_with_softap_password() {
+    SimulatedPersistentStateStore store;
+    const ConnectivityCredential v1{validCredential().homeWifi, std::nullopt};
+    TEST_ASSERT_TRUE(
+        writeV1CredentialRecord(store, device_platform::StorageEpoch{1U}, v1));
+    ConnectivityCredentialStore credentials(store);
+    const auto loaded = credentials.load(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.status ==
+                     ConnectivityCredentialLoadStatus::Available);
+    TEST_ASSERT_EQUAL_UINT32(1U, loaded.record->schemaVersion);
+    TEST_ASSERT_FALSE(loaded.record->credential.softApPassword.has_value());
+
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+    const auto migrated = credentials.load(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(migrated.record.has_value());
+    TEST_ASSERT_EQUAL_UINT32(2U, migrated.record->schemaVersion);
+    TEST_ASSERT_TRUE(migrated.record->credential.homeWifi == v1.homeWifi);
+    TEST_ASSERT_TRUE(migrated.record->credential.softApPassword.has_value());
+    TEST_ASSERT_TRUE(fermentation::isValidSoftApPassword(
+        *migrated.record->credential.softApPassword));
+}
+
+void test_v2_softap_only_record_separates_home_setup_from_ap_only() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    const ConnectivityCredential softApOnly{std::nullopt,
+                                            std::string(16U, 'A')};
+    TEST_ASSERT_TRUE(
+        credentials.write(softApOnly, device_platform::StorageEpoch{1U}, 1U)
+            .status == ConnectivityCredentialWriteStatus::Committed);
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(service.setupFlowActive());
+    TEST_ASSERT_TRUE(lifecycle.status().state ==
+                     device_platform::NetworkLifecycleState::SetupAccessPoint);
+
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_FALSE(service.setupFlowActive());
+    TEST_ASSERT_TRUE(lifecycle.status().state ==
+                     device_platform::NetworkLifecycleState::AccessPointOnly);
+}
+
+void test_device_name_restart_changes_ssid_but_preserves_softap_password() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U}, "Device-A")
+                         .status == NetworkConfigurationStatus::Applied);
+    const auto first = service.accessPointInfo();
+    TEST_ASSERT_TRUE(first.has_value());
+    TEST_ASSERT_EQUAL_STRING("Device-A", first->ssid.c_str());
+    const auto firstPassword = first->password;
+
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U}, "Device-B")
+                         .status == NetworkConfigurationStatus::Applied);
+    const auto second = service.accessPointInfo();
+    TEST_ASSERT_TRUE(second.has_value());
+    TEST_ASSERT_EQUAL_STRING("Device-B", second->ssid.c_str());
+    TEST_ASSERT_TRUE(second->password == firstPassword);
+}
+
+void test_other_epoch_discards_home_and_softap_secrets_and_restarts_sequence() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    const auto old = validCredential();
+    TEST_ASSERT_TRUE(
+        credentials.write(old, device_platform::StorageEpoch{1U}, 7U).status ==
+        ConnectivityCredentialWriteStatus::Committed);
+
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    randomSource.setNextBytes(std::string(16U, '\x01'));
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{2U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+
+    const auto current = credentials.load(device_platform::StorageEpoch{2U});
+    TEST_ASSERT_TRUE(current.status ==
+                     ConnectivityCredentialLoadStatus::Available);
+    TEST_ASSERT_TRUE(current.record.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, current.record->recordSequence);
+    TEST_ASSERT_FALSE(current.record->credential.homeWifi.has_value());
+    TEST_ASSERT_TRUE(current.record->credential.softApPassword.has_value());
+    TEST_ASSERT_TRUE(*current.record->credential.softApPassword !=
+                     *old.softApPassword);
+}
+
+void test_valid_v2_load_does_not_require_random_source() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    TEST_ASSERT_TRUE(
+        credentials
+            .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
+            .status == ConnectivityCredentialWriteStatus::Committed);
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    randomSource.injectFailure(true);
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+}
+
 void test_successful_write_with_readback_error_is_indeterminate() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -193,13 +479,20 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
 
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_TRUE(lifecycle.status().state ==
                      device_platform::NetworkLifecycleState::SetupAccessPoint);
+    const auto initial = credentials.load(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(initial.record.has_value());
+    const auto initialSoftApPassword =
+        *initial.record->credential.softApPassword;
     TEST_ASSERT_TRUE(
         service.beginCandidate("Fermentation-WLAN", "correct-horse-battery")
             .status == NetworkConfigurationStatus::Applied);
@@ -207,7 +500,7 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
         device_platform::NetworkOperationStatus::Failed);
     TEST_ASSERT_TRUE(service.testCandidate().status ==
                      NetworkConfigurationStatus::CandidateRejected);
-    TEST_ASSERT_FALSE(
+    TEST_ASSERT_TRUE(
         credentials.load(device_platform::StorageEpoch{1U}).record.has_value());
 
     TEST_ASSERT_TRUE(
@@ -219,7 +512,14 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
                      NetworkConfigurationStatus::Applied);
     const auto committed = credentials.load(device_platform::StorageEpoch{1U});
     TEST_ASSERT_TRUE(committed.record.has_value());
-    TEST_ASSERT_TRUE(committed.record->credential == validCredential());
+    TEST_ASSERT_TRUE(committed.record->credential.homeWifi.has_value());
+    TEST_ASSERT_TRUE(*committed.record->credential.homeWifi ==
+                     *validCredential().homeWifi);
+    TEST_ASSERT_TRUE(committed.record->credential.softApPassword.has_value());
+    TEST_ASSERT_EQUAL_UINT(16U,
+                           committed.record->credential.softApPassword->size());
+    TEST_ASSERT_TRUE(*committed.record->credential.softApPassword ==
+                     initialSoftApPassword);
 }
 
 void test_candidate_wrong_password_disconnect_and_timeout_never_commit() {
@@ -230,10 +530,13 @@ void test_candidate_wrong_password_disconnect_and_timeout_never_commit() {
         SimulatedPersistentStateStore store;
         ConnectivityCredentialStore credentials(store);
         MockNetworkLifecycle lifecycle;
-        NetworkConfigurationService service(credentials, lifecycle);
+        MockSecureRandomSource randomSource;
+        NetworkConfigurationService service(credentials, lifecycle,
+                                            randomSource);
         TEST_ASSERT_TRUE(service
                              .start(NetworkMode::HOME_WIFI,
-                                    device_platform::StorageEpoch{1U})
+                                    device_platform::StorageEpoch{1U},
+                                    "Fermentationsschrank")
                              .status == NetworkConfigurationStatus::Applied);
         lifecycle.setCandidateStatus(failure);
         TEST_ASSERT_TRUE(
@@ -241,8 +544,8 @@ void test_candidate_wrong_password_disconnect_and_timeout_never_commit() {
             NetworkConfigurationStatus::Applied);
         TEST_ASSERT_TRUE(service.testCandidate().status ==
                          NetworkConfigurationStatus::CandidateRejected);
-        TEST_ASSERT_FALSE(credentials.load(device_platform::StorageEpoch{1U})
-                              .record.has_value());
+        TEST_ASSERT_TRUE(credentials.load(device_platform::StorageEpoch{1U})
+                             .record.has_value());
     }
 }
 
@@ -250,10 +553,13 @@ void test_indeterminate_commit_stops_without_restoring_old_runtime() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_TRUE(
         service.beginCandidate("new-wlan", "new-password-1").status ==
         NetworkConfigurationStatus::Applied);
@@ -268,9 +574,11 @@ void test_indeterminate_commit_stops_without_restoring_old_runtime() {
     // Recovery is explicit and restartable: the next start reloads the
     // durable winner instead of restoring the pre-write runtime credential.
     lifecycle.setStartStatus(device_platform::NetworkOperationStatus::Applied);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_FALSE(service.recoveryRequired());
     TEST_ASSERT_TRUE(lifecycle.lastStartedCredentials().has_value());
     const device_platform::NetworkCredentials recovered{"new-wlan",
@@ -286,18 +594,22 @@ void test_normal_home_mode_gates_setup_mutations_until_reconfiguration() {
             .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
             .status == ConnectivityCredentialWriteStatus::Committed);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_FALSE(service.setupFlowActive());
     TEST_ASSERT_TRUE(service.scan().status ==
                      NetworkConfigurationStatus::SetupNotAvailable);
     TEST_ASSERT_TRUE(service.beginCandidate("ssid", "password-1").status ==
                      NetworkConfigurationStatus::SetupNotAvailable);
 
-    TEST_ASSERT_TRUE(service.beginHomeWifiReconfiguration().status ==
-                     NetworkConfigurationStatus::Applied);
+    TEST_ASSERT_TRUE(
+        service.beginHomeWifiReconfiguration("Fermentationsschrank").status ==
+        NetworkConfigurationStatus::Applied);
     TEST_ASSERT_TRUE(service.setupFlowActive());
     // Reconfiguration starts the AP setup path without deleting the stored
     // credential. A failed candidate restores that still-active credential.
@@ -321,10 +633,13 @@ void test_ap_only_does_not_infer_home_wifi_from_credentials() {
             .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
             .status == ConnectivityCredentialWriteStatus::Committed);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::AP_ONLY, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_TRUE(lifecycle.status().state ==
                      device_platform::NetworkLifecycleState::AccessPointOnly);
     TEST_ASSERT_FALSE(lifecycle.lastStartedCredentials().has_value());
@@ -350,17 +665,20 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     const auto genericStatus = service.status();
     TEST_ASSERT_TRUE(genericStatus.state ==
                      device_platform::NetworkLifecycleState::SetupAccessPoint);
     const auto accessPoint = service.accessPointInfo();
     TEST_ASSERT_TRUE(accessPoint.has_value());
-    TEST_ASSERT_EQUAL_STRING("mock-setup-ap", accessPoint->ssid.c_str());
-    TEST_ASSERT_EQUAL_STRING("mock-ap-password", accessPoint->password.c_str());
+    TEST_ASSERT_EQUAL_STRING("Fermentationsschrank", accessPoint->ssid.c_str());
+    TEST_ASSERT_EQUAL_UINT(16U, accessPoint->password.size());
     TEST_ASSERT_TRUE(accessPoint->ipv4Address.has_value());
     TEST_ASSERT_TRUE(*accessPoint->ipv4Address == 0x0104A8C0U);
     NetworkSetupRoutes routes(service);
@@ -400,6 +718,53 @@ void test_setup_routes_share_one_surface_and_redact_passwords() {
                       response.body.find("correct-horse-battery"));
 }
 
+void test_scan_route_bounds_entries_and_response_without_secret_expansion() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+
+    std::vector<device_platform::NetworkScanEntry> entries;
+    for (std::size_t index = 0U; index < 20U; ++index) {
+        entries.push_back({std::string(40U, static_cast<char>('A' + index)),
+                           static_cast<std::int8_t>(-index), true});
+    }
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Applied, entries});
+    NetworkSetupRoutes routes(service);
+
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL_UINT(device_platform::kMaximumNetworkScanResponseBytes,
+                           response.body.size());
+    TEST_ASSERT_EQUAL_UINT(
+        device_platform::kMaximumNetworkScanEntries,
+        static_cast<std::size_t>(
+            std::count(response.body.begin(), response.body.end(), '\n')));
+    TEST_ASSERT_EQUAL_UINT(device_platform::kMaximumNetworkSsidBytes,
+                           response.body.find('\n'));
+
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Applied, {}});
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.empty());
+
+    lifecycle.setScanResult(
+        {device_platform::NetworkOperationStatus::Failed, {}});
+    response = {};
+    TEST_ASSERT_TRUE(routes.handle({"GET", "/api/network/scan", {}}, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+}
+
 std::pair<std::uint16_t, std::string> submitCandidateRoute(
     device_platform::NetworkOperationStatus candidateStatus,
     std::optional<SimulatedPersistentStateStore::WriteFault> writeFault,
@@ -407,8 +772,11 @@ std::pair<std::uint16_t, std::string> submitCandidateRoute(
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    if (service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    if (service
+            .start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U},
+                   "Fermentationsschrank")
             .status != NetworkConfigurationStatus::Applied) {
         return {0U, "setup failed"};
     }
@@ -480,10 +848,13 @@ void test_normal_home_routes_do_not_render_or_accept_setup_mutations() {
             .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
             .status == ConnectivityCredentialWriteStatus::Committed);
     MockNetworkLifecycle lifecycle;
-    NetworkConfigurationService service(credentials, lifecycle);
-    TEST_ASSERT_TRUE(
-        service.start(NetworkMode::HOME_WIFI, device_platform::StorageEpoch{1U})
-            .status == NetworkConfigurationStatus::Applied);
+    MockSecureRandomSource randomSource;
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::HOME_WIFI,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
     NetworkSetupRoutes routes(service);
 
     device_platform::HttpResponse response;
@@ -508,7 +879,16 @@ int main() {
     RUN_TEST(test_startup_decision_requires_selection_and_never_infers_mode);
     RUN_TEST(test_v1_v2_migrate_to_unselected_and_v3_has_no_credentials);
     RUN_TEST(test_connectivity_credential_codec_keeps_pair_together);
+    RUN_TEST(
+        test_connectivity_credential_wire_limits_and_v2_validation_goldens);
     RUN_TEST(test_connectivity_credential_store_uses_cc0_and_epoch_binding);
+    RUN_TEST(test_v1_load_migrates_home_credentials_to_v2_with_softap_password);
+    RUN_TEST(test_v2_softap_only_record_separates_home_setup_from_ap_only);
+    RUN_TEST(
+        test_device_name_restart_changes_ssid_but_preserves_softap_password);
+    RUN_TEST(
+        test_other_epoch_discards_home_and_softap_secrets_and_restarts_sequence);
+    RUN_TEST(test_valid_v2_load_does_not_require_random_source);
     RUN_TEST(test_successful_write_with_readback_error_is_indeterminate);
     RUN_TEST(
         test_network_workflow_tests_before_commit_and_preserves_on_failure);
@@ -518,6 +898,8 @@ int main() {
     RUN_TEST(test_ap_only_does_not_infer_home_wifi_from_credentials);
     RUN_TEST(test_transport_stop_start_is_restartable);
     RUN_TEST(test_setup_routes_share_one_surface_and_redact_passwords);
+    RUN_TEST(
+        test_scan_route_bounds_entries_and_response_without_secret_expansion);
     RUN_TEST(
         test_candidate_route_distinguishes_persistence_and_recovery_outcomes);
     RUN_TEST(test_normal_home_routes_do_not_render_or_accept_setup_mutations);

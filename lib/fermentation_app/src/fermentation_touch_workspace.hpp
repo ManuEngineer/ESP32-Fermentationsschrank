@@ -89,6 +89,9 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     NavigateLanguage,
     NavigateNetwork,
     NavigateClock,
+    ApplyNetworkModeApOnly,
+    ApplyNetworkModeHomeWifi,
+    BeginHomeWifiReconfiguration,
     MovePagerUp,
     MovePagerDown,
     BeginProgramEdit,
@@ -142,6 +145,9 @@ struct FermentationUiWorkspacePress {
         transitionAction;
     std::optional<FermentationUiResumeFallbackCommand> resumeFallback;
     std::optional<FermentationUiProgramEditRequest> programEdit;
+    std::optional<FermentationUiApplyNetworkModeCommand> applyNetworkMode;
+    std::optional<FermentationUiBeginHomeWifiReconfigurationCommand>
+        beginHomeWifiReconfiguration;
 };
 
 class FermentationTouchWorkspace {

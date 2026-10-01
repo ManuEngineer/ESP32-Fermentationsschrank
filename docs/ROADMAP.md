@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-09-30
+Stand: 2026-10-01
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -27,16 +27,16 @@ nicht kopiert, sondern verlinkt.
 | Issue #26 / PR #143 | `ISSUE26_STATUS=CLOSED_COMPLETED`; `PR143=MERGED`; `PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`; `PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`; `PRE_READY_LOCAL_GATES=PASS`; `ACTUATOR_RELEASE=NO` |
 | Issue #154 / PR #155 | `ISSUE154_STATUS=CLOSED_COMPLETED`; `PR155=MERGED`; `PR155_SOURCE_HEAD=4d759b381343f0d9f466ccd76f8c7504ee7177fb`; `PR155_MERGE_COMMIT=54c80d26416343495b4d9a8c4518e6137dc747c1`; `PLAN_COMMIT=3824bf54f1aebc5e3453739fd083ab9c317ef868`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `HARDWARE=NOT_RUN`; `ACTUATOR_RELEASE=NO` |
 | Issue #159 / PR #160 | `ISSUE159=CLOSED_COMPLETED`; `PR160=MERGED @ dc017f4ee7c4f33be240fac23c1686606f340225`; `APPROVED_PLAN_SHA=b7747dc270a513f5dea45bb86f274a85ae2bf1cf`; `IMPLEMENTATION=BUILDER_COMPLETE`; `FULL_PROFILE_BUILDS=PASS`; `FULL_ESP_CLANG=PASS`; `HARDWARE_PARITY=PASS_WITH_OWNER_WAIVER`; `TARGET=v6.1@fff9895c82d744c7237be8847347bdd1b07c6643`; `ACTUATOR_RELEASE=NO` |
-| Issue #168 / PR #169 | `ISSUE168=CLOSED_COMPLETED`; `PR169=MERGED @ b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`; Application-owned Runtime-/UI-/Command-Projektion ist kanonisch auf `main`; `ACTUATOR_RELEASE=NO` |
-| Issue #31 / PR #156 | `ISSUE31=CLOSED_COMPLETED`; `PR156=MERGED @ b871375f494701bed1834013cfeb789856983e3a`; Renderer-/Display-/Touch- und Kalibrierungsstand sowie Host-Clang-21- und PyYAML-CI-Vertraege sind auf `main`; `ACTUATOR_RELEASE=NO` |
+| Issue #31 / PR #156 | `ISSUE31=CLOSED_COMPLETED`; `PR156=MERGED`; `PR156_SOURCE_HEAD=0884df9fbece018f4d487c72fd463774d62f228a`; `PR156_MERGE_COMMIT=b871375f494701bed1834013cfeb789856983e3a`; `PRODUCT_TOUCH_SMOKE=PASS`; `ACTUATOR_RELEASE=NO` |
 | Kein Issue / PR #161 – GitHub-CI ESP-IDF-Setup beschleunigen | `PR161=MERGED`; `PR161_SOURCE_HEAD=6fed57dc5e58c6e6aa3124f7b2a9ee3a1796c34e`; `PR161_MERGE_COMMIT=0f37004121355e1ad5efbf76e44b88004d0789f8`; `APPROVED_PLAN_SHA=e354b2026a5a73450a96be661a9e4b87f1a5e027`; `INDEPENDENT_REVIEW=PASS`; `OPEN_BLOCKERS=0`; `GITHUB_CI=PASS`; `CACHE_HIT_EVIDENCE=ZWEITER_LAUF_CA_5MIN_VS_CA_10MIN_BASELINE`; `ACTUATOR_RELEASE=NO` |
 
 ## Aktuelle Arbeit
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 0 | Issue #164 / PR #165 – R1-WLAN-Integration ueber nativen ESP-IDF-HTTP-Pfad | `PLAN_FIRST=YES`; `REVISED_PLAN_SHA=67fbc1786b42f8ca3dc0afe65cdb4343aed2d70e`; `PLAN_STATUS=APPROVED`; `IMPLEMENTATION_AUTHORIZATION=YES`; `IMPLEMENTATION=BUILDER_COMPLETE`; `PR165=MERGED @ 1f1755e5e706fb668472920545b5302fcef1df16`; `INDEPENDENT_REVIEW=PASS`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `PRODUCTIVE_IMPLEMENTATION=MERGED`; `ACTUATOR_RELEASE=NO`. | Softwareintegration gemergt; offen bleibt reale Hardware-/Client-Evidence |
-| 1 | Issue #27 – Web/API/Auth auf aktuellem `main` neu aufsetzen | `BASE_SHA=b871375f494701bed1834013cfeb789856983e3a`; `BRANCH=agent/issue-27-web-api-auth-main-restart`; `PR170=OPEN_DRAFT`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `PLAN_REVISION_SHA=aa695b43f5b68edefea23669678d877f5b830c17`; `OWNER_PLAN_APPROVAL=YES`; `SLICE=4B_READ_ONLY_API_AND_BOUNDED_JSON_CODEC`; `FINAL_LIBRARY_SELECTION=ESPRESSIF_CJSON_1_7_19_2`; `REGISTRY_COMMIT=1387cec28a9b40654be7892114bd7d26fcd3869c`; `UPSTREAM_COMMIT=b2890c8d76bbb64e710585ebc0a917196b9c67e7`; `CJSON_PRIVATE_CODEC_DEPENDENCY=YES`; `ARDUINOJSON_PRODUCT_DEPENDENCY=NO`; `PRODUCT_CODEC=IMPLEMENTED`; `NATIVE_TARGETED_REGRESSIONS=PASS`; `ESP32_BRINGUP_RELEASE=PASS`; `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`; `READ_ONLY_API=IMPLEMENTED_NOT_COMPOSED`; `PRODUCTIVE_MUTATION_ROUTE=NOT_REGISTERED`; `FOUR_SESSION_NO_PSRAM_RESOURCE_GATE=PENDING`; `HARDWARE=NOT_RUN`; `FLASH=NOT_RUN`; `PR171_INTEGRATED=NO`; `PR167_COMMITS_IMPORTED=NO`; `ACTUATOR_RELEASE=NO` | STOP fuer Independent Slice Review; Route-Composition und produktive Webmutation bleiben durch offene Composition-/Ressourcengates gesperrt |
+| 0 | Issue #164 – R1-WLAN und lokale Touch-Netzwerkseite | `ISSUE164=OPEN`; `PR171=MERGED @ cafacb211950bde8c85ec14550c2a60680d5c6f1`; `PR171_SOURCE_HEAD=722adcda702666fc19bdf004374b854510c9d107`; `OWNER_APPROVED_PLAN_SHA=3cedb448de6bbf4ce91ac029c55fad1b873bea2d`; `SOFTWARE_IMPLEMENTATION_GATE=PASS`; `OPEN_SOFTWARE_BLOCKERS=0`; `PRE_READY_LOCAL_GATES=PASS`; `GITHUB_CI=PASS`; `OWNER_MERGE_WAIVER=YES`; `PHYSICAL_ACCEPTANCE=DEFERRED`; `TOUCH_DISPLAY_QR_CLIENT_BROWSER_HOME_WIFI_TESTS=PENDING`; `ACTUATOR_RELEASE=NO` | Reale Owner-Acceptance vor Ort nachholen; Issue erst danach schliessen. |
+| 1 | Issue #168 / PR #169 – Application-owned Runtime-Evidence und UI-/Command-Projection | `ISSUE168=CLOSED_COMPLETED`; `PR169=MERGED`; `PR169_MERGE_COMMIT=b8d963e8d830b95b160dfb7e5cc9c2d033ad53e9`; `HISTORICAL_REFERENCE_ONLY=YES`; `ACTUATOR_RELEASE=NO`. | Keine aktuelle Arbeit in diesem abgeschlossenen Scope |
+| 2 | Issue #27 / PR #170 – Web/API/Auth | `ISSUE27=OPEN`; `CURRENT_PR27=170`; `PR170=OPEN_DRAFT`; `PRE_INTEGRATION_HEAD=757b1c1fac7d24d927b7f4049835f70efa2565ee`; `APPROVED_PLAN_SHA=46e0ea470b307a34867e24337b63a9d38166d771`; `JSON_R1_PLAN_REVISION_SHA=aa695b43f5b68edefea23669678d877f5b830c17`; `JSON_R1_DOMAIN_VALIDATION_BLOCKER=CLOSED`; `PR171_INTEGRATED=YES`; `MAIN_INTEGRATION_BASE=7e3948652453ae97eede07956af466ef6dddb602`; `INTEGRATION_REGRESSIONS=PENDING`; `FOUR_SESSION_NO_PSRAM_RESOURCE_GATE=PENDING`; `HARDWARE=NOT_RUN`; `FLASH=NOT_RUN`; `PR167=SUPERSEDED_REFERENCE_ONLY`; `ACTUATOR_RELEASE=NO` | Integrationsregressionen ausführen und anschliessend Independent Integration/Fix Review; danach erst nächsten #170-Slice beginnen. |
 | 1 | Issue #89 – WLAN-Onboarding und Provisionierung evaluieren | `ISSUE89_STATUS=EVALUATION_COMPLETE`; `PR158=MERGED @ c5aa9cabf5165408d4dcc7f40975dd7918f0394e`; `CANDIDATE_SELECTION=NATIVE_ESP_IDF_HTTP`; `OWNER_CANDIDATE_SELECTION=COMPLETED`; `R1_IMPLEMENTATION_ISSUE=164`; `PRODUCTIVE_INTEGRATION=MERGED_IN_ISSUE164_PR165`; `PRODUCTIVE_IMPLEMENTATION=NOT_APPLICABLE_SEE_164`; `ACTUATOR_RELEASE=NO`. Die Kandidatenevaluation ist abgeschlossen; die produktive Integration liegt gemergt in #164/PR #165, keine eigene laufende #89-Implementierung mehr. | Keine weitere #89-Implementation; Issue #89 ist abschlussreif |
 | 2 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
 | 3 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. Begrenzte nichtproduktive Serviceprüfungen sind zulässig; #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | `ELECTRICAL_LEVEL_MEASUREMENT=NOT_REQUIRED_WAIVED`, SSOT-/Kanal-/Verbraucherzuordnung, funktionales AUS/EIN, Boot-/Reset-Sicherheit, Lüfter/Nachlauf/Summer und produktionsnaher Adapter-/Treiberpfad als `FUNCTIONAL_HARDWARE_VERIFICATION`; kein separates Adapter-Safety-Gate und keine produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
@@ -47,6 +47,22 @@ nicht kopiert, sondern verlinkt.
 | 8 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
 | 9 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
+### Historischer Issue #31 Korrekturstand (vor PR #156 Merge)
+
+Der nachfolgende Korrekturstand ist historische Zwischen-Evidence. Für den aktuellen Status gilt Issue #31 `CLOSED_COMPLETED` nach PR #156 Merge auf `main`; die referenzierten Auditdateien bleiben unverändert.
+
+PR #156 remains `OPEN_DRAFT`; the approved plan supplement is
+`5a52f0147e9d277fc38f5b65489e7126301ebda6` and implementation is complete on
+`CURRENT_IMPLEMENTATION_HEAD=c39b420ac6c2fec1c989fe8691ebe88cf3e44731`.
+The existing reviewed model was composed deterministically into `tc0` sequence
+2; the idempotent hardware readback is PASS, the renderer-side X compensation
+is removed, and the owner-confirmed R1 panel transform remains
+`swap_xy:true,mirror_x:true,mirror_y:true`. Issue-29, product active-load and
+the actor-free navigation/status smoke are PASS. No new FIT capture was made;
+`tc1`, thresholds and actor policy remain unchanged. Evidence is recorded in
+`docs/audits/ISSUE_31_TOUCH_CALIBRATION_PROVISION_20260924_EVIDENCE.md`.
+`PROBE_FAIL_CLOSED_GT_60S=NOT_VERIFIED`; `ACTUATOR_RELEASE=NO`. Die revidierte Host-Clang-21-Planfassung `5c92d09aac0fe69fd2a88a8d0c16776dc157b1de` ist ownerfreigegeben und auf `CURRENT_IMPLEMENTATION_HEAD=32b8f6e7cd3fbfc1d108484c9705175d3cc73c56` umgesetzt. Self-Check und gezielte Regressionen sind PASS; der unabhängige Review steht noch aus. Die `prepareStop`-InvalidInput-Pruefung bleibt vor der Identity-Allocation; die ungueltige Anfrage verbraucht keine Command-ID. Der vollstaendige Pre-Ready bleibt bis zum Review-Gate `NOT_RUN`.
+
 ## Parallele Governance-Arbeit
 
 - Issue #145 / PR #146 – Builder-/Reviewer-, Convergence- und Compute-Governance abgeschlossen: `ISSUE145_STATUS=CLOSED_COMPLETED`; `PR146=MERGED`; `FIX_VERIFICATION=PASS`; `OPEN_BLOCKERS=0`; `PRODUCTION_CODE_CHANGED=NO`.
@@ -55,83 +71,71 @@ nicht kopiert, sondern verlinkt.
 
 ## Naechste fachliche Arbeit
 
-PR #165, PR #169 und PR #156 sind auf `main` gemergt. Issue #31 ist
-abgeschlossen; seine Produkt-, Touch-/Kalibrierungs-, Clang-21- und
-CI-Provisionierungsvertraege sind die kanonische Basis. Die historischen
-Hardware- und Auditnachweise bleiben in ihren Fachdateien, nicht als
-aktuelle offene #31-Arbeit in dieser Roadmap. Issue #164 bleibt fuer
-reale WLAN-/Client-Evidence offen.
+PR #165 ist auf `main` unter `1f1755e5e706fb668472920545b5302fcef1df16` gemergt. Owner hat Plan-SHA `bb3007e59a809c366a3a89b09df18ce11e969def` freigegeben; die Korrektur ist auf `e9f1f8bd81393182208421ea11fc72bfd45f7bcc` umgesetzt. Independent Fix Verification ist auf PR-HEAD `58d52eb1bcda81e3deeeb4f04224792630667faa` PASS. Der danach buildfrei geflashte Release-Artefakt trägt Firmwareversion/source SHA `e9f1f8b`; zwischen diesem Build und PR-HEAD wurde ausschließlich `docs/ROADMAP.md` geändert. `esp32_release` wurde mit `esptool v5.4.0` geflasht und alle drei Images wurden hashverifiziert; weder Full-Erase noch NVS-Erase oder Rebuild erfolgten. UART bestätigt Default-NVS-Initialisierung für PHY-Systemdaten, `phy_init`, Profil `esp32_release`, `HARDWARE_UNVERIFIED`, deaktivierte reale Aktoren, `application: ready`, 42 Heartbeats bis ca. 43 s und drei AP_ONLY-Boot-Ressourcenpunkte. Der Mitschnitt enthält zwei `POWERON_RESET`-Header; der erste Bootabschnitt ist unvollständig und liegt am Capture-/Reset-Übergang, der zweite erreicht die Anwendung. Nach `application: ready` wurde während des erfassten Laufs kein Panic, Watchdog, Brownout oder weiterer Reset beobachtet. Ressourcen-/Netzwerkmodusmessungen für einen Touch-Moduswechsel und HOME_WIFI wurden nicht erhoben. Touch-, Modusauswahl-, QR-, Client-, Browser- und Reconnect-Evidence bleibt `NOT_RUN`; Issue #164 und PR #171 bleiben offen/Draft. Der separate historische Issue-29-Probe-Panic in derselben Heap-API-Aufrufkette bleibt ungelöst, wurde nicht erneut ausgeführt und ist keine Diagnose dieser Hardwaremessung. `ACTUATOR_RELEASE=NO`.
 
-Issue #27 basiert auf `main@b871375f494701bed1834013cfeb789856983e3a`; die
-exakte Plan-SHA `46e0ea470b307a34867e24337b63a9d38166d771` ist freigegeben.
-Die vier Auth-Storage-/Recovery-Findings aus Slice 1 sowie die spaeter
-verifizierten ESP-IDF-HTTP-Metadaten-, `Sec-Fetch-Site`- und Session-Idle-
-Korrekturen bleiben geschlossen. Slice 3 umfasst Session-, CSRF-,
-Browser-Reload-/Zwei-Tab-, Retry-, Sequenzkonflikt- und `uint64`-Overflow-
-Regressionen; sein lokaler Idle-Fix ist unabhaengig verifiziert. Der
-Replay-Cache bleibt fest byte-begrenzt: 512 Bytes Fingerprint, 64 Bytes
-Content-Type, 256 Bytes Body, hoechstens acht Outcomes plus eine
-In-Flight-Anfrage je Session; der Vier-Session-Rohpayload ist auf 29.952 Bytes
-und `WebSessionManager` zur Compile-Zeit auf 32 KiB begrenzt.
+Nachfolgender Owner-Testlauf 2026-09-29 auf demselben Firmware-Quellstand (`e9f1f8bd81393182208421ea11fc72bfd45f7bcc`; danach nur `docs/ROADMAP.md` bis PR-HEAD geändert) ist separat dokumentiert in [Owner-Hardware-Testbericht](tasks/issue-164-owner-hardware-test-evidence-2026-09-29.md). Acht `SW_CPU_RESET` wurden erfasst: sechs bei dynamischen Allokationen im Netzwerkmodus-Commit, zwei beim Aufbau des Netzwerkseiten-Zeichenmodells. Die Allokationsfehler laufen in den C++-Exception-Stub und `abort()`; die konkrete Heap-Ursache bleibt offen. Das SoftAP-Passwort wird pro App-Start neu erzeugt und nicht persistent gehalten, daher passte der zuvor gescannte QR nach einem Reset nicht mehr. Der Owner-QR-Scan und die Profilanlage gelangen, der Client-Join schlug fehl. Die kurzen weißen Displayphasen passen zeitlich zu den Resets. Der Lauf wurde nach den Fehlern gestoppt; Browser-/Test-before-Commit-/geplanter Neustart-/Persistenz-/Reconnect-Prüfungen bleiben `NOT_RUN`. Fehler nicht behoben; kein Produktcode, Build oder Reflash; `ACTUATOR_RELEASE=NO`.
+Issue #31 / PR #156 ist `CLOSED_COMPLETED` und auf `main` unter `b871375f494701bed1834013cfeb789856983e3a` gemergt. Die nachfolgenden detaillierten Stage-, Hardware- und Smoke-Angaben in diesem Abschnitt sind historische Evidence, keine aktuelle Steuerung; Auditdateien bleiben unverändert.
+`LVGL_INTEGRATION=ESP_LVGL_PORT`; `LEAN_PRODUCT_PATH=REJECTED`.
+Der offizielle actor-free Stage-2-Smoke initialisierte Display und Touch und
+zeigte vier Farben; die Software-Rotation darf die physische Einbaulage
+ausgleichen. Die Stage-3-Zusatzmatrix lief in Polling und IRQ fuer Display-
+Wiederholung, kombinierten Draw/Touch/SPI-Stress, Fehlerreaktion, Ressourcen,
+Timing und Stabilitaet; die vorhandene statische Touch-Evidence wurde gemaess
+Reuse-before-Retest wiederverwendet.
+Der Harness-Resetpfad ist direkt gegen die Quelle verifiziert:
+`esp_lcd_panel_reset(panel)` steht unmittelbar vor
+`esp_lcd_panel_init(panel)`, während `reset_gpio_num=GPIO_NUM_NC` den
+unveränderten gemeinsamen physischen Resetpfad belässt.
 
-Slice 4A ist auf `9ad1b68071d57322e07163983e64d82f6f54be30` unabhaengig
-reviewt (`PASS / GO`). `WebRunMutationHandler` verarbeitet intern
-`POST /internal/ui/run` fail-closed ueber
-`prepareEnvelope -> confirmPrepared -> applyConfirmedPrepared`; die
-Anwendung bleibt alleiniger Apply-/Persistenz-Owner. Die Produktcomposition
-bleibt ausstehend.
+Aktuell produktrepräsentativ ist `RTS -> EN` getrennt: Die verzögerte
+EN-Power-On-Sequenz bestand in drei echten Läufen mit mindestens 10 Sekunden
+Auszeit und 1 Sekunde EN-Haltezeit; kein Lauf zeigte im UART-Fenster vom
+Power-On bis zur ersten Draw-Ausgabe einen Brownout-Marker, und alle drei
+Sichtprüfungen waren PASS. Damit gilt: drei echte Kaltstarts PASS,
+Displayfunktion PASS, Touchfunktion PASS und `STAGE_2=PASS`.
 
-Slice 4B implementiert softwareseitig die read-only-Endpunkte
-`GET /api/v1/status`, `/api/v1/temperatures` und `/api/v1/alerts`, ausschliesslich
-aus `FermentationApplication::uiSnapshot()` und ohne Registrierung in
-`main/app_main.cpp`. Der interne Run-Handler dekodiert den DTO genau einmal aus
-dem exakten `HttpRequest::body`, der anschliessend unveraendert den Replay-
-Fingerprint bildet. Body 480 B, JSON-Nesting 4, Programm-ID 48 B,
-Temperaturarray 3, Alertarray 16 und API-Antwort 3072 B sind fail-closed
-begrenzt; das Replay-Fingerprintbudget bleibt 512 B.
+Historisch bleibt separat dokumentiert: Bei verbundenem `RTS -> EN` wurde eine
+Brownout-/White-Display-Abweichung beobachtet; die elektrische Mechanik wurde
+nicht bestimmt. Diese Debugtopologie darf für Remote-Flash und Test verbunden
+bleiben, ist aber kein produktrepräsentativer Kaltstart. Es gab keine
+Hardware-/SSOT- oder Produktänderung.
 
-Die frueheren Kandidatenspikes bleiben unveraenderte Messungen gegen den damals
-strengeren Duplicate-/NUL-/UTF-8-Vertrag. Die neue JSON-R1-Planrevision trennt
-MUST von Hardening: Duplicate-Ablehnung, generische UTF-8-Ablehnung bei
-ASCII-only DTO-Text und generische Escape-/Control-Regeln ueber gueltige
-JSON-Syntax und reale Felder hinaus sind nicht automatisch MUST. Der aktuelle
-Vertrag behaelt harte 480-/3072-Byte-Bounds, vollstaendige gueltige JSON-
-Syntax, geschlossenes `v=1`-Schema, Pflichtfelder/Typen, finite und
-range-gepruefte Zahlen, exakte Revision-/Konfliktsemantik, kanonische
-Feldvalidierung, einen deterministischen einmaligen DTO-Decode, Secretfreiheit
-und die Bindung des Replay-Fingerprints an die exakten Requestbytes.
+`OWNER_NON_DECISION_STAGE_EXECUTION_AUTHORIZATION=YES` und
+`OWNER_STAGE_4_EXECUTION_AUTHORIZED=YES` gelten. `STAGE_3=PASS` basiert auf der
+akzeptierten Wiederverwendung der unveränderten Stage-2-Touch-Evidence und der
+bereits ausgeführten Stage-3-Zusatzmatrix. `STAGE_4=PASS` und
+`STAGE_4_SELECTION=OWNER_APPROVED`; die produktive Rendererentscheidung ist
+`OWNER_RENDERER_SELECTION=LVGL`.
+`PRODUCT_IMPLEMENTATION=IN_PROGRESS`, Kalibrierung bleibt ohne realen
+persistierten Datensatz fail-closed, und `ACTUATOR_RELEASE=NO` bleibt
+unverändert.
 
-Der abgeschlossene cJSON-Kandidatenabschluss prueft im isolierten Spike nach
-der 480-Byte-Grenze rohe NUL-Bytes und die Sequenz Backslash gefolgt von
-`u0000` ohne Tokenizing oder Lexer; Native-Probe und
-ESP-IDF-6.1-ESP32-Build bestehen. Gueltige ASCII-Intent-/
-Enum-Beispiele und eine Program-ID ueber den vorhandenen Projektvalidator
-bestehen ebenfalls. Beide Kandidaten sind nun `PASS_CANDIDATE` gegen denselben
-proportionalen R1-MUST-Vertrag. Es gibt keinen gemessenen Ressourcen-Sieger;
-Espressif-Herkunft ist ein legitimer ESP-IDF-Tie-Breaker, der vorhandene
-ArduinoJson-Codec nur ein kleiner Migrationskostenfaktor. Beide alten
-Spike-Berichte und vier Duplicate-Testvektoren bleiben unveraendert historische
-Evidence. Revision:
-`UINT64_WEB_REPRESENTATION=DECIMAL_STRING` fuer
-`UserConfigurationRevision` und `ProgramCatalogRevision` mit
-`VALID_RANGE=1..18446744073709551615`, `ABSENT_OPTIONAL_FIELD=NO_EXPECTED_REVISION`
-und `REVISION_ZERO=INVALID`; Dezimalstrings bleiben für exakte Browser-
-Darstellung über den gesamten `uint64_t`-Bereich. Danach autorisierte der Owner
-die finale cJSON-Auswahl und ihre schmale Codec-Umsetzung. Native Regressionen,
-beide ESP-IDF-Profile und Builder-Self-Check bestehen; Suitezahlen und
-Provenienz stehen im aktuellen Component-Evaluation-Supplement. Das ist kein
-integrierter Vier-Session-/no-PSRAM-Ressourcennachweis.
-
-Der Handler und die Read-only-Routen sind absichtlich weder registriert noch
-produktiv komponiert. Vor Composition bleiben ausserdem HTTP-/Application-
-Aufrufserialisierung und produktive Auth-/Session-Verdrahtung erforderlich.
-Keine Hardwaretests oder Flasharbeit. PR #170 bleibt Draft und Issue #27
-offen; PR #171 bleibt separat und PR #167 historische Referenz ohne
-Commituebernahme. `ACTUATOR_RELEASE=NO`; Builder stoppt fuer Independent Slice
-Review.
-
-Die spaetere Hardware-Reihenfolge #30 -> #32 -> #33 und die getrennten
-#28-Diagnose-/Chart-/Exportgates bleiben unberuehrt; `ACTUATOR_RELEASE=NO`.
+Der kumulative Integrationscheckpoint Issue #134 / PR #135 ist erfolgreich nach
+`main` promoted. PR #149 / Issue #148 hat `main` als normale
+Entwicklungsbasis wiederhergestellt; `integration/r1-development` wird nicht
+mehr als regulaere Entwicklungsbasis verwendet. Die aktuelle fachliche Arbeit
+ist nach dem Merge von PR #143 und PR #153 der reale, derzeit hardware-
+blockierte Renderer-/Display-/Touch-Scope von Issue #31. Issue #26 ist
+abgeschlossen und liefert zusammen mit dem abgeschlossenen manuellen
+Zeit-/Temperaturvertrag aus #152 die rendererunabhängigen Contracts. Fuer #31
+ist nach dem Full Review eine Planrevision erforderlich; die Umsetzung bleibt
+bis zur unabhaengigen Plan-Fix-Verifikation und der Freigabe der exakten neuen
+Plan-SHA angehalten. Die reale Hardware-Reihenfolge bleibt #31 -> #30 -> #32
+-> #33; fehlende Hardware- und Commissioning-Nachweise werden nicht
+vorweggenommen. Issue #154 / PR #155 ist als getrennte parallele
+Governance-Arbeit abgeschlossen und ändert keine Fachlogik.
+`ISSUE144_STATUS=CLOSED_COMPLETED`, `PR147=MERGED`,
+`PR147_MERGE_COMMIT=0b8b4cc1673f40296a510fdc0d79440c616ffeb8`,
+`ISSUE152_STATUS=CLOSED_COMPLETED`, `PR153=MERGED`,
+`PR153_SOURCE_HEAD=00b6fd9444f38108253961718f40adab2836c7ad`,
+`PR153_MERGE_COMMIT=5d838f43f3b32ef8d49d29ae77776d3e86266575`,
+`ISSUE26_STATUS=CLOSED_COMPLETED`, `PR143=MERGED`,
+`PR143_SOURCE_HEAD=8b65a6925de06c5207dd86c30db7239b8fa401c2`,
+`PR143_MERGE_COMMIT=253f6135b86d607d703d25bd3a2413b3d83fb54e`,
+`BLOCKED_BY_ISSUE144=NO`, `BLOCKED_BY_ISSUE152=NO`,
+`ISSUE152_CONTRACT_STATUS=MERGED`, `PLAN_APPROVED=YES`,
+`PRE_READY_LOCAL_GATES=PASS`, `HARDWARE=NOT_RUN` und `ACTUATOR_RELEASE=NO`
+gelten für den abgeschlossenen #26-/#143-Stand.
 
 PR #110 / Issue #24 und PR #113 / Issue #111 sind auf dem aktuellen `main`
 abgeschlossen. Der Release-1-KISS-/fail-closed-Vertrag ist im stateless

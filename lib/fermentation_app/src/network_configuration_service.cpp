@@ -4,7 +4,9 @@
 #include <utility>
 
 #include "configuration_limits.hpp"
+#include "configuration_storage_contract.hpp"
 #include "connectivity_credential_codec.hpp"
+#include "softap_credentials.hpp"
 
 namespace fermentation {
 
@@ -24,16 +26,83 @@ NetworkConfigurationResult NetworkConfigurationService::mapLifecycleResult(
 
 NetworkConfigurationResult
 NetworkConfigurationService::restoreActiveTransport() {
+    if (!activeCredential_.has_value() ||
+        !activeCredential_->softApPassword.has_value() ||
+        activeSoftApSsid_.empty() ||
+        lifecycle_
+                .setAccessPointCredentials(activeSoftApSsid_,
+                                           *activeCredential_->softApPassword)
+                .status != device_platform::NetworkOperationStatus::Applied) {
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
     std::optional<device_platform::NetworkCredentials> credentials;
-    if (activeCredential_.has_value()) {
+    if (activeCredential_->homeWifi.has_value()) {
         credentials = activeCredential_->homeWifi;
     }
     return mapLifecycleResult(lifecycle_.start(selectedMode_, credentials));
 }
 
+NetworkConfigurationResult NetworkConfigurationService::writeNewCredential(
+    ConnectivityCredential credential, device_platform::StorageEpoch epoch,
+    std::uint64_t recordSequence) {
+    const auto written =
+        credentialStore_.write(credential, epoch, recordSequence);
+    if (written.status == ConnectivityCredentialWriteStatus::Committed) {
+        activeCredential_ = std::move(credential);
+        return {NetworkConfigurationStatus::Applied};
+    }
+    return {written.status == ConnectivityCredentialWriteStatus::Indeterminate
+                ? NetworkConfigurationStatus::CommitIndeterminate
+                : NetworkConfigurationStatus::PersistenceFailure};
+}
+
+NetworkConfigurationResult NetworkConfigurationService::ensureCredential(
+    device_platform::StorageEpoch storageEpoch,
+    const std::string& canonicalDeviceName) {
+    const auto loaded = credentialStore_.load(storageEpoch);
+    if (loaded.status == ConnectivityCredentialLoadStatus::Available &&
+        loaded.record.has_value()) {
+        if (loaded.record->schemaVersion ==
+                configuration_storage_contract::
+                    kConnectivityCredentialSchemaVersionV2 &&
+            loaded.record->credential.softApPassword.has_value()) {
+            activeCredential_ = loaded.record->credential;
+            return {NetworkConfigurationStatus::Applied};
+        }
+        if (loaded.record->recordSequence ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            return {NetworkConfigurationStatus::PersistenceFailure};
+        }
+        const auto generated =
+            makeSoftApCredentials(randomSource_, canonicalDeviceName);
+        if (!generated.has_value()) {
+            return {NetworkConfigurationStatus::PersistenceFailure};
+        }
+        auto migrated = loaded.record->credential;
+        migrated.softApPassword = generated->password;
+        return writeNewCredential(std::move(migrated), storageEpoch,
+                                  loaded.record->recordSequence + 1U);
+    }
+    if (loaded.status != ConnectivityCredentialLoadStatus::NotFound &&
+        loaded.status != ConnectivityCredentialLoadStatus::OtherEpoch) {
+        return {loaded.status == ConnectivityCredentialLoadStatus::CapacityError
+                    ? NetworkConfigurationStatus::CredentialUnavailable
+                    : NetworkConfigurationStatus::PersistenceFailure};
+    }
+
+    const auto generated =
+        makeSoftApCredentials(randomSource_, canonicalDeviceName);
+    if (!generated.has_value()) {
+        return {NetworkConfigurationStatus::PersistenceFailure};
+    }
+    ConnectivityCredential fresh;
+    fresh.softApPassword = generated->password;
+    return writeNewCredential(std::move(fresh), storageEpoch, 1U);
+}
+
 NetworkConfigurationResult NetworkConfigurationService::start(
     device_platform::NetworkMode selectedMode,
-    device_platform::StorageEpoch storageEpoch,
+    device_platform::StorageEpoch storageEpoch, std::string canonicalDeviceName,
     bool explicitHomeWifiReconfiguration) {
     if (!device_platform::isValidNetworkMode(selectedMode) ||
         storageEpoch.value() == 0U) {
@@ -50,28 +119,29 @@ NetworkConfigurationResult NetworkConfigurationService::start(
     }
 
     activeCredential_.reset();
-    if (selectedMode == device_platform::NetworkMode::HOME_WIFI) {
-        const auto loaded = credentialStore_.load(storageEpoch);
-        if (loaded.status == ConnectivityCredentialLoadStatus::Available &&
-            loaded.record.has_value()) {
-            if (loaded.record->credential.homeWifi.has_value()) {
-                activeCredential_ = loaded.record->credential;
-            }
-        } else if (loaded.status !=
-                       ConnectivityCredentialLoadStatus::NotFound &&
-                   loaded.status !=
-                       ConnectivityCredentialLoadStatus::OtherEpoch) {
-            initialized_ = false;
-            return {loaded.status ==
-                            ConnectivityCredentialLoadStatus::CapacityError
-                        ? NetworkConfigurationStatus::CredentialUnavailable
-                        : NetworkConfigurationStatus::PersistenceFailure};
-        }
+    const auto credentialResult =
+        ensureCredential(storageEpoch, canonicalDeviceName);
+    if (credentialResult.status != NetworkConfigurationStatus::Applied) {
+        initialized_ = false;
+        static_cast<void>(lifecycle_.stop());
+        return credentialResult;
     }
+    const auto softApSsid = deriveSoftApSsid(canonicalDeviceName);
+    if (!softApSsid.has_value() || !activeCredential_.has_value() ||
+        !activeCredential_->softApPassword.has_value() ||
+        lifecycle_
+                .setAccessPointCredentials(*softApSsid,
+                                           *activeCredential_->softApPassword)
+                .status != device_platform::NetworkOperationStatus::Applied) {
+        initialized_ = false;
+        static_cast<void>(lifecycle_.stop());
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
+    activeSoftApSsid_ = *softApSsid;
 
-    const auto decision =
-        decideNetworkStartup(selectedMode, activeCredential_.has_value(),
-                             explicitHomeWifiReconfiguration);
+    const auto decision = decideNetworkStartup(
+        selectedMode, activeCredential_->homeWifi.has_value(),
+        explicitHomeWifiReconfiguration);
     if (decision.path == NetworkStartupPath::SelectionRequired) {
         initialized_ = false;
         return {NetworkConfigurationStatus::SelectionRequired};
@@ -85,6 +155,7 @@ NetworkConfigurationResult NetworkConfigurationService::start(
     const auto result = lifecycle_.start(selectedMode, credentials);
     if (result.status != device_platform::NetworkOperationStatus::Applied) {
         initialized_ = false;
+        static_cast<void>(lifecycle_.stop());
         return mapLifecycleResult(result);
     }
     initialized_ = true;
@@ -113,7 +184,11 @@ NetworkConfigurationResult NetworkConfigurationService::beginCandidate(
         return {initialized_ ? NetworkConfigurationStatus::SetupNotAvailable
                              : NetworkConfigurationStatus::NotInitialized};
     }
-    ConnectivityCredential candidate;
+    if (!activeCredential_.has_value() ||
+        !activeCredential_->softApPassword.has_value()) {
+        return {NetworkConfigurationStatus::PersistenceFailure};
+    }
+    ConnectivityCredential candidate = *activeCredential_;
     candidate.homeWifi = device_platform::NetworkCredentials{
         std::move(ssid), std::move(password)};
     if (validateConnectivityCredential(candidate) !=
@@ -160,6 +235,17 @@ NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
         credentialStore_.write(*candidate_, storageEpoch_, nextSequence);
     if (written.status == ConnectivityCredentialWriteStatus::Committed) {
         const auto committed = *candidate_;
+        if (lifecycle_
+                .setAccessPointCredentials(activeSoftApSsid_,
+                                           *committed.softApPassword)
+                .status != device_platform::NetworkOperationStatus::Applied) {
+            activeCredential_ = committed;
+            candidate_.reset();
+            initialized_ = false;
+            recoveryRequired_ = true;
+            static_cast<void>(lifecycle_.stop());
+            return {NetworkConfigurationStatus::RecoveryRequired};
+        }
         const auto applied = lifecycle_.start(
             device_platform::NetworkMode::HOME_WIFI, committed.homeWifi);
         if (applied.status !=
@@ -198,12 +284,14 @@ NetworkConfigurationResult NetworkConfigurationService::testCandidate() {
 }
 
 NetworkConfigurationResult
-NetworkConfigurationService::beginHomeWifiReconfiguration() {
+NetworkConfigurationService::beginHomeWifiReconfiguration(
+    std::string canonicalDeviceName) {
     if (selectedMode_ != device_platform::NetworkMode::HOME_WIFI ||
         storageEpoch_.value() == 0U) {
         return {NetworkConfigurationStatus::SetupNotAvailable};
     }
-    return start(device_platform::NetworkMode::HOME_WIFI, storageEpoch_, true);
+    return start(device_platform::NetworkMode::HOME_WIFI, storageEpoch_,
+                 std::move(canonicalDeviceName), true);
 }
 
 void NetworkConfigurationService::discardCandidate() noexcept {

@@ -15,8 +15,10 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store.csv"
 
-# Measured Release-1 main-task baseline; keep this shared across profiles.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+# Shared main-task allocation across profiles. Hardware evidence for Issue
+# #164 found that 16 KiB cannot cover the synchronous local network-mode
+# configuration preview/commit path through NVS.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
 
 # Keep the parser bound aligned with the closed Issue #27 DTO depth.
 CONFIG_CJSON_NESTING_LIMIT=4
@@ -26,3 +28,7 @@ CONFIG_CJSON_NESTING_LIMIT=4
 # Issue #31 raw-touch contract: conversion/calibration remains above the
 # controller adapter boundary.
 CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n
+
+# Issue #164 SoftAP join QR uses the QR widget already included in the pinned
+# LVGL component; no separate QR dependency or encoder is added.
+CONFIG_LV_USE_QRCODE=y

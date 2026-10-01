@@ -23,6 +23,9 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
         hostname_ = hostname;
         return {device_platform::NetworkOperationStatus::Applied};
     }
+    [[nodiscard]] device_platform::NetworkOperationResult
+    setAccessPointCredentials(const std::string& ssid,
+                              const std::string& password) override;
     [[nodiscard]] device_platform::NetworkStatus status() const override {
         return status_;
     }
@@ -54,6 +57,12 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] const std::string& hostname() const noexcept {
         return hostname_;
     }
+    [[nodiscard]] const std::string& accessPointSsid() const noexcept {
+        return accessPointSsid_;
+    }
+    [[nodiscard]] const std::string& accessPointPassword() const noexcept {
+        return accessPointPassword_;
+    }
     [[nodiscard]] std::size_t startCallCount() const noexcept {
         return startHistory_.size();
     }
@@ -78,6 +87,8 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     std::optional<device_platform::NetworkCredentials> lastStartedCredentials_;
     std::optional<device_platform::NetworkCredentials> lastTestedCandidate_;
     std::string hostname_;
+    std::string accessPointSsid_{"mock-setup-ap"};
+    std::string accessPointPassword_{"mock-ap-password"};
     std::vector<std::optional<device_platform::NetworkCredentials>>
         startHistory_;
     std::size_t stopCallCount_{0U};

@@ -38,6 +38,27 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         }
         return result;
     }
+    if (press.applyNetworkMode.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::applyNetworkMode(
+            application, *press.applyNetworkMode);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
+    if (press.beginHomeWifiReconfiguration.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult =
+            FermentationUiCommandBridge::beginHomeWifiReconfiguration(
+                application, *press.beginHomeWifiReconfiguration);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.resumeFallback.has_value()) {
         WorkspacePressDispatchResult dispatched;
         dispatched.commandResult = FermentationUiCommandBridge::resumeFallback(
@@ -84,19 +105,26 @@ WorkspaceTouchTickResult processWorkspaceTouch(
         return result;
     }
     // The screen is built once here and reused for both targetAt() and
-    // routePress() (when a fresh press fires), so the two never disagree
-    // about the bottom-slot layout the user was actually looking at. This
-    // is deliberately the same set of inputs render() itself uses to
-    // rebuild its own screen for drawing, with pressedTarget left unset:
-    // this screen represents the state as displayed *before* this press
-    // is routed.
-    const auto screen =
-        makeRepresentativeScreen(snapshot, workspace, textPacks, locale,
-                                 std::nullopt, catalog, networkStatus, clock);
-    result.pressedTarget = targetAt(screen, touchX, touchY);
-    if (freshPressEdge && result.pressedTarget.has_value()) {
-        const auto press =
-            routePress(workspace, snapshot, screen, touchX, touchY, catalog);
+    // routePress() (when a fresh press fires), so they use the same header and
+    // bottom-slot geometry the user was actually looking at. This is
+    // deliberately the same set of inputs render() itself uses to rebuild its
+    // own screen for drawing, with pressedTarget left unset: this screen
+    // represents the state as displayed *before* this press is routed.
+    // Destroy its vector/string storage before a typed press can mutate owners.
+    FermentationUiWorkspacePress press;
+    bool shouldDispatch = false;
+    {
+        const auto screen = makeRepresentativeScreen(
+            snapshot, workspace, textPacks, locale, std::nullopt, catalog,
+            networkStatus, clock);
+        result.pressedTarget = targetAt(screen, touchX, touchY);
+        if (freshPressEdge && result.pressedTarget.has_value()) {
+            press = routePress(workspace, snapshot, screen, touchX, touchY,
+                               catalog);
+            shouldDispatch = true;
+        }
+    }
+    if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
     }

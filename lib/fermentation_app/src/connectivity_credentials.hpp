@@ -15,10 +15,14 @@ namespace fermentation {
 // only. An empty record is valid for AP_ONLY and for HOME_WIFI before setup.
 struct ConnectivityCredential {
     std::optional<device_platform::NetworkCredentials> homeWifi;
+    // V1 records do not carry this value during migration. Every valid V2
+    // record does carry exactly one valid SoftAP password.
+    std::optional<std::string> softApPassword;
 
     friend bool operator==(const ConnectivityCredential& left,
                            const ConnectivityCredential& right) {
-        return left.homeWifi == right.homeWifi;
+        return left.homeWifi == right.homeWifi &&
+               left.softApPassword == right.softApPassword;
     }
     friend bool operator!=(const ConnectivityCredential& left,
                            const ConnectivityCredential& right) {
@@ -30,10 +34,15 @@ enum class ConnectivityCredentialValidationStatus : std::uint8_t {
     Success,
     InvalidSsid,
     InvalidPassword,
+    InvalidSoftApPassword,
+    MissingSoftApPassword,
 };
 
 [[nodiscard]] ConnectivityCredentialValidationStatus
 validateConnectivityCredential(const ConnectivityCredential& credential);
+
+[[nodiscard]] ConnectivityCredentialValidationStatus
+validateConnectivityCredentialV2(const ConnectivityCredential& credential);
 
 enum class ConnectivityCredentialLoadStatus : std::uint8_t {
     Available,
@@ -48,6 +57,7 @@ struct ConnectivityCredentialRecord {
     ConnectivityCredential credential;
     device_platform::StorageEpoch storageEpoch;
     std::uint64_t recordSequence{0U};
+    std::uint32_t schemaVersion{0U};
 };
 
 struct ConnectivityCredentialLoadResult {
