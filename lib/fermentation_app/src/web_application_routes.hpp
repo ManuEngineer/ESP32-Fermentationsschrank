@@ -32,9 +32,9 @@ class WebRunMutationHandler final {
    private:
     friend struct WebRunMutationHandlerTestAccess;
 
-    [[nodiscard]] static WebMutationOutcome projectCommandResult(
+    [[nodiscard]] static ReplayOutcomeCode projectCommandResult(
         const FermentationUiCommandResult& result);
-    [[nodiscard]] static WebMutationOutcome projectRequestStatus(
+    [[nodiscard]] static ReplayOutcomeCode projectRequestStatus(
         FermentationApplicationRequestStatus status);
 
     FermentationApplication& application_;

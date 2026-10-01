@@ -119,8 +119,6 @@ struct ServiceLeaseView {
 [[nodiscard]] bool mutationDigest(const device_platform::HttpRequest& request,
                                   IReplayDigest& digest, ReplayDigest& out);
 [[nodiscard]] WebMutationOutcome replayOutcome(ReplayOutcomeCode code);
-[[nodiscard]] std::optional<ReplayOutcomeCode> replayOutcomeCode(
-    const WebMutationOutcome& outcome) noexcept;
 
 class WebSessionManager final {
    public:
@@ -170,7 +168,7 @@ class WebSessionManager final {
                                         std::uint64_t nowMs,
                                         std::uint64_t sequence,
                                         const ReplayDigest& digest,
-                                        const WebMutationOutcome& outcome);
+                                        ReplayOutcomeCode outcome);
 
    private:
     struct CompletedMutation {
@@ -207,11 +205,11 @@ class WebSessionManager final {
                                       const std::array<std::uint8_t, 16U>& id);
     static void clearMutation(CompletedMutation& mutation) noexcept;
     static void clearMutationState(Session& session) noexcept;
+    static void retire(Session& session) noexcept;
+    [[nodiscard]] static bool expired(const Session& session,
+                                      std::uint64_t nowMs) noexcept;
     [[nodiscard]] static bool digestMatches(
         const CompletedMutation& mutation, const ReplayDigest& digest) noexcept;
-    [[nodiscard]] static bool storeOutcome(
-        const WebMutationOutcome& outcome,
-        CompletedMutation& mutation) noexcept;
     [[nodiscard]] static WebMutationOutcome restoreOutcome(
         const CompletedMutation& mutation);
 

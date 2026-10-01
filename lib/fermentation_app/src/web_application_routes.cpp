@@ -27,15 +27,11 @@ WebMutationOutcome outcome(std::uint16_t status, const char* body) {
     return {status, kJsonContentType, body};
 }
 
-constexpr auto kApplied = 200U;
 constexpr auto kConflict = 409U;
-constexpr auto kRejected = 422U;
 constexpr auto kTooLarge = 413U;
-constexpr auto kWriteFailed = 500U;
-constexpr auto kUnavailable = 503U;
 
 WebMutationOutcome unavailable() {
-    return outcome(kUnavailable, "{\"outcome\":\"unavailable\"}");
+    return replayOutcome(ReplayOutcomeCode::Unavailable);
 }
 
 bool decisionOnlyRejected(const FermentationUiCommandResult& result) {
@@ -267,25 +263,25 @@ WebMutationOutcome reservationError(MutationReservationStatus status) {
 
 }  // namespace
 
-WebMutationOutcome WebRunMutationHandler::projectRequestStatus(
+ReplayOutcomeCode WebRunMutationHandler::projectRequestStatus(
     FermentationApplicationRequestStatus status) {
     switch (status) {
         case FermentationApplicationRequestStatus::Prepared:
-            return unavailable();
+            return ReplayOutcomeCode::Unavailable;
         case FermentationApplicationRequestStatus::StaleProgramCatalog:
-            return outcome(kConflict, "{\"outcome\":\"stale\"}");
+            return ReplayOutcomeCode::Stale;
         case FermentationApplicationRequestStatus::ProgramUnavailable:
         case FermentationApplicationRequestStatus::InvalidInput:
-            return outcome(kRejected, "{\"outcome\":\"rejected\"}");
+            return ReplayOutcomeCode::Rejected;
         case FermentationApplicationRequestStatus::NotInitialized:
         case FermentationApplicationRequestStatus::Unavailable:
         case FermentationApplicationRequestStatus::Overflow:
-            return unavailable();
+            return ReplayOutcomeCode::Unavailable;
     }
-    return unavailable();
+    return ReplayOutcomeCode::Unavailable;
 }
 
-WebMutationOutcome WebRunMutationHandler::projectCommandResult(
+ReplayOutcomeCode WebRunMutationHandler::projectCommandResult(
     const FermentationUiCommandResult& result) {
     using Category = device_platform::DeviceUiCommandOutcomeCategory;
 
@@ -297,31 +293,30 @@ WebMutationOutcome WebRunMutationHandler::projectCommandResult(
             case RunPersistenceResultStatus::AlreadyProcessed:
             case RunPersistenceResultStatus::AlreadyPersisted:
                 return owningWithCategory(result, Category::Accepted)
-                           ? outcome(kApplied, "{\"outcome\":\"applied\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Applied
+                           : ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::Busy:
                 return owningWithCategory(result, Category::Busy)
-                           ? outcome(kConflict, "{\"outcome\":\"busy\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Busy
+                           : ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::StaleDecision:
                 return owningWithCategory(result, Category::Rejected)
-                           ? outcome(kConflict, "{\"outcome\":\"stale\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Stale
+                           : ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::NotInitialized:
             case RunPersistenceResultStatus::RecoveryPending:
             case RunPersistenceResultStatus::PersistenceIndeterminate:
             case RunPersistenceResultStatus::PersistenceCommittedApplyFailed:
             case RunPersistenceResultStatus::Blocked:
-                return unavailable();
+                return ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::WriteFailed:
                 return owningWithCategory(result, Category::Rejected)
-                           ? outcome(kWriteFailed,
-                                     "{\"outcome\":\"write-failed\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::WriteFailed
+                           : ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::CapacityExceeded:
                 return owningWithCategory(result, Category::Rejected)
-                           ? outcome(kTooLarge, "{\"outcome\":\"too-large\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::TooLarge
+                           : ReplayOutcomeCode::Unavailable;
             case RunPersistenceResultStatus::NotEligible:
             case RunPersistenceResultStatus::NotAllowedInState:
             case RunPersistenceResultStatus::InvalidDecision:
@@ -331,10 +326,10 @@ WebMutationOutcome WebRunMutationHandler::projectCommandResult(
             case RunPersistenceResultStatus::NotDue:
             case RunPersistenceResultStatus::NoActiveRun:
                 return owningWithCategory(result, Category::Rejected)
-                           ? outcome(kRejected, "{\"outcome\":\"rejected\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Rejected
+                           : ReplayOutcomeCode::Unavailable;
         }
-        return unavailable();
+        return ReplayOutcomeCode::Unavailable;
     }
 
     if (const auto* status = std::get_if<CommandStatus>(&result.detail)) {
@@ -343,57 +338,56 @@ WebMutationOutcome WebRunMutationHandler::projectCommandResult(
             case CommandStatus::NoChange:
             case CommandStatus::AlreadyProcessed:
                 return owningWithCategory(result, Category::Accepted)
-                           ? outcome(kApplied, "{\"outcome\":\"applied\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Applied
+                           : ReplayOutcomeCode::Unavailable;
             case CommandStatus::Proposed:
                 // An accepted proposal is DecisionOnly, never a web success.
-                return unavailable();
+                return ReplayOutcomeCode::Unavailable;
             case CommandStatus::NotConfirmed:
                 return result.phase ==
                                    FermentationUiCommandPhase::DecisionOnly &&
                                result.category == Category::ConfirmationRequired
-                           ? outcome(kConflict,
-                                     "{\"outcome\":\"confirmation-required\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::ConfirmationRequired
+                           : ReplayOutcomeCode::Unavailable;
             case CommandStatus::StaleState:
                 return decisionOnlyRejected(result)
-                           ? outcome(kConflict, "{\"outcome\":\"stale\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Stale
+                           : ReplayOutcomeCode::Unavailable;
             case CommandStatus::ContextMissing:
-                return unavailable();
+                return ReplayOutcomeCode::Unavailable;
             case CommandStatus::CapacityReached:
                 return decisionOnlyRejected(result)
-                           ? outcome(kTooLarge, "{\"outcome\":\"too-large\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::TooLarge
+                           : ReplayOutcomeCode::Unavailable;
             case CommandStatus::NotAllowedInState:
             case CommandStatus::InvalidInput:
             case CommandStatus::SafetyRejected:
                 return decisionOnlyRejected(result)
-                           ? outcome(kRejected, "{\"outcome\":\"rejected\"}")
-                           : unavailable();
+                           ? ReplayOutcomeCode::Rejected
+                           : ReplayOutcomeCode::Unavailable;
         }
-        return unavailable();
+        return ReplayOutcomeCode::Unavailable;
     }
 
     if (const auto* status = std::get_if<DecisionStatus>(&result.detail)) {
         if (result.phase != FermentationUiCommandPhase::DecisionOnly ||
             result.category != Category::Rejected) {
-            return unavailable();
+            return ReplayOutcomeCode::Unavailable;
         }
         switch (*status) {
             case DecisionStatus::Proposed:
-                return unavailable();
+                return ReplayOutcomeCode::Unavailable;
             case DecisionStatus::NoTransition:
             case DecisionStatus::Rejected:
             case DecisionStatus::InvalidInput:
             case DecisionStatus::TimeWentBackwards:
-                return outcome(kRejected, "{\"outcome\":\"rejected\"}");
+                return ReplayOutcomeCode::Rejected;
         }
     }
 
     // Configuration, network and unknown details are not valid outcomes for
     // this run-only route. A category alone can never authorize success.
-    return unavailable();
+    return ReplayOutcomeCode::Unavailable;
 }
 
 bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
@@ -508,7 +502,7 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
     context.monotonicMillis = nowMs;
     context.expected = dto.expected;
 
-    WebMutationOutcome projected;
+    ReplayOutcomeCode projected = ReplayOutcomeCode::Unavailable;
     const auto prepared = application_.prepareEnvelope(context, dto.intent);
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
@@ -531,7 +525,7 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         setResponse(response, unavailable());
         return true;
     }
-    setResponse(response, projected);
+    setResponse(response, replayOutcome(projected));
     return true;
 }
 

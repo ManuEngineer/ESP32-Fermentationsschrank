@@ -78,28 +78,6 @@ WebMutationOutcome replayOutcome(ReplayOutcomeCode code) {
     return {503U, kJsonContentType, kUnavailableBody};
 }
 
-std::optional<ReplayOutcomeCode> replayOutcomeCode(
-    const WebMutationOutcome& outcome) noexcept {
-    if (outcome.contentType != kJsonContentType) return std::nullopt;
-    if (outcome.statusCode == 200U && outcome.body == kAppliedBody)
-        return ReplayOutcomeCode::Applied;
-    if (outcome.statusCode == 503U && outcome.body == kUnavailableBody)
-        return ReplayOutcomeCode::Unavailable;
-    if (outcome.statusCode == 409U && outcome.body == kStaleBody)
-        return ReplayOutcomeCode::Stale;
-    if (outcome.statusCode == 422U && outcome.body == kRejectedBody)
-        return ReplayOutcomeCode::Rejected;
-    if (outcome.statusCode == 409U && outcome.body == kBusyBody)
-        return ReplayOutcomeCode::Busy;
-    if (outcome.statusCode == 409U && outcome.body == kConfirmationRequiredBody)
-        return ReplayOutcomeCode::ConfirmationRequired;
-    if (outcome.statusCode == 500U && outcome.body == kWriteFailedBody)
-        return ReplayOutcomeCode::WriteFailed;
-    if (outcome.statusCode == 413U && outcome.body == kTooLargeBody)
-        return ReplayOutcomeCode::TooLarge;
-    return std::nullopt;
-}
-
 static_assert(sizeof(WebSessionManager) <= kMaximumWebSessionManagerBytes,
               "Web session manager exceeds its explicit RAM budget");
 
@@ -183,6 +161,22 @@ void WebSessionManager::clearMutationState(Session& session) noexcept {
     session.replayFloor = 0U;
 }
 
+void WebSessionManager::retire(Session& session) noexcept {
+    session.active = false;
+    for (auto& completed : session.completed) clearMutation(completed);
+    session.completedCount = 0U;
+    session.highWater = 0U;
+    session.replayFloor = 0U;
+}
+
+bool WebSessionManager::expired(const Session& session,
+                                std::uint64_t nowMs) noexcept {
+    return nowMs < session.createdAtMs ||
+           nowMs - session.createdAtMs >= kWebSessionAbsoluteLimitMs ||
+           nowMs < session.lastActivityMs ||
+           nowMs - session.lastActivityMs >= kWebSessionIdleLimitMs;
+}
+
 bool WebSessionManager::digestMatches(const CompletedMutation& mutation,
                                       const ReplayDigest& digest) noexcept {
     unsigned char difference = 0U;
@@ -190,14 +184,6 @@ bool WebSessionManager::digestMatches(const CompletedMutation& mutation,
         difference |=
             static_cast<unsigned char>(mutation.digest[index] ^ digest[index]);
     return difference == 0U;
-}
-
-bool WebSessionManager::storeOutcome(const WebMutationOutcome& outcome,
-                                     CompletedMutation& mutation) noexcept {
-    const auto code = replayOutcomeCode(outcome);
-    if (!code.has_value()) return false;
-    mutation.outcome = *code;
-    return true;
 }
 
 WebMutationOutcome WebSessionManager::restoreOutcome(
@@ -217,12 +203,8 @@ WebSessionManager::Session* WebSessionManager::get(WebSessionHandle handle,
     auto& session = sessions_[handle.slot];
     if (!session.active || session.generation != handle.generation)
         return nullptr;
-    if (nowMs < session.createdAtMs ||
-        nowMs - session.createdAtMs >= kWebSessionAbsoluteLimitMs ||
-        nowMs < session.lastActivityMs ||
-        nowMs - session.lastActivityMs >= kWebSessionIdleLimitMs) {
-        session.active = false;
-        clearMutationState(session);
+    if (expired(session, nowMs)) {
+        retire(session);
         return nullptr;
     }
     return &session;
@@ -239,19 +221,14 @@ WebSessionResult WebSessionManager::create(std::uint64_t nowMs) {
     // abandoned sessions before capacity is evaluated, but never evict a
     // live session merely to make room for a new login.
     for (auto& session : sessions_) {
-        if (session.active &&
-            (nowMs < session.createdAtMs ||
-             nowMs - session.createdAtMs >= kWebSessionAbsoluteLimitMs ||
-             nowMs < session.lastActivityMs ||
-             nowMs - session.lastActivityMs >= kWebSessionIdleLimitMs)) {
-            session.active = false;
-            clearMutationState(session);
-        }
+        if (session.active && expired(session, nowMs)) retire(session);
     }
     Session* target = nullptr;
     std::size_t slot = 0U;
     for (; slot < sessions_.size(); ++slot) {
-        if (!sessions_[slot].active) {
+        // A retired slot with a reserved mutation stays occupied until that
+        // mutation is terminalized.
+        if (!sessions_[slot].active && !sessions_[slot].inFlight.has_value()) {
             target = &sessions_[slot];
             break;
         }
@@ -333,17 +310,13 @@ void WebSessionManager::revoke(WebSessionHandle handle) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (handle.slot < sessions_.size() &&
         sessions_[handle.slot].generation == handle.generation) {
-        sessions_[handle.slot].active = false;
-        clearMutationState(sessions_[handle.slot]);
+        retire(sessions_[handle.slot]);
     }
 }
 
 void WebSessionManager::revokeAll() {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& session : sessions_) {
-        session.active = false;
-        clearMutationState(session);
-    }
+    for (auto& session : sessions_) retire(session);
 }
 
 bool WebSessionManager::grantServiceLease(WebSessionHandle handle,
@@ -449,26 +422,36 @@ bool WebSessionManager::completeMutation(WebSessionHandle handle,
                                          std::uint64_t nowMs,
                                          std::uint64_t sequence,
                                          const ReplayDigest& digest,
-                                         const WebMutationOutcome& outcome) {
+                                         ReplayOutcomeCode outcome) {
     std::lock_guard<std::mutex> lock(mutex_);
-    auto* session = get(handle, nowMs);
-    if (session == nullptr || !session->inFlight.has_value() ||
-        session->inFlight->sequence != sequence ||
-        !digestMatches(*session->inFlight, digest) ||
-        !storeOutcome(outcome, *session->inFlight)) {
+    if (handle.slot >= sessions_.size()) return false;
+    auto& session = sessions_[handle.slot];
+    // The reservation, not the session lifecycle, owns terminalization: an
+    // already applied mutation must stay completable after expiry or revoke.
+    if (session.generation != handle.generation ||
+        !session.inFlight.has_value() ||
+        session.inFlight->sequence != sequence ||
+        !digestMatches(*session.inFlight, digest)) {
         return false;
     }
-    session->highWater = sequence;
-    if (session->completedCount < kMaximumCompletedMutationOutcomes) {
-        session->completed[session->completedCount++] = *session->inFlight;
-    } else {
-        session->replayFloor = session->completed.front().sequence;
-        std::move(session->completed.begin() + 1, session->completed.end(),
-                  session->completed.begin());
-        session->completed.back() = *session->inFlight;
+    if (session.active && expired(session, nowMs)) retire(session);
+    if (!session.active) {
+        clearMutation(*session.inFlight);
+        session.inFlight.reset();
+        return true;
     }
-    clearMutation(*session->inFlight);
-    session->inFlight.reset();
+    session.inFlight->outcome = outcome;
+    session.highWater = sequence;
+    if (session.completedCount < kMaximumCompletedMutationOutcomes) {
+        session.completed[session.completedCount++] = *session.inFlight;
+    } else {
+        session.replayFloor = session.completed.front().sequence;
+        std::move(session.completed.begin() + 1, session.completed.end(),
+                  session.completed.begin());
+        session.completed.back() = *session.inFlight;
+    }
+    clearMutation(*session.inFlight);
+    session.inFlight.reset();
     return true;
 }
 

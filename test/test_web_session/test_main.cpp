@@ -96,8 +96,7 @@ void test_more_than_eight_mutations_do_not_exhaust_session() {
         TEST_ASSERT_TRUE(sessions.completeMutation(
             *created.handle, sequence, sequence,
             testDigest("fingerprint-" + std::to_string(sequence)),
-            fermentation::replayOutcome(
-                fermentation::ReplayOutcomeCode::Applied)));
+            fermentation::ReplayOutcomeCode::Applied));
     }
     const auto view = sessions.mutationSequence(*created.handle, 1U);
     TEST_ASSERT_EQUAL_INT(
@@ -116,9 +115,9 @@ void test_replay_and_reuse_are_not_second_mutations() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(first.status));
-    TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 1U, 1U, testDigest("same"),
-        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
+    TEST_ASSERT_TRUE(
+        sessions.completeMutation(*created.handle, 1U, 1U, testDigest("same"),
+                                  fermentation::ReplayOutcomeCode::Applied));
     const auto replay =
         sessions.reserveMutation(*created.handle, 2U, 1U, testDigest("same"));
     TEST_ASSERT_EQUAL_INT(
@@ -187,10 +186,11 @@ void test_two_tabs_share_csrf_sequence_and_replay_outcome() {
             fermentation::MutationReservationStatus::SequenceConflict),
         static_cast<int>(competingSequence.status));
 
-    const fermentation::WebMutationOutcome outcome =
+    const auto outcome =
         fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied);
-    TEST_ASSERT_TRUE(sessions.completeMutation(*firstTab.handle, 2U, 1U,
-                                               fingerprint, outcome));
+    TEST_ASSERT_TRUE(
+        sessions.completeMutation(*firstTab.handle, 2U, 1U, fingerprint,
+                                  fermentation::ReplayOutcomeCode::Applied));
     const auto retry =
         sessions.reserveMutation(*secondTab.handle, 3U, 1U, fingerprint);
     TEST_ASSERT_EQUAL_INT(
@@ -218,7 +218,7 @@ void test_browser_reload_preserves_live_session_csrf_and_replay_state() {
         static_cast<int>(outcome.status));
     TEST_ASSERT_TRUE(sessions.completeMutation(
         *created.handle, 1U, 1U, testDigest("reload-stable-request"),
-        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
+        fermentation::ReplayOutcomeCode::Applied));
 
     const auto reloaded = sessions.find("FSSESSION=" + created.cookieValue, 2U);
     TEST_ASSERT_EQUAL_INT(
@@ -257,9 +257,9 @@ void test_inflight_and_old_retired_values_fail_closed() {
         static_cast<int>(
             fermentation::MutationReservationStatus::SequenceConflict),
         static_cast<int>(loser.status));
-    TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 0U, 1U, testDigest("a"),
-        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
+    TEST_ASSERT_TRUE(
+        sessions.completeMutation(*created.handle, 0U, 1U, testDigest("a"),
+                                  fermentation::ReplayOutcomeCode::Applied));
     for (std::uint64_t sequence = 2U; sequence <= 10U; ++sequence) {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::MutationReservationStatus::Reserved),
@@ -271,8 +271,7 @@ void test_inflight_and_old_retired_values_fail_closed() {
         TEST_ASSERT_TRUE(sessions.completeMutation(
             *created.handle, 0U, sequence,
             testDigest("x" + std::to_string(sequence)),
-            fermentation::replayOutcome(
-                fermentation::ReplayOutcomeCode::Applied)));
+            fermentation::ReplayOutcomeCode::Applied));
     }
     const auto expired =
         sessions.reserveMutation(*created.handle, 0U, 1U, testDigest("same"));
@@ -503,16 +502,9 @@ void test_replay_cache_uses_compact_outcome_codes_and_full_window() {
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(reserved.status));
 
-    const fermentation::WebMutationOutcome unsupported{200U, "application/json",
-                                                       "ok"};
-    TEST_ASSERT_FALSE(sessions.completeMutation(*created.handle, 1U, 1U, digest,
-                                                unsupported));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(fermentation::MutationSequenceState::InFlight),
-        static_cast<int>(sessions.mutationSequence(*created.handle, 1U).state));
-    TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 1U, 1U, digest,
-        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
+    TEST_ASSERT_TRUE(
+        sessions.completeMutation(*created.handle, 1U, 1U, digest,
+                                  fermentation::ReplayOutcomeCode::Applied));
 
     for (std::uint8_t value = 1U; value <= 8U; ++value) {
         const auto code = static_cast<fermentation::ReplayOutcomeCode>(value);
@@ -524,8 +516,7 @@ void test_replay_cache_uses_compact_outcome_codes_and_full_window() {
             static_cast<int>(fermentation::MutationReservationStatus::Reserved),
             static_cast<int>(next.status));
         TEST_ASSERT_TRUE(sessions.completeMutation(
-            *created.handle, 1U + value, 1U + value, mutationDigest,
-            fermentation::replayOutcome(code)));
+            *created.handle, 1U + value, 1U + value, mutationDigest, code));
     }
 
     const auto expired =
@@ -588,11 +579,10 @@ void test_sequence_gap_and_uint64_overflow_fail_closed() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(boundaryReservation.status));
-    const fermentation::WebMutationOutcome outcome =
-        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied);
     TEST_ASSERT_TRUE(sessions.completeMutation(
         *created.handle, 1U, std::numeric_limits<std::uint64_t>::max(),
-        testDigest("overflow-boundary"), outcome));
+        testDigest("overflow-boundary"),
+        fermentation::ReplayOutcomeCode::Applied));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationSequenceState::Exhausted),
         static_cast<int>(sessions.mutationSequence(*created.handle, 1U).state));
@@ -621,6 +611,147 @@ void test_sequence_gap_and_uint64_overflow_fail_closed() {
         static_cast<int>(exhausted.status));
 }
 
+struct ExpectedOutcome {
+    fermentation::ReplayOutcomeCode code;
+    std::uint16_t status;
+    const char* body;
+};
+
+void test_every_replay_outcome_code_maps_to_one_http_response() {
+    const ExpectedOutcome table[] = {
+        {fermentation::ReplayOutcomeCode::Applied, 200U,
+         "{\"outcome\":\"applied\"}"},
+        {fermentation::ReplayOutcomeCode::Unavailable, 503U,
+         "{\"outcome\":\"unavailable\"}"},
+        {fermentation::ReplayOutcomeCode::Stale, 409U,
+         "{\"outcome\":\"stale\"}"},
+        {fermentation::ReplayOutcomeCode::Rejected, 422U,
+         "{\"outcome\":\"rejected\"}"},
+        {fermentation::ReplayOutcomeCode::Busy, 409U, "{\"outcome\":\"busy\"}"},
+        {fermentation::ReplayOutcomeCode::ConfirmationRequired, 409U,
+         "{\"outcome\":\"confirmation-required\"}"},
+        {fermentation::ReplayOutcomeCode::WriteFailed, 500U,
+         "{\"outcome\":\"write-failed\"}"},
+        {fermentation::ReplayOutcomeCode::TooLarge, 413U,
+         "{\"outcome\":\"too-large\"}"},
+    };
+    for (const auto& expected : table) {
+        const auto outcome = fermentation::replayOutcome(expected.code);
+        TEST_ASSERT_EQUAL_UINT16(expected.status, outcome.statusCode);
+        TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                                 outcome.contentType.c_str());
+        TEST_ASSERT_EQUAL_STRING(expected.body, outcome.body.c_str());
+    }
+}
+
+void expectInvalidSession(fermentation::WebSessionManager& sessions,
+                          const fermentation::WebSessionResult& created,
+                          std::uint64_t nowMs) {
+    TEST_ASSERT_FALSE(sessions.touch(*created.handle, nowMs));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Missing),
+        static_cast<int>(
+            sessions.find("FSSESSION=" + created.cookieValue, nowMs).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::MutationReservationStatus::InvalidSession),
+        static_cast<int>(
+            sessions
+                .reserveMutation(*created.handle, nowMs, 2U, testDigest("new"))
+                .status));
+}
+
+void fillOtherSlots(fermentation::WebSessionManager& sessions,
+                    std::uint64_t nowMs) {
+    for (std::size_t i = 1U; i < fermentation::kMaximumWebSessions; ++i)
+        TEST_ASSERT_TRUE(sessions.create(nowMs).handle.has_value());
+}
+
+void test_reserved_mutation_terminalizes_at_absolute_expiry() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    const auto limit = fermentation::kWebSessionAbsoluteLimitMs;
+    // Keep the idle deadline out of the way: only the absolute limit expires.
+    const auto step = fermentation::kWebSessionIdleLimitMs - 1U;
+    for (std::uint64_t at = step; at < limit - 1U; at += step)
+        TEST_ASSERT_TRUE(sessions.touch(*created.handle, at));
+    TEST_ASSERT_TRUE(sessions.touch(*created.handle, limit - 1U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::MutationReservationStatus::Reserved),
+        static_cast<int>(sessions
+                             .reserveMutation(*created.handle, limit - 1U, 1U,
+                                              testDigest("late"))
+                             .status));
+    TEST_ASSERT_TRUE(sessions.completeMutation(
+        *created.handle, limit, 1U, testDigest("late"),
+        fermentation::ReplayOutcomeCode::Applied));
+    expectInvalidSession(sessions, created, limit);
+    TEST_ASSERT_FALSE(sessions.completeMutation(
+        *created.handle, limit, 1U, testDigest("late"),
+        fermentation::ReplayOutcomeCode::Applied));
+}
+
+void test_reserved_mutation_terminalizes_after_revoke_and_revoke_all() {
+    for (const bool all : {false, true}) {
+        Random random;
+        fermentation::WebSessionManager sessions(random);
+        const auto created = sessions.create(0U);
+        TEST_ASSERT_TRUE(created.handle.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::MutationReservationStatus::Reserved),
+            static_cast<int>(sessions
+                                 .reserveMutation(*created.handle, 1U, 1U,
+                                                  testDigest("pending"))
+                                 .status));
+        if (all) {
+            sessions.revokeAll();
+        } else {
+            sessions.revoke(*created.handle);
+        }
+        expectInvalidSession(sessions, created, 2U);
+        TEST_ASSERT_TRUE(sessions.completeMutation(
+            *created.handle, 2U, 1U, testDigest("pending"),
+            fermentation::ReplayOutcomeCode::Applied));
+        TEST_ASSERT_FALSE(sessions.completeMutation(
+            *created.handle, 2U, 1U, testDigest("pending"),
+            fermentation::ReplayOutcomeCode::Applied));
+        expectInvalidSession(sessions, created, 3U);
+    }
+}
+
+void test_slot_with_pending_mutation_is_not_reused_until_terminalized() {
+    Random random;
+    fermentation::WebSessionManager sessions(random);
+    const auto created = sessions.create(0U);
+    TEST_ASSERT_TRUE(created.handle.has_value());
+    fillOtherSlots(sessions, 0U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::MutationReservationStatus::Reserved),
+        static_cast<int>(
+            sessions
+                .reserveMutation(*created.handle, 1U, 1U, testDigest("pending"))
+                .status));
+    sessions.revoke(*created.handle);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Capacity),
+        static_cast<int>(sessions.create(2U).status));
+
+    TEST_ASSERT_TRUE(sessions.completeMutation(
+        *created.handle, 2U, 1U, testDigest("pending"),
+        fermentation::ReplayOutcomeCode::Applied));
+    const auto reused = sessions.create(3U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::WebSessionStatus::Created),
+        static_cast<int>(reused.status));
+    TEST_ASSERT_TRUE(reused.handle.has_value());
+    TEST_ASSERT_FALSE(*reused.handle == *created.handle);
+    TEST_ASSERT_FALSE(sessions.completeMutation(
+        *created.handle, 3U, 1U, testDigest("pending"),
+        fermentation::ReplayOutcomeCode::Applied));
+}
+
 }  // namespace
 
 int main() {
@@ -641,5 +772,9 @@ int main() {
     RUN_TEST(test_browser_reload_preserves_live_session_csrf_and_replay_state);
     RUN_TEST(test_replay_cache_uses_compact_outcome_codes_and_full_window);
     RUN_TEST(test_sequence_gap_and_uint64_overflow_fail_closed);
+    RUN_TEST(test_every_replay_outcome_code_maps_to_one_http_response);
+    RUN_TEST(test_reserved_mutation_terminalizes_at_absolute_expiry);
+    RUN_TEST(test_reserved_mutation_terminalizes_after_revoke_and_revoke_all);
+    RUN_TEST(test_slot_with_pending_mutation_is_not_reused_until_terminalized);
     return UNITY_END();
 }

@@ -99,12 +99,12 @@ class FermentationApplicationTestAccess {
 };
 
 struct WebRunMutationHandlerTestAccess {
-    static WebMutationOutcome project(
+    static ReplayOutcomeCode project(
         const FermentationUiCommandResult& result) {
         return WebRunMutationHandler::projectCommandResult(result);
     }
 
-    static WebMutationOutcome projectRequest(
+    static ReplayOutcomeCode projectRequest(
         FermentationApplicationRequestStatus status) {
         return WebRunMutationHandler::projectRequestStatus(status);
     }
@@ -355,11 +355,11 @@ FermentationUiCommandResult commandResult(Category category,
 
 void assertProjected(const FermentationUiCommandResult& input,
                      std::uint16_t expectedStatus) {
-    const auto projected = WebRunMutationHandlerTestAccess::project(input);
+    const auto projected =
+        replayOutcome(WebRunMutationHandlerTestAccess::project(input));
     TEST_ASSERT_EQUAL_UINT16(expectedStatus, projected.statusCode);
     TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
                              projected.contentType.c_str());
-    TEST_ASSERT_TRUE(replayOutcomeCode(projected).has_value());
 }
 
 void test_outcome_matrix_accepts_only_owning_apply_results() {
@@ -484,23 +484,23 @@ void test_outcome_matrix_recovery_and_indeterminate_states_fail_closed() {
 void test_application_request_status_mapping_is_fail_closed() {
     for (const auto status :
          {FermentationApplicationRequestStatus::StaleProgramCatalog}) {
-        const auto projected =
-            WebRunMutationHandlerTestAccess::projectRequest(status);
+        const auto projected = replayOutcome(
+            WebRunMutationHandlerTestAccess::projectRequest(status));
         TEST_ASSERT_EQUAL_UINT16(409U, projected.statusCode);
     }
     for (const auto status :
          {FermentationApplicationRequestStatus::ProgramUnavailable,
           FermentationApplicationRequestStatus::InvalidInput}) {
-        const auto projected =
-            WebRunMutationHandlerTestAccess::projectRequest(status);
+        const auto projected = replayOutcome(
+            WebRunMutationHandlerTestAccess::projectRequest(status));
         TEST_ASSERT_EQUAL_UINT16(422U, projected.statusCode);
     }
     for (const auto status :
          {FermentationApplicationRequestStatus::NotInitialized,
           FermentationApplicationRequestStatus::Unavailable,
           FermentationApplicationRequestStatus::Overflow}) {
-        const auto projected =
-            WebRunMutationHandlerTestAccess::projectRequest(status);
+        const auto projected = replayOutcome(
+            WebRunMutationHandlerTestAccess::projectRequest(status));
         TEST_ASSERT_EQUAL_UINT16(503U, projected.statusCode);
     }
 }
