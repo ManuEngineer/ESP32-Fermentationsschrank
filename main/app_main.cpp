@@ -7,6 +7,7 @@
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "ds3231_sn_rtc_adapter.hpp"
+#include "esp_idf_authentication_kdf.hpp"
 #include "esp_idf_i2c_subsystem.hpp"
 #include "esp_idf_http_server_lifecycle.hpp"
 #include "esp_idf_network_lifecycle.hpp"
@@ -526,6 +527,7 @@ extern "C" void app_main(void) {
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
     device_platform_esp_idf::EspIdfSecureRandomSource randomSource;
+    device_platform_esp_idf::EspIdfPbkdf2HmacSha256 authenticationKdf;
     device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle({});
     device_platform_esp_idf::EspIdfHttpServerLifecycle httpServerLifecycle;
 
@@ -536,7 +538,8 @@ extern "C" void app_main(void) {
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
                           timeZoneResolver, timeSource, networkLifecycle,
-                          httpServerLifecycle, randomSource, &resetCauseSource);
+                          httpServerLifecycle, randomSource, authenticationKdf,
+                          &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());

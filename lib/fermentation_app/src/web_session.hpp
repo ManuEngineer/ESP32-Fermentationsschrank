@@ -28,7 +28,7 @@ inline constexpr std::size_t kMaximumReplayOutcomeBytes =
 inline constexpr std::size_t kMaximumWebSessionReplayPayloadBytes =
     kMaximumWebSessions * (kMaximumCompletedMutationOutcomes + 1U) *
     (kMaximumMutationFingerprintBytes + kMaximumReplayOutcomeBytes);
-inline constexpr std::size_t kMaximumWebSessionManagerBytes = 32U * 1024U;
+inline constexpr std::size_t kMaximumWebSessionManagerBytes = 32ULL * 1024ULL;
 
 struct WebSessionHandle {
     std::size_t slot{0U};

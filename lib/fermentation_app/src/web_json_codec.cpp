@@ -763,6 +763,31 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     return WebRunMutationDecodeStatus::Success;
 }
 
+WebLoginDecodeStatus decodeWebLogin(const std::string& exactBody,
+                                    WebLoginDto& output) {
+    if (exactBody.empty()) return WebLoginDecodeStatus::Invalid;
+    if (exactBody.size() > kMaximumWebLoginBodyBytes) {
+        return WebLoginDecodeStatus::TooLarge;
+    }
+    if (containsForbiddenNulInput(exactBody)) {
+        return WebLoginDecodeStatus::Invalid;
+    }
+
+    CJsonDocument document(cJSON_ParseWithLengthOpts(
+        exactBody.c_str(), exactBody.size() + 1U, nullptr, true));
+    if (!document || !cJSON_IsObject(document.get()) ||
+        !hasOnlyKeys(document.get(), {"password"})) {
+        return WebLoginDecodeStatus::Invalid;
+    }
+    WebLoginDto parsed;
+    const auto* password = member(document.get(), "password");
+    if (password != nullptr && !readString(password, 256U, parsed.password)) {
+        return WebLoginDecodeStatus::Invalid;
+    }
+    output = std::move(parsed);
+    return WebLoginDecodeStatus::Success;
+}
+
 bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
                         std::string& output) {
     const auto* homeMode = homeModeName(snapshot.home.mode);

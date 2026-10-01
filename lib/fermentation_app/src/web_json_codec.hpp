@@ -9,6 +9,7 @@
 namespace fermentation {
 
 inline constexpr std::size_t kMaximumWebRunMutationBodyBytes = 480U;
+inline constexpr std::size_t kMaximumWebLoginBodyBytes = 768U;
 inline constexpr std::size_t kMaximumWebApiResponseBodyBytes = 3072U;
 inline constexpr std::size_t kMaximumWebApiAlertCount = 16U;
 inline constexpr unsigned kMaximumWebJsonNesting = 4U;
@@ -18,6 +19,19 @@ enum class WebRunMutationDecodeStatus : unsigned char {
     TooLarge,
     Invalid,
 };
+
+struct WebLoginDto {
+    std::string password;
+};
+
+enum class WebLoginDecodeStatus : unsigned char {
+    Success,
+    TooLarge,
+    Invalid,
+};
+
+[[nodiscard]] WebLoginDecodeStatus decodeWebLogin(const std::string& exactBody,
+                                                  WebLoginDto& output);
 
 // cJSON is confined to this codec implementation. The decoder accepts one
 // versioned schema and publishes no partial DTO on failure.

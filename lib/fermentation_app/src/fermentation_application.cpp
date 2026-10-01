@@ -16,6 +16,7 @@
 #include "network_setup_routes.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
+#include "web_application_routes.hpp"
 
 namespace fermentation {
 namespace {
@@ -215,12 +216,15 @@ FermentationApplication::makePreparedRequest(
             device_platform::UiRequestId{uiRequestId}};
 }
 
+FermentationApplication::FermentationApplication() noexcept = default;
+
 FermentationApplication::~FermentationApplication() = default;
 
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartProgram(
     const FermentationUiCommandContext& context,
     const FermentationUiStartProgramIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (configurationService_ == nullptr || runIdentity_ == nullptr) {
         return requestFailure(
@@ -290,6 +294,7 @@ FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualHolding(
     const FermentationUiCommandContext& context,
     const FermentationUiStartManualHoldingIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -319,6 +324,7 @@ FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualTimed(
     const FermentationUiCommandContext& context,
     const ManualTimedRunValues& values) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -355,6 +361,7 @@ FermentationApplication::prepareStartManualTimed(
 FermentationApplicationRequestResult FermentationApplication::prepareStop(
     const FermentationUiCommandContext& context,
     const FermentationUiStopRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -394,6 +401,7 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
 FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
     const FermentationUiCommandContext& context,
     const FermentationUiCompleteRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -491,6 +499,7 @@ FermentationApplication::prepareAdditionalEnvelope(
 FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
     const FermentationUiCommandContext& context,
     const FermentationUiEnvelopePayload& payload) {
+    const auto guard = applicationCallSerializer_.enter();
     return std::visit(
         [this,
          &context](const auto& intent) -> FermentationApplicationRequestResult {
@@ -521,6 +530,7 @@ FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
 
 FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     const FermentationApplicationRequestResult& prepared) {
+    const auto guard = applicationCallSerializer_.enter();
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
         return requestFailure(
@@ -537,6 +547,7 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
 
 FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     const FermentationApplicationPreparedRequest& confirmed) {
+    const auto guard = applicationCallSerializer_.enter();
     if (!confirmed.commandEnvelope().confirmed) {
         return FermentationUiCommandBridge::fromCommandStatus(
             CommandStatus::NotConfirmed);
@@ -649,7 +660,23 @@ bool FermentationApplication::begin(
     const device_platform::IResetCauseSource* resetCauseSource) {
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
-                           &httpServerLifecycle, &randomSource);
+                           &httpServerLifecycle, &randomSource, nullptr);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    device_platform::ISecureRandomSource& randomSource,
+    IAuthenticationKdf& authenticationKdf,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource, &networkLifecycle,
+                           &httpServerLifecycle, &randomSource,
+                           &authenticationKdf);
 }
 
 bool FermentationApplication::initializeNetwork(
@@ -681,6 +708,21 @@ bool FermentationApplication::initializeNetwork(
     if (networkSetupRoutes_ == nullptr) {
         return false;
     }
+    if (timeSource_ == nullptr) {
+        return false;
+    }
+    webSessionManager_ =
+        std::unique_ptr<WebSessionManager>{new (std::nothrow) WebSessionManager(
+            *randomSource, fermentationWebServicePolicy())};
+    if (webSessionManager_ == nullptr) {
+        return false;
+    }
+    webRouteDispatcher_ = std::unique_ptr<WebRouteDispatcher>{
+        new (std::nothrow) WebRouteDispatcher(
+            *networkSetupRoutes_, *this, *webSessionManager_, *timeSource_)};
+    if (webRouteDispatcher_ == nullptr) {
+        return false;
+    }
     const auto hostname = networkHostnameFromDeviceName(canonicalDeviceName);
     if (!hostname.has_value() ||
         networkLifecycle_->setHostname(*hostname).status !=
@@ -690,7 +732,7 @@ bool FermentationApplication::initializeNetwork(
     const auto networkStart = networkConfigurationService_->start(
         selectedMode, storageEpoch, canonicalDeviceName);
     if (networkStart.status == NetworkConfigurationStatus::Applied &&
-        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        !httpServerLifecycle_->start(*webRouteDispatcher_)) {
         static_cast<void>(networkLifecycle_->stop());
         static_cast<void>(httpServerLifecycle_->stop());
         return false;
@@ -705,6 +747,7 @@ bool FermentationApplication::initializeNetwork(
 
 NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     device_platform::NetworkMode selectedMode) {
+    const auto guard = applicationCallSerializer_.enter();
     if (configurationService_ == nullptr ||
         networkConfigurationService_ == nullptr || stateStore_ == nullptr ||
         !storageEpoch_.has_value() || storageEpoch_->value() == 0U ||
@@ -760,8 +803,8 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
         return applied;
     }
     if (httpServerLifecycle_ != nullptr && !httpServerLifecycle_->running() &&
-        networkSetupRoutes_ != nullptr &&
-        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        webRouteDispatcher_ != nullptr &&
+        !httpServerLifecycle_->start(*webRouteDispatcher_)) {
         static_cast<void>(networkLifecycle_->stop());
         return {NetworkConfigurationStatus::TransportFailure};
     }
@@ -771,6 +814,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
 
 NetworkConfigurationResult
 FermentationApplication::beginHomeWifiReconfiguration() {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr ||
         configurationService_ == nullptr) {
         return {NetworkConfigurationStatus::NotInitialized};
@@ -800,9 +844,9 @@ FermentationApplication::beginHomeWifiReconfiguration() {
         }
         return reconfigured;
     }
-    if (httpServerLifecycle_ != nullptr && networkSetupRoutes_ != nullptr &&
+    if (httpServerLifecycle_ != nullptr && webRouteDispatcher_ != nullptr &&
         (httpServerLifecycle_->running() ||
-         httpServerLifecycle_->start(*networkSetupRoutes_))) {
+         httpServerLifecycle_->start(*webRouteDispatcher_))) {
         return reconfigured;
     }
     static_cast<void>(networkLifecycle_->stop());
@@ -814,14 +858,22 @@ FermentationApplication::beginHomeWifiReconfiguration() {
 
 std::optional<device_platform::NetworkAccessPointInfo>
 FermentationApplication::networkAccessPointInfo() const {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr) {
         return std::nullopt;
     }
     return networkConfigurationService_->accessPointInfo();
 }
 
+bool FermentationApplication::networkSetupFlowActive() const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
+    return networkConfigurationService_ != nullptr &&
+           networkConfigurationService_->setupFlowActive();
+}
+
 device_platform::NetworkMode FermentationApplication::networkMode()
     const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr) {
         return device_platform::NetworkMode::UNSELECTED;
     }
@@ -960,10 +1012,12 @@ bool FermentationApplication::revalidatePreparedRequest(
 
 void FermentationApplication::publishOwningRuntimeEvidence(
     const CrossRolePlausibilityContext& evidence) {
+    const auto guard = applicationCallSerializer_.enter();
     owningRuntimeEvidence_ = evidence;
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
+    const auto guard = applicationCallSerializer_.enter();
     FermentationUiProjectionInput input;
     input.runState = runtimeRunState_.get();
     if (runtimeRunState_ != nullptr) {
@@ -1020,6 +1074,7 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
 
 FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
     const {
+    const auto guard = applicationCallSerializer_.enter();
     FermentationUiPresentationSource source;
     if (configurationService_ == nullptr) {
         return source;
@@ -1039,6 +1094,84 @@ FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
     return source;
 }
 
+WebAuthenticationState FermentationApplication::webAuthenticationStateUnlocked()
+    const {
+    if (authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        authenticationResolutionStatus_ !=
+            AuthenticationBootstrapResolutionStatus::Ready) {
+        return WebAuthenticationState::Indeterminate;
+    }
+    authenticationBootstrapStatus_ =
+        authenticationDomain_->inspect(*authenticationContext_);
+    switch (authenticationBootstrapStatus_) {
+        case AuthBootstrapStatus::BootstrapAllowed:
+            return WebAuthenticationState::Unprovisioned;
+        case AuthBootstrapStatus::AlreadyProvisioned: {
+            const auto enabled = authenticationDomain_->webPasswordEnabled(
+                *authenticationContext_);
+            if (!enabled.has_value()) {
+                return WebAuthenticationState::RecoveryRequired;
+            }
+            return *enabled ? WebAuthenticationState::PasswordProtected
+                            : WebAuthenticationState::PasswordDisabled;
+        }
+        default:
+            return WebAuthenticationState::RecoveryRequired;
+    }
+}
+
+WebAuthenticationState FermentationApplication::webAuthenticationState() const {
+    const auto guard = applicationCallSerializer_.enter();
+    return webAuthenticationStateUnlocked();
+}
+
+WebAuthenticationResult FermentationApplication::authenticateWebPassword(
+    const std::string& password, std::uint64_t nowMs) {
+    AuthenticationDomain* domain = nullptr;
+    std::optional<AuthenticationBootstrapContext> context;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (webAuthenticationStateUnlocked() !=
+                WebAuthenticationState::PasswordProtected ||
+            authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value()) {
+            const auto state = webAuthenticationStateUnlocked();
+            return {state == WebAuthenticationState::PasswordDisabled
+                        ? WebAuthenticationResultStatus::Disabled
+                        : WebAuthenticationResultStatus::RecoveryRequired,
+                    0U};
+        }
+        domain = authenticationDomain_.get();
+        context = authenticationContext_;
+    }
+
+    std::uint64_t retryAfterMs = 0U;
+    const auto checked =
+        domain->verifyWebPassword(*context, password, nowMs, retryAfterMs);
+    switch (checked) {
+        case AuthCheckStatus::Authenticated:
+            return {WebAuthenticationResultStatus::Authenticated, 0U};
+        case AuthCheckStatus::Disabled:
+            return {WebAuthenticationResultStatus::Disabled, 0U};
+        case AuthCheckStatus::Invalid:
+            return retryAfterMs == 0U
+                       ? WebAuthenticationResult{WebAuthenticationResultStatus::
+                                                     Invalid,
+                                                 0U}
+                       : WebAuthenticationResult{
+                             WebAuthenticationResultStatus::LockedOut,
+                             retryAfterMs};
+        case AuthCheckStatus::LockedOut:
+            return {WebAuthenticationResultStatus::LockedOut, retryAfterMs};
+        case AuthCheckStatus::RecoveryRequired:
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+        case AuthCheckStatus::KdfUnavailable:
+            return {WebAuthenticationResultStatus::KdfUnavailable, 0U};
+    }
+    return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+}
+
 bool FermentationApplication::beginPersistent(
     device_platform::IPlatformServices& platformServices,
     device_platform::IStateStore& store,
@@ -1047,7 +1180,8 @@ bool FermentationApplication::beginPersistent(
     const device_platform::IResetCauseSource* resetCauseSource,
     device_platform::INetworkLifecycle* networkLifecycle,
     device_platform::IHttpServerLifecycle* httpServerLifecycle,
-    device_platform::ISecureRandomSource* randomSource) {
+    device_platform::ISecureRandomSource* randomSource,
+    IAuthenticationKdf* authenticationKdf) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -1058,6 +1192,7 @@ bool FermentationApplication::beginPersistent(
     networkLifecycle_ = networkLifecycle;
     httpServerLifecycle_ = httpServerLifecycle;
     secureRandomSource_ = randomSource;
+    authenticationKdf_ = authenticationKdf;
     storageEpoch_.reset();
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
@@ -1081,8 +1216,16 @@ bool FermentationApplication::beginPersistent(
     runPersistenceCoordinator_.reset();
     configurationRecoveryService_.reset();
     networkSetupRoutes_.reset();
+    webRouteDispatcher_.reset();
+    webSessionManager_.reset();
     networkConfigurationService_.reset();
     connectivityCredentialStore_.reset();
+    authenticationContext_.reset();
+    authenticationDomain_.reset();
+    authenticationRecordStore_.reset();
+    authenticationResolutionStatus_ =
+        AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+    authenticationBootstrapStatus_ = AuthBootstrapStatus::RecoveryRequired;
     configurationService_.reset();
     graphStore_.reset();
     mutationCoordinator_.reset();
@@ -1140,6 +1283,7 @@ bool FermentationApplication::beginPersistent(
     const auto epoch = runtime.lease.get().storageEpoch();
     storageEpoch_ = epoch;
 
+    initializeAuthentication(store);
     if (!initializeNetwork(store, epoch,
                            runtime.lease.get().userConfiguration().networkMode,
                            runtime.lease.get().userConfiguration().deviceName,
@@ -1203,6 +1347,36 @@ bool FermentationApplication::beginPersistent(
 
     lifecycleState_ = ApplicationLifecycleState::Ready;
     return true;
+}
+
+void FermentationApplication::initializeAuthentication(
+    device_platform::IStateStore& store) {
+    if (authenticationKdf_ == nullptr || secureRandomSource_ == nullptr) {
+        return;
+    }
+    authenticationRecordStore_ = std::unique_ptr<AuthenticationRecordStore>{
+        new (std::nothrow) AuthenticationRecordStore(store)};
+    if (authenticationRecordStore_ == nullptr) {
+        return;
+    }
+    authenticationDomain_ = std::unique_ptr<AuthenticationDomain>{
+        new (std::nothrow)
+            AuthenticationDomain(*authenticationRecordStore_,
+                                 *authenticationKdf_, *secureRandomSource_)};
+    if (authenticationDomain_ == nullptr) {
+        return;
+    }
+    const auto resolved =
+        configurationRecoveryService_->resolveAuthenticationBootstrap(
+            *authenticationRecordStore_);
+    authenticationResolutionStatus_ = resolved.status;
+    if (resolved.status != AuthenticationBootstrapResolutionStatus::Ready ||
+        !resolved.context.has_value()) {
+        return;
+    }
+    authenticationContext_ = *resolved.context;
+    authenticationBootstrapStatus_ =
+        authenticationDomain_->inspect(*authenticationContext_);
 }
 
 bool FermentationApplication::processBootClassification(
@@ -1338,6 +1512,7 @@ bool FermentationApplication::processTerminalClassification(
 }
 
 void FermentationApplication::update() {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkLifecycle_ != nullptr) {
         networkLifecycle_->poll();
     }
@@ -1346,11 +1521,13 @@ void FermentationApplication::update() {
 
 void FermentationApplication::publishOwningRecoveryEvidence(
     const CrossRolePlausibilityContext& evidence) {
+    const auto guard = applicationCallSerializer_.enter();
     owningRecoveryEvidence_ = evidence;
 }
 
 RunPersistenceResult FermentationApplication::resumeFallback(
     const FermentationUiResumeFallbackCommand& command) {
+    const auto guard = applicationCallSerializer_.enter();
     if (pendingFallbackResume_ == nullptr ||
         runPersistenceCoordinator_ == nullptr) {
         RunPersistenceResult unavailable;
@@ -1433,6 +1610,7 @@ RunPersistenceResult FermentationApplication::resumeFallback(
 
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
     if (configurationRecoveryService_ == nullptr ||

@@ -1,19 +1,26 @@
 #include <unity.h>
 
 #include <array>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <variant>
 
 #include "device_platform.hpp"
 #include "configuration_limits.hpp"
+#include "connectivity_credentials.hpp"
 #include "fermentation_application.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "mock_network_lifecycle.hpp"
 #include "program_limits.hpp"
+#include "mock_secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "virtual_time_source.hpp"
 #include "web_application_routes.hpp"
@@ -25,6 +32,24 @@ class FermentationApplicationTestAccess {
    public:
     static RunCommandState& runtimeState(FermentationApplication& application) {
         return *application.runtimeRunState_;
+    }
+
+    static ApplicationCallSerializer::Guard enter(
+        FermentationApplication& application) {
+        return application.applicationCallSerializer_.enter();
+    }
+
+    static bool provision(FermentationApplication& application,
+                          const std::string& password,
+                          const std::string& servicePin) {
+        if (application.authenticationDomain_ == nullptr ||
+            !application.authenticationContext_.has_value()) {
+            return false;
+        }
+        return application.authenticationDomain_->bootstrap(
+                   *application.authenticationContext_,
+                   device_platform::UiSurface::LocalDisplay, true, password,
+                   servicePin) == AuthBootstrapStatus::BootstrapAllowed;
     }
 };
 
@@ -62,6 +87,145 @@ class DeterministicRandom final : public device_platform::ISecureRandomSource {
    private:
     std::uint8_t next_{1U};
 };
+
+class DeterministicKdf final : public IAuthenticationKdf {
+   public:
+    bool derive(
+        const std::string& secret, const AuthVerifier& parameters,
+        std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) override {
+        std::uint32_t state = 2166136261U;
+        for (const auto byte : secret) {
+            state ^= static_cast<std::uint8_t>(byte);
+            state *= 16777619U;
+        }
+        for (const auto byte : parameters.salt) {
+            state ^= byte;
+            state *= 16777619U;
+        }
+        for (std::size_t index = 0U; index < out.size(); ++index) {
+            state ^= static_cast<std::uint32_t>(index + 1U);
+            state *= 16777619U;
+            out[index] = static_cast<std::uint8_t>(state >> 24U);
+        }
+        return true;
+    }
+};
+
+class CapturingHttpServerLifecycle final
+    : public device_platform::IHttpServerLifecycle {
+   public:
+    [[nodiscard]] bool start(device_platform::IHttpRouteSink& routes) override {
+        ++startCount_;
+        routes_ = &routes;
+        running_ = true;
+        return true;
+    }
+
+    [[nodiscard]] bool stop() override {
+        running_ = false;
+        routes_ = nullptr;
+        return true;
+    }
+
+    [[nodiscard]] bool running() const override { return running_; }
+
+    [[nodiscard]] device_platform::IHttpRouteSink* routes() const noexcept {
+        return routes_;
+    }
+
+    [[nodiscard]] std::size_t startCount() const noexcept {
+        return startCount_;
+    }
+
+   private:
+    bool running_{false};
+    std::size_t startCount_{0U};
+    device_platform::IHttpRouteSink* routes_{nullptr};
+};
+
+struct ComposedFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    DeterministicRandom random;
+    DeterministicKdf kdf;
+    CapturingHttpServerLifecycle http;
+    FermentationApplication application;
+
+    ComposedFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        ConnectivityCredentialStore credentials(store);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ConnectivityCredentialWriteStatus::Committed),
+            static_cast<int>(credentials
+                                 .write({std::nullopt, std::string(16U, 'A')},
+                                        device_platform::StorageEpoch{1U}, 1U)
+                                 .status));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http, random,
+                                           kdf));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(
+                application
+                    .applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                    .status));
+        TEST_ASSERT_NOT_NULL(http.routes());
+    }
+};
+
+device_platform::HttpRequest makeWebRequest(const std::string& method,
+                                            const std::string& path,
+                                            std::string body = {}) {
+    device_platform::HttpRequest request;
+    request.method = method;
+    request.path = path;
+    request.body = std::move(body);
+    request.metadata.host = "fermenter.local";
+    request.metadata.origin = "http://fermenter.local";
+    request.metadata.secFetchSite = "same-origin";
+    return request;
+}
+
+std::string sessionCookieValue(const device_platform::HttpResponse& response) {
+    TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
+    const std::string& cookie = *response.metadata.setCookie;
+    constexpr char prefix[] = "FSSESSION=";
+    TEST_ASSERT_TRUE(cookie.rfind(prefix, 0U) == 0U);
+    const auto end = cookie.find(';');
+    return cookie.substr(sizeof(prefix) - 1U,
+                         end == std::string::npos
+                             ? std::string::npos
+                             : end - (sizeof(prefix) - 1U));
+}
+
+std::string csrfToken(const device_platform::HttpResponse& response) {
+    constexpr char marker[] = "\"csrfToken\":\"";
+    const auto start = response.body.find(marker);
+    TEST_ASSERT_TRUE(start != std::string::npos);
+    const auto valueStart = start + sizeof(marker) - 1U;
+    const auto end = response.body.find('"', valueStart);
+    TEST_ASSERT_TRUE(end != std::string::npos);
+    return response.body.substr(valueStart, end - valueStart);
+}
+
+device_platform::HttpRequest makeLoginRequest(const std::string& password) {
+    auto request = makeWebRequest("POST", "/api/v1/login",
+                                  "{\"password\":\"" + password + "\"}");
+    request.metadata.contentType = "application/json; charset=utf-8";
+    return request;
+}
+
+device_platform::HttpRequest makeAuthenticatedRequest(
+    const std::string& method, const std::string& path,
+    const std::string& cookie, const std::string& csrf = {}) {
+    auto request = makeWebRequest(method, path);
+    request.metadata.cookie = "FSSESSION=" + cookie;
+    if (!csrf.empty()) request.metadata.csrfToken = csrf;
+    return request;
+}
 
 FermentationUiCommandResult commandResult(Category category,
                                           FermentationUiCommandDetail detail,
@@ -1163,6 +1327,164 @@ void test_read_only_api_routes_are_get_only_and_uncomposed() {
     TEST_ASSERT_FALSE(api.handle(request, response));
 }
 
+void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
+    ComposedFixture fixture;
+    auto* routes = fixture.http.routes();
+    TEST_ASSERT_NOT_NULL(routes);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.http.startCount());
+
+    auto request = makeWebRequest("GET", "/");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("Fermentation") != std::string::npos);
+
+    request = makeWebRequest("GET", "/api/v1/status");
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    request = makeWebRequest("GET", "/internal/ui/run");
+    TEST_ASSERT_FALSE(routes->handle(request, response));
+
+    const auto home = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(home.status));
+    TEST_ASSERT_TRUE(fixture.application.networkSetupFlowActive());
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.http.startCount());
+
+    request = makeWebRequest("GET", "/");
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("Network setup") != std::string::npos);
+
+    request = makeWebRequest("GET", "/api/v1/status");
+    TEST_ASSERT_FALSE(routes->handle(request, response));
+    request = makeWebRequest("GET", "/api/network/status");
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.http.startCount());
+}
+
+void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordProtected);
+
+    auto request = makeLoginRequest("wrong");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(response.body.find("invalid-credentials") !=
+                     std::string::npos);
+
+    request = makeLoginRequest("correct horse battery");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    const auto firstCookie = sessionCookieValue(response);
+    const auto firstCsrf = csrfToken(response);
+    TEST_ASSERT_TRUE(response.metadata.setCookie->find("HttpOnly") !=
+                     std::string::npos);
+    TEST_ASSERT_TRUE(response.metadata.setCookie->find("SameSite=Strict") !=
+                     std::string::npos);
+    TEST_ASSERT_TRUE(response.metadata.setCookie->find("Path=/") !=
+                     std::string::npos);
+    TEST_ASSERT_TRUE(response.metadata.setCookie->find("Secure") ==
+                     std::string::npos);
+
+    request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("password") == std::string::npos);
+    request =
+        makeAuthenticatedRequest("GET", "/api/v1/temperatures", firstCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    request = makeAuthenticatedRequest("GET", "/api/v1/alerts", firstCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+
+    request = makeAuthenticatedRequest("POST", "/api/v1/logout", firstCookie,
+                                       firstCsrf);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
+    request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+
+    request = makeLoginRequest("correct horse battery");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    const auto expiringCookie = sessionCookieValue(response);
+    fixture.timeSource.advanceMonotonicMillis(kWebSessionIdleLimitMs - 1U);
+    request = makeAuthenticatedRequest("GET", "/api/v1/status", expiringCookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    fixture.timeSource.advanceMonotonicMillis(2U);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+
+    ComposedFixture lockoutFixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        lockoutFixture.application, "correct horse battery", "1234"));
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        request = makeLoginRequest("wrong password here");
+        TEST_ASSERT_TRUE(
+            lockoutFixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+    }
+    request = makeLoginRequest("wrong password here");
+    TEST_ASSERT_TRUE(lockoutFixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(429U, response.statusCode);
+    TEST_ASSERT_TRUE(response.metadata.retryAfter.has_value());
+}
+
+void test_application_call_serializer_blocks_cross_thread_and_allows_reentry() {
+    Fixture fixture;
+    std::mutex synchronization;
+    std::condition_variable changed;
+    bool workerStarted = false;
+    bool workerAcquired = false;
+
+    std::thread worker;
+    {
+        auto held =
+            FermentationApplicationTestAccess::enter(fixture.application);
+        static_cast<void>(fixture.application.uiSnapshot());
+        worker = std::thread([&] {
+            {
+                std::lock_guard<std::mutex> lock(synchronization);
+                workerStarted = true;
+            }
+            changed.notify_one();
+            auto entered =
+                FermentationApplicationTestAccess::enter(fixture.application);
+            {
+                std::lock_guard<std::mutex> lock(synchronization);
+                workerAcquired = true;
+            }
+            changed.notify_one();
+            static_cast<void>(entered);
+        });
+
+        {
+            std::unique_lock<std::mutex> lock(synchronization);
+            TEST_ASSERT_TRUE(changed.wait_for(lock, std::chrono::seconds(1),
+                                              [&] { return workerStarted; }));
+            TEST_ASSERT_FALSE(workerAcquired);
+        }
+    }
+    {
+        std::unique_lock<std::mutex> lock(synchronization);
+        TEST_ASSERT_TRUE(changed.wait_for(lock, std::chrono::seconds(1),
+                                          [&] { return workerAcquired; }));
+    }
+    worker.join();
+}
+
 }  // namespace
 
 int main() {
@@ -1187,5 +1509,11 @@ int main() {
     RUN_TEST(test_maximum_product_mutation_fits_body_and_exact_replay_budget);
     RUN_TEST(test_read_only_api_projection_bounds_and_untrusted_values);
     RUN_TEST(test_read_only_api_routes_are_get_only_and_uncomposed);
+    RUN_TEST(
+        test_composed_dispatcher_preserves_setup_priority_and_single_server);
+    RUN_TEST(
+        test_composed_dispatcher_authenticates_read_only_sessions_and_expires);
+    RUN_TEST(
+        test_application_call_serializer_blocks_cross_thread_and_allows_reentry);
     return UNITY_END();
 }
