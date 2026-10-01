@@ -315,7 +315,9 @@ Aenderung oder einem breiten neuen Diff erforderlich; den neuen Wechsel auf
 ## 11. Handover
 
 Vor Sessionende, Kontextreset oder Agentenwechsel wird bei offenem PR genau ein
-aktueller `SESSION HANDOVER`-Kommentar erstellt und danach angehalten.
+kanonischer `SESSION HANDOVER`-Kommentar gepflegt und danach angehalten. Der
+Kommentar beginnt mit dem stabilen Marker
+`<!-- SESSION_HANDOVER_CANONICAL -->`.
 
 Der Handover nennt kompakt:
 
@@ -325,9 +327,12 @@ Der Handover nennt kompakt:
 - offene Befunde, Risiken und Gates;
 - naechsten konkreten Schritt.
 
-Der neueste Handover ersetzt fruehere. Diffs, Plaene und Logs werden
-referenziert, nicht kopiert. Ist kein PR-Kommentar moeglich, wird der fertige
-Text im Chat als nicht veroeffentlicht ausgegeben.
+Existiert bereits ein Top-Level-PR-Kommentar mit dem kanonischen Marker, wird
+dieser Kommentar vollstaendig aktualisiert. Nur wenn noch keiner existiert,
+wird einmalig ein neuer Kommentar erstellt. Der kanonische Handover enthaelt
+nur den aktuellen Stand; fruehere Inhalte werden beim Update ersetzt. Diffs,
+Plaene und Logs werden referenziert, nicht kopiert. Ist kein PR-Kommentar
+moeglich, wird der fertige Text im Chat als nicht veroeffentlicht ausgegeben.
 
 ## 12. Abschluss und Ownerrechte
 
