@@ -28,11 +28,13 @@ wiederverwendbares WLAN-Passwort.
 - Factory-, V1- und V2-Zustaende migrieren beim Lesen nach `UNSELECTED`;
 - V1-/V2-Records leiten weder `HOME_WIFI` noch `AP_ONLY` implizit aus
   Credentials ab;
-- es gibt genau einen typisierten `ConnectivityCredential`-V1-Record im
+- es gibt genau einen typisierten `ConnectivityCredential`-Record (Schema 1
+  oder Schema 2) im
   bestehenden `IStateStore` unter `StateStoreKey=cc0` und
   `RecordTypeId=9`;
-- SSID und Passwort liegen gemeinsam in diesem Record und sind an die aktuelle
-  `StorageEpoch` gebunden;
+- die aus `UserConfiguration.deviceName` abgeleitete SoftAP-SSID wird nicht
+  persistiert; HOME_WIFI und das pro `StorageEpoch` persistierte SoftAP-
+  Passwort liegen gemeinsam in diesem Record;
 - der bestehende generische `StorageEnvelope`-V1-Vertrag, CRC,
   `IStateStore`-Read/Write, Test-vor-Commit, Graph-Revision, Readback und
   `CommitOutcomeUnknown` bleiben unveraendert;
@@ -903,9 +905,15 @@ Authentication-Manifeste, -Roots, -Slots oder Reservepayloads.
 
 Die persistente Connectivity-Domaene von Issue #164 besitzt genau einen
 stark typisierten, versionierten und an die aktuelle `StorageEpoch` gebundenen
-`ConnectivityCredential`-V1-Record im bestehenden `IStateStore` unter
-`StateStoreKey=cc0` und `RecordTypeId=9`. SSID und Passwort bilden darin ein
-gemeinsames Credential-Paar. Diese Domaene ist keine zweite physische
+`ConnectivityCredential`-Record im bestehenden `IStateStore` unter
+`StateStoreKey=cc0` und `RecordTypeId=9`. Schema 1 bleibt das alte
+HOME_WIFI-only-Layout; Schema 2 enthaelt optional HOME_WIFI und zwingend das
+exakt 16-stellige SoftAP-Passwort ohne Present-Tag. Schema 1 wird beim
+Network-Start mit erhaltenen HOME_WIFI-Credentials nach Schema 2 migriert, der
+aktuelle Writer schreibt ausschliesslich Schema 2. V1 hat maximal 100 Byte
+Payload/145 Byte Envelope, V2 maximal 118 Byte Payload/163 Byte Envelope.
+SSID und Passwort bilden darin ein gemeinsames Credential-Paar, wobei die SSID
+aus dem aktuellen Device-Name abgeleitet und nicht persistiert wird. Diese Domaene ist keine zweite physische
 Persistenz und keine zweite Credential-Wahrheit; ihre Commit-, Readback- und
 Recoverysemantik bleibt Teil des bestehenden Konfigurationsvertrags.
 
@@ -1142,9 +1150,11 @@ fluechtige Vorschau, Migration, Boot/Recovery,
 `RuntimeConfigurationSnapshot` und den typisierten
 `ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. Die
 Die `UserConfiguration`-Wahrheit enthaelt fuer das #164-Delta nur die
-Netzwerkmodus-Auswahl. Der eine `ConnectivityCredential`-V1-Record unter
-`StateStoreKey=cc0` und `RecordTypeId=9` liegt mit SSID und Passwort gemeinsam
-im bestehenden `IStateStore` und ist an `StorageEpoch` gebunden. Ein zweiter
+Netzwerkmodus-Auswahl. Der eine `ConnectivityCredential`-Record (Schema 1/2)
+unter `StateStoreKey=cc0` und `RecordTypeId=9` liegt mit HOME_WIFI-SSID/-Passwort
+und SoftAP-Passwort gemeinsam im bestehenden `IStateStore` und ist an
+`StorageEpoch` gebunden; die SoftAP-SSID wird aus dem aktuellen Device-Name
+abgeleitet und nicht persistiert. Ein zweiter
 physischer Credential- oder Secret-Blob-Store und eine zweite Credential-
 Wahrheit werden nicht eingefuehrt.
 

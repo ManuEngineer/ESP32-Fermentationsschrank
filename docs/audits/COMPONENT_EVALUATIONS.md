@@ -641,8 +641,9 @@ Bibliotheksentscheid und keine Connectivity-Pluginplattform.
 
 | Kandidat | Stand/Lizenz | Ressourcen und Adapter | Empfehlung |
 |---|---|---|---|
-| ricmoo/QRCode | `0.0.1`, `eafbde49`, MIT; nennt Project Nayuki als Ursprung | kleine C/C++-Bibliothek; Versions- und Wartungsaktivitaet gering; Ausgabematrix begrenzen | als Arduino-nahe Referenz messen |
-| Project Nayuki QR-Code-generator | `1.8.0`, `2c9044de`, MIT im Quellheader | portable C-Implementierung, auf feste QR-Version/ECC und caller-provided Buffer begrenzbar | bevorzugter technischer Gegenkandidat, aber erst nach Lizenz-/Ressourcenpruefung im umsetzenden PR |
+| LVGL `lv_qrcode` mit gebuendeltem Project Nayuki `qrcodegen.c` | LVGL `9.6.0~1`, Component-Hash `7d82410747bbfb319531449749e940f440f8414f041f9eaba13f0d1dd7f58cdd`; MIT und MIT-Text im Nayuki-Quellheader | bereits gepinnter und produktiv verwendeter LVGL-/`esp_lvgl_port`-Stack; keine neue Komponente | fuer #164 ausgewaehlte Reuse-Implementierung; digitale Integration/Builds nachweisen, realen Scan vor Issue-Abschluss nachholen |
+| ricmoo/QRCode | `0.0.1`, `eafbde49`, MIT; nennt Project Nayuki als Ursprung | kleine C/C++-Bibliothek; Versions- und Wartungsaktivitaet gering; Ausgabematrix begrenzen | nicht ausgewaehlt; bestehende Referenz fuer den Fall, dass der LVGL-Pfad ungeeignet ist |
+| Project Nayuki QR-Code-generator | `1.8.0`, `2c9044de`, MIT im Quellheader | portable C-Implementierung, auf feste QR-Version/ECC und caller-provided Buffer begrenzbar | bereits evaluierter bevorzugter Gegenkandidat, aber nicht ausgewaehlt; nur bei nachgewiesener Ungeeignetheit des vorhandenen LVGL-Pfads erneut bewerten |
 
 Der Payloadvertrag ist `REQUIREMENT_DECIDED`: individuelle SoftAP-SSID und
 individuelles SoftAP-Passwort im gaengigen WLAN-QR-Format. Escaping,
@@ -650,12 +651,17 @@ Sonderzeichen, sichtbare/versteckte SSID soweit unterstuetzt, Scannbarkeit auf
 320 x 240 unter Android, iOS/iPadOS und soweit unterstuetzt Windows,
 Kameraabstand, Helligkeit, Rotation, Fallback und Credentialwechsel werden
 gemessen. Keine Zugangsdaten gelangen in Logs. Onboardingstatus, Secret-Schutz
-und Displaydarstellung bleiben eigene Logik. QR-Bibliothek:
-`FINAL_SELECTION_PENDING`; Darstellung/Scannbarkeit: `SPIKE_REQUIRED`.
+und Displaydarstellung bleiben eigene Logik. Fuer #164 ist die Bibliothekswahl
+auf den bereits vorhandenen LVGL-QR-Widgetpfad begrenzt; ricmoo und die separate
+Nayuki-Komponente bleiben nicht ausgewaehlt. Software-Payload, Escaping,
+Layout und Produktbuilds sind digitale Evidence; die reale Kamera-/Client-
+Scannbarkeit auf dem Produktdisplay bleibt bis zur Hardwarepruefung offen.
 
 Quellen: [ricmoo/QRCode](https://github.com/ricmoo/QRCode),
-[Project Nayuki](https://github.com/nayuki/QR-Code-generator). Abgerufen am
-2026-07-27.
+[Project Nayuki](https://github.com/nayuki/QR-Code-generator),
+[LVGL QR-Widget v9.6.0](https://github.com/lvgl/lvgl/blob/v9.6.0/src/widgets/qrcode/lv_qrcode.c),
+[gebuendelter Nayuki-Quelltext und Lizenz](https://github.com/lvgl/lvgl/blob/v9.6.0/src/libs/qrcode/qrcodegen.c).
+Gepruefter LVGL-Paketstand: `9.6.0~1`, Component-Hash wie oben, 2026-09-25.
 
 ## Gemeinsame UI-Basis und Frameworkgrenze
 
@@ -706,15 +712,18 @@ verglichen.
 
 | Kandidat | Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |
 |---|---|---|---|---|
-| LVGL | `9.5.0`, `8fd90bb1`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework; kein Display-/Touchtreiber | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; 4 MB/ohne PSRAM nach der Treiberwahl messen | nicht vorsorglich einbinden; nur waehlen, wenn der identische repraesentative Screen einen klar gemessenen Vorteil bei Bedienbarkeit, Wartbarkeit oder Umsetzung zeigt und die zusaetzlichen Ressourcen rechtfertigt |
+| LVGL | `9.6.0~1`, Component-Hash `7d82410747bbfb319531449749e940f440f8414f041f9eaba13f0d1dd7f58cdd`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework; kein Display-/Touchtreiber | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; Gesamtsystemressourcen bleiben Hardware-Evidence | bestehender produktiver Stack wird in #164 fuer den eingebauten WLAN-QR wiederverwendet; dies ist keine neue allgemeine QR-Plattform oder neue LVGL-Einfuehrung durch #164 |
 | schlanke projektspezifische Views auf gewaehltem Treiber | keine Drittkomponente fuer Widgets | passt zu wenigen festen 320-x-240-Screens und bestehenden View-Modellen | mehr eigene Layout-/Fokuslogik, aber enger kontrollierbarer Umfang | Vergleichsbasis erst nach Treiberwahl und Adaptervertrag; bevorzugt, solange LVGL keinen belegten Vorteil bringt |
 
 Die gemeinsamen #25-Praesentationsmodelle und die hardwareunabhaengige
-#26-Navigations-/Screenlogik bleiben frameworkfrei. Status:
-`EVALUATE_LATER`, keine LVGL-Abhaengigkeit in #25, im Treiberspike oder vor
-Treiberwahl, Adaptervertrag und repraesentativem Screen.
+#26-Navigations-/Screenlogik bleiben frameworkfrei. Die fruehere generische
+Framework-Evaluation waehlt keine zusaetzliche Frameworkabstraktion fuer diese
+Modelle aus; der bereits integrierte Produkt-Rendererpfad bleibt die konkrete
+LVGL-/`esp_lvgl_port`-Nutzung. Issue #164 fuegt nur den QR-Widgetaufruf zu
+diesem bestehenden Pfad hinzu.
 
-Quelle: [LVGL](https://github.com/lvgl/lvgl), abgerufen am 2026-07-27.
+Quelle: [LVGL v9.6.0](https://github.com/lvgl/lvgl/tree/v9.6.0), gepruefter
+Component-Manager-Paketstand `9.6.0~1` am 2026-09-25.
 
 ## Authentisierung und Plattformschutz
 

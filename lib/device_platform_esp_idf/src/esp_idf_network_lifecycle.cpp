@@ -1,5 +1,6 @@
 #include "esp_idf_network_lifecycle.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <mutex>
@@ -16,7 +17,6 @@
 namespace device_platform_esp_idf {
 namespace {
 
-constexpr std::size_t kMaximumSsidBytes = 32U;
 constexpr std::size_t kMinimumPasswordBytes = 8U;
 constexpr std::size_t kMaximumPasswordBytes = 63U;
 constexpr TickType_t kCandidatePollTicks = pdMS_TO_TICKS(100U);
@@ -56,7 +56,8 @@ EspIdfNetworkLifecycle::EspIdfNetworkLifecycle(
 bool EspIdfNetworkLifecycle::validAccessPointConfig(
     const EspIdfNetworkLifecycleConfig& config) {
     return !config.softApSsid.empty() &&
-           config.softApSsid.size() <= kMaximumSsidBytes &&
+           config.softApSsid.size() <=
+               device_platform::kMaximumNetworkSsidBytes &&
            config.softApPassword.size() >= kMinimumPasswordBytes &&
            config.softApPassword.size() <= kMaximumPasswordBytes &&
            !config.hostname.empty();
@@ -132,6 +133,7 @@ bool EspIdfNetworkLifecycle::ensureInitialized() {
         return false;
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+    init.nvs_enable = 0;
     if (esp_wifi_init(&init) != ESP_OK) {
         cleanupInitialization();
         return false;
@@ -182,7 +184,7 @@ bool EspIdfNetworkLifecycle::configureAccessPoint() {
 bool EspIdfNetworkLifecycle::configureStation(
     const device_platform::NetworkCredentials& credentials) {
     if (credentials.ssid.empty() ||
-        credentials.ssid.size() > kMaximumSsidBytes ||
+        credentials.ssid.size() > device_platform::kMaximumNetworkSsidBytes ||
         credentials.password.size() < kMinimumPasswordBytes ||
         credentials.password.size() > kMaximumPasswordBytes) {
         return false;
@@ -426,14 +428,19 @@ device_platform::NetworkScanResult EspIdfNetworkLifecycle::scan() {
     if (esp_wifi_scan_get_ap_num(&count) != ESP_OK) {
         return {device_platform::NetworkOperationStatus::Failed, {}};
     }
-    std::vector<wifi_ap_record_t> records(count);
-    if (count != 0U &&
-        esp_wifi_scan_get_ap_records(&count, records.data()) != ESP_OK) {
+    const auto recordCapacity =
+        static_cast<std::uint16_t>(std::min<std::size_t>(
+            count, device_platform::kMaximumNetworkScanEntries));
+    std::vector<wifi_ap_record_t> records(recordCapacity);
+    auto recordCount = recordCapacity;
+    if (recordCount != 0U &&
+        esp_wifi_scan_get_ap_records(&recordCount, records.data()) != ESP_OK) {
         return {device_platform::NetworkOperationStatus::Failed, {}};
     }
     std::vector<device_platform::NetworkScanEntry> entries;
-    entries.reserve(count);
-    for (const auto& record : records) {
+    entries.reserve(recordCount);
+    for (std::size_t index = 0U; index < recordCount; ++index) {
+        const auto& record = records[index];
         entries.push_back({reinterpret_cast<const char*>(record.ssid),
                            record.rssi, record.authmode != WIFI_AUTH_OPEN});
     }
@@ -528,10 +535,26 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::setHostname(
     if (hostname.empty() || hostname.size() > 63U) {
         return {device_platform::NetworkOperationStatus::InvalidInput};
     }
-    if (initialized_) {
-        return {device_platform::NetworkOperationStatus::Busy};
+    if (initialized_ &&
+        (!mdnsInitialized_ || mdns_hostname_set(hostname.c_str()) != ESP_OK)) {
+        return {device_platform::NetworkOperationStatus::Failed};
     }
     config_.hostname = hostname;
+    return {device_platform::NetworkOperationStatus::Applied};
+}
+
+device_platform::NetworkOperationResult
+EspIdfNetworkLifecycle::setAccessPointCredentials(const std::string& ssid,
+                                                  const std::string& password) {
+    if (ssid.empty() ||
+        ssid.size() > device_platform::kMaximumNetworkSsidBytes ||
+        password.size() < kMinimumPasswordBytes ||
+        password.size() > kMaximumPasswordBytes) {
+        return {device_platform::NetworkOperationStatus::InvalidInput};
+    }
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    config_.softApSsid = ssid;
+    config_.softApPassword = password;
     return {device_platform::NetworkOperationStatus::Applied};
 }
 

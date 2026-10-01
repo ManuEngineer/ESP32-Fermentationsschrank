@@ -645,57 +645,59 @@ bool FermentationApplication::begin(
     const device_platform::ITimeSource& timeSource,
     device_platform::INetworkLifecycle& networkLifecycle,
     device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    device_platform::ISecureRandomSource& randomSource,
     const device_platform::IResetCauseSource* resetCauseSource) {
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
-                           &httpServerLifecycle);
+                           &httpServerLifecycle, &randomSource);
 }
 
 bool FermentationApplication::initializeNetwork(
     device_platform::IStateStore& store,
     device_platform::StorageEpoch storageEpoch,
     device_platform::NetworkMode selectedMode,
-    const std::string& canonicalDeviceName) {
+    const std::string& canonicalDeviceName,
+    device_platform::ISecureRandomSource* randomSource) {
     if (networkLifecycle_ == nullptr || httpServerLifecycle_ == nullptr) {
         return true;
+    }
+    if (randomSource == nullptr) {
+        return false;
     }
 
     connectivityCredentialStore_ = std::unique_ptr<ConnectivityCredentialStore>{
         new (std::nothrow) ConnectivityCredentialStore(store)};
     if (connectivityCredentialStore_ == nullptr) {
-        requireService(FaultCode::None, true);
         return false;
     }
     networkConfigurationService_ = std::unique_ptr<NetworkConfigurationService>{
         new (std::nothrow) NetworkConfigurationService(
-            *connectivityCredentialStore_, *networkLifecycle_)};
+            *connectivityCredentialStore_, *networkLifecycle_, *randomSource)};
     if (networkConfigurationService_ == nullptr) {
-        requireService(FaultCode::None, true);
         return false;
     }
     networkSetupRoutes_ = std::unique_ptr<NetworkSetupRoutes>{
         new (std::nothrow) NetworkSetupRoutes(*networkConfigurationService_)};
     if (networkSetupRoutes_ == nullptr) {
-        requireService(FaultCode::None, true);
         return false;
     }
     const auto hostname = networkHostnameFromDeviceName(canonicalDeviceName);
     if (!hostname.has_value() ||
         networkLifecycle_->setHostname(*hostname).status !=
             device_platform::NetworkOperationStatus::Applied) {
-        requireService(FaultCode::ConfigurationUnavailable);
         return false;
     }
-    const auto networkStart =
-        networkConfigurationService_->start(selectedMode, storageEpoch);
+    const auto networkStart = networkConfigurationService_->start(
+        selectedMode, storageEpoch, canonicalDeviceName);
     if (networkStart.status == NetworkConfigurationStatus::Applied &&
         !httpServerLifecycle_->start(*networkSetupRoutes_)) {
-        requireService(FaultCode::ConfigurationUnavailable);
+        static_cast<void>(networkLifecycle_->stop());
+        static_cast<void>(httpServerLifecycle_->stop());
         return false;
     }
     if (networkStart.status != NetworkConfigurationStatus::Applied &&
         networkStart.status != NetworkConfigurationStatus::SelectionRequired) {
-        requireService(FaultCode::ConfigurationUnavailable);
+        static_cast<void>(networkLifecycle_->stop());
         return false;
     }
     return true;
@@ -736,21 +738,32 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         return {NetworkConfigurationStatus::PersistenceFailure};
     }
+    const auto hostname = networkHostnameFromDeviceName(
+        runtime.lease.get().userConfiguration().deviceName);
+    if (!hostname.has_value() ||
+        networkLifecycle_->setHostname(*hostname).status !=
+            device_platform::NetworkOperationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
     const auto applied = networkConfigurationService_->start(
-        selectedMode, runtime.lease.get().storageEpoch());
+        selectedMode, runtime.lease.get().storageEpoch(),
+        runtime.lease.get().userConfiguration().deviceName);
     if (applied.status != NetworkConfigurationStatus::Applied) {
         static_cast<void>(networkLifecycle_->stop());
         if (httpServerLifecycle_ != nullptr) {
             static_cast<void>(httpServerLifecycle_->stop());
         }
-        requireService(FaultCode::ConfigurationUnavailable);
-        return {NetworkConfigurationStatus::RecoveryRequired};
+        return applied;
     }
     if (httpServerLifecycle_ != nullptr && !httpServerLifecycle_->running() &&
         networkSetupRoutes_ != nullptr &&
         !httpServerLifecycle_->start(*networkSetupRoutes_)) {
-        requireService(FaultCode::ConfigurationUnavailable);
-        return {NetworkConfigurationStatus::RecoveryRequired};
+        static_cast<void>(networkLifecycle_->stop());
+        return {NetworkConfigurationStatus::TransportFailure};
     }
     storageEpoch_ = runtime.lease.get().storageEpoch();
     return {NetworkConfigurationStatus::Applied};
@@ -758,10 +771,45 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
 
 NetworkConfigurationResult
 FermentationApplication::beginHomeWifiReconfiguration() {
-    if (networkConfigurationService_ == nullptr) {
+    if (networkConfigurationService_ == nullptr ||
+        configurationService_ == nullptr) {
         return {NetworkConfigurationStatus::NotInitialized};
     }
-    return networkConfigurationService_->beginHomeWifiReconfiguration();
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return {NetworkConfigurationStatus::PersistenceFailure};
+    }
+    const auto hostname = networkHostnameFromDeviceName(
+        runtime.lease.get().userConfiguration().deviceName);
+    if (!hostname.has_value() ||
+        networkLifecycle_->setHostname(*hostname).status !=
+            device_platform::NetworkOperationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
+    const auto reconfigured =
+        networkConfigurationService_->beginHomeWifiReconfiguration(
+            runtime.lease.get().userConfiguration().deviceName);
+    if (reconfigured.status != NetworkConfigurationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return reconfigured;
+    }
+    if (httpServerLifecycle_ != nullptr && networkSetupRoutes_ != nullptr &&
+        (httpServerLifecycle_->running() ||
+         httpServerLifecycle_->start(*networkSetupRoutes_))) {
+        return reconfigured;
+    }
+    static_cast<void>(networkLifecycle_->stop());
+    if (httpServerLifecycle_ != nullptr) {
+        static_cast<void>(httpServerLifecycle_->stop());
+    }
+    return {NetworkConfigurationStatus::TransportFailure};
 }
 
 std::optional<device_platform::NetworkAccessPointInfo>
@@ -998,7 +1046,8 @@ bool FermentationApplication::beginPersistent(
     const device_platform::ITimeSource* timeSource,
     const device_platform::IResetCauseSource* resetCauseSource,
     device_platform::INetworkLifecycle* networkLifecycle,
-    device_platform::IHttpServerLifecycle* httpServerLifecycle) {
+    device_platform::IHttpServerLifecycle* httpServerLifecycle,
+    device_platform::ISecureRandomSource* randomSource) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -1008,6 +1057,7 @@ bool FermentationApplication::beginPersistent(
     stateStore_ = &store;
     networkLifecycle_ = networkLifecycle;
     httpServerLifecycle_ = httpServerLifecycle;
+    secureRandomSource_ = randomSource;
     storageEpoch_.reset();
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
@@ -1090,10 +1140,12 @@ bool FermentationApplication::beginPersistent(
     const auto epoch = runtime.lease.get().storageEpoch();
     storageEpoch_ = epoch;
 
-    if (!initializeNetwork(
-            store, epoch, runtime.lease.get().userConfiguration().networkMode,
-            runtime.lease.get().userConfiguration().deviceName)) {
-        return true;
+    if (!initializeNetwork(store, epoch,
+                           runtime.lease.get().userConfiguration().networkMode,
+                           runtime.lease.get().userConfiguration().deviceName,
+                           secureRandomSource_)) {
+        // Network setup is optional for application readiness. The core
+        // persistence and safety path continues independently.
     }
 
     runPersistenceCoordinator_ = std::unique_ptr<RunPersistenceCoordinator>{

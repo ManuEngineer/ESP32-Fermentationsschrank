@@ -11,6 +11,7 @@
 #include "device_ui_shell.hpp"
 #include "device_ui_theme.hpp"
 #include "device_ui_text.hpp"
+#include "network_lifecycle.hpp"
 #include "fermentation_touch_workspace.hpp"
 #include "fermentation_ui_text.hpp"
 
@@ -20,6 +21,7 @@ enum class ScreenDrawKind : std::uint8_t {
     Fill,
     Text,
     NetworkStatusIcon,
+    QrCode,
     Logo,
     PressFeedback,
 };
@@ -32,6 +34,7 @@ struct ScreenDrawCommand {
         device_platform::ThemeToken::Canvas};
     std::string text;
     std::string assetPath;
+    bool wrapText{false};
 };
 
 struct RepresentativeScreen {
@@ -51,6 +54,7 @@ struct RepresentativeScreen {
         device_platform::ThemeId{"manuengineer-dark"}, {}};
     std::string clockText{"--:--"};
     std::string logoAssetPath{"assets/branding/manuengineer/ManuEngineer.svg"};
+    std::uint64_t localNetworkInfoFingerprint{0U};
     FermentationUiWorkspaceView workspace;
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
     std::optional<device_platform::DeviceUiTarget> pressedTarget;
@@ -59,6 +63,12 @@ struct RepresentativeScreen {
 
 [[nodiscard]] std::uint16_t themeColor565(
     device_platform::ThemeToken token) noexcept;
+
+// Standard WLAN QR payload for locally joining the active protected SoftAP.
+// This renderer-only projection has no URL/IP input and is never added to the
+// general application UI snapshot.
+[[nodiscard]] std::optional<std::string> makeSoftApWifiQrPayload(
+    const device_platform::NetworkAccessPointInfo& accessPoint);
 
 // pressedTarget reflects only the existing #26 interaction result
 // (DeviceUiInteractionResult::visiblePressFeedback) for the currently held
@@ -75,7 +85,9 @@ struct RepresentativeScreen {
     const ProgramCatalog* catalog = nullptr,
     device_platform::DeviceUiNetworkStatus networkStatus =
         device_platform::DeviceUiNetworkStatus::Unavailable,
-    device_platform::ClockViewInput clock = {});
+    device_platform::ClockViewInput clock = {},
+    const std::optional<device_platform::NetworkAccessPointInfo>&
+        networkAccessPointInfo = std::nullopt);
 
 // Identifies every semantic input the concrete renderer must redraw for, so
 // it stays independent of the application's UiRefreshRevision. The workspace
@@ -105,6 +117,7 @@ struct ScreenRenderKey {
     std::optional<std::uint8_t> pressedBottomSlotIndex;
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};
+    std::uint64_t localNetworkInfoFingerprint{0U};
     std::optional<std::int64_t> trustedUtc;
     device_platform::ThemeId themeId;
 

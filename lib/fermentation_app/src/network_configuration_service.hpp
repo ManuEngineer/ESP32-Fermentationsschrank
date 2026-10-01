@@ -9,6 +9,7 @@
 #include "network_lifecycle.hpp"
 #include "network_mode.hpp"
 #include "network_startup_policy.hpp"
+#include "secure_random_source.hpp"
 
 namespace fermentation {
 
@@ -44,13 +45,18 @@ struct NetworkConfigurationScanResult {
 // ueber den bestehenden ConnectivityCredentialStore.
 class NetworkConfigurationService final {
    public:
-    NetworkConfigurationService(ConnectivityCredentialStore& credentialStore,
-                                device_platform::INetworkLifecycle& lifecycle)
-        : credentialStore_(credentialStore), lifecycle_(lifecycle) {}
+    NetworkConfigurationService(
+        ConnectivityCredentialStore& credentialStore,
+        device_platform::INetworkLifecycle& lifecycle,
+        device_platform::ISecureRandomSource& randomSource)
+        : credentialStore_(credentialStore),
+          lifecycle_(lifecycle),
+          randomSource_(randomSource) {}
 
     [[nodiscard]] NetworkConfigurationResult start(
         device_platform::NetworkMode selectedMode,
         device_platform::StorageEpoch storageEpoch,
+        std::string canonicalDeviceName,
         bool explicitHomeWifiReconfiguration = false);
 
     [[nodiscard]] NetworkConfigurationScanResult scan();
@@ -58,7 +64,8 @@ class NetworkConfigurationService final {
     [[nodiscard]] NetworkConfigurationResult beginCandidate(
         std::string ssid, std::string password);
     [[nodiscard]] NetworkConfigurationResult testCandidate();
-    [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
+    [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration(
+        std::string canonicalDeviceName);
     void discardCandidate() noexcept;
 
     [[nodiscard]] device_platform::NetworkStatus status() const {
@@ -85,14 +92,23 @@ class NetworkConfigurationService final {
     [[nodiscard]] NetworkConfigurationResult mapLifecycleResult(
         device_platform::NetworkOperationResult result) const;
     [[nodiscard]] NetworkConfigurationResult restoreActiveTransport();
+    [[nodiscard]] NetworkConfigurationResult ensureCredential(
+        device_platform::StorageEpoch storageEpoch,
+        const std::string& canonicalDeviceName);
+    [[nodiscard]] NetworkConfigurationResult writeNewCredential(
+        ConnectivityCredential credential,
+        device_platform::StorageEpoch storageEpoch,
+        std::uint64_t recordSequence);
 
     ConnectivityCredentialStore& credentialStore_;
     device_platform::INetworkLifecycle& lifecycle_;
+    device_platform::ISecureRandomSource& randomSource_;
     device_platform::NetworkMode selectedMode_{
         device_platform::NetworkMode::UNSELECTED};
     device_platform::StorageEpoch storageEpoch_;
     std::optional<ConnectivityCredential> activeCredential_;
     std::optional<ConnectivityCredential> candidate_;
+    std::string activeSoftApSsid_;
     bool initialized_{false};
     bool setupFlowActive_{false};
     bool recoveryRequired_{false};

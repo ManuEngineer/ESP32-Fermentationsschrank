@@ -23,6 +23,7 @@
 #include "network_lifecycle.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "secure_random_source.hpp"
 
 namespace fermentation {
 
@@ -72,6 +73,7 @@ class FermentationApplication {
         const device_platform::ITimeSource& timeSource,
         device_platform::INetworkLifecycle& networkLifecycle,
         device_platform::IHttpServerLifecycle& httpServerLifecycle,
+        device_platform::ISecureRandomSource& randomSource,
         const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
@@ -201,12 +203,14 @@ class FermentationApplication {
         const device_platform::ITimeSource* timeSource,
         const device_platform::IResetCauseSource* resetCauseSource,
         device_platform::INetworkLifecycle* networkLifecycle = nullptr,
-        device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr);
+        device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr,
+        device_platform::ISecureRandomSource* randomSource = nullptr);
     [[nodiscard]] bool initializeNetwork(
         device_platform::IStateStore& store,
         device_platform::StorageEpoch storageEpoch,
         device_platform::NetworkMode selectedMode,
-        const std::string& canonicalDeviceName);
+        const std::string& canonicalDeviceName,
+        device_platform::ISecureRandomSource* randomSource);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
         const RunPersistenceSnapshot* snapshot,
@@ -242,6 +246,7 @@ class FermentationApplication {
     device_platform::IStateStore* stateStore_{nullptr};
     device_platform::INetworkLifecycle* networkLifecycle_{nullptr};
     device_platform::IHttpServerLifecycle* httpServerLifecycle_{nullptr};
+    device_platform::ISecureRandomSource* secureRandomSource_{nullptr};
     std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;

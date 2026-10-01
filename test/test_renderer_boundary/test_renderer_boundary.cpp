@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -15,6 +16,19 @@ bool hasText(const fermentation::main_ui::RepresentativeScreen& screen,
     return std::any_of(
         screen.commands.begin(), screen.commands.end(),
         [text](const auto& command) { return command.text == text; });
+}
+
+bool overlaps(const device_platform::DisplayRect& left,
+              const device_platform::DisplayRect& right) {
+    return left.left < right.left + right.width &&
+           right.left < left.left + left.width &&
+           left.top < right.top + right.height &&
+           right.top < left.top + left.height;
+}
+
+void assertWithinDisplay(const device_platform::DisplayRect& rect) {
+    TEST_ASSERT_LESS_OR_EQUAL_UINT16(320U, rect.left + rect.width);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT16(240U, rect.top + rect.height);
 }
 
 void test_representative_screen_uses_existing_workspace_and_three_locales() {
@@ -69,6 +83,56 @@ void test_bottom_press_returns_existing_target() {
     TEST_ASSERT_NOT_EQUAL(
         static_cast<int>(device_platform::DeviceUiInteractionOutcome::Ignored),
         static_cast<int>(press.interaction.outcome));
+}
+
+void test_network_header_target_matches_rendered_status_icon_rect() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    const auto icon = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
+        });
+    TEST_ASSERT_TRUE(icon != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(220U, icon->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(4U, icon->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(44U, icon->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, icon->rect.height);
+
+    const auto assertNetworkTarget = [&screen](std::uint16_t x,
+                                               std::uint16_t y) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(
+                device_platform::DeviceUiTargetKind::HeaderNetwork),
+            static_cast<int>(target->kind));
+    };
+    assertNetworkTarget(220U, 4U);
+    assertNetworkTarget(263U, 21U);
+    assertNetworkTarget(240U, 12U);
+
+    const auto assertNoTarget = [&screen](std::uint16_t x, std::uint16_t y) {
+        TEST_ASSERT_FALSE(
+            fermentation::main_ui::targetAt(screen, x, y).has_value());
+    };
+    assertNoTarget(219U, 12U);
+    assertNoTarget(264U, 12U);
+    assertNoTarget(240U, 3U);
+    assertNoTarget(240U, 22U);
+
+    const auto bottom = fermentation::main_ui::targetAt(screen, 20U, 220U);
+    TEST_ASSERT_TRUE(bottom.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(bottom->kind));
+    TEST_ASSERT_EQUAL_UINT8(0U, bottom->slotIndex);
 }
 
 void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
@@ -526,6 +590,346 @@ void test_logo_command_is_native_size_and_does_not_overlap_header_boxes() {
     TEST_ASSERT_TRUE(headerBoxesChecked >= 3U);
 }
 
+void test_network_page_projects_softap_data_only_in_local_display_model() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::HOME_WIFI;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        "Fermentationsschrank", "ACDEFHJKMNPQRTU3", 0x0104A8C0U};
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+
+    TEST_ASSERT_TRUE(hasText(screen, "Home WiFi"));
+    TEST_ASSERT_TRUE(hasText(screen, "SSID: Fermentationsschrank"));
+    TEST_ASSERT_TRUE(hasText(screen, "Password: ACDEFHJKMNPQRTU3"));
+    TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
+    const auto qr =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(qr != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING(
+        "WIFI:T:WPA;S:Fermentationsschrank;P:ACDEFHJKMNPQRTU3;;",
+        qr->text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(156U, qr->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(34U, qr->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.height);
+    TEST_ASSERT_TRUE(qr->text.find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(qr->text.find("192.168.4.1") == std::string::npos);
+    TEST_ASSERT_NOT_EQUAL(0U, screen.localNetworkInfoFingerprint);
+    const auto ssid =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "SSID: Fermentationsschrank";
+                     });
+    const auto password =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.text == "Password: ACDEFHJKMNPQRTU3";
+                     });
+    TEST_ASSERT_TRUE(ssid != screen.commands.end());
+    TEST_ASSERT_TRUE(password != screen.commands.end());
+    TEST_ASSERT_TRUE(ssid->wrapText);
+    TEST_ASSERT_TRUE(password->wrapText);
+    TEST_ASSERT_EQUAL_UINT16(8U, ssid->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(72U, ssid->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, ssid->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(36U, ssid->rect.height);
+    TEST_ASSERT_EQUAL_UINT16(8U, password->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(110U, password->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, password->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(54U, password->rect.height);
+
+    const auto ip = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) { return command.text == "IP: 192.168.4.1"; });
+    TEST_ASSERT_TRUE(ip != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(8U, ip->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(166U, ip->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, ip->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, ip->rect.height);
+
+    const auto title = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) { return command.text == "WLAN"; });
+    const auto mode = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) { return command.text == "Home WiFi"; });
+    const auto header = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::NetworkStatusIcon;
+        });
+    TEST_ASSERT_TRUE(title != screen.commands.end());
+    TEST_ASSERT_TRUE(mode != screen.commands.end());
+    TEST_ASSERT_TRUE(header != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(8U, title->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(34U, title->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, title->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, title->rect.height);
+    TEST_ASSERT_EQUAL_UINT16(8U, mode->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(52U, mode->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, mode->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(18U, mode->rect.height);
+
+    const std::array<device_platform::DisplayRect, 5U> manualRects{
+        title->rect, mode->rect, ssid->rect, password->rect, ip->rect};
+    for (const auto& rect : manualRects) {
+        assertWithinDisplay(rect);
+        TEST_ASSERT_FALSE(overlaps(qr->rect, rect));
+    }
+    for (std::size_t index = 0U; index < manualRects.size(); ++index) {
+        for (std::size_t other = index + 1U; other < manualRects.size();
+             ++other) {
+            TEST_ASSERT_FALSE(overlaps(manualRects[index], manualRects[other]));
+        }
+    }
+    assertWithinDisplay(qr->rect);
+    assertWithinDisplay(header->rect);
+    TEST_ASSERT_FALSE(overlaps(qr->rect, header->rect));
+    for (const auto& command : screen.commands) {
+        assertWithinDisplay(command.rect);
+        if (command.rect.top >= 200U &&
+            command.kind != fermentation::main_ui::ScreenDrawKind::Fill) {
+            TEST_ASSERT_FALSE(overlaps(qr->rect, command.rect));
+        }
+    }
+
+    auto changedAccessPoint = accessPoint;
+    changedAccessPoint.password += "-rotated";
+    const auto changedScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        changedAccessPoint);
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeScreenRenderKey(screen) ==
+        fermentation::main_ui::makeScreenRenderKey(changedScreen));
+    const auto changedQr =
+        std::find_if(changedScreen.commands.begin(),
+                     changedScreen.commands.end(), [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(changedQr != changedScreen.commands.end());
+    TEST_ASSERT_TRUE(changedQr->text != qr->text);
+
+    const device_platform::DeviceUiTarget heldBottomSlot{
+        device_platform::DeviceUiTargetKind::BottomSlot, 2U};
+    const auto pressedScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        heldBottomSlot, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.size());
+    TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.capacity());
+
+    workspace.setPage(fermentation::FermentationUiPage::Home);
+    const auto ordinaryScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "Fermentation"));
+    TEST_ASSERT_FALSE(hasText(ordinaryScreen, "ACDEFHJKMNPQRTU3"));
+    TEST_ASSERT_EQUAL_UINT64(0U, ordinaryScreen.localNetworkInfoFingerprint);
+
+    for (const auto& command : screen.commands) {
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            320U, command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            240U, command.rect.top + command.rect.height);
+    }
+}
+
+void test_unselected_network_mode_renders_localized_selection_prompt() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::UNSELECTED;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+
+    const auto de = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"de"});
+    const auto en = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto es = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"es"});
+
+    TEST_ASSERT_TRUE(hasText(de, "Modus waehlen"));
+    TEST_ASSERT_TRUE(hasText(en, "Select mode"));
+    TEST_ASSERT_TRUE(hasText(es, "Elegir modo"));
+    TEST_ASSERT_FALSE(hasText(de, "Nicht ausgewaehlt"));
+    TEST_ASSERT_FALSE(hasText(en, "Not selected"));
+    TEST_ASSERT_FALSE(hasText(es, "Sin seleccionar"));
+    TEST_ASSERT_FALSE(hasText(de, "network-unselected"));
+    TEST_ASSERT_FALSE(hasText(en, "network-unselected"));
+    TEST_ASSERT_FALSE(hasText(es, "network-unselected"));
+
+    const auto prompt = std::find_if(
+        de.commands.begin(), de.commands.end(),
+        [](const auto& command) { return command.text == "Modus waehlen"; });
+    TEST_ASSERT_TRUE(prompt != de.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(8U, prompt->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(52U, prompt->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(140U, prompt->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(
+        fermentation::main_ui::RepresentativeScreen::kTextLineHeight,
+        prompt->rect.height);
+}
+
+void assertNetworkBottomLabelsFit(
+    const fermentation::main_ui::RepresentativeScreen& screen) {
+    std::size_t labelCount = 0U;
+    for (const auto& command : screen.commands) {
+        if (command.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+            command.rect.top < 200U || command.rect.width != 76U) {
+            continue;
+        }
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            320U, command.rect.left + command.rect.width);
+        TEST_ASSERT_LESS_OR_EQUAL_UINT16(
+            240U, command.rect.top + command.rect.height);
+        ++labelCount;
+    }
+    TEST_ASSERT_EQUAL_UINT(4U, labelCount);
+
+    constexpr std::array<std::uint16_t, 4U> slotCenters{40U, 120U, 200U, 280U};
+    for (const auto x : slotCenters) {
+        const auto target = fermentation::main_ui::targetAt(
+            screen, static_cast<std::uint16_t>(x), 220U);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+            static_cast<int>(target->kind));
+        TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(x / 80U),
+                                target->slotIndex);
+    }
+}
+
+void test_network_action_labels_fit_without_changing_bottom_hit_targets() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto de = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"de"});
+    const auto en = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto es = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"es"});
+
+    TEST_ASSERT_TRUE(hasText(de, "Nur AP"));
+    TEST_ASSERT_TRUE(hasText(de, "Heimnetz"));
+    TEST_ASSERT_TRUE(hasText(de, "Setup"));
+    TEST_ASSERT_TRUE(hasText(en, "AP only"));
+    TEST_ASSERT_TRUE(hasText(en, "Home WiFi"));
+    TEST_ASSERT_TRUE(hasText(en, "WiFi setup"));
+    TEST_ASSERT_TRUE(hasText(es, "Solo AP"));
+    TEST_ASSERT_TRUE(hasText(es, "WiFi casa"));
+    TEST_ASSERT_TRUE(hasText(es, "Ajustes"));
+
+    assertNetworkBottomLabelsFit(de);
+    assertNetworkBottomLabelsFit(en);
+    assertNetworkBottomLabelsFit(es);
+}
+
+void test_softap_wifi_qr_escapes_reserved_characters_deterministically() {
+    const device_platform::NetworkAccessPointInfo accessPoint{
+        R"(semi;comma,colon:quote"slash\end)", R"(pass;word,:"\x)",
+        0x0104A8C0U};
+    const auto first =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    const auto second =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    TEST_ASSERT_TRUE(first.has_value());
+    TEST_ASSERT_TRUE(second.has_value());
+    TEST_ASSERT_EQUAL_STRING(
+        R"(WIFI:T:WPA;S:semi\;comma\,colon\:quote\"slash\\end;P:pass\;word\,\:\"\\x;;)",
+        first->c_str());
+    TEST_ASSERT_EQUAL_STRING(first->c_str(), second->c_str());
+    TEST_ASSERT_TRUE(first->find("http") == std::string::npos);
+    TEST_ASSERT_TRUE(first->find("192.168.4.1") == std::string::npos);
+
+    auto changed = accessPoint;
+    changed.ssid += "-other";
+    const auto changedPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPayload != *first);
+
+    changed = accessPoint;
+    changed.password += "-other";
+    const auto changedPasswordPayload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(changed);
+    TEST_ASSERT_TRUE(changedPasswordPayload.has_value());
+    TEST_ASSERT_TRUE(*changedPasswordPayload != *first);
+
+    device_platform::NetworkAccessPointInfo incomplete;
+    incomplete.ssid = "no-password";
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeSoftApWifiQrPayload(incomplete).has_value());
+}
+
+void test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract() {
+    constexpr std::uint16_t kQrCanvas = 164U;
+    constexpr std::uint16_t kQrEffectiveVersion = 5U;
+    constexpr std::uint16_t kQrModuleCount = 37U;
+    constexpr std::uint16_t kQrModuleScale = 4U;
+    constexpr std::uint16_t kQrMarginPerSide = 8U;
+    TEST_ASSERT_EQUAL_UINT16(
+        kQrCanvas, kQrModuleCount * kQrModuleScale + 2U * kQrMarginPerSide);
+    TEST_ASSERT_EQUAL_UINT16(148U, kQrModuleCount * kQrModuleScale);
+    TEST_ASSERT_EQUAL_UINT16(8U, kQrCanvas - 148U - kQrMarginPerSide);
+    TEST_ASSERT_EQUAL_UINT16(5U, kQrEffectiveVersion);
+
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::AP_ONLY;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto accessPoint = device_platform::NetworkAccessPointInfo{
+        std::string(14U, '\\'), std::string(16U, 'A'), 0x0104A8C0U};
+    const auto payload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    TEST_ASSERT_TRUE(payload.has_value());
+    TEST_ASSERT_EQUAL_UINT(62U, payload->size());
+
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    const auto qr =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(qr != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING(payload->c_str(), qr->text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(156U, qr->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(34U, qr->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.height);
+    assertWithinDisplay(qr->rect);
+}
+
+void test_network_page_missing_softap_info_is_explicit() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_TRUE(hasText(screen, "Access data unavailable"));
+    TEST_ASSERT_EQUAL_UINT64(0U, screen.localNetworkInfoFingerprint);
+}
+
 }  // namespace
 
 // The native test target does not compile the ESP-IDF main component.  Include
@@ -544,6 +948,7 @@ int main() {
     RUN_TEST(
         test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);
+    RUN_TEST(test_network_header_target_matches_rendered_status_icon_rect);
     RUN_TEST(test_empty_home_omits_empty_pager_and_messages_pager_is_rendered);
     RUN_TEST(test_render_key_stable_for_same_snapshot_and_workspace);
     RUN_TEST(test_render_key_changes_on_workspace_navigation);
@@ -567,5 +972,13 @@ int main() {
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
+    RUN_TEST(
+        test_network_page_projects_softap_data_only_in_local_display_model);
+    RUN_TEST(test_unselected_network_mode_renders_localized_selection_prompt);
+    RUN_TEST(
+        test_network_action_labels_fit_without_changing_bottom_hit_targets);
+    RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
+    RUN_TEST(test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract);
+    RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -8,6 +9,11 @@
 #include "network_mode.hpp"
 
 namespace device_platform {
+
+inline constexpr std::size_t kMaximumNetworkSsidBytes = 32U;
+inline constexpr std::size_t kMaximumNetworkScanEntries = 16U;
+inline constexpr std::size_t kMaximumNetworkScanResponseBytes =
+    kMaximumNetworkScanEntries * (kMaximumNetworkSsidBytes + 1U);
 
 struct NetworkCredentials {
     std::string ssid;
@@ -101,6 +107,11 @@ class INetworkLifecycle {
     // transport derives its advertised hostname/mDNS identity from it.
     [[nodiscard]] virtual NetworkOperationResult setHostname(
         const std::string& hostname) = 0;
+    // Supplies the volatile SoftAP identity before the next transport start.
+    // The application owns persistence and derives the value; the lifecycle
+    // only retains it in RAM for the concrete Wi-Fi adapter.
+    [[nodiscard]] virtual NetworkOperationResult setAccessPointCredentials(
+        const std::string& ssid, const std::string& password) = 0;
     [[nodiscard]] virtual NetworkStatus status() const = 0;
     // Deliberately separate sensitive local SoftAP setup data from the
     // generic status/diagnostic contract.

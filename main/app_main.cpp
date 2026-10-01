@@ -1,5 +1,4 @@
 #include <cinttypes>
-#include <cstdio>
 #include <memory>
 #include <new>
 #include <string>
@@ -42,7 +41,7 @@
 #endif
 
 #include "esp_log.h"
-#include "esp_mac.h"
+#include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -201,41 +200,96 @@ void logHeartbeat(uint64_t uptimeMs) {
     ESP_LOGI(kTag, "heartbeat: safe test mode, uptime_ms=%" PRIu64, uptimeMs);
 }
 
-void logResources() {
-    const uint32_t freeHeapBytes = esp_get_free_heap_size();
-    const UBaseType_t stackHighWaterMarkBytes =
-        uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGI(kTag, "resources: free_heap_bytes=%" PRIu32 " stack_hwm_bytes=%u",
-             freeHeapBytes, static_cast<unsigned>(stackHighWaterMarkBytes));
+[[nodiscard]] const char* networkModeName(
+    device_platform::NetworkMode mode) noexcept {
+    switch (mode) {
+        case device_platform::NetworkMode::UNSELECTED:
+            return "UNSELECTED";
+        case device_platform::NetworkMode::AP_ONLY:
+            return "AP_ONLY";
+        case device_platform::NetworkMode::HOME_WIFI:
+            return "HOME_WIFI";
+    }
+    return "UNKNOWN";
 }
 
-device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
-    device_platform::ISecureRandomSource& randomSource) {
-    std::uint8_t mac[6]{};
-    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) {
-        return {};
+[[nodiscard]] const char* networkLifecycleStateName(
+    device_platform::NetworkLifecycleState state) noexcept {
+    switch (state) {
+        case device_platform::NetworkLifecycleState::Stopped:
+            return "Stopped";
+        case device_platform::NetworkLifecycleState::SetupAccessPoint:
+            return "SetupAccessPoint";
+        case device_platform::NetworkLifecycleState::AccessPointOnly:
+            return "AccessPointOnly";
+        case device_platform::NetworkLifecycleState::ConnectingHome:
+            return "ConnectingHome";
+        case device_platform::NetworkLifecycleState::HomeConnected:
+            return "HomeConnected";
+        case device_platform::NetworkLifecycleState::CandidateTesting:
+            return "CandidateTesting";
+        case device_platform::NetworkLifecycleState::Failed:
+            return "Failed";
     }
-    char suffix[13]{};
-    const int written =
-        std::snprintf(suffix, sizeof(suffix), "%02X%02X%02X%02X%02X%02X",
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    if (written != 12) {
-        return {};
+    return "Unknown";
+}
+
+void logResources(const char* samplePoint,
+                  device_platform::NetworkMode selectedMode,
+                  device_platform::NetworkLifecycleState lifecycleState) {
+    const uint32_t freeHeapBytes = esp_get_free_heap_size();
+    const uint32_t minimumFreeHeapBytes = esp_get_minimum_free_heap_size();
+    const size_t largestFreeBlockBytes =
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    const UBaseType_t stackHighWaterMarkBytes =
+        uxTaskGetStackHighWaterMark(nullptr);
+    ESP_LOGI(kTag,
+             "resources: point=%s network_mode=%s network_state=%s "
+             "free_heap_bytes=%" PRIu32 " minimum_free_heap_bytes=%" PRIu32
+             " largest_free_block_8bit_bytes=%zu stack_hwm_bytes=%u",
+             samplePoint, networkModeName(selectedMode),
+             networkLifecycleStateName(lifecycleState), freeHeapBytes,
+             minimumFreeHeapBytes, largestFreeBlockBytes,
+             static_cast<unsigned>(stackHighWaterMarkBytes));
+}
+
+struct NetworkResourceSamplingState {
+    device_platform::NetworkMode lastObservedMode;
+    device_platform::NetworkLifecycleState lastObservedState;
+    bool hasObservedState{false};
+};
+
+void sampleStableNetworkResources(
+    device_platform::NetworkMode selectedNetworkMode,
+    device_platform::NetworkLifecycleState networkState,
+    NetworkResourceSamplingState& samplingState) {
+    const bool stableApOnly =
+        networkState == device_platform::NetworkLifecycleState::AccessPointOnly;
+    const bool stableHomeWifi =
+        selectedNetworkMode == device_platform::NetworkMode::HOME_WIFI &&
+        (networkState ==
+             device_platform::NetworkLifecycleState::HomeConnected ||
+         networkState ==
+             device_platform::NetworkLifecycleState::SetupAccessPoint);
+    const bool networkStatusChanged =
+        !samplingState.hasObservedState ||
+        selectedNetworkMode != samplingState.lastObservedMode ||
+        networkState != samplingState.lastObservedState;
+    if (networkStatusChanged && (stableApOnly || stableHomeWifi)) {
+        const char* samplePoint = nullptr;
+        if (stableApOnly) {
+            samplePoint = "stable_ap_only";
+        } else if (networkState ==
+                   device_platform::NetworkLifecycleState::HomeConnected) {
+            samplePoint = "stable_home_wifi";
+        } else {
+            samplePoint = "stable_home_wifi_setup_access_point";
+        }
+        logResources(samplePoint, selectedNetworkMode, networkState);
     }
-    std::uint8_t randomBytes[16]{};
-    if (!randomSource.fill(randomBytes, sizeof(randomBytes))) {
-        return {};
-    }
-    static constexpr char kHex[] = "0123456789abcdef";
-    std::string password;
-    password.reserve(sizeof(randomBytes) * 2U);
-    for (const auto byte : randomBytes) {
-        password.push_back(kHex[(byte >> 4U) & 0x0FU]);
-        password.push_back(kHex[byte & 0x0FU]);
-    }
-    // The password is neither derived from the MAC nor exposed through logs
-    // or URLs. It exists only in the volatile adapter configuration.
-    return {std::string("Fermentation-") + suffix, std::move(password), {}};
+    samplingState.lastObservedMode = selectedNetworkMode;
+    samplingState.lastObservedState = networkState;
+    samplingState.hasObservedState = true;
 }
 
 // Maps the existing renderer-independent #164 network lifecycle state to the
@@ -316,7 +370,8 @@ void initializeProductUi(
     if (!displayRenderer->render(application.uiSnapshot(), uiWorkspace,
                                  uiTextPacks, uiPresentation.displayLocale,
                                  std::nullopt, &uiPresentation.programCatalog,
-                                 uiNetworkStatus, uiClock)) {
+                                 uiNetworkStatus, uiClock,
+                                 application.networkAccessPointInfo())) {
         ESP_LOGW(kTag, "productive LVGL initial projection failed");
     }
 }
@@ -326,17 +381,34 @@ void updateProductUi(
     fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
     fermentation::FermentationTouchWorkspace& uiWorkspace,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
+    const device_platform::LocaleId& initialDisplayLocale,
+    const device_platform::TimeZoneId& initialTimeZoneId,
     device_platform::INetworkLifecycle& networkLifecycle,
     const device_platform::ITimeSource& timeSource) {
     if (displayRenderer == nullptr || !displayRenderer->initialized()) {
         return;
     }
 
-    const auto loopPresentation = application.uiPresentationSource();
+    const bool networkPageBeforeTouch =
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    fermentation::FermentationUiPresentationSource loopPresentation;
+    if (!networkPageBeforeTouch) {
+        loopPresentation = application.uiPresentationSource();
+    }
+    // HeaderNetwork does not consume ProgramCatalog; do not keep its full
+    // copy alive while a network-mode touch is committed.
+    const auto& touchDisplayLocale = networkPageBeforeTouch
+                                         ? initialDisplayLocale
+                                         : loopPresentation.displayLocale;
+    const auto& touchTimeZoneId = networkPageBeforeTouch
+                                      ? initialTimeZoneId
+                                      : loopPresentation.canonicalTimeZoneId;
+    const auto* touchProgramCatalog =
+        networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
     const device_platform::ClockViewInput loopClock{
-        timeSource.unixTimeSeconds(), loopPresentation.canonicalTimeZoneId};
+        timeSource.unixTimeSeconds(), touchTimeZoneId};
     const auto loopSnapshot = application.uiSnapshot();
 
     // The existing #26 target/interaction path (calibrated touch
@@ -346,23 +418,45 @@ void updateProductUi(
     // never builds a RepresentativeScreen or calls targetAt()/routePress()
     // itself. No second event/command state machine is introduced.
     const auto touchPoll = displayRenderer->pollTouch();
+    const bool sampleNetworkPagePress =
+        touchPoll.freshPressEdge &&
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    if (sampleNetworkPagePress) {
+        logResources("network_page_press_before", application.networkMode(),
+                     networkLifecycle.status().state);
+    }
     const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
-        application, uiWorkspace, loopSnapshot, uiTextPacks,
-        loopPresentation.displayLocale, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock, touchPoll.contactHeld,
+        application, uiWorkspace, loopSnapshot, uiTextPacks, touchDisplayLocale,
+        touchProgramCatalog, loopNetworkStatus, loopClock,
+        touchPoll.contactHeld,
         touchPoll.point.has_value() ? touchPoll.point->x : 0U,
         touchPoll.point.has_value() ? touchPoll.point->y : 0U,
         touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    if (sampleNetworkPagePress) {
+        logResources("network_page_press_after", application.networkMode(),
+                     networkLifecycle.status().state);
+    }
     if (touchTick.dispatch.outcome !=
         fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
         ESP_LOGI(kTag, "touch press dispatch: outcome=%d",
                  static_cast<int>(touchTick.dispatch.outcome));
     }
 
+    if (networkPageBeforeTouch &&
+        uiWorkspace.page() != fermentation::FermentationUiPage::HeaderNetwork) {
+        loopPresentation = application.uiPresentationSource();
+    }
+    const bool networkPageAfterTouch =
+        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    const auto& renderDisplayLocale = networkPageAfterTouch
+                                          ? initialDisplayLocale
+                                          : loopPresentation.displayLocale;
+    const auto* renderProgramCatalog =
+        networkPageAfterTouch ? nullptr : &loopPresentation.programCatalog;
     static_cast<void>(displayRenderer->render(
-        loopSnapshot, uiWorkspace, uiTextPacks, loopPresentation.displayLocale,
-        touchTick.pressedTarget, &loopPresentation.programCatalog,
-        loopNetworkStatus, loopClock));
+        loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
+        touchTick.pressedTarget, renderProgramCatalog, loopNetworkStatus,
+        loopClock, application.networkAccessPointInfo()));
 }
 
 }  // namespace
@@ -377,6 +471,16 @@ extern "C" void app_main(void) {
     fermentation::issue_31_touch_calibration::run();
     return;
 #endif
+
+    const esp_err_t defaultNvsStatus = nvs_flash_init();
+    if (defaultNvsStatus != ESP_OK) {
+        ESP_LOGE(kTag,
+                 "default NVS initialization for ESP-IDF PHY data failed: "
+                 "err=0x%x; Wi-Fi startup is stopped",
+                 static_cast<unsigned>(defaultNvsStatus));
+        return;
+    }
+    ESP_LOGI(kTag, "default NVS initialized for ESP-IDF PHY system data");
 
     const auto stateStoreContext = NvsOwningContext::create();
     if (stateStoreContext == nullptr) {
@@ -422,9 +526,7 @@ extern "C" void app_main(void) {
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
     device_platform_esp_idf::EspIdfSecureRandomSource randomSource;
-    const auto networkConfig = makeNetworkConfig(randomSource);
-    device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle(
-        networkConfig);
+    device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle({});
     device_platform_esp_idf::EspIdfHttpServerLifecycle httpServerLifecycle;
 
     const device_platform::PlatformStartupContext startupContext{
@@ -434,7 +536,7 @@ extern "C" void app_main(void) {
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
                           timeZoneResolver, timeSource, networkLifecycle,
-                          httpServerLifecycle, &resetCauseSource);
+                          httpServerLifecycle, randomSource, &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());
@@ -475,17 +577,22 @@ extern "C" void app_main(void) {
          r1_pins::kBacklightActiveHigh});
     fermentation::FermentationTouchWorkspace uiWorkspace;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
-    // The single renderer-independent source for locale, the program catalog
-    // and the canonical prepared time zone; see
-    // FermentationApplication::uiPresentationSource().
-    const auto uiPresentation = application.uiPresentationSource();
-    const auto uiNetworkStatus =
-        toDeviceUiNetworkStatus(networkLifecycle.status().state);
-    const device_platform::ClockViewInput uiClock{
-        timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
-    initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
-                        application, uiWorkspace, uiTextPacks, uiPresentation,
-                        uiNetworkStatus, uiClock);
+    device_platform::LocaleId uiDisplayLocale{"en"};
+    device_platform::TimeZoneId uiTimeZoneId;
+    // The single renderer-independent source for locale, program catalog and
+    // canonical prepared time zone is needed here only for initial UI setup.
+    {
+        auto uiPresentation = application.uiPresentationSource();
+        const auto uiNetworkStatus =
+            toDeviceUiNetworkStatus(networkLifecycle.status().state);
+        const device_platform::ClockViewInput uiClock{
+            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
+        initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
+                            application, uiWorkspace, uiTextPacks,
+                            uiPresentation, uiNetworkStatus, uiClock);
+        uiDisplayLocale = std::move(uiPresentation.displayLocale);
+        uiTimeZoneId = std::move(uiPresentation.canonicalTimeZoneId);
+    }
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
     fermentation::issue_90_slice7::Harness issue90Harness(application,
@@ -493,7 +600,8 @@ extern "C" void app_main(void) {
     issue90Harness.start();
 #endif
 
-    logResources();
+    logResources("startup", application.networkMode(),
+                 networkLifecycle.status().state);
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -501,13 +609,21 @@ extern "C" void app_main(void) {
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;
+    NetworkResourceSamplingState networkResourceSamplingState{
+        application.networkMode(), networkLifecycle.status().state};
 
     for (;;) {
         platform.update();
         sntp.poll();
         application.update();
         updateProductUi(application, displayRenderer.get(), uiWorkspace,
-                        uiTextPacks, networkLifecycle, timeSource);
+                        uiTextPacks, uiDisplayLocale, uiTimeZoneId,
+                        networkLifecycle, timeSource);
+
+        const auto networkStatus = networkLifecycle.status();
+        const auto selectedNetworkMode = application.networkMode();
+        sampleStableNetworkResources(selectedNetworkMode, networkStatus.state,
+                                     networkResourceSamplingState);
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
@@ -521,7 +637,9 @@ extern "C" void app_main(void) {
         if (!secondResourceLogDone &&
             nowMs - startMs >= kSecondResourceLogAfterMs) {
             secondResourceLogDone = true;
-            logResources();
+            const auto currentNetworkStatus = networkLifecycle.status();
+            logResources("periodic_30s", application.networkMode(),
+                         currentNetworkStatus.state);
         }
 
         vTaskDelay(kCooperativeYieldTicks);
