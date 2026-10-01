@@ -8,14 +8,14 @@ WORKTREE=/tmp/issue164-network-ui.M4vluy
 BASE_HEAD=daeccd995a2ba81d7af5b91587050c14dd8b84ca
 BASE_PLAN_HEAD=32cb8f1cc46c2cea532458a1c5db5581da552052
 SUPERSEDES_CONTRACT_ONLY=old_fixed-softap-ssid-and-per-boot-password-sections
-PLAN_STATUS=PLAN_FIX_READY_OWNER_VERIFICATION
-PLAN_FIX_SCOPE=P1_LVGL_QR_MODEL_AND_P2_V2_WIREFORMAT
+PLAN_STATUS=PLAN_FIX_READY_INDEPENDENT_VERIFICATION
+PLAN_FIX_SCOPE=P1_P2_B1_B3_B4
 PRODUCT_CODE_CHANGED=NO
 TESTS=NOT_RUN_PLAN_ONLY
 BUILD=NOT_RUN_PLAN_ONLY
 FLASH=NOT_RUN_PLAN_ONLY
 IMPLEMENTATION_ALLOWED=NO
-NEXT_GATE=OWNER_PLAN_FIX_VERIFICATION
+NEXT_GATE=INDEPENDENT_PLAN_FIX_VERIFICATION
 PR_STATE=OPEN_DRAFT
 READY=NO
 MERGE=NO
@@ -288,7 +288,138 @@ Die manuelle Anzeige und `networkAccessPointInfo()` beziehen SSID, Passwort
 und IP weiterhin aus dem bestehenden aktiven Lifecycle. Es gibt keine zweite
 SSID-/Passwort-Wahrheit in Renderer, HTTP-Route oder Diagnose.
 
-## 6. QR-Payload, Version und Geometrie
+## 6. B1 – Netzwerkfehler bleiben vom Fermentationskern getrennt
+
+Der Netzwerkpfad ist ein optionaler lokaler Dienst und keine Voraussetzung fuer
+die Initialisierung des Fermentations-/Safety-Kerns. Fuer die spaetere
+Umsetzung gilt deshalb der explizite Vertrag:
+
+```text
+network credential/random/persistence failure
+OR network lifecycle start failure
+OR HTTP start failure
+
+-> network remains stopped/fail-closed
+-> FermentationApplication core initialization continues
+-> RunPersistenceCoordinator/load/classification continue
+-> local fermentation/Safety remain governed only by existing contracts
+-> no global service-required state solely because networking failed
+```
+
+Der heute sichtbare Kontrollfluss
+
+```cpp
+if (!initializeNetwork(...)) {
+    return true;
+}
+```
+
+darf in der spaeteren Umsetzung nicht dazu fuehren, dass ein reiner
+Netzwerkfehler die anschliessende Erstellung oder Nutzung des
+`RunPersistenceCoordinator`, die Run-Load-/Classification-Pfade oder die
+bestehende Safety-/Readiness-Bewertung ueberspringt. Nach einem fehlenden oder
+fehlgeschlagenen Netzwerkstart muss die Application mit Netzwerkstatus
+`unavailable`/`stopped` in den bereits vorhandenen Core-Initialisierungspfad
+weiterlaufen.
+
+`initializeNetwork()` darf Fehler aus Credential-Erzeugung, Credential-
+Persistenz/Readback, SSID-Ableitung, Lifecycle-Start oder HTTP-Start nicht
+ueber einen globalen `requireService()`-Pfad in eine Abhaengigkeit des
+Fermentationskerns von WLAN verwandeln. Ein solcher Fehler bleibt lokal am
+Netzwerk-/Web-Dienst beobachtbar; die bestehenden Core-Faults und
+Safety-Vertraege werden nicht erweitert. Eine zweite Application-State-
+Machine, ein Netzwerk-Worker oder ein paralleler Readiness-Owner wird nicht
+eingefuehrt.
+
+Die spaetere Umsetzung muss mindestens diese getrennten Regressionen
+vorsehen:
+
+1. SoftAP-Credential-Write-/Readbackfehler: kein Network-Start, Core-Boot und
+   Run-/Safety-Initialisierung laufen weiter.
+2. Network-Lifecycle-Startfehler: Netzwerk bleibt unavailable/stopped, Core-
+   Boot laeuft weiter.
+3. HTTP-Startfehler: der Network-Lifecycle wird wieder gestoppt/fail-closed,
+   Web bleibt unavailable, Core-Boot laeuft weiter.
+4. Run-/Safety-Readiness bleibt identisch unabhaengig vom Network-Erfolg.
+
+## 7. B3 – Recordexistenz ist nicht HOME_WIFI-Verfuegbarkeit
+
+Ein gueltiger V2-Record kann ausschliesslich ein persistiertes SoftAP-
+Passwort enthalten. Die vollstaendige Credential darf fuer SoftAP-
+Passwort-Preservation im RAM gehalten werden; sie ist aber kein Beleg fuer
+vorhandene HOME_WIFI-Credentials. Die fachliche Entscheidung lautet an jeder
+Stelle exakt:
+
+```cpp
+validHomeWifiCredentials = currentCredential.homeWifi.has_value();
+```
+
+Unzulaessig ist die Abkuerzung "Credential-Record vorhanden bedeutet
+HOME_WIFI verfuegbar". `currentCredential` und die darin verschachtelte
+`homeWifi`-Optionalitaet bleiben getrennt. Nur bei `has_value()` darf das
+HOME_WIFI-Paar an den Station-/Candidate-Pfad uebergeben werden.
+
+Die Startup-Entscheidungen bleiben damit:
+
+| Credential-/Modusbefund | Erwarteter Pfad |
+|---|---|
+| V2: SoftAP-Passwort vorhanden, `homeWifi` absent, HOME_WIFI ausgewaehlt | `HomeWifiSetup`, `setupFlowActive=true` |
+| V2: SoftAP-Passwort vorhanden, `homeWifi` absent, AP_ONLY ausgewaehlt | `AccessPointOnly` |
+| V2: SoftAP-Passwort und `homeWifi` vorhanden, HOME_WIFI ausgewaehlt | normaler `HomeWifi`-Pfad |
+| setup-only V2 plus erfolgreicher HOME_WIFI-Kandidatencommit | HOME_WIFI wird ergaenzt, dasselbe SoftAP-Passwort bleibt erhalten |
+
+Der AP_ONLY-Start darf niemals deshalb in Setup oder HOME_WIFI wechseln, weil
+der V2-Record existiert. Umgekehrt darf HOME_WIFI ohne verschachtelte
+Credentials nicht als normal verbunden gestartet werden. Die bestehende
+Setup-/Candidate-/Commit-Semantik, Epochbindung und fail-closed Behandlung
+bleiben unveraendert.
+
+## 8. B4 – aktueller `deviceName` bei jedem Network-Restart
+
+Der Ownervertrag gilt fuer jeden Application-owned Start-/Restart-Pfad:
+
+```text
+deviceName changes
+-> next real network restart uses newly derived SSID
+-> persisted SoftAP password stays unchanged
+```
+
+Das muss explizit fuer alle folgenden Pfade gelten:
+
+- Boot und `initializeNetwork()`;
+- `applyNetworkMode()`;
+- `beginHomeWifiReconfiguration()`.
+
+Vor jedem tatsaechlichen `INetworkLifecycle::start()` oder Restart bezieht
+der Application-Owner den aktuellen Runtime-
+`UserConfiguration.deviceName` ueber den bestehenden `ConfigurationService`
+oder uebergibt die frisch daraus abgeleitete SSID an den bestehenden
+Network-Pfad. Der `NetworkConfigurationService` liest dafuer niemals direkt
+die Configuration-Persistenz. Er erhaelt den aktuellen SSID-Wert vom
+Application-Owner und verwendet das SoftAP-Passwort unveraendert aus dem
+aktuellen gueltigen V2-Credential.
+
+Die konkreten Pfade sind damit geplant:
+
+1. **Boot / `initializeNetwork()`**: Nach dem Runtime-Configuration-Read wird
+   der damals aktuelle `deviceName` abgeleitet und vor dem ersten Lifecycle-
+   Start gesetzt.
+2. **`applyNetworkMode()`**: Nach dem bestehenden Configuration-Commit wird
+   die aktuelle Runtime-Konfiguration erneut ueber den `ConfigurationService`
+   bezogen. Der nachfolgende Network-Start/Restart bekommt daraus die neue
+   SSID; ein gueltiges SoftAP-Passwort wird nicht neu erzeugt.
+3. **`beginHomeWifiReconfiguration()`**: Vor dem expliziten HOME_WIFI-
+   Restart stellt der Application-Owner den aktuellen `deviceName` bereit.
+   Der bestehende Network-Pfad darf nicht mit einem beim Boot gespeicherten
+   Namen arbeiten und darf fuer diese Aktualisierung keine direkte
+   Store-Lesung einfuehren.
+
+Wenn ein konkreter bestehender Pfad nach der spaeteren Implementierung den
+Lifecycle tatsaechlich nicht neu startet, wird das als Befund dokumentiert und
+der naechste reale Restartpunkt mit aktuellem `deviceName` geprueft. Eine
+kuenstliche Restart-Logik oder neue State-Machine wird nicht eingefuehrt.
+
+## 9. QR-Payload, Version und Geometrie
 
 Die semantische Payload bleibt exakt:
 
@@ -379,7 +510,7 @@ Passwort und IP ueberlappen den QR nicht. Bestehende Header-Touch- und
 Bottom-Control-Rechtecke werden nur in einer Regression mitgeprueft, nicht
 durch eine neue Layoutarchitektur ersetzt.
 
-## 7. Scanvertrag erhalten
+## 10. Scanvertrag erhalten
 
 Die bereits beschlossene Scan-Korrektur ist Bestandteil dieses Korrekturplans
 und darf nicht geloest oder erweitert werden:
@@ -400,7 +531,7 @@ und darf nicht geloest oder erweitert werden:
   neue Diagnosearchitektur erlaubt, Task-Stack-HWM werden vor/nach dem
   Browser-Scan erfasst. Diese Messung beweist keine OOM-Ursache allein.
 
-## 8. Geplante Regressionen und Nachweise
+## 11. Geplante Regressionen und Nachweise
 
 Diese Pruefungen sind Bestandteil der spaeteren Umsetzung, wurden in diesem
 Plan-Only-Schritt aber nicht ausgefuehrt.
@@ -425,6 +556,31 @@ Plan-Only-Schritt aber nicht ausgefuehrt.
 - Header, Page-Titel, Current Mode, SSID, Passwort, IP, QR und Bottom-
   Controls liegen innerhalb der 320x240-Grenze; linke Info-Rechtecke und QR
   ueberlappen nicht.
+
+### B1, B3 und B4
+
+- SoftAP-Credential-Write-/Readbackfehler fuehren zu keinem Network-Start;
+  der Core-Boot mit `RunPersistenceCoordinator`, Run-Classification und
+  Safety-Readiness laeuft weiter.
+- Ein Network-Lifecycle-Startfehler laesst das Netzwerk unavailable/stopped,
+  ohne den Fermentationskern in einen globalen `service-required`-Zustand zu
+  setzen.
+- Ein HTTP-Startfehler stoppt den Network-Lifecycle wieder fail-closed und
+  laesst nur Web unavailable; der Core-Boot laeuft weiter. Die vier B1-Faelle
+  werden getrennt von den normalen Core-Faults verifiziert.
+- V2 mit SoftAP-Passwort und ohne HOME_WIFI plus Auswahl `HOME_WIFI` ergibt
+  `HomeWifiSetup` mit `setupFlowActive=true`; derselbe V2-Record unter
+  `AP_ONLY` ergibt `AccessPointOnly`.
+- V2 mit HOME_WIFI startet unter `HOME_WIFI` normal; ein erfolgreicher
+  setup-only HOME_WIFI-Kandidatencommit ergaenzt HOME_WIFI und bewahrt exakt
+  dasselbe SoftAP-Passwort.
+- Nach `deviceName`-Aenderung von A nach B prueft ein echter
+  `applyNetworkMode()`-Restart die SSID aus B bei unveraendertem Passwort P.
+- Nach `deviceName`-Aenderung von A nach B prueft ein echter
+  `beginHomeWifiReconfiguration()`-Restart die SSID aus B bei unveraendertem
+  Passwort P. Startet ein konkreter Pfad nicht wirklich neu, wird das als
+  Befund dokumentiert und am naechsten echten Restartpunkt geprueft; keine
+  kuenstliche Restart-Logik wird hinzugefuegt.
 
 ### Zufall und Persistenz
 
@@ -465,7 +621,7 @@ der Planphase. Sie bleiben bis zu einem Owner-PASS des Full Implementation
 Reviews gesperrt. Kein FTDI-Displaykopplungsbefund wird ohne neue Evidence als
 Firmware-Crash deklariert; `ROOT_CAUSE=UNPROVEN` bleibt bestehen.
 
-## 9. Aktive Dokumente und Review-Gate
+## 12. Aktive Dokumente und Review-Gate
 
 Erst waehrend der spaeter freigegebenen Umsetzung werden die aktiven Vertraege
 mit dem implementierten Stand synchronisiert:
@@ -484,7 +640,7 @@ In dieser Planphase werden diese Dateien nicht veraendert. Nach diesem
 Plan-Fix-Commit ist der naechste Gate ausschliesslich:
 
 ```text
-OWNER_PLAN_FIX_VERIFICATION
+INDEPENDENT_PLAN_FIX_VERIFICATION
 -> IMPLEMENTATION_ALLOWED=NO_UNTIL_OWNER_PASS
 ```
 
