@@ -253,6 +253,45 @@ void logResources(const char* samplePoint,
              static_cast<unsigned>(stackHighWaterMarkBytes));
 }
 
+struct NetworkResourceSamplingState {
+    device_platform::NetworkMode lastObservedMode;
+    device_platform::NetworkLifecycleState lastObservedState;
+    bool hasObservedState{false};
+};
+
+void sampleStableNetworkResources(
+    device_platform::NetworkMode selectedNetworkMode,
+    device_platform::NetworkLifecycleState networkState,
+    NetworkResourceSamplingState& samplingState) {
+    const bool stableApOnly =
+        networkState == device_platform::NetworkLifecycleState::AccessPointOnly;
+    const bool stableHomeWifi =
+        selectedNetworkMode == device_platform::NetworkMode::HOME_WIFI &&
+        (networkState ==
+             device_platform::NetworkLifecycleState::HomeConnected ||
+         networkState ==
+             device_platform::NetworkLifecycleState::SetupAccessPoint);
+    const bool networkStatusChanged =
+        !samplingState.hasObservedState ||
+        selectedNetworkMode != samplingState.lastObservedMode ||
+        networkState != samplingState.lastObservedState;
+    if (networkStatusChanged && (stableApOnly || stableHomeWifi)) {
+        const char* samplePoint = nullptr;
+        if (stableApOnly) {
+            samplePoint = "stable_ap_only";
+        } else if (networkState ==
+                   device_platform::NetworkLifecycleState::HomeConnected) {
+            samplePoint = "stable_home_wifi";
+        } else {
+            samplePoint = "stable_home_wifi_setup_access_point";
+        }
+        logResources(samplePoint, selectedNetworkMode, networkState);
+    }
+    samplingState.lastObservedMode = selectedNetworkMode;
+    samplingState.lastObservedState = networkState;
+    samplingState.hasObservedState = true;
+}
+
 // Maps the existing renderer-independent #164 network lifecycle state to the
 // existing renderer-independent header status contract. No new network
 // state is introduced; SetupAccessPoint/ConnectingHome/CandidateTesting are
@@ -570,9 +609,8 @@ extern "C" void app_main(void) {
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;
-    auto lastObservedNetworkMode = application.networkMode();
-    auto lastObservedNetworkState = networkLifecycle.status().state;
-    bool hasObservedNetworkState = false;
+    NetworkResourceSamplingState networkResourceSamplingState{
+        application.networkMode(), networkLifecycle.status().state};
 
     for (;;) {
         platform.update();
@@ -584,31 +622,8 @@ extern "C" void app_main(void) {
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();
-        const bool stableApOnly =
-            networkStatus.state ==
-            device_platform::NetworkLifecycleState::AccessPointOnly;
-        const bool stableHomeWifi =
-            selectedNetworkMode == device_platform::NetworkMode::HOME_WIFI &&
-            (networkStatus.state ==
-                 device_platform::NetworkLifecycleState::HomeConnected ||
-             networkStatus.state ==
-                 device_platform::NetworkLifecycleState::SetupAccessPoint);
-        const bool networkStatusChanged =
-            !hasObservedNetworkState ||
-            selectedNetworkMode != lastObservedNetworkMode ||
-            networkStatus.state != lastObservedNetworkState;
-        if (networkStatusChanged && (stableApOnly || stableHomeWifi)) {
-            const char* samplePoint =
-                stableApOnly ? "stable_ap_only"
-                : networkStatus.state ==
-                        device_platform::NetworkLifecycleState::HomeConnected
-                    ? "stable_home_wifi"
-                    : "stable_home_wifi_setup_access_point";
-            logResources(samplePoint, selectedNetworkMode, networkStatus.state);
-        }
-        lastObservedNetworkMode = selectedNetworkMode;
-        lastObservedNetworkState = networkStatus.state;
-        hasObservedNetworkState = true;
+        sampleStableNetworkResources(selectedNetworkMode, networkStatus.state,
+                                     networkResourceSamplingState);
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
