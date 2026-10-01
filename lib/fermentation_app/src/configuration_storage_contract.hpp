@@ -20,7 +20,10 @@ inline constexpr device_platform::RecordTypeId
     kConfigurationBootstrapRecordType{6U};
 inline constexpr device_platform::RecordTypeId
     kConnectivityCredentialRecordType{9U};
-inline constexpr std::uint32_t kConnectivityCredentialSchemaVersion = 1U;
+inline constexpr std::uint32_t kConnectivityCredentialSchemaVersionV1 = 1U;
+inline constexpr std::uint32_t kConnectivityCredentialSchemaVersionV2 = 2U;
+inline constexpr std::uint32_t kConnectivityCredentialSchemaVersion =
+    kConnectivityCredentialSchemaVersionV2;
 inline constexpr const char kConnectivityCredentialStoreKey[] = "cc0";
 
 // ADR-016-konforme kurze NVS-Schluessel. Es handelt sich nur um die stabile

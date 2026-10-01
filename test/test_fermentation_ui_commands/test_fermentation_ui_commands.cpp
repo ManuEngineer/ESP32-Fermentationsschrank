@@ -8,6 +8,7 @@
 #include "device_platform.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
 #include "virtual_time_source.hpp"
@@ -239,11 +240,13 @@ void test_network_ui_commands_use_the_owning_application_paths() {
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     FermentationUiCommand typedCommand;
     typedCommand.operation = FermentationUiApplyNetworkModeCommand{
@@ -269,7 +272,7 @@ void test_network_ui_commands_use_the_owning_application_paths() {
 
     const auto accessPoint = application.networkAccessPointInfo();
     TEST_ASSERT_TRUE(accessPoint.has_value());
-    TEST_ASSERT_EQUAL_STRING("mock-ap-password", accessPoint->password.c_str());
+    TEST_ASSERT_EQUAL_UINT(16U, accessPoint->password.size());
 
     const auto homeWifi = FermentationUiCommandBridge::applyNetworkMode(
         application, FermentationUiApplyNetworkModeCommand{
@@ -306,11 +309,13 @@ void test_unselected_network_command_is_rejected_without_a_third_ui_option() {
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     const auto result = FermentationUiCommandBridge::applyNetworkMode(
         application, FermentationUiApplyNetworkModeCommand{

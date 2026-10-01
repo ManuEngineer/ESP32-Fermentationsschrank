@@ -22,7 +22,6 @@
 #include "fermentation_ui_press_dispatcher.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
-#include "softap_credentials.hpp"
 #include "touch_calibration.hpp"
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
@@ -252,18 +251,6 @@ void logResources(const char* samplePoint,
              networkLifecycleStateName(lifecycleState), freeHeapBytes,
              minimumFreeHeapBytes, largestFreeBlockBytes,
              static_cast<unsigned>(stackHighWaterMarkBytes));
-}
-
-device_platform_esp_idf::EspIdfNetworkLifecycleConfig makeNetworkConfig(
-    device_platform::ISecureRandomSource& randomSource) {
-    const auto credentials = fermentation::makeSoftApCredentials(randomSource);
-    if (!credentials.has_value()) {
-        return {};
-    }
-    // Credentials remain volatile and are never logged or copied to
-    // persistence. The SSID is intentionally fixed by the #164 owner
-    // contract; only the password is per-boot random.
-    return {credentials->ssid, credentials->password, {}};
 }
 
 // Maps the existing renderer-independent #164 network lifecycle state to the
@@ -500,9 +487,7 @@ extern "C" void app_main(void) {
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
     device_platform_esp_idf::EspIdfSecureRandomSource randomSource;
-    const auto networkConfig = makeNetworkConfig(randomSource);
-    device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle(
-        networkConfig);
+    device_platform_esp_idf::EspIdfNetworkLifecycle networkLifecycle({});
     device_platform_esp_idf::EspIdfHttpServerLifecycle httpServerLifecycle;
 
     const device_platform::PlatformStartupContext startupContext{
@@ -512,7 +497,7 @@ extern "C" void app_main(void) {
         platform.begin(startupContext) &&
         application.begin(platform, stateStoreContext->store(),
                           timeZoneResolver, timeSource, networkLifecycle,
-                          httpServerLifecycle, &resetCauseSource);
+                          httpServerLifecycle, randomSource, &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());

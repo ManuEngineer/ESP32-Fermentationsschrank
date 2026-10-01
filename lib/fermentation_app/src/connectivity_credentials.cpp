@@ -43,9 +43,12 @@ ConnectivityCredentialLoadResult ConnectivityCredentialStore::load(
     if (!decoded.envelope.has_value() ||
         decoded.envelope->recordTypeId !=
             configuration_storage_contract::kConnectivityCredentialRecordType ||
-        decoded.envelope->schemaVersion !=
-            configuration_storage_contract::
-                kConnectivityCredentialSchemaVersion ||
+        (decoded.envelope->schemaVersion !=
+             configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV1 &&
+         decoded.envelope->schemaVersion !=
+             configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV2) ||
         decoded.envelope->versionValue == 0U) {
         return {ConnectivityCredentialLoadStatus::InvalidRecord, std::nullopt};
     }
@@ -60,14 +63,15 @@ ConnectivityCredentialLoadResult ConnectivityCredentialStore::load(
     return {ConnectivityCredentialLoadStatus::Available,
             ConnectivityCredentialRecord{std::move(*payload.credential),
                                          decoded.envelope->storageEpoch,
-                                         decoded.envelope->versionValue}};
+                                         decoded.envelope->versionValue,
+                                         decoded.envelope->schemaVersion}};
 }
 
 ConnectivityCredentialWriteResult ConnectivityCredentialStore::write(
     const ConnectivityCredential& credential,
     device_platform::StorageEpoch epoch, std::uint64_t recordSequence) {
     if (recordSequence == 0U ||
-        validateConnectivityCredential(credential) !=
+        validateConnectivityCredentialV2(credential) !=
             ConnectivityCredentialValidationStatus::Success) {
         return {ConnectivityCredentialWriteStatus::WriteFailure, 0U};
     }

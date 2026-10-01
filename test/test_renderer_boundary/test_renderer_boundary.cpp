@@ -597,14 +597,14 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
     const auto packs = fermentation::makeFermentationUiTextPacks();
     const device_platform::NetworkAccessPointInfo accessPoint{
-        "Fermentation", "ACDEFHJKMNPQRTU3", 0x0104A8C0U};
+        "Fermentationsschrank", "ACDEFHJKMNPQRTU3", 0x0104A8C0U};
     const auto screen = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"},
         std::nullopt, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
 
     TEST_ASSERT_TRUE(hasText(screen, "Home WiFi"));
-    TEST_ASSERT_TRUE(hasText(screen, "SSID: Fermentation"));
+    TEST_ASSERT_TRUE(hasText(screen, "SSID: Fermentationsschrank"));
     TEST_ASSERT_TRUE(hasText(screen, "Password: ACDEFHJKMNPQRTU3"));
     TEST_ASSERT_TRUE(hasText(screen, "IP: 192.168.4.1"));
     const auto qr =
@@ -614,8 +614,9 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
                                 fermentation::main_ui::ScreenDrawKind::QrCode;
                      });
     TEST_ASSERT_TRUE(qr != screen.commands.end());
-    TEST_ASSERT_EQUAL_STRING("WIFI:T:WPA;S:Fermentation;P:ACDEFHJKMNPQRTU3;;",
-                             qr->text.c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "WIFI:T:WPA;S:Fermentationsschrank;P:ACDEFHJKMNPQRTU3;;",
+        qr->text.c_str());
     TEST_ASSERT_EQUAL_UINT16(156U, qr->rect.left);
     TEST_ASSERT_EQUAL_UINT16(34U, qr->rect.top);
     TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.width);
@@ -626,7 +627,7 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
     const auto ssid =
         std::find_if(screen.commands.begin(), screen.commands.end(),
                      [](const auto& command) {
-                         return command.text == "SSID: Fermentation";
+                         return command.text == "SSID: Fermentationsschrank";
                      });
     const auto password =
         std::find_if(screen.commands.begin(), screen.commands.end(),

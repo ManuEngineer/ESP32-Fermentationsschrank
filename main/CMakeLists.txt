@@ -1,7 +1,7 @@
 # Die Component muss registriert werden, bevor die aus Kconfig erzeugten
 # Profilvariablen fuer die private Quellenisolierung verwendet werden.
 idf_component_register(
-    SRCS "app_main.cpp" "softap_credentials.cpp" "fermentation_ui_renderer.cpp"
+    SRCS "app_main.cpp" "fermentation_ui_renderer.cpp"
          "fermentation_ui_lvgl_renderer.cpp"
          "fermentation_ui_press_dispatcher.cpp"
          "generated/manuengineer_logo_168x24.cpp"

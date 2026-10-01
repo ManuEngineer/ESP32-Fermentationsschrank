@@ -79,6 +79,40 @@ Es werden keine neue Graph-, Persistence-, Configuration-, Codec- oder
 Network-Ownership-Architektur, keine zweite State-Machine und kein neuer
 Netzwerk-Task eingeführt.
 
+## Aktueller Korrekturvertrag nach Owner-Plan `3cedb448`
+
+Der neuere, unabhängig verifizierte Korrekturplan
+`docs/tasks/issue-164-softap-credential-persistence-and-device-name-ssid-correction-plan.md`
+ist für die Umsetzung maßgeblich und überschreibt die widersprechenden
+früheren aktiven SoftAP-Aussagen dieses Dokuments. Historische Plan- und
+Hardware-Evidence weiter unten bleibt unverändert.
+
+Aktiv gilt damit:
+
+- Die SoftAP-SSID wird ausschließlich aus dem aktuellen
+  `UserConfiguration.deviceName` abgeleitet, am vollständigen UTF-8-Codepoint-
+  Ende auf höchstens 24 rohe beziehungsweise 28 QR-escaped Bytes begrenzt und
+  erhält keinen Suffix, Hash, MAC-, Zeit- oder Zufallsanteil.
+- Das SoftAP-Passwort hat exakt 16 Zeichen aus dem festgelegten 42er Alphabet,
+  wird mit der bestehenden sicheren Zufallsquelle und Rejection Sampling
+  erzeugt und pro `StorageEpoch` in `cc0`/RecordTypeId 9 persistiert. Schema 1
+  bleibt lesbar und wird nach Schema 2 migriert; Schema 2 enthält das
+  SoftAP-Passwort ohne Present-Tag und schreibt es zwingend.
+- V1/V2 haben die Maxima 100/145 beziehungsweise 118/163 Byte. V2 ohne
+  gültiges 16-stelliges SoftAP-Passwort ist ungültig; der aktuelle Writer
+  schreibt ausschließlich Schema 2.
+- `HOME_WIFI`-Verfügbarkeit wird ausschließlich aus
+  `currentCredential.homeWifi.has_value()` entschieden. `AP_ONLY` mit einem
+  SoftAP-only-V2 bleibt AP-only; HOME_WIFI ohne Home-Credentials bleibt Setup.
+- Boot, `applyNetworkMode()` und `beginHomeWifiReconfiguration()` verwenden
+  den jeweils aktuellen Device-Name; ein Neustart ändert die SSID, nicht das
+  persistierte SoftAP-Passwort. Netzwerkfehler blockieren den Fermentations-
+  und Safety-Kern nicht und starten keinen globalen Service-Required-Pfad.
+- Die QR-Geometrie bleibt `{156,34,164,164}` mit Quiet-Zone und bestehendem
+  LVGL-9.6.0~1-Pfad. Scanlimit, Heap-Vector-Pfad, 16/528-Byte-HTTP-Grenze,
+  `503` bei Fehler und leerer `200`-Antwort bei Empty-Scan bleiben bestehen;
+  `ROOT_CAUSE=UNPROVEN` wird nicht geändert.
+
 ### 2. SoftAP-Zugangsdaten
 
 `makeNetworkConfig()` setzt die SoftAP-SSID ohne MAC-Lesen und ohne Suffix

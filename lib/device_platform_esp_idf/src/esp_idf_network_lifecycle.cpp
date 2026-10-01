@@ -542,6 +542,21 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::setHostname(
     return {device_platform::NetworkOperationStatus::Applied};
 }
 
+device_platform::NetworkOperationResult
+EspIdfNetworkLifecycle::setAccessPointCredentials(const std::string& ssid,
+                                                  const std::string& password) {
+    if (ssid.empty() ||
+        ssid.size() > device_platform::kMaximumNetworkSsidBytes ||
+        password.size() < kMinimumPasswordBytes ||
+        password.size() > kMaximumPasswordBytes) {
+        return {device_platform::NetworkOperationStatus::InvalidInput};
+    }
+    std::lock_guard<std::mutex> operationLock(operationMutex_);
+    config_.softApSsid = ssid;
+    config_.softApPassword = password;
+    return {device_platform::NetworkOperationStatus::Applied};
+}
+
 device_platform::NetworkStatus EspIdfNetworkLifecycle::status() const {
     std::lock_guard<std::mutex> stateLock(stateMutex_);
     return status_;

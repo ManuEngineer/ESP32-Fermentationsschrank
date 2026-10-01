@@ -37,6 +37,9 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
         const device_platform::NetworkCredentials& candidate) override;
     [[nodiscard]] device_platform::NetworkOperationResult setHostname(
         const std::string& hostname) override;
+    [[nodiscard]] device_platform::NetworkOperationResult
+    setAccessPointCredentials(const std::string& ssid,
+                              const std::string& password) override;
     [[nodiscard]] device_platform::NetworkStatus status() const override;
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     accessPointInfo() const override;

@@ -1,5 +1,6 @@
 #include "mock_network_lifecycle.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace device_platform_test_support {
@@ -21,11 +22,24 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::start(
     if (mode == device_platform::NetworkMode::AP_ONLY ||
         !credentials.has_value()) {
         accessPointInfo_ = device_platform::NetworkAccessPointInfo{
-            "mock-setup-ap", "mock-ap-password", 0x0104A8C0U};
+            accessPointSsid_, accessPointPassword_, 0x0104A8C0U};
     } else {
         accessPointInfo_.reset();
     }
     lastStartedCredentials_ = credentials;
+    return {device_platform::NetworkOperationStatus::Applied};
+}
+
+device_platform::NetworkOperationResult
+MockNetworkLifecycle::setAccessPointCredentials(const std::string& ssid,
+                                                const std::string& password) {
+    if (ssid.empty() ||
+        ssid.size() > device_platform::kMaximumNetworkSsidBytes ||
+        password.size() < 8U || password.size() > 63U) {
+        return {device_platform::NetworkOperationStatus::InvalidInput};
+    }
+    accessPointSsid_ = ssid;
+    accessPointPassword_ = password;
     return {device_platform::NetworkOperationStatus::Applied};
 }
 

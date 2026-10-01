@@ -166,13 +166,14 @@ weder Resume noch `Allowed`.
 - Die Ownerentscheidung fuer Issue #164 (`VARIANT_B_QR_RETAINED`) deferiert die
   lokale HOME_WIFI-SSID-/Passworteingabe am Touchdisplay und die dafuer
   erforderliche Bildschirmtastatur aus R1. Der WLAN-QR zum Beitritt in den
-  geschuetzten Setup-/AP-only-SoftAP mit der festen SSID `Fermentation` und
-  einem bei jedem Boot neu erzeugten 16-stelligen Passwort aus dem festgelegten
+  geschuetzten Setup-/AP-only-SoftAP mit einer aus dem aktuellen
+  `UserConfiguration.deviceName` abgeleiteten SSID und einem pro
+  `StorageEpoch` persistierten 16-stelligen Passwort aus dem festgelegten
   42-Zeichen-Alphabet ist R1-pflichtig; ein separater Webseiten-QR bleibt
   Future Scope. Das Passwort wird mit der bestehenden sicheren Zufallsquelle
-  per Rejection Sampling erzeugt, nicht aus vorhersagbaren Geraetewerten
-  abgeleitet und nicht persistiert. SSID, aktuelles SoftAP-Passwort und direkte
-  IP bleiben lokal am Display sichtbar.
+  per Rejection Sampling erzeugt und nicht aus vorhersagbaren Geraetewerten
+  abgeleitet. SSID, aktuelles SoftAP-Passwort und direkte IP bleiben lokal am
+  Display sichtbar.
 - Der SoftAP-WLAN-QR verwendet im bestehenden LVGL-9.6.0~1-Pfad ausschliesslich
   SSID und Passwort, aktiviert die Quiet-Zone und wird als Schwarz auf Weiss in
   `{156,34,164,164}` gezeichnet; URL und IP sind nicht Bestandteil des Payloads.

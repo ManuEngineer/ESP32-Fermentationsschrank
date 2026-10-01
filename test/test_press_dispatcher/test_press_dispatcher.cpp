@@ -8,6 +8,7 @@
 #include "fermentation_ui_text.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
 #include "run_persistence_codec.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
@@ -562,11 +563,13 @@ void test_dispatch_network_touch_actions_use_existing_application_bridge() {
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     auto snapshot = application.uiSnapshot();
     FermentationTouchWorkspace workspace;
@@ -682,11 +685,13 @@ void test_process_touch_from_home_reaches_network_page_and_application_owner() {
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
     MockHttpServerLifecycle http;
     FermentationApplication application;
     TEST_ASSERT_TRUE(platform.begin({true}));
     TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
-                                       timeSource, network, http));
+                                       timeSource, network, http,
+                                       randomSource));
 
     auto snapshot = application.uiSnapshot();
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Standby),
