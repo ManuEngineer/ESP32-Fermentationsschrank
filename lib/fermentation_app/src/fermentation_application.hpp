@@ -280,6 +280,7 @@ class FermentationApplication {
         device_platform::NetworkMode selectedMode,
         const std::string& canonicalDeviceName,
         device_platform::ISecureRandomSource* randomSource);
+    void resetAuthenticationState() noexcept;
     void initializeAuthentication(device_platform::IStateStore& store);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,

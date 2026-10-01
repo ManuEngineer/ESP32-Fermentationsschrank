@@ -312,6 +312,16 @@ void assertComposedSessionRejected(ComposedFixture& fixture,
     TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
 }
 
+void assertComposedSessionFailClosed(ComposedFixture& fixture,
+                                     const std::string& cookie) {
+    auto request = makeAuthenticatedRequest("GET", "/api/v1/status", cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("authentication-unavailable") !=
+                     std::string::npos);
+}
+
 FermentationUiCommandResult commandResult(Category category,
                                           FermentationUiCommandDetail detail,
                                           FermentationUiCommandPhase phase) {
@@ -1540,8 +1550,35 @@ void test_composed_dispatcher_factory_reset_revokes_old_sessions() {
         reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted ||
         reset.status ==
             ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable);
-    assertComposedSessionRejected(fixture, first.cookie);
-    assertComposedSessionRejected(fixture, second.cookie);
+    assertComposedSessionFailClosed(fixture, first.cookie);
+    assertComposedSessionFailClosed(fixture, second.cookie);
+
+    const auto postResetAuth = fixture.application.webAuthenticationState();
+    TEST_ASSERT_TRUE(postResetAuth !=
+                     WebAuthenticationState::PasswordProtected);
+    if (reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        TEST_ASSERT_TRUE(postResetAuth ==
+                         WebAuthenticationState::Unprovisioned);
+    } else {
+        TEST_ASSERT_TRUE(
+            postResetAuth == WebAuthenticationState::Unprovisioned ||
+            postResetAuth == WebAuthenticationState::RecoveryRequired ||
+            postResetAuth == WebAuthenticationState::Indeterminate);
+    }
+
+    auto request = makeLoginRequest("correct horse battery");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(response.body.find("authenticated") == std::string::npos);
+    if (postResetAuth == WebAuthenticationState::Unprovisioned) {
+        TEST_ASSERT_TRUE(response.body.find("provisioning-required") !=
+                         std::string::npos);
+    } else {
+        TEST_ASSERT_TRUE(response.body.find("recovery-required") !=
+                         std::string::npos);
+    }
 }
 
 void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {

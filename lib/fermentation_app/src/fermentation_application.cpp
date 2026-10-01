@@ -1362,6 +1362,8 @@ bool FermentationApplication::beginPersistent(
 
 void FermentationApplication::initializeAuthentication(
     device_platform::IStateStore& store) {
+    resetAuthenticationState();
+
     if (authenticationKdf_ == nullptr || secureRandomSource_ == nullptr) {
         return;
     }
@@ -1388,6 +1390,15 @@ void FermentationApplication::initializeAuthentication(
     authenticationContext_ = *resolved.context;
     authenticationBootstrapStatus_ =
         authenticationDomain_->inspect(*authenticationContext_);
+}
+
+void FermentationApplication::resetAuthenticationState() noexcept {
+    authenticationContext_.reset();
+    authenticationDomain_.reset();
+    authenticationRecordStore_.reset();
+    authenticationResolutionStatus_ =
+        AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+    authenticationBootstrapStatus_ = AuthBootstrapStatus::RecoveryRequired;
 }
 
 bool FermentationApplication::processBootClassification(
@@ -1644,6 +1655,9 @@ FermentationApplication::beginAuthorizedFactoryReset() {
         // failures must not preserve pre-reset browser authority.
         webSessionManager_->revokeAll();
     }
+    // The reset has advanced the configuration/storage epoch. Invalidate the
+    // old domain now; a later bootstrap failure must remain fail-closed.
+    resetAuthenticationState();
 
     auto authorizedRunEpochHandoff =
         configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
@@ -1716,6 +1730,10 @@ FermentationApplication::beginAuthorizedFactoryReset() {
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
                 reset.diagnostics};
     }
+    // The handoff is consumed now, so resolve the new epoch-bound
+    // authentication domain once more. The first resolution above deliberately
+    // remained fail-closed while the reset handoff was still pending.
+    initializeAuthentication(*stateStore_);
     runPersistenceCoordinator_ = std::move(coordinator);
     storageEpoch_ = currentEpoch;
     runIdentity_.reset();
