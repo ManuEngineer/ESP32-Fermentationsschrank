@@ -6,13 +6,16 @@ PR=171
 BRANCH=agent/issue-164-network-ui-completion
 WORKTREE=/tmp/issue164-network-ui.M4vluy
 BASE_HEAD=daeccd995a2ba81d7af5b91587050c14dd8b84ca
+BASE_PLAN_HEAD=32cb8f1cc46c2cea532458a1c5db5581da552052
 SUPERSEDES_CONTRACT_ONLY=old_fixed-softap-ssid-and-per-boot-password-sections
-PLAN_STATUS=PLAN_ONLY_OWNER_REVIEW_REQUIRED
+PLAN_STATUS=PLAN_FIX_READY_OWNER_VERIFICATION
+PLAN_FIX_SCOPE=P1_LVGL_QR_MODEL_AND_P2_V2_WIREFORMAT
 PRODUCT_CODE_CHANGED=NO
 TESTS=NOT_RUN_PLAN_ONLY
 BUILD=NOT_RUN_PLAN_ONLY
 FLASH=NOT_RUN_PLAN_ONLY
 IMPLEMENTATION_ALLOWED=NO
+NEXT_GATE=OWNER_PLAN_FIX_VERIFICATION
 PR_STATE=OPEN_DRAFT
 READY=NO
 MERGE=NO
@@ -134,30 +137,56 @@ Der fachliche V2-Inhalt ist:
 ```text
 ConnectivityCredential {
     optional HOME_WIFI credentials;
-    optional-on-wire softApPassword, in every valid V2 record exactly 16 chars;
+    softApPassword, in every valid V2 record required and exactly 16 chars;
 }
 ```
 
 Das optionale `HOME_WIFI` bleibt unveraendert optional. Ein V2-Record ohne
-gueltiges `softApPassword` ist kein gueltiger aktiver Record; er wird
-fail-closed als InvalidRecord behandelt. Die Option im RAM-/Migrationsmodell
-ist nur noetig, damit ein V1-Record vor seiner Migration eindeutig als
-passwordlos erkannt wird.
+exakt 16 Zeichen aus dem festgelegten SoftAP-Alphabet ist kein gueltiger
+Record und kann strukturell nicht als gueltiger V2-Record entstehen. Decoder
+und fachliche Validierung lehnen fehlende, zu kurze, zu lange oder sonst
+ungueltige Werte fail-closed als InvalidRecord ab. Eine optionale Darstellung
+von `softApPassword` im RAM-/Migrationsmodell ist nur zulaessig, damit ein
+V1-Record vor seiner Migration eindeutig als "noch kein SoftAP-Passwort"
+erkannt wird; diese RAM-Optionalitaet darf nicht in V2 serialisiert werden.
 
 Die kanonische V2-Payload wird in dieser Reihenfolge geplant:
 
 1. `HOME_WIFI`-Optionaltag, ein Byte;
 2. bei gesetztem Tag: SSID als `uint16`-Laenge plus Bytes und Passwort als
    `uint16`-Laenge plus Bytes;
-3. `softApPassword`-Present-Tag, ein Byte;
-4. bei gesetztem Tag: `uint16`-Laenge plus genau 16 Passwortbytes.
+3. `softApPassword` als `uint16`-Laenge plus genau 16 Passwortbytes,
+   ohne Present-Tag.
 
-Die V1-Payload bleibt bytekompatibel und wird weiterhin nur mit Schema 1
-decodiert: ein `HOME_WIFI`-Optionaltag und, falls gesetzt, die beiden alten
-Stringfelder. V1 kennt kein SoftAP-Passwort und wird nicht als fertiger
+Die V1-Payload bleibt bytekompatibel und wird weiterhin ausschliesslich mit
+Schema 1 decodiert: ein `HOME_WIFI`-Optionaltag und, falls gesetzt, die beiden
+alten Stringfelder. V1 kennt kein SoftAP-Passwort und wird nicht als fertiger
 Runtime-Vertrag verwendet.
 
-### 3.3 Geschlossene Groessenrechnung
+### 3.3 Schema-Kompatibilitaet und Writer-Vertrag
+
+`ConnectivityCredentialStore::load()` akzeptiert fuer
+`RecordTypeId=9` ausschliesslich Schema 1 und Schema 2. Die Schemaauswahl
+erfolgt vor der Payloaddekodierung und bindet jeweils genau ein Layout:
+
+- Schema 1 wird nur mit dem bestehenden V1-Layout dekodiert; die vorhandenen
+  V1-Bytes bleiben vollstaendig kompatibel und ergeben im Migrationsmodell
+  "noch kein SoftAP-Passwort".
+- Schema 2 wird nur mit dem neuen V2-Layout ohne
+  `softApPassword`-Present-Tag dekodiert. Der feste Laengenprefix und die
+  anschliessende fachliche Pruefung erzwingen genau 16 gueltige Zeichen.
+- Jede andere Schema-Version bleibt `UnsupportedSchema`/Invalid und darf
+  weder als V1 noch als V2 umgedeutet werden.
+- Der aktuelle Writer schreibt ausschliesslich Schema 2 und immer ein
+  gueltiges, genau 16-stelliges SoftAP-Passwort.
+
+Ein V2-Payload ohne das Passwortfeld, mit einem falschen Laengenwert, mit
+ungueltigen Alphabetzeichen oder mit Restbytes ist damit kein gueltiger V2-
+Record. Der Read-/Write-/Readback-Vertrag, die Epoch-Bindung, die bestehende
+`cc0`-/Record-Type-9-Zuordnung und die Record-Sequenzsemantik bleiben
+unveraendert.
+
+### 3.4 Geschlossene Groessenrechnung
 
 Die bisherige V1-Maximalpayload ist:
 
@@ -176,17 +205,17 @@ Die V2-Maximalpayload ist:
 1                         HOME_WIFI-Optionaltag
 + (2 + 32)                maximale HOME_WIFI-SSID
 + (2 + 63)                maximales HOME_WIFI-Passwort
-+ 1                       softApPassword-Present-Tag
 + (2 + 16)                SoftAP-Passwort
-= 119 Byte                V2-Maximalpayload
+= 118 Byte                V2-Maximalpayload
 + 45 Byte                 StorageEnvelope
-= 164 Byte                V2-Maximalenvelope
+= 163 Byte                V2-Maximalenvelope
 ```
 
 Die Implementierung muss diese beiden Maxima in den zentralen
 `configuration_limits`-Konstanten, im Writer, im Decoder und im Store-
 Readlimit identisch verwenden. Ein Payload-/Envelope-Golden-Test muss die
-berechneten Bytes und die Abweisung von Ueberlaenge absichern.
+berechneten Bytes, das fehlende Present-Tag und die Abweisung von fehlendem,
+ungueltigem oder ueberlangem Passwort absichern.
 
 ## 4. Migration und Lebenszyklus pro `StorageEpoch`
 
@@ -280,21 +309,50 @@ gesamt        = 34 Byte
 ```
 
 Bei maximal 28 escaped SSID-Bytes ergibt sich eine maximale Payload von
-`34 + 28 = 62` Bytes. Vor der Umsetzung ist dies gegen die tatsaechlich
-gepinnte LVGL-Quelle `9.6.0~1` und deren `qrcodegen`-ECC-M-Bytekapazitaet
-formal zu bestaetigen. Version 4 muss 62 Bytes akzeptieren; falls die
-gepinnte Quelle diese Aussage nicht exakt bestaetigt, darf nicht implementiert
-werden, bevor der Owner die aufgeloeste QR-Variante freigibt.
-
-Fuer QR-Version 4 gilt:
+`34 + 28 = 62` Bytes. Fuer die gepinnte LVGL-Quelle `9.6.0~1` gilt im
+Encoding-Modell:
 
 ```text
-QR-Module ohne Quiet-Zone = 17 + 4 * (4 - 1) = 33
-Quiet-Zone                 = 4 Module je Seite
-Module mit Quiet-Zone      = 33 + 4 + 4 = 41
-Pixel je Modul             = 4
-LVGL-Groesse               = 41 * 4 = 164 px
+QR_PAYLOAD_MAX_BYTES                    = 62
+qrcodegen_getMinFitVersion(Ecc_MEDIUM,62) = 4
+QRCODEGEN_MIN_FIT_VERSION_MAX           = 4
 ```
+
+Das ist die minimale qrcodegen-Fit-Version, nicht die Anzahl der Module, die
+LVGL bei der gewaehlten Canvas-Groesse zeichnet. Der produktive Pfad setzt
+weiterhin `lv_qrcode_set_quiet_zone(qrCode, true)`. LVGL 9.6.0 verwendet dabei
+zusaetzlich `get_satisfied_size()`. Fuer den Minimum-Fit-Version-4-Payload und
+eine Canvas-Groesse von 164 px ist der tatsaechliche LVGL-Rendervertrag:
+
+```text
+LVGL_EFFECTIVE_QR_VERSION_AT_164PX = 5
+QR_MODULE_SCALE                    = 4PX
+eigentliche QR-Module              = 37
+QR-Flaeche                         = 37 * 4 = 148 px
+LVGL_QUIET_ZONE_MARGIN             = 8PX_PER_SIDE
+Canvas                             = 8 + 148 + 8 = 164 px
+```
+
+Die fruehere Aussage "4 Quiet-Zone-Module pro Seite / 41 gerenderte Module"
+ist damit aus dem Vertrag entfernt. Es werden keine 41 gerenderten Module
+und keine separate viermodulige Quiet-Zone implementiert oder behauptet.
+
+Der aktuell kuerzere WLAN-Payload besitzt ebenfalls
+`qrcodegen_getMinFitVersion(Ecc_MEDIUM, payload) = 4` und laeuft bereits durch
+denselben LVGL-9.6.0-Quiet-Zone-Pfad. Die Regression muss den aktuellen
+Payload und den maximal erlaubten 62-Byte-Payload gemeinsam pruefen und
+beweisen, dass beide dieselbe effektive LVGL-Version 5, denselben
+4-px-Modulmassstab, dieselbe 148-px-QR-Flaeche und denselben 8-px-Rand je
+Seite erhalten. Damit gilt im Planvertrag:
+
+```text
+QR_READABILITY_MUST_NOT_REGRESS = REQUIRED
+```
+
+Diese Regression fuehrt keine Layoutaenderung, keine eigene Quiet-Zone-
+Berechnung, keinen Custom-QR und keine neue QR-/ECC-Abhaengigkeit ein. Die
+reale Smartphone-Lesbarkeit bleibt ein separates Hardware-Abnahmekriterium
+nach dem spaeteren Implementation Review.
 
 Der produktive LVGL-Pfad bleibt beim vorhandenen Widget und setzt explizit
 Quiet-Zone, `164` Pixel, Schwarz als Dark-Color und Weiss als Light-Color.
@@ -355,8 +413,13 @@ Plan-Only-Schritt aber nicht ausgefuehrt.
 - Namen mit WiFi-Sonderzeichen pruefen: escaped SSID hoechstens 28 Bytes,
   kein Praefix/Suffix/Hash/MAC/Zeitwert, fail-closed bei unmoeglichem Wert;
 - Payload enthaelt exakt aktuelle SSID und aktuelles Passwort, keine URL/IP;
-- maximale Payload ist 62 Bytes, die gepinnte ECC-M-Quelle waehlt hoechstens
-  Version 4, und die QR-Draw-Command ist exakt `{156,34,164,164}`;
+- maximale WLAN-Payload ist 62 Bytes und
+  `qrcodegen_getMinFitVersion(Ecc_MEDIUM,62)` ist maximal Version 4;
+- aktueller kuerzerer und maximaler 62-Byte-Payload durchlaufen denselben
+  LVGL-9.6.0-Quiet-Zone-Pfad mit effektiver Version 5, 37 QR-Modulen,
+  4-px-Modulmassstab, 148-px-Flaeche und 8-px-Rand je Seite;
+- die QR-Draw-Command bleibt exakt `{156,34,164,164}` und
+  `QR_READABILITY_MUST_NOT_REGRESS` wird als Regression abgesichert;
 - produktiver LVGL-Pfad setzt Quiet-Zone `true`, Schwarz/Weiss und die
   exakte Groesse;
 - Header, Page-Titel, Current Mode, SSID, Passwort, IP, QR und Bottom-
@@ -383,7 +446,8 @@ Plan-Only-Schritt aber nicht ausgefuehrt.
   neues Passwort;
 - HOME_WIFI-Kandidatencommit behaelt das SoftAP-Passwort;
 - exakte V1-/V2-Payload-, Envelope- und Maximalgroessen-Goldens werden
-  getestet.
+  getestet; V1 wird ausschliesslich mit Schema-1-Layout, V2 ausschliesslich
+  ohne SoftAp-Present-Tag dekodiert, und der Writer erzeugt nur Schema 2.
 
 ### Bestehende Regressionen und Builder-Gates
 
@@ -417,12 +481,11 @@ mit dem implementierten Stand synchronisiert:
   historisch markiert bleibt.
 
 In dieser Planphase werden diese Dateien nicht veraendert. Nach diesem
-Plan-Commit ist der naechste Gate ausschliesslich:
+Plan-Fix-Commit ist der naechste Gate ausschliesslich:
 
 ```text
-OWNER_REVIEW_OF_NEW_PLAN_HEAD
--> OWNER_APPROVAL_OF_THIS_CORRECTION_PLAN
--> IMPLEMENTATION_ALLOWED
+OWNER_PLAN_FIX_VERIFICATION
+-> IMPLEMENTATION_ALLOWED=NO_UNTIL_OWNER_PASS
 ```
 
 Bis zu diesem Gate bleiben `PRODUCT_CODE_CHANGED=NO`, Tests, Builds und Flash
