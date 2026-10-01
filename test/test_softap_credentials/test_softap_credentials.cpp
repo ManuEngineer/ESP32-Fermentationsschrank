@@ -66,6 +66,35 @@ void test_softap_credentials_rejection_sampling_skips_out_of_range_bytes() {
     TEST_ASSERT_EQUAL_UINT(16U, credentials->password.size());
 }
 
+void test_ssid_truncation_preserves_complete_utf8_codepoints_and_raw_budget() {
+    const std::string deviceName = std::string(22U, 'a') + "\xC3\xA4" + "z";
+    const auto truncated = fermentation::deriveSoftApSsid(deviceName);
+    TEST_ASSERT_TRUE(truncated.has_value());
+    TEST_ASSERT_EQUAL_UINT(24U, truncated->size());
+    TEST_ASSERT_EQUAL_STRING((std::string(22U, 'a') + "\xC3\xA4").c_str(),
+                             truncated->c_str());
+
+    const auto asciiLimited =
+        fermentation::deriveSoftApSsid(std::string(24U, 'b') + "z");
+    TEST_ASSERT_TRUE(asciiLimited.has_value());
+    TEST_ASSERT_EQUAL_UINT(24U, asciiLimited->size());
+    TEST_ASSERT_EQUAL_STRING(std::string(24U, 'b').c_str(),
+                             asciiLimited->c_str());
+}
+
+void test_ssid_reserved_wifi_bytes_and_escaped_budget_are_bounded() {
+    const std::string reserved = R"(A\;,:\")";
+    const auto preserved = fermentation::deriveSoftApSsid(reserved);
+    TEST_ASSERT_TRUE(preserved.has_value());
+    TEST_ASSERT_EQUAL_STRING(reserved.c_str(), preserved->c_str());
+
+    const auto escapedLimited =
+        fermentation::deriveSoftApSsid(std::string(15U, '\\'));
+    TEST_ASSERT_TRUE(escapedLimited.has_value());
+    TEST_ASSERT_EQUAL_UINT(14U, escapedLimited->size());
+    TEST_ASSERT_TRUE(*escapedLimited == std::string(14U, '\\'));
+}
+
 }  // namespace
 
 // Native tests use the production helper without compiling the ESP-IDF
@@ -79,5 +108,8 @@ int main() {
         test_softap_credentials_reject_random_source_failure_without_fallback);
     RUN_TEST(
         test_softap_credentials_rejection_sampling_skips_out_of_range_bytes);
+    RUN_TEST(
+        test_ssid_truncation_preserves_complete_utf8_codepoints_and_raw_budget);
+    RUN_TEST(test_ssid_reserved_wifi_bytes_and_escaped_budget_are_bounded);
     return UNITY_END();
 }

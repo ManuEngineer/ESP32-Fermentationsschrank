@@ -877,6 +877,48 @@ void test_softap_wifi_qr_escapes_reserved_characters_deterministically() {
         fermentation::main_ui::makeSoftApWifiQrPayload(incomplete).has_value());
 }
 
+void test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract() {
+    constexpr std::uint16_t kQrCanvas = 164U;
+    constexpr std::uint16_t kQrEffectiveVersion = 5U;
+    constexpr std::uint16_t kQrModuleCount = 37U;
+    constexpr std::uint16_t kQrModuleScale = 4U;
+    constexpr std::uint16_t kQrMarginPerSide = 8U;
+    TEST_ASSERT_EQUAL_UINT16(
+        kQrCanvas, kQrModuleCount * kQrModuleScale + 2U * kQrMarginPerSide);
+    TEST_ASSERT_EQUAL_UINT16(148U, kQrModuleCount * kQrModuleScale);
+    TEST_ASSERT_EQUAL_UINT16(8U, kQrCanvas - 148U - kQrMarginPerSide);
+    TEST_ASSERT_EQUAL_UINT16(5U, kQrEffectiveVersion);
+
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.network.currentMode = device_platform::NetworkMode::AP_ONLY;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+    const auto accessPoint = device_platform::NetworkAccessPointInfo{
+        std::string(14U, '\\'), std::string(16U, 'A'), 0x0104A8C0U};
+    const auto payload =
+        fermentation::main_ui::makeSoftApWifiQrPayload(accessPoint);
+    TEST_ASSERT_TRUE(payload.has_value());
+    TEST_ASSERT_EQUAL_UINT(62U, payload->size());
+
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
+    const auto qr =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [](const auto& command) {
+                         return command.kind ==
+                                fermentation::main_ui::ScreenDrawKind::QrCode;
+                     });
+    TEST_ASSERT_TRUE(qr != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING(payload->c_str(), qr->text.c_str());
+    TEST_ASSERT_EQUAL_UINT16(156U, qr->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(34U, qr->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(164U, qr->rect.height);
+    assertWithinDisplay(qr->rect);
+}
+
 void test_network_page_missing_softap_info_is_explicit() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
@@ -936,6 +978,7 @@ int main() {
     RUN_TEST(
         test_network_action_labels_fit_without_changing_bottom_hit_targets);
     RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
+    RUN_TEST(test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }

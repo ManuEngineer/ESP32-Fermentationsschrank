@@ -9,6 +9,7 @@
 
 #include "big_endian_codec.hpp"
 #include "byte_buffer.hpp"
+#include "configuration_limits.hpp"
 #include "configuration_storage_contract.hpp"
 #include "configuration_document_codec.hpp"
 #include "configuration_documents.hpp"
@@ -216,6 +217,96 @@ void test_connectivity_credential_codec_keeps_pair_together() {
     TEST_ASSERT_FALSE(rejectedLegacy.credential.has_value());
 }
 
+void test_connectivity_credential_wire_limits_and_v2_validation_goldens() {
+    TEST_ASSERT_EQUAL_UINT(100U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialV1PayloadBytes);
+    TEST_ASSERT_EQUAL_UINT(145U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialV1EnvelopeBytes);
+    TEST_ASSERT_EQUAL_UINT(118U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialPayloadBytes);
+    TEST_ASSERT_EQUAL_UINT(163U,
+                           fermentation::configuration_limits::
+                               kMaximumConnectivityCredentialEnvelopeBytes);
+
+    const ConnectivityCredential maximum{
+        device_platform::NetworkCredentials{std::string(32U, 's'),
+                                            std::string(63U, 'p')},
+        std::string(16U, 'A')};
+    std::string v2Payload;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConnectivityCredentialPayload(maximum, v2Payload) ==
+        ConnectivityCredentialCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT(118U, v2Payload.size());
+    std::string v2Envelope;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConnectivityCredentialRecordType,
+             fermentation::configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV2,
+             device_platform::StorageEpoch{1U}, 1U, std::nullopt, v2Payload},
+            v2Envelope,
+            163U) == device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT(163U, v2Envelope.size());
+
+    device_platform::ByteWriter v1Writer(100U);
+    TEST_ASSERT_TRUE(
+        device_platform::big_endian::writeOptionalTag(v1Writer, true));
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint16(v1Writer, 32U));
+    TEST_ASSERT_TRUE(v1Writer.writeBytes(std::string(32U, 's').data(), 32U));
+    TEST_ASSERT_TRUE(device_platform::big_endian::writeUint16(v1Writer, 63U));
+    TEST_ASSERT_TRUE(v1Writer.writeBytes(std::string(63U, 'p').data(), 63U));
+    const auto v1Payload = v1Writer.takeBytes();
+    TEST_ASSERT_EQUAL_UINT(100U, v1Payload.size());
+    std::string v1Envelope;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {fermentation::configuration_storage_contract::
+                 kConnectivityCredentialRecordType,
+             fermentation::configuration_storage_contract::
+                 kConnectivityCredentialSchemaVersionV1,
+             device_platform::StorageEpoch{1U}, 1U, std::nullopt, v1Payload},
+            v1Envelope,
+            145U) == device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT(145U, v1Envelope.size());
+
+    const ConnectivityCredential missingSoftAp{maximum.homeWifi, std::nullopt};
+    TEST_ASSERT_TRUE(
+        fermentation::validateConnectivityCredentialV2(missingSoftAp) ==
+        ConnectivityCredentialValidationStatus::MissingSoftApPassword);
+    TEST_ASSERT_TRUE(fermentation::encodeConnectivityCredentialPayload(
+                         missingSoftAp, v2Payload) ==
+                     ConnectivityCredentialCodecStatus::InvalidCredential);
+
+    for (const auto length : {15U, 17U}) {
+        auto wrongLength = maximum;
+        wrongLength.softApPassword = std::string(length, 'A');
+        TEST_ASSERT_TRUE(
+            fermentation::validateConnectivityCredentialV2(wrongLength) ==
+            ConnectivityCredentialValidationStatus::InvalidSoftApPassword);
+    }
+    auto wrongAlphabet = maximum;
+    wrongAlphabet.softApPassword = std::string(15U, 'A') + "!";
+    TEST_ASSERT_TRUE(
+        fermentation::validateConnectivityCredentialV2(wrongAlphabet) ==
+        ConnectivityCredentialValidationStatus::InvalidSoftApPassword);
+
+    std::string normalPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeConnectivityCredentialPayload(
+                         validCredential(), normalPayload) ==
+                     ConnectivityCredentialCodecStatus::Success);
+    auto trailing = normalPayload;
+    trailing.push_back('x');
+    const auto decodedTrailing =
+        fermentation::decodeConnectivityCredentialPayload(2U, trailing);
+    TEST_ASSERT_TRUE(decodedTrailing.status ==
+                     ConnectivityCredentialCodecStatus::TrailingBytes);
+    TEST_ASSERT_FALSE(decodedTrailing.credential.has_value());
+}
+
 void test_connectivity_credential_store_uses_cc0_and_epoch_binding() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -322,6 +413,53 @@ void test_device_name_restart_changes_ssid_but_preserves_softap_password() {
     TEST_ASSERT_TRUE(second->password == firstPassword);
 }
 
+void test_other_epoch_discards_home_and_softap_secrets_and_restarts_sequence() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    const auto old = validCredential();
+    TEST_ASSERT_TRUE(
+        credentials.write(old, device_platform::StorageEpoch{1U}, 7U).status ==
+        ConnectivityCredentialWriteStatus::Committed);
+
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    randomSource.setNextBytes(std::string(16U, '\x01'));
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{2U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+
+    const auto current = credentials.load(device_platform::StorageEpoch{2U});
+    TEST_ASSERT_TRUE(current.status ==
+                     ConnectivityCredentialLoadStatus::Available);
+    TEST_ASSERT_TRUE(current.record.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, current.record->recordSequence);
+    TEST_ASSERT_FALSE(current.record->credential.homeWifi.has_value());
+    TEST_ASSERT_TRUE(current.record->credential.softApPassword.has_value());
+    TEST_ASSERT_TRUE(*current.record->credential.softApPassword !=
+                     *old.softApPassword);
+}
+
+void test_valid_v2_load_does_not_require_random_source() {
+    SimulatedPersistentStateStore store;
+    ConnectivityCredentialStore credentials(store);
+    TEST_ASSERT_TRUE(
+        credentials
+            .write(validCredential(), device_platform::StorageEpoch{1U}, 1U)
+            .status == ConnectivityCredentialWriteStatus::Committed);
+    MockNetworkLifecycle lifecycle;
+    MockSecureRandomSource randomSource;
+    randomSource.injectFailure(true);
+    NetworkConfigurationService service(credentials, lifecycle, randomSource);
+    TEST_ASSERT_TRUE(service
+                         .start(NetworkMode::AP_ONLY,
+                                device_platform::StorageEpoch{1U},
+                                "Fermentationsschrank")
+                         .status == NetworkConfigurationStatus::Applied);
+}
+
 void test_successful_write_with_readback_error_is_indeterminate() {
     SimulatedPersistentStateStore store;
     ConnectivityCredentialStore credentials(store);
@@ -351,6 +489,10 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
                          .status == NetworkConfigurationStatus::Applied);
     TEST_ASSERT_TRUE(lifecycle.status().state ==
                      device_platform::NetworkLifecycleState::SetupAccessPoint);
+    const auto initial = credentials.load(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(initial.record.has_value());
+    const auto initialSoftApPassword =
+        *initial.record->credential.softApPassword;
     TEST_ASSERT_TRUE(
         service.beginCandidate("Fermentation-WLAN", "correct-horse-battery")
             .status == NetworkConfigurationStatus::Applied);
@@ -376,6 +518,8 @@ void test_network_workflow_tests_before_commit_and_preserves_on_failure() {
     TEST_ASSERT_TRUE(committed.record->credential.softApPassword.has_value());
     TEST_ASSERT_EQUAL_UINT(16U,
                            committed.record->credential.softApPassword->size());
+    TEST_ASSERT_TRUE(*committed.record->credential.softApPassword ==
+                     initialSoftApPassword);
 }
 
 void test_candidate_wrong_password_disconnect_and_timeout_never_commit() {
@@ -735,11 +879,16 @@ int main() {
     RUN_TEST(test_startup_decision_requires_selection_and_never_infers_mode);
     RUN_TEST(test_v1_v2_migrate_to_unselected_and_v3_has_no_credentials);
     RUN_TEST(test_connectivity_credential_codec_keeps_pair_together);
+    RUN_TEST(
+        test_connectivity_credential_wire_limits_and_v2_validation_goldens);
     RUN_TEST(test_connectivity_credential_store_uses_cc0_and_epoch_binding);
     RUN_TEST(test_v1_load_migrates_home_credentials_to_v2_with_softap_password);
     RUN_TEST(test_v2_softap_only_record_separates_home_setup_from_ap_only);
     RUN_TEST(
         test_device_name_restart_changes_ssid_but_preserves_softap_password);
+    RUN_TEST(
+        test_other_epoch_discards_home_and_softap_secrets_and_restarts_sequence);
+    RUN_TEST(test_valid_v2_load_does_not_require_random_source);
     RUN_TEST(test_successful_write_with_readback_error_is_indeterminate);
     RUN_TEST(
         test_network_workflow_tests_before_commit_and_preserves_on_failure);

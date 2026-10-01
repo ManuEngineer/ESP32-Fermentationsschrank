@@ -738,6 +738,17 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         return {NetworkConfigurationStatus::PersistenceFailure};
     }
+    const auto hostname = networkHostnameFromDeviceName(
+        runtime.lease.get().userConfiguration().deviceName);
+    if (!hostname.has_value() ||
+        networkLifecycle_->setHostname(*hostname).status !=
+            device_platform::NetworkOperationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
     const auto applied = networkConfigurationService_->start(
         selectedMode, runtime.lease.get().storageEpoch(),
         runtime.lease.get().userConfiguration().deviceName);
@@ -768,8 +779,37 @@ FermentationApplication::beginHomeWifiReconfiguration() {
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
         return {NetworkConfigurationStatus::PersistenceFailure};
     }
-    return networkConfigurationService_->beginHomeWifiReconfiguration(
+    const auto hostname = networkHostnameFromDeviceName(
         runtime.lease.get().userConfiguration().deviceName);
+    if (!hostname.has_value() ||
+        networkLifecycle_->setHostname(*hostname).status !=
+            device_platform::NetworkOperationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return {NetworkConfigurationStatus::TransportFailure};
+    }
+    const auto reconfigured =
+        networkConfigurationService_->beginHomeWifiReconfiguration(
+            runtime.lease.get().userConfiguration().deviceName);
+    if (reconfigured.status != NetworkConfigurationStatus::Applied) {
+        static_cast<void>(networkLifecycle_->stop());
+        if (httpServerLifecycle_ != nullptr) {
+            static_cast<void>(httpServerLifecycle_->stop());
+        }
+        return reconfigured;
+    }
+    if (httpServerLifecycle_ != nullptr && networkSetupRoutes_ != nullptr &&
+        (httpServerLifecycle_->running() ||
+         httpServerLifecycle_->start(*networkSetupRoutes_))) {
+        return reconfigured;
+    }
+    static_cast<void>(networkLifecycle_->stop());
+    if (httpServerLifecycle_ != nullptr) {
+        static_cast<void>(httpServerLifecycle_->stop());
+    }
+    return {NetworkConfigurationStatus::TransportFailure};
 }
 
 std::optional<device_platform::NetworkAccessPointInfo>

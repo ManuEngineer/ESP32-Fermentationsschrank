@@ -535,8 +535,9 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::setHostname(
     if (hostname.empty() || hostname.size() > 63U) {
         return {device_platform::NetworkOperationStatus::InvalidInput};
     }
-    if (initialized_) {
-        return {device_platform::NetworkOperationStatus::Busy};
+    if (initialized_ &&
+        (!mdnsInitialized_ || mdns_hostname_set(hostname.c_str()) != ESP_OK)) {
+        return {device_platform::NetworkOperationStatus::Failed};
     }
     config_.hostname = hostname;
     return {device_platform::NetworkOperationStatus::Applied};
