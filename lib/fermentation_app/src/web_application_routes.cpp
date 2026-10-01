@@ -22,10 +22,6 @@ constexpr char kLogoutPath[] = "/api/v1/logout";
 constexpr char kSessionCookieName[] = "FSSESSION=";
 constexpr char kHtmlContentType[] = "text/html; charset=utf-8";
 constexpr std::size_t kMaximumWebShellBytes = 4096U;
-static_assert(kMaximumWebRunMutationBodyBytes + sizeof("POST") +
-                      sizeof(kRoutePath) + 4U <=
-                  kMaximumMutationFingerprintBytes,
-              "maximum run DTO must fit the session replay fingerprint");
 
 WebMutationOutcome outcome(std::uint16_t status, const char* body) {
     return {status, kJsonContentType, body};
@@ -254,8 +250,6 @@ WebMutationOutcome reservationError(MutationReservationStatus status) {
     switch (status) {
         case MutationReservationStatus::InvalidSession:
             return requestError(401U, "{\"error\":\"session-required\"}");
-        case MutationReservationStatus::InvalidFingerprint:
-            return requestError(kTooLarge, "{\"error\":\"request-too-large\"}");
         case MutationReservationStatus::Reserved:
         case MutationReservationStatus::ReplayOutcome:
             break;
@@ -447,11 +441,9 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    const auto fingerprint = mutationFingerprint(request);
-    if (fingerprint.empty()) {
-        setResponse(
-            response,
-            requestError(kTooLarge, "{\"error\":\"request-too-large\"}"));
+    ReplayDigest digest{};
+    if (!sessions_.mutationDigest(request, digest)) {
+        setResponse(response, unavailable());
         return true;
     }
     if (!request.metadata.cookie.has_value()) {
@@ -495,8 +487,8 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    const auto reservation = sessions_.reserveMutation(*session.handle, nowMs,
-                                                       *sequence, fingerprint);
+    const auto reservation =
+        sessions_.reserveMutation(*session.handle, nowMs, *sequence, digest);
     if (reservation.status == MutationReservationStatus::ReplayOutcome) {
         if (reservation.outcome.has_value()) {
             setResponse(response, *reservation.outcome);
@@ -533,9 +525,9 @@ bool WebRunMutationHandler::handle(const device_platform::HttpRequest& request,
         }
     }
 
-    if (!sessions_.completeMutation(
-            *session.handle, timeSource_.monotonicMillis(),
-            *reservation.sequence, fingerprint, projected)) {
+    if (!sessions_.completeMutation(*session.handle,
+                                    timeSource_.monotonicMillis(),
+                                    *reservation.sequence, digest, projected)) {
         setResponse(response, unavailable());
         return true;
     }

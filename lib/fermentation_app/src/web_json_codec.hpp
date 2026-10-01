@@ -8,7 +8,6 @@
 
 namespace fermentation {
 
-inline constexpr std::size_t kMaximumWebRunMutationBodyBytes = 480U;
 inline constexpr std::size_t kMaximumWebLoginBodyBytes = 768U;
 inline constexpr std::size_t kMaximumWebApiResponseBodyBytes = 3072U;
 inline constexpr std::size_t kMaximumWebApiAlertCount = 16U;

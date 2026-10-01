@@ -7,17 +7,16 @@ namespace fermentation {
 namespace {
 
 constexpr char kHex[] = "0123456789abcdef";
-
-bool validReplayContentType(const std::string& contentType) noexcept {
-    if (contentType.empty() ||
-        contentType.size() > kMaximumReplayOutcomeContentTypeBytes) {
-        return false;
-    }
-    for (const unsigned char byte : contentType) {
-        if (byte < 0x20U || byte > 0x7EU) return false;
-    }
-    return true;
-}
+constexpr char kJsonContentType[] = "application/json; charset=utf-8";
+constexpr char kAppliedBody[] = "{\"outcome\":\"applied\"}";
+constexpr char kUnavailableBody[] = "{\"outcome\":\"unavailable\"}";
+constexpr char kStaleBody[] = "{\"outcome\":\"stale\"}";
+constexpr char kRejectedBody[] = "{\"outcome\":\"rejected\"}";
+constexpr char kBusyBody[] = "{\"outcome\":\"busy\"}";
+constexpr char kConfirmationRequiredBody[] =
+    "{\"outcome\":\"confirmation-required\"}";
+constexpr char kWriteFailedBody[] = "{\"outcome\":\"write-failed\"}";
+constexpr char kTooLargeBody[] = "{\"outcome\":\"too-large\"}";
 
 bool constantEqual(const std::string& left, const std::string& right) noexcept {
     if (left.size() != right.size()) return false;
@@ -43,29 +42,62 @@ std::optional<std::uint64_t> parseMutationSequence(
     return result == 0U ? std::nullopt : std::optional<std::uint64_t>{result};
 }
 
-std::string mutationFingerprint(const device_platform::HttpRequest& request) {
-    // Retain exact request identity within a small fixed replay-cache budget.
-    if (request.method.empty() || request.method.size() > 16U ||
-        request.path.empty() || request.path.size() > 256U ||
-        request.body.size() > 4096U) {
-        return {};
+bool mutationDigest(const device_platform::HttpRequest& request,
+                    IReplayDigest& digest, ReplayDigest& out) {
+    if (request.method.empty() ||
+        request.method.size() > kMaximumMutationMethodBytes ||
+        request.path.empty() ||
+        request.path.size() > kMaximumMutationPathBytes ||
+        request.body.size() > kMaximumWebRunMutationBodyBytes) {
+        return false;
     }
     const auto bodyLength = std::to_string(request.body.size());
-    const auto fingerprintLength = request.method.size() + 1U +
-                                   request.path.size() + 1U +
-                                   bodyLength.size() + 1U + request.body.size();
-    if (fingerprintLength > kMaximumMutationFingerprintBytes) return {};
+    return digest.digest(
+        {request.method, request.path, bodyLength, request.body}, out);
+}
 
-    std::string material;
-    material.reserve(fingerprintLength);
-    material.append(request.method);
-    material.push_back('\0');
-    material.append(request.path);
-    material.push_back('\0');
-    material.append(bodyLength);
-    material.push_back('\0');
-    material.append(request.body);
-    return material;
+WebMutationOutcome replayOutcome(ReplayOutcomeCode code) {
+    switch (code) {
+        case ReplayOutcomeCode::Applied:
+            return {200U, kJsonContentType, kAppliedBody};
+        case ReplayOutcomeCode::Unavailable:
+            return {503U, kJsonContentType, kUnavailableBody};
+        case ReplayOutcomeCode::Stale:
+            return {409U, kJsonContentType, kStaleBody};
+        case ReplayOutcomeCode::Rejected:
+            return {422U, kJsonContentType, kRejectedBody};
+        case ReplayOutcomeCode::Busy:
+            return {409U, kJsonContentType, kBusyBody};
+        case ReplayOutcomeCode::ConfirmationRequired:
+            return {409U, kJsonContentType, kConfirmationRequiredBody};
+        case ReplayOutcomeCode::WriteFailed:
+            return {500U, kJsonContentType, kWriteFailedBody};
+        case ReplayOutcomeCode::TooLarge:
+            return {413U, kJsonContentType, kTooLargeBody};
+    }
+    return {503U, kJsonContentType, kUnavailableBody};
+}
+
+std::optional<ReplayOutcomeCode> replayOutcomeCode(
+    const WebMutationOutcome& outcome) noexcept {
+    if (outcome.contentType != kJsonContentType) return std::nullopt;
+    if (outcome.statusCode == 200U && outcome.body == kAppliedBody)
+        return ReplayOutcomeCode::Applied;
+    if (outcome.statusCode == 503U && outcome.body == kUnavailableBody)
+        return ReplayOutcomeCode::Unavailable;
+    if (outcome.statusCode == 409U && outcome.body == kStaleBody)
+        return ReplayOutcomeCode::Stale;
+    if (outcome.statusCode == 422U && outcome.body == kRejectedBody)
+        return ReplayOutcomeCode::Rejected;
+    if (outcome.statusCode == 409U && outcome.body == kBusyBody)
+        return ReplayOutcomeCode::Busy;
+    if (outcome.statusCode == 409U && outcome.body == kConfirmationRequiredBody)
+        return ReplayOutcomeCode::ConfirmationRequired;
+    if (outcome.statusCode == 500U && outcome.body == kWriteFailedBody)
+        return ReplayOutcomeCode::WriteFailed;
+    if (outcome.statusCode == 413U && outcome.body == kTooLargeBody)
+        return ReplayOutcomeCode::TooLarge;
+    return std::nullopt;
 }
 
 static_assert(sizeof(WebSessionManager) <= kMaximumWebSessionManagerBytes,
@@ -136,13 +168,8 @@ bool WebSessionManager::equalId(const Session& session,
 
 void WebSessionManager::clearMutation(CompletedMutation& mutation) noexcept {
     mutation.sequence = 0U;
-    mutation.fingerprint.fill('\0');
-    mutation.fingerprintLength = 0U;
-    mutation.statusCode = 500U;
-    mutation.contentType.fill('\0');
-    mutation.contentTypeLength = 0U;
-    mutation.body.fill('\0');
-    mutation.bodyLength = 0U;
+    mutation.digest.fill(0U);
+    mutation.outcome = ReplayOutcomeCode::Unavailable;
 }
 
 void WebSessionManager::clearMutationState(Session& session) noexcept {
@@ -156,49 +183,32 @@ void WebSessionManager::clearMutationState(Session& session) noexcept {
     session.replayFloor = 0U;
 }
 
-bool WebSessionManager::fingerprintMatches(
-    const CompletedMutation& mutation,
-    const std::string& fingerprint) noexcept {
-    if (fingerprint.empty() ||
-        fingerprint.size() > kMaximumMutationFingerprintBytes ||
-        mutation.fingerprintLength != fingerprint.size()) {
-        return false;
-    }
+bool WebSessionManager::digestMatches(const CompletedMutation& mutation,
+                                      const ReplayDigest& digest) noexcept {
     unsigned char difference = 0U;
-    for (std::size_t index = 0U; index < fingerprint.size(); ++index) {
-        difference |= static_cast<unsigned char>(mutation.fingerprint[index] ^
-                                                 fingerprint[index]);
-    }
+    for (std::size_t index = 0U; index < digest.size(); ++index)
+        difference |=
+            static_cast<unsigned char>(mutation.digest[index] ^ digest[index]);
     return difference == 0U;
 }
 
 bool WebSessionManager::storeOutcome(const WebMutationOutcome& outcome,
                                      CompletedMutation& mutation) noexcept {
-    if (outcome.statusCode < 200U || outcome.statusCode > 599U ||
-        !validReplayContentType(outcome.contentType) ||
-        outcome.body.size() > kMaximumReplayOutcomeBodyBytes) {
-        return false;
-    }
-    if (outcome.body.size() >
-        kMaximumReplayOutcomeBytes - outcome.contentType.size()) {
-        return false;
-    }
-    mutation.statusCode = outcome.statusCode;
-    mutation.contentTypeLength =
-        static_cast<std::uint16_t>(outcome.contentType.size());
-    std::copy(outcome.contentType.begin(), outcome.contentType.end(),
-              mutation.contentType.begin());
-    mutation.bodyLength = static_cast<std::uint16_t>(outcome.body.size());
-    std::copy(outcome.body.begin(), outcome.body.end(), mutation.body.begin());
+    const auto code = replayOutcomeCode(outcome);
+    if (!code.has_value()) return false;
+    mutation.outcome = *code;
     return true;
 }
 
 WebMutationOutcome WebSessionManager::restoreOutcome(
     const CompletedMutation& mutation) {
-    return {
-        mutation.statusCode,
-        std::string(mutation.contentType.data(), mutation.contentTypeLength),
-        std::string(mutation.body.data(), mutation.bodyLength)};
+    return replayOutcome(mutation.outcome);
+}
+
+bool WebSessionManager::mutationDigest(
+    const device_platform::HttpRequest& request, ReplayDigest& out) const {
+    return replayDigest_ != nullptr &&
+           ::fermentation::mutationDigest(request, *replayDigest_, out);
 }
 
 WebSessionManager::Session* WebSessionManager::get(WebSessionHandle handle,
@@ -391,19 +401,15 @@ MutationSequenceView WebSessionManager::mutationSequence(
 
 MutationReservation WebSessionManager::reserveMutation(
     WebSessionHandle handle, std::uint64_t nowMs, std::uint64_t sequence,
-    const std::string& fingerprint) {
+    const ReplayDigest& digest) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto* session = get(handle, nowMs);
     if (session == nullptr)
         return {MutationReservationStatus::InvalidSession, std::nullopt,
                 std::nullopt};
-    if (fingerprint.empty() ||
-        fingerprint.size() > kMaximumMutationFingerprintBytes)
-        return {MutationReservationStatus::InvalidFingerprint, std::nullopt,
-                std::nullopt};
     if (session->inFlight.has_value()) {
         if (sequence == session->inFlight->sequence) {
-            return {fingerprintMatches(*session->inFlight, fingerprint)
+            return {digestMatches(*session->inFlight, digest)
                         ? MutationReservationStatus::InFlight
                         : MutationReservationStatus::SequenceReused,
                     sequence, std::nullopt};
@@ -417,7 +423,7 @@ MutationReservation WebSessionManager::reserveMutation(
     for (std::size_t index = 0U; index < session->completedCount; ++index) {
         const auto& completed = session->completed[index];
         if (completed.sequence == sequence) {
-            if (!fingerprintMatches(completed, fingerprint))
+            if (!digestMatches(completed, digest))
                 return {MutationReservationStatus::SequenceReused, sequence,
                         std::nullopt};
             return {MutationReservationStatus::ReplayOutcome, sequence,
@@ -435,26 +441,20 @@ MutationReservation WebSessionManager::reserveMutation(
     session->inFlight.emplace();
     auto& mutation = *session->inFlight;
     mutation.sequence = sequence;
-    mutation.fingerprintLength = static_cast<std::uint16_t>(fingerprint.size());
-    std::copy(fingerprint.begin(), fingerprint.end(),
-              mutation.fingerprint.begin());
+    mutation.digest = digest;
     return {MutationReservationStatus::Reserved, sequence, std::nullopt};
 }
 
 bool WebSessionManager::completeMutation(WebSessionHandle handle,
                                          std::uint64_t nowMs,
                                          std::uint64_t sequence,
-                                         const std::string& fingerprint,
+                                         const ReplayDigest& digest,
                                          const WebMutationOutcome& outcome) {
-    if (fingerprint.empty() ||
-        fingerprint.size() > kMaximumMutationFingerprintBytes) {
-        return false;
-    }
     std::lock_guard<std::mutex> lock(mutex_);
     auto* session = get(handle, nowMs);
     if (session == nullptr || !session->inFlight.has_value() ||
         session->inFlight->sequence != sequence ||
-        !fingerprintMatches(*session->inFlight, fingerprint) ||
+        !digestMatches(*session->inFlight, digest) ||
         !storeOutcome(outcome, *session->inFlight)) {
         return false;
     }

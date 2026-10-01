@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 
 #include "web_session.hpp"
 
@@ -46,22 +47,57 @@ class Random final : public device_platform::ISecureRandomSource {
     std::uint8_t next_{1U};
 };
 
+fermentation::ReplayDigest testDigest(std::string_view value) {
+    fermentation::ReplayDigest digest{};
+    std::uint32_t state = 2166136261U;
+    for (const auto byte : value) {
+        state ^= static_cast<std::uint8_t>(byte);
+        state *= 16777619U;
+    }
+    for (std::size_t index = 0U; index < digest.size(); ++index) {
+        state ^= static_cast<std::uint32_t>(index + 1U);
+        state *= 16777619U;
+        digest[index] = static_cast<std::uint8_t>(state >> 24U);
+    }
+    return digest;
+}
+
+class CapturingDigest final : public fermentation::IReplayDigest {
+   public:
+    bool digest(const fermentation::ReplayDigestInput& input,
+                fermentation::ReplayDigest& out) override {
+        stream.clear();
+        stream.append(input.method.data(), input.method.size());
+        stream.push_back('\0');
+        stream.append(input.path.data(), input.path.size());
+        stream.push_back('\0');
+        stream.append(input.bodyLength.data(), input.bodyLength.size());
+        stream.push_back('\0');
+        stream.append(input.body.data(), input.body.size());
+        out = testDigest(stream);
+        return true;
+    }
+
+    std::string stream;
+};
+
 void test_more_than_eight_mutations_do_not_exhaust_session() {
     Random random;
     fermentation::WebSessionManager sessions(random);
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
     for (std::uint64_t sequence = 1U; sequence <= 20U; ++sequence) {
-        const auto reserved =
-            sessions.reserveMutation(*created.handle, sequence, sequence,
-                                     "fingerprint-" + std::to_string(sequence));
+        const auto reserved = sessions.reserveMutation(
+            *created.handle, sequence, sequence,
+            testDigest("fingerprint-" + std::to_string(sequence)));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::MutationReservationStatus::Reserved),
             static_cast<int>(reserved.status));
         TEST_ASSERT_TRUE(sessions.completeMutation(
             *created.handle, sequence, sequence,
-            "fingerprint-" + std::to_string(sequence),
-            {200U, "application/json", "{\"ok\":true}"}));
+            testDigest("fingerprint-" + std::to_string(sequence)),
+            fermentation::replayOutcome(
+                fermentation::ReplayOutcomeCode::Applied)));
     }
     const auto view = sessions.mutationSequence(*created.handle, 1U);
     TEST_ASSERT_EQUAL_INT(
@@ -76,25 +112,27 @@ void test_replay_and_reuse_are_not_second_mutations() {
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
     const auto first =
-        sessions.reserveMutation(*created.handle, 1U, 1U, "same");
+        sessions.reserveMutation(*created.handle, 1U, 1U, testDigest("same"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(first.status));
     TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 1U, 1U, "same", {200U, "application/json", "ok"}));
+        *created.handle, 1U, 1U, testDigest("same"),
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
     const auto replay =
-        sessions.reserveMutation(*created.handle, 2U, 1U, "same");
+        sessions.reserveMutation(*created.handle, 2U, 1U, testDigest("same"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::ReplayOutcome),
         static_cast<int>(replay.status));
     TEST_ASSERT_TRUE(replay.outcome.has_value());
     TEST_ASSERT_EQUAL_UINT16(200U, replay.outcome->statusCode);
-    TEST_ASSERT_EQUAL_STRING("application/json",
+    TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
                              replay.outcome->contentType.c_str());
-    TEST_ASSERT_EQUAL_STRING("ok", replay.outcome->body.c_str());
+    TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}",
+                             replay.outcome->body.c_str());
     const auto reused =
-        sessions.reserveMutation(*created.handle, 2U, 1U, "other");
+        sessions.reserveMutation(*created.handle, 2U, 1U, testDigest("other"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::SequenceReused),
@@ -125,15 +163,15 @@ void test_two_tabs_share_csrf_sequence_and_replay_outcome() {
     TEST_ASSERT_FALSE(
         sessions.validateCsrf(*otherSession.handle, firstTab.csrfToken, 2U));
 
-    const std::string fingerprint = "post-run-payload";
+    const auto fingerprint = testDigest("post-run-payload");
     const auto owner =
         sessions.reserveMutation(*firstTab.handle, 2U, 1U, fingerprint);
     const auto sameRequest =
         sessions.reserveMutation(*secondTab.handle, 2U, 1U, fingerprint);
-    const auto changedRequest =
-        sessions.reserveMutation(*secondTab.handle, 2U, 1U, "changed-payload");
-    const auto competingSequence =
-        sessions.reserveMutation(*secondTab.handle, 2U, 2U, "next-payload");
+    const auto changedRequest = sessions.reserveMutation(
+        *secondTab.handle, 2U, 1U, testDigest("changed-payload"));
+    const auto competingSequence = sessions.reserveMutation(
+        *secondTab.handle, 2U, 2U, testDigest("next-payload"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(owner.status));
@@ -149,8 +187,8 @@ void test_two_tabs_share_csrf_sequence_and_replay_outcome() {
             fermentation::MutationReservationStatus::SequenceConflict),
         static_cast<int>(competingSequence.status));
 
-    const fermentation::WebMutationOutcome outcome{
-        200U, "application/json; charset=utf-8", "{\"applied\":true}"};
+    const fermentation::WebMutationOutcome outcome =
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied);
     TEST_ASSERT_TRUE(sessions.completeMutation(*firstTab.handle, 2U, 1U,
                                                fingerprint, outcome));
     const auto retry =
@@ -173,14 +211,14 @@ void test_browser_reload_preserves_live_session_csrf_and_replay_state() {
     fermentation::WebSessionManager sessions(random);
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
-    const auto outcome = sessions.reserveMutation(*created.handle, 1U, 1U,
-                                                  "reload-stable-request");
+    const auto outcome = sessions.reserveMutation(
+        *created.handle, 1U, 1U, testDigest("reload-stable-request"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(outcome.status));
     TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 1U, 1U, "reload-stable-request",
-        {202U, "application/json; charset=utf-8", "{\"queued\":true}"}));
+        *created.handle, 1U, 1U, testDigest("reload-stable-request"),
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
 
     const auto reloaded = sessions.find("FSSESSION=" + created.cookieValue, 2U);
     TEST_ASSERT_EQUAL_INT(
@@ -192,14 +230,15 @@ void test_browser_reload_preserves_live_session_csrf_and_replay_state() {
                              reloaded.csrfToken.c_str());
     const auto sequence = sessions.mutationSequence(*reloaded.handle, 2U);
     TEST_ASSERT_EQUAL_UINT64(2U, sequence.nextMutationSeq);
-    const auto retry = sessions.reserveMutation(*reloaded.handle, 2U, 1U,
-                                                "reload-stable-request");
+    const auto retry = sessions.reserveMutation(
+        *reloaded.handle, 2U, 1U, testDigest("reload-stable-request"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::ReplayOutcome),
         static_cast<int>(retry.status));
     TEST_ASSERT_TRUE(retry.outcome.has_value());
-    TEST_ASSERT_EQUAL_STRING("{\"queued\":true}", retry.outcome->body.c_str());
+    TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}",
+                             retry.outcome->body.c_str());
 }
 
 void test_inflight_and_old_retired_values_fail_closed() {
@@ -208,31 +247,35 @@ void test_inflight_and_old_retired_values_fail_closed() {
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
     const auto inFlight =
-        sessions.reserveMutation(*created.handle, 0U, 1U, "a");
+        sessions.reserveMutation(*created.handle, 0U, 1U, testDigest("a"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(inFlight.status));
-    const auto loser = sessions.reserveMutation(*created.handle, 0U, 2U, "b");
+    const auto loser =
+        sessions.reserveMutation(*created.handle, 0U, 2U, testDigest("b"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::SequenceConflict),
         static_cast<int>(loser.status));
     TEST_ASSERT_TRUE(sessions.completeMutation(
-        *created.handle, 0U, 1U, "a", {200U, "application/json", "ok"}));
+        *created.handle, 0U, 1U, testDigest("a"),
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
     for (std::uint64_t sequence = 2U; sequence <= 10U; ++sequence) {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(fermentation::MutationReservationStatus::Reserved),
             static_cast<int>(
                 sessions
                     .reserveMutation(*created.handle, 0U, sequence,
-                                     "x" + std::to_string(sequence))
+                                     testDigest("x" + std::to_string(sequence)))
                     .status));
         TEST_ASSERT_TRUE(sessions.completeMutation(
-            *created.handle, 0U, sequence, "x" + std::to_string(sequence),
-            {200U, "application/json", "ok"}));
+            *created.handle, 0U, sequence,
+            testDigest("x" + std::to_string(sequence)),
+            fermentation::replayOutcome(
+                fermentation::ReplayOutcomeCode::Applied)));
     }
     const auto expired =
-        sessions.reserveMutation(*created.handle, 0U, 1U, "same");
+        sessions.reserveMutation(*created.handle, 0U, 1U, testDigest("same"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::ReplayExpired),
@@ -383,108 +426,133 @@ void test_cookie_parser_rejects_duplicate_session_cookie() {
         static_cast<int>(duplicate.status));
 }
 
-void test_request_fingerprint_preserves_exact_bounded_identity() {
+void test_request_digest_preserves_canonical_bounded_identity() {
+    CapturingDigest digest;
     device_platform::HttpRequest first{
         "POST", "/internal/ui/run", std::string("a\0b", 3U), {}};
     device_platform::HttpRequest second{
         "POST", "/internal/ui/run", std::string("a\0c", 3U), {}};
-    const auto firstFingerprint = fermentation::mutationFingerprint(first);
-    const auto secondFingerprint = fermentation::mutationFingerprint(second);
-    TEST_ASSERT_FALSE(firstFingerprint.empty());
-    TEST_ASSERT_TRUE(firstFingerprint != secondFingerprint);
+    fermentation::ReplayDigest firstDigest{};
+    fermentation::ReplayDigest secondDigest{};
+    TEST_ASSERT_TRUE(fermentation::mutationDigest(first, digest, firstDigest));
+    const auto firstStream = digest.stream;
+    TEST_ASSERT_TRUE(
+        fermentation::mutationDigest(second, digest, secondDigest));
+    TEST_ASSERT_TRUE(firstDigest != secondDigest);
+    TEST_ASSERT_EQUAL_UINT32(fermentation::kReplayDigestBytes,
+                             firstDigest.size());
     auto differentMethod = first;
     differentMethod.method = "PUT";
-    TEST_ASSERT_TRUE(firstFingerprint !=
-                     fermentation::mutationFingerprint(differentMethod));
+    fermentation::ReplayDigest differentMethodDigest{};
+    TEST_ASSERT_TRUE(fermentation::mutationDigest(differentMethod, digest,
+                                                  differentMethodDigest));
+    TEST_ASSERT_TRUE(firstDigest != differentMethodDigest);
     auto differentPath = first;
     differentPath.path = "/internal/ui/other";
-    TEST_ASSERT_TRUE(firstFingerprint !=
-                     fermentation::mutationFingerprint(differentPath));
-    device_platform::HttpRequest atFingerprintLimit{
-        "POST", "/", std::string(501U, 'x'), {}};
-    TEST_ASSERT_EQUAL_UINT32(
-        fermentation::kMaximumMutationFingerprintBytes,
-        fermentation::mutationFingerprint(atFingerprintLimit).size());
-    device_platform::HttpRequest oversized{
-        "POST", "/", std::string(502U, 'x'), {}};
-    TEST_ASSERT_TRUE(fermentation::mutationFingerprint(oversized).empty());
-    oversized.body.assign(4097U, 'x');
-    TEST_ASSERT_TRUE(fermentation::mutationFingerprint(oversized).empty());
+    fermentation::ReplayDigest differentPathDigest{};
+    TEST_ASSERT_TRUE(fermentation::mutationDigest(differentPath, digest,
+                                                  differentPathDigest));
+    TEST_ASSERT_TRUE(firstDigest != differentPathDigest);
+
+    device_platform::HttpRequest boundaryA{"A", "BC", {}, {}};
+    device_platform::HttpRequest boundaryB{"AB", "C", {}, {}};
+    fermentation::ReplayDigest boundaryDigest{};
+    TEST_ASSERT_TRUE(
+        fermentation::mutationDigest(boundaryA, digest, boundaryDigest));
+    const auto boundaryStreamA = digest.stream;
+    TEST_ASSERT_TRUE(
+        fermentation::mutationDigest(boundaryB, digest, boundaryDigest));
+    TEST_ASSERT_TRUE(boundaryStreamA != digest.stream);
+    TEST_ASSERT_TRUE(firstStream != boundaryStreamA);
+
+    device_platform::HttpRequest atBodyLimit{
+        "POST",
+        "/",
+        std::string(fermentation::kMaximumWebRunMutationBodyBytes, 'x'),
+        {}};
+    TEST_ASSERT_TRUE(
+        fermentation::mutationDigest(atBodyLimit, digest, boundaryDigest));
+    atBodyLimit.body.push_back('x');
+    TEST_ASSERT_FALSE(
+        fermentation::mutationDigest(atBodyLimit, digest, boundaryDigest));
+    atBodyLimit.body.clear();
+    atBodyLimit.method.assign(fermentation::kMaximumMutationMethodBytes + 1U,
+                              'M');
+    TEST_ASSERT_FALSE(
+        fermentation::mutationDigest(atBodyLimit, digest, boundaryDigest));
+    atBodyLimit.method = "POST";
+    atBodyLimit.path.assign(fermentation::kMaximumMutationPathBytes + 1U, 'P');
+    TEST_ASSERT_FALSE(
+        fermentation::mutationDigest(atBodyLimit, digest, boundaryDigest));
 }
 
-void test_replay_cache_enforces_fingerprint_and_outcome_byte_limits() {
+void test_replay_cache_uses_compact_outcome_codes_and_full_window() {
     Random random;
     fermentation::WebSessionManager sessions(random);
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
-    TEST_ASSERT_EQUAL_UINT32(
-        29952U, fermentation::kMaximumWebSessionReplayPayloadBytes);
+    TEST_ASSERT_EQUAL_UINT32(1152U,
+                             fermentation::kMaximumWebSessionReplayDigestBytes);
     TEST_ASSERT_TRUE(sizeof(sessions) <=
                      fermentation::kMaximumWebSessionManagerBytes);
 
-    const auto oversizedFingerprint = sessions.reserveMutation(
-        *created.handle, 1U, 1U,
-        std::string(fermentation::kMaximumMutationFingerprintBytes + 1U, 'x'));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            fermentation::MutationReservationStatus::InvalidFingerprint),
-        static_cast<int>(oversizedFingerprint.status));
-
-    const std::string fingerprint(
-        fermentation::kMaximumMutationFingerprintBytes, 'f');
+    const auto digest = testDigest("compact-outcome");
     const auto reserved =
-        sessions.reserveMutation(*created.handle, 1U, 1U, fingerprint);
+        sessions.reserveMutation(*created.handle, 1U, 1U, digest);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(reserved.status));
 
-    const fermentation::WebMutationOutcome oversizedBody{
-        200U, "application/json",
-        std::string(fermentation::kMaximumReplayOutcomeBodyBytes + 1U, 'x')};
-    TEST_ASSERT_FALSE(sessions.completeMutation(*created.handle, 1U, 1U,
-                                                fingerprint, oversizedBody));
+    const fermentation::WebMutationOutcome unsupported{200U, "application/json",
+                                                       "ok"};
+    TEST_ASSERT_FALSE(sessions.completeMutation(*created.handle, 1U, 1U, digest,
+                                                unsupported));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationSequenceState::InFlight),
         static_cast<int>(sessions.mutationSequence(*created.handle, 1U).state));
+    TEST_ASSERT_TRUE(sessions.completeMutation(
+        *created.handle, 1U, 1U, digest,
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied)));
 
-    const fermentation::WebMutationOutcome oversizedContentType{
-        200U,
-        std::string(fermentation::kMaximumReplayOutcomeContentTypeBytes + 1U,
-                    'a'),
-        "ok"};
-    TEST_ASSERT_FALSE(sessions.completeMutation(
-        *created.handle, 1U, 1U, fingerprint, oversizedContentType));
-    const fermentation::WebMutationOutcome invalidContentType{
-        200U, "application/json\r\nX-Injected: yes", "ok"};
-    TEST_ASSERT_FALSE(sessions.completeMutation(
-        *created.handle, 1U, 1U, fingerprint, invalidContentType));
-    const fermentation::WebMutationOutcome invalidStatus{
-        600U, "application/json", "ok"};
-    TEST_ASSERT_FALSE(sessions.completeMutation(*created.handle, 1U, 1U,
-                                                fingerprint, invalidStatus));
+    for (std::uint8_t value = 1U; value <= 8U; ++value) {
+        const auto code = static_cast<fermentation::ReplayOutcomeCode>(value);
+        const auto mutationDigest =
+            testDigest("outcome-" + std::to_string(value));
+        const auto next = sessions.reserveMutation(*created.handle, 1U + value,
+                                                   1U + value, mutationDigest);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::MutationReservationStatus::Reserved),
+            static_cast<int>(next.status));
+        TEST_ASSERT_TRUE(sessions.completeMutation(
+            *created.handle, 1U + value, 1U + value, mutationDigest,
+            fermentation::replayOutcome(code)));
+    }
 
-    const std::string boundedContentType =
-        "application/x-" +
-        std::string(fermentation::kMaximumReplayOutcomeContentTypeBytes - 14U,
-                    'a');
-    const std::string boundedBody(fermentation::kMaximumReplayOutcomeBodyBytes,
-                                  'b');
-    const fermentation::WebMutationOutcome bounded{200U, boundedContentType,
-                                                   boundedBody};
-    TEST_ASSERT_TRUE(sessions.completeMutation(*created.handle, 1U, 1U,
-                                               fingerprint, bounded));
-    const auto replay =
-        sessions.reserveMutation(*created.handle, 2U, 1U, fingerprint);
+    const auto expired =
+        sessions.reserveMutation(*created.handle, 10U, 1U, digest);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
-            fermentation::MutationReservationStatus::ReplayOutcome),
-        static_cast<int>(replay.status));
-    TEST_ASSERT_TRUE(replay.outcome.has_value());
-    TEST_ASSERT_EQUAL_UINT32(fermentation::kMaximumReplayOutcomeBodyBytes,
-                             replay.outcome->body.size());
-    TEST_ASSERT_EQUAL_STRING(boundedContentType.c_str(),
-                             replay.outcome->contentType.c_str());
-    TEST_ASSERT_EQUAL_STRING(boundedBody.c_str(), replay.outcome->body.c_str());
+            fermentation::MutationReservationStatus::ReplayExpired),
+        static_cast<int>(expired.status));
+    for (std::uint8_t value = 1U; value <= 8U; ++value) {
+        const auto code = static_cast<fermentation::ReplayOutcomeCode>(value);
+        const auto mutationDigest =
+            testDigest("outcome-" + std::to_string(value));
+        const auto replay = sessions.reserveMutation(
+            *created.handle, 10U, 1U + value, mutationDigest);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::MutationReservationStatus::ReplayOutcome),
+            static_cast<int>(replay.status));
+        TEST_ASSERT_TRUE(replay.outcome.has_value());
+        const auto expected = fermentation::replayOutcome(code);
+        TEST_ASSERT_EQUAL_UINT16(expected.statusCode,
+                                 replay.outcome->statusCode);
+        TEST_ASSERT_EQUAL_STRING(expected.contentType.c_str(),
+                                 replay.outcome->contentType.c_str());
+        TEST_ASSERT_EQUAL_STRING(expected.body.c_str(),
+                                 replay.outcome->body.c_str());
+    }
 }
 
 void test_sequence_gap_and_uint64_overflow_fail_closed() {
@@ -492,8 +560,8 @@ void test_sequence_gap_and_uint64_overflow_fail_closed() {
     fermentation::WebSessionManager sessions(random);
     const auto created = sessions.create(0U);
     TEST_ASSERT_TRUE(created.handle.has_value());
-    const auto gap =
-        sessions.reserveMutation(*created.handle, 1U, 2U, "gap-payload");
+    const auto gap = sessions.reserveMutation(*created.handle, 1U, 2U,
+                                              testDigest("gap-payload"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::SequenceGap),
         static_cast<int>(gap.status));
@@ -516,29 +584,29 @@ void test_sequence_gap_and_uint64_overflow_fail_closed() {
         sessions.mutationSequence(*created.handle, 1U).nextMutationSeq);
     const auto boundaryReservation = sessions.reserveMutation(
         *created.handle, 1U, std::numeric_limits<std::uint64_t>::max(),
-        "overflow-boundary");
+        testDigest("overflow-boundary"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Reserved),
         static_cast<int>(boundaryReservation.status));
-    const fermentation::WebMutationOutcome outcome{
-        200U, "application/json; charset=utf-8", "{\"done\":true}"};
+    const fermentation::WebMutationOutcome outcome =
+        fermentation::replayOutcome(fermentation::ReplayOutcomeCode::Applied);
     TEST_ASSERT_TRUE(sessions.completeMutation(
         *created.handle, 1U, std::numeric_limits<std::uint64_t>::max(),
-        "overflow-boundary", outcome));
+        testDigest("overflow-boundary"), outcome));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationSequenceState::Exhausted),
         static_cast<int>(sessions.mutationSequence(*created.handle, 1U).state));
 
     const auto replay = sessions.reserveMutation(
         *created.handle, 1U, std::numeric_limits<std::uint64_t>::max(),
-        "overflow-boundary");
+        testDigest("overflow-boundary"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::ReplayOutcome),
         static_cast<int>(replay.status));
     const auto reused = sessions.reserveMutation(
         *created.handle, 1U, std::numeric_limits<std::uint64_t>::max(),
-        "different-after-exhaustion");
+        testDigest("different-after-exhaustion"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::MutationReservationStatus::SequenceReused),
@@ -546,8 +614,8 @@ void test_sequence_gap_and_uint64_overflow_fail_closed() {
     TEST_ASSERT_TRUE(fermentation::WebSessionManagerTestAccess::setHighWater(
         sessions, *created.handle, std::numeric_limits<std::uint64_t>::max(),
         true));
-    const auto exhausted =
-        sessions.reserveMutation(*created.handle, 1U, 1U, "new-payload");
+    const auto exhausted = sessions.reserveMutation(*created.handle, 1U, 1U,
+                                                    testDigest("new-payload"));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::MutationReservationStatus::Exhausted),
         static_cast<int>(exhausted.status));
@@ -568,10 +636,10 @@ int main() {
     RUN_TEST(test_create_retires_all_expired_slots_before_capacity);
     RUN_TEST(test_service_lease_status_is_read_only_and_uses_its_policy);
     RUN_TEST(test_cookie_parser_rejects_duplicate_session_cookie);
-    RUN_TEST(test_request_fingerprint_preserves_exact_bounded_identity);
+    RUN_TEST(test_request_digest_preserves_canonical_bounded_identity);
     RUN_TEST(test_two_tabs_share_csrf_sequence_and_replay_outcome);
     RUN_TEST(test_browser_reload_preserves_live_session_csrf_and_replay_state);
-    RUN_TEST(test_replay_cache_enforces_fingerprint_and_outcome_byte_limits);
+    RUN_TEST(test_replay_cache_uses_compact_outcome_codes_and_full_window);
     RUN_TEST(test_sequence_gap_and_uint64_overflow_fail_closed);
     return UNITY_END();
 }

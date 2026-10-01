@@ -8,6 +8,7 @@
 #include <string>
 
 #include "http_server_lifecycle.hpp"
+#include "replay_digest.hpp"
 #include "secure_random_source.hpp"
 #include "device_ui_session.hpp"
 
@@ -18,17 +19,21 @@ inline constexpr std::uint64_t kWebSessionIdleLimitMs = 30ULL * 60ULL * 1000ULL;
 inline constexpr std::uint64_t kWebSessionAbsoluteLimitMs =
     12ULL * 60ULL * 60ULL * 1000ULL;
 inline constexpr std::size_t kMaximumCompletedMutationOutcomes = 8U;
-inline constexpr std::size_t kMaximumMutationFingerprintBytes = 512U;
-inline constexpr std::size_t kMaximumReplayOutcomeContentTypeBytes = 64U;
-inline constexpr std::size_t kMaximumReplayOutcomeBodyBytes = 256U;
-inline constexpr std::size_t kMaximumReplayOutcomeBytes =
-    kMaximumReplayOutcomeContentTypeBytes + kMaximumReplayOutcomeBodyBytes;
-// Raw replay payload only: four sessions, eight outcomes plus one in-flight
-// fingerprint each. Fixed entry metadata is covered by the manager size check.
-inline constexpr std::size_t kMaximumWebSessionReplayPayloadBytes =
+inline constexpr std::size_t kMaximumMutationMethodBytes = 16U;
+inline constexpr std::size_t kMaximumMutationPathBytes = 256U;
+inline constexpr std::size_t kMaximumWebRunMutationBodyBytes = 480U;
+// Digest bytes only: four sessions, eight completed outcomes plus one
+// in-flight digest each. Entry metadata is covered by the manager size check.
+inline constexpr std::size_t kMaximumWebSessionReplayDigestBytes =
     kMaximumWebSessions * (kMaximumCompletedMutationOutcomes + 1U) *
-    (kMaximumMutationFingerprintBytes + kMaximumReplayOutcomeBytes);
-inline constexpr std::size_t kMaximumWebSessionManagerBytes = 32ULL * 1024ULL;
+    device_platform::kReplayDigestBytes;
+inline constexpr std::size_t kMaximumWebSessionManagerBytes = 4096U;
+
+using ReplayDigest = device_platform::ReplayDigest;
+using ReplayDigestInput = device_platform::ReplayDigestInput;
+using IReplayDigest = device_platform::IReplayDigest;
+inline constexpr std::size_t kReplayDigestBytes =
+    device_platform::kReplayDigestBytes;
 
 struct WebSessionHandle {
     std::size_t slot{0U};
@@ -61,6 +66,17 @@ enum class MutationSequenceState : std::uint8_t {
     Exhausted,
 };
 
+enum class ReplayOutcomeCode : std::uint8_t {
+    Applied,
+    Unavailable,
+    Stale,
+    Rejected,
+    Busy,
+    ConfirmationRequired,
+    WriteFailed,
+    TooLarge,
+};
+
 struct MutationSequenceView {
     MutationSequenceState state{MutationSequenceState::Exhausted};
     std::uint64_t nextMutationSeq{0U};
@@ -85,7 +101,6 @@ enum class MutationReservationStatus : std::uint8_t {
     SequenceReused,
     Exhausted,
     InvalidSession,
-    InvalidFingerprint,
 };
 
 struct MutationReservation {
@@ -101,8 +116,11 @@ struct ServiceLeaseView {
 
 [[nodiscard]] std::optional<std::uint64_t> parseMutationSequence(
     const std::string& value) noexcept;
-[[nodiscard]] std::string mutationFingerprint(
-    const device_platform::HttpRequest& request);
+[[nodiscard]] bool mutationDigest(const device_platform::HttpRequest& request,
+                                  IReplayDigest& digest, ReplayDigest& out);
+[[nodiscard]] WebMutationOutcome replayOutcome(ReplayOutcomeCode code);
+[[nodiscard]] std::optional<ReplayOutcomeCode> replayOutcomeCode(
+    const WebMutationOutcome& outcome) noexcept;
 
 class WebSessionManager final {
    public:
@@ -111,6 +129,16 @@ class WebSessionManager final {
                                    servicePolicy = {5ULL * 60ULL * 1000ULL,
                                                     15ULL * 60ULL * 1000ULL})
         : random_(random), servicePolicy_(servicePolicy) {}
+    WebSessionManager(device_platform::ISecureRandomSource& random,
+                      IReplayDigest& replayDigest,
+                      device_platform::ServiceSessionPolicy servicePolicy =
+                          {5ULL * 60ULL * 1000ULL, 15ULL * 60ULL * 1000ULL})
+        : random_(random),
+          replayDigest_(&replayDigest),
+          servicePolicy_(servicePolicy) {}
+
+    [[nodiscard]] bool mutationDigest(
+        const device_platform::HttpRequest& request, ReplayDigest& out) const;
 
     [[nodiscard]] WebSessionResult create(std::uint64_t nowMs);
     [[nodiscard]] WebSessionResult find(const std::string& cookie,
@@ -137,23 +165,18 @@ class WebSessionManager final {
         WebSessionHandle handle, std::uint64_t nowMs) const;
     [[nodiscard]] MutationReservation reserveMutation(
         WebSessionHandle handle, std::uint64_t nowMs, std::uint64_t sequence,
-        const std::string& fingerprint);
+        const ReplayDigest& digest);
     [[nodiscard]] bool completeMutation(WebSessionHandle handle,
                                         std::uint64_t nowMs,
                                         std::uint64_t sequence,
-                                        const std::string& fingerprint,
+                                        const ReplayDigest& digest,
                                         const WebMutationOutcome& outcome);
 
    private:
     struct CompletedMutation {
         std::uint64_t sequence{0U};
-        std::array<char, kMaximumMutationFingerprintBytes> fingerprint{};
-        std::uint16_t fingerprintLength{0U};
-        std::uint16_t statusCode{500U};
-        std::array<char, kMaximumReplayOutcomeContentTypeBytes> contentType{};
-        std::uint16_t contentTypeLength{0U};
-        std::array<char, kMaximumReplayOutcomeBodyBytes> body{};
-        std::uint16_t bodyLength{0U};
+        ReplayDigest digest{};
+        ReplayOutcomeCode outcome{ReplayOutcomeCode::Unavailable};
     };
     struct Session {
         bool active{false};
@@ -184,9 +207,8 @@ class WebSessionManager final {
                                       const std::array<std::uint8_t, 16U>& id);
     static void clearMutation(CompletedMutation& mutation) noexcept;
     static void clearMutationState(Session& session) noexcept;
-    [[nodiscard]] static bool fingerprintMatches(
-        const CompletedMutation& mutation,
-        const std::string& fingerprint) noexcept;
+    [[nodiscard]] static bool digestMatches(
+        const CompletedMutation& mutation, const ReplayDigest& digest) noexcept;
     [[nodiscard]] static bool storeOutcome(
         const WebMutationOutcome& outcome,
         CompletedMutation& mutation) noexcept;
@@ -194,6 +216,7 @@ class WebSessionManager final {
         const CompletedMutation& mutation);
 
     device_platform::ISecureRandomSource& random_;
+    IReplayDigest* replayDigest_{nullptr};
     device_platform::ServiceSessionPolicy servicePolicy_;
     mutable std::mutex mutex_;
     std::array<Session, kMaximumWebSessions> sessions_{};

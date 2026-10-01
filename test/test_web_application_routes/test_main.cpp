@@ -133,6 +133,31 @@ class DeterministicRandom final : public device_platform::ISecureRandomSource {
     std::uint8_t next_{1U};
 };
 
+class DeterministicReplayDigest final : public IReplayDigest {
+   public:
+    bool digest(const ReplayDigestInput& input, ReplayDigest& out) override {
+        std::string material;
+        material.append(input.method.data(), input.method.size());
+        material.push_back('\0');
+        material.append(input.path.data(), input.path.size());
+        material.push_back('\0');
+        material.append(input.bodyLength.data(), input.bodyLength.size());
+        material.push_back('\0');
+        material.append(input.body.data(), input.body.size());
+        std::uint32_t state = 2166136261U;
+        for (const auto byte : material) {
+            state ^= static_cast<std::uint8_t>(byte);
+            state *= 16777619U;
+        }
+        for (std::size_t index = 0U; index < out.size(); ++index) {
+            state ^= static_cast<std::uint32_t>(index + 1U);
+            state *= 16777619U;
+            out[index] = static_cast<std::uint8_t>(state >> 24U);
+        }
+        return true;
+    }
+};
+
 class DeterministicKdf final : public IAuthenticationKdf {
    public:
     bool derive(
@@ -334,7 +359,7 @@ void assertProjected(const FermentationUiCommandResult& input,
     TEST_ASSERT_EQUAL_UINT16(expectedStatus, projected.statusCode);
     TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
                              projected.contentType.c_str());
-    TEST_ASSERT_TRUE(projected.body.size() <= kMaximumReplayOutcomeBodyBytes);
+    TEST_ASSERT_TRUE(replayOutcomeCode(projected).has_value());
 }
 
 void test_outcome_matrix_accepts_only_owning_apply_results() {
@@ -495,11 +520,14 @@ struct Fixture {
     device_platform::VirtualTimeSource timeSource;
     FermentationApplication application;
     DeterministicRandom random;
+    DeterministicReplayDigest replayDigest;
     WebSessionManager sessions;
     WebRunMutationHandler handler;
     WebSessionResult session;
 
-    Fixture() : sessions(random), handler(application, sessions, timeSource) {
+    Fixture()
+        : sessions(random, replayDigest),
+          handler(application, sessions, timeSource) {
         TEST_ASSERT_TRUE(platform.begin({true}));
         timeSource.setUnixTimeSeconds(1'700'000'000LL);
         TEST_ASSERT_TRUE(
@@ -1292,9 +1320,10 @@ void test_maximum_product_mutation_fits_body_and_exact_replay_budget() {
     request.method = "POST";
     request.path = "/internal/ui/run";
     request.body = body;
-    const auto fingerprint = mutationFingerprint(request);
-    TEST_ASSERT_FALSE(fingerprint.empty());
-    TEST_ASSERT_TRUE(fingerprint.size() <= kMaximumMutationFingerprintBytes);
+    DeterministicReplayDigest replayDigest;
+    ReplayDigest digest{};
+    TEST_ASSERT_TRUE(mutationDigest(request, replayDigest, digest));
+    TEST_ASSERT_EQUAL_UINT32(kReplayDigestBytes, digest.size());
 
     WebRunMutationDto decoded;
     TEST_ASSERT_EQUAL_INT(

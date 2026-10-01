@@ -314,7 +314,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/fermentation_app/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
-        "private": frozenset(),
+        "private": frozenset({"cjson"}),
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform", "nvs_flash"}),
@@ -326,6 +326,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "esp_lcd",
                 "esp_http_server",
                 "esp_timer",
+                "mbedtls",
                 "freertos",
                 "esp_netif",
                 "esp_wifi",
@@ -347,6 +348,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "fermentation_app",
                 "device_platform_esp_idf",
                 "nvs_flash",
+                "mbedtls",
                 "esp_timer",
                 "espressif__esp_lvgl_port",
             }

@@ -660,7 +660,8 @@ bool FermentationApplication::begin(
     const device_platform::IResetCauseSource* resetCauseSource) {
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
-                           &httpServerLifecycle, &randomSource, nullptr);
+                           &httpServerLifecycle, &randomSource, nullptr,
+                           nullptr);
 }
 
 bool FermentationApplication::begin(
@@ -676,7 +677,24 @@ bool FermentationApplication::begin(
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
                            &httpServerLifecycle, &randomSource,
-                           &authenticationKdf);
+                           &authenticationKdf, nullptr);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    device_platform::ISecureRandomSource& randomSource,
+    IAuthenticationKdf& authenticationKdf,
+    device_platform::IReplayDigest& replayDigest,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource, &networkLifecycle,
+                           &httpServerLifecycle, &randomSource,
+                           &authenticationKdf, &replayDigest);
 }
 
 bool FermentationApplication::initializeNetwork(
@@ -684,7 +702,8 @@ bool FermentationApplication::initializeNetwork(
     device_platform::StorageEpoch storageEpoch,
     device_platform::NetworkMode selectedMode,
     const std::string& canonicalDeviceName,
-    device_platform::ISecureRandomSource* randomSource) {
+    device_platform::ISecureRandomSource* randomSource,
+    device_platform::IReplayDigest* replayDigest) {
     if (networkLifecycle_ == nullptr || httpServerLifecycle_ == nullptr) {
         return true;
     }
@@ -711,9 +730,15 @@ bool FermentationApplication::initializeNetwork(
     if (timeSource_ == nullptr) {
         return false;
     }
-    webSessionManager_ =
-        std::unique_ptr<WebSessionManager>{new (std::nothrow) WebSessionManager(
-            *randomSource, fermentationWebServicePolicy())};
+    if (replayDigest == nullptr) {
+        webSessionManager_ = std::unique_ptr<WebSessionManager>{
+            new (std::nothrow) WebSessionManager(
+                *randomSource, fermentationWebServicePolicy())};
+    } else {
+        webSessionManager_ = std::unique_ptr<WebSessionManager>{
+            new (std::nothrow) WebSessionManager(
+                *randomSource, *replayDigest, fermentationWebServicePolicy())};
+    }
     if (webSessionManager_ == nullptr) {
         return false;
     }
@@ -1192,7 +1217,8 @@ bool FermentationApplication::beginPersistent(
     device_platform::INetworkLifecycle* networkLifecycle,
     device_platform::IHttpServerLifecycle* httpServerLifecycle,
     device_platform::ISecureRandomSource* randomSource,
-    IAuthenticationKdf* authenticationKdf) {
+    IAuthenticationKdf* authenticationKdf,
+    device_platform::IReplayDigest* replayDigest) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -1298,7 +1324,7 @@ bool FermentationApplication::beginPersistent(
     if (!initializeNetwork(store, epoch,
                            runtime.lease.get().userConfiguration().networkMode,
                            runtime.lease.get().userConfiguration().deviceName,
-                           secureRandomSource_)) {
+                           secureRandomSource_, replayDigest)) {
         // Network setup is optional for application readiness. The core
         // persistence and safety path continues independently.
     }

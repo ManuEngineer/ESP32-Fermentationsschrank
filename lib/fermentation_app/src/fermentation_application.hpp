@@ -25,6 +25,7 @@
 #include "network_lifecycle.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "replay_digest.hpp"
 #include "secure_random_source.hpp"
 
 namespace fermentation {
@@ -136,6 +137,17 @@ class FermentationApplication {
         device_platform::IHttpServerLifecycle& httpServerLifecycle,
         device_platform::ISecureRandomSource& randomSource,
         IAuthenticationKdf& authenticationKdf,
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+    [[nodiscard]] bool begin(
+        device_platform::IPlatformServices& platformServices,
+        device_platform::IStateStore& store,
+        const device_platform::ITimeZoneResolver& timeZoneResolver,
+        const device_platform::ITimeSource& timeSource,
+        device_platform::INetworkLifecycle& networkLifecycle,
+        device_platform::IHttpServerLifecycle& httpServerLifecycle,
+        device_platform::ISecureRandomSource& randomSource,
+        IAuthenticationKdf& authenticationKdf,
+        device_platform::IReplayDigest& replayDigest,
         const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
@@ -273,13 +285,15 @@ class FermentationApplication {
         device_platform::INetworkLifecycle* networkLifecycle = nullptr,
         device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr,
         device_platform::ISecureRandomSource* randomSource = nullptr,
-        IAuthenticationKdf* authenticationKdf = nullptr);
+        IAuthenticationKdf* authenticationKdf = nullptr,
+        device_platform::IReplayDigest* replayDigest = nullptr);
     [[nodiscard]] bool initializeNetwork(
         device_platform::IStateStore& store,
         device_platform::StorageEpoch storageEpoch,
         device_platform::NetworkMode selectedMode,
         const std::string& canonicalDeviceName,
-        device_platform::ISecureRandomSource* randomSource);
+        device_platform::ISecureRandomSource* randomSource,
+        device_platform::IReplayDigest* replayDigest);
     void resetAuthenticationState() noexcept;
     void initializeAuthentication(device_platform::IStateStore& store);
     [[nodiscard]] bool processBootClassification(
