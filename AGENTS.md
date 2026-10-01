@@ -138,13 +138,17 @@ nicht bestanden.
 ## Session-Handover
 
 Vor Sessionende, Kontextreset oder Agentenwechsel wird bei offenem PR genau ein
-aktueller `SESSION HANDOVER`-Kommentar erstellt und danach angehalten. Er nennt
+kanonischer `SESSION HANDOVER`-Kommentar gepflegt und danach angehalten. Er
+beginnt mit dem stabilen Marker `<!-- SESSION_HANDOVER_CANONICAL -->` und nennt
 kompakt `HEAD`, freigegebenen Plan-Commit, erledigte Bereiche, Tests, offene
 Befunde und den naechsten Schritt.
 
-Der neueste Handover ersetzt fruehere. Diffs, Plaene und Logs werden
-referenziert, nicht kopiert. Ist kein PR-Kommentar moeglich, wird der Text im
-Chat als nicht veroeffentlicht ausgegeben.
+Existiert bereits ein Top-Level-PR-Kommentar mit diesem Marker, wird dessen
+Inhalt vollstaendig aktualisiert; nur wenn keiner existiert, wird einmalig ein
+neuer Kommentar erstellt. Der kanonische Handover enthaelt ausschliesslich den
+aktuellen Stand; fruehere Handover-Inhalte werden beim Update ersetzt. Diffs,
+Plaene und Logs werden referenziert, nicht kopiert. Ist kein PR-Kommentar
+moeglich, wird der Text im Chat als nicht veroeffentlicht ausgegeben.
 
 ## Bedingte Lesematrix
 
