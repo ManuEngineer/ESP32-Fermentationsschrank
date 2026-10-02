@@ -313,7 +313,8 @@ struct NetworkResourceSamplingState {
 void sampleStableNetworkResources(
     device_platform::NetworkMode selectedNetworkMode,
     device_platform::NetworkLifecycleState networkState,
-    NetworkResourceSamplingState& samplingState) {
+    NetworkResourceSamplingState& samplingState,
+    const fermentation::main_ui::ProductiveLvglRenderer* displayRenderer) {
     const bool stableApOnly =
         networkState == device_platform::NetworkLifecycleState::AccessPointOnly;
     const bool stableHomeWifi =
@@ -336,7 +337,8 @@ void sampleStableNetworkResources(
         } else {
             samplePoint = "stable_home_wifi_setup_access_point";
         }
-        logResources(samplePoint, selectedNetworkMode, networkState);
+        logResources(samplePoint, selectedNetworkMode, networkState,
+                     displayRenderer);
     }
     samplingState.lastObservedMode = selectedNetworkMode;
     samplingState.lastObservedState = networkState;
@@ -691,7 +693,8 @@ extern "C" void app_main(void) {
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();
         sampleStableNetworkResources(selectedNetworkMode, networkStatus.state,
-                                     networkResourceSamplingState);
+                                     networkResourceSamplingState,
+                                     displayRenderer.get());
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
