@@ -4,15 +4,22 @@ Plan: `docs/tasks/memory-platform-course-plan.md` (ownerfreigegebene Plan-SHA
 `2c20fe13d4d51a2bfabc00e630f1ad7c90c0e48a`), Schnitt S2, Abschnitt 3.
 
 ```text
-S2_INSTRUMENTATION=IMPLEMENTED
+S2_INSTRUMENTATION=PASS
 BUILD_ESP32_RELEASE=PASS
 BUILD_ESP32_BRINGUP=PASS
 FINAL_S2_CODE_SHA=5bfc9bc0fb2f00b8ceac8d830bf000d04f8b37e7
-BASELINE_STATUS=NOT_COMPLETE_LOAD_PATH_NOT_EXECUTABLE_ON_DEVICE
 O2=APPROVED
-EXPLORATORY_RUN_0DE006A=DONE_NOT_A_BASELINE
-PRECHECK_122C33E=HISTORICAL_ONLY_NOT_A_BASELINE
+S2_TOUCH_PROVISIONING=PASS
+PRODUCT_TOUCH_SMOKE=PASS_OWNER_OBSERVED
+S2_BASELINE=BLOCKED_STOP_CONDITION_HEAP_ALLOC_FAILED_ABORT
+O2_NETWORK_MODE_SWITCHES_COMPLETED=1_OF_5
 ```
+
+Frühere Läufe (Vorab-Lauf `122c33e`, Erkundungslauf `0de006a` im Zustand
+`ServiceRequired`) sind ausschließlich historisch und keine Baseline. Der
+ownerfreigegebene O2-Lauf auf dem finalen S2-Stand ist Abschnitt 3b.
+
+
 
 `122c33e` war der erste S2-Stand; die stabilen Netzwerkpunkte loggten dort den
 LVGL-Pool noch nicht. Der Fix `5bfc9bc` behebt das. Die vollständige Baseline
@@ -170,11 +177,120 @@ erreicht wurden. Dass Sprachwechsel und Netzwerkmodus-Auswahl am Gerät
 nicht funktionieren, liegt außerhalb von S2; es wurde nichts am
 Produktverhalten geändert und der freigegebene Lastpfad nicht ersetzt.
 
+## 3b. Ownerfreigegebener O2-Lauf auf dem finalen S2-Stand (2026-10-02)
+
+Firmware `esp32_release`, Quell-SHA `0de006a7…` (Code identisch mit
+`5bfc9bc`, Abschnitt „Geflashter Stand“), App-BIN `dc593a9d…`, ELF
+`364cf80d…`. Testzustand: kontrolliert neuinitialisierter `state_store`,
+Touchkalibrierung `Available` (Erstprovisionierung `2c71c4f`), Default-NVS/PHY
+unberührt, keine erneute Provisionierung. Ein durchgehender UART-Mitschnitt
+ab Reset: [R1_RAM_BASELINE_S2_O2_RUN_20261002_RAW.txt](R1_RAM_BASELINE_S2_O2_RUN_20261002_RAW.txt)
+(993 Zeilen, Heartbeats entfernt), alle Messpunkte als
+[R1_RAM_BASELINE_S2_O2_RUN_20261002_POINTS.csv](R1_RAM_BASELINE_S2_O2_RUN_20261002_POINTS.csv)
+(alle geforderten Felder inkl. LVGL-Pool). Der Lauf wurde wegen
+Stopbedingungen (`heap_alloc_failed`, `abort()`, unerwartete Resets)
+abgebrochen; es wurde kein Fix implementiert.
+
+**Boot:** `application: ready`, `touch calibration: active_status=Available
+fallback_status=NotFound`, ein `POWERON_RESET` (durch den Mitschnitt-Start),
+keine Panic/Watchdog/Brownout vor der Bedienung.
+
+**Product-Touch-Smoke (Owner-Beobachtung):** Touchzuordnung stimmt, Navigation
+durch alle erreichbaren Seiten korrekt: `PRODUCT_TOUCH_SMOKE=PASS`,
+`TOUCH_ALIGNMENT=PASS`. `ONE_ACTION_PER_PRESS` und `GHOST_TOUCH=NO` wurden
+nicht explizit gemeldet, es gab aber keine Auffälligkeit in der Navigation.
+
+**O2-Ablauf (Owner-Beobachtung und Log):**
+
+| O2-Schritt | Ergebnis |
+|---|---|
+| 10 Seitenwechsel | durchgeführt (alle erreichbaren Seiten), ohne Auffälligkeit |
+| Sprachwechsel | `NOT_AVAILABLE_IN_CURRENT_R1_PATH`: das „EN“ im Header ist kein Button; nicht implementiert, nicht simuliert |
+| Netzwerkmoduswechsel 1: `UNSELECTED` → `AP_ONLY` | **erfolgreich** (Log: `network_mode=AP_ONLY network_state=AccessPointOnly` bei `network_page_press_after`) |
+| Browserzugriff `192.168.4.1` in `AP_ONLY` | erfolgreich (Owner) |
+| Netzwerkmoduswechsel 2: `AP_ONLY` → `HOME_WIFI` | Whitescreen = Absturz (`abort()` nach `heap_alloc_failed`); nach dem Neustart steht `HOME_WIFI` persistiert |
+| Weitere Wechsel 3–5 | nicht ausführbar; `O2_NETWORK_MODE_SWITCHES_COMPLETED=1_OF_5` |
+| Browserzugriff im Modus `HOME_WIFI`/`SetupAccessPoint` | Absturz bzw. Seite lädt, danach Whitescreen (Owner) |
+| 120 s Idle nach der Interaktion | nicht erreicht; nur Idle-Punkte vor und zwischen den Abstürzen |
+
+**Resets:** 6 Boots, 5 `abort()` mit `SW_CPU_RESET`, 7
+`heap_alloc_failed`-Zeilen, kein Watchdog, kein Brownout. Jeder Abort ist ein
+C++-`operator new` ohne Heap (`__cxa_allocate_exception` → `abort`):
+
+| Absturz | Zeitpunkt (ms im Boot) / Modus | fehlgeschlagene Allokation | dekodierte Stelle (ELF `364cf80d…`) |
+|---|---|---|---|
+| 1 | Boot 1, 384925, `AP_ONLY`, Heap-Minimum 3960 B | 251 B | `ConfigurationGraphStore::validationScan` → `validateProgramReferenceSemantically` → `loadReferencedRecord` → `decodeEnvelope` (`std::string`) |
+| 2 | Boot 2, nach `periodic_30s`, `HOME_WIFI`, Minimum 2384 B | 1532 B, 1344 B | `updateProductUi` → `ProductiveLvglRenderer::render` → `makeRepresentativeScreen` → `vector<ScreenDrawCommand>::reserve` |
+| 3 | Boot 3, nach `idle_120s`, `HOME_WIFI` | 2048 B | `makeRepresentativeScreen` → `vector::push_back/_M_realloc_append` |
+| 4 | Boot 4, nach `periodic_30s`, `HOME_WIFI` | 722 B (caps 0x80c), 2048 B | `makeRepresentativeScreen` → `vector::push_back` |
+| 5 | Boot 5, kurz nach `stable_home_wifi_setup_access_point` | 1350 B | `EspIdfHttpServerLifecycle::handleRequest` → `NetworkSetupRoutes::handle` (`std::string::operator=`) |
+
+Welcher Auslöser (Browserzugriff, UI-Rendering) jeweils zuerst traf, ist
+aus dem Log nicht eindeutig; die Tabelle nennt nur die dekodierte
+Absturzstelle.
+
+**Messpunkte (Auszug; vollständig in der CSV).** Werte in Bytes; `int-min` und
+`dma-min` sind das Minimum der jeweiligen Capability-Sicht:
+
+| Boot | ms | Punkt | Modus/Zustand | free | min free | größter 8-Bit-Block | Stack-HWM | int-min | dma-min | LVGL frei / max belegt / % / Frag |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1175 | after_platform_begin | UNSELECTED/Stopped | 154876 | 154876 | 110592 | 20672 | 154876 | 154876 | – |
+| 1 | 1225 | after_application_begin | UNSELECTED/Stopped | 123900 | 119800 | 110592 | 13936 | 119800 | 119800 | – |
+| 1 | 1775 | after_ui_init | UNSELECTED/Stopped | 77380 | 71700 | 65536 | 13936 | 71700 | 71700 | 49980 / 13940 / 21 / 1 |
+| 1 | 31825 | periodic_30s | UNSELECTED/Stopped | 77380 | 71700 | 65536 | 13936 | 71700 | 71700 | 49980 / 13940 / 21 / 1 |
+| 1 | 121825 | idle_120s | UNSELECTED/Stopped | 77380 | 71700 | 65536 | 13936 | 71700 | 71700 | 49980 / 13940 / 21 / 1 |
+| 1 | 179625 | network_page_press_before | UNSELECTED/Stopped | 76792 | 69644 | 65536 | 13936 | 69644 | 69644 | 52920 / 14072 / 17 / 6 |
+| 1 | 180265 | network_page_press_after | AP_ONLY/AccessPointOnly | **11452** | 11412 | 11264 | 7072 | 11412 | 11412 | 52920 / 14072 / 17 / 6 |
+| 1 | 180455 | stable_ap_only | AP_ONLY/AccessPointOnly | 11800 | 9212 | 8704 | 7072 | 9212 | 9212 | unavailable |
+| 1 | 300575 | idle_120s | AP_ONLY/AccessPointOnly | 12160 | 8428 | 11264 | 7072 | 8428 | 8428 | 48576 / 15848 / 24 / 2 |
+| 1 | 382455 | network_page_press_before | AP_ONLY/AccessPointOnly | 8040 | **3960** | **4352** | 7072 | 3960 | 3960 | 48576 / 15848 / 24 / 2 |
+| 2 | 1725 | after_application_begin | HOME_WIFI/SetupAccessPoint | 56544 | 52572 | 51200 | 13936 | 52572 | 52572 | – |
+| 2 | 2155 | after_ui_init | HOME_WIFI/SetupAccessPoint | 10264 | 5196 | 7680 | 13936 | 5196 | 5196 | unavailable |
+| 2 | 2315 | stable_home_wifi_setup_access_point | HOME_WIFI/SetupAccessPoint | 10264 | 5180 | 7680 | 13936 | 5180 | 5180 | 49980 / 13940 / 21 / 1 |
+| 2 | 32285 | periodic_30s | HOME_WIFI/SetupAccessPoint | 7456 | **2384** | 6400 | 13936 | 2384 | 2384 | 48568 / 15832 / 24 / 1 |
+| 3 | 122245 | idle_120s | HOME_WIFI/SetupAccessPoint | 10432 | 4664 | 7680 | 13936 | 4664 | 4664 | 49980 / 13940 / 21 / 1 |
+
+`stable_home_wifi` (verbundenes Heimnetz) wurde nicht erreicht;
+`stable_home_wifi_setup_access_point` in jedem `HOME_WIFI`-Boot.
+
+**Extremwerte des Laufs:**
+
+| Größe | Wert |
+|---|---|
+| global niedrigstes `minimum_free_heap_bytes` | 2384 B (Boot 2, `periodic_30s`, `HOME_WIFI`) |
+| kleinster beobachteter 8-Bit-Block | 4352 B (Boot 1, `AP_ONLY`) |
+| niedrigste INTERNAL-/DMA-Reserve (Minimum) | 2384 B / 2384 B (identisch, kein PSRAM) |
+| niedrigster Main-Task-Stack-HWM | 7072 B (ab `AP_ONLY`) |
+| höchste LVGL-Poolbelegung | 24 % (`max_used` 15848 B von 63384 B) |
+| `heap_alloc_failed` | ja, 7 Zeilen in 5 Abstürzen |
+| Resets | 6 Boots, 5× `abort()`/`SW_CPU_RESET`, kein Watchdog, kein Brownout |
+
+Auffällig im Verlauf (Zahlen, keine Ursachenbehauptung): Mit dem
+Netzwerkmodus-Commit `UNSELECTED` → `AP_ONLY` sank der freie Heap von 76792 B
+auf 11452 B und das Minimum danach bis 3960 B. In den `HOME_WIFI`-Boots
+beträgt der freie Heap nach `after_application_begin` 56–57 kB und nach
+`after_ui_init` rund 10 kB. LVGL-Pool unavailable trat 4-mal auf
+(`pool=unavailable`; Ursache — Lock-Timeout oder noch nicht initialisiert —
+aus dem Log nicht unterscheidbar).
+
+**Ergebnis:** Die RAM-Baseline des Ist-Zustands ist gemessen und
+reproduziert die im Plan beschriebene Heap-Erschöpfung im Netzwerkmodus,
+jedoch als **abgebrochener, nicht vollständiger O2-Lauf** (1 von 5
+Moduswechseln, kein 120-s-Idle nach der Interaktion, kein `stable_home_wifi`).
+Es wird kein Mindestabstand und kein Budget festgelegt; das bleibt
+S8/O4.
+
+**Gerätezustand nach dem Lauf:** Der persistierte Netzwerkmodus ist
+`HOME_WIFI` (aus dem neuinitialisierten, danach geänderten `state_store`);
+das Gerät bootet seither jeweils mit rund 10 kB freiem Heap nach der
+UI-Initialisierung.
+
 ## 4. Offen für die vollständige Baseline (Owner am Gerät)
 
-- O2 ist freigegeben, der Lastpfad aber am Gerät nicht ausführbar (Abschnitt 3a).
-  Owner-Entscheidung nötig: Ursache klären (`service required`, Netzwerkmodus-
-  Auswahl wird nicht übernommen) bzw. Umgang mit dem nicht ausführbaren Pfad.
+- O2 ist freigegeben; der Lauf wurde in Abschnitt 3b wegen Stopbedingungen
+  abgebrochen. Offen: Owner-/Reviewentscheid, wie die Baseline des
+  Ist-Zustands gewertet wird (abgebrochener Lauf als Baseline oder
+  Wiederholung in einem anderen Gerätezustand).
 - Bedienung am Gerät: Netzwerkmodus auswählen (AP_ONLY und HOME_WIFI) für
   `stable_ap_only`/`stable_home_wifi`, Lastpfad (Seitenwechsel,
   Sprachwechsel, 5 Moduswechsel, ein Browserzugriff) mit
