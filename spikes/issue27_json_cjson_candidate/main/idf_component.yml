@@ -1,0 +1,6 @@
+dependencies:
+  espressif/cjson:
+    version: "=1.7.19~2"
+  idf:
+    version: ">=6.1,<6.2"
+version: 0.1.0

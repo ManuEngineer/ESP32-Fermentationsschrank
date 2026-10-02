@@ -15,15 +15,23 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
     // This is the sole production encoder.  Legacy schemas are decode-only;
     // callers must not be able to create a new schema-1 writer by selecting a
     // field in the in-memory model.
-    if (record.schemaVersion != kConfigurationBootstrapSchemaVersion2 ||
+    if ((record.schemaVersion != kConfigurationBootstrapSchemaVersion2 &&
+         record.schemaVersion != kConfigurationBootstrapSchemaVersion3) ||
         !isPlausible(record)) {
         return ConfigurationBootstrapCodecStatus::InvalidModel;
     }
 
     const auto payloadSize =
-        record.handoff == RunEpochHandoffState::None
-            ? configuration_limits::kConfigurationBootstrapPayloadBytes
-            : configuration_limits::kConfigurationBootstrapBoundPayloadBytes;
+        record.schemaVersion == kConfigurationBootstrapSchemaVersion3
+            ? (record.handoff == RunEpochHandoffState::None
+                   ? configuration_limits::
+                         kConfigurationBootstrapSchema3PayloadBytes
+                   : configuration_limits::
+                         kConfigurationBootstrapSchema3BoundPayloadBytes)
+            : (record.handoff == RunEpochHandoffState::None
+                   ? configuration_limits::kConfigurationBootstrapPayloadBytes
+                   : configuration_limits::
+                         kConfigurationBootstrapBoundPayloadBytes);
     device_platform::ByteWriter payload(payloadSize);
     if (!device_platform::big_endian::writeUint32(
             payload, record.storageFormatVersion.value()) ||
@@ -42,13 +50,20 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
              payload, record.currentEpoch->value()))) {
         return ConfigurationBootstrapCodecStatus::CapacityExceeded;
     }
+    if (record.schemaVersion == kConfigurationBootstrapSchemaVersion3 &&
+        (!device_platform::big_endian::writeUint8(
+             payload, static_cast<std::uint8_t>(record.authDomainHandoff)) ||
+         !device_platform::big_endian::writeUint64(
+             payload, record.authHandoffSequence.value()))) {
+        return ConfigurationBootstrapCodecStatus::CapacityExceeded;
+    }
     if (payload.size() != payloadSize) {
         return ConfigurationBootstrapCodecStatus::InvalidModel;
     }
 
     const device_platform::StorageEnvelope envelope{
         configuration_storage_contract::kConfigurationBootstrapRecordType,
-        kConfigurationBootstrapSchemaVersion2,
+        record.schemaVersion,
         record.storageEpoch,
         record.sequence.value(),
         std::nullopt,
@@ -56,7 +71,11 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
     std::string encoded;
     const auto status = device_platform::encodeEnvelope(
         envelope, encoded,
-        configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+        record.schemaVersion == kConfigurationBootstrapSchemaVersion3
+            ? configuration_limits::
+                  kMaximumConfigurationBootstrapSchema3EnvelopeBytes
+            : configuration_limits::
+                  kMaximumConfigurationBootstrapEnvelopeBytes);
     if (status == device_platform::EnvelopeEncodeStatus::CapacityExceeded) {
         return ConfigurationBootstrapCodecStatus::CapacityExceeded;
     }
@@ -87,8 +106,9 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
                 std::nullopt};
     }
     if (envelope.schemaVersion != kConfigurationBootstrapSchemaVersion1 &&
-        envelope.schemaVersion != kConfigurationBootstrapSchemaVersion2) {
-        return {envelope.schemaVersion > kConfigurationBootstrapSchemaVersion2
+        envelope.schemaVersion != kConfigurationBootstrapSchemaVersion2 &&
+        envelope.schemaVersion != kConfigurationBootstrapSchemaVersion3) {
+        return {envelope.schemaVersion > kConfigurationBootstrapSchemaVersion3
                     ? ConfigurationBootstrapCodecStatus::UnsupportedNewerSchema
                     : ConfigurationBootstrapCodecStatus::InvalidModel,
                 std::nullopt};
@@ -96,19 +116,25 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
     if (envelope.utcUnixSeconds.has_value()) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }
-    const auto expectedPayloadSize =
+    const bool validPayloadSize =
         envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1
-            ? configuration_limits::kConfigurationBootstrapSchema1PayloadBytes
-            : configuration_limits::kConfigurationBootstrapPayloadBytes;
-    if (envelope.payload.size() != expectedPayloadSize &&
-        envelope.schemaVersion == kConfigurationBootstrapSchemaVersion1) {
-        return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
-    }
-    if (envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
-        envelope.payload.size() !=
-            configuration_limits::kConfigurationBootstrapPayloadBytes &&
-        envelope.payload.size() !=
-            configuration_limits::kConfigurationBootstrapBoundPayloadBytes) {
+            ? envelope.payload.size() ==
+                  configuration_limits::
+                      kConfigurationBootstrapSchema1PayloadBytes
+        : envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2
+            ? envelope.payload.size() ==
+                      configuration_limits::
+                          kConfigurationBootstrapPayloadBytes ||
+                  envelope.payload.size() ==
+                      configuration_limits::
+                          kConfigurationBootstrapBoundPayloadBytes
+            : envelope.payload.size() ==
+                      configuration_limits::
+                          kConfigurationBootstrapSchema3PayloadBytes ||
+                  envelope.payload.size() ==
+                      configuration_limits::
+                          kConfigurationBootstrapSchema3BoundPayloadBytes;
+    if (!validPayloadSize) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }
 
@@ -119,7 +145,7 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
         static_cast<std::uint8_t>(RunEpochHandoffState::None);
     if (!device_platform::big_endian::readUint32(reader, format) ||
         !device_platform::big_endian::readUint8(reader, state) ||
-        (envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
+        (envelope.schemaVersion >= kConfigurationBootstrapSchemaVersion2 &&
          !device_platform::big_endian::readUint8(reader, handoff))) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }
@@ -132,7 +158,7 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
     }
     std::optional<device_platform::StorageEpoch> previousEpoch;
     std::optional<device_platform::StorageEpoch> currentEpoch;
-    if (envelope.schemaVersion == kConfigurationBootstrapSchemaVersion2 &&
+    if (envelope.schemaVersion >= kConfigurationBootstrapSchemaVersion2 &&
         handoff != static_cast<std::uint8_t>(RunEpochHandoffState::None)) {
         std::uint64_t previous = 0U;
         std::uint64_t current = 0U;
@@ -144,7 +170,18 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
         previousEpoch = device_platform::StorageEpoch{previous};
         currentEpoch = device_platform::StorageEpoch{current};
     }
-    if (reader.remaining() != 0U) {
+    std::uint8_t authHandoff =
+        static_cast<std::uint8_t>(AuthDomainHandoffState::None);
+    std::uint64_t authHandoffSequence = 0U;
+    if (envelope.schemaVersion == kConfigurationBootstrapSchemaVersion3 &&
+        (!device_platform::big_endian::readUint8(reader, authHandoff) ||
+         !device_platform::big_endian::readUint64(reader,
+                                                  authHandoffSequence) ||
+         reader.remaining() != 0U)) {
+        return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
+    }
+    if (envelope.schemaVersion != kConfigurationBootstrapSchemaVersion3 &&
+        reader.remaining() != 0U) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }
 
@@ -156,7 +193,9 @@ ConfigurationBootstrapDecodeResult decodeConfigurationBootstrapRecord(
         envelope.schemaVersion,
         static_cast<RunEpochHandoffState>(handoff),
         previousEpoch,
-        currentEpoch};
+        currentEpoch,
+        static_cast<AuthDomainHandoffState>(authHandoff),
+        ConfigurationBootstrapSequence{authHandoffSequence}};
     if (!isPlausible(record)) {
         return {ConfigurationBootstrapCodecStatus::InvalidModel, std::nullopt};
     }

@@ -197,6 +197,12 @@ Credential-/Moduswechsel, Werksreset oder einem anderen serverseitigen
 Widerruf gueltig. Browser-Fingerprints, `beforeunload`-Garantien oder andere
 Lifecycle-Hacks sind dafuer nicht vorgesehen.
 
+Die 30-Minuten-Inaktivitaetsfrist wird nur durch explizit erfasste relevante
+Benutzeraktivitaet verlaengert. Cookie-/Session-Lookup, Browser-Reload,
+read-only Polling und passive Snapshot-Aktualisierung verlaengern sie nicht;
+die absolute 12-Stunden-Grenze bleibt unabhaengig davon bestehen. Das separate
+Timing der Web-Servicelease bleibt davon unberuehrt.
+
 ### Betrieb ohne normales Webpasswort
 
 Ist der normale Webpasswortschutz bewusst deaktiviert:
@@ -243,6 +249,19 @@ Unabhaengig von der spaeteren konkreten Bibliothek gelten:
 - Abmeldung und Passwortaenderung machen die betroffene Sitzung ungueltig.
 - Sitzungs- und Servicefreigaben werden nicht in normale Diagnoseexporte
   aufgenommen.
+
+Mutation-Sequenzen sind pro Session monoton und atomar reserviert. Eine Session
+haelt hoechstens acht abgeschlossene Replay-Outcomes und eine In-Flight-Anfrage;
+nach Abschluss erhalten identische Retrys exakt dasselbe Outcome. Eine
+konkurrierende In-Flight-Anfrage, Payloadwechsel, Sequenzluecken, abgelaufene
+Sequenzen und `uint64`-Overflow bleiben fail-closed. Der exakte
+Request-Fingerprint ist auf 512 Bytes
+begrenzt. Ein Replay-Outcome enthaelt hoechstens 64 Bytes Content-Type und 256
+Bytes Body. Fuer vier Sessions samt je acht Outcomes und einer In-Flight-Anfrage
+bleibt der rohe Replay-Payload auf 29.952 Bytes begrenzt; die feste
+`WebSessionManager`-Speichergroesse wird zusaetzlich zur Compile-Zeit auf 32 KiB
+begrenzt. Vor Aktivierung der ersten Web-Mutationsroute ist weiterhin der
+integrierte Vier-Session-Ressourcennachweis erforderlich.
 
 ## Servicebereich in der Weboberflaeche
 

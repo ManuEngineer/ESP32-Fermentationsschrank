@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -16,6 +17,7 @@
 #include "time_zone_resolver.hpp"
 #include "application_run_identity.hpp"
 #include "application_lifecycle.hpp"
+#include "authentication_records.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "fermentation_ui_projector.hpp"
 #include "http_server_lifecycle.hpp"
@@ -23,6 +25,7 @@
 #include "network_lifecycle.hpp"
 #include "network_configuration_service.hpp"
 #include "network_setup_routes.hpp"
+#include "replay_digest.hpp"
 #include "secure_random_source.hpp"
 
 namespace fermentation {
@@ -34,6 +37,8 @@ class ConfigurationRecoveryService;
 struct ConfigurationRecoveryResult;
 class ConfigurationService;
 class RunPersistenceCoordinator;
+class WebRouteDispatcher;
+class WebSessionManager;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
 class FermentationApplicationTestAccess;
 
@@ -43,9 +48,57 @@ class Harness;
 }
 #endif
 
+// One narrow, application-owned gate is shared by the main/touch loop and
+// every Web callback. Recursive locking is intentional for existing owning
+// paths that call nested public projections; PBKDF2 runs outside this gate.
+class ApplicationCallSerializer final {
+   public:
+    class Guard final {
+       public:
+        ~Guard() = default;
+        Guard(const Guard&) = delete;
+        Guard& operator=(const Guard&) = delete;
+        Guard(Guard&&) noexcept = default;
+        Guard& operator=(Guard&&) noexcept = default;
+
+       private:
+        friend class ApplicationCallSerializer;
+        explicit Guard(std::recursive_mutex& mutex) : lock_(mutex) {}
+        std::unique_lock<std::recursive_mutex> lock_;
+    };
+
+    [[nodiscard]] Guard enter() const { return Guard(mutex_); }
+
+   private:
+    mutable std::recursive_mutex mutex_;
+};
+
+enum class WebAuthenticationState : std::uint8_t {
+    PasswordProtected,
+    PasswordDisabled,
+    Unprovisioned,
+    RecoveryRequired,
+    Indeterminate,
+};
+
+enum class WebAuthenticationResultStatus : std::uint8_t {
+    Authenticated,
+    Disabled,
+    Invalid,
+    LockedOut,
+    RecoveryRequired,
+    KdfUnavailable,
+};
+
+struct WebAuthenticationResult {
+    WebAuthenticationResultStatus status{
+        WebAuthenticationResultStatus::RecoveryRequired};
+    std::uint64_t retryAfterMs{0U};
+};
+
 class FermentationApplication {
    public:
-    FermentationApplication() = default;
+    FermentationApplication() noexcept;
     FermentationApplication(const FermentationApplication&) = delete;
     FermentationApplication& operator=(const FermentationApplication&) = delete;
     FermentationApplication(FermentationApplication&&) = delete;
@@ -75,6 +128,27 @@ class FermentationApplication {
         device_platform::IHttpServerLifecycle& httpServerLifecycle,
         device_platform::ISecureRandomSource& randomSource,
         const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+    [[nodiscard]] bool begin(
+        device_platform::IPlatformServices& platformServices,
+        device_platform::IStateStore& store,
+        const device_platform::ITimeZoneResolver& timeZoneResolver,
+        const device_platform::ITimeSource& timeSource,
+        device_platform::INetworkLifecycle& networkLifecycle,
+        device_platform::IHttpServerLifecycle& httpServerLifecycle,
+        device_platform::ISecureRandomSource& randomSource,
+        IAuthenticationKdf& authenticationKdf,
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+    [[nodiscard]] bool begin(
+        device_platform::IPlatformServices& platformServices,
+        device_platform::IStateStore& store,
+        const device_platform::ITimeZoneResolver& timeZoneResolver,
+        const device_platform::ITimeSource& timeSource,
+        device_platform::INetworkLifecycle& networkLifecycle,
+        device_platform::IHttpServerLifecycle& httpServerLifecycle,
+        device_platform::ISecureRandomSource& randomSource,
+        IAuthenticationKdf& authenticationKdf,
+        device_platform::IReplayDigest& replayDigest,
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
         device_platform::NetworkMode selectedMode);
@@ -84,6 +158,7 @@ class FermentationApplication {
     // these credentials.
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     networkAccessPointInfo() const;
+    [[nodiscard]] bool networkSetupFlowActive() const noexcept;
     // Secret-free canonical mode input for the renderer-independent UI view.
     [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
     // Sole application-owned runtime evidence handoff. Producers such as
@@ -98,6 +173,10 @@ class FermentationApplication {
     // recovery policy; a failed configuration read yields safe defaults
     // (English, an empty catalog) rather than blocking presentation.
     [[nodiscard]] FermentationUiPresentationSource uiPresentationSource() const;
+
+    [[nodiscard]] WebAuthenticationState webAuthenticationState() const;
+    [[nodiscard]] WebAuthenticationResult authenticateWebPassword(
+        const std::string& password, std::uint64_t nowMs);
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -180,6 +259,7 @@ class FermentationApplication {
         const device_platform::SensorQualitySnapshot& snapshot) noexcept;
     [[nodiscard]] bool revalidatePreparedRequest(
         FermentationApplicationPreparedRequest& request);
+    [[nodiscard]] WebAuthenticationState webAuthenticationStateUnlocked() const;
     template <typename Request>
     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
         Request request,
@@ -204,13 +284,18 @@ class FermentationApplication {
         const device_platform::IResetCauseSource* resetCauseSource,
         device_platform::INetworkLifecycle* networkLifecycle = nullptr,
         device_platform::IHttpServerLifecycle* httpServerLifecycle = nullptr,
-        device_platform::ISecureRandomSource* randomSource = nullptr);
+        device_platform::ISecureRandomSource* randomSource = nullptr,
+        IAuthenticationKdf* authenticationKdf = nullptr,
+        device_platform::IReplayDigest* replayDigest = nullptr);
     [[nodiscard]] bool initializeNetwork(
         device_platform::IStateStore& store,
         device_platform::StorageEpoch storageEpoch,
         device_platform::NetworkMode selectedMode,
         const std::string& canonicalDeviceName,
-        device_platform::ISecureRandomSource* randomSource);
+        device_platform::ISecureRandomSource* randomSource,
+        device_platform::IReplayDigest* replayDigest);
+    void resetAuthenticationState() noexcept;
+    void initializeAuthentication(device_platform::IStateStore& store);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
         const RunPersistenceSnapshot* snapshot,
@@ -241,12 +326,22 @@ class FermentationApplication {
     std::unique_ptr<ConnectivityCredentialStore> connectivityCredentialStore_;
     std::unique_ptr<NetworkConfigurationService> networkConfigurationService_;
     std::unique_ptr<NetworkSetupRoutes> networkSetupRoutes_;
+    std::unique_ptr<WebSessionManager> webSessionManager_;
+    std::unique_ptr<WebRouteDispatcher> webRouteDispatcher_;
     std::unique_ptr<RunPersistenceCoordinator> runPersistenceCoordinator_;
     std::unique_ptr<ApplicationRunIdentity> runIdentity_;
     device_platform::IStateStore* stateStore_{nullptr};
     device_platform::INetworkLifecycle* networkLifecycle_{nullptr};
     device_platform::IHttpServerLifecycle* httpServerLifecycle_{nullptr};
     device_platform::ISecureRandomSource* secureRandomSource_{nullptr};
+    IAuthenticationKdf* authenticationKdf_{nullptr};
+    std::unique_ptr<AuthenticationRecordStore> authenticationRecordStore_;
+    std::unique_ptr<AuthenticationDomain> authenticationDomain_;
+    std::optional<AuthenticationBootstrapContext> authenticationContext_;
+    AuthenticationBootstrapResolutionStatus authenticationResolutionStatus_{
+        AuthenticationBootstrapResolutionStatus::RecoveryRequired};
+    mutable AuthBootstrapStatus authenticationBootstrapStatus_{
+        AuthBootstrapStatus::RecoveryRequired};
     std::optional<device_platform::StorageEpoch> storageEpoch_;
     std::unique_ptr<RunCommandState> runtimeRunState_;
     std::unique_ptr<RunCommandState> pendingResume_;
@@ -264,6 +359,7 @@ class FermentationApplication {
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
+    ApplicationCallSerializer applicationCallSerializer_;
 };
 
 }  // namespace fermentation

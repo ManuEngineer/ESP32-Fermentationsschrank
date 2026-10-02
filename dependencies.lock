@@ -79,6 +79,16 @@ dependencies:
     - esp32s2
     - esp32s3
     version: 2.1.2
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
   espressif/cmake_utilities:
     component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
     dependencies:
@@ -176,10 +186,11 @@ direct_dependencies:
 - atanisoft/esp_lcd_touch_xpt2046
 - esp-idf-lib/ds3231
 - esp-idf-lib/i2cdev
+- espressif/cjson
 - espressif/esp_lcd_ili9341
 - espressif/esp_lcd_touch
 - espressif/esp_lvgl_port
 - espressif/mdns
-manifest_hash: 6693a62ce376e496ab7e8d31578f3674bdc5ff06263cfe4414c06fb6cc2d5ba9
+manifest_hash: 4b6a22b93ea0a4fbd6c21f439b906e50cfb2cb952f8974e9c13de236e15baeb3
 target: esp32
 version: 3.0.0

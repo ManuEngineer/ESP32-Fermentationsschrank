@@ -127,10 +127,20 @@ allgemeine Connectivity-Plattform.
 ## JSON an externen Grenzen
 
 Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
-allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist dafuer der
-bevorzugte Release-1-Kandidat, wird aber erst nach einem begrenzten Build-,
-Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernommen. Eine
-Alternative wird nur bei einem konkret belegten Release-1-Problem untersucht.
+allgemeiner Parser neu entwickelt. Die reproduzierten ArduinoJson-7.4.3- und
+Espressif-cJSON-1.7.19~2-Spikes bleiben historische Messungen gegen den damals
+strengeren Duplicate-/NUL-/UTF-8-Vertrag; diese Resultate werden nicht
+umgeschrieben. Die proportionale JSON-R1-Planrevision bewertet Duplicate-
+Ablehnung und generische UTF-8-/Escape-Hardening-Regeln für die aktuellen
+ASCII-only DTO-Textfelder nicht automatisch als MUST. Der Owner hat mit
+Freigabe von Plan `aa695b43f5b68edefea23669678d877f5b830c17` Espressif
+`espressif/cjson 1.7.19~2` final ausgewaehlt. Die Produktabhängigkeit ist
+exakt gepinnt, privat auf der `fermentation_app`-Buildgrenze und ausschliesslich
+im konkreten Web-JSON-Codec verwendet; ArduinoJson ist daraus entfernt.
+`FINAL_SELECTION_PENDING=NO`; eine dritte Alternative wird nicht evaluiert.
+Der cJSON-Codec lehnt raw NUL und die bounded erkannte `\u0000`-Form vor dem
+Parse ab; Duplikat-Member-Ablehnung und generische UTF-8-Prüfung bleiben
+Hardening, nicht R1-MUST.
 
 Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
 Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und
@@ -176,12 +186,13 @@ fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
 
 ## Authentisierung und Secret-Schutz
 
-Bewaehrte Kryptoprimitive und vorhandene Plattformfunktionen werden erst nach
-reproduzierbarer Toolchain-, Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und
-Watchdogpruefung adoptiert. PBKDF2-HMAC-SHA-256 aus dem fixierten
-mbedTLS-/ESP32-Pfad ist nur erster Evaluationskandidat; Work Factor,
-Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
-festgelegt.
+Fuer R1 ist PBKDF2-HMAC-SHA-256 ueber die PSA-KDF-API der fixierten
+ESP-IDF-6.1-Plattform mit exakt 10000 Iterationen festgelegt; es gibt keinen
+automatischen Work-Factor-Fallback. Das ist die Ownerentscheidung fuer den
+Algorithmus und Parameter, keine Freigabe der integrierten Weblast oder ein
+Versprechen gegen physischen Flashzugriff. Zufallsintegration,
+Toolchain-/Testvektor-, Stack-, Heap-, Jitter- und Watchdognachweise bleiben
+fuer die jeweils betroffenen Produkt- und Release-Gates erforderlich.
 
 Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
 PIN-Credentials, atomar neustartfeste Vor-Sperr-Zaehler/Sperrzustaende,

@@ -25,6 +25,13 @@ inline constexpr std::uint32_t kConnectivityCredentialSchemaVersionV2 = 2U;
 inline constexpr std::uint32_t kConnectivityCredentialSchemaVersion =
     kConnectivityCredentialSchemaVersionV2;
 inline constexpr const char kConnectivityCredentialStoreKey[] = "cc0";
+inline constexpr device_platform::RecordTypeId kAuthenticationRecordType{11U};
+inline constexpr device_platform::RecordTypeId kAuthenticationRootRecordType{
+    12U};
+inline constexpr std::uint32_t kAuthenticationSchemaVersion = 1U;
+inline constexpr std::uint32_t kAuthenticationRootSchemaVersion = 1U;
+inline constexpr const char kAuthenticationStoreKey[] = "auth0";
+inline constexpr const char kAuthenticationRootStoreKey[] = "authroot0";
 
 // ADR-016-konforme kurze NVS-Schluessel. Es handelt sich nur um die stabile
 // Namenskonvention fuer die vier Dokumentplaetze; Lesen, Schreiben, Rotation

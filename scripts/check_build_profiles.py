@@ -62,6 +62,7 @@ REQUIRED_NATIVE_WARNINGS = {"-Wall", "-Wextra", "-Wpedantic", "-Werror"}
 # sdkconfig speichert String-Werte mit Anführungszeichen im Text selbst;
 # read_sdkconfig() entfernt sie bewusst nicht (verlustfreie Rohwertpruefung).
 EXPECTED_IDF_TARGET = '"esp32"'
+EXPECTED_MAIN_TASK_STACK_SIZE = "24576"
 
 # Exakte Namen und Praefixe, die im ESP-IDF-Build keinesfalls vorkommen
 # duerfen. Eine reine Substring-Suche im gesamten Kommando wuerde auch
@@ -154,6 +155,12 @@ def check_sdkconfig_for_profile(sdkconfig_path: Path, profile: str) -> list[str]
         violations.append(f"{sdkconfig_path}: 4-MB-Flashkonfiguration fehlt")
     if values.get("CONFIG_SPIRAM") == "y":
         violations.append(f"{sdkconfig_path}: PSRAM (CONFIG_SPIRAM) ist aktiviert")
+    if values.get("CONFIG_ESP_MAIN_TASK_STACK_SIZE") != EXPECTED_MAIN_TASK_STACK_SIZE:
+        violations.append(
+            f"{sdkconfig_path}: CONFIG_ESP_MAIN_TASK_STACK_SIZE erwartet "
+            f"{EXPECTED_MAIN_TASK_STACK_SIZE}, gefunden "
+            f"{values.get('CONFIG_ESP_MAIN_TASK_STACK_SIZE', '(fehlt)')}"
+        )
     if values.get("CONFIG_IDF_TARGET") != EXPECTED_IDF_TARGET:
         violations.append(
             f"{sdkconfig_path}: CONFIG_IDF_TARGET erwartet {EXPECTED_IDF_TARGET}, "
@@ -530,6 +537,7 @@ def _write_sdkconfig(
     *,
     flash_ok: bool = True,
     idf_target: str | None = EXPECTED_IDF_TARGET,
+    main_stack: str | None = EXPECTED_MAIN_TASK_STACK_SIZE,
 ) -> None:
     lines = []
     for profile in esp_idf_contract.PROFILES:
@@ -542,6 +550,8 @@ def _write_sdkconfig(
         lines.append("CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y")
     if idf_target is not None:
         lines.append(f"CONFIG_IDF_TARGET={idf_target}")
+    if main_stack is not None:
+        lines.append(f"CONFIG_ESP_MAIN_TASK_STACK_SIZE={main_stack}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -741,6 +751,29 @@ def run_selftest() -> int:
         _write_sdkconfig(sdkconfig_path, {esp_idf_contract.profile_kconfig_option("bringup")})
         violations = check_sdkconfig_for_profile(sdkconfig_path, "bringup")
         checks.append(("Korrekter Zielchip CONFIG_IDF_TARGET=\"esp32\" wird akzeptiert", not violations))
+
+    for profile in esp_idf_contract.PROFILES:
+        for stack, label in (
+            ("16384", "Abweichender Main-Task-Stack 16384 wird erkannt"),
+            (None, "Fehlender Main-Task-Stack wird erkannt"),
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                sdkconfig_path = (
+                    Path(tmp) / "build" / esp_idf_contract.build_dir_name(profile) / "sdkconfig"
+                )
+                _write_sdkconfig(
+                    sdkconfig_path,
+                    {esp_idf_contract.profile_kconfig_option(profile)},
+                    main_stack=stack,
+                )
+                violations = check_sdkconfig_for_profile(sdkconfig_path, profile)
+                checks.append((f"{label} ({profile})", any("MAIN_TASK_STACK" in v for v in violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sdkconfig_path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("release") / "sdkconfig"
+        _write_sdkconfig(sdkconfig_path, {esp_idf_contract.profile_kconfig_option("release")})
+        violations = check_sdkconfig_for_profile(sdkconfig_path, "release")
+        checks.append(("Kanonischer Main-Task-Stack 24576 wird akzeptiert", not violations))
 
     # --- Compile-Definitionen strukturiert -----------------------------
     with tempfile.TemporaryDirectory() as tmp:

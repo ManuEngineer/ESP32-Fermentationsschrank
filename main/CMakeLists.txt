@@ -1,14 +1,15 @@
 # Die Component muss registriert werden, bevor die aus Kconfig erzeugten
 # Profilvariablen fuer die private Quellenisolierung verwendet werden.
 idf_component_register(
-    SRCS "app_main.cpp" "fermentation_ui_renderer.cpp"
+    SRCS "app_main.cpp" "esp_idf_authentication_kdf.cpp"
+         "fermentation_ui_renderer.cpp"
          "fermentation_ui_lvgl_renderer.cpp"
          "fermentation_ui_press_dispatcher.cpp"
          "generated/manuengineer_logo_168x24.cpp"
     PRIV_INCLUDE_DIRS "../include"
                   "../lib/device_platform_esp_idf/private"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
-                  nvs_flash
+                  nvs_flash mbedtls
                   esp_timer
                   espressif__esp_lvgl_port
 )
