@@ -9,8 +9,9 @@ Produktänderung. S3–S7 nicht begonnen.
 STATE_STORE_REINIT=DONE
 APPLICATION_READY_AFTER_REINIT=YES
 UnsupportedNewerConfigurationSchema_AFTER_REINIT=NOT_OBSERVED
-TOUCH_CALIBRATION=NotFound_NOT_RESTORABLE_VIA_EXISTING_ISSUE31_PATH
-O2_BASELINE_RUN=NOT_EXECUTED_BLOCKED
+TOUCH_CALIBRATION=Available_AFTER_FIRST_PROVISION
+FIRST_PROVISION_FROM_EMPTY=PASS
+O2_BASELINE_RUN=PENDING_OWNER_AT_DEVICE
 ```
 
 ## 1. Ablauf und Belege
@@ -64,21 +65,44 @@ Partitionstabelle, App; App-BIN `dc593a9d…`) und bootet mit
 `application: ready`, Touch `NotFound`:
 [R1_RAM_BASELINE_S2_RELEASE_AFTER_REINIT_20261002_RAW.txt](R1_RAM_BASELINE_S2_RELEASE_AFTER_REINIT_20261002_RAW.txt).
 
-## 3. Folge für die O2-Baseline
+## 3. Erstprovisionierung (Owner-Freigabe `PR174_S2_Touch_FirstProvision`)
 
-Der O2-Lastpfad verlangt Touchbedienung (Seitenwechsel, Netzwerkmodus-
-Press, `network_page_press_*`). Ohne Kalibrierung bleibt Touch
-fail-closed; die Baseline wurde daher nicht gestartet. Ob der
-Netzwerkpfad nach der Neuinitialisierung ausführbar ist (Moduswahl,
-QR/Access Point), ist **nicht geprüft**, weil er Touch voraussetzt.
+Der Provisionierer wurde minimal um genau einen Fall erweitert
+(`main/issue_31_touch_calibration_provision.cpp`, Commit `2c71c4f5…`):
+Sind `tc0` (Active) und `tc1` (Fallback) exakt `NotFound`, wird das bereits
+reviewte `kComposedModel` direkt als Sequenz 2 geschrieben, dann exakter
+Readback und unverändertes, leeres `tc1` geprüft. Migration (Sequenz 1 → 2),
+Idempotenz (Sequenz 2) und alle übrigen vorhandenen Records bleiben
+unverändert bzw. fail-closed. Keine Änderung an Store, Codec, Schema,
+Koeffizienten, Thresholds, Rotation, Renderer oder Layout.
 
-## 4. Offene Owner-Entscheidung
+Build aus sauberem Worktree auf `2c71c4f5…` (`SOURCE_TREE_CLEAN`), Profil
+`esp32_bringup`, App-BIN `a1868b7b97ccd5959b50e9482c15c0a6a30f2fbdde9c839951308aec95e9bf6f`,
+nur Bootloader, Partitionstabelle und App geflasht. Auf dem
+neuinitialisierten Gerät:
 
-Wie soll die Touchkalibrierung auf dem leeren Testgerät wiederhergestellt
-werden? Der vorhandene Weg deckt nur die Migration Sequenz 1 → 2 ab. Mögliche
-Wege (keine umgesetzt): (a) bestehende Provisionierung um einen
-Erstbeschreibungs-Vorzustand erweitern (Änderung der Issue-31-
-Provisionierlogik, eigener Plan/Review), (b) Rückspielen des alten
-Kalibrierungsrecords aus der Sicherung als kontrollierte, dokumentierte
-Testzustandsmaßnahme, (c) Neukalibrierung per Capture/Fit-Workflow, soweit
-dieser vom Owner freigegeben wird.
+```text
+ISSUE31_CALIBRATION_ACTIVE_STATUS=NotFound
+ISSUE31_CALIBRATION_FALLBACK_STATUS=NotFound
+ISSUE31_CALIBRATION_ACTIVE_PRESTATE=FIRST_PROVISION_FROM_EMPTY
+ISSUE31_CALIBRATION_WRITE=COMMITTED
+ISSUE31_CALIBRATION_FALLBACK_AFTER=NotFound
+ISSUE31_CALIBRATION_READBACK=PASS
+ISSUE31_CALIBRATION_PROVISION=COMPLETE ACTUATOR_RELEASE=NO FALLBACK_SLOT=UNCHANGED
+```
+
+Rohlog: [R1_RAM_BASELINE_S2_ISSUE31_FIRST_PROVISION_20261002_RAW.txt](R1_RAM_BASELINE_S2_ISSUE31_FIRST_PROVISION_20261002_RAW.txt).
+Danach wurde der finale S2-Release-Stand (`dc593a9d…`, meldet `0de006a…`,
+Code `5bfc9bc`) wieder geflasht; Boot: `application: ready`,
+`touch calibration: active_status=Available fallback_status=NotFound`, kein
+`UnsupportedNewerConfigurationSchema` im Log
+([R1_RAM_BASELINE_S2_RELEASE_AFTER_PROVISION_20261002_RAW.txt](R1_RAM_BASELINE_S2_RELEASE_AFTER_PROVISION_20261002_RAW.txt)).
+Der frühere Befund aus Abschnitt 2 (`ACTIVE_RECORD_MIGRATION_PRECONDITION` bei
+`NotFound`) ist damit behoben und nur noch historisch.
+
+## 4. Offen
+
+Product-Touch-Smoke zur Bestätigung der bekannten Zuordnung und der
+O2-Baselinelauf benötigen den Owner am Gerät; sie sind noch nicht ausgeführt.
+Ob der Netzwerkpfad (Moduswahl, QR/Access Point) ausführbar ist, ist noch
+nicht geprüft.
