@@ -95,9 +95,13 @@ class FermentationApplication {
     // The single renderer-independent source for display locale, the
     // canonical prepared time zone and the program catalog needed by the
     // local UI workspace/renderer. It never duplicates persistence or
-    // recovery policy; a failed configuration read yields safe defaults
-    // (English, an empty catalog) rather than blocking presentation.
-    [[nodiscard]] FermentationUiPresentationSource uiPresentationSource() const;
+    // recovery policy. The result is explicit: a value only if the
+    // configuration runtime granted its read lease, std::nullopt otherwise
+    // (no configuration service, lease unavailable). Callers decide what an
+    // unavailable source means; there is no heuristic over empty catalogs or
+    // default values.
+    [[nodiscard]] std::optional<FermentationUiPresentationSource>
+    uiPresentationSource() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {

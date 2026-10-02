@@ -19,6 +19,7 @@
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
+#include "fermentation_ui_presentation_cache.hpp"
 #include "fermentation_ui_press_dispatcher.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
@@ -434,6 +435,7 @@ bool updateProductUi(
     fermentation::FermentationApplication& application,
     fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
     fermentation::FermentationTouchWorkspace& uiWorkspace,
+    fermentation::FermentationUiPresentationCache& presentationCache,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
     const device_platform::LocaleId& initialDisplayLocale,
     const device_platform::TimeZoneId& initialTimeZoneId,
@@ -445,12 +447,17 @@ bool updateProductUi(
 
     const bool networkPageBeforeTouch =
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
-    fermentation::FermentationUiPresentationSource loopPresentation;
-    if (!networkPageBeforeTouch) {
-        loopPresentation = application.uiPresentationSource();
-    }
-    // HeaderNetwork does not consume ProgramCatalog; do not keep its full
-    // copy alive while a network-mode touch is committed.
+    const auto loopSnapshot = application.uiSnapshot();
+    // One long-lived presentation copy, invalidated only by the snapshot's
+    // existing revisions. HeaderNetwork does not consume ProgramCatalog: the
+    // copy is evicted before a network-mode touch is committed, and refilled
+    // through the same explicit fill contract after leaving the page.
+    const auto fillPresentation = [&application]() {
+        return application.uiPresentationSource();
+    };
+    presentationCache.update(networkPageBeforeTouch, loopSnapshot.revisions,
+                             fillPresentation);
+    const auto& loopPresentation = presentationCache.get();
     const auto& touchDisplayLocale = networkPageBeforeTouch
                                          ? initialDisplayLocale
                                          : loopPresentation.displayLocale;
@@ -463,7 +470,6 @@ bool updateProductUi(
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
     const device_platform::ClockViewInput loopClock{
         timeSource.unixTimeSeconds(), touchTimeZoneId};
-    const auto loopSnapshot = application.uiSnapshot();
 
     // The existing #26 target/interaction path (calibrated touch
     // -> targetAt()/Workspace::press() -> existing typed
@@ -496,17 +502,17 @@ bool updateProductUi(
                  static_cast<int>(touchTick.dispatch.outcome));
     }
 
-    if (networkPageBeforeTouch &&
-        uiWorkspace.page() != fermentation::FermentationUiPage::HeaderNetwork) {
-        loopPresentation = application.uiPresentationSource();
-    }
     const bool networkPageAfterTouch =
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
+    presentationCache.update(networkPageAfterTouch, loopSnapshot.revisions,
+                             fillPresentation);
+    // Re-read after update(): the copy may have been evicted or refilled.
+    const auto& renderPresentation = presentationCache.get();
     const auto& renderDisplayLocale = networkPageAfterTouch
                                           ? initialDisplayLocale
-                                          : loopPresentation.displayLocale;
+                                          : renderPresentation.displayLocale;
     const auto* renderProgramCatalog =
-        networkPageAfterTouch ? nullptr : &loopPresentation.programCatalog;
+        networkPageAfterTouch ? nullptr : &renderPresentation.programCatalog;
     static_cast<void>(displayRenderer->render(
         loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
         touchTick.pressedTarget, renderProgramCatalog, loopNetworkStatus,
@@ -644,13 +650,17 @@ extern "C" void app_main(void) {
          r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
          r1_pins::kBacklightActiveHigh});
     fermentation::FermentationTouchWorkspace uiWorkspace;
+    fermentation::FermentationUiPresentationCache uiPresentationCache;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
     device_platform::LocaleId uiDisplayLocale{"en"};
     device_platform::TimeZoneId uiTimeZoneId;
     // The single renderer-independent source for locale, program catalog and
     // canonical prepared time zone is needed here only for initial UI setup.
     {
-        auto uiPresentation = application.uiPresentationSource();
+        // One-time initial setup: an unavailable source falls back to the
+        // safe defaults (English, empty catalog), as before.
+        auto uiPresentation = application.uiPresentationSource().value_or(
+            fermentation::FermentationUiPresentationSource{});
         const auto uiNetworkStatus =
             toDeviceUiNetworkStatus(networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
@@ -686,9 +696,10 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-        const bool touchPressObserved = updateProductUi(
-            application, displayRenderer.get(), uiWorkspace, uiTextPacks,
-            uiDisplayLocale, uiTimeZoneId, networkLifecycle, timeSource);
+        const bool touchPressObserved =
+            updateProductUi(application, displayRenderer.get(), uiWorkspace,
+                            uiPresentationCache, uiTextPacks, uiDisplayLocale,
+                            uiTimeZoneId, networkLifecycle, timeSource);
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();

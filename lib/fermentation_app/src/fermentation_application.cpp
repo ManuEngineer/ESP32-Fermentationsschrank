@@ -1018,16 +1018,16 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     return FermentationUiProjector::project(input);
 }
 
-FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
-    const {
-    FermentationUiPresentationSource source;
+std::optional<FermentationUiPresentationSource>
+FermentationApplication::uiPresentationSource() const {
     if (configurationService_ == nullptr) {
-        return source;
+        return std::nullopt;
     }
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-        return source;
+        return std::nullopt;
     }
+    FermentationUiPresentationSource source;
     const auto& userConfiguration = runtime.lease.get().userConfiguration();
     if (!userConfiguration.displayLanguageId.empty()) {
         source.displayLocale =
