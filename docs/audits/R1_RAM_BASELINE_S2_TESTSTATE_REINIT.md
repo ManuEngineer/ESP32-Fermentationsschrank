@@ -100,6 +100,13 @@ Code `5bfc9bc`) wieder geflasht; Boot: `application: ready`,
 Der frühere Befund aus Abschnitt 2 (`ACTIVE_RECORD_MIGRATION_PRECONDITION` bei
 `NotFound`) ist damit behoben und nur noch historisch.
 
+Owner-Freigabe: `S2_TOUCH_FIRST_PROVISION_FROM_EMPTY=OWNER_APPROVED`
+(`TC0_NOTFOUND_AND_TC1_NOTFOUND` -> `kComposedModel`, Sequenz 2; Commit
+`2c71c4f5d2a0eb320c9fb75f1805af1ed6e950aa`; `NEW_CALIBRATION_CAPTURE=NO`,
+`ACTUATOR_RELEASE=NO`). Die ausgeführte Hardware-Provisionierung und ihre
+Evidenz gelten damit als freigegebene Testzustandsmaßnahme für die
+S2-Baseline.
+
 ## 4. Offen
 
 Product-Touch-Smoke zur Bestätigung der bekannten Zuordnung und der
