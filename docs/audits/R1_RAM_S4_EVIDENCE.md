@@ -5,9 +5,10 @@ Plan: `docs/tasks/memory-platform-course-plan.md` (Plan-SHA
 und Builds; **keine Hardware-Re-Messung** vor der Independent Verification.
 
 ```text
-S4_CODE_COMMIT=dc4d4afb476ed6e9dab8a23626ea2de3b5164482
+S4_CODE_COMMIT=68acea04d0545bb41cb4e8ef2bc4ee81664ff179
+S4_FIX1=HEADERNETWORK_AP_REVISION_AND_SNAPSHOT_STRING_CAPACITY
 S4_HOST_ALLOCATION_PROOF=PASS_UNCHANGED_STEADY_STATE_0_ALLOCATIONS
-S4_RESIDUAL_ALLOCATIONS=DOCUMENTED_NOT_SILENTLY_CLAIMED
+S4_RESIDUAL_ALLOCATIONS=EVENT_BOUND_ONLY_DOCUMENTED
 S4_HARDWARE_REMEASURE=NOT_DONE_PENDING_INDEPENDENT_VERIFICATION
 S5_TO_S11=NOT_STARTED
 ```
@@ -21,7 +22,8 @@ Vor jeder Änderung wurde die echte Pipeline gemessen
 |---|---|---|
 | `uiSnapshot()` | 2 (Eingabevektor `input.temperatures = {…}` und `output.temperatures.reserve`) | recycelnder `refreshUiSnapshot()` mit wiederverwendeten Puffern → 0 |
 | S3-Cacheentscheidung (unverändert) | 0 | keine |
-| `networkAccessPointInfo()` | 0 im Hosttest ohne AP; in der Firmware 2 Strings by value | nur noch im Fehlpfad bzw. auf `HeaderNetwork` (siehe 5) |
+| `networkAccessPointInfo()` | in der Firmware 2 Strings by value je Loop auf `HeaderNetwork` (Hosttest mit nicht-SSO-Werten belegt >0) | nur noch für einen tatsächlichen Redraw; der Key nutzt die AP-Änderungsrevision (Abschnitt 2a) |
+| `home.activeRunId` im recycelten Snapshot (Run-ID bis 48 Byte) | 1 je Loop (Reset gab die Kapazität frei, belegt per Mutationstest: 100 Allokationen in 100 Loops) | Kapazität des Run-ID-Strings wird mit den Vektorpuffern behalten |
 | `ClockViewInput` (kopiert `TimeZoneId`) | 0 bei kurzer Zeitzone (SSO), sonst 1 | nur noch bei gehaltenem Kontakt bzw. im Zeichenpfad |
 | `makeRepresentativeScreen()` + `makeScreenRenderKey(screen)` | viele (Befehlsvektor, Strings, `view()`/Programmliste) | Key wird vorher gebildet; bei gleichem Key kein Screen-Modell |
 
@@ -64,6 +66,47 @@ Allokation erkennt.
   `INetworkLifecycle`, kein weiterer Zähler außer der einen
   Workspace-Revision.
 
+## 2a. Fix 1 (Independent Review)
+
+**Blocker 1 – HeaderNetwork:** Der Key nutzte im Hosttest einen vorgegebenen
+Fingerprint, die Firmware kopierte SSID und Passwort je Loop. Jetzt:
+
+- `INetworkLifecycle::accessPointInfoRevision()` (Owner-gewünschte Erweiterung
+  des bestehenden Network-Lifecycle-Vertrags): monotoner, geheimnisfreier
+  Zähler, der sich genau ändert, wenn sich die semantische
+  `NetworkAccessPointInfo` (SSID, Passwort, IPv4) ändert oder die Daten
+  gesetzt/gelöscht werden, und sonst nie. Umgesetzt in `EspIdfNetworkLifecycle`
+  (alle sechs Schreibstellen laufen über `setAccessPointInfoLocked()`, unter
+  `stateMutex_`; ein Neustart mit unveränderten Daten ändert die Revision
+  nicht) und im `MockNetworkLifecycle`; durchgereicht über
+  `NetworkConfigurationService` und `FermentationApplication::
+  networkAccessPointRevision()` ohne Stringkopie.
+- Der `ScreenRenderKey` enthält diese Revision (nur auf `HeaderNetwork`)
+  statt eines Hashes; `UiRenderGate::renderRequired()` liest sie selbst.
+  `networkAccessPointInfo()` mit SSID/Passwort wird erst beim tatsächlichen
+  Redraw geholt. Keine zweite SSID-/Passwort-Wahrheit, kein Cache im Renderer,
+  kein Logging.
+- Nachweis (zählender `operator new`, echter Pfad mit Mock-Lifecycle und
+  nicht-SSO-Werten, im Test auf >15 Byte geprüft): `HeaderNetwork`, Warm-up,
+  100 unveränderte Loops → 0 Allokationen, kein Redraw; Kontrolltest, dass der
+  By-Value-Abruf allokiert; SSID-, Passwort-, IPv4-Änderung, Löschen und
+  Wiedersetzen ändern die Revision und erzwingen Redraw (unveränderter
+  Neustart nicht); beim Redraw trägt der Screen die echten Daten inklusive
+  Wi-Fi-QR-Payload.
+
+**Blocker 2 – Snapshot-Strings:** Mit einer aktiven Run-ID von 48 Byte (über
+der Small-String-Grenze) allokierte der Reset-/Kopierpfad je Loop
+(Mutationstest: ohne Korrektur 100 Allokationen in 100 Loops). Korrektur:
+`projectInto()` behält zusätzlich die Kapazität von `home.activeRunId`.
+Die einzigen von `uiSnapshot()` befüllten stringtragenden Felder sind
+`home.activeRunId`; `primaryAction`, `semanticActions` und
+`service.unavailableReason` werden dort nicht befüllt (Defaults, leer),
+`PresentationState`, Meldungen (`RuntimeMessage`), Temperaturen und
+Empfehlungs-/Recoverywerte enthalten keine Strings. Nachweis: Active Run mit
+48-Byte-Run-ID, 100 Gate-Loops → 0 Allokationen, kein Redraw; recycelter
+Snapshot semantisch gleich `uiSnapshot()`; eine geänderte Run-ID erzwingt
+Redraw.
+
 ## 3. Obermengen-Audit
 
 Vom Workspace und Screen gelesene Snapshot-Felder (`home.mode`,
@@ -78,7 +121,7 @@ Key.
 
 ## 4. Tests
 
-Neu `test_ui_steady_state_allocations` (13/13 PASS):
+Neu `test_ui_steady_state_allocations` (16/16 PASS):
 unveränderter Zustand nach Warm-up über 100 Loops → kein Redraw und
 **0 Allokationen** (Snapshot, Cacheentscheidung, Key bilden/speichern/
 vergleichen); dasselbe auf `HeaderNetwork` mit vorgegebenem AP-Fingerprint
@@ -95,22 +138,16 @@ Program-Edit-Slots, AP-Rotation). Regression PASS: `test_local_touch_ui`,
 `test_fermentation_ui_commands`, `test_issue144_run_identity`,
 `test_fermentation_ui_presentation_cache` (S3-Vertrag unverändert),
 `test_fermentation_ui_editing`, `test_device_ui_contracts`, `test_smoke`;
-zusätzlich die gesamte native Suite: 1324/1324 PASS.
+zusätzlich die gesamte native Suite: 1327/1327 PASS.
 
 ## 5. Nicht abgedeckt / Reste (bewusst nicht verschwiegen)
 
-- **HeaderNetwork:** Die AP-Daten (`ssid`/`password` by value) werden dort
-  weiterhin pro Loop für den Identitäts-Hash kopiert (zwei kurzlebige
-  Strings; im Fehlpfad ein zweites Mal). Die Daten sind nicht nur Konstanten:
-  `EspIdfNetworkLifecycle` setzt `config_.softApSsid/-Password` zur Laufzeit
-  und schreibt/leert `accessPointInfo_` an mehreren Stellen, ein Proxy aus
-  `(Modus, Zustand, IPv4)` wäre daher keine belegte Obermenge. Eine
-  allokationsfreie Identität bräuchte eine Änderung an `INetworkLifecycle`;
-  das ist nicht Teil dieses Plans und wird als gemessener Rest für S11
-  vermerkt.
-- **Zustandsabhängig:** Vorhandene Meldungen im Snapshot oder lange
-  `TextKey`-Werte (`unavailableReason`) allokieren weiterhin im Snapshot;
-  der Hosttest deckt den Zustand `ready` ohne Meldungen ab.
+- **HeaderNetwork:** durch Fix 1 erledigt (AP-Änderungsrevision, siehe 2a); es verbleibt nur der ereignisgebundene By-Value-Abruf bei einem Redraw.
+- **Zustandsabhängig:** Eine wachsende Zahl von Meldungen vergrößert den
+  Meldungsvektor einmalig (danach wiederverwendet). Text-Keys in
+  `home.primaryAction`/`service.unavailableReason`/`semanticActions` werden von
+  `uiSnapshot()` heute nicht befüllt und wurden nicht vorsorglich recycelt;
+  würde der Snapshot sie künftig befüllen, wäre der Nachweis zu erweitern.
 - **Ereignisbezogen (zulässig):** geänderter Snapshot, Katalog oder Locale,
   Seiten-/Pager-/Dialogwechsel, Press und Release, Minutenwechsel, jeweils
   mit Screen-Modell und LVGL-Update. Außerdem ein zusätzlicher Redraw beim
@@ -132,10 +169,11 @@ zusätzlich die gesamte native Suite: 1324/1324 PASS.
 ## 7. Builds und Stack
 
 `esp32_release` und `esp32_bringup` frisch gebaut (ESP-IDF v6.1), 0
-Warnungen, Profilvalidierung PASS. Quell-SHA `dc4d4afb…`, Release-App-BIN
-`b59b742f2d38c322489bc346d8020091b8cc5334b6f90f78e512a1137b089e94`, ELF
-`f794bc56af443c8a3123d22151d2c1f41def1320916cd71a4a09d4b523150e72`.
-`app_main`-Stackframe (`.su`): 3856 B (S3: 3136 B, S2: 2864 B); der
-`UiRenderGate` (Snapshot, Cache, zwei Keys) liegt auf dem Main-Stack
-(24576 B konfiguriert). Der beobachtete minimale Main-Stack-HWM in `AP_ONLY`
-lag bei 6864 B (S3); er ist auf Hardware neu zu messen.
+Warnungen, Profilvalidierung PASS. Quell-SHA `68acea04…`, Release-App-BIN
+`ab6b357cce026821146c49591db02fa53d35750fb6bf7d3683f26cc7638ceda0`, ELF
+`f29a4da1de243e33113aa1758134c65a5b832fffb885ce6dc3e0884d744b41b0`.
+`app_main`-Stackframe (`.su`): 3872 B (vorher S4: 3856 B, S3: 3136 B, S2:
+2864 B); der `UiRenderGate` (Snapshot, Cache, zwei Keys) liegt auf dem
+Main-Stack (24576 B konfiguriert). Der beobachtete minimale Main-Stack-HWM in
+`AP_ONLY` lag bei 6864 B (S3) und ist auf Hardware neu zu messen. Keine
+Hardware-Re-Messung vor der Independent Verification.
