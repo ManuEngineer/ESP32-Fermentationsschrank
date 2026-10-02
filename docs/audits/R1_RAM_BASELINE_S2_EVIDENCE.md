@@ -11,7 +11,8 @@ FINAL_S2_CODE_SHA=5bfc9bc0fb2f00b8ceac8d830bf000d04f8b37e7
 O2=APPROVED
 S2_TOUCH_PROVISIONING=PASS
 PRODUCT_TOUCH_SMOKE=PASS_OWNER_OBSERVED
-S2_BASELINE=BLOCKED_STOP_CONDITION_HEAP_ALLOC_FAILED_ABORT
+S2_BASELINE=FAILING_CURRENT_STATE_BASELINE_ESTABLISHED
+O2_FULL_PATH=ABORTED_BY_STOP_CONDITION
 O2_NETWORK_MODE_SWITCHES_COMPLETED=1_OF_5
 ```
 
@@ -272,6 +273,15 @@ beträgt der freie Heap nach `after_application_begin` 56–57 kB und nach
 `after_ui_init` rund 10 kB. LVGL-Pool unavailable trat 4-mal auf
 (`pool=unavailable`; Ursache — Lock-Timeout oder noch nicht initialisiert —
 aus dem Log nicht unterscheidbar).
+
+**Owner-Wertung (Auftrag S3):** Der S2-Lauf wird nicht wiederholt. Die
+Evidenz gilt als **failing current-state baseline** des Ist-Zustands
+(reproduzierbares `heap_alloc_failed`, 5× `abort()`/`SW_CPU_RESET`, globales
+Heap-Minimum 2384 B, kleinster 8-Bit-Block 4352 B, `HOME_WIFI`/
+`SetupAccessPoint` nach UI-Init nur rund 10 kB freier Heap, Absturzstellen
+Configuration-Commit, `makeRepresentativeScreen()` und HTTP-Route). Der
+O2-Vollpfad bleibt historisch `ABORTED_BY_STOP_CONDITION` und wird nicht als
+erfolgreicher O2-Lauf umdeklariert.
 
 **Ergebnis:** Die RAM-Baseline des Ist-Zustands ist gemessen und
 reproduziert die im Plan beschriebene Heap-Erschöpfung im Netzwerkmodus,
