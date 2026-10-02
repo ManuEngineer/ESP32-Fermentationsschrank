@@ -124,9 +124,22 @@ Stand nicht reproduzierbar belegt und gilt nur als unbestätigte Schätzung.
   (`lib/device_platform/src/network_lifecycle.hpp:86-88`); Preview,
   persistenter Commit und Runtime-Publish liegen beim Application-/
   `ConfigurationService`-Pfad.
-- `RuntimeConfigurationReadLease` ist exklusiv (`RuntimeReadLeaseBusy`,
-  `configuration_service.hpp:78-110`) und darf nicht über einen UI-Tick
-  gehalten werden. `ConfigurationService::stateRevision()` existiert.
+- `RuntimeConfigurationReadLease` erlaubt mehrere gleichzeitige Leser,
+  begrenzt durch `configuration_limits::kMaxRuntimeConfigurationReadLeases`
+  (aktuell 8, `configuration_limits.hpp:51`). Bei ausgeschöpfter Kapazität
+  liefert `acquireRuntime()` `RuntimeReadLeaseBusy`
+  (`configuration_service.cpp:635`). Der UI-Cache hält keine Runtime-Lease
+  dauerhaft.
+- `FermentationApplication::uiSnapshot()` füllt bereits
+  `FermentationUiSnapshot::revisions.expectedUserConfigurationRevision` und
+  `expectedProgramCatalogRevision` (`fermentation_application.cpp:978-986`);
+  `main/app_main.cpp:412` erzeugt den Snapshot je Schleifendurchlauf.
+- `FermentationTouchWorkspace::view()` → `makePageView()` baut dynamische
+  View-Daten, auf der Programmseite zusätzlich
+  `makeFermentationUiProgramList()` (`fermentation_touch_workspace.cpp:424-442,789-792`).
+  `makeScreenRenderKey()` (`main/fermentation_ui_renderer.cpp:602-627`)
+  kopiert u. a. Strings (`locale`, `confirmationProgramName`) aus dem fertigen
+  Screen-Modell.
 - `scripts/build_report.py` erzeugt bereits `idf.py size --format json2` und
   wertet DRAM/IRAM aus.
 - `logResources()` (`main/app_main.cpp:237-254`) protokolliert freien Heap,
@@ -174,9 +187,13 @@ Messpunkte in tatsächlicher Bootreihenfolge:
    Netzwerk-Setup-Seite; danach 120 s Idle. Mit Punkten vor/nach jedem
    Moduswechsel (bestehende `network_page_press_*`).
 
-Die Trennung „Application-Boot ohne WLAN/HTTP“ ist ohne Eingriff in die
-Composition nicht messbar. Vorschlag: kombinierter Punkt 2 genügt; die
-WLAN-Wirkung ergibt sich aus Punkt 2 gegen 1 sowie dem `stable_*`-Punkt.
+Application-Boot und WLAN-/HTTP-Start werden am kombinierten Messpunkt
+`after_application_begin` erfasst. Die Differenz zu `after_platform_begin`
+beschreibt ihre gemeinsame Speicherwirkung. Der `stable_*`-Punkt erfasst den
+späteren stabilen Gesamtzustand. Diese Messpunkte liefern keine isolierte
+WLAN-Verbrauchsmessung. Für die vorgesehene Systembaseline genügt der
+kombinierte Punkt; eine zusätzliche Zerlegung ist nicht Bestandteil dieses
+Scopes.
 
 ## 4. Fehlende Regel und Budgetstatus
 
@@ -238,18 +255,41 @@ Owner am Gerät. Jede Messung folgt Abschnitt 3.
 
 ### 5.1 S3 – Katalogkopie
 
-`uiPresentationSource()` wird nur noch bei geänderter bestehender
-`ConfigurationService::stateRevision()` neu aufgebaut; `app_main` hält die
-bestehende `loopPresentation` als einzige Konsumentenkopie (kein zweiter
-Catalog-Owner, keine dauerhaft gehaltene Lease). Ist die Revision aus
-`app_main` nicht erreichbar, erhält `FermentationApplication` eine schlanke
-Lesemethode, die den bestehenden Wert durchreicht. Im Schnitt wird geprüft und
-dokumentiert, dass Katalog-, Sprach- und Zeitzonenänderungen diese Revision
-erhöhen; sonst wird die Invalidierung auf die tatsächlich erhöhte bestehende
-Revision gestützt.
+Die Invalidierung stützt sich auf die bestehenden
+`FermentationUiSnapshot::revisions`:
 
-Test: Konsument erkennt Katalog-, Sprach- und Zeitzonenänderung; unveränderte
-Revision erzeugt keine Kopie.
+- `expectedUserConfigurationRevision` für Sprache und Zeitzone;
+- `expectedProgramCatalogRevision` für den Katalog.
+
+Ablauf je Schleifendurchlauf in `app_main`: zuerst den bestehenden Snapshot
+(`application.uiSnapshot()`) erzeugen, dann dessen beiden Revisionen mit den
+zuletzt erfolgreich übernommenen Revisionen der Konsumentenkopie vergleichen.
+Nur bei Abweichung wird `uiPresentationSource()` erneut aufgerufen und kopiert.
+`ConfigurationService::stateRevision()` wird nicht neu durch
+`FermentationApplication` durchgereicht. `loopPresentation` bleibt die eine
+Konsumentenkopie; Runtime-Leases bleiben kurzlebig innerhalb von
+`uiSnapshot()`/`uiPresentationSource()`.
+
+Randfälle:
+
+- Erstbefüllung: Die Kopie gilt erst als gültig, nachdem eine Befüllung mit
+  erteilter Runtime-Lease gelungen ist; bis dahin wird bei jedem Durchlauf
+  erneut versucht.
+- Nicht verfügbare Revisionen (`std::nullopt`, z. B. `RuntimeReadLeaseBusy`
+  oder Runtime nicht verfügbar): Der Vergleich gilt als nicht entscheidbar;
+  die bisherige Kopie bleibt in Gebrauch, die gespeicherten Revisionen werden
+  nicht überschrieben, und der nächste Durchlauf vergleicht erneut.
+- Fehlgeschlagene Befüllung (`uiPresentationSource()` ohne erteilte Lease
+  liefert die Default-Quelle): Sie zählt nicht als erfolgreich aktualisierter
+  Cache; gespeicherte Revisionen und bisherige Kopie bleiben, der nächste
+  Durchlauf versucht erneut.
+
+Test (im Implementierungsschnitt): Änderung von
+`expectedProgramCatalogRevision` aktualisiert den Katalog; Änderung von
+`expectedUserConfigurationRevision` aktualisiert Sprache und Zeitzone;
+unveränderte Revisionen rufen `uiPresentationSource()` nicht auf;
+Erstbefüllung, nicht verfügbare Revision und fehlgeschlagene Befüllung
+übernehmen keine Revision als aktualisiert.
 
 ### 5.2 S4 – Render-Key vor Screen-Modell
 
@@ -260,8 +300,31 @@ Pager, Dialog, gedrücktes Ziel, Locale, Katalogrevision, Netzwerkstatus,
 Uhrzeit in Anzeigeauflösung, AP-Info). Bei gleichem Key wird kein Modell
 gebaut.
 
-Test: je Eingabe einzeln ein Fall, der eine Key-Änderung und damit Neuzeichnen
-nachweist; ein Fall ohne Änderung ohne Modellaufbau.
+Bildung, Speicherung und Vergleich des vorgezogenen Keys erfolgen im
+unveränderten Steady State ohne dynamische Allokation:
+
+- Für den Key werden weder `FermentationTouchWorkspace::view()` noch
+  `makeFermentationUiProgramList()` aufgerufen, weil `view()` dynamische
+  View-Daten und auf der Programmseite die Programmliste erzeugt.
+- Der Key enthält keine kopierten `std::string`-Werte, wie sie
+  `makeScreenRenderKey()` heute aus dem Screen-Modell übernimmt. Er wird aus
+  vorhandenen allokationsfreien Werten gebildet (Revisionen, Enum-/Index-/
+  Zählerwerte, Flags, feste Arrays). Kann ein sichtbarer Wert nur über einen
+  String verglichen werden, wird er über eine vorhandene Revision abgedeckt.
+- Reichen vorhandene allokationsfreie Werte für renderrelevante
+  Workspace-Mutationen nicht aus, erhält `FermentationTouchWorkspace` eine
+  einzelne kleine monotone Presentation-/Render-Revision, die bei jeder
+  renderrelevanten Mutation erhöht wird. Sie dient nur der
+  Cache-Invalidierung, nicht als fachlicher Zustand.
+- Die vollständige Abdeckung aller sichtbaren Eingaben bleibt Pflicht.
+
+Test (im Implementierungsschnitt):
+
+- unveränderter Zustand: weder Aufbau eines Screen-Modells noch
+  C++-Heap-Allokation im Key-Pfad (Bildung, Speicherung, Vergleich), belegt
+  mit einem zählenden `operator new` im Host-Test für diesen C++-Pfad;
+- je sichtbarer Eingabe und je renderrelevanter Workspace-Mutation ein Fall,
+  der eine Key-Änderung und damit Neuzeichnen nachweist.
 
 ### 5.3 S5 – UI-Takt
 
@@ -370,15 +433,19 @@ Zeichnen, nicht Regel- oder Safetytakt.
 
 - [ ] O1: Freigabe dieser Plan-SHA.
 - [ ] O2: repräsentativer R1-Lastpfad (Vorschlag in Abschnitt 3, Punkt 6).
-- [ ] O3: kombinierter Messpunkt Application-Boot + WLAN/HTTP ausreichend
-      (Abschnitt 3).
+- [x] O3: `FREIGEGEBEN` (Owner, 2026-10-02). Der kombinierte Messpunkt
+      `after_application_begin` inklusive Application-Initialisierung, WLAN
+      und HTTP ist ausreichend. Daraus wird keine isolierte WLAN-Wirkung
+      abgeleitet (Abschnitt 3).
 - [ ] O4: nach S8 der abgeleitete System-Mindestabstand.
 - [ ] O5: nach S8 Freigabe von S9/S10/S11, jede `sdkconfig`-Änderung einzeln.
-- [ ] O6: Issue für diesen Scope; PR #174 hat noch keines (AGENTS.md: ein
-      Issue pro Branch/PR).
-- [ ] O7: Konflikt zwischen den Korrekturaufträgen: A verlangt Entfernung,
-      B Überarbeitung von ADR-020/021. Umgesetzt nach A (Entfernung); bitte
-      bestätigen. Zuordnung siehe Abschnitt 11.
+- [x] O6: `OWNER_GOVERNANCE_OVERRIDE` (Owner, 2026-10-02). Für PR #174 ist
+      ausnahmsweise kein separates Issue erforderlich
+      (`NO_SEPARATE_ISSUE_REQUIRED_BY_OWNER_OVERRIDE`); Scope ist die laufende
+      R1-RAM-Stabilisierung. Die Ausnahme gilt nur für PR #174 und ändert die
+      allgemeine Governance nicht.
+- [x] O7: `FREIGEGEBEN / ERLEDIGT` (Owner, 2026-10-02). ADR-020 und ADR-021
+      bleiben entfernt; keine weitere Ownerentscheidung erforderlich.
 
 Spätere, getrennte Owneroptionen außerhalb dieses Plans: ESP32-S3-/PSRAM-Profil und
 Speicherplatzierungsschnittstelle; Flash-Core-Dump; Prozessvereinfachungen.
@@ -413,4 +480,4 @@ A = „PR #174 Plan korrigieren“, B = „Korrekturauftrag zum Optimierungsplan
 | B3 Netzwerk-Commit beim bestehenden Owner | 2.4, 5.3, 5.7 |
 | B4 Core Dumps nicht in der Messbasis | 6, S2 |
 | B nicht blockierend: S3/Platzierung, E4-Gate, Prozess | 7, 9 |
-| B-Punkte zu ADR-020/021 (Kontext, Entscheidung, No-PSRAM-Garantie) | durch Entfernung nach A gegenstandslos; Inhalte in 2.1, 4.1, 4.2 und 6 übernommen; O7 |
+| B-Punkte zu ADR-020/021 (Kontext, Entscheidung, No-PSRAM-Garantie) | durch Entfernung nach A gegenstandslos; Inhalte in 2.1, 4.1, 4.2 und 6 übernommen; O7 erledigt, ADRs bleiben entfernt |
