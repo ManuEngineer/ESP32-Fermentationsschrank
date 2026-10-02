@@ -964,8 +964,18 @@ void FermentationApplication::publishOwningRuntimeEvidence(
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
-    FermentationUiProjectionInput input;
+    FermentationUiSnapshot snapshot;
+    refreshUiSnapshot(snapshot);
+    return snapshot;
+}
+
+void FermentationApplication::refreshUiSnapshot(
+    FermentationUiSnapshot& snapshot) const {
+    // The projection input is a reused member: its temperature buffer keeps
+    // its capacity, so repeated snapshots do not allocate once warmed up.
+    auto& input = uiProjectionInput_;
     input.runState = runtimeRunState_.get();
+    input.revisions = FermentationUiExpectedRevisions{};
     if (runtimeRunState_ != nullptr) {
         input.revisions.expectedStateSequence =
             runtimeRunState_->processState.transitionSequence;
@@ -998,16 +1008,19 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
         return value.rawCelsius;
     };
     const auto evidence = resolveRuntimeEvidence();
-    input.temperatures = {
-        {FermentationTemperatureRole::CabinetAir,
-         valueOf(evidence.plausibility.air), evidence.plausibility.air},
-        {FermentationTemperatureRole::Product,
-         valueOf(evidence.plausibility.product), evidence.plausibility.product},
-        {FermentationTemperatureRole::Cooling,
-         valueOf(evidence.plausibility.cooling),
-         evidence.plausibility.cooling}};
+    input.temperatures.clear();
+    input.temperatures.push_back({FermentationTemperatureRole::CabinetAir,
+                                  valueOf(evidence.plausibility.air),
+                                  evidence.plausibility.air});
+    input.temperatures.push_back({FermentationTemperatureRole::Product,
+                                  valueOf(evidence.plausibility.product),
+                                  evidence.plausibility.product});
+    input.temperatures.push_back({FermentationTemperatureRole::Cooling,
+                                  valueOf(evidence.plausibility.cooling),
+                                  evidence.plausibility.cooling});
     input.recoveryDisposition = recoveryDisposition_;
     input.persistenceLoadStatus = persistenceLoadStatus_;
+    input.coordinatorState.reset();
     if (runPersistenceCoordinator_ != nullptr) {
         input.coordinatorState = runPersistenceCoordinator_->state();
     }
@@ -1015,7 +1028,7 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
     input.refreshTracker = &uiRefreshTracker_;
-    return FermentationUiProjector::project(input);
+    FermentationUiProjector::projectInto(snapshot, input);
 }
 
 std::optional<FermentationUiPresentationSource>

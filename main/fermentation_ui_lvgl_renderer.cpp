@@ -117,7 +117,6 @@ struct ProductiveLvglRenderer::Impl final {
     // taken on that read side.
     std::optional<device_platform::TouchCalibrationModel> touchCalibrationModel;
     bool touchCalibrationWarningLogged{false};
-    std::optional<ScreenRenderKey> renderedKey;
 
     // Touch poll state the LVGL task's read callback publishes and
     // ProductiveLvglRenderer::pollTouch() (caller's task) consumes, both
@@ -317,19 +316,14 @@ bool ProductiveLvglRenderer::render(
     if (!state.initialized || state.display == nullptr || state.root == nullptr)
         return false;
 
-    // Building the screen model is a cheap pure projection; only the LVGL
-    // widget rebuild below is expensive. The render key captures every
-    // semantic input relevant to the visible projection (application
-    // revision, local workspace/page/pager/dialog state, locale and header
-    // values), so a page/pager/locale change is never masked by an unchanged
-    // application UiRefreshRevision.
+    // The caller decides whether anything visible changed (allocation-free
+    // ScreenRenderKey, see fermentation_ui_renderer.hpp); this method always
+    // builds the screen model and rebuilds the widgets, so it is only called
+    // for a real visible change. It returns false without drawing when the
+    // LVGL lock cannot be taken, so the caller retries on the next loop.
     const auto screen = makeRepresentativeScreen(
         snapshot, workspace, textPacks, locale, pressedTarget, catalog,
         networkStatus, clock, networkAccessPointInfo);
-    const auto key = makeScreenRenderKey(screen);
-    if (state.renderedKey.has_value() && *state.renderedKey == key) {
-        return true;
-    }
     if (!lvgl_port_lock(1000U)) return false;
 
     lv_obj_clean(state.root);
@@ -393,7 +387,6 @@ bool ProductiveLvglRenderer::render(
     }
     lv_obj_invalidate(state.root);
     lvgl_port_unlock();
-    state.renderedKey = key;
     return true;
 }
 

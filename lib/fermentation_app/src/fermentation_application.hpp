@@ -92,6 +92,10 @@ class FermentationApplication {
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
+    // Same snapshot into an existing object (recycled buffers): allocation-free
+    // once the buffers have reached their capacity; used by the steady-state
+    // UI loop. Not safe for concurrent callers.
+    void refreshUiSnapshot(FermentationUiSnapshot& snapshot) const;
     // The single renderer-independent source for display locale, the
     // canonical prepared time zone and the program catalog needed by the
     // local UI workspace/renderer. It never duplicates persistence or
@@ -259,6 +263,7 @@ class FermentationApplication {
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     CrossRolePlausibilityContext owningRuntimeEvidence_{};
     mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
+    mutable FermentationUiProjectionInput uiProjectionInput_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
     std::optional<RecoveryDisposition> recoveryDisposition_;

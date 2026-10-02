@@ -59,6 +59,18 @@ class FermentationUiPresentationCache {
         return source_.has_value() ? *source_ : defaultSource_;
     }
 
+    // Catalog identity of the copy currently in use, for the renderer's
+    // allocation-free render key: the revision adopted with the last
+    // successful fill, or nullopt while no valid copy exists (never filled,
+    // evicted on HeaderNetwork, or fill unavailable).
+    [[nodiscard]] std::optional<ProgramCatalogRevision>
+    adoptedProgramCatalogRevision() const noexcept {
+        return adoptedRevisions_.has_value()
+                   ? std::optional<ProgramCatalogRevision>{adoptedRevisions_
+                                                               ->catalog}
+                   : std::nullopt;
+    }
+
     [[nodiscard]] bool hasCopy() const noexcept { return source_.has_value(); }
     [[nodiscard]] bool revisionsValid() const noexcept {
         return adoptedRevisions_.has_value();

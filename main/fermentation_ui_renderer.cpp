@@ -570,62 +570,52 @@ RepresentativeScreen makeRepresentativeScreen(
     return screen;
 }
 
-bool operator==(const ScreenRenderKey& left,
-                const ScreenRenderKey& right) noexcept {
-    for (std::size_t index = 0U; index < left.bottomSlots.size(); ++index) {
-        const auto& leftSlot = left.bottomSlots[index];
-        const auto& rightSlot = right.bottomSlots[index];
-        if (leftSlot.kind != rightSlot.kind ||
-            leftSlot.label != rightSlot.label ||
-            leftSlot.enabled != rightSlot.enabled) {
-            return false;
-        }
+std::uint64_t localeFingerprint(
+    const device_platform::LocaleId& locale) noexcept {
+    constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+    constexpr std::uint64_t kPrime = 1099511628211ULL;
+    auto hash = kOffset;
+    for (const auto character : locale.value()) {
+        hash ^= static_cast<unsigned char>(character);
+        hash *= kPrime;
     }
-    return left.refreshRevision == right.refreshRevision &&
-           left.locale == right.locale && left.page == right.page &&
-           left.pagerCurrentIndex == right.pagerCurrentIndex &&
-           left.pagerItemCount == right.pagerItemCount &&
-           left.hasConfirmationWarning == right.hasConfirmationWarning &&
-           left.confirmationProgramName == right.confirmationProgramName &&
-           left.completionLocked == right.completionLocked &&
-           left.blockedReason == right.blockedReason &&
-           left.unavailableCapabilityCount ==
-               right.unavailableCapabilityCount &&
-           left.programListSize == right.programListSize &&
-           left.pressedBottomSlotIndex == right.pressedBottomSlotIndex &&
-           left.networkStatus == right.networkStatus &&
-           left.localNetworkInfoFingerprint ==
-               right.localNetworkInfoFingerprint &&
-           left.trustedUtc == right.trustedUtc && left.themeId == right.themeId;
+    return hash;
+}
+
+std::uint64_t accessPointFingerprint(
+    const std::optional<device_platform::NetworkAccessPointInfo>&
+        accessPoint) noexcept {
+    if (!accessPoint.has_value()) {
+        return 0U;
+    }
+    return networkInfoFingerprint(*accessPoint) | 1U;
 }
 
 ScreenRenderKey makeScreenRenderKey(
-    const RepresentativeScreen& screen) noexcept {
+    const FermentationUiSnapshot& snapshot,
+    const FermentationTouchWorkspace& workspace,
+    const device_platform::LocaleId& locale,
+    std::optional<device_platform::DeviceUiTarget> pressedTarget,
+    const FermentationUiPresentationCache& presentation,
+    device_platform::DeviceUiNetworkStatus networkStatus,
+    std::optional<std::int64_t> trustedUtc,
+    std::uint64_t accessPointFingerprintValue) noexcept {
     ScreenRenderKey key;
-    key.refreshRevision = screen.refreshRevision;
-    key.locale = screen.locale;
-    key.page = screen.workspace.page;
-    key.pagerCurrentIndex = screen.workspace.pager.currentIndex;
-    key.pagerItemCount = screen.workspace.pager.itemCount;
-    key.hasConfirmationWarning =
-        screen.workspace.confirmationWarning.has_value();
-    key.confirmationProgramName =
-        screen.workspace.confirmationProgramName.value_or(std::string{});
-    key.completionLocked = screen.workspace.completionLocked;
-    key.blockedReason = screen.workspace.blockedReason;
-    key.unavailableCapabilityCount =
-        screen.workspace.unavailableCapabilities.size();
-    key.programListSize = screen.workspace.programList.size();
-    key.bottomSlots = screen.workspace.bottomSlots;
-    if (screen.pressedTarget.has_value() &&
-        screen.pressedTarget->kind ==
-            device_platform::DeviceUiTargetKind::BottomSlot) {
-        key.pressedBottomSlotIndex = screen.pressedTarget->slotIndex;
+    key.refreshRevision = snapshot.refreshRevision;
+    key.workspaceRevision = workspace.renderRevision();
+    key.page = workspace.page();
+    key.catalogRevision = presentation.adoptedProgramCatalogRevision();
+    key.localeFingerprint = localeFingerprint(locale);
+    if (pressedTarget.has_value()) {
+        key.hasPressedTarget = true;
+        key.pressedKind = pressedTarget->kind;
+        key.pressedSlotIndex = pressedTarget->slotIndex;
     }
-    key.networkStatus = screen.header.networkStatus;
-    key.localNetworkInfoFingerprint = screen.localNetworkInfoFingerprint;
-    key.trustedUtc = screen.header.clock.trustedUtc;
-    key.themeId = screen.theme.id;
+    key.networkStatus = networkStatus;
+    if (trustedUtc.has_value()) {
+        key.utcMinute = *trustedUtc / 60;
+    }
+    key.accessPointFingerprint = accessPointFingerprintValue;
     return key;
 }
 

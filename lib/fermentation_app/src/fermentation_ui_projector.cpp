@@ -26,6 +26,25 @@ bool hasCanonicalDecisionRequiredMessage(const RunCommandState& state) {
 FermentationUiSnapshot FermentationUiProjector::project(
     const FermentationUiProjectionInput& input) {
     FermentationUiSnapshot output;
+    projectInto(output, input);
+    return output;
+}
+
+void FermentationUiProjector::projectInto(
+    FermentationUiSnapshot& output,
+    const FermentationUiProjectionInput& input) {
+    // Keep the vector buffers: move them out, reset the snapshot to its
+    // default state, then move the emptied buffers back.
+    auto temperatures = std::move(output.temperatures);
+    auto messages = std::move(output.messages);
+    auto semanticActions = std::move(output.navigation.semanticActions);
+    output = FermentationUiSnapshot{};
+    temperatures.clear();
+    messages.clear();
+    semanticActions.clear();
+    output.temperatures = std::move(temperatures);
+    output.messages = std::move(messages);
+    output.navigation.semanticActions = std::move(semanticActions);
     output.revisions = input.revisions;
     output.temperatures.reserve(input.temperatures.size());
     for (const auto& source : input.temperatures) {
@@ -162,7 +181,6 @@ FermentationUiSnapshot FermentationUiProjector::project(
     if (input.refreshTracker != nullptr) {
         output.refreshRevision = input.refreshTracker->publish(output);
     }
-    return output;
 }
 
 }  // namespace fermentation
