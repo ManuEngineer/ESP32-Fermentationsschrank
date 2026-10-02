@@ -38,13 +38,20 @@ void FermentationUiProjector::projectInto(
     auto temperatures = std::move(output.temperatures);
     auto messages = std::move(output.messages);
     auto semanticActions = std::move(output.navigation.semanticActions);
+    // The run id is the only string-carrying field the application fills in
+    // today (R1 allows up to 48 bytes, beyond the small-string buffer), so its
+    // capacity is kept as well. Text keys that the application does not
+    // populate in uiSnapshot() are not recycled.
+    auto activeRunId = std::move(output.home.activeRunId);
     output = FermentationUiSnapshot{};
     temperatures.clear();
     messages.clear();
     semanticActions.clear();
+    activeRunId.clear();
     output.temperatures = std::move(temperatures);
     output.messages = std::move(messages);
     output.navigation.semanticActions = std::move(semanticActions);
+    output.home.activeRunId = std::move(activeRunId);
     output.revisions = input.revisions;
     output.temperatures.reserve(input.temperatures.size());
     for (const auto& source : input.temperatures) {

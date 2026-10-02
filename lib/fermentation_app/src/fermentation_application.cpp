@@ -820,6 +820,13 @@ FermentationApplication::networkAccessPointInfo() const {
     return networkConfigurationService_->accessPointInfo();
 }
 
+std::uint64_t FermentationApplication::networkAccessPointRevision()
+    const noexcept {
+    return networkConfigurationService_ == nullptr
+               ? 0U
+               : networkConfigurationService_->accessPointInfoRevision();
+}
+
 device_platform::NetworkMode FermentationApplication::networkMode()
     const noexcept {
     if (networkConfigurationService_ == nullptr) {

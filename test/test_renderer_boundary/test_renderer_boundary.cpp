@@ -709,20 +709,17 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         device_platform::DeviceUiNetworkStatus::Unavailable, {},
         changedAccessPoint);
     {
+        // The key carries the lifecycle's access-point change revision, never
+        // the credentials themselves.
         fermentation::FermentationUiSnapshot keySnapshot;
         fermentation::FermentationTouchWorkspace keyWorkspace;
         keyWorkspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
-        TEST_ASSERT_FALSE(
-            keyFor(
-                keySnapshot, keyWorkspace, "en", std::nullopt,
-                device_platform::DeviceUiNetworkStatus::Unavailable,
-                std::nullopt,
-                fermentation::main_ui::accessPointFingerprint(accessPoint)) ==
-            keyFor(keySnapshot, keyWorkspace, "en", std::nullopt,
-                   device_platform::DeviceUiNetworkStatus::Unavailable,
-                   std::nullopt,
-                   fermentation::main_ui::accessPointFingerprint(
-                       changedAccessPoint)));
+        const auto network =
+            device_platform::DeviceUiNetworkStatus::Unavailable;
+        TEST_ASSERT_FALSE(keyFor(keySnapshot, keyWorkspace, "en", std::nullopt,
+                                 network, std::nullopt, 1U) ==
+                          keyFor(keySnapshot, keyWorkspace, "en", std::nullopt,
+                                 network, std::nullopt, 2U));
     }
     const auto changedQr =
         std::find_if(changedScreen.commands.begin(),

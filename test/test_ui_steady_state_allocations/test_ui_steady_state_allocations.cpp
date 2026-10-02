@@ -9,8 +9,12 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_presentation_cache.hpp"
 #include "fermentation_ui_text.hpp"
+#include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "simulated_persistent_state_store.hpp"
+
+#include "virtual_time_source.hpp"
 
 #include "../../main/fermentation_ui_press_dispatcher.hpp"
 
@@ -128,21 +132,20 @@ struct AppFixture {
     }
 
     // One loop step exactly as updateProductUi() does it without a touch
-    // contact. `accessPointFingerprint` is evaluated on HeaderNetwork only.
+    // contact.
     bool step(
         std::optional<device_platform::DeviceUiTarget> pressed = std::nullopt,
         device_platform::DeviceUiNetworkStatus network =
             device_platform::DeviceUiNetworkStatus::Connected,
         std::optional<std::int64_t> utc = 1'700'000'000LL,
-        std::uint64_t apFingerprint = 0U, const char* locale = nullptr) {
+        const char* locale = nullptr) {
         if (locale != nullptr) {
             initialLocale = device_platform::LocaleId{locale};
         }
         gate.beginStep(application,
                        workspace.page() == FermentationUiPage::HeaderNetwork);
         return gate.renderRequired(application, workspace, initialLocale,
-                                   pressed, network, utc,
-                                   [apFingerprint] { return apFingerprint; });
+                                   pressed, network, utc);
     }
 
     // Warm up and mark the current state as rendered.
@@ -192,36 +195,222 @@ void test_unchanged_state_builds_no_render_and_allocates_nothing() {
     TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
 }
 
-void test_unchanged_header_network_page_allocates_nothing_in_the_gate() {
-    // HeaderNetwork evicts the presentation copy; with the by-value
-    // access-point data supplied as a precomputed value the rest of the gate
-    // is allocation-free. (The firmware additionally copies the access-point
-    // strings on this page, see the S4 evidence.)
-    AppFixture fixture;
-    fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
-    for (int loop = 0; loop < 3; ++loop) {
-        if (fixture.step(std::nullopt,
-                         device_platform::DeviceUiNetworkStatus::Connected,
-                         1'700'000'000LL, 42U)) {
-            fixture.gate.markRendered();
-        }
+class MockHttpServerLifecycle final
+    : public device_platform::IHttpServerLifecycle {
+   public:
+    [[nodiscard]] bool start(device_platform::IHttpRouteSink&) override {
+        running_ = true;
+        return true;
     }
-    TEST_ASSERT_FALSE(fixture.step(
-        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, 42U));
+    [[nodiscard]] bool stop() override {
+        running_ = false;
+        return true;
+    }
+    [[nodiscard]] bool running() const override { return running_; }
+
+   private:
+    bool running_{false};
+};
+
+// The real firmware wiring: an application with a network lifecycle whose
+// SoftAP data (long, non-small-string SSID and password) is available, shown
+// on HeaderNetwork.
+struct NetworkFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    FermentationTouchWorkspace workspace;
+    UiRenderGate gate;
+    device_platform::LocaleId initialLocale{"en"};
+
+    NetworkFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_TRUE(
+            application.applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                .status == NetworkConfigurationStatus::Applied);
+        workspace.setPage(FermentationUiPage::HeaderNetwork);
+        const auto info = application.networkAccessPointInfo();
+        TEST_ASSERT_TRUE(info.has_value());
+        // Beyond the small-string buffer, so a copy really allocates.
+        TEST_ASSERT_TRUE(info->ssid.size() > 15U);
+        TEST_ASSERT_TRUE(info->password.size() > 15U);
+    }
+
+    bool step() {
+        gate.beginStep(application,
+                       workspace.page() == FermentationUiPage::HeaderNetwork);
+        return gate.renderRequired(
+            application, workspace, initialLocale, std::nullopt,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    }
+    void settle() {
+        for (int loop = 0; loop < 3; ++loop) {
+            if (step()) {
+                gate.markRendered();
+            }
+        }
+        TEST_ASSERT_FALSE(step());
+    }
+    void restartAccessPoint() {
+        TEST_ASSERT_TRUE(
+            network.start(device_platform::NetworkMode::AP_ONLY, std::nullopt)
+                .status == device_platform::NetworkOperationStatus::Applied);
+    }
+    void setCredentials(const std::string& ssid, const std::string& password) {
+        TEST_ASSERT_TRUE(
+            network.setAccessPointCredentials(ssid, password).status ==
+            device_platform::NetworkOperationStatus::Applied);
+    }
+};
+
+void test_header_network_with_real_access_point_data_allocates_nothing() {
+    NetworkFixture fixture;
+    fixture.settle();
     TEST_ASSERT_FALSE(fixture.gate.presentation().hasCopy());
 
     startCounting();
     bool redraw = false;
     for (int loop = 0; loop < 100; ++loop) {
-        redraw = redraw ||
-                 fixture.step(std::nullopt,
-                              device_platform::DeviceUiNetworkStatus::Connected,
-                              1'700'000'000LL, 42U);
+        redraw = redraw || fixture.step();
     }
     const auto allocations = stopCounting();
     TEST_ASSERT_FALSE(redraw);
     TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
+void test_control_by_value_access_point_fetch_allocates() {
+    NetworkFixture fixture;
+    fixture.settle();
+    startCounting();
+    {
+        const auto info = fixture.application.networkAccessPointInfo();
+        static_cast<void>(info);
+    }
+    TEST_ASSERT_TRUE(stopCounting() > 0U);
+}
+
+void test_access_point_changes_bump_the_revision_and_request_redraw() {
+    NetworkFixture fixture;
+    fixture.settle();
+    const auto start = fixture.application.networkAccessPointRevision();
+
+    // Starting again with unchanged data must not change the revision.
+    fixture.restartAccessPoint();
+    TEST_ASSERT_EQUAL_UINT64(start,
+                             fixture.application.networkAccessPointRevision());
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // SSID change.
+    fixture.setCredentials("Fermentation-Setup-ssid-changed",
+                           fixture.network.accessPointPassword());
+    fixture.restartAccessPoint();
+    const auto afterSsid = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterSsid != start);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Password change.
+    fixture.setCredentials(fixture.network.accessPointSsid(),
+                           "rotated-password-0123456789");
+    fixture.restartAccessPoint();
+    const auto afterPassword = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterPassword != afterSsid);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // IPv4 change.
+    fixture.network.setAccessPointAddress(0x0204A8C0U);
+    fixture.restartAccessPoint();
+    const auto afterAddress = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterAddress != afterPassword);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Cleared (presence).
+    static_cast<void>(fixture.network.stop());
+    const auto afterClear = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterClear != afterAddress);
+    TEST_ASSERT_FALSE(fixture.application.networkAccessPointInfo().has_value());
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Set again.
+    fixture.restartAccessPoint();
+    TEST_ASSERT_TRUE(fixture.application.networkAccessPointRevision() !=
+                     afterClear);
+    TEST_ASSERT_TRUE(fixture.step());
+}
+
+void test_redraw_after_access_point_change_still_shows_the_real_data() {
+    NetworkFixture fixture;
+    fixture.settle();
+    fixture.setCredentials("Fermentation-Setup-ssid-changed",
+                           "rotated-password-0123456789");
+    fixture.restartAccessPoint();
+    TEST_ASSERT_TRUE(fixture.step());
+    // The redraw path fetches the actual data and the screen carries it,
+    // including the Wi-Fi QR payload.
+    const auto info = fixture.application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(info.has_value());
+    TEST_ASSERT_EQUAL_STRING("Fermentation-Setup-ssid-changed",
+                             info->ssid.c_str());
+    const auto packs = makeFermentationUiTextPacks();
+    const auto screen = makeRepresentativeScreen(
+        fixture.gate.snapshot(), fixture.workspace, packs,
+        fixture.initialLocale, std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Connected,
+        {1'700'000'000LL, {}}, info);
+    bool qrWithNewData = false;
+    for (const auto& command : screen.commands) {
+        if (command.kind == ScreenDrawKind::QrCode &&
+            command.text.find("rotated-password-0123456789") !=
+                std::string::npos &&
+            command.text.find("Fermentation-Setup-ssid-changed") !=
+                std::string::npos) {
+            qrWithNewData = true;
+        }
+    }
+    TEST_ASSERT_TRUE(qrWithNewData);
+}
+
+void test_active_run_with_long_run_id_allocates_nothing() {
+    AppFixture fixture;
+    auto& state =
+        FermentationApplicationTestAccess::runtimeState(fixture.application);
+    // R1 allows run ids up to 48 bytes, beyond the small-string buffer.
+    state.activeRunId = std::string(48U, 'r');
+    fixture.settle();
+    TEST_ASSERT_EQUAL_UINT32(
+        48U, static_cast<std::uint32_t>(
+                 fixture.gate.snapshot().home.activeRunId.size()));
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    TEST_ASSERT_TRUE(equalFermentationUiSemanticSnapshot(
+        fixture.gate.snapshot(), fixture.application.uiSnapshot()));
+
+    // A different run id is a real visible-state change.
+    state.activeRunId = std::string(40U, 's');
+    state.runRevision += 1U;
+    TEST_ASSERT_TRUE(fixture.step());
 }
 
 void test_recycled_snapshot_equals_a_fresh_snapshot() {
@@ -275,7 +464,7 @@ void test_locale_change_requests_redraw_on_network_page() {
     TEST_ASSERT_FALSE(fixture.step());
     TEST_ASSERT_TRUE(fixture.step(
         std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, 0U, "de"));
+        1'700'000'000LL, "de"));
 }
 
 void test_pressed_target_change_requests_redraw() {
@@ -314,24 +503,6 @@ void test_clock_minute_change_requests_redraw_but_seconds_do_not() {
     TEST_ASSERT_TRUE(fixture.step(
         std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
         std::nullopt));
-}
-
-void test_access_point_identity_change_requests_redraw_on_network_page() {
-    AppFixture fixture;
-    fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
-    for (int loop = 0; loop < 3; ++loop) {
-        if (fixture.step(std::nullopt,
-                         device_platform::DeviceUiNetworkStatus::Connected,
-                         1'700'000'000LL, 1U)) {
-            fixture.gate.markRendered();
-        }
-    }
-    TEST_ASSERT_FALSE(fixture.step(
-        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, 1U));
-    TEST_ASSERT_TRUE(fixture.step(
-        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, 2U));
 }
 
 void test_catalog_revision_adoption_changes_the_key() {
@@ -419,7 +590,11 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_control_counter_detects_allocations_of_the_former_pipeline);
     RUN_TEST(test_unchanged_state_builds_no_render_and_allocates_nothing);
-    RUN_TEST(test_unchanged_header_network_page_allocates_nothing_in_the_gate);
+    RUN_TEST(test_header_network_with_real_access_point_data_allocates_nothing);
+    RUN_TEST(test_control_by_value_access_point_fetch_allocates);
+    RUN_TEST(test_access_point_changes_bump_the_revision_and_request_redraw);
+    RUN_TEST(test_redraw_after_access_point_change_still_shows_the_real_data);
+    RUN_TEST(test_active_run_with_long_run_id_allocates_nothing);
     RUN_TEST(test_recycled_snapshot_equals_a_fresh_snapshot);
     RUN_TEST(test_application_state_change_requests_redraw);
     RUN_TEST(test_workspace_page_change_requests_redraw);
@@ -427,7 +602,6 @@ int main() {
     RUN_TEST(test_pressed_target_change_requests_redraw);
     RUN_TEST(test_network_status_change_requests_redraw);
     RUN_TEST(test_clock_minute_change_requests_redraw_but_seconds_do_not);
-    RUN_TEST(test_access_point_identity_change_requests_redraw_on_network_page);
     RUN_TEST(test_catalog_revision_adoption_changes_the_key);
     RUN_TEST(test_every_workspace_mutator_bumps_the_render_revision);
     return UNITY_END();

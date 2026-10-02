@@ -105,8 +105,10 @@ struct RepresentativeScreen {
 //    while no valid copy exists (HeaderNetwork, unavailable fill);
 //  - locale: hash of the locale actually used for drawing;
 //  - pressed target (kind and slot), network status, trusted UTC at display
-//    resolution (the clock text is HH:MM from UTC, minute granularity) and an
-//    identity of the access-point data (hash; only present on HeaderNetwork).
+//    resolution (the clock text is HH:MM from UTC, minute granularity) and the
+//    network lifecycle's access-point change revision (only on HeaderNetwork;
+//    it changes exactly when SSID, password or IPv4 address change or the
+//    data is set or cleared, and is read without copying the secrets).
 struct ScreenRenderKey {
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
     std::uint32_t workspaceRevision{0U};
@@ -120,7 +122,7 @@ struct ScreenRenderKey {
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};
     std::optional<std::int64_t> utcMinute;
-    std::uint64_t accessPointFingerprint{0U};
+    std::uint64_t accessPointRevision{0U};
 
     friend bool operator==(const ScreenRenderKey& left,
                            const ScreenRenderKey& right) noexcept {
@@ -134,7 +136,7 @@ struct ScreenRenderKey {
                left.pressedSlotIndex == right.pressedSlotIndex &&
                left.networkStatus == right.networkStatus &&
                left.utcMinute == right.utcMinute &&
-               left.accessPointFingerprint == right.accessPointFingerprint;
+               left.accessPointRevision == right.accessPointRevision;
     }
     friend bool operator!=(const ScreenRenderKey& left,
                            const ScreenRenderKey& right) noexcept {
@@ -145,12 +147,6 @@ struct ScreenRenderKey {
 [[nodiscard]] std::uint64_t localeFingerprint(
     const device_platform::LocaleId& locale) noexcept;
 
-// 0 without access-point data; otherwise a non-zero hash of SSID, password
-// and IPv4 address. The SoftAP credentials are never part of the key itself.
-[[nodiscard]] std::uint64_t accessPointFingerprint(
-    const std::optional<device_platform::NetworkAccessPointInfo>&
-        accessPoint) noexcept;
-
 [[nodiscard]] ScreenRenderKey makeScreenRenderKey(
     const FermentationUiSnapshot& snapshot,
     const FermentationTouchWorkspace& workspace,
@@ -159,7 +155,7 @@ struct ScreenRenderKey {
     const FermentationUiPresentationCache& presentation,
     device_platform::DeviceUiNetworkStatus networkStatus,
     std::optional<std::int64_t> trustedUtc,
-    std::uint64_t accessPointFingerprint) noexcept;
+    std::uint64_t accessPointRevision) noexcept;
 
 [[nodiscard]] std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,

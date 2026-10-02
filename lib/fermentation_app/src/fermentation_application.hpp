@@ -84,6 +84,9 @@ class FermentationApplication {
     // these credentials.
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     networkAccessPointInfo() const;
+    // Change identity of networkAccessPointInfo() without copying the
+    // secret-bearing strings (see INetworkLifecycle::accessPointInfoRevision).
+    [[nodiscard]] std::uint64_t networkAccessPointRevision() const noexcept;
     // Secret-free canonical mode input for the renderer-independent UI view.
     [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
     // Sole application-owned runtime evidence handoff. Producers such as

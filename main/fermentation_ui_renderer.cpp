@@ -582,15 +582,6 @@ std::uint64_t localeFingerprint(
     return hash;
 }
 
-std::uint64_t accessPointFingerprint(
-    const std::optional<device_platform::NetworkAccessPointInfo>&
-        accessPoint) noexcept {
-    if (!accessPoint.has_value()) {
-        return 0U;
-    }
-    return networkInfoFingerprint(*accessPoint) | 1U;
-}
-
 ScreenRenderKey makeScreenRenderKey(
     const FermentationUiSnapshot& snapshot,
     const FermentationTouchWorkspace& workspace,
@@ -599,7 +590,7 @@ ScreenRenderKey makeScreenRenderKey(
     const FermentationUiPresentationCache& presentation,
     device_platform::DeviceUiNetworkStatus networkStatus,
     std::optional<std::int64_t> trustedUtc,
-    std::uint64_t accessPointFingerprintValue) noexcept {
+    std::uint64_t accessPointRevision) noexcept {
     ScreenRenderKey key;
     key.refreshRevision = snapshot.refreshRevision;
     key.workspaceRevision = workspace.renderRevision();
@@ -615,7 +606,7 @@ ScreenRenderKey makeScreenRenderKey(
     if (trustedUtc.has_value()) {
         key.utcMinute = *trustedUtc / 60;
     }
-    key.accessPointFingerprint = accessPointFingerprintValue;
+    key.accessPointRevision = accessPointRevision;
     return key;
 }
 

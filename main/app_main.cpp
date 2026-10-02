@@ -507,10 +507,7 @@ bool updateProductUi(
     const auto trustedUtc = timeSource.unixTimeSeconds();
     const bool redrawRequired = renderGate.renderRequired(
         application, uiWorkspace, initialDisplayLocale, touchTick.pressedTarget,
-        loopNetworkStatus, trustedUtc, [&application]() {
-            return fermentation::main_ui::accessPointFingerprint(
-                application.networkAccessPointInfo());
-        });
+        loopNetworkStatus, trustedUtc);
     if (redrawRequired) {
         // Only a real visible change reaches the screen model and the LVGL
         // update; ProductiveLvglRenderer::render() builds both.

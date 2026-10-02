@@ -95,10 +95,9 @@ struct WorkspaceTouchTickResult {
 // firmware and the host tests: recycled snapshot, the one presentation copy
 // (S3) and the pre-built ScreenRenderKey. In an unchanged visible state none
 // of these steps allocates after warm-up, and no screen model is built.
-// Residual allocations are event-bound or state-dependent: a changed
-// snapshot/catalog, messages or long text keys in the snapshot, and, while
-// HeaderNetwork is shown, the by-value access-point data used for its identity
-// (see the S4 evidence).
+// Residual allocations are event-bound: a changed snapshot, catalog or locale,
+// the by-value access-point fetch for an actual redraw, and messages or text
+// keys beyond the buffers already grown.
 class UiRenderGate {
    public:
     // 1. Refresh the recycled snapshot and the presentation copy. The
@@ -113,16 +112,15 @@ class UiRenderGate {
     // 2. After touch handling: refresh the presentation copy for the page
     //    that will be drawn, build the key and compare it with the last
     //    successfully rendered key. Returns true if a redraw is required.
-    //    `accessPointFingerprint` is only evaluated on HeaderNetwork.
-    template <typename AccessPointFingerprint>
+    //    The access-point change revision is only read on HeaderNetwork and
+    //    never copies SSID or password.
     [[nodiscard]] bool renderRequired(
         FermentationApplication& application,
         const FermentationTouchWorkspace& workspace,
         const device_platform::LocaleId& initialDisplayLocale,
         std::optional<device_platform::DeviceUiTarget> pressedTarget,
         device_platform::DeviceUiNetworkStatus networkStatus,
-        std::optional<std::int64_t> trustedUtc,
-        AccessPointFingerprint&& accessPointFingerprint) {
+        std::optional<std::int64_t> trustedUtc) {
         const bool networkPage =
             workspace.page() == FermentationUiPage::HeaderNetwork;
         presentation_.update(networkPage, snapshot_.revisions, [&application] {
@@ -133,7 +131,8 @@ class UiRenderGate {
         pendingKey_ = makeScreenRenderKey(
             snapshot_, workspace, locale, pressedTarget, presentation_,
             networkStatus, trustedUtc,
-            networkPage ? accessPointFingerprint() : std::uint64_t{0U});
+            networkPage ? application.networkAccessPointRevision()
+                        : std::uint64_t{0U});
         return !renderedKey_.has_value() || *renderedKey_ != *pendingKey_;
     }
 

@@ -43,6 +43,8 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] device_platform::NetworkStatus status() const override;
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     accessPointInfo() const override;
+    [[nodiscard]] std::uint64_t accessPointInfoRevision()
+        const noexcept override;
     void poll() override;
 
    private:
@@ -64,7 +66,12 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
 
     EspIdfNetworkLifecycleConfig config_;
     device_platform::NetworkStatus status_;
+    // Both are guarded by stateMutex_; every write goes through
+    // setAccessPointInfoLocked() so the revision tracks the data exactly.
     std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
+    std::uint64_t accessPointInfoRevision_{0U};
+    void setAccessPointInfoLocked(
+        std::optional<device_platform::NetworkAccessPointInfo> info);
     bool initialized_{false};
     bool wifiInitialized_{false};
     bool mdnsInitialized_{false};
