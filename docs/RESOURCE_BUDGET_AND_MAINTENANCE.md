@@ -138,6 +138,20 @@ aber nur innerhalb klarer Grenzen:
 Ein Web- oder Exportfehler darf die lokale Regelung und Sicherheitslogik nicht
 beeintraechtigen.
 
+### Hauptschleife und lokale UI
+
+Im hochfrequenten Main-/UI-Pfad erfolgt nach dem Warm-up keine wiederholte
+dynamische Allokation ohne sichtbare Zustandsaenderung. Ereignisbezogene
+Allokationen (Seiten-, Sprach-, Konfigurations- oder Netzwerkmoduswechsel)
+bleiben zulaessig, wenn sie begrenzt sind. Ein Zaehler fuer C++-`operator new`
+im Host-Test belegt nur die getesteten C++-Pfade; `malloc` aus C-, ESP-IDF-,
+LVGL- oder cJSON-Code und LVGL-Poolallokationen benoetigen eine
+ESP32-Laufzeitmessung. Statische `idf.py size`-Werte belegen keinen
+Laufzeit-Heap und keine Fragmentierung.
+
+Request-Handler gehoeren nicht zu dieser Regel; fuer sie gilt weiterhin
+"Web, JSON und Exporte" mit begrenzter request-lokaler Allokation.
+
 ## Proaktive Speicherbereinigung
 
 Die bereits festgelegten Aufbewahrungsregeln werden aktiv durchgesetzt. Dadurch
