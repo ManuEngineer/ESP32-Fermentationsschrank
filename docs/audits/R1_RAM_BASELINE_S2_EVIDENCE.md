@@ -74,6 +74,26 @@ identisch für die hier genannten Werte):
 
 Statisches DRAM belegt keinen Laufzeit-Heap.
 
+### Geflashter Stand für die Baseline
+
+Die Quell-SHA wird beim CMake-Lauf aus `git rev-parse HEAD` eingebettet. Der
+Flash (`idf.py flash`) hat das Release-Profil deshalb auf dem damaligen
+Branch-HEAD `0de006a7d4d7d9f93a467df1ce0289e92f7ae603` neu gebaut; die
+Firmware meldet entsprechend `source git sha: 0de006a7…`. Der Unterschied zu
+`5bfc9bc0…` besteht ausschließlich aus Dokumentation: `git diff 5bfc9bc HEAD`
+ändert nur `docs/ROADMAP.md` und diese Evidenzdatei, keine Buildeingabe
+(`main`, `lib`, `src`, `include`, `CMakeLists.txt`, `sdkconfig.defaults*`,
+`partitions`, `platformio.ini`, `dependencies.lock`: leerer Diff). Der
+S2-Code-Stand ist damit unverändert `5bfc9bc`.
+
+| Profil | App-BIN SHA-256 (geflasht) | ELF SHA-256 | sdkconfig SHA-256 (unverändert) |
+|---|---|---|---|
+| esp32_release | `dc593a9de2457820bb87c96ab0bab318af3535ba89800a71baf522e7d9a51fc3` | `364cf80d22e67ede38a4d7a1e0e7cf5b6a07fb2882ac73e64080a14b0782b3fb` | `6edbf61555023d42da33cdf212fbd1b6030b5af3c4b1203f5440cd6055b8e09f` |
+
+Die Hashes der Tabelle oben (`89cc8e96…`, `fd098b6f…`) gehören zum Build direkt
+auf `5bfc9bc`; sie unterscheiden sich nur durch die eingebettete SHA und die
+davon abhängigen Metadaten. `esp32_bringup` wurde nicht neu gebaut.
+
 ## 3. Historische Vorabmessung auf `122c33e` (keine Baseline)
 
 Gerät: ESP32-Devboard, MAC `20:50:0d:1b:2f:34`, `/dev/ttyUSB0`. Der Owner hat
