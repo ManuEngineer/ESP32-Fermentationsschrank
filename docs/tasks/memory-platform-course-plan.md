@@ -1,178 +1,416 @@
-# Kurskorrektur: RAM-Budget, Hot-Path-Regeln und Hardware-Profile
+# R1-RAM-Stabilisierung ESP32-WROOM-32E ohne PSRAM
 
-Status: Vorschlag zur Ownerfreigabe (Plan-PR, keine Produktionscodeaenderung)
+Status: Planvorschlag zur Ownerfreigabe (Plan-PR #174, keine Produktionscodeänderung)
 Datum: 2026-10-02
-Bezug: PR #170 (Retest 2026-10-01/02), ADR-008, ADR-013, ADR-019
-Neue ADR-Vorschlaege: `docs/ADR-020_RAM_BUDGET_UND_HOT_PATH.md`,
-`docs/ADR-021_HARDWARE_PROFILE_PSRAM.md`
+Plan-Basis: `origin/main` `7e3948652453ae97eede07956af466ef6dddb602`
+Konsolidiert aus zwei Korrekturaufträgen zu PR-#174-HEAD
+`52825fbfba22d8a0d79ea3d9f7b630d8d7ba6017` („PR #174 Plan korrigieren“ und
+„Korrekturauftrag zum Optimierungsplan“, Blocker B1–B4).
 
-## 1. Anlass
+## 1. Ziel und Nicht-Ziele
 
-Der freie Heap ist ueber mehrere Issues unbemerkt von 231 KB auf 12 KB
-gefallen (Minimum 2,5 KB, groesster Block 5 KB). Der Abort in
-`main/fermentation_ui_renderer.cpp:393` (`makeRepresentativeScreen`) ist ein
-Out-of-Memory beim Bildaufbau, kein Fehler der Web-/Auth-Logik aus PR #170.
+Ziel ist ein messungsgetriebener Nachweis, dass die vorhandene R1-Hardware
+(ESP32-WROOM-32E, 4 MB Flash, ohne PSRAM) den R1-Funktionsumfang mit
+begründeter RAM-Reserve trägt, und die Behebung der dafür nachweislich
+nötigen, kleinsten Ursachen.
 
-| Ausbaustand | Freier Heap | Evidenz |
-|---|---|---|
-| Nur App, ohne UI und WLAN (ESP-IDF 6.1) | 231 KB | `docs/audits/ISSUE_159_ESP_IDF_6_1_UPGRADE_EVIDENCE.md` |
-| + LVGL-UI, ohne WLAN | 89 KB | `docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_READABLE.txt` |
-| + WLAN, mDNS, HTTP, Web/Auth (PR #170) | 12 KB, Min. 2,5 KB | `docs/ROADMAP.md`, Retest 2026-10-02 |
-
-Die Hardware (ESP32-WROOM-32E, ohne PSRAM) ist nicht zu klein. Es fehlt ein
-gefuehrtes RAM-Budget mit automatischem Gate, und einige Muster verbrauchen
-unnoetig Speicher. Da noch kein Geraet im Feld ist, werden jetzt die Regeln
-korrigiert statt Symptome geflickt.
-
-## 2. Ziel
-
-- Die Plattform laeuft auf dem kleinsten Hardware-Profil (WROOM-32E ohne
-  PSRAM) mit Reserve.
-- Dieselbe App laeuft spaeter ohne Codeaenderung auf einem ESP32-S3 mit PSRAM;
-  nur das Hardware-Profil aendert Kapazitaeten und Speicherplatzierung.
-- RAM-Verbrauch wird automatisch geprueft, nicht nachtraeglich dokumentiert.
-
-Nicht-Ziel: In diesem PR wird kein Produktionscode geaendert. Jede Etappe
-(Abschnitt 7) erhaelt einen eigenen kleinen PR.
-
-## 3. Leitprinzipien
-
-1. Referenzhardware ist das kleinste Profil.
-2. Jedes Subsystem besitzt ein RAM-Budget in KB.
-3. Allokieren beim Start, nicht im Betrieb: im Ruhezustand null
-   Heap-Allokationen in Hauptschleife, Render-Pfad und Request-Handlern.
-4. Feste Kapazitaeten aus dem Profil statt unbegrenztem Wachstum.
-5. Lesen statt kopieren (Referenz, Lease, `std::string_view`).
-6. Messen ist ein Gate.
-7. Die Plattform entscheidet ueber die Speicherplatzierung (intern, DMA,
-   PSRAM); Apps fordern nur Groesse und Zweck an.
-
-## 4. RAM-Budget WROOM-32E (Planungswerte)
-
-Basis: ca. 304 KB freier Heap nach dem Boot ohne Applikationskomposition.
-
-| Subsystem | Ist heute | Budget | Wichtigste Hebel |
-|---|---|---|---|
-| IDF-Kern + App-Domaene | ca. 73 KB (gemessen) | 75 KB | keine grossen Kopien, Stacks messen |
-| UI (LVGL-Pool, LVGL-Task, Zeichenpuffer, UI-Modell, Textpacks) | ca. 142 KB (gemessen) | 75 KB | Pool messen/verkleinern, Retained Widgets, geteilte Styles, Textpacks im Flash |
-| WLAN + lwIP + mDNS + SNTP | ca. 60 KB (geschaetzt) | 45 KB | RX/TX-Puffer, AMPDU aus, mDNS optional |
-| Web (httpd, Sockets, Sessions, JSON) | ca. 17 KB (geschaetzt) | 20 KB Spitze | 3 Sockets, Streaming, feste Puffer |
-| Reserve im Ruhezustand | 12 KB | mind. 60 KB | |
-
-Harte Laufzeitgrenzen: unter Last nie unter 40 KB freiem Heap; groesster
-freier Block mindestens 16 KB. WLAN/Web-Aufteilung wird in Etappe E0 gemessen.
-
-Durchsetzung:
-
-- CI: Skript wertet `idf.py size --format json` aus; Build scheitert bei
-  Ueberschreitung des statischen DRAM-Grenzwerts pro Profil.
-- Host-Test: zaehlender `operator new` im nativen Test; `update()` und
-  `render()` duerfen nach dem Aufwaermen nicht allokieren.
-- Hardware: festes Smoke-Skript mit Messpunkten (Boot, nach UI-Init, nach
-  Netzwerkstart, Ruhezustand 60 s, Worst Case: 20 Moduswechsel + 4 Sessions +
-  Seitenwechsel). Log-Datei haengt am PR.
-
-## 5. Technische Massnahmen
-
-### 5.1 UI (Retained UI)
-
-| Heute | Kuenftig |
-|---|---|
-| Alle 10 ms kopiert `uiPresentationSource()` den ganzen ProgramCatalog | Katalog nur auf Programmseiten, per Referenz/Lease |
-| Alle 10 ms zweimal `makeRepresentativeScreen()` (Dispatcher + Renderer), Vektor mit `std::string` | Billiger Render-Key aus Eingaben zuerst; Modell nur bei Aenderung |
-| Theme- und Build-Catalog in jedem Frame neu gebaut | Einmal als `constexpr`/`static const` |
-| `lv_obj_clean()` + kompletter Neuaufbau bei jeder Aenderung | Widget-Baum pro Seite einmal; danach nur Text-/Zustandsupdates |
-| Fuenf lokale Styles pro Objekt | Geteilte `static lv_style_t` pro Theme-Token |
-| Textpacks als `std::vector<TextPackManifest>` mit `std::string` | Konstante Tabellen im Flash |
-| Hauptschleife alle 10 ms | UI-Takt 30-50 ms |
-
-Weitere Regeln: Screen-Modell bleibt rendererunabhaengig (ADR-019), aber mit
-fester Kapazitaet (`std::array` + Zaehler). LVGL-Pool mit `lv_mem_monitor()`
-messen und pro Profil festlegen (WROOM Startwert 32 KB). Ein Zeichenpuffer
-320x10. Kein doppelter DMA-Puffer zwischen Adapter und LVGL. Netzwerkmodus-
-Commit als asynchrones Kommando an den Netzwerk-Lifecycle; danach
-Hauptstack zurueck auf 16 KB pruefen.
-
-### 5.2 Netzwerk und Web
-
-Startwerte fuer das WROOM-Profil (danach messen):
+Reihenfolge:
 
 ```text
-CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
-CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
-CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
-CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
-CONFIG_LWIP_MAX_SOCKETS=8
+Baseline auf aktuellem Stand
+-> kleinste Hotspot-Korrekturen, je einzeln neu gemessen
+-> Re-Messung und begründeter System-Mindestabstand
+-> WLAN-Tuning nur falls nötig
+-> repräsentativer Hardware-Lasttest
+-> erst bei verbleibender Lücke: struktureller UI-Umbau (eigene Planrevision)
 ```
 
-- httpd: `max_open_sockets = 3`, `lru_purge_enable = true`, Task-Stack gemessen.
-- Antworten per `httpd_resp_send_chunk()` aus festem Puffer;
-  `cJSON_PrintPreallocated()` statt dynamischer Strings.
-- Statische Web-Assets gz-komprimiert blockweise aus dem Flash.
-- mDNS pro Profil schaltbar; im WROOM-Profil aus, solange R1 es nicht braucht
-  (Ownerentscheidung).
-- AP/Heimnetz-Wechsel prueft vorher die Reserve und lehnt mit Meldung ab,
-  statt abzustuerzen.
+Nicht-Ziele dieses Plans:
 
-### 5.3 Diagnose
+- keine neuen ADRs und keine Parallelverträge zu
+  `docs/ENGINEERING_PRINCIPLES.md`, `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`
+  und ADR-008;
+- kein ESP32-S3-/PSRAM-Profil, kein `esp32s3`-Build, keine generische
+  Speicherplatzierungsschnittstelle;
+- keine harten Subsystembudgets vor der Baseline;
+- keine Asynchronisierung des Netzwerkmodus-Commits und keine
+  Main-Stack-Reduktion als Pflichtschritt;
+- keine Flash-Core-Dump-Partition und keine Partitionsänderung;
+- keine Prozess- oder Governanceänderung (PR-Größenlimit, RAM-Schätzpflicht,
+  neue AGENTS-Regeln, Umbau der PASS-Key-/Gate-Governance);
+- keine Merge-, Rebase- oder Supersede-Entscheidung zu PR #170.
 
-- `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` mit 64-KB-Partition (aus `factory`,
-  sofern das App-Image laut `idf.py size` passt).
-- `heap_caps_register_failed_alloc_callback()` loggt Groesse, Caps, Task.
-- Ressourcen-Log: interner und DMA-Heap getrennt, LVGL-Pool, HWM aller Tasks.
-- Dev-Profil: `CONFIG_HEAP_TASK_TRACKING=y`.
+## 2. Verifizierte Ausgangslage
 
-## 6. Prozess
+### 2.1 Historische Messanker (nicht vergleichbar)
 
-- Roadmap: eine Zeile pro Issue (Status, naechster Schritt, Blocker);
-  SHAs und Einzelnachweise in PR-Beschreibung bzw. CI-Log.
-- Kleine PRs: ein Slice pro PR, Richtwert unter 1500 geaenderten Zeilen ohne
-  Tests.
-- Automatische Gates (Budget-Skript, Null-Allokations-Test,
-  Architekturgrenzen, Smoke-Skript) ersetzen manuelle `*_PASS`-Schluessel.
-- Jeder Plan und jede PR-Beschreibung nennt die geschaetzte RAM-Wirkung in KB.
-- Speicherregeln stehen als kurzer Block in `AGENTS.md`.
+Die folgenden Werte stammen aus verschiedenen Firmware-, Konfigurations- und
+Integrationsständen. Ihre Differenzen sind **keine** isolierte Messung eines
+Subsystems (insbesondere sind 231444 B − 89036 B keine gemessenen 142 KB
+UI-Verbrauch).
 
-## 7. Etappen
-
-| Etappe | Inhalt | Gate |
+| Wert | Stand | Quelle |
 |---|---|---|
-| E0 Messbasis | Core Dump, Failed-Alloc-Hook, erweitertes Ressourcen-Log, Budget-Skript (nur Bericht), Baseline-Messung | Ist-Spalte in Abschnitt 4 gemessen statt geschaetzt |
-| E1 Regeln verankern | ADR-020/021 akzeptiert, AGENTS.md-Block, Null-Allokations-Testharness, Budget-Skript als CI-Gate | CI scheitert bei Budgetverletzung |
-| E2 UI-Umbau | Retained Widgets, geteilte Styles, statische Kataloge, Textpacks im Flash, LVGL-Pool pro Profil | UI <= 75 KB; 0 Allokationen im Ruhezustand |
-| E3 Netzwerk-Profil | WLAN-Kconfig, httpd-Sockets, mDNS-Entscheid, asynchroner Moduswechsel | Netz <= 45 KB; 20 Moduswechsel ohne Reset |
-| E4 PR #170 abschliessen | Auf neuer Basis rebasen, Streaming-Antworten, Provisionierungspfad | 4 Sessions unter Last, Min. Heap >= 40 KB |
-| E5 S3-Profil vorbereiten | Profil-Layering der sdkconfig, Platzierungsschnittstelle | `esp32s3`-Build in CI gruen (ohne Hardware) |
+| `free_heap_bytes=304764` | Issue-#74-Stand, vor ESP-IDF 6.1 | `docs/tasks/issue-74-implementation-plan.md:366` |
+| `free_heap_bytes=231444` | Issue #159, ESP-IDF 6.1, ohne LVGL-UI und WLAN | `docs/audits/ISSUE_159_ESP_IDF_6_1_UPGRADE_EVIDENCE.md:287-288` |
+| `free_heap_bytes=89036` | Issue-#31-Text-/WLAN-Smoke `717776c` | `docs/audits/ISSUE_31_TEXT_WIFI_SMOKE_20260924_717776C_READABLE.txt:84,115` |
+| `free_heap≈12,1–12,2 kB`, `minimum_free_heap_bytes=2576`, größter Block 5120 B | PR-#170-Retest, Firmware `099ba8a981124f500cc85cd1b3e89a83a928467c`, `CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576` | kanonische PR-#170-Roadmap/Handover-Evidence; PR-#170-HEAD beim Review `6fca5ebb17afcea0056a685be04b7e2a54a8b790` |
 
-Umgang mit PR #170: offen; Ownerentscheidung zwischen (a) Merge der
-Software-Slices mit aufgeschobenem Hardware-Gate und Ressourcenabnahme in E4,
-oder (b) PR #170 haelt bis E2/E3 abgeschlossen sind.
+Die frühere Aussage „ca. 304 KB Basis, daraus 73 KB Kern+App“ ist auf aktuellem
+Stand nicht reproduzierbar belegt und gilt nur als unbestätigte Schätzung.
 
-## 8. Offene Ownerentscheidungen
+### 2.2 Belegte Fehlerbilder
 
-- [ ] ADR-020 und ADR-021 annehmen oder anpassen
-- [ ] Budgetwerte in Abschnitt 4 freigeben
-- [ ] mDNS in Release 1 ja/nein
-- [ ] Umgang mit PR #170: Variante (a) oder (b)
-- [ ] Prozessvorschlaege in Abschnitt 6 ganz, teilweise oder nicht
+- PR-#170-Retest (`099ba8a`): `abort()` nach ca. 37 s ohne Bedienung;
+  Backtrace `operator new` → `std::vector<ScreenDrawCommand>::push_back` in
+  `makeRepresentativeScreen` (`main/fermentation_ui_renderer.cpp`). Belegt ist
+  die **Absturzstelle** (fehlgeschlagene Allokation im UI). Die
+  **Gesamtsystemursache** der Heap-Erschöpfung ist nicht belegt; die
+  Web-/Auth-Komposition aus PR #170 ist dadurch weder be- noch entlastet.
+- Issue-#164-Ownertest auf Firmware `e9f1f8b` (PR-#171-Stand, später in
+  `main` gemergt; danach u. a. `722adcd` im Resource-Sampling-Kontrollfluss):
+  acht `SW_CPU_RESET`, davon sechs bei Allokationen im Netzwerkmodus-Commit
+  und zwei beim Aufbau des Netzwerkseiten-Zeichenmodells
+  (`docs/tasks/issue-164-owner-hardware-test-evidence-2026-09-29.md`).
+  Das RAM-Problem besteht damit bereits auf `main`, unabhängig von PR #170.
 
-## 9. Folgeaenderungen nach Freigabe
+### 2.3 Verifizierte Code-Hotspots auf `main`
 
-Dieser PR enthaelt bewusst nur neue Dateien. Nach Freigabe des Plans folgen
-in einem kleinen Doku-PR (bzw. als Teil von E1):
+1. `FermentationApplication::uiPresentationSource()`
+   (`lib/fermentation_app/src/fermentation_application.cpp:1021-1040`) kopiert
+   `runtime.lease.get().programCatalog()` in
+   `FermentationUiPresentationSource::programCatalog` (by value,
+   `fermentation_ui_models.hpp:132-136`). `main/app_main.cpp:396,447` ruft das
+   in jedem Schleifendurchlauf auf.
+2. `ProductiveLvglRenderer::render()`
+   (`main/fermentation_ui_lvgl_renderer.cpp:304-331`) baut
+   `makeRepresentativeScreen()` (Vektor aus `ScreenDrawCommand` mit Strings)
+   bei **jedem** Aufruf und prüft erst danach den unveränderten Render-Key.
+   Der Dispatcher (`main/fermentation_ui_press_dispatcher.cpp:100-125`) baut
+   das Modell nur bei gehaltenem Kontakt (`contactHeld`); die frühere Aussage
+   „zweimal alle 10 ms“ war falsch.
+3. Die Hauptschleife (`main/app_main.cpp:614-646`) ruft `platform.update()`,
+   `application.update()` und `updateProductUi()` im selben Takt auf und gibt
+   je Durchlauf `kCooperativeYieldTicks = 1` ab. Ein UI-Takt existiert nicht
+   getrennt.
+4. `EspIdfDisplayTouchAdapter` reserviert bei Initialisierung dauerhaft
+   `kPartialBufferPixels = 320U * 8U` Pixel DMA-Speicher
+   (`lib/device_platform_esp_idf/src/esp_idf_display_touch_adapter.cpp:29,232-233`),
+   auch wenn im Produktpfad LVGL rendert.
+5. LVGL-Port-Konfiguration (`main/fermentation_ui_lvgl_renderer.cpp:263-281`):
+   `buffer_size = 320*20`, `trans_size = 320*20`, `buff_dma = 1`,
+   `buff_spiram = 0`. Gepinnt: `espressif/esp_lvgl_port 2.9.0`,
+   `lvgl/lvgl 9.6.0~1`, ESP-IDF `6.1.0` (`dependencies.lock`).
+   `sdkconfig.defaults` setzt keinen LVGL-Allocator/-Poolwert; der effektiv
+   generierte Wert ist noch nicht dokumentiert.
+6. WLAN- und HTTP-Start erfolgen innerhalb von `application.begin()` →
+   `beginPersistent()` → `initializeNetwork()`
+   (`fermentation_application.cpp:655-705,1143`), also **vor**
+   `initializeProductUi()` (`main/app_main.cpp:590`). Der einzige Bootmesspunkt
+   `startup` (`main/app_main.cpp:603`) liegt nach allem.
 
-- ADR-020 und ADR-021 in das Register `docs/DECISIONS.md` uebernehmen.
-- Budgettabelle aus Abschnitt 4 in `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`.
-- Block "Speicherregeln" in `AGENTS.md`:
-  - Referenz ist das kleinste Hardware-Profil (WROOM-32E ohne PSRAM).
-  - Im Ruhezustand keine Heap-Allokation in Hauptschleife, Render-Pfad und
-    Request-Handlern; Allokationen nur beim Boot und bei seltenen Ereignissen.
-  - Grosse Strukturen nicht pro Aufruf kopieren (Referenz, Lease,
-    `std::string_view`).
-  - Container mit fester Kapazitaet aus dem Profil.
-  - Texte und Tabellen als Konstanten im Flash.
-  - Keine grossen Objekte auf dem Stack; Stackwerte nur gemessen.
-  - Speicherplatzierung nur ueber die Plattform.
-  - Jeder Plan und jede PR-Beschreibung nennt die RAM-Wirkung in KB.
-- Eine Zeile in `docs/ROADMAP.md`.
+### 2.4 Bestehende Verträge und Werkzeuge (werden wiederverwendet)
+
+- `docs/ENGINEERING_PRINCIPLES.md` „Ressourcenbudgets aus Messung und
+  Produktkontext“: frühe Subsystembudgets sind Planungs-/Warnwerte; harte
+  Grenzen nur begründet, gemessen und ownerfreigegeben; Gesamtsystembewertung
+  inkl. Main-Task-HWM, Heap, größter Block, IRAM/DRAM; WLAN, LVGL und Web
+  benötigen nach Integration eigene Ressourcenqualifikation.
+- `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`: überwachte Ressourcen,
+  `EARLY_SUBSYSTEM_BUDGETS=PLANNING_AND_WARNING_VALUES`, begrenzte
+  dynamische Web-/JSON-Nutzung, „nachgewiesene Mindestreserve“ vor Laufstart.
+- ADR-008: Release 1 ohne PSRAM-Voraussetzung, 4 MB Flash.
+- `INetworkLifecycle` besitzt nur flüchtigen Transportzustand
+  (`lib/device_platform/src/network_lifecycle.hpp:86-88`); Preview,
+  persistenter Commit und Runtime-Publish liegen beim Application-/
+  `ConfigurationService`-Pfad.
+- `RuntimeConfigurationReadLease` ist exklusiv (`RuntimeReadLeaseBusy`,
+  `configuration_service.hpp:78-110`) und darf nicht über einen UI-Tick
+  gehalten werden. `ConfigurationService::stateRevision()` existiert.
+- `scripts/build_report.py` erzeugt bereits `idf.py size --format json2` und
+  wertet DRAM/IRAM aus.
+- `logResources()` (`main/app_main.cpp:237-254`) protokolliert freien Heap,
+  Minimum, größten 8-Bit-Block und Main-Task-HWM an den Punkten `startup`,
+  `periodic_30s`, `stable_*` und `network_page_press_before/after`.
+
+## 3. Messprotokoll (gilt für Baseline und jede Re-Messung)
+
+Jede Hardwaremessung ist nachvollziehbar durch:
+
+- Firmware-Quell-SHA, Profil `esp32_release`, frischer Build aus
+  `sdkconfig.defaults` + `sdkconfig.defaults.release`, SHA-256 von App-BIN und
+  ELF;
+- effektive Konfiguration: Main-Stack, LVGL-Allocator und Poolgröße,
+  WLAN-/lwIP-Puffer, `CONFIG_SPIRAM` (aus dem generierten `sdkconfig`);
+- Gerät, NVS-Zustand (gelöscht/nicht gelöscht), Netzwerkmodus und
+  Netzwerkzustand je Messpunkt, Zeitstempel seit Boot;
+- UART-Rohmitschnitt im Repository oder als PR-Anhang.
+
+Gemessen werden:
+
+| Größe | Quelle |
+|---|---|
+| statisches DRAM/IRAM (Build) | bestehender `scripts/build_report.py` (JSON2) |
+| freier Heap, Minimum-Free-Heap, größter Block, je getrennt für `MALLOC_CAP_INTERNAL \| MALLOC_CAP_8BIT` und `MALLOC_CAP_DMA` | `logResources()` |
+| Main-Task-Stack-HWM | `logResources()` |
+| LVGL-Poolbelegung, -maximum und -Fragmentierung, nur falls der eingebaute LVGL-Allocator aktiv ist | `lv_mem_monitor()` unter `lvgl_port_lock()` |
+
+Überlappende Heap-Capabilities werden nicht addiert. Eine Zuordnung zu
+Subsystemen erfolgt nur aus Differenzen vergleichbarer Messpunkte desselben
+Laufs.
+
+Messpunkte in tatsächlicher Bootreihenfolge:
+
+1. `after_platform_begin`: vor `application.begin()`;
+2. `after_application_begin`: nach Application-Boot **einschließlich**
+   WLAN-/HTTP-Start (siehe Abschnitt 2.3, Punkt 6);
+3. `after_ui_init`: nach LVGL-/Display-Initialisierung;
+4. `stable_ap_only` bzw. `stable_home_wifi`: bestehender Punkt nach erreichtem
+   stabilen Netzwerkzustand;
+5. `periodic_30s` und ein zusätzlicher Idle-Punkt nach 120 s ohne Bedienung;
+6. repräsentativer R1-Lastpfad (Ownerentscheidung O2, Vorschlag):
+   10 Seitenwechsel über alle Touch-Seiten, Sprachwechsel, 5 Netzwerkmodus-
+   wechsel AP_ONLY ↔ HOME_WIFI, ein Browserzugriff auf die vorhandene
+   Netzwerk-Setup-Seite; danach 120 s Idle. Mit Punkten vor/nach jedem
+   Moduswechsel (bestehende `network_page_press_*`).
+
+Die Trennung „Application-Boot ohne WLAN/HTTP“ ist ohne Eingriff in die
+Composition nicht messbar. Vorschlag: kombinierter Punkt 2 genügt; die
+WLAN-Wirkung ergibt sich aus Punkt 2 gegen 1 sowie dem `stable_*`-Punkt.
+
+## 4. Fehlende Regel und Budgetstatus
+
+### 4.1 Minimale Ergänzung bestehender Quellen
+
+Nachweislich fehlt nur eine Regel für den Steady-State-Pfad außerhalb des
+Regelkerns. Web/JSON-Grenzen, Main-Task-HWM und Teilpfad-Evidenz sind
+bereits geregelt. Ergänzung in `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`,
+Abschnitt „Begrenzte Speicherstrukturen“, neuer Unterabschnitt (Commit S1):
+
+```text
+### Hauptschleife und lokale UI
+
+Im hochfrequenten Main-/UI-Pfad erfolgt nach dem Warm-up keine wiederholte
+dynamische Allokation ohne sichtbare Zustandsänderung. Ereignisbezogene
+Allokationen (Seiten-, Sprach-, Konfigurations- oder Netzwerkmoduswechsel)
+bleiben zulässig, wenn sie begrenzt sind. Ein Zähler für C++-`operator new`
+im Host-Test belegt nur die getesteten C++-Pfade; `malloc` aus C-, ESP-IDF-,
+LVGL- oder cJSON-Code und LVGL-Poolallokationen benötigen eine
+ESP32-Laufzeitmessung. Statische `idf.py size`-Werte belegen keinen
+Laufzeit-Heap und keine Fragmentierung.
+```
+
+Request-Handler werden bewusst nicht in diese Regel aufgenommen; für sie gilt
+weiterhin „Web, JSON und Exporte“ mit begrenzter request-lokaler Allokation.
+
+### 4.2 Budgetwerte
+
+Die früher vorgeschlagenen Werte (Subsysteme 75/75/45/20 KB; 60 KB
+Idle-Reserve; 40 KB Laufzeitminimum; 16 KB größter Block) sind nur zu prüfende
+Diagnose- und Planungswerte. Es wird keine Freigabe dieser Zahlen verlangt.
+
+Nach Abschluss von S2–S7 leitet S8 aus den gemessenen Minima und Spitzen
+einen begründeten **System-Mindestabstand** (freier Heap und größter Block,
+intern und DMA getrennt) ab. Erst dieser Wert wird dem Owner zur Freigabe
+vorgelegt (O4) und ersetzt dann den in
+`RESOURCE_BUDGET_AND_MAINTENANCE.md` genannten Begriff „nachgewiesene
+Mindestreserve“ durch eine Zahl. Ein automatisches CI-Gate für statisches
+DRAM ist nicht Teil dieses Plans; statische und Laufzeitwerte bleiben getrennt.
+
+## 5. Umsetzungs- und Commit-Schnitte
+
+Nach jedem Commit wird angehalten. Schritte mit Hardwaremessung erfordern den
+Owner am Gerät. Jede Messung folgt Abschnitt 3.
+
+| Schnitt | Inhalt | Nachweis |
+|---|---|---|
+| S1 | Regelergänzung aus 4.1 in `RESOURCE_BUDGET_AND_MAINTENANCE.md` | Doku-Diff |
+| S2 | Messbasis, nur Diagnose-Instrumentierung ohne Verhaltensänderung (daher misst die Baseline auf `main` + S2): `logResources()` um interne/DMA-Werte und optional LVGL-Pool erweitern; Messpunkte 1–3 und 120-s-Idle ergänzen; `heap_caps_register_failed_alloc_callback()` mit allokationsfreier Ausgabe (nur `esp_rom_printf`/`ESP_DRAM_LOGE`, Größe, Caps, Funktionsname); falls nötig `build_report.py` um `idf.py size --format json2` je Komponente erweitern (genaue Optionsform gegen gepinnte IDF 6.1 im Schnitt verifizieren) | Build beider Profile; Baseline-Hardwarelauf auf dem S2-Stand, Evidenzdatei unter `docs/audits/` |
+| S3 | Hotspot 1: Katalogkopie | Host-Test + Re-Messung |
+| S4 | Hotspot 2: Render-Key vor Screen-Modell | Host-Test + Re-Messung |
+| S5 | Hotspot 3: UI-Rendern vom Schleifentakt entkoppeln | Host-Test + Re-Messung inkl. Touch-Reaktion |
+| S6 | Hotspot 4: Adapter-DMA-Puffer im LVGL-Produktpfad vermeiden | Display-Smoke + Re-Messung |
+| S7 | Hotspot 5: `trans_size` prüfen | Display-Smoke + Re-Messung |
+| S8 | Auswertung, abgeleiteter System-Mindestabstand, Entscheidung über S9–S11 | Evidenzdokument, Ownerfreigabe O4 |
+| S9 | bedingt: WLAN-Speicherprofil | siehe 5.6 |
+| S10 | bedingt: Stack-/Commitpfad | siehe 5.7 |
+| S11 | bedingt: struktureller UI-Umbau | eigene Planrevision |
+
+### 5.1 S3 – Katalogkopie
+
+`uiPresentationSource()` wird nur noch bei geänderter bestehender
+`ConfigurationService::stateRevision()` neu aufgebaut; `app_main` hält die
+bestehende `loopPresentation` als einzige Konsumentenkopie (kein zweiter
+Catalog-Owner, keine dauerhaft gehaltene Lease). Ist die Revision aus
+`app_main` nicht erreichbar, erhält `FermentationApplication` eine schlanke
+Lesemethode, die den bestehenden Wert durchreicht. Im Schnitt wird geprüft und
+dokumentiert, dass Katalog-, Sprach- und Zeitzonenänderungen diese Revision
+erhöhen; sonst wird die Invalidierung auf die tatsächlich erhöhte bestehende
+Revision gestützt.
+
+Test: Konsument erkennt Katalog-, Sprach- und Zeitzonenänderung; unveränderte
+Revision erzeugt keine Kopie.
+
+### 5.2 S4 – Render-Key vor Screen-Modell
+
+Der Render-Key wird aus den Eingaben von `render()` gebildet, bevor
+`makeRepresentativeScreen()` aufgerufen wird. Er muss eine Obermenge aller
+sichtbaren Eingaben sein (Snapshot-/Refresh-Revision, Workspace-Seite,
+Pager, Dialog, gedrücktes Ziel, Locale, Katalogrevision, Netzwerkstatus,
+Uhrzeit in Anzeigeauflösung, AP-Info). Bei gleichem Key wird kein Modell
+gebaut.
+
+Test: je Eingabe einzeln ein Fall, der eine Key-Änderung und damit Neuzeichnen
+nachweist; ein Fall ohne Änderung ohne Modellaufbau.
+
+### 5.3 S5 – UI-Takt
+
+Nur das Rendern wird begrenzt: neu gezeichnet wird bei geändertem Key aus S4
+und höchstens mit einem UI-Takt (Startwert 50 ms, im Schnitt gemessen).
+Touch-Polling und Press-Edge-Erkennung (`pollTouch()`/`routePress()` aus #31)
+sowie `platform.update()` und `application.update()` bleiben im bestehenden
+Schleifentakt. Die kooperative Application-Schleife wird nicht verlangsamt.
+
+Test: kein verlorener Press-Edge bei gedrosseltem Rendern; Hardware: subjektive
+und geloggte Touch-Reaktionszeit vor/nach.
+
+### 5.4 S6 – Adapter-DMA-Puffer
+
+Der `320*8`-DMA-Puffer wird nicht mehr bei Initialisierung reserviert, sondern
+von den direkten Fill-/Flush-Pfaden des Adapters bedarfsgerecht besessen
+(z. B. bei erster Nutzung angelegt und nach direktem Zeichnen freigegeben).
+Der produktive LVGL-Pfad nutzt ihn nicht. Vorher wird geprüft, welche Pfade
+(Bring-up, Kalibrierharness) ihn verwenden.
+
+### 5.5 S7 – `trans_size`
+
+Anhand der gepinnten `esp_lvgl_port 2.9.0`-Quelle wird geprüft, ob bei
+`buff_dma=1`, `buff_spiram=0` ein separater Transferpuffer mit `trans_size`
+angelegt wird. Nur wenn ja und er entbehrlich ist, wird `trans_size` entfernt
+(0). Änderung nur nach Hardware-Display-Smoke. Die LVGL-Zeilenpuffergröße
+`320x20` bleibt unverändert; eine Halbierung wäre nur nach gemessenem
+RAM-Gewinn gegen Refresh-/Touch-Reaktionszeit eine eigene Ownerentscheidung.
+
+### 5.6 S9 – WLAN-Speicherprofil (bedingt)
+
+Nur falls S8 eine Lücke zeigt. Keine Einzelwerte vorab. Geprüft werden die
+offiziellen ESP-IDF-6.1-Kandidaten „Memory saving“/„Minimum“ als
+zusammenhängende Sätze einschließlich gekoppelter WLAN-RX-/TX-Puffer und
+TCP-Sende-/Empfangsfenster. Danach AP_ONLY, HOME_WIFI, HTTP und Sessionlast
+real qualifizieren. Jede `sdkconfig`-Änderung ist eine Ownerentscheidung.
+
+### 5.7 S10 – Stack und Netzwerkmodus-Commit (bedingt)
+
+Zuerst werden Main-Task-HWM und der synchrone Commit-/Fehlerpfad nach S3–S7
+gemessen. Nur bei weiter nachgewiesenem Stack- oder Spitzenproblem folgt eine
+eigene Planrevision. Rahmen dafür:
+
+- Preview, persistenter Commit und Runtime-Publish bleiben beim bestehenden
+  Application-/`ConfigurationService`-Pfad; `INetworkLifecycle` bleibt
+  flüchtiger Transport. Keine zweite Commit- oder Netzwerkzustandsmaschine.
+- Wird Asynchronität gewählt, braucht der Slice einen konkreten Vertrag:
+  Zuständigkeit, begrenzte Kommandokapazität, Busy/Fehler/
+  `CommitIndeterminate`, persistenter Linearisierungspunkt, anschließende
+  Transportaktivierung und Sessionwiderruf.
+- Ein kleinerer Main-Stack zählt nur netto als Ersparnis, nach Abzug eines
+  neuen Workerstacks und seiner temporären Daten. 16 KB werden erst nach
+  Messung des gesamten Commit-/Fehlerpfads geprüft.
+
+### 5.8 S11 – struktureller UI-Umbau (bedingt)
+
+Retained Widgets, feste `ScreenDrawCommand`-Arrays, geteilte Styles,
+Text-/Katalogdaten im Flash oder LVGL-Pool-Anpassungen werden nur geplant,
+wenn S3–S7 die Reserve aus S8 nicht herstellen, und nur im gemessen nötigen
+Umfang. Keine pauschale Umstellung gemeinsamer Modellcontainer.
+
+## 6. Diagnoseumfang
+
+- Die Messbasis benötigt nur UART/Backtrace mit ELF, die erweiterten
+  Ressourcenlogs und den allokationsfreien Failed-Alloc-Callback.
+- Ein persistenter Flash-Core-Dump ist nicht Teil dieses Plans. Bei späterem
+  Bedarf braucht er eine eigene Bewertung: Dumpumfang, Tasks und Stacks,
+  Diagnose-RAM, App-Image-Grenze, Erhalt der `state_store`-Offsets
+  (`partitions/issue_90_state_store.csv`), und Abgrenzung zu Secrets, weil
+  Taskstacks lokale `wifi_config_t`-Objekte mit Passwortdaten enthalten können
+  (`esp_idf_network_lifecycle.cpp:171,192`), inkl. Schutz, Zugriff und Löschung.
+
+## 7. Verhältnis zu PR #170
+
+PR #170 ist abhängige Arbeit: keine weitere Featureausweitung, bis die
+R1-RAM-Basis (S8) stabil ist. Für dessen Ressourcenabnahme gilt unverändert
+das zehnminütige Vier-Session-/Replay-Ressourcengate aus
+`docs/tasks/issue-27-replay-resource-plan-revision-2026-10-01.md` (PR-#170-
+Branch). Hinweise für dort, ohne Vorwegnahme:
+
+- `web_json_codec.cpp::serializeBounded()` nutzt bereits
+  `cJSON_PrintPreallocated()`; verbleibende Allokationen entstehen im
+  cJSON-Baum und in der Ergebnis-`std::string`;
+- HTTP-Socketanzahl und logische Sessions sind verschieden; die
+  Lastverträglichkeit ist gesondert zu prüfen.
+
+Merge, Rebase oder Supersede von PR #170 entscheidet dieser Plan nicht.
+
+## 8. Tests und Dokumentationswirkung
+
+- Host: gezielte native Tests der geänderten Bereiche je Schnitt
+  (`test_renderer_boundary`, `test_press_dispatcher`, `test_local_touch_ui`,
+  `test_fermentation_ui_models`, bei S3 betroffene Application-Tests).
+- Build: `esp32_release` und `esp32_bringup` je Codeschnitt.
+- Hardware: Messprotokoll aus Abschnitt 3 nach S2 (Baseline) und nach S3–S7.
+- Dokumentation: S1 ändert `RESOURCE_BUDGET_AND_MAINTENANCE.md`; S2 und S8
+  legen Evidenz unter `docs/audits/` ab; `docs/ROADMAP.md` je Schnitt.
+- Der vollständige lokale Pre-Ready-Lauf folgt nur dem Workflow aus
+  `docs/AGENT_WORKFLOW.md` und `docs/CI_AND_QUALITY_GATES.md`.
+
+Safety: Keine Änderung an Regelung, Interlock oder Aktorfreigabe;
+`ACTUATOR_RELEASE=NO` bleibt. Die UI-Drosselung (S5) betrifft nur das
+Zeichnen, nicht Regel- oder Safetytakt.
+
+## 9. Offene Ownerentscheidungen
+
+- [ ] O1: Freigabe dieser Plan-SHA.
+- [ ] O2: repräsentativer R1-Lastpfad (Vorschlag in Abschnitt 3, Punkt 6).
+- [ ] O3: kombinierter Messpunkt Application-Boot + WLAN/HTTP ausreichend
+      (Abschnitt 3).
+- [ ] O4: nach S8 der abgeleitete System-Mindestabstand.
+- [ ] O5: nach S8 Freigabe von S9/S10/S11, jede `sdkconfig`-Änderung einzeln.
+- [ ] O6: Issue für diesen Scope; PR #174 hat noch keines (AGENTS.md: ein
+      Issue pro Branch/PR).
+- [ ] O7: Konflikt zwischen den Korrekturaufträgen: A verlangt Entfernung,
+      B Überarbeitung von ADR-020/021. Umgesetzt nach A (Entfernung); bitte
+      bestätigen. Zuordnung siehe Abschnitt 11.
+
+Spätere, getrennte Owneroptionen außerhalb dieses Plans: ESP32-S3-/PSRAM-Profil und
+Speicherplatzierungsschnittstelle; Flash-Core-Dump; Prozessvereinfachungen.
+Automatische Messnachweise ersetzen keine Ownerentscheidung und keinen
+unabhängigen Review.
+
+## 10. Materielle Risiken
+
+- Die Hotspot-Korrekturen reichen nicht; dann S9/S11 mit eigener Planung.
+- Die Revision aus S3 erfasst nicht jede sichtbare Änderung; abgesichert durch
+  die Invalidierungstests aus S3/S4.
+- Messwerte schwanken zwischen Läufen; deshalb identisches Protokoll und
+  Ableitung des Mindestabstands aus Minima, nicht aus Einzelwerten.
+
+## 11. Herkunft der Korrekturen
+
+A = „PR #174 Plan korrigieren“, B = „Korrekturauftrag zum Optimierungsplan“.
+
+| Punkt | Umsetzung im Plan |
+|---|---|
+| A1 Keine Parallelverträge, ADRs entfernen, kein S3/PSRAM | ADR-020/021 gelöscht; 1, 4.1, 9 |
+| A2 Budgetwerte erst nach Messung | 3, 4.2 |
+| A3 Bestehenden Buildreport nutzen | 2.4, S2 |
+| A4 Hot-Path-Regel präzisieren | 4.1 |
+| A5 Kleinste UI-Hotspots einzeln | 2.3, S3–S7, 5.8 |
+| A6 WLAN als Messkandidat | 5.6 |
+| A7 Keine Async-Architektur zur Stackreduktion | 5.7 |
+| A8 Keine Core-Dump-Partition | 6 |
+| A9 Kein Prozess-/Governance-Scope, #170 nur abhängig | 1, 7, 9 |
+| B1 Messbasis, Ursachen, Budgetstatus | 2.1, 2.2, 3, 4.2 |
+| B2 Allokationsregel und Nachweisgrenzen | 2.3, 3 (LVGL-Pool), 4.1, 5.1–5.3, 5.8, 7 |
+| B3 Netzwerk-Commit beim bestehenden Owner | 2.4, 5.3, 5.7 |
+| B4 Core Dumps nicht in der Messbasis | 6, S2 |
+| B nicht blockierend: S3/Platzierung, E4-Gate, Prozess | 7, 9 |
+| B-Punkte zu ADR-020/021 (Kontext, Entscheidung, No-PSRAM-Garantie) | durch Entfernung nach A gegenstandslos; Inhalte in 2.1, 4.1, 4.2 und 6 übernommen; O7 |
