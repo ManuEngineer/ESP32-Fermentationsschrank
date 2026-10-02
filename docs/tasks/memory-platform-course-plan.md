@@ -310,6 +310,27 @@ Config-Owner und ohne neue Cache-Architektur. Bestehende Aufrufer
 Es gibt keine Heuristik über leeren Katalog, Default-Locale oder andere
 Nutzdaten.
 
+Eviction auf `FermentationUiPage::HeaderNetwork`: Der heutige Produktpfad hält
+auf `HeaderNetwork` bewusst keinen vollständigen `ProgramCatalog` im Speicher
+(`loopPresentation` ist lokal; bei `networkPageBeforeTouch == true` wird
+`uiPresentationSource()` nicht aufgerufen, Renderer erhält `catalog == nullptr`,
+`main/app_main.cpp:392-407,445-455`). Die eine S3-Konsumentenkopie darf diese
+Eigenschaft nicht aufheben und den Katalog nicht über `HeaderNetwork` hinweg
+halten, weil sonst zusätzlicher Heap im bekannten Netzwerkmodus-RAM-Peak
+gebunden wäre:
+
+- Beim Eintritt in `HeaderNetwork` wird die gecachte Presentation-/Katalogkopie
+  vor dem Netzwerkmodus-Commit verworfen und freigegeben; die gespeicherten
+  Revisionen gelten ab dann als ungültig.
+- Auf `HeaderNetwork` bleibt der bestehende `catalog == nullptr`-Pfad erhalten.
+- Beim Verlassen der Netzwerkseite wird die Kopie über den normalen expliziten
+  Success/Unavailable-Vertrag erneut befüllt; erst nach Success werden die
+  Revisionen wieder als gültig übernommen. Bei Unavailable bleiben sie
+  ungültig, und der nächste Durchlauf versucht erneut.
+- Kein zweiter Cache, kein zweiter Katalog-Owner, keine neue Zustandsmaschine:
+  Eviction und Neubefüllung nutzen dieselbe eine Konsumentenkopie und deren
+  Gültigkeitsmerkmal.
+
 Test (im Implementierungsschnitt): Änderung von
 `expectedProgramCatalogRevision` aktualisiert den Katalog; Änderung von
 `expectedUserConfigurationRevision` aktualisiert Sprache und Zeitzone;
@@ -318,6 +339,16 @@ Erstbefüllung und nicht verfügbare Revision übernehmen keine Revision als
 aktualisiert; Runtime-Lease nicht verfügbar → `uiPresentationSource()`
 meldet Unavailable, bestehende Konsumentenkopie und gespeicherte Revisionen
 bleiben unverändert, und der nächste Durchlauf versucht erneut.
+
+Zusätzlich gezielt für die `HeaderNetwork`-Eviction:
+
+1. Eintritt in `HeaderNetwork`: gecachter `ProgramCatalog` ist nicht mehr
+   lebend, der Renderer erhält `nullptr`.
+2. Der Netzwerkmodus-Commit hält keine zusätzliche S3-Katalogkopie.
+3. Verlassen von `HeaderNetwork`: erfolgreiche Neubefüllung stellt Locale,
+   Zeitzone und Katalog wieder her.
+4. Unavailable beim Verlassen: alte Revisionen werden nicht fälschlich als
+   aktuell markiert; der nächste Durchlauf versucht erneut.
 
 ### 5.2 S4 – Render-Key vor Screen-Modell und allokationsfreier UI-Steady-State
 
