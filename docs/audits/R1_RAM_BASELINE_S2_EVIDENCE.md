@@ -8,7 +8,9 @@ S2_INSTRUMENTATION=IMPLEMENTED
 BUILD_ESP32_RELEASE=PASS
 BUILD_ESP32_BRINGUP=PASS
 FINAL_S2_CODE_SHA=5bfc9bc0fb2f00b8ceac8d830bf000d04f8b37e7
-BASELINE_STATUS=NOT_STARTED_PENDING_OWNER_O2_AND_DEVICE
+BASELINE_STATUS=NOT_COMPLETE_LOAD_PATH_NOT_EXECUTABLE_ON_DEVICE
+O2=APPROVED
+EXPLORATORY_RUN_0DE006A=DONE_NOT_A_BASELINE
 PRECHECK_122C33E=HISTORICAL_ONLY_NOT_A_BASELINE
 ```
 
@@ -122,9 +124,57 @@ Werte belegen nur die Boot- und Idle-Situation vor der Netzwerkmodus-Auswahl;
 INTERNAL|8BIT und DMA sind auf diesem Board identisch (alle interne DRAM).
 Ein Vergleich mit den historischen Messankern ist nicht zulässig.
 
+## 3a. Erkundungslauf auf dem geflashten Stand (keine Baseline)
+
+O2 (repräsentativer Lastpfad nach Plan Abschnitt 3 Punkt 6) ist vom Owner
+freigegeben. Am Gerät war er nicht ausführbar. Der Owner bediente das Gerät
+frei; Rohmitschnitt: [R1_RAM_BASELINE_S2_20261002_0DE006A_EXPLORATORY_UNSELECTED_RAW.txt](R1_RAM_BASELINE_S2_20261002_0DE006A_EXPLORATORY_UNSELECTED_RAW.txt)
+(1096 Zeilen, 534 s ab Reset). Firmware `esp32_release`, Quell-SHA
+`0de006a7…` (Code identisch mit `5bfc9bc`, siehe oben), NVS nicht gelöscht,
+Touch-Kalibrierung `Available`, `hardware state: HARDWARE_UNVERIFIED`,
+`application: service required`.
+
+**Beobachtungen des Owners am Gerät** (nicht aus dem Log ableitbar):
+- Die Anzeigesprache ist Englisch; das „EN“ im Header ist kein Button, ein
+  Sprachwechsel war nicht möglich.
+- Die Buttons für AP und Home ließen sich drücken, aber nicht aktivieren;
+  es erschien kein QR-Code und im Setup war nichts Weiteres vorhanden.
+- Die Rezeptseite war leer.
+- Das Gerät stürzte bei allen Bedienungen nie ab.
+
+**Aus dem Log:**
+- Der Netzwerkmodus blieb während des gesamten Laufs `UNSELECTED`, der
+  Netzwerkzustand `Stopped`. Damit gab es keinen Access Point (die QR-/
+  SSID-Anzeige setzt `networkAccessPointInfo` voraus), keine `stable_*`-
+  Punkte und keine Moduswechsel.
+- 5 Touch-Dispatches mit `outcome=2` (`OwningOutcome`): Ein Netzwerkmodus-
+  Press erreichte den Anwendungspfad; das Befehlsergebnis wird nicht
+  geloggt, die Ablehnungsursache ist daher aus diesem Lauf **nicht**
+  belegt.
+- 13 Paare `network_page_press_before/after` mit `resources_lvgl`, ein
+  `idle_120s` bei 180515 ms (120 s nach dem letzten Press), kein
+  Failed-Alloc-Hook-Treffer.
+
+| Größe | Wert im Lauf |
+|---|---|
+| freier Heap nach UI-Init / Ende | 106068 B / 105992 B |
+| Minimum freier Heap (INTERNAL|8BIT = DMA) | 101608 B |
+| größter Block (INTERNAL|8BIT) | 98304 B |
+| Main-Task-Stack-HWM (Minimum) | 15920 B |
+| LVGL-Pool maximal belegt | 14072 B (Pool 63384 B) |
+
+**Aussage und Grenze:** Diese Werte belegen nur Boot, Seitennavigation und
+Idle ohne Netzwerkmodus. Sie sind **keine Baseline**, da weder WLAN/HTTP
+laufen noch die bekannten Peaks (Netzwerkmodus-Commit, Lastpfad)
+erreicht wurden. Dass Sprachwechsel und Netzwerkmodus-Auswahl am Gerät
+nicht funktionieren, liegt außerhalb von S2; es wurde nichts am
+Produktverhalten geändert und der freigegebene Lastpfad nicht ersetzt.
+
 ## 4. Offen für die vollständige Baseline (Owner am Gerät)
 
-- O2: Freigabe des repräsentativen R1-Lastpfads (Plan Abschnitt 3, Punkt 6).
+- O2 ist freigegeben, der Lastpfad aber am Gerät nicht ausführbar (Abschnitt 3a).
+  Owner-Entscheidung nötig: Ursache klären (`service required`, Netzwerkmodus-
+  Auswahl wird nicht übernommen) bzw. Umgang mit dem nicht ausführbaren Pfad.
 - Bedienung am Gerät: Netzwerkmodus auswählen (AP_ONLY und HOME_WIFI) für
   `stable_ap_only`/`stable_home_wifi`, Lastpfad (Seitenwechsel,
   Sprachwechsel, 5 Moduswechsel, ein Browserzugriff) mit
