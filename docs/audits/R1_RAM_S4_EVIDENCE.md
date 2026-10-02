@@ -45,8 +45,9 @@ Allokation erkennt.
   S3-Cache **übernommene** Katalogrevision (fehlt bei Eviction/Unavailable);
   Hash der tatsächlich verwendeten Locale; gedrücktes Ziel (Art und Slot);
   Netzwerkstatus; UTC-Minute (die Uhr zeigt HH:MM aus UTC, Sekundenwechsel
-  zeichnen nicht mehr neu); Identitäts-Hash der AP-Daten (nur auf
-  `HeaderNetwork`).
+  zeichnen nicht mehr neu); die Änderungsrevision der AP-Daten
+  (`INetworkLifecycle::accessPointInfoRevision()`, nur auf `HeaderNetwork`;
+  im ersten S4-Stand war es ein Hash, siehe 2a).
 - `ProductiveLvglRenderer::render()` entscheidet nicht mehr selbst: Es baut
   Modell und Widgets nur noch für eine echte sichtbare Änderung und liefert
   `false` bei fehlendem LVGL-Lock (der Key wird dann nicht übernommen, der
@@ -62,9 +63,10 @@ Allokation erkennt.
   Member. `uiSnapshot()` bleibt für alle bisherigen Aufrufer und Tests
   unverändert nutzbar.
 - `FermentationUiPresentationCache::adoptedProgramCatalogRevision()` als
-  schlanker Getter. Keine Port- oder ADR-Änderung, keine Änderung an
-  `INetworkLifecycle`, kein weiterer Zähler außer der einen
-  Workspace-Revision.
+  schlanker Getter. Im ersten S4-Stand gab es keine Port-Änderung; Fix 1
+  (Abschnitt 2a) ergänzt auf Owner-Wunsch `INetworkLifecycle::
+  accessPointInfoRevision()`. Weiterhin keine ADR-Änderung und kein weiterer
+  Zähler außer der einen Workspace-Render-Revision und der AP-Revision.
 
 ## 2a. Fix 1 (Independent Review)
 
@@ -107,6 +109,15 @@ Empfehlungs-/Recoverywerte enthalten keine Strings. Nachweis: Active Run mit
 Snapshot semantisch gleich `uiSnapshot()`; eine geänderte Run-ID erzwingt
 Redraw.
 
+**Restart-Semantik der AP-Revision.** Der `MockNetworkLifecycle` ändert die
+Revision bei einem Neustart mit identischen AP-Daten nicht (der Test belegt
+das). Der `EspIdfNetworkLifecycle` löscht und setzt die Daten beim Neustart
+nacheinander (Clear, dann Set) und kann dadurch zwei neue Revisionen
+erzeugen. Das ist ein ereignisgebundener zusätzlicher Redraw bei einem
+echten Netzwerkereignis und kein Bruch des Steady-State-Vertrags: Im
+unveränderten Zustand ändert sich die Revision nicht (auf der Hardware im
+120-s-Idle belegt, siehe `R1_RAM_S4_HARDWARE_REMEASURE_EVIDENCE.md`).
+
 ## 3. Obermengen-Audit
 
 Vom Workspace und Screen gelesene Snapshot-Felder (`home.mode`,
@@ -124,8 +135,9 @@ Key.
 Neu `test_ui_steady_state_allocations` (16/16 PASS):
 unveränderter Zustand nach Warm-up über 100 Loops → kein Redraw und
 **0 Allokationen** (Snapshot, Cacheentscheidung, Key bilden/speichern/
-vergleichen); dasselbe auf `HeaderNetwork` mit vorgegebenem AP-Fingerprint
-(Presentation-Kopie evicted); recycelter Snapshot ist semantisch gleich dem
+vergleichen); dasselbe auf `HeaderNetwork` über den echten Pfad mit Mock-Lifecycle und
+nicht-SSO-Werten (ab Fix 1; im ersten S4-Stand mit vorgegebenem
+Fingerprint; Presentation-Kopie evicted); recycelter Snapshot ist semantisch gleich dem
 frischen Snapshot; je ein Fall für Änderung von Anwendungszustand,
 Workspace-Seite, Locale, gedrücktem Ziel, Netzwerkstatus, Uhrminute (Sekunden
 nicht, Minute und Verlust der Vertrauenszeit ja), AP-Identität und

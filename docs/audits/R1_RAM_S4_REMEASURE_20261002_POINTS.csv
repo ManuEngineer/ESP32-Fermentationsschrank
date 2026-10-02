@@ -1,0 +1,14 @@
+boot,uptime_ms,point,mode,state,free_heap_bytes,minimum_free_heap_bytes,largest_free_block_8bit_bytes,stack_hwm_bytes,internal_8bit_free_bytes,internal_8bit_minimum_free_bytes,internal_8bit_largest_free_block_bytes,dma_free_bytes,dma_minimum_free_bytes,dma_largest_free_block_bytes,lvgl_total_bytes,lvgl_free_bytes,lvgl_largest_free_bytes,lvgl_max_used_bytes,lvgl_used_pct,lvgl_frag_pct,lvgl
+1,1176,after_platform_begin,UNSELECTED,Stopped,154744,154744,110592,19680,154744,154744,110592,154744,154744,110592,,,,,,,
+1,1696,after_application_begin,HOME_WIFI,SetupAccessPoint,56744,52756,51200,12944,56744,52756,51200,56744,52756,51200,,,,,,,
+1,2096,after_ui_init,HOME_WIFI,SetupAccessPoint,9972,4888,7424,12944,9972,4888,7424,9972,4888,7424,,,,,,,unavailable
+1,2526,stable_home_wifi_setup_access_point,HOME_WIFI,SetupAccessPoint,8248,4888,7424,12944,8556,4888,7424,8556,4888,7424,63108,50004,49648,13940,21,1,
+1,32226,periodic_30s,HOME_WIFI,SetupAccessPoint,8696,4888,7424,12944,8696,4888,7424,8696,4888,7424,63108,50004,49648,13940,21,1,
+1,122226,idle_120s,HOME_WIFI,SetupAccessPoint,8696,4888,7424,12944,8696,4888,7424,8696,4888,7424,63108,50004,49648,13940,21,1,
+1,255816,network_page_press_before,HOME_WIFI,SetupAccessPoint,9636,4888,7424,12944,9636,4888,7424,9636,4888,7424,63296,48580,47772,15692,24,2,
+1,255866,network_page_press_after,HOME_WIFI,SetupAccessPoint,9636,4888,7424,12944,9636,4888,7424,9636,4888,7424,63296,48580,47772,15692,24,2,
+1,256976,network_page_press_before,HOME_WIFI,SetupAccessPoint,9636,4888,7424,12944,9636,4888,7424,9636,4888,7424,63296,48560,47740,15848,24,2,
+1,257046,network_page_press_after,HOME_WIFI,SetupAccessPoint,9568,4888,7424,12944,9436,4888,7424,9436,4888,7424,63296,48560,47740,15848,24,2,
+1,260676,network_page_press_before,HOME_WIFI,SetupAccessPoint,9620,4888,7424,12944,9620,4888,7424,9620,4888,7424,63296,48560,47624,15852,24,2,
+1,260746,network_page_press_after,HOME_WIFI,SetupAccessPoint,9664,4888,7424,12944,9664,4888,7424,9664,4888,7424,63296,48560,47624,15852,24,2,
+1,381146,idle_120s,HOME_WIFI,SetupAccessPoint,9624,4888,7424,12944,9624,4888,7424,9624,4888,7424,63296,48560,47624,15852,24,2,
