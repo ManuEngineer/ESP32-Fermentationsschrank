@@ -108,6 +108,20 @@ Stand nicht reproduzierbar belegt und gilt nur als unbestätigte Schätzung.
    (`fermentation_application.cpp:655-705,1143`), also **vor**
    `initializeProductUi()` (`main/app_main.cpp:590`). Der einzige Bootmesspunkt
    `startup` (`main/app_main.cpp:603`) liegt nach allem.
+7. Vor dem Render-Key entsteht in `updateProductUi()` je Schleifendurchlauf
+   weitere dynamische C++-Arbeit:
+   - `application.uiSnapshot()` (`main/app_main.cpp:412`):
+     `FermentationUiProjectionInput::temperatures` ist ein `std::vector`
+     (`fermentation_ui_projector.hpp:13`); `FermentationUiProjector::project()`
+     reserviert und befüllt `output.temperatures` und ggf. `output.messages`
+     (`fermentation_ui_projector.cpp:30-38`, `fermentation_ui_models.hpp:117-118`);
+   - `application.networkAccessPointInfo()` (`main/app_main.cpp:374,459`)
+     liefert `std::optional<NetworkAccessPointInfo>` by value; die Struktur
+     enthält `std::string ssid` und `std::string password`
+     (`network_lifecycle.hpp:41-44`), `EspIdfNetworkLifecycle::accessPointInfo()`
+     kopiert diese Strings;
+   - `ClockViewInput` (`device_ui_contracts.hpp:99-102`) enthält eine
+     `TimeZoneId` und wird by value gebildet (`main/app_main.cpp:410`).
 
 ### 2.4 Bestehende Verträge und Werkzeuge (werden wiederverwendet)
 
@@ -243,8 +257,8 @@ Owner am Gerät. Jede Messung folgt Abschnitt 3.
 |---|---|---|
 | S1 | Regelergänzung aus 4.1 in `RESOURCE_BUDGET_AND_MAINTENANCE.md` | Doku-Diff |
 | S2 | Messbasis, nur Diagnose-Instrumentierung ohne Verhaltensänderung (daher misst die Baseline auf `main` + S2): `logResources()` um interne/DMA-Werte und optional LVGL-Pool erweitern; Messpunkte 1–3 und 120-s-Idle ergänzen; `heap_caps_register_failed_alloc_callback()` mit allokationsfreier Ausgabe (nur `esp_rom_printf`/`ESP_DRAM_LOGE`, Größe, Caps, Funktionsname); falls nötig `build_report.py` um `idf.py size --format json2` je Komponente erweitern (genaue Optionsform gegen gepinnte IDF 6.1 im Schnitt verifizieren) | Build beider Profile; Baseline-Hardwarelauf auf dem S2-Stand, Evidenzdatei unter `docs/audits/` |
-| S3 | Hotspot 1: Katalogkopie | Host-Test + Re-Messung |
-| S4 | Hotspot 2: Render-Key vor Screen-Modell | Host-Test + Re-Messung |
+| S3 | Hotspot 1: Katalogkopie mit explizitem Befüllungsergebnis | Host-Test + Re-Messung |
+| S4 | Hotspot 2: Render-Key vor Screen-Modell; allokationsfreier unveränderter `updateProductUi()`-Pfad | Host-Test + Re-Messung |
 | S5 | Hotspot 3: UI-Rendern vom Schleifentakt entkoppeln | Host-Test + Re-Messung inkl. Touch-Reaktion |
 | S6 | Hotspot 4: Adapter-DMA-Puffer im LVGL-Produktpfad vermeiden | Display-Smoke + Re-Messung |
 | S7 | Hotspot 5: `trans_size` prüfen | Display-Smoke + Re-Messung |
@@ -279,19 +293,33 @@ Randfälle:
   oder Runtime nicht verfügbar): Der Vergleich gilt als nicht entscheidbar;
   die bisherige Kopie bleibt in Gebrauch, die gespeicherten Revisionen werden
   nicht überschrieben, und der nächste Durchlauf vergleicht erneut.
-- Fehlgeschlagene Befüllung (`uiPresentationSource()` ohne erteilte Lease
-  liefert die Default-Quelle): Sie zählt nicht als erfolgreich aktualisierter
+- Fehlgeschlagene Befüllung: Sie zählt nicht als erfolgreich aktualisierter
   Cache; gespeicherte Revisionen und bisherige Kopie bleiben, der nächste
   Durchlauf versucht erneut.
+
+Erfolgsnachweis der Befüllung: Cache-Revisionen werden nur nach **explizit
+nachgewiesen erfolgreicher** Befüllung übernommen. Der heutige Vertrag kann
+das nicht ausdrücken: `FermentationApplication::uiPresentationSource()` gibt
+immer eine `FermentationUiPresentationSource` zurück und liefert ohne
+erteilte Runtime-Lease nur eine Default-Quelle ohne Status
+(`fermentation_application.cpp:1021-1040`). S3 passt diesen Rückgabevertrag
+deshalb minimal an ein explizites Success/Unavailable-Ergebnis an
+(z. B. `std::optional<FermentationUiPresentationSource>`), ohne zweiten
+Config-Owner und ohne neue Cache-Architektur. Bestehende Aufrufer
+(`main/app_main.cpp:396,447,585`) werden auf das neue Ergebnis umgestellt.
+Es gibt keine Heuristik über leeren Katalog, Default-Locale oder andere
+Nutzdaten.
 
 Test (im Implementierungsschnitt): Änderung von
 `expectedProgramCatalogRevision` aktualisiert den Katalog; Änderung von
 `expectedUserConfigurationRevision` aktualisiert Sprache und Zeitzone;
 unveränderte Revisionen rufen `uiPresentationSource()` nicht auf;
-Erstbefüllung, nicht verfügbare Revision und fehlgeschlagene Befüllung
-übernehmen keine Revision als aktualisiert.
+Erstbefüllung und nicht verfügbare Revision übernehmen keine Revision als
+aktualisiert; Runtime-Lease nicht verfügbar → `uiPresentationSource()`
+meldet Unavailable, bestehende Konsumentenkopie und gespeicherte Revisionen
+bleiben unverändert, und der nächste Durchlauf versucht erneut.
 
-### 5.2 S4 – Render-Key vor Screen-Modell
+### 5.2 S4 – Render-Key vor Screen-Modell und allokationsfreier UI-Steady-State
 
 Der Render-Key wird aus den Eingaben von `render()` gebildet, bevor
 `makeRepresentativeScreen()` aufgerufen wird. Er muss eine Obermenge aller
@@ -318,11 +346,34 @@ unveränderten Steady State ohne dynamische Allokation:
   Cache-Invalidierung, nicht als fachlicher Zustand.
 - Die vollständige Abdeckung aller sichtbaren Eingaben bleibt Pflicht.
 
+Der Nachweis gilt nicht nur für den Key, sondern für den vollständigen
+unveränderten `updateProductUi()`-Steady-State. Vor dem Key entsteht heute
+weitere dynamische C++-Arbeit (Abschnitt 2.3, Punkt 7: Snapshot-Erzeugung mit
+Temperatur-/Meldungsvektoren, AP-Info mit `ssid`/`password`-Strings by value,
+`ClockViewInput` mit `TimeZoneId`). Deshalb gilt:
+
+- Nach Warm-up und ohne sichtbare Zustandsänderung erfolgt keine wiederholte
+  C++-Heap-Allokation im gesamten lokalen UI-Kompositionspfad
+  (`updateProductUi()` bis zum Early-Return des Renderers).
+- Touch-Polling und Application-/Safety-Takt bleiben unverändert.
+- Ereignisbezogene Allokationen bei tatsächlicher sichtbarer Änderung bleiben
+  gemäß Regel 4.1 zulässig und begrenzt.
+- Der Schnitt wählt je Quelle die kleinste Korrektur; es gibt keine
+  vorsorgliche Umstellung aller UI-Container.
+- Erlauben die vorhandenen Modelle diesen Nachweis nicht mit kleinem Delta,
+  wird nur der betroffene Teil als gemessener struktureller UI-Umbau in S11
+  geplant.
+- C-, ESP-IDF- und LVGL-Allokationen bleiben über die Hardware-Laufzeitmessung
+  (Abschnitt 3) abgedeckt.
+
 Test (im Implementierungsschnitt):
 
 - unveränderter Zustand: weder Aufbau eines Screen-Modells noch
-  C++-Heap-Allokation im Key-Pfad (Bildung, Speicherung, Vergleich), belegt
-  mit einem zählenden `operator new` im Host-Test für diesen C++-Pfad;
+  C++-Heap-Allokation im lokalen UI-Kompositionspfad, belegt mit einem
+  zählenden `operator new` im Host-Test. Der Nachweis umfasst mindestens
+  Snapshot-Erzeugung und Cacheentscheidung (S3), AP-Info-Zulieferung,
+  `ClockViewInput` und Render-Key (Bildung, Speicherung, Vergleich) bis zum
+  Early-Return;
 - je sichtbarer Eingabe und je renderrelevanter Workspace-Mutation ein Fall,
   der eine Key-Änderung und damit Neuzeichnen nachweist.
 
