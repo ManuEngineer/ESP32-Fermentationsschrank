@@ -9,7 +9,8 @@ S4_FIX1=PASS
 S4_HARDWARE_REMEASURE=FAIL_STOP_CONDITION_NONFATAL_HEAP_ALLOC_FAILED_X2
 STEADY_STATE_HEADERNETWORK_120S=PASS
 BROWSER_ACCESS=PASS_PAGE_LOADED_DEVICE_STABLE
-NETWORK_MODE_SWITCH=NOT_EXECUTED_RUN_STOPPED
+NETWORK_MODE_SWITCH_BY_TOUCH=NOT_EXECUTED_RUN_STOPPED
+HOME_NETWORK_CONNECT_VIA_SETUP_PAGE=OWNER_OBSERVED_SUCCESS_NOT_IN_UART_LOG
 ABORT_OR_RESET=0
 S5_TO_S11=NOT_STARTED
 OPEN_OWNER_GATES=O4_O5
@@ -99,6 +100,32 @@ ist es dagegen stabil und ändert sich nicht. Der Stack-HWM ist um 736 B
 niedriger als in S3, passend zum um 720–736 B größeren `app_main`-Frame
 (3872 B). Eine Verbesserung des Heaps wird aus diesen Messwerten **nicht**
 behauptet.
+
+## 4a. Nachtrag: Heimnetz-Verbindung nach Mitschnittende (Owner-Beobachtung)
+
+Nach den zwei `heap_alloc_failed` habe ich den UART-Mitschnitt beendet
+(Stopregel, ~568 s). Der Owner hat danach **über die Setup-Seite das Gerät mit
+dem Heimnetz verbunden**; das Gerät ist seither im Heimnetz unter
+`192.168.1.68` auffindbar. Ein Ping vom Entwicklungsrechner bestätigt das
+(3/3 Antworten, 0 % Verlust, ~50 ms; das ist kein Teil der UART-Evidenz).
+
+Was belegt ist und was nicht:
+
+- **Belegt:** Erreichbarkeit des Geräts im Heimnetz (Ping).
+- **Owner-Beobachtung, nicht im Log:** Die Verbindung mit dem Heimnetz gelang
+  und das Gerät lief danach weiter. In S2 und S3 führten die
+  Heimnetz-Wechsel zu Abstürzen (Configuration-Commit, Whitescreen).
+- **Nicht belegt:** Heap, Minimum, Stack-HWM und Reset-/`heap_alloc_failed`-
+  Verhalten während und nach dem Verbindungsaufbau, weil der Mitschnitt
+  vorher endete. Ein `stable_home_wifi`-Messpunkt wurde nicht erfasst.
+
+Die Aussage „Moduswechsel nicht ausgeführt“ in Abschnitt 2 gilt für den
+Wechsel `HOME_WIFI` → `AP_ONLY` per Touch; die Heimnetz-Verbindung über die
+Setup-Seite ist davon getrennt und wurde nicht aufgezeichnet. Eine
+Wiederholung mit durchgehendem Mitschnitt (Reset ohne Flash und ohne Erase,
+persistierter Zustand mit gespeicherten Zugangsdaten) ist als nächster
+Messschritt vorgeschlagen, aber nicht ausgeführt und nicht freigegeben. Am
+Gerät wurde nach dem Mitschnittende nichts geändert.
 
 ## 5. Ergebnis nach der Entscheidungsregel
 
