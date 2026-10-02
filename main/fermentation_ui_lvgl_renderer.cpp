@@ -401,4 +401,25 @@ bool ProductiveLvglRenderer::initialized() const noexcept {
     return impl_ != nullptr && impl_->initialized;
 }
 
+std::optional<ProductiveLvglRenderer::LvglPoolStats>
+ProductiveLvglRenderer::lvglPoolStats() const {
+#if defined(LV_USE_STDLIB_MALLOC) && defined(LV_STDLIB_BUILTIN) && \
+    (LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN)
+    if (!initialized() || !lvgl_port_lock(100U)) {
+        return std::nullopt;
+    }
+    lv_mem_monitor_t monitor{};
+    lv_mem_monitor(&monitor);
+    lvgl_port_unlock();
+    return LvglPoolStats{static_cast<std::uint32_t>(monitor.total_size),
+                         static_cast<std::uint32_t>(monitor.free_size),
+                         static_cast<std::uint32_t>(monitor.free_biggest_size),
+                         static_cast<std::uint32_t>(monitor.max_used),
+                         static_cast<std::uint8_t>(monitor.used_pct),
+                         static_cast<std::uint8_t>(monitor.frag_pct)};
+#else
+    return std::nullopt;
+#endif
+}
+
 }  // namespace fermentation::main_ui
