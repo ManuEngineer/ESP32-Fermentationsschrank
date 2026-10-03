@@ -155,3 +155,25 @@ kein Test durch mich ausgeführt und am Gerät nichts geändert. Der aktuelle
 Gerätezustand ist daher nicht mehr gleich dem im Abschnitt 6 genannten
 (persistierter Modus nach dem Lauf: `HOME_WIFI`; danach laut Owner wieder
 `AP`).
+
+## 8. Nachtrag: Rückwechsel ohne vorherigen Browserzugriff (Owner-Beobachtung)
+
+Der Owner hat den Wechsel `AP_ONLY` → `HOME_WIFI` danach **erneut** per Touch
+ausgeführt, diesmal **ohne vorher die Webseite aufzurufen**, und meldet: Der
+Wechsel lief problemlos.
+
+Einordnung (kein Messwert):
+
+- Es lief kein UART-Mitschnitt; Heap, Minimum, größter Block, Stack-HWM und
+  ein mögliches `heap_alloc_failed` sind nicht erfasst.
+- Dass die Firmware unverändert der Clean-Build `c089486` war, ist
+  anzunehmen (es wurde nichts geflasht), aber hier nicht per Boot-Log belegt.
+- Der Befund passt zu der Beobachtung aus Abschnitt 2, dass beim gescheiterten
+  Rückwechsel ein Client verbunden war und der Heap vor dem Press deutlich
+  niedriger lag (frei 7428 B, größter Block 5632 B gegenüber 10396 B und 8192 B
+  ohne Client). Er belegt aber keine Ursache: Es ist ein Einzelversuch ohne
+  Aufzeichnung, und der Configuration-Commit ist weiterhin als Absturzstelle
+  mit Clientlast reproduziert (S3 und der Clean-Lauf).
+- Für eine belastbare Aussage ist der Rückwechsel mit durchgehendem Mitschnitt
+  wiederholt zu messen, einmal ohne Client und einmal mit verbundenem Client.
+  Das ist nicht ausgeführt und nicht freigegeben.
