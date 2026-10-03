@@ -139,3 +139,19 @@ und die fehlschlagende Allokationsgröße sind unverändert zu S3.
   Review/Owner entschieden; es wurde nichts implementiert.
 - Gerätezustand nach dem Lauf: persistierter Modus `HOME_WIFI`, Gerät im
   Heimnetz; am Gerät wurde nichts geändert.
+
+## 7. Nachtrag: Owner-Beobachtungen nach Mitschnittende (nicht im UART-Log)
+
+Der Mitschnitt endete nach dem Absturz und dem Neustart (siehe Abschnitt 3).
+Danach hat der Owner gemeldet:
+
+- Die Webseite des Geräts unter `192.168.1.68` im Heimnetz funktioniert
+  (nach dem Neustart im `HOME_WIFI`-Zustand).
+- Der Owner hat danach wieder auf `AP` umgestellt („Bin wieder auf ap“).
+
+Beides ist Owner-Beobachtung. Heap-, Reset- und `heap_alloc_failed`-Verhalten
+während dieser Vorgänge sind nicht aufgezeichnet; es wurde in dieser Phase
+kein Test durch mich ausgeführt und am Gerät nichts geändert. Der aktuelle
+Gerätezustand ist daher nicht mehr gleich dem im Abschnitt 6 genannten
+(persistierter Modus nach dem Lauf: `HOME_WIFI`; danach laut Owner wieder
+`AP`).
