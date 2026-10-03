@@ -174,10 +174,33 @@ Zwei nichtfatale Fehlschläge (`size=1696 caps=0x1800`), beide im reinen
 `HOME_WIFI`/`HomeConnected`-Idle ohne Touch und ohne Browser, kein Abort,
 kein Reset, kein Screen-Aufbau:
 
-| # | Uptime | Zeit seit `stable_home_wifi` (1367 s) | letzter Ressourcenpunkt davor | letztes WLAN-Ereignis davor |
+Zeitstempel-Herkunft: Die Zeiten stammen aus dem **ursprünglichen,
+unveränderten UART-Mitschnitt** dieser Sitzung (lokal gesichert, unsanitisiert,
+nicht im Repository: `s6_campaign_ORIGINAL_UNSANITIZED.raw`, SHA-256
+`d02928ac11c66371b5a0435b640e38df587a47c74bf6a657f1048325155551cc`,
+378762 Bytes, identisch zur Capture-Datei der Messreihe). Die Fehlerzeile
+trägt selbst keinen Zeitstempel (ESP-ROM-Ausgabe aus dem Allokator-Hook); sie ist
+durch die beiden benachbarten 1-s-Heartbeats des Originals eingeklammert
+(Auszug: [R1_RAM_S6_HW_IDLE_1696B_EVENT_BRACKETS.txt](R1_RAM_S6_HW_IDLE_1696B_EVENT_BRACKETS.txt)).
+Der committete sanitisierte Rohlog enthält keine Heartbeats und erlaubt diese
+Herleitung allein nicht.
+
+```text
+IDLE_1696B_TIMESTAMP_SOURCE=ORIGINAL_UNSANITIZED_UART_CAPTURE_SHA256_d02928ac11c66371b5a0435b640e38df587a47c74bf6a657f1048325155551cc
+IDLE_1696B_EVENT1_UPTIME_MS=BETWEEN_1745915_AND_1746915_LOG_TICK_(HEARTBEAT_UPTIME_1744744..1745744)
+IDLE_1696B_EVENT2_UPTIME_MS=BETWEEN_3370355_AND_3371355_LOG_TICK_(HEARTBEAT_UPTIME_3369183..3370183)
+```
+
+| # | Fenster (Log-Tick, ms seit Boot) | Zeit seit `stable_home_wifi` (1367505) | letzter Ressourcenpunkt davor | letztes WLAN-Ereignis davor |
 |---|---|---|---|---|
-| 1 | ~1745,9 s | ~379 s | `idle_120s` bei 1485 s: frei 18924 B, Minimum 4124 B, größter Block 7168 B, Stack-HWM 6256 B | `RX DELBA reason:39` bei 1502 s (~244 s vorher) |
-| 2 | ~3370,4 s | ~2003 s | derselbe | kein WLAN-Ereignis im Log davor |
+| 1 | 1745915 … 1746915 | ~378–379 s | `idle_120s` bei 1485175: frei 18924 B, Minimum 4124 B, größter Block 7168 B, Stack-HWM 6256 B | `RX DELBA reason:39` bei 1502505 (~243 s vorher) |
+| 2 | 3370355 … 3371355 | ~2003 s | derselbe | keines im Log davor (letztes: DELBA 1502505) |
+
+Die früher genannten ungefähren Werte „~1745,9 s“ und „~3370,4 s“ entsprachen
+dem unteren Ende dieser Ein-Sekunden-Fenster. Nach beiden Ereignissen zeigt
+das Log in den folgenden ~12 Minuten keinen Abort, Reset, keine WLAN-Trennung
+und keine Zustandsänderung; das nächste WLAN-Ereignis nach Ereignis 2 ist ein
+normales `ADDBA`/`DELBA` (3632405 / 3653275).
 
 Beide Male war der letzte gemessene Heap hoch (≈ 18,9 kB frei, größter Block
 7168 B, deutlich über 1696 B). Wie die Allokation dennoch fehlschlug, ist aus
