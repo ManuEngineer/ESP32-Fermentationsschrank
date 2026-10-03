@@ -84,6 +84,9 @@ class FermentationApplication {
     // these credentials.
     [[nodiscard]] std::optional<device_platform::NetworkAccessPointInfo>
     networkAccessPointInfo() const;
+    // Change identity of networkAccessPointInfo() without copying the
+    // secret-bearing strings (see INetworkLifecycle::accessPointInfoRevision).
+    [[nodiscard]] std::uint64_t networkAccessPointRevision() const noexcept;
     // Secret-free canonical mode input for the renderer-independent UI view.
     [[nodiscard]] device_platform::NetworkMode networkMode() const noexcept;
     // Sole application-owned runtime evidence handoff. Producers such as
@@ -92,12 +95,20 @@ class FermentationApplication {
     void publishOwningRuntimeEvidence(
         const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] FermentationUiSnapshot uiSnapshot() const;
+    // Same snapshot into an existing object (recycled buffers): allocation-free
+    // once the buffers have reached their capacity; used by the steady-state
+    // UI loop. Not safe for concurrent callers.
+    void refreshUiSnapshot(FermentationUiSnapshot& snapshot) const;
     // The single renderer-independent source for display locale, the
     // canonical prepared time zone and the program catalog needed by the
     // local UI workspace/renderer. It never duplicates persistence or
-    // recovery policy; a failed configuration read yields safe defaults
-    // (English, an empty catalog) rather than blocking presentation.
-    [[nodiscard]] FermentationUiPresentationSource uiPresentationSource() const;
+    // recovery policy. The result is explicit: a value only if the
+    // configuration runtime granted its read lease, std::nullopt otherwise
+    // (no configuration service, lease unavailable). Callers decide what an
+    // unavailable source means; there is no heuristic over empty catalogs or
+    // default values.
+    [[nodiscard]] std::optional<FermentationUiPresentationSource>
+    uiPresentationSource() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -255,6 +266,7 @@ class FermentationApplication {
     std::optional<CrossRolePlausibilityContext> owningRecoveryEvidence_;
     CrossRolePlausibilityContext owningRuntimeEvidence_{};
     mutable FermentationUiRefreshRevisionTracker uiRefreshTracker_;
+    mutable FermentationUiProjectionInput uiProjectionInput_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
     std::optional<RecoveryDisposition> recoveryDisposition_;

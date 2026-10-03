@@ -13,6 +13,7 @@
 #include "device_ui_text.hpp"
 #include "network_lifecycle.hpp"
 #include "fermentation_touch_workspace.hpp"
+#include "fermentation_ui_presentation_cache.hpp"
 #include "fermentation_ui_text.hpp"
 
 namespace fermentation::main_ui {
@@ -89,48 +90,72 @@ struct RepresentativeScreen {
     const std::optional<device_platform::NetworkAccessPointInfo>&
         networkAccessPointInfo = std::nullopt);
 
-// Identifies every semantic input the concrete renderer must redraw for, so
-// it stays independent of the application's UiRefreshRevision. The workspace
-// carries local navigation/pager/dialog state that can change without a new
-// application snapshot; locale and header values can change independently of
-// both. Only genuinely visible inputs participate; the drawn command list
-// itself is derived output, not part of the key.
+// Allocation-free identity of every visible input of render(), formed
+// BEFORE any screen model is built: if it equals the key of the last
+// successful render nothing visible changed and no model is built. It holds
+// only revisions, enum/index values, flags and hashes (no strings), so forming,
+// storing and comparing it never allocates. It must be a superset of the
+// visible inputs:
+//  - application state: snapshot.refreshRevision (published by the tracker
+//    from the full semantic snapshot comparison);
+//  - local workspace state (page, pager, dialog, selections, bottom slots):
+//    FermentationTouchWorkspace::renderRevision(), bumped by every mutator,
+//    plus the current page;
+//  - program catalog: the revision adopted by the presentation cache, absent
+//    while no valid copy exists (HeaderNetwork, unavailable fill);
+//  - locale: hash of the locale actually used for drawing;
+//  - pressed target (kind and slot), network status, trusted UTC at display
+//    resolution (the clock text is HH:MM from UTC, minute granularity) and the
+//    network lifecycle's access-point change revision (only on HeaderNetwork;
+//    it changes exactly when SSID, password or IPv4 address change or the
+//    data is set or cleared, and is read without copying the secrets).
 struct ScreenRenderKey {
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
-    device_platform::LocaleId locale;
-    FermentationUiPage page;
-    std::uint32_t pagerCurrentIndex{0U};
-    std::uint32_t pagerItemCount{0U};
-    bool hasConfirmationWarning{false};
-    std::string confirmationProgramName;
-    bool completionLocked{false};
-    std::optional<device_platform::TextKey> blockedReason;
-    std::size_t unavailableCapabilityCount{0U};
-    std::size_t programListSize{0U};
-    // Bottom slots are local, renderer-independent workspace/interaction
-    // state that can change within the same page and the same application
-    // UiRefreshRevision (e.g. setManualHoldingValues() enabling the confirm
-    // slot, or a program-edit dirty state enabling save) - see BLOCKER 1,
-    // docs/tasks/issue-31-renderer-display-touch-calibration-plan.md's
-    // follow-up Auftrag.
-    std::array<device_platform::BottomSlot, 4U> bottomSlots{};
-    std::optional<std::uint8_t> pressedBottomSlotIndex;
+    std::uint32_t workspaceRevision{0U};
+    FermentationUiPage page{FermentationUiPage::Home};
+    std::optional<ProgramCatalogRevision> catalogRevision;
+    std::uint64_t localeFingerprint{0U};
+    bool hasPressedTarget{false};
+    device_platform::DeviceUiTargetKind pressedKind{
+        device_platform::DeviceUiTargetKind::None};
+    std::uint8_t pressedSlotIndex{0U};
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};
-    std::uint64_t localNetworkInfoFingerprint{0U};
-    std::optional<std::int64_t> trustedUtc;
-    device_platform::ThemeId themeId;
+    std::optional<std::int64_t> utcMinute;
+    std::uint64_t accessPointRevision{0U};
 
     friend bool operator==(const ScreenRenderKey& left,
-                           const ScreenRenderKey& right) noexcept;
+                           const ScreenRenderKey& right) noexcept {
+        return left.refreshRevision == right.refreshRevision &&
+               left.workspaceRevision == right.workspaceRevision &&
+               left.page == right.page &&
+               left.catalogRevision == right.catalogRevision &&
+               left.localeFingerprint == right.localeFingerprint &&
+               left.hasPressedTarget == right.hasPressedTarget &&
+               left.pressedKind == right.pressedKind &&
+               left.pressedSlotIndex == right.pressedSlotIndex &&
+               left.networkStatus == right.networkStatus &&
+               left.utcMinute == right.utcMinute &&
+               left.accessPointRevision == right.accessPointRevision;
+    }
     friend bool operator!=(const ScreenRenderKey& left,
                            const ScreenRenderKey& right) noexcept {
         return !(left == right);
     }
 };
 
+[[nodiscard]] std::uint64_t localeFingerprint(
+    const device_platform::LocaleId& locale) noexcept;
+
 [[nodiscard]] ScreenRenderKey makeScreenRenderKey(
-    const RepresentativeScreen& screen) noexcept;
+    const FermentationUiSnapshot& snapshot,
+    const FermentationTouchWorkspace& workspace,
+    const device_platform::LocaleId& locale,
+    std::optional<device_platform::DeviceUiTarget> pressedTarget,
+    const FermentationUiPresentationCache& presentation,
+    device_platform::DeviceUiNetworkStatus networkStatus,
+    std::optional<std::int64_t> trustedUtc,
+    std::uint64_t accessPointRevision) noexcept;
 
 [[nodiscard]] std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,

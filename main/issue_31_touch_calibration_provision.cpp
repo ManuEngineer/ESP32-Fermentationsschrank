@@ -151,6 +151,42 @@ void run() noexcept {
                  "ISSUE31_CALIBRATION_ACTIVE_PRESTATE="
                  "COMPOSED_SEQUENCE_2");
         ESP_LOGI(kTag, "ISSUE31_CALIBRATION_WRITE=NOT_NEEDED");
+    } else if (active.status ==
+               device_platform::TouchCalibrationLoadStatus::NotFound) {
+        // Narrow first-provision case for a deliberately reinitialized,
+        // empty test state: only if both slots are exactly NotFound is the
+        // already reviewed composed model written directly as sequence 2.
+        // Any other existing or unreadable record stays fail-closed.
+        const auto fallback =
+            calibration.load(device_platform::TouchCalibrationSlot::Fallback,
+                             kBoardControllerId);
+        ESP_LOGI(kTag, "ISSUE31_CALIBRATION_FALLBACK_STATUS=%s",
+                 loadStatusName(fallback.status));
+        if (fallback.status !=
+            device_platform::TouchCalibrationLoadStatus::NotFound) {
+            logFailure("FIRST_PROVISION_FALLBACK_NOT_EMPTY");
+            return;
+        }
+        ESP_LOGI(kTag,
+                 "ISSUE31_CALIBRATION_ACTIVE_PRESTATE=FIRST_PROVISION_FROM_"
+                 "EMPTY");
+        const auto write = calibration.write(
+            device_platform::TouchCalibrationSlot::Active, kComposedModel, 2U);
+        if (write.status !=
+            device_platform::TouchCalibrationWriteStatus::Committed) {
+            logFailure("ACTIVE_WRITE_NOT_COMMITTED");
+            return;
+        }
+        ESP_LOGI(kTag, "ISSUE31_CALIBRATION_WRITE=COMMITTED");
+        const auto fallbackAfter =
+            calibration.load(device_platform::TouchCalibrationSlot::Fallback,
+                             kBoardControllerId);
+        if (fallbackAfter.status !=
+            device_platform::TouchCalibrationLoadStatus::NotFound) {
+            logFailure("FIRST_PROVISION_FALLBACK_CHANGED");
+            return;
+        }
+        ESP_LOGI(kTag, "ISSUE31_CALIBRATION_FALLBACK_AFTER=NotFound");
     } else {
         logFailure("ACTIVE_RECORD_MIGRATION_PRECONDITION");
         return;

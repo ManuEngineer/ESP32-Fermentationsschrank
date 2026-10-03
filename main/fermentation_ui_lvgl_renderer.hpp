@@ -93,6 +93,20 @@ class ProductiveLvglRenderer final {
             networkAccessPointInfo = std::nullopt);
     [[nodiscard]] bool initialized() const noexcept;
 
+    // Reine Diagnose (R1-RAM-Baseline, Plan S2): Belegung des eingebauten
+    // LVGL-Speicherpools. nullopt, wenn LVGL nicht initialisiert ist, der
+    // eingebaute LVGL-Allocator nicht aktiv ist oder der LVGL-Lock nicht
+    // innerhalb einer kurzen Frist erhalten wird. Aendert keinen Zustand.
+    struct LvglPoolStats {
+        std::uint32_t totalBytes{0U};
+        std::uint32_t freeBytes{0U};
+        std::uint32_t largestFreeBytes{0U};
+        std::uint32_t maxUsedBytes{0U};
+        std::uint8_t usedPercent{0U};
+        std::uint8_t fragmentationPercent{0U};
+    };
+    [[nodiscard]] std::optional<LvglPoolStats> lvglPoolStats() const;
+
    private:
     class Impl;
     std::unique_ptr<Impl> impl_;

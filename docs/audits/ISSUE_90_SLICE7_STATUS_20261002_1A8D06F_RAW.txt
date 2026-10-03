@@ -1,0 +1,9 @@
+I (793) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1173) app_main: ISSUE90_NVS_PARTITION_INIT=PASS ISSUE90_NVS_STORE_OPEN=PASS
+I (1253) app_main: source git sha: 1a8d06fe5d5818a0779d413ab3f8d41d5fded382
+W (1273) app_main: application: service required
+I (1823) issue90_slice7: ISSUE90_UART_RX_READY result=PASS
+I (1823) issue90_slice7: ISSUE90_PROTOCOL_VERSION=1
+I (1823) issue90_slice7: ISSUE90_READY partition=state_store_test actor_free=YES real_actuators_enabled=NO backup_required=YES partition_offset=0x300000 partition_size=0x100000 test_partition_physically_separate=NO test_partition_reuses_production_flash_range=YES source_sha=1a8d06fe5d5818a0779d413ab3f8d41d5fded382 load_stop=STOP_OR_PHYSICAL_POWER_CUT
+I (1853) issue90_slice7: ISSUE90_STATUS application_started=YES application_lifecycle=ServiceRequired configuration_recovery_status=UnsupportedNewerConfigurationSchema configuration_runtime_available=NO run_persistence_load_status=NOT_AVAILABLE run_load_disposition=SafeBoot published_process_state=NONE actuator_release=false trusted_utc=NOT_AVAILABLE
+I (25233) issue90_slice7: ISSUE90_STATUS application_started=YES application_lifecycle=ServiceRequired configuration_recovery_status=UnsupportedNewerConfigurationSchema configuration_runtime_available=NO run_persistence_load_status=NOT_AVAILABLE run_load_disposition=SafeBoot published_process_state=NONE actuator_release=false trusted_utc=NOT_AVAILABLE

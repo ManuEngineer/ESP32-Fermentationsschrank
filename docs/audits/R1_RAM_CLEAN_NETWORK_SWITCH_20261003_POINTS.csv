@@ -1,0 +1,16 @@
+boot,uptime_ms,point,mode,state,free_heap_bytes,minimum_free_heap_bytes,largest_free_block_8bit_bytes,stack_hwm_bytes,internal_8bit_free_bytes,internal_8bit_minimum_free_bytes,internal_8bit_largest_free_block_bytes,dma_free_bytes,dma_minimum_free_bytes,dma_largest_free_block_bytes,lvgl_total_bytes,lvgl_free_bytes,lvgl_largest_free_bytes,lvgl_max_used_bytes,lvgl_used_pct,lvgl_frag_pct,lvgl
+1,1175,after_platform_begin,UNSELECTED,Stopped,154744,154744,110592,19680,154744,154744,110592,154744,154744,110592,,,,,,,
+1,1715,after_application_begin,HOME_WIFI,ConnectingHome,64060,60060,59392,12944,63704,60060,59392,63704,60060,59392,,,,,,,
+1,2235,after_ui_init,HOME_WIFI,ConnectingHome,15620,10612,12800,12944,15620,10612,12800,15620,10612,12800,63108,49980,49612,13940,21,1,
+1,4215,stable_home_wifi,HOME_WIFI,HomeConnected,13776,10124,12800,12944,13776,10124,12800,13776,10124,12800,,,,,,,unavailable
+1,32325,periodic_30s,HOME_WIFI,HomeConnected,13668,9820,12800,12944,13668,9820,12800,13668,9820,12800,63108,50016,49648,13940,21,1,
+1,122325,idle_120s,HOME_WIFI,HomeConnected,13708,7904,12800,12944,13708,7904,12800,13708,7904,12800,63108,50016,49648,13940,21,1,
+1,3837495,network_page_press_before,HOME_WIFI,HomeConnected,14456,2336,12800,12944,14456,2336,12800,14456,2336,12800,63384,52924,50248,13940,17,6,
+1,3837995,network_page_press_after,AP_ONLY,AccessPointOnly,10916,2336,8192,6256,10728,2336,8192,10728,2336,8192,63384,52924,50248,13940,17,6,
+1,3838395,stable_ap_only,AP_ONLY,AccessPointOnly,10396,2336,8192,6256,10600,2336,8192,10600,2336,8192,63276,48388,46756,15848,24,4,
+1,3918515,network_page_press_before,AP_ONLY,AccessPointOnly,7428,2192,5632,6256,7428,2192,5632,7428,2192,5632,63296,48560,47740,15848,24,2,
+2,1175,after_platform_begin,UNSELECTED,Stopped,154744,154744,110592,19680,154744,154744,110592,154744,154744,110592,,,,,,,
+2,1715,after_application_begin,HOME_WIFI,ConnectingHome,64060,59928,59392,12944,64060,59928,59392,64060,59928,59392,,,,,,,
+2,2235,after_ui_init,HOME_WIFI,ConnectingHome,15616,10108,13312,12944,15616,10108,13312,15616,10108,13312,63108,49980,49612,13940,21,1,
+2,4235,stable_home_wifi,HOME_WIFI,HomeConnected,13564,9980,12288,12944,13744,9980,12288,13744,9980,12288,,,,,,,unavailable
+2,32325,periodic_30s,HOME_WIFI,HomeConnected,13944,4608,12288,12944,13944,4608,12288,13944,4608,12288,63108,50016,49648,13940,21,1,

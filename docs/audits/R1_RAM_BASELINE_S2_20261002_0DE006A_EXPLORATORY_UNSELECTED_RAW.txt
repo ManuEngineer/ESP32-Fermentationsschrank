@@ -1,0 +1,1096 @@
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+rtbeat: safe test mode, uptime_ms=2523721
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 ets Jul 29 2019 12OT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (28) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (621) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154744 minimum_free_heap_bytes=154744 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154744 internal_8bit_minimum_free_bytes=154744 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154744 dma_minimum_free_bytes=154744 dma_largest_free_block_bytes=110592
+I (1205) app_main: resources: point=after_application_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=153200 minimum_free_heap_bytes=153140 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=17280 internal_8bit_free_bytes=153200 internal_8bit_minimum_free_bytes=153140 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=153200 dma_minimum_free_bytes=153140 dma_largest_free_block_bytes=110592
+I (1235) app_main: ESP32-Fermentationsschrank
+I (1245) app_main: profile: esp32_release
+I (1245) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1255) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1255) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1265) app_main: real actuators: disabled
+W (1265) app_main: application: service required
+I (1285) ili9341: LCD panel create success, version: 2.1.0
+I (1405) LVGL: Starting LVGL task
+W (1415) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+I (1475) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (1765) app_main: resources: point=after_ui_init network_mode=UNSELECTED network_state=Stopped free_heap_bytes=106068 minimum_free_heap_bytes=101632 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=17136 internal_8bit_free_bytes=106068 internal_8bit_minimum_free_bytes=101632 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=106068 dma_minimum_free_bytes=101632 dma_largest_free_block_bytes=98304
+I (1795) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (2815) app_main: heartbeat: safe test mode, uptime_ms=1642
+I (3815) app_main: heartbeat: safe test mode, uptime_ms=2642
+I (4815) app_main: heartbeat: safe test mode, uptime_ms=3642
+I (5815) app_main: heartbeat: safe test mode, uptime_ms=4642
+I (6815) app_main: heartbeat: safe test mode, uptime_ms=5642
+I (7815) app_main: heartbeat: safe test mode, uptime_ms=6642
+I (8815) app_main: heartbeat: safe test mode, uptime_ms=7642
+I (9815) app_main: heartbeat: safe test mode, uptime_ms=8642
+I (10815) app_main: heartbeat: safe test mode, uptime_ms=9642
+I (11815) app_main: heartbeat: safe test mode, uptime_ms=10642
+I (12815) app_main: heartbeat: safe test mode, uptime_ms=11642
+I (13815) app_main: heartbeat: safe test mode, uptime_ms=12642
+I (14815) app_main: heartbeat: safe test mode, uptime_ms=13642
+I (15815) app_main: heartbeat: safe test mode, uptime_ms=14642
+I (16815) app_main: heartbeat: safe test mode, uptime_ms=15642
+I (17815) app_main: heartbeat: safe test mode, uptime_ms=16642
+I (18815) app_main: heartbeat: safe test mode, uptime_ms=17642
+I (19815) app_main: heartbeat: safe test mode, uptime_ms=18642
+I (20815) app_main: heartbeat: safe test mode, uptime_ms=19642
+I (21815) app_main: heartbeat: safe test mode, uptime_ms=20642
+I (22815) app_main: heartbeat: safe test mode, uptime_ms=21642
+I (23815) app_main: heartbeat: safe test mode, uptime_ms=22642
+I (24815) app_main: heartbeat: safe test mode, uptime_ms=23642
+I (25825) app_main: heartbeat: safe test mode, uptime_ms=24652
+I (26785) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (26815) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (26835) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (26865) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (26885) app_main: touch press dispatch: outcome=2
+I (27095) app_main: heartbeat: safe test mode, uptime_ms=25920
+I (28095) app_main: heartbeat: safe test mode, uptime_ms=26921
+I (29035) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (29065) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (29085) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (29115) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (29335) app_main: heartbeat: safe test mode, uptime_ms=28164
+I (30195) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (30225) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (30245) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (30275) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (30295) app_main: touch press dispatch: outcome=2
+I (30505) app_main: heartbeat: safe test mode, uptime_ms=29331
+I (31505) app_main: heartbeat: safe test mode, uptime_ms=30331
+I (31605) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (31635) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (31655) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (31685) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (31705) app_main: touch press dispatch: outcome=2
+I (31915) app_main: resources: point=periodic_30s network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105988 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105988 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105988 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (31935) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63360 pool_free_bytes=52756 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (32505) app_main: heartbeat: safe test mode, uptime_ms=31331
+I (32895) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16112 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (32925) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (32945) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105472 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16080 internal_8bit_free_bytes=105472 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105472 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (32975) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50568 pool_max_used_bytes=13940 pool_used_pct=17 pool_frag_pct=5
+I (33585) app_main: heartbeat: safe test mode, uptime_ms=32412
+I (34875) app_main: heartbeat: safe test mode, uptime_ms=33704
+I (35885) app_main: heartbeat: safe test mode, uptime_ms=34712
+I (36895) app_main: heartbeat: safe test mode, uptime_ms=35722
+I (37955) app_main: heartbeat: safe test mode, uptime_ms=36780
+I (38955) app_main: heartbeat: safe test mode, uptime_ms=37782
+I (39965) app_main: heartbeat: safe test mode, uptime_ms=38792
+I (40975) app_main: heartbeat: safe test mode, uptime_ms=39802
+I (41985) app_main: heartbeat: safe test mode, uptime_ms=40812
+I (43135) app_main: heartbeat: safe test mode, uptime_ms=41961
+I (44195) app_main: heartbeat: safe test mode, uptime_ms=43021
+I (45255) app_main: heartbeat: safe test mode, uptime_ms=44080
+I (46475) app_main: heartbeat: safe test mode, uptime_ms=45303
+I (47725) app_main: heartbeat: safe test mode, uptime_ms=46554
+I (48735) app_main: heartbeat: safe test mode, uptime_ms=47561
+I (49735) app_main: heartbeat: safe test mode, uptime_ms=48561
+I (50735) app_main: heartbeat: safe test mode, uptime_ms=49561
+I (51735) app_main: heartbeat: safe test mode, uptime_ms=50561
+I (52085) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16080 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (52115) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (52135) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16080 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (52165) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (52185) app_main: touch press dispatch: outcome=2
+I (52735) app_main: heartbeat: safe test mode, uptime_ms=51561
+I (53085) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=16080 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (53115) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (53135) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (53165) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (53185) app_main: touch press dispatch: outcome=2
+I (53735) app_main: heartbeat: safe test mode, uptime_ms=52562
+I (53815) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (53845) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (53865) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (53895) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (54745) app_main: heartbeat: safe test mode, uptime_ms=53571
+I (55195) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (55225) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (55245) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (55275) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (55745) app_main: heartbeat: safe test mode, uptime_ms=54571
+I (55755) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (55785) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (55805) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (55835) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (56155) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (56185) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (56205) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15936 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (56235) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (56745) app_main: heartbeat: safe test mode, uptime_ms=55573
+I (57275) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15920 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (57305) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (57325) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15920 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (57355) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (57745) app_main: heartbeat: safe test mode, uptime_ms=56573
+I (58195) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15920 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (58225) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (58245) app_main: resources: point=network_page_press_after network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105476 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15920 internal_8bit_free_bytes=105476 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105476 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (58275) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52932 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (58885) app_main: heartbeat: safe test mode, uptime_ms=57714
+I (59895) app_main: heartbeat: safe test mode, uptime_ms=58722
+I (60905) app_main: heartbeat: safe test mode, uptime_ms=59732
+I (61905) app_main: heartbeat: safe test mode, uptime_ms=60732
+I (62905) app_main: heartbeat: safe test mode, uptime_ms=61732
+I (63905) app_main: heartbeat: safe test mode, uptime_ms=62732
+I (64905) app_main: heartbeat: safe test mode, uptime_ms=63732
+I (65905) app_main: heartbeat: safe test mode, uptime_ms=64732
+I (66905) app_main: heartbeat: safe test mode, uptime_ms=65732
+I (67905) app_main: heartbeat: safe test mode, uptime_ms=66732
+I (68905) app_main: heartbeat: safe test mode, uptime_ms=67732
+I (69905) app_main: heartbeat: safe test mode, uptime_ms=68732
+I (70905) app_main: heartbeat: safe test mode, uptime_ms=69732
+I (71905) app_main: heartbeat: safe test mode, uptime_ms=70732
+I (72905) app_main: heartbeat: safe test mode, uptime_ms=71732
+I (73905) app_main: heartbeat: safe test mode, uptime_ms=72732
+I (74905) app_main: heartbeat: safe test mode, uptime_ms=73732
+I (75905) app_main: heartbeat: safe test mode, uptime_ms=74732
+I (76905) app_main: heartbeat: safe test mode, uptime_ms=75732
+I (77905) app_main: heartbeat: safe test mode, uptime_ms=76732
+I (78905) app_main: heartbeat: safe test mode, uptime_ms=77732
+I (79905) app_main: heartbeat: safe test mode, uptime_ms=78732
+I (80905) app_main: heartbeat: safe test mode, uptime_ms=79732
+I (81905) app_main: heartbeat: safe test mode, uptime_ms=80732
+I (82905) app_main: heartbeat: safe test mode, uptime_ms=81732
+I (83905) app_main: heartbeat: safe test mode, uptime_ms=82732
+I (84905) app_main: heartbeat: safe test mode, uptime_ms=83732
+I (85905) app_main: heartbeat: safe test mode, uptime_ms=84732
+I (86905) app_main: heartbeat: safe test mode, uptime_ms=85732
+I (87905) app_main: heartbeat: safe test mode, uptime_ms=86732
+I (88905) app_main: heartbeat: safe test mode, uptime_ms=87732
+I (89905) app_main: heartbeat: safe test mode, uptime_ms=88732
+I (90905) app_main: heartbeat: safe test mode, uptime_ms=89732
+I (91905) app_main: heartbeat: safe test mode, uptime_ms=90732
+I (92905) app_main: heartbeat: safe test mode, uptime_ms=91732
+I (93905) app_main: heartbeat: safe test mode, uptime_ms=92732
+I (94905) app_main: heartbeat: safe test mode, uptime_ms=93732
+I (95905) app_main: heartbeat: safe test mode, uptime_ms=94732
+I (96905) app_main: heartbeat: safe test mode, uptime_ms=95732
+I (97905) app_main: heartbeat: safe test mode, uptime_ms=96732
+I (98905) app_main: heartbeat: safe test mode, uptime_ms=97732
+I (99905) app_main: heartbeat: safe test mode, uptime_ms=98732
+I (100905) app_main: heartbeat: safe test mode, uptime_ms=99732
+I (101905) app_main: heartbeat: safe test mode, uptime_ms=100732
+I (102905) app_main: heartbeat: safe test mode, uptime_ms=101732
+I (103905) app_main: heartbeat: safe test mode, uptime_ms=102732
+I (104905) app_main: heartbeat: safe test mode, uptime_ms=103732
+I (105905) app_main: heartbeat: safe test mode, uptime_ms=104732
+I (106905) app_main: heartbeat: safe test mode, uptime_ms=105732
+I (107905) app_main: heartbeat: safe test mode, uptime_ms=106732
+I (108905) app_main: heartbeat: safe test mode, uptime_ms=107732
+I (109905) app_main: heartbeat: safe test mode, uptime_ms=108732
+I (110905) app_main: heartbeat: safe test mode, uptime_ms=109732
+I (111905) app_main: heartbeat: safe test mode, uptime_ms=110732
+I (112905) app_main: heartbeat: safe test mode, uptime_ms=111732
+I (113905) app_main: heartbeat: safe test mode, uptime_ms=112732
+I (114905) app_main: heartbeat: safe test mode, uptime_ms=113732
+I (115905) app_main: heartbeat: safe test mode, uptime_ms=114732
+I (116905) app_main: heartbeat: safe test mode, uptime_ms=115732
+I (117905) app_main: heartbeat: safe test mode, uptime_ms=116732
+I (118905) app_main: heartbeat: safe test mode, uptime_ms=117732
+I (119905) app_main: heartbeat: safe test mode, uptime_ms=118732
+I (120905) app_main: heartbeat: safe test mode, uptime_ms=119732
+I (121905) app_main: heartbeat: safe test mode, uptime_ms=120732
+I (122905) app_main: heartbeat: safe test mode, uptime_ms=121732
+I (123905) app_main: heartbeat: safe test mode, uptime_ms=122732
+I (124905) app_main: heartbeat: safe test mode, uptime_ms=123732
+I (125905) app_main: heartbeat: safe test mode, uptime_ms=124732
+I (126905) app_main: heartbeat: safe test mode, uptime_ms=125732
+I (127905) app_main: heartbeat: safe test mode, uptime_ms=126732
+I (128905) app_main: heartbeat: safe test mode, uptime_ms=127732
+I (129905) app_main: heartbeat: safe test mode, uptime_ms=128732
+I (130905) app_main: heartbeat: safe test mode, uptime_ms=129732
+I (131905) app_main: heartbeat: safe test mode, uptime_ms=130732
+I (132905) app_main: heartbeat: safe test mode, uptime_ms=131732
+I (133905) app_main: heartbeat: safe test mode, uptime_ms=132732
+I (134905) app_main: heartbeat: safe test mode, uptime_ms=133732
+I (135905) app_main: heartbeat: safe test mode, uptime_ms=134732
+I (136905) app_main: heartbeat: safe test mode, uptime_ms=135732
+I (137905) app_main: heartbeat: safe test mode, uptime_ms=136732
+I (138905) app_main: heartbeat: safe test mode, uptime_ms=137732
+I (139905) app_main: heartbeat: safe test mode, uptime_ms=138732
+I (140905) app_main: heartbeat: safe test mode, uptime_ms=139732
+I (141905) app_main: heartbeat: safe test mode, uptime_ms=140732
+I (142905) app_main: heartbeat: safe test mode, uptime_ms=141732
+I (143905) app_main: heartbeat: safe test mode, uptime_ms=142732
+I (144905) app_main: heartbeat: safe test mode, uptime_ms=143732
+I (145905) app_main: heartbeat: safe test mode, uptime_ms=144732
+I (146905) app_main: heartbeat: safe test mode, uptime_ms=145732
+I (147905) app_main: heartbeat: safe test mode, uptime_ms=146732
+I (148905) app_main: heartbeat: safe test mode, uptime_ms=147732
+I (149905) app_main: heartbeat: safe test mode, uptime_ms=148732
+I (150905) app_main: heartbeat: safe test mode, uptime_ms=149732
+I (151905) app_main: heartbeat: safe test mode, uptime_ms=150732
+I (152905) app_main: heartbeat: safe test mode, uptime_ms=151732
+I (153905) app_main: heartbeat: safe test mode, uptime_ms=152732
+I (154905) app_main: heartbeat: safe test mode, uptime_ms=153732
+I (155905) app_main: heartbeat: safe test mode, uptime_ms=154732
+I (156905) app_main: heartbeat: safe test mode, uptime_ms=155732
+I (157905) app_main: heartbeat: safe test mode, uptime_ms=156732
+I (158905) app_main: heartbeat: safe test mode, uptime_ms=157732
+I (159905) app_main: heartbeat: safe test mode, uptime_ms=158732
+I (160905) app_main: heartbeat: safe test mode, uptime_ms=159732
+I (161905) app_main: heartbeat: safe test mode, uptime_ms=160732
+I (162905) app_main: heartbeat: safe test mode, uptime_ms=161732
+I (163905) app_main: heartbeat: safe test mode, uptime_ms=162732
+I (164905) app_main: heartbeat: safe test mode, uptime_ms=163732
+I (165905) app_main: heartbeat: safe test mode, uptime_ms=164732
+I (166905) app_main: heartbeat: safe test mode, uptime_ms=165732
+I (167905) app_main: heartbeat: safe test mode, uptime_ms=166732
+I (168905) app_main: heartbeat: safe test mode, uptime_ms=167732
+I (169905) app_main: heartbeat: safe test mode, uptime_ms=168732
+I (170905) app_main: heartbeat: safe test mode, uptime_ms=169732
+I (171905) app_main: heartbeat: safe test mode, uptime_ms=170732
+I (172905) app_main: heartbeat: safe test mode, uptime_ms=171732
+I (173905) app_main: heartbeat: safe test mode, uptime_ms=172732
+I (174905) app_main: heartbeat: safe test mode, uptime_ms=173732
+I (175905) app_main: heartbeat: safe test mode, uptime_ms=174732
+I (176905) app_main: heartbeat: safe test mode, uptime_ms=175732
+I (177905) app_main: heartbeat: safe test mode, uptime_ms=176732
+I (178905) app_main: heartbeat: safe test mode, uptime_ms=177732
+I (179905) app_main: heartbeat: safe test mode, uptime_ms=178732
+I (180515) app_main: resources: point=idle_120s network_mode=UNSELECTED network_state=Stopped free_heap_bytes=105992 minimum_free_heap_bytes=101608 largest_free_block_8bit_bytes=98304 stack_hwm_bytes=15920 internal_8bit_free_bytes=105992 internal_8bit_minimum_free_bytes=101608 internal_8bit_largest_free_block_bytes=98304 dma_free_bytes=105992 dma_minimum_free_bytes=101608 dma_largest_free_block_bytes=98304
+I (180545) app_main: resources_lvgl: point=idle_120s pool_total_bytes=63108 pool_free_bytes=50016 pool_largest_free_bytes=49648 pool_max_used_bytes=14072 pool_used_pct=21 pool_frag_pct=1
+I (180905) app_main: heartbeat: safe test mode, uptime_ms=179732
+I (181905) app_main: heartbeat: safe test mode, uptime_ms=180732
+I (182905) app_main: heartbeat: safe test mode, uptime_ms=181732
+I (183905) app_main: heartbeat: safe test mode, uptime_ms=182732
+I (184905) app_main: heartbeat: safe test mode, uptime_ms=183732
+I (185905) app_main: heartbeat: safe test mode, uptime_ms=184732
+I (186905) app_main: heartbeat: safe test mode, uptime_ms=185732
+I (187905) app_main: heartbeat: safe test mode, uptime_ms=186732
+I (188905) app_main: heartbeat: safe test mode, uptime_ms=187732
+I (189905) app_main: heartbeat: safe test mode, uptime_ms=188732
+I (190905) app_main: heartbeat: safe test mode, uptime_ms=189732
+I (191905) app_main: heartbeat: safe test mode, uptime_ms=190732
+I (192905) app_main: heartbeat: safe test mode, uptime_ms=191732
+I (193905) app_main: heartbeat: safe test mode, uptime_ms=192732
+I (194905) app_main: heartbeat: safe test mode, uptime_ms=193732
+I (195905) app_main: heartbeat: safe test mode, uptime_ms=194732
+I (196905) app_main: heartbeat: safe test mode, uptime_ms=195732
+I (197905) app_main: heartbeat: safe test mode, uptime_ms=196732
+I (198905) app_main: heartbeat: safe test mode, uptime_ms=197732
+I (199905) app_main: heartbeat: safe test mode, uptime_ms=198732
+I (200905) app_main: heartbeat: safe test mode, uptime_ms=199732
+I (201905) app_main: heartbeat: safe test mode, uptime_ms=200732
+I (202905) app_main: heartbeat: safe test mode, uptime_ms=201732
+I (203905) app_main: heartbeat: safe test mode, uptime_ms=202732
+I (204905) app_main: heartbeat: safe test mode, uptime_ms=203732
+I (205905) app_main: heartbeat: safe test mode, uptime_ms=204732
+I (206905) app_main: heartbeat: safe test mode, uptime_ms=205732
+I (207905) app_main: heartbeat: safe test mode, uptime_ms=206732
+I (208905) app_main: heartbeat: safe test mode, uptime_ms=207732
+I (209905) app_main: heartbeat: safe test mode, uptime_ms=208732
+I (210905) app_main: heartbeat: safe test mode, uptime_ms=209732
+I (211905) app_main: heartbeat: safe test mode, uptime_ms=210732
+I (212905) app_main: heartbeat: safe test mode, uptime_ms=211732
+I (213905) app_main: heartbeat: safe test mode, uptime_ms=212732
+I (214905) app_main: heartbeat: safe test mode, uptime_ms=213732
+I (215905) app_main: heartbeat: safe test mode, uptime_ms=214732
+I (216905) app_main: heartbeat: safe test mode, uptime_ms=215732
+I (217905) app_main: heartbeat: safe test mode, uptime_ms=216732
+I (218905) app_main: heartbeat: safe test mode, uptime_ms=217732
+I (219905) app_main: heartbeat: safe test mode, uptime_ms=218732
+I (220905) app_main: heartbeat: safe test mode, uptime_ms=219732
+I (221905) app_main: heartbeat: safe test mode, uptime_ms=220732
+I (222905) app_main: heartbeat: safe test mode, uptime_ms=221732
+I (223905) app_main: heartbeat: safe test mode, uptime_ms=222732
+I (224905) app_main: heartbeat: safe test mode, uptime_ms=223732
+I (225905) app_main: heartbeat: safe test mode, uptime_ms=224732
+I (226905) app_main: heartbeat: safe test mode, uptime_ms=225732
+I (227905) app_main: heartbeat: safe test mode, uptime_ms=226732
+I (228905) app_main: heartbeat: safe test mode, uptime_ms=227732
+I (229905) app_main: heartbeat: safe test mode, uptime_ms=228732
+I (230905) app_main: heartbeat: safe test mode, uptime_ms=229732
+I (231905) app_main: heartbeat: safe test mode, uptime_ms=230732
+I (232905) app_main: heartbeat: safe test mode, uptime_ms=231732
+I (233905) app_main: heartbeat: safe test mode, uptime_ms=232732
+I (234905) app_main: heartbeat: safe test mode, uptime_ms=233732
+I (235905) app_main: heartbeat: safe test mode, uptime_ms=234732
+I (236905) app_main: heartbeat: safe test mode, uptime_ms=235732
+I (237905) app_main: heartbeat: safe test mode, uptime_ms=236732
+I (238905) app_main: heartbeat: safe test mode, uptime_ms=237732
+I (239905) app_main: heartbeat: safe test mode, uptime_ms=238732
+I (240905) app_main: heartbeat: safe test mode, uptime_ms=239732
+I (241905) app_main: heartbeat: safe test mode, uptime_ms=240732
+I (242905) app_main: heartbeat: safe test mode, uptime_ms=241732
+I (243905) app_main: heartbeat: safe test mode, uptime_ms=242732
+I (244905) app_main: heartbeat: safe test mode, uptime_ms=243732
+I (245905) app_main: heartbeat: safe test mode, uptime_ms=244732
+I (246905) app_main: heartbeat: safe test mode, uptime_ms=245732
+I (247905) app_main: heartbeat: safe test mode, uptime_ms=246732
+I (248905) app_main: heartbeat: safe test mode, uptime_ms=247732
+I (249905) app_main: heartbeat: safe test mode, uptime_ms=248732
+I (250905) app_main: heartbeat: safe test mode, uptime_ms=249732
+I (251905) app_main: heartbeat: safe test mode, uptime_ms=250732
+I (252905) app_main: heartbeat: safe test mode, uptime_ms=251732
+I (253905) app_main: heartbeat: safe test mode, uptime_ms=252732
+I (254905) app_main: heartbeat: safe test mode, uptime_ms=253732
+I (255905) app_main: heartbeat: safe test mode, uptime_ms=254732
+I (256905) app_main: heartbeat: safe test mode, uptime_ms=255732
+I (257905) app_main: heartbeat: safe test mode, uptime_ms=256732
+I (258905) app_main: heartbeat: safe test mode, uptime_ms=257732
+I (259905) app_main: heartbeat: safe test mode, uptime_ms=258732
+I (260905) app_main: heartbeat: safe test mode, uptime_ms=259732
+I (261905) app_main: heartbeat: safe test mode, uptime_ms=260732
+I (262905) app_main: heartbeat: safe test mode, uptime_ms=261732
+I (263905) app_main: heartbeat: safe test mode, uptime_ms=262732
+I (264905) app_main: heartbeat: safe test mode, uptime_ms=263732
+I (265905) app_main: heartbeat: safe test mode, uptime_ms=264732
+I (266905) app_main: heartbeat: safe test mode, uptime_ms=265732
+I (267905) app_main: heartbeat: safe test mode, uptime_ms=266732
+I (268905) app_main: heartbeat: safe test mode, uptime_ms=267732
+I (269905) app_main: heartbeat: safe test mode, uptime_ms=268732
+I (270905) app_main: heartbeat: safe test mode, uptime_ms=269732
+I (271905) app_main: heartbeat: safe test mode, uptime_ms=270732
+I (272905) app_main: heartbeat: safe test mode, uptime_ms=271732
+I (273905) app_main: heartbeat: safe test mode, uptime_ms=272732
+I (274905) app_main: heartbeat: safe test mode, uptime_ms=273732
+I (275905) app_main: heartbeat: safe test mode, uptime_ms=274732
+I (276905) app_main: heartbeat: safe test mode, uptime_ms=275732
+I (277905) app_main: heartbeat: safe test mode, uptime_ms=276732
+I (278905) app_main: heartbeat: safe test mode, uptime_ms=277732
+I (279905) app_main: heartbeat: safe test mode, uptime_ms=278732
+I (280905) app_main: heartbeat: safe test mode, uptime_ms=279732
+I (281905) app_main: heartbeat: safe test mode, uptime_ms=280732
+I (282905) app_main: heartbeat: safe test mode, uptime_ms=281732
+I (283905) app_main: heartbeat: safe test mode, uptime_ms=282732
+I (284905) app_main: heartbeat: safe test mode, uptime_ms=283732
+I (285905) app_main: heartbeat: safe test mode, uptime_ms=284732
+I (286905) app_main: heartbeat: safe test mode, uptime_ms=285732
+I (287905) app_main: heartbeat: safe test mode, uptime_ms=286732
+I (288905) app_main: heartbeat: safe test mode, uptime_ms=287732
+I (289905) app_main: heartbeat: safe test mode, uptime_ms=288732
+I (290905) app_main: heartbeat: safe test mode, uptime_ms=289732
+I (291905) app_main: heartbeat: safe test mode, uptime_ms=290732
+I (292905) app_main: heartbeat: safe test mode, uptime_ms=291732
+I (293905) app_main: heartbeat: safe test mode, uptime_ms=292732
+I (294905) app_main: heartbeat: safe test mode, uptime_ms=293732
+I (295905) app_main: heartbeat: safe test mode, uptime_ms=294732
+I (296905) app_main: heartbeat: safe test mode, uptime_ms=295732
+I (297905) app_main: heartbeat: safe test mode, uptime_ms=296732
+I (298905) app_main: heartbeat: safe test mode, uptime_ms=297732
+I (299905) app_main: heartbeat: safe test mode, uptime_ms=298732
+I (300905) app_main: heartbeat: safe test mode, uptime_ms=299732
+I (301905) app_main: heartbeat: safe test mode, uptime_ms=300732
+I (302905) app_main: heartbeat: safe test mode, uptime_ms=301732
+I (303905) app_main: heartbeat: safe test mode, uptime_ms=302732
+I (304905) app_main: heartbeat: safe test mode, uptime_ms=303732
+I (305905) app_main: heartbeat: safe test mode, uptime_ms=304732
+I (306905) app_main: heartbeat: safe test mode, uptime_ms=305732
+I (307905) app_main: heartbeat: safe test mode, uptime_ms=306732
+I (308905) app_main: heartbeat: safe test mode, uptime_ms=307732
+I (309905) app_main: heartbeat: safe test mode, uptime_ms=308732
+I (310905) app_main: heartbeat: safe test mode, uptime_ms=309732
+I (311905) app_main: heartbeat: safe test mode, uptime_ms=310732
+I (312905) app_main: heartbeat: safe test mode, uptime_ms=311732
+I (313905) app_main: heartbeat: safe test mode, uptime_ms=312732
+I (314905) app_main: heartbeat: safe test mode, uptime_ms=313732
+I (315905) app_main: heartbeat: safe test mode, uptime_ms=314732
+I (316905) app_main: heartbeat: safe test mode, uptime_ms=315732
+I (317905) app_main: heartbeat: safe test mode, uptime_ms=316732
+I (318905) app_main: heartbeat: safe test mode, uptime_ms=317732
+I (319905) app_main: heartbeat: safe test mode, uptime_ms=318732
+I (320905) app_main: heartbeat: safe test mode, uptime_ms=319732
+I (321905) app_main: heartbeat: safe test mode, uptime_ms=320732
+I (322905) app_main: heartbeat: safe test mode, uptime_ms=321732
+I (323905) app_main: heartbeat: safe test mode, uptime_ms=322732
+I (324905) app_main: heartbeat: safe test mode, uptime_ms=323732
+I (325905) app_main: heartbeat: safe test mode, uptime_ms=324732
+I (326905) app_main: heartbeat: safe test mode, uptime_ms=325732
+I (327905) app_main: heartbeat: safe test mode, uptime_ms=326732
+I (328905) app_main: heartbeat: safe test mode, uptime_ms=327732
+I (329905) app_main: heartbeat: safe test mode, uptime_ms=328732
+I (330905) app_main: heartbeat: safe test mode, uptime_ms=329732
+I (331905) app_main: heartbeat: safe test mode, uptime_ms=330732
+I (332905) app_main: heartbeat: safe test mode, uptime_ms=331732
+I (333905) app_main: heartbeat: safe test mode, uptime_ms=332732
+I (334905) app_main: heartbeat: safe test mode, uptime_ms=333732
+I (335905) app_main: heartbeat: safe test mode, uptime_ms=334732
+I (336905) app_main: heartbeat: safe test mode, uptime_ms=335732
+I (337905) app_main: heartbeat: safe test mode, uptime_ms=336732
+I (338905) app_main: heartbeat: safe test mode, uptime_ms=337732
+I (339905) app_main: heartbeat: safe test mode, uptime_ms=338732
+I (340905) app_main: heartbeat: safe test mode, uptime_ms=339732
+I (341905) app_main: heartbeat: safe test mode, uptime_ms=340732
+I (342905) app_main: heartbeat: safe test mode, uptime_ms=341732
+I (343905) app_main: heartbeat: safe test mode, uptime_ms=342732
+I (344905) app_main: heartbeat: safe test mode, uptime_ms=343732
+I (345905) app_main: heartbeat: safe test mode, uptime_ms=344732
+I (346905) app_main: heartbeat: safe test mode, uptime_ms=345732
+I (347905) app_main: heartbeat: safe test mode, uptime_ms=346732
+I (348905) app_main: heartbeat: safe test mode, uptime_ms=347732
+I (349905) app_main: heartbeat: safe test mode, uptime_ms=348732
+I (350905) app_main: heartbeat: safe test mode, uptime_ms=349732
+I (351905) app_main: heartbeat: safe test mode, uptime_ms=350732
+I (352905) app_main: heartbeat: safe test mode, uptime_ms=351732
+I (353905) app_main: heartbeat: safe test mode, uptime_ms=352732
+I (354905) app_main: heartbeat: safe test mode, uptime_ms=353732
+I (355905) app_main: heartbeat: safe test mode, uptime_ms=354732
+I (356905) app_main: heartbeat: safe test mode, uptime_ms=355732
+I (357905) app_main: heartbeat: safe test mode, uptime_ms=356732
+I (358905) app_main: heartbeat: safe test mode, uptime_ms=357732
+I (359905) app_main: heartbeat: safe test mode, uptime_ms=358732
+I (360905) app_main: heartbeat: safe test mode, uptime_ms=359732
+I (361905) app_main: heartbeat: safe test mode, uptime_ms=360732
+I (362905) app_main: heartbeat: safe test mode, uptime_ms=361732
+I (363905) app_main: heartbeat: safe test mode, uptime_ms=362732
+I (364905) app_main: heartbeat: safe test mode, uptime_ms=363732
+I (365905) app_main: heartbeat: safe test mode, uptime_ms=364732
+I (366905) app_main: heartbeat: safe test mode, uptime_ms=365732
+I (367905) app_main: heartbeat: safe test mode, uptime_ms=366732
+I (368905) app_main: heartbeat: safe test mode, uptime_ms=367732
+I (369905) app_main: heartbeat: safe test mode, uptime_ms=368732
+I (370905) app_main: heartbeat: safe test mode, uptime_ms=369732
+I (371905) app_main: heartbeat: safe test mode, uptime_ms=370732
+I (372905) app_main: heartbeat: safe test mode, uptime_ms=371732
+I (373905) app_main: heartbeat: safe test mode, uptime_ms=372732
+I (374905) app_main: heartbeat: safe test mode, uptime_ms=373732
+I (375905) app_main: heartbeat: safe test mode, uptime_ms=374732
+I (376905) app_main: heartbeat: safe test mode, uptime_ms=375732
+I (377905) app_main: heartbeat: safe test mode, uptime_ms=376732
+I (378905) app_main: heartbeat: safe test mode, uptime_ms=377732
+I (379905) app_main: heartbeat: safe test mode, uptime_ms=378732
+I (380905) app_main: heartbeat: safe test mode, uptime_ms=379732
+I (381905) app_main: heartbeat: safe test mode, uptime_ms=380732
+I (382905) app_main: heartbeat: safe test mode, uptime_ms=381732
+I (383905) app_main: heartbeat: safe test mode, uptime_ms=382732
+I (384905) app_main: heartbeat: safe test mode, uptime_ms=383732
+I (385905) app_main: heartbeat: safe test mode, uptime_ms=384732
+I (386905) app_main: heartbeat: safe test mode, uptime_ms=385732
+I (387905) app_main: heartbeat: safe test mode, uptime_ms=386732
+I (388905) app_main: heartbeat: safe test mode, uptime_ms=387732
+I (389905) app_main: heartbeat: safe test mode, uptime_ms=388732
+I (390905) app_main: heartbeat: safe test mode, uptime_ms=389732
+I (391905) app_main: heartbeat: safe test mode, uptime_ms=390732
+I (392905) app_main: heartbeat: safe test mode, uptime_ms=391732
+I (393905) app_main: heartbeat: safe test mode, uptime_ms=392732
+I (394905) app_main: heartbeat: safe test mode, uptime_ms=393732
+I (395905) app_main: heartbeat: safe test mode, uptime_ms=394732
+I (396905) app_main: heartbeat: safe test mode, uptime_ms=395732
+I (397905) app_main: heartbeat: safe test mode, uptime_ms=396732
+I (398905) app_main: heartbeat: safe test mode, uptime_ms=397732
+I (399905) app_main: heartbeat: safe test mode, uptime_ms=398732
+I (400905) app_main: heartbeat: safe test mode, uptime_ms=399732
+I (401905) app_main: heartbeat: safe test mode, uptime_ms=400732
+I (402905) app_main: heartbeat: safe test mode, uptime_ms=401732
+I (403905) app_main: heartbeat: safe test mode, uptime_ms=402732
+I (404905) app_main: heartbeat: safe test mode, uptime_ms=403732
+I (405905) app_main: heartbeat: safe test mode, uptime_ms=404732
+I (406905) app_main: heartbeat: safe test mode, uptime_ms=405732
+I (407905) app_main: heartbeat: safe test mode, uptime_ms=406732
+I (408905) app_main: heartbeat: safe test mode, uptime_ms=407732
+I (409905) app_main: heartbeat: safe test mode, uptime_ms=408732
+I (410905) app_main: heartbeat: safe test mode, uptime_ms=409732
+I (411905) app_main: heartbeat: safe test mode, uptime_ms=410732
+I (412905) app_main: heartbeat: safe test mode, uptime_ms=411732
+I (413905) app_main: heartbeat: safe test mode, uptime_ms=412732
+I (414905) app_main: heartbeat: safe test mode, uptime_ms=413732
+I (415905) app_main: heartbeat: safe test mode, uptime_ms=414732
+I (416905) app_main: heartbeat: safe test mode, uptime_ms=415732
+I (417905) app_main: heartbeat: safe test mode, uptime_ms=416732
+I (418905) app_main: heartbeat: safe test mode, uptime_ms=417732
+I (419905) app_main: heartbeat: safe test mode, uptime_ms=418732
+I (420905) app_main: heartbeat: safe test mode, uptime_ms=419732
+I (421905) app_main: heartbeat: safe test mode, uptime_ms=420732
+I (422905) app_main: heartbeat: safe test mode, uptime_ms=421732
+I (423905) app_main: heartbeat: safe test mode, uptime_ms=422732
+I (424905) app_main: heartbeat: safe test mode, uptime_ms=423732
+I (425905) app_main: heartbeat: safe test mode, uptime_ms=424732
+I (426905) app_main: heartbeat: safe test mode, uptime_ms=425732
+I (427905) app_main: heartbeat: safe test mode, uptime_ms=426732
+I (428905) app_main: heartbeat: safe test mode, uptime_ms=427732
+I (429905) app_main: heartbeat: safe test mode, uptime_ms=428732
+I (430905) app_main: heartbeat: safe test mode, uptime_ms=429732
+I (431905) app_main: heartbeat: safe test mode, uptime_ms=430732
+I (432905) app_main: heartbeat: safe test mode, uptime_ms=431732
+I (433905) app_main: heartbeat: safe test mode, uptime_ms=432732
+I (434905) app_main: heartbeat: safe test mode, uptime_ms=433732
+I (435905) app_main: heartbeat: safe test mode, uptime_ms=434732
+I (436905) app_main: heartbeat: safe test mode, uptime_ms=435732
+I (437905) app_main: heartbeat: safe test mode, uptime_ms=436732
+I (438905) app_main: heartbeat: safe test mode, uptime_ms=437732
+I (439905) app_main: heartbeat: safe test mode, uptime_ms=438732
+I (440905) app_main: heartbeat: safe test mode, uptime_ms=439732
+I (441905) app_main: heartbeat: safe test mode, uptime_ms=440732
+I (442905) app_main: heartbeat: safe test mode, uptime_ms=441732
+I (443905) app_main: heartbeat: safe test mode, uptime_ms=442732
+I (444905) app_main: heartbeat: safe test mode, uptime_ms=443732
+I (445905) app_main: heartbeat: safe test mode, uptime_ms=444732
+I (446905) app_main: heartbeat: safe test mode, uptime_ms=445732
+I (447905) app_main: heartbeat: safe test mode, uptime_ms=446732
+I (448905) app_main: heartbeat: safe test mode, uptime_ms=447732
+I (449905) app_main: heartbeat: safe test mode, uptime_ms=448732
+I (450905) app_main: heartbeat: safe test mode, uptime_ms=449732
+I (451905) app_main: heartbeat: safe test mode, uptime_ms=450732
+I (452905) app_main: heartbeat: safe test mode, uptime_ms=451732
+I (453905) app_main: heartbeat: safe test mode, uptime_ms=452732
+I (454905) app_main: heartbeat: safe test mode, uptime_ms=453732
+I (455905) app_main: heartbeat: safe test mode, uptime_ms=454732
+I (456905) app_main: heartbeat: safe test mode, uptime_ms=455732
+I (457905) app_main: heartbeat: safe test mode, uptime_ms=456732
+I (458905) app_main: heartbeat: safe test mode, uptime_ms=457732
+I (459905) app_main: heartbeat: safe test mode, uptime_ms=458732
+I (460905) app_main: heartbeat: safe test mode, uptime_ms=459732
+I (461905) app_main: heartbeat: safe test mode, uptime_ms=460732
+I (462905) app_main: heartbeat: safe test mode, uptime_ms=461732
+I (463905) app_main: heartbeat: safe test mode, uptime_ms=462732
+I (464905) app_main: heartbeat: safe test mode, uptime_ms=463732
+I (465905) app_main: heartbeat: safe test mode, uptime_ms=464732
+I (466905) app_main: heartbeat: safe test mode, uptime_ms=465732
+I (467905) app_main: heartbeat: safe test mode, uptime_ms=466732
+I (468905) app_main: heartbeat: safe test mode, uptime_ms=467732
+I (469905) app_main: heartbeat: safe test mode, uptime_ms=468732
+I (470905) app_main: heartbeat: safe test mode, uptime_ms=469732
+I (471905) app_main: heartbeat: safe test mode, uptime_ms=470732
+I (472905) app_main: heartbeat: safe test mode, uptime_ms=471732
+I (473905) app_main: heartbeat: safe test mode, uptime_ms=472732
+I (474905) app_main: heartbeat: safe test mode, uptime_ms=473732
+I (475905) app_main: heartbeat: safe test mode, uptime_ms=474732
+I (476905) app_main: heartbeat: safe test mode, uptime_ms=475732
+I (477905) app_main: heartbeat: safe test mode, uptime_ms=476732
+I (478905) app_main: heartbeat: safe test mode, uptime_ms=477732
+I (479905) app_main: heartbeat: safe test mode, uptime_ms=478732
+I (480905) app_main: heartbeat: safe test mode, uptime_ms=479732
+I (481905) app_main: heartbeat: safe test mode, uptime_ms=480732
+I (482905) app_main: heartbeat: safe test mode, uptime_ms=481732
+I (483905) app_main: heartbeat: safe test mode, uptime_ms=482732
+I (484905) app_main: heartbeat: safe test mode, uptime_ms=483732
+I (485905) app_main: heartbeat: safe test mode, uptime_ms=484732
+I (486905) app_main: heartbeat: safe test mode, uptime_ms=485732
+I (487905) app_main: heartbeat: safe test mode, uptime_ms=486732
+I (488905) app_main: heartbeat: safe test mode, uptime_ms=487732
+I (489905) app_main: heartbeat: safe test mode, uptime_ms=488732
+I (490905) app_main: heartbeat: safe test mode, uptime_ms=489732
+I (491905) app_main: heartbeat: safe test mode, uptime_ms=490732
+I (492905) app_main: heartbeat: safe test mode, uptime_ms=491732
+I (493905) app_main: heartbeat: safe test mode, uptime_ms=492732
+I (494905) app_main: heartbeat: safe test mode, uptime_ms=493732
+I (495905) app_main: heartbeat: safe test mode, uptime_ms=494732
+I (496905) app_main: heartbeat: safe test mode, uptime_ms=495732
+I (497905) app_main: heartbeat: safe test mode, uptime_ms=496732
+I (498905) app_main: heartbeat: safe test mode, uptime_ms=497732
+I (499905) app_main: heartbeat: safe test mode, uptime_ms=498732
+I (500905) app_main: heartbeat: safe test mode, uptime_ms=499732
+I (501905) app_main: heartbeat: safe test mode, uptime_ms=500732
+I (502905) app_main: heartbeat: safe test mode, uptime_ms=501732
+I (503905) app_main: heartbeat: safe test mode, uptime_ms=502732
+I (504905) app_main: heartbeat: safe test mode, uptime_ms=503732
+I (505905) app_main: heartbeat: safe test mode, uptime_ms=504732
+I (506905) app_main: heartbeat: safe test mode, uptime_ms=505732
+I (507905) app_main: heartbeat: safe test mode, uptime_ms=506732
+I (508905) app_main: heartbeat: safe test mode, uptime_ms=507732
+I (509905) app_main: heartbeat: safe test mode, uptime_ms=508732
+I (510905) app_main: heartbeat: safe test mode, uptime_ms=509732
+I (511905) app_main: heartbeat: safe test mode, uptime_ms=510732
+I (512905) app_main: heartbeat: safe test mode, uptime_ms=511732
+I (513905) app_main: heartbeat: safe test mode, uptime_ms=512732
+I (514905) app_main: heartbeat: safe test mode, uptime_ms=513732
+I (515905) app_main: heartbeat: safe test mode, uptime_ms=514732
+I (516905) app_main: heartbeat: safe test mode, uptime_ms=515732
+I (517905) app_main: heartbeat: safe test mode, uptime_ms=516732
+I (518905) app_main: heartbeat: safe test mode, uptime_ms=517732
+I (519905) app_main: heartbeat: safe test mode, uptime_ms=518732
+I (520905) app_main: heartbeat: safe test mode, uptime_ms=519732
+I (521905) app_main: heartbeat: safe test mode, uptime_ms=520732
+I (522905) app_main: heartbeat: safe test mode, uptime_ms=521732
+I (523905) app_main: heartbeat: safe test mode, uptime_ms=522732
+I (524905) app_main: heartbeat: safe test mode, uptime_ms=523732
+I (525905) app_main: heartbeat: safe test mode, uptime_ms=524732
+I (526905) app_main: heartbeat: safe test mode, uptime_ms=525732
+I (527905) app_main: heartbeat: safe test mode, uptime_ms=526732
+I (528905) app_main: heartbeat: safe test mode, uptime_ms=527732
+I (529905) app_main: heartbeat: safe test mode, uptime_ms=528732
+I (530905) app_main: heartbeat: safe test mode, uptime_ms=529732
+I (531905) app_main: heartbeat: safe test mode, uptime_ms=530732
+I (532905) app_main: heartbeat: safe test mode, uptime_ms=531732
+I (533905) app_main: heartbeat: safe test mode, uptime_ms=532732
+I (534905) app_main: heartbeat: safe test mode, uptime_ms=533732
