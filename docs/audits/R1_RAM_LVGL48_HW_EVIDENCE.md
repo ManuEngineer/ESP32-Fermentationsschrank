@@ -234,8 +234,8 @@ RESET_COUNT=1_POWERON_AT_CAPTURE_START_ONLY
 WATCHDOG_COUNT=0
 BROWNOUT_COUNT=0
 
-O4=DEFERRED_PENDING_INDEPENDENT_REVIEW
-O5=DEFERRED_PENDING_INDEPENDENT_REVIEW
+O4=DEFERRED_PENDING_INDEPENDENT_REVIEW   # Stand bei Messende, siehe Statusabschluss
+O5=DEFERRED_PENDING_INDEPENDENT_REVIEW   # Stand bei Messende, siehe Statusabschluss
 S9_TO_S11=NOT_STARTED
 ```
 
@@ -244,7 +244,7 @@ fokussierten Scope (ein Release-Build, ein Gerät, ein kombinierter Lastfall,
 87,7 min Idle). Es ist keine Aussage über die volle S6-Matrix, über andere
 Seiten-/Sprachpfade (Sprachwechsel nicht verfügbar) oder über den 1696-B-Befund.
 
-## 9. Offene Punkte für den Independent Hardware Review
+## 9. Offene Punkte für den Independent Hardware Review (Stand bei Messende, historisch)
 
 - Ob 48 KiB ausreichen: Peak 15852 B bei 46724–47000 B Pool (Reserve rund
   31 kB); Peak nur an den geloggten Punkten bekannt.
@@ -253,6 +253,27 @@ Seiten-/Sprachpfade (Sprachwechsel nicht verfügbar) oder über den 1696-B-Befun
 - 1696-B-Befund bleibt `FOLLOW_UP_NON_BLOCKING_FOR_PR174`; keine WLAN-/lwIP-
   Ursache behauptet.
 - Keine Ownerentscheidung simuliert; `PR174_FINAL_GO=NO_UNTIL_OWNER_O4_O5`.
+
+## 10. Statusabschluss (nach Independent Review)
+
+Der Independent Hardware Review ist abgeschlossen, der Owner hat O4 und O5
+freigegeben. Die Messdaten oben bleiben unverändert.
+
+```text
+LVGL_POOL_48K_HARDWARE=PASS
+O4=APPROVED
+O5=APPROVED
+OPEN_OWNER_GATES=0
+S9=NOT_NEEDED_FOR_PR174
+S10=NOT_NEEDED
+S11=NOT_NEEDED
+FURTHER_PROACTIVE_RAM_OPTIMIZATION=NO
+IDLE_1696B_CLASSIFICATION=FOLLOW_UP_NON_BLOCKING_FOR_PR174
+PR174_FINAL_GO=PENDING_INDEPENDENT_FINAL_FIX_VERIFICATION
+```
+
+`IDLE_1696B_COUNT=0` in 87,7 min ist positive Evidenz, aber kein Nachweis einer
+Ursachenbehebung; der Befund bleibt offenes Follow-up.
 
 Rohdaten: `R1_RAM_LVGL48_HW_20261004_RAW.txt` (sanitisiert),
 `R1_RAM_LVGL48_HW_20261004_POINTS.csv` (17 Ressourcenpunkte).

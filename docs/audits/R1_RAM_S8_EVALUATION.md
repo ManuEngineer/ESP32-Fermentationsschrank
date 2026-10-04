@@ -16,7 +16,7 @@ S4=PASS
 S5=NO_ACTION_OWNER_DECISION
 S6=PASS_CODE_AND_HARDWARE
 S7=NO_ACTION
-S8=EVALUATION_FIXED_PENDING_INDEPENDENT_VERIFICATION
+S8=PASS
 
 FATAL_R1_NETWORK_COMMIT_RAM_BLOCKER=CLOSED_MEASURED_SCOPE
 FATAL_R1_NETWORK_COMMIT_RAM_BLOCKER_SCOPE=RELEASE_PROFILE_ONE_CLIENT_5_OF_5_MATRIX_CASES_MARGIN_NOT_PROVEN_FOR_MORE_CLIENTS_OR_MORE_SWITCHES
@@ -51,12 +51,19 @@ S9_FUTURE_CONDITION=ONLY_IF_CALLER_DIAGNOSIS_PROVES_WIFI_LWIP_MEMORY_PROFILE_REL
 S10_RECOMMENDATION=NOT_NEEDED
 S11_RECOMMENDATION=NOT_NEEDED
 
-O4=OWNER_DECISION_REQUIRED
-O5=OWNER_DECISION_REQUIRED
+O4=APPROVED
+O5=APPROVED
+OPEN_OWNER_GATES=0
 
 PR170_DEPENDENCY=KEEP_BLOCKED_ON_IDLE_1696B_DIAGNOSIS_OR_EXPLICIT_OWNER_WAIVER
-PR174_FINAL_GO=NO_UNTIL_OWNER_O4_O5
+PR174_FINAL_GO=PENDING_INDEPENDENT_FINAL_FIX_VERIFICATION
 ```
+
+**Statusabschluss:** Owner hat O4 und O5 freigegeben (Eintrag in
+`docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`, Abschnitt R1-RAM-Referenzbasis). Die
+Abschnitte "O4" und "O5" unten sind die damalige Empfehlung (historisch); die
+Zahlen dort sind S6-Stand-Messwerte und keine verbindlichen Grenzen. Die neue
+Referenzbasis ist der 48-KiB-Pool (`R1_RAM_LVGL48_HW_EVIDENCE.md`).
 
 ## A. Gemessene R1-Reserve nach S6
 
@@ -235,7 +242,7 @@ Follow-up ist daher **`DIAGNOSE_BEFORE_PR170_NETWORK_EXPANSION`** und nicht Teil
 des Scopes von PR #174 (siehe O5). Ob dafür ein eigenes Issue anzulegen ist,
 entscheidet der Owner.
 
-## O4 – Empfehlung Mindestabstand / RAM-Budget (Ownerentscheidung erforderlich)
+## O4 – Empfehlung Mindestabstand / RAM-Budget (historische Empfehlung; Owner: O4=APPROVED, siehe Statusabschluss)
 
 Abgeleitet ausschließlich aus den Messdaten, mit getrennter Zuordnung von
 **niedrigstem gesampeltem Qualifikationspunkt-Wert**, **Qualifikationsgrenze** und **Warnschwelle**:
@@ -313,8 +320,8 @@ S9_FUTURE_CONDITION=ONLY_IF_CALLER_DIAGNOSIS_PROVES_WIFI_LWIP_MEMORY_PROFILE_REL
 **PR #170:** `PR170_DEPENDENCY=KEEP_BLOCKED_ON_IDLE_1696B_DIAGNOSIS_OR_EXPLICIT_OWNER_WAIVER`
 nach Abschluss von PR #174. Das erlaubt PR #174 zu konvergieren, ohne den
 unbekannten Netzwerk-/Idle-Befund in dessen Scope zu ziehen. Es wird keine
-Ownerentscheidung simuliert; O4 und O5 bleiben `OWNER_DECISION_REQUIRED`,
-`PR174_FINAL_GO=NO_UNTIL_OWNER_O4_O5`.
+Ownerentscheidung simuliert (historischer Stand dieser Auswertung; O4/O5
+später vom Owner freigegeben, siehe Statusabschluss).
 
 ## Offene Grenzen der Auswertung
 
