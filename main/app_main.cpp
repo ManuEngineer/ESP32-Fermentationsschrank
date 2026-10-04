@@ -54,6 +54,8 @@
 namespace {
 
 constexpr char kTag[] = "app_main";
+// Tag fuer den Failed-Allocation-Hook; muss in DRAM liegen (ESP_DRAM_LOGE).
+DRAM_ATTR const char kHeapAllocFailedTag[] = "heap_alloc_failed";
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
@@ -245,8 +247,7 @@ void logHeartbeat(uint64_t uptimeMs) {
 // loesen ihn aus. Reine Diagnose: der Hook aendert kein Verhalten.
 void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
                                        const char* functionName) {
-    ESP_DRAM_LOGE(DRAM_STR("heap_alloc_failed"),
-                  "size=%u caps=0x%08x function=%s",
+    ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
                   static_cast<unsigned>(size), static_cast<unsigned>(caps),
                   functionName != nullptr ? functionName : "?");
 }
@@ -486,12 +487,12 @@ bool updateProductUi(
             networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
         const device_platform::ClockViewInput loopClock{
             timeSource.unixTimeSeconds(), touchTimeZoneId};
+        const auto touchPoint = touchPoll.point.value_or(
+            fermentation::main_ui::ProductiveLvglRenderer::TouchPoint{});
         touchTick = fermentation::main_ui::processWorkspaceTouch(
             application, uiWorkspace, loopSnapshot, uiTextPacks,
             touchDisplayLocale, touchProgramCatalog, loopNetworkStatus,
-            loopClock, touchPoll.contactHeld,
-            touchPoll.point.has_value() ? touchPoll.point->x : 0U,
-            touchPoll.point.has_value() ? touchPoll.point->y : 0U,
+            loopClock, touchPoll.contactHeld, touchPoint.x, touchPoint.y,
             touchPoll.freshPressEdge, timeSource.monotonicMillis());
     }
     if (sampleNetworkPagePress) {
