@@ -161,35 +161,46 @@ void test_empty_home_omits_empty_pager_and_messages_pager_is_rendered() {
     TEST_ASSERT_TRUE(target.has_value());
 }
 
+using fermentation::main_ui::ScreenRenderKey;
+
+// Builds the allocation-free pre-render key for the given visible inputs
+// (S4). The catalog identity comes from a default presentation cache, i.e.
+// "no copy", unless a test passes its own.
+ScreenRenderKey keyFor(
+    const fermentation::FermentationUiSnapshot& snapshot,
+    const fermentation::FermentationTouchWorkspace& workspace,
+    const char* locale = "en",
+    std::optional<device_platform::DeviceUiTarget> pressed = std::nullopt,
+    device_platform::DeviceUiNetworkStatus network =
+        device_platform::DeviceUiNetworkStatus::Unavailable,
+    std::optional<std::int64_t> utc = std::nullopt,
+    std::uint64_t apFingerprint = 0U,
+    const fermentation::FermentationUiPresentationCache& presentation =
+        fermentation::FermentationUiPresentationCache{}) {
+    return fermentation::main_ui::makeScreenRenderKey(
+        snapshot, workspace, device_platform::LocaleId{locale}, pressed,
+        presentation, network, utc, apFingerprint);
+}
+
 void test_render_key_stable_for_same_snapshot_and_workspace() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
-    const auto packs = fermentation::makeFermentationUiTextPacks();
 
-    const auto first = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-    const auto second = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-
-    TEST_ASSERT_TRUE(fermentation::main_ui::makeScreenRenderKey(first) ==
-                     fermentation::main_ui::makeScreenRenderKey(second));
+    TEST_ASSERT_TRUE(keyFor(snapshot, workspace) ==
+                     keyFor(snapshot, workspace));
 }
 
 void test_render_key_changes_on_workspace_navigation() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
-    const auto packs = fermentation::makeFermentationUiTextPacks();
 
-    const auto home = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto home = keyFor(snapshot, workspace);
     workspace.setPage(fermentation::FermentationUiPage::Messages);
-    const auto messages = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto messages = keyFor(snapshot, workspace);
 
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(home) ==
-                      fermentation::main_ui::makeScreenRenderKey(messages));
+    TEST_ASSERT_FALSE(home == messages);
 }
 
 void test_render_key_changes_on_pager_move() {
@@ -209,6 +220,7 @@ void test_render_key_changes_on_pager_move() {
 
     const auto beforeMove = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
+    const auto keyBefore = keyFor(snapshot, workspace);
     // Real navigation goes through the existing typed press path (the "down"
     // bottom slot), which is what synchronizes the workspace-local pager with
     // the current item count; calling movePagerDown() directly without a
@@ -216,26 +228,17 @@ void test_render_key_changes_on_pager_move() {
     const auto press = fermentation::main_ui::routePress(
         workspace, snapshot, beforeMove, 180U, 220U);
     TEST_ASSERT_TRUE(press.navigated);
-    const auto afterMove = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
 
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(beforeMove) ==
-                      fermentation::main_ui::makeScreenRenderKey(afterMove));
+    TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
 }
 
 void test_render_key_changes_on_locale_change() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
-    const auto packs = fermentation::makeFermentationUiTextPacks();
 
-    const auto de = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"de"});
-    const auto en = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(de) ==
-                      fermentation::main_ui::makeScreenRenderKey(en));
+    TEST_ASSERT_FALSE(keyFor(snapshot, workspace, "de") ==
+                      keyFor(snapshot, workspace, "en"));
 }
 
 void test_no_touch_means_no_press_feedback_command() {
@@ -472,38 +475,35 @@ void test_theme_is_sourced_from_canonical_r1_catalog() {
 void test_render_key_changes_on_network_status_and_clock() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
-    const auto packs = fermentation::makeFermentationUiTextPacks();
-    const auto unavailable = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-    const auto connected = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"},
-        std::nullopt, nullptr,
-        device_platform::DeviceUiNetworkStatus::Connected);
-    const device_platform::ClockViewInput clock{3661, {}};
-    const auto clocked = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"},
-        std::nullopt, nullptr,
-        device_platform::DeviceUiNetworkStatus::Unavailable, clock);
+    const auto unavailable = keyFor(snapshot, workspace);
+    const auto connected =
+        keyFor(snapshot, workspace, "en", std::nullopt,
+               device_platform::DeviceUiNetworkStatus::Connected);
+    const auto clocked =
+        keyFor(snapshot, workspace, "en", std::nullopt,
+               device_platform::DeviceUiNetworkStatus::Unavailable, 3661);
 
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(unavailable) ==
-                      fermentation::main_ui::makeScreenRenderKey(connected));
-    TEST_ASSERT_FALSE(fermentation::main_ui::makeScreenRenderKey(unavailable) ==
-                      fermentation::main_ui::makeScreenRenderKey(clocked));
+    TEST_ASSERT_FALSE(unavailable == connected);
+    TEST_ASSERT_FALSE(unavailable == clocked);
+    // The visible clock is HH:MM, so seconds within one minute must not
+    // redraw, while the next minute must.
+    TEST_ASSERT_TRUE(clocked ==
+                     keyFor(snapshot, workspace, "en", std::nullopt,
+                            device_platform::DeviceUiNetworkStatus::Unavailable,
+                            3661 + 30));
+    TEST_ASSERT_FALSE(
+        clocked == keyFor(snapshot, workspace, "en", std::nullopt,
+                          device_platform::DeviceUiNetworkStatus::Unavailable,
+                          3661 + 60));
 }
 
 void test_render_key_unchanged_workspace_remains_equal() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     fermentation::FermentationTouchWorkspace workspace;
-    const auto packs = fermentation::makeFermentationUiTextPacks();
 
-    const auto first = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-    const auto second = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
-
-    TEST_ASSERT_TRUE(fermentation::main_ui::makeScreenRenderKey(first) ==
-                     fermentation::main_ui::makeScreenRenderKey(second));
+    TEST_ASSERT_TRUE(keyFor(snapshot, workspace) ==
+                     keyFor(snapshot, workspace));
 }
 
 void test_render_key_changes_when_manual_holding_values_enable_confirm() {
@@ -515,6 +515,7 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
     const auto beforeValues = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_FALSE(beforeValues.workspace.bottomSlots[2].enabled);
+    const auto keyBefore = keyFor(snapshot, workspace);
 
     workspace.setManualHoldingValues(
         fermentation::FermentationUiManualRunPlanValues{});
@@ -522,9 +523,7 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
 
-    TEST_ASSERT_FALSE(
-        fermentation::main_ui::makeScreenRenderKey(beforeValues) ==
-        fermentation::main_ui::makeScreenRenderKey(afterValues));
+    TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
 }
 
 void test_render_key_changes_when_program_edit_candidate_enables_save() {
@@ -537,15 +536,14 @@ void test_render_key_changes_when_program_edit_candidate_enables_save() {
         fermentation::main_ui::makeRepresentativeScreen(
             snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_FALSE(beforeCandidate.workspace.bottomSlots[3].enabled);
+    const auto keyBefore = keyFor(snapshot, workspace);
 
     workspace.setProgramEditCandidate(fermentation::ProgramDocument{});
     const auto afterCandidate = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_TRUE(afterCandidate.workspace.bottomSlots[3].enabled);
 
-    TEST_ASSERT_FALSE(
-        fermentation::main_ui::makeScreenRenderKey(beforeCandidate) ==
-        fermentation::main_ui::makeScreenRenderKey(afterCandidate));
+    TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
 }
 
 // Branding FOLLOW-UP layout proof: the Logo command's rect must be exactly
@@ -710,9 +708,19 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         std::nullopt, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable, {},
         changedAccessPoint);
-    TEST_ASSERT_FALSE(
-        fermentation::main_ui::makeScreenRenderKey(screen) ==
-        fermentation::main_ui::makeScreenRenderKey(changedScreen));
+    {
+        // The key carries the lifecycle's access-point change revision, never
+        // the credentials themselves.
+        fermentation::FermentationUiSnapshot keySnapshot;
+        fermentation::FermentationTouchWorkspace keyWorkspace;
+        keyWorkspace.setPage(fermentation::FermentationUiPage::HeaderNetwork);
+        const auto network =
+            device_platform::DeviceUiNetworkStatus::Unavailable;
+        TEST_ASSERT_FALSE(keyFor(keySnapshot, keyWorkspace, "en", std::nullopt,
+                                 network, std::nullopt, 1U) ==
+                          keyFor(keySnapshot, keyWorkspace, "en", std::nullopt,
+                                 network, std::nullopt, 2U));
+    }
     const auto changedQr =
         std::find_if(changedScreen.commands.begin(),
                      changedScreen.commands.end(), [](const auto& command) {

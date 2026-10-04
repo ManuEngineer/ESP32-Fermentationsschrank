@@ -48,6 +48,10 @@ struct NetworkAccessPointInfo {
         return left.ssid == right.ssid && left.password == right.password &&
                left.ipv4Address == right.ipv4Address;
     }
+    friend bool operator!=(const NetworkAccessPointInfo& left,
+                           const NetworkAccessPointInfo& right) {
+        return !(left == right);
+    }
 };
 
 enum class NetworkLifecycleState : std::uint8_t {
@@ -117,6 +121,14 @@ class INetworkLifecycle {
     // generic status/diagnostic contract.
     [[nodiscard]] virtual std::optional<NetworkAccessPointInfo>
     accessPointInfo() const = 0;
+    // Monotonic change identity of accessPointInfo(), readable without
+    // copying any SSID or password: it changes exactly when the semantic
+    // NetworkAccessPointInfo changes (SSID, password or IPv4 address) or the
+    // data is set or cleared, and never otherwise. It carries no secret and
+    // lets a renderer decide whether to fetch the data at all. It is not a
+    // second source of the access data.
+    [[nodiscard]] virtual std::uint64_t accessPointInfoRevision()
+        const noexcept = 0;
     virtual void poll() = 0;
 };
 

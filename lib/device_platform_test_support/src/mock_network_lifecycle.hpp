@@ -33,8 +33,15 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     accessPointInfo() const override {
         return accessPointInfo_;
     }
+    [[nodiscard]] std::uint64_t accessPointInfoRevision()
+        const noexcept override {
+        return accessPointInfoRevision_;
+    }
     void poll() override {}
 
+    void setAccessPointAddress(std::uint32_t address) noexcept {
+        accessPointAddress_ = address;
+    }
     void setStartStatus(
         device_platform::NetworkOperationStatus status) noexcept {
         startStatus_ = status;
@@ -76,8 +83,17 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     }
 
    private:
+    void setAccessPointInfo(
+        std::optional<device_platform::NetworkAccessPointInfo> info) {
+        if (info != accessPointInfo_) {
+            accessPointInfo_ = std::move(info);
+            ++accessPointInfoRevision_;
+        }
+    }
+
     device_platform::NetworkStatus status_;
     std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
+    std::uint64_t accessPointInfoRevision_{0U};
     device_platform::NetworkOperationStatus startStatus_{
         device_platform::NetworkOperationStatus::Applied};
     device_platform::NetworkOperationStatus candidateStatus_{
@@ -87,6 +103,7 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     std::optional<device_platform::NetworkCredentials> lastStartedCredentials_;
     std::optional<device_platform::NetworkCredentials> lastTestedCandidate_;
     std::string hostname_;
+    std::uint32_t accessPointAddress_{0x0104A8C0U};
     std::string accessPointSsid_{"mock-setup-ap"};
     std::string accessPointPassword_{"mock-ap-password"};
     std::vector<std::optional<device_platform::NetworkCredentials>>

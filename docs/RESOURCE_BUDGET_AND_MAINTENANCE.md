@@ -138,6 +138,20 @@ aber nur innerhalb klarer Grenzen:
 Ein Web- oder Exportfehler darf die lokale Regelung und Sicherheitslogik nicht
 beeintraechtigen.
 
+### Hauptschleife und lokale UI
+
+Im hochfrequenten Main-/UI-Pfad erfolgt nach dem Warm-up keine wiederholte
+dynamische Allokation ohne sichtbare Zustandsaenderung. Ereignisbezogene
+Allokationen (Seiten-, Sprach-, Konfigurations- oder Netzwerkmoduswechsel)
+bleiben zulaessig, wenn sie begrenzt sind. Ein Zaehler fuer C++-`operator new`
+im Host-Test belegt nur die getesteten C++-Pfade; `malloc` aus C-, ESP-IDF-,
+LVGL- oder cJSON-Code und LVGL-Poolallokationen benoetigen eine
+ESP32-Laufzeitmessung. Statische `idf.py size`-Werte belegen keinen
+Laufzeit-Heap und keine Fragmentierung.
+
+Request-Handler gehoeren nicht zu dieser Regel; fuer sie gilt weiterhin
+"Web, JSON und Exporte" mit begrenzter request-lokaler Allokation.
+
 ## Proaktive Speicherbereinigung
 
 Die bereits festgelegten Aufbewahrungsregeln werden aktiv durchgesetzt. Dadurch
@@ -347,6 +361,36 @@ und Abgrenzung zu echten Sicherheitsfehlern separat spezifiziert.
 
 Ein tatsaechlich erkannter Fehler oder eine bestehende Sicherheitsursache wird
 weiterhin sofort gemeldet und ist keine Wartungserinnerung.
+
+## R1-RAM-Referenzbasis (PR #174, Owner-Entscheidung O4)
+
+`CONFIG_LV_MEM_SIZE=49152` (LVGL-Builtin-Pool, statisches Array im internen RAM)
+ist die akzeptierte R1-RAM-Referenzbasis fuer den aktuellen Integrationsstand.
+Die dazu gemessenen Werte (fokussierter Hardwaretest,
+`docs/audits/R1_RAM_LVGL48_HW_EVIDENCE.md`; Auswertung
+`docs/audits/R1_RAM_S8_EVALUATION.md`) sind Qualifikations- und
+Regressionsevidenz des aktuellen R1-Scopes an definierten Messpunkten. Sie sind
+weder ein jederzeit gueltiges kontinuierliches Heap-Minimum noch eine neue
+numerische Warnschwelle.
+
+- Verbindliche finale System-Ressourcengrenzen werden erst bei der finalen
+  R1-Systemintegration festgelegt, wenn die noch ausstehenden Hauptfunktionen
+  integriert und gemessen sind (siehe Abschnitt "Noch offen").
+- Groessere verbleibende Integrationsschritte pruefen ihr RAM-Delta gegen diese
+  Referenzbasis.
+- Statisches DRAM, aktueller freier Heap, historischer Low-Water-Mark und
+  groesster zusammenhaengender Block bleiben getrennte Messgroessen.
+- Eine kuenftige Zahl nennt immer den Pruefzeitpunkt beziehungsweise Gate-Kontext.
+
+```text
+O4=APPROVED
+R1_RAM_REFERENCE_LVGL_MEM_SIZE_BYTES=49152
+R1_RAM_REFERENCE_BASIS=PR174_LVGL48_HARDWARE_PASS
+CURRENT_SCOPE_RESOURCE_VALUES=QUALIFICATION_AND_REGRESSION_EVIDENCE
+CONTINUOUS_RUNTIME_MINIMUM_CLAIM=NO
+FINAL_HARD_SYSTEM_LIMITS=DEFERRED_TO_FINAL_R1_INTEGRATION_QUALIFICATION
+MATERIAL_FUTURE_INTEGRATIONS_REQUIRE_RAM_DELTA_CHECK=YES
+```
 
 ## Akzeptierte Entscheidungen aus Phase 9C
 

@@ -29,3 +29,10 @@ CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n
 # Issue #164 SoftAP join QR uses the QR widget already included in the pinned
 # LVGL component; no separate QR dependency or encoder is added.
 CONFIG_LV_USE_QRCODE=y
+
+# R1 RAM plan: size of the pinned LVGL builtin (TLSF) memory pool, a static
+# internal-RAM array (no LV_MEM_POOL_ALLOC, LV_MEM_ADR=0). Reduced from the
+# 65536 B default; measured peak use so far is 15856 B (about 24 % of the
+# 63384 B usable pool). Shared by esp32_release and esp32_bringup. The free-heap
+# gain is only claimed after the hardware re-measurement.
+CONFIG_LV_MEM_SIZE=49152

@@ -99,7 +99,7 @@ void EspIdfNetworkLifecycle::cleanupInitialization() noexcept {
     destroyDefaultNetifs();
     initialized_ = false;
     std::lock_guard<std::mutex> stateLock(stateMutex_);
-    accessPointInfo_.reset();
+    setAccessPointInfoLocked(std::nullopt);
     intentionalDisconnectsPending_ = 0U;
 }
 
@@ -331,7 +331,7 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
         candidateTesting_ = false;
         candidateTestOutcome_ = CandidateTestOutcome::None;
         status_.ipv4Address.reset();
-        accessPointInfo_.reset();
+        setAccessPointInfoLocked(std::nullopt);
     }
     if (stationWasActive && wifiStarted_) {
         static_cast<void>(requestIntentionalDisconnect());
@@ -358,8 +358,8 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
                 ? device_platform::NetworkLifecycleState::AccessPointOnly
                 : device_platform::NetworkLifecycleState::SetupAccessPoint;
         status_.ipv4Address = ipInfo.ip.addr;
-        accessPointInfo_ = device_platform::NetworkAccessPointInfo{
-            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr};
+        setAccessPointInfoLocked(device_platform::NetworkAccessPointInfo{
+            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr});
         return {device_platform::NetworkOperationStatus::Applied};
     }
     if (esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK ||
@@ -373,7 +373,7 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::start(
         reconnectAllowed_ = true;
         status_.selectedMode = mode;
         status_.state = device_platform::NetworkLifecycleState::ConnectingHome;
-        accessPointInfo_.reset();
+        setAccessPointInfoLocked(std::nullopt);
     }
     return {device_platform::NetworkOperationStatus::Applied};
 }
@@ -399,7 +399,7 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::stop() {
         status_.state = device_platform::NetworkLifecycleState::Stopped;
         status_.httpReady = false;
         status_.ipv4Address.reset();
-        accessPointInfo_.reset();
+        setAccessPointInfoLocked(std::nullopt);
     }
     if (stationWasActive && wifiStarted_) {
         static_cast<void>(requestIntentionalDisconnect());
@@ -482,8 +482,8 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::testCandidate(
     }
     {
         std::lock_guard<std::mutex> stateLock(stateMutex_);
-        accessPointInfo_ = device_platform::NetworkAccessPointInfo{
-            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr};
+        setAccessPointInfoLocked(device_platform::NetworkAccessPointInfo{
+            config_.softApSsid, config_.softApPassword, ipInfo.ip.addr});
         reconnectAllowed_ = false;
         reconnectRequested_ = false;
         candidateTesting_ = true;
@@ -567,6 +567,19 @@ std::optional<device_platform::NetworkAccessPointInfo>
 EspIdfNetworkLifecycle::accessPointInfo() const {
     std::lock_guard<std::mutex> stateLock(stateMutex_);
     return accessPointInfo_;
+}
+
+std::uint64_t EspIdfNetworkLifecycle::accessPointInfoRevision() const noexcept {
+    std::lock_guard<std::mutex> stateLock(stateMutex_);
+    return accessPointInfoRevision_;
+}
+
+void EspIdfNetworkLifecycle::setAccessPointInfoLocked(
+    std::optional<device_platform::NetworkAccessPointInfo> info) {
+    if (info != accessPointInfo_) {
+        accessPointInfo_ = std::move(info);
+        ++accessPointInfoRevision_;
+    }
 }
 
 void EspIdfNetworkLifecycle::poll() {

@@ -90,4 +90,70 @@ struct WorkspaceTouchTickResult {
     std::uint16_t touchX, std::uint16_t touchY, bool freshPressEdge,
     std::uint64_t monotonicMillis);
 
+// The UI loop's allocation-free steady-state gate (R1 RAM plan, S4). It is the
+// part of updateProductUi() that precedes the renderer and is shared by the
+// firmware and the host tests: recycled snapshot, the one presentation copy
+// (S3) and the pre-built ScreenRenderKey. In an unchanged visible state none
+// of these steps allocates after warm-up, and no screen model is built.
+// Residual allocations are event-bound: a changed snapshot, catalog or locale,
+// the by-value access-point fetch for an actual redraw, and messages or text
+// keys beyond the buffers already grown.
+class UiRenderGate {
+   public:
+    // 1. Refresh the recycled snapshot and the presentation copy. The
+    //    presentation copy is evicted while HeaderNetwork is the current page.
+    void beginStep(FermentationApplication& application, bool networkPage) {
+        application.refreshUiSnapshot(snapshot_);
+        presentation_.update(networkPage, snapshot_.revisions, [&application] {
+            return application.uiPresentationSource();
+        });
+    }
+
+    // 2. After touch handling: refresh the presentation copy for the page
+    //    that will be drawn, build the key and compare it with the last
+    //    successfully rendered key. Returns true if a redraw is required.
+    //    The access-point change revision is only read on HeaderNetwork and
+    //    never copies SSID or password.
+    [[nodiscard]] bool renderRequired(
+        FermentationApplication& application,
+        const FermentationTouchWorkspace& workspace,
+        const device_platform::LocaleId& initialDisplayLocale,
+        std::optional<device_platform::DeviceUiTarget> pressedTarget,
+        device_platform::DeviceUiNetworkStatus networkStatus,
+        std::optional<std::int64_t> trustedUtc) {
+        const bool networkPage =
+            workspace.page() == FermentationUiPage::HeaderNetwork;
+        presentation_.update(networkPage, snapshot_.revisions, [&application] {
+            return application.uiPresentationSource();
+        });
+        const auto& locale = networkPage ? initialDisplayLocale
+                                         : presentation_.get().displayLocale;
+        pendingKey_ = makeScreenRenderKey(
+            snapshot_, workspace, locale, pressedTarget, presentation_,
+            networkStatus, trustedUtc,
+            networkPage ? application.networkAccessPointRevision()
+                        : std::uint64_t{0U});
+        return !renderedKey_.has_value() || *renderedKey_ != *pendingKey_;
+    }
+
+    // 3. Call after a successful render() of the key last passed through
+    //    renderRequired(); a failed render keeps the old key so the next loop
+    //    tries again.
+    void markRendered() { renderedKey_ = pendingKey_; }
+
+    [[nodiscard]] const FermentationUiSnapshot& snapshot() const noexcept {
+        return snapshot_;
+    }
+    [[nodiscard]] const FermentationUiPresentationCache& presentation()
+        const noexcept {
+        return presentation_;
+    }
+
+   private:
+    FermentationUiSnapshot snapshot_;
+    FermentationUiPresentationCache presentation_;
+    std::optional<ScreenRenderKey> renderedKey_;
+    std::optional<ScreenRenderKey> pendingKey_;
+};
+
 }  // namespace fermentation::main_ui

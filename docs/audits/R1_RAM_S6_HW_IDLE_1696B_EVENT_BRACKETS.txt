@@ -1,0 +1,11 @@
+# Auszug aus dem ORIGINAL-UART-Mitschnitt der S6-Hardware-Messreihe (unsanitisiert, nicht im Repository)
+# Datei: s6_campaign_ORIGINAL_UNSANITIZED.raw, SHA-256 d02928ac11c66371b5a0435b640e38df587a47c74bf6a657f1048325155551cc, 378762 Bytes
+# Je Fehler: die beiden Heartbeat-Zeilen davor/danach (1 s Takt) und die Fehlerzeile. Enthält keine SSID/MAC/IP.
+# --- Originalzeile 2089
+I (1745915) app_main: heartbeat: safe test mode, uptime_ms=1744744
+E heap_alloc_failed: size=1696 caps=0x00001800 function=heap_caps_malloc
+I (1746915) app_main: heartbeat: safe test mode, uptime_ms=1745744
+# --- Originalzeile 3712
+I (3370355) app_main: heartbeat: safe test mode, uptime_ms=3369183
+E heap_alloc_failed: size=1696 caps=0x00001800 function=heap_caps_malloc
+I (3371355) app_main: heartbeat: safe test mode, uptime_ms=3370183

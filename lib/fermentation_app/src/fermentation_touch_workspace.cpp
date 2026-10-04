@@ -794,47 +794,56 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::view(
 
 void FermentationTouchWorkspace::setManualHoldingValues(
     FermentationUiManualRunPlanValues values) noexcept {
+    markRenderRelevantChange();
     manualHoldingValues_ = std::move(values);
 }
 
 void FermentationTouchWorkspace::setManualTimedValues(
     ManualTimedRunValues values) noexcept {
+    markRenderRelevantChange();
     manualTimedValues_ = std::move(values);
 }
 
 void FermentationTouchWorkspace::setCompletionCoolingPlan(
     std::optional<FermentationUiManualRunPlanValues> values) noexcept {
+    markRenderRelevantChange();
     completionCoolingPlan_ = std::move(values);
 }
 
 void FermentationTouchWorkspace::setStopCoolingPlan(
     std::optional<FermentationUiManualRunPlanValues> values) noexcept {
+    markRenderRelevantChange();
     stopCoolingPlan_ = std::move(values);
 }
 
 void FermentationTouchWorkspace::setSelectedMessage(
     std::optional<std::uint32_t> messageId) noexcept {
+    markRenderRelevantChange();
     selectedMessageId_ = messageId;
 }
 
 void FermentationTouchWorkspace::setProgramEditCandidate(
     std::optional<ProgramDocument> candidate) noexcept {
+    markRenderRelevantChange();
     programEditCandidate_ = std::move(candidate);
     programEditDirty_ = programEditCandidate_.has_value();
 }
 
 void FermentationTouchWorkspace::setProgramEditOperation(
     FermentationUiProgramEditOperation operation) noexcept {
+    markRenderRelevantChange();
     programEditOperation_ = operation;
 }
 
 void FermentationTouchWorkspace::setSensorSelectionAction(
     std::optional<SensorSelectionUserAction> action) noexcept {
+    markRenderRelevantChange();
     sensorSelectionAction_ = action;
 }
 
 void FermentationTouchWorkspace::setRecoveryTimeCorrectionSeconds(
     std::optional<std::uint32_t> seconds) noexcept {
+    markRenderRelevantChange();
     recoveryTimeCorrectionSeconds_ = seconds;
 }
 
@@ -871,6 +880,7 @@ FermentationTouchWorkspace::makeCompletionIntent(
 
 bool FermentationTouchWorkspace::selectProgram(const std::string& programId,
                                                const ProgramCatalog& catalog) {
+    markRenderRelevantChange();
     const auto found = std::find_if(
         catalog.programs.begin(), catalog.programs.end(),
         [&programId](const ProgramDocument& document) {
@@ -891,6 +901,7 @@ bool FermentationTouchWorkspace::selectProgram(const std::string& programId,
 
 void FermentationTouchWorkspace::setStartCandidate(
     FermentationUiStartCandidate candidate) {
+    markRenderRelevantChange();
     if (!selectedProgramId_.has_value() ||
         candidate.programId != *selectedProgramId_) {
         selectedCandidate_ = {};
@@ -1201,6 +1212,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
     const FermentationUiSnapshot& snapshot,
     const device_platform::DeviceUiTarget& target,
     const ProgramCatalog* catalog) {
+    markRenderRelevantChange();
     const auto current = view(snapshot, catalog);
     pager_.itemCount = current.pager.itemCount;
     pager_.currentIndex = current.pager.currentIndex;
@@ -1327,6 +1339,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
 }
 
 void FermentationTouchWorkspace::setPage(FermentationUiPage page) {
+    markRenderRelevantChange();
     setCanonicalPageStack(page);
 }
 
