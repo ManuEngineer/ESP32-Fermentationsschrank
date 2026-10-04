@@ -721,7 +721,8 @@ void test_handler_requires_session_csrf_same_origin_and_json() {
     device_platform::HttpResponse response;
     auto request = makeRequest(fixture, dto);
 
-    request.metadata.csrfToken = "wrong-token";
+    const std::string invalidCsrfValue = "wrong-token";
+    request.metadata.csrfToken = invalidCsrfValue;
     TEST_ASSERT_TRUE(fixture.handler.handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(403U, response.statusCode);
 
