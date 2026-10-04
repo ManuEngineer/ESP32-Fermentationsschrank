@@ -277,8 +277,8 @@ vergrößern; **beide Pfade und Reset/Reinitialisierung nutzen daher einen
 gemeinsamen, schmalen Vertrag.**
 
 **Vertrag: `AuthOperationGate` (application-owned, privat, kein neuer Port).**
-Ein kleiner Member im Application-Owner (Mutex, Condition-Variable, Zähler,
-Flag; kein Heap):
+Ein kleiner Member im Application-Owner (`std::mutex`, `std::condition_variable`,
+Zähler, Flag; die Synchronisationsprimitive allokieren intern, siehe Abschnitt 5):
 
 ```text
 mutex m;  condition_variable cv;  unsigned active = 0;  bool closed = false;
@@ -460,13 +460,33 @@ Optimierung.
 
 ```text
 NEW_LONG_LIVED_DYNAMIC_BUFFERS=NO
+NEW_LONG_LIVED_DYNAMIC_ALLOCATIONS=YES_SYNC_PRIMITIVES_ONLY
+AUTH_OPERATION_GATE_SYNC_IMPLEMENTATION=STD_MUTEX_AND_CONDITION_VARIABLE
+AUTH_OPERATION_GATE_HEAP_FREE=NO
+AUTH_OPERATION_GATE_SYNC_HEAP=BOUNDED_AND_MEASURE_IN_S2
 NEW_SESSION_CAPACITY=NO
+SESSION_CAPACITY_CHANGE=NO
 REPLAY_MODEL_CHANGE=NO
 LVGL_POOL_CHANGE=NO
 STACK_CHANGE=NO
 ```
 
-- Dauerhaftes zusätzliches RAM: kleine statische Zustände im Application-Owner (`AuthOperationGate`: Mutex, Condition-Variable, Zähler, Flag; Fenster: Flag und 64-Bit-Deadline; Snapshot-Feld `webAccess`), insgesamt im Bereich weniger Dutzend Bytes plus ein Mutex-/CV-Objekt, kein Heap. Im Implementierungsschnitt per `sizeof` zu belegen. Flash-Konstante für das
+Klarstellung: Es entstehen **keine** neuen lang lebenden Nutzdaten-, Request-
+oder Replay-Puffer und keine eigene Heap-Datenstruktur. Das `AuthOperationGate`
+besitzt jedoch kleine interne Synchronisations-Allokationen, die ESP-IDF 6.1 /
+libstdc++ erzeugen: `std::mutex` läuft über pthread, `pthread_mutex_init()`
+allokiert ein `esp_pthread_mutex_t` und erzeugt ein FreeRTOS-Mutex-Objekt;
+`std::condition_variable` läuft über pthread, `pthread_cond_init()` allokiert ein
+`esp_pthread_cond_t`. Der einzelne Waiter nutzt beim Warten einen statischen
+FreeRTOS-Semaphorpuffer auf dem Stack; das ändert die langfristigen Allokationen
+nicht. Das Projekt verwendet `std::mutex` bereits produktiv; auf der
+PR-#174-RAM-Basis ist das kein Grund, die Lösung zu verwerfen. Die Allokation
+wird ehrlich budgetiert und gemessen (S2). Es wird keine neue
+Synchronisationsabstraktion und keine FreeRTOS-Variante in `device_platform`
+gebaut, solange die gemessene pthread-Allokation keinen realen Ressourcenblocker
+darstellt.
+
+- Dauerhaftes zusätzliches RAM: kleine statische Zustände im Application-Owner (`AuthOperationGate`: `std::mutex`, `std::condition_variable`, Zähler, Flag; Fenster: Flag und 64-Bit-Deadline; Snapshot-Feld `webAccess`) im Objekt, zuzüglich der kleinen pthread-/FreeRTOS-Heap-Allokationen für Mutex und Condition-Variable (siehe oben). Beides ist in S2 zu belegen (`sizeof` und gemessenes Heap-Delta). Flash-Konstante für das
   statische Formularfragment (geschätzt unter 3 KiB, im Implementierungsschnitt
   per Buildreport zu belegen, kein Laufzeit-RAM).
 - Request-lokales RAM: ein Body-`std::string` ≤ 1024 B, DTO mit zwei kurzen
@@ -495,7 +515,18 @@ Pre-Ready-Lauf erst nach Independent Review und Ownerfreigabe.
    `beginAuthorizedFactoryReset()`/`initializeAuthentication()`/Destruktor,
    Audit aller Aufrufer von `resetAuthenticationState()`; die Concurrency-Tests
    aus Abschnitt 7 für den Login-Pfad. Dateien: `fermentation_application.hpp/.cpp`,
-   Tests.
+   Tests. **Zusätzliche S2-Evidence (Heap der Synchronisationsprimitive):**
+   (1) `sizeof(AuthOperationGate)` beziehungsweise die statische Objektgröße
+   dokumentieren; (2) auf dem ESP32 nach erstmaliger Initialisierung/Benutzung
+   des Gates den zusätzlichen Runtime-Heapverbrauch gegenüber demselben Stand
+   ohne Gate messen oder durch eine fokussierte Vorher/Nachher-Messung
+   isolieren; (3) mindestens `free_heap_bytes`, `minimum_free_heap_bytes` und
+   `largest_free_block_8bit_bytes` erfassen; (4) bestätigen: keine unerwartete
+   größere Allokation, keine neue kontinuierlich wachsende Allokation, keine
+   Änderung an `CONFIG_LV_MEM_SIZE`, keine Stackvergrößerung. Es wird keine neue
+   harte RAM-Grenze erfunden; bewertet wird gegen die bestehende
+   PR-#174-RAM-Referenz und die gemessene Delta-Größe. Die Hardwaremessung
+   erfolgt nur auf ausdrücklichen Ownerauftrag.
 3. **S3 – Provisionierung und Fenster.** `provisionWebAccess`,
    `openWebProvisioningWindow`, Fensterzustand inkl. Schließen bei Reset,
    Moduswechsel, Reconfiguration, Ablauf, Verbrauch; Concurrency-Test für die
