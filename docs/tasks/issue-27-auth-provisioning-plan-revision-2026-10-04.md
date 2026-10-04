@@ -195,15 +195,33 @@ Touchaktion geplant:
 | Persistenz | rein flüchtig: ein `bool`/Deadline-Paar im Application-Owner, keine Persistenz, kein neuer Speicher |
 | Anzeige | secret-freies Snapshot-Feld `webAccess ∈ {NotApplicable, Closed, WindowOpen}` im UI-Snapshot; Text DE/EN/ES über das bestehende Textpack |
 
-Route-Gate (alle Bedingungen müssen gelten, sonst `403 provisioning-not-allowed`
-beziehungsweise `503 recovery-required`):
+Eindeutige Prüfreihenfolge der Route (unter L1, vor jedem Domain-Aufruf; die
+erste zutreffende Zeile entscheidet):
 
 ```text
-webAuthenticationState() == Unprovisioned
-&& inspect() == BootstrapAllowed
-&& webProvisioningWindowOpen(now)
+1. state == PasswordProtected || state == PasswordDisabled
+       -> 409 already-provisioned
+2. state == RecoveryRequired  || state == Indeterminate
+       -> 503 recovery-required
+3. state != Unprovisioned                      (jeder andere Wert)
+       -> fail closed: 503 recovery-required
+4. inspect() != BootstrapAllowed               (Zustand Unprovisioned)
+       -> fail closed: 503 recovery-required, kein bootstrap-Aufruf
+5. lokales Freigabefenster nicht offen
+       -> 403 provisioning-not-allowed
+6. sonst -> Provisionierung versuchen (tryBegin, bootstrap, ...)
 ```
 
+Damit gilt konsistent und ohne Überschneidung:
+
+```text
+REPEAT_AFTER_SUCCESS=409_ALREADY_PROVISIONED
+NO_LOCAL_WINDOW=403_PROVISIONING_NOT_ALLOWED
+RECOVERY_STATE=503_RECOVERY_REQUIRED
+```
+
+Ein bereits provisioniertes Gerät antwortet immer `409`, unabhängig vom
+Fensterzustand; `403` gilt nur im Zustand `Unprovisioned` ohne offenes Fenster.
 `RecoveryRequired` und `Indeterminate` bleiben ausgeschlossen. Ohne lokale
 Freigabe gibt es kein „first come, first served“, es gibt keine Touch-Tastatur und
 keine neue Pairing-/Token-Domäne.
@@ -226,7 +244,7 @@ Teil von R1.
 | Max. Body | `kMaximumWebProvisionBodyBytes = 1024` (Konstante in `web_json_codec.hpp` neben `kMaximumWebLoginBodyBytes=768`); größer → `413` |
 | Request-DTO | JSON-Objekt, genau diese Schlüssel (`hasOnlyKeys`, Duplikate/NUL wie Login abgelehnt): `mode` (`"protect"` \| `"disable"`, Pflicht), `servicePin` (Pflicht, genau 4 ASCII-Ziffern), `password` (Pflicht bei `protect`, **verboten** bei `disable`; Länge nach `validateWebPassword`, max. 256 Byte im Decoder), `confirmDisable` (Pflicht `true` bei `disable`, **verboten** bei `protect`) |
 | Erfolg | `200` `{"provisioned":true,"passwordProtection":"enabled"\|"disabled"}`; **keine** Session, **kein** Cookie, **kein** CSRF-Token |
-| Fehler | `400 invalid-json` (Schema/Modus/Felder), `413 request-too-large`, `415`, `403 origin-rejected`, `403 provisioning-not-allowed` (Gate: kein offenes lokales Freigabefenster oder Zustand nicht `Unprovisioned`/`BootstrapAllowed`), `409 already-provisioned`, `422 invalid-credentials` (Passwort-/PIN-Regelverletzung), `503 recovery-required` (`RecoveryRequired`, `Indeterminate`, `CommitOutcomeUnknown`, Root nicht `Unprovisioned`), `503 provisioning-failed` (KDF- oder Persistenzfehler) |
+| Fehler | `400 invalid-json` (Schema/Modus/Felder), `413 request-too-large`, `415`, `403 origin-rejected`, `403 provisioning-not-allowed` (nur Zustand `Unprovisioned`, `BootstrapAllowed`, aber kein offenes lokales Freigabefenster), `409 already-provisioned` (Zustand `PasswordProtected`/`PasswordDisabled`, auch ohne Fenster; ebenso konkurrierender Zweitrequest nach Erfolg), `422 invalid-credentials` (Passwort-/PIN-Regelverletzung), `503 recovery-required` (`RecoveryRequired`, `Indeterminate`, jeder sonstige Zustand, `inspect()!=BootstrapAllowed` im Zustand `Unprovisioned`, `CommitOutcomeUnknown`), `503 provisioning-failed` (KDF- oder Persistenzfehler) |
 | Antworten | niemals Passwort, PIN oder Verifier; Passwort nie in URL/Log/Snapshot |
 
 Es gibt vor der Provisionierung **keine** Session, daher weder CSRF-Token noch
@@ -277,17 +295,37 @@ Domain-/Store-Operation) und nie umgekehrt (L2 → L1) genommen.
 
 Auth-Operation (Login-Verifikation oder Provisionierung):
 
-1. Unter L1: Zustand/Gate prüfen, `domain`, `context` kopieren, `tryBegin()`
-   (liefert `false` ⇒ Operation startet nicht, Ergebnis fail-closed
-   `RecoveryRequired`). Danach L1 **freigeben**.
-2. Ohne irgendeine Sperre: `domain->verifyWebPassword(...)` bzw.
-   `domain->bootstrap(...)` (PBKDF2). Eine RAII-Wache ruft `end()` in jedem
-   Ausgang (auch bei Fehler/Exception-freiem Frühausstieg).
-3. Nach `end()`: nur noch lokale Ergebnisabbildung. Seiteneffekte, die den
+```text
+AUTH_DOMAIN_RAW_HANDLE_VALIDITY=ONLY_WHILE_AUTH_OPERATION_TOKEN_ACTIVE
+AUTH_CONTEXT_COPY_VALIDITY_FOR_DOMAIN_ACCESS=ONLY_WHILE_AUTH_OPERATION_TOKEN_ACTIVE
+USE_COPIED_DOMAIN_AFTER_END=FORBIDDEN
+```
+
+1. Unter L1: Zustand/Gate prüfen (Prüfreihenfolge 3.2), `domain` und `context`
+   kopieren, `tryBegin()` (liefert `false` ⇒ Operation startet nicht, Ergebnis
+   fail-closed `RecoveryRequired`). Danach L1 **freigeben**. Ab hier gilt der
+   Auth-Operation-Token als aktiv.
+2. Ohne irgendeine Sperre, **solange der Token aktiv ist**: ausschließlich hier
+   darf der kopierte `domain`-Zeiger (und `context` für Domain-Zugriffe)
+   dereferenziert werden: `domain->verifyWebPassword(...)` bzw.
+   `domain->bootstrap(...)` (PBKDF2). Benötigt das Ergebnis eine Re-Inspektion
+   (Provisionierung: `bootstrap` lieferte `RecoveryRequired`, um einen
+   Retry/konkurrierenden Request nach Erfolg von echtem Recovery zu
+   unterscheiden), erfolgt `domain->inspect(*context)` **noch vor `end()`**; das
+   Ergebnis wird als lokaler Wert kopiert. L1 wird vor `end()` **nie** erneut
+   genommen (ein bereits in `closeAndDrain()` wartender Reset hält L1 und würde
+   sonst einen Lock-Zyklus bilden).
+3. Eine RAII-Wache ruft `end()` in jedem Ausgang (auch Frühausstieg). Direkt
+   danach werden `domain` und `context` nicht mehr verwendet; ein Reset darf
+   unmittelbar nach der Rückkehr der Domain und vor jeder weiteren
+   Ergebnisabbildung fortfahren.
+4. Nach `end()`: nur noch lokale Ergebniswerte. Seiteneffekte, die
    Application-Zustand brauchen (Sessions widerrufen, Fenster verbrauchen,
-   `inspect()` für `AlreadyProvisioned`), nehmen L1 **neu** und halten dabei
-   `m` nicht. Dazwischen eingetretene Resets sind harmlos: sie haben das Fenster
-   bereits geschlossen und alle Sessions widerrufen.
+   Statusabbildung), nehmen L1 **neu** und halten dabei `m` nicht; sie
+   dereferenzieren keinen alten Domain-/Store-Zeiger. Dazwischen eingetretene
+   Resets sind harmlos: sie haben das Fenster bereits geschlossen und alle
+   Sessions widerrufen; ein Verbrauch/Widerruf auf dem neuen Zustand ist
+   idempotent.
 
 Reset/Reinitialisierung (Factory Reset, `initializeAuthentication`,
 `resetAuthenticationState`):
@@ -334,14 +372,18 @@ WebProvisionStatus FermentationApplication::provisionWebAccess(
 [[nodiscard]] bool FermentationApplication::openWebProvisioningWindow();
 ```
 
-`provisionWebAccess` folgt dem Vertrag oben: Gate-Prüfung unter L1
-(Zustand `Unprovisioned`, `inspect()==BootstrapAllowed`, Fenster offen,
-`tryBegin()`), `bootstrap` ohne Sperre; bei `RecoveryRequired` erneute
-`inspect()` unter L1 – ist es `AlreadyProvisioned` (Retry/konkurrierender
-Request nach Erfolg), lautet der Status `AlreadyProvisioned` (HTTP 409), nicht
-„Recovery“. Bei Erfolg: unter L1 Fenster verbrauchen und
-`webSessionManager_->revokeAll()`. `openWebProvisioningWindow()` setzt unter L1
-Deadline = jetzt + 600 000 ms, wenn die Vorbedingungen aus 3.2 gelten.
+`provisionWebAccess` folgt dem Vertrag oben: Prüfreihenfolge unter L1 (3.2:
+bereits provisioniert → `AlreadyProvisioned`; Recovery/sonstiger Zustand/
+`inspect()!=BootstrapAllowed` → `RecoveryRequired`; Fenster geschlossen →
+`NotAllowed`), dann `tryBegin()` und L1 freigeben; `bootstrap` innerhalb des
+Tokens. Antwortet `bootstrap` mit `RecoveryRequired`, wird noch innerhalb des
+Tokens `domain->inspect(*context)` ausgewertet: `AlreadyProvisioned` (Retry/
+konkurrierender Request nach Erfolg) ergibt den lokalen Status
+`AlreadyProvisioned` (HTTP 409), alles andere `RecoveryRequired`. Nach `end()`
+wird unter L1 bei Erfolg das Fenster verbraucht und
+`webSessionManager_->revokeAll()` aufgerufen. `openWebProvisioningWindow()`
+setzt unter L1 Deadline = jetzt + 600 000 ms, wenn die Vorbedingungen aus 3.2
+gelten.
 
 ### 3.5 Auth-Domain – genau eine kleine, begründete Erweiterung (Entscheidung D3)
 
@@ -491,7 +533,13 @@ vorhandenen abstrakten Ports; keine neue Bibliothek, kein neuer Komponentenstack
   Content-Type, Origin, fremde/doppelte/fehlende Schlüssel, zu großer Body,
   unzulässige Passwort-/PIN-Werte, `disable` ohne Bestätigung, `protect` mit
   `confirmDisable`, `disable` mit `password`.
-- Gate: ohne offenes Fenster → `403 provisioning-not-allowed`; Fenster öffnet nur
+- Zustandsmatrix der Route (Prüfreihenfolge 3.2), jeweils mit und ohne offenes
+  Fenster: `PasswordProtected`/`PasswordDisabled` → `409` (kein Bootstrap-Aufruf);
+  `RecoveryRequired`/`Indeterminate`/`Unprovisioned` mit
+  `inspect()!=BootstrapAllowed` → `503 recovery-required` (kein Bootstrap-Aufruf);
+  `Unprovisioned`+`BootstrapAllowed` ohne Fenster → `403`; mit Fenster →
+  Versuch.
+- Gate: ohne offenes Fenster (Zustand `Unprovisioned`) → `403 provisioning-not-allowed`; Fenster öffnet nur
   bei `Unprovisioned`+`BootstrapAllowed`; Ablauf nach 10 min (virtuelle Uhr);
   Verbrauch bei Erfolg; Schließen bei Werksreset, Moduswechsel,
   `beginHomeWifiReconfiguration`; Candidate-Test-Erfolg schließt es nicht;
@@ -509,15 +557,23 @@ vorhandenen abstrakten Ports; keine neue Bibliothek, kein neuer Komponentenstack
   Credential-Records lesbar, alle Sessions widerrufen, Fenster geschlossen.
   (4) Eine nach `closeAndDrain()` gestartete Operation ruft die KDF nicht auf und
   ist fail-closed. (5) Schlägt der Reset fehl, öffnet `reopen()` das Gate und die
-  Domain bleibt nutzbar. Falls die Native-Testumgebung Threads nicht linkt, ist
+  Domain bleibt nutzbar. (6) Der Reset darf unmittelbar nach der Rückkehr der
+  Domain-Operation und vor der HTTP-Ergebnisabbildung fortfahren (Test-Hook
+  zwischen `end()` und Statusabbildung): die Abbildung verwendet nur lokale
+  Ergebniswerte, greift auf keinen alten Domain-/Store-Zeiger zu und erzeugt
+  weder UAF, Deadlock noch stale-epoch-Write; für den Re-Inspektionsfall
+  (konkurrierende Provisionierung) wird belegt, dass `inspect()` vor `end()`
+  stattfindet. Falls die Native-Testumgebung Threads nicht linkt, ist
   das ein Build-Konfigurationsbefund und wird dem Owner vor der Änderung
   vorgelegt.
 - Persistenzfehler (Root-Write, Credential-Write, Readback, `CommitOutcomeUnknown`)
   → kein Erfolg, Zustand `RecoveryRequired`, keine Session; Fehler vor dem
   ersten Write → weiterhin `Unprovisioned`.
 - KDF-/Random-Fehler fail-closed.
-- Wiederholung nach Erfolg → `409`; konkurrierender zweiter Request → `409`
-  (nicht „recovery“).
+- Wiederholung nach Erfolg → `409` (Zustandsprüfung, unabhängig vom Fenster);
+  konkurrierender zweiter Request, der das Gate noch im Zustand `Unprovisioned`
+  passiert hat → `409` über die Re-Inspektion innerhalb des Tokens (nicht
+  „recovery“).
 - `RecoveryRequired`/`Indeterminate` nicht über Provisionierung umgehbar.
 - Factory Reset → wieder `Unprovisioned` und erneut provisionierbar.
 - Keine Regression: `test_web_session`, Replay Candidate C (`4×8`), 4-Session-Limit,
