@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -71,6 +72,83 @@ class ApplicationCallSerializer final {
 
    private:
     mutable std::recursive_mutex mutex_;
+};
+
+// Lifetime gate for slow authentication operations (PBKDF2 runs outside the
+// ApplicationCallSerializer). A running operation holds a Token; reset,
+// re-initialisation and destruction close the gate and drain active tokens
+// before the domain/record store are destroyed or the storage epoch changes.
+// Lock order: ApplicationCallSerializer (L1) -> gate mutex (L2). The gate
+// mutex is only held briefly, never during a domain/store operation or KDF,
+// and L1 is never acquired while it is held. The std::mutex /
+// std::condition_variable allocate small pthread objects on ESP-IDF.
+class AuthOperationGate final {
+   public:
+    class Token final {
+       public:
+        Token(const Token&) = delete;
+        Token& operator=(const Token&) = delete;
+        Token(Token&& other) noexcept : gate_(other.gate_) {
+            other.gate_ = nullptr;
+        }
+        Token& operator=(Token&& other) noexcept {
+            if (this != &other) {
+                if (gate_ != nullptr) {
+                    gate_->end();
+                }
+                gate_ = other.gate_;
+                other.gate_ = nullptr;
+            }
+            return *this;
+        }
+        ~Token() {
+            if (gate_ != nullptr) {
+                gate_->end();
+            }
+        }
+
+       private:
+        friend class AuthOperationGate;
+        explicit Token(AuthOperationGate& gate) noexcept : gate_(&gate) {}
+        AuthOperationGate* gate_;
+    };
+
+    AuthOperationGate() = default;
+    AuthOperationGate(const AuthOperationGate&) = delete;
+    AuthOperationGate& operator=(const AuthOperationGate&) = delete;
+
+    // Empty while the gate is closed.
+    [[nodiscard]] std::optional<Token> tryBegin() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (closed_) {
+            return std::nullopt;
+        }
+        ++active_;
+        return Token(*this);
+    }
+    void closeAndDrain() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        closed_ = true;
+        drained_.wait(lock, [this] { return active_ == 0U; });
+    }
+    void reopen() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        closed_ = false;
+    }
+
+   private:
+    friend class FermentationApplicationTestAccess;
+    void end() noexcept {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (--active_ == 0U) {
+            drained_.notify_all();
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable drained_;
+    unsigned active_{0U};
+    bool closed_{false};
 };
 
 enum class WebAuthenticationState : std::uint8_t {
@@ -346,6 +424,7 @@ class FermentationApplication {
     device_platform::IHttpServerLifecycle* httpServerLifecycle_{nullptr};
     device_platform::ISecureRandomSource* secureRandomSource_{nullptr};
     IAuthenticationKdf* authenticationKdf_{nullptr};
+    AuthOperationGate authOperationGate_;
     std::unique_ptr<AuthenticationRecordStore> authenticationRecordStore_;
     std::unique_ptr<AuthenticationDomain> authenticationDomain_;
     std::optional<AuthenticationBootstrapContext> authenticationContext_;

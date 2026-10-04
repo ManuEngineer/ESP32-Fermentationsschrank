@@ -1,9 +1,12 @@
 #include <unity.h>
 
 #include <array>
+#include <memory>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <iomanip>
 #include <mutex>
@@ -15,6 +18,7 @@
 
 #include "device_platform.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_storage_contract.hpp"
 #include "connectivity_credentials.hpp"
 #include "fermentation_application.hpp"
 #include "mock_time_zone_resolver.hpp"
@@ -37,6 +41,20 @@ class FermentationApplicationTestAccess {
     static ApplicationCallSerializer::Guard enter(
         FermentationApplication& application) {
         return application.applicationCallSerializer_.enter();
+    }
+
+    static bool authGateClosed(FermentationApplication& application) {
+        const std::lock_guard<std::mutex> lock(
+            application.authOperationGate_.mutex_);
+        return application.authOperationGate_.closed_;
+    }
+
+    static void closeAuthGate(FermentationApplication& application) {
+        application.authOperationGate_.closeAndDrain();
+    }
+
+    static void reopenAuthGate(FermentationApplication& application) {
+        application.authOperationGate_.reopen();
     }
 
     static bool provision(FermentationApplication& application,
@@ -181,6 +199,57 @@ class DeterministicKdf final : public IAuthenticationKdf {
     }
 };
 
+// Delegates to the deterministic KDF; when armed, the next derivation
+// signals that it is inside the slow operation and blocks until released.
+class BlockableKdf final : public IAuthenticationKdf {
+   public:
+    bool derive(
+        const std::string& secret, const AuthVerifier& parameters,
+        std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) override {
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            ++calls_;
+            if (armed_) {
+                armed_ = false;
+                entered_ = true;
+                changed_.notify_all();
+                changed_.wait(lock, [this] { return released_; });
+            }
+        }
+        return inner_.derive(secret, parameters, out);
+    }
+
+    void arm() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        armed_ = true;
+        entered_ = false;
+        released_ = false;
+    }
+    [[nodiscard]] bool waitEntered() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return changed_.wait_for(lock, std::chrono::seconds(10),
+                                 [this] { return entered_; });
+    }
+    void release() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        released_ = true;
+        changed_.notify_all();
+    }
+    [[nodiscard]] unsigned calls() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return calls_;
+    }
+
+   private:
+    DeterministicKdf inner_;
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    unsigned calls_{0U};
+    bool armed_{false};
+    bool entered_{false};
+    bool released_{false};
+};
+
 class CapturingHttpServerLifecycle final
     : public device_platform::IHttpServerLifecycle {
    public:
@@ -226,7 +295,7 @@ struct ComposedFixture {
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
     DeterministicRandom random;
-    DeterministicKdf kdf;
+    BlockableKdf kdf;
     CapturingHttpServerLifecycle http;
     FermentationApplication application;
 
@@ -1805,6 +1874,200 @@ void test_application_call_serializer_blocks_cross_thread_and_allows_reentry() {
 
 }  // namespace
 
+template <typename Predicate>
+bool eventually(Predicate predicate) {
+    for (int attempt = 0; attempt < 2000; ++attempt) {
+        if (predicate()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return false;
+}
+
+std::string authRecordBytes(ComposedFixture& fixture) {
+    const auto key = device_platform::StateStoreKey::create(
+        configuration_storage_contract::kAuthenticationStoreKey);
+    TEST_ASSERT_TRUE(key.key.has_value());
+    return fixture.store.read(*key.key, 4096U).value;
+}
+
+bool resetFinished(const ConfigurationRecoveryResult& reset) {
+    return reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted ||
+           reset.status ==
+               ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable;
+}
+
+void test_factory_reset_drains_running_login_before_touching_the_store() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto oldSession = loginComposed(fixture);
+    const auto recordsBefore = authRecordBytes(fixture);
+    TEST_ASSERT_FALSE(recordsBefore.empty());
+
+    fixture.kdf.arm();
+    WebAuthenticationResult loginResult;
+    std::thread login([&] {
+        loginResult = fixture.application.authenticateWebPassword(
+            "correct horse battery", 1000U);
+    });
+    TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+
+    std::atomic<bool> resetDone{false};
+    ConfigurationRecoveryResult reset;
+    std::thread resetter([&] {
+        reset = fixture.application.beginAuthorizedFactoryReset();
+        resetDone = true;
+    });
+    // The reset has closed the gate and waits for the running login.
+    TEST_ASSERT_TRUE(eventually([&] {
+        return FermentationApplicationTestAccess::authGateClosed(
+            fixture.application);
+    }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    TEST_ASSERT_FALSE(resetDone.load());
+    TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+
+    fixture.kdf.release();
+    login.join();
+    resetter.join();
+
+    // The login finished against the old epoch; the reset then completed.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(loginResult.status));
+    TEST_ASSERT_TRUE(resetFinished(reset));
+    assertComposedSessionFailClosed(fixture, oldSession.cookie);
+    if (reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::Unprovisioned);
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::authGateClosed(
+            fixture.application));
+    }
+    TEST_ASSERT_TRUE(authRecordBytes(fixture) != recordsBefore);
+}
+
+void test_login_after_gate_close_is_fail_closed_without_kdf() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    FermentationApplicationTestAccess::closeAuthGate(fixture.application);
+    const auto callsBefore = fixture.kdf.calls();
+    const auto closed = fixture.application.authenticateWebPassword(
+        "correct horse battery", 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::RecoveryRequired),
+        static_cast<int>(closed.status));
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls());
+
+    FermentationApplicationTestAccess::reopenAuthGate(fixture.application);
+    const auto reopened = fixture.application.authenticateWebPassword(
+        "correct horse battery", 2000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(reopened.status));
+    TEST_ASSERT_TRUE(fixture.kdf.calls() > callsBefore);
+}
+
+void test_failed_factory_reset_reopens_the_gate_and_keeps_the_domain() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    fixture.store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(reset.status !=
+                     ConfigurationRecoveryStatus::FactoryResetCompleted);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::authGateClosed(fixture.application));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordProtected);
+    const auto login = fixture.application.authenticateWebPassword(
+        "correct horse battery", 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(login.status));
+}
+
+void test_reset_may_proceed_right_after_the_domain_returns() {
+    // The login maps its result from local values after the token ended; a
+    // reset that proceeds immediately must neither deadlock nor disturb it.
+    for (int iteration = 0; iteration < 8; ++iteration) {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, "correct horse battery", "1234"));
+        fixture.kdf.arm();
+        WebAuthenticationResult loginResult;
+        std::thread login([&] {
+            loginResult = fixture.application.authenticateWebPassword(
+                "correct horse battery", 1000U);
+        });
+        TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+        ConfigurationRecoveryResult reset;
+        std::thread resetter(
+            [&] { reset = fixture.application.beginAuthorizedFactoryReset(); });
+        TEST_ASSERT_TRUE(eventually([&] {
+            return FermentationApplicationTestAccess::authGateClosed(
+                fixture.application);
+        }));
+        fixture.kdf.release();
+        login.join();
+        resetter.join();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+            static_cast<int>(loginResult.status));
+        TEST_ASSERT_TRUE(resetFinished(reset));
+    }
+}
+
+void test_destructor_drains_a_running_login() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    DeterministicRandom random;
+    BlockableKdf kdf;
+    CapturingHttpServerLifecycle http;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    auto application = std::make_unique<FermentationApplication>();
+    TEST_ASSERT_TRUE(application->begin(platform, store, timeZoneResolver,
+                                        timeSource, network, http, random,
+                                        kdf));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        *application, "correct horse battery", "1234"));
+
+    kdf.arm();
+    WebAuthenticationResult loginResult;
+    std::thread login([&] {
+        loginResult = application->authenticateWebPassword(
+            "correct horse battery", 1000U);
+    });
+    TEST_ASSERT_TRUE(kdf.waitEntered());
+    std::atomic<bool> destroyed{false};
+    std::thread destroyer([&] {
+        application.reset();
+        destroyed = true;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    TEST_ASSERT_FALSE(destroyed.load());
+    kdf.release();
+    login.join();
+    destroyer.join();
+    TEST_ASSERT_TRUE(destroyed.load());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(loginResult.status));
+}
+
+void test_auth_operation_gate_object_size_is_reported() {
+    // S2 evidence: static object size of the gate (heap of the pthread
+    // objects is measured on the target, not here).
+    std::printf("AUTH_OPERATION_GATE_SIZEOF=%u\n",
+                static_cast<unsigned>(sizeof(AuthOperationGate)));
+    TEST_ASSERT_TRUE(sizeof(AuthOperationGate) > 0U);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_outcome_matrix_accepts_only_owning_apply_results);
@@ -1840,5 +2103,11 @@ int main() {
         test_composed_dispatcher_authenticates_read_only_sessions_and_expires);
     RUN_TEST(
         test_application_call_serializer_blocks_cross_thread_and_allows_reentry);
+    RUN_TEST(test_factory_reset_drains_running_login_before_touching_the_store);
+    RUN_TEST(test_login_after_gate_close_is_fail_closed_without_kdf);
+    RUN_TEST(test_failed_factory_reset_reopens_the_gate_and_keeps_the_domain);
+    RUN_TEST(test_reset_may_proceed_right_after_the_domain_returns);
+    RUN_TEST(test_destructor_drains_a_running_login);
+    RUN_TEST(test_auth_operation_gate_object_size_is_reported);
     return UNITY_END();
 }

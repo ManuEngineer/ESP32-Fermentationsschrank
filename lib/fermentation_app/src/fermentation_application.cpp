@@ -218,7 +218,12 @@ FermentationApplication::makePreparedRequest(
 
 FermentationApplication::FermentationApplication() noexcept = default;
 
-FermentationApplication::~FermentationApplication() = default;
+FermentationApplication::~FermentationApplication() {
+    // The product lifecycle stops the HTTP server before destruction; draining
+    // here additionally guarantees that no authentication operation still
+    // uses the domain or record store while the members are destroyed.
+    authOperationGate_.closeAndDrain();
+}
 
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartProgram(
@@ -1187,6 +1192,7 @@ WebAuthenticationResult FermentationApplication::authenticateWebPassword(
     const std::string& password, std::uint64_t nowMs) {
     AuthenticationDomain* domain = nullptr;
     std::optional<AuthenticationBootstrapContext> context;
+    std::optional<AuthOperationGate::Token> token;
     {
         const auto guard = applicationCallSerializer_.enter();
         if (webAuthenticationStateUnlocked() !=
@@ -1199,13 +1205,25 @@ WebAuthenticationResult FermentationApplication::authenticateWebPassword(
                         : WebAuthenticationResultStatus::RecoveryRequired,
                     0U};
         }
+        token = authOperationGate_.tryBegin();
+        if (!token.has_value()) {
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+        }
         domain = authenticationDomain_.get();
         context = authenticationContext_;
     }
 
+    // The domain pointer and the context copy are valid only while the token
+    // is active. The Application gate is released here, so the multi-second
+    // PBKDF2 does not block other callers; reset and destruction wait for the
+    // token instead.
     std::uint64_t retryAfterMs = 0U;
     const auto checked =
         domain->verifyWebPassword(*context, password, nowMs, retryAfterMs);
+    token.reset();
+    domain = nullptr;
+    context.reset();
+
     switch (checked) {
         case AuthCheckStatus::Authenticated:
             return {WebAuthenticationResultStatus::Authenticated, 0U};
@@ -1409,6 +1427,12 @@ bool FermentationApplication::beginPersistent(
 
 void FermentationApplication::initializeAuthentication(
     device_platform::IStateStore& store) {
+    // resetAuthenticationState() closes and drains the auth gate; it is
+    // reopened on every exit once the new domain (or its absence) is final.
+    struct ReopenOnExit {
+        AuthOperationGate& gate;
+        ~ReopenOnExit() { gate.reopen(); }
+    } reopenOnExit{authOperationGate_};
     resetAuthenticationState();
 
     if (authenticationKdf_ == nullptr || secureRandomSource_ == nullptr) {
@@ -1440,6 +1464,10 @@ void FermentationApplication::initializeAuthentication(
 }
 
 void FermentationApplication::resetAuthenticationState() noexcept {
+    // No authentication operation may use the domain or record store while
+    // they are destroyed. Boot-time callers have no active operation, so the
+    // drain returns immediately; the runtime reset closed the gate already.
+    authOperationGate_.closeAndDrain();
     authenticationContext_.reset();
     authenticationDomain_.reset();
     authenticationRecordStore_.reset();
@@ -1689,12 +1717,17 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     }
 
     const auto previousEpoch = *storageEpoch_;
+    // Wait for running authentication operations before the destructive,
+    // epoch-changing reset; new operations fail closed meanwhile.
+    authOperationGate_.closeAndDrain();
     const auto reset =
         configurationRecoveryService_->beginAuthorizedFactoryReset();
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     configurationRecoveryStatus_ = reset.status;
 #endif
     if (reset.status != ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        // Domain and context are unchanged and remain usable.
+        authOperationGate_.reopen();
         return reset;
     }
     if (webSessionManager_ != nullptr) {
