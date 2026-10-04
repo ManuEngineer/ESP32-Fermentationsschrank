@@ -183,7 +183,10 @@ class FermentationTouchWorkspace {
         std::optional<SensorSelectionUserAction> action) noexcept;
     void setRecoveryTimeCorrectionSeconds(
         std::optional<std::uint32_t> seconds) noexcept;
-    void setProgramEditDirty(bool dirty) noexcept { programEditDirty_ = dirty; }
+    void setProgramEditDirty(bool dirty) noexcept {
+        markRenderRelevantChange();
+        programEditDirty_ = dirty;
+    }
 
     [[nodiscard]] FermentationUiStartManualHoldingIntent
     makeManualHoldingIntent(
@@ -198,16 +201,30 @@ class FermentationTouchWorkspace {
         bool startCooling,
         const std::optional<FermentationUiManualRunPlanValues>& coolingPlan =
             std::nullopt) const;
-    [[nodiscard]] bool movePagerUp() noexcept { return pager_.moveUp(); }
-    [[nodiscard]] bool movePagerDown() noexcept { return pager_.moveDown(); }
+    [[nodiscard]] bool movePagerUp() noexcept {
+        markRenderRelevantChange();
+        return pager_.moveUp();
+    }
+    [[nodiscard]] bool movePagerDown() noexcept {
+        markRenderRelevantChange();
+        return pager_.moveDown();
+    }
     [[nodiscard]] FermentationUiPage page() const noexcept { return page_; }
     void setPage(FermentationUiPage page);
+    // Monotonic render-invalidation counter (wraps). It is increased by every
+    // public mutator that can change what view() returns for an unchanged
+    // snapshot and catalog, and serves only as a cache key for the renderer;
+    // it is not application state.
+    [[nodiscard]] std::uint32_t renderRevision() const noexcept {
+        return renderRevision_;
+    }
     [[nodiscard]] const std::optional<std::string>& selectedProgramId()
         const noexcept {
         return selectedProgramId_;
     }
 
    private:
+    void markRenderRelevantChange() noexcept { ++renderRevision_; }
     [[nodiscard]] static device_platform::TextKey key(const char* value);
     [[nodiscard]] static device_platform::BottomSlot slot(const char* label,
                                                           bool enabled = true);
@@ -246,6 +263,7 @@ class FermentationTouchWorkspace {
     std::optional<SensorSelectionUserAction> sensorSelectionAction_;
     std::optional<std::uint32_t> recoveryTimeCorrectionSeconds_;
     bool programEditDirty_{false};
+    std::uint32_t renderRevision_{0U};
 };
 
 }  // namespace fermentation

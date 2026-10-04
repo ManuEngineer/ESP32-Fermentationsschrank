@@ -1,0 +1,608 @@
+#include <unity.h>
+
+#include <cstddef>
+#include <cstdlib>
+#include <new>
+#include <optional>
+
+#include "device_platform.hpp"
+#include "fermentation_application.hpp"
+#include "fermentation_ui_presentation_cache.hpp"
+#include "fermentation_ui_text.hpp"
+#include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
+#include "mock_time_zone_resolver.hpp"
+#include "simulated_persistent_state_store.hpp"
+
+#include "virtual_time_source.hpp"
+
+#include "../../main/fermentation_ui_press_dispatcher.hpp"
+
+// Counting replacement of every global allocation function in this test
+// executable. The count is only active between startCounting() and
+// stopCounting(), so setup and warm-up are not measured.
+namespace {
+std::size_t gAllocationCount = 0U;
+bool gCounting = false;
+
+void startCounting() {
+    gAllocationCount = 0U;
+    gCounting = true;
+}
+std::size_t stopCounting() {
+    gCounting = false;
+    return gAllocationCount;
+}
+
+void* countedAllocate(std::size_t size) {
+    if (gCounting) {
+        ++gAllocationCount;
+    }
+    void* pointer = std::malloc(size == 0U ? 1U : size);
+    if (pointer == nullptr) {
+        throw std::bad_alloc();
+    }
+    return pointer;
+}
+void* countedAllocateAligned(std::size_t size, std::size_t alignment) {
+    if (gCounting) {
+        ++gAllocationCount;
+    }
+    void* pointer = nullptr;
+    if (posix_memalign(&pointer,
+                       alignment < sizeof(void*) ? sizeof(void*) : alignment,
+                       size == 0U ? 1U : size) != 0) {
+        throw std::bad_alloc();
+    }
+    return pointer;
+}
+}  // namespace
+
+void* operator new(std::size_t size) { return countedAllocate(size); }
+void* operator new[](std::size_t size) { return countedAllocate(size); }
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    try {
+        return countedAllocate(size);
+    } catch (...) {
+        return nullptr;
+    }
+}
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+    try {
+        return countedAllocate(size);
+    } catch (...) {
+        return nullptr;
+    }
+}
+void* operator new(std::size_t size, std::align_val_t alignment) {
+    return countedAllocateAligned(size, static_cast<std::size_t>(alignment));
+}
+void* operator new[](std::size_t size, std::align_val_t alignment) {
+    return countedAllocateAligned(size, static_cast<std::size_t>(alignment));
+}
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete[](void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, std::size_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, std::size_t) noexcept {
+    std::free(pointer);
+}
+void operator delete(void* pointer, std::align_val_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, std::align_val_t) noexcept {
+    std::free(pointer);
+}
+void operator delete(void* pointer, std::size_t, std::align_val_t) noexcept {
+    std::free(pointer);
+}
+void operator delete[](void* pointer, std::size_t, std::align_val_t) noexcept {
+    std::free(pointer);
+}
+
+namespace fermentation {
+
+class FermentationApplicationTestAccess {
+   public:
+    static RunCommandState& runtimeState(FermentationApplication& application) {
+        return *application.runtimeRunState_;
+    }
+};
+
+}  // namespace fermentation
+
+namespace {
+
+using namespace fermentation;
+using namespace fermentation::main_ui;
+
+struct AppFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    FermentationApplication application;
+    FermentationTouchWorkspace workspace;
+    UiRenderGate gate;
+    device_platform::LocaleId initialLocale{"en"};
+
+    AppFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    }
+
+    // One loop step exactly as updateProductUi() does it without a touch
+    // contact.
+    bool step(
+        std::optional<device_platform::DeviceUiTarget> pressed = std::nullopt,
+        device_platform::DeviceUiNetworkStatus network =
+            device_platform::DeviceUiNetworkStatus::Connected,
+        std::optional<std::int64_t> utc = 1'700'000'000LL,
+        const char* locale = nullptr) {
+        if (locale != nullptr) {
+            initialLocale = device_platform::LocaleId{locale};
+        }
+        gate.beginStep(application,
+                       workspace.page() == FermentationUiPage::HeaderNetwork);
+        return gate.renderRequired(application, workspace, initialLocale,
+                                   pressed, network, utc);
+    }
+
+    // Warm up and mark the current state as rendered.
+    void settle() {
+        for (int loop = 0; loop < 3; ++loop) {
+            if (step()) {
+                gate.markRendered();
+            }
+        }
+        TEST_ASSERT_FALSE(step());
+    }
+};
+
+// Control: proves the counter is live and that the former per-loop pipeline
+// (by-value snapshot) really allocated, so the zero above is a measurement.
+void test_control_counter_detects_allocations_of_the_former_pipeline() {
+    AppFixture fixture;
+    fixture.settle();
+    startCounting();
+    {
+        auto snapshot = fixture.application.uiSnapshot();
+        static_cast<void>(snapshot);
+    }
+    const auto byValueSnapshot = stopCounting();
+    TEST_ASSERT_TRUE(byValueSnapshot > 0U);
+
+    startCounting();
+    {
+        auto* probe = new int(1);
+        delete probe;
+    }
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(stopCounting()));
+}
+
+void test_unchanged_state_builds_no_render_and_allocates_nothing() {
+    AppFixture fixture;
+    fixture.settle();
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
+class MockHttpServerLifecycle final
+    : public device_platform::IHttpServerLifecycle {
+   public:
+    [[nodiscard]] bool start(device_platform::IHttpRouteSink&) override {
+        running_ = true;
+        return true;
+    }
+    [[nodiscard]] bool stop() override {
+        running_ = false;
+        return true;
+    }
+    [[nodiscard]] bool running() const override { return running_; }
+
+   private:
+    bool running_{false};
+};
+
+// The real firmware wiring: an application with a network lifecycle whose
+// SoftAP data (long, non-small-string SSID and password) is available, shown
+// on HeaderNetwork.
+struct NetworkFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    FermentationApplication application;
+    FermentationTouchWorkspace workspace;
+    UiRenderGate gate;
+    device_platform::LocaleId initialLocale{"en"};
+
+    NetworkFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource));
+        TEST_ASSERT_TRUE(
+            application.applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                .status == NetworkConfigurationStatus::Applied);
+        workspace.setPage(FermentationUiPage::HeaderNetwork);
+        const auto info = application.networkAccessPointInfo();
+        TEST_ASSERT_TRUE(info.has_value());
+        // Beyond the small-string buffer, so a copy really allocates.
+        TEST_ASSERT_TRUE(info->ssid.size() > 15U);
+        TEST_ASSERT_TRUE(info->password.size() > 15U);
+    }
+
+    bool step() {
+        gate.beginStep(application,
+                       workspace.page() == FermentationUiPage::HeaderNetwork);
+        return gate.renderRequired(
+            application, workspace, initialLocale, std::nullopt,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    }
+    void settle() {
+        for (int loop = 0; loop < 3; ++loop) {
+            if (step()) {
+                gate.markRendered();
+            }
+        }
+        TEST_ASSERT_FALSE(step());
+    }
+    void restartAccessPoint() {
+        TEST_ASSERT_TRUE(
+            network.start(device_platform::NetworkMode::AP_ONLY, std::nullopt)
+                .status == device_platform::NetworkOperationStatus::Applied);
+    }
+    void setCredentials(const std::string& ssid, const std::string& password) {
+        TEST_ASSERT_TRUE(
+            network.setAccessPointCredentials(ssid, password).status ==
+            device_platform::NetworkOperationStatus::Applied);
+    }
+};
+
+void test_header_network_with_real_access_point_data_allocates_nothing() {
+    NetworkFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_FALSE(fixture.gate.presentation().hasCopy());
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
+void test_control_by_value_access_point_fetch_allocates() {
+    NetworkFixture fixture;
+    fixture.settle();
+    startCounting();
+    {
+        const auto info = fixture.application.networkAccessPointInfo();
+        static_cast<void>(info);
+    }
+    TEST_ASSERT_TRUE(stopCounting() > 0U);
+}
+
+void test_access_point_changes_bump_the_revision_and_request_redraw() {
+    NetworkFixture fixture;
+    fixture.settle();
+    const auto start = fixture.application.networkAccessPointRevision();
+
+    // Starting again with unchanged data must not change the revision.
+    fixture.restartAccessPoint();
+    TEST_ASSERT_EQUAL_UINT64(start,
+                             fixture.application.networkAccessPointRevision());
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // SSID change.
+    fixture.setCredentials("Fermentation-Setup-ssid-changed",
+                           fixture.network.accessPointPassword());
+    fixture.restartAccessPoint();
+    const auto afterSsid = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterSsid != start);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Password change.
+    fixture.setCredentials(fixture.network.accessPointSsid(),
+                           "rotated-password-0123456789");
+    fixture.restartAccessPoint();
+    const auto afterPassword = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterPassword != afterSsid);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // IPv4 change.
+    fixture.network.setAccessPointAddress(0x0204A8C0U);
+    fixture.restartAccessPoint();
+    const auto afterAddress = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterAddress != afterPassword);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Cleared (presence).
+    static_cast<void>(fixture.network.stop());
+    const auto afterClear = fixture.application.networkAccessPointRevision();
+    TEST_ASSERT_TRUE(afterClear != afterAddress);
+    TEST_ASSERT_FALSE(fixture.application.networkAccessPointInfo().has_value());
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+
+    // Set again.
+    fixture.restartAccessPoint();
+    TEST_ASSERT_TRUE(fixture.application.networkAccessPointRevision() !=
+                     afterClear);
+    TEST_ASSERT_TRUE(fixture.step());
+}
+
+void test_redraw_after_access_point_change_still_shows_the_real_data() {
+    NetworkFixture fixture;
+    fixture.settle();
+    fixture.setCredentials("Fermentation-Setup-ssid-changed",
+                           "rotated-password-0123456789");
+    fixture.restartAccessPoint();
+    TEST_ASSERT_TRUE(fixture.step());
+    // The redraw path fetches the actual data and the screen carries it,
+    // including the Wi-Fi QR payload.
+    const auto info = fixture.application.networkAccessPointInfo();
+    TEST_ASSERT_TRUE(info.has_value());
+    TEST_ASSERT_EQUAL_STRING("Fermentation-Setup-ssid-changed",
+                             info->ssid.c_str());
+    const auto packs = makeFermentationUiTextPacks();
+    const auto screen = makeRepresentativeScreen(
+        fixture.gate.snapshot(), fixture.workspace, packs,
+        fixture.initialLocale, std::nullopt, nullptr,
+        device_platform::DeviceUiNetworkStatus::Connected,
+        {1'700'000'000LL, {}}, info);
+    bool qrWithNewData = false;
+    for (const auto& command : screen.commands) {
+        if (command.kind == ScreenDrawKind::QrCode &&
+            command.text.find("rotated-password-0123456789") !=
+                std::string::npos &&
+            command.text.find("Fermentation-Setup-ssid-changed") !=
+                std::string::npos) {
+            qrWithNewData = true;
+        }
+    }
+    TEST_ASSERT_TRUE(qrWithNewData);
+}
+
+void test_active_run_with_long_run_id_allocates_nothing() {
+    AppFixture fixture;
+    auto& state =
+        FermentationApplicationTestAccess::runtimeState(fixture.application);
+    // R1 allows run ids up to 48 bytes, beyond the small-string buffer.
+    state.activeRunId = std::string(48U, 'r');
+    fixture.settle();
+    TEST_ASSERT_EQUAL_UINT32(
+        48U, static_cast<std::uint32_t>(
+                 fixture.gate.snapshot().home.activeRunId.size()));
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    TEST_ASSERT_TRUE(equalFermentationUiSemanticSnapshot(
+        fixture.gate.snapshot(), fixture.application.uiSnapshot()));
+
+    // A different run id is a real visible-state change.
+    state.activeRunId = std::string(40U, 's');
+    state.runRevision += 1U;
+    TEST_ASSERT_TRUE(fixture.step());
+}
+
+void test_recycled_snapshot_equals_a_fresh_snapshot() {
+    AppFixture fixture;
+    fixture.settle();
+    const auto fresh = fixture.application.uiSnapshot();
+    TEST_ASSERT_TRUE(
+        equalFermentationUiSemanticSnapshot(fixture.gate.snapshot(), fresh));
+    // Also after a state change and back-to-back refreshes.
+    auto& state =
+        FermentationApplicationTestAccess::runtimeState(fixture.application);
+    state.messageCount = 1U;
+    state.messages[0] = RuntimeMessage{};
+    state.messages[0].id = 7U;
+    state.messageRevision += 1U;
+    fixture.gate.beginStep(fixture.application, false);
+    fixture.gate.beginStep(fixture.application, false);
+    TEST_ASSERT_TRUE(equalFermentationUiSemanticSnapshot(
+        fixture.gate.snapshot(), fixture.application.uiSnapshot()));
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(
+                                     fixture.gate.snapshot().messages.size()));
+}
+
+// --- every visible input changes the key and requests a redraw ---
+
+void test_application_state_change_requests_redraw() {
+    AppFixture fixture;
+    fixture.settle();
+    auto& state =
+        FermentationApplicationTestAccess::runtimeState(fixture.application);
+    state.messageCount = 1U;
+    state.messages[0] = RuntimeMessage{};
+    state.messages[0].id = 9U;
+    state.messageRevision += 1U;
+    TEST_ASSERT_TRUE(fixture.step());
+}
+
+void test_workspace_page_change_requests_redraw() {
+    AppFixture fixture;
+    fixture.settle();
+    fixture.workspace.setPage(FermentationUiPage::Messages);
+    TEST_ASSERT_TRUE(fixture.step());
+}
+
+void test_locale_change_requests_redraw_on_network_page() {
+    AppFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
+    for (int loop = 0; loop < 3; ++loop) {
+        if (fixture.step()) fixture.gate.markRendered();
+    }
+    TEST_ASSERT_FALSE(fixture.step());
+    TEST_ASSERT_TRUE(fixture.step(
+        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
+        1'700'000'000LL, "de"));
+}
+
+void test_pressed_target_change_requests_redraw() {
+    AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.step(device_platform::DeviceUiTarget{
+        device_platform::DeviceUiTargetKind::BottomSlot, 1U}));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(fixture.step(device_platform::DeviceUiTarget{
+        device_platform::DeviceUiTargetKind::BottomSlot, 2U}));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(fixture.step(device_platform::DeviceUiTarget{
+        device_platform::DeviceUiTargetKind::HeaderNetwork, 0U}));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(fixture.step());  // release
+}
+
+void test_network_status_change_requests_redraw() {
+    AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.step(
+        std::nullopt, device_platform::DeviceUiNetworkStatus::Disconnected));
+}
+
+void test_clock_minute_change_requests_redraw_but_seconds_do_not() {
+    AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_FALSE(fixture.step(
+        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
+        1'700'000'030LL));
+    TEST_ASSERT_TRUE(fixture.step(
+        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
+        1'700'000'000LL + 60));
+    fixture.gate.markRendered();
+    // Losing the trusted time changes the visible text ("--:--").
+    TEST_ASSERT_TRUE(fixture.step(
+        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
+        std::nullopt));
+}
+
+void test_catalog_revision_adoption_changes_the_key() {
+    FermentationUiSnapshot snapshot;
+    FermentationTouchWorkspace workspace;
+    const device_platform::LocaleId locale{"en"};
+    const auto fill = [] {
+        return std::optional<FermentationUiPresentationSource>{
+            FermentationUiPresentationSource{}};
+    };
+    FermentationUiPresentationCache first;
+    FermentationUiExpectedRevisions revisionsOne;
+    revisionsOne.expectedUserConfigurationRevision =
+        UserConfigurationRevision{1U};
+    revisionsOne.expectedProgramCatalogRevision = ProgramCatalogRevision{1U};
+    first.update(false, revisionsOne, fill);
+    FermentationUiPresentationCache second = first;
+    auto revisionsTwo = revisionsOne;
+    revisionsTwo.expectedProgramCatalogRevision = ProgramCatalogRevision{2U};
+    second.update(false, revisionsTwo, fill);
+    const auto keyOne = makeScreenRenderKey(
+        snapshot, workspace, locale, std::nullopt, first,
+        device_platform::DeviceUiNetworkStatus::Unavailable, std::nullopt, 0U);
+    const auto keyTwo = makeScreenRenderKey(
+        snapshot, workspace, locale, std::nullopt, second,
+        device_platform::DeviceUiNetworkStatus::Unavailable, std::nullopt, 0U);
+    TEST_ASSERT_FALSE(keyOne == keyTwo);
+    // An evicted copy (HeaderNetwork) differs from any adopted catalog.
+    FermentationUiPresentationCache evicted = first;
+    evicted.evict();
+    TEST_ASSERT_FALSE(
+        keyOne ==
+        makeScreenRenderKey(snapshot, workspace, locale, std::nullopt, evicted,
+                            device_platform::DeviceUiNetworkStatus::Unavailable,
+                            std::nullopt, 0U));
+}
+
+// --- every public workspace mutator bumps the render revision ---
+
+void test_every_workspace_mutator_bumps_the_render_revision() {
+    FermentationTouchWorkspace workspace;
+    FermentationUiSnapshot snapshot;
+    ProgramCatalog catalog;
+    auto expectBump = [&workspace](auto&& mutate) {
+        const auto before = workspace.renderRevision();
+        mutate();
+        TEST_ASSERT_NOT_EQUAL_UINT32(before, workspace.renderRevision());
+    };
+    expectBump([&] { workspace.setPage(FermentationUiPage::Messages); });
+    expectBump([&] {
+        static_cast<void>(workspace.press(
+            snapshot,
+            device_platform::DeviceUiTarget{
+                device_platform::DeviceUiTargetKind::BottomSlot, 0U}));
+    });
+    expectBump(
+        [&] { static_cast<void>(workspace.selectProgram("none", catalog)); });
+    expectBump([&] { workspace.setStartCandidate({}); });
+    expectBump([&] { workspace.setManualHoldingValues({}); });
+    expectBump([&] { workspace.setManualTimedValues({}); });
+    expectBump([&] { workspace.setCompletionCoolingPlan(std::nullopt); });
+    expectBump([&] { workspace.setStopCoolingPlan(std::nullopt); });
+    expectBump([&] { workspace.setSelectedMessage(3U); });
+    expectBump([&] { workspace.setProgramEditCandidate(std::nullopt); });
+    expectBump([&] {
+        workspace.setProgramEditOperation(
+            FermentationUiProgramEditOperation::Edit);
+    });
+    expectBump([&] { workspace.setSensorSelectionAction(std::nullopt); });
+    expectBump([&] { workspace.setRecoveryTimeCorrectionSeconds(5U); });
+    expectBump([&] { workspace.setProgramEditDirty(true); });
+    expectBump([&] { static_cast<void>(workspace.movePagerDown()); });
+    expectBump([&] { static_cast<void>(workspace.movePagerUp()); });
+}
+
+}  // namespace
+
+void setUp() {}
+void tearDown() {}
+
+#include "../../main/fermentation_ui_press_dispatcher.cpp"
+#include "../../main/fermentation_ui_renderer.cpp"
+
+int main() {
+    UNITY_BEGIN();
+    RUN_TEST(test_control_counter_detects_allocations_of_the_former_pipeline);
+    RUN_TEST(test_unchanged_state_builds_no_render_and_allocates_nothing);
+    RUN_TEST(test_header_network_with_real_access_point_data_allocates_nothing);
+    RUN_TEST(test_control_by_value_access_point_fetch_allocates);
+    RUN_TEST(test_access_point_changes_bump_the_revision_and_request_redraw);
+    RUN_TEST(test_redraw_after_access_point_change_still_shows_the_real_data);
+    RUN_TEST(test_active_run_with_long_run_id_allocates_nothing);
+    RUN_TEST(test_recycled_snapshot_equals_a_fresh_snapshot);
+    RUN_TEST(test_application_state_change_requests_redraw);
+    RUN_TEST(test_workspace_page_change_requests_redraw);
+    RUN_TEST(test_locale_change_requests_redraw_on_network_page);
+    RUN_TEST(test_pressed_target_change_requests_redraw);
+    RUN_TEST(test_network_status_change_requests_redraw);
+    RUN_TEST(test_clock_minute_change_requests_redraw_but_seconds_do_not);
+    RUN_TEST(test_catalog_revision_adoption_changes_the_key);
+    RUN_TEST(test_every_workspace_mutator_bumps_the_render_revision);
+    return UNITY_END();
+}

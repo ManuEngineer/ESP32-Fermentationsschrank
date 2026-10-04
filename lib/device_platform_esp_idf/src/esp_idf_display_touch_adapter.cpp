@@ -32,6 +32,38 @@ bool validPin(int pin) noexcept { return pin >= 0; }
 
 gpio_num_t gpio(int pin) noexcept { return static_cast<gpio_num_t>(pin); }
 
+// DMA-capable scratch buffer owned by exactly one direct draw call
+// (fillRect()/flushRgb565()). It is allocated at the start of the call, reused
+// for every chunk of that call and freed when the call returns, but only after
+// no asynchronous transfer can still read it (see EspIdfDisplayTouchAdapter::
+// Impl::waitForTransfer()). The productive LVGL path never uses it, so no
+// buffer is held between draw calls.
+class ScopedDmaBuffer final {
+   public:
+    ScopedDmaBuffer()
+        : pixels_(static_cast<std::uint16_t*>(heap_caps_malloc(
+              kPartialBufferPixels * sizeof(std::uint16_t), MALLOC_CAP_DMA))) {}
+    ~ScopedDmaBuffer() {
+        if (pixels_ != nullptr) {
+            heap_caps_free(pixels_);
+        }
+    }
+
+    ScopedDmaBuffer(const ScopedDmaBuffer&) = delete;
+    ScopedDmaBuffer& operator=(const ScopedDmaBuffer&) = delete;
+
+    [[nodiscard]] std::uint16_t* get() const noexcept { return pixels_; }
+    // Hands the buffer to the caller, who becomes responsible for freeing it.
+    [[nodiscard]] std::uint16_t* release() noexcept {
+        auto* released = pixels_;
+        pixels_ = nullptr;
+        return released;
+    }
+
+   private:
+    std::uint16_t* pixels_;
+};
+
 }  // namespace
 
 class EspIdfDisplayTouchAdapter::Impl final {
@@ -42,10 +74,10 @@ class EspIdfDisplayTouchAdapter::Impl final {
         // esp_lcd_panel_draw_bitmap() retains the DMA buffer until its
         // on_color_trans_done callback. Never free or recycle it before the
         // callback, even on the teardown path.
-        if (transferPending && transferDone != nullptr) {
+        while (transferPending && transferDone != nullptr) {
             (void)xSemaphoreTake(transferDone, portMAX_DELAY);
-            transferPending = false;
         }
+        transferPending = false;
         if (touch != nullptr) {
             (void)esp_lcd_touch_del(touch);
             touch = nullptr;
@@ -66,9 +98,12 @@ class EspIdfDisplayTouchAdapter::Impl final {
             (void)spi_bus_free(kSpiHost);
             busInitialized = false;
         }
-        if (dmaPixels != nullptr) {
-            heap_caps_free(dmaPixels);
-            dmaPixels = nullptr;
+        // A draw call whose transfer timed out could not free its scratch
+        // buffer (the transfer might still read it). It was handed over to
+        // faultedDmaPixels and is released here, after the wait above.
+        if (faultedDmaPixels != nullptr) {
+            heap_caps_free(faultedDmaPixels);
+            faultedDmaPixels = nullptr;
         }
         if (transferDone != nullptr) {
             vSemaphoreDelete(transferDone);
@@ -84,7 +119,8 @@ class EspIdfDisplayTouchAdapter::Impl final {
     esp_lcd_panel_io_handle_t touchIo{nullptr};
     esp_lcd_panel_handle_t panel{nullptr};
     esp_lcd_touch_handle_t touch{nullptr};
-    std::uint16_t* dmaPixels{nullptr};
+    // Only set when a direct draw transfer timed out; see ~Impl().
+    std::uint16_t* faultedDmaPixels{nullptr};
     bool busInitialized{false};
     bool initialized{false};
     SemaphoreHandle_t transferDone{nullptr};
@@ -111,11 +147,17 @@ class EspIdfDisplayTouchAdapter::Impl final {
     }
 
     [[nodiscard]] bool waitForTransfer(TickType_t timeoutTicks) noexcept {
-        if (!transferPending) return !transferFaulted;
-        if (transferDone == nullptr ||
-            xSemaphoreTake(transferDone, timeoutTicks) != pdTRUE) {
-            transferFaulted = true;
-            return false;
+        // Returns only when the color-transfer-done callback has cleared
+        // transferPending, i.e. when the transfer no longer reads its buffer.
+        // A semaphore token left over from an earlier transfer whose callback
+        // ran before this check must not end the wait early, hence the loop on
+        // the flag instead of a single take.
+        while (transferPending) {
+            if (transferDone == nullptr ||
+                xSemaphoreTake(transferDone, timeoutTicks) != pdTRUE) {
+                transferFaulted = true;
+                return false;
+            }
         }
         return !transferFaulted;
     }
@@ -229,11 +271,6 @@ bool EspIdfDisplayTouchAdapter::initialize() {
         return false;
     }
 
-    state.dmaPixels = static_cast<std::uint16_t*>(heap_caps_malloc(
-        kPartialBufferPixels * sizeof(std::uint16_t), MALLOC_CAP_DMA));
-    if (state.dmaPixels == nullptr) {
-        return false;
-    }
     state.initialized = true;
     return setRotation(state.config.rotation);
 }
@@ -270,8 +307,8 @@ bool EspIdfDisplayTouchAdapter::setBacklight(bool enabled) {
 bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
                                          std::uint16_t rgb565) {
     auto& state = *impl_;
-    if (!state.initialized || state.panel == nullptr ||
-        state.dmaPixels == nullptr || rect.width == 0U || rect.height == 0U ||
+    if (!state.initialized || state.panel == nullptr || rect.width == 0U ||
+        rect.height == 0U ||
         static_cast<std::uint32_t>(rect.left) + rect.width >
             state.config.width ||
         static_cast<std::uint32_t>(rect.top) + rect.height >
@@ -280,7 +317,9 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
     }
 
     if (state.transferFaulted) return false;
-    std::fill_n(state.dmaPixels, kPartialBufferPixels, rgb565);
+    ScopedDmaBuffer scratch;
+    if (scratch.get() == nullptr) return false;
+    std::fill_n(scratch.get(), kPartialBufferPixels, rgb565);
     std::uint16_t remainingRows = rect.height;
     std::uint16_t row = rect.top;
     while (remainingRows > 0U) {
@@ -292,12 +331,16 @@ bool EspIdfDisplayTouchAdapter::fillRect(device_platform::DisplayRect rect,
         state.transferPending = true;
         if (esp_lcd_panel_draw_bitmap(state.panel, rect.left, row,
                                       rect.left + rect.width, row + rows,
-                                      state.dmaPixels) != ESP_OK) {
+                                      scratch.get()) != ESP_OK) {
             state.transferPending = false;
             state.transferFaulted = true;
             return false;
         }
-        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) return false;
+        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) {
+            // The transfer may still read the buffer: hand it to the Impl.
+            state.faultedDmaPixels = scratch.release();
+            return false;
+        }
         row = static_cast<std::uint16_t>(row + rows);
         remainingRows = static_cast<std::uint16_t>(remainingRows - rows);
     }
@@ -310,8 +353,7 @@ bool EspIdfDisplayTouchAdapter::flushRgb565(device_platform::DisplayRect rect,
     auto& state = *impl_;
     const auto expectedPixels = static_cast<std::size_t>(rect.width) *
                                 static_cast<std::size_t>(rect.height);
-    if (!state.initialized || state.panel == nullptr ||
-        state.dmaPixels == nullptr || pixels == nullptr ||
+    if (!state.initialized || state.panel == nullptr || pixels == nullptr ||
         pixelCount != expectedPixels || rect.width == 0U || rect.height == 0U ||
         static_cast<std::uint32_t>(rect.left) + rect.width >
             state.config.width ||
@@ -321,6 +363,8 @@ bool EspIdfDisplayTouchAdapter::flushRgb565(device_platform::DisplayRect rect,
         return false;
     }
 
+    ScopedDmaBuffer scratch;
+    if (scratch.get() == nullptr) return false;
     std::size_t sourceOffset = 0U;
     std::uint16_t row = rect.top;
     while (row < static_cast<std::uint16_t>(rect.top + rect.height)) {
@@ -328,17 +372,21 @@ bool EspIdfDisplayTouchAdapter::flushRgb565(device_platform::DisplayRect rect,
             rect.height - (row - rect.top), kPartialBufferPixels / rect.width));
         if (rows == 0U || state.transferPending) return false;
         const auto chunkPixels = static_cast<std::size_t>(rows) * rect.width;
-        std::memcpy(state.dmaPixels, pixels + sourceOffset,
+        std::memcpy(scratch.get(), pixels + sourceOffset,
                     chunkPixels * sizeof(std::uint16_t));
         state.transferPending = true;
         if (esp_lcd_panel_draw_bitmap(state.panel, rect.left, row,
                                       rect.left + rect.width, row + rows,
-                                      state.dmaPixels) != ESP_OK) {
+                                      scratch.get()) != ESP_OK) {
             state.transferPending = false;
             state.transferFaulted = true;
             return false;
         }
-        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) return false;
+        if (!state.waitForTransfer(pdMS_TO_TICKS(1000U))) {
+            // The transfer may still read the buffer: hand it to the Impl.
+            state.faultedDmaPixels = scratch.release();
+            return false;
+        }
         sourceOffset += chunkPixels;
         row = static_cast<std::uint16_t>(row + rows);
     }

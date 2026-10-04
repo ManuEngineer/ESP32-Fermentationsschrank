@@ -21,10 +21,10 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::start(
             : device_platform::NetworkLifecycleState::SetupAccessPoint;
     if (mode == device_platform::NetworkMode::AP_ONLY ||
         !credentials.has_value()) {
-        accessPointInfo_ = device_platform::NetworkAccessPointInfo{
-            accessPointSsid_, accessPointPassword_, 0x0104A8C0U};
+        setAccessPointInfo(device_platform::NetworkAccessPointInfo{
+            accessPointSsid_, accessPointPassword_, accessPointAddress_});
     } else {
-        accessPointInfo_.reset();
+        setAccessPointInfo(std::nullopt);
     }
     lastStartedCredentials_ = credentials;
     return {device_platform::NetworkOperationStatus::Applied};
@@ -48,7 +48,7 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::stop() {
     status_.state = device_platform::NetworkLifecycleState::Stopped;
     status_.httpReady = false;
     status_.ipv4Address.reset();
-    accessPointInfo_.reset();
+    setAccessPointInfo(std::nullopt);
     return {device_platform::NetworkOperationStatus::Applied};
 }
 

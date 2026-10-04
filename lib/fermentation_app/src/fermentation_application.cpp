@@ -907,6 +907,14 @@ bool FermentationApplication::networkSetupFlowActive() const noexcept {
            networkConfigurationService_->setupFlowActive();
 }
 
+std::uint64_t FermentationApplication::networkAccessPointRevision()
+    const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
+    return networkConfigurationService_ == nullptr
+               ? 0U
+               : networkConfigurationService_->accessPointInfoRevision();
+}
+
 device_platform::NetworkMode FermentationApplication::networkMode()
     const noexcept {
     const auto guard = applicationCallSerializer_.enter();
@@ -1053,9 +1061,19 @@ void FermentationApplication::publishOwningRuntimeEvidence(
 }
 
 FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
+    FermentationUiSnapshot snapshot;
+    refreshUiSnapshot(snapshot);
+    return snapshot;
+}
+
+void FermentationApplication::refreshUiSnapshot(
+    FermentationUiSnapshot& snapshot) const {
     const auto guard = applicationCallSerializer_.enter();
-    FermentationUiProjectionInput input;
+    // The projection input is a reused member: its temperature buffer keeps
+    // its capacity, so repeated snapshots do not allocate once warmed up.
+    auto& input = uiProjectionInput_;
     input.runState = runtimeRunState_.get();
+    input.revisions = FermentationUiExpectedRevisions{};
     if (runtimeRunState_ != nullptr) {
         input.revisions.expectedStateSequence =
             runtimeRunState_->processState.transitionSequence;
@@ -1088,16 +1106,19 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
         return value.rawCelsius;
     };
     const auto evidence = resolveRuntimeEvidence();
-    input.temperatures = {
-        {FermentationTemperatureRole::CabinetAir,
-         valueOf(evidence.plausibility.air), evidence.plausibility.air},
-        {FermentationTemperatureRole::Product,
-         valueOf(evidence.plausibility.product), evidence.plausibility.product},
-        {FermentationTemperatureRole::Cooling,
-         valueOf(evidence.plausibility.cooling),
-         evidence.plausibility.cooling}};
+    input.temperatures.clear();
+    input.temperatures.push_back({FermentationTemperatureRole::CabinetAir,
+                                  valueOf(evidence.plausibility.air),
+                                  evidence.plausibility.air});
+    input.temperatures.push_back({FermentationTemperatureRole::Product,
+                                  valueOf(evidence.plausibility.product),
+                                  evidence.plausibility.product});
+    input.temperatures.push_back({FermentationTemperatureRole::Cooling,
+                                  valueOf(evidence.plausibility.cooling),
+                                  evidence.plausibility.cooling});
     input.recoveryDisposition = recoveryDisposition_;
     input.persistenceLoadStatus = persistenceLoadStatus_;
+    input.coordinatorState.reset();
     if (runPersistenceCoordinator_ != nullptr) {
         input.coordinatorState = runPersistenceCoordinator_->state();
     }
@@ -1105,20 +1126,20 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
     input.refreshTracker = &uiRefreshTracker_;
-    return FermentationUiProjector::project(input);
+    FermentationUiProjector::projectInto(snapshot, input);
 }
 
-FermentationUiPresentationSource FermentationApplication::uiPresentationSource()
-    const {
+std::optional<FermentationUiPresentationSource>
+FermentationApplication::uiPresentationSource() const {
     const auto guard = applicationCallSerializer_.enter();
-    FermentationUiPresentationSource source;
     if (configurationService_ == nullptr) {
-        return source;
+        return std::nullopt;
     }
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-        return source;
+        return std::nullopt;
     }
+    FermentationUiPresentationSource source;
     const auto& userConfiguration = runtime.lease.get().userConfiguration();
     if (!userConfiguration.displayLanguageId.empty()) {
         source.displayLocale =

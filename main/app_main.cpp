@@ -43,6 +43,7 @@
 #endif
 
 #include "esp_log.h"
+#include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -55,6 +56,8 @@
 namespace {
 
 constexpr char kTag[] = "app_main";
+// Tag fuer den Failed-Allocation-Hook; muss in DRAM liegen (ESP_DRAM_LOGE).
+DRAM_ATTR const char kHeapAllocFailedTag[] = "heap_alloc_failed";
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
@@ -62,6 +65,9 @@ constexpr char kStateStorePartitionLabel[] = "state_store";
 #endif
 constexpr uint64_t kHeartbeatIntervalMs = 1000U;
 constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
+// Idle-Messpunkt: 120 s ohne Bedienung (seit Boot bzw. seit dem letzten
+// Touch-Press); siehe docs/tasks/memory-platform-course-plan.md, Abschnitt 3.
+constexpr uint64_t kIdleResourceLogAfterMs = 120000U;
 // Mindestens ein Tick Schedulerkooperation je Schleifendurchlauf; siehe
 // docs/tasks/issue-73-implementation-plan.md, Abschnitt 12. Bewusst nicht
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
@@ -236,23 +242,69 @@ void logHeartbeat(uint64_t uptimeMs) {
     return "Unknown";
 }
 
+// Diagnosehook fuer fehlgeschlagene Heap-Allokationen. Er kann aus jedem
+// Kontext der Allokation aufgerufen werden und darf deshalb weder allokieren
+// noch ESP_LOGx verwenden; nur ROM-Ausgabe mit DRAM-Formatstrings. Auch
+// erwartete Fehlschlaege (nothrow-new, Capability-Fallbacks in ESP-IDF)
+// loesen ihn aus. Reine Diagnose: der Hook aendert kein Verhalten.
+void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
+                                       const char* functionName) {
+    ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
+                  static_cast<unsigned>(size), static_cast<unsigned>(caps),
+                  functionName != nullptr ? functionName : "?");
+}
+
 void logResources(const char* samplePoint,
                   device_platform::NetworkMode selectedMode,
-                  device_platform::NetworkLifecycleState lifecycleState) {
+                  device_platform::NetworkLifecycleState lifecycleState,
+                  const fermentation::main_ui::ProductiveLvglRenderer*
+                      displayRenderer = nullptr) {
     const uint32_t freeHeapBytes = esp_get_free_heap_size();
     const uint32_t minimumFreeHeapBytes = esp_get_minimum_free_heap_size();
     const size_t largestFreeBlockBytes =
         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     const UBaseType_t stackHighWaterMarkBytes =
         uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGI(kTag,
-             "resources: point=%s network_mode=%s network_state=%s "
-             "free_heap_bytes=%" PRIu32 " minimum_free_heap_bytes=%" PRIu32
-             " largest_free_block_8bit_bytes=%zu stack_hwm_bytes=%u",
-             samplePoint, networkModeName(selectedMode),
-             networkLifecycleStateName(lifecycleState), freeHeapBytes,
-             minimumFreeHeapBytes, largestFreeBlockBytes,
-             static_cast<unsigned>(stackHighWaterMarkBytes));
+    // Getrennte, sich ueberlappende Capability-Sichten; nicht addieren.
+    constexpr uint32_t kInternal8Bit = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    ESP_LOGI(
+        kTag,
+        "resources: point=%s network_mode=%s network_state=%s "
+        "free_heap_bytes=%" PRIu32 " minimum_free_heap_bytes=%" PRIu32
+        " largest_free_block_8bit_bytes=%zu stack_hwm_bytes=%u"
+        " internal_8bit_free_bytes=%zu internal_8bit_minimum_free_bytes=%zu"
+        " internal_8bit_largest_free_block_bytes=%zu"
+        " dma_free_bytes=%zu dma_minimum_free_bytes=%zu"
+        " dma_largest_free_block_bytes=%zu",
+        samplePoint, networkModeName(selectedMode),
+        networkLifecycleStateName(lifecycleState), freeHeapBytes,
+        minimumFreeHeapBytes, largestFreeBlockBytes,
+        static_cast<unsigned>(stackHighWaterMarkBytes),
+        heap_caps_get_free_size(kInternal8Bit),
+        heap_caps_get_minimum_free_size(kInternal8Bit),
+        heap_caps_get_largest_free_block(kInternal8Bit),
+        heap_caps_get_free_size(MALLOC_CAP_DMA),
+        heap_caps_get_minimum_free_size(MALLOC_CAP_DMA),
+        heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
+    if (displayRenderer == nullptr) {
+        return;
+    }
+    // Nur bei aktivem eingebautem LVGL-Allocator und initialisiertem LVGL.
+    const auto pool = displayRenderer->lvglPoolStats();
+    if (pool.has_value()) {
+        ESP_LOGI(kTag,
+                 "resources_lvgl: point=%s pool_total_bytes=%" PRIu32
+                 " pool_free_bytes=%" PRIu32 " pool_largest_free_bytes=%" PRIu32
+                 " pool_max_used_bytes=%" PRIu32
+                 " pool_used_pct=%u pool_frag_pct=%u",
+                 samplePoint, pool->totalBytes, pool->freeBytes,
+                 pool->largestFreeBytes, pool->maxUsedBytes,
+                 static_cast<unsigned>(pool->usedPercent),
+                 static_cast<unsigned>(pool->fragmentationPercent));
+    } else {
+        ESP_LOGI(kTag, "resources_lvgl: point=%s pool=unavailable",
+                 samplePoint);
+    }
 }
 
 struct NetworkResourceSamplingState {
@@ -264,7 +316,8 @@ struct NetworkResourceSamplingState {
 void sampleStableNetworkResources(
     device_platform::NetworkMode selectedNetworkMode,
     device_platform::NetworkLifecycleState networkState,
-    NetworkResourceSamplingState& samplingState) {
+    NetworkResourceSamplingState& samplingState,
+    const fermentation::main_ui::ProductiveLvglRenderer* displayRenderer) {
     const bool stableApOnly =
         networkState == device_platform::NetworkLifecycleState::AccessPointOnly;
     const bool stableHomeWifi =
@@ -287,7 +340,8 @@ void sampleStableNetworkResources(
         } else {
             samplePoint = "stable_home_wifi_setup_access_point";
         }
-        logResources(samplePoint, selectedNetworkMode, networkState);
+        logResources(samplePoint, selectedNetworkMode, networkState,
+                     displayRenderer);
     }
     samplingState.lastObservedMode = selectedNetworkMode;
     samplingState.lastObservedState = networkState;
@@ -378,40 +432,32 @@ void initializeProductUi(
     }
 }
 
-void updateProductUi(
+// Returns true iff this iteration consumed a fresh touch press edge.
+bool updateProductUi(
     fermentation::FermentationApplication& application,
     fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
     fermentation::FermentationTouchWorkspace& uiWorkspace,
+    fermentation::main_ui::UiRenderGate& renderGate,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
     const device_platform::LocaleId& initialDisplayLocale,
     const device_platform::TimeZoneId& initialTimeZoneId,
     device_platform::INetworkLifecycle& networkLifecycle,
     const device_platform::ITimeSource& timeSource) {
     if (displayRenderer == nullptr || !displayRenderer->initialized()) {
-        return;
+        return false;
     }
 
+    // Allocation-free steady state (R1 RAM plan, S4): the recycled snapshot,
+    // the one presentation copy (S3) and the pre-built render key come from
+    // the shared UiRenderGate. HeaderNetwork does not consume ProgramCatalog:
+    // the copy is evicted before a network-mode touch is committed and
+    // refilled after leaving the page.
     const bool networkPageBeforeTouch =
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
-    fermentation::FermentationUiPresentationSource loopPresentation;
-    if (!networkPageBeforeTouch) {
-        loopPresentation = application.uiPresentationSource();
-    }
-    // HeaderNetwork does not consume ProgramCatalog; do not keep its full
-    // copy alive while a network-mode touch is committed.
-    const auto& touchDisplayLocale = networkPageBeforeTouch
-                                         ? initialDisplayLocale
-                                         : loopPresentation.displayLocale;
-    const auto& touchTimeZoneId = networkPageBeforeTouch
-                                      ? initialTimeZoneId
-                                      : loopPresentation.canonicalTimeZoneId;
-    const auto* touchProgramCatalog =
-        networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
+    renderGate.beginStep(application, networkPageBeforeTouch);
+    const auto& loopSnapshot = renderGate.snapshot();
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
-    const device_platform::ClockViewInput loopClock{
-        timeSource.unixTimeSeconds(), touchTimeZoneId};
-    const auto loopSnapshot = application.uiSnapshot();
 
     // The existing #26 target/interaction path (calibrated touch
     // -> targetAt()/Workspace::press() -> existing typed
@@ -425,18 +471,35 @@ void updateProductUi(
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
     if (sampleNetworkPagePress) {
         logResources("network_page_press_before", application.networkMode(),
-                     networkLifecycle.status().state);
+                     networkLifecycle.status().state, displayRenderer);
     }
-    const auto touchTick = fermentation::main_ui::processWorkspaceTouch(
-        application, uiWorkspace, loopSnapshot, uiTextPacks, touchDisplayLocale,
-        touchProgramCatalog, loopNetworkStatus, loopClock,
-        touchPoll.contactHeld,
-        touchPoll.point.has_value() ? touchPoll.point->x : 0U,
-        touchPoll.point.has_value() ? touchPoll.point->y : 0U,
-        touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    fermentation::main_ui::WorkspaceTouchTickResult touchTick;
+    if (touchPoll.contactHeld) {
+        // Locale, time zone and catalog for the touch path; the clock input
+        // (which copies the time zone id) is only built while a contact is
+        // held, so the idle loop does not allocate for it.
+        const auto& loopPresentation = renderGate.presentation().get();
+        const auto& touchDisplayLocale = networkPageBeforeTouch
+                                             ? initialDisplayLocale
+                                             : loopPresentation.displayLocale;
+        const auto& touchTimeZoneId =
+            networkPageBeforeTouch ? initialTimeZoneId
+                                   : loopPresentation.canonicalTimeZoneId;
+        const auto* touchProgramCatalog =
+            networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
+        const device_platform::ClockViewInput loopClock{
+            timeSource.unixTimeSeconds(), touchTimeZoneId};
+        const auto touchPoint = touchPoll.point.value_or(
+            fermentation::main_ui::ProductiveLvglRenderer::TouchPoint{});
+        touchTick = fermentation::main_ui::processWorkspaceTouch(
+            application, uiWorkspace, loopSnapshot, uiTextPacks,
+            touchDisplayLocale, touchProgramCatalog, loopNetworkStatus,
+            loopClock, touchPoll.contactHeld, touchPoint.x, touchPoint.y,
+            touchPoll.freshPressEdge, timeSource.monotonicMillis());
+    }
     if (sampleNetworkPagePress) {
         logResources("network_page_press_after", application.networkMode(),
-                     networkLifecycle.status().state);
+                     networkLifecycle.status().state, displayRenderer);
     }
     if (touchTick.dispatch.outcome !=
         fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
@@ -444,21 +507,36 @@ void updateProductUi(
                  static_cast<int>(touchTick.dispatch.outcome));
     }
 
-    if (networkPageBeforeTouch &&
-        uiWorkspace.page() != fermentation::FermentationUiPage::HeaderNetwork) {
-        loopPresentation = application.uiPresentationSource();
+    const auto trustedUtc = timeSource.unixTimeSeconds();
+    const bool redrawRequired = renderGate.renderRequired(
+        application, uiWorkspace, initialDisplayLocale, touchTick.pressedTarget,
+        loopNetworkStatus, trustedUtc);
+    if (redrawRequired) {
+        // Only a real visible change reaches the screen model and the LVGL
+        // update; ProductiveLvglRenderer::render() builds both.
+        const bool networkPageAfterTouch =
+            uiWorkspace.page() ==
+            fermentation::FermentationUiPage::HeaderNetwork;
+        const auto& renderPresentation = renderGate.presentation().get();
+        const auto& renderDisplayLocale =
+            networkPageAfterTouch ? initialDisplayLocale
+                                  : renderPresentation.displayLocale;
+        const auto* renderProgramCatalog =
+            networkPageAfterTouch ? nullptr
+                                  : &renderPresentation.programCatalog;
+        const device_platform::ClockViewInput renderClock{
+            trustedUtc, networkPageAfterTouch
+                            ? initialTimeZoneId
+                            : renderPresentation.canonicalTimeZoneId};
+        if (displayRenderer->render(
+                loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
+                touchTick.pressedTarget, renderProgramCatalog,
+                loopNetworkStatus, renderClock,
+                application.networkAccessPointInfo())) {
+            renderGate.markRendered();
+        }
     }
-    const bool networkPageAfterTouch =
-        uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
-    const auto& renderDisplayLocale = networkPageAfterTouch
-                                          ? initialDisplayLocale
-                                          : loopPresentation.displayLocale;
-    const auto* renderProgramCatalog =
-        networkPageAfterTouch ? nullptr : &loopPresentation.programCatalog;
-    static_cast<void>(displayRenderer->render(
-        loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
-        touchTick.pressedTarget, renderProgramCatalog, loopNetworkStatus,
-        loopClock, application.networkAccessPointInfo()));
+    return touchPoll.freshPressEdge;
 }
 
 }  // namespace
@@ -473,6 +551,10 @@ extern "C" void app_main(void) {
     fermentation::issue_31_touch_calibration::run();
     return;
 #endif
+
+    // Erste Anweisung: auch Allokationsfehler waehrend des Boots erfassen.
+    static_cast<void>(
+        heap_caps_register_failed_alloc_callback(logFailedHeapAllocation));
 
     const esp_err_t defaultNvsStatus = nvs_flash_init();
     if (defaultNvsStatus != ESP_OK) {
@@ -536,12 +618,20 @@ extern "C" void app_main(void) {
     const device_platform::PlatformStartupContext startupContext{
         app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
     };
-    const bool applicationStarted =
-        platform.begin(startupContext) &&
-        application.begin(platform, stateStoreContext->store(),
-                          timeZoneResolver, timeSource, networkLifecycle,
-                          httpServerLifecycle, randomSource, authenticationKdf,
-                          replayDigest, &resetCauseSource);
+    // Kurzschlussverhalten von `platform.begin() && application.begin()` bleibt
+    // erhalten: application.begin() laeuft nur nach erfolgreichem
+    // platform.begin().
+    bool applicationStarted = platform.begin(startupContext);
+    logResources("after_platform_begin", application.networkMode(),
+                 networkLifecycle.status().state);
+    if (applicationStarted) {
+        applicationStarted = application.begin(
+            platform, stateStoreContext->store(), timeZoneResolver, timeSource,
+            networkLifecycle, httpServerLifecycle, randomSource,
+            authenticationKdf, replayDigest, &resetCauseSource);
+        logResources("after_application_begin", application.networkMode(),
+                     networkLifecycle.status().state);
+    }
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
                    application.ready());
@@ -581,13 +671,17 @@ extern "C" void app_main(void) {
          r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
          r1_pins::kBacklightActiveHigh});
     fermentation::FermentationTouchWorkspace uiWorkspace;
+    fermentation::main_ui::UiRenderGate uiRenderGate;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
     device_platform::LocaleId uiDisplayLocale{"en"};
     device_platform::TimeZoneId uiTimeZoneId;
     // The single renderer-independent source for locale, program catalog and
     // canonical prepared time zone is needed here only for initial UI setup.
     {
-        auto uiPresentation = application.uiPresentationSource();
+        // One-time initial setup: an unavailable source falls back to the
+        // safe defaults (English, empty catalog), as before.
+        auto uiPresentation = application.uiPresentationSource().value_or(
+            fermentation::FermentationUiPresentationSource{});
         const auto uiNetworkStatus =
             toDeviceUiNetworkStatus(networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
@@ -605,8 +699,8 @@ extern "C" void app_main(void) {
     issue90Harness.start();
 #endif
 
-    logResources("startup", application.networkMode(),
-                 networkLifecycle.status().state);
+    logResources("after_ui_init", application.networkMode(),
+                 networkLifecycle.status().state, displayRenderer.get());
 
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
@@ -614,6 +708,8 @@ extern "C" void app_main(void) {
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;
+    uint64_t lastActivityMs = startMs;
+    bool idleResourceLogDone = false;
     NetworkResourceSamplingState networkResourceSamplingState{
         application.networkMode(), networkLifecycle.status().state};
 
@@ -621,19 +717,25 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-        updateProductUi(application, displayRenderer.get(), uiWorkspace,
-                        uiTextPacks, uiDisplayLocale, uiTimeZoneId,
-                        networkLifecycle, timeSource);
+        const bool touchPressObserved =
+            updateProductUi(application, displayRenderer.get(), uiWorkspace,
+                            uiRenderGate, uiTextPacks, uiDisplayLocale,
+                            uiTimeZoneId, networkLifecycle, timeSource);
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();
         sampleStableNetworkResources(selectedNetworkMode, networkStatus.state,
-                                     networkResourceSamplingState);
+                                     networkResourceSamplingState,
+                                     displayRenderer.get());
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
 #endif
 
         const uint64_t nowMs = timeSource.monotonicMillis();
+        if (touchPressObserved) {
+            lastActivityMs = nowMs;
+            idleResourceLogDone = false;
+        }
         if (nowMs - lastHeartbeatMs >= kHeartbeatIntervalMs) {
             lastHeartbeatMs = nowMs;
             logHeartbeat(nowMs);
@@ -644,7 +746,15 @@ extern "C" void app_main(void) {
             secondResourceLogDone = true;
             const auto currentNetworkStatus = networkLifecycle.status();
             logResources("periodic_30s", application.networkMode(),
-                         currentNetworkStatus.state);
+                         currentNetworkStatus.state, displayRenderer.get());
+        }
+
+        if (!idleResourceLogDone &&
+            nowMs - lastActivityMs >= kIdleResourceLogAfterMs) {
+            idleResourceLogDone = true;
+            logResources("idle_120s", application.networkMode(),
+                         networkLifecycle.status().state,
+                         displayRenderer.get());
         }
 
         vTaskDelay(kCooperativeYieldTicks);

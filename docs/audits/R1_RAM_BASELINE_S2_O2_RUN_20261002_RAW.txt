@@ -1,0 +1,993 @@
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+at: safe test mode, uptime_ms=1210656
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (28) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (621) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1225) app_main: resources: point=after_application_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=123900 minimum_free_heap_bytes=119800 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=13936 internal_8bit_free_bytes=123900 internal_8bit_minimum_free_bytes=119800 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=123900 dma_minimum_free_bytes=119800 dma_largest_free_block_bytes=110592
+I (1255) app_main: ESP32-Fermentationsschrank
+I (1255) app_main: profile: esp32_release
+I (1255) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1265) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1265) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1275) app_main: real actuators: disabled
+I (1275) app_main: application: ready
+I (1295) ili9341: LCD panel create success, version: 2.1.0
+I (1415) LVGL: Starting LVGL task
+W (1425) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+I (1485) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (1775) app_main: resources: point=after_ui_init network_mode=UNSELECTED network_state=Stopped free_heap_bytes=77380 minimum_free_heap_bytes=71700 largest_free_block_8bit_bytes=65536 stack_hwm_bytes=13936 internal_8bit_free_bytes=77380 internal_8bit_minimum_free_bytes=71700 internal_8bit_largest_free_block_bytes=65536 dma_free_bytes=77380 dma_minimum_free_bytes=71700 dma_largest_free_block_bytes=65536
+I (1795) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (31825) app_main: resources: point=periodic_30s network_mode=UNSELECTED network_state=Stopped free_heap_bytes=77380 minimum_free_heap_bytes=71700 largest_free_block_8bit_bytes=65536 stack_hwm_bytes=13936 internal_8bit_free_bytes=77380 internal_8bit_minimum_free_bytes=71700 internal_8bit_largest_free_block_bytes=65536 dma_free_bytes=77380 dma_minimum_free_bytes=71700 dma_largest_free_block_bytes=65536
+I (31855) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (121825) app_main: resources: point=idle_120s network_mode=UNSELECTED network_state=Stopped free_heap_bytes=77380 minimum_free_heap_bytes=71700 largest_free_block_8bit_bytes=65536 stack_hwm_bytes=13936 internal_8bit_free_bytes=77380 internal_8bit_minimum_free_bytes=71700 internal_8bit_largest_free_block_bytes=65536 dma_free_bytes=77380 dma_minimum_free_bytes=71700 dma_largest_free_block_bytes=65536
+I (121855) app_main: resources_lvgl: point=idle_120s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (179625) app_main: resources: point=network_page_press_before network_mode=UNSELECTED network_state=Stopped free_heap_bytes=76792 minimum_free_heap_bytes=69644 largest_free_block_8bit_bytes=65536 stack_hwm_bytes=13936 internal_8bit_free_bytes=76792 internal_8bit_minimum_free_bytes=69644 internal_8bit_largest_free_block_bytes=65536 dma_free_bytes=76792 dma_minimum_free_bytes=69644 dma_largest_free_block_bytes=65536
+I (179655) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63384 pool_free_bytes=52920 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (179805) wifi:wifi driver task: 3ffe3dc0, prio:23, stack:6656, core=0
+I (179805) wifi:wifi firmware version: e12a754
+I (179805) wifi:wifi certification version: v7.0
+I (179805) wifi:config NVS flash: disabled
+I (179805) wifi:config nano formatting: disabled
+I (179815) wifi:Init data frame dynamic rx buffer num: 32
+I (179815) wifi:Init static rx mgmt buffer num: 5
+I (179825) wifi:Init management short buffer num: 32
+I (179825) wifi:Init dynamic tx buffer num: 32
+I (179835) wifi:Init static rx buffer size: 1600
+I (179835) wifi:Init static rx buffer num: 10
+I (179835) wifi:Init dynamic rx buffer num: 32
+I (179845) wifi_init: rx ba win: 6
+I (179845) wifi_init: accept mbox: 6
+I (179855) wifi_init: tcpip mbox: 32
+I (179855) wifi_init: udp mbox: 6
+I (179855) wifi_init: tcp mbox: 6
+I (179855) wifi_init: tcp tx win: 5760
+I (179865) wifi_init: tcp rx win: 5760
+I (179865) wifi_init: tcp mss: 1440
+I (179865) wifi_init: WiFi IRAM OP enabled
+I (179875) wifi_init: WiFi RX IRAM OP enabled
+I (180145) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (180235) wifi:mode : softAP (20:50:0d:1b:2f:35)
+I (180245) wifi:Total power save buffer number: 16
+I (180245) wifi:Init max length of beacon: 752/752
+I (180245) wifi:Init max length of beacon: 752/752
+I (180245) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (180265) app_main: resources: point=network_page_press_after network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=11452 minimum_free_heap_bytes=11412 largest_free_block_8bit_bytes=11264 stack_hwm_bytes=7072 internal_8bit_free_bytes=11452 internal_8bit_minimum_free_bytes=11412 internal_8bit_largest_free_block_bytes=11264 dma_free_bytes=11452 dma_minimum_free_bytes=11412 dma_largest_free_block_bytes=11264
+I (180285) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63384 pool_free_bytes=52920 pool_largest_free_bytes=50248 pool_max_used_bytes=14072 pool_used_pct=17 pool_frag_pct=6
+I (180305) app_main: touch press dispatch: outcome=2
+I (180455) app_main: resources: point=stable_ap_only network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=11800 minimum_free_heap_bytes=9212 largest_free_block_8bit_bytes=8704 stack_hwm_bytes=7072 internal_8bit_free_bytes=11800 internal_8bit_minimum_free_bytes=9212 internal_8bit_largest_free_block_bytes=8704 dma_free_bytes=11800 dma_minimum_free_bytes=9212 dma_largest_free_block_bytes=8704
+I (180575) app_main: resources_lvgl: point=stable_ap_only pool=unavailable
+I (300575) app_main: resources: point=idle_120s network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=12160 minimum_free_heap_bytes=8428 largest_free_block_8bit_bytes=11264 stack_hwm_bytes=7072 internal_8bit_free_bytes=12160 internal_8bit_minimum_free_bytes=8428 internal_8bit_largest_free_block_bytes=11264 dma_free_bytes=12160 dma_minimum_free_bytes=8428 dma_largest_free_block_bytes=11264
+I (300605) app_main: resources_lvgl: point=idle_120s pool_total_bytes=63296 pool_free_bytes=48576 pool_largest_free_bytes=47768 pool_max_used_bytes=15848 pool_used_pct=24 pool_frag_pct=2
+I (357625) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+I (358025) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (358145) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2
+I (358565) wifi:<ba-add>idx:3 (ifx:1, 4e:21:3c:72:c7:12), tid:6, ssn:2, winSize:64
+I (382455) app_main: resources: point=network_page_press_before network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=8040 minimum_free_heap_bytes=3960 largest_free_block_8bit_bytes=4352 stack_hwm_bytes=7072 internal_8bit_free_bytes=8040 internal_8bit_minimum_free_bytes=3960 internal_8bit_largest_free_block_bytes=4352 dma_free_bytes=8040 dma_minimum_free_bytes=3960 dma_largest_free_block_bytes=4352
+I (382485) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63296 pool_free_bytes=48576 pool_largest_free_bytes=47768 pool_max_used_bytes=15848 pool_used_pct=24 pool_frag_pct=2
+I (382505) app_main: resources: point=network_page_press_after network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=8040 minimum_free_heap_bytes=3960 largest_free_block_8bit_bytes=4352 stack_hwm_bytes=7072 internal_8bit_free_bytes=8040 internal_8bit_minimum_free_bytes=3960 internal_8bit_largest_free_block_bytes=4352 dma_free_bytes=8040 dma_minimum_free_bytes=3960 dma_largest_free_block_bytes=4352
+I (382535) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63296 pool_free_bytes=48576 pool_largest_free_bytes=47768 pool_max_used_bytes=15848 pool_used_pct=24 pool_frag_pct=2
+I (384925) app_main: resources: point=network_page_press_before network_mode=AP_ONLY network_state=AccessPointOnly free_heap_bytes=8040 minimum_free_heap_bytes=3960 largest_free_block_8bit_bytes=4352 stack_hwm_bytes=7072 internal_8bit_free_bytes=8040 internal_8bit_minimum_free_bytes=3960 internal_8bit_largest_free_block_bytes=4352 dma_free_bytes=8040 dma_minimum_free_bytes=3960 dma_largest_free_block_bytes=4352
+I (384955) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63296 pool_free_bytes=48560 pool_largest_free_bytes=47740 pool_max_used_bytes=15848 pool_used_pct=24 pool_frag_pct=2
+E heap_alloc_failed: size=251 caps=0x00001800 function=heap_caps_malloc
+
+abort() was called at PC 0x401ebc22 on core 0
+
+
+Backtrace: 0x4008c5f9:0x3ffce8d0 0x4008c5c1:0x3ffce8f0 0x4008bfd9:0x3ffce910 0x401ebc22:0x3ffce980 0x401ea651:0x3ffce9a0 0x401eaacd:0x3ffce9c0 0x401eab07:0x3ffce9e0 0x401eabd5:0x3ffcea00 0x40118243:0x3ffcea30 0x4010f8fe:0x3ffceaf0 0x4010f9ad:0x3ffcec00 0x4010fa47:0x3ffcecb0 0x4010feb6:0x3ffcecd0 0x40110440:0x3ffceea0 0x40102f8e:0x3ffcef90 0x400e4452:0x3ffcfe20 0x400ec429:0x3ffcff80 0x400e0b1b:0x3ffcffa0 0x400e0e3b:0x3ffd07c0 0x400de524:0x3ffd0f40 0x400deda3:0x3ffd12d0 0x400d5fee:0x3ffd1e10 0x401ffd1a:0x3ffd1e40
+
+
+
+
+ELF file SHA256: 364cf80d2
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (27) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (620) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1265) wifi:wifi driver task: 3ffdefcc, prio:23, stack:6656, core=0
+I (1265) wifi:wifi firmware version: e12a754
+I (1265) wifi:wifi certification version: v7.0
+I (1265) wifi:config NVS flash: disabled
+I (1265) wifi:config nano formatting: disabled
+I (1275) wifi:Init data frame dynamic rx buffer num: 32
+I (1275) wifi:Init static rx mgmt buffer num: 5
+I (1285) wifi:Init management short buffer num: 32
+I (1285) wifi:Init dynamic tx buffer num: 32
+I (1285) wifi:Init static rx buffer size: 1600
+I (1295) wifi:Init static rx buffer num: 10
+I (1295) wifi:Init dynamic rx buffer num: 32
+I (1305) wifi_init: rx ba win: 6
+I (1305) wifi_init: accept mbox: 6
+I (1305) wifi_init: tcpip mbox: 32
+I (1315) wifi_init: udp mbox: 6
+I (1315) wifi_init: tcp mbox: 6
+I (1315) wifi_init: tcp tx win: 5760
+I (1315) wifi_init: tcp rx win: 5760
+I (1325) wifi_init: tcp mss: 1440
+I (1325) wifi_init: WiFi IRAM OP enabled
+I (1325) wifi_init: WiFi RX IRAM OP enabled
+I (1605) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (1695) wifi:mode : sta (20:50:0d:1b:2f:34) + softAP (20:50:0d:1b:2f:35)
+I (1695) wifi:enable tsf
+I (1705) wifi:Total power save buffer number: 16
+I (1705) wifi:Init max length of beacon: 752/752
+I (1705) wifi:Init max length of beacon: 752/752
+I (1705) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (1725) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=56544 minimum_free_heap_bytes=52572 largest_free_block_8bit_bytes=51200 stack_hwm_bytes=13936 internal_8bit_free_bytes=56544 internal_8bit_minimum_free_bytes=52572 internal_8bit_largest_free_block_bytes=51200 dma_free_bytes=56544 dma_minimum_free_bytes=52572 dma_largest_free_block_bytes=51200
+I (1755) app_main: ESP32-Fermentationsschrank
+I (1755) app_main: profile: esp32_release
+I (1755) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1765) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1775) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1775) app_main: real actuators: disabled
+I (1775) app_main: application: ready
+I (1805) ili9341: LCD panel create success, version: 2.1.0
+I (1925) LVGL: Starting LVGL task
+W (1935) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+W (1955) wifi:no need to send deauth when softap is sending deauth
+I (2005) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (2155) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10264 minimum_free_heap_bytes=5196 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10264 internal_8bit_minimum_free_bytes=5196 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10264 dma_minimum_free_bytes=5196 dma_largest_free_block_bytes=7680
+I (2285) app_main: resources_lvgl: point=after_ui_init pool=unavailable
+I (2315) app_main: resources: point=stable_home_wifi_setup_access_point network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10264 minimum_free_heap_bytes=5180 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10264 internal_8bit_minimum_free_bytes=5180 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10264 dma_minimum_free_bytes=5180 dma_largest_free_block_bytes=7680
+I (2345) app_main: resources_lvgl: point=stable_home_wifi_setup_access_point pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (11435) app_main: resources: point=network_page_press_before network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=9836 minimum_free_heap_bytes=4848 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=9836 internal_8bit_minimum_free_bytes=4848 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=9836 dma_minimum_free_bytes=4848 dma_largest_free_block_bytes=7680
+I (11465) app_main: resources_lvgl: point=network_page_press_before pool_total_bytes=63296 pool_free_bytes=48552 pool_largest_free_bytes=47076 pool_max_used_bytes=15704 pool_used_pct=24 pool_frag_pct=4
+I (11495) wifi:Total power save buffer number: 16
+I (11505) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (11505) app_main: resources: point=network_page_press_after network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=9724 minimum_free_heap_bytes=4848 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=9592 internal_8bit_minimum_free_bytes=4848 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=9592 dma_minimum_free_bytes=4848 dma_largest_free_block_bytes=7680
+I (11535) app_main: resources_lvgl: point=network_page_press_after pool_total_bytes=63296 pool_free_bytes=48552 pool_largest_free_bytes=47076 pool_max_used_bytes=15704 pool_used_pct=24 pool_frag_pct=4
+I (11555) app_main: touch press dispatch: outcome=2
+I (24755) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+I (25275) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (25325) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2
+I (25655) wifi:<ba-add>idx:3 (ifx:1, 4e:21:3c:72:c7:12), tid:6, ssn:2, winSize:64
+I (32285) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=7456 minimum_free_heap_bytes=2384 largest_free_block_8bit_bytes=6400 stack_hwm_bytes=13936 internal_8bit_free_bytes=7456 internal_8bit_minimum_free_bytes=2384 internal_8bit_largest_free_block_bytes=6400 dma_free_bytes=7456 dma_minimum_free_bytes=2384 dma_largest_free_block_bytes=6400
+I (32315) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63296 pool_free_bytes=48568 pool_largest_free_bytes=48156 pool_max_used_bytes=15832 pool_used_pct=24 pool_frag_pct=1
+E heap_alloc_failed: size=1532 caps=0x00001800 function=heap_caps_malloc
+E heap_alloc_failed: size=1344 caps=0x00001800 function=heap_caps_malloc
+
+abort() was called at PC 0x401ebc22 on core 0
+
+
+Backtrace: 0x4008c5f9:0x3ffd0200 0x4008c5c1:0x3ffd0220 0x4008bfd9:0x3ffd0240 0x401ebc22:0x3ffd02b0 0x401ea651:0x3ffd02d0 0x400e224e:0x3ffd02f0 0x400e24cf:0x3ffd0310 0x400e2aa6:0x3ffd0340 0x400dfa07:0x3ffd09f0 0x400de61c:0x3ffd0f40 0x400deda3:0x3ffd12d0 0x400d5fee:0x3ffd1e10 0x401ffd1a:0x3ffd1e40
+
+
+
+
+ELF file SHA256: 364cf80d2
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (27) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (620) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1265) wifi:wifi driver task: 3ffdefcc, prio:23, stack:6656, core=0
+I (1265) wifi:wifi firmware version: e12a754
+I (1265) wifi:wifi certification version: v7.0
+I (1265) wifi:config NVS flash: disabled
+I (1265) wifi:config nano formatting: disabled
+I (1275) wifi:Init data frame dynamic rx buffer num: 32
+I (1275) wifi:Init static rx mgmt buffer num: 5
+I (1285) wifi:Init management short buffer num: 32
+I (1285) wifi:Init dynamic tx buffer num: 32
+I (1285) wifi:Init static rx buffer size: 1600
+I (1295) wifi:Init static rx buffer num: 10
+I (1295) wifi:Init dynamic rx buffer num: 32
+I (1305) wifi_init: rx ba win: 6
+I (1305) wifi_init: accept mbox: 6
+I (1305) wifi_init: tcpip mbox: 32
+I (1315) wifi_init: udp mbox: 6
+I (1315) wifi_init: tcp mbox: 6
+I (1315) wifi_init: tcp tx win: 5760
+I (1315) wifi_init: tcp rx win: 5760
+I (1325) wifi_init: tcp mss: 1440
+I (1325) wifi_init: WiFi IRAM OP enabled
+I (1325) wifi_init: WiFi RX IRAM OP enabled
+I (1605) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (1685) wifi:mode : sta (20:50:0d:1b:2f:34) + softAP (20:50:0d:1b:2f:35)
+I (1695) wifi:enable tsf
+I (1695) wifi:Total power save buffer number: 16
+I (1695) wifi:Init max length of beacon: 752/752
+I (1695) wifi:Init max length of beacon: 752/752
+I (1705) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (1715) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=56700 minimum_free_heap_bytes=52700 largest_free_block_8bit_bytes=51200 stack_hwm_bytes=13936 internal_8bit_free_bytes=56700 internal_8bit_minimum_free_bytes=52700 internal_8bit_largest_free_block_bytes=51200 dma_free_bytes=56544 dma_minimum_free_bytes=52700 dma_largest_free_block_bytes=51200
+I (1745) app_main: ESP32-Fermentationsschrank
+I (1755) app_main: profile: esp32_release
+I (1755) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1765) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1765) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1775) app_main: real actuators: disabled
+I (1775) app_main: application: ready
+I (1795) ili9341: LCD panel create success, version: 2.1.0
+I (1915) LVGL: Starting LVGL task
+W (1925) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+W (1925) wifi:no need to send deauth when softap is sending deauth
+I (1985) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (2115) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10248 minimum_free_heap_bytes=5200 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10004 internal_8bit_minimum_free_bytes=5200 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10264 dma_minimum_free_bytes=5200 dma_largest_free_block_bytes=7680
+I (2245) app_main: resources_lvgl: point=after_ui_init pool=unavailable
+I (2285) app_main: resources: point=stable_home_wifi_setup_access_point network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10256 minimum_free_heap_bytes=5144 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10256 internal_8bit_minimum_free_bytes=5144 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10256 dma_minimum_free_bytes=5144 dma_largest_free_block_bytes=7680
+I (2315) app_main: resources_lvgl: point=stable_home_wifi_setup_access_point pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (32245) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10432 minimum_free_heap_bytes=4676 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10432 internal_8bit_minimum_free_bytes=4676 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10432 dma_minimum_free_bytes=4676 dma_largest_free_block_bytes=7680
+I (32275) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (122245) app_main: resources: point=idle_120s network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10432 minimum_free_heap_bytes=4664 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10432 internal_8bit_minimum_free_bytes=4664 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10432 dma_minimum_free_bytes=4664 dma_largest_free_block_bytes=7680
+I (122275) app_main: resources_lvgl: point=idle_120s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (148155) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+I (148685) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (148715) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2
+E heap_alloc_failed: size=2048 caps=0x00001800 function=heap_caps_malloc
+
+abort() was called at PC 0x401ebc22 on core 0
+
+
+Backtrace: 0x4008c5f9:0x3ffd01d0 0x4008c5c1:0x3ffd01f0 0x4008bfd9:0x3ffd0210 0x401ebc22:0x3ffd0280 0x401ea651:0x3ffd02a0 0x400e224e:0x3ffd02c0 0x400e253d:0x3ffd02e0 0x400e25af:0x3ffd0320 0x400e2e26:0x3ffd0340 0x400dfa07:0x3ffd09f0 0x400de61c:0x3ffd0f40 0x400deda3:0x3ffd12d0 0x400d5fee:0x3ffd1e10 0x401ffd1a:0x3ffd1e40
+
+
+
+
+ELF file SHA256: 364cf80d2
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (27) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (620) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1265) wifi:wifi driver task: 3ffdefcc, prio:23, stack:6656, core=0
+I (1265) wifi:wifi firmware version: e12a754
+I (1265) wifi:wifi certification version: v7.0
+I (1265) wifi:config NVS flash: disabled
+I (1265) wifi:config nano formatting: disabled
+I (1275) wifi:Init data frame dynamic rx buffer num: 32
+I (1275) wifi:Init static rx mgmt buffer num: 5
+I (1285) wifi:Init management short buffer num: 32
+I (1285) wifi:Init dynamic tx buffer num: 32
+I (1285) wifi:Init static rx buffer size: 1600
+I (1295) wifi:Init static rx buffer num: 10
+I (1295) wifi:Init dynamic rx buffer num: 32
+I (1305) wifi_init: rx ba win: 6
+I (1305) wifi_init: accept mbox: 6
+I (1305) wifi_init: tcpip mbox: 32
+I (1315) wifi_init: udp mbox: 6
+I (1315) wifi_init: tcp mbox: 6
+I (1315) wifi_init: tcp tx win: 5760
+I (1315) wifi_init: tcp rx win: 5760
+I (1325) wifi_init: tcp mss: 1440
+I (1325) wifi_init: WiFi IRAM OP enabled
+I (1325) wifi_init: WiFi RX IRAM OP enabled
+I (1605) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (1695) wifi:mode : sta (20:50:0d:1b:2f:34) + softAP (20:50:0d:1b:2f:35)
+I (1695) wifi:enable tsf
+I (1705) wifi:Total power save buffer number: 16
+I (1705) wifi:Init max length of beacon: 752/752
+I (1705) wifi:Init max length of beacon: 752/752
+I (1705) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (1725) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=56708 minimum_free_heap_bytes=52708 largest_free_block_8bit_bytes=51200 stack_hwm_bytes=13936 internal_8bit_free_bytes=56708 internal_8bit_minimum_free_bytes=52708 internal_8bit_largest_free_block_bytes=51200 dma_free_bytes=56708 dma_minimum_free_bytes=52708 dma_largest_free_block_bytes=51200
+I (1745) app_main: ESP32-Fermentationsschrank
+I (1755) app_main: profile: esp32_release
+I (1755) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1765) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1765) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1775) app_main: real actuators: disabled
+I (1775) app_main: application: ready
+I (1795) ili9341: LCD panel create success, version: 2.1.0
+I (1915) LVGL: Starting LVGL task
+W (1925) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+I (1995) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (2115) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10276 minimum_free_heap_bytes=5208 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10276 internal_8bit_minimum_free_bytes=5208 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10276 dma_minimum_free_bytes=5208 dma_largest_free_block_bytes=7680
+I (2245) app_main: resources_lvgl: point=after_ui_init pool=unavailable
+I (2285) app_main: resources: point=stable_home_wifi_setup_access_point network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=9936 minimum_free_heap_bytes=5176 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=9936 internal_8bit_minimum_free_bytes=5176 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=9936 dma_minimum_free_bytes=5176 dma_largest_free_block_bytes=7680
+I (2315) app_main: resources_lvgl: point=stable_home_wifi_setup_access_point pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+W (2705) wifi:no need to send deauth when softap is sending deauth
+I (32245) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10444 minimum_free_heap_bytes=4484 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10444 internal_8bit_minimum_free_bytes=4484 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10444 dma_minimum_free_bytes=4484 dma_largest_free_block_bytes=7680
+I (32275) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (55775) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+I (59865) wifi:station: 4e:21:3c:72:c7:12 leave, AID = 1, reason = 15, bss_flags is 34311266, bss:0x3fffe590
+I (59865) wifi:new:<1,0>, old:<1,1>, ap:<1,1>, sta:<0,0>, prof:1, snd_ch_cfg:0x0
+I (59865) wifi:new:<1,1>, old:<1,0>, ap:<1,1>, sta:<0,0>, prof:1, snd_ch_cfg:0x0
+I (63565) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+E heap_alloc_failed: size=722 caps=0x0000080c function=heap_caps_malloc
+I (64145) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (64155) wifi:<ba-del>idx:2, tid:0
+I (64155) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:1, winSize:64
+E heap_alloc_failed: size=2048 caps=0x00001800 function=heap_caps_malloc
+
+abort() was called at PC 0x401ebc22 on core 0
+
+
+Backtrace: 0x4008c5f9:0x3ffd01d0 0x4008c5c1:0x3ffd01f0 0x4008bfd9:0x3ffd0210 0x401ebc22:0x3ffd0280 0x401ea651:0x3ffd02a0 0x400e224e:0x3ffd02c0 0x400e253d:0x3ffd02e0 0x400e25af:0x3ffd0320 0x400e2e26:0x3ffd0340 0x400dfa07:0x3ffd09f0 0x400de61c:0x3ffd0f40 0x400deda3:0x3ffd12d0 0x400d5fee:0x3ffd1e10 0x401ffd1a:0x3ffd1e40
+
+
+
+
+ELF file SHA256: 364cf80d2
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (27) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (620) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1265) wifi:wifi driver task: 3ffdefcc, prio:23, stack:6656, core=0
+I (1265) wifi:wifi firmware version: e12a754
+I (1265) wifi:wifi certification version: v7.0
+I (1265) wifi:config NVS flash: disabled
+I (1265) wifi:config nano formatting: disabled
+I (1275) wifi:Init data frame dynamic rx buffer num: 32
+I (1275) wifi:Init static rx mgmt buffer num: 5
+I (1285) wifi:Init management short buffer num: 32
+I (1285) wifi:Init dynamic tx buffer num: 32
+I (1285) wifi:Init static rx buffer size: 1600
+I (1295) wifi:Init static rx buffer num: 10
+I (1295) wifi:Init dynamic rx buffer num: 32
+I (1305) wifi_init: rx ba win: 6
+I (1305) wifi_init: accept mbox: 6
+I (1305) wifi_init: tcpip mbox: 32
+I (1315) wifi_init: udp mbox: 6
+I (1315) wifi_init: tcp mbox: 6
+I (1315) wifi_init: tcp tx win: 5760
+I (1315) wifi_init: tcp rx win: 5760
+I (1325) wifi_init: tcp mss: 1440
+I (1325) wifi_init: WiFi IRAM OP enabled
+I (1325) wifi_init: WiFi RX IRAM OP enabled
+I (1605) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (1685) wifi:mode : sta (20:50:0d:1b:2f:34) + softAP (20:50:0d:1b:2f:35)
+I (1685) wifi:enable tsf
+I (1695) wifi:Total power save buffer number: 16
+I (1695) wifi:Init max length of beacon: 752/752
+I (1695) wifi:Init max length of beacon: 752/752
+W (1705) wifi:no need to send deauth when softap is sending deauth
+W (1705) wifi:no need to send deauth when softap is sending deauth
+W (1715) wifi:no need to send deauth when softap is sending deauth
+I (1725) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (1735) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=56864 minimum_free_heap_bytes=52876 largest_free_block_8bit_bytes=51200 stack_hwm_bytes=13936 internal_8bit_free_bytes=56864 internal_8bit_minimum_free_bytes=52876 internal_8bit_largest_free_block_bytes=51200 dma_free_bytes=56864 dma_minimum_free_bytes=52876 dma_largest_free_block_bytes=51200
+I (1765) app_main: ESP32-Fermentationsschrank
+I (1765) app_main: profile: esp32_release
+I (1775) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1775) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1785) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1785) app_main: real actuators: disabled
+I (1795) app_main: application: ready
+I (1815) ili9341: LCD panel create success, version: 2.1.0
+I (1935) LVGL: Starting LVGL task
+W (1945) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+I (2005) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (2245) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10016 minimum_free_heap_bytes=5208 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10016 internal_8bit_minimum_free_bytes=5208 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10016 dma_minimum_free_bytes=5208 dma_largest_free_block_bytes=7680
+I (2315) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (2335) app_main: resources: point=stable_home_wifi_setup_access_point network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10284 minimum_free_heap_bytes=5192 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10284 internal_8bit_minimum_free_bytes=5192 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10284 dma_minimum_free_bytes=5192 dma_largest_free_block_bytes=7680
+I (2365) app_main: resources_lvgl: point=stable_home_wifi_setup_access_point pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (4935) wifi:station: 4e:21:3c:72:c7:12 join, AID=1, bgn, 40U
+I (5495) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (5505) wifi:<ba-del>idx:2, tid:0
+I (5515) wifi:<ba-add>idx:2 (ifx:1, 4e:21:3c:72:c7:12), tid:0, ssn:0, winSize:64
+I (5515) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2
+E heap_alloc_failed: size=1350 caps=0x00001800 function=heap_caps_malloc
+
+abort() was called at PC 0x401ebc22 on core 0
+
+
+Backtrace: 0x4008c5f9:0x3ffeb260 0x4008c5c1:0x3ffeb280 0x4008bfd9:0x3ffeb2a0 0x401ebc22:0x3ffeb310 0x401ea651:0x3ffeb330 0x401eaacd:0x3ffeb350 0x401eab07:0x3ffeb370 0x401eac76:0x3ffeb390 0x401eafc5:0x3ffeb3d0 0x401eaff1:0x3ffeb400 0x400f1a91:0x3ffeb420 0x40115ea6:0x3ffeb690 0x401887db:0x3ffeb750 0x401890cd:0x3ffeb790 0x4018917a:0x3ffeb820 0x40187cfa:0x3ffeb840 0x40186cba:0x3ffeb860 0x401f677b:0x3ffeb880 0x40187572:0x3ffeb8a0 0x401875de:0x3ffeb8f0 0x401ffd1a:0x3ffeb910
+
+
+
+
+ELF file SHA256: 364cf80d2
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0040,len:6272
+load:0x40078000,len:15824
+load:0x40080400,len:3988
+entry 0x40080644
+I (27) boot: ESP-IDF v6.1 2nd stage bootloader
+I (27) boot: compile time Oct  2 2026 15:59:08
+I (27) boot: Multicore bootloader
+I (29) boot: chip revision: v3.1
+I (31) boot.esp32: SPI Speed      : 40MHz
+I (35) boot.esp32: SPI Mode       : DIO
+I (39) boot.esp32: SPI Flash Size : 4MB
+I (42) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (49) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (62) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 002f0000
+I (75) boot:  3 state_store      WiFi data        01 02 00300000 00100000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=2eed4h (192212) map
+I (161) esp_image: segment 1: paddr=0003eefc vaddr=3ffb0000 size=0111ch (  4380) load
+I (163) esp_image: segment 2: paddr=00040020 vaddr=400d0020 size=13423ch (1262140) map
+I (615) esp_image: segment 3: paddr=00174264 vaddr=3ffb111c size=03888h ( 14472) load
+I (620) esp_image: segment 4: paddr=00177af4 vaddr=40080000 size=184fch ( 99580) load
+I (662) esp_image: segment 5: paddr=0018fff8 vaddr=50000000 size=00028h (    40) load
+I (674) boot: Loaded app from partition at offset 0x10000
+I (674) boot: Disabling RNG early entropy source...
+I (685) cpu_start: Multicore app
+I (693) cpu_start: GPIO 3 and 1 are used as console UART I/O pins
+I (693) cpu_start: Pro cpu start user code
+I (693) cpu_start: cpu freq: 160000000 Hz
+I (695) app_init: Application information:
+I (699) app_init: Project name:     esp32_fermentationsschrank
+I (705) app_init: App version:      0de006a-dirty
+I (709) app_init: Compile time:     Oct  2 2026 16:06:32
+I (714) app_init: ELF file SHA256:  364cf80d2...
+I (718) app_init: ESP-IDF:          v6.1
+I (722) efuse_init: Min chip rev:     v0.0
+I (726) efuse_init: Max chip rev:     v3.99 
+I (730) efuse_init: Chip rev:         v3.1
+I (734) heap_init: Initializing. RAM available for dynamic allocation:
+I (740) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (745) heap_init: At 3FFCA970 len 00015690 (85 KiB): DRAM
+I (750) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (756) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (761) heap_init: At 400984FC len 00007B04 (30 KiB): IRAM
+I (768) spi_flash: detected chip: generic
+I (770) spi_flash: flash io: dio
+I (775) main_task: Started on CPU0
+I (775) main_task: Calling app_main()
+I (795) app_main: default NVS initialized for ESP-IDF PHY system data
+I (1175) app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped free_heap_bytes=154876 minimum_free_heap_bytes=154876 largest_free_block_8bit_bytes=110592 stack_hwm_bytes=20672 internal_8bit_free_bytes=154876 internal_8bit_minimum_free_bytes=154876 internal_8bit_largest_free_block_bytes=110592 dma_free_bytes=154876 dma_minimum_free_bytes=154876 dma_largest_free_block_bytes=110592
+I (1265) wifi:wifi driver task: 3ffdefcc, prio:23, stack:6656, core=0
+I (1265) wifi:wifi firmware version: e12a754
+I (1265) wifi:wifi certification version: v7.0
+I (1265) wifi:config NVS flash: disabled
+I (1265) wifi:config nano formatting: disabled
+I (1275) wifi:Init data frame dynamic rx buffer num: 32
+I (1275) wifi:Init static rx mgmt buffer num: 5
+I (1285) wifi:Init management short buffer num: 32
+I (1285) wifi:Init dynamic tx buffer num: 32
+I (1285) wifi:Init static rx buffer size: 1600
+I (1295) wifi:Init static rx buffer num: 10
+I (1295) wifi:Init dynamic rx buffer num: 32
+I (1305) wifi_init: rx ba win: 6
+I (1305) wifi_init: accept mbox: 6
+I (1305) wifi_init: tcpip mbox: 32
+I (1315) wifi_init: udp mbox: 6
+I (1315) wifi_init: tcp mbox: 6
+I (1315) wifi_init: tcp tx win: 5760
+I (1315) wifi_init: tcp rx win: 5760
+I (1325) wifi_init: tcp mss: 1440
+I (1325) wifi_init: WiFi IRAM OP enabled
+I (1325) wifi_init: WiFi RX IRAM OP enabled
+I (1605) phy_init: phy_version 4863,a3a4459,Oct 28 2025,14:30:06
+I (1685) wifi:mode : sta (20:50:0d:1b:2f:34) + softAP (20:50:0d:1b:2f:35)
+I (1695) wifi:enable tsf
+I (1695) wifi:Total power save buffer number: 16
+I (1695) wifi:Init max length of beacon: 752/752
+I (1695) wifi:Init max length of beacon: 752/752
+W (1705) wifi:no need to send deauth when softap is sending deauth
+I (1715) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (1725) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=56716 minimum_free_heap_bytes=52716 largest_free_block_8bit_bytes=51200 stack_hwm_bytes=13936 internal_8bit_free_bytes=56716 internal_8bit_minimum_free_bytes=52716 internal_8bit_largest_free_block_bytes=51200 dma_free_bytes=56716 dma_minimum_free_bytes=52716 dma_largest_free_block_bytes=51200
+I (1755) app_main: ESP32-Fermentationsschrank
+I (1755) app_main: profile: esp32_release
+I (1755) app_main: source git sha: 0de006a7d4d7d9f93a467df1ce0289e92f7ae603
+I (1765) app_main: hardware state: HARDWARE_UNVERIFIED
+I (1775) app_main: actuator policy: REQUIRE_VERIFIED_HARDWARE
+I (1775) app_main: real actuators: disabled
+I (1785) app_main: application: ready
+I (1805) ili9341: LCD panel create success, version: 2.1.0
+I (1925) LVGL: Starting LVGL task
+W (1935) lcd_panel.io.spi: Callback on_color_trans_done was already set and now it was overwritten!
+I (2005) app_main: touch calibration: active_status=Available fallback_status=NotFound
+I (2245) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10284 minimum_free_heap_bytes=5236 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10284 internal_8bit_minimum_free_bytes=5236 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10284 dma_minimum_free_bytes=5236 dma_largest_free_block_bytes=7680
+I (2305) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (2325) app_main: resources: point=stable_home_wifi_setup_access_point network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10284 minimum_free_heap_bytes=5184 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10284 internal_8bit_minimum_free_bytes=5184 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10284 dma_minimum_free_bytes=5184 dma_largest_free_block_bytes=7680
+I (2355) app_main: resources_lvgl: point=stable_home_wifi_setup_access_point pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1
+I (32325) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=SetupAccessPoint free_heap_bytes=10452 minimum_free_heap_bytes=4680 largest_free_block_8bit_bytes=7680 stack_hwm_bytes=13936 internal_8bit_free_bytes=10452 internal_8bit_minimum_free_bytes=4680 internal_8bit_largest_free_block_bytes=7680 dma_free_bytes=10452 dma_minimum_free_bytes=4680 dma_largest_free_block_bytes=7680
+I (32355) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=63108 pool_free_bytes=49980 pool_largest_free_bytes=49612 pool_max_used_bytes=13940 pool_used_pct=21 pool_frag_pct=1

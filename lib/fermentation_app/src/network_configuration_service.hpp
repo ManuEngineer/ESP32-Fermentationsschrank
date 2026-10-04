@@ -75,6 +75,9 @@ class NetworkConfigurationService final {
     accessPointInfo() const {
         return lifecycle_.accessPointInfo();
     }
+    [[nodiscard]] std::uint64_t accessPointInfoRevision() const noexcept {
+        return lifecycle_.accessPointInfoRevision();
+    }
     [[nodiscard]] device_platform::NetworkMode selectedMode() const noexcept {
         return selectedMode_;
     }
