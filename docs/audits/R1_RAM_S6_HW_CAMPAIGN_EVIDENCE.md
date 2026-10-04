@@ -125,7 +125,7 @@ ebenfalls im Heimnetz-Start, daher gleichwertige Pfade.
 | Client-Heap-Kosten (`stable_ap_only` → Press, mit Client) | 2980–3096 B | 2796–2996 B |
 | größter Block vor dem Press ohne Client | 7936–8192 B | 12800 / 10752 B |
 | größter Block vor dem Press mit Client | 4864–6400 B | 8192 B (C, D, E) |
-| Minimum im erfolgreichen Commit | 2872–2956 B (ohne Client) | 7880 / 7856 B (ohne), 4124 B (C), kein neues Minimum in D und E |
+| Low-Water-Mark im erfolgreichen Moduswechsel-Fenster | 2872–2956 B (ohne Client) | 7880 / 7856 B (ohne), 4124 B (C), kein neues Minimum in D und E |
 | Stack-HWM Minimum | 5936 B | 6256 B |
 | LVGL max belegt | 15848–15860 B (24 %) | 15856 B (24 %) |
 | 192-B-Commit-OOM | 3/3 mit Client (ohne Seite 1×, mit Seite 2×) | **0** |
@@ -165,7 +165,7 @@ DMA und INTERNAL stimmen mit den allgemeinen Heap-Werten überein (kein PSRAM,
 
 Der Heap fiel über die Wechsel hinweg stufenweise (größter Block 14848 →
 12800 → 10752 → 8192 → 7424 → 7168 B) und erholte sich nicht; das Minimum
-sank in den Commits von Fall A bis C von 11364 B auf 4124 B und blieb dann
+sank in den Moduswechsel-Fenstern von Fall A bis C von 11364 B auf 4124 B und blieb dann
 stehen.
 
 ## 5. 1696-B-Idle-Fehler
@@ -217,7 +217,7 @@ Follow-up-Befund** zu führen.
   ausgelöst: Fälle C, D und E (Client ohne Seite, zweimal, und mit Seite)
   liefen durch, ohne `heap_alloc_failed` im Commit.
 - Es ist kein Beweis, dass der Abort „behoben“ ist. Je Bedingung liegen nur
-  ein bis zwei Durchläufe vor, das Minimum im Commit sank mit Client auf
+  ein bis zwei Durchläufe vor, die Low-Water-Mark im Moduswechsel-Fenster sank mit Client auf
   4124 B (gegenüber 2576–2956 B vor dem Absturz davor) und die Reserve schrumpft
   über wiederholte Wechsel (Block 14848 → 7168 B). Eine Zuordnung des
   Erfolgs allein zum Wegfall des Puffers ist aus dieser Serie nicht ableitbar
@@ -227,3 +227,8 @@ Follow-up-Befund** zu führen.
 - S6 wurde nicht zurückgebaut, es wurde nichts implementiert, S7 nicht
   begonnen. Die Beurteilung (R1-RAM-Blocker geschlossen, S7-Nutzen, 1696-B-
   Follow-up, S8) bleibt dem Independent Review.
+
+Hinweis zu 4124 B: Der Wert ist die Low-Water-Mark des gesamten synchronen
+Netzwerkmoduswechsel-Fensters (`network_page_press_before` bis `_after` umfasst
+auch die Transport-/Network-Lifecycle-Aktivierung), nicht exklusiv ein
+Configuration-Commit-Wert; die Teilphase ist nicht instrumentiert.

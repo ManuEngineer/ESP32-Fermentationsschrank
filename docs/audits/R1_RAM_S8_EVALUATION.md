@@ -16,26 +16,45 @@ S4=PASS
 S5=NO_ACTION_OWNER_DECISION
 S6=PASS_CODE_AND_HARDWARE
 S7=NO_ACTION
+S8=EVALUATION_FIXED_PENDING_INDEPENDENT_VERIFICATION
 
-FATAL_R1_NETWORK_COMMIT_RAM_BLOCKER=CLOSED
+FATAL_R1_NETWORK_COMMIT_RAM_BLOCKER=CLOSED_MEASURED_SCOPE
 FATAL_R1_NETWORK_COMMIT_RAM_BLOCKER_SCOPE=RELEASE_PROFILE_ONE_CLIENT_5_OF_5_MATRIX_CASES_MARGIN_NOT_PROVEN_FOR_MORE_CLIENTS_OR_MORE_SWITCHES
 MAKE_REPRESENTATIVE_SCREEN_OOM=CLOSED
 
-LOWEST_MEASURED_COMMIT_MIN_HEAP_BYTES=4124
-LOWEST_MAIN_STACK_HWM_BYTES=6256
+LOWEST_NETWORK_MODE_SWITCH_LOW_WATER_MARK_BYTES=4124
+NETWORK_MODE_SWITCH_LOW_WATER_SUBPHASE=NOT_INSTRUMENTED
+LOWEST_MAIN_STACK_HWM_BYTES=5936
+S6_LOWEST_MAIN_STACK_HWM_BYTES=6256
 LOWEST_CURRENT_LARGEST_FREE_BLOCK_BYTES=7168
 
-IDLE_1696B_FAILURE=OPEN
-IDLE_1696B_CLASSIFICATION=FOLLOW_UP_NON_BLOCKING
+MEASURED_CURRENT_FREE_HEAP_FLOOR_BYTES=12288
+MEASURED_CURRENT_INTERNAL_8BIT_FREE_FLOOR_BYTES=12288
+MEASURED_CURRENT_DMA_FREE_FLOOR_BYTES=12288
+MEASURED_CURRENT_LARGEST_8BIT_BLOCK_FLOOR_BYTES=7168
+MEASURED_CURRENT_INTERNAL_8BIT_LARGEST_BLOCK_FLOOR_BYTES=7168
+MEASURED_CURRENT_DMA_LARGEST_BLOCK_FLOOR_BYTES=7168
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_FREE_HEAP_FLOOR_BYTES=12288
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_INTERNAL_8BIT_FREE_FLOOR_BYTES=12288
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_DMA_FREE_FLOOR_BYTES=12288
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_LARGEST_8BIT_BLOCK_FLOOR_BYTES=8192
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_INTERNAL_8BIT_LARGEST_BLOCK_FLOOR_BYTES=8192
+MEASURED_PRE_NETWORK_COMMIT_CLIENT_DMA_LARGEST_BLOCK_FLOOR_BYTES=8192
 
-S9_RECOMMENDATION=ONLY_IF_1696_DIAG_REQUIRES
+IDLE_1696B_FAILURE=OPEN
+IDLE_1696B_CLASSIFICATION=FOLLOW_UP_NON_BLOCKING_FOR_PR174
+IDLE_1696B_FOLLOW_UP=DIAGNOSE_BEFORE_PR170_NETWORK_EXPANSION
+
+S9_RECOMMENDATION=NOT_NEEDED_FOR_PR174
+S9_FUTURE_CONDITION=ONLY_IF_CALLER_DIAGNOSIS_PROVES_WIFI_LWIP_MEMORY_PROFILE_RELEVANT
 S10_RECOMMENDATION=NOT_NEEDED
 S11_RECOMMENDATION=NOT_NEEDED
 
 O4=OWNER_DECISION_REQUIRED
 O5=OWNER_DECISION_REQUIRED
 
-PR170_DEPENDENCY=KEEP_UNTIL_OWNER_O4_O5_AND_S8_REVIEW
+PR170_DEPENDENCY=KEEP_BLOCKED_ON_IDLE_1696B_DIAGNOSIS_OR_EXPLICIT_OWNER_WAIVER
+PR174_FINAL_GO=NO_UNTIL_OWNER_O4_O5
 ```
 
 ## A. Gemessene R1-Reserve nach S6
@@ -65,12 +84,29 @@ Extremwerte der Serie:
 |---|---:|---|
 | niedrigster **aktueller freier Heap** | 12288 B | `network_page_press_before`, Fall E (Client) |
 | niedrigster **aktueller größter Block** | 7168 B | `network_page_press_after`, Fall E (`HOME_WIFI`) |
-| **Low-Water-Mark** (`minimum_free_heap`) | 4124 B | Fall C (Commit mit Client), danach nicht mehr unterschritten |
-| niedrigster Main-Task-Stack-HWM | 6256 B (von 24576 B) | ab erstem `AP_ONLY`; über alle Läufe (S2–S6) niedrigster Wert 5936 B (Pre-S6) |
+| **Low-Water-Mark** (`minimum_free_heap`) | 4124 B | während des synchronen Netzwerkmoduswechsel-Fensters von Fall C (Client), danach nicht mehr unterschritten; die Teilphase (Configuration-Commit oder Transport-/Lifecycle-Aktivierung) ist nicht instrumentiert |
+| niedrigster Main-Task-Stack-HWM | **5936 B** über alle Läufe S2–S6 (Pre-S6, Clean-Lauf); in der S6-Serie 6256 B (von 24576 B) | S6-Serie ab erstem `AP_ONLY` |
 | LVGL-Pool maximal belegt | 15856 B (24 %, Pool 63384 B) | unverändert gegenüber S2–S4 |
 
 Der Heap-Gewinn durch S6 beträgt gemessen +4,8…5,0 kB beim freien Heap
 (Details in der S6-Evidenz).
+
+### Gemessene Böden getrennt nach Capability-Sicht
+
+Aus der S6-Punkte-CSV (alle 40 Punkte bzw. die drei Client-Pre-Commit-Punkte
+C, D, E). INTERNAL|8BIT und DMA sind überlappende Sichten desselben internen
+DRAM (kein PSRAM) und werden nicht addiert; sie stimmen in dieser Serie in
+jedem Punkt überein.
+
+| Boden | allgemein (8BIT) | INTERNAL\|8BIT | DMA | Ort |
+|---|---:|---:|---:|---|
+| aktueller freier Heap, alle Punkte | 12288 B | 12288 B | 12288 B | `network_page_press_before`, Fall E |
+| aktueller größter Block, alle Punkte | 7168 B | 7168 B | 7168 B | `network_page_press_after`, Fall E |
+| freier Heap unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 12288 B | 12288 B | 12288 B | Fall E |
+| größter Block unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 8192 B | 8192 B | 8192 B | Fälle C, D, E |
+
+Das sind gemessene Böden des Scopes dieser Serie und keine zusätzlichen
+Sicherheitsabstände.
 
 ## B. Configuration-Commit
 
@@ -79,11 +115,22 @@ PRE_S6_CLIENT_COMMIT_ABORT=3_OF_3
 POST_S6_CLIENT_COMMIT_PASS=3_OF_3
 POST_S6_ALL_MATRIX_CASES=5_OF_5_PASS
 POST_S6_COMMIT_OOM=0
-LOWEST_POST_S6_COMMIT_MINIMUM_FREE_HEAP=4124_B
+LOWEST_POST_S6_NETWORK_MODE_SWITCH_LOW_WATER_MARK=4124_B
 ```
 
+**Zur Benennung von 4124 B:** `network_page_press_before` wird vor
+`processWorkspaceTouch()`, `network_page_press_after` danach geloggt. Dazwischen
+liegt beim Netzwerkmoduswechsel nicht nur `ConfigurationService::confirmPreview()`,
+sondern anschließend auch die Transport-/Network-Lifecycle-Aktivierung. 4124 B
+ist daher die Low-Water-Mark des **gesamten synchronen
+Netzwerkmoduswechsel-Fensters**, kein exklusiv dem Configuration-Commit
+zuzuordnender Wert; die Teilphase ist nicht instrumentiert (keine neue
+Instrumentierung vorgesehen). Der Pre-S6-Abort war dagegen per Backtrace im
+Configuration-Commit (`validationScan`/`scanGroupMetadata`) lokalisiert; das
+bleibt unverändert.
+
 Zustand unmittelbar vor dem Rückwechsel `AP_ONLY` → `HOME_WIFI`
-(aktueller freier Heap / größter Block / Low-Water-Mark):
+(aktueller freier Heap / größter Block / Low-Water-Mark seit Boot):
 
 | Fall | Zustand | Ergebnis |
 |---|---|---|
@@ -98,12 +145,12 @@ Zustand unmittelbar vor dem Rückwechsel `AP_ONLY` → `HOME_WIFI`
 Zwischen fehlgeschlagenen und bestandenen Zuständen liegen im aktuellen freien
 Heap 4,5 kB (7756 → 12288 B) und im größten Block 1,8 kB (6400 → 8192 B).
 Die Low-Water-Mark trennt die Fälle **nicht**: Pre-S6 bestanden auch
-Commits ohne Client bei einer Tiefstmarke von 2872–2956 B.
+Moduswechsel ohne Client bei einer Tiefstmarke von 2872–2956 B.
 
 **Bewertung:** Der bekannte fatale R1-Commit-Blocker (192-B-Abort im
 Configuration-Commit beim Rückwechsel nach `HOME_WIFI` mit Client) ist im
 **gemessenen Scope als geschlossen zu werten**: 0 von 5 Matrixfällen, 0
-Commit-OOM, kein Abort; derselbe Pfad scheiterte vor S6 3 von 3 mit Client.
+Commit-OOM, kein Abort (niedrigste Low-Water-Mark im Moduswechsel-Fenster 4124 B); derselbe Pfad scheiterte vor S6 3 von 3 mit Client.
 Der Scope ist eng: Release-Profil, höchstens ein Client, fünf Durchläufe,
 Rückwechsel `AP_ONLY` → `HOME_WIFI` (und die vorgelagerten Wechsel nach
 `AP_ONLY`), kein Mehr-Client- und kein Dauerwechsel-Test. Der Erfolg lässt
@@ -163,7 +210,7 @@ Zur Wirkung aus der vorhandenen Evidenz:
   das Gerät danach weiter).
 - Die Allokation wurde von ihrem Aufrufer behandelt (kein C++-
   `operator new`-Abort); der Aufrufer ist unbekannt.
-- Die Frequenz ist niedrig: höchstens ein Ereignis je ~25–30 min Idle.
+- Eine belastbare Ereignisrate lässt sich aus den vorhandenen Läufen nicht ableiten (verschiedene Laufdauern und Bedingungen; ein Pre-S6-Ereignis trat bereits etwa 40 s nach einem Rückwechsel auf).
 - Nach Projektregel (`AGENTS.md`) benötigen Regelung und Safety weder Netzwerk
   noch Web noch Anzeige; ein nichtfataler Fehlschlag im Netzwerk-Idle hat
   damit auf den Regelpfad keinen Durchgriff. Das ist eine Architekturaussage,
@@ -171,56 +218,89 @@ Zur Wirkung aus der vorhandenen Evidenz:
 
 Es wird **nicht** behauptet, der Aufrufer sei WLAN oder lwIP.
 
-Empfohlene Klassifikation: **`FOLLOW_UP_NON_BLOCKING`** für das Mergen von
-PR #174. Begründung: begrenzte, in der vorhandenen Evidenz folgenlose
-Wirkung; der fatale RAM-Blocker ist unabhängig davon geschlossen. Einschränkung:
-Die Ursache ist ungeklärt, die tatsächliche Produktwirkung (z. B. ein verlorener
-Netzwerkframe) ist aus dem UART-Log nicht beurteilbar. Die Klärung (Aufrufer-
-Nachweis, falls der Review sie fordert, über das bedingte S9/Diagnose) sollte
-vor einer Erweiterung der Netzwerkfunktionen (PR #170) erfolgen. Ob dafür ein
-eigenes Issue anzulegen ist, entscheidet der Owner.
+Empfohlene Klassifikation: **`FOLLOW_UP_NON_BLOCKING_FOR_PR174`**.
+Begründung: 4 bekannte nichtfatale Ereignisse in 3 Läufen; kein
+Abort/Reset/`ServiceRequired`; kein beobachteter Durchgriff auf den
+Regel-/Safety-Kern; Aufrufer und tatsächliche Komfort-/Netzwerkauswirkung
+unbekannt. Der fatale RAM-Blocker ist unabhängig davon geschlossen.
+Einschränkung: Die Ursache ist ungeklärt, die tatsächliche Wirkung (z. B. ein
+verlorener Netzwerkframe) ist aus dem UART-Log nicht beurteilbar. Das
+Follow-up ist daher **`DIAGNOSE_BEFORE_PR170_NETWORK_EXPANSION`** und nicht Teil
+des Scopes von PR #174 (siehe O5). Ob dafür ein eigenes Issue anzulegen ist,
+entscheidet der Owner.
 
-## O4 – Vorschlag Mindestabstand / RAM-Budget (Ownerentscheidung erforderlich)
+## O4 – Empfehlung Mindestabstand / RAM-Budget (Ownerentscheidung erforderlich)
 
-Abgeleitet ausschließlich aus den Messdaten (Abschnitt B, Messscope: Release,
-höchstens ein Client). Der **aktuelle** Heap unmittelbar vor dem
-Netzwerk-Commit trennt bestandene und fehlgeschlagene Fälle; die Low-Water-Mark
-trennt sie nicht.
+Abgeleitet ausschließlich aus den Messdaten, mit getrennter Zuordnung von
+**gemessenem Boden**, **Qualifikationsgrenze** und **Warnschwelle**:
 
-| Größe | Fehler beobachtet bei | niedrigster bestandener Wert (Scope) | Vorschlag |
+| Größe | Fehler beobachtet bei | gemessener Boden (S6-Scope) | Pre-S6-PASS-Vergleichswert (ohne Client) |
 |---|---|---|---|
-| aktueller freier Heap vor dem Netzwerk-Commit in `AP_ONLY` | ≤ 7756 B | 12288 B (S6, mit Client); 10752 B (Pre-S6, ohne Client) | Mindestwert **12288 B** (niedrigster mit Client nachgewiesener Wert); Warnschwelle **10752 B** (niedrigster nachgewiesener Wert ohne Client) |
-| aktueller größter Block vor dem Commit | ≤ 6400 B | 8192 B (S6); 7936 B (Pre-S6, ohne Client) | Mindestwert **8192 B**; Warnschwelle **7936 B** |
-| `minimum_free_heap` (Low-Water-Mark) im Commit-Test | 2192–2956 B vor dem Abort | 4124 B (S6, mit Client); 2872 B (Pre-S6, ohne Client) | nur als Beobachtungsgröße, **kein Gate** (trennt nicht); Referenz 4124 B |
-| Main-Task-Stack-HWM | kein Stack-Fehler beobachtet | 5936 B über alle Läufe, 6256 B in S6 | Mindestwert **5936 B** (niedrigster beobachteter), keine Stop-Schwelle ableitbar |
+| aktueller freier Heap unmittelbar vor dem Moduswechsel mit Client | ≤ 7756 B | 12288 B | 10752 B |
+| aktueller größter Block unmittelbar vor dem Moduswechsel mit Client | ≤ 6400 B | 8192 B | 7936 B |
+| aktueller freier Heap, systemweit | – | 12288 B | – |
+| aktueller größter Block, systemweit | – | 7168 B | – |
+| Low-Water-Mark im Moduswechsel-Fenster | 2192–2956 B vor dem Abort | 4124 B | 2872 B |
+| Main-Task-Stack-HWM | kein Stack-Fehler beobachtet | 5936 B (alle Läufe), 6256 B (S6) | – |
 
-Die Werte sind die tatsächlich gemessenen Pass-Grenzen, keine gerundeten
-Wunschwerte. Offen für den Owner: ob der Mindestabstand die nachgewiesene
-Pass-Grenze selbst oder eine zusätzliche Reserve darüber sein soll, und ob eine
-Warn-/Stop-Schwelle im Produkt (nicht nur im Test) eingeführt wird. Das erfordert
-laut `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` eine Zahl statt der Formulierung
-„nachgewiesene Mindestreserve“; sie wird hier nicht eigenmächtig gesetzt.
+Die Pre-S6-PASS-Werte (10752 B und 7936 B) sind historische Vergleichswerte
+ohne Client und **keine Warnschwellen**.
+
+**Empfohlene Ownerentscheidung für R1:**
+
+- **Systemweite gemessene Qualifikationsuntergrenze** (Regression gegen den
+  nachgewiesenen Scope): aktueller freier Heap **≥ 12288 B**, aktueller größter
+  zusammenhängender Block **≥ 7168 B**.
+- **Zusätzliche Qualifikationsbedingung unmittelbar vor dem kritischen
+  Netzwerkmoduswechsel mit einem Client:** freier Heap **≥ 12288 B**, größter
+  Block **≥ 8192 B**.
+- Diese Werte sind Regression-/Qualifikationsgrenzen des nachgewiesenen
+  R1-Scopes. Sie sind **kein statistisch nachgewiesener zusätzlicher
+  Safety-Abstand**: Der niedrigste bestandene Wert ist nur der niedrigste
+  nachgewiesene Wert, nicht mehr.
+- Die Low-Water-Mark (4124 B im Moduswechsel-Fenster) trennt bestandene und
+  fehlgeschlagene Fälle nicht und bleibt Beobachtungsgröße; der Stack-HWM
+  liefert keine Stop-Schwelle (kein Stack-Fehler, 5936 B niedrigster Wert).
+- **Keine separate numerische Warnschwelle** wird aus den vorhandenen Daten
+  abgeleitet. Falls der Owner später eine Frühwarnschwelle möchte, muss sie
+  logisch **oberhalb** der kritischen Grenze liegen und als zusätzliche Policy
+  begründet werden.
+
+Die Zahl ersetzt, falls der Owner sie beschließt, den Begriff
+„nachgewiesene Mindestreserve“ in `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`;
+sie wird hier nicht eigenmächtig gesetzt.
 
 ## O5 – bedingte weitere Schnitte (Empfehlung, keine Implementierung)
 
+Für **PR #174**:
+
 ```text
-S9  WLAN memory profile = ONLY_IF_1696_DIAG_REQUIRES
-S10 stack/commit        = NOT_NEEDED
-S11 structural UI       = NOT_NEEDED
+S9_RECOMMENDATION=NOT_NEEDED_FOR_PR174
+S10_RECOMMENDATION=NOT_NEEDED
+S11_RECOMMENDATION=NOT_NEEDED
+IDLE_1696B_FOLLOW_UP=DIAGNOSE_BEFORE_PR170_NETWORK_EXPANSION
+S9_FUTURE_CONDITION=ONLY_IF_CALLER_DIAGNOSIS_PROVES_WIFI_LWIP_MEMORY_PROFILE_RELEVANT
 ```
 
 - **S9 (WLAN-Speicherprofil):** Der fatale Blocker ist ohne WLAN-Tuning
-  geschlossen; S9 ist nur gerechtfertigt, wenn der 1696-B-Befund eine
-  Diagnose verlangt und diese WLAN-/lwIP-Puffer als Quelle belegt. Ohne
-  Aufrufer-Nachweis wird S9 nicht begründet.
-- **S10 (Stack/Commit):** Der Configuration-Commit lief in 5 von 5 Fällen; der
-  Stack-HWM liegt stabil bei 6256 B von 24576 B und es gab keinen Stack-Fehler.
-  Es besteht aus der Evidenz kein Bedarf für einen Stack- oder
+  geschlossen; es gibt keinen Aufrufer-Nachweis für den 1696-B-Befund. Damit
+  wird kein WLAN-Tuning auf Verdacht Teil von PR #174. S9 käme nur in Betracht,
+  wenn eine spätere Aufrufer-Diagnose das WLAN-/lwIP-Speicherprofil als
+  relevant belegt.
+- **S10 (Stack/Commit):** Der Moduswechsel lief in 5 von 5 Fällen; der
+  Stack-HWM liegt bei mindestens 5936 B von 24576 B, es gab keinen
+  Stack-Fehler. Aus der Evidenz besteht kein Bedarf für einen Stack- oder
   Commit-Umbau.
 - **S11 (struktureller UI-Umbau):** `makeRepresentativeScreen()` trat seit S4
   in keiner Messung mehr als OOM auf (S4-Hardware, Clean-Läufe, S6-Serie); der
   LVGL-Pool ist mit 24 % unverändert. Der in S4 benannte Rest (By-Value-Kopie
   der AP-Strings bei einem Redraw) ist ereignisgebunden.
+
+**PR #170:** `PR170_DEPENDENCY=KEEP_BLOCKED_ON_IDLE_1696B_DIAGNOSIS_OR_EXPLICIT_OWNER_WAIVER`
+nach Abschluss von PR #174. Das erlaubt PR #174 zu konvergieren, ohne den
+unbekannten Netzwerk-/Idle-Befund in dessen Scope zu ziehen. Es wird keine
+Ownerentscheidung simuliert; O4 und O5 bleiben `OWNER_DECISION_REQUIRED`,
+`PR174_FINAL_GO=NO_UNTIL_OWNER_O4_O5`.
 
 ## Offene Grenzen der Auswertung
 
