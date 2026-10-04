@@ -28,18 +28,19 @@ LOWEST_MAIN_STACK_HWM_BYTES=5936
 S6_LOWEST_MAIN_STACK_HWM_BYTES=6256
 LOWEST_CURRENT_LARGEST_FREE_BLOCK_BYTES=7168
 
-MEASURED_CURRENT_FREE_HEAP_FLOOR_BYTES=12288
-MEASURED_CURRENT_INTERNAL_8BIT_FREE_FLOOR_BYTES=12288
-MEASURED_CURRENT_DMA_FREE_FLOOR_BYTES=12288
-MEASURED_CURRENT_LARGEST_8BIT_BLOCK_FLOOR_BYTES=7168
-MEASURED_CURRENT_INTERNAL_8BIT_LARGEST_BLOCK_FLOOR_BYTES=7168
-MEASURED_CURRENT_DMA_LARGEST_BLOCK_FLOOR_BYTES=7168
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_FREE_HEAP_FLOOR_BYTES=12288
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_INTERNAL_8BIT_FREE_FLOOR_BYTES=12288
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_DMA_FREE_FLOOR_BYTES=12288
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_LARGEST_8BIT_BLOCK_FLOOR_BYTES=8192
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_INTERNAL_8BIT_LARGEST_BLOCK_FLOOR_BYTES=8192
-MEASURED_PRE_NETWORK_COMMIT_CLIENT_DMA_LARGEST_BLOCK_FLOOR_BYTES=8192
+LOWEST_SAMPLED_QUALIFICATION_POINT_FREE_HEAP_BYTES=12288
+LOWEST_SAMPLED_QUALIFICATION_POINT_INTERNAL_8BIT_FREE_BYTES=12288
+LOWEST_SAMPLED_QUALIFICATION_POINT_DMA_FREE_BYTES=12288
+LOWEST_SAMPLED_QUALIFICATION_POINT_LARGEST_8BIT_BLOCK_BYTES=7168
+LOWEST_SAMPLED_QUALIFICATION_POINT_INTERNAL_8BIT_LARGEST_BLOCK_BYTES=7168
+LOWEST_SAMPLED_QUALIFICATION_POINT_DMA_LARGEST_BLOCK_BYTES=7168
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_FREE_HEAP_BYTES=12288
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_INTERNAL_8BIT_FREE_BYTES=12288
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_DMA_FREE_BYTES=12288
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_LARGEST_8BIT_BLOCK_BYTES=8192
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_INTERNAL_8BIT_LARGEST_BLOCK_BYTES=8192
+PRE_NETWORK_SWITCH_CLIENT_QUALIFICATION_DMA_LARGEST_BLOCK_BYTES=8192
+QUALIFICATION_POINTS_ARE_DISCRETE_SAMPLES_NOT_A_CONTINUOUS_RUNTIME_FLOOR=YES
 
 IDLE_1696B_FAILURE=OPEN
 IDLE_1696B_CLASSIFICATION=FOLLOW_UP_NON_BLOCKING_FOR_PR174
@@ -82,8 +83,8 @@ Extremwerte der Serie:
 
 | Größe | Wert | Ort |
 |---|---:|---|
-| niedrigster **aktueller freier Heap** | 12288 B | `network_page_press_before`, Fall E (Client) |
-| niedrigster **aktueller größter Block** | 7168 B | `network_page_press_after`, Fall E (`HOME_WIFI`) |
+| niedrigster **gesampelter aktueller freier Heap** (an den Qualifikationspunkten) | 12288 B | `network_page_press_before`, Fall E (Client) |
+| niedrigster **gesampelter aktueller größter Block** (an den Qualifikationspunkten) | 7168 B | `network_page_press_after`, Fall E (`HOME_WIFI`) |
 | **Low-Water-Mark** (`minimum_free_heap`) | 4124 B | während des synchronen Netzwerkmoduswechsel-Fensters von Fall C (Client), danach nicht mehr unterschritten; die Teilphase (Configuration-Commit oder Transport-/Lifecycle-Aktivierung) ist nicht instrumentiert |
 | niedrigster Main-Task-Stack-HWM | **5936 B** über alle Läufe S2–S6 (Pre-S6, Clean-Lauf); in der S6-Serie 6256 B (von 24576 B) | S6-Serie ab erstem `AP_ONLY` |
 | LVGL-Pool maximal belegt | 15856 B (24 %, Pool 63384 B) | unverändert gegenüber S2–S4 |
@@ -91,22 +92,27 @@ Extremwerte der Serie:
 Der Heap-Gewinn durch S6 beträgt gemessen +4,8…5,0 kB beim freien Heap
 (Details in der S6-Evidenz).
 
-### Gemessene Böden getrennt nach Capability-Sicht
+### Niedrigste gesampelte Qualifikationspunkt-Werte, getrennt nach Capability-Sicht
 
-Aus der S6-Punkte-CSV (alle 40 Punkte bzw. die drei Client-Pre-Commit-Punkte
-C, D, E). INTERNAL|8BIT und DMA sind überlappende Sichten desselben internen
-DRAM (kein PSRAM) und werden nicht addiert; sie stimmen in dieser Serie in
-jedem Punkt überein.
+Aus der S6-Punkte-CSV (alle 40 Ressourcenpunkte bzw. die drei Client-Punkte
+unmittelbar vor dem Moduswechsel C, D, E). INTERNAL|8BIT und DMA sind
+überlappende Sichten desselben internen DRAM (kein PSRAM) und werden nicht
+addiert; sie stimmen in dieser Serie in jedem Punkt überein.
 
-| Boden | allgemein (8BIT) | INTERNAL\|8BIT | DMA | Ort |
+| niedrigster gesampelter Wert | allgemein (8BIT) | INTERNAL\|8BIT | DMA | Ort |
 |---|---:|---:|---:|---|
-| aktueller freier Heap, alle Punkte | 12288 B | 12288 B | 12288 B | `network_page_press_before`, Fall E |
-| aktueller größter Block, alle Punkte | 7168 B | 7168 B | 7168 B | `network_page_press_after`, Fall E |
-| freier Heap unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 12288 B | 12288 B | 12288 B | Fall E |
-| größter Block unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 8192 B | 8192 B | 8192 B | Fälle C, D, E |
+| aktueller freier Heap, alle Qualifikationspunkte | 12288 B | 12288 B | 12288 B | `network_page_press_before`, Fall E |
+| aktueller größter Block, alle Qualifikationspunkte | 7168 B | 7168 B | 7168 B | `network_page_press_after`, Fall E |
+| freier Heap am Punkt unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 12288 B | 12288 B | 12288 B | Fall E |
+| größter Block am Punkt unmittelbar vor dem Moduswechsel mit Client (C, D, E) | 8192 B | 8192 B | 8192 B | Fälle C, D, E |
 
-Das sind gemessene Böden des Scopes dieser Serie und keine zusätzlichen
-Sicherheitsabstände.
+**Semantik (wichtig):** Das sind Werte **diskreter Messpunkte**, keine
+kontinuierlich gültige Laufzeit-Untergrenze. Der freie Heap lag zwischen zwei
+Messpunkten während eines bestandenen Moduswechsels nachweislich transient
+unter 12288 B (die Low-Water-Mark von 4124 B belegt das); für den größten
+freien Block existiert zwischen den Punkten gar kein historischer
+Low-Water-Mark. Daraus folgt keine Aussage „freier Heap ≥ 12288 B zu jedem
+Zeitpunkt“.
 
 ## B. Configuration-Commit
 
@@ -232,14 +238,14 @@ entscheidet der Owner.
 ## O4 – Empfehlung Mindestabstand / RAM-Budget (Ownerentscheidung erforderlich)
 
 Abgeleitet ausschließlich aus den Messdaten, mit getrennter Zuordnung von
-**gemessenem Boden**, **Qualifikationsgrenze** und **Warnschwelle**:
+**niedrigstem gesampeltem Qualifikationspunkt-Wert**, **Qualifikationsgrenze** und **Warnschwelle**:
 
-| Größe | Fehler beobachtet bei | gemessener Boden (S6-Scope) | Pre-S6-PASS-Vergleichswert (ohne Client) |
+| Größe (an Messpunkten) | Fehler beobachtet bei | niedrigster gesampelter Qualifikationspunkt-Wert (S6-Scope) | Pre-S6-PASS-Vergleichswert (ohne Client) |
 |---|---|---|---|
 | aktueller freier Heap unmittelbar vor dem Moduswechsel mit Client | ≤ 7756 B | 12288 B | 10752 B |
 | aktueller größter Block unmittelbar vor dem Moduswechsel mit Client | ≤ 6400 B | 8192 B | 7936 B |
-| aktueller freier Heap, systemweit | – | 12288 B | – |
-| aktueller größter Block, systemweit | – | 7168 B | – |
+| aktueller freier Heap, alle Qualifikationspunkte | – | 12288 B | – |
+| aktueller größter Block, alle Qualifikationspunkte | – | 7168 B | – |
 | Low-Water-Mark im Moduswechsel-Fenster | 2192–2956 B vor dem Abort | 4124 B | 2872 B |
 | Main-Task-Stack-HWM | kein Stack-Fehler beobachtet | 5936 B (alle Läufe), 6256 B (S6) | – |
 
@@ -248,23 +254,31 @@ ohne Client und **keine Warnschwellen**.
 
 **Empfohlene Ownerentscheidung für R1:**
 
-- **Systemweite gemessene Qualifikationsuntergrenze** (Regression gegen den
-  nachgewiesenen Scope): aktueller freier Heap **≥ 12288 B**, aktueller größter
-  zusammenhängender Block **≥ 7168 B**.
-- **Zusätzliche Qualifikationsbedingung unmittelbar vor dem kritischen
-  Netzwerkmoduswechsel mit einem Client:** freier Heap **≥ 12288 B**, größter
-  Block **≥ 8192 B**.
-- Diese Werte sind Regression-/Qualifikationsgrenzen des nachgewiesenen
-  R1-Scopes. Sie sind **kein statistisch nachgewiesener zusätzlicher
-  Safety-Abstand**: Der niedrigste bestandene Wert ist nur der niedrigste
-  nachgewiesene Wert, nicht mehr.
-- Die Low-Water-Mark (4124 B im Moduswechsel-Fenster) trennt bestandene und
-  fehlgeschlagene Fälle nicht und bleibt Beobachtungsgröße; der Stack-HWM
-  liefert keine Stop-Schwelle (kein Stack-Fehler, 5936 B niedrigster Wert).
-- **Keine separate numerische Warnschwelle** wird aus den vorhandenen Daten
-  abgeleitet. Falls der Owner später eine Frühwarnschwelle möchte, muss sie
-  logisch **oberhalb** der kritischen Grenze liegen und als zusätzliche Policy
-  begründet werden.
+- `12288 B` (freier Heap) und `7168 B` (größter zusammenhängender Block) als
+  **Regression-/Qualifikationsgrenzen an den definierten Ressourcen-
+  Messpunkten** (`after_ui_init`, `stable_*`, `network_page_press_*`,
+  `periodic_30s`, `idle_120s`) des nachgewiesenen R1-Scopes.
+- `12288 B` / `8192 B` zusätzlich am **definierten Messpunkt unmittelbar vor
+  dem kritischen `AP_ONLY` → `HOME_WIFI`-Moduswechsel mit einem Client**
+  (`network_page_press_before`).
+- `4124 B` als **beobachteter historischer Free-Heap-Low-Water-Mark während
+  eines bestandenen Moduswechsels, kein Gate** (die Teilphase ist nicht
+  instrumentiert).
+- Das sind Qualifikationsgrenzen des nachgewiesenen Scopes, **kein
+  statistisch nachgewiesener zusätzlicher Safety-Abstand** (der niedrigste
+  bestandene gesampelte Wert ist nur der niedrigste nachgewiesene Wert) und
+  **keine kontinuierlich gültige systemweite Mindestreserve zwischen den
+  Messpunkten**.
+- Der Stack-HWM liefert keine Stop-Schwelle (kein Stack-Fehler, 5936 B
+  niedrigster Wert); es wird keine numerische Warnschwelle abgeleitet. Eine
+  spätere Frühwarnschwelle müsste logisch **oberhalb** der kritischen Grenze
+  liegen und als zusätzliche Policy begründet werden.
+
+**Vertragsform:** Erhält `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` durch O4 eine
+Zahl, muss sie den **Prüfzeitpunkt bzw. Gate-Kontext** mitnennen (z. B. „am
+Ressourcen-Messpunkt X des Qualifikationslaufs …“); nicht einfach „freier Heap
+muss jederzeit ≥ 12288 B sein“. Es wird keine zusätzliche Hardwaremessung
+verlangt.
 
 Die Zahl ersetzt, falls der Owner sie beschließt, den Begriff
 „nachgewiesene Mindestreserve“ in `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`;
