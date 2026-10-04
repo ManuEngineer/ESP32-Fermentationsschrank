@@ -1,0 +1,70 @@
+# Filtered UART excerpts (probe run 2: pair readings; probe run 3: growth windows)
+
+## Run 2
+I (1454) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=77376 minimum_free_heap_bytes=73380 largest_free_block_8bit_bytes=69632 stack_hwm_bytes=12800 internal_8bit_free_bytes=77376 internal_8bit_minimum_free_bytes=73380 internal_8bit_largest_free_block_bytes=69632 dma_free_bytes=77376 dma_minimum_free_bytes=73380 dma_largest_free_block_bytes=69632
+I (1774) app_main: application: ready
+I (2264) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=34012 minimum_free_heap_bytes=28972 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=12800 internal_8bit_free_bytes=34012 internal_8bit_minimum_free_bytes=28972 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=34012 dma_minimum_free_bytes=28972 dma_largest_free_block_bytes=28672
+I (2334) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=46724 pool_free_bytes=33596 pool_largest_free_bytes=33228 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+I (32354) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=32324 minimum_free_heap_bytes=24840 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=12800 internal_8bit_free_bytes=32324 internal_8bit_minimum_free_bytes=24840 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=32324 dma_minimum_free_bytes=24840 dma_largest_free_block_bytes=28672
+I (32374) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=46724 pool_free_bytes=33632 pool_largest_free_bytes=33264 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+I (32394) app_main: gate_probe sizeof(AuthOperationGate)=16
+I (32404) app_main: resources: point=gate_probe_start network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=32220 minimum_free_heap_bytes=24840 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=12800 internal_8bit_free_bytes=32220 internal_8bit_minimum_free_bytes=24840 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=32220 dma_minimum_free_bytes=24840 dma_largest_free_block_bytes=28672
+I (32434) app_main: gate_probe_pair variant=single_thread rep=0 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32444) app_main: gate_probe_pair variant=single_thread rep=1 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32464) app_main: gate_probe_pair variant=single_thread rep=2 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32474) app_main: gate_probe_pair variant=single_thread rep=3 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32484) app_main: gate_probe_pair variant=single_thread rep=4 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32504) app_main: gate_probe_pair variant=single_thread rep=5 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32514) app_main: gate_probe_pair variant=single_thread rep=6 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32524) app_main: gate_probe_pair variant=single_thread rep=7 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32534) app_main: gate_probe_pair variant=single_thread rep=8 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32554) app_main: gate_probe_pair variant=single_thread rep=9 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32584) app_main: gate_probe_pair variant=with_threaded_wait rep=0 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32604) app_main: gate_probe_pair variant=with_threaded_wait rep=1 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32624) app_main: gate_probe_pair variant=with_threaded_wait rep=2 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32644) app_main: gate_probe_pair variant=with_threaded_wait rep=3 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32664) app_main: gate_probe_pair variant=with_threaded_wait rep=4 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32684) app_main: gate_probe_pair variant=with_threaded_wait rep=5 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32704) app_main: gate_probe_pair variant=with_threaded_wait rep=6 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32724) app_main: gate_probe_pair variant=with_threaded_wait rep=7 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32744) app_main: gate_probe_pair variant=with_threaded_wait rep=8 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (32764) app_main: gate_probe_pair variant=with_threaded_wait rep=9 free0=32220 free1_alive=32008 free2_destroyed=32220 alive_delta=212 freed_delta=212
+I (33024) app_main: gate_probe_growth cycles=5000 free_before=32008 free_after=31604 delta=404
+I (33024) app_main: resources: point=gate_probe_end network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=31604 minimum_free_heap_bytes=24840 largest_free_block_8bit_bytes=28672 stack_hwm_bytes=12800 internal_8bit_free_bytes=31604 internal_8bit_minimum_free_bytes=24840 internal_8bit_largest_free_block_bytes=28672 dma_free_bytes=31604 dma_minimum_free_bytes=24840 dma_largest_free_block_bytes=28672
+
+## Run 3
+I (1734) app_main: resources: point=after_application_begin network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=77376 minimum_free_heap_bytes=73200 largest_free_block_8bit_bytes=69632 stack_hwm_bytes=12800 internal_8bit_free_bytes=77292 internal_8bit_minimum_free_bytes=73200 internal_8bit_largest_free_block_bytes=69632 dma_free_bytes=77292 dma_minimum_free_bytes=73200 dma_largest_free_block_bytes=69632
+I (1794) app_main: application: ready
+I (2264) app_main: resources: point=after_ui_init network_mode=HOME_WIFI network_state=ConnectingHome free_heap_bytes=33984 minimum_free_heap_bytes=28964 largest_free_block_8bit_bytes=27648 stack_hwm_bytes=12800 internal_8bit_free_bytes=33984 internal_8bit_minimum_free_bytes=28964 internal_8bit_largest_free_block_bytes=27648 dma_free_bytes=33984 dma_minimum_free_bytes=28964 dma_largest_free_block_bytes=27648
+I (2364) app_main: resources_lvgl: point=after_ui_init pool_total_bytes=46724 pool_free_bytes=33596 pool_largest_free_bytes=33228 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+I (32374) app_main: resources: point=periodic_30s network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=32100 minimum_free_heap_bytes=25964 largest_free_block_8bit_bytes=27648 stack_hwm_bytes=12800 internal_8bit_free_bytes=32100 internal_8bit_minimum_free_bytes=25964 internal_8bit_largest_free_block_bytes=27648 dma_free_bytes=32100 dma_minimum_free_bytes=25964 dma_largest_free_block_bytes=27648
+I (32394) app_main: resources_lvgl: point=periodic_30s pool_total_bytes=46724 pool_free_bytes=33632 pool_largest_free_bytes=33264 pool_max_used_bytes=13940 pool_used_pct=29 pool_frag_pct=2
+I (32414) app_main: gate_probe sizeof(AuthOperationGate)=16
+I (32424) app_main: resources: point=gate_probe_start network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=31992 minimum_free_heap_bytes=25964 largest_free_block_8bit_bytes=27648 stack_hwm_bytes=12800 internal_8bit_free_bytes=31992 internal_8bit_minimum_free_bytes=25964 internal_8bit_largest_free_block_bytes=27648 dma_free_bytes=31992 dma_minimum_free_bytes=25964 dma_largest_free_block_bytes=27648
+I (32454) app_main: gate_probe_pair variant=single_thread rep=0 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32464) app_main: gate_probe_pair variant=single_thread rep=1 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32484) app_main: gate_probe_pair variant=single_thread rep=2 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32494) app_main: gate_probe_pair variant=single_thread rep=3 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32504) app_main: gate_probe_pair variant=single_thread rep=4 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32524) app_main: gate_probe_pair variant=single_thread rep=5 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32534) app_main: gate_probe_pair variant=single_thread rep=6 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32544) app_main: gate_probe_pair variant=single_thread rep=7 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32564) app_main: gate_probe_pair variant=single_thread rep=8 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32574) app_main: gate_probe_pair variant=single_thread rep=9 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32604) app_main: gate_probe_pair variant=with_threaded_wait rep=0 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32624) app_main: gate_probe_pair variant=with_threaded_wait rep=1 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32644) app_main: gate_probe_pair variant=with_threaded_wait rep=2 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32664) app_main: gate_probe_pair variant=with_threaded_wait rep=3 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32684) app_main: gate_probe_pair variant=with_threaded_wait rep=4 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32704) app_main: gate_probe_pair variant=with_threaded_wait rep=5 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32724) app_main: gate_probe_pair variant=with_threaded_wait rep=6 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32744) app_main: gate_probe_pair variant=with_threaded_wait rep=7 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32764) app_main: gate_probe_pair variant=with_threaded_wait rep=8 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (32784) app_main: gate_probe_pair variant=with_threaded_wait rep=9 free0=31992 free1_alive=31780 free2_destroyed=31992 alive_delta=212 freed_delta=212
+I (33274) app_main: gate_probe_growth window=0 cycles=5000 duration_us=243510 gate_delta=0 control_delta=0
+I (33754) app_main: gate_probe_growth window=1 cycles=5000 duration_us=243318 gate_delta=0 control_delta=0
+I (34234) app_main: gate_probe_growth window=2 cycles=5000 duration_us=240110 gate_delta=0 control_delta=0
+I (34724) app_main: gate_probe_growth window=3 cycles=5000 duration_us=241649 gate_delta=0 control_delta=0
+I (35214) app_main: gate_probe_growth window=4 cycles=5000 duration_us=244279 gate_delta=0 control_delta=0
+I (35694) app_main: gate_probe_growth window=5 cycles=5000 duration_us=242487 gate_delta=0 control_delta=0
+I (35694) app_main: resources: point=gate_probe_end network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=31780 minimum_free_heap_bytes=25964 largest_free_block_8bit_bytes=27648 stack_hwm_bytes=12800 internal_8bit_free_bytes=31780 internal_8bit_minimum_free_bytes=25964 internal_8bit_largest_free_block_bytes=27648 dma_free_bytes=31780 dma_minimum_free_bytes=25964 dma_largest_free_block_bytes=27648

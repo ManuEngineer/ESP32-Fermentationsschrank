@@ -1,0 +1,119 @@
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 3b6da7c..61347a1 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -42,7 +42,10 @@
+ #include "issue_29_bringup_probe.hpp"
+ #endif
+ 
++#include <atomic>
++#include <thread>
+ #include "esp_log.h"
++#include "esp_timer.h"
+ #include "esp_attr.h"
+ #include "esp_heap_caps.h"
+ #include "esp_system.h"
+@@ -541,6 +544,95 @@ bool updateProductUi(
+ 
+ }  // namespace
+ 
++
++// TEMPORARY S2 RAM-EVIDENCE PROBE (not committed): isolates the heap taken by
++// the std::mutex / std::condition_variable inside a fresh AuthOperationGate
++// with back-to-back readings (free0 before construction, free1 while the
++// exercised gate is alive, free2 after destruction).
++void runAuthGateHeapProbe(fermentation::FermentationApplication& application,
++                          device_platform::NetworkLifecycleState state) {
++    const auto mode = application.networkMode();
++    ESP_LOGI(kTag, "gate_probe sizeof(AuthOperationGate)=%u",
++             static_cast<unsigned>(sizeof(fermentation::AuthOperationGate)));
++    {
++        std::thread warmup([] {});
++        warmup.join();
++    }
++    logResources("gate_probe_start", mode, state);
++    for (int variant = 0; variant < 2; ++variant) {
++        for (int repetition = 0; repetition < 10; ++repetition) {
++            const uint32_t free0 = esp_get_free_heap_size();
++            uint32_t free1 = 0U;
++            {
++                fermentation::AuthOperationGate gate;
++                {
++                    auto token = gate.tryBegin();
++                }
++                gate.closeAndDrain();
++                gate.reopen();
++                if (variant == 1) {
++                    std::atomic<bool> started{false};
++                    std::thread holder([&gate, &started] {
++                        auto token = gate.tryBegin();
++                        started = true;
++                        vTaskDelay(pdMS_TO_TICKS(20));
++                    });
++                    while (!started.load()) {
++                        vTaskDelay(1);
++                    }
++                    gate.closeAndDrain();
++                    gate.reopen();
++                    holder.join();
++                }
++                free1 = esp_get_free_heap_size();
++            }
++            const uint32_t free2 = esp_get_free_heap_size();
++            ESP_LOGI(kTag,
++                     "gate_probe_pair variant=%s rep=%d free0=%" PRIu32
++                     " free1_alive=%" PRIu32 " free2_destroyed=%" PRIu32
++                     " alive_delta=%d freed_delta=%d",
++                     variant == 0 ? "single_thread" : "with_threaded_wait",
++                     repetition, free0, free1, free2,
++                     static_cast<int>(free0) - static_cast<int>(free1),
++                     static_cast<int>(free2) - static_cast<int>(free1));
++        }
++    }
++    // Growth check: windows with 5000 gate cycles on one long-lived gate,
++    // each paired with a control window of equal duration without any gate
++    // operation, to separate gate growth from unrelated background activity.
++    fermentation::AuthOperationGate longLived;
++    {
++        auto token = longLived.tryBegin();
++    }
++    longLived.closeAndDrain();
++    longLived.reopen();
++    for (int window = 0; window < 6; ++window) {
++        const int64_t gateStartUs = esp_timer_get_time();
++        const uint32_t gateBefore = esp_get_free_heap_size();
++        for (int cycle = 0; cycle < 5000; ++cycle) {
++            auto token = longLived.tryBegin();
++            token.reset();
++            longLived.closeAndDrain();
++            longLived.reopen();
++        }
++        const uint32_t gateAfter = esp_get_free_heap_size();
++        const int64_t gateUs = esp_timer_get_time() - gateStartUs;
++        const int64_t controlStartUs = esp_timer_get_time();
++        const uint32_t controlBefore = esp_get_free_heap_size();
++        while (esp_timer_get_time() - controlStartUs < gateUs) {
++        }
++        const uint32_t controlAfter = esp_get_free_heap_size();
++        ESP_LOGI(kTag,
++                 "gate_probe_growth window=%d cycles=5000 duration_us=%lld"
++                 " gate_delta=%d control_delta=%d",
++                 window, static_cast<long long>(gateUs),
++                 static_cast<int>(gateBefore) - static_cast<int>(gateAfter),
++                 static_cast<int>(controlBefore) -
++                     static_cast<int>(controlAfter));
++    }
++    logResources("gate_probe_end", mode, state);
++}
++
+ extern "C" void app_main(void) {
+ #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+     fermentation::issue_31_touch_calibration_provision::run();
+@@ -747,6 +839,7 @@ extern "C" void app_main(void) {
+             const auto currentNetworkStatus = networkLifecycle.status();
+             logResources("periodic_30s", application.networkMode(),
+                          currentNetworkStatus.state, displayRenderer.get());
++            runAuthGateHeapProbe(application, currentNetworkStatus.state);
+         }
+ 
+         if (!idleResourceLogDone &&
