@@ -271,6 +271,13 @@ enum class AuthBootstrapStatus : std::uint8_t {
     CommitOutcomeUnknown,
 };
 
+// Selected at first provisioning. Disabled keeps the Service-PIN protection:
+// only the normal web password check is switched off.
+enum class WebPasswordMode : std::uint8_t {
+    Protected,
+    Disabled,
+};
+
 enum class AuthCheckStatus : std::uint8_t {
     Authenticated,
     Disabled,
@@ -291,10 +298,16 @@ class AuthenticationDomain final {
         const AuthenticationBootstrapContext& context) const;
     // Recovery creates the unprovisioned root only after validating the
     // current ConfigurationBootstrap schema-3 marker and epoch.
+    // Either surface is accepted when `confirmed`; authorizing physical
+    // presence for the web surface is the application's responsibility.
+    // `Disabled` requires an empty `password`; the credential record then
+    // carries random schema-conforming web password fields that are never
+    // compared, because `webPasswordEnabled` is false.
     [[nodiscard]] AuthBootstrapStatus bootstrap(
         const AuthenticationBootstrapContext& context,
         device_platform::UiSurface surface, bool confirmed,
-        const std::string& password, const std::string& servicePin);
+        const std::string& password, const std::string& servicePin,
+        WebPasswordMode mode = WebPasswordMode::Protected);
     [[nodiscard]] AuthCheckStatus verifyWebPassword(
         const AuthenticationBootstrapContext& context,
         const std::string& password, std::uint64_t nowMs,
@@ -331,6 +344,9 @@ class AuthenticationDomain final {
         LockoutClock& clock) const noexcept;
     [[nodiscard]] bool makeVerifier(const std::string& secret,
                                     AuthVerifier& out);
+    // Schema-conforming random salt and verifier for a disabled web password;
+    // no KDF run, never treated as a known password.
+    [[nodiscard]] bool makeUnusedVerifier(AuthVerifier& out);
     [[nodiscard]] AuthenticationCredentialReadResult readActiveCredentials(
         const AuthenticationBootstrapContext& context) const;
     [[nodiscard]] AuthProvisioningRootReadResult readActiveRoot(

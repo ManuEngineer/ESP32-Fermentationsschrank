@@ -72,6 +72,7 @@ class DeterministicTestKdf final : public fermentation::IAuthenticationKdf {
         std::array<std::uint8_t, fermentation::kAuthenticationVerifierBytes>&
             out) override {
         ++calls;
+        if (fail) return false;
         if (params.algorithmId !=
                 fermentation::kAuthenticationPbkdf2Sha256Algorithm ||
             params.workFactor !=
@@ -90,6 +91,7 @@ class DeterministicTestKdf final : public fermentation::IAuthenticationKdf {
     }
 
     std::size_t calls{0U};
+    bool fail{false};
 };
 
 class TestRandom final : public device_platform::ISecureRandomSource {
@@ -175,7 +177,7 @@ void test_auth_records_round_trip_and_fixed_kdf_policy() {
             credentials, encodedCredentials)));
 }
 
-void test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets() {
+void test_bootstrap_requires_confirmed_input_and_provisions_both_secrets() {
     LocalStore store;
     seedRoot(store);
     fermentation::AuthenticationRecordStore records(store);
@@ -193,12 +195,13 @@ void test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets()
         static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
         static_cast<int>(
             auth.bootstrap(context, device_platform::UiSurface::WebInterface,
-                           true, longPassword(), "1234")));
+                           false, longPassword(), "1234")));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
         static_cast<int>(
             auth.bootstrap(context, device_platform::UiSurface::LocalDisplay,
                            false, longPassword(), "1234")));
+    TEST_ASSERT_EQUAL_INT(0, static_cast<int>(kdf.calls));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
         static_cast<int>(
@@ -218,6 +221,212 @@ void test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets()
         static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
         static_cast<int>(
             auth.verifyServicePin(context, "1234", 11U, retryAfterMs)));
+}
+
+void test_web_interface_surface_bootstraps_when_confirmed() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto epoch = device_platform::StorageEpoch{4U};
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, epoch, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(
+            auth.bootstrap(context, device_platform::UiSurface::WebInterface,
+                           true, longPassword(), "1234")));
+    TEST_ASSERT_EQUAL_INT(2, static_cast<int>(kdf.calls));
+    const auto loaded = records.readCredentials(epoch);
+    TEST_ASSERT_TRUE(loaded.value.has_value());
+    TEST_ASSERT_TRUE(loaded.value->webPasswordEnabled);
+    std::uint64_t retryAfterMs = 0U;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
+        static_cast<int>(auth.verifyWebPassword(context, longPassword(), 10U,
+                                                retryAfterMs)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
+        static_cast<int>(
+            auth.verifyServicePin(context, "1234", 11U, retryAfterMs)));
+}
+
+void test_disabled_mode_provisions_only_service_pin_with_random_web_fields() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto epoch = device_platform::StorageEpoch{4U};
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, epoch, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true, "", "1234",
+            fermentation::WebPasswordMode::Disabled)));
+    // Exactly one KDF run: the Service-PIN. No web password derivation.
+    TEST_ASSERT_EQUAL_INT(1, static_cast<int>(kdf.calls));
+    // Random source: web salt (16) + web verifier (32) + service-PIN salt (16).
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(1U +
+                                  fermentation::kAuthenticationSaltBytes * 2U +
+                                  fermentation::kAuthenticationVerifierBytes),
+        random.next);
+    const auto loaded = records.readCredentials(epoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::Success),
+        static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(loaded.value.has_value());
+    TEST_ASSERT_FALSE(loaded.value->webPasswordEnabled);
+    TEST_ASSERT_EQUAL_UINT8(1U, loaded.value->webPassword.salt[0]);
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(1U + fermentation::kAuthenticationSaltBytes),
+        loaded.value->webPassword.verifier[0]);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::AlreadyProvisioned),
+        static_cast<int>(auth.inspect(context)));
+    const auto enabled = auth.webPasswordEnabled(context);
+    TEST_ASSERT_TRUE(enabled.has_value());
+    TEST_ASSERT_FALSE(*enabled);
+
+    std::uint64_t retryAfterMs = 0U;
+    const auto kdfCallsBefore = kdf.calls;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Disabled),
+        static_cast<int>(auth.verifyWebPassword(context, longPassword(), 10U,
+                                                retryAfterMs)));
+    TEST_ASSERT_EQUAL_UINT64(kdfCallsBefore, kdf.calls);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Authenticated),
+        static_cast<int>(
+            auth.verifyServicePin(context, "1234", 11U, retryAfterMs)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthCheckStatus::Invalid),
+        static_cast<int>(
+            auth.verifyServicePin(context, "4321", 12U, retryAfterMs)));
+}
+
+void test_disabled_mode_rejects_input_before_any_write() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, device_platform::StorageEpoch{4U}, 12U);
+    const auto writesBefore = store.writes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true,
+            longPassword(), "1234", fermentation::WebPasswordMode::Disabled)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true, "", "12",
+            fermentation::WebPasswordMode::Disabled)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, false, "",
+            "1234", fermentation::WebPasswordMode::Disabled)));
+    // Protected mode still requires a valid password.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::InvalidInput),
+        static_cast<int>(
+            auth.bootstrap(context, device_platform::UiSurface::WebInterface,
+                           true, "", "1234")));
+    TEST_ASSERT_EQUAL_UINT64(writesBefore, store.writes);
+    TEST_ASSERT_EQUAL_UINT64(0U, kdf.calls);
+    TEST_ASSERT_EQUAL_UINT8(1U, random.next);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(auth.inspect(context)));
+}
+
+void test_disabled_mode_random_failure_is_fail_closed() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    random.fail = true;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto epoch = device_platform::StorageEpoch{4U};
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, epoch, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::KdfUnavailable),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true, "", "1234",
+            fermentation::WebPasswordMode::Disabled)));
+    TEST_ASSERT_EQUAL_UINT64(0U, kdf.calls);
+    // Existing contract: a failure after the first root write leaves the
+    // root in RecoveryRequired and no credentials are committed.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::RecoveryRequired),
+        static_cast<int>(auth.inspect(context)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::NotFound),
+        static_cast<int>(records.readCredentials(epoch).status));
+}
+
+void test_disabled_mode_service_pin_kdf_failure_is_fail_closed() {
+    LocalStore store;
+    seedRoot(store);
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    kdf.fail = true;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto epoch = device_platform::StorageEpoch{4U};
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, epoch, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::KdfUnavailable),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true, "", "1234",
+            fermentation::WebPasswordMode::Disabled)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::RecoveryRequired),
+        static_cast<int>(auth.inspect(context)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthenticationReadStatus::NotFound),
+        static_cast<int>(records.readCredentials(epoch).status));
+}
+
+void test_disabled_mode_unknown_credential_commit_stays_fail_closed() {
+    LocalStore store;
+    seedRoot(store);
+    // Write 1: root -> Provisioning; write 2: credentials.
+    store.unknownWriteAt = 2U;
+    store.unknownCommitAt = false;
+    fermentation::AuthenticationRecordStore records(store);
+    DeterministicTestKdf kdf;
+    TestRandom random;
+    fermentation::AuthenticationDomain auth(records, kdf, random);
+    const auto context =
+        fermentation::AuthenticationBootstrapContextTestAccess::create(
+            store, device_platform::StorageEpoch{4U}, 12U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::AuthBootstrapStatus::CommitOutcomeUnknown),
+        static_cast<int>(auth.bootstrap(
+            context, device_platform::UiSurface::WebInterface, true, "", "1234",
+            fermentation::WebPasswordMode::Disabled)));
+    TEST_ASSERT_NOT_EQUAL_INT(
+        static_cast<int>(fermentation::AuthBootstrapStatus::BootstrapAllowed),
+        static_cast<int>(auth.inspect(context)));
 }
 
 void test_authorized_new_epoch_bootstrap_replaces_corrupt_prior_credentials() {
@@ -498,7 +707,14 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_auth_records_round_trip_and_fixed_kdf_policy);
     RUN_TEST(
-        test_bootstrap_requires_local_confirmed_input_and_provisions_both_secrets);
+        test_bootstrap_requires_confirmed_input_and_provisions_both_secrets);
+    RUN_TEST(test_web_interface_surface_bootstraps_when_confirmed);
+    RUN_TEST(
+        test_disabled_mode_provisions_only_service_pin_with_random_web_fields);
+    RUN_TEST(test_disabled_mode_rejects_input_before_any_write);
+    RUN_TEST(test_disabled_mode_random_failure_is_fail_closed);
+    RUN_TEST(test_disabled_mode_service_pin_kdf_failure_is_fail_closed);
+    RUN_TEST(test_disabled_mode_unknown_credential_commit_stays_fail_closed);
     RUN_TEST(
         test_authorized_new_epoch_bootstrap_replaces_corrupt_prior_credentials);
     RUN_TEST(

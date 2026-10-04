@@ -731,18 +731,34 @@ bool AuthenticationDomain::makeVerifier(const std::string& secret,
     return kdf_.derive(secret, out, out.verifier);
 }
 
+bool AuthenticationDomain::makeUnusedVerifier(AuthVerifier& out) {
+    out.algorithmId = kAuthenticationPbkdf2Sha256Algorithm;
+    out.workFactor = kAuthenticationPbkdf2Sha256WorkFactor;
+    return random_.fill(out.salt.data(), out.salt.size()) &&
+           random_.fill(out.verifier.data(), out.verifier.size());
+}
+
 AuthBootstrapStatus AuthenticationDomain::bootstrap(
     const AuthenticationBootstrapContext& context,
     device_platform::UiSurface surface, bool confirmed,
-    const std::string& password, const std::string& servicePin) {
+    const std::string& password, const std::string& servicePin,
+    WebPasswordMode mode) {
     const std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto epoch = context.storageEpoch();
     if (!context.validFor(*store_.storeIdentity()))
         return AuthBootstrapStatus::RecoveryRequired;
-    if (surface != device_platform::UiSurface::LocalDisplay || !confirmed)
+    if ((surface != device_platform::UiSurface::LocalDisplay &&
+         surface != device_platform::UiSurface::WebInterface) ||
+        !confirmed)
         return AuthBootstrapStatus::InvalidInput;
-    if (validateWebPassword(password) != AuthInputStatus::Valid ||
-        validateServicePin(servicePin) != AuthInputStatus::Valid)
+    const bool webPasswordEnabled = mode == WebPasswordMode::Protected;
+    if (mode != WebPasswordMode::Protected && mode != WebPasswordMode::Disabled)
+        return AuthBootstrapStatus::InvalidInput;
+    if (webPasswordEnabled
+            ? validateWebPassword(password) != AuthInputStatus::Valid
+            : !password.empty())
+        return AuthBootstrapStatus::InvalidInput;
+    if (validateServicePin(servicePin) != AuthInputStatus::Valid)
         return AuthBootstrapStatus::InvalidInput;
     auto rootResult = readActiveRoot(context);
     if (rootResult.status != AuthenticationReadStatus::Success ||
@@ -772,8 +788,11 @@ AuthBootstrapStatus AuthenticationDomain::bootstrap(
 
     AuthenticationCredentialRecord record;
     record.storageEpoch = epoch;
-    if (!makeVerifier(password, record.webPassword) ||
-        !makeVerifier(servicePin, record.servicePin)) {
+    record.webPasswordEnabled = webPasswordEnabled;
+    const bool webFieldsReady = webPasswordEnabled
+                                    ? makeVerifier(password, record.webPassword)
+                                    : makeUnusedVerifier(record.webPassword);
+    if (!webFieldsReady || !makeVerifier(servicePin, record.servicePin)) {
         const auto recovery = provisioning;
         if (provisioning.recordSequence !=
             std::numeric_limits<std::uint64_t>::max()) {
