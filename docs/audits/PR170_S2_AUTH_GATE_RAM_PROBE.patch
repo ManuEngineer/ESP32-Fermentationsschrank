@@ -5,7 +5,7 @@ index 3b6da7c..61347a1 100644
 @@ -42,7 +42,10 @@
  #include "issue_29_bringup_probe.hpp"
  #endif
- 
+
 +#include <atomic>
 +#include <thread>
  #include "esp_log.h"
@@ -14,9 +14,9 @@ index 3b6da7c..61347a1 100644
  #include "esp_heap_caps.h"
  #include "esp_system.h"
 @@ -541,6 +544,95 @@ bool updateProductUi(
- 
+
  }  // namespace
- 
+
 +
 +// TEMPORARY S2 RAM-EVIDENCE PROBE (not committed): isolates the heap taken by
 +// the std::mutex / std::condition_variable inside a fresh AuthOperationGate
@@ -115,5 +115,5 @@ index 3b6da7c..61347a1 100644
                           currentNetworkStatus.state, displayRenderer.get());
 +            runAuthGateHeapProbe(application, currentNetworkStatus.state);
          }
- 
+
          if (!idleResourceLogDone &&

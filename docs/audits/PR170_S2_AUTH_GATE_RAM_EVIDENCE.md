@@ -21,7 +21,8 @@ Der freigegebene Plan verlangt eine ehrliche, fokussierte Messung des
 Heap-Footprints der `std::mutex`/`std::condition_variable`-Synchronisation
 (ESP-IDF 6.1 allokiert die pthread-Objekte lazy intern). Gemessen wurde mit
 einer **temporären Instrumentierung in `main/app_main.cpp`, die nicht
-committet ist** (`PR170_S2_AUTH_GATE_RAM_PROBE.patch`, letzter Stand):
+committet ist** (`PR170_S2_AUTH_GATE_RAM_PROBE.patch`, letzter Stand; leere Kontextzeilen sind
+von Trailing-Whitespace befreit, Anwendung mit `git apply --ignore-whitespace`):
 
 - Die Probe läuft im Hauptloop bei `periodic_30s`, also im stabilen
   `HOME_WIFI`-Betrieb nach `HomeConnected`.
