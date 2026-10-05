@@ -1,0 +1,2 @@
+6d4c87b9314af9de6343fcd3c1e23e730c87d1a2
+ee73d47f55ca84d01343be18eebe87d0586ea13bec7c0de9e027b254014643ff  build/esp32_release/esp32_fermentationsschrank.bin

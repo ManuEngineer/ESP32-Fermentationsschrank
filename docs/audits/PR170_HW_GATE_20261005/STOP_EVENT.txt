@@ -26,3 +26,10 @@ After reboot: /api/v1/status -> 401 (session required) and login shell => state 
 Before overflow: no heap_alloc_failed; minimum_free_heap 16668 B during WiFi mode switches (before provisioning).
 No repair, no optimization performed (stop rule).
 [19:29:40] owner said done: capture ended by STOP file
+[20:56:34] === RUN 3 (stack fix 8192, HEAD 6d4c87b): owner-approved full erase + calibration provisioner + product flash ===
+[20:57:04] capture paused to flash product 6d4c87b (no erase)
+[23:08:05] B4 start: session_gate login
+[23:09:02] B4 polling start: 600 s, 3 scripted sessions (+1 idle orphan session from a script bug, device holds 4)
+[23:19:04] B4 polling end
+[23:19:05] poll finished; recording 600 s post-load idle
+[23:29:05] post-load idle done; STOP file created by plan (owner asleep, said stop after ~10 min)

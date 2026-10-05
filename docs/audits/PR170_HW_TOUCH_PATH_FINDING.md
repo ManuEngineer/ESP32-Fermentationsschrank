@@ -9,7 +9,10 @@ PROFILE=esp32_release
 FIX_COMMIT=612feeadeaf2d62bf71cd955b7e79a2c13a7c581
 FIX_SOFTWARE_TESTS=PASS_91_OF_91
 FIX_HARDWARE_VERIFICATION=TOUCH_PATH_PASS_GATE_STOPPED
-FINAL_HARDWARE_RESOURCE_GATE=BLOCKED_HTTPD_STACK_OVERFLOW
+FINAL_HARDWARE_RESOURCE_GATE=MEASURED_PENDING_OWNER_ASSESSMENT_AND_INDEPENDENT_FIX_VERIFICATION
+HTTPD_STACK_FIX=HARDWARE_VERIFIED_8192_ON_PROVISIONING_PATH
+HTTPD_STACK_FIX_CODE_COMMIT=bcf370dea0ff8835a6f5243e68da048dc394ebba
+HARDWARE_TESTED_HEAD=6d4c87b9314af9de6343fcd3c1e23e730c87d1a2
 STOP_REASON=HTTPD_STACK_OVERFLOW_DURING_PROVISIONING_AFTER_STABLE_POWER_RETEST
 EVIDENCE=docs/audits/PR170_HW_GATE_20261005/
 ACTUATOR_RELEASE=NO
@@ -94,3 +97,55 @@ Hashes der unbereinigten Originale in `CAPTURE_HASHES_raw_unsanitized.txt`).
 Einordnung durch den Owner: Die frueheren Brownouts stammen sicher vom
 provisorischen Stromaufbau; der spaetere Stack-Overflow im httpd-Task trat bei
 stabiler Versorgung auf und ist ein eigener Befund.
+
+## Stackfix-Verifikation und Gate (Stand `6d4c87b`, `kHttpServerTaskStackBytes=8192`)
+
+Ablauf (Owner-freigegebener Full-Erase, Kalibrier-Provisionierung
+`WRITE=COMMITTED`/`READBACK=PASS`, Neuflash des exakten HEAD ohne weiteren
+Erase, HOME_WIFI-Setup, stabile Stromversorgung):
+
+```text
+B3_PROVISIONING_SUCCESS_RESPONSE=PASS   (Owner-Screenshots: Login-Shell, Anmeldung, Statusdaten)
+B3_STACK_OVERFLOW=NOT_OBSERVED
+B3_AUTH_STATE=PASSWORD_PROTECTED
+B3_PROVISION_REQUEST_DURATION=NOT_MEASURED_HTTP_NOT_LOGGED   (Login: 3.03..3.08 s je Request)
+B4_SESSIONS_1_TO_4=PASS   (HTTP 200, status 200 mit jeder Session)
+B4_FIFTH_SESSION=PASS_FAIL_CLOSED   (HTTP 503 session-unavailable)
+B4_LOGOUT_THEN_ONE_NEW_LOGIN=PASS   (nach Logout genau ein neuer Login, weiterer 503)
+B4_READ_ONLY_POLLING_600S=PASS_WITH_OBSERVATION   (3 aktive Sessions + 1 ruhende)
+B4_POLL_REQUESTS=2019  OK=2009  CLIENT_TIMEOUT_10S=10  LATENCY_P50_MS=221  LATENCY_MAX_MS=10648
+B4_DISPLAY_TOUCH_DURING_LOAD=OWNER_BROWSED_ALL_PAGES_NO_REPORTED_WHITESCREEN_OR_HANG
+UNEXPECTED_RESET_STACK_OVERFLOW_PANIC_WATCHDOG_BROWNOUT=NONE_IN_RUN
+HEAP_ALLOC_FAILED=0
+HEAP_ALLOC_FAILED_SIZE_1696=0
+HEARTBEATS=9072  LARGEST_GAP_MS=3605   (Login/PBKDF2)
+MIN_FREE_HEAP_BYTES_OVER_RUN=8148
+MAIN_STACK_HWM_BYTES_SEEN=6056   (Boot-Werte 19560, 9576)
+FREE_HEAP_STABLE_HOME_WIFI_AFTER_PROVISION=27428
+LARGEST_FREE_BLOCK_8BIT_MIN_SEEN=12800
+```
+
+Einordnung gegen PR #174 (`docs/audits/R1_RAM_LVGL48_HW_EVIDENCE.md`,
+ohne neue harte Grenze): #174 maass beim Moduswechsel ein
+`minimum_free_heap` von 20612 B und einen niedrigsten Main-Stack-HWM von
+6256 B. Mit Webzugang, vier Sessions und Polling liegt das Minimum bei 8148 B
+(rund 12 KB niedriger) und der Main-Stack-HWM bei 6056 B (200 B niedriger).
+Das ist ein gemessener Unterschied durch Websession-/HTTP-Betrieb, kein
+Fehler; die Bewertung gegen die R1-Integrationsqualifikation liegt beim Owner.
+
+Beobachtungen/Grenzen der Messung:
+
+- 10 von 2019 Pollinganfragen liefen in den 10-s-Client-Timeout (zwei
+  `httpd recv error 104` im Log); die Last (ca. 10 Anfragen/s) liegt weit ueber
+  dem Browser-Polling (alle 5 s). Kein Geraetefehler im Log.
+- Eine vierte Session blieb durch einen Skriptfehler (Logout mit Body, HTTP 400
+  `body-not-allowed`, vom Geraet korrekt abgewiesen) ohne Cookie zurueck und
+  belegte einen Platz; Polling lief daher mit 3 aktiven + 1 ruhenden Session.
+- Stack-HWM des httpd-Tasks und Dauer des Provisionierungsrequests wurden nicht
+  gemessen (nicht im Produktlog); die 8192 B sind nur durch das Ausbleiben des
+  Overflows belegt.
+- Kein erneuter 87,7-min-Lauf noetig; der Mitschnitt umfasst 9088 s ohne
+  1696-B-Ereignis.
+
+Der Gate wird hier nicht als PASS deklariert; Independent Fix Verification und
+Ownerbewertung stehen aus.

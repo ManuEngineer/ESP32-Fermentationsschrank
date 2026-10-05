@@ -1,0 +1,11 @@
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll failure HTTP -1
+poll 600s sessions=3 ok=2009 fail=10 lat_ms p50=221 max=10648
