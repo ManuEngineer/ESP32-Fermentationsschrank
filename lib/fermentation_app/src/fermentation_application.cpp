@@ -1421,14 +1421,28 @@ WebProvisionStatus FermentationApplication::provisionWebAccess(
     context.reset();
 
     const auto projected = projectProvisionResult(bootstrapResult, reinspected);
+
+    // Re-take the Application gate only after the token ended and conclude
+    // the operation once against the current state (no old domain pointer).
+    const auto guard = applicationCallSerializer_.enter();
     if (projected != WebProvisionStatus::Provisioned) {
+        // Retryable failures (invalid input, persistence failure before the
+        // first root write) leave Unprovisioned + BootstrapAllowed and keep a
+        // still valid window; every recovery or unclear state ends it.
+        if (webAuthenticationStateUnlocked() !=
+                WebAuthenticationState::Unprovisioned ||
+            authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value() ||
+            authenticationDomain_->inspect(*authenticationContext_) !=
+                AuthBootstrapStatus::BootstrapAllowed) {
+            closeWebProvisioningWindow();
+        }
         return projected;
     }
 
-    // Re-take the Application gate only after the token ended. A trust
-    // boundary (factory reset, network boundary) between bootstrap and here
-    // makes the old success stale: it must not be reported for a new epoch.
-    const auto guard = applicationCallSerializer_.enter();
+    // A trust boundary (factory reset, network boundary) between bootstrap
+    // and here makes the old success stale: it must not be reported for a new
+    // epoch.
     const auto expected = mode == WebProvisionMode::Protect
                               ? WebAuthenticationState::PasswordProtected
                               : WebAuthenticationState::PasswordDisabled;

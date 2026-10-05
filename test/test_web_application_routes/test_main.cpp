@@ -2542,6 +2542,9 @@ void test_provision_input_and_failure_contracts() {
                          WebProvisionStatus::Failed);
         TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
                          WebAuthenticationState::Unprovisioned);
+        // Retryable pre-commit failure: the release stays valid.
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
         TEST_ASSERT_TRUE(provisionProtected(fixture) ==
                          WebProvisionStatus::Provisioned);
     }
@@ -2556,6 +2559,9 @@ void test_provision_input_and_failure_contracts() {
         fixture.kdf.setFailing(false);
         TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
                          WebAuthenticationState::RecoveryRequired);
+        // The window ends immediately, without a second call.
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
         TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
             fixture.application, 0U));
         TEST_ASSERT_TRUE(provisionProtected(fixture) ==
@@ -2572,7 +2578,42 @@ void test_provision_input_and_failure_contracts() {
         fixture.random.fail = false;
         TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
                          WebAuthenticationState::RecoveryRequired);
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
     }
+}
+
+void test_provision_commit_outcome_unknown_closes_window_immediately() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    // The first bootstrap write (root -> Provisioning) is durably committed
+    // but reports an unknown outcome, and the readback fails as well, so the
+    // domain cannot resolve it (a successful readback would).
+    fixture.store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::PowerCutAfterCommitBeforeReturn);
+    fixture.store.failNextReadAfterWrite();
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() !=
+                     WebAuthenticationState::Unprovisioned);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() !=
+                     WebAuthenticationState::PasswordProtected);
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 0U));
+}
+
+void test_provision_lost_race_closes_window_via_current_state() {
+    // The loser of a provisioning race sees a provisioned root; its window
+    // is closed by the current-state conclusion, not only by the winner.
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::Provisioned);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
 }
 
 void test_provision_result_projection_is_fail_closed() {
@@ -2794,6 +2835,8 @@ int main() {
     RUN_TEST(test_provision_without_window_is_not_allowed_without_kdf_or_write);
     RUN_TEST(test_provision_state_matrix_never_calls_bootstrap);
     RUN_TEST(test_provision_input_and_failure_contracts);
+    RUN_TEST(test_provision_commit_outcome_unknown_closes_window_immediately);
+    RUN_TEST(test_provision_lost_race_closes_window_via_current_state);
     RUN_TEST(test_provision_result_projection_is_fail_closed);
     RUN_TEST(test_provision_gate_closed_is_fail_closed_without_kdf);
     RUN_TEST(
