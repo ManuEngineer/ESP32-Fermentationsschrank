@@ -28,6 +28,7 @@
 #include "network_setup_routes.hpp"
 #include "replay_digest.hpp"
 #include "secure_random_source.hpp"
+#include "web_session.hpp"
 
 namespace fermentation {
 
@@ -172,6 +173,23 @@ struct WebAuthenticationResult {
     WebAuthenticationResultStatus status{
         WebAuthenticationResultStatus::RecoveryRequired};
     std::uint64_t retryAfterMs{0U};
+    // Web trust generation observed when the authentication decision was
+    // taken; issueWebSession() refuses the decision once a trust boundary
+    // (session revocation, auth reset) has been crossed since.
+    std::uint64_t trustGeneration{0U};
+};
+
+enum class WebSessionIssueStatus : std::uint8_t {
+    Created,
+    // The authentication decision is stale: a trust boundary was crossed or
+    // the authentication state changed after it was taken. Fail closed.
+    TrustBoundaryChanged,
+    Unavailable,
+};
+
+struct WebSessionIssueResult {
+    WebSessionIssueStatus status{WebSessionIssueStatus::Unavailable};
+    WebSessionResult session;
 };
 
 class FermentationApplication {
@@ -266,6 +284,12 @@ class FermentationApplication {
     [[nodiscard]] WebAuthenticationState webAuthenticationState() const;
     [[nodiscard]] WebAuthenticationResult authenticateWebPassword(
         const std::string& password, std::uint64_t nowMs);
+    // Creates the browser session for a successful (or disabled-mode)
+    // authentication decision. The recheck of the current authentication
+    // state and trust generation and the session creation happen under the
+    // Application gate, so a trust-boundary revocation cannot interleave.
+    [[nodiscard]] WebSessionIssueResult issueWebSession(
+        const WebAuthenticationResult& authentication, std::uint64_t nowMs);
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -384,6 +408,9 @@ class FermentationApplication {
         device_platform::ISecureRandomSource* randomSource,
         device_platform::IReplayDigest* replayDigest);
     void resetAuthenticationState() noexcept;
+    // Single place that revokes all browser sessions at a trust boundary and
+    // advances the trust generation (callers hold the Application gate).
+    void revokeWebSessionsAtTrustBoundary() noexcept;
     void initializeAuthentication(device_platform::IStateStore& store);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
@@ -425,6 +452,7 @@ class FermentationApplication {
     device_platform::ISecureRandomSource* secureRandomSource_{nullptr};
     IAuthenticationKdf* authenticationKdf_{nullptr};
     AuthOperationGate authOperationGate_;
+    std::uint64_t webTrustGeneration_{0U};
     std::unique_ptr<AuthenticationRecordStore> authenticationRecordStore_;
     std::unique_ptr<AuthenticationDomain> authenticationDomain_;
     std::optional<AuthenticationBootstrapContext> authenticationContext_;

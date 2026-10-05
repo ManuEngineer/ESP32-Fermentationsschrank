@@ -580,13 +580,16 @@ bool WebRouteDispatcher::handleShell(
             findSession(request, sessions_, timeSource_.monotonicMillis());
         if (!session.has_value() &&
             state == WebAuthenticationState::PasswordDisabled) {
-            const auto created =
-                sessions_.create(timeSource_.monotonicMillis());
-            if (created.status == WebSessionStatus::Created &&
-                created.handle.has_value()) {
-                session = created.handle;
-                csrf = created.csrfToken;
-                setSessionCookie(response, created.cookieValue);
+            // Disabled mode: the anonymous session is issued under the same
+            // trust-boundary recheck as a login (no KDF run in this mode).
+            const auto authentication = application_.authenticateWebPassword(
+                std::string{}, timeSource_.monotonicMillis());
+            const auto issued = application_.issueWebSession(
+                authentication, timeSource_.monotonicMillis());
+            if (issued.status == WebSessionIssueStatus::Created) {
+                session = issued.session.handle;
+                csrf = issued.session.csrfToken;
+                setSessionCookie(response, issued.session.cookieValue);
             }
         }
         if (session.has_value() && csrf.empty()) {
@@ -648,15 +651,11 @@ bool WebRouteDispatcher::handleLogin(
         return true;
     }
 
-    WebAuthenticationResult authentication;
-    if (state == WebAuthenticationState::PasswordDisabled) {
-        authentication.status = WebAuthenticationResultStatus::Disabled;
-    } else {
-        // The Application wrapper deliberately releases its shared gate before
-        // entering the potentially multi-second PSA PBKDF2 operation.
-        authentication = application_.authenticateWebPassword(
-            dto.password, timeSource_.monotonicMillis());
-    }
+    // The Application wrapper deliberately releases its shared gate before
+    // entering the potentially multi-second PSA PBKDF2 operation. In
+    // password-disabled mode it returns Disabled without any KDF run.
+    const auto authentication = application_.authenticateWebPassword(
+        dto.password, timeSource_.monotonicMillis());
     if (authentication.status != WebAuthenticationResultStatus::Authenticated &&
         authentication.status != WebAuthenticationResultStatus::Disabled) {
         const auto status =
@@ -673,12 +672,20 @@ bool WebRouteDispatcher::handleLogin(
         return true;
     }
 
-    const auto created = sessions_.create(timeSource_.monotonicMillis());
-    if (created.status != WebSessionStatus::Created ||
-        !created.handle.has_value()) {
+    // Recheck and session creation are atomic against trust-boundary
+    // revocations (see FermentationApplication::issueWebSession).
+    const auto issued = application_.issueWebSession(
+        authentication, timeSource_.monotonicMillis());
+    if (issued.status == WebSessionIssueStatus::TrustBoundaryChanged) {
+        setJsonResponse(response, 409U,
+                        "{\"error\":\"authentication-changed\"}");
+        return true;
+    }
+    if (issued.status != WebSessionIssueStatus::Created) {
         setJsonResponse(response, 503U, "{\"error\":\"session-unavailable\"}");
         return true;
     }
+    const auto& created = issued.session;
     response.statusCode = 200U;
     response.contentType = kJsonContentType;
     response.body =

@@ -32,6 +32,15 @@
 
 namespace fermentation {
 
+struct WebSessionManagerTestAccess {
+    static bool hasActive(const WebSessionManager& manager) {
+        for (const auto& session : manager.sessions_) {
+            if (session.active) return true;
+        }
+        return false;
+    }
+};
+
 class FermentationApplicationTestAccess {
    public:
     static RunCommandState& runtimeState(FermentationApplication& application) {
@@ -41,6 +50,14 @@ class FermentationApplicationTestAccess {
     static ApplicationCallSerializer::Guard enter(
         FermentationApplication& application) {
         return application.applicationCallSerializer_.enter();
+    }
+
+    // True when the session manager still holds any active session.
+    static bool hasActiveSession(FermentationApplication& application,
+                                 std::uint64_t /*nowMs*/) {
+        return application.webSessionManager_ != nullptr &&
+               WebSessionManagerTestAccess::hasActive(
+                   *application.webSessionManager_);
     }
 
     static bool authGateClosed(FermentationApplication& application) {
@@ -2020,6 +2037,152 @@ void test_reset_may_proceed_right_after_the_domain_returns() {
     }
 }
 
+// ---- Session issuance vs. trust boundaries ---------------------------------
+// The login handler takes the authentication decision (token already ended)
+// and then issues the session. These tests drive that exact sequence with a
+// trust boundary placed deterministically between the two steps.
+
+void test_stale_protected_login_cannot_create_a_session_after_factory_reset() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto decision = fixture.application.authenticateWebPassword(
+        "correct horse battery", 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(decision.status));
+
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(resetFinished(reset));
+
+    const auto issued = fixture.application.issueWebSession(decision, 1001U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebSessionIssueStatus::TrustBoundaryChanged),
+        static_cast<int>(issued.status));
+    TEST_ASSERT_FALSE(issued.session.handle.has_value());
+    TEST_ASSERT_TRUE(issued.session.cookieValue.empty());
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 1002U));
+    if (reset.status == ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::Unprovisioned);
+    }
+}
+
+void test_protected_login_session_created_before_reset_is_revoked() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto decision = fixture.application.authenticateWebPassword(
+        "correct horse battery", 1000U);
+    const auto issued = fixture.application.issueWebSession(decision, 1001U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebSessionIssueStatus::Created),
+                          static_cast<int>(issued.status));
+    TEST_ASSERT_TRUE(issued.session.handle.has_value());
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 1002U));
+
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(resetFinished(reset));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 1003U));
+}
+
+void test_stale_disabled_mode_login_cannot_create_a_session_after_reset() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::setWebPasswordEnabled(
+        fixture.application, false));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordDisabled);
+    const auto callsBefore = fixture.kdf.calls();
+    const auto decision =
+        fixture.application.authenticateWebPassword(std::string{}, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Disabled),
+        static_cast<int>(decision.status));
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls());
+
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(resetFinished(reset));
+
+    const auto issued = fixture.application.issueWebSession(decision, 1001U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebSessionIssueStatus::TrustBoundaryChanged),
+        static_cast<int>(issued.status));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 1002U));
+}
+
+void test_stale_login_cannot_create_a_session_after_network_boundaries() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+
+    // Network mode change between decision and issuance.
+    auto decision = fixture.application.authenticateWebPassword(
+        "correct horse battery", 1000U);
+    const auto changed = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(changed.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebSessionIssueStatus::TrustBoundaryChanged),
+        static_cast<int>(
+            fixture.application.issueWebSession(decision, 1001U).status));
+
+    // HOME_WIFI reconfiguration between decision and issuance.
+    decision = fixture.application.authenticateWebPassword(
+        "correct horse battery", 2000U);
+    const auto reconfigured =
+        fixture.application.beginHomeWifiReconfiguration();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(reconfigured.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebSessionIssueStatus::TrustBoundaryChanged),
+        static_cast<int>(
+            fixture.application.issueWebSession(decision, 2001U).status));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 2002U));
+}
+
+void test_concurrent_login_and_factory_reset_never_leave_a_valid_session() {
+    for (int iteration = 0; iteration < 8; ++iteration) {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, "correct horse battery", "1234"));
+        fixture.kdf.arm();
+        device_platform::HttpResponse loginResponse;
+        std::thread login([&] {
+            const auto request = makeLoginRequest("correct horse battery");
+            static_cast<void>(
+                fixture.http.routes()->handle(request, loginResponse));
+        });
+        TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+        ConfigurationRecoveryResult reset;
+        std::thread resetter(
+            [&] { reset = fixture.application.beginAuthorizedFactoryReset(); });
+        TEST_ASSERT_TRUE(eventually([&] {
+            return FermentationApplicationTestAccess::authGateClosed(
+                fixture.application);
+        }));
+        fixture.kdf.release();
+        login.join();
+        resetter.join();
+        TEST_ASSERT_TRUE(resetFinished(reset));
+        // Whatever the interleaving was: no session survives the reset.
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+            fixture.application, 5000U));
+        if (loginResponse.statusCode == 200U) {
+            assertComposedSessionFailClosed(fixture,
+                                            sessionCookieValue(loginResponse));
+        } else {
+            TEST_ASSERT_FALSE(loginResponse.metadata.setCookie.has_value());
+        }
+    }
+}
+
 void test_destructor_drains_a_running_login() {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
@@ -2107,6 +2270,14 @@ int main() {
     RUN_TEST(test_login_after_gate_close_is_fail_closed_without_kdf);
     RUN_TEST(test_failed_factory_reset_reopens_the_gate_and_keeps_the_domain);
     RUN_TEST(test_reset_may_proceed_right_after_the_domain_returns);
+    RUN_TEST(
+        test_stale_protected_login_cannot_create_a_session_after_factory_reset);
+    RUN_TEST(test_protected_login_session_created_before_reset_is_revoked);
+    RUN_TEST(
+        test_stale_disabled_mode_login_cannot_create_a_session_after_reset);
+    RUN_TEST(test_stale_login_cannot_create_a_session_after_network_boundaries);
+    RUN_TEST(
+        test_concurrent_login_and_factory_reset_never_leave_a_valid_session);
     RUN_TEST(test_destructor_drains_a_running_login);
     RUN_TEST(test_auth_operation_gate_object_size_is_reported);
     return UNITY_END();

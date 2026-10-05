@@ -836,7 +836,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     if (webSessionManager_ != nullptr && previousMode != selectedMode) {
         // The network boundary has changed successfully. Existing browser
         // sessions must not cross into the new transport boundary.
-        webSessionManager_->revokeAll();
+        revokeWebSessionsAtTrustBoundary();
     }
     if (httpServerLifecycle_ != nullptr && !httpServerLifecycle_->running() &&
         webRouteDispatcher_ != nullptr &&
@@ -883,7 +883,7 @@ FermentationApplication::beginHomeWifiReconfiguration() {
     if (webSessionManager_ != nullptr) {
         // Entering HOME_WIFI setup is a trust-boundary transition even
         // before a candidate credential is committed.
-        webSessionManager_->revokeAll();
+        revokeWebSessionsAtTrustBoundary();
     }
     if (httpServerLifecycle_ != nullptr && webRouteDispatcher_ != nullptr &&
         (httpServerLifecycle_->running() ||
@@ -1193,8 +1193,10 @@ WebAuthenticationResult FermentationApplication::authenticateWebPassword(
     AuthenticationDomain* domain = nullptr;
     std::optional<AuthenticationBootstrapContext> context;
     std::optional<AuthOperationGate::Token> token;
+    std::uint64_t trustGeneration = 0U;
     {
         const auto guard = applicationCallSerializer_.enter();
+        trustGeneration = webTrustGeneration_;
         if (webAuthenticationStateUnlocked() !=
                 WebAuthenticationState::PasswordProtected ||
             authenticationDomain_ == nullptr ||
@@ -1203,11 +1205,12 @@ WebAuthenticationResult FermentationApplication::authenticateWebPassword(
             return {state == WebAuthenticationState::PasswordDisabled
                         ? WebAuthenticationResultStatus::Disabled
                         : WebAuthenticationResultStatus::RecoveryRequired,
-                    0U};
+                    0U, trustGeneration};
         }
         token = authOperationGate_.tryBegin();
         if (!token.has_value()) {
-            return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+                    trustGeneration};
         }
         domain = authenticationDomain_.get();
         context = authenticationContext_;
@@ -1226,25 +1229,70 @@ WebAuthenticationResult FermentationApplication::authenticateWebPassword(
 
     switch (checked) {
         case AuthCheckStatus::Authenticated:
-            return {WebAuthenticationResultStatus::Authenticated, 0U};
+            return {WebAuthenticationResultStatus::Authenticated, 0U,
+                    trustGeneration};
         case AuthCheckStatus::Disabled:
-            return {WebAuthenticationResultStatus::Disabled, 0U};
+            return {WebAuthenticationResultStatus::Disabled, 0U,
+                    trustGeneration};
         case AuthCheckStatus::Invalid:
             return retryAfterMs == 0U
                        ? WebAuthenticationResult{WebAuthenticationResultStatus::
                                                      Invalid,
-                                                 0U}
+                                                 0U, trustGeneration}
                        : WebAuthenticationResult{
                              WebAuthenticationResultStatus::LockedOut,
-                             retryAfterMs};
+                             retryAfterMs, trustGeneration};
         case AuthCheckStatus::LockedOut:
-            return {WebAuthenticationResultStatus::LockedOut, retryAfterMs};
+            return {WebAuthenticationResultStatus::LockedOut, retryAfterMs,
+                    trustGeneration};
         case AuthCheckStatus::RecoveryRequired:
-            return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+                    trustGeneration};
         case AuthCheckStatus::KdfUnavailable:
-            return {WebAuthenticationResultStatus::KdfUnavailable, 0U};
+            return {WebAuthenticationResultStatus::KdfUnavailable, 0U,
+                    trustGeneration};
     }
-    return {WebAuthenticationResultStatus::RecoveryRequired, 0U};
+    return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+            trustGeneration};
+}
+
+WebSessionIssueResult FermentationApplication::issueWebSession(
+    const WebAuthenticationResult& authentication, std::uint64_t nowMs) {
+    WebAuthenticationState expected = WebAuthenticationState::Indeterminate;
+    if (authentication.status == WebAuthenticationResultStatus::Authenticated) {
+        expected = WebAuthenticationState::PasswordProtected;
+    } else if (authentication.status ==
+               WebAuthenticationResultStatus::Disabled) {
+        expected = WebAuthenticationState::PasswordDisabled;
+    } else {
+        return {WebSessionIssueStatus::TrustBoundaryChanged, {}};
+    }
+
+    // Recheck and create under the Application gate: every trust-boundary
+    // revocation (network mode change, HOME_WIFI reconfiguration, factory
+    // reset) runs under the same gate, so it either precedes this call and
+    // makes the decision stale, or follows it and revokes the new session.
+    const auto guard = applicationCallSerializer_.enter();
+    if (webSessionManager_ == nullptr) {
+        return {WebSessionIssueStatus::Unavailable, {}};
+    }
+    if (authentication.trustGeneration != webTrustGeneration_ ||
+        webAuthenticationStateUnlocked() != expected) {
+        return {WebSessionIssueStatus::TrustBoundaryChanged, {}};
+    }
+    auto created = webSessionManager_->create(nowMs);
+    if (created.status != WebSessionStatus::Created ||
+        !created.handle.has_value()) {
+        return {WebSessionIssueStatus::Unavailable, {}};
+    }
+    return {WebSessionIssueStatus::Created, std::move(created)};
+}
+
+void FermentationApplication::revokeWebSessionsAtTrustBoundary() noexcept {
+    ++webTrustGeneration_;
+    if (webSessionManager_ != nullptr) {
+        webSessionManager_->revokeAll();
+    }
 }
 
 bool FermentationApplication::beginPersistent(
@@ -1468,6 +1516,9 @@ void FermentationApplication::resetAuthenticationState() noexcept {
     // they are destroyed. Boot-time callers have no active operation, so the
     // drain returns immediately; the runtime reset closed the gate already.
     authOperationGate_.closeAndDrain();
+    // Any replacement of the authentication domain also ends the validity of
+    // pending authentication decisions.
+    ++webTrustGeneration_;
     authenticationContext_.reset();
     authenticationDomain_.reset();
     authenticationRecordStore_.reset();
@@ -1733,7 +1784,7 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     if (webSessionManager_ != nullptr) {
         // Revoke at the irreversible reset boundary. Later run-epoch handoff
         // failures must not preserve pre-reset browser authority.
-        webSessionManager_->revokeAll();
+        revokeWebSessionsAtTrustBoundary();
     }
     // The reset has advanced the configuration/storage epoch. Invalidate the
     // old domain now; a later bootstrap failure must remain fail-closed.
