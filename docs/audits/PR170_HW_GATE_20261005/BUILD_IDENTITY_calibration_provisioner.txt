@@ -1,0 +1,1 @@
+92a8312d97c9d6349ad3cf4ef689da74711ab10bad8148e0b353fc84aa53ec27  build/esp32_bringup_issue31_touch_calibration_provision/esp32_fermentationsschrank.bin

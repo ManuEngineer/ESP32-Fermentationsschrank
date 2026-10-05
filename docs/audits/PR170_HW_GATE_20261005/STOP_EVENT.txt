@@ -15,3 +15,13 @@ Code: 503 on read-only = Unprovisioned | RecoveryRequired | Indeterminate; provi
 => state is RecoveryRequired or Indeterminate, NOT Unprovisioned and NOT PasswordProtected/Disabled (those would answer 401 without a session).
 Brownouts at +258s, +2783s, +2794s (host 18:23:52 / ~19:0x). Suspected: power loss during provisioning write (unproven; requests not logged).
 STOP rule: persistence/security deviation. No reset/erase/repair performed. Waiting for owner decision.
+[19:16:55] OWNER-AUTHORIZED FULL RESET: capture paused for erase_flash + reflash of f8fcd6c
+[19:20:54] owner-approved: flashing touch calibration provisioner (bring-up, actor-free), capture paused
+[19:21:25] calibration provisioned (COMMITTED/READBACK=PASS); reflashing product f8fcd6c without erase
+[19:27:19] BLOCKER (stack overflow): after full reset + calibration + re-flash of f8fcd6c, WiFi re-setup, window opened, owner submitted provisioning form (no brownout).
+UART +193.370s: "***ERROR*** A stack overflow in task httpd has been detected." -> abort -> SW_CPU_RESET (rst:0xc), reboot; owner saw no confirmation, display refresh ~10s later (the reboot).
+Backtrace decode: vApplicationStackOverflowHook <- vTaskSwitchContext (context switch while in FermentationApplication::webAuthenticationStateUnlocked, fermentation_application.cpp:1174).
+httpd task stack = HTTPD_DEFAULT_CONFIG() (esp_idf_http_server_lifecycle.cpp:190, no stack_size override).
+After reboot: /api/v1/status -> 401 (session required) and login shell => state is protected (provisioning persisted), response lost.
+Before overflow: no heap_alloc_failed; minimum_free_heap 16668 B during WiFi mode switches (before provisioning).
+No repair, no optimization performed (stop rule).

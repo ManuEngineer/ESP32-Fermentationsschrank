@@ -9,8 +9,8 @@ PROFILE=esp32_release
 FIX_COMMIT=612feeadeaf2d62bf71cd955b7e79a2c13a7c581
 FIX_SOFTWARE_TESTS=PASS_91_OF_91
 FIX_HARDWARE_VERIFICATION=TOUCH_PATH_PASS_GATE_STOPPED
-FINAL_HARDWARE_RESOURCE_GATE=STOPPED_NOT_PASS
-STOP_REASON=BROWNOUTS_PROVISIONAL_POWER_THEN_AUTH_STATE_RECOVERY_REQUIRED_OR_INDETERMINATE
+FINAL_HARDWARE_RESOURCE_GATE=BLOCKED_HTTPD_STACK_OVERFLOW
+STOP_REASON=HTTPD_STACK_OVERFLOW_DURING_PROVISIONING_AFTER_STABLE_POWER_RETEST
 EVIDENCE=docs/audits/PR170_HW_GATE_20261005/
 ACTUATOR_RELEASE=NO
 ```
@@ -59,3 +59,30 @@ nicht als PASS deklariert.
   `size=1696`), kein Panic/Watchdog im gesamten Mitschnitt.
 - Der Hardware-Nachweis fuer das finale Gate steht aus; er braucht stabile
   Stromversorgung und einen vom Owner ausgeloesten Recovery-Schritt.
+
+## Wiederholung nach Full-Reset (Stand `f8fcd6c`) – BLOCKER
+
+Nach vom Owner freigegebenem Full-Erase, Kalibrier-Provisionierung
+(`WRITE=COMMITTED`, `READBACK=PASS`), Neuflash von `f8fcd6c` ohne Erase und
+neuem Heimnetz-Setup wurde das Fenster geoeffnet und das Formular ohne
+Stromunterbruch abgeschickt. Ergebnis:
+
+- UART +193,370 s: `***ERROR*** A stack overflow in task httpd has been
+  detected.` → `abort` → `SW_CPU_RESET`. Der Owner erhielt keine Bestaetigung;
+  das Display zeigte ca. 10 s spaeter den Neustart.
+- Backtrace (addr2line): `vApplicationStackOverflowHook` ←
+  `vTaskSwitchContext`, unterbrochen in
+  `FermentationApplication::webAuthenticationStateUnlocked()`
+  (`fermentation_application.cpp:1174`).
+- Der HTTP-Server nutzt `HTTPD_DEFAULT_CONFIG()` ohne `stack_size`-Override
+  (`esp_idf_http_server_lifecycle.cpp:190`); die Provisionierung (zwei
+  PBKDF2-Laeufe, JSON, Antwort) laeuft im httpd-Task.
+- Nach dem Neustart antwortet `/api/v1/status` mit 401 und die Login-Shell
+  erscheint: die Provisionierung wurde persistiert, die Antwort ging verloren.
+- Laut Testauftrag ein Blocker („Stack-Overflow“). Keine Reparatur und keine
+  Optimierung in diesem Lauf. Fix und Neuverifikation sind eine eigene
+  Entscheidung.
+- Kein `heap_alloc_failed` (auch nicht 1696 B); Heap-Minimum 16668 B waehrend der
+  WLAN-Moduswechsel vor der Provisionierung.
+- Die frueheren drei Brownouts (provisorische Stromversorgung) sind damit nicht
+  die Ursache des Gate-Blockers.
