@@ -17,6 +17,11 @@ constexpr std::uint16_t kHeaderLocaleLeft = 188U;
 constexpr std::uint16_t kHeaderLocaleWidth = 32U;
 constexpr device_platform::DisplayRect kHeaderNetworkRect{
     220U, 4U, 44U, RepresentativeScreen::kTextLineHeight};
+// Touch zone around the visible language code (x=188..220). It ends at
+// x=219 so it never overlaps kHeaderNetworkRect and starts right of the logo
+// (x=4..172).
+constexpr device_platform::DisplayRect kHeaderLanguageHitRect{176U, 0U, 44U,
+                                                              kHeaderHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
@@ -628,6 +633,13 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,
     std::uint16_t y) noexcept {
     if (x >= screen.kWidth) return std::nullopt;
+    if (x >= kHeaderLanguageHitRect.left &&
+        x < kHeaderLanguageHitRect.left + kHeaderLanguageHitRect.width &&
+        y >= kHeaderLanguageHitRect.top &&
+        y < kHeaderLanguageHitRect.top + kHeaderLanguageHitRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderLanguage, 0U};
+    }
     if (x >= kHeaderNetworkRect.left &&
         x < kHeaderNetworkRect.left + kHeaderNetworkRect.width &&
         y >= kHeaderNetworkRect.top &&

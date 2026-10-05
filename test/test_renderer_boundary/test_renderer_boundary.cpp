@@ -122,10 +122,29 @@ void test_network_header_target_matches_rendered_status_icon_rect() {
         TEST_ASSERT_FALSE(
             fermentation::main_ui::targetAt(screen, x, y).has_value());
     };
-    assertNoTarget(219U, 12U);
     assertNoTarget(264U, 12U);
     assertNoTarget(240U, 3U);
     assertNoTarget(240U, 22U);
+
+    // The language zone (x=176..219, y=0..31) ends right before the unchanged
+    // network zone and never reaches the logo (x=4..172).
+    const auto assertLanguageTarget = [&screen](std::uint16_t x,
+                                                std::uint16_t y) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(
+                device_platform::DeviceUiTargetKind::HeaderLanguage),
+            static_cast<int>(target->kind));
+    };
+    assertLanguageTarget(176U, 0U);
+    assertLanguageTarget(200U, 12U);
+    assertLanguageTarget(219U, 12U);
+    assertLanguageTarget(219U, 31U);
+    assertNoTarget(175U, 12U);
+    assertNoTarget(100U, 12U);
+    assertNoTarget(200U, 32U);
+    assertNoTarget(240U, 31U);
 
     const auto bottom = fermentation::main_ui::targetAt(screen, 20U, 220U);
     TEST_ASSERT_TRUE(bottom.has_value());
