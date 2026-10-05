@@ -1,0 +1,17 @@
+STOP RULE TRIGGERED (owner report: constant white screen) on d3038f1 esp32_release
+Timeline (host clock, capture start 18:19:34 = +0.000s):
+ +181.834s (18:22:35) touch press dispatch outcome=2 (owning outcome; web setup window release path)
+ +258.344s (18:23:52) "E BOD: Brownout detector was triggered" -> POWERON_RESET reboot
+ +259.8s   normal boot, application: ready, LVGL/ili9341 init lines identical to first boot, HOME_WIFI connected
+ afterwards: heartbeats continue, no panic/abort/wdt, no heap_alloc_failed, no touch events logged
+ Owner screenshots: browser 18:23 "Passwort oder PIN abgelehnt" (provision request rejected); display showed "Web-Setup frei (10 Min)" before the reboot.
+Not yet known: whether the brownout correlates with the provisioning request (HTTP requests are not logged), supply cause.
+No repair/reset performed.
+[18:57:45] owner-requested EN reset via RTS pulse from a second process; capture keeps running
+[19:06:48] owner reports another power interruption; owner-requested EN reset via RTS pulse (capture running)
+[19:08:29] OWNER REPORT: web setup no longer offered after the power interruptions.
+Read-only probe (no state change): GET /api/v1/status -> 503 {"error":"authentication-unavailable"}; GET / serves the LOGIN shell (provision form absent).
+Code: 503 on read-only = Unprovisioned | RecoveryRequired | Indeterminate; provisioning shell only when Unprovisioned.
+=> state is RecoveryRequired or Indeterminate, NOT Unprovisioned and NOT PasswordProtected/Disabled (those would answer 401 without a session).
+Brownouts at +258s, +2783s, +2794s (host 18:23:52 / ~19:0x). Suspected: power loss during provisioning write (unproven; requests not logged).
+STOP rule: persistence/security deviation. No reset/erase/repair performed. Waiting for owner decision.

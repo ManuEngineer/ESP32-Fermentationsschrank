@@ -1,0 +1,7 @@
+== GET /
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 3561
+
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fermentation</title><style>body{font-family:system-ui;max-width:48rem;margin:auto;padding:1rem}form{display:grid;gap:.6rem}input,button{font:inherit;padding:.45rem}#m{font-weight:600}</style></head><body><main><h1>Fermentation</h1><form id="f"><label><input type="radio" name="o" value="p" checked> <span id="a"></span></label><label><input type="radio" name="o" value="d"> <span id="b"></span></label><label id="lw"><span id="c"></span> <input id="w" type="password" autocomplete="new-password"></label><label><span id="e"></span> <input id="n" type="password" inputmode="numeric" autocomplete="off"></label><p id="x" hidden></p><label id="lk" hidden><input id="k" type="checkbox"> <sp
+== GET /api/v1/status
