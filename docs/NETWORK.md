@@ -239,8 +239,14 @@ Er ist der verbindliche und einzige R1-Eingabepfad fuer HOME_WIFI-SSID und
 5. Heim-WLAN mit den neuen Zugangsdaten testen, waehrend der Setup-Pfad aktiv
    bleibt
 6. Geraetename festlegen oder vorgeschlagenen Namen uebernehmen
-7. normalen Webzugang mit Passwort aktivieren oder bewusst deaktivieren
-8. Zusammenfassung anzeigen und erst nach erfolgreichem Test speichern
+7. Zusammenfassung anzeigen und erst nach erfolgreichem Test speichern
+   (Ende des Assistenten)
+
+Der normale Webzugang (Passwort aktivieren oder bewusst deaktivieren) ist
+**nicht** mehr Teil dieses Assistenten, sondern ein eigener Schritt **nach
+erfolgreichem Netzwerk-Setup** (siehe unten). Grund: Mit dem erfolgreichen Test
+speichert der Assistent die Konfiguration und der Setup-Ablauf endet; die
+Einrichtung des Webzugangs ist an eine lokale Freigabe am Geraet gebunden.
 
 Ein Verbindungsfehler darf die bisherige funktionierende Konfiguration nicht
 unbemerkt zerstoeren. Die neue Heim-WLAN-Konfiguration bleibt bis zum
@@ -398,6 +404,20 @@ erhalten bleiben.
 
 Die Weboberflaeche kann mit einem gemeinsamen normalen Webpasswort geschuetzt
 werden.
+
+Ablauf der Ersteinrichtung nach erfolgreichem Netzwerk-Setup:
+
+1. Der Netzwerkassistent ist abgeschlossen (`HOME_WIFI` bzw. `AP_ONLY` aktiv).
+2. Am Geraet wird `Sprache` -> `Webzugang` -> `Web-Setup` gewaehlt; das
+   fluechtige Freigabefenster von 10 Minuten oeffnet sich.
+3. Der Browser ruft die Weboberflaeche auf (Direkt-IP oder mDNS). Im Zustand
+   `unprovisioned` zeigt sie das Einrichtungsformular.
+4. Der Benutzer richtet Passwortschutz (empfohlen) ein oder deaktiviert ihn
+   bewusst nach Warnung und Bestaetigung und legt die getrennte Service-PIN fest.
+5. Danach erfolgt die normale Anmeldung; die Einrichtung erzeugt keine Session.
+
+Das Detail (Route, Statuscodes, Fenster) steht in
+[WEB_UI.md](WEB_UI.md#ersteinrichtung-des-webzugangs).
 
 Verbindliche Regeln:
 
