@@ -179,6 +179,25 @@ struct WebAuthenticationResult {
     std::uint64_t trustGeneration{0U};
 };
 
+// First-time web access setup (no web password yet). The caller (S4 HTTP
+// adapter) maps these to the wire contract; the Application owns the
+// authorization (local release window) and the lifetime/trust contracts.
+enum class WebProvisionMode : std::uint8_t {
+    Protect,
+    Disable,
+};
+
+enum class WebProvisionStatus : std::uint8_t {
+    Provisioned,
+    NotAllowed,
+    AlreadyProvisioned,
+    InvalidCredentials,
+    RecoveryRequired,
+    Failed,
+};
+
+inline constexpr std::uint64_t kWebProvisioningWindowMs = 600000U;
+
 enum class WebSessionIssueStatus : std::uint8_t {
     Created,
     // The authentication decision is stale: a trust boundary was crossed or
@@ -290,6 +309,16 @@ class FermentationApplication {
     // Application gate, so a trust-boundary revocation cannot interleave.
     [[nodiscard]] WebSessionIssueResult issueWebSession(
         const WebAuthenticationResult& authentication, std::uint64_t nowMs);
+    // Domain validates password and Service-PIN. Runs the slow KDF under the
+    // AuthOperationGate (outside the Application gate) and only reports
+    // Provisioned if no trust boundary was crossed meanwhile.
+    [[nodiscard]] WebProvisionStatus provisionWebAccess(
+        WebProvisionMode mode, const std::string& webPassword,
+        const std::string& servicePin);
+    // Opens the volatile local release window (fixed 10 minutes, not
+    // extended). Returns true only if it was newly opened. Called by the
+    // local touch action only.
+    [[nodiscard]] bool openWebProvisioningWindow();
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -411,6 +440,14 @@ class FermentationApplication {
     // Single place that revokes all browser sessions at a trust boundary and
     // advances the trust generation (callers hold the Application gate).
     void revokeWebSessionsAtTrustBoundary() noexcept;
+    // Volatile local release window for the web first-time setup. Elapsed
+    // time is compared (no deadline arithmetic); a backward or missing clock
+    // closes the window.
+    void closeWebProvisioningWindow() noexcept;
+    [[nodiscard]] bool webProvisioningWindowOpenUnlocked() noexcept;
+    [[nodiscard]] static WebProvisionStatus projectProvisionResult(
+        AuthBootstrapStatus bootstrapResult,
+        AuthBootstrapStatus reinspected) noexcept;
     void initializeAuthentication(device_platform::IStateStore& store);
     [[nodiscard]] bool processBootClassification(
         BootClassification classification,
@@ -453,6 +490,8 @@ class FermentationApplication {
     IAuthenticationKdf* authenticationKdf_{nullptr};
     AuthOperationGate authOperationGate_;
     std::uint64_t webTrustGeneration_{0U};
+    bool webProvisioningWindowOpen_{false};
+    std::uint64_t webProvisioningWindowOpenedAtMs_{0U};
     std::unique_ptr<AuthenticationRecordStore> authenticationRecordStore_;
     std::unique_ptr<AuthenticationDomain> authenticationDomain_;
     std::optional<AuthenticationBootstrapContext> authenticationContext_;

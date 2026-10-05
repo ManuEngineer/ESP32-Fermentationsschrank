@@ -60,6 +60,50 @@ class FermentationApplicationTestAccess {
                    *application.webSessionManager_);
     }
 
+    // Moves an Unprovisioned root to RecoveryRequired through the legal
+    // Provisioning step (test only; mirrors a failed bootstrap).
+    static bool forceRootState(FermentationApplication& application,
+                               AuthProvisioningState state) {
+        if (state != AuthProvisioningState::RecoveryRequired ||
+            application.stateStore_ == nullptr ||
+            !application.authenticationContext_.has_value()) {
+            return false;
+        }
+        AuthenticationRecordStore store(*application.stateStore_);
+        const auto read =
+            store.readRoot(application.authenticationContext_->storageEpoch());
+        if (!read.value.has_value()) return false;
+        auto provisioning = *read.value;
+        provisioning.state = AuthProvisioningState::Provisioning;
+        ++provisioning.recordSequence;
+        if (store.writeRoot(*read.value, provisioning) !=
+            AuthenticationWriteStatus::Success) {
+            return false;
+        }
+        auto recovery = provisioning;
+        recovery.state = AuthProvisioningState::RecoveryRequired;
+        ++recovery.recordSequence;
+        return store.writeRoot(provisioning, recovery) ==
+               AuthenticationWriteStatus::Success;
+    }
+
+    static bool windowFlagOpen(const FermentationApplication& application) {
+        return application.webProvisioningWindowOpen_;
+    }
+    static std::uint64_t trustGeneration(
+        const FermentationApplication& application) {
+        return application.webTrustGeneration_;
+    }
+    static void setWindowOpenedAt(FermentationApplication& application,
+                                  std::uint64_t openedAtMs) {
+        application.webProvisioningWindowOpenedAtMs_ = openedAtMs;
+    }
+    static WebProvisionStatus projectProvision(
+        AuthBootstrapStatus result, AuthBootstrapStatus reinspected) {
+        return FermentationApplication::projectProvisionResult(result,
+                                                               reinspected);
+    }
+
     static bool authGateClosed(FermentationApplication& application) {
         const std::lock_guard<std::mutex> lock(
             application.authOperationGate_.mutex_);
@@ -156,13 +200,15 @@ class DeterministicRandom final : public device_platform::ISecureRandomSource {
    public:
     bool fill(void* buffer, std::size_t length) override {
         if (length == 0U) return true;
-        if (buffer == nullptr) return false;
+        if (buffer == nullptr || fail) return false;
         auto* bytes = static_cast<std::uint8_t*>(buffer);
         for (std::size_t index = 0U; index < length; ++index) {
             bytes[index] = next_++;
         }
         return true;
     }
+
+    bool fail{false};
 
    private:
     std::uint8_t next_{1U};
@@ -226,6 +272,9 @@ class BlockableKdf final : public IAuthenticationKdf {
         {
             std::unique_lock<std::mutex> lock(mutex_);
             ++calls_;
+            if (failing_) {
+                return false;
+            }
             if (armed_) {
                 armed_ = false;
                 entered_ = true;
@@ -247,6 +296,10 @@ class BlockableKdf final : public IAuthenticationKdf {
         return changed_.wait_for(lock, std::chrono::seconds(10),
                                  [this] { return entered_; });
     }
+    void setFailing(bool failing) {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        failing_ = failing;
+    }
     void release() {
         const std::lock_guard<std::mutex> lock(mutex_);
         released_ = true;
@@ -263,6 +316,7 @@ class BlockableKdf final : public IAuthenticationKdf {
     std::condition_variable changed_;
     unsigned calls_{0U};
     bool armed_{false};
+    bool failing_{false};
     bool entered_{false};
     bool released_{false};
 };
@@ -2183,6 +2237,456 @@ void test_concurrent_login_and_factory_reset_never_leave_a_valid_session() {
     }
 }
 
+// ---- S3: local release window and web provisioning --------------------------
+
+constexpr const char kPinUnderTest[] = "1234";
+
+std::string passwordUnderTest() { return "correct horse battery"; }
+
+WebProvisionStatus provisionProtected(ComposedFixture& fixture) {
+    return fixture.application.provisionWebAccess(
+        WebProvisionMode::Protect, passwordUnderTest(), kPinUnderTest);
+}
+
+void test_window_opens_only_when_unprovisioned_and_bootstrap_allowed() {
+    ComposedFixture fixture;
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    const auto generation =
+        FermentationApplicationTestAccess::trustGeneration(fixture.application);
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    // Opening the window is not a trust boundary.
+    TEST_ASSERT_EQUAL_UINT64(generation,
+                             FermentationApplicationTestAccess::trustGeneration(
+                                 fixture.application));
+    // Re-opening a valid window is a no-op and never extends it.
+    fixture.timeSource.advanceMonotonicMillis(1000U);
+    TEST_ASSERT_FALSE(fixture.application.openWebProvisioningWindow());
+
+    // Already provisioned (protected / disabled): cannot open.
+    ComposedFixture protectedFixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        protectedFixture.application, passwordUnderTest(), kPinUnderTest));
+    TEST_ASSERT_FALSE(protectedFixture.application.openWebProvisioningWindow());
+    ComposedFixture disabledFixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        disabledFixture.application, passwordUnderTest(), kPinUnderTest));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::setWebPasswordEnabled(
+        disabledFixture.application, false));
+    TEST_ASSERT_FALSE(disabledFixture.application.openWebProvisioningWindow());
+
+    // Recovery required: cannot open.
+    ComposedFixture recoveryFixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+        recoveryFixture.application, AuthProvisioningState::RecoveryRequired));
+    TEST_ASSERT_TRUE(recoveryFixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::RecoveryRequired);
+    TEST_ASSERT_FALSE(recoveryFixture.application.openWebProvisioningWindow());
+
+    // Not started application (no domain, no clock): Indeterminate.
+    FermentationApplication notStarted;
+    TEST_ASSERT_TRUE(notStarted.webAuthenticationState() ==
+                     WebAuthenticationState::Indeterminate);
+    TEST_ASSERT_FALSE(notStarted.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(notStarted.provisionWebAccess(WebProvisionMode::Protect,
+                                                   passwordUnderTest(),
+                                                   kPinUnderTest) ==
+                     WebProvisionStatus::RecoveryRequired);
+}
+
+void test_window_lasts_exactly_ten_minutes_and_is_not_extended() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    fixture.timeSource.advanceMonotonicMillis(kWebProvisioningWindowMs - 1U);
+    TEST_ASSERT_FALSE(fixture.application.openWebProvisioningWindow());
+    // Still open one millisecond before expiry: a rejected input is reported
+    // as invalid, not as "not allowed".
+    TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                         WebProvisionMode::Protect, "short", kPinUnderTest) ==
+                     WebProvisionStatus::InvalidCredentials);
+    fixture.timeSource.advanceMonotonicMillis(1U);
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::NotAllowed);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+}
+
+void test_window_fails_closed_on_backward_clock_observation() {
+    ComposedFixture fixture;
+    fixture.timeSource.advanceMonotonicMillis(5000U);
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    // Simulates an observation earlier than the recorded opening.
+    FermentationApplicationTestAccess::setWindowOpenedAt(fixture.application,
+                                                         9000U);
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::NotAllowed);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+}
+
+void test_window_closes_at_boundaries_and_survives_candidate_commit() {
+    // Successful network mode change closes the window.
+    {
+        ComposedFixture fixture(true);
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        const auto changed = fixture.application.applyNetworkMode(
+            device_platform::NetworkMode::HOME_WIFI);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(changed.status));
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+    }
+    // Failed network mode change leaves the window as it was.
+    {
+        ComposedFixture fixture(true);
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.network.setStartStatus(
+            device_platform::NetworkOperationStatus::Failed);
+        const auto failed = fixture.application.applyNetworkMode(
+            device_platform::NetworkMode::HOME_WIFI);
+        TEST_ASSERT_TRUE(failed.status != NetworkConfigurationStatus::Applied);
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+    }
+    // HOME_WIFI reconfiguration closes; a candidate commit alone does not.
+    {
+        ComposedFixture fixture(true);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(
+                fixture.application
+                    .applyNetworkMode(device_platform::NetworkMode::HOME_WIFI)
+                    .status));
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        const auto reconfigured =
+            fixture.application.beginHomeWifiReconfiguration();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(NetworkConfigurationStatus::Applied),
+            static_cast<int>(reconfigured.status));
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        auto request =
+            makeWebRequest("POST", "/api/network/candidate",
+                           "ssid=next-network&password=next-network-password");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_FALSE(fixture.application.networkSetupFlowActive());
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+    }
+    // Factory reset closes the window.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        const auto reset = fixture.application.beginAuthorizedFactoryReset();
+        TEST_ASSERT_TRUE(resetFinished(reset));
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::NotAllowed);
+    }
+    // A fresh application (restart) starts with a closed window.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::NotAllowed);
+    }
+}
+
+void test_window_closes_lazily_when_auth_state_is_no_longer_bootstrap_allowed() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+        fixture.application, AuthProvisioningState::RecoveryRequired));
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+}
+
+void test_provision_protect_consumes_window_and_login_works() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    const auto generation =
+        FermentationApplicationTestAccess::trustGeneration(fixture.application);
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::Provisioned);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordProtected);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::trustGeneration(
+                         fixture.application) > generation);
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::AlreadyProvisioned);
+    // No session was created by the provisioning itself.
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 0U));
+    const auto login =
+        fixture.application.authenticateWebPassword(passwordUnderTest(), 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Authenticated),
+        static_cast<int>(login.status));
+    const auto issued = fixture.application.issueWebSession(login, 1001U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebSessionIssueStatus::Created),
+                          static_cast<int>(issued.status));
+}
+
+void test_provision_disable_uses_only_service_pin_kdf_and_allows_sessions() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                         WebProvisionMode::Disable, "", kPinUnderTest) ==
+                     WebProvisionStatus::Provisioned);
+    TEST_ASSERT_EQUAL_UINT(1U, fixture.kdf.calls());
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordDisabled);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    const auto decision =
+        fixture.application.authenticateWebPassword(std::string{}, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebAuthenticationResultStatus::Disabled),
+        static_cast<int>(decision.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebSessionIssueStatus::Created),
+        static_cast<int>(
+            fixture.application.issueWebSession(decision, 1001U).status));
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::AlreadyProvisioned);
+}
+
+void test_provision_without_window_is_not_allowed_without_kdf_or_write() {
+    ComposedFixture fixture;
+    const auto recordsBefore = authRecordBytes(fixture);
+    const auto callsBefore = fixture.kdf.calls();
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::NotAllowed);
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls());
+    TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::Unprovisioned);
+}
+
+void test_provision_state_matrix_never_calls_bootstrap() {
+    // Protected / Disabled -> AlreadyProvisioned.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        const auto calls = fixture.kdf.calls();
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::AlreadyProvisioned);
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::setWebPasswordEnabled(
+                fixture.application, false));
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::AlreadyProvisioned);
+        TEST_ASSERT_EQUAL_UINT(calls, fixture.kdf.calls());
+    }
+    // RecoveryRequired -> RecoveryRequired.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+            fixture.application, AuthProvisioningState::RecoveryRequired));
+        const auto calls = fixture.kdf.calls();
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::RecoveryRequired);
+        TEST_ASSERT_EQUAL_UINT(calls, fixture.kdf.calls());
+    }
+}
+
+void test_provision_input_and_failure_contracts() {
+    // Domain-invalid inputs keep the device repeatable.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        const auto recordsBefore = authRecordBytes(fixture);
+        TEST_ASSERT_TRUE(
+            fixture.application.provisionWebAccess(WebProvisionMode::Protect,
+                                                   "short", kPinUnderTest) ==
+            WebProvisionStatus::InvalidCredentials);
+        TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                             WebProvisionMode::Protect, passwordUnderTest(),
+                             "12") == WebProvisionStatus::InvalidCredentials);
+        TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                             WebProvisionMode::Disable, passwordUnderTest(),
+                             kPinUnderTest) ==
+                         WebProvisionStatus::InvalidCredentials);
+        TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::Unprovisioned);
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::Provisioned);
+    }
+    // Persistence failure before the first write: still Unprovisioned.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.store.setNextWriteFault(
+            device_platform_test_support::SimulatedPersistentStateStore::
+                WriteFault::FailBeforeBegin);
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::Failed);
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::Unprovisioned);
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::Provisioned);
+    }
+    // KDF failure after the first root write: existing domain recovery
+    // contract, no session.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.kdf.setFailing(true);
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::Failed);
+        fixture.kdf.setFailing(false);
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::RecoveryRequired);
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+            fixture.application, 0U));
+        TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                         WebProvisionStatus::RecoveryRequired);
+    }
+    // Random failure in disabled mode: fail closed.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.random.fail = true;
+        TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                             WebProvisionMode::Disable, "", kPinUnderTest) ==
+                         WebProvisionStatus::Failed);
+        fixture.random.fail = false;
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::RecoveryRequired);
+    }
+}
+
+void test_provision_result_projection_is_fail_closed() {
+    const auto project = FermentationApplicationTestAccess::projectProvision;
+    using S = AuthBootstrapStatus;
+    TEST_ASSERT_TRUE(project(S::BootstrapAllowed, S::RecoveryRequired) ==
+                     WebProvisionStatus::Provisioned);
+    TEST_ASSERT_TRUE(project(S::InvalidInput, S::BootstrapAllowed) ==
+                     WebProvisionStatus::InvalidCredentials);
+    // The concurrent-winner case: bootstrap saw a non-Unprovisioned root and
+    // the re-inspection inside the auth token reports provisioned.
+    TEST_ASSERT_TRUE(project(S::RecoveryRequired, S::AlreadyProvisioned) ==
+                     WebProvisionStatus::AlreadyProvisioned);
+    TEST_ASSERT_TRUE(project(S::RecoveryRequired, S::RecoveryRequired) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_TRUE(project(S::RecoveryRequired, S::BootstrapAllowed) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_TRUE(project(S::KdfUnavailable, S::RecoveryRequired) ==
+                     WebProvisionStatus::Failed);
+    TEST_ASSERT_TRUE(project(S::PersistenceFailure, S::RecoveryRequired) ==
+                     WebProvisionStatus::Failed);
+    TEST_ASSERT_TRUE(project(S::CommitOutcomeUnknown, S::RecoveryRequired) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_TRUE(project(S::LockedOut, S::RecoveryRequired) ==
+                     WebProvisionStatus::RecoveryRequired);
+}
+
+void test_provision_gate_closed_is_fail_closed_without_kdf() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    FermentationApplicationTestAccess::closeAuthGate(fixture.application);
+    const auto calls = fixture.kdf.calls();
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::RecoveryRequired);
+    TEST_ASSERT_EQUAL_UINT(calls, fixture.kdf.calls());
+    FermentationApplicationTestAccess::reopenAuthGate(fixture.application);
+    TEST_ASSERT_TRUE(provisionProtected(fixture) ==
+                     WebProvisionStatus::Provisioned);
+}
+
+void test_provision_running_during_factory_reset_is_not_reported_current() {
+    for (int iteration = 0; iteration < 4; ++iteration) {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        const auto recordsBefore = authRecordBytes(fixture);
+        fixture.kdf.arm();
+        WebProvisionStatus provisioned = WebProvisionStatus::Provisioned;
+        std::thread provisioner(
+            [&] { provisioned = provisionProtected(fixture); });
+        TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+        std::atomic<bool> resetDone{false};
+        ConfigurationRecoveryResult reset;
+        std::thread resetter([&] {
+            reset = fixture.application.beginAuthorizedFactoryReset();
+            resetDone = true;
+        });
+        TEST_ASSERT_TRUE(eventually([&] {
+            return FermentationApplicationTestAccess::authGateClosed(
+                fixture.application);
+        }));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // The reset waits for the running provisioning before it touches
+        // the store.
+        TEST_ASSERT_FALSE(resetDone.load());
+        TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+        fixture.kdf.release();
+        provisioner.join();
+        resetter.join();
+        TEST_ASSERT_TRUE(resetFinished(reset));
+        // The bootstrap ran against the old epoch; the reset crossed the
+        // trust boundary before the result was mapped: not current success.
+        TEST_ASSERT_TRUE(provisioned == WebProvisionStatus::RecoveryRequired);
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+            fixture.application, 0U));
+        if (reset.status ==
+            ConfigurationRecoveryStatus::FactoryResetCompleted) {
+            TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                             WebAuthenticationState::Unprovisioned);
+        }
+    }
+}
+
+void test_concurrent_provisioning_has_one_winner_and_one_credential_write() {
+    for (int iteration = 0; iteration < 12; ++iteration) {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        std::atomic<bool> go{false};
+        WebProvisionStatus first = WebProvisionStatus::Failed;
+        WebProvisionStatus second = WebProvisionStatus::Failed;
+        auto worker = [&](WebProvisionStatus& out) {
+            while (!go.load()) {
+                std::this_thread::yield();
+            }
+            out = provisionProtected(fixture);
+        };
+        std::thread a(worker, std::ref(first));
+        std::thread b(worker, std::ref(second));
+        go = true;
+        a.join();
+        b.join();
+        const bool firstWon = first == WebProvisionStatus::Provisioned;
+        const bool secondWon = second == WebProvisionStatus::Provisioned;
+        TEST_ASSERT_TRUE(firstWon != secondWon);
+        TEST_ASSERT_TRUE((firstWon ? second : first) ==
+                         WebProvisionStatus::AlreadyProvisioned);
+        // One bootstrap: password + Service-PIN derivation, exactly once.
+        TEST_ASSERT_EQUAL_UINT(2U, fixture.kdf.calls());
+        TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                         WebAuthenticationState::PasswordProtected);
+    }
+}
+
 void test_destructor_drains_a_running_login() {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
@@ -2278,6 +2782,24 @@ int main() {
     RUN_TEST(test_stale_login_cannot_create_a_session_after_network_boundaries);
     RUN_TEST(
         test_concurrent_login_and_factory_reset_never_leave_a_valid_session);
+    RUN_TEST(test_window_opens_only_when_unprovisioned_and_bootstrap_allowed);
+    RUN_TEST(test_window_lasts_exactly_ten_minutes_and_is_not_extended);
+    RUN_TEST(test_window_fails_closed_on_backward_clock_observation);
+    RUN_TEST(test_window_closes_at_boundaries_and_survives_candidate_commit);
+    RUN_TEST(
+        test_window_closes_lazily_when_auth_state_is_no_longer_bootstrap_allowed);
+    RUN_TEST(test_provision_protect_consumes_window_and_login_works);
+    RUN_TEST(
+        test_provision_disable_uses_only_service_pin_kdf_and_allows_sessions);
+    RUN_TEST(test_provision_without_window_is_not_allowed_without_kdf_or_write);
+    RUN_TEST(test_provision_state_matrix_never_calls_bootstrap);
+    RUN_TEST(test_provision_input_and_failure_contracts);
+    RUN_TEST(test_provision_result_projection_is_fail_closed);
+    RUN_TEST(test_provision_gate_closed_is_fail_closed_without_kdf);
+    RUN_TEST(
+        test_provision_running_during_factory_reset_is_not_reported_current);
+    RUN_TEST(
+        test_concurrent_provisioning_has_one_winner_and_one_credential_write);
     RUN_TEST(test_destructor_drains_a_running_login);
     RUN_TEST(test_auth_operation_gate_object_size_is_reported);
     return UNITY_END();
