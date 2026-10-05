@@ -15,17 +15,17 @@ PR171=MERGED
 PR170=OPEN_DRAFT_MERGES_BEFORE_ANY_172_IMPLEMENTATION_NOT_MODIFIED
 PR174=MERGED
 PR167=SUPERSEDED_REFERENCE_ONLY
-OWNER_DECISIONS_PENDING=0
-OWNER_RECOMMENDATIONS_O1_TO_O9=INCORPORATED_CONFIRMATION_WITH_PLAN_SHA_APPROVAL
+OWNER_DECISIONS_PENDING=9
+OWNER_RECOMMENDATIONS_O1_TO_O9=RECOMMENDED_PENDING_OWNER_CONFIRMATION
 PR175_CORRECTION_ORDER=B1_TO_B6_INCORPORATED
 ACTUATOR_RELEASE=NO
 ```
 
 Dieser Plan ist das Ergebnis des Audits aus dem Auftrag
 `Issue172_Plan_Audit_Auftrag.md`. Er enthaelt **keine** Produktimplementation.
-Revision 2 arbeitet den Korrekturauftrag zu PR #175 (B1–B6) und die dort
-genannten Ownerempfehlungen ein; diese gelten als Arbeitsgrundlage und werden
-mit der Freigabe der exakten Plan-SHA bestaetigt. PR #170 wird **vor** jeder
+Revision 2 arbeitet den Korrekturauftrag zu PR #175 (B1–B6) ein und fuehrt die
+dort genannten Ownerempfehlungen O1–O9 als **empfohlene Entscheidungen, Owner-
+Bestaetigung ausstehend**; sie sind keine beschlossenen Ownerentscheide. PR #170 wird **vor** jeder
 #172-Produktimplementation integriert; danach wird dieser Plan auf den dann
 aktuellen `main` rebased, revalidiert und mit neuer exakter Plan-SHA zur
 Independent Fix Verification und Ownerfreigabe vorgelegt (Abschnitt 9).
@@ -327,13 +327,15 @@ S1 bewusst angepasst und im PR als Vertragsaenderung ausgewiesen.
   UI-Regelmatrix ist ausgeschlossen. `setSensorSelectionAction` und der
   vorhandene Slot 3 `continue` bleiben unberuehrt.
 
-## 5. Ownerentscheidungen
+## 5. Empfohlene Ownerentscheidungen (Bestaetigung ausstehend)
 
 Die Werte stammen aus den Ownerempfehlungen des Korrekturauftrags zu PR #175.
-Sie sind Arbeitsgrundlage dieser Revision und werden mit der Freigabe der
-exakten Plan-SHA bestaetigt; der Agent trifft keine davon selbst.
+Sie sind **nicht** als Ownerentscheid beschlossen (`pending owner
+confirmation`); der Plan arbeitet nur vorlaeufig mit ihnen. Nach ausdruecklicher
+Ownerbestaetigung werden sie als beschlossen markiert. Der Agent trifft keine
+davon selbst, `IMPLEMENTATION_AUTHORIZATION=NO` bleibt.
 
-| Nr. | Gegenstand | Entscheidung | Betrifft |
+| Nr. | Gegenstand | Empfohlene Entscheidung (ausstehend) | Betrifft |
 |---|---|---|---|
 | O1 | Einstieg normale Einstellungen | **B**: der redundante Standby-Home-Slot 1 `programs` wird `settings`; Slot 0 `start` bleibt Zugang zur Programmliste. Andere Home-Modi unveraendert. Betrifft die Home-Aktionsmatrix (`test_local_touch_ui`, SIM-26-01). | S10 |
 | O2 | Zeitzone | **A**: lesend; keine vorgetaeuschte Auswahl, keine neue Zeitdatenbank. Header und Uhrseite kennzeichnen UTC eindeutig (`HH:MMZ`). Lokale IANA-Zeit/Offset/DST als eigener spaeterer Scope (Folge-Issue oder `FUTURE_SCOPE.md`, vom Owner anzulegen). | S4, S10 |
@@ -616,7 +618,7 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 
 ### S10 – Bildschirmtastatur, Programmeditor, Settings
 
-- **Entscheidungsgrundlage:** O1-B, O3-A, O4-A. Die WLAN-Credentialtastatur
+- **Empfohlene Grundlage (Owner-Bestaetigung ausstehend):** O1-B, O3-A, O4-A. Die WLAN-Credentialtastatur
   ist ausgeschlossen (F16). Home Standby: Slot 1 `programs` → `settings`
   (Home-Aktionsmatrix und `test_local_touch_ui` entsprechend angepasst).
 - **Dateien/Owner:** Workspace (`TextEdit`-Seite, `ProgramField`-Enum,
