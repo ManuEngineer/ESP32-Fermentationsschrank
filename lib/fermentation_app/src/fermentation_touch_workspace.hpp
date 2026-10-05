@@ -39,6 +39,7 @@ enum class FermentationUiPage : std::uint8_t {
     HeaderLanguage,
     HeaderNetwork,
     HeaderClock,
+    HeaderWebAccess,
 };
 
 enum class FermentationUiSafeBootTarget : std::uint8_t {
@@ -92,6 +93,8 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     ApplyNetworkModeApOnly,
     ApplyNetworkModeHomeWifi,
     BeginHomeWifiReconfiguration,
+    NavigateWebAccess,
+    OpenWebProvisioningWindow,
     MovePagerUp,
     MovePagerDown,
     BeginProgramEdit,
@@ -148,6 +151,8 @@ struct FermentationUiWorkspacePress {
     std::optional<FermentationUiApplyNetworkModeCommand> applyNetworkMode;
     std::optional<FermentationUiBeginHomeWifiReconfigurationCommand>
         beginHomeWifiReconfiguration;
+    std::optional<FermentationUiOpenWebProvisioningWindowCommand>
+        openWebProvisioningWindow;
 };
 
 class FermentationTouchWorkspace {

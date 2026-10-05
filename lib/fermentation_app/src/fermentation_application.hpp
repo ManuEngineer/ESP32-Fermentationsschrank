@@ -319,6 +319,11 @@ class FermentationApplication {
     // extended). Returns true only if it was newly opened. Called by the
     // local touch action only.
     [[nodiscard]] bool openWebProvisioningWindow();
+    // Read-only view of the release state for the local UI projection. It
+    // uses the cached authentication state and never queries the domain, so
+    // a running KDF cannot stall the UI loop; the press path
+    // (openWebProvisioningWindow) re-validates authoritatively.
+    [[nodiscard]] FermentationWebAccessState webAccessState() const;
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -445,6 +450,7 @@ class FermentationApplication {
     // closes the window.
     void closeWebProvisioningWindow() noexcept;
     [[nodiscard]] bool webProvisioningWindowOpenUnlocked() noexcept;
+    [[nodiscard]] bool webProvisioningWindowStillOpenUnlocked() const noexcept;
     [[nodiscard]] static WebProvisionStatus projectProvisionResult(
         AuthBootstrapStatus bootstrapResult,
         AuthBootstrapStatus reinspected) noexcept;

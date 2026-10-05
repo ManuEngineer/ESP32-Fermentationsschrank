@@ -19,7 +19,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 65U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 70U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -85,6 +85,11 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"network-password", "Password: "},
         std::pair{"network-access-unavailable", "Access data unavailable"},
         std::pair{"network-ip-unavailable", "unavailable"},
+        std::pair{"web-access", "Web access"},
+        std::pair{"web-access-open", "Web setup"},
+        std::pair{"web-access-window-open", "Web setup allowed (10 min)"},
+        std::pair{"web-access-closed", "Web setup not allowed yet"},
+        std::pair{"web-access-not-needed", "Web access is set up"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -94,7 +99,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 65U> de{
+            const std::array<std::pair<const char*, const char*>, 70U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -162,7 +167,12 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-password", "Passwort: "},
                  {"network-access-unavailable",
                   "Zugangsdaten nicht verfuegbar"},
-                 {"network-ip-unavailable", "nicht verfuegbar"}}};
+                 {"network-ip-unavailable", "nicht verfuegbar"},
+                 {"web-access", "Webzugang"},
+                 {"web-access-open", "Web-Setup"},
+                 {"web-access-window-open", "Web-Setup frei (10 Min)"},
+                 {"web-access-closed", "Web-Setup nicht freigegeben"},
+                 {"web-access-not-needed", "Webzugang ist eingerichtet"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -171,7 +181,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 65U> es{
+            const std::array<std::pair<const char*, const char*>, 70U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -239,7 +249,12 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-password", "Clave: "},
                  {"network-access-unavailable",
                   "Datos de acceso no disponibles"},
-                 {"network-ip-unavailable", "no disponible"}}};
+                 {"network-ip-unavailable", "no disponible"},
+                 {"web-access", "Acceso web"},
+                 {"web-access-open", "Config. web"},
+                 {"web-access-window-open", "Config. web permitida (10 min)"},
+                 {"web-access-closed", "Config. web no permitida"},
+                 {"web-access-not-needed", "Acceso web configurado"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

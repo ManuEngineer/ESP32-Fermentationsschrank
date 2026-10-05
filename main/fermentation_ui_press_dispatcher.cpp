@@ -59,6 +59,17 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.openWebProvisioningWindow.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult =
+            FermentationUiCommandBridge::openWebProvisioningWindow(
+                application, *press.openWebProvisioningWindow);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.resumeFallback.has_value()) {
         WorkspacePressDispatchResult dispatched;
         dispatched.commandResult = FermentationUiCommandBridge::resumeFallback(

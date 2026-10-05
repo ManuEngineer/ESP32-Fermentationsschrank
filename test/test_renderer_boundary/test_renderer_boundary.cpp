@@ -927,6 +927,64 @@ void test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract() {
     assertWithinDisplay(qr->rect);
 }
 
+void test_web_access_page_shows_the_application_state_in_all_locales() {
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    struct Expectation {
+        const char* locale;
+        fermentation::FermentationWebAccessState state;
+        const char* title;
+        const char* status;
+    };
+    const Expectation expectations[] = {
+        {"en", fermentation::FermentationWebAccessState::Closed, "Web access",
+         "Web setup not allowed yet"},
+        {"en", fermentation::FermentationWebAccessState::WindowOpen,
+         "Web access", "Web setup allowed (10 min)"},
+        {"en", fermentation::FermentationWebAccessState::NotApplicable,
+         "Web access", "Web access is set up"},
+        {"de", fermentation::FermentationWebAccessState::Closed, "Webzugang",
+         "Web-Setup nicht freigegeben"},
+        {"de", fermentation::FermentationWebAccessState::WindowOpen,
+         "Webzugang", "Web-Setup frei (10 Min)"},
+        {"es", fermentation::FermentationWebAccessState::Closed, "Acceso web",
+         "Config. web no permitida"},
+        {"es", fermentation::FermentationWebAccessState::WindowOpen,
+         "Acceso web", "Config. web permitida (10 min)"},
+    };
+    for (const auto& expected : expectations) {
+        fermentation::FermentationUiSnapshot snapshot;
+        snapshot.webAccess = expected.state;
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::HeaderWebAccess);
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs,
+            device_platform::LocaleId{expected.locale}, std::nullopt, nullptr,
+            device_platform::DeviceUiNetworkStatus::Connected, {},
+            std::nullopt);
+        TEST_ASSERT_TRUE(hasText(screen, expected.title));
+        TEST_ASSERT_TRUE(hasText(screen, expected.status));
+        // No stale network page content is drawn on this page.
+        TEST_ASSERT_FALSE(hasText(screen, "SSID: "));
+        for (const auto& command : screen.commands) {
+            TEST_ASSERT_TRUE(command.rect.left + command.rect.width <=
+                             screen.kWidth);
+            TEST_ASSERT_TRUE(command.rect.top + command.rect.height <=
+                             screen.kHeight);
+        }
+    }
+}
+
+void test_language_page_offers_the_web_access_entry_with_a_localized_label() {
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderLanguage);
+    const auto view = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].label ==
+                     fermentation::fermentationTextKey("web-access"));
+}
+
 void test_network_page_missing_softap_info_is_explicit() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
@@ -987,6 +1045,9 @@ int main() {
         test_network_action_labels_fit_without_changing_bottom_hit_targets);
     RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
     RUN_TEST(test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract);
+    RUN_TEST(test_web_access_page_shows_the_application_state_in_all_locales);
+    RUN_TEST(
+        test_language_page_offers_the_web_access_entry_with_a_localized_label);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     return UNITY_END();
 }

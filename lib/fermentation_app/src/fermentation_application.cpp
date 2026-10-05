@@ -1130,6 +1130,7 @@ void FermentationApplication::refreshUiSnapshot(
     input.application.lifecycleState = lifecycleState_;
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
+    input.webAccess = webAccessState();
     input.refreshTracker = &uiRefreshTracker_;
     FermentationUiProjector::projectInto(snapshot, input);
 }
@@ -1318,6 +1319,31 @@ bool FermentationApplication::webProvisioningWindowOpenUnlocked() noexcept {
         return false;
     }
     return true;
+}
+
+bool FermentationApplication::webProvisioningWindowStillOpenUnlocked()
+    const noexcept {
+    if (!webProvisioningWindowOpen_ || timeSource_ == nullptr) {
+        return false;
+    }
+    const auto nowMs = timeSource_->monotonicMillis();
+    return nowMs >= webProvisioningWindowOpenedAtMs_ &&
+           nowMs - webProvisioningWindowOpenedAtMs_ < kWebProvisioningWindowMs;
+}
+
+FermentationWebAccessState FermentationApplication::webAccessState() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        authenticationResolutionStatus_ !=
+            AuthenticationBootstrapResolutionStatus::Ready ||
+        authenticationBootstrapStatus_ !=
+            AuthBootstrapStatus::BootstrapAllowed) {
+        return FermentationWebAccessState::NotApplicable;
+    }
+    return webProvisioningWindowStillOpenUnlocked()
+               ? FermentationWebAccessState::WindowOpen
+               : FermentationWebAccessState::Closed;
 }
 
 bool FermentationApplication::openWebProvisioningWindow() {

@@ -117,6 +117,47 @@ class MockHttpServerLifecycle final
     bool running_{false};
 };
 
+class TestKdf final : public IAuthenticationKdf {
+   public:
+    bool derive(
+        const std::string& secret, const AuthVerifier& parameters,
+        std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) override {
+        std::uint32_t state = 2166136261U;
+        for (const auto byte : secret) {
+            state = (state ^ static_cast<std::uint8_t>(byte)) * 16777619U;
+        }
+        for (const auto byte : parameters.salt) {
+            state = (state ^ byte) * 16777619U;
+        }
+        for (auto& byte : out) {
+            state = state * 1664525U + 1013904223U;
+            byte = static_cast<std::uint8_t>(state >> 24U);
+        }
+        return true;
+    }
+};
+
+// Application with the authentication stack, so the web first-time setup can
+// be released from the local UI.
+struct WebAccessFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    TestKdf kdf;
+    FermentationApplication application;
+
+    WebAccessFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource, kdf));
+    }
+};
+
 struct AppFixture {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
@@ -613,6 +654,102 @@ void test_dispatch_network_touch_actions_use_existing_application_bridge() {
                               reconfigureResult.commandResult->detail)));
 }
 
+void test_web_access_open_runs_through_bridge_to_the_application_owner() {
+    WebAccessFixture fixture;
+    auto snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_TRUE(snapshot.webAccess == FermentationWebAccessState::Closed);
+
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderWebAccess);
+    const auto press = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_TRUE(press.openWebProvisioningWindow.has_value());
+
+    const auto opened =
+        dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(opened.outcome));
+    TEST_ASSERT_TRUE(opened.commandResult.has_value());
+    TEST_ASSERT_TRUE(opened.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_TRUE(
+        std::get<FermentationUiDetailStatus>(opened.commandResult->detail) ==
+        FermentationUiDetailStatus::WebProvisioningWindowOpened);
+
+    // The owner state is projected back into the UI snapshot and the slot.
+    snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_TRUE(snapshot.webAccess ==
+                     FermentationWebAccessState::WindowOpen);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[1].enabled);
+    const auto blocked = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
+
+    // Dispatching the same command again is decided by the owner: it neither
+    // reopens nor extends the window.
+    const auto again =
+        dispatchWorkspacePress(fixture.application, snapshot, press, 1001U);
+    TEST_ASSERT_TRUE(again.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Rejected);
+    TEST_ASSERT_TRUE(
+        std::get<FermentationUiDetailStatus>(again.commandResult->detail) ==
+        FermentationUiDetailStatus::WebProvisioningWindowNotOpened);
+
+    // The window expires in the Application, the UI follows.
+    fixture.timeSource.advanceMonotonicMillis(kWebProvisioningWindowMs);
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().webAccess ==
+                     FermentationWebAccessState::Closed);
+}
+
+void test_web_access_provisioning_success_is_projected_as_not_applicable() {
+    WebAccessFixture fixture;
+    auto snapshot = fixture.application.uiSnapshot();
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderWebAccess);
+    const auto press = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_TRUE(
+        dispatchWorkspacePress(fixture.application, snapshot, press, 1000U)
+            .commandResult->category ==
+        device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                         WebProvisionMode::Disable, "", "1234") ==
+                     WebProvisionStatus::Provisioned);
+    snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_TRUE(snapshot.webAccess ==
+                     FermentationWebAccessState::NotApplicable);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[1].enabled);
+}
+
+void test_web_access_not_allowed_state_is_not_bypassed_by_the_ui() {
+    // No authentication stack: web access is not applicable. Even a forged
+    // command is decided by the Application owner.
+    AppFixture fixture;
+    auto snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_TRUE(snapshot.webAccess ==
+                     FermentationWebAccessState::NotApplicable);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderWebAccess);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[1].enabled);
+    const auto blocked = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
+
+    FermentationUiWorkspacePress forged;
+    forged.openWebProvisioningWindow =
+        FermentationUiOpenWebProvisioningWindowCommand{};
+    const auto result =
+        dispatchWorkspacePress(fixture.application, snapshot, forged, 1000U);
+    TEST_ASSERT_TRUE(result.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Rejected);
+    TEST_ASSERT_TRUE(
+        std::get<FermentationUiDetailStatus>(result.commandResult->detail) ==
+        FermentationUiDetailStatus::WebProvisioningWindowNotOpened);
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().webAccess ==
+                     FermentationWebAccessState::NotApplicable);
+}
+
 void test_process_touch_without_contact_yields_no_target() {
     AppFixture fixture;
     FermentationTouchWorkspace workspace;
@@ -835,6 +972,10 @@ int main() {
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
     RUN_TEST(
         test_dispatch_network_touch_actions_use_existing_application_bridge);
+    RUN_TEST(test_web_access_open_runs_through_bridge_to_the_application_owner);
+    RUN_TEST(
+        test_web_access_provisioning_success_is_projected_as_not_applicable);
+    RUN_TEST(test_web_access_not_allowed_state_is_not_bypassed_by_the_ui);
     RUN_TEST(test_process_touch_without_contact_yields_no_target);
     RUN_TEST(test_process_touch_held_without_fresh_edge_does_not_navigate);
     RUN_TEST(test_process_touch_fresh_edge_on_valid_slot_navigates);

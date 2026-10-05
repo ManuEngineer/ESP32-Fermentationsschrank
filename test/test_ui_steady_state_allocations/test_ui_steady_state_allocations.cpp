@@ -271,6 +271,109 @@ struct NetworkFixture {
     }
 };
 
+class WebAccessTestKdf final : public IAuthenticationKdf {
+   public:
+    bool derive(
+        const std::string& secret, const AuthVerifier& parameters,
+        std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) override {
+        std::uint32_t state = 2166136261U;
+        for (const auto byte : secret) {
+            state = (state ^ static_cast<std::uint8_t>(byte)) * 16777619U;
+        }
+        for (const auto byte : parameters.salt) {
+            state = (state ^ byte) * 16777619U;
+        }
+        for (auto& byte : out) {
+            state = state * 1664525U + 1013904223U;
+            byte = static_cast<std::uint8_t>(state >> 24U);
+        }
+        return true;
+    }
+};
+
+// Application with the authentication stack, showing the web access page.
+struct WebAccessFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    WebAccessTestKdf kdf;
+    FermentationApplication application;
+    FermentationTouchWorkspace workspace;
+    UiRenderGate gate;
+    device_platform::LocaleId initialLocale{"en"};
+
+    WebAccessFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http,
+                                           randomSource, kdf));
+        workspace.setPage(FermentationUiPage::HeaderWebAccess);
+    }
+
+    bool step() {
+        gate.beginStep(application, false);
+        return gate.renderRequired(
+            application, workspace, initialLocale, std::nullopt,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    }
+    void settle() {
+        for (int loop = 0; loop < 3; ++loop) {
+            if (step()) {
+                gate.markRendered();
+            }
+        }
+        TEST_ASSERT_FALSE(step());
+    }
+};
+
+void test_web_access_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().webAccess ==
+                     FermentationWebAccessState::Closed);
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto closedAllocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(closedAllocations));
+
+    // Releasing setup changes the visible state: one redraw, then quiet again
+    // and still allocation free.
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+    startCounting();
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto openAllocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(openAllocations));
+
+    // Expiry is evaluated lazily by the Application and requests a redraw.
+    fixture.timeSource.advanceMonotonicMillis(kWebProvisioningWindowMs);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
+void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
+    // Only HeaderNetwork evicts the program catalog copy (it does not consume
+    // it); the web access page keeps the existing presentation contract.
+    WebAccessFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+}
+
 void test_header_network_with_real_access_point_data_allocates_nothing() {
     NetworkFixture fixture;
     fixture.settle();
@@ -604,5 +707,7 @@ int main() {
     RUN_TEST(test_clock_minute_change_requests_redraw_but_seconds_do_not);
     RUN_TEST(test_catalog_revision_adoption_changes_the_key);
     RUN_TEST(test_every_workspace_mutator_bumps_the_render_revision);
+    RUN_TEST(test_web_access_page_steady_state_allocates_nothing);
+    RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }
