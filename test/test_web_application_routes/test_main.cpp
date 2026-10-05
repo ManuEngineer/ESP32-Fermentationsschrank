@@ -3030,7 +3030,11 @@ void test_unprovisioned_shell_explains_local_release_and_creates_no_session() {
     const auto body = shellBody(fixture);
     // 403 is explained as a local release on the device; 409/422/503 have
     // their own messages; nothing logs in or creates a session afterwards.
-    TEST_ASSERT_TRUE(contains(body, "r.status===403?T.na"));
+    // The local-release hint is bound to the error code, not to every 403
+    // (a rejected origin must not send the user to the device).
+    TEST_ASSERT_TRUE(
+        contains(body, "j.error==='provisioning-not-allowed'?T.na"));
+    TEST_ASSERT_FALSE(contains(body, "r.status===403"));
     TEST_ASSERT_TRUE(contains(body, "r.status===409?T.ap"));
     TEST_ASSERT_TRUE(contains(body, "r.status===422?T.ic"));
     TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?T.rc"));
