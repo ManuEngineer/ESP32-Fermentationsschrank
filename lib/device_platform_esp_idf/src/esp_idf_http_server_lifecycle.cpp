@@ -11,6 +11,10 @@ namespace device_platform_esp_idf {
 namespace {
 
 constexpr std::size_t kMaximumHttpBodyBytes = 4096U;
+// HTTPD_DEFAULT_CONFIG() uses 4096 bytes, which the web provisioning request
+// overflowed on hardware (stack overflow in task httpd). 8192 is the first
+// fix candidate; hardware verification decides whether it is sufficient.
+constexpr std::size_t kHttpServerTaskStackBytes = 8192U;
 
 const char* methodName(http_method method) {
     switch (method) {
@@ -188,6 +192,7 @@ bool EspIdfHttpServerLifecycle::start(device_platform::IHttpRouteSink& routes) {
         return false;
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = kHttpServerTaskStackBytes;
     config.max_uri_handlers = 1U;
     config.max_req_hdr_len =
         device_platform::kMaximumHttpRequestHeaderBlockBytes;
