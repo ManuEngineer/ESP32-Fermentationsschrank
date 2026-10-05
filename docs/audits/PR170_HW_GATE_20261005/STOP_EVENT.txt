@@ -25,3 +25,4 @@ httpd task stack = HTTPD_DEFAULT_CONFIG() (esp_idf_http_server_lifecycle.cpp:190
 After reboot: /api/v1/status -> 401 (session required) and login shell => state is protected (provisioning persisted), response lost.
 Before overflow: no heap_alloc_failed; minimum_free_heap 16668 B during WiFi mode switches (before provisioning).
 No repair, no optimization performed (stop rule).
+[19:29:40] owner said done: capture ended by STOP file

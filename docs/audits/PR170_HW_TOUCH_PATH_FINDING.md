@@ -86,3 +86,11 @@ Stromunterbruch abgeschickt. Ergebnis:
   WLAN-Moduswechsel vor der Provisionierung.
 - Die frueheren drei Brownouts (provisorische Stromversorgung) sind damit nicht
   die Ursache des Gate-Blockers.
+
+## Abschluss des Mitschnitts
+
+Der Mitschnitt wurde auf Ownerwunsch beendet (`UART_STAMPED.txt`, bereinigt;
+Hashes der unbereinigten Originale in `CAPTURE_HASHES_raw_unsanitized.txt`).
+Einordnung durch den Owner: Die frueheren Brownouts stammen sicher vom
+provisorischen Stromaufbau; der spaetere Stack-Overflow im httpd-Task trat bei
+stabiler Versorgung auf und ist ein eigener Befund.
