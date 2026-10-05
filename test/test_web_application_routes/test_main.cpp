@@ -1758,9 +1758,9 @@ void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    TEST_ASSERT_TRUE(
-        response.body.find("Local provisioning or recovery required") !=
-        std::string::npos);
+    // Unprovisioned: the first-time setup form (S6) instead of the old hint.
+    TEST_ASSERT_TRUE(response.body.find("/api/v1/provision") !=
+                     std::string::npos);
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
@@ -2947,6 +2947,151 @@ void test_provision_route_does_not_open_the_run_mutation_route() {
     TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
 }
 
+// ---- S6: first-time setup form in the web shell -----------------------------
+
+std::string shellBody(ComposedFixture& fixture) {
+    auto request = makeWebRequest("GET", "/");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    return response.body;
+}
+
+bool contains(const std::string& text, const char* needle) {
+    return text.find(needle) != std::string::npos;
+}
+
+size_t occurrences(const std::string& text, const std::string& needle) {
+    size_t count = 0U;
+    for (size_t at = text.find(needle); at != std::string::npos;
+         at = text.find(needle, at + needle.size())) {
+        ++count;
+    }
+    return count;
+}
+
+void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
+    ComposedFixture fixture;
+    const auto body = shellBody(fixture);
+    // The existing shell size limit is neither raised nor exceeded.
+    TEST_ASSERT_TRUE(body.size() <= 4096U);
+    // Protect is preselected; password, separate Service-PIN and the explicit
+    // disable confirmation are separate controls.
+    TEST_ASSERT_TRUE(contains(body, "name=\"o\" value=\"p\" checked"));
+    TEST_ASSERT_TRUE(contains(body, "name=\"o\" value=\"d\">"));
+    TEST_ASSERT_TRUE(contains(body, "id=\"w\" type=\"password\""));
+    TEST_ASSERT_TRUE(contains(body, "id=\"n\" type=\"password\""));
+    TEST_ASSERT_TRUE(contains(body, "id=\"k\" type=\"checkbox\""));
+    // The warning and the confirmation are hidden until "disable" is chosen.
+    TEST_ASSERT_TRUE(contains(body, "<p id=\"x\" hidden>"));
+    TEST_ASSERT_TRUE(contains(body, "<label id=\"lk\" hidden>"));
+    TEST_ASSERT_TRUE(contains(body, "q('x').hidden=q('lk').hidden=!d()"));
+    // No login, session, status polling or logout in this state.
+    TEST_ASSERT_FALSE(contains(body, "/api/v1/login"));
+    TEST_ASSERT_FALSE(contains(body, "/api/v1/logout"));
+    TEST_ASSERT_FALSE(contains(body, "/api/v1/status"));
+    TEST_ASSERT_FALSE(contains(body, "csrf"));
+    TEST_ASSERT_FALSE(contains(body, "__WEB_CSRF__"));
+}
+
+void test_unprovisioned_shell_requests_match_the_s4_contract() {
+    ComposedFixture fixture;
+    const auto body = shellBody(fixture);
+    TEST_ASSERT_TRUE(contains(body, "fetch('/api/v1/provision'"));
+    TEST_ASSERT_TRUE(contains(body, "method:'POST'"));
+    TEST_ASSERT_TRUE(contains(body, "'Content-Type':'application/json'"));
+    // Key set and order exactly as the S4 codec expects them.
+    TEST_ASSERT_TRUE(contains(body,
+                              "{mode:'disable',servicePin:q('n').value,"
+                              "confirmDisable:true}"));
+    TEST_ASSERT_TRUE(contains(body,
+                              "{mode:'protect',password:q('w').value,"
+                              "servicePin:q('n').value}"));
+    // Disable is only sent after the explicit confirmation is ticked.
+    TEST_ASSERT_TRUE(contains(body, "if(d()&&!q('k').checked)"));
+
+    // The exact bodies the page builds are accepted by the S4 route/codec.
+    WebProvisionDto dto;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebProvisionDecodeStatus::Success),
+        static_cast<int>(decodeWebProvision(
+            "{\"mode\":\"protect\",\"password\":\"x\",\"servicePin\":\"1\"}",
+            dto)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::Success),
+                          static_cast<int>(decodeWebProvision(
+                              "{\"mode\":\"disable\",\"servicePin\":\"1\","
+                              "\"confirmDisable\":true}",
+                              dto)));
+}
+
+void test_unprovisioned_shell_explains_local_release_and_creates_no_session() {
+    ComposedFixture fixture;
+    const auto body = shellBody(fixture);
+    // 403 is explained as a local release on the device; 409/422/503 have
+    // their own messages; nothing logs in or creates a session afterwards.
+    TEST_ASSERT_TRUE(contains(body, "r.status===403?T.na"));
+    TEST_ASSERT_TRUE(contains(body, "r.status===409?T.ap"));
+    TEST_ASSERT_TRUE(contains(body, "r.status===422?T.ic"));
+    TEST_ASSERT_TRUE(contains(body, "j.error==='recovery-required'?T.rc"));
+    TEST_ASSERT_TRUE(contains(body, "release web setup on the device first"));
+    TEST_ASSERT_TRUE(contains(body, "am Geraet freigeben"));
+    TEST_ASSERT_TRUE(contains(body, "en el equipo"));
+    TEST_ASSERT_FALSE(contains(body, "location.reload"));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 0U));
+}
+
+void test_unprovisioned_shell_texts_are_complete_in_all_locales() {
+    ComposedFixture fixture;
+    const auto body = shellBody(fixture);
+    for (const char* key : {"a", "b", "c", "e", "x", "y", "g", "ok", "na", "ic",
+                            "ap", "rc", "fl"}) {
+        // Every message key exists exactly once per locale (de, en, es).
+        TEST_ASSERT_EQUAL_UINT(
+            3U, occurrences(body, std::string(1U, ',') + key + ":'") +
+                    occurrences(body, std::string(1U, '{') + key + ":'"));
+    }
+    TEST_ASSERT_TRUE(contains(body, "de:{"));
+    TEST_ASSERT_TRUE(contains(body, ",en:{"));
+    TEST_ASSERT_TRUE(contains(body, ",es:{"));
+    TEST_ASSERT_TRUE(contains(body, "T=L[g]||L.en"));
+}
+
+void test_other_states_get_no_provisioning_form_or_bypass() {
+    // Protected, disabled and recovery states keep the existing shell and
+    // never offer a provisioning path.
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        const auto body = shellBody(fixture);
+        TEST_ASSERT_FALSE(contains(body, "/api/v1/provision"));
+        TEST_ASSERT_TRUE(contains(body, "/api/v1/login"));
+    }
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::setWebPasswordEnabled(
+                fixture.application, false));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_FALSE(contains(response.body, "/api/v1/provision"));
+    }
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+            fixture.application, AuthProvisioningState::RecoveryRequired));
+        const auto body = shellBody(fixture);
+        TEST_ASSERT_FALSE(contains(body, "/api/v1/provision"));
+        TEST_ASSERT_TRUE(
+            contains(body, "Local provisioning or recovery required"));
+    }
+}
+
 void test_provision_commit_outcome_unknown_closes_window_immediately() {
     ComposedFixture fixture;
     TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
@@ -3211,6 +3356,13 @@ int main() {
     RUN_TEST(test_provision_route_recovery_and_failure_mapping);
     RUN_TEST(test_provision_route_is_not_served_during_setup_flow);
     RUN_TEST(test_provision_route_does_not_open_the_run_mutation_route);
+    RUN_TEST(
+        test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
+    RUN_TEST(test_unprovisioned_shell_requests_match_the_s4_contract);
+    RUN_TEST(
+        test_unprovisioned_shell_explains_local_release_and_creates_no_session);
+    RUN_TEST(test_unprovisioned_shell_texts_are_complete_in_all_locales);
+    RUN_TEST(test_other_states_get_no_provisioning_form_or_bypass);
     RUN_TEST(test_provision_commit_outcome_unknown_closes_window_immediately);
     RUN_TEST(test_provision_lost_race_closes_window_via_current_state);
     RUN_TEST(test_provision_result_projection_is_fail_closed);

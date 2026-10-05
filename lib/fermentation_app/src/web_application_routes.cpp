@@ -135,8 +135,102 @@ std::string retryAfterSeconds(std::uint64_t retryAfterMs) {
     return std::to_string(seconds);
 }
 
+// Shell for the Unprovisioned state: the first-time web access setup form.
+// Login, status polling and the session controls have no function in this
+// state (the API answers 503), so this page replaces them within the same
+// shell size limit. The form only collects input and posts it to
+// POST /api/v1/provision; the Application decides everything (release
+// window, credential rules, state). It issues no session.
+std::string provisioningShell() {
+    return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+           "<meta name=\"viewport\" content=\"width=device-width,"
+           "initial-scale=1\"><title>Fermentation</"
+           "title><style>body{font-family:"
+           "system-ui;max-width:48rem;margin:auto;padding:1rem}form{display:"
+           "grid;"
+           "gap:.6rem}input,button{font:inherit;padding:.45rem}#m{font-weight:"
+           "600}"
+           "</style></head><body><main><h1>Fermentation</h1><form id=\"f\">"
+           "<label><input type=\"radio\" name=\"o\" value=\"p\" checked> "
+           "<span id=\"a\"></span></label><label><input type=\"radio\" "
+           "name=\"o\" value=\"d\"> <span id=\"b\"></span></label>"
+           "<label id=\"lw\"><span id=\"c\"></span> <input id=\"w\" "
+           "type=\"password\" autocomplete=\"new-password\"></label>"
+           "<label><span id=\"e\"></span> <input id=\"n\" type=\"password\" "
+           "inputmode=\"numeric\" autocomplete=\"off\"></label>"
+           "<p id=\"x\" hidden></p><label id=\"lk\" hidden><input id=\"k\" "
+           "type=\"checkbox\"> <span id=\"y\"></span></label>"
+           "<button id=\"g\"></button><p id=\"m\"></p></form></main><script>"
+           "const L={de:{a:'Mit Passwort schuetzen "
+           "(empfohlen)',b:'Passwortschutz "
+           "deaktivieren',c:'Passwort',e:'Service-PIN',x:'Warnung: Ohne "
+           "Passwort "
+           "kann jedes Geraet im lokalen Netz bedienen. Der Servicebereich "
+           "bleibt "
+           "per PIN geschuetzt.',y:'Verstanden, Passwortschutz deaktivieren',"
+           "g:'Einrichten',ok:'Eingerichtet. Seite neu laden.',na:'Noch nicht "
+           "freigegeben: Web-Setup zuerst am Geraet freigeben, dann erneut "
+           "versuchen.',ic:'Passwort oder PIN abgelehnt.',ap:'Bereits "
+           "eingerichtet.',rc:'Lokale Wiederherstellung "
+           "noetig.',fl:'Einrichtung "
+           "fehlgeschlagen.'},en:{a:'Protect with a password (recommended)',b:'"
+           "Disable password protection',c:'Password',e:'Service "
+           "PIN',x:'Warning:"
+           " without a password every device in the local network can operate "
+           "this device. The service area stays PIN protected.',y:'I "
+           "understand, "
+           "disable password protection',g:'Set up',ok:'Set up. Reload the "
+           "page.',"
+           "na:'Not released yet: release web setup on the device first, then "
+           "retry.',ic:'Password or PIN rejected.',ap:'Already set "
+           "up.',rc:'Local "
+           "recovery needed.',fl:'Setup failed.'},es:{a:'Proteger con "
+           "contrasena "
+           "(recomendado)',b:'Desactivar la proteccion',c:'Contrasena',e:'PIN "
+           "de "
+           "servicio',x:'Aviso: sin contrasena cualquier dispositivo de la red "
+           "local puede operar el equipo. El servicio sigue protegido por "
+           "PIN.',"
+           "y:'Entendido, desactivar la proteccion',g:'Configurar',ok:'Listo. "
+           "Recargue la pagina.',na:'Aun no permitido: permita la "
+           "configuracion "
+           "web en el equipo y reintente.',ic:'Contrasena o PIN "
+           "rechazados.',ap:'Ya"
+           " configurado.',rc:'Requiere recuperacion local.',fl:'Fallo la "
+           "configuracion.'}};const g=(navigator.language||'en').slice(0,2),"
+           "T=L[g]||L.en,q=i=>document.getElementById(i);"
+           "document.documentElement.lang=L[g]?g:'en';for(const i of "
+           "['a','b','c','e','x','y','g'])q(i).textContent=T[i];"
+           "const "
+           "d=()=>document.querySelector('input[name=o]:checked').value==='d';"
+           "const "
+           "u=()=>{q('lw').hidden=d();q('x').hidden=q('lk').hidden=!d();};"
+           "document.querySelectorAll('input[name=o]').forEach(i=>i.onchange=u)"
+           ";"
+           "q('f').onsubmit=async "
+           "e=>{e.preventDefault();if(d()&&!q('k').checked)"
+           "{q('m').textContent=T.y;return;}const b=d()?{mode:'disable',"
+           "servicePin:q('n').value,confirmDisable:true}:{mode:'protect',"
+           "password:"
+           "q('w').value,servicePin:q('n').value};try{const r=await "
+           "fetch('/api/v1/provision',{method:'POST',credentials:'same-origin',"
+           "headers:{'Content-Type':'application/"
+           "json'},body:JSON.stringify(b)});"
+           "const j=await "
+           "r.json().catch(()=>({}));q('m').textContent=r.ok?T.ok:"
+           "r.status===403?T.na:r.status===409?T.ap:r.status===422?T.ic:"
+           "j.error==='recovery-required'?T.rc:T.fl;if(r.ok){q('w').value=q('n'"
+           ")"
+           ".value='';}}catch(x){q('m').textContent=T.fl;}};u();</script></"
+           "body>"
+           "</html>";
+}
+
 std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
                      bool authenticated) {
+    if (state == WebAuthenticationState::Unprovisioned) {
+        return provisioningShell();
+    }
     // This is intentionally a small static shell. It has no framework,
     // generated bundle, history, chart or mutation control. All three API
     // requests are repeated together so a reconnect receives a full snapshot.
