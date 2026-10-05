@@ -89,7 +89,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"web-access-open", "Web setup"},
         std::pair{"web-access-window-open", "Web setup allowed (10 min)"},
         std::pair{"web-access-closed", "Web setup not allowed yet"},
-        std::pair{"web-access-not-needed", "Web access is set up"},
+        std::pair{"web-access-unavailable", "Web setup not available"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -172,7 +172,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"web-access-open", "Web-Setup"},
                  {"web-access-window-open", "Web-Setup frei (10 Min)"},
                  {"web-access-closed", "Web-Setup nicht freigegeben"},
-                 {"web-access-not-needed", "Webzugang ist eingerichtet"}}};
+                 {"web-access-unavailable", "Web-Setup nicht verfuegbar"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -254,7 +254,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"web-access-open", "Config. web"},
                  {"web-access-window-open", "Config. web permitida (10 min)"},
                  {"web-access-closed", "Config. web no permitida"},
-                 {"web-access-not-needed", "Acceso web configurado"}}};
+                 {"web-access-unavailable", "Config. web no disponible"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

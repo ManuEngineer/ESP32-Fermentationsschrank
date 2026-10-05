@@ -791,6 +791,14 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 view, 1U, "web-access-open",
                 FermentationUiWorkspaceSlotAction::OpenWebProvisioningWindow,
                 snapshot.webAccess == FermentationWebAccessState::Closed);
+            // The reason mirrors the Application-reported state; the
+            // workspace adds no state logic of its own.
+            if (snapshot.webAccess == FermentationWebAccessState::WindowOpen) {
+                view.blockedReason = key("web-access-window-open");
+            } else if (snapshot.webAccess ==
+                       FermentationWebAccessState::NotApplicable) {
+                view.blockedReason = key("web-access-unavailable");
+            }
             break;
         case FermentationUiPage::HeaderClock:
             view.title = key("clock");

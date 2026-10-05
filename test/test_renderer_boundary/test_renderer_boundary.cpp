@@ -941,7 +941,11 @@ void test_web_access_page_shows_the_application_state_in_all_locales() {
         {"en", fermentation::FermentationWebAccessState::WindowOpen,
          "Web access", "Web setup allowed (10 min)"},
         {"en", fermentation::FermentationWebAccessState::NotApplicable,
-         "Web access", "Web access is set up"},
+         "Web access", "Web setup not available"},
+        {"de", fermentation::FermentationWebAccessState::NotApplicable,
+         "Webzugang", "Web-Setup nicht verfuegbar"},
+        {"es", fermentation::FermentationWebAccessState::NotApplicable,
+         "Acceso web", "Config. web no disponible"},
         {"de", fermentation::FermentationWebAccessState::Closed, "Webzugang",
          "Web-Setup nicht freigegeben"},
         {"de", fermentation::FermentationWebAccessState::WindowOpen,
@@ -965,6 +969,10 @@ void test_web_access_page_shows_the_application_state_in_all_locales() {
         TEST_ASSERT_TRUE(hasText(screen, expected.status));
         // No stale network page content is drawn on this page.
         TEST_ASSERT_FALSE(hasText(screen, "SSID: "));
+        // No state may claim a successful setup.
+        TEST_ASSERT_FALSE(hasText(screen, "Web access is set up"));
+        TEST_ASSERT_FALSE(hasText(screen, "Webzugang ist eingerichtet"));
+        TEST_ASSERT_FALSE(hasText(screen, "Acceso web configurado"));
         for (const auto& command : screen.commands) {
             TEST_ASSERT_TRUE(command.rect.left + command.rect.width <=
                              screen.kWidth);

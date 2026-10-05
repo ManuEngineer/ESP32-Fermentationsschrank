@@ -416,7 +416,7 @@ RepresentativeScreen makeRepresentativeScreen(
                 device_platform::ThemeToken::Canvas);
     } else if (screen.workspace.page == FermentationUiPage::HeaderWebAccess) {
         // The Application owns the release state; the page only shows it.
-        const char* statusKey = "web-access-not-needed";
+        const char* statusKey = "web-access-unavailable";
         auto statusToken = device_platform::ThemeToken::TextSecondary;
         if (snapshot.webAccess == FermentationWebAccessState::WindowOpen) {
             statusKey = "web-access-window-open";

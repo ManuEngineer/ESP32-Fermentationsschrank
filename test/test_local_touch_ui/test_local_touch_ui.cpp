@@ -979,6 +979,13 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
     snapshot.webAccess = FermentationWebAccessState::NotApplicable;
     view = workspace.view(snapshot);
     TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    {
+        const device_platform::TextKey expectedReason{
+            device_platform::TextNamespace{"fermentation"},
+            "web-access-unavailable"};
+        TEST_ASSERT_TRUE(*view.blockedReason == expectedReason);
+    }
     auto blocked = workspace.press(snapshot, bottom(1));
     TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
     TEST_ASSERT_TRUE(blocked.interaction.outcome ==
@@ -987,12 +994,20 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
     snapshot.webAccess = FermentationWebAccessState::WindowOpen;
     view = workspace.view(snapshot);
     TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    {
+        const device_platform::TextKey expectedReason{
+            device_platform::TextNamespace{"fermentation"},
+            "web-access-window-open"};
+        TEST_ASSERT_TRUE(*view.blockedReason == expectedReason);
+    }
     blocked = workspace.press(snapshot, bottom(1));
     TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
 
     snapshot.webAccess = FermentationWebAccessState::Closed;
     view = workspace.view(snapshot);
     TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_FALSE(view.blockedReason.has_value());
     const auto opened = workspace.press(snapshot, bottom(1));
     TEST_ASSERT_TRUE(opened.openWebProvisioningWindow.has_value());
     TEST_ASSERT_FALSE(opened.navigated);
