@@ -82,6 +82,9 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
                                    device_platform::HttpResponse& response);
     [[nodiscard]] bool handleLogout(const device_platform::HttpRequest& request,
                                     device_platform::HttpResponse& response);
+    [[nodiscard]] bool handleProvision(
+        const device_platform::HttpRequest& request,
+        device_platform::HttpResponse& response);
     [[nodiscard]] bool handleReadOnly(
         const device_platform::HttpRequest& request,
         device_platform::HttpResponse& response);

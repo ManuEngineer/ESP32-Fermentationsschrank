@@ -9,6 +9,7 @@
 namespace fermentation {
 
 inline constexpr std::size_t kMaximumWebLoginBodyBytes = 768U;
+inline constexpr std::size_t kMaximumWebProvisionBodyBytes = 1024U;
 inline constexpr std::size_t kMaximumWebApiResponseBodyBytes = 3072U;
 inline constexpr std::size_t kMaximumWebApiAlertCount = 16U;
 inline constexpr unsigned kMaximumWebJsonNesting = 4U;
@@ -28,6 +29,24 @@ enum class WebLoginDecodeStatus : unsigned char {
     TooLarge,
     Invalid,
 };
+
+// First-time web access setup request. The codec only checks the schema;
+// password and Service-PIN rules stay with the authentication domain, so
+// present-but-invalid values reach the Application and end as 422.
+struct WebProvisionDto {
+    WebProvisionMode mode{WebProvisionMode::Protect};
+    std::string password;
+    std::string servicePin;
+};
+
+enum class WebProvisionDecodeStatus : unsigned char {
+    Success,
+    TooLarge,
+    Invalid,
+};
+
+[[nodiscard]] WebProvisionDecodeStatus decodeWebProvision(
+    const std::string& exactBody, WebProvisionDto& output);
 
 [[nodiscard]] WebLoginDecodeStatus decodeWebLogin(const std::string& exactBody,
                                                   WebLoginDto& output);

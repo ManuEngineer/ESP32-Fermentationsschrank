@@ -53,6 +53,38 @@ bool hasOnlyKeys(const cJSON* object,
     return true;
 }
 
+bool hasDuplicateKeys(const cJSON* object) {
+    for (auto* item = object->child; item != nullptr; item = item->next) {
+        if (item->string == nullptr) return true;
+        for (auto* other = item->next; other != nullptr; other = other->next) {
+            if (other->string != nullptr &&
+                std::strcmp(item->string, other->string) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::size_t memberCount(const cJSON* object) {
+    std::size_t count = 0U;
+    for (auto* item = object->child; item != nullptr; item = item->next) {
+        ++count;
+    }
+    return count;
+}
+
+// Like readString, but an empty string is a well-formed value: whether it is
+// an acceptable credential is decided by the authentication domain.
+bool readCredentialString(const cJSON* value, std::size_t maximumBytes,
+                          std::string& output) {
+    if (!cJSON_IsString(value) || value->valuestring == nullptr) return false;
+    const auto length = std::strlen(value->valuestring);
+    if (length > maximumBytes) return false;
+    output.assign(value->valuestring, length);
+    return true;
+}
+
 bool containsForbiddenNulInput(const std::string& body) {
     if (body.find('\0') != std::string::npos) return true;
     constexpr char kDecodedNulEscape[] = {'\\', 'u', '0', '0', '0', '0'};
@@ -761,6 +793,58 @@ WebRunMutationDecodeStatus decodeWebRunMutation(const std::string& exactBody,
     }
     output = std::move(parsed);
     return WebRunMutationDecodeStatus::Success;
+}
+
+WebProvisionDecodeStatus decodeWebProvision(const std::string& exactBody,
+                                            WebProvisionDto& output) {
+    if (exactBody.empty()) return WebProvisionDecodeStatus::Invalid;
+    if (exactBody.size() > kMaximumWebProvisionBodyBytes) {
+        return WebProvisionDecodeStatus::TooLarge;
+    }
+    if (containsForbiddenNulInput(exactBody)) {
+        return WebProvisionDecodeStatus::Invalid;
+    }
+
+    CJsonDocument document(cJSON_ParseWithLengthOpts(
+        exactBody.c_str(), exactBody.size() + 1U, nullptr, true));
+    if (!document || !cJSON_IsObject(document.get()) ||
+        hasDuplicateKeys(document.get())) {
+        return WebProvisionDecodeStatus::Invalid;
+    }
+
+    WebProvisionDto parsed;
+    const auto* mode = member(document.get(), "mode");
+    if (!cJSON_IsString(mode) || mode->valuestring == nullptr) {
+        return WebProvisionDecodeStatus::Invalid;
+    }
+    const auto* servicePin = member(document.get(), "servicePin");
+    if (std::strcmp(mode->valuestring, "protect") == 0) {
+        parsed.mode = WebProvisionMode::Protect;
+        const auto* password = member(document.get(), "password");
+        if (!hasOnlyKeys(document.get(), {"mode", "password", "servicePin"}) ||
+            memberCount(document.get()) != 3U ||
+            !readCredentialString(password, kMaximumWebProvisionBodyBytes,
+                                  parsed.password)) {
+            return WebProvisionDecodeStatus::Invalid;
+        }
+    } else if (std::strcmp(mode->valuestring, "disable") == 0) {
+        parsed.mode = WebProvisionMode::Disable;
+        const auto* confirm = member(document.get(), "confirmDisable");
+        if (!hasOnlyKeys(document.get(),
+                         {"mode", "servicePin", "confirmDisable"}) ||
+            memberCount(document.get()) != 3U || !cJSON_IsBool(confirm) ||
+            !cJSON_IsTrue(confirm)) {
+            return WebProvisionDecodeStatus::Invalid;
+        }
+    } else {
+        return WebProvisionDecodeStatus::Invalid;
+    }
+    if (!readCredentialString(servicePin, kMaximumWebProvisionBodyBytes,
+                              parsed.servicePin)) {
+        return WebProvisionDecodeStatus::Invalid;
+    }
+    output = std::move(parsed);
+    return WebProvisionDecodeStatus::Success;
 }
 
 WebLoginDecodeStatus decodeWebLogin(const std::string& exactBody,

@@ -19,6 +19,7 @@ constexpr char kTemperaturesApiPath[] = "/api/v1/temperatures";
 constexpr char kAlertsApiPath[] = "/api/v1/alerts";
 constexpr char kLoginPath[] = "/api/v1/login";
 constexpr char kLogoutPath[] = "/api/v1/logout";
+constexpr char kProvisionPath[] = "/api/v1/provision";
 constexpr char kSessionCookieName[] = "FSSESSION=";
 constexpr char kHtmlContentType[] = "text/html; charset=utf-8";
 constexpr std::size_t kMaximumWebShellBytes = 4096U;
@@ -699,6 +700,75 @@ bool WebRouteDispatcher::handleLogin(
     return true;
 }
 
+bool WebRouteDispatcher::handleProvision(
+    const device_platform::HttpRequest& request,
+    device_platform::HttpResponse& response) {
+    if (request.method != "POST") {
+        setJsonResponse(response, 405U, "{\"error\":\"method-not-allowed\"}");
+        return true;
+    }
+    if (!validWebMetadata(request, response)) return true;
+    if (!request.metadata.contentType.has_value() ||
+        !web_browser_policy::exactJsonContentType(
+            *request.metadata.contentType)) {
+        setJsonResponse(response, 415U,
+                        "{\"error\":\"unsupported-media-type\"}");
+        return true;
+    }
+    if (!web_browser_policy::sameOrigin(request)) {
+        setJsonResponse(response, 403U, "{\"error\":\"origin-rejected\"}");
+        return true;
+    }
+
+    // First-time setup has no session, CSRF token or replay sequence; the
+    // authorization is the local release window owned by the Application.
+    WebProvisionDto dto;
+    const auto decoded = decodeWebProvision(request.body, dto);
+    if (decoded != WebProvisionDecodeStatus::Success) {
+        if (decoded == WebProvisionDecodeStatus::TooLarge) {
+            setJsonResponse(response, 413U,
+                            "{\"error\":\"request-too-large\"}");
+        } else {
+            setJsonResponse(response, 400U, "{\"error\":\"invalid-json\"}");
+        }
+        return true;
+    }
+
+    switch (application_.provisionWebAccess(dto.mode, dto.password,
+                                            dto.servicePin)) {
+        case WebProvisionStatus::Provisioned:
+            setJsonResponse(response, 200U,
+                            dto.mode == WebProvisionMode::Protect
+                                ? "{\"provisioned\":true,"
+                                  "\"passwordProtection\":\"enabled\"}"
+                                : "{\"provisioned\":true,"
+                                  "\"passwordProtection\":\"disabled\"}");
+            break;
+        case WebProvisionStatus::NotAllowed:
+            setJsonResponse(response, 403U,
+                            "{\"error\":\"provisioning-not-allowed\"}");
+            break;
+        case WebProvisionStatus::AlreadyProvisioned:
+            setJsonResponse(response, 409U,
+                            "{\"error\":\"already-provisioned\"}");
+            break;
+        case WebProvisionStatus::InvalidCredentials:
+            setJsonResponse(response, 422U,
+                            "{\"error\":\"invalid-credentials\"}");
+            break;
+        case WebProvisionStatus::Failed:
+            setJsonResponse(response, 503U,
+                            "{\"error\":\"provisioning-failed\"}");
+            break;
+        case WebProvisionStatus::RecoveryRequired:
+        default:
+            setJsonResponse(response, 503U,
+                            "{\"error\":\"recovery-required\"}");
+            break;
+    }
+    return true;
+}
+
 bool WebRouteDispatcher::handleLogout(
     const device_platform::HttpRequest& request,
     device_platform::HttpResponse& response) {
@@ -780,6 +850,9 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
     if (request.path == "/") return handleShell(request, response);
     if (request.path == kLoginPath) return handleLogin(request, response);
     if (request.path == kLogoutPath) return handleLogout(request, response);
+    if (request.path == kProvisionPath) {
+        return handleProvision(request, response);
+    }
     if (request.path == kStatusApiPath ||
         request.path == kTemperaturesApiPath ||
         request.path == kAlertsApiPath) {

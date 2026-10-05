@@ -2583,6 +2583,370 @@ void test_provision_input_and_failure_contracts() {
     }
 }
 
+// ---- S4: POST /api/v1/provision ---------------------------------------------
+
+std::string provisionBodyProtect(const std::string& webSecret,
+                                 const std::string& pin) {
+    return "{\"mode\":\"protect\",\"password\":\"" + webSecret +
+           "\",\"servicePin\":\"" + pin + "\"}";
+}
+
+std::string provisionBodyDisable(const std::string& pin,
+                                 const std::string& confirmValue = "true") {
+    return "{\"mode\":\"disable\",\"servicePin\":\"" + pin +
+           "\",\"confirmDisable\":" + confirmValue + "}";
+}
+
+device_platform::HttpRequest makeProvisionRequest(std::string body) {
+    auto request = makeWebRequest("POST", "/api/v1/provision", std::move(body));
+    request.metadata.contentType = "application/json; charset=utf-8";
+    return request;
+}
+
+device_platform::HttpResponse postProvision(ComposedFixture& fixture,
+                                            const std::string& body) {
+    device_platform::HttpResponse response;
+    const auto request = makeProvisionRequest(body);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    return response;
+}
+
+void assertError(const device_platform::HttpResponse& response,
+                 std::uint16_t status, const char* error) {
+    TEST_ASSERT_EQUAL_UINT16(status, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find(error) != std::string::npos);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+}
+
+void test_provision_codec_accepts_exactly_the_two_schemas() {
+    WebProvisionDto dto;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WebProvisionDecodeStatus::Success),
+        static_cast<int>(decodeWebProvision(
+            provisionBodyProtect(passwordUnderTest(), kPinUnderTest), dto)));
+    TEST_ASSERT_TRUE(dto.mode == WebProvisionMode::Protect);
+    TEST_ASSERT_TRUE(dto.password == passwordUnderTest());
+    TEST_ASSERT_TRUE(dto.servicePin == kPinUnderTest);
+
+    WebProvisionDto disable;
+    disable.password = "stale";
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::Success),
+                          static_cast<int>(decodeWebProvision(
+                              provisionBodyDisable(kPinUnderTest), disable)));
+    TEST_ASSERT_TRUE(disable.mode == WebProvisionMode::Disable);
+    TEST_ASSERT_TRUE(disable.password.empty());
+    TEST_ASSERT_TRUE(disable.servicePin == kPinUnderTest);
+
+    // Empty and short strings are well-formed: the domain judges them.
+    WebProvisionDto weak;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::Success),
+                          static_cast<int>(decodeWebProvision(
+                              provisionBodyProtect("", ""), weak)));
+}
+
+void test_provision_codec_body_limit_and_whitespace() {
+    WebProvisionDto dto;
+    const auto valid = provisionBodyProtect(passwordUnderTest(), kPinUnderTest);
+    std::string exact = valid;
+    exact.append(kMaximumWebProvisionBodyBytes - exact.size(), ' ');
+    TEST_ASSERT_EQUAL_UINT(kMaximumWebProvisionBodyBytes, exact.size());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::Success),
+                          static_cast<int>(decodeWebProvision(exact, dto)));
+    std::string over = exact + " ";
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::TooLarge),
+                          static_cast<int>(decodeWebProvision(over, dto)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(WebProvisionDecodeStatus::Invalid),
+                          static_cast<int>(decodeWebProvision("", dto)));
+}
+
+void test_provision_codec_rejects_every_schema_violation_without_partial_dto() {
+    const std::string pin = kPinUnderTest;
+    const std::string secret = passwordUnderTest();
+    const std::string embeddedNul = std::string("{\"mode\":\"disable\",") +
+                                    "\"servicePin\":\"12" + '\0' +
+                                    "34\",\"confirmDisable\":true}";
+    const std::string bodies[] = {
+        "{}",
+        "[]",
+        "null",
+        "\"protect\"",
+        "{\"mode\":\"other\",\"servicePin\":\"" + pin + "\"}",
+        "{\"mode\":\"protect\",\"password\":\"" + secret +
+            "\",\"servicePin\":\"" + pin + "\",\"extra\":1}",
+        "{\"mode\":\"protect\",\"mode\":\"protect\",\"password\":\"" + secret +
+            "\",\"servicePin\":\"" + pin + "\"}",
+        "{\"password\":\"" + secret + "\",\"servicePin\":\"" + pin + "\"}",
+        "{\"mode\":\"protect\",\"password\":\"" + secret + "\"}",
+        "{\"mode\":\"protect\",\"servicePin\":\"" + pin + "\"}",
+        "{\"mode\":\"protect\",\"password\":\"" + secret +
+            "\",\"servicePin\":\"" + pin + "\",\"confirmDisable\":true}",
+        "{\"mode\":\"disable\",\"password\":\"" + secret +
+            "\",\"servicePin\":\"" + pin + "\",\"confirmDisable\":true}",
+        "{\"mode\":\"disable\",\"servicePin\":\"" + pin + "\"}",
+        provisionBodyDisable(pin, "false"),
+        provisionBodyDisable(pin, "\"true\""),
+        provisionBodyDisable(pin, "1"),
+        "{\"mode\":\"protect\",\"password\":1,\"servicePin\":\"" + pin + "\"}",
+        "{\"mode\":\"protect\",\"password\":\"" + secret +
+            "\",\"servicePin\":1234}",
+        "{\"mode\":1,\"servicePin\":\"" + pin + "\"}",
+        provisionBodyProtect(secret, pin) + " trailing",
+        "{\"mode\":\"disable\",\"servicePin\":\"12\\u0000\",\"confirmDisable\":"
+        "true}",
+        embeddedNul,
+    };
+    for (const auto& body : bodies) {
+        const std::string sentinelText(12U, 's');
+        WebProvisionDto dto;
+        dto.mode = WebProvisionMode::Disable;
+        dto.password = sentinelText;
+        dto.servicePin = "9999";
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WebProvisionDecodeStatus::Invalid),
+            static_cast<int>(decodeWebProvision(body, dto)));
+        TEST_ASSERT_TRUE(dto.mode == WebProvisionMode::Disable);
+        TEST_ASSERT_TRUE(dto.password == sentinelText);
+        TEST_ASSERT_TRUE(dto.servicePin == "9999");
+    }
+}
+
+void test_provision_route_request_security_contract() {
+    ComposedFixture fixture;
+    const auto body = provisionBodyProtect(passwordUnderTest(), kPinUnderTest);
+    device_platform::HttpResponse response;
+
+    auto request = makeWebRequest("GET", "/api/v1/provision");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 405U, "method-not-allowed");
+
+    // Invalid request metadata (oversized Host header) is rejected by the
+    // shared metadata validation.
+    request = makeProvisionRequest(body);
+    request.metadata.host = std::string(1000U, 'a');
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 400U, "invalid-request");
+
+    request = makeProvisionRequest(body);
+    request.metadata.contentType = "text/plain";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 415U, "unsupported-media-type");
+
+    request = makeProvisionRequest(body);
+    request.metadata.contentType.reset();
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 415U, "unsupported-media-type");
+
+    request = makeProvisionRequest(body);
+    request.metadata.origin = "http://other.local";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 403U, "origin-rejected");
+
+    request = makeProvisionRequest(body);
+    request.metadata.origin = "null";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 403U, "origin-rejected");
+
+    request = makeProvisionRequest(body);
+    request.metadata.secFetchSite = "cross-site";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 403U, "origin-rejected");
+
+    // A valid Origin proceeds (here: no local release, so "not allowed").
+    request = makeProvisionRequest(body);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 403U, "provisioning-not-allowed");
+
+    // Referer fallback when Origin is absent.
+    request = makeProvisionRequest(body);
+    request.metadata.origin.reset();
+    request.metadata.referer = "http://fermenter.local/";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 403U, "provisioning-not-allowed");
+
+    request = makeProvisionRequest(std::string(2000U, ' '));
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 413U, "request-too-large");
+
+    request = makeProvisionRequest("{\"mode\":\"protect\"}");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    assertError(response, 400U, "invalid-json");
+}
+
+void test_provision_route_without_window_changes_nothing() {
+    ComposedFixture fixture;
+    const auto recordsBefore = authRecordBytes(fixture);
+    const auto callsBefore = fixture.kdf.calls();
+    const auto response = postProvision(
+        fixture, provisionBodyProtect(passwordUnderTest(), kPinUnderTest));
+    assertError(response, 403U, "provisioning-not-allowed");
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls());
+    TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+}
+
+void test_provision_route_protect_success_creates_no_session() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    const auto response = postProvision(
+        fixture, provisionBodyProtect(passwordUnderTest(), kPinUnderTest));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.contentType == "application/json; charset=utf-8");
+    TEST_ASSERT_TRUE(
+        response.body ==
+        "{\"provisioned\":true,\"passwordProtection\":\"enabled\"}");
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(response.body.find("csrf") == std::string::npos);
+    TEST_ASSERT_TRUE(response.body.find(passwordUnderTest()) ==
+                     std::string::npos);
+    TEST_ASSERT_TRUE(response.body.find(kPinUnderTest) == std::string::npos);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordProtected);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 0U));
+
+    // Normal login works afterwards; a repeat is a conflict.
+    const auto session = loginComposed(fixture);
+    TEST_ASSERT_FALSE(session.cookie.empty());
+    const auto repeat = postProvision(
+        fixture, provisionBodyProtect(passwordUnderTest(), kPinUnderTest));
+    assertError(repeat, 409U, "already-provisioned");
+}
+
+void test_provision_route_disable_success_creates_no_session() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    const auto response =
+        postProvision(fixture, provisionBodyDisable(kPinUnderTest));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(
+        response.body ==
+        "{\"provisioned\":true,\"passwordProtection\":\"disabled\"}");
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordDisabled);
+    TEST_ASSERT_FALSE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_FALSE(FermentationApplicationTestAccess::hasActiveSession(
+        fixture.application, 0U));
+
+    // The existing disabled-mode shell path still issues the anonymous session.
+    auto shell = makeWebRequest("GET", "/");
+    device_platform::HttpResponse shellResponse;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(shell, shellResponse));
+    TEST_ASSERT_EQUAL_UINT16(200U, shellResponse.statusCode);
+    TEST_ASSERT_TRUE(shellResponse.metadata.setCookie.has_value());
+
+    const auto repeat =
+        postProvision(fixture, provisionBodyDisable(kPinUnderTest));
+    assertError(repeat, 409U, "already-provisioned");
+}
+
+void test_provision_route_credential_errors_are_422_and_retryable() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    const auto recordsBefore = authRecordBytes(fixture);
+    assertError(postProvision(fixture,
+                              provisionBodyProtect("too short", kPinUnderTest)),
+                422U, "invalid-credentials");
+    assertError(postProvision(fixture, provisionBodyProtect("", kPinUnderTest)),
+                422U, "invalid-credentials");
+    assertError(
+        postProvision(fixture, provisionBodyProtect(passwordUnderTest(), "12")),
+        422U, "invalid-credentials");
+    assertError(postProvision(fixture, provisionBodyDisable("abcd")), 422U,
+                "invalid-credentials");
+    TEST_ASSERT_TRUE(authRecordBytes(fixture) == recordsBefore);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::Unprovisioned);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_EQUAL_UINT16(
+        200U, postProvision(fixture, provisionBodyProtect(passwordUnderTest(),
+                                                          kPinUnderTest))
+                  .statusCode);
+}
+
+void test_provision_route_recovery_and_failure_mapping() {
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+            fixture.application, AuthProvisioningState::RecoveryRequired));
+        const auto calls = fixture.kdf.calls();
+        assertError(
+            postProvision(fixture, provisionBodyProtect(passwordUnderTest(),
+                                                        kPinUnderTest)),
+            503U, "recovery-required");
+        TEST_ASSERT_EQUAL_UINT(calls, fixture.kdf.calls());
+    }
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.kdf.setFailing(true);
+        assertError(
+            postProvision(fixture, provisionBodyProtect(passwordUnderTest(),
+                                                        kPinUnderTest)),
+            503U, "provisioning-failed");
+        fixture.kdf.setFailing(false);
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+    }
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+        fixture.store.setNextWriteFault(
+            device_platform_test_support::SimulatedPersistentStateStore::
+                WriteFault::PowerCutAfterCommitBeforeReturn);
+        fixture.store.failNextReadAfterWrite();
+        assertError(
+            postProvision(fixture, provisionBodyProtect(passwordUnderTest(),
+                                                        kPinUnderTest)),
+            503U, "recovery-required");
+        TEST_ASSERT_FALSE(FermentationApplicationTestAccess::windowFlagOpen(
+            fixture.application));
+    }
+}
+
+void test_provision_route_is_not_served_during_setup_flow() {
+    ComposedFixture fixture;
+    const auto home = fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NetworkConfigurationStatus::Applied),
+                          static_cast<int>(home.status));
+    TEST_ASSERT_TRUE(fixture.application.networkSetupFlowActive());
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+
+    auto request = makeProvisionRequest(
+        provisionBodyProtect(passwordUnderTest(), kPinUnderTest));
+    device_platform::HttpResponse response;
+    // The setup flow owns the surface: the dispatcher does not handle it.
+    TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::Unprovisioned);
+
+    // After the network setup completed the normal route answers.
+    auto candidate =
+        makeWebRequest("POST", "/api/network/candidate",
+                       "ssid=next-network&password=next-network-password");
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(candidate, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_FALSE(fixture.application.networkSetupFlowActive());
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::windowFlagOpen(fixture.application));
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::PasswordProtected);
+}
+
+void test_provision_route_does_not_open_the_run_mutation_route() {
+    ComposedFixture fixture;
+    auto request = makeWebRequest("POST", "/internal/ui/run");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
+}
+
 void test_provision_commit_outcome_unknown_closes_window_immediately() {
     ComposedFixture fixture;
     TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
@@ -2835,6 +3199,18 @@ int main() {
     RUN_TEST(test_provision_without_window_is_not_allowed_without_kdf_or_write);
     RUN_TEST(test_provision_state_matrix_never_calls_bootstrap);
     RUN_TEST(test_provision_input_and_failure_contracts);
+    RUN_TEST(test_provision_codec_accepts_exactly_the_two_schemas);
+    RUN_TEST(test_provision_codec_body_limit_and_whitespace);
+    RUN_TEST(
+        test_provision_codec_rejects_every_schema_violation_without_partial_dto);
+    RUN_TEST(test_provision_route_request_security_contract);
+    RUN_TEST(test_provision_route_without_window_changes_nothing);
+    RUN_TEST(test_provision_route_protect_success_creates_no_session);
+    RUN_TEST(test_provision_route_disable_success_creates_no_session);
+    RUN_TEST(test_provision_route_credential_errors_are_422_and_retryable);
+    RUN_TEST(test_provision_route_recovery_and_failure_mapping);
+    RUN_TEST(test_provision_route_is_not_served_during_setup_flow);
+    RUN_TEST(test_provision_route_does_not_open_the_run_mutation_route);
     RUN_TEST(test_provision_commit_outcome_unknown_closes_window_immediately);
     RUN_TEST(test_provision_lost_race_closes_window_via_current_state);
     RUN_TEST(test_provision_result_projection_is_fail_closed);
