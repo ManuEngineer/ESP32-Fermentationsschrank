@@ -85,3 +85,11 @@ harte RAM-Grenze behauptet.
   `after_ui_init` einmal `pool=unavailable` (Pfad `lvgl_port_lock(100)` im
   Boot-Fenster); die beiden Probeläufe zeigten `pool_total_bytes=46724`. Das
   hängt nicht am Gate und wurde hier nicht weiter untersucht.
+
+## Nachtrag: S2-Fix Session-Issuance
+
+Der Folge-Fix (Session-Erzeugung gegen Trust-Boundaries serialisieren) fügt
+`FermentationApplication` genau einen 64-Bit-Zähler (`webTrustGeneration_`) und
+Methoden hinzu, aber **keine** Synchronisations-, Heap- oder Langzeitobjekte.
+Die Messung oben bleibt daher unverändert gültig (`S2_RAM_EVIDENCE=PASS_UNCHANGED`);
+eine erneute Hardwaremessung war nicht erforderlich.
