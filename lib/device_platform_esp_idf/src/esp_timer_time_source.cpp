@@ -58,4 +58,9 @@ bool EspTimerTimeSource::markAbsoluteTimeTrusted() const noexcept {
     return true;
 }
 
+bool EspTimerTimeSource::absoluteTimeTrusted() const noexcept {
+    const std::scoped_lock lock(trustMutex_);
+    return publicationGate_.trusted();
+}
+
 }  // namespace device_platform_esp_idf
