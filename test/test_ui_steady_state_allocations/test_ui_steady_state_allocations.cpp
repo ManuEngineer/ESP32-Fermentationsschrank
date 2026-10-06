@@ -409,6 +409,25 @@ void test_program_list_page_steady_state_allocates_nothing_and_rows_redraw() {
     TEST_ASSERT_FALSE(fixture.step());
 }
 
+// S2: the message list page is a steady state too.
+void test_message_list_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::Messages);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    fixture.workspace.setPage(FermentationUiPage::MessageDetail);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
 void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
     // Only HeaderNetwork evicts the program catalog copy (it does not consume
     // it); the web access page keeps the existing presentation contract.
@@ -753,6 +772,7 @@ int main() {
     RUN_TEST(test_web_access_page_steady_state_allocates_nothing);
     RUN_TEST(
         test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
+    RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }

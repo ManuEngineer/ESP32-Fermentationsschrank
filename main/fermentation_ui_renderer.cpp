@@ -31,6 +31,13 @@ constexpr std::uint16_t kContentRowHeight = kControlHeight;
 constexpr std::uint16_t kContentRowLeft = 8U;
 constexpr std::uint16_t kContentRowWidth = 304U;
 constexpr std::uint16_t kListReasonTop = 184U;
+
+// Pages whose content is a row list over the workspace pager. The pager item
+// count is the number of listed entries (programs or messages).
+bool isContentListPage(FermentationUiPage page) noexcept {
+    return page == FermentationUiPage::ProgramList ||
+           page == FermentationUiPage::Messages;
+}
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
     8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
@@ -512,6 +519,85 @@ RepresentativeScreen makeRepresentativeScreen(
                                : device_platform::ThemeToken::TextSecondary,
                            device_platform::ThemeToken::Surface);
             }
+        } else if (screen.workspace.page == FermentationUiPage::Messages) {
+            // Window over snapshot.messages: row r shows message
+            // currentIndex + r (same geometry as the program list).
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount =
+                std::min<std::size_t>(snapshot.messages.size() > first
+                                          ? snapshot.messages.size() - first
+                                          : 0U,
+                                      kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& message = snapshot.messages[first + index].message;
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                const auto textTop = static_cast<std::uint16_t>(
+                    top + (kContentRowHeight -
+                           RepresentativeScreen::kTextLineHeight) /
+                              2U);
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        device_platform::ThemeToken::Surface);
+                addText(
+                    commands, textPacks, locale,
+                    messageCodeTextKey(message.code),
+                    {12U, textTop, 196U, RepresentativeScreen::kTextLineHeight},
+                    message.acknowledged
+                        ? device_platform::ThemeToken::TextSecondary
+                        : device_platform::ThemeToken::TextPrimary,
+                    device_platform::ThemeToken::Surface);
+                if (message.acousticMuted || message.acknowledged) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey(message.acousticMuted
+                                                    ? "message-muted"
+                                                    : "message-acknowledged"),
+                            {212U, textTop, 96U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::TextSecondary,
+                            device_platform::ThemeToken::Surface);
+                }
+            }
+        } else if (screen.workspace.page == FermentationUiPage::MessageDetail &&
+                   screen.workspace.selectedMessageId.has_value()) {
+            const auto selected =
+                std::find_if(snapshot.messages.begin(), snapshot.messages.end(),
+                             [&screen](const MessageView& view) {
+                                 return view.message.id ==
+                                        *screen.workspace.selectedMessageId;
+                             });
+            if (selected != snapshot.messages.end()) {
+                const auto& message = selected->message;
+                addText(commands, textPacks, locale,
+                        messageCodeTextKey(message.code),
+                        {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
+                        device_platform::ThemeToken::TextPrimary,
+                        device_platform::ThemeToken::Canvas);
+                addText(commands, textPacks, locale,
+                        messageClassTextKey(message.messageClass),
+                        {8U, 92U, 304U, RepresentativeScreen::kTextLineHeight},
+                        device_platform::ThemeToken::TextSecondary,
+                        device_platform::ThemeToken::Canvas);
+                std::uint16_t stateTop = 116U;
+                if (message.acknowledged) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey("message-acknowledged"),
+                            {8U, stateTop, 304U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::StatusInformation,
+                            device_platform::ThemeToken::Canvas);
+                    stateTop = static_cast<std::uint16_t>(stateTop + 24U);
+                }
+                if (message.acousticMuted) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey("message-muted"),
+                            {8U, stateTop, 304U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::StatusInformation,
+                            device_platform::ThemeToken::Canvas);
+                }
+            }
         } else if (screen.workspace.confirmationProgramName.has_value()) {
             addRawText(commands,
                        {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
@@ -599,7 +685,7 @@ RepresentativeScreen makeRepresentativeScreen(
     if (pressedTarget.has_value() &&
         pressedTarget->kind ==
             device_platform::DeviceUiTargetKind::ContentCell &&
-        screen.workspace.page == FermentationUiPage::ProgramList &&
+        isContentListPage(screen.workspace.page) &&
         pressedTarget->column == 0U &&
         pressedTarget->row < kFermentationUiListVisibleRows) {
         commands.push_back(
@@ -691,10 +777,10 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
     }
     // Visible program rows only: row r is entry currentIndex + r, so the hit
     // zone follows exactly what the renderer draws.
-    if (screen.workspace.page == FermentationUiPage::ProgramList &&
-        !screen.workspace.programList.empty() &&
+    if (isContentListPage(screen.workspace.page) &&
+        screen.workspace.pager.itemCount > 0U &&
         screen.workspace.pager.currentIndex <
-            screen.workspace.programList.size() &&
+            screen.workspace.pager.itemCount &&
         x >= kContentRowLeft && x < kContentRowLeft + kContentRowWidth &&
         y >= kContentRowTop &&
         y < kContentRowTop +
@@ -702,7 +788,7 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         const auto row =
             static_cast<std::uint8_t>((y - kContentRowTop) / kContentRowHeight);
         const auto visible =
-            std::min<std::size_t>(screen.workspace.programList.size() -
+            std::min<std::size_t>(screen.workspace.pager.itemCount -
                                       screen.workspace.pager.currentIndex,
                                   kFermentationUiListVisibleRows);
         if (row < visible) {

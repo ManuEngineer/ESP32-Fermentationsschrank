@@ -593,6 +593,58 @@ void test_mute_message_is_ram_owned_and_persistence_ineligible() {
     assertSameHead(headBefore, readHead(fixture.store));
 }
 
+// S2: the message selected by a physical row press reaches the unchanged
+// owning acknowledge/mute path with its canonical id.
+void test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path() {
+    OwningAppFixture fixture;
+    installMessage(fixture.application, 7U);
+    const auto snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(snapshot.messages.size()));
+
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    const auto selected = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U});
+    TEST_ASSERT_TRUE(selected.navigated);
+    TEST_ASSERT_FALSE(selected.action.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+
+    const auto acknowledge = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_TRUE(acknowledge.action.has_value());
+    const auto* intent = std::get_if<FermentationUiAcknowledgeMessageIntent>(
+        &*acknowledge.action);
+    TEST_ASSERT_TRUE(intent != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(7U, intent->messageId);
+
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = 10U;
+    const auto prepared =
+        fixture.application.prepareEnvelope(context, *acknowledge.action);
+    const auto confirmed = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    const auto applied =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(applied, CommandStatus::Applied,
+                        FermentationUiCommandPhase::OwningOutcome);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acknowledged);
+
+    const auto mute = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 2U});
+    TEST_ASSERT_TRUE(mute.action.has_value());
+    const auto* muteIntent =
+        std::get_if<FermentationUiMuteMessageIntent>(&*mute.action);
+    TEST_ASSERT_TRUE(muteIntent != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(7U, muteIntent->messageId);
+}
+
 void test_command_status_projection_keeps_decisions_only() {
     const auto proposed =
         FermentationUiCommandBridge::fromCommandStatus(CommandStatus::Proposed);
@@ -1006,6 +1058,8 @@ int main() {
     RUN_TEST(test_duplicate_confirmed_request_preserves_owner_idempotency);
     RUN_TEST(test_acknowledge_message_is_ram_owned_and_persistence_ineligible);
     RUN_TEST(test_mute_message_is_ram_owned_and_persistence_ineligible);
+    RUN_TEST(
+        test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);

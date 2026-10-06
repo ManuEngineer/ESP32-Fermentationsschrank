@@ -145,6 +145,9 @@ struct FermentationUiWorkspaceView {
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
     // for the explicitly selected action slot.
+    // Canonical id of the explicitly selected message (MessageDetail); the
+    // renderer looks the message up in the snapshot, nothing is copied.
+    std::optional<std::uint32_t> selectedMessageId;
     std::optional<FermentationUiEnvelopePayload> action;
     std::optional<FermentationUiProductInsertedConfirmedIntent>
         transitionAction;
@@ -269,6 +272,8 @@ class FermentationTouchWorkspace {
                  bool enabled = true) const;
     void setCanonicalPageStack(FermentationUiPage page);
 
+    [[nodiscard]] bool selectedMessageExists(
+        const FermentationUiSnapshot& snapshot) const;
     [[nodiscard]] bool selectProgramFor(const std::string& programId,
                                         const ProgramCatalog& catalog,
                                         FermentationUiPage destination);

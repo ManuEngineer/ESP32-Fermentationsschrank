@@ -10,6 +10,43 @@ device_platform::TextKey fermentationTextKey(const char* value) {
     return {device_platform::TextNamespace{"fermentation"}, value};
 }
 
+device_platform::TextKey messageCodeTextKey(MessageCode code) {
+    switch (code) {
+        case MessageCode::ProductInsertionRequested:
+            return fermentationTextKey("message-product-insertion-requested");
+        case MessageCode::TargetReachTimeExceeded:
+            return fermentationTextKey("message-target-reach-time-exceeded");
+        case MessageCode::UserDecisionRequired:
+            return fermentationTextKey("message-user-decision-required");
+        case MessageCode::RunCompleted:
+            return fermentationTextKey("message-run-completed");
+        case MessageCode::RunAborted:
+            return fermentationTextKey("message-run-aborted");
+        case MessageCode::RecoveryPending:
+            return fermentationTextKey("message-recovery-pending");
+        case MessageCode::SafetyFault:
+            return fermentationTextKey("message-safety-fault");
+    }
+    // An unknown code stays visible as its technical key instead of a guess.
+    return fermentationTextKey("message-unknown");
+}
+
+device_platform::TextKey messageClassTextKey(MessageClass messageClass) {
+    switch (messageClass) {
+        case MessageClass::Information:
+            return fermentationTextKey("message-class-information");
+        case MessageClass::ProcessWarning:
+            return fermentationTextKey("message-class-process-warning");
+        case MessageClass::Recovery:
+            return fermentationTextKey("message-class-recovery");
+        case MessageClass::DecisionRequired:
+            return fermentationTextKey("message-class-decision-required");
+        case MessageClass::SafetyFault:
+            return fermentationTextKey("message-class-safety-fault");
+    }
+    return fermentationTextKey("message-unknown");
+}
+
 std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::LocaleId;
     using device_platform::TextKey;
@@ -19,7 +56,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 70U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 84U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -90,6 +127,20 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"web-access-window-open", "Web setup allowed (10 min)"},
         std::pair{"web-access-closed", "Web setup not allowed yet"},
         std::pair{"web-access-unavailable", "Web setup not available"},
+        std::pair{"message-product-insertion-requested", "Insert product"},
+        std::pair{"message-target-reach-time-exceeded", "Target time exceeded"},
+        std::pair{"message-user-decision-required", "Decision required"},
+        std::pair{"message-run-completed", "Run completed"},
+        std::pair{"message-run-aborted", "Run aborted"},
+        std::pair{"message-recovery-pending", "Recovery pending"},
+        std::pair{"message-safety-fault", "Safety fault"},
+        std::pair{"message-class-information", "Information"},
+        std::pair{"message-class-process-warning", "Process warning"},
+        std::pair{"message-class-recovery", "Recovery"},
+        std::pair{"message-class-decision-required", "Decision required"},
+        std::pair{"message-class-safety-fault", "Safety fault"},
+        std::pair{"message-acknowledged", "Acknowledged"},
+        std::pair{"message-muted", "Muted"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -99,7 +150,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 70U> de{
+            const std::array<std::pair<const char*, const char*>, 84U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -172,7 +223,22 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"web-access-open", "Web-Setup"},
                  {"web-access-window-open", "Web-Setup frei (10 Min)"},
                  {"web-access-closed", "Web-Setup nicht freigegeben"},
-                 {"web-access-unavailable", "Web-Setup nicht verfuegbar"}}};
+                 {"web-access-unavailable", "Web-Setup nicht verfuegbar"},
+                 {"message-product-insertion-requested", "Produkt einlegen"},
+                 {"message-target-reach-time-exceeded",
+                  "Zielzeit ueberschritten"},
+                 {"message-user-decision-required", "Entscheidung noetig"},
+                 {"message-run-completed", "Lauf abgeschlossen"},
+                 {"message-run-aborted", "Lauf abgebrochen"},
+                 {"message-recovery-pending", "Wiederanlauf offen"},
+                 {"message-safety-fault", "Sicherheitsfehler"},
+                 {"message-class-information", "Information"},
+                 {"message-class-process-warning", "Prozesswarnung"},
+                 {"message-class-recovery", "Wiederanlauf"},
+                 {"message-class-decision-required", "Entscheidung noetig"},
+                 {"message-class-safety-fault", "Sicherheitsfehler"},
+                 {"message-acknowledged", "Quittiert"},
+                 {"message-muted", "Stumm"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -181,7 +247,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 70U> es{
+            const std::array<std::pair<const char*, const char*>, 84U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -254,7 +320,22 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"web-access-open", "Config. web"},
                  {"web-access-window-open", "Config. web permitida (10 min)"},
                  {"web-access-closed", "Config. web no permitida"},
-                 {"web-access-unavailable", "Config. web no disponible"}}};
+                 {"web-access-unavailable", "Config. web no disponible"},
+                 {"message-product-insertion-requested", "Insertar producto"},
+                 {"message-target-reach-time-exceeded",
+                  "Tiempo objetivo excedido"},
+                 {"message-user-decision-required", "Decision necesaria"},
+                 {"message-run-completed", "Proceso completado"},
+                 {"message-run-aborted", "Proceso cancelado"},
+                 {"message-recovery-pending", "Recuperacion pendiente"},
+                 {"message-safety-fault", "Fallo de seguridad"},
+                 {"message-class-information", "Informacion"},
+                 {"message-class-process-warning", "Aviso de proceso"},
+                 {"message-class-recovery", "Recuperacion"},
+                 {"message-class-decision-required", "Decision necesaria"},
+                 {"message-class-safety-fault", "Fallo de seguridad"},
+                 {"message-acknowledged", "Confirmado"},
+                 {"message-muted", "Silenciado"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

@@ -1266,6 +1266,122 @@ void test_manage_list_reaches_new_program_when_the_active_list_is_empty() {
         static_cast<int>(noCatalog.view(snapshot).slotActions[3]));
 }
 
+// S2: a snapshot with several messages (ids 11..15, the first one decision
+// required) for the list window.
+FermentationUiSnapshot snapshotWithMessages(std::size_t count) {
+    auto snapshot = snapshotWithMessage(ProcessState::Fermenting,
+                                        MessageCode::RunCompleted, false);
+    snapshot.messages.clear();
+    for (std::size_t index = 0U; index < count; ++index) {
+        RuntimeMessage message;
+        message.id = static_cast<std::uint32_t>(11U + index);
+        message.code = MessageCode::RunCompleted;
+        message.active = true;
+        message.decisionRequired = index == 0U;
+        snapshot.messages.push_back({message});
+    }
+    return snapshot;
+}
+
+void test_message_list_cell_selects_the_canonical_message_id() {
+    const auto snapshot = snapshotWithMessages(5U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+
+    // The details slot needs an explicit selection and never picks one.
+    TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[3].enabled);
+
+    const auto first = workspace.press(snapshot, cell(1U));
+    TEST_ASSERT_TRUE(first.navigated);
+    TEST_ASSERT_FALSE(first.action.has_value());
+    TEST_ASSERT_FALSE(first.transitionAction.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_UINT32(12U, *workspace.view(snapshot).selectedMessageId);
+
+    // Back to the list: the explicit selection (not the first decision) opens.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Messages),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_TRUE(workspace.view(snapshot).bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(3)).navigated);
+    TEST_ASSERT_EQUAL_UINT32(12U, *workspace.view(snapshot).selectedMessageId);
+
+    // Scrolled by two, row 2 is the fifth message.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, cell(2U)).navigated);
+    TEST_ASSERT_EQUAL_UINT32(15U, *workspace.view(snapshot).selectedMessageId);
+
+    // Ack and mute carry the selected canonical id; slot 3 stays unchanged.
+    const auto acknowledged = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_TRUE(acknowledged.action.has_value());
+    const auto* ack = std::get_if<FermentationUiAcknowledgeMessageIntent>(
+        &*acknowledged.action);
+    TEST_ASSERT_TRUE(ack != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(15U, ack->messageId);
+    const auto muted = workspace.press(snapshot, bottom(2));
+    const auto* mute =
+        std::get_if<FermentationUiMuteMessageIntent>(&*muted.action);
+    TEST_ASSERT_TRUE(mute != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(15U, mute->messageId);
+    const auto detail = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::ResetFault),
+        static_cast<int>(detail.slotActions[3]));
+    TEST_ASSERT_FALSE(detail.bottomSlots[3].enabled);
+}
+
+void test_message_list_cell_outside_the_window_or_page_is_blocked() {
+    const auto snapshot = snapshotWithMessages(2U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    for (const std::uint8_t row : {std::uint8_t{2U}, std::uint8_t{3U}}) {
+        const auto beyond = workspace.press(snapshot, cell(row));
+        TEST_ASSERT_FALSE(beyond.navigated);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                device_platform::DeviceUiInteractionOutcome::Blocked),
+            static_cast<int>(beyond.interaction.outcome));
+    }
+    TEST_ASSERT_FALSE(
+        workspace
+            .press(snapshot, {device_platform::DeviceUiTargetKind::ContentCell,
+                              0U, 0U, 1U})
+            .navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Messages),
+                          static_cast<int>(workspace.page()));
+    // No messages: no hittable row at all.
+    FermentationTouchWorkspace empty;
+    empty.setPage(FermentationUiPage::Messages);
+    TEST_ASSERT_FALSE(
+        empty.press(snapshotWithMessages(0U), cell(0U)).navigated);
+    // A content cell never selects a message on another page.
+    FermentationTouchWorkspace status;
+    status.setPage(FermentationUiPage::Status);
+    TEST_ASSERT_FALSE(status.press(snapshot, cell(0U)).navigated);
+}
+
+void test_decision_home_still_opens_the_first_decision_message_by_default() {
+    auto snapshot = snapshotWithMessage(
+        ProcessState::Fermenting, MessageCode::UserDecisionRequired, true);
+    RuntimeMessage later;
+    later.id = 9U;
+    later.active = true;
+    snapshot.messages.push_back({later});
+    FermentationTouchWorkspace workspace;
+    const auto home = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateMessageDetail),
+        static_cast<int>(home.slotActions[0]));
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_UINT32(7U, *workspace.view(snapshot).selectedMessageId);
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1279,6 +1395,10 @@ int main(int, char**) {
     RUN_TEST(test_start_and_programs_open_the_list_with_separate_intent);
     RUN_TEST(
         test_manage_list_reaches_new_program_when_the_active_list_is_empty);
+    RUN_TEST(test_message_list_cell_selects_the_canonical_message_id);
+    RUN_TEST(test_message_list_cell_outside_the_window_or_page_is_blocked);
+    RUN_TEST(
+        test_decision_home_still_opens_the_first_decision_message_by_default);
     RUN_TEST(
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);

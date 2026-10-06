@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -576,6 +577,184 @@ void test_program_summary_names_the_reason_of_a_not_startable_program() {
         packs, device_platform::LocaleId{"en"},
         fermentation::fermentationTextKey("program-disabled"));
     TEST_ASSERT_TRUE(hasText(screen, expected.value));
+}
+
+// S2: message rows and detail.
+fermentation::FermentationUiSnapshot snapshotWithMessagesForRender(
+    std::size_t count) {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const std::array<fermentation::MessageCode, 5U> codes{
+        fermentation::MessageCode::ProductInsertionRequested,
+        fermentation::MessageCode::RunAborted,
+        fermentation::MessageCode::SafetyFault,
+        fermentation::MessageCode::RecoveryPending,
+        fermentation::MessageCode::RunCompleted};
+    for (std::size_t index = 0U; index < count; ++index) {
+        fermentation::RuntimeMessage message;
+        message.id = static_cast<std::uint32_t>(21U + index);
+        message.code = codes[index % codes.size()];
+        message.active = true;
+        snapshot.messages.push_back({message});
+    }
+    return snapshot;
+}
+
+std::string textFor(const char* key, const char* locale) {
+    return device_platform::resolveText(
+               fermentation::makeFermentationUiTextPacks(),
+               device_platform::LocaleId{locale},
+               fermentation::fermentationTextKey(key))
+        .value;
+}
+
+void test_message_list_rows_are_hittable_and_follow_the_pager_window() {
+    auto snapshot = snapshotWithMessagesForRender(5U);
+    snapshot.messages[0].message.acknowledged = true;
+    snapshot.messages[1].message.acousticMuted = true;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Messages);
+    auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+
+    TEST_ASSERT_TRUE(hasText(screen, "Insert product"));
+    TEST_ASSERT_TRUE(hasText(screen, "Run aborted"));
+    TEST_ASSERT_TRUE(hasText(screen, "Safety fault"));
+    TEST_ASSERT_FALSE(hasText(screen, "Recovery pending"));
+    // Row state: acknowledged / muted entries show their state at the right.
+    TEST_ASSERT_TRUE(hasText(screen, "Acknowledged"));
+    TEST_ASSERT_TRUE(hasText(screen, "Muted"));
+    const auto state = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) { return command.text == "Acknowledged"; });
+    TEST_ASSERT_EQUAL_UINT16(212U, state->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(75U, state->rect.top);
+
+    const auto row2 = fermentation::main_ui::targetAt(screen, 100U, 150U);
+    TEST_ASSERT_TRUE(row2.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::ContentCell),
+        static_cast<int>(row2->kind));
+    TEST_ASSERT_EQUAL_UINT8(2U, row2->row);
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(screen, 100U, 184U).has_value());
+
+    // Scroll by two via the real bottom slot; the window becomes 2..4 and row
+    // 2 selects the fifth message (canonical id 25).
+    for (int step = 0; step < 2; ++step) {
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(workspace, snapshot,
+                                                           screen, 180U, 220U)
+                             .navigated);
+        screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+            device_platform::LocaleId{"en"});
+    }
+    TEST_ASSERT_FALSE(hasText(screen, "Insert product"));
+    TEST_ASSERT_TRUE(hasText(screen, "Run completed"));
+    const auto selected = fermentation::main_ui::routePress(workspace, snapshot,
+                                                            screen, 100U, 170U);
+    TEST_ASSERT_TRUE(selected.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::FermentationUiPage::MessageDetail),
+        static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_UINT32(25U, *workspace.view(snapshot).selectedMessageId);
+
+    // The held row is drawn as press feedback for that row only.
+    fermentation::FermentationTouchWorkspace other;
+    other.setPage(fermentation::FermentationUiPage::Messages);
+    const device_platform::DeviceUiTarget held{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const auto feedbackScreen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, other, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, held);
+    const auto feedback = std::find_if(
+        feedbackScreen.commands.begin(), feedbackScreen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        });
+    TEST_ASSERT_TRUE(feedback != feedbackScreen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(104U, feedback->rect.top);
+}
+
+void test_empty_message_list_has_no_hittable_rows() {
+    const auto snapshot = snapshotWithMessagesForRender(0U);
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Messages);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(screen, 100U, 80U).has_value());
+}
+
+void test_message_detail_shows_code_class_and_state_in_all_locales() {
+    auto snapshot = snapshotWithMessagesForRender(1U);
+    snapshot.messages[0].message.code =
+        fermentation::MessageCode::TargetReachTimeExceeded;
+    snapshot.messages[0].message.messageClass =
+        fermentation::MessageClass::ProcessWarning;
+    snapshot.messages[0].message.acknowledged = true;
+    snapshot.messages[0].message.acousticMuted = true;
+    for (const char* locale : {"en", "de", "es"}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::Messages);
+        TEST_ASSERT_TRUE(
+            workspace
+                .press(snapshot,
+                       {device_platform::DeviceUiTargetKind::ContentCell, 0U,
+                        0U, 0U})
+                .navigated);
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+            device_platform::LocaleId{locale});
+        for (const char* key : {"message-target-reach-time-exceeded",
+                                "message-class-process-warning",
+                                "message-acknowledged", "message-muted"}) {
+            const auto text = textFor(key, locale);
+            TEST_ASSERT_TRUE(!text.empty());
+            TEST_ASSERT_TRUE(text.find("fermentation") == std::string::npos);
+            TEST_ASSERT_TRUE(hasText(screen, text));
+        }
+    }
+
+    // A selection that is not in the snapshot draws no detail text.
+    fermentation::FermentationTouchWorkspace stale;
+    stale.setPage(fermentation::FermentationUiPage::MessageDetail);
+    stale.setSelectedMessage(999U);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, stale, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    TEST_ASSERT_FALSE(hasText(screen, textFor("message-acknowledged", "en")));
+}
+
+void test_every_message_code_and_class_has_localized_text() {
+    using fermentation::MessageClass;
+    using fermentation::MessageCode;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    for (const char* locale : {"en", "de", "es"}) {
+        for (const auto code :
+             {MessageCode::ProductInsertionRequested,
+              MessageCode::TargetReachTimeExceeded,
+              MessageCode::UserDecisionRequired, MessageCode::RunCompleted,
+              MessageCode::RunAborted, MessageCode::RecoveryPending,
+              MessageCode::SafetyFault}) {
+            const auto key = fermentation::messageCodeTextKey(code);
+            const auto result = device_platform::resolveText(
+                packs, device_platform::LocaleId{locale}, key);
+            TEST_ASSERT_TRUE(result.value != key.visibleTechnicalKey());
+        }
+        for (const auto messageClass :
+             {MessageClass::Information, MessageClass::ProcessWarning,
+              MessageClass::Recovery, MessageClass::DecisionRequired,
+              MessageClass::SafetyFault}) {
+            const auto key = fermentation::messageClassTextKey(messageClass);
+            const auto result = device_platform::resolveText(
+                packs, device_platform::LocaleId{locale}, key);
+            TEST_ASSERT_TRUE(result.value != key.visibleTechnicalKey());
+        }
+    }
 }
 
 void test_service_page_shows_blocked_reason() {
@@ -1292,6 +1471,10 @@ int main() {
     RUN_TEST(test_pager_counter_sits_in_the_title_row_clear_of_the_rows);
     RUN_TEST(test_not_startable_program_row_is_dimmed_and_stays_hittable);
     RUN_TEST(test_program_summary_names_the_reason_of_a_not_startable_program);
+    RUN_TEST(test_message_list_rows_are_hittable_and_follow_the_pager_window);
+    RUN_TEST(test_empty_message_list_has_no_hittable_rows);
+    RUN_TEST(test_message_detail_shows_code_class_and_state_in_all_locales);
+    RUN_TEST(test_every_message_code_and_class_has_localized_text);
     RUN_TEST(test_service_page_shows_blocked_reason);
     RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);

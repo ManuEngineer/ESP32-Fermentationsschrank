@@ -673,12 +673,15 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "down",
                     FermentationUiWorkspaceSlotAction::MovePagerDown,
                     view.pager.canMoveDown());
+            // The slot opens the explicitly selected message (a row tap does
+            // so directly); it never substitutes another message.
             setSlot(view, 3U, "details",
                     FermentationUiWorkspaceSlotAction::NavigateMessageDetail,
-                    !snapshot.messages.empty());
+                    selectedMessageExists(snapshot));
             break;
         case FermentationUiPage::MessageDetail:
             view.title = key("message-detail");
+            view.selectedMessageId = selectedMessageId_;
             setSlot(view, 1U, "acknowledge",
                     FermentationUiWorkspaceSlotAction::AcknowledgeMessage,
                     selectedMessageId_.has_value());
@@ -1089,6 +1092,15 @@ bool FermentationTouchWorkspace::goBack() {
     return true;
 }
 
+bool FermentationTouchWorkspace::selectedMessageExists(
+    const FermentationUiSnapshot& snapshot) const {
+    return selectedMessageId_.has_value() &&
+           std::any_of(snapshot.messages.begin(), snapshot.messages.end(),
+                       [this](const MessageView& message) {
+                           return message.message.id == *selectedMessageId_;
+                       });
+}
+
 FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
     const FermentationUiSnapshot& snapshot, std::size_t slotIndex,
     const FermentationUiWorkspaceView& current) {
@@ -1198,7 +1210,11 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             result.navigated = pager_.moveDown();
             break;
         case FermentationUiWorkspaceSlotAction::NavigateMessageDetail:
-            if (!snapshot.messages.empty()) {
+            // From the message list the explicit selection stands; the first
+            // decision-required message is only the default entry from the
+            // waiting home view.
+            if (page_ != FermentationUiPage::Messages &&
+                !snapshot.messages.empty()) {
                 const auto decision = std::find_if(
                     snapshot.messages.begin(), snapshot.messages.end(),
                     [](const MessageView& message) {
@@ -1308,11 +1324,14 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                device_platform::DeviceUiTargetKind::ContentCell) {
         // Only the visible window of the program list is hittable: row r is
         // entry currentIndex + r.
-        enabled = page_ == FermentationUiPage::ProgramList &&
-                  target.column == 0U &&
+        enabled = target.column == 0U &&
                   target.row < kFermentationUiListVisibleRows &&
                   current.pager.currentIndex + target.row <
-                      current.programList.size();
+                      (page_ == FermentationUiPage::ProgramList
+                           ? current.programList.size()
+                       : page_ == FermentationUiPage::Messages
+                           ? snapshot.messages.size()
+                           : std::size_t{0U});
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerUp) {
         enabled = current.pager.canMoveUp();
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerDown) {
@@ -1346,6 +1365,16 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 return pressed;
             }();
         case device_platform::DeviceUiTargetKind::ContentCell: {
+            if (page_ == FermentationUiPage::Messages) {
+                // `enabled` guarantees an in-range message; its canonical id
+                // becomes the selection.
+                selectedMessageId_ =
+                    snapshot.messages[current.pager.currentIndex + target.row]
+                        .message.id;
+                result.navigated = navigate(
+                    FermentationUiWorkspaceSlotAction::NavigateMessageDetail);
+                return result;
+            }
             // `enabled` guarantees ProgramList, a catalog behind the list and
             // an in-range entry.
             const auto& entry =
