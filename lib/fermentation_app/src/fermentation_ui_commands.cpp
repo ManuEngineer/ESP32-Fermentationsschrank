@@ -349,6 +349,20 @@ FermentationUiCommandBridge::beginHomeWifiReconfiguration(
 }
 
 FermentationUiCommandResult
+FermentationUiCommandBridge::openWebProvisioningWindow(
+    FermentationApplication& application,
+    const FermentationUiOpenWebProvisioningWindowCommand&) {
+    // Only the Application owner decides; "not opened" covers an already open
+    // window as well as every state in which the release is not allowed.
+    const bool opened = application.openWebProvisioningWindow();
+    return makeResult(
+        opened ? Category::Accepted : Category::Rejected,
+        opened ? FermentationUiDetailStatus::WebProvisioningWindowOpened
+               : FermentationUiDetailStatus::WebProvisioningWindowNotOpened,
+        FermentationUiCommandPhase::OwningOutcome);
+}
+
+FermentationUiCommandResult
 FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,
                       FermentationUiDetailStatus::UnsupportedAppDetail,

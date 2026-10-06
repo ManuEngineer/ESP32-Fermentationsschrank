@@ -82,6 +82,8 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::ApplyNetworkModeApOnly:
         case FermentationUiWorkspaceSlotAction::ApplyNetworkModeHomeWifi:
         case FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration:
+        case FermentationUiWorkspaceSlotAction::NavigateWebAccess:
+        case FermentationUiWorkspaceSlotAction::OpenWebProvisioningWindow:
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
         case FermentationUiWorkspaceSlotAction::MovePagerDown:
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
@@ -192,6 +194,9 @@ std::vector<device_platform::TextKey> FermentationTouchWorkspace::routeForPage(
         case FermentationUiPage::HeaderClock:
             route.push_back(key("clock"));
             break;
+        case FermentationUiPage::HeaderWebAccess:
+            route.push_back(key("web-access"));
+            break;
     }
     return route;
 }
@@ -287,6 +292,7 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
         case FermentationUiPage::HeaderLanguage:
         case FermentationUiPage::HeaderNetwork:
         case FermentationUiPage::HeaderClock:
+        case FermentationUiPage::HeaderWebAccess:
             pageStack_.push_back(page);
             break;
     }
@@ -754,6 +760,8 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
             setSlot(view, 2U, "clock",
                     FermentationUiWorkspaceSlotAction::NavigateClock);
+            setSlot(view, 3U, "web-access",
+                    FermentationUiWorkspaceSlotAction::NavigateWebAccess);
             break;
         case FermentationUiPage::HeaderNetwork:
             view.title = key("network");
@@ -772,6 +780,25 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration,
                 snapshot.network.currentMode ==
                     device_platform::NetworkMode::HOME_WIFI);
+            break;
+        case FermentationUiPage::HeaderWebAccess:
+            view.title = key("web-access");
+            setSlot(view, 0U, "back",
+                    FermentationUiWorkspaceSlotAction::NavigateBack);
+            // Enabled only while the Application reports a possible but not
+            // yet released setup; the Application re-validates on the press.
+            setSlot(
+                view, 1U, "web-access-open",
+                FermentationUiWorkspaceSlotAction::OpenWebProvisioningWindow,
+                snapshot.webAccess == FermentationWebAccessState::Closed);
+            // The reason mirrors the Application-reported state; the
+            // workspace adds no state logic of its own.
+            if (snapshot.webAccess == FermentationWebAccessState::WindowOpen) {
+                view.blockedReason = key("web-access-window-open");
+            } else if (snapshot.webAccess ==
+                       FermentationWebAccessState::NotApplicable) {
+                view.blockedReason = key("web-access-unavailable");
+            }
             break;
         case FermentationUiPage::HeaderClock:
             view.title = key("clock");
@@ -990,6 +1017,9 @@ bool FermentationTouchWorkspace::navigate(
         case FermentationUiWorkspaceSlotAction::NavigateClock:
             destination = FermentationUiPage::HeaderClock;
             break;
+        case FermentationUiWorkspaceSlotAction::NavigateWebAccess:
+            destination = FermentationUiPage::HeaderWebAccess;
+            break;
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
         case FermentationUiWorkspaceSlotAction::CopyProgram:
         case FermentationUiWorkspaceSlotAction::NewProgram:
@@ -1116,6 +1146,10 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
         case FermentationUiWorkspaceSlotAction::BeginHomeWifiReconfiguration:
             result.beginHomeWifiReconfiguration =
                 FermentationUiBeginHomeWifiReconfigurationCommand{};
+            break;
+        case FermentationUiWorkspaceSlotAction::OpenWebProvisioningWindow:
+            result.openWebProvisioningWindow =
+                FermentationUiOpenWebProvisioningWindowCommand{};
             break;
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
             result.navigated = pager_.moveUp();
@@ -1330,6 +1364,8 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
             result.applyNetworkMode = pressed.applyNetworkMode;
             result.beginHomeWifiReconfiguration =
                 pressed.beginHomeWifiReconfiguration;
+            result.openWebProvisioningWindow =
+                pressed.openWebProvisioningWindow;
             return result;
         }
         case device_platform::DeviceUiTargetKind::None:

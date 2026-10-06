@@ -16,6 +16,7 @@
 #include "network_setup_routes.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
+#include "web_application_routes.hpp"
 
 namespace fermentation {
 namespace {
@@ -215,12 +216,20 @@ FermentationApplication::makePreparedRequest(
             device_platform::UiRequestId{uiRequestId}};
 }
 
-FermentationApplication::~FermentationApplication() = default;
+FermentationApplication::FermentationApplication() noexcept = default;
+
+FermentationApplication::~FermentationApplication() {
+    // The product lifecycle stops the HTTP server before destruction; draining
+    // here additionally guarantees that no authentication operation still
+    // uses the domain or record store while the members are destroyed.
+    authOperationGate_.closeAndDrain();
+}
 
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartProgram(
     const FermentationUiCommandContext& context,
     const FermentationUiStartProgramIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (configurationService_ == nullptr || runIdentity_ == nullptr) {
         return requestFailure(
@@ -290,6 +299,7 @@ FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualHolding(
     const FermentationUiCommandContext& context,
     const FermentationUiStartManualHoldingIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -319,6 +329,7 @@ FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualTimed(
     const FermentationUiCommandContext& context,
     const ManualTimedRunValues& values) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -355,6 +366,7 @@ FermentationApplication::prepareStartManualTimed(
 FermentationApplicationRequestResult FermentationApplication::prepareStop(
     const FermentationUiCommandContext& context,
     const FermentationUiStopRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -394,6 +406,7 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
 FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
     const FermentationUiCommandContext& context,
     const FermentationUiCompleteRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
     const auto evidence = resolveRuntimeEvidence();
     if (runIdentity_ == nullptr) {
         return requestFailure(
@@ -491,6 +504,7 @@ FermentationApplication::prepareAdditionalEnvelope(
 FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
     const FermentationUiCommandContext& context,
     const FermentationUiEnvelopePayload& payload) {
+    const auto guard = applicationCallSerializer_.enter();
     return std::visit(
         [this,
          &context](const auto& intent) -> FermentationApplicationRequestResult {
@@ -521,6 +535,7 @@ FermentationApplicationRequestResult FermentationApplication::prepareEnvelope(
 
 FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
     const FermentationApplicationRequestResult& prepared) {
+    const auto guard = applicationCallSerializer_.enter();
     if (prepared.status != FermentationApplicationRequestStatus::Prepared ||
         !prepared.request.has_value()) {
         return requestFailure(
@@ -537,6 +552,7 @@ FermentationApplicationRequestResult FermentationApplication::confirmPrepared(
 
 FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
     const FermentationApplicationPreparedRequest& confirmed) {
+    const auto guard = applicationCallSerializer_.enter();
     if (!confirmed.commandEnvelope().confirmed) {
         return FermentationUiCommandBridge::fromCommandStatus(
             CommandStatus::NotConfirmed);
@@ -649,7 +665,41 @@ bool FermentationApplication::begin(
     const device_platform::IResetCauseSource* resetCauseSource) {
     return beginPersistent(platformServices, store, timeZoneResolver,
                            &timeSource, resetCauseSource, &networkLifecycle,
-                           &httpServerLifecycle, &randomSource);
+                           &httpServerLifecycle, &randomSource, nullptr,
+                           nullptr);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    device_platform::ISecureRandomSource& randomSource,
+    IAuthenticationKdf& authenticationKdf,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource, &networkLifecycle,
+                           &httpServerLifecycle, &randomSource,
+                           &authenticationKdf, nullptr);
+}
+
+bool FermentationApplication::begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::ITimeSource& timeSource,
+    device_platform::INetworkLifecycle& networkLifecycle,
+    device_platform::IHttpServerLifecycle& httpServerLifecycle,
+    device_platform::ISecureRandomSource& randomSource,
+    IAuthenticationKdf& authenticationKdf,
+    device_platform::IReplayDigest& replayDigest,
+    const device_platform::IResetCauseSource* resetCauseSource) {
+    return beginPersistent(platformServices, store, timeZoneResolver,
+                           &timeSource, resetCauseSource, &networkLifecycle,
+                           &httpServerLifecycle, &randomSource,
+                           &authenticationKdf, &replayDigest);
 }
 
 bool FermentationApplication::initializeNetwork(
@@ -657,7 +707,8 @@ bool FermentationApplication::initializeNetwork(
     device_platform::StorageEpoch storageEpoch,
     device_platform::NetworkMode selectedMode,
     const std::string& canonicalDeviceName,
-    device_platform::ISecureRandomSource* randomSource) {
+    device_platform::ISecureRandomSource* randomSource,
+    device_platform::IReplayDigest* replayDigest) {
     if (networkLifecycle_ == nullptr || httpServerLifecycle_ == nullptr) {
         return true;
     }
@@ -681,6 +732,27 @@ bool FermentationApplication::initializeNetwork(
     if (networkSetupRoutes_ == nullptr) {
         return false;
     }
+    if (timeSource_ == nullptr) {
+        return false;
+    }
+    if (replayDigest == nullptr) {
+        webSessionManager_ = std::unique_ptr<WebSessionManager>{
+            new (std::nothrow) WebSessionManager(
+                *randomSource, fermentationWebServicePolicy())};
+    } else {
+        webSessionManager_ = std::unique_ptr<WebSessionManager>{
+            new (std::nothrow) WebSessionManager(
+                *randomSource, *replayDigest, fermentationWebServicePolicy())};
+    }
+    if (webSessionManager_ == nullptr) {
+        return false;
+    }
+    webRouteDispatcher_ = std::unique_ptr<WebRouteDispatcher>{
+        new (std::nothrow) WebRouteDispatcher(
+            *networkSetupRoutes_, *this, *webSessionManager_, *timeSource_)};
+    if (webRouteDispatcher_ == nullptr) {
+        return false;
+    }
     const auto hostname = networkHostnameFromDeviceName(canonicalDeviceName);
     if (!hostname.has_value() ||
         networkLifecycle_->setHostname(*hostname).status !=
@@ -690,7 +762,7 @@ bool FermentationApplication::initializeNetwork(
     const auto networkStart = networkConfigurationService_->start(
         selectedMode, storageEpoch, canonicalDeviceName);
     if (networkStart.status == NetworkConfigurationStatus::Applied &&
-        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        !httpServerLifecycle_->start(*webRouteDispatcher_)) {
         static_cast<void>(networkLifecycle_->stop());
         static_cast<void>(httpServerLifecycle_->stop());
         return false;
@@ -705,12 +777,14 @@ bool FermentationApplication::initializeNetwork(
 
 NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     device_platform::NetworkMode selectedMode) {
+    const auto guard = applicationCallSerializer_.enter();
     if (configurationService_ == nullptr ||
         networkConfigurationService_ == nullptr || stateStore_ == nullptr ||
         !storageEpoch_.has_value() || storageEpoch_->value() == 0U ||
         !device_platform::isSelectableNetworkMode(selectedMode)) {
         return {NetworkConfigurationStatus::InvalidMode};
     }
+    const auto previousMode = networkLifecycle_->status().selectedMode;
     auto build = configurationService_->beginPreview();
     if (build.status != ConfigurationPreviewStatus::Success ||
         !build.lease.valid()) {
@@ -759,9 +833,14 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
         }
         return applied;
     }
+    if (webSessionManager_ != nullptr && previousMode != selectedMode) {
+        // The network boundary has changed successfully. Existing browser
+        // sessions must not cross into the new transport boundary.
+        revokeWebSessionsAtTrustBoundary();
+    }
     if (httpServerLifecycle_ != nullptr && !httpServerLifecycle_->running() &&
-        networkSetupRoutes_ != nullptr &&
-        !httpServerLifecycle_->start(*networkSetupRoutes_)) {
+        webRouteDispatcher_ != nullptr &&
+        !httpServerLifecycle_->start(*webRouteDispatcher_)) {
         static_cast<void>(networkLifecycle_->stop());
         return {NetworkConfigurationStatus::TransportFailure};
     }
@@ -771,6 +850,7 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
 
 NetworkConfigurationResult
 FermentationApplication::beginHomeWifiReconfiguration() {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr ||
         configurationService_ == nullptr) {
         return {NetworkConfigurationStatus::NotInitialized};
@@ -800,9 +880,14 @@ FermentationApplication::beginHomeWifiReconfiguration() {
         }
         return reconfigured;
     }
-    if (httpServerLifecycle_ != nullptr && networkSetupRoutes_ != nullptr &&
+    if (webSessionManager_ != nullptr) {
+        // Entering HOME_WIFI setup is a trust-boundary transition even
+        // before a candidate credential is committed.
+        revokeWebSessionsAtTrustBoundary();
+    }
+    if (httpServerLifecycle_ != nullptr && webRouteDispatcher_ != nullptr &&
         (httpServerLifecycle_->running() ||
-         httpServerLifecycle_->start(*networkSetupRoutes_))) {
+         httpServerLifecycle_->start(*webRouteDispatcher_))) {
         return reconfigured;
     }
     static_cast<void>(networkLifecycle_->stop());
@@ -814,14 +899,22 @@ FermentationApplication::beginHomeWifiReconfiguration() {
 
 std::optional<device_platform::NetworkAccessPointInfo>
 FermentationApplication::networkAccessPointInfo() const {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr) {
         return std::nullopt;
     }
     return networkConfigurationService_->accessPointInfo();
 }
 
+bool FermentationApplication::networkSetupFlowActive() const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
+    return networkConfigurationService_ != nullptr &&
+           networkConfigurationService_->setupFlowActive();
+}
+
 std::uint64_t FermentationApplication::networkAccessPointRevision()
     const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
     return networkConfigurationService_ == nullptr
                ? 0U
                : networkConfigurationService_->accessPointInfoRevision();
@@ -829,6 +922,7 @@ std::uint64_t FermentationApplication::networkAccessPointRevision()
 
 device_platform::NetworkMode FermentationApplication::networkMode()
     const noexcept {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkConfigurationService_ == nullptr) {
         return device_platform::NetworkMode::UNSELECTED;
     }
@@ -967,6 +1061,7 @@ bool FermentationApplication::revalidatePreparedRequest(
 
 void FermentationApplication::publishOwningRuntimeEvidence(
     const CrossRolePlausibilityContext& evidence) {
+    const auto guard = applicationCallSerializer_.enter();
     owningRuntimeEvidence_ = evidence;
 }
 
@@ -978,6 +1073,7 @@ FermentationUiSnapshot FermentationApplication::uiSnapshot() const {
 
 void FermentationApplication::refreshUiSnapshot(
     FermentationUiSnapshot& snapshot) const {
+    const auto guard = applicationCallSerializer_.enter();
     // The projection input is a reused member: its temperature buffer keeps
     // its capacity, so repeated snapshots do not allocate once warmed up.
     auto& input = uiProjectionInput_;
@@ -1034,12 +1130,14 @@ void FermentationApplication::refreshUiSnapshot(
     input.application.lifecycleState = lifecycleState_;
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
+    input.webAccess = webAccessState();
     input.refreshTracker = &uiRefreshTracker_;
     FermentationUiProjector::projectInto(snapshot, input);
 }
 
 std::optional<FermentationUiPresentationSource>
 FermentationApplication::uiPresentationSource() const {
+    const auto guard = applicationCallSerializer_.enter();
     if (configurationService_ == nullptr) {
         return std::nullopt;
     }
@@ -1059,6 +1157,335 @@ FermentationApplication::uiPresentationSource() const {
     return source;
 }
 
+WebAuthenticationState FermentationApplication::webAuthenticationStateUnlocked()
+    const {
+    if (authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        authenticationResolutionStatus_ !=
+            AuthenticationBootstrapResolutionStatus::Ready) {
+        return WebAuthenticationState::Indeterminate;
+    }
+    authenticationBootstrapStatus_ =
+        authenticationDomain_->inspect(*authenticationContext_);
+    switch (authenticationBootstrapStatus_) {
+        case AuthBootstrapStatus::BootstrapAllowed:
+            return WebAuthenticationState::Unprovisioned;
+        case AuthBootstrapStatus::AlreadyProvisioned: {
+            const auto enabled = authenticationDomain_->webPasswordEnabled(
+                *authenticationContext_);
+            if (!enabled.has_value()) {
+                return WebAuthenticationState::RecoveryRequired;
+            }
+            return *enabled ? WebAuthenticationState::PasswordProtected
+                            : WebAuthenticationState::PasswordDisabled;
+        }
+        default:
+            return WebAuthenticationState::RecoveryRequired;
+    }
+}
+
+WebAuthenticationState FermentationApplication::webAuthenticationState() const {
+    const auto guard = applicationCallSerializer_.enter();
+    return webAuthenticationStateUnlocked();
+}
+
+WebAuthenticationResult FermentationApplication::authenticateWebPassword(
+    const std::string& password, std::uint64_t nowMs) {
+    AuthenticationDomain* domain = nullptr;
+    std::optional<AuthenticationBootstrapContext> context;
+    std::optional<AuthOperationGate::Token> token;
+    std::uint64_t trustGeneration = 0U;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        trustGeneration = webTrustGeneration_;
+        if (webAuthenticationStateUnlocked() !=
+                WebAuthenticationState::PasswordProtected ||
+            authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value()) {
+            const auto state = webAuthenticationStateUnlocked();
+            return {state == WebAuthenticationState::PasswordDisabled
+                        ? WebAuthenticationResultStatus::Disabled
+                        : WebAuthenticationResultStatus::RecoveryRequired,
+                    0U, trustGeneration};
+        }
+        token = authOperationGate_.tryBegin();
+        if (!token.has_value()) {
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+                    trustGeneration};
+        }
+        domain = authenticationDomain_.get();
+        context = authenticationContext_;
+    }
+
+    // The domain pointer and the context copy are valid only while the token
+    // is active. The Application gate is released here, so the multi-second
+    // PBKDF2 does not block other callers; reset and destruction wait for the
+    // token instead.
+    std::uint64_t retryAfterMs = 0U;
+    const auto checked =
+        domain->verifyWebPassword(*context, password, nowMs, retryAfterMs);
+    token.reset();
+    domain = nullptr;
+    context.reset();
+
+    switch (checked) {
+        case AuthCheckStatus::Authenticated:
+            return {WebAuthenticationResultStatus::Authenticated, 0U,
+                    trustGeneration};
+        case AuthCheckStatus::Disabled:
+            return {WebAuthenticationResultStatus::Disabled, 0U,
+                    trustGeneration};
+        case AuthCheckStatus::Invalid:
+            return retryAfterMs == 0U
+                       ? WebAuthenticationResult{WebAuthenticationResultStatus::
+                                                     Invalid,
+                                                 0U, trustGeneration}
+                       : WebAuthenticationResult{
+                             WebAuthenticationResultStatus::LockedOut,
+                             retryAfterMs, trustGeneration};
+        case AuthCheckStatus::LockedOut:
+            return {WebAuthenticationResultStatus::LockedOut, retryAfterMs,
+                    trustGeneration};
+        case AuthCheckStatus::RecoveryRequired:
+            return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+                    trustGeneration};
+        case AuthCheckStatus::KdfUnavailable:
+            return {WebAuthenticationResultStatus::KdfUnavailable, 0U,
+                    trustGeneration};
+    }
+    return {WebAuthenticationResultStatus::RecoveryRequired, 0U,
+            trustGeneration};
+}
+
+WebSessionIssueResult FermentationApplication::issueWebSession(
+    const WebAuthenticationResult& authentication, std::uint64_t nowMs) {
+    WebAuthenticationState expected = WebAuthenticationState::Indeterminate;
+    if (authentication.status == WebAuthenticationResultStatus::Authenticated) {
+        expected = WebAuthenticationState::PasswordProtected;
+    } else if (authentication.status ==
+               WebAuthenticationResultStatus::Disabled) {
+        expected = WebAuthenticationState::PasswordDisabled;
+    } else {
+        return {WebSessionIssueStatus::TrustBoundaryChanged, {}};
+    }
+
+    // Recheck and create under the Application gate: every trust-boundary
+    // revocation (network mode change, HOME_WIFI reconfiguration, factory
+    // reset) runs under the same gate, so it either precedes this call and
+    // makes the decision stale, or follows it and revokes the new session.
+    const auto guard = applicationCallSerializer_.enter();
+    if (webSessionManager_ == nullptr) {
+        return {WebSessionIssueStatus::Unavailable, {}};
+    }
+    if (authentication.trustGeneration != webTrustGeneration_ ||
+        webAuthenticationStateUnlocked() != expected) {
+        return {WebSessionIssueStatus::TrustBoundaryChanged, {}};
+    }
+    auto created = webSessionManager_->create(nowMs);
+    if (created.status != WebSessionStatus::Created ||
+        !created.handle.has_value()) {
+        return {WebSessionIssueStatus::Unavailable, {}};
+    }
+    return {WebSessionIssueStatus::Created, std::move(created)};
+}
+
+void FermentationApplication::revokeWebSessionsAtTrustBoundary() noexcept {
+    ++webTrustGeneration_;
+    // A trust boundary also ends the local release for the web setup.
+    closeWebProvisioningWindow();
+    if (webSessionManager_ != nullptr) {
+        webSessionManager_->revokeAll();
+    }
+}
+
+void FermentationApplication::closeWebProvisioningWindow() noexcept {
+    webProvisioningWindowOpen_ = false;
+    webProvisioningWindowOpenedAtMs_ = 0U;
+}
+
+bool FermentationApplication::webProvisioningWindowOpenUnlocked() noexcept {
+    if (!webProvisioningWindowOpen_) {
+        return false;
+    }
+    if (timeSource_ == nullptr) {
+        closeWebProvisioningWindow();
+        return false;
+    }
+    const auto nowMs = timeSource_->monotonicMillis();
+    // Fail closed on a backward observation; otherwise compare elapsed time.
+    if (nowMs < webProvisioningWindowOpenedAtMs_ ||
+        nowMs - webProvisioningWindowOpenedAtMs_ >= kWebProvisioningWindowMs) {
+        closeWebProvisioningWindow();
+        return false;
+    }
+    return true;
+}
+
+bool FermentationApplication::webProvisioningWindowStillOpenUnlocked()
+    const noexcept {
+    if (!webProvisioningWindowOpen_ || timeSource_ == nullptr) {
+        return false;
+    }
+    const auto nowMs = timeSource_->monotonicMillis();
+    return nowMs >= webProvisioningWindowOpenedAtMs_ &&
+           nowMs - webProvisioningWindowOpenedAtMs_ < kWebProvisioningWindowMs;
+}
+
+FermentationWebAccessState FermentationApplication::webAccessState() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        authenticationResolutionStatus_ !=
+            AuthenticationBootstrapResolutionStatus::Ready ||
+        authenticationBootstrapStatus_ !=
+            AuthBootstrapStatus::BootstrapAllowed) {
+        return FermentationWebAccessState::NotApplicable;
+    }
+    return webProvisioningWindowStillOpenUnlocked()
+               ? FermentationWebAccessState::WindowOpen
+               : FermentationWebAccessState::Closed;
+}
+
+bool FermentationApplication::openWebProvisioningWindow() {
+    const auto guard = applicationCallSerializer_.enter();
+    if (timeSource_ == nullptr || authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        webAuthenticationStateUnlocked() !=
+            WebAuthenticationState::Unprovisioned ||
+        authenticationDomain_->inspect(*authenticationContext_) !=
+            AuthBootstrapStatus::BootstrapAllowed) {
+        closeWebProvisioningWindow();
+        return false;
+    }
+    if (webProvisioningWindowOpenUnlocked()) {
+        return false;
+    }
+    webProvisioningWindowOpen_ = true;
+    webProvisioningWindowOpenedAtMs_ = timeSource_->monotonicMillis();
+    return true;
+}
+
+WebProvisionStatus FermentationApplication::projectProvisionResult(
+    AuthBootstrapStatus bootstrapResult,
+    AuthBootstrapStatus reinspected) noexcept {
+    switch (bootstrapResult) {
+        case AuthBootstrapStatus::BootstrapAllowed:
+            return WebProvisionStatus::Provisioned;
+        case AuthBootstrapStatus::InvalidInput:
+            return WebProvisionStatus::InvalidCredentials;
+        case AuthBootstrapStatus::RecoveryRequired:
+            // A concurrent request that completed first leaves the root
+            // provisioned; that is a conflict, not a recovery condition.
+            return reinspected == AuthBootstrapStatus::AlreadyProvisioned
+                       ? WebProvisionStatus::AlreadyProvisioned
+                       : WebProvisionStatus::RecoveryRequired;
+        case AuthBootstrapStatus::KdfUnavailable:
+        case AuthBootstrapStatus::PersistenceFailure:
+            return WebProvisionStatus::Failed;
+        case AuthBootstrapStatus::CommitOutcomeUnknown:
+        case AuthBootstrapStatus::NotProvisioned:
+        case AuthBootstrapStatus::AlreadyProvisioned:
+        case AuthBootstrapStatus::AuthenticationDenied:
+        case AuthBootstrapStatus::LockedOut:
+        case AuthBootstrapStatus::AuthenticationDisabled:
+            return WebProvisionStatus::RecoveryRequired;
+    }
+    return WebProvisionStatus::RecoveryRequired;
+}
+
+WebProvisionStatus FermentationApplication::provisionWebAccess(
+    WebProvisionMode mode, const std::string& webPassword,
+    const std::string& servicePin) {
+    AuthenticationDomain* domain = nullptr;
+    std::optional<AuthenticationBootstrapContext> context;
+    std::optional<AuthOperationGate::Token> token;
+    std::uint64_t trustGeneration = 0U;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        const auto state = webAuthenticationStateUnlocked();
+        if (state != WebAuthenticationState::Unprovisioned) {
+            // Not Unprovisioned + BootstrapAllowed any more: the release ends.
+            closeWebProvisioningWindow();
+            return state == WebAuthenticationState::PasswordProtected ||
+                           state == WebAuthenticationState::PasswordDisabled
+                       ? WebProvisionStatus::AlreadyProvisioned
+                       : WebProvisionStatus::RecoveryRequired;
+        }
+        if (authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value() ||
+            authenticationDomain_->inspect(*authenticationContext_) !=
+                AuthBootstrapStatus::BootstrapAllowed) {
+            closeWebProvisioningWindow();
+            return WebProvisionStatus::RecoveryRequired;
+        }
+        if (!webProvisioningWindowOpenUnlocked()) {
+            return WebProvisionStatus::NotAllowed;
+        }
+        trustGeneration = webTrustGeneration_;
+        token = authOperationGate_.tryBegin();
+        if (!token.has_value()) {
+            return WebProvisionStatus::RecoveryRequired;
+        }
+        domain = authenticationDomain_.get();
+        context = authenticationContext_;
+    }
+
+    // Fail closed before the first use outside the serializer block.
+    if (domain == nullptr || !context.has_value() || !token.has_value()) {
+        return WebProvisionStatus::RecoveryRequired;
+    }
+
+    // The domain pointer and the context copy are valid only while the token
+    // is active (see AuthOperationGate). The Application gate is not held.
+    const auto passwordMode = mode == WebProvisionMode::Protect
+                                  ? WebPasswordMode::Protected
+                                  : WebPasswordMode::Disabled;
+    const auto bootstrapResult =
+        domain->bootstrap(*context, device_platform::UiSurface::WebInterface,
+                          true, webPassword, servicePin, passwordMode);
+    auto reinspected = AuthBootstrapStatus::RecoveryRequired;
+    if (bootstrapResult == AuthBootstrapStatus::RecoveryRequired) {
+        reinspected = domain->inspect(*context);
+    }
+    token.reset();
+    domain = nullptr;
+    context.reset();
+
+    const auto projected = projectProvisionResult(bootstrapResult, reinspected);
+
+    // Re-take the Application gate only after the token ended and conclude
+    // the operation once against the current state (no old domain pointer).
+    const auto guard = applicationCallSerializer_.enter();
+    if (projected != WebProvisionStatus::Provisioned) {
+        // Retryable failures (invalid input, persistence failure before the
+        // first root write) leave Unprovisioned + BootstrapAllowed and keep a
+        // still valid window; every recovery or unclear state ends it.
+        if (webAuthenticationStateUnlocked() !=
+                WebAuthenticationState::Unprovisioned ||
+            authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value() ||
+            authenticationDomain_->inspect(*authenticationContext_) !=
+                AuthBootstrapStatus::BootstrapAllowed) {
+            closeWebProvisioningWindow();
+        }
+        return projected;
+    }
+
+    // A trust boundary (factory reset, network boundary) between bootstrap
+    // and here makes the old success stale: it must not be reported for a new
+    // epoch.
+    const auto expected = mode == WebProvisionMode::Protect
+                              ? WebAuthenticationState::PasswordProtected
+                              : WebAuthenticationState::PasswordDisabled;
+    if (trustGeneration != webTrustGeneration_ ||
+        webAuthenticationStateUnlocked() != expected) {
+        return WebProvisionStatus::RecoveryRequired;
+    }
+    // Consumes the window and revokes any existing session.
+    revokeWebSessionsAtTrustBoundary();
+    return WebProvisionStatus::Provisioned;
+}
+
 bool FermentationApplication::beginPersistent(
     device_platform::IPlatformServices& platformServices,
     device_platform::IStateStore& store,
@@ -1067,7 +1494,9 @@ bool FermentationApplication::beginPersistent(
     const device_platform::IResetCauseSource* resetCauseSource,
     device_platform::INetworkLifecycle* networkLifecycle,
     device_platform::IHttpServerLifecycle* httpServerLifecycle,
-    device_platform::ISecureRandomSource* randomSource) {
+    device_platform::ISecureRandomSource* randomSource,
+    IAuthenticationKdf* authenticationKdf,
+    device_platform::IReplayDigest* replayDigest) {
     if (!platformServices.ready()) {
         return false;
     }
@@ -1078,6 +1507,7 @@ bool FermentationApplication::beginPersistent(
     networkLifecycle_ = networkLifecycle;
     httpServerLifecycle_ = httpServerLifecycle;
     secureRandomSource_ = randomSource;
+    authenticationKdf_ = authenticationKdf;
     storageEpoch_.reset();
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
@@ -1095,14 +1525,23 @@ bool FermentationApplication::beginPersistent(
     owningRecoveryEvidence_.reset();
     owningRuntimeEvidence_ = CrossRolePlausibilityContext{};
     uiRefreshTracker_ = FermentationUiRefreshRevisionTracker{};
+    closeWebProvisioningWindow();
     pendingRecoverySource_.reset();
     recoveryDisposition_.reset();
     runtimeRunState_.reset();
     runPersistenceCoordinator_.reset();
     configurationRecoveryService_.reset();
     networkSetupRoutes_.reset();
+    webRouteDispatcher_.reset();
+    webSessionManager_.reset();
     networkConfigurationService_.reset();
     connectivityCredentialStore_.reset();
+    authenticationContext_.reset();
+    authenticationDomain_.reset();
+    authenticationRecordStore_.reset();
+    authenticationResolutionStatus_ =
+        AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+    authenticationBootstrapStatus_ = AuthBootstrapStatus::RecoveryRequired;
     configurationService_.reset();
     graphStore_.reset();
     mutationCoordinator_.reset();
@@ -1160,10 +1599,11 @@ bool FermentationApplication::beginPersistent(
     const auto epoch = runtime.lease.get().storageEpoch();
     storageEpoch_ = epoch;
 
+    initializeAuthentication(store);
     if (!initializeNetwork(store, epoch,
                            runtime.lease.get().userConfiguration().networkMode,
                            runtime.lease.get().userConfiguration().deviceName,
-                           secureRandomSource_)) {
+                           secureRandomSource_, replayDigest)) {
         // Network setup is optional for application readiness. The core
         // persistence and safety path continues independently.
     }
@@ -1223,6 +1663,67 @@ bool FermentationApplication::beginPersistent(
 
     lifecycleState_ = ApplicationLifecycleState::Ready;
     return true;
+}
+
+void FermentationApplication::initializeAuthentication(
+    device_platform::IStateStore& store) {
+    // resetAuthenticationState() closes and drains the auth gate; it is
+    // reopened on every exit once the new domain (or its absence) is final.
+    struct ReopenOnExit {
+        explicit ReopenOnExit(AuthOperationGate& authGate) : gate(authGate) {}
+        ReopenOnExit(const ReopenOnExit&) = delete;
+        ReopenOnExit& operator=(const ReopenOnExit&) = delete;
+        ReopenOnExit(ReopenOnExit&&) = delete;
+        ReopenOnExit& operator=(ReopenOnExit&&) = delete;
+        ~ReopenOnExit() { gate.reopen(); }
+        AuthOperationGate& gate;
+    };
+    const ReopenOnExit reopenOnExit(authOperationGate_);
+    resetAuthenticationState();
+
+    if (authenticationKdf_ == nullptr || secureRandomSource_ == nullptr) {
+        return;
+    }
+    authenticationRecordStore_ = std::unique_ptr<AuthenticationRecordStore>{
+        new (std::nothrow) AuthenticationRecordStore(store)};
+    if (authenticationRecordStore_ == nullptr) {
+        return;
+    }
+    authenticationDomain_ = std::unique_ptr<AuthenticationDomain>{
+        new (std::nothrow)
+            AuthenticationDomain(*authenticationRecordStore_,
+                                 *authenticationKdf_, *secureRandomSource_)};
+    if (authenticationDomain_ == nullptr) {
+        return;
+    }
+    const auto resolved =
+        configurationRecoveryService_->resolveAuthenticationBootstrap(
+            *authenticationRecordStore_);
+    authenticationResolutionStatus_ = resolved.status;
+    if (resolved.status != AuthenticationBootstrapResolutionStatus::Ready ||
+        !resolved.context.has_value()) {
+        return;
+    }
+    authenticationContext_ = *resolved.context;
+    authenticationBootstrapStatus_ =
+        authenticationDomain_->inspect(*authenticationContext_);
+}
+
+void FermentationApplication::resetAuthenticationState() noexcept {
+    // No authentication operation may use the domain or record store while
+    // they are destroyed. Boot-time callers have no active operation, so the
+    // drain returns immediately; the runtime reset closed the gate already.
+    authOperationGate_.closeAndDrain();
+    // Any replacement of the authentication domain also ends the validity of
+    // pending authentication decisions.
+    ++webTrustGeneration_;
+    closeWebProvisioningWindow();
+    authenticationContext_.reset();
+    authenticationDomain_.reset();
+    authenticationRecordStore_.reset();
+    authenticationResolutionStatus_ =
+        AuthenticationBootstrapResolutionStatus::RecoveryRequired;
+    authenticationBootstrapStatus_ = AuthBootstrapStatus::RecoveryRequired;
 }
 
 bool FermentationApplication::processBootClassification(
@@ -1358,6 +1859,7 @@ bool FermentationApplication::processTerminalClassification(
 }
 
 void FermentationApplication::update() {
+    const auto guard = applicationCallSerializer_.enter();
     if (networkLifecycle_ != nullptr) {
         networkLifecycle_->poll();
     }
@@ -1366,11 +1868,13 @@ void FermentationApplication::update() {
 
 void FermentationApplication::publishOwningRecoveryEvidence(
     const CrossRolePlausibilityContext& evidence) {
+    const auto guard = applicationCallSerializer_.enter();
     owningRecoveryEvidence_ = evidence;
 }
 
 RunPersistenceResult FermentationApplication::resumeFallback(
     const FermentationUiResumeFallbackCommand& command) {
+    const auto guard = applicationCallSerializer_.enter();
     if (pendingFallbackResume_ == nullptr ||
         runPersistenceCoordinator_ == nullptr) {
         RunPersistenceResult unavailable;
@@ -1453,6 +1957,7 @@ RunPersistenceResult FermentationApplication::resumeFallback(
 
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
     if (configurationRecoveryService_ == nullptr ||
@@ -1462,14 +1967,27 @@ FermentationApplication::beginAuthorizedFactoryReset() {
     }
 
     const auto previousEpoch = *storageEpoch_;
+    // Wait for running authentication operations before the destructive,
+    // epoch-changing reset; new operations fail closed meanwhile.
+    authOperationGate_.closeAndDrain();
     const auto reset =
         configurationRecoveryService_->beginAuthorizedFactoryReset();
 #if defined(APP_ISSUE_90_SLICE7_HARNESS)
     configurationRecoveryStatus_ = reset.status;
 #endif
     if (reset.status != ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        // Domain and context are unchanged and remain usable.
+        authOperationGate_.reopen();
         return reset;
     }
+    if (webSessionManager_ != nullptr) {
+        // Revoke at the irreversible reset boundary. Later run-epoch handoff
+        // failures must not preserve pre-reset browser authority.
+        revokeWebSessionsAtTrustBoundary();
+    }
+    // The reset has advanced the configuration/storage epoch. Invalidate the
+    // old domain now; a later bootstrap failure must remain fail-closed.
+    resetAuthenticationState();
 
     auto authorizedRunEpochHandoff =
         configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
@@ -1542,6 +2060,10 @@ FermentationApplication::beginAuthorizedFactoryReset() {
         return {ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable,
                 reset.diagnostics};
     }
+    // The handoff is consumed now, so resolve the new epoch-bound
+    // authentication domain once more. The first resolution above deliberately
+    // remained fail-closed while the reset handoff was still pending.
+    initializeAuthentication(*stateStore_);
     runPersistenceCoordinator_ = std::move(coordinator);
     storageEpoch_ = currentEpoch;
     runIdentity_.reset();

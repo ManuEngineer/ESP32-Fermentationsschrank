@@ -181,6 +181,32 @@ void test_catalog_revision_only_change_publishes_new_snapshot() {
         2U, changed.revisions.expectedProgramCatalogRevision->value());
 }
 
+void test_web_access_state_is_projected_and_publishes_new_snapshot() {
+    RunCommandState state;
+    FermentationUiRefreshRevisionTracker tracker;
+    FermentationUiProjectionInput input;
+    input.runState = &state;
+    input.refreshTracker = &tracker;
+    const auto first = FermentationUiProjector::project(input);
+    TEST_ASSERT_TRUE(first.webAccess ==
+                     FermentationWebAccessState::NotApplicable);
+
+    input.webAccess = FermentationWebAccessState::Closed;
+    const auto closed = FermentationUiProjector::project(input);
+    TEST_ASSERT_TRUE(closed.webAccess == FermentationWebAccessState::Closed);
+    TEST_ASSERT_TRUE(closed.refreshRevision->value >
+                     first.refreshRevision->value);
+
+    input.webAccess = FermentationWebAccessState::WindowOpen;
+    const auto open = FermentationUiProjector::project(input);
+    TEST_ASSERT_TRUE(open.webAccess == FermentationWebAccessState::WindowOpen);
+    TEST_ASSERT_TRUE(open.refreshRevision->value >
+                     closed.refreshRevision->value);
+    const auto unchanged = FermentationUiProjector::project(input);
+    TEST_ASSERT_EQUAL_UINT64(open.refreshRevision->value,
+                             unchanged.refreshRevision->value);
+}
+
 void test_projector_home_modes_follow_lifecycle_and_process_matrix() {
     RunCommandState state;
     FermentationUiProjectionInput input;
@@ -262,6 +288,7 @@ int main(int, char**) {
         test_projector_maps_canonical_messages_temperatures_and_recovery_modes);
     RUN_TEST(test_refresh_revision_changes_only_on_new_publication);
     RUN_TEST(test_catalog_revision_only_change_publishes_new_snapshot);
+    RUN_TEST(test_web_access_state_is_projected_and_publishes_new_snapshot);
     RUN_TEST(test_projector_home_modes_follow_lifecycle_and_process_matrix);
     RUN_TEST(test_projector_maps_only_canonical_decision_required_to_waiting);
     return UNITY_END();

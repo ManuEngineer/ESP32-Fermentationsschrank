@@ -945,6 +945,80 @@ void test_network_page_exposes_only_the_two_modes_and_explicit_setup_action() {
     TEST_ASSERT_TRUE(reconfigure.beginHomeWifiReconfiguration.has_value());
 }
 
+void test_web_access_page_is_reachable_and_slot_follows_application_state() {
+    auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+
+    // Existing header navigation is unchanged; the new entry is slot 3.
+    auto view = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
+    TEST_ASSERT_TRUE(view.slotActions[2] ==
+                     FermentationUiWorkspaceSlotAction::NavigateClock);
+    TEST_ASSERT_TRUE(view.slotActions[3] ==
+                     FermentationUiWorkspaceSlotAction::NavigateWebAccess);
+
+    const auto entered = workspace.press(snapshot, bottom(3));
+    TEST_ASSERT_TRUE(entered.navigated);
+    TEST_ASSERT_FALSE(entered.openWebProvisioningWindow.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderWebAccess),
+                          static_cast<int>(workspace.page()));
+    view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.route.segments.empty());
+    TEST_ASSERT_TRUE(view.bottomSlots[0].enabled);
+    TEST_ASSERT_TRUE(
+        view.slotActions[1] ==
+        FermentationUiWorkspaceSlotAction::OpenWebProvisioningWindow);
+
+    // The slot mirrors the Application-reported state; the UI has no window.
+    snapshot.webAccess = FermentationWebAccessState::NotApplicable;
+    view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    {
+        const device_platform::TextKey expectedReason{
+            device_platform::TextNamespace{"fermentation"},
+            "web-access-unavailable"};
+        TEST_ASSERT_TRUE(*view.blockedReason == expectedReason);
+    }
+    auto blocked = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
+    TEST_ASSERT_TRUE(blocked.interaction.outcome ==
+                     device_platform::DeviceUiInteractionOutcome::Blocked);
+
+    snapshot.webAccess = FermentationWebAccessState::WindowOpen;
+    view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    {
+        const device_platform::TextKey expectedReason{
+            device_platform::TextNamespace{"fermentation"},
+            "web-access-window-open"};
+        TEST_ASSERT_TRUE(*view.blockedReason == expectedReason);
+    }
+    blocked = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_FALSE(blocked.openWebProvisioningWindow.has_value());
+
+    snapshot.webAccess = FermentationWebAccessState::Closed;
+    view = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_FALSE(view.blockedReason.has_value());
+    const auto opened = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_TRUE(opened.openWebProvisioningWindow.has_value());
+    TEST_ASSERT_FALSE(opened.navigated);
+
+    // Back returns to the language page.
+    const auto back = workspace.press(snapshot, bottom(0));
+    TEST_ASSERT_TRUE(back.navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderLanguage),
+                          static_cast<int>(workspace.page()));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -952,6 +1026,8 @@ void tearDown() {}
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);
     RUN_TEST(test_workspace_navigation_does_not_create_a_command_id);
     RUN_TEST(test_active_home_press_opens_choice_without_preparing_a_command);

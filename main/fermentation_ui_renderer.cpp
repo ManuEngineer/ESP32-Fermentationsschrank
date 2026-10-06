@@ -17,6 +17,11 @@ constexpr std::uint16_t kHeaderLocaleLeft = 188U;
 constexpr std::uint16_t kHeaderLocaleWidth = 32U;
 constexpr device_platform::DisplayRect kHeaderNetworkRect{
     220U, 4U, 44U, RepresentativeScreen::kTextLineHeight};
+// Touch zone around the visible language code (x=188..220). It ends at
+// x=219 so it never overlaps kHeaderNetworkRect and starts right of the logo
+// (x=4..172).
+constexpr device_platform::DisplayRect kHeaderLanguageHitRect{176U, 0U, 44U,
+                                                              kHeaderHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 constexpr std::uint16_t kProgramRowHeight = 18U;
@@ -414,6 +419,20 @@ RepresentativeScreen makeRepresentativeScreen(
                 {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
+    } else if (screen.workspace.page == FermentationUiPage::HeaderWebAccess) {
+        // The Application owns the release state; the page only shows it.
+        const char* statusKey = "web-access-unavailable";
+        auto statusToken = device_platform::ThemeToken::TextSecondary;
+        if (snapshot.webAccess == FermentationWebAccessState::WindowOpen) {
+            statusKey = "web-access-window-open";
+            statusToken = device_platform::ThemeToken::StatusInformation;
+        } else if (snapshot.webAccess == FermentationWebAccessState::Closed) {
+            statusKey = "web-access-closed";
+            statusToken = device_platform::ThemeToken::StatusWarning;
+        }
+        addText(commands, textPacks, locale, fermentationTextKey(statusKey),
+                {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
+                statusToken, device_platform::ThemeToken::Canvas);
     } else if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
         if (networkAccessPointInfo.has_value() &&
             !networkAccessPointInfo->ssid.empty() &&
@@ -614,6 +633,13 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
     const RepresentativeScreen& screen, std::uint16_t x,
     std::uint16_t y) noexcept {
     if (x >= screen.kWidth) return std::nullopt;
+    if (x >= kHeaderLanguageHitRect.left &&
+        x < kHeaderLanguageHitRect.left + kHeaderLanguageHitRect.width &&
+        y >= kHeaderLanguageHitRect.top &&
+        y < kHeaderLanguageHitRect.top + kHeaderLanguageHitRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderLanguage, 0U};
+    }
     if (x >= kHeaderNetworkRect.left &&
         x < kHeaderNetworkRect.left + kHeaderNetworkRect.width &&
         y >= kHeaderNetworkRect.top &&

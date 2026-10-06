@@ -72,6 +72,10 @@ struct FermentationUiApplyNetworkModeCommand {
 
 struct FermentationUiBeginHomeWifiReconfigurationCommand {};
 
+// Opens the volatile local release window for the web first-time setup. The
+// Application owner decides whether it may open; the UI carries intent only.
+struct FermentationUiOpenWebProvisioningWindowCommand {};
+
 // The renderer-independent UI contract carries intent only.  In particular,
 // these payloads never carry a ProgramDocument, safety/sensor/planner
 // evidence, or an owning decision object.  The later application boundary
@@ -250,12 +254,16 @@ struct FermentationUiCommand {
                  FermentationUiConfigurationCommitCommand,
                  FermentationUiResumeFallbackCommand,
                  FermentationUiApplyNetworkModeCommand,
-                 FermentationUiBeginHomeWifiReconfigurationCommand>
+                 FermentationUiBeginHomeWifiReconfigurationCommand,
+                 FermentationUiOpenWebProvisioningWindowCommand>
         operation;
 };
 
 enum class FermentationUiDetailStatus : std::uint8_t {
     UnsupportedAppDetail,
+    // Owning outcomes of OpenWebProvisioningWindow.
+    WebProvisioningWindowOpened,
+    WebProvisioningWindowNotOpened,
 };
 
 // A canonical Proposed decision is not an owning apply/persist outcome.  The
@@ -346,6 +354,9 @@ class FermentationUiCommandBridge {
     beginHomeWifiReconfiguration(
         FermentationApplication& application,
         const FermentationUiBeginHomeWifiReconfigurationCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult openWebProvisioningWindow(
+        FermentationApplication& application,
+        const FermentationUiOpenWebProvisioningWindowCommand& command);
 
    private:
     friend class FermentationApplication;

@@ -314,7 +314,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/fermentation_app/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
-        "private": frozenset(),
+        "private": frozenset({"cjson"}),
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform", "nvs_flash"}),
@@ -326,6 +326,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "esp_lcd",
                 "esp_http_server",
                 "esp_timer",
+                "mbedtls",
                 "freertos",
                 "esp_netif",
                 "esp_wifi",
@@ -347,6 +348,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "fermentation_app",
                 "device_platform_esp_idf",
                 "nvs_flash",
+                "mbedtls",
                 "esp_timer",
                 "espressif__esp_lvgl_port",
             }
@@ -1094,7 +1096,7 @@ def create_clean_fixture(root: Path) -> None:
         ),
         "lib/fermentation_app/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
-            "REQUIRES device_platform)\n"
+            "REQUIRES device_platform PRIV_REQUIRES cjson)\n"
         ),
         "lib/device_platform_esp_idf/src/esp_timer_time_source.hpp": (
             '#pragma once\n#include "time_source.hpp"\n'
@@ -1103,7 +1105,7 @@ def create_clean_fixture(root: Path) -> None:
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
             'REQUIRES device_platform nvs_flash PRIV_REQUIRES '
             'esp_event esp_driver_gpio esp_driver_spi esp_lcd '
-            'freertos esp_http_server esp_netif esp_wifi mdns esp_timer lwip '
+            'freertos esp_http_server esp_netif esp_wifi mdns esp_timer mbedtls lwip '
             'esp-idf-lib__ds3231 esp-idf-lib__i2cdev '
             'espressif__esp_lcd_ili9341 espressif__esp_lcd_touch '
             'atanisoft__esp_lcd_touch_xpt2046)\n'
@@ -1113,7 +1115,7 @@ def create_clean_fixture(root: Path) -> None:
             'idf_component_register(SRCS "app_main.cpp" '
             'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
             "device_platform fermentation_app device_platform_esp_idf nvs_flash "
-            "esp_timer espressif__esp_lvgl_port)\n"
+            "mbedtls esp_timer espressif__esp_lvgl_port)\n"
         ),
         # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
         # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die

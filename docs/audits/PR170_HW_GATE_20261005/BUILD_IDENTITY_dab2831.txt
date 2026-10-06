@@ -1,0 +1,6 @@
+dab2831cc2723a6cb4baab134971f196d870a07c
+dab934d1e4b2abe988e3e9b5e7eb274049943bbd28aa0f24d7ff4a3a89cea89d  build/esp32_release/esp32_fermentationsschrank.bin
+064f423f4fbf50662efe872f4c6bbfc981c7d25f724091843910941c0952832d  build/esp32_release/bootloader/bootloader.bin
+d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d  build/esp32_release/partition_table/partition-table.bin
+esptool v5.4.0
+5.4.0

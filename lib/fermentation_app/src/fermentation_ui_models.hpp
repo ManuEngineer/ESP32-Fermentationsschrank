@@ -110,6 +110,17 @@ struct FermentationNetworkModeView {
         device_platform::NetworkMode::HOME_WIFI};
 };
 
+// Secret-free state of the local release for the web first-time setup, as
+// reported by the Application owner. The UI never models the window itself.
+enum class FermentationWebAccessState : std::uint8_t {
+    // Web access is already set up or not in a state to be released.
+    NotApplicable,
+    // Setup is possible but the local release window is closed.
+    Closed,
+    // The local release window is open.
+    WindowOpen,
+};
+
 struct FermentationUiSnapshot {
     FermentationUiExpectedRevisions revisions;
     FermentationHomeView home;
@@ -120,6 +131,8 @@ struct FermentationUiSnapshot {
     ApplicationStatusView status;
     ServiceAvailabilityView service;
     FermentationNetworkModeView network;
+    FermentationWebAccessState webAccess{
+        FermentationWebAccessState::NotApplicable};
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 

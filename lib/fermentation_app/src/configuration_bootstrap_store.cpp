@@ -59,9 +59,10 @@ ConfigurationBootstrapScanResult ConfigurationBootstrapStore::scan() const {
     };
     std::array<std::optional<Candidate>, 2> candidates;
     for (std::size_t slot = 0U; slot < candidates.size(); ++slot) {
-        auto read = store_.read(
-            keyFor(slot),
-            configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+        auto read =
+            store_.read(keyFor(slot),
+                        configuration_limits::
+                            kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
         if (read.status == StateStoreReadStatus::NotFound) {
             continue;
         }
@@ -176,6 +177,59 @@ ConfigurationBootstrapStore::writeHandoffSuccessor(
 }
 
 ConfigurationBootstrapWriteResult
+ConfigurationBootstrapStore::writeAuthDomainHandoff(
+    const LoadedConfigurationBootstrap& expected,
+    AuthDomainHandoffState targetHandoff,
+    const ConfigurationMutationLease& mutationLease) {
+    if (!mutationLease.valid()) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
+    const auto current = scan();
+    if (current.status != ConfigurationBootstrapScanStatus::Available ||
+        !current.loaded.has_value() ||
+        current.loaded->record != expected.record ||
+        current.loaded->canonicalRecordBytes != expected.canonicalRecordBytes ||
+        current.loaded->slot != expected.slot ||
+        expected.record.state != ConfigurationBootstrapState::Initialized ||
+        (expected.record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion2 &&
+         expected.record.schemaVersion !=
+             kConfigurationBootstrapSchemaVersion3) ||
+        expected.record.sequence.value() ==
+            std::numeric_limits<std::uint64_t>::max()) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
+    const auto sequence =
+        ConfigurationBootstrapSequence{expected.record.sequence.value() + 1U};
+    const auto schema =
+        expected.record.schemaVersion == kConfigurationBootstrapSchemaVersion2
+            ? kConfigurationBootstrapSchemaVersion3
+            : expected.record.schemaVersion;
+    const auto handoffSequence =
+        targetHandoff == AuthDomainHandoffState::Unconsumed
+            ? sequence
+            : expected.record.authHandoffSequence;
+    const ConfigurationBootstrapRecord target{
+        sequence,
+        expected.record.storageFormatVersion,
+        expected.record.storageEpoch,
+        expected.record.state,
+        schema,
+        expected.record.handoff,
+        expected.record.previousEpoch,
+        expected.record.currentEpoch,
+        targetHandoff,
+        handoffSequence};
+    if (!isAllowedBootstrapSuccessor(expected.record, target)) {
+        return {ConfigurationBootstrapWriteStatus::InvalidTransition,
+                std::nullopt};
+    }
+    return writeBound(current, target);
+}
+
+ConfigurationBootstrapWriteResult
 ConfigurationBootstrapStore::writeSuccessorWithHandoff(
     const LoadedConfigurationBootstrap& expected,
     ConfigurationBootstrapState targetState,
@@ -229,10 +283,18 @@ ConfigurationBootstrapStore::writeSuccessorWithHandoff(
         expected.record.storageFormatVersion,
         epoch,
         targetState,
-        kConfigurationBootstrapSchemaVersion2,
+        expected.record.schemaVersion == kConfigurationBootstrapSchemaVersion3
+            ? kConfigurationBootstrapSchemaVersion3
+            : kConfigurationBootstrapSchemaVersion2,
         targetHandoff,
         previousEpoch,
-        currentEpoch};
+        currentEpoch,
+        targetState == ConfigurationBootstrapState::Resetting
+            ? AuthDomainHandoffState::None
+            : expected.record.authDomainHandoff,
+        targetState == ConfigurationBootstrapState::Resetting
+            ? ConfigurationBootstrapSequence{0U}
+            : expected.record.authHandoffSequence};
     if (!isAllowedBootstrapSuccessor(expected.record, target)) {
         return {ConfigurationBootstrapWriteStatus::InvalidTransition,
                 std::nullopt};
@@ -247,9 +309,10 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
     std::optional<std::string> previous;
     if (scanResult.loaded.has_value()) {
         targetSlot = scanResult.loaded->slot.value() == 0U ? 1U : 0U;
-        const auto prior = store_.read(
-            keyFor(targetSlot),
-            configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+        const auto prior =
+            store_.read(keyFor(targetSlot),
+                        configuration_limits::
+                            kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
         if (prior.status == StateStoreReadStatus::Success) {
             previous = prior.value;
         } else if (prior.status == StateStoreReadStatus::ReadError) {
@@ -273,9 +336,10 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
         return {ConfigurationBootstrapWriteStatus::WriteCapacityError,
                 std::nullopt};
     }
-    const auto readback = store_.read(
-        keyFor(targetSlot),
-        configuration_limits::kMaximumConfigurationBootstrapEnvelopeBytes);
+    const auto readback =
+        store_.read(keyFor(targetSlot),
+                    configuration_limits::
+                        kMaximumConfigurationBootstrapSchema3EnvelopeBytes);
     if (readback.status == StateStoreReadStatus::ReadError) {
         return {ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate,
                 std::nullopt};

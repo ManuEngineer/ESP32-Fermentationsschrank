@@ -73,6 +73,7 @@ void FermentationUiProjector::projectInto(
     output.service.serviceAuthorizationRequired =
         input.service.serviceAuthorizationRequired;
     output.service.unavailableReason = input.service.unavailableReason;
+    output.webAccess = input.webAccess;
     output.network.currentMode = input.network.currentMode;
     output.network.selectionRequired =
         input.network.currentMode == device_platform::NetworkMode::UNSELECTED;

@@ -30,6 +30,156 @@ Nachweisarten:
 - **Repository:** bereits implementierter und getesteter Projektstand;
 - **Messung:** erst nach einem definierten Hardware-Spike; derzeit offen.
 
+### Issue #27 ArduinoJson-Kandidatensupplement (2026-09-30)
+
+Dieses Supplement dokumentiert ausschliesslich den softwareseitigen Spike; es
+ersetzt weder das Originalaudit noch die ausstehende Ownerauswahl.
+
+- Kandidat: ArduinoJson `7.4.3`, offizieller Tag-Commit
+  `77771d3c07668e01d8f52acb03910c1110bb373f`; bezogene `LICENSE.txt` ist MIT
+  (SHA-256 `4a7ee9c96b28cbf30c5bf7c2d211a0ef57179f0328e68ad7b7fa7d754b7da1a2`).
+  Der ESP-IDF Component Manager lockt denselben Commit; das native PlatformIO-
+  Manifest pinnt denselben Git-SHA.
+- Konkrete Grenzen: Run-Mutation-Body 480 Byte (innerhalb des bestehenden
+  512-Byte-Replay-Fingerprints), maximale JSON-Nestingtiefe 4, Program-ID
+  48 Byte, Temperaturprojektion 3 Eintraege, Alerts 16 Eintraege und jede
+  Read-only-Antwort maximal 3072 Byte. DTO-Objekte lehnen fehlende
+  Pflichtfelder, falsche Typen, zusaetzliche Felder, NUL-in-Strings/-Keys sowie
+  malformed/truncated JSON fail-closed ab. Doppelte Membernamen werden aber
+  waehrend `deserializeJson()` kollabiert und vom DTO-Validator nicht mehr
+  erkannt; deshalb erfuellt dieser Kandidatenpfad den strikten Duplicate-Key-
+  Vertrag nicht. Der Maximaltest verwendet eine reale Program-Startmutation
+  mit allen Overrides und maximalen Revisionswerten.
+- Das interne Body-Schema hat Version 1: Root `v`/`r`/`i` (Version,
+  erwartete Revisionen, Intent); Revisionsschluessel `s`/`r`/`m`/`f`/`e`/
+  `u`/`c` (State, Run, Meldungen, Fault, Recovery-Episode,
+  User-Konfiguration, Programmkatalog). Intent `t` ist einer von
+  `start-program`, `start-manual-holding`, `start-manual-timed`, `stop-run`,
+  `complete-run`, `adjust-run`, `recovery-time-correction`, `ack-message`,
+  `mute-message`, `reset-fault` oder `sensor-selection`. Payloadfelder sind
+  im Codec streng allowlisted; Programmstart nutzt Kandidat `c` mit `p` (ID),
+  `x` (Ziel), `d` (Dauer), `h` (Vorheizen), `s` (Sensor), `c` (Completion),
+  `k` (Kuehlziel), `l` (Haltezeit). Read-only-Ausgaben whitelisten Status-/
+  Revisionsfelder, je Temperatur Rolle/Qualitaet/Gueltigkeit/Wert und je Alert
+  ID/Code/Schwere/Aktiv-/Ack-/Decision-/Mute-Zustand; interne Sensorrohdaten,
+  Kalibrierkoeffizienten und Laufzeitstempel werden nicht ausgegeben.
+- Verifikation vor dem Duplicate-Key-Finding: Native-Codec-/API-/Handler-
+  Regressionen und beide ESP-IDF-6.1-Profile bestanden. `esp32_bringup`
+  erzeugte 1,554,240 Byte Firmwarebinary (ELF text/data/bss
+  1,359,348/210,835/90,082 Byte); `esp32_release` 1,542,224 Byte
+  (1,349,292/208,867/90,082 Byte). Codec und Handler sind nicht in
+  `main/app_main.cpp` komponiert; ihre Symbole sind nicht im Firmware-ELF,
+  daher ist daraus kein produktiver Flash-/RAM-Delta-Nachweis abzuleiten.
+- Duplicate-Key-Reproduktion auf dem Slice-4B-HEAD
+  `a236effc625cc992fbd16e4e6cc72e36d2829940`: vier neue Regressionen verlangen
+  Ablehnung bei Root-, Revisions-, Intent- und Candidate-Duplikaten;
+  alle vier wurden unerwartet akzeptiert. Der Native-Route-Lauf endete deshalb
+  `ERRORED` (4 fehlgeschlagene Assertions, 15 andere Tests bestanden).
+- Oeffentliche ArduinoJson-v7-API-Pruefung: dokumentierte
+  [`deserializeJson()`-Optionen](https://arduinojson.org/v7/api/json/deserializejson/)
+  umfassen Filter und NestingLimit, aber keinen Duplicate-Key-Hook oder
+  Token-Visitor; die dokumentierten
+  [`DeserializationError`-Werte](https://arduinojson.org/v7/api/misc/deserializationerror/)
+  enthalten keinen Duplicate-Key-Fehler. `JsonObjectConst` stellt Iteration,
+  Lookup und Groesse der fertig geparsten Objektprojektion bereit, keine
+  Eingabeereignisse. Der oeffentliche Custom-Reader liefert nur Bytes; ein
+  Duplicate-Tracker davor muesste selbst JSON-Strings und Objektgrenzen lexen
+  und waere hier ein verbotener zweiter Parser.
+- Ergebnis: `ARDUINOJSON_7_4_3=FAIL_CANDIDATE_FOR_STRICT_DUPLICATE_FIELD_CONTRACT`;
+  `FINAL_SELECTION_PENDING=YES`. Keine alternative JSON-Bibliothek und kein
+  eigener Parser wurden ausgewaehlt oder implementiert. Der fruehere
+  `PASS_CANDIDATE`-Status ist durch dieses Finding ueberholt. Die offene
+  Heap-/Vier-Session/no-PSRAM-Messung bleibt zusaetzlich ausstehend.
+
+### Issue #27 Espressif-cJSON-Kandidatensupplement (2026-09-30)
+
+Dieses Supplement dokumentiert den ergebnisoffenen zweiten JSON-Kandidatenspike
+nach dem belegten ArduinoJson-Fehler. Es ist keine Produktbibliotheksauswahl
+und aendert weder Codec noch produktive Dependencies oder Composition.
+
+- Exakter Kandidat: Espressif Component Registry
+  [`espressif/cjson 1.7.19~2`](https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2/readme),
+  Quellrepository `espressif/idf-extra-components/cjson`, Commit
+  `1387cec28a9b40654be7892114bd7d26fcd3869c`; das SBOM identifiziert das
+  Upstream-Submodul [DaveGamble/cJSON 1.7.19](https://github.com/DaveGamble/cJSON/commit/b2890c8d76bbb64e710585ebc0a917196b9c67e7)
+  bei Commit `b2890c8d76bbb64e710585ebc0a917196b9c67e7`. Der isolierte Spike pinnt
+  `=1.7.19~2`; das IDF-6.1-Lockfile enthaelt Component-Hash
+  `e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469`.
+  Die Registry-Lizenz ist
+  [MIT](https://components.espressif.com/components/espressif/cjson/versions/1.7.19~2/license);
+  die bezogene Lizenzdatei hat SHA-256
+  `a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c`.
+- Kompatibilitaet: Der direkte ESP-IDF-6.1-Build fuer `esp32` kompiliert die
+  C-Komponente und den C++17-Verbraucher. Der gleiche Probequelltext ist nativ
+  mit C99-cJSON plus C++17-Consumer gebaut und ausgefuehrt. Das belegt den
+  Hostpfad und den ESP32-Targetbuild, nicht ein exaktes WROOM-32E-Modul oder
+  Laufzeit-/Hardwareverhalten.
+- Die Probe verwendet die konkreten Slice-4B-Grenzen: Mutation-Body 480 Byte,
+  Tiefe 4, Program-ID 48 Byte, hoechstens drei Temperaturprojektionen,
+  sechzehn Alerts und je Read-only-Antwort 3072 Byte. Der maximale konkrete
+  Mutationsbody ist 337 Byte; ein 480-Byte-Body wird akzeptiert und 481 Byte
+  vor dem Parser abgewiesen. Maximale Status-/Temperatur-/Alertantworten
+  serialisieren begrenzt in 346/247/3048 Byte und bleiben unter 3072 Byte.
+- Die oeffentliche cJSON-Objektstruktur (`child`/`next`/`string`) behaelt
+  doppelte Member; ein begrenzter Baumdurchlauf erkennt Duplikate in Root,
+  Revision, Intent und verschachteltem Programmkandidaten. Allowlist-,
+  Pflichtfeld- und Root-Typpruefungen koennen unbekannte, fehlende und falsch
+  typisierte Felder ablehnen. Truncated/malformed JSON wird abgelehnt; die
+  konfigurierte Nestingtiefe 4 wird erzwungen und Tiefe 5 abgewiesen.
+- Drei wesentliche Vertragsfehler bleiben reproduziert: `uint64_t`-Maximum
+  und `2^64` werden auf denselben `double`-Wert gerundet; escaped und raw NUL
+  werden akzeptiert und als C-String abgeschnitten; ungueltiges UTF-8 wird
+  akzeptiert. `1e999` wird als Infinity geparst und erfordert zusaetzliche
+  `isfinite`-Validierung; `uint32_t`-Overflow ist durch Wertebereichspruefung
+  erkennbar. Der Native-Probeprozess endet deshalb erwartungsgemaess mit
+  Exit-Code 1 fuer die Vertragsfehler.
+- Ergebnis: `ESPRESSIF_CJSON_1_7_19_2=FAIL_CANDIDATE` und
+  `FINAL_SELECTION_PENDING=YES`. Keine dritte Bibliothek, kein eigener
+  JSON-Lexer, Fork oder Workaround wurde ausgewaehlt/implementiert. Die
+  ArduinoJson-Duplicate-Regressions bleiben unveraendert. Produktive Routes,
+  `main/app_main.cpp`-Composition, Hardware und Flash bleiben unberuehrt.
+
+### Issue #27 cJSON Candidate Completion gegen proportionalen JSON-R1-Vertrag (2026-09-30)
+
+Dieser neue Probe-Nachweis korrigiert nicht die historische Messung oben,
+sondern ergänzt den im Planreview verlangten kleinen Gate für den aktuellen
+ASCII-only R1-Bodyvertrag.
+
+- Basis-HEAD: `c792c4ac1791ddbeb96864ee32fcff249e3389ae`; isolierter
+  Probe-Commit: `b5b26c204f00e63c4e3944feacde4dccdcb4ae06`.
+- Revalidierte Planrevision: `aa695b43f5b68edefea23669678d877f5b830c17`;
+  PR #170 bleibt Draft, finale Bibliothekswahl bleibt Ownerentscheidung.
+- `containsForbiddenNulInput()` läuft erst nach der 480-Byte-Grenze und
+  prüft rohe NUL-Bytes sowie die sechs Literalbytes: Backslash, `u`, vier
+  Nullen. Das ist ein begrenzter Byte-Scan ohne JSON-Tokenizing,
+  String-/Escape-State-Machine, Strukturwissen, private cJSON-Interna oder
+  Fork.
+- Native C99-cJSON/C++17-Probe: Exit-Code 0. `RAW_NUL_REJECTED_BY_BOUNDED_GATE`
+  und `DECODED_NUL_ESCAPE_REJECTED_BY_BOUNDED_GATE` sind PASS. Ein separater
+  Parse desselben escaped-NUL-Vektors bestätigt weiterhin die historische
+  cJSON-Dekodierung/C-String-Kürzung; verworfen wird er vor dem Parser.
+- Die aktuelle maximale Mutation mit Dezimalstring-`uint64`-Revisionen ist
+  341/480 Byte. Gültiges `start-program`, Enumwerte `product` und
+  `cool-and-hold-until-manual-stop` bleiben parsebar. Die 48-Byte-Program-ID
+  besteht danach den tatsächlichen Projektvalidator
+  `validateLowercaseIdentifier()`. Maximalantworten bleiben Status 346,
+  Temperaturen 247 und Alerts 3048 von 3072 Byte.
+- ESP-IDF 6.1 / ESP32 Build des isolierten cJSON-Probes und des realen
+  Projekt-ID-Validators: PASS. Es wurde weder geflasht noch auf Hardware
+  ausgeführt; daraus folgt kein integrierter Heap-/no-PSRAM-Ressourcennachweis.
+- Duplicate-Member-Rejection und generische UTF-8-Ablehnung bleiben
+  Hardening, nicht MUST. Der historische numerische `uint64`-Kollisionsbefund
+  bleibt wahr, wird aber durch die gemeinsame Dezimalstring-Wiredarstellung
+  aus dem R1-JSON-number-Pfad entfernt.
+- Ergebnis gegen den proportionalen aktuellen Vertrag:
+  `CJSON_REASSESSMENT=PASS_CANDIDATE_FOR_R1_MUST`. ArduinoJson bleibt
+  `PASS_CANDIDATE_FOR_R1_MUST_WITH_SMALL_CODEC_DELTA`; dies ist keine finale
+  Ownerauswahl. Es gibt keinen gemessenen Ressourcen-Sieger. Die offizielle
+  Espressif-Herkunft ist ein legitimer ESP-IDF-Wartungs-/Wiederverwendungs-
+  Tie-Breaker; vorhandener ungemergter Codeccode ist nur ein kleiner
+  Migrationskostenfaktor. Produktcodec, Dependency, Composition und Hardware
+  bleiben unverändert.
+
 ### Upstream-Aktivitaet und deklarierte Plattformbreite
 
 Die Aktivitaet ist nur ein Wartungsindikator. Sie beweist weder Fehlerfreiheit
@@ -795,3 +945,39 @@ Quellen: [Arduino PID](https://github.com/br3ttb/Arduino-PID-Library),
 - NVS-Kapazitaet, reale Flashatomizitaet und Lebensdauer sind nicht gemessen.
 - Es wird keine reale Heapreserve, PSRAM, GPIO-Belegung oder aktive Polaritaet
   behauptet.
+
+### Issue #27 – owner-ausgewaehlter cJSON-Codec implementiert (2026-09-30)
+
+Plan `aa695b43f5b68edefea23669678d877f5b830c17` wurde fuer die finale
+Bibliotheksauswahl ownerfreigegeben. Ausgewaehlt ist ausschliesslich
+Espressif Registry `espressif/cjson 1.7.19~2`, Komponentencommit
+`1387cec28a9b40654be7892114bd7d26fcd3869c`, Upstream cJSON Commit
+`b2890c8d76bbb64e710585ebc0a917196b9c67e7`, Component-Hash
+`e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469`.
+Die MIT-Lizenzdatei hat SHA-256
+`a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c`.
+ArduinoJson ist aus Manifest, Lockfile, CMake und PlatformIO entfernt.
+
+- `web_json_codec.cpp` verwendet cJSON nur an der konkreten Codecgrenze;
+  CMake deklariert `cjson` als private Dependency. `uint64`-Revisionen bleiben
+  kanonische bounded Dezimalstrings; Zahlen, Pflichtfelder und geschlossene
+  Schemas werden projektspezifisch validiert. Der 480-Byte-Bodybound wird vor
+  NUL-Scan und Parse erzwungen; Responses sind auf 3072 Byte begrenzt.
+- Native Regressionen nach Implementierung: Web-Application-Routes 16/16,
+  Web-Session 16/16, Browser-Policy 4/4, HTTP-Lifecycle 5/5, lokale Touch-UI
+  14/14, UI-Commands 10/10, Run-Identity 18/18 und
+  Run-Persistence-Coordinator 163/163. Die geaenderte Route-/Codec-Suite
+  bestand nach clang-format-21 nochmals 16/16.
+- ESP-IDF `esp32_bringup` und `esp32_release` sowie abschliessender
+  PlatformIO-Profilvertrag: PASS. Board-Profile-Single-Source und
+  Builder-Static-Analysis-Self-Check unter clang-format/tidy 21: PASS;
+  `git diff --check`: PASS.
+- Read-only-Antwortgroessen im gemessenen nativen Produktpfad: Status 345,
+  Temperaturen 247 und Alerts 3048 Byte, jeweils innerhalb 3072 Byte.
+  Dies ist kein integrierter Vier-Session-/no-PSRAM-Ressourcennachweis.
+- `GET /api/v1/*` und der interne Run-Handler bleiben unregistriert und
+  unkomponiert; kein `main/app_main.cpp`-Delta. Die Auth-/Session-Composition,
+  Application-Aufrufserialisierung und das Vier-Session-/no-PSRAM-Gate bleiben
+  vor produktiver Webmutation offen. Hardware und Flash: `NOT_RUN`;
+  `ACTUATOR_RELEASE=NO`. Ergebnis: softwareseitiger Slice abgeschlossen,
+  STOP fuer Independent Slice Review.

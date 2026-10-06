@@ -197,6 +197,12 @@ Credential-/Moduswechsel, Werksreset oder einem anderen serverseitigen
 Widerruf gueltig. Browser-Fingerprints, `beforeunload`-Garantien oder andere
 Lifecycle-Hacks sind dafuer nicht vorgesehen.
 
+Die 30-Minuten-Inaktivitaetsfrist wird nur durch explizit erfasste relevante
+Benutzeraktivitaet verlaengert. Cookie-/Session-Lookup, Browser-Reload,
+read-only Polling und passive Snapshot-Aktualisierung verlaengern sie nicht;
+die absolute 12-Stunden-Grenze bleibt unabhaengig davon bestehen. Das separate
+Timing der Web-Servicelease bleibt davon unberuehrt.
+
 ### Betrieb ohne normales Webpasswort
 
 Ist der normale Webpasswortschutz bewusst deaktiviert:
@@ -223,6 +229,69 @@ Deaktiviert zu aktiviert setzt das neue Passwort atomar und widerruft alle
 anonymen Sessions. Bei der Ersteinrichtung ist Passwortschutz empfohlen und
 vorausgewaehlt; Deaktivierung ist nur bewusst nach Warnung moeglich.
 
+### Ersteinrichtung des Webzugangs
+
+Dieser Abschnitt beschreibt den implementierten R1-Ablauf fuer den Zustand
+`unprovisioned` (noch kein Webpasswort entschieden). Er ersetzt nicht die
+geschuetzte Moduswechsel-Mutation oben; eine spaetere Passwortaenderung oder
+ein Moduswechsel ist nicht Teil der Ersteinrichtung.
+
+**Lokale Freigabe.** Die Ersteinrichtung ist nur moeglich, nachdem sie am Geraet
+bewusst freigegeben wurde: Display `Sprache` -> `Webzugang` -> `Web-Setup`.
+Die Freigabe ist ein fluechtiges Fenster von 10 Minuten (monotone Zeit, keine
+Verlaengerung, keine Persistenz). Es endet bei erfolgreicher Einrichtung, Ablauf,
+Werksreset, Neustart, Netzwerkmoduswechsel und `HOME_WIFI`-Neueinrichtung, sowie
+sobald der Authzustand nicht mehr `unprovisioned` mit moeglichem Bootstrap ist.
+Der HTTP-Server ist nicht an ein Interface gebunden; die Freigabe, nicht die
+Erreichbarkeit, ist die Sicherheitsgrenze. Innerhalb des Fensters kann der erste
+Client, der die Route erreicht, die Einrichtung abschliessen.
+
+**Formular.** Im Zustand `unprovisioned` liefert `/` ein kompaktes
+Einrichtungsformular statt der Anmeldeseite (Login, Statusabfrage und
+Sitzungsbedienung haben in diesem Zustand keine Funktion):
+
+- Option `Passwortschutz` (empfohlen, vorausgewaehlt) mit Passwortfeld;
+- Option `Passwortschutz deaktivieren` mit sichtbarer Warnung und ausdruecklicher
+  Bestaetigung; ohne Bestaetigung wird nichts gesendet;
+- ein getrenntes Feld fuer die vierstellige Service-PIN in beiden Optionen (die
+  Service-PIN bleibt bei deaktiviertem Webpasswort geschuetzt);
+- Texte in Deutsch, Englisch und Spanisch nach Browsersprache, Englisch als
+  Rueckfall;
+- eine Meldung bei `403`, dass die Freigabe zuerst am Geraet erfolgen muss.
+
+Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
+Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
+4096 Bytes.
+
+**Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
+(optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
+Anmeldung, Body hoechstens 1024 Bytes. Weder Session noch CSRF-Token noch
+Mutationssequenz sind vorausgesetzt; vor der Einrichtung existiert keine
+Session. Zulaessige Schluessel genau:
+
+- Passwortschutz: `mode:"protect"`, `password`, `servicePin`;
+- Deaktivierung: `mode:"disable"`, `servicePin`, `confirmDisable:true`.
+
+| Status | Bedeutung |
+|---|---|
+| `200` | eingerichtet (`passwordProtection` `enabled` oder `disabled`) |
+| `400` `invalid-json` / `413` / `415` / `403 origin-rejected` / `405` | Request-Vertrag verletzt |
+| `403 provisioning-not-allowed` | kein offenes lokales Freigabefenster |
+| `409 already-provisioned` | Webzugang ist bereits eingerichtet |
+| `422 invalid-credentials` | Passwort oder PIN verletzen die Domaenenregeln |
+| `503 recovery-required` | Recovery oder unklarer Zustand |
+| `503 provisioning-failed` | KDF- oder Persistenzfehler |
+
+Bei Erfolg wird **keine** Session erzeugt und kein Cookie gesetzt. Der Benutzer
+meldet sich danach normal an (Passwortschutz) bzw. erhaelt beim Laden von `/`
+die anonyme lokale Session (deaktivierter Passwortschutz). Fehler vor dem ersten
+Schreibzugriff lassen den Zustand `unprovisioned` wiederholbar; ein Fehler nach
+dem ersten Schreibzugriff fuehrt zum bestehenden Recovery-Zustand, den nur der
+lokale Werksreset aufloest.
+
+Passwort und PIN erscheinen nie in URL, Antwort, Log, Snapshot oder Diagnose.
+Die Verbindung ist unverschluesseltes HTTP im lokalen Netz (siehe NETWORK.md).
+
 ## Sitzungstechnische Mindestregeln
 
 Unabhaengig von der spaeteren konkreten Bibliothek gelten:
@@ -243,6 +312,22 @@ Unabhaengig von der spaeteren konkreten Bibliothek gelten:
 - Abmeldung und Passwortaenderung machen die betroffene Sitzung ungueltig.
 - Sitzungs- und Servicefreigaben werden nicht in normale Diagnoseexporte
   aufgenommen.
+
+Mutation-Sequenzen sind pro Session monoton und atomar reserviert. Eine Session
+haelt hoechstens acht abgeschlossene Replay-Outcomes und eine In-Flight-Anfrage;
+nach Abschluss erhalten identische Retrys exakt dasselbe Outcome. Eine
+konkurrierende In-Flight-Anfrage, Payloadwechsel, Sequenzluecken, abgelaufene
+Sequenzen und `uint64`-Overflow bleiben fail-closed. Der exakte
+Request-Fingerprint ist ein
+SHA-256-Replay-Digest (32 Bytes); ein abgeschlossener Replay-Outcome besteht aus
+Digest und kompaktem endlichem Outcome-Code, ohne dynamische
+Replay-Payload-Puffer. Fuer vier Sessions samt je acht Outcomes betraegt der
+Ziel-Replay-RAM 1760 Bytes (`WebSessionManager` Ziel 2344 Bytes); die feste
+`WebSessionManager`-Speichergroesse wird zusaetzlich zur Compile-Zeit auf
+4096 Bytes begrenzt. Die frueheren Werte (512-Byte-Fingerprint,
+29.952-Byte-Replay-Payload, ca. 31 KiB) sind nur noch historische
+Vor-Candidate-C-Evidence. Vor Aktivierung der ersten Web-Mutationsroute ist weiterhin der
+integrierte Vier-Session-Ressourcennachweis erforderlich.
 
 ## Servicebereich in der Weboberflaeche
 
