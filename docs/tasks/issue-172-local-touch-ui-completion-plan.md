@@ -8,7 +8,7 @@ SCOPE=R1_LOCAL_TOUCH_UI_FUNCTIONAL_COMPLETION
 BASE_BRANCH=main
 BASE_SHA=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
 PLAN_REVISION=4
-PLAN_STATUS=OWNER_DECISIONS_O1_TO_O9_INCORPORATED_WAITING_PLAN_FIX_VERIFICATION
+PLAN_STATUS=OWNER_DECISIONS_INCORPORATED_FIX_VERIFICATION_CORRECTED_WAITING_LOCAL_TIME_ISSUE_AND_BOUNDED_VERIFICATION
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PR171=MERGED
@@ -21,7 +21,8 @@ PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
 PRODUCTION_CODE_CHANGED=NO
 OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
 OWNER_APPROVED_PLAN_SHA=NONE
-O2_INTERIM_HEADER_DISPLAY=OPEN_OWNER_CLARIFICATION
+R1_LOCAL_TIME_OWNER_ISSUE=NUMBER_PENDING_OWNER_CREATION_REQUIRED_BEFORE_S4
+S4_GATED_ON_LOCAL_TIME_OWNER=YES
 PR175_CORRECTION_ORDER=B1_TO_B6_INCORPORATED
 ACTUATOR_RELEASE=NO
 ```
@@ -70,7 +71,7 @@ Nicht-Ziele (unveraendert aus dem Issue):
 | F5 | Der Dispatcher meldet `transitionAction` und `programEdit` als `UnavailableNoOwner`; alle anderen Press-Payloads sind verdrahtet. | `main/fermentation_ui_press_dispatcher.cpp:89-99` |
 | F6 | Die Programmliste zeichnet immer die Eintraege 0..2 (18-px-Zeilen) und ignoriert `pager.currentIndex`; Auf/Ab aendert nur den Zaehler `n/N`. 18 px sind fuer resistives Touch zu klein (BottomSlots: 40 px). | `fermentation_ui_renderer.cpp:480-492`, `:523-530` |
 | F7 | `NavigateMessageDetail` waehlt stets die **erste** aktive, unaufgeloeste Meldung und ignoriert den Pager. | `fermentation_touch_workspace.cpp:1160-1172` |
-| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt die UTC-formatierte Zeit (`formatClockText`); eine echte lokale Uhrzeit ist ohne UTC→Local-Aufloesung nicht darstellbar, eine Zeitzonen-„Auswahl“ waere ein No-op. Gemaess O2 baut #172 **keine** neue IANA-/DST-/Aufloesungsinfrastruktur und keinen Fake-/Fallback-Lokalzeitmechanismus; die technische Aufloesung ist ein eigener nachgelagerter Scope auf Basis der UTC-Zeitplattform (#126). | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:185-198` |
+| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt heute die UTC-formatierte Zeit (`formatClockText`) ohne Kennzeichnung; eine echte lokale Uhrzeit ist ohne UTC→Local-Aufloesung nicht darstellbar. Echte Lokalzeit ist R1-Ziel (O2). #172 baut die Aufloesung nicht selbst, liefert aber auch keine unmarkierte UTC-Zeit als scheinbare Lokalzeit aus: Der Lokalzeit-Owner (separates R1-Issue auf Basis #126, siehe O2 und S4) ist Voraussetzung fuer S4. | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:185-198` |
 | F9 | `FermentationUiPresentationSource` enthaelt `displayLocale`, `canonicalTimeZoneId`, `programCatalog`, aber **kein** `deviceName`. | `fermentation_ui_models.hpp:145-149` |
 | F10 | `app_main` uebergibt `initialDisplayLocale` / `initialTimeZoneId` (beim Boot erfasst) an `renderGate.renderRequired()` und als Locale/Zeitzone der Netzwerkseite. Auf `HeaderNetwork` ist die Presentation-Kopie verdraengt; `get()` liefert dort die Defaults (Englisch). Nach einem Sprachwechsel zeichnet der Render-Key nicht neu bzw. die Netzwerkseite bliebe bis zum Reboot in der alten Sprache. | `main/app_main.cpp:442-443`, `:482-487`, `:511-532`; `fermentation_ui_presentation_cache.hpp` (`update`, `evict`, `get`) |
 | F11 | Es gibt keine Settings-/Menue-Seite in `FermentationUiPage`. Die vier Standby-Home-Slots sind `start` und `programs` (beide → Programmliste, ununterscheidbar), `status`, `service`. | `fermentation_touch_workspace.cpp:317-331` |
@@ -87,8 +88,8 @@ Nicht-Ziele (unveraendert aus dem Issue):
 | # | Luecke | Ist-Pfad | Bestehender Owner | Fehlt | Slice |
 |---|---|---|---|---|---|
 | 1 | Header-Sprache | Header zeigt Sprachcode; Hit-Zone existiert seit #170 (F1); `Workspace::press(HeaderLanguage)` navigiert (`:1310`); Seite `HeaderLanguage` hat nur Cross-Navigation inkl. #170-Slot 3 `web-access` (`:757-764`) | `UserConfiguration.displayLanguageId` via `ConfigurationService`; Muster `applyNetworkMode` (`fermentation_application.cpp:778-…`, mit `applicationCallSerializer_.enter()`); Sprachkatalog `kLanguages{de,es,en}` | Auswahlzeilen, Application-Entry, eviction-feste Locale-Kopie (F10); **keine** neue Hit-Zone | S3 |
-| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:803-809`); Uhr nicht treffbar | `ITimeSource`/`ClockViewInput{trustedUtc, tz}`; Zeitzonenkatalog (F8) | Hit-Zone, ein gemeinsamer Screen `Zeit / Zeitzone` (auch ueber `Einstellungen` erreichbar); keine Aufloesungsinfrastruktur (O2) | S4 |
-| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite `Einstellungen` (Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒), Standby-Slot `settings` (O1), Geraetename-Editor, Application-Entry; Links auf bestehende Seiten/Owner (kein neuer Web-/Service-Owner) | S10 |
+| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:803-809`); Uhr nicht treffbar | `ITimeSource` (absolute Zeitquelle, #126); lokale Zeit (`trusted UTC + canonicalTimeZoneId → lokale Zeit inkl. DST`) gehoert dem separaten R1-Lokalzeit-Owner; Zeitzonenkatalog (F8) | Hit-Zone, ein gemeinsamer Screen `Zeit / Zeitzone` (auch ueber `Einstellungen` erreichbar), Konsum der Lokalzeit des Owners | S4 (nach Lokalzeit-Owner) |
+| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite `Einstellungen` (Reihenfolge: Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒), Standby-Slot `settings` (O1), Geraetename-Editor, Application-Entry; Links auf bestehende Seiten/Owner (kein neuer Web-/Service-Owner) | S10 |
 | 4 | Programmlisten-Auswahl | Liste gezeichnet; `selectProgram()` ohne Aufrufer (F3); kein Row-Target (F1/F2); Pager-Fenster fehlt (F6) | `Workspace::selectProgram` → `ProgramSummary` | Content-Target, Pager-Fenster, Zeilenhoehe | S1 |
 | 5 | Programmverwaltung | Aktionen (Reset/Uninstall/Delete/Save) erzeugen `programEdit`-Request; Dispatcher: `UnavailableNoOwner` (F5); Helfer mit falschen Wire-Werten (F14) | `applyProgramEditPreview()` + `ConfigurationService` + `ProgramCatalogRevision`-Staleness | `FermentationApplication`-Entry, Wire-Wert-Korrektur, Dispatcher | S6 |
 | 6 | Programmeditor/Startwerte | `setStartCandidate`, `setProgramEditCandidate` nur Tests (F3); Edit-Modelle ohne Konsument (F4) | `validateProgram`, `makeFermentationUiProgramList`, `openProgramEditSession`, Preview-Pfad, `prepareStartProgram` | Editor-Seiten, Tastenfeld/Tastatur, Feldzuordnung | S8, S10 |
@@ -110,7 +111,7 @@ Slot-Nummern `0..3` links nach rechts.
 | Header | Logo | nicht interaktiv (UI-11) | – | OK (bewusst) |
 | Header | Sprache | gezeichnet, treffbar (#170, → `HeaderLanguage`); Seite ohne Auswahl | `UserConfiguration` | NAV; Auswahl DEAD → S3 |
 | Header | WLAN | → `HeaderNetwork` | #164 | OK |
-| Header | Uhr | gezeichnet, nicht treffbar | `ClockViewInput` | DEAD → S4 (Hit-Zone → gemeinsamer Screen `Zeit / Zeitzone`; Header-Text unveraendert, O2) |
+| Header | Uhr | gezeichnet, nicht treffbar, zeigt heute nicht lokal umgerechnete UTC-Zeit | Lokalzeit-Owner (R1-Issue, #126-Basis) | DEAD → S4 (Hit-Zone → gemeinsamer Screen; Header-Text aus der Lokalzeit des Owners, nie unmarkierte UTC) |
 | Home Standby | 0 `start`, 1 `programs` | → `ProgramList` (beide, ununterscheidbar, F11) | – | NAV; wird `Start` (Auswahl/manuell) und `Programme` (Verwaltung) mit getrennter Listenabsicht (O1, D14, S1) |
 | Home Standby | 2 `status`, 3 `service` | → `Status`, `Service` (nur wenn `service.available`) | #28 fuer Inhalt | NAV; Slot 3 wird `settings` (O1, D14, S10); `Service` wandert atomar unter `Einstellungen` (geschuetzt, Regeln unveraendert) |
 | Home ActiveRun | `stop`, `programs`, `details`, `status` | → `StopDialog`, `ProgramList`, `Process`, `Status` | – | NAV; Inhalt → S7 |
@@ -156,15 +157,15 @@ Slot-Nummern `0..3` links nach rechts.
 | HeaderNetwork | alle | verdrahtet | #164 | OK |
 | HeaderClock | 1 `language`, 2 `network` | NAV; kein Inhalt | `ClockViewInput` | DEAD → S4 (derselbe Screen wie `Einstellungen → Zeit / Zeitzone`) |
 
-Zurueckgestellte Punkte ohne bestehendes Folge-Issue: **technische
-Zeitzonenaufloesung/Lokalzeit** (O2, eigener nachgelagerter Scope auf Basis
-#126; es existiert noch kein Issue) und **Recovery-Zeitkorrektur als
-Benutzerpfad** (4.1). Der Agent legt kein Issue eigenmaechtig an; der Owner
-legt je ein Folge-Issue an oder benennt einen `FUTURE_SCOPE.md`-Eintrag.
-Der spaetere Expertenmodus fuer technische Laufparameter (O5) ist nicht R1 und
-nicht #172; er ist im Future-Scope-Tracking-Issue #163 dokumentiert. Bis dahin
-nennt die jeweilige Seite den Grund „zurueckgestellt“ (kein
-Funktionsversprechen).
+Voraussetzung ausserhalb von #172: **Lokalzeit-Owner** (separates R1-Issue auf
+Basis #126, kein Future-Scope, weil echte Lokalzeit R1-Ziel ist; Nummer
+ausstehend, vom Owner anzulegen). Zurueckgestellt ohne bestehendes Folge-Issue:
+**Recovery-Zeitkorrektur als Benutzerpfad** (4.1). Der Agent legt kein Issue
+eigenmaechtig an; der Owner legt es an oder benennt einen
+`FUTURE_SCOPE.md`-Eintrag. Der spaetere Expertenmodus fuer technische
+Laufparameter (O5) ist nicht R1 und nicht #172; er ist im Future-Scope-
+Tracking-Issue #163 dokumentiert. Bis dahin nennt die jeweilige Seite den Grund
+„zurueckgestellt“ (kein Funktionsversprechen).
 
 ### 2.4 Abdeckung durch bestehende Tests (Bestand, wird erweitert)
 
@@ -392,7 +393,7 @@ die aktualisierte exakte Plan-SHA freigibt.
 | Nr. | Gegenstand | Entscheidung | Betrifft |
 |---|---|---|---|
 | O1 | Standby-Navigation / Einstellungen | Standby-Home `Start \| Programme \| Status \| Einstellungen` (D14). `Start`: startorientierter Pfad (Programmauswahl/manueller Betrieb); `Programme`: Programmverwaltung; `Status`: Geraete-/Betriebsstatus; `Einstellungen`: normale Geraetekonfiguration = Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒. `Service` ist kein eigener Home-Slot mehr; Owner, PIN-/Safety-Regeln unveraendert, nur der Navigationsort aendert sich. `Webzugang` nutzt ausschliesslich den #170-Owner; der provisorische `HeaderLanguage`-Slot 3 entfaellt atomar in S10 (D13). | S1, S10 |
-| O2 | Zeit-UX / Scope-Trennung | Nur UX in #172: Tap auf die Header-Uhr oeffnet denselben Screen `Zeit / Zeitzone` wie `Einstellungen → Zeit / Zeitzone` (kein zweiter Zeit-Screen). Ziel ist, dass der Header echte lokale Uhrzeit zeigt; `HH:MMZ` ist keine gewuenschte R1-Enddarstellung. #172 implementiert **keine** IANA-/DST-/UTC→Local-Infrastruktur und keinen Fake-/Fallback-Lokalzeitmechanismus; die technische Aufloesung ist ein eigener nachgelagerter Scope auf Basis #126. Offene Klaerung: Header-Anzeige bis dahin (siehe S4). | S4, S10 |
+| O2 | Zeit-UX / Scope-Trennung | Der normale Header zeigt in R1 die **echte lokale Uhrzeit**. #172 besitzt Navigation und UX: Tap auf die Header-Uhr oeffnet denselben Screen `Zeit / Zeitzone` wie `Einstellungen → Zeit / Zeitzone` (kein zweiter Zeit-Screen). `HH:MMZ` ist keine R1-Enddarstellung; es gibt keinen Fake-/Fallback-Lokalzeitmechanismus und keine manuelle zweite Zeitwahrheit. #172 implementiert **keine** IANA-/DST-/UTC→Local-Infrastruktur. Diese gehoert einem separaten **R1-Lokalzeit-Owner** (eigenes R1-Issue auf Basis #126, Nummer ausstehend, vom Owner anzulegen), der `trusted UTC + canonicalTimeZoneId → lokale Zeit inkl. DST` besitzt; die absolute Zeitquelle bleibt #126. Reihenfolge: Lokalzeit-Owner vor S4; #172 beansprucht den R1-Uhrpfad erst nach dessen Verfuegbarkeit als vollstaendig. | S4, S10 |
 | O3 | Bildschirmtastatur | Eine gemeinsame lokale Tastatur fuer Programmname, Programmnotiz und Geraetename; einfache Modi Buchstaben/Ziffern/Symbole, ausreichend grosse Touchflaechen; Validierung und Laengenlimits bleiben bei den bestehenden Ownern; HOME_WIFI-SSID/-Passwort ausserhalb #172 (F16). | S10 |
 | O4 | Geraetename | Nur ohne aktiven Lauf aenderbar; nach erfolgreichem Commit lokal sofort sichtbar; Hostname/SoftAP-SSID/QR erst beim naechsten normalen Netzwerkstart; kein automatischer Neustart, keine erzwungene Netzwerkunterbrechung. | S10 |
 | O5 | Technische Laufparameter | Benutzer geben nur echte Laufwerte ein; technische Qualifikations-/Grenzwerte kommen aus einem kanonischen Produkt-/Commissioning-Owner; keine erfundenen Defaults; solange der Producer fehlt, Start fail-closed mit verstaendlichem Grund. Der spaetere Expertenmodus ist nicht R1/nicht #172 (Future-Scope-Tracking-Issue #163). | S9 |
@@ -523,30 +524,34 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 
 ### S4 – Header-Uhr (Hit-Zone und gemeinsamer Screen `Zeit / Zeitzone`)
 
-- **Dateien/Owner:** Renderer `targetAt` (nur neue Uhr-Zone, D4), Workspace
-  `HeaderClock`, Renderer-Inhalt, Textpacks. `formatClockText` und der
-  Header-Text bleiben **unveraendert** (O2: kein `HH:MMZ`, kein neuer
-  Lokalzeit-/Fallbackmechanismus).
+- **Start-Gate:** S4 wird erst umgesetzt, wenn der **R1-Lokalzeit-Owner**
+  (separates R1-Issue auf Basis #126; Nummer ausstehend, vom Owner
+  anzulegen; Gate-Token `R1_LOCAL_TIME_OWNER_ISSUE`) gemergt und verfuegbar ist.
+  Er besitzt die technische Abbildung `trusted UTC + canonicalTimeZoneId →
+  lokale Zeit inkl. DST`; die Schnittstelle legt er fest, #172 erfindet sie
+  nicht. Bis dahin liefert #172 keine unmarkierte UTC-Zeit als scheinbare
+  Lokalzeit aus und beansprucht den R1-Uhrpfad nicht als vollstaendig. Die
+  Slice-Reihenfolge in PR A darf S4 daher ans Ende stellen oder PR A bis zum
+  Gate zurueckhalten (O6 bleibt: A → B → C → D).
+- **Dateien/Owner:** Renderer `targetAt` (nur neue Uhr-Zone, D4),
+  `formatClockText` (Quelle wird die Lokalzeit des Owners, kein `HH:MMZ`, kein
+  UTC-Fallback), Workspace `HeaderClock`, Renderer-Inhalt, Textpacks.
 - **Verhalten:** Hit-Zone Uhr oeffnet die Seite `HeaderClock`; sie ist der
   einzige Zeit-Screen und wird zusaetzlich aus `Einstellungen → Zeit /
-  Zeitzone` (S10) per bestehender Aktion `NavigateClock` erreicht (kein zweiter
-  Zeit-Screen). Die Seite zeigt ausschliesslich vorhandene Werte:
-  Vertrauensstatus (`trustedUtc` gesetzt oder nicht) und die kanonische
-  Zeitzonen-ID aus der Presentation-Quelle. Keine Zeitzonenauswahl, keine neue
-  Zeitwahrheit, keine Zeitdatenbank, keine #126-Neuimplementierung. Die
-  technische UTC→Local-Aufloesung (und damit die echte lokale Header-Uhrzeit)
-  ist ein eigener nachgelagerter Scope auf Basis #126.
-- **Offene Ownerklaerung (blockiert S4 nicht):** Der Header zeigt bis zu diesem
-  Folge-Scope weiterhin die bestehende, nicht lokal umgerechnete Zeit (heute
-  ohne Kennzeichnung, F8). Der Plan fuehrt dafuer keine Darstellung neu ein
-  (weder `HH:MMZ` noch ein Ersatzmechanismus). Falls der Owner fuer die
-  Uebergangszeit eine andere Header-Anzeige will (z. B. `--:--` oder
-  Kennzeichnung), ist das eine ausdrueckliche Entscheidung.
+  Zeitzone` (S10) per bestehender Aktion `NavigateClock` erreicht. #172
+  besitzt nur Navigation und UX des Screens; absolute Zeitquelle ist #126,
+  Lokalzeit der Owner. Die Seite zeigt ausschliesslich vorhandene Werte:
+  Vertrauensstatus (`trustedUtc` gesetzt oder nicht), die kanonische
+  Zeitzonen-ID aus der Presentation-Quelle und die Lokalzeit des Owners. Ohne
+  vertrauenswuerdige Zeit oder ohne Lokalzeit des Owners bleibt die Anzeige
+  `--:--` (bestehendes Verhalten, kein neuer Mechanismus). Keine Zeitzonen-
+  auswahl, keine manuelle Zeiteingabe, keine zweite Zeitwahrheit.
 - **Tests:** `test_renderer_boundary` (Hit-Zone Randpixel 263/264, 319/320;
-  bestehende Uhrtext-Tests unveraendert), `test_local_touch_ui` (Tap → Seite,
-  derselbe Screen auch ueber Settings), `test_ui_steady_state_allocations`.
-- **Abhaengigkeiten:** S1 (Layout); keine `targetAt`-Kopplung mehr zu S3, da
-  die Sprachzone Bestand ist. **Ownerentscheidung:** O2.
+  Uhrtext aus der Lokalzeit des Owners, `--:--` ohne Zeit/Lokalzeit, kein
+  UTC-Fallback), `test_local_touch_ui` (Tap → Seite, derselbe Screen auch
+  ueber Settings), `test_ui_steady_state_allocations`.
+- **Abhaengigkeiten:** Lokalzeit-Owner (Start-Gate), S1 (Layout); keine
+  `targetAt`-Kopplung zu S3. **Ownerentscheidung:** O2.
 
 ### S5 – `ProductInsertedConfirmed`-Owner
 
@@ -714,14 +719,15 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   `SaveProgram` → S6-Entry mit `expectedProgramCatalogRevision`. Settings-Seite
   (`ContentCell`-Zeilen mit Pager): Sprache (Link), Zeit / Zeitzone (Link auf den
   Screen aus S4, kein zweiter Screen, O2), Geraetename (Editor, nur ohne aktiven
-  Lauf, O4), Netzwerk (Link), Service 🔒 (Link auf die bestehende
-  `Service`-Seite per `NavigateService`; aktiv nur bei `service.available`,
-  sonst bestehender `unavailableReason`; PIN-/Safety-Regeln und Owner
-  unveraendert, D14), Webzugang (Link auf die
+  Lauf, O4), Netzwerk (Link), Webzugang (Link auf die
   bestehende `HeaderWebAccess`-Seite per vorhandener Aktion `NavigateWebAccess`;
   Freigabe, Fenster und Anzeige bleiben beim #170-Owner
   `FermentationApplication::openWebProvisioningWindow()` /
-  `webAccessState()`, keine zweite Web-/Auth-/Provisionierungslogik). Der
+  `webAccessState()`, keine zweite Web-/Auth-/Provisionierungslogik), Service 🔒
+  (Link auf die bestehende `Service`-Seite per `NavigateService`; aktiv nur bei
+  `service.available`, sonst bestehender `unavailableReason`; PIN-/Safety-Regeln
+  und Owner unveraendert, D14). Reihenfolge der Zeilen exakt wie beschlossen
+  (O1) und im Test festgeschrieben. Der
   provisorische #170-Zugang ueber `HeaderLanguage` Slot 3 wird in S10
   **atomar** (ein Commit) ersetzt: zuerst `Webzugang` in `Einstellungen`
   einhaengen, danach den `web-access`-Slot aus `HeaderLanguage` entfernen (D13).
@@ -729,7 +735,8 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   `Einstellungen` (D14), der Seitenstapel `Home → Settings → Service` wird
   getestet. Dirty-Verwerfen ueber den vorhandenen `ConfirmDiscard`-Exit.
 - **Tests:** `test_fermentation_ui_editing` (Textfolgen, Grenzen
-  `validateVisibleName`, UTF-8), `test_local_touch_ui`, neuer
+  `validateVisibleName`, UTF-8), `test_local_touch_ui` (Settings-Zeilenreihenfolge Sprache, Zeit / Zeitzone,
+  Geraetename, Netzwerk, Webzugang, Service), neuer
   Application-Test (Geraetename-Commit, Gating bei aktivem Lauf, ASCII- und
   Mehrbyte-Namen), `test_softap_credentials` Konsument (SSID-Ableitung),
   `test_ui_steady_state_allocations`, Hardware-Log (D10).
@@ -751,7 +758,7 @@ Software-/Reviewgate und mit `ACTUATOR_RELEASE=NO`; Ergebnisse bis dahin
 ```text
 PR A:  S1 ──► S2
        S1 ──► S3
-       S1 ──► S4
+       S1 ──► S4   (zusaetzlich: Lokalzeit-Owner ──► S4, Start-Gate)
 PR B:  S5 ──► S6          (nach PR A)
 PR C:  S7 ──► S8 ──► S9   (nach PR B)
 PR D:  S10 ──► S11        (nach PR C; benoetigt S6, S8, S1)
@@ -836,7 +843,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 | S1 | anwendbar | nur Katalog |
 | S2 | `NOT_APPLICABLE` | keine Meldungen (F18) |
 | S3 | anwendbar | Persistenz ueber Neustart pruefbar; zusaetzlich Hardware-Log vor/nach Sprachcommit (D10) |
-| S4 | anwendbar | Hit-Zone und Screen `Zeit / Zeitzone`; Header-Text unveraendert |
+| S4 | anwendbar nach Lokalzeit-Owner | Hit-Zone, Screen `Zeit / Zeitzone`, Lokalzeit im Header; vorher `NOT_RUN` |
 | S5 | `NOT_APPLICABLE` | `WaitingForProduct` ohne Regelkreis nicht erreichbar (F15) |
 | S6 | anwendbar | reine Konfiguration; zusaetzlich Hardware-Log (D10) |
 | S7 | nur Layout | Temperaturen zeigen ohne Sensorproduzent `--.- C` |
@@ -853,7 +860,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 | `WaitingForProduct` ist im Produktbuild ohne Regelkreis kaum erreichbar (F15); Laufmeldungen haben keinen Erzeuger (F18). | Nativer Nachweis; Hardware-Nachweis je Slice gemaess 11.1; im PR ausgewiesen; O9. |
 | Verwaltungsauswahl (D12) aendert den bestehenden `selectProgram`-Vertrag. | Bewusste Testanpassung in S1, im PR als Vertragsaenderung ausgewiesen. |
 | Technische Qualifikationswerte fuer manuelle Laeufe haben keinen Producer (`TBD_COMMISSIONING`, O5). | Keine Benutzereingabe, keine Defaults; Start fail-closed mit sichtbarem Grund; #34/#35 revalidieren. |
-| Header zeigt die nicht lokal umgerechnete Zeit (F8); Zeitzonenkatalog hat einen Eintrag. | Kein neuer Mechanismus in #172 (O2); Hit-Zone und gemeinsamer Screen `Zeit / Zeitzone`; technische Aufloesung als eigener Folge-Scope auf Basis #126 (Owner legt Issue an); Uebergangsanzeige als offene Ownerklaerung (S4). |
+| Echte Lokalzeit im Header braucht UTC→Local-Aufloesung, die weder in #172 noch in #126 existiert (F8); Zeitzonenkatalog hat einen Eintrag. | Separater R1-Lokalzeit-Owner auf Basis #126 (Nummer ausstehend, vom Owner anzulegen) ist Start-Gate fuer S4; bis dahin keine unmarkierte UTC als Lokalzeit, kein `HH:MMZ`, kein Fallback; ohne Zeit `--:--`. |
 | Geraetename-Aenderung beeinflusst SSID/Hostname/QR (#164 B4). | O4: nur ohne aktiven Lauf, Netzwerkname erst beim naechsten normalen Netzwerkstart, kein Auto-Restart. |
 | Tastenraster 34 px koennte fuer resistives Touch zu klein sein (D8). | Hardware-Abnahmekriterium; bei Verfehlen Plan-Revision, kein stilles Nachjustieren. |
 | `ContentCell` fixiert einen Plattformvertrag frueh (D1). | Nur Indizes in der Plattform, Kapazitaeten in App-Schicht; Reviewfrage im Independent Plan Review. |
@@ -873,6 +880,7 @@ PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
 PLAN_REVISION=4
 PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
 OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
+R1_LOCAL_TIME_OWNER_ISSUE=NUMBER_PENDING_OWNER_CREATION_REQUIRED_BEFORE_S4
 PRODUCTION_CODE_CHANGED=NO
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
@@ -885,10 +893,13 @@ Delta gegenueber Revision 3 (Ownerentscheidungen):
   atomar unter `Einstellungen` (geschuetzt, Owner/Regeln unveraendert); kleine
   Listenabsicht `Start`/`Manage` (S1); Settings-Eintraege Sprache, Zeit /
   Zeitzone, Geraetename, Netzwerk, Webzugang, Service (S10).
-- O2: kein `HH:MMZ`, kein Lokalzeit-/Fallbackmechanismus, keine
-  IANA-/DST-Infrastruktur; ein gemeinsamer Screen `Zeit / Zeitzone` (S4);
-  technische Aufloesung als eigener Folge-Scope auf Basis #126 (Issue vom Owner
-  anzulegen). Offene Klaerung: Header-Anzeige in der Uebergangszeit.
+- O2: echte Lokalzeit ist R1-Ziel; kein `HH:MMZ`, kein Fallback, keine
+  IANA-/DST-Infrastruktur in #172; ein gemeinsamer Screen `Zeit / Zeitzone`
+  (S4); technische Aufloesung gehoert einem separaten R1-Lokalzeit-Owner (Issue
+  auf Basis #126, Nummer ausstehend, vom Owner anzulegen), der Start-Gate fuer S4
+  ist. Die fruehere offene Uebergangsklaerung entfaellt.
+- S10: Settings-Reihenfolge exakt Sprache, Zeit / Zeitzone, Geraetename,
+  Netzwerk, Webzugang, Service.
 - O3, O4, O6, O7, O8, O9: als beschlossen markiert; O5 ergaenzt um den Verweis
   auf #163 (Expertenmodus nicht R1); O9: Aktionsbuttons nur mit
   Owner-Eligibility.
