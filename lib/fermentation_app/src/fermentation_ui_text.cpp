@@ -56,7 +56,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 84U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 87U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -141,6 +141,11 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"message-class-safety-fault", "Safety fault"},
         std::pair{"message-acknowledged", "Acknowledged"},
         std::pair{"message-muted", "Muted"},
+        // Endonyms in ASCII (the standard font has no n with tilde); the
+        // same text in every pack so each language is recognisable.
+        std::pair{"language-de", "Deutsch"},
+        std::pair{"language-en", "English"},
+        std::pair{"language-es", "Espanol"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -150,7 +155,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 84U> de{
+            const std::array<std::pair<const char*, const char*>, 87U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -238,7 +243,10 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"message-class-decision-required", "Entscheidung noetig"},
                  {"message-class-safety-fault", "Sicherheitsfehler"},
                  {"message-acknowledged", "Quittiert"},
-                 {"message-muted", "Stumm"}}};
+                 {"message-muted", "Stumm"},
+                 {"language-de", "Deutsch"},
+                 {"language-en", "English"},
+                 {"language-es", "Espanol"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -247,7 +255,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 84U> es{
+            const std::array<std::pair<const char*, const char*>, 87U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -335,7 +343,10 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"message-class-decision-required", "Decision necesaria"},
                  {"message-class-safety-fault", "Fallo de seguridad"},
                  {"message-acknowledged", "Confirmado"},
-                 {"message-muted", "Silenciado"}}};
+                 {"message-muted", "Silenciado"},
+                 {"language-de", "Deutsch"},
+                 {"language-en", "English"},
+                 {"language-es", "Espanol"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

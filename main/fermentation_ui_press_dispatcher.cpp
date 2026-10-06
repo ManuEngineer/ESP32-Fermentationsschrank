@@ -59,6 +59,16 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.setDisplayLanguage.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::setDisplayLanguage(
+            application, *press.setDisplayLanguage);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.openWebProvisioningWindow.has_value()) {
         WorkspacePressDispatchResult result;
         result.commandResult =

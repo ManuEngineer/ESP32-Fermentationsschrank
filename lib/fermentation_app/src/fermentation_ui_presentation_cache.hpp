@@ -39,6 +39,10 @@ class FermentationUiPresentationCache {
             return;
         }
         source_ = std::move(*filled);
+        // Remembered separately so the HeaderNetwork eviction, which frees
+        // the catalog copy, never reverts the language or time zone.
+        lastLocale_ = source_->displayLocale;
+        lastTimeZone_ = source_->canonicalTimeZoneId;
         adoptedRevisions_ =
             decidable(revisions)
                 ? std::optional<Revisions>{Revisions{
@@ -47,7 +51,8 @@ class FermentationUiPresentationCache {
                 : std::nullopt;
     }
 
-    // Frees the copy and invalidates the stored revisions.
+    // Frees the copy and invalidates the stored revisions. The last filled
+    // display locale and time zone are deliberately kept (see displayLocale()).
     void evict() noexcept {
         source_.reset();
         adoptedRevisions_.reset();
@@ -57,6 +62,21 @@ class FermentationUiPresentationCache {
     // copy exists; matches the former per-loop default behavior.
     [[nodiscard]] const FermentationUiPresentationSource& get() const noexcept {
         return source_.has_value() ? *source_ : defaultSource_;
+    }
+
+    // Display locale / canonical time zone of the last successful fill. They
+    // survive evict(), so the network page (which holds no copy) keeps drawing
+    // in the language chosen by the user instead of a boot-time snapshot.
+    // Before the first successful fill they are the safe defaults.
+    [[nodiscard]] const device_platform::LocaleId& displayLocale()
+        const noexcept {
+        return lastLocale_.has_value() ? *lastLocale_
+                                       : defaultSource_.displayLocale;
+    }
+    [[nodiscard]] const device_platform::TimeZoneId& canonicalTimeZoneId()
+        const noexcept {
+        return lastTimeZone_.has_value() ? *lastTimeZone_
+                                         : defaultSource_.canonicalTimeZoneId;
     }
 
     // Catalog identity of the copy currently in use, for the renderer's
@@ -104,6 +124,8 @@ class FermentationUiPresentationCache {
 
     std::optional<FermentationUiPresentationSource> source_;
     std::optional<Revisions> adoptedRevisions_;
+    std::optional<device_platform::LocaleId> lastLocale_;
+    std::optional<device_platform::TimeZoneId> lastTimeZone_;
     FermentationUiPresentationSource defaultSource_;
 };
 

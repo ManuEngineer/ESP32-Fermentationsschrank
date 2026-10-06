@@ -257,6 +257,42 @@ void test_application_source_is_unavailable_when_runtime_lease_is_busy() {
     TEST_ASSERT_TRUE(fixture.application.uiPresentationSource().has_value());
 }
 
+// D11: the last filled locale and time zone survive the HeaderNetwork
+// eviction and follow every later successful fill (a language change).
+void test_locale_and_time_zone_survive_eviction_and_follow_refills() {
+    FermentationUiPresentationCache cache;
+    // Safe defaults before any successful fill.
+    TEST_ASSERT_EQUAL_STRING("en", cache.displayLocale().value().c_str());
+
+    FakeFill german;
+    cache.update(false, revisions(1U, 1U), german);
+    TEST_ASSERT_EQUAL_STRING("de", cache.displayLocale().value().c_str());
+    TEST_ASSERT_EQUAL_STRING("Europe/Zurich",
+                             cache.canonicalTimeZoneId().value().c_str());
+
+    // HeaderNetwork frees the copy but not the language.
+    cache.update(true, revisions(1U, 1U), german);
+    TEST_ASSERT_FALSE(cache.hasCopy());
+    TEST_ASSERT_EQUAL_STRING("de", cache.displayLocale().value().c_str());
+    TEST_ASSERT_EQUAL_STRING("Europe/Zurich",
+                             cache.canonicalTimeZoneId().value().c_str());
+
+    // A new user revision refills with the new language.
+    FakeFill spanish;
+    spanish.locale = "es";
+    cache.update(false, revisions(2U, 1U), spanish);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+    cache.update(true, revisions(2U, 1U), spanish);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+
+    // An unavailable fill keeps the last value instead of reverting.
+    FakeFill unavailable;
+    unavailable.available = false;
+    cache.update(false, revisions(3U, 1U), unavailable);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+    TEST_ASSERT_TRUE(cache.get().displayLocale.value() == "en");
+}
+
 }  // namespace
 
 void setUp() {}
@@ -265,6 +301,7 @@ void tearDown() {}
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_revisions_do_not_call_fill_again);
+    RUN_TEST(test_locale_and_time_zone_survive_eviction_and_follow_refills);
     RUN_TEST(test_program_catalog_revision_change_refills_catalog);
     RUN_TEST(
         test_user_configuration_revision_change_refills_locale_and_time_zone);

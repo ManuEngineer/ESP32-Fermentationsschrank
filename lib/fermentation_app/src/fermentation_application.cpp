@@ -1,5 +1,6 @@
 #include "fermentation_application.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <new>
 #include <type_traits>
@@ -846,6 +847,68 @@ NetworkConfigurationResult FermentationApplication::applyNetworkMode(
     }
     storageEpoch_ = runtime.lease.get().storageEpoch();
     return {NetworkConfigurationStatus::Applied};
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applyDisplayLanguage(
+    const std::string& languageId,
+    const std::optional<UserConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    if (configurationService_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Only languages included in this build are selectable. An unknown id is
+    // an invalid candidate; no preview slot is taken for it.
+    const auto catalog = makeFermentationR1DeviceUiBuildCatalog();
+    const bool known = std::any_of(
+        catalog.includedLocales.begin(), catalog.includedLocales.end(),
+        [&languageId](const device_platform::LocaleId& locale) {
+            return locale.value() == languageId;
+        });
+    if (!known) {
+        return {Preview::InvalidCandidate,
+                Commit::ConfigurationValidationFailure};
+    }
+    // Without a decidable revision the change cannot be checked for staleness.
+    if (!expectedRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    auto build = configurationService_->beginPreview();
+    if (build.status != Preview::Success || !build.lease.valid()) {
+        return {build.status == Preview::Success
+                    ? Preview::ConfigurationRuntimeUnavailable
+                    : build.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    build.lease.userConfiguration().displayLanguageId = languageId;
+    const auto installed = configurationService_->installPreview(
+        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+        {ChangeOperationKind::NormalEdit, 1U});
+    if (installed.status != Preview::Success ||
+        !installed.preview.has_value()) {
+        return {installed.status == Preview::Success ? Preview::InvalidCandidate
+                                                     : installed.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Every exit without an activated change releases the one visible
+    // preview slot.
+    const auto handle = installed.preview->handle;
+    const auto validation =
+        configurationService_->validatePreviewForConfirmation(
+            handle, *expectedRevision);
+    if (validation.status != Commit::ReadyForConfirmation) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+        return {Preview::Success, validation.status};
+    }
+    const auto committed = configurationService_->confirmPreview(handle);
+    if (committed.status != Commit::Activated &&
+        committed.status != Commit::NoChange) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+    }
+    return {Preview::Success, committed.status};
 }
 
 NetworkConfigurationResult

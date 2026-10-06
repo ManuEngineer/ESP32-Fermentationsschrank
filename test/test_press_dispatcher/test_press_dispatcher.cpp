@@ -645,6 +645,67 @@ void test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path() {
     TEST_ASSERT_EQUAL_UINT32(7U, muteIntent->messageId);
 }
 
+// S3: a language row press reaches the Application's configuration path
+// through the bridge and the dispatcher as an owning outcome; a stale or
+// absent revision is refused and the language stays unchanged.
+void test_language_row_press_reaches_the_owning_configuration_commit() {
+    OwningAppFixture fixture;
+    const auto current = [&fixture] {
+        const auto source = fixture.application.uiPresentationSource();
+        TEST_ASSERT_TRUE(source.has_value());
+        return source->displayLocale.value();
+    };
+    TEST_ASSERT_TRUE(current() != "es");
+    const auto snapshot = fixture.application.uiSnapshot();
+
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    const auto press = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 2U, 0U});
+    TEST_ASSERT_TRUE(press.setDisplayLanguage.has_value());
+    const auto result =
+        dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.commandResult->phase));
+    TEST_ASSERT_TRUE(std::holds_alternative<ConfigurationCommitStatus>(
+        result.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            std::get<ConfigurationCommitStatus>(result.commandResult->detail)));
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // The same (now stale) snapshot revision is refused; nothing changes.
+    const auto stale = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U});
+    const auto refused =
+        dispatchWorkspacePress(fixture.application, snapshot, stale, 1001U);
+    TEST_ASSERT_TRUE(refused.commandResult.has_value());
+    TEST_ASSERT_TRUE(refused.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // An absent revision is refused fail-closed as well.
+    auto undecidable = fixture.application.uiSnapshot();
+    undecidable.revisions.expectedUserConfigurationRevision.reset();
+    const auto absent = workspace.press(
+        undecidable,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U});
+    const auto absentResult =
+        dispatchWorkspacePress(fixture.application, undecidable, absent, 1002U);
+    TEST_ASSERT_TRUE(absentResult.commandResult.has_value());
+    TEST_ASSERT_TRUE(absentResult.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+}
+
 void test_command_status_projection_keeps_decisions_only() {
     const auto proposed =
         FermentationUiCommandBridge::fromCommandStatus(CommandStatus::Proposed);
@@ -1060,6 +1121,7 @@ int main() {
     RUN_TEST(test_mute_message_is_ram_owned_and_persistence_ineligible);
     RUN_TEST(
         test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path);
+    RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);

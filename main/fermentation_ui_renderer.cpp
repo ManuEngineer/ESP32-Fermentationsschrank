@@ -33,10 +33,11 @@ constexpr std::uint16_t kContentRowWidth = 304U;
 constexpr std::uint16_t kListReasonTop = 184U;
 
 // Pages whose content is a row list over the workspace pager. The pager item
-// count is the number of listed entries (programs or messages).
+// count is the number of listed entries (programs, messages or languages).
 bool isContentListPage(FermentationUiPage page) noexcept {
     return page == FermentationUiPage::ProgramList ||
-           page == FermentationUiPage::Messages;
+           page == FermentationUiPage::Messages ||
+           page == FermentationUiPage::HeaderLanguage;
 }
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
@@ -519,6 +520,38 @@ RepresentativeScreen makeRepresentativeScreen(
                                : device_platform::ThemeToken::TextSecondary,
                            device_platform::ThemeToken::Surface);
             }
+        } else if (screen.workspace.page ==
+                   FermentationUiPage::HeaderLanguage) {
+            // One row per language included in this build; the active
+            // display language is drawn as the selected row.
+            const auto catalog = makeFermentationR1DeviceUiBuildCatalog();
+            const auto rowCount = std::min<std::size_t>(
+                catalog.includedLocales.size(), kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& language = catalog.includedLocales[index];
+                const bool active = language.value() == locale.value();
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                const auto fill =
+                    active ? device_platform::ThemeToken::PrimaryAction
+                           : device_platform::ThemeToken::Surface;
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        fill);
+                addText(commands, textPacks, locale,
+                        fermentationTextKey(
+                            ("language-" + language.value()).c_str()),
+                        {12U,
+                         static_cast<std::uint16_t>(
+                             top + (kContentRowHeight -
+                                    RepresentativeScreen::kTextLineHeight) /
+                                       2U),
+                         296U, RepresentativeScreen::kTextLineHeight},
+                        active ? device_platform::ThemeToken::OnPrimaryAction
+                               : device_platform::ThemeToken::TextPrimary,
+                        fill);
+            }
         } else if (screen.workspace.page == FermentationUiPage::Messages) {
             // Window over snapshot.messages: row r shows message
             // currentIndex + r (same geometry as the program list).
@@ -627,7 +660,8 @@ RepresentativeScreen makeRepresentativeScreen(
     }
 
     if (screen.workspace.pager.itemCount > 0U &&
-        screen.workspace.pager.valid()) {
+        screen.workspace.pager.valid() &&
+        screen.workspace.page != FermentationUiPage::HeaderLanguage) {
         // The n/N counter sits right in the title row so it never overlaps
         // content rows.
         addRawText(commands,

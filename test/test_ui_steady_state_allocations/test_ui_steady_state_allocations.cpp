@@ -144,8 +144,8 @@ struct AppFixture {
         }
         gate.beginStep(application,
                        workspace.page() == FermentationUiPage::HeaderNetwork);
-        return gate.renderRequired(application, workspace, initialLocale,
-                                   pressed, network, utc);
+        return gate.renderRequired(application, workspace, pressed, network,
+                                   utc);
     }
 
     // Warm up and mark the current state as rendered.
@@ -248,7 +248,7 @@ struct NetworkFixture {
         gate.beginStep(application,
                        workspace.page() == FermentationUiPage::HeaderNetwork);
         return gate.renderRequired(
-            application, workspace, initialLocale, std::nullopt,
+            application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
     }
     void settle() {
@@ -317,7 +317,7 @@ struct WebAccessFixture {
     bool step() {
         gate.beginStep(application, false);
         return gate.renderRequired(
-            application, workspace, initialLocale, std::nullopt,
+            application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
     }
     void settle() {
@@ -389,14 +389,13 @@ void test_program_list_page_steady_state_allocates_nothing_and_rows_redraw() {
         device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U};
     const device_platform::DeviceUiTarget row1{
         device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
-    const auto redrawFor =
-        [&fixture](const device_platform::DeviceUiTarget& target) {
-            fixture.gate.beginStep(fixture.application, false);
-            return fixture.gate.renderRequired(
-                fixture.application, fixture.workspace, fixture.initialLocale,
-                target, device_platform::DeviceUiNetworkStatus::Connected,
-                1'700'000'000LL);
-        };
+    const auto redrawFor = [&fixture](
+                               const device_platform::DeviceUiTarget& target) {
+        fixture.gate.beginStep(fixture.application, false);
+        return fixture.gate.renderRequired(
+            fixture.application, fixture.workspace, target,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    };
     TEST_ASSERT_TRUE(redrawFor(row0));
     fixture.gate.markRendered();
     TEST_ASSERT_FALSE(redrawFor(row0));
@@ -426,6 +425,21 @@ void test_message_list_page_steady_state_allocates_nothing() {
     TEST_ASSERT_TRUE(fixture.step());
     fixture.gate.markRendered();
     TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S3: the language page is a steady state too.
+void test_language_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::HeaderLanguage);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
 }
 
 void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
@@ -620,16 +634,37 @@ void test_workspace_page_change_requests_redraw() {
     TEST_ASSERT_TRUE(fixture.step());
 }
 
-void test_locale_change_requests_redraw_on_network_page() {
+// D11: the language comes from the configuration, not from a boot-time copy.
+// The HeaderNetwork eviction frees the catalog copy but must keep the language
+// the user chose, so the network page is drawn in it.
+void test_language_change_reaches_the_network_page_through_the_cache() {
     AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().displayLocale().value() !=
+                     "es");
+    const auto revision =
+        fixture.gate.snapshot().revisions.expectedUserConfigurationRevision;
+    TEST_ASSERT_TRUE(revision.has_value());
+    const auto changed =
+        fixture.application.applyDisplayLanguage("es", revision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(changed.commit));
+
+    // The new revision refills the copy and requests a redraw.
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_EQUAL_STRING(
+        "es", fixture.gate.presentation().displayLocale().value().c_str());
+
+    // On HeaderNetwork the copy is evicted, the language stays German.
     fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
-    for (int loop = 0; loop < 3; ++loop) {
-        if (fixture.step()) fixture.gate.markRendered();
-    }
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.gate.presentation().hasCopy());
+    TEST_ASSERT_EQUAL_STRING(
+        "es", fixture.gate.presentation().displayLocale().value().c_str());
     TEST_ASSERT_FALSE(fixture.step());
-    TEST_ASSERT_TRUE(fixture.step(
-        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, "de"));
 }
 
 void test_pressed_target_change_requests_redraw() {
@@ -763,7 +798,7 @@ int main() {
     RUN_TEST(test_recycled_snapshot_equals_a_fresh_snapshot);
     RUN_TEST(test_application_state_change_requests_redraw);
     RUN_TEST(test_workspace_page_change_requests_redraw);
-    RUN_TEST(test_locale_change_requests_redraw_on_network_page);
+    RUN_TEST(test_language_change_reaches_the_network_page_through_the_cache);
     RUN_TEST(test_pressed_target_change_requests_redraw);
     RUN_TEST(test_network_status_change_requests_redraw);
     RUN_TEST(test_clock_minute_change_requests_redraw_but_seconds_do_not);
@@ -773,6 +808,7 @@ int main() {
     RUN_TEST(
         test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
     RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
+    RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }

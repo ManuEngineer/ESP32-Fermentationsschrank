@@ -214,6 +214,16 @@ struct WebSessionIssueResult {
     WebSessionResult session;
 };
 
+// Owning outcome of a local UserConfiguration change through the
+// ConfigurationService preview/commit path. `commit` is only meaningful when
+// `preview` is Success.
+struct ApplicationConfigurationChangeResult {
+    ConfigurationPreviewStatus preview{
+        ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable};
+    ConfigurationCommitStatus commit{
+        ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+};
+
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;
@@ -270,6 +280,12 @@ class FermentationApplication {
     void update();
     [[nodiscard]] NetworkConfigurationResult applyNetworkMode(
         device_platform::NetworkMode selectedMode);
+    // Persists the display language through preview, revision validation and
+    // confirmation; every outcome other than Activated/NoChange cancels the
+    // preview. Surface-neutral: a later web surface may call it unchanged.
+    [[nodiscard]] ApplicationConfigurationChangeResult applyDisplayLanguage(
+        const std::string& languageId,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
     // Renderer-independent local setup data for the currently active
     // SoftAP. The caller owns display/QR rendering; HTTP routes never expose

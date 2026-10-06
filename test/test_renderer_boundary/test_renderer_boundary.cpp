@@ -757,6 +757,97 @@ void test_every_message_code_and_class_has_localized_text() {
     }
 }
 
+// S3: language page rows.
+void test_language_page_rows_show_endonyms_mark_the_active_language_and_hit() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    snapshot.revisions.expectedUserConfigurationRevision =
+        fermentation::UserConfigurationRevision{3U};
+    for (const char* locale : {"en", "de", "es"}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::HeaderLanguage);
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+            device_platform::LocaleId{locale});
+        TEST_ASSERT_TRUE(hasText(screen, "Deutsch"));
+        TEST_ASSERT_TRUE(hasText(screen, "English"));
+        TEST_ASSERT_TRUE(hasText(screen, "Espanol"));
+        // No pager counter on a page without scrolling.
+        TEST_ASSERT_FALSE(hasText(screen, "1/3"));
+
+        // Exactly the active language row is drawn as the selected row.
+        const std::array<const char*, 3U> order{"de", "en", "es"};
+        for (std::size_t row = 0U; row < order.size(); ++row) {
+            const auto fill = std::find_if(
+                screen.commands.begin(), screen.commands.end(),
+                [row](const auto& command) {
+                    return command.kind ==
+                               fermentation::main_ui::ScreenDrawKind::Fill &&
+                           command.rect.left == 8U &&
+                           command.rect.top == 64U + row * 40U &&
+                           command.rect.width == 304U;
+                });
+            TEST_ASSERT_TRUE(fill != screen.commands.end());
+            const bool active = std::string{locale} == order[row];
+            TEST_ASSERT_EQUAL(
+                static_cast<int>(
+                    active ? device_platform::ThemeToken::PrimaryAction
+                           : device_platform::ThemeToken::Surface),
+                static_cast<int>(fill->token));
+        }
+    }
+}
+
+void test_language_page_row_hit_issues_the_language_intent() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderLanguage);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    const std::array<const char*, 3U> order{"de", "en", "es"};
+    for (std::size_t row = 0U; row < order.size(); ++row) {
+        const auto target = fermentation::main_ui::targetAt(
+            screen, 100U, static_cast<std::uint16_t>(70U + row * 40U));
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(device_platform::DeviceUiTargetKind::ContentCell),
+            static_cast<int>(target->kind));
+        TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(row), target->row);
+    }
+    // Below the third row there is no fourth language row.
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(screen, 100U, 190U).has_value());
+    const auto press = fermentation::main_ui::routePress(workspace, snapshot,
+                                                         screen, 100U, 150U);
+    TEST_ASSERT_TRUE(press.setDisplayLanguage.has_value());
+    TEST_ASSERT_EQUAL_STRING("es",
+                             press.setDisplayLanguage->languageId.c_str());
+    // The existing header zones still resolve as before (regression).
+    const auto language = fermentation::main_ui::targetAt(screen, 176U, 0U);
+    TEST_ASSERT_TRUE(language.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderLanguage),
+        static_cast<int>(language->kind));
+    const auto network = fermentation::main_ui::targetAt(screen, 220U, 4U);
+    TEST_ASSERT_TRUE(network.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderNetwork),
+        static_cast<int>(network->kind));
+}
+
+void test_language_texts_exist_in_every_pack() {
+    for (const char* locale : {"en", "de", "es"}) {
+        TEST_ASSERT_EQUAL_STRING("Deutsch",
+                                 textFor("language-de", locale).c_str());
+        TEST_ASSERT_EQUAL_STRING("English",
+                                 textFor("language-en", locale).c_str());
+        TEST_ASSERT_EQUAL_STRING("Espanol",
+                                 textFor("language-es", locale).c_str());
+    }
+}
+
 void test_service_page_shows_blocked_reason() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
@@ -1475,6 +1566,10 @@ int main() {
     RUN_TEST(test_empty_message_list_has_no_hittable_rows);
     RUN_TEST(test_message_detail_shows_code_class_and_state_in_all_locales);
     RUN_TEST(test_every_message_code_and_class_has_localized_text);
+    RUN_TEST(
+        test_language_page_rows_show_endonyms_mark_the_active_language_and_hit);
+    RUN_TEST(test_language_page_row_hit_issues_the_language_intent);
+    RUN_TEST(test_language_texts_exist_in_every_pack);
     RUN_TEST(test_service_page_shows_blocked_reason);
     RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);

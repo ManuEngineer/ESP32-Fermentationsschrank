@@ -799,6 +799,9 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
         }
         case FermentationUiPage::HeaderLanguage:
             view.title = key("language");
+            // One selectable row per language included in this build.
+            view.pager.itemCount =
+                makeFermentationR1DeviceUiBuildCatalog().includedLocales.size();
             setSlot(view, 1U, "network",
                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
             setSlot(view, 2U, "clock",
@@ -1345,6 +1348,8 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                            ? current.programList.size()
                        : page_ == FermentationUiPage::Messages
                            ? snapshot.messages.size()
+                       : page_ == FermentationUiPage::HeaderLanguage
+                           ? current.pager.itemCount
                            : std::size_t{0U});
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerUp) {
         enabled = current.pager.canMoveUp();
@@ -1379,6 +1384,18 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 return pressed;
             }();
         case device_platform::DeviceUiTargetKind::ContentCell: {
+            if (page_ == FermentationUiPage::HeaderLanguage) {
+                // `enabled` guarantees an in-range language row. The press
+                // only carries intent; the Application owns the catalog
+                // check and the persistent change.
+                result.setDisplayLanguage =
+                    FermentationUiSetDisplayLanguageCommand{
+                        makeFermentationR1DeviceUiBuildCatalog()
+                            .includedLocales[target.row]
+                            .value(),
+                        snapshot.revisions.expectedUserConfigurationRevision};
+                return result;
+            }
             if (page_ == FermentationUiPage::Messages) {
                 // `enabled` guarantees an in-range message; its canonical id
                 // becomes the selection.

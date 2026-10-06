@@ -1417,6 +1417,72 @@ void test_stale_message_selection_offers_and_creates_no_message_action() {
     TEST_ASSERT_FALSE(workspace.press(none, bottom(1)).action.has_value());
 }
 
+// S3: the language page offers one row per build language and only issues the
+// typed intent; the Application owns the change.
+void test_language_page_rows_issue_a_language_intent_and_keep_the_slots() {
+    auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    snapshot.revisions.expectedUserConfigurationRevision =
+        UserConfigurationRevision{7U};
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    const auto view = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_UINT32(3U,
+                             static_cast<std::uint32_t>(view.pager.itemCount));
+    // Slots 1..3 stay as before (network, clock, the provisional #170
+    // web access entry).
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateNetwork),
+        static_cast<int>(view.slotActions[1]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateClock),
+        static_cast<int>(view.slotActions[2]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateWebAccess),
+        static_cast<int>(view.slotActions[3]));
+
+    const std::array<const char*, 3U> expected{"de", "en", "es"};
+    for (std::uint8_t row = 0U; row < expected.size(); ++row) {
+        const auto press = workspace.press(snapshot, cell(row));
+        TEST_ASSERT_TRUE(press.setDisplayLanguage.has_value());
+        TEST_ASSERT_EQUAL_STRING(expected[row],
+                                 press.setDisplayLanguage->languageId.c_str());
+        TEST_ASSERT_TRUE(
+            press.setDisplayLanguage->expectedUserConfigurationRevision ==
+            snapshot.revisions.expectedUserConfigurationRevision);
+        TEST_ASSERT_FALSE(press.navigated);
+        TEST_ASSERT_FALSE(press.action.has_value());
+        TEST_ASSERT_FALSE(press.transitionAction.has_value());
+        TEST_ASSERT_FALSE(press.programEdit.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationUiPage::HeaderLanguage),
+            static_cast<int>(workspace.page()));
+    }
+    // No row beyond the build catalog and no second column.
+    const auto beyond = workspace.press(snapshot, cell(3U));
+    TEST_ASSERT_FALSE(beyond.setDisplayLanguage.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(beyond.interaction.outcome));
+    TEST_ASSERT_FALSE(
+        workspace
+            .press(snapshot, {device_platform::DeviceUiTargetKind::ContentCell,
+                              0U, 0U, 1U})
+            .setDisplayLanguage.has_value());
+
+    // An undecidable revision is carried as absent (the Application rejects).
+    snapshot.revisions.expectedUserConfigurationRevision.reset();
+    const auto undecidable = workspace.press(snapshot, cell(0U));
+    TEST_ASSERT_TRUE(undecidable.setDisplayLanguage.has_value());
+    TEST_ASSERT_FALSE(undecidable.setDisplayLanguage
+                          ->expectedUserConfigurationRevision.has_value());
+
+    // The slot press path is unchanged: slot 3 still opens the web access page.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(3)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderWebAccess),
+                          static_cast<int>(workspace.page()));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1430,6 +1496,8 @@ int main(int, char**) {
     RUN_TEST(test_start_and_programs_open_the_list_with_separate_intent);
     RUN_TEST(
         test_manage_list_reaches_new_program_when_the_active_list_is_empty);
+    RUN_TEST(
+        test_language_page_rows_issue_a_language_intent_and_keep_the_slots);
     RUN_TEST(test_message_list_cell_selects_the_canonical_message_id);
     RUN_TEST(test_message_list_cell_outside_the_window_or_page_is_blocked);
     RUN_TEST(

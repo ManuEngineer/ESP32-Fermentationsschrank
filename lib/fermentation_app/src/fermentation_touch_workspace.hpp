@@ -169,6 +169,7 @@ struct FermentationUiWorkspacePress {
         beginHomeWifiReconfiguration;
     std::optional<FermentationUiOpenWebProvisioningWindowCommand>
         openWebProvisioningWindow;
+    std::optional<FermentationUiSetDisplayLanguageCommand> setDisplayLanguage;
 };
 
 class FermentationTouchWorkspace {
