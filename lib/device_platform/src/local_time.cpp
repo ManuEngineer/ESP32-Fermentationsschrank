@@ -43,9 +43,8 @@ std::optional<LocalTime> toLocalTime(
     if (!breakDown(utc, utcFields)) return std::nullopt;
     const int year = utcFields.tm_year + 1900;
 
-    const bool daylightSaving =
-        utc >= lastSundayTransitionUtc(year, 3U) &&
-        utc < lastSundayTransitionUtc(year, 10U);
+    const bool daylightSaving = utc >= lastSundayTransitionUtc(year, 3U) &&
+                                utc < lastSundayTransitionUtc(year, 10U);
     const auto offsetMinutes = static_cast<std::int16_t>(
         rule.standardOffsetMinutes +
         (daylightSaving ? kDaylightSavingMinutes : 0));

@@ -22,12 +22,12 @@ void test_known_dates() {
 }
 
 void test_leap_day_handling() {
-    TEST_ASSERT_EQUAL_INT64(1LL, daysFromCivil(2024, 3U, 1U) -
-                                     daysFromCivil(2024, 2U, 29U));
-    TEST_ASSERT_EQUAL_INT64(1LL, daysFromCivil(2100, 3U, 1U) -
-                                     daysFromCivil(2100, 2U, 28U));
-    TEST_ASSERT_EQUAL_INT64(366LL, daysFromCivil(2025, 1U, 1U) -
-                                       daysFromCivil(2024, 1U, 1U));
+    TEST_ASSERT_EQUAL_INT64(
+        1LL, daysFromCivil(2024, 3U, 1U) - daysFromCivil(2024, 2U, 29U));
+    TEST_ASSERT_EQUAL_INT64(
+        1LL, daysFromCivil(2100, 3U, 1U) - daysFromCivil(2100, 2U, 28U));
+    TEST_ASSERT_EQUAL_INT64(
+        366LL, daysFromCivil(2025, 1U, 1U) - daysFromCivil(2024, 1U, 1U));
 }
 
 }  // namespace

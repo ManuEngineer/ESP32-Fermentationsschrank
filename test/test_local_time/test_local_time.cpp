@@ -35,9 +35,9 @@ struct Vector {
 };
 
 constexpr Vector kVectors[] = {
-    {1767225600, 2026, 1, 1, 1, 0, 0, 60, false},    // Winter
-    {1782864000, 2026, 7, 1, 2, 0, 0, 120, true},    // Sommer
-    {1774745999, 2026, 3, 29, 1, 59, 59, 60, false}, // Fruehjahr 2026
+    {1767225600, 2026, 1, 1, 1, 0, 0, 60, false},     // Winter
+    {1782864000, 2026, 7, 1, 2, 0, 0, 120, true},     // Sommer
+    {1774745999, 2026, 3, 29, 1, 59, 59, 60, false},  // Fruehjahr 2026
     {1774746000, 2026, 3, 29, 3, 0, 0, 120, true},
     {1792889999, 2026, 10, 25, 2, 59, 59, 120, true},  // Herbst 2026
     {1792890000, 2026, 10, 25, 2, 0, 0, 60, false},
@@ -136,7 +136,8 @@ void test_prepared_zone_from_resolver_converts_and_unknown_zone_does_not() {
     const device_platform_test_support::MockTimeZoneResolver resolver;
     const auto known = resolver.prepare("Europe/Zurich");
     TEST_ASSERT_TRUE(known.prepared.has_value());
-    const auto local = device_platform::toLocalTime(1782864000, *known.prepared);
+    const auto local =
+        device_platform::toLocalTime(1782864000, *known.prepared);
     TEST_ASSERT_TRUE(local.has_value());
     TEST_ASSERT_EQUAL_UINT8(2, local->hour);
 
@@ -158,6 +159,7 @@ int main() {
     RUN_TEST(test_unprepared_zone_yields_no_local_time);
     RUN_TEST(test_negative_utc_yields_no_local_time);
     RUN_TEST(test_lookup_finds_only_exact_canonical_identifier);
-    RUN_TEST(test_prepared_zone_from_resolver_converts_and_unknown_zone_does_not);
+    RUN_TEST(
+        test_prepared_zone_from_resolver_converts_and_unknown_zone_does_not);
     return UNITY_END();
 }
