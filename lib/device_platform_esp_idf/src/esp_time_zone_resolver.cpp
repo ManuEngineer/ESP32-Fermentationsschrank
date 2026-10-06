@@ -1,17 +1,14 @@
 #include "esp_time_zone_resolver.hpp"
 
 namespace device_platform_esp_idf {
-namespace {
-
-constexpr char kSupportedIdentifier[] = "Europe/Zurich";
-
-}  // namespace
 
 device_platform::TimeZonePrepareResult EspTimeZoneResolver::prepare(
     const std::string& canonicalIdentifier) const {
-    if (canonicalIdentifier == kSupportedIdentifier) {
+    const auto rule = device_platform::findTimeZoneRule(canonicalIdentifier);
+    if (rule.has_value()) {
         return {device_platform::TimeZonePrepareStatus::Success,
-                device_platform::PreparedTimeZone{canonicalIdentifier}};
+                device_platform::PreparedTimeZone{canonicalIdentifier,
+                                                  *rule}};
     }
     return {device_platform::TimeZonePrepareStatus::UnsupportedIdentifier,
             std::nullopt};

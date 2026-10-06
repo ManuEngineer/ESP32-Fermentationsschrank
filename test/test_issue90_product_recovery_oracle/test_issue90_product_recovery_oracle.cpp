@@ -565,7 +565,7 @@ ConfigurationFixtureBytes configurationBaseline(bool withNewGeneration) {
                         std::nullopt};
             }
             return {device_platform::TimeZonePrepareStatus::Success,
-                    device_platform::PreparedTimeZone{value}};
+                    device_platform::PreparedTimeZone{value, {}}};
         }
     } resolver;
     std::string oldServicePayload;
@@ -3020,7 +3020,7 @@ class ProductionResolver final : public device_platform::ITimeZoneResolver {
                 std::nullopt};
         }
         return {device_platform::TimeZonePrepareStatus::Success,
-                device_platform::PreparedTimeZone{value}};
+                device_platform::PreparedTimeZone{value, {}}};
     }
 };
 

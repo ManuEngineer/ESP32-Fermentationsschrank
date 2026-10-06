@@ -335,7 +335,7 @@ class Resolver final : public device_platform::ITimeZoneResolver {
                 std::nullopt};
         }
         return {device_platform::TimeZonePrepareStatus::Success,
-                device_platform::PreparedTimeZone{identifier}};
+                device_platform::PreparedTimeZone{identifier, {}}};
     }
 
     [[nodiscard]] std::size_t prepareCount() const {
