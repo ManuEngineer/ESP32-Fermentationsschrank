@@ -8,7 +8,7 @@ SCOPE=R1_LOCAL_TOUCH_UI_FUNCTIONAL_COMPLETION
 BASE_BRANCH=main
 BASE_SHA=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
 PLAN_REVISION=4
-PLAN_STATUS=OWNER_DECISIONS_INCORPORATED_FIX_VERIFICATION_CORRECTED_WAITING_LOCAL_TIME_ISSUE_AND_BOUNDED_VERIFICATION
+PLAN_STATUS=OWNER_DECISIONS_INCORPORATED_LOCAL_TIME_ISSUE_178_WAITING_BOUNDED_FIX_VERIFICATION
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PR171=MERGED
@@ -21,7 +21,7 @@ PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
 PRODUCTION_CODE_CHANGED=NO
 OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
 OWNER_APPROVED_PLAN_SHA=NONE
-R1_LOCAL_TIME_OWNER_ISSUE=NUMBER_PENDING_OWNER_CREATION_REQUIRED_BEFORE_S4
+R1_LOCAL_TIME_OWNER_ISSUE=178
 S4_GATED_ON_LOCAL_TIME_OWNER=YES
 PR175_CORRECTION_ORDER=B1_TO_B6_INCORPORATED
 ACTUATOR_RELEASE=NO
@@ -158,8 +158,8 @@ Slot-Nummern `0..3` links nach rechts.
 | HeaderClock | 1 `language`, 2 `network` | NAV; kein Inhalt | `ClockViewInput` | DEAD → S4 (derselbe Screen wie `Einstellungen → Zeit / Zeitzone`) |
 
 Voraussetzung ausserhalb von #172: **Lokalzeit-Owner** (separates R1-Issue auf
-Basis #126, kein Future-Scope, weil echte Lokalzeit R1-Ziel ist; Nummer
-ausstehend, vom Owner anzulegen). Zurueckgestellt ohne bestehendes Folge-Issue:
+Basis #126, Issue #178 „R1 lokale Zeitdarstellung und IANA-Zeitzonenaufloesung“,
+kein Future-Scope, weil echte Lokalzeit R1-Ziel ist). Zurueckgestellt ohne bestehendes Folge-Issue:
 **Recovery-Zeitkorrektur als Benutzerpfad** (4.1). Der Agent legt kein Issue
 eigenmaechtig an; der Owner legt es an oder benennt einen
 `FUTURE_SCOPE.md`-Eintrag. Der spaetere Expertenmodus fuer technische
@@ -393,7 +393,7 @@ die aktualisierte exakte Plan-SHA freigibt.
 | Nr. | Gegenstand | Entscheidung | Betrifft |
 |---|---|---|---|
 | O1 | Standby-Navigation / Einstellungen | Standby-Home `Start \| Programme \| Status \| Einstellungen` (D14). `Start`: startorientierter Pfad (Programmauswahl/manueller Betrieb); `Programme`: Programmverwaltung; `Status`: Geraete-/Betriebsstatus; `Einstellungen`: normale Geraetekonfiguration = Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒. `Service` ist kein eigener Home-Slot mehr; Owner, PIN-/Safety-Regeln unveraendert, nur der Navigationsort aendert sich. `Webzugang` nutzt ausschliesslich den #170-Owner; der provisorische `HeaderLanguage`-Slot 3 entfaellt atomar in S10 (D13). | S1, S10 |
-| O2 | Zeit-UX / Scope-Trennung | Der normale Header zeigt in R1 die **echte lokale Uhrzeit**. #172 besitzt Navigation und UX: Tap auf die Header-Uhr oeffnet denselben Screen `Zeit / Zeitzone` wie `Einstellungen → Zeit / Zeitzone` (kein zweiter Zeit-Screen). `HH:MMZ` ist keine R1-Enddarstellung; es gibt keinen Fake-/Fallback-Lokalzeitmechanismus und keine manuelle zweite Zeitwahrheit. #172 implementiert **keine** IANA-/DST-/UTC→Local-Infrastruktur. Diese gehoert einem separaten **R1-Lokalzeit-Owner** (eigenes R1-Issue auf Basis #126, Nummer ausstehend, vom Owner anzulegen), der `trusted UTC + canonicalTimeZoneId → lokale Zeit inkl. DST` besitzt; die absolute Zeitquelle bleibt #126. Reihenfolge: Lokalzeit-Owner vor S4; #172 beansprucht den R1-Uhrpfad erst nach dessen Verfuegbarkeit als vollstaendig. | S4, S10 |
+| O2 | Zeit-UX / Scope-Trennung | Der normale Header zeigt in R1 die **echte lokale Uhrzeit**. #172 besitzt Navigation und UX: Tap auf die Header-Uhr oeffnet denselben Screen `Zeit / Zeitzone` wie `Einstellungen → Zeit / Zeitzone` (kein zweiter Zeit-Screen). `HH:MMZ` ist keine R1-Enddarstellung; es gibt keinen Fake-/Fallback-Lokalzeitmechanismus und keine manuelle zweite Zeitwahrheit. #172 implementiert **keine** IANA-/DST-/UTC→Local-Infrastruktur. Diese gehoert einem separaten **R1-Lokalzeit-Owner** (Issue #178 auf Basis #126), der `trusted UTC + canonicalTimeZoneId → lokale Zeit inkl. DST` besitzt; die absolute Zeitquelle bleibt #126. Reihenfolge: Lokalzeit-Owner vor S4; #172 beansprucht den R1-Uhrpfad erst nach dessen Verfuegbarkeit als vollstaendig. | S4, S10 |
 | O3 | Bildschirmtastatur | Eine gemeinsame lokale Tastatur fuer Programmname, Programmnotiz und Geraetename; einfache Modi Buchstaben/Ziffern/Symbole, ausreichend grosse Touchflaechen; Validierung und Laengenlimits bleiben bei den bestehenden Ownern; HOME_WIFI-SSID/-Passwort ausserhalb #172 (F16). | S10 |
 | O4 | Geraetename | Nur ohne aktiven Lauf aenderbar; nach erfolgreichem Commit lokal sofort sichtbar; Hostname/SoftAP-SSID/QR erst beim naechsten normalen Netzwerkstart; kein automatischer Neustart, keine erzwungene Netzwerkunterbrechung. | S10 |
 | O5 | Technische Laufparameter | Benutzer geben nur echte Laufwerte ein; technische Qualifikations-/Grenzwerte kommen aus einem kanonischen Produkt-/Commissioning-Owner; keine erfundenen Defaults; solange der Producer fehlt, Start fail-closed mit verstaendlichem Grund. Der spaetere Expertenmodus ist nicht R1/nicht #172 (Future-Scope-Tracking-Issue #163). | S9 |
@@ -525,8 +525,8 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 ### S4 – Header-Uhr (Hit-Zone und gemeinsamer Screen `Zeit / Zeitzone`)
 
 - **Start-Gate:** S4 wird erst umgesetzt, wenn der **R1-Lokalzeit-Owner**
-  (separates R1-Issue auf Basis #126; Nummer ausstehend, vom Owner
-  anzulegen; Gate-Token `R1_LOCAL_TIME_OWNER_ISSUE`) gemergt und verfuegbar ist.
+  (Issue #178 auf Basis #126; Gate-Token `R1_LOCAL_TIME_OWNER_ISSUE=178`)
+  gemergt und verfuegbar ist.
   Er besitzt die technische Abbildung `trusted UTC + canonicalTimeZoneId →
   lokale Zeit inkl. DST`; die Schnittstelle legt er fest, #172 erfindet sie
   nicht. Bis dahin liefert #172 keine unmarkierte UTC-Zeit als scheinbare
@@ -860,7 +860,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 | `WaitingForProduct` ist im Produktbuild ohne Regelkreis kaum erreichbar (F15); Laufmeldungen haben keinen Erzeuger (F18). | Nativer Nachweis; Hardware-Nachweis je Slice gemaess 11.1; im PR ausgewiesen; O9. |
 | Verwaltungsauswahl (D12) aendert den bestehenden `selectProgram`-Vertrag. | Bewusste Testanpassung in S1, im PR als Vertragsaenderung ausgewiesen. |
 | Technische Qualifikationswerte fuer manuelle Laeufe haben keinen Producer (`TBD_COMMISSIONING`, O5). | Keine Benutzereingabe, keine Defaults; Start fail-closed mit sichtbarem Grund; #34/#35 revalidieren. |
-| Echte Lokalzeit im Header braucht UTC→Local-Aufloesung, die weder in #172 noch in #126 existiert (F8); Zeitzonenkatalog hat einen Eintrag. | Separater R1-Lokalzeit-Owner auf Basis #126 (Nummer ausstehend, vom Owner anzulegen) ist Start-Gate fuer S4; bis dahin keine unmarkierte UTC als Lokalzeit, kein `HH:MMZ`, kein Fallback; ohne Zeit `--:--`. |
+| Echte Lokalzeit im Header braucht UTC→Local-Aufloesung, die weder in #172 noch in #126 existiert (F8); Zeitzonenkatalog hat einen Eintrag. | Der R1-Lokalzeit-Owner Issue #178 (Basis #126) ist Start-Gate fuer S4; bis dahin keine unmarkierte UTC als Lokalzeit, kein `HH:MMZ`, kein Fallback; ohne Zeit `--:--`. |
 | Geraetename-Aenderung beeinflusst SSID/Hostname/QR (#164 B4). | O4: nur ohne aktiven Lauf, Netzwerkname erst beim naechsten normalen Netzwerkstart, kein Auto-Restart. |
 | Tastenraster 34 px koennte fuer resistives Touch zu klein sein (D8). | Hardware-Abnahmekriterium; bei Verfehlen Plan-Revision, kein stilles Nachjustieren. |
 | `ContentCell` fixiert einen Plattformvertrag frueh (D1). | Nur Indizes in der Plattform, Kapazitaeten in App-Schicht; Reviewfrage im Independent Plan Review. |
@@ -880,7 +880,7 @@ PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
 PLAN_REVISION=4
 PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
 OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
-R1_LOCAL_TIME_OWNER_ISSUE=NUMBER_PENDING_OWNER_CREATION_REQUIRED_BEFORE_S4
+R1_LOCAL_TIME_OWNER_ISSUE=178
 PRODUCTION_CODE_CHANGED=NO
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
@@ -895,9 +895,9 @@ Delta gegenueber Revision 3 (Ownerentscheidungen):
   Zeitzone, Geraetename, Netzwerk, Webzugang, Service (S10).
 - O2: echte Lokalzeit ist R1-Ziel; kein `HH:MMZ`, kein Fallback, keine
   IANA-/DST-Infrastruktur in #172; ein gemeinsamer Screen `Zeit / Zeitzone`
-  (S4); technische Aufloesung gehoert einem separaten R1-Lokalzeit-Owner (Issue
-  auf Basis #126, Nummer ausstehend, vom Owner anzulegen), der Start-Gate fuer S4
-  ist. Die fruehere offene Uebergangsklaerung entfaellt.
+  (S4); technische Aufloesung gehoert dem R1-Lokalzeit-Owner Issue #178 (auf Basis
+  #126), der Start-Gate fuer S4 ist; #172/S4 konsumiert ihn. Die fruehere offene
+  Uebergangsklaerung entfaellt.
 - S10: Settings-Reihenfolge exakt Sprache, Zeit / Zeitzone, Geraetename,
   Netzwerk, Webzugang, Service.
 - O3, O4, O6, O7, O8, O9: als beschlossen markiert; O5 ergaenzt um den Verweis
