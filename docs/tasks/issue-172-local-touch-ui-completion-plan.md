@@ -777,9 +777,13 @@ nicht. #172 implementiert keine Web-Route, keine Auth, keine Session.
   simulierten Persistenz ueber Neustart; Reale-Hardware-Nachweise
   `NOT_RUN` bis nach dem Gate. Nicht ausgefuehrte Tests gelten nicht als
   bestanden.
-- ESP-Build beider Profile (`esp32_bringup`, `esp32_release`) wird erst im
-  Self-Check bewertet; RAM-Vergleich (`R1_RAM_REFERENCE_LVGL_MEM_SIZE_BYTES=49152`
-  bleibt die Referenz).
+- Die ESP-IDF-Profilverifikation (`esp32_bringup`, `esp32_release`) ist **nicht
+  Bestandteil des Builder-Self-Checks**: `run_pre_ready_gates.sh self-check`
+  prueft nur den gezielten Static-Analysis-Pfad. Zeitpunkt, Umfang und Profile
+  der vollstaendigen Host-/ESP-Gates richten sich ausschliesslich nach
+  `docs/CI_AND_QUALITY_GATES.md` (Owner-/Pre-Ready-Vertrag); dieser Plan
+  definiert dafuer keine eigene Policy. Der RAM-Vergleich
+  (`R1_RAM_REFERENCE_LVGL_MEM_SIZE_BYTES=49152`) bleibt die Referenz.
 
 ### 11.1 Hardware-Nachweisumfang je Slice
 
