@@ -6,16 +6,21 @@
 ISSUE=172
 SCOPE=R1_LOCAL_TOUCH_UI_FUNCTIONAL_COMPLETION
 BASE_BRANCH=main
-BASE_SHA=8a734f62836f8c57263c76ceebfc36a49f4af77c
-PLAN_REVISION=2
-PLAN_STATUS=REVISED_AFTER_OWNER_CORRECTION_WAITING_PR170_MERGE_THEN_REBASE_AND_REVALIDATE
+BASE_SHA=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
+PLAN_REVISION=3
+PLAN_STATUS=REBASED_AND_REVALIDATED_AGAINST_MERGED_PR170_WAITING_INDEPENDENT_PLAN_REVIEW
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PR171=MERGED
-PR170=OPEN_DRAFT_MERGES_BEFORE_ANY_172_IMPLEMENTATION_NOT_MODIFIED
+PR170=MERGED
+PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
 PR174=MERGED
 PR167=SUPERSEDED_REFERENCE_ONLY
+PR175_REBASE=PASS
+PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
+PRODUCTION_CODE_CHANGED=NO
 OWNER_DECISIONS_PENDING=9
+OWNER_DECISIONS_O1_TO_O9=PENDING
 OWNER_RECOMMENDATIONS_O1_TO_O9=RECOMMENDED_PENDING_OWNER_CONFIRMATION
 PR175_CORRECTION_ORDER=B1_TO_B6_INCORPORATED
 ACTUATOR_RELEASE=NO
@@ -23,15 +28,14 @@ ACTUATOR_RELEASE=NO
 
 Dieser Plan ist das Ergebnis des Audits aus dem Auftrag
 `Issue172_Plan_Audit_Auftrag.md`. Er enthaelt **keine** Produktimplementation.
-Revision 2 arbeitet den Korrekturauftrag zu PR #175 (B1–B6) ein und fuehrt die
-dort genannten Ownerempfehlungen O1–O9 als **empfohlene Entscheidungen, Owner-
-Bestaetigung ausstehend**; sie sind keine beschlossenen Ownerentscheide. PR #170 wird **vor** jeder
-#172-Produktimplementation integriert; danach wird dieser Plan auf den dann
-aktuellen `main` rebased, revalidiert und mit neuer exakter Plan-SHA zur
-Independent Fix Verification und Ownerfreigabe vorgelegt (Abschnitt 9).
-Die Umsetzung beginnt erst nach diesen Schritten. Dieser PR ist ein
-**reiner Plan-PR** (Praezedenzfall PR #171); die Implementations-PRs entstehen
-danach von `main` (Abschnitt 6).
+Revision 3 ist der auf den gemergten PR #170 (`02b7523b…`) rebasete und gegen
+den tatsaechlichen Code revalidierte Stand (Abschnitt 9). Die Ownerempfehlungen
+O1–O9 bleiben **empfohlene Entscheidungen, Owner-Bestaetigung ausstehend**; sie
+sind keine beschlossenen Ownerentscheide. Die Umsetzung beginnt erst nach
+Independent Plan Review und ausdruecklicher Ownerfreigabe der exakten Plan-SHA.
+Dieser PR ist ein **reiner Plan-PR** (Praezedenzfall PR #171); die
+Implementations-PRs entstehen danach von `main` (Abschnitt 6). Zeilenbezuege in
+Abschnitt 2 gelten fuer `BASE_SHA`.
 
 ## 1. Ziel und Nicht-Ziele
 
@@ -44,35 +48,36 @@ Message-, Recovery- oder Persistenzwahrheit.
 Nicht-Ziele (unveraendert aus dem Issue):
 
 - #164: WLAN-/QR-/Browser-Setup und dessen Hardware-Evidence.
-- #27 / PR #170: Web, API, Auth, Session, CSRF. `HeaderWebAccess` und
-  `OpenWebProvisioningWindow` bleiben unberuehrt.
+- #27 / PR #170 (gemergt): Web, API, Auth, Session, CSRF. `HeaderWebAccess`,
+  `OpenWebProvisioningWindow`, `webAccessState()` und der Auth-/Session-Owner
+  bleiben unberuehrt; #172 baut keine zweite Web-/Auth-/Provisionierungslogik.
 - #28: Diagnose, Service, PIN-Ablauf, Charts, Exporte.
 - #30/#32/#33/#34/#35: Sensor-, Ausgangs-, Peltier-, Commissioningwerte.
 - Keine UI-Plattform, kein Widget-/Event-/Formframework, keine neue ADR.
 - Keine Werte aus `TBD_HARDWARE`, `TBD_COMMISSIONING`,
   `TBD_IMPLEMENTATION_BUDGET` als Laufzeitwert.
 
-## 2. Verifizierte Ausgangslage (Audit, Stand `BASE_SHA`)
+## 2. Verifizierte Ausgangslage (Stand `BASE_SHA`, nach PR #170)
 
 ### 2.1 Strukturbefunde
 
 | Nr. | Befund | Nachweis |
 |---|---|---|
-| F1 | `targetAt()` kennt nur `HeaderNetwork` (Rect 220/4/44/18) und die vier BottomSlots. `HeaderLanguage` und `HeaderClock` sind im Renderer gezeichnet (Sprachcode x=188..220, Uhr x=264..316), aber nicht treffbar. Es gibt kein Content-Target. | `main/fermentation_ui_renderer.cpp:345-355`, `:613-633` |
+| F1 | `targetAt()` kennt `HeaderLanguage` (seit #170: `kHeaderLanguageHitRect{176,0,44,32}`, ueberlappungsfrei zu `HeaderNetwork`, Randpixel-Test vorhanden), `HeaderNetwork` (Rect 220/4/44/18) und die vier BottomSlots. `HeaderClock` ist im Renderer gezeichnet (Uhr x=264..316), aber **nicht treffbar**. Es gibt kein Content-Target. | `main/fermentation_ui_renderer.cpp:23-24`, `:351-359`, `:632-660`; `test_renderer_boundary.cpp:130-140` |
 | F2 | `DeviceUiTargetKind` kennt `None, HeaderLanguage, HeaderNetwork, HeaderClock, BottomSlot, HomeOrBack, PagerUp, PagerDown, Confirm, Cancel, Back`. Kein Inhalts-/Zeilentarget. | `lib/device_platform/src/device_ui_interaction.hpp:10-22` |
 | F3 | Alle zwoelf Workspace-Setter (`selectProgram`, `setStartCandidate`, `setManualHoldingValues`, `setManualTimedValues`, `setStopCoolingPlan`, `setCompletionCoolingPlan`, `setSelectedMessage`, `setProgramEditCandidate`, `setProgramEditOperation`, `setProgramEditDirty`, `setSensorSelectionAction`, `setRecoveryTimeCorrectionSeconds`) haben **0 produktive Aufrufer** (Suche in `main/`, `src/`, `lib/`), nur Testaufrufer. | Grep, Audit-Lauf |
 | F4 | `NumericEditModel` / `TextEditModel` haben ausserhalb von `fermentation_ui_editing.*` und Tests keinen Konsumenten. `NumericEditAction::Plus/Minus` sind **Vorzeichenaktionen**, keine Schrittweiten. | `fermentation_ui_editing.cpp:48-93` |
-| F5 | Der Dispatcher meldet `transitionAction` und `programEdit` als `UnavailableNoOwner`; alle anderen Press-Payloads sind verdrahtet. | `main/fermentation_ui_press_dispatcher.cpp:78-90` |
-| F6 | Die Programmliste zeichnet immer die Eintraege 0..2 (18-px-Zeilen) und ignoriert `pager.currentIndex`; Auf/Ab aendert nur den Zaehler `n/N`. 18 px sind fuer resistives Touch zu klein (BottomSlots: 40 px). | `fermentation_ui_renderer.cpp:461-477`, `:503-511` |
-| F7 | `NavigateMessageDetail` waehlt stets die **erste** aktive, unaufgeloeste Meldung und ignoriert den Pager. | `fermentation_touch_workspace.cpp:1126-1138` |
-| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt UTC (`formatClockText`). Eine Zeitzonen-„Auswahl“ waere ein No-op, obwohl das Issue die Aenderung der Zeitzone in normalen Einstellungen zulaesst. Die unmarkierte UTC-Anzeige darf nicht bleiben; S4 kennzeichnet sie (`HH:MMZ`). | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:178-193` |
-| F9 | `FermentationUiPresentationSource` enthaelt `displayLocale`, `canonicalTimeZoneId`, `programCatalog`, aber **kein** `deviceName`. | `fermentation_ui_models.hpp:132-135` |
-| F10 | `app_main` uebergibt `initialDisplayLocale` / `initialTimeZoneId` (beim Boot erfasst) an `renderGate.renderRequired()` und als Locale/Zeitzone der Netzwerkseite. Auf `HeaderNetwork` ist die Presentation-Kopie verdraengt; `get()` liefert dort die Defaults (Englisch). Nach einem Sprachwechsel zeichnet der Render-Key nicht neu bzw. die Netzwerkseite bliebe bis zum Reboot in der alten Sprache. | `main/app_main.cpp:440-441`, `:481-484`, `:510-527`; `fermentation_ui_presentation_cache.hpp` (`update`, `evict`, `get`) |
-| F11 | Es gibt keine Settings-/Menue-Seite in `FermentationUiPage`. Die vier Home-Slots sind belegt (Standby: `start` und `programs` zeigen beide auf die Programmliste). | `fermentation_touch_workspace.cpp:311-324` |
+| F5 | Der Dispatcher meldet `transitionAction` und `programEdit` als `UnavailableNoOwner`; alle anderen Press-Payloads sind verdrahtet. | `main/fermentation_ui_press_dispatcher.cpp:89-99` |
+| F6 | Die Programmliste zeichnet immer die Eintraege 0..2 (18-px-Zeilen) und ignoriert `pager.currentIndex`; Auf/Ab aendert nur den Zaehler `n/N`. 18 px sind fuer resistives Touch zu klein (BottomSlots: 40 px). | `fermentation_ui_renderer.cpp:480-492`, `:523-530` |
+| F7 | `NavigateMessageDetail` waehlt stets die **erste** aktive, unaufgeloeste Meldung und ignoriert den Pager. | `fermentation_touch_workspace.cpp:1160-1172` |
+| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt UTC (`formatClockText`). Eine Zeitzonen-„Auswahl“ waere ein No-op, obwohl das Issue die Aenderung der Zeitzone in normalen Einstellungen zulaesst. Die unmarkierte UTC-Anzeige darf nicht bleiben; S4 kennzeichnet sie (`HH:MMZ`). | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:185-198` |
+| F9 | `FermentationUiPresentationSource` enthaelt `displayLocale`, `canonicalTimeZoneId`, `programCatalog`, aber **kein** `deviceName`. | `fermentation_ui_models.hpp:145-149` |
+| F10 | `app_main` uebergibt `initialDisplayLocale` / `initialTimeZoneId` (beim Boot erfasst) an `renderGate.renderRequired()` und als Locale/Zeitzone der Netzwerkseite. Auf `HeaderNetwork` ist die Presentation-Kopie verdraengt; `get()` liefert dort die Defaults (Englisch). Nach einem Sprachwechsel zeichnet der Render-Key nicht neu bzw. die Netzwerkseite bliebe bis zum Reboot in der alten Sprache. | `main/app_main.cpp:442-443`, `:482-487`, `:511-532`; `fermentation_ui_presentation_cache.hpp` (`update`, `evict`, `get`) |
+| F11 | Es gibt keine Settings-/Menue-Seite in `FermentationUiPage`. Die vier Home-Slots sind belegt (Standby: `start` und `programs` zeigen beide auf die Programmliste). | `fermentation_touch_workspace.cpp:317-331` |
 | F12 | `SensorSelectionUserAction` wird nur von `setSensorSelectionAction()` gesetzt. Es gibt **keine reine Abfrage** „zulaessige Aktionen“: die Zulaessigkeit entscheidet `decideApplySensorSelectionAction` ueber `applySensorSelectionDecision` mit Program-Kontext, Plausibilitaet und `criticalSafetyEventPending`; `CommandDecision` traegt einen kompletten `RunCommandState`. `MessageView` traegt aber `code`/`decisionRequired` (`MessageCode::UserDecisionRequired`). | `run_commands.cpp:1343-1418`, `fermentation_ui_models.hpp:58-60` |
-| F13 | Die Textpacks (DE/ES/EN) existieren; jede neue Taste braucht Eintraege in allen drei Packs; die Tabellengroesse ist als Literal (`65U`) in drei Arrays kodiert. | `fermentation_ui_text.cpp:22`, `:97`, `:174` |
+| F13 | Die Textpacks (DE/ES/EN) existieren; jede neue Taste braucht Eintraege in allen drei Packs; die Tabellengroesse ist als Literal in drei Arrays kodiert und betraegt seit #170 `70U` (fuenf `web-access*`-Schluessel). | `fermentation_ui_text.cpp:22`, `:102`, `:184` |
 | F14 | **Latenter Defekt (durch Code-Lesung belegt, nicht ausgefuehrt):** `applyProgramEditPreview` installiert mit `{LocalDisplay, 0U}` und `{NormalEdit\|StandardProgramReset, 0U}`. `validChangeOrigin/Operation` verlangen `LocalDisplay==2U`, `NormalEdit==1U`, `StandardProgramReset==6U`; `encodeConfigurationManifestPayload` lehnt jedes Manifest mit `!isPlausible` ab. Kein Test bestaetigt ein von `applyProgramEditPreview` erzeugtes Preview (die Tests brechen es ab oder lehnen es vorher ab), es gibt keinen produktiven Aufrufer. Ein Commit eines solchen Previews scheitert daher voraussichtlich bei der Persistierung. `applyNetworkMode` nutzt die kanonischen Werte `{LocalDisplay,2U}`/`{NormalEdit,1U}`. | `fermentation_ui_editing.cpp` (`applyProgramEditPreview`), `configuration_graph.cpp:28-58,108-138`, `configuration_graph_codec.cpp:88-100`, `test_configuration_service.cpp:773-790,833-880` |
-| F15 | Die Prozess-State-Machine hat in `FermentationApplication` **keinen zyklischen Pfad**: `update()` pollt nur `networkLifecycle_` und `reevaluateWaitingForTrustedTime()`. Das Application-Objekt komponiert weder `TemperatureControlApplicationOrchestrator` noch einen Fault-/Signalproduzenten. `ProcessSignals{}` ist die einzige bestehende Signalquelle (acht Stellen im `RunPersistenceCoordinator`). Der einzige Eintritt in `WaitingForProduct` ist die automatische Entscheidung `PreheatQualified` aus `Preheating`, die `signals.qualificationProgress == Complete` verlangt (`process_state_machine.cpp:417-421`), sowie `RecoveryResume` einer zuvor persistierten Wartephase (`:680`). `StartRun` fuehrt nicht direkt dorthin. Folge: Ohne Signalproduzent/Regelkreis (#30/#35) ist `WaitingForProduct` im Produktbuild nur nach einer wiederhergestellten Wartephase erreichbar. | `fermentation_application.cpp:1360-1365`, `process_state_machine.cpp:417-421,680`, `run_persistence_coordinator.cpp:1237,1285,1475,1503,1836` |
+| F15 | Die Prozess-State-Machine hat in `FermentationApplication` **keinen zyklischen Pfad**: `update()` pollt nur `networkLifecycle_` und `reevaluateWaitingForTrustedTime()`. Das Application-Objekt komponiert weder `TemperatureControlApplicationOrchestrator` noch einen Fault-/Signalproduzenten. `ProcessSignals{}` ist die einzige bestehende Signalquelle (acht Stellen im `RunPersistenceCoordinator`). Der einzige Eintritt in `WaitingForProduct` ist die automatische Entscheidung `PreheatQualified` aus `Preheating`, die `signals.qualificationProgress == Complete` verlangt (`process_state_machine.cpp:417-421`), sowie `RecoveryResume` einer zuvor persistierten Wartephase (`:680`). `StartRun` fuehrt nicht direkt dorthin. Folge: Ohne Signalproduzent/Regelkreis (#30/#35) ist `WaitingForProduct` im Produktbuild nur nach einer wiederhergestellten Wartephase erreichbar. | `fermentation_application.cpp:1861-1866`, `process_state_machine.cpp:417-421,680`, `run_persistence_coordinator.cpp:1237,1285,1475,1503,1836` |
 | F16 | **Abgrenzung Tastatur (kein Widerspruch):** `LOCAL_UI_PROGRAMS.md` verlangt fuer R1 eine lokale Bildschirmtastatur fuer Programmname und Notiz. `FUTURE_SCOPE.md` (`R1_TOUCH_WIFI_KEYBOARD=DEFERRED`) deferiert ausdruecklich nur die **HOME_WIFI-Credentialeingabe und die dafuer erforderliche Tastatur**, nicht jede Bildschirmtastatur. Die Tastatur fuer Programmname/Notiz/Geraetename ist daher R1-Scope von #172; die WLAN-Credentialtastatur bleibt deferred und wird nicht aufgenommen. | `docs/LOCAL_UI_PROGRAMS.md` (Abschnitt „Bildschirmtastatur“), `docs/FUTURE_SCOPE.md:74-82` |
 | F17 | **Vorbestehende Abweichung in `ACCEPTANCE_TESTS.md`:** Die Definitionen SIM-26-04..07 (Zeilen 215-218) und die Testzuordnungstabelle (Zeilen 238-241) passen nicht zueinander (z. B. SIM-26-04 `ProductInsertedConfirmed` zeigt auf Locale-/Clock-Tests; SIM-26-06 `PIN` zeigt auf Editor-Tests). Berichtigung in S11 (O8-b), kein stilles Umhaengen in anderen Slices. | `docs/ACCEPTANCE_TESTS.md:212-241` |
 | F18 | **Kein Produktions-Erzeuger fuer Laufmeldungen:** In `lib/fermentation_app/src` schreibt nichts in `RunCommandState::messages`/`messageCount`; es gibt nur Lesestellen (`run_commands.cpp:356,1511`). `MessageCode::UserDecisionRequired` und `ProductInsertionRequested` werden im Produktcode nur gelesen (`fermentation_ui_projector.cpp:16-17`); die `ProcessMessage`-Eintraege einer `TransitionDecision` werden nirgends in `RuntimeMessage` uebersetzt. Folge: Die Meldungsliste ist auf der Hardware leer; Auswahl, Quittieren und Stummschalten sind nur nativ mit Fixtures nachweisbar (O9). | Grep ueber `lib/fermentation_app/src/*.cpp/hpp` |
@@ -81,17 +86,17 @@ Nicht-Ziele (unveraendert aus dem Issue):
 
 | # | Luecke | Ist-Pfad | Bestehender Owner | Fehlt | Slice |
 |---|---|---|---|---|---|
-| 1 | Header-Sprache | Header zeigt Sprachcode; `Workspace::press(HeaderLanguage)` navigiert (`:1276`); Seite `HeaderLanguage` hat nur Cross-Navigation (`:751-757`); `targetAt()` trifft nichts (F1) | `UserConfiguration.displayLanguageId` via `ConfigurationService`; Muster `applyNetworkMode` (`fermentation_application.cpp:706-735`); Sprachkatalog `kLanguages{de,es,en}` | Hit-Zone, Auswahlzeilen, Application-Entry, eviction-feste Locale-Kopie (F10) | S3 |
-| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:776-782`); Uhr nicht treffbar | `ITimeSource`/`ClockViewInput{trustedUtc, tz}`; Zeitzonenkatalog (F8) | Hit-Zone, Status-Inhalt; Zeitzonenauswahl nicht sinnvoll moeglich (O2) | S4 |
-| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite, Einstieg (O1), Geraetename-Editor, Application-Entry | S10 |
+| 1 | Header-Sprache | Header zeigt Sprachcode; Hit-Zone existiert seit #170 (F1); `Workspace::press(HeaderLanguage)` navigiert (`:1310`); Seite `HeaderLanguage` hat nur Cross-Navigation inkl. #170-Slot 3 `web-access` (`:757-764`) | `UserConfiguration.displayLanguageId` via `ConfigurationService`; Muster `applyNetworkMode` (`fermentation_application.cpp:778-…`, mit `applicationCallSerializer_.enter()`); Sprachkatalog `kLanguages{de,es,en}` | Auswahlzeilen, Application-Entry, eviction-feste Locale-Kopie (F10); **keine** neue Hit-Zone | S3 |
+| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:803-809`); Uhr nicht treffbar | `ITimeSource`/`ClockViewInput{trustedUtc, tz}`; Zeitzonenkatalog (F8) | Hit-Zone, Status-Inhalt; Zeitzonenauswahl nicht sinnvoll moeglich (O2) | S4 |
+| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite, Einstieg (O1), Geraetename-Editor, Application-Entry; Link auf die bestehende `HeaderWebAccess`-Seite (kein neuer Web-Owner) | S10 |
 | 4 | Programmlisten-Auswahl | Liste gezeichnet; `selectProgram()` ohne Aufrufer (F3); kein Row-Target (F1/F2); Pager-Fenster fehlt (F6) | `Workspace::selectProgram` → `ProgramSummary` | Content-Target, Pager-Fenster, Zeilenhoehe | S1 |
 | 5 | Programmverwaltung | Aktionen (Reset/Uninstall/Delete/Save) erzeugen `programEdit`-Request; Dispatcher: `UnavailableNoOwner` (F5); Helfer mit falschen Wire-Werten (F14) | `applyProgramEditPreview()` + `ConfigurationService` + `ProgramCatalogRevision`-Staleness | `FermentationApplication`-Entry, Wire-Wert-Korrektur, Dispatcher | S6 |
 | 6 | Programmeditor/Startwerte | `setStartCandidate`, `setProgramEditCandidate` nur Tests (F3); Edit-Modelle ohne Konsument (F4) | `validateProgram`, `makeFermentationUiProgramList`, `openProgramEditSession`, Preview-Pfad, `prepareStartProgram` | Editor-Seiten, Tastenfeld/Tastatur, Feldzuordnung | S8, S10 |
 | 7 | Manueller Betrieb/Kuehlplaene | `setManualHoldingValues`, `setManualTimedValues`, `setStopCoolingPlan`, `setCompletionCoolingPlan` nur Tests (F3); Confirm-Slots dauerhaft disabled | `validateManualRunPlan`, `prepareStartManual*`, `prepareStop`, `prepareCompletion` | Eingabe nur echter Laufwerte; technische Qualifikationswerte stammen aus einem spaeteren Commissioning-/Produktowner (O5), bis dahin Start fail-closed | S9 |
 | 8 | `ProductInsertedConfirmed` | Slot + Intent vorhanden; Dispatcher `UnavailableNoOwner` (F5); `decideProductInsertedConfirmed` ist nur eine Entscheidung ohne Apply | `decideProcessTransition()` (`process_state_machine.cpp:746`), `RunPersistenceCoordinator::persistTransition()` (`:2798`, `ProductInserted` ist in `eligibleTransition`) | `FermentationApplication`-Entry, Bridge, Dispatcher | S5 |
-| 9 | Meldungen | Seiten `Messages`/`MessageDetail`, Ack/Mute-Slots, Intents und RAM-Apply (`applyConfirmedPrepared`, `:562-567`) vorhanden; keine Auswahl (F3/F7); Sensorentscheidung ohne Datenquelle (F12) | `decideAcknowledgeMessage/MuteMessage` | Row-Target, Detail-Inhalt; Sensorentscheidung bewusst nicht in #172 (Follow-up, 4.1) | S2 |
+| 9 | Meldungen | Seiten `Messages`/`MessageDetail`, Ack/Mute-Slots, Intents und RAM-Apply (`applyConfirmedPrepared`, `fermentation_application.cpp:553-…`) vorhanden; keine Auswahl (F3/F7); Sensorentscheidung ohne Datenquelle (F12) | `decideAcknowledgeMessage/MuteMessage` | Row-Target, Detail-Inhalt; Sensorentscheidung bewusst nicht in #172 (Follow-up, 4.1) | S2 |
 | 10 | Recovery-Zeitkorrektur | Slot `ApplyRecoveryTimeCorrection` nur bei gesetztem Wert (F3); Owner `decideApplyRecoveryTimeCorrection` verlangt eine **vom Benutzer gelieferte** `secondsDelta` innerhalb der Ausfallgrenzen (`run_commands.cpp:1229-1290`) | `ApplyRecoveryTimeCorrectionRequest` | Kein R1-Benutzerpfad spezifiziert: nur `RECOVERY_AND_INTERRUPTION.md:407` und `RUN_PERSISTENCE.md:382` (Semantik), keine UI-Anforderung | S7: zurueckgestellt, siehe 4.1 |
-| 11 | Leere/unvollstaendige Seiten | Renderer zeichnet fuer alle Seiten ausser Home, Programmliste, Bestaetigungsname, Netzwerk nur Titel und Slots (`fermentation_ui_renderer.cpp:460-501`) | Snapshots (`FermentationUiSnapshot`), `ProgramCatalog` | Inhalte je Seite | S7 |
+| 11 | Leere/unvollstaendige Seiten | Renderer zeichnet fuer alle Seiten ausser Home, Programmliste, Bestaetigungsname, Netzwerk und `HeaderWebAccess` (#170) nur Titel und Slots (`fermentation_ui_renderer.cpp:422-492`) | Snapshots (`FermentationUiSnapshot`), `ProgramCatalog` | Inhalte je Seite | S7 |
 
 ### 2.3 Vollstaendiges Seiten-/Element-Inventar (Header, Seiten, Slots)
 
@@ -103,7 +108,7 @@ Slot-Nummern `0..3` links nach rechts.
 | Seite / Element | Slot / Zone | Ist-Wirkung | Owner / Ziel | Status → Slice bzw. Verweis |
 |---|---|---|---|---|
 | Header | Logo | nicht interaktiv (UI-11) | – | OK (bewusst) |
-| Header | Sprache | gezeichnet, nicht treffbar | `UserConfiguration` | DEAD → S3 |
+| Header | Sprache | gezeichnet, treffbar (#170, → `HeaderLanguage`); Seite ohne Auswahl | `UserConfiguration` | NAV; Auswahl DEAD → S3 |
 | Header | WLAN | → `HeaderNetwork` | #164 | OK |
 | Header | Uhr | gezeichnet, nicht treffbar, UTC unmarkiert | `ClockViewInput` | DEAD → S4 (inkl. Kennzeichnung `HH:MMZ`) |
 | Home Standby | 0 `start`, 1 `programs` | → `ProgramList` (doppelt belegt, F11) | – | NAV; Slot 1 wird `settings` (O1-B, S10) |
@@ -146,7 +151,8 @@ Slot-Nummern `0..3` links nach rechts.
 | Recovery | 1 `resume-fallback` | `ResumeFallback` verdrahtet | Recovery-Owner | OK |
 | Recovery | 1 `confirm` (Zeitkorrektur) | nur mit `setRecoveryTimeCorrectionSeconds` (F3) | `decideApplyRecoveryTimeCorrection` | DEF → Folge-Scope (4.1) |
 | Recovery | 3 `diagnostics` | → `Diagnostics` | #28 | DEF → #28 |
-| HeaderLanguage | 1 `network`, 2 `clock`, 3 (#170: `web-access`) | NAV | – | NAV; Auswahl → S3 |
+| HeaderLanguage | 1 `network`, 2 `clock`, 3 `web-access` (provisorischer #170-Uebergangspfad) | NAV; Slot 3 → `HeaderWebAccess` | – | NAV; Auswahl → S3; Slot 3 bleibt in PR A–C und entfaellt atomar in S10 (D13) |
+| HeaderWebAccess | 0 `back`, 1 `web-access-open` | `OpenWebProvisioningWindow` → `FermentationApplication::openWebProvisioningWindow()`, Anzeige `snapshot.webAccess` | #27 / `FermentationApplication` | OK (#170, hardware-verifiziert); unberuehrt |
 | HeaderNetwork | alle | verdrahtet | #164 | OK |
 | HeaderClock | 1 `language`, 2 `network` | NAV; kein Inhalt | `ClockViewInput` | DEAD → S4 |
 
@@ -188,15 +194,23 @@ y=184..200. Die Netzwerkseite behaelt ihr hardware-validiertes Layout
 unveraendert (#164). Tastengroessen fuer Tastenfeld/Tastatur sind **keine**
 Planannahme, sondern Hardware-Abnahmekriterium (siehe S8/S10).
 
-**D4 – Header-Hit-Zonen ohne Ueberlappung.** Neue Zonen
-`HeaderLanguage` x=184..220 und `HeaderClock` x=264..320, jeweils ueber die volle
-Headerhoehe y=0..32. Die bestehende `HeaderNetwork`-Zone (x=220..264, y=4..22)
-wird **nicht** veraendert; die Zonen ueberlappen nicht (Test: Randpixel
-219/220/263/264).
+**D4 – Header-Hit-Zonen ohne Ueberlappung.** Die `HeaderLanguage`-Zone
+(`kHeaderLanguageHitRect{176,0,44,32}`) und die `HeaderNetwork`-Zone
+(x=220..264, y=4..22) sind seit #170 **Bestand und werden nicht veraendert**
+(nicht erneut gebaut). #172 ergaenzt ausschliesslich die neue Zone
+`HeaderClock` x=264..320 ueber die volle Headerhoehe y=0..32 (S4); sie
+ueberlappt weder Netzwerk- noch Sprachzone (Test: Randpixel 263/264 und
+319/320; die vorhandenen Sprach-/Netzwerk-Randtests bleiben unveraendert).
 
 **D5 – Commit-Pfad fuer UserConfiguration/ProgramCatalog.** Genau ein Pfad:
 neue `FermentationApplication`-Methoden nach dem Muster von `applyNetworkMode`
-(`beginPreview` → Kandidat aendern → `installPreview` mit den **kanonischen**
+(seit #170 beginnt jede oeffentliche Application-Methode mit
+`applicationCallSerializer_.enter()`, weil Touch-/Main-Loop und Web-Callbacks
+dieselbe Instanz nutzen; die neuen Methoden `applyDisplayLanguage`,
+`confirmProductInserted`, `applyProgramEdit`, `applyUserSettings` tun dasselbe
+und ergaenzen weder ein zweites Lock noch ein neues Serializer-Konzept; der
+Serializer ist rekursiv, geschachtelte oeffentliche Aufrufe bleiben zulaessig;
+je neuer Methode prueft ein Test nach dem Muster von `test_application_call_serializer_blocks_cross_thread_and_allows_reentry` in `test_web_application_routes`, dass der Aufruf bei gehaltenem Guard blockiert) (`beginPreview` → Kandidat aendern → `installPreview` mit den **kanonischen**
 Wire-Werten `{LocalDisplay,2U}`/`{NormalEdit,1U}` (bei Standardprogramm-Reset
 `{StandardProgramReset,6U}`) → `validatePreviewForConfirmation` mit erwarteter
 Revision → `confirmPreview`). Der gemeinsame private Helfer ist **nur fuer die
@@ -258,14 +272,21 @@ Rueckkehrseite entgegen.
 `FURTHER_PROACTIVE_RAM_OPTIMIZATION=NO` gilt. #172 fuehrt **keine**
 prophylaktische RAM-/Eviction-Architektur ein: kein neuer Mutations-Evict-Pfad
 und keine Aufteilung von `processWorkspaceTouch()`.
-- Die PR-#174-Baseline (`CONFIG_LV_MEM_SIZE=49152`) bleibt unveraendert.
+- Die PR-#174-Baseline (`CONFIG_LV_MEM_SIZE=49152`, Main-Task-Stack 24576 B) bleibt
+  unveraendert; die gemergte #170-Basis aendert beides nicht (httpd-Stack
+  8192 B, neue `std::mutex`-/`condition_variable`-Objekte im Application-
+  Serializer und `AuthOperationGate`). Referenz fuer spaetere Hardware-Logs ist
+  der #170-Nachweis `docs/audits/PR170_HW_GATE_20261005/`
+  (`MIN_FREE_HEAP_UNDER_WEB_LOAD=8148`, `MAIN_STACK_HWM=6056`,
+  `IDLE_1696B_FOLLOW_UP=OPEN_NON_BLOCKING_NOT_REPRODUCED`). #172 leitet daraus
+  keine Optimierung ab und erfindet keine Budgetgrenze.
 - Neue Seiteninhalte nutzen den vorhandenen `ScreenDrawCommand`-Pfad;
   Befehlsanzahl je Seite wird begrenzt und im Test geprueft (Muster
   `kNetworkScreenDrawCommandCapacity`).
 - `test_ui_steady_state_allocations` wird fuer jede neue Seite und jede neue
   Press-Art erweitert (kein Heap-Zuwachs im Steady State).
-- S6/S10 werden mit Steady-State-/Resource-Regressionen und spaeter mit einem
-  Hardware-Log (`logResources` vor/nach Commit-Presses, analog
+- S3, S6 und S10 (jeweils `ConfigurationService`-Commit) werden mit
+  Steady-State-/Resource-Regressionen und spaeter mit einem Hardware-Log (`logResources` vor/nach Commit-Presses, analog
   `network_page_press_*`) gemessen; Hardware-Nachweise erst nach dem
   Software-/Reviewgate und mit `ACTUATOR_RELEASE=NO`.
 - Nur bei einem **reproduzierten neuen** OOM-/Heap-Problem wird ein eigener,
@@ -302,6 +323,18 @@ Das aendert den bestehenden Vertrag von `selectProgram` (heute `false` fuer
 nicht startbare Eintraege); die betroffenen Tests in drei Testdateien werden in
 S1 bewusst angepasst und im PR als Vertragsaenderung ausgewiesen.
 
+**D13 – Webzugang-Navigation (Uebergang und Ziel).** Der #170-Stand
+`HeaderLanguage` Slot 3 `web-access` ist nur der testbare Uebergangspfad, nicht
+die endgueltige UX. In PR A–C bleibt der Slot unveraendert, damit das Web-Setup
+erreichbar bleibt; S3 behandelt ihn temporaer als Bestand und baut keine zweite
+Sprachloesung. In S10/PR D wird `Webzugang` in `Einstellungen` eingehaengt und
+im selben Commit der Slot aus `HeaderLanguage` entfernt; zu keinem Zwischenstand
+existiert ein unerreichbarer Web-Setup-Pfad. Verwendet wird ausschliesslich die
+bestehende Seite `HeaderWebAccess`, die Aktion `NavigateWebAccess` und der #170-
+Owner (`openWebProvisioningWindow()`/`webAccessState()`); keine zweite
+Auth-/Provisionierungslogik, keine neue WebAccess-Domain. Tests in S10: Slot 3
+entfernt, `Webzugang` erreichbar, `OpenWebProvisioningWindow` unveraendert.
+
 ## 4. Zurueckgestellt und geschlossen mit Beleg
 
 ### 4.1 Geschlossen mit Beleg (keine Ownerentscheidung noetig)
@@ -337,7 +370,7 @@ davon selbst, `IMPLEMENTATION_AUTHORIZATION=NO` bleibt.
 
 | Nr. | Gegenstand | Empfohlene Entscheidung (ausstehend) | Betrifft |
 |---|---|---|---|
-| O1 | Einstieg normale Einstellungen | **B**: der redundante Standby-Home-Slot 1 `programs` wird `settings`; Slot 0 `start` bleibt Zugang zur Programmliste. Andere Home-Modi unveraendert. Betrifft die Home-Aktionsmatrix (`test_local_touch_ui`, SIM-26-01). | S10 |
+| O1 | Einstieg normale Einstellungen | **B**: der redundante Standby-Home-Slot 1 `programs` wird `settings`; Slot 0 `start` bleibt Zugang zur Programmliste. Andere Home-Modi unveraendert. Betrifft die Home-Aktionsmatrix (`test_local_touch_ui`, SIM-26-01). Revalidiert gegen #170: Standby-Slots unveraendert (`start`/`programs` doppelt belegt). Webzugang: Zielstruktur `Einstellungen` = Sprache, Zeit/Zeitzone, Geraetename, Netzwerk, Webzugang; der provisorische `HeaderLanguage`-Slot 3 entfaellt atomar mit dem Einhaengen in S10 (D13, Korrekturauftrag B3). | S10 |
 | O2 | Zeitzone | **A**: lesend; keine vorgetaeuschte Auswahl, keine neue Zeitdatenbank. Header und Uhrseite kennzeichnen UTC eindeutig (`HH:MMZ`). Lokale IANA-Zeit/Offset/DST als eigener spaeterer Scope (Folge-Issue oder `FUTURE_SCOPE.md`, vom Owner anzulegen). | S4, S10 |
 | O3 | Bildschirmtastatur | **A**: lokale Tastatur fuer Programmname, Notiz und Geraetename. Die HOME_WIFI-Credentialtastatur bleibt deferred und wird nicht aufgenommen (F16). | S10 |
 | O4 | Geraetename | **A**: nur ohne aktiven Lauf; UI-Wert nach Commit sichtbar; SSID/Hostname/QR erst beim naechsten normalen Netzwerkstart; kein Auto-Restart. | S10 |
@@ -351,9 +384,10 @@ davon selbst, `IMPLEMENTATION_AUTHORIZATION=NO` bleibt.
 
 Elf Slices in einem PR wuerden dem Grundsatz „zusammenhaengender Scope, klein
 und unabhaengig reviewbar“ widersprechen. Gemaess O6 ist **dieser PR plan-only**
-(Praezedenzfall: PR #171 wurde als reiner Plan-PR gemergt). Nach Merge von
-PR #170, Rebase/Revalidierung dieses Plans und Freigabe der neuen exakten
-Plan-SHA entstehen **vier Implementations-PRs, strikt sequenziell** A → B → C →
+(Praezedenzfall: PR #171 wurde als reiner Plan-PR gemergt). Nach dem
+abgeschlossenen Rebase auf `main` nach PR #170 (Abschnitt 9), Independent Plan
+Review und Freigabe der exakten Plan-SHA entstehen **vier Implementations-PRs,
+strikt sequenziell** A → B → C →
 D, jeweils von aktuellem kanonischem `main` nach dem Merge des Vorgaengers
 (kein gestapelter PR ohne ausdrueckliche Ownerfreigabe). Parallelitaet wird
 nicht geplant: auch S3 aendert `fermentation_application.*`,
@@ -427,10 +461,13 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 
 ### S3 – Header-Sprache DE/EN/ES
 
-- **Dateien/Owner:** `fermentation_ui_renderer.cpp` (`targetAt` D4),
+- **Dateien/Owner:** `fermentation_ui_renderer.cpp` (Zeilen der Seite
+  `HeaderLanguage`; die Header-Hit-Zone ist Bestand aus #170 und wird
+  **wiederverwendet, nicht neu gebaut**, D4; sie wird nur als Regression
+  getestet),
   `fermentation_touch_workspace.{hpp,cpp}` (Seite `HeaderLanguage`: drei
-  `ContentCell`-Zeilen, aktuelle Sprache markiert; **Slot 3 bleibt
-  unveraendert**, damit #170 dort `web-access` belegen kann),
+  `ContentCell`-Zeilen, aktuelle Sprache markiert; **Slot 1–3 bleiben
+  unveraendert**, insbesondere der provisorische #170-Slot 3 `web-access`),
   `fermentation_ui_commands.{hpp,cpp}` (neuer typisierter Intent
   `FermentationUiSetDisplayLanguageCommand{languageId, expected revision}` +
   Bridge), `fermentation_application.{hpp,cpp}` (Entry `applyDisplayLanguage`,
@@ -447,17 +484,21 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   `cancelPreview` auf Fehlerausgaengen, Persistenz ueber Neustart mit
   `SimulatedPersistentStateStore`: begin → apply → neu begin → Sprache),
   `test_local_touch_ui` (Zeilen, Markierung, Slot 3 unveraendert),
-  `test_press_dispatcher`, `test_renderer_boundary` (Hit-Zone Sprache,
-  Netzwerkzone unveraendert, Randpixel 219/220/263/264, Netzwerkseite folgt
-  der neuen Sprache), `test_fermentation_ui_presentation_cache` (Refill bei
+  `test_press_dispatcher`, `test_renderer_boundary` (Zeilen-Hit-Test der
+  Sprachseite; die vorhandenen Randtests der Sprach-/Netzwerkzone bleiben
+  unveraendert, Netzwerkseite folgt der neuen Sprache), `test_fermentation_ui_presentation_cache` (Refill bei
   Revisionswechsel), `test_ui_steady_state_allocations`.
   `test_network_configuration` bleibt unveraendert (D5).
 - **Abhaengigkeiten:** S1. **Ownerentscheidung:** keine.
-- **Konfliktflaeche #170:** `HeaderLanguage` Slot 3, Textarray, Press-Struct.
+- **Konfliktflaeche #170 (revalidiert):** `HeaderLanguage` Slot 3 (`web-access`,
+  bleibt), Textarray (`70U`), `FermentationUiWorkspacePress`/Dispatcher
+  (`openWebProvisioningWindow`-Zweig bleibt, #172 ergaenzt einen eigenen
+  Zweig), `FermentationUiCommand::operation` (+`SetDisplayLanguage`),
+  Application-Serializer (D5).
 
 ### S4 – Header-Uhr (UTC-Kennzeichnung und Statusseite)
 
-- **Dateien/Owner:** Renderer `targetAt` (D4) und `formatClockText`,
+- **Dateien/Owner:** Renderer `targetAt` (nur neue Uhr-Zone, D4) und `formatClockText`,
   Workspace `HeaderClock`, Renderer-Inhalt, Textpacks.
 - **Verhalten:** Hit-Zone Uhr. Der Header zeigt die Uhrzeit **eindeutig als UTC**
   (`HH:MMZ`; ohne vertrauenswuerdige Zeit unveraendert `--:--`). Die Seite zeigt
@@ -471,8 +512,8 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 - **Tests:** `test_renderer_boundary` (`12:34Z`, `--:--`, Textbreite),
   `test_local_touch_ui`, `test_ui_steady_state_allocations` (Render-Key nutzt
   weiterhin die UTC-Minute).
-- **Abhaengigkeiten:** S3 (gemeinsame `targetAt`-Aenderung).
-  **Ownerentscheidung:** O2 (A).
+- **Abhaengigkeiten:** S1 (Layout); keine `targetAt`-Kopplung mehr zu S3, da
+  die Sprachzone Bestand ist. **Ownerentscheidung:** O2 (A).
 
 ### S5 – `ProductInsertedConfirmed`-Owner
 
@@ -639,7 +680,14 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Zielerreichungszeit, Abschluss-/Kuehlverhalten); Speichern ueber
   `SaveProgram` → S6-Entry mit `expectedProgramCatalogRevision`. Settings-Seite:
   Sprache (Link), Zeitzone (lesend, UTC-gekennzeichnet, O2), Geraetename
-  (Editor, nur ohne aktiven Lauf, O4), Netzwerk (Link). Dirty-Verwerfen ueber den vorhandenen `ConfirmDiscard`-Exit.
+  (Editor, nur ohne aktiven Lauf, O4), Netzwerk (Link), Webzugang (Link auf die
+  bestehende `HeaderWebAccess`-Seite per vorhandener Aktion `NavigateWebAccess`;
+  Freigabe, Fenster und Anzeige bleiben beim #170-Owner
+  `FermentationApplication::openWebProvisioningWindow()` /
+  `webAccessState()`, keine zweite Web-/Auth-/Provisionierungslogik). Der
+  provisorische #170-Zugang ueber `HeaderLanguage` Slot 3 wird in S10
+  **atomar** (ein Commit) ersetzt: zuerst `Webzugang` in `Einstellungen`
+  einhaengen, danach den `web-access`-Slot aus `HeaderLanguage` entfernen (D13). Dirty-Verwerfen ueber den vorhandenen `ConfirmDiscard`-Exit.
 - **Tests:** `test_fermentation_ui_editing` (Textfolgen, Grenzen
   `validateVisibleName`, UTF-8), `test_local_touch_ui`, neuer
   Application-Test (Geraetename-Commit, Gating bei aktivem Lauf, ASCII- und
@@ -662,7 +710,8 @@ Software-/Reviewgate und mit `ACTUATOR_RELEASE=NO`; Ergebnisse bis dahin
 
 ```text
 PR A:  S1 ──► S2
-       S1 ──► S3 ──► S4
+       S1 ──► S3
+       S1 ──► S4
 PR B:  S5 ──► S6          (nach PR A)
 PR C:  S7 ──► S8 ──► S9   (nach PR B)
 PR D:  S10 ──► S11        (nach PR C; benoetigt S6, S8, S1)
@@ -670,38 +719,41 @@ PR D:  S10 ──► S11        (nach PR C; benoetigt S6, S8, S1)
 
 - Die vier Implementations-PRs laufen **sequenziell** A → B → C → D, jeweils von
   aktuellem `main` (O6). Es gibt keine Parallelitaetsannahme.
-- Innerhalb eines PR gilt die Slice-Reihenfolge; S3/S4 teilen die
-  `targetAt`-Aenderung, alle Slices mit `fermentation_ui_text.cpp` die
-  Tabellengroesse.
-- Eine Implementation startet fruehestens nach Merge von PR #170, Rebase,
-  Revalidierung und Freigabe der neuen exakten Plan-SHA (Abschnitt 9).
+- Innerhalb eines PR gilt die Slice-Reihenfolge; alle Slices mit
+  `fermentation_ui_text.cpp` teilen die Tabellengroesse (`70U` ab `BASE_SHA`).
+- Eine Implementation startet fruehestens nach Independent Plan Review und
+  ausdruecklicher Ownerfreigabe der exakten Plan-SHA (Rebase und Revalidierung
+  gegen den gemergten #170 sind erledigt, Abschnitt 9).
 
-## 9. Integration mit PR #170 (Reihenfolge O7-B)
+## 9. Integration mit PR #170 (revalidiert gegen den gemergten Stand)
 
-PR #170 wird vor jeder #172-Produktimplementation integriert (er ist laut
-`docs/ROADMAP.md` an die 1696-B-Diagnose bzw. einen Owner-Waiver gebunden).
-Danach wird dieser Plan-PR auf den neuen `main` rebased; die folgende
-Konfliktflaechen-Tabelle (Stand `dab2831c…`, 96 Dateien) ist dann gegen den
-**tatsaechlich integrierten** Stand zu pruefen, nicht gegen einen offenen PR.
-Jede Aenderung in #172 bleibt additiv, ohne Umbenennung oder Umformatierung
-bestehender Bloecke.
+PR #170 ist gemergt (`PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7`,
+O7-B erfuellt). Dieser Plan-PR ist auf diesen `main` rebased; `git diff
+origin/main..HEAD` enthaelt nur `docs/ROADMAP.md` und diese Plandatei. Die
+Konfliktflaechen wurden gegen den **tatsaechlich integrierten** Code geprueft
+(`git diff 8a734f6..02b7523`, 49 Dateien). Jede Aenderung in #172 bleibt
+additiv, ohne Umbenennung oder Umformatierung bestehender Bloecke.
 
-| Datei | Zu pruefen nach #170-Merge |
-|---|---|
-| `fermentation_touch_workspace.hpp/.cpp` | `HeaderWebAccess`, `NavigateWebAccess`, `OpenWebProvisioningWindow` und die Feldkopie im `Confirm`-Zweig von `press()` sind dann Bestand. **`HeaderLanguage` Slot 3 gehoert `web-access`**; #172/S3 belegt ihn nicht. |
-| `fermentation_ui_commands.hpp/.cpp` | `operation`-Variant, `FermentationUiDetailStatus` und Bridge um #170-Eintraege erweitert; #172 ergaenzt Bridge-Funktionen und Operation-Varianten (`SetDisplayLanguage`), keine neuen Detail-Varianten. |
-| `main/fermentation_ui_press_dispatcher.cpp` | #170-`if`-Zweige vorhanden; #172 aendert den bestehenden `transitionAction`/`programEdit`-Zweig. |
-| `main/fermentation_ui_renderer.cpp` | Seiteninhalts-`else if`-Kette um `HeaderWebAccess` erweitert; #172 aendert `targetAt` und das Programmlisten-Layout. |
-| `fermentation_ui_text.cpp` | Tabellengroesse dann `70U`; #172-Eintraege setzen darauf auf. |
-| `fermentation_application.hpp/.cpp` | rund 785 Zeilen aus #170 (Serializer, Auth, Web) sind Bestand; #172 fuegt Methoden in einem abgegrenzten Block hinzu und prueft `ApplicationCallSerializer` fuer die neuen Methoden (Touch- und Web-Aufrufe). |
-| `main/app_main.cpp` | #170-Komposition Bestand; #172 aendert die Locale-/Zeitzonenkopie (D11). |
-| `scripts/check_architecture_boundaries.py`, `docs/ROADMAP.md` | beide koennen Regeln/Statuszeilen geaendert haben. |
+| Datei | Befund im gemergten #170-Stand | Konsequenz fuer #172 |
+|---|---|---|
+| `fermentation_touch_workspace.hpp/.cpp` | `HeaderWebAccess`-Seite, `NavigateWebAccess`, `OpenWebProvisioningWindow`, Press-Feld `openWebProvisioningWindow` vorhanden; `HeaderLanguage` Slot 3 = `web-access` | Slot 3 bleibt; S3 ergaenzt nur Zeilen; S10 verlinkt per vorhandener Aktion `NavigateWebAccess` |
+| `fermentation_ui_commands.hpp/.cpp` | `operation`-Variant enthaelt `…OpenWebProvisioningWindowCommand`; `FermentationUiDetailStatus` hat zwei `WebProvisioningWindow*`-Werte, kein neuer Detail-Variant noetig | #172 ergaenzt Operation-Varianten (`SetDisplayLanguage` usw.) und Bridge-Funktionen, keine neuen Detail-Varianten |
+| `main/fermentation_ui_press_dispatcher.cpp` | eigener `if`-Zweig `openWebProvisioningWindow` (Z. 62-72); `transitionAction`/`programEdit` weiterhin `UnavailableNoOwner` (Z. 89-99) | #172 aendert nur den bestehenden `transitionAction`/`programEdit`-Zweig und ergaenzt eigene Zweige |
+| `main/fermentation_ui_renderer.cpp` | **`HeaderLanguage`-Hit-Zone bereits vorhanden** (`kHeaderLanguageHitRect{176,0,44,32}`, `targetAt` Z. 636-642, Tests); `HeaderWebAccess`-Seiteninhalt (Z. 422-433); `HeaderClock`-Zone fehlt weiterhin; Programmliste unveraendert | D4 angepasst: Sprachzone wiederverwendet, nur Uhr-Zone neu; Programmlisten-Layout (S1) unveraendert geplant |
+| `fermentation_ui_text.cpp` | Tabellengroesse `70U` in drei Arrays | #172-Eintraege setzen auf `70U` auf (F13) |
+| `fermentation_application.hpp/.cpp` | `ApplicationCallSerializer` (rekursiv, jede oeffentliche Methode betritt ihn), `AuthOperationGate`, `webAccessState()`, `openWebProvisioningWindow()`, neue `begin()`-Overloads mit KDF/Replay-Digest; `applyNetworkMode` unveraendert (Muster, jetzt Z. 778) | neue Methoden betreten den Serializer (D5); `applyNetworkMode` bleibt unberuehrt; Auth-/Session-/Web-Owner werden nicht beruehrt |
+| `main/app_main.cpp` | nur Komposition (KDF, Replay-Digest) ergaenzt; Locale-/Zeitzonenkopie fuer `HeaderNetwork` unveraendert (Z. 482-487, 511-532) | D11 unveraendert gueltig (F10) |
+| `FermentationUiSnapshot` / Projector | neues Feld `webAccess` (Application-owned, nur Anzeige) | wird unveraendert gelesen, nicht dupliziert |
+| `configuration_service.*`, `configuration_graph.*`, `fermentation_ui_editing.*` | im #170-Diff **nicht** enthalten; ausser `applyNetworkMode` ruft kein Application-/Web-Code `beginPreview`/`installPreview`/`confirmPreview` auf (Web nutzt nur `prepareEnvelope` mit `UiSurface::WebInterface`) | F14 und D5 („genau ein Pfad“) bleiben gueltig; Abschnitt 10 unveraendert |
+| `scripts/check_architecture_boundaries.py`, `check_build_profiles.py`, `sdkconfig.defaults`, `platformio.ini` | erweitert um `cjson`/`mbedtls` und `CONFIG_CJSON_NESTING_LIMIT=4` | keine Konfliktflaeche; #172 fuehrt keine neue Abhaengigkeit ein |
+| `docs/ROADMAP.md` | PR-#174-Zeile steht auf `main` bereits auf `MERGED`, #170-Zeile aktuell | nur #172-Zeile ergaenzt, Stand-Datum aktualisiert |
 
-Nach dem #170-Merge: Plan-PR rebasen, Konfliktflaechen und vorhandene
-#170-Application-/Serializer-/UI-Vertraege erneut pruefen, Planstatus und
-`docs/ROADMAP.md` aktualisieren und eine **neue exakte Plan-SHA** fuer die
-Independent Fix Verification und Ownerfreigabe vorlegen. Vor jedem
-Implementations-PR wird der Stand erneut revalidiert.
+RAM/Stack: LVGL-Pool (`49152`) und Main-Task-Stack (`24576`) sind unveraendert;
+der #170-Hardwarenachweis nennt keinen offenen Ressourcenblocker
+(`OPEN_RESOURCE_BLOCKERS=0`, 1696-B-Follow-up nicht reproduziert und
+nicht blockierend). D10 bleibt: keine vorsorgliche RAM-/LVGL-/HTTP-Optimierung.
+
+Vor jedem Implementations-PR wird der Stand erneut revalidiert.
 
 ## 10. Gemeinsame Application-Owner fuer #27
 
@@ -739,7 +791,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 |---|---|---|
 | S1 | anwendbar | nur Katalog |
 | S2 | `NOT_APPLICABLE` | keine Meldungen (F18) |
-| S3 | anwendbar | Persistenz ueber Neustart pruefbar |
+| S3 | anwendbar | Persistenz ueber Neustart pruefbar; zusaetzlich Hardware-Log vor/nach Sprachcommit (D10) |
 | S4 | anwendbar | reine Anzeige, `HH:MMZ` passt ins Uhrfeld |
 | S5 | `NOT_APPLICABLE` | `WaitingForProduct` ohne Regelkreis nicht erreichbar (F15) |
 | S6 | anwendbar | reine Konfiguration; zusaetzlich Hardware-Log (D10) |
@@ -752,7 +804,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 
 | Risiko | Gegenmassnahme |
 |---|---|
-| Config-Commits sind unter Netz-/RAM-Last schon einmal an OOM gescheitert (PR #174). | Keine prophylaktische Eviction (D10, `FURTHER_PROACTIVE_RAM_OPTIMIZATION=NO`); S6/S10 mit Steady-State-/Resource-Regression und spaeterem Hardware-Log; nur bei reproduziertem neuem OOM ein eigener gezielter Fix. |
+| Config-Commits sind unter Netz-/RAM-Last schon einmal an OOM gescheitert (PR #174). | Keine prophylaktische Eviction (D10, `FURTHER_PROACTIVE_RAM_OPTIMIZATION=NO`); S3/S6/S10 mit Steady-State-/Resource-Regression und spaeterem Hardware-Log; nur bei reproduziertem neuem OOM ein eigener gezielter Fix. |
 | F14: ein bestaetigtes Programm-Preview scheitert voraussichtlich an falschen Wire-Werten. | S6 beginnt mit einem fehlschlagenden Bestaetigungs-/Reload-Test; Korrektur mit denselben kanonischen Werten wie `applyNetworkMode`. |
 | `WaitingForProduct` ist im Produktbuild ohne Regelkreis kaum erreichbar (F15); Laufmeldungen haben keinen Erzeuger (F18). | Nativer Nachweis; Hardware-Nachweis je Slice gemaess 11.1; im PR ausgewiesen; O9. |
 | Verwaltungsauswahl (D12) aendert den bestehenden `selectProgram`-Vertrag. | Bewusste Testanpassung in S1, im PR als Vertragsaenderung ausgewiesen. |
@@ -766,13 +818,36 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 
 ## 13. Abschluss dieser Revision
 
-Revision 2 ist der vollstaendige Planstand nach dem Korrekturauftrag zu
-PR #175. Es erfolgen keine Produktaenderungen, keine Aenderungen an PR #170 und
-keine Aenderungen an `.codex/config.toml`. Naechste Schritte: PR #170
-integrieren, diesen Plan-PR rebasen und revalidieren, neue exakte Plan-SHA zur
-Independent Fix Verification und Ownerfreigabe vorlegen.
+Revision 3 ist der vollstaendige Planstand nach Rebase auf `main` nach PR #170
+und Revalidierung gegen den gemergten Code. Es erfolgen keine
+Produktaenderungen, keine Aenderungen an PR #170 und keine Aenderungen an
+`.codex/config.toml`.
 
-`docs/ROADMAP.md` fuehrt die Zeile fuer PR #174 noch als `OPEN_DRAFT`, obwohl
-der PR gemergt ist (`8a734f62836f8c57263c76ceebfc36a49f4af77c`). Dieser Plan
-aendert diese Zeile nicht, um die owner-gepflegten Detailnachweise nicht
-teilweise zu editieren (Owner-Hinweis an die Roadmap-Pflege).
+```text
+PR170=MERGED
+PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
+PR175_REBASE=PASS
+PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
+PRODUCTION_CODE_CHANGED=NO
+IMPLEMENTATION=NOT_STARTED
+OWNER_DECISIONS_O1_TO_O9=PENDING
+IMPLEMENTATION_AUTHORIZATION=NO
+ACTUATOR_RELEASE=NO
+```
+
+Aenderungen gegenueber Revision 2 (Delta durch #170):
+
+- F1/D4/S3/2.2/2.3: `HeaderLanguage`-Hit-Zone ist Bestand und wird
+  wiederverwendet; S4 baut nur die Uhr-Zone; S4 ist nicht mehr von S3
+  abhaengig.
+- S3/S10/O1: `HeaderLanguage` Slot 3 `web-access` bleibt; Settings verlinkt
+  auf den bestehenden `HeaderWebAccess`-Owner; der Slot-3-Uebergangspfad entfaellt
+  atomar in S10 (D13).
+- D5: neue Application-Methoden betreten `ApplicationCallSerializer`.
+- F13: Textarrays `70U`; Zeilenbezuege auf `BASE_SHA` aktualisiert.
+- D10: Baseline und #170-Referenznachweis ergaenzt, keine neue Optimierung.
+- Abschnitt 9: Konfliktflaechen gegen gemergten Stand beantwortet.
+
+O2–O9 sind gegen den Code unveraendert gueltig; O1 ist um die
+Webzugang-Zielstruktur (D13) ergaenzt. Naechster Schritt: Independent Plan Review der neuen exakten
+Plan-SHA und ausdrueckliche Ownerentscheidung O1–O9.
