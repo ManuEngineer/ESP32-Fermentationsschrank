@@ -7,8 +7,8 @@ ISSUE=172
 SCOPE=R1_LOCAL_TOUCH_UI_FUNCTIONAL_COMPLETION
 BASE_BRANCH=main
 BASE_SHA=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
-PLAN_REVISION=3
-PLAN_STATUS=REBASED_AND_REVALIDATED_AGAINST_MERGED_PR170_WAITING_INDEPENDENT_PLAN_REVIEW
+PLAN_REVISION=4
+PLAN_STATUS=OWNER_DECISIONS_O1_TO_O9_INCORPORATED_WAITING_PLAN_FIX_VERIFICATION
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PR171=MERGED
@@ -19,20 +19,20 @@ PR167=SUPERSEDED_REFERENCE_ONLY
 PR175_REBASE=PASS
 PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
 PRODUCTION_CODE_CHANGED=NO
-OWNER_DECISIONS_PENDING=9
-OWNER_DECISIONS_O1_TO_O9=PENDING
-OWNER_RECOMMENDATIONS_O1_TO_O9=RECOMMENDED_PENDING_OWNER_CONFIRMATION
+OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
+OWNER_APPROVED_PLAN_SHA=NONE
+O2_INTERIM_HEADER_DISPLAY=OPEN_OWNER_CLARIFICATION
 PR175_CORRECTION_ORDER=B1_TO_B6_INCORPORATED
 ACTUATOR_RELEASE=NO
 ```
 
 Dieser Plan ist das Ergebnis des Audits aus dem Auftrag
 `Issue172_Plan_Audit_Auftrag.md`. Er enthaelt **keine** Produktimplementation.
-Revision 3 ist der auf den gemergten PR #170 (`02b7523b…`) rebasete und gegen
-den tatsaechlichen Code revalidierte Stand (Abschnitt 9). Die Ownerempfehlungen
-O1–O9 bleiben **empfohlene Entscheidungen, Owner-Bestaetigung ausstehend**; sie
-sind keine beschlossenen Ownerentscheide. Die Umsetzung beginnt erst nach
-Independent Plan Review und ausdruecklicher Ownerfreigabe der exakten Plan-SHA.
+Revision 4 arbeitet die abgeschlossenen Ownerentscheidungen O1–O9 in den auf
+den gemergten PR #170 (`02b7523b…`) rebaseten und revalidierten Plan ein
+(Abschnitt 5, 9). Die Ownerentscheidungen gelten; die Umsetzung beginnt erst
+nach Independent Fix Verification dieses Deltas und ausdruecklicher
+Ownerfreigabe der exakten Plan-SHA (`IMPLEMENTATION_AUTHORIZATION=NO`).
 Dieser PR ist ein **reiner Plan-PR** (Praezedenzfall PR #171); die
 Implementations-PRs entstehen danach von `main` (Abschnitt 6). Zeilenbezuege in
 Abschnitt 2 gelten fuer `BASE_SHA`.
@@ -70,10 +70,10 @@ Nicht-Ziele (unveraendert aus dem Issue):
 | F5 | Der Dispatcher meldet `transitionAction` und `programEdit` als `UnavailableNoOwner`; alle anderen Press-Payloads sind verdrahtet. | `main/fermentation_ui_press_dispatcher.cpp:89-99` |
 | F6 | Die Programmliste zeichnet immer die Eintraege 0..2 (18-px-Zeilen) und ignoriert `pager.currentIndex`; Auf/Ab aendert nur den Zaehler `n/N`. 18 px sind fuer resistives Touch zu klein (BottomSlots: 40 px). | `fermentation_ui_renderer.cpp:480-492`, `:523-530` |
 | F7 | `NavigateMessageDetail` waehlt stets die **erste** aktive, unaufgeloeste Meldung und ignoriert den Pager. | `fermentation_touch_workspace.cpp:1160-1172` |
-| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt UTC (`formatClockText`). Eine Zeitzonen-„Auswahl“ waere ein No-op, obwohl das Issue die Aenderung der Zeitzone in normalen Einstellungen zulaesst. Die unmarkierte UTC-Anzeige darf nicht bleiben; S4 kennzeichnet sie (`HH:MMZ`). | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:185-198` |
+| F8 | Der Zeitzonenkatalog enthaelt genau einen Eintrag (`Europe/Zurich`); `PreparedTimeZone` traegt nur den Bezeichner, keinen Offset; der Port enthaelt ausdruecklich keine Zeitzonendatenbank. Der Header zeigt die UTC-formatierte Zeit (`formatClockText`); eine echte lokale Uhrzeit ist ohne UTC→Local-Aufloesung nicht darstellbar, eine Zeitzonen-„Auswahl“ waere ein No-op. Gemaess O2 baut #172 **keine** neue IANA-/DST-/Aufloesungsinfrastruktur und keinen Fake-/Fallback-Lokalzeitmechanismus; die technische Aufloesung ist ein eigener nachgelagerter Scope auf Basis der UTC-Zeitplattform (#126). | `firmware_configuration_catalog.cpp:8-9`, `time_zone_resolver.hpp:15-26`, `fermentation_ui_renderer.cpp:185-198` |
 | F9 | `FermentationUiPresentationSource` enthaelt `displayLocale`, `canonicalTimeZoneId`, `programCatalog`, aber **kein** `deviceName`. | `fermentation_ui_models.hpp:145-149` |
 | F10 | `app_main` uebergibt `initialDisplayLocale` / `initialTimeZoneId` (beim Boot erfasst) an `renderGate.renderRequired()` und als Locale/Zeitzone der Netzwerkseite. Auf `HeaderNetwork` ist die Presentation-Kopie verdraengt; `get()` liefert dort die Defaults (Englisch). Nach einem Sprachwechsel zeichnet der Render-Key nicht neu bzw. die Netzwerkseite bliebe bis zum Reboot in der alten Sprache. | `main/app_main.cpp:442-443`, `:482-487`, `:511-532`; `fermentation_ui_presentation_cache.hpp` (`update`, `evict`, `get`) |
-| F11 | Es gibt keine Settings-/Menue-Seite in `FermentationUiPage`. Die vier Home-Slots sind belegt (Standby: `start` und `programs` zeigen beide auf die Programmliste). | `fermentation_touch_workspace.cpp:317-331` |
+| F11 | Es gibt keine Settings-/Menue-Seite in `FermentationUiPage`. Die vier Standby-Home-Slots sind `start` und `programs` (beide → Programmliste, ununterscheidbar), `status`, `service`. | `fermentation_touch_workspace.cpp:317-331` |
 | F12 | `SensorSelectionUserAction` wird nur von `setSensorSelectionAction()` gesetzt. Es gibt **keine reine Abfrage** „zulaessige Aktionen“: die Zulaessigkeit entscheidet `decideApplySensorSelectionAction` ueber `applySensorSelectionDecision` mit Program-Kontext, Plausibilitaet und `criticalSafetyEventPending`; `CommandDecision` traegt einen kompletten `RunCommandState`. `MessageView` traegt aber `code`/`decisionRequired` (`MessageCode::UserDecisionRequired`). | `run_commands.cpp:1343-1418`, `fermentation_ui_models.hpp:58-60` |
 | F13 | Die Textpacks (DE/ES/EN) existieren; jede neue Taste braucht Eintraege in allen drei Packs; die Tabellengroesse ist als Literal in drei Arrays kodiert und betraegt seit #170 `70U` (fuenf `web-access*`-Schluessel). | `fermentation_ui_text.cpp:22`, `:102`, `:184` |
 | F14 | **Latenter Defekt (durch Code-Lesung belegt, nicht ausgefuehrt):** `applyProgramEditPreview` installiert mit `{LocalDisplay, 0U}` und `{NormalEdit\|StandardProgramReset, 0U}`. `validChangeOrigin/Operation` verlangen `LocalDisplay==2U`, `NormalEdit==1U`, `StandardProgramReset==6U`; `encodeConfigurationManifestPayload` lehnt jedes Manifest mit `!isPlausible` ab. Kein Test bestaetigt ein von `applyProgramEditPreview` erzeugtes Preview (die Tests brechen es ab oder lehnen es vorher ab), es gibt keinen produktiven Aufrufer. Ein Commit eines solchen Previews scheitert daher voraussichtlich bei der Persistierung. `applyNetworkMode` nutzt die kanonischen Werte `{LocalDisplay,2U}`/`{NormalEdit,1U}`. | `fermentation_ui_editing.cpp` (`applyProgramEditPreview`), `configuration_graph.cpp:28-58,108-138`, `configuration_graph_codec.cpp:88-100`, `test_configuration_service.cpp:773-790,833-880` |
@@ -87,8 +87,8 @@ Nicht-Ziele (unveraendert aus dem Issue):
 | # | Luecke | Ist-Pfad | Bestehender Owner | Fehlt | Slice |
 |---|---|---|---|---|---|
 | 1 | Header-Sprache | Header zeigt Sprachcode; Hit-Zone existiert seit #170 (F1); `Workspace::press(HeaderLanguage)` navigiert (`:1310`); Seite `HeaderLanguage` hat nur Cross-Navigation inkl. #170-Slot 3 `web-access` (`:757-764`) | `UserConfiguration.displayLanguageId` via `ConfigurationService`; Muster `applyNetworkMode` (`fermentation_application.cpp:778-…`, mit `applicationCallSerializer_.enter()`); Sprachkatalog `kLanguages{de,es,en}` | Auswahlzeilen, Application-Entry, eviction-feste Locale-Kopie (F10); **keine** neue Hit-Zone | S3 |
-| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:803-809`); Uhr nicht treffbar | `ITimeSource`/`ClockViewInput{trustedUtc, tz}`; Zeitzonenkatalog (F8) | Hit-Zone, Status-Inhalt; Zeitzonenauswahl nicht sinnvoll moeglich (O2) | S4 |
-| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite, Einstieg (O1), Geraetename-Editor, Application-Entry; Link auf die bestehende `HeaderWebAccess`-Seite (kein neuer Web-Owner) | S10 |
+| 2 | Header-Uhr/Zeitzone | `HeaderClock` Seite nur Cross-Navigation (`:803-809`); Uhr nicht treffbar | `ITimeSource`/`ClockViewInput{trustedUtc, tz}`; Zeitzonenkatalog (F8) | Hit-Zone, ein gemeinsamer Screen `Zeit / Zeitzone` (auch ueber `Einstellungen` erreichbar); keine Aufloesungsinfrastruktur (O2) | S4 |
+| 3 | Normale Settings | keine Seite (F11); `UserConfiguration` hat `displayLanguageId`, `timeZoneId`, `deviceName`, `activeThemeId`, `networkMode` | `UserConfiguration` / `validateUserConfiguration` | Seite `Einstellungen` (Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒), Standby-Slot `settings` (O1), Geraetename-Editor, Application-Entry; Links auf bestehende Seiten/Owner (kein neuer Web-/Service-Owner) | S10 |
 | 4 | Programmlisten-Auswahl | Liste gezeichnet; `selectProgram()` ohne Aufrufer (F3); kein Row-Target (F1/F2); Pager-Fenster fehlt (F6) | `Workspace::selectProgram` → `ProgramSummary` | Content-Target, Pager-Fenster, Zeilenhoehe | S1 |
 | 5 | Programmverwaltung | Aktionen (Reset/Uninstall/Delete/Save) erzeugen `programEdit`-Request; Dispatcher: `UnavailableNoOwner` (F5); Helfer mit falschen Wire-Werten (F14) | `applyProgramEditPreview()` + `ConfigurationService` + `ProgramCatalogRevision`-Staleness | `FermentationApplication`-Entry, Wire-Wert-Korrektur, Dispatcher | S6 |
 | 6 | Programmeditor/Startwerte | `setStartCandidate`, `setProgramEditCandidate` nur Tests (F3); Edit-Modelle ohne Konsument (F4) | `validateProgram`, `makeFermentationUiProgramList`, `openProgramEditSession`, Preview-Pfad, `prepareStartProgram` | Editor-Seiten, Tastenfeld/Tastatur, Feldzuordnung | S8, S10 |
@@ -110,9 +110,9 @@ Slot-Nummern `0..3` links nach rechts.
 | Header | Logo | nicht interaktiv (UI-11) | – | OK (bewusst) |
 | Header | Sprache | gezeichnet, treffbar (#170, → `HeaderLanguage`); Seite ohne Auswahl | `UserConfiguration` | NAV; Auswahl DEAD → S3 |
 | Header | WLAN | → `HeaderNetwork` | #164 | OK |
-| Header | Uhr | gezeichnet, nicht treffbar, UTC unmarkiert | `ClockViewInput` | DEAD → S4 (inkl. Kennzeichnung `HH:MMZ`) |
-| Home Standby | 0 `start`, 1 `programs` | → `ProgramList` (doppelt belegt, F11) | – | NAV; Slot 1 wird `settings` (O1-B, S10) |
-| Home Standby | 2 `status`, 3 `service` | → `Status`, `Service` (nur wenn `service.available`) | #28 fuer Inhalt | NAV / DEF → #28 |
+| Header | Uhr | gezeichnet, nicht treffbar | `ClockViewInput` | DEAD → S4 (Hit-Zone → gemeinsamer Screen `Zeit / Zeitzone`; Header-Text unveraendert, O2) |
+| Home Standby | 0 `start`, 1 `programs` | → `ProgramList` (beide, ununterscheidbar, F11) | – | NAV; wird `Start` (Auswahl/manuell) und `Programme` (Verwaltung) mit getrennter Listenabsicht (O1, D14, S1) |
+| Home Standby | 2 `status`, 3 `service` | → `Status`, `Service` (nur wenn `service.available`) | #28 fuer Inhalt | NAV; Slot 3 wird `settings` (O1, D14, S10); `Service` wandert atomar unter `Einstellungen` (geschuetzt, Regeln unveraendert) |
 | Home ActiveRun | `stop`, `programs`, `details`, `status` | → `StopDialog`, `ProgramList`, `Process`, `Status` | – | NAV; Inhalt → S7 |
 | Home Waiting | 0 `continue` | `ProductInsertedConfirmed` → `UnavailableNoOwner` (F5) | `persistTransition` | DEAD → S5 |
 | Home Waiting (Nutzerentscheidung) | 0 | → `MessageDetail` | Messages | NAV → S2 |
@@ -154,13 +154,17 @@ Slot-Nummern `0..3` links nach rechts.
 | HeaderLanguage | 1 `network`, 2 `clock`, 3 `web-access` (provisorischer #170-Uebergangspfad) | NAV; Slot 3 → `HeaderWebAccess` | – | NAV; Auswahl → S3; Slot 3 bleibt in PR A–C und entfaellt atomar in S10 (D13) |
 | HeaderWebAccess | 0 `back`, 1 `web-access-open` | `OpenWebProvisioningWindow` → `FermentationApplication::openWebProvisioningWindow()`, Anzeige `snapshot.webAccess` | #27 / `FermentationApplication` | OK (#170, hardware-verifiziert); unberuehrt |
 | HeaderNetwork | alle | verdrahtet | #164 | OK |
-| HeaderClock | 1 `language`, 2 `network` | NAV; kein Inhalt | `ClockViewInput` | DEAD → S4 |
+| HeaderClock | 1 `language`, 2 `network` | NAV; kein Inhalt | `ClockViewInput` | DEAD → S4 (derselbe Screen wie `Einstellungen → Zeit / Zeitzone`) |
 
-Zurueckgestellte Punkte ohne bestehendes Folge-Issue: **Zeitzonenauswahl/
-Lokalzeit** (O2) und **Recovery-Zeitkorrektur als Benutzerpfad** (4.1). Der
-Agent legt kein Issue eigenmaechtig an. Der Plan beantragt beim Owner je ein
-Folge-Issue oder einen `FUTURE_SCOPE.md`-Eintrag (O2, 4.1). Bis dahin nennt die
-Seite den Grund „zurueckgestellt“ (kein Funktionsversprechen).
+Zurueckgestellte Punkte ohne bestehendes Folge-Issue: **technische
+Zeitzonenaufloesung/Lokalzeit** (O2, eigener nachgelagerter Scope auf Basis
+#126; es existiert noch kein Issue) und **Recovery-Zeitkorrektur als
+Benutzerpfad** (4.1). Der Agent legt kein Issue eigenmaechtig an; der Owner
+legt je ein Folge-Issue an oder benennt einen `FUTURE_SCOPE.md`-Eintrag.
+Der spaetere Expertenmodus fuer technische Laufparameter (O5) ist nicht R1 und
+nicht #172; er ist im Future-Scope-Tracking-Issue #163 dokumentiert. Bis dahin
+nennt die jeweilige Seite den Grund „zurueckgestellt“ (kein
+Funktionsversprechen).
 
 ### 2.4 Abdeckung durch bestehende Tests (Bestand, wird erweitert)
 
@@ -335,6 +339,26 @@ Owner (`openWebProvisioningWindow()`/`webAccessState()`); keine zweite
 Auth-/Provisionierungslogik, keine neue WebAccess-Domain. Tests in S10: Slot 3
 entfernt, `Webzugang` erreichbar, `OpenWebProvisioningWindow` unveraendert.
 
+**D14 – Standby-Navigation `Start | Programme | Status | Einstellungen` (O1).**
+Ziel-Home im Standby: Slot 0 `start` (neuer Lauf: Programmauswahl, manueller
+Betrieb), Slot 1 `programs` (Programmverwaltung), Slot 2 `status`, Slot 3
+`settings`. `Service` ist kein Home-Slot mehr, sondern ein geschuetzter
+Eintrag `Service 🔒` unter `Einstellungen`; Service bleibt technisch ein
+geschuetzter Plattformbereich mit unveraenderten PIN-/Safety-Regeln und
+unveraendertem Owner (#28), nur der Navigationsort aendert sich (der Eintrag
+bleibt wie heute nur bei `service.available` aktiv, sonst mit dem bestehenden
+`unavailableReason`). Zur Unterscheidung von `Start` und `Programme` haelt der
+Workspace eine kleine Listenabsicht (`Start`/`Manage`, ein Enum, kein
+Framework): `Start` → Zeilentreffer → `ProgramSummary` (Startpfad, `manual`-Slot
+wie heute); `Manage` → Zeilentreffer → `ProgramActions` (bearbeiten, kopieren,
+neu, loeschen ueber die vorhandenen Aktionen/S6-Entry), ohne `manual`-Slot.
+Home-Modi ausser Standby bleiben unveraendert (`programs` im ActiveRun oeffnet die Liste weiter mit `Start`). Der `Service`-Umzug erfolgt
+atomar mit dem Einhaengen von `Einstellungen` (S10, ein Commit), damit zu keinem
+Zwischenstand der Service-Bereich unerreichbar ist; bis dahin bleibt Slot 3
+`service`. Der kanonische Seitenstapel fuer `Service`/`Pin`/`Recovery`-Pfade wird
+auf `Home → Settings → Service` angepasst (Test). Der Plan-Review prueft die
+Listenabsicht als kleinste Loesung der Start/Programme-Trennung.
+
 ## 4. Zurueckgestellt und geschlossen mit Beleg
 
 ### 4.1 Geschlossen mit Beleg (keine Ownerentscheidung noetig)
@@ -347,38 +371,35 @@ entfernt, `Webzugang` erreichbar, `OpenWebProvisioningWindow` unveraendert.
   deaktiviert/ausgeblendet mit Grund „nicht verfuegbar“; `setRecoveryTime
   CorrectionSeconds` bleibt Testhilfe. Das Folge-Issue bzw. der Future-Scope-
   Eintrag wird beim Owner **beantragt** (nicht eigenmaechtig angelegt).
-- **Sensorentscheidung zurueckgestellt (O9-A):** #172 bindet Meldungsauswahl
-  sowie Ack/Mute an, aber **keine** pauschal aktivierte Drei-Aktions-Liste. Die
-  Zulaessigkeit von `ContinueWithAir`/`ReturnToProduct`/`RecheckProduct`
-  haengt von Sensorphase, Plausibilitaet und Safety-Zustand ab
-  (`decideApplySensorSelectionAction`); `MessageView` enthaelt diese
-  authoritative Eligibility nicht, und es gibt keinen Produktions-Erzeuger fuer
-  `UserDecisionRequired` (F18). Ein eigenes Follow-up besitzt Erzeuger **und**
-  authoritative Aktionsprojektion. Nur falls der Owner Sensorentscheidungen
-  ausdruecklich in #172 behalten will, ist eine schmale Application-owned
-  Eligibility-Projektion zulaessig (materielle Planrevision); eine duplizierte
-  UI-Regelmatrix ist ausgeschlossen. `setSensorSelectionAction` und der
-  vorhandene Slot 3 `continue` bleiben unberuehrt.
+- **Sensorentscheidung (O9):** #172 implementiert Meldungsauswahl,
+  Detailansicht, `Quittieren` und `Stummschalten`. Fachliche Aktionsbuttons
+  (`ContinueWithAir`/`ReturnToProduct`/`RecheckProduct`) werden nur angezeigt,
+  wenn ein kanonischer Owner die konkrete zulaessige Aktion/Eligibility liefert;
+  die Zulaessigkeit haengt von Sensorphase, Plausibilitaet und Safety-Zustand ab
+  (`decideApplySensorSelectionAction`), `MessageView` enthaelt sie nicht, und es
+  gibt keinen Produktions-Erzeuger fuer `UserDecisionRequired` (F18). Eine
+  UI-eigene Sensor-/Safety-Aktionsmatrix ist ausgeschlossen. Erzeuger **und**
+  Aktionsprojektion sind ein separater Follow-up-Scope.
+  `setSensorSelectionAction` und der vorhandene Slot 3 `continue` bleiben
+  unberuehrt.
 
-## 5. Empfohlene Ownerentscheidungen (Bestaetigung ausstehend)
+## 5. Ownerentscheidungen (beschlossen)
 
-Die Werte stammen aus den Ownerempfehlungen des Korrekturauftrags zu PR #175.
-Sie sind **nicht** als Ownerentscheid beschlossen (`pending owner
-confirmation`); der Plan arbeitet nur vorlaeufig mit ihnen. Nach ausdruecklicher
-Ownerbestaetigung werden sie als beschlossen markiert. Der Agent trifft keine
-davon selbst, `IMPLEMENTATION_AUTHORIZATION=NO` bleibt.
+O1–O9 sind vom Owner abgeschlossen und in diesen Plan uebernommen. Das ist
+keine Implementationsfreigabe: `IMPLEMENTATION_AUTHORIZATION=NO` bis der Owner
+die aktualisierte exakte Plan-SHA freigibt.
 
-| Nr. | Gegenstand | Empfohlene Entscheidung (ausstehend) | Betrifft |
+| Nr. | Gegenstand | Entscheidung | Betrifft |
 |---|---|---|---|
-| O1 | Einstieg normale Einstellungen | **B**: der redundante Standby-Home-Slot 1 `programs` wird `settings`; Slot 0 `start` bleibt Zugang zur Programmliste. Andere Home-Modi unveraendert. Betrifft die Home-Aktionsmatrix (`test_local_touch_ui`, SIM-26-01). Revalidiert gegen #170: Standby-Slots unveraendert (`start`/`programs` doppelt belegt). Webzugang: Zielstruktur `Einstellungen` = Sprache, Zeit/Zeitzone, Geraetename, Netzwerk, Webzugang; der provisorische `HeaderLanguage`-Slot 3 entfaellt atomar mit dem Einhaengen in S10 (D13, Korrekturauftrag B3). | S10 |
-| O2 | Zeitzone | **A**: lesend; keine vorgetaeuschte Auswahl, keine neue Zeitdatenbank. Header und Uhrseite kennzeichnen UTC eindeutig (`HH:MMZ`). Lokale IANA-Zeit/Offset/DST als eigener spaeterer Scope (Folge-Issue oder `FUTURE_SCOPE.md`, vom Owner anzulegen). | S4, S10 |
-| O3 | Bildschirmtastatur | **A**: lokale Tastatur fuer Programmname, Notiz und Geraetename. Die HOME_WIFI-Credentialtastatur bleibt deferred und wird nicht aufgenommen (F16). | S10 |
-| O4 | Geraetename | **A**: nur ohne aktiven Lauf; UI-Wert nach Commit sichtbar; SSID/Hostname/QR erst beim naechsten normalen Netzwerkstart; kein Auto-Restart. | S10 |
-| O5 | Manuelle Qualifikations-/Technikwerte | **B**: Zielband, Qualifikationsdauer, maximale Zielerreichungszeit und vergleichbare Grenzwerte kommen aus einem spaeter freigegebenen Commissioning-/Produktowner (#34/#35); keine Benutzereingabe, keine erfundenen Defaults. | S9 |
-| O6 | PR-Schnitt | **A modifiziert**: Plan-PR plus vier Implementations-PRs, **sequenziell A → B → C → D**, jeweils von aktuellem `main`. | alle |
-| O7 | Reihenfolge #170/#172 | **B**: PR #170 zuerst abschliessen/mergen; danach PR #175 auf neuen `main` rebasen, revalidieren, erst dann exakte Plan-SHA freigeben. | alle |
-| O8 | (a) Reset-Slot, (b) SIM-26-Zuordnung | (a) **A**: `ProgramSummary` Slot 3 wird `reset`, solange der Laufkandidat von den Programmwerten abweicht, sonst `status`. (b) die falsche SIM-26-Trace-Zuordnung wird in S11 als begrenzte Doku-Korrektur berichtigt; kein separates Issue. | S8, S11 |
-| O9 | Meldungen/Sensorentscheidung | **A**: #172 liefert Meldungsauswahl und Ack/Mute; der fehlende RuntimeMessage-/Sensorentscheidungs-Erzeuger **und** die Sensoraktions-Eligibility sind ein eigenes Follow-up (oder eine spaeter ausdruecklich ownerfreigegebene #172-Erweiterung). | S2 |
+| O1 | Standby-Navigation / Einstellungen | Standby-Home `Start \| Programme \| Status \| Einstellungen` (D14). `Start`: startorientierter Pfad (Programmauswahl/manueller Betrieb); `Programme`: Programmverwaltung; `Status`: Geraete-/Betriebsstatus; `Einstellungen`: normale Geraetekonfiguration = Sprache, Zeit / Zeitzone, Geraetename, Netzwerk, Webzugang, Service 🔒. `Service` ist kein eigener Home-Slot mehr; Owner, PIN-/Safety-Regeln unveraendert, nur der Navigationsort aendert sich. `Webzugang` nutzt ausschliesslich den #170-Owner; der provisorische `HeaderLanguage`-Slot 3 entfaellt atomar in S10 (D13). | S1, S10 |
+| O2 | Zeit-UX / Scope-Trennung | Nur UX in #172: Tap auf die Header-Uhr oeffnet denselben Screen `Zeit / Zeitzone` wie `Einstellungen → Zeit / Zeitzone` (kein zweiter Zeit-Screen). Ziel ist, dass der Header echte lokale Uhrzeit zeigt; `HH:MMZ` ist keine gewuenschte R1-Enddarstellung. #172 implementiert **keine** IANA-/DST-/UTC→Local-Infrastruktur und keinen Fake-/Fallback-Lokalzeitmechanismus; die technische Aufloesung ist ein eigener nachgelagerter Scope auf Basis #126. Offene Klaerung: Header-Anzeige bis dahin (siehe S4). | S4, S10 |
+| O3 | Bildschirmtastatur | Eine gemeinsame lokale Tastatur fuer Programmname, Programmnotiz und Geraetename; einfache Modi Buchstaben/Ziffern/Symbole, ausreichend grosse Touchflaechen; Validierung und Laengenlimits bleiben bei den bestehenden Ownern; HOME_WIFI-SSID/-Passwort ausserhalb #172 (F16). | S10 |
+| O4 | Geraetename | Nur ohne aktiven Lauf aenderbar; nach erfolgreichem Commit lokal sofort sichtbar; Hostname/SoftAP-SSID/QR erst beim naechsten normalen Netzwerkstart; kein automatischer Neustart, keine erzwungene Netzwerkunterbrechung. | S10 |
+| O5 | Technische Laufparameter | Benutzer geben nur echte Laufwerte ein; technische Qualifikations-/Grenzwerte kommen aus einem kanonischen Produkt-/Commissioning-Owner; keine erfundenen Defaults; solange der Producer fehlt, Start fail-closed mit verstaendlichem Grund. Der spaetere Expertenmodus ist nicht R1/nicht #172 (Future-Scope-Tracking-Issue #163). | S9 |
+| O6 | PR-Schnitt | Vier strikt sequenzielle Implementations-PRs A → B → C → D, jeweils von aktuellem `main`; keine zusaetzliche Zerlegung ohne neuen Grund. | alle |
+| O7 | Reihenfolge #170/#172 | Erfuellt: #170 gemergt, #175 rebased und revalidiert. | alle |
+| O8 | (a) Reset-Slot, (b) SIM-26 | (a) `Zuruecksetzen` in `ProgramSummary` Slot 3 nur, wenn der Laufkandidat von den gespeicherten Programmwerten abweicht, sonst `Status`. (b) Falsche SIM-26-Trace-/Testzuordnung wird in S11 als begrenzte Doku-Korrektur berichtigt; kein separates Issue. | S8, S11 |
+| O9 | Meldungen / Sensorentscheidungen | #172: Meldungsauswahl, Detailansicht, `Quittieren`, `Stummschalten`; fachliche Aktionsbuttons nur, wenn ein kanonischer Owner die konkrete zulaessige Aktion/Eligibility liefert; keine UI-eigene Sensor-/Safety-Aktionsmatrix; fehlende Sensorentscheidungs-Producer separater Follow-up-Scope. | S2 |
 
 ## 6. PR-Schnitt und Gates
 
@@ -396,10 +417,10 @@ dieselben Grenzen wie S5/S6.
 
 | PR | Slices | Inhalt |
 |---|---|---|
-| A | S1–S4 | Touch-Navigation: Content-Target, Programmlistenauswahl, Meldungsauswahl, Header-Sprache, Header-Uhr |
+| A | S1–S4 | Touch-Navigation: Content-Target, Programmlistenauswahl, Meldungsauswahl, Header-Sprache, Header-Uhr (Hit-Zone, Screen `Zeit / Zeitzone`) |
 | B | S5–S6 | Application-Owner: ProductInserted, ProgramCatalog-Mutation, Wire-Wert-Korrektur |
 | C | S7–S9 | Seiteninhalte, Tastenfeld, Startwerte, manuelle Eingabe (Start fail-closed bis Technikwert-Producer) |
-| D | S10–S11 | Tastatur, Programmeditor, Settings, Dokumentation |
+| D | S10–S11 | Tastatur, Programmeditor, Settings (inkl. Webzugang- und Service-Umzug), Dokumentation |
 
 Jeder Implementations-PR zitiert die vom Owner freigegebene Plan-SHA und nennt
 seinen Slice-Bereich. Vor jedem PR-Start wird der Stand aus Abschnitt 9
@@ -426,7 +447,10 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Programmliste zeichnet `currentIndex…+2`; Treffer auf Zeile `r` ruft
   `selectProgram(entries[currentIndex+r].id)` → `ProgramSummary` mit D12:
   jeder installierte Eintrag ist waehlbar, nicht startbare zeigen den
-  `blockedReason` und lassen `confirm` deaktiviert. Keine LVGL-Fachlogik.
+  `blockedReason` und lassen `confirm` deaktiviert. Keine LVGL-Fachlogik. Listenabsicht `Start`/`Manage` (D14): `Start`
+  → `ProgramSummary`, `Manage` → `ProgramActions`. Standby-Slot 0 `start` oeffnet
+  die Liste mit `Start`, Slot 1 `programs` mit `Manage`; Standby-Slot 3 bleibt
+  `service` bis S10.
 - **Tests:** `test_device_ui_contracts` (Target-Validitaet),
   `test_renderer_boundary` (Hit-Test Zeilen/Randwerte, Fenster, Zeilenhoehe),
   `test_local_touch_ui` (Pager + Auswahl → `ProgramSummary`; nicht startbarer
@@ -434,7 +458,7 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   `selectProgram`-Erwartungen, D12), `test_press_dispatcher` (Auswahl liefert kein Payload),
   `test_ui_steady_state_allocations`.
 - **Abhaengigkeiten:** keine. Basis fuer S2, S3, S7–S10.
-- **Ownerentscheidung:** keine.
+- **Ownerentscheidung:** O1 (Listenabsicht, D14).
 
 ### S2 – Meldungsauswahl, Ack/Mute
 
@@ -450,14 +474,15 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   hat heute sieben Werte, im Umsetzungsschritt erneut gezaehlt). Ack/Mute laufen
   unveraendert ueber `prepareEnvelope` → `applyConfirmedPrepared`.
   **Keine** Sensoraktions-Zeilen und keine pauschale Drei-Aktions-Liste (4.1,
-  O9-A); Slot 3 bleibt wie heute (`fault-reset`, bzw. `continue` nur mit dem
-  unberuehrten Test-Setter).
+  O9); Slot 3 bleibt wie heute (`fault-reset`, bzw. `continue` nur mit dem
+  unberuehrten Test-Setter); fachliche Aktionsbuttons erscheinen nur bei
+  kanonischer Owner-Eligibility (O9), die heute fehlt.
 - **Tests:** `test_local_touch_ui` (Auswahl, Detail, Ack/Mute-Payload),
   `test_press_dispatcher` (Ack/Mute → `OwningOutcome`), `test_renderer_boundary`,
   `test_ui_steady_state_allocations`.
 - **Hardware:** Wegen F18 bleibt die Meldungsliste auf der Hardware leer; der
   Nachweis erfolgt nativ mit Fixtures, Hardware `NOT_APPLICABLE` (11.1).
-- **Abhaengigkeiten:** S1. **Ownerentscheidung:** O9 (A).
+- **Abhaengigkeiten:** S1. **Ownerentscheidung:** O9.
 
 ### S3 – Header-Sprache DE/EN/ES
 
@@ -496,24 +521,32 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Zweig), `FermentationUiCommand::operation` (+`SetDisplayLanguage`),
   Application-Serializer (D5).
 
-### S4 – Header-Uhr (UTC-Kennzeichnung und Statusseite)
+### S4 – Header-Uhr (Hit-Zone und gemeinsamer Screen `Zeit / Zeitzone`)
 
-- **Dateien/Owner:** Renderer `targetAt` (nur neue Uhr-Zone, D4) und `formatClockText`,
-  Workspace `HeaderClock`, Renderer-Inhalt, Textpacks.
-- **Verhalten:** Hit-Zone Uhr. Der Header zeigt die Uhrzeit **eindeutig als UTC**
-  (`HH:MMZ`; ohne vertrauenswuerdige Zeit unveraendert `--:--`). Die Seite zeigt
-  ausschliesslich vorhandene Werte: UTC-Zeit mit Kennzeichnung,
+- **Dateien/Owner:** Renderer `targetAt` (nur neue Uhr-Zone, D4), Workspace
+  `HeaderClock`, Renderer-Inhalt, Textpacks. `formatClockText` und der
+  Header-Text bleiben **unveraendert** (O2: kein `HH:MMZ`, kein neuer
+  Lokalzeit-/Fallbackmechanismus).
+- **Verhalten:** Hit-Zone Uhr oeffnet die Seite `HeaderClock`; sie ist der
+  einzige Zeit-Screen und wird zusaetzlich aus `Einstellungen → Zeit /
+  Zeitzone` (S10) per bestehender Aktion `NavigateClock` erreicht (kein zweiter
+  Zeit-Screen). Die Seite zeigt ausschliesslich vorhandene Werte:
   Vertrauensstatus (`trustedUtc` gesetzt oder nicht) und die kanonische
-  Zeitzonen-ID aus der Presentation-Quelle. Keine Auswahl (O2-A), keine neue
-  Zeitwahrheit, keine Zeitdatenbank, keine #126-Neuimplementierung; lokale
-  Zeit/IANA-Offset/DST ist eigener spaeterer Scope.
-- **Abnahmekriterium:** Die sechs Zeichen von `HH:MMZ` passen in das 52-px-
-  Uhrfeld (x=264..316) ohne Abschneiden (Hardware-/Renderer-Test).
-- **Tests:** `test_renderer_boundary` (`12:34Z`, `--:--`, Textbreite),
-  `test_local_touch_ui`, `test_ui_steady_state_allocations` (Render-Key nutzt
-  weiterhin die UTC-Minute).
+  Zeitzonen-ID aus der Presentation-Quelle. Keine Zeitzonenauswahl, keine neue
+  Zeitwahrheit, keine Zeitdatenbank, keine #126-Neuimplementierung. Die
+  technische UTC→Local-Aufloesung (und damit die echte lokale Header-Uhrzeit)
+  ist ein eigener nachgelagerter Scope auf Basis #126.
+- **Offene Ownerklaerung (blockiert S4 nicht):** Der Header zeigt bis zu diesem
+  Folge-Scope weiterhin die bestehende, nicht lokal umgerechnete Zeit (heute
+  ohne Kennzeichnung, F8). Der Plan fuehrt dafuer keine Darstellung neu ein
+  (weder `HH:MMZ` noch ein Ersatzmechanismus). Falls der Owner fuer die
+  Uebergangszeit eine andere Header-Anzeige will (z. B. `--:--` oder
+  Kennzeichnung), ist das eine ausdrueckliche Entscheidung.
+- **Tests:** `test_renderer_boundary` (Hit-Zone Randpixel 263/264, 319/320;
+  bestehende Uhrtext-Tests unveraendert), `test_local_touch_ui` (Tap → Seite,
+  derselbe Screen auch ueber Settings), `test_ui_steady_state_allocations`.
 - **Abhaengigkeiten:** S1 (Layout); keine `targetAt`-Kopplung mehr zu S3, da
-  die Sprachzone Bestand ist. **Ownerentscheidung:** O2 (A).
+  die Sprachzone Bestand ist. **Ownerentscheidung:** O2.
 
 ### S5 – `ProductInsertedConfirmed`-Owner
 
@@ -543,7 +576,7 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   unveraendert, `test_process_state_machine` und
   `test_run_persistence_coordinator` Konsument.
 - **Abhaengigkeiten:** PR A gemergt (sequenziell, Abschnitt 6).
-  **Ownerentscheidung:** keine (die SIM-26-Zuordnung berichtigt S11, O8-b).
+  **Ownerentscheidung:** keine (die SIM-26-Zuordnung berichtigt S11, O8 (b)).
 
 ### S6 – ProgramCatalog-Mutations-Owner, Programmverwaltung ohne Editor
 
@@ -618,13 +651,13 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Kuehlziel, Haltedauer (numerisch via Tastenfeld, D8); Vorheizen,
   Sensorbetrieb, Abschlussmodus (Zyklus pro Tap). Validierung D8; Ergebnis
   nur in `setStartCandidate` (naechster Lauf, kein Mutieren des Programms).
-  Geaenderte Werte sind sichtbar gekennzeichnet. `Zuruecksetzen` gemaess O8-a.
+  Geaenderte Werte sind sichtbar gekennzeichnet. `Zuruecksetzen` gemaess O8 (a).
 - **Hardware-Abnahmekriterium:** Tastenhoehe 34 px treffbar (D8).
 - **Tests:** `test_fermentation_ui_editing` (Tastenfolge → committed Wert),
   `test_local_touch_ui` (Kandidat → `StartProgram`-Payload enthaelt Overrides;
   ungueltiger Wert deaktiviert `confirm`), `test_renderer_boundary`,
   `test_run_commands` Konsument, `test_ui_steady_state_allocations`.
-- **Abhaengigkeiten:** S1, S7. **Ownerentscheidung:** O8-a.
+- **Abhaengigkeiten:** S1, S7. **Ownerentscheidung:** O8 (a).
 
 ### S9 – Manueller Betrieb und Kuehlplaene (echte Laufwerte, Start fail-closed)
 
@@ -636,7 +669,7 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Vorheizen sowie ggf. Kuehlziel/Halteverhalten (Abschluss-/Kuehlplaene fuer
   `stop-and-cool` und `cool-now`). `qualificationBandCelsius`,
   `qualificationDurationMinutes`, `maximumTargetReachMinutes` und vergleichbare
-  technische Grenzwerte (O5-B) bezieht die **Application** von einem
+  technische Grenzwerte (O5) bezieht die **Application** von einem
   kanonischen, spaeter durch Commissioning (#34/#35) freigegebenen
   Produkt-/Service-Owner; sie sind nie UI-Eingabe und werden nie erfunden.
   Solange dieser Producer fehlt (heute der Fall), bleibt der produktive
@@ -659,9 +692,9 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
 
 ### S10 – Bildschirmtastatur, Programmeditor, Settings
 
-- **Empfohlene Grundlage (Owner-Bestaetigung ausstehend):** O1-B, O3-A, O4-A. Die WLAN-Credentialtastatur
-  ist ausgeschlossen (F16). Home Standby: Slot 1 `programs` → `settings`
-  (Home-Aktionsmatrix und `test_local_touch_ui` entsprechend angepasst).
+- **Grundlage (Ownerentscheidungen):** O1, O3, O4. Die WLAN-Credentialtastatur
+  ist ausgeschlossen (F16). Home Standby: Slot 3 `service` → `settings`
+  (D14; Home-Aktionsmatrix und `test_local_touch_ui` entsprechend angepasst).
 - **Dateien/Owner:** Workspace (`TextEdit`-Seite, `ProgramField`-Enum,
   `Settings`-Seite), Renderer (Tastatur), `fermentation_application`
   (`applyUserSettings` fuer `deviceName`, D5/O4, Kandidat nur nach
@@ -672,34 +705,41 @@ vollstaendiger Pre-Ready-Lauf in Draft). Nach jedem Commit wird angehalten.
   Rueckschritt, Eingabe loeschen). Bottom-Slots: `Cancel` (0), `Mode` (1),
   `Backspace` (2), `Commit` (3); `Clear` als eigene Zelle im Raster. Die
   Spaltenkapazitaet (vorgesehen 10) und die genaue Tastenbelegung werden **erst
-  hier** festgelegt und gemaess O3-A; Tastengroesse ist
+  hier** festgelegt und gemaess O3; Tastengroesse ist
   Hardware-Abnahmekriterium. Programmeditor deckt die laut
   `LOCAL_UI_PROGRAMS.md` mindestens lokal bearbeitbaren Felder ab, soweit sie
   im Programmmodell existieren (Name, Notiz, Zieltemperatur, Dauer, Vorheizen,
   Sensorvorschlag, Produktfuehler-Ausfallverhalten, maximale
   Zielerreichungszeit, Abschluss-/Kuehlverhalten); Speichern ueber
-  `SaveProgram` → S6-Entry mit `expectedProgramCatalogRevision`. Settings-Seite:
-  Sprache (Link), Zeitzone (lesend, UTC-gekennzeichnet, O2), Geraetename
-  (Editor, nur ohne aktiven Lauf, O4), Netzwerk (Link), Webzugang (Link auf die
+  `SaveProgram` → S6-Entry mit `expectedProgramCatalogRevision`. Settings-Seite
+  (`ContentCell`-Zeilen mit Pager): Sprache (Link), Zeit / Zeitzone (Link auf den
+  Screen aus S4, kein zweiter Screen, O2), Geraetename (Editor, nur ohne aktiven
+  Lauf, O4), Netzwerk (Link), Service 🔒 (Link auf die bestehende
+  `Service`-Seite per `NavigateService`; aktiv nur bei `service.available`,
+  sonst bestehender `unavailableReason`; PIN-/Safety-Regeln und Owner
+  unveraendert, D14), Webzugang (Link auf die
   bestehende `HeaderWebAccess`-Seite per vorhandener Aktion `NavigateWebAccess`;
   Freigabe, Fenster und Anzeige bleiben beim #170-Owner
   `FermentationApplication::openWebProvisioningWindow()` /
   `webAccessState()`, keine zweite Web-/Auth-/Provisionierungslogik). Der
   provisorische #170-Zugang ueber `HeaderLanguage` Slot 3 wird in S10
   **atomar** (ein Commit) ersetzt: zuerst `Webzugang` in `Einstellungen`
-  einhaengen, danach den `web-access`-Slot aus `HeaderLanguage` entfernen (D13). Dirty-Verwerfen ueber den vorhandenen `ConfirmDiscard`-Exit.
+  einhaengen, danach den `web-access`-Slot aus `HeaderLanguage` entfernen (D13).
+  Ebenfalls atomar im selben Commit: `Service` wandert von Standby-Slot 3 nach
+  `Einstellungen` (D14), der Seitenstapel `Home → Settings → Service` wird
+  getestet. Dirty-Verwerfen ueber den vorhandenen `ConfirmDiscard`-Exit.
 - **Tests:** `test_fermentation_ui_editing` (Textfolgen, Grenzen
   `validateVisibleName`, UTF-8), `test_local_touch_ui`, neuer
   Application-Test (Geraetename-Commit, Gating bei aktivem Lauf, ASCII- und
   Mehrbyte-Namen), `test_softap_credentials` Konsument (SSID-Ableitung),
   `test_ui_steady_state_allocations`, Hardware-Log (D10).
-- **Abhaengigkeiten:** S6, S8, S1. **Ownerentscheidung:** O1 (B), O3 (A), O4 (A).
+- **Abhaengigkeiten:** S6, S8, S1. **Ownerentscheidung:** O1, O3, O4.
 
 ### S11 – Dokumentation und Abschluss
 
 `docs/ACCEPTANCE_TESTS.md` (neue SIM-IDs; begrenzte, ausdruecklich
 ausgewiesene Berichtigung der falschen SIM-26-04..07-Testzuordnung gemaess
-O8-b, nur die Tabellenverschiebung, keine Definitionsaenderung), `docs/LOCAL_UI.md`/`LOCAL_UI_SETTINGS_SERVICE.md`
+O8 (b), nur die Tabellenverschiebung, keine Definitionsaenderung), `docs/LOCAL_UI.md`/`LOCAL_UI_SETTINGS_SERVICE.md`
 nur dort, wo das reale Verhalten (Settings-Einstieg, Sprachseite, Zeitseite) von
 der Beschreibung abweicht, `docs/ROADMAP.md`. Hardware-Smoke (Display/Touch,
 Sprachwechsel mit Neustart, Programmverwaltung, Ressourcen-Logs) erst nach
@@ -796,7 +836,7 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 | S1 | anwendbar | nur Katalog |
 | S2 | `NOT_APPLICABLE` | keine Meldungen (F18) |
 | S3 | anwendbar | Persistenz ueber Neustart pruefbar; zusaetzlich Hardware-Log vor/nach Sprachcommit (D10) |
-| S4 | anwendbar | reine Anzeige, `HH:MMZ` passt ins Uhrfeld |
+| S4 | anwendbar | Hit-Zone und Screen `Zeit / Zeitzone`; Header-Text unveraendert |
 | S5 | `NOT_APPLICABLE` | `WaitingForProduct` ohne Regelkreis nicht erreichbar (F15) |
 | S6 | anwendbar | reine Konfiguration; zusaetzlich Hardware-Log (D10) |
 | S7 | nur Layout | Temperaturen zeigen ohne Sensorproduzent `--.- C` |
@@ -812,46 +852,48 @@ laufabhaengige Pfade auf der Hardware nicht ausloesbar. Der Hardware-Smoke
 | F14: ein bestaetigtes Programm-Preview scheitert voraussichtlich an falschen Wire-Werten. | S6 beginnt mit einem fehlschlagenden Bestaetigungs-/Reload-Test; Korrektur mit denselben kanonischen Werten wie `applyNetworkMode`. |
 | `WaitingForProduct` ist im Produktbuild ohne Regelkreis kaum erreichbar (F15); Laufmeldungen haben keinen Erzeuger (F18). | Nativer Nachweis; Hardware-Nachweis je Slice gemaess 11.1; im PR ausgewiesen; O9. |
 | Verwaltungsauswahl (D12) aendert den bestehenden `selectProgram`-Vertrag. | Bewusste Testanpassung in S1, im PR als Vertragsaenderung ausgewiesen. |
-| Technische Qualifikationswerte fuer manuelle Laeufe haben keinen Producer (`TBD_COMMISSIONING`, O5-B). | Keine Benutzereingabe, keine Defaults; Start fail-closed mit sichtbarem Grund; #34/#35 revalidieren. |
-| Header zeigt UTC ohne Kennzeichnung (F8); Zeitzonenkatalog hat einen Eintrag. | S4 kennzeichnet `HH:MMZ` in Header und Uhrseite; Lokalzeit als Folge-Scope (O2-A); Textbreite im 52-px-Feld als Abnahmekriterium. |
-| Geraetename-Aenderung beeinflusst SSID/Hostname/QR (#164 B4). | O4-A: nur ohne aktiven Lauf, Netzwerkname erst beim naechsten normalen Netzwerkstart, kein Auto-Restart. |
+| Technische Qualifikationswerte fuer manuelle Laeufe haben keinen Producer (`TBD_COMMISSIONING`, O5). | Keine Benutzereingabe, keine Defaults; Start fail-closed mit sichtbarem Grund; #34/#35 revalidieren. |
+| Header zeigt die nicht lokal umgerechnete Zeit (F8); Zeitzonenkatalog hat einen Eintrag. | Kein neuer Mechanismus in #172 (O2); Hit-Zone und gemeinsamer Screen `Zeit / Zeitzone`; technische Aufloesung als eigener Folge-Scope auf Basis #126 (Owner legt Issue an); Uebergangsanzeige als offene Ownerklaerung (S4). |
+| Geraetename-Aenderung beeinflusst SSID/Hostname/QR (#164 B4). | O4: nur ohne aktiven Lauf, Netzwerkname erst beim naechsten normalen Netzwerkstart, kein Auto-Restart. |
 | Tastenraster 34 px koennte fuer resistives Touch zu klein sein (D8). | Hardware-Abnahmekriterium; bei Verfehlen Plan-Revision, kein stilles Nachjustieren. |
 | `ContentCell` fixiert einen Plattformvertrag frueh (D1). | Nur Indizes in der Plattform, Kapazitaeten in App-Schicht; Reviewfrage im Independent Plan Review. |
 | Sprachnamen/Texte mit Sonderzeichen (z. B. `n` mit Tilde) sind im Standardfont nicht abgedeckt. | ASCII-Endonyme (`Espanol`) wie die bestehenden Packs; Glyphen-Pruefung im Textpack-Test. |
-| Vorbestehende Fehlzuordnung der SIM-26-Traces (F17). | Begrenzte, ausgewiesene Berichtigung in S11 (O8-b). |
+| Vorbestehende Fehlzuordnung der SIM-26-Traces (F17). | Begrenzte, ausgewiesene Berichtigung in S11 (O8 (b)). |
 
 ## 13. Abschluss dieser Revision
 
-Revision 3 ist der vollstaendige Planstand nach Rebase auf `main` nach PR #170
-und Revalidierung gegen den gemergten Code. Es erfolgen keine
+Revision 4 ist der vollstaendige Planstand nach Uebernahme der Ownerentscheidungen
+O1–O9 auf dem auf `main` nach PR #170 rebaseten Plan. Es erfolgen keine
 Produktaenderungen, keine Aenderungen an PR #170 und keine Aenderungen an
 `.codex/config.toml`.
 
 ```text
 PR170=MERGED
 PR170_MERGE_COMMIT=02b7523b7dc3fdc82583c7939ecbab9eb9ec5dd7
-PR175_REBASE=PASS
+PLAN_REVISION=4
 PLAN_REVALIDATION_AGAINST_MERGED_PR170=PASS
+OWNER_DECISIONS_O1_TO_O9=APPROVED_BY_OWNER
 PRODUCTION_CODE_CHANGED=NO
 IMPLEMENTATION=NOT_STARTED
-OWNER_DECISIONS_O1_TO_O9=PENDING
 IMPLEMENTATION_AUTHORIZATION=NO
 ACTUATOR_RELEASE=NO
 ```
 
-Aenderungen gegenueber Revision 2 (Delta durch #170):
+Delta gegenueber Revision 3 (Ownerentscheidungen):
 
-- F1/D4/S3/2.2/2.3: `HeaderLanguage`-Hit-Zone ist Bestand und wird
-  wiederverwendet; S4 baut nur die Uhr-Zone; S4 ist nicht mehr von S3
-  abhaengig.
-- S3/S10/O1: `HeaderLanguage` Slot 3 `web-access` bleibt; Settings verlinkt
-  auf den bestehenden `HeaderWebAccess`-Owner; der Slot-3-Uebergangspfad entfaellt
-  atomar in S10 (D13).
-- D5: neue Application-Methoden betreten `ApplicationCallSerializer`.
-- F13: Textarrays `70U`; Zeilenbezuege auf `BASE_SHA` aktualisiert.
-- D10: Baseline und #170-Referenznachweis ergaenzt, keine neue Optimierung.
-- Abschnitt 9: Konfliktflaechen gegen gemergten Stand beantwortet.
+- O1/D14: Standby `Start | Programme | Status | Einstellungen`; `Service` wandert
+  atomar unter `Einstellungen` (geschuetzt, Owner/Regeln unveraendert); kleine
+  Listenabsicht `Start`/`Manage` (S1); Settings-Eintraege Sprache, Zeit /
+  Zeitzone, Geraetename, Netzwerk, Webzugang, Service (S10).
+- O2: kein `HH:MMZ`, kein Lokalzeit-/Fallbackmechanismus, keine
+  IANA-/DST-Infrastruktur; ein gemeinsamer Screen `Zeit / Zeitzone` (S4);
+  technische Aufloesung als eigener Folge-Scope auf Basis #126 (Issue vom Owner
+  anzulegen). Offene Klaerung: Header-Anzeige in der Uebergangszeit.
+- O3, O4, O6, O7, O8, O9: als beschlossen markiert; O5 ergaenzt um den Verweis
+  auf #163 (Expertenmodus nicht R1); O9: Aktionsbuttons nur mit
+  Owner-Eligibility.
+- Unveraendert: D1–D13, PR-Schnitt A → B → C → D, KISS/YAGNI, keine neuen
+  Fachowner oder Frameworks.
 
-O2–O9 sind gegen den Code unveraendert gueltig; O1 ist um die
-Webzugang-Zielstruktur (D13) ergaenzt. Naechster Schritt: Independent Plan Review der neuen exakten
-Plan-SHA und ausdrueckliche Ownerentscheidung O1–O9.
+Naechster Schritt: Independent Fix Verification dieses Deltas und
+ausdrueckliche Ownerfreigabe der exakten Plan-SHA.
