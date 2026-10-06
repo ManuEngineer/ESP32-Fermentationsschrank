@@ -4,6 +4,15 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ## Unreleased
 
+### Added
+
+- Issue #178: `device_platform::toLocalTime` rechnet trusted UTC mit der
+  vorbereiteten kanonischen Zeitzone (`PreparedTimeZone::rule`) in lokale Zeit
+  inklusive EU-Sommerzeit um; die Zonentabelle `kSupportedTimeZones` ist die
+  einzige Quelle fuer Resolver und Firmware-Zeitzonenkatalog. `daysFromCivil`
+  wurde aus dem DS3231SN-Adapter nach `device_platform` extrahiert. Kein
+  Konsument (Touch/Web/Renderer) ist verdrahtet.
+
 ### Changed
 
 - Issue #74 / PR #79: ESP-IDF `v6.0.2`

@@ -7,6 +7,8 @@
 #include <limits>
 #include <optional>
 
+#include "civil_calendar.hpp"
+
 namespace device_platform_esp_idf::internal {
 
 // Internal, transport-independent representation of the DS3231/DS3231SN
@@ -45,21 +47,9 @@ inline std::uint8_t daysInMonth(const int year, const std::uint8_t month) {
     return days[month - 1U];
 }
 
-// Howard Hinnant's civil-calendar conversion, restricted to R1's explicit
-// 2000..2099 DS3231SN contract.  It avoids timezone/locale behavior.
-inline std::int64_t daysFromCivil(const int year, const unsigned month,
-                                  const unsigned day) {
-    const int adjustedYear = year - (month <= 2U ? 1 : 0);
-    const int era =
-        (adjustedYear >= 0 ? adjustedYear : adjustedYear - 399) / 400;
-    const unsigned yearOfEra = static_cast<unsigned>(adjustedYear - era * 400);
-    const unsigned marchBasedMonth = month > 2U ? month - 3U : month + 9U;
-    const unsigned dayOfYear = (153U * marchBasedMonth + 2U) / 5U + day - 1U;
-    const unsigned dayOfEra =
-        yearOfEra * 365U + yearOfEra / 4U - yearOfEra / 100U + dayOfYear;
-    return static_cast<std::int64_t>(era) * 146097LL +
-           static_cast<std::int64_t>(dayOfEra) - 719468LL;
-}
+// The civil-calendar conversion is shared with device_platform; the R1
+// 2000..2099 DS3231SN range is enforced by the validation below, not here.
+using device_platform::daysFromCivil;
 
 inline bool validateCalendar(const std::array<std::uint8_t, 7>& calendar) {
     if ((calendar[0] & 0x80U) != 0U || !validBcd(calendar[0] & 0x7FU, 59U) ||
