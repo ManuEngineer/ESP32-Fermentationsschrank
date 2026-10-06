@@ -7,13 +7,16 @@ ISSUE=178
 SCOPE=R1_LOCAL_TIME_OWNER
 BASE_BRANCH=main
 BASE_SHA=8bf48ccc28e0286e4550c7e778711e5682b72f42
-PLAN_REVISION=4
-PLAN_STATUS=AWAITING_OWNER_DECISION_O1_AND_PLAN_APPROVAL
+PLAN_REVISION=5
+PLAN_STATUS=O1_DECIDED_B_AWAITING_PLAN_APPROVAL
+OWNER_DECISION_O1=B
+LOCAL_TIME_IMPLEMENTATION=PURE_DEVICE_PLATFORM_FUNCTION
+ESP_IDF_NEWLIB_TZ_PATH=NOT_SELECTED
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCTION_CODE_CHANGED=NO
 OWNER_APPROVED_PLAN_SHA=NONE
-SUPERSEDES_REVISION=3_AT_e1a3793bfdeb9cca678ebcdfe016f500f18e48e6
+SUPERSEDES_REVISION=4_AT_8325ad871518c6fccaf464a8976a22ed68bfe109
 B1_REUSE_BEFORE_BUILD=PASS
 B2_SINGLE_TIMEZONE_TRUTH=PASS
 B3_RTC_2000_2099_LEAK=PASS
@@ -120,7 +123,7 @@ werden. Option A traegt dasselbe Risiko (POSIX-String in der Firmware); OTA ist
 nicht Release 1. Das Risiko ist dokumentiert, nicht beseitigt.
 
 **Empfehlung B**, bei wesentlicher Gewichtung des Espressif-first-Grundsatzes ist
-A zulaessig; O1 liegt beim Owner (Abschnitt 6).
+A zulaessig; der Owner hat O1=B entschieden (Abschnitt 6).
 
 ## 4. Architekturentscheidungen (Option B, aus dem Bestand abgeleitet)
 
@@ -247,18 +250,20 @@ Keine Allokation, kein Zustand, `noexcept`.
 
 ## 6. Owner-Entscheidung
 
-**O1 – Umrechnungsweg.**
+**O1 – Umrechnungsweg: ENTSCHIEDEN = B (Owner).**
 
-| Option | Inhalt | Bewertung |
-|---|---|---|
-| **B (Empfehlung)** | Reine Funktion + eine Regel + Tabelle in `device_platform`; `daysFromCivil` aus #126 extrahiert, Felder ueber libc-`gmtime_r` (Abschnitt 3/4) | zustands-/heapfrei; DST-Grenzen auf dem Ziel durch bestehende Gates beweisbar; kein neuer Port/Adapter; kleiner Eigenanteil (~25 Zeilen Regel) |
-| A | newlib-POSIX-TZ im ESP-Adapter (offizieller Pfad) | maximale Wiederverwendung; newlib ist per Lock thread-sicher (F9); aber neuer Port/Adapter, Zonen-Aktivierungsprotokoll, Heap bei Zonenaenderung, DST-Grenzen auf dem Ziel nur ueber einen zusaetzlichen Hardware-/Emulationsnachweis belegbar |
+```text
+OWNER_DECISION_O1=B
+LOCAL_TIME_IMPLEMENTATION=PURE_DEVICE_PLATFORM_FUNCTION
+ESP_IDF_NEWLIB_TZ_PATH=NOT_SELECTED
+```
 
-Wird A gewaehlt, wird dieser Plan als neue Revision vollstaendig konsolidiert
-(Port, Adapter, Aktivierungsprotokoll, Hardware-/Emulationsnachweis der
-DST-Grenzen, POSIX-String in der Tabelle) und erneut freigegeben. Die Tabelle
-als einzige Zonenwahrheit und der Verzicht auf UI-Vorverdrahtung gelten fuer
-beide Optionen.
+Umgesetzt wird die reine Funktion samt Regel und Tabelle in `device_platform`;
+`daysFromCivil` aus #126 wird extrahiert, die Felder entstehen ueber libc-
+`gmtime_r` (Abschnitt 3/4). Der newlib-POSIX-TZ-Pfad (Option A) ist nicht
+gewaehlt; seine Bewertung (Abschnitt 3) bleibt als Entscheidungsnachweis
+erhalten. Die Tabelle als einzige Zonenwahrheit und der Verzicht auf
+UI-Vorverdrahtung sind unveraendert.
 
 Weitere Ownerentscheidungen: keine. Kein neues ADR noetig (ADR-013 eingehalten,
 kein Modul neu geschnitten); die Entscheidung wird in `docs/ADOPT_OR_BUILD.md`
@@ -344,7 +349,7 @@ nach Ownerfreigabe; nicht ausgefuehrt gilt als nicht bestanden.
 | Zweite Zonenwahrheit | eine Tabelle; Katalog und Resolver leiten ab (Abschnitt 4) |
 | Extraktion beruehrt #126-Code | rein mechanisch; `test_absolute_time_internal` und ESP-Build beider Profile als Nachweis; Commit 1 getrennt |
 | Verwechslung Anzeige und Run-Zeit | Lokalzeit nur Anzeige; Run/Recovery bleiben UTC/monoton |
-| Option A nachtraeglich gewuenscht | O1; vollstaendig neue Planrevision |
+| Option A nachtraeglich gewuenscht | O1=B ist entschieden; ein Wechsel waere eine materielle Abweichung mit neuer Planrevision |
 
 ## 10. Dokumentationswirkung
 
