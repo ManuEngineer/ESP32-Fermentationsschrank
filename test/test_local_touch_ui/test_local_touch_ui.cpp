@@ -1363,13 +1363,20 @@ void test_message_list_cell_outside_the_window_or_page_is_blocked() {
     TEST_ASSERT_FALSE(status.press(snapshot, cell(0U)).navigated);
 }
 
-void test_decision_home_still_opens_the_first_decision_message_by_default() {
+// Review B1: the waiting home opens the canonical decision-required message,
+// not an earlier active, unresolved message of another kind.
+void test_waiting_home_opens_the_canonical_decision_message_not_an_earlier_one() {
     auto snapshot = snapshotWithMessage(
         ProcessState::Fermenting, MessageCode::UserDecisionRequired, true);
-    RuntimeMessage later;
-    later.id = 9U;
-    later.active = true;
-    snapshot.messages.push_back({later});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Waiting),
+                          static_cast<int>(snapshot.home.mode));
+    RuntimeMessage earlier;
+    earlier.id = 3U;
+    earlier.code = MessageCode::RunCompleted;
+    earlier.messageClass = MessageClass::Information;
+    earlier.active = true;
+    earlier.resolved = false;
+    snapshot.messages.insert(snapshot.messages.begin(), {earlier});
     FermentationTouchWorkspace workspace;
     const auto home = workspace.view(snapshot);
     TEST_ASSERT_EQUAL_INT(
@@ -1380,6 +1387,34 @@ void test_decision_home_still_opens_the_first_decision_message_by_default() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
                           static_cast<int>(workspace.page()));
     TEST_ASSERT_EQUAL_UINT32(7U, *workspace.view(snapshot).selectedMessageId);
+}
+
+// Review B2: a selection that left the snapshot keeps no active actions.
+void test_stale_message_selection_offers_and_creates_no_message_action() {
+    const auto first = snapshotWithMessages(5U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    TEST_ASSERT_TRUE(workspace.press(first, cell(1U)).navigated);
+    TEST_ASSERT_TRUE(workspace.view(first).bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(workspace.view(first).bottomSlots[2].enabled);
+
+    // Same workspace, new snapshot without message id 12.
+    auto later = snapshotWithMessages(5U);
+    later.messages.erase(later.messages.begin() + 1);
+    const auto stale = workspace.view(later);
+    TEST_ASSERT_FALSE(stale.selectedMessageId.has_value());
+    TEST_ASSERT_FALSE(stale.bottomSlots[1].enabled);
+    TEST_ASSERT_FALSE(stale.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(workspace.press(later, bottom(1)).action.has_value());
+    TEST_ASSERT_FALSE(workspace.press(later, bottom(2)).action.has_value());
+    // Back on the list the details slot is disabled as well.
+    TEST_ASSERT_TRUE(workspace.press(later, bottom(0)).navigated);
+    TEST_ASSERT_FALSE(workspace.view(later).bottomSlots[3].enabled);
+    // An empty snapshot behaves the same.
+    workspace.setPage(FermentationUiPage::MessageDetail);
+    const auto none = snapshotWithMessages(0U);
+    TEST_ASSERT_FALSE(workspace.view(none).selectedMessageId.has_value());
+    TEST_ASSERT_FALSE(workspace.press(none, bottom(1)).action.has_value());
 }
 
 }  // namespace
@@ -1398,7 +1433,8 @@ int main(int, char**) {
     RUN_TEST(test_message_list_cell_selects_the_canonical_message_id);
     RUN_TEST(test_message_list_cell_outside_the_window_or_page_is_blocked);
     RUN_TEST(
-        test_decision_home_still_opens_the_first_decision_message_by_default);
+        test_waiting_home_opens_the_canonical_decision_message_not_an_earlier_one);
+    RUN_TEST(test_stale_message_selection_offers_and_creates_no_message_action);
     RUN_TEST(
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);

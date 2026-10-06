@@ -10,6 +10,17 @@ namespace fermentation {
 
 namespace {
 
+// The canonical decision-required message, exactly as the Application-owned
+// projection defines it for the Waiting home mode (fermentation_ui_projector):
+// an earlier active, unresolved message of another kind must not be taken for
+// it.
+bool isCanonicalDecisionRequiredMessage(const RuntimeMessage& message) {
+    return message.active && !message.resolved && message.decisionRequired &&
+           message.messageClass == MessageClass::DecisionRequired &&
+           (message.code == MessageCode::UserDecisionRequired ||
+            message.code == MessageCode::ProductInsertionRequested);
+}
+
 std::vector<FermentationUiSafeBootCapability>
 safeBootUnavailableCapabilities() {
     return {FermentationUiSafeBootCapability::PersistentFactoryReset,
@@ -681,13 +692,16 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::MessageDetail:
             view.title = key("message-detail");
-            view.selectedMessageId = selectedMessageId_;
+            // A selection that is no longer in the snapshot shows no detail
+            // and offers no message action.
+            if (selectedMessageExists(snapshot))
+                view.selectedMessageId = selectedMessageId_;
             setSlot(view, 1U, "acknowledge",
                     FermentationUiWorkspaceSlotAction::AcknowledgeMessage,
-                    selectedMessageId_.has_value());
+                    selectedMessageExists(snapshot));
             setSlot(view, 2U, "mute",
                     FermentationUiWorkspaceSlotAction::MuteMessage,
-                    selectedMessageId_.has_value());
+                    selectedMessageExists(snapshot));
             if (sensorSelectionAction_.has_value()) {
                 setSlot(
                     view, 3U, "continue",
@@ -1218,8 +1232,8 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                 const auto decision = std::find_if(
                     snapshot.messages.begin(), snapshot.messages.end(),
                     [](const MessageView& message) {
-                        return message.message.active &&
-                               !message.message.resolved;
+                        return isCanonicalDecisionRequiredMessage(
+                            message.message);
                     });
                 if (decision != snapshot.messages.end())
                     selectedMessageId_ = decision->message.id;
@@ -1274,13 +1288,13 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                 FermentationUiResumeFallbackCommand{snapshot.revisions, false};
             break;
         case FermentationUiWorkspaceSlotAction::AcknowledgeMessage:
-            if (selectedMessageId_.has_value())
+            if (selectedMessageExists(snapshot))
                 result.action = FermentationUiEnvelopePayload{
                     FermentationUiAcknowledgeMessageIntent{
                         *selectedMessageId_}};
             break;
         case FermentationUiWorkspaceSlotAction::MuteMessage:
-            if (selectedMessageId_.has_value())
+            if (selectedMessageExists(snapshot))
                 result.action = FermentationUiEnvelopePayload{
                     FermentationUiMuteMessageIntent{*selectedMessageId_}};
             break;
