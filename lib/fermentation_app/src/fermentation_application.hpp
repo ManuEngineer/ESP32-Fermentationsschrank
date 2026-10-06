@@ -115,12 +115,15 @@ class AuthOperationGate final {
     };
 
     AuthOperationGate() = default;
+    ~AuthOperationGate() = default;
     AuthOperationGate(const AuthOperationGate&) = delete;
     AuthOperationGate& operator=(const AuthOperationGate&) = delete;
+    AuthOperationGate(AuthOperationGate&&) = delete;
+    AuthOperationGate& operator=(AuthOperationGate&&) = delete;
 
     // Empty while the gate is closed.
     [[nodiscard]] std::optional<Token> tryBegin() {
-        const std::lock_guard<std::mutex> lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         if (closed_) {
             return std::nullopt;
         }
@@ -133,14 +136,14 @@ class AuthOperationGate final {
         drained_.wait(lock, [this] { return active_ == 0U; });
     }
     void reopen() {
-        const std::lock_guard<std::mutex> lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         closed_ = false;
     }
 
    private:
     friend class FermentationApplicationTestAccess;
     void end() noexcept {
-        const std::lock_guard<std::mutex> lock(mutex_);
+        const std::scoped_lock lock(mutex_);
         if (--active_ == 0U) {
             drained_.notify_all();
         }

@@ -1430,6 +1430,11 @@ WebProvisionStatus FermentationApplication::provisionWebAccess(
         context = authenticationContext_;
     }
 
+    // Fail closed before the first use outside the serializer block.
+    if (domain == nullptr || !context.has_value() || !token.has_value()) {
+        return WebProvisionStatus::RecoveryRequired;
+    }
+
     // The domain pointer and the context copy are valid only while the token
     // is active (see AuthOperationGate). The Application gate is not held.
     const auto passwordMode = mode == WebProvisionMode::Protect
@@ -1665,9 +1670,15 @@ void FermentationApplication::initializeAuthentication(
     // resetAuthenticationState() closes and drains the auth gate; it is
     // reopened on every exit once the new domain (or its absence) is final.
     struct ReopenOnExit {
-        AuthOperationGate& gate;
+        explicit ReopenOnExit(AuthOperationGate& authGate) : gate(authGate) {}
+        ReopenOnExit(const ReopenOnExit&) = delete;
+        ReopenOnExit& operator=(const ReopenOnExit&) = delete;
+        ReopenOnExit(ReopenOnExit&&) = delete;
+        ReopenOnExit& operator=(ReopenOnExit&&) = delete;
         ~ReopenOnExit() { gate.reopen(); }
-    } reopenOnExit{authOperationGate_};
+        AuthOperationGate& gate;
+    };
+    const ReopenOnExit reopenOnExit(authOperationGate_);
     resetAuthenticationState();
 
     if (authenticationKdf_ == nullptr || secureRandomSource_ == nullptr) {
