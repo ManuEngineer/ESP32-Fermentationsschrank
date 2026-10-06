@@ -7,7 +7,8 @@ ISSUE=181
 SCOPE=BUGFIX_ABSOLUTE_TIME_OWNER_ISSUE_126
 BASE_BRANCH=main
 BASE_SHA=9cfffdfae73f8903b6feabf74acc20d754014b49
-PLAN_REVISION=1
+PLAN_REVISION=2
+SUPERSEDES_REVISION=1_AT_4884870ba02f7896b6f7a68db74dfe38058dee5c
 PLAN_STATUS=AWAITING_OWNER_APPROVAL
 OWNER_APPROVED_PLAN_SHA=NONE
 IMPLEMENTATION=NOT_STARTED
@@ -45,7 +46,7 @@ Zeitzonen-/UI-Code, kein #172-Codefix, kein ESP-IDF-Pin-Bump.
 
 | # | Befund | Status | Beleg |
 |---|---|---|---|
-| F1 | Auf Hardware ohne RTC zeigt der Header Uptime seit 1970 (01:02 bei 17:24) und `HeaderClock` meldet `Zeit vertrauenswuerdig`. | `OBSERVED` | `docs/audits/PR179_HW_SMOKE_20261006_EVIDENCE.md` Abschnitt 5 |
+| F1 | Auf Hardware ohne RTC zeigt der Header Uptime seit 1970 (01:02 bei 17:24) und `HeaderClock` meldet `Zeit vertrauenswuerdig`. | `OBSERVED` | PR #179 (Branch `agent/issue-172-pr-a-touch-navigation`), Evidence-Datei `docs/audits/PR179_HW_SMOKE_20261006_EVIDENCE.md` Abschnitt 5 @ `a36641e4ea849e1e7e3c33abadb116084215575f`; die Datei liegt nicht auf `main` und nicht auf der Basis dieses PR |
 | F2 | `EspIdfSntpTimeCoordinator::initialize()` setzt `smooth_sync = true` fest; `poll()` promotet Trust bei jeder `COMPLETED`-Beobachtung, unabhaengig vom Modus. | `VERIFIED_SOURCE` | `esp_idf_sntp_time_coordinator.cpp`, `absolute_time_internal.hpp` (`SntpArbitration`) |
 | F3 | `esp_netif_sntp_init` setzt nur bei `smooth_sync` den Modus auf `SMOOTH` und nie zurueck auf `IMMED`; der Default `IMMED` ist eine implizite Annahme. | `VERIFIED_SOURCE` | `components/esp_netif/lwip/esp_netif_sntp.c:75-77` |
 | F4 | Im Modus `IMMED` gilt `settimeofday(server tv)` und danach `COMPLETED` in derselben Funktion. | `VERIFIED_SOURCE` | `components/lwip/apps/sntp/sntp.c:42-44` |
@@ -108,11 +109,14 @@ Hypothese.
 
 | ID | Nachweis | Ort | Gate |
 |---|---|---|---|
-| N1 | `sizeof(long)==4` und `sizeof(time_t)==8` fuer das Target `esp32` per `static_assert`/`-dM -E` mit dem Projekt-Compiler; Narrowing modulo 2^N belegt. | off-device | kein Gate |
+| N1 | `sizeof(long)==4` und `sizeof(time_t)==8` fuer das Target `esp32` per `static_assert`/`-dM -E` mit dem Projekt-Compiler; Narrowing modulo 2^N belegt. Zusaetzlich Build-Konfigurationsnachweis fuer den getesteten ESP32-Profilbuild (`esp32_bringup`/`esp32_release`): wirksames `CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER=y` bzw. die wirksame `CONFIG_LIBC_TIME_SYSCALL_*`-Auswahl, aus dem erzeugten `sdkconfig` des Profils zitiert (indikativ im Arbeitsbaum-`sdkconfig`: `ESP_TIME_FUNCS_USE_RTC_TIMER=y`, `ESP_TIME_FUNCS_USE_ESP_TIMER=y`, `LIBC_TIME_SYSCALL_USE_RTC_HRT=y`). Keine neue Kconfig-Einstellung. | off-device | kein Gate |
 | N2 | Upstream-Vergleich `release/v6.1` gegen `master` fuer `time.c`/`timekeeping.c`: H1-Fix `bdf98cf0d` auf `master` vorhanden (bereits gesichtet), H2 unveraendert. Ein Pin-Bump ist eine materielle Toolchain-Aenderung und nur betrachtete Alternative (A3). | off-device | kein Gate |
-| N3 | Einmalige Diagnose-Probe auf dem NTP-only-ESP32 (Bring-up-Profil, nicht Produktcode, nicht in `main` zu mergen): bei Kaltstart `time(nullptr)` vor Sync, `adjtime`-Rueckgabe mit echtem Delta, direkt danach `adjtime(NULL,&out)`, Status-Sequenz, `sntp_get_sync_mode()`, `time(nullptr)` nach `COMPLETED`, Reset-Grund. | on-device | **Owner-Gate O3** |
+| N3 | Einmalige Diagnose-Probe auf dem NTP-only-ESP32 (Bring-up-Profil, nicht Produktcode, nicht in `main` zu mergen): **nur nach echter Spannungsunterbrechung (Power-Cycle)**: Reset-Grund `ESP_RST_POWERON` (oder gleichwertig eindeutig belegter Power-on-Reset), rohes `time(nullptr)` nahe Epoche vor dem ersten Sync, `adjtime`-Rueckgabe mit echtem Delta, direkt danach `adjtime(NULL,&out)`, Status-Sequenz, `sntp_get_sync_mode()`, `time(nullptr)` nach `COMPLETED`. `EN/CHIP_PU`, `esp_restart()`, Panic/WDT und andere Resetpfade sind **kein** Cold-Boot-Beweis. Keine neue Reset-Abstraktion. | on-device | **Owner-Gate O3** |
 
-Statusregel: Ohne N1-N3 bleibt `ROOT_CAUSE=UNPROVEN`. Der Fix (C1/C2) ist
+Statusregel: `ROOT_CAUSE=PROVEN` wird nur gesetzt, wenn die Evidence die jeweils
+notwendige Toolchain-/Buildkonfiguration (N1) und die Hardwarebeobachtung (N3,
+Power-on-Reset, Epoche-nahe Zeit) tatsaechlich belegt; sonst bleibt
+`ROOT_CAUSE=UNPROVEN`. Der Fix (C1/C2) ist
 gegen beide Hypothesen robust (siehe 3.1), N3 entscheidet nur die
 Formulierung in Doku und Evidence, nicht den Fix.
 
@@ -203,7 +207,10 @@ wird erst mit angeschlossener RTC relevant. Entscheidung O1.
 
 ## 5. Umsetzungs- und Commit-Schnitte (nach Freigabe)
 
-Nach **jedem** Commit wird angehalten (Owner-Freigabe).
+Es gilt der kanonische Workflow (`AGENTS.md`, `docs/AGENT_WORKFLOW.md`):
+Ownerfreigabe der exakten Plan-SHA vor der Implementation, erneute Freigabe nur
+bei materieller Abweichung. Die Schnitte C0-C3 sind Struktur und benoetigen kein
+zusaetzliches Owner-Gate je Commit.
 
 | Schnitt | Inhalt | Gezielter Nachweis |
 |---|---|---|
@@ -233,17 +240,20 @@ self-check`; vollstaendiger Pre-Ready-Lauf nur nach Independent Review mit
 
 Auf demselben NTP-only ESP32 (keine RTC, kein Erase):
 
-1. **Kaltstart per Power-Cycle oder EN/CHIP_PU, nicht per Software-Reset.**
-   Grund: Unter `ESP_TIME_FUNCS_USE_RTC_TIMER` ueberlebt `boot_time`
-   Software-Resets (`esp_restart`, Panic, WDT); ein Softreset startet mit
-   fast richtiger, aber untrusted Zeit und beweist den Cold-Boot-Fall nicht.
-2. Evidence enthaelt den **Reset-Grund** und das **rohe `time(nullptr)` vor
-   dem Sync** (Vorbedingung „nahe Epoche"); „untrusted" allein genuegt nicht.
+1. **Kaltstart ausschliesslich per echter Spannungsunterbrechung (Power-Cycle).**
+   Grund: Unter `ESP_TIME_FUNCS_USE_RTC_TIMER` haelt die RTC-Zeitbasis
+   (`boot_time`) Resets; nur ein Power-on-Reset setzt sie zurueck. `EN/CHIP_PU`,
+   `esp_restart()`, Panic/WDT und andere Resetpfade starten mit fast richtiger,
+   aber untrusted Zeit und beweisen den Cold-Boot-Fall **nicht**.
+2. Evidence enthaelt `ESP_RST_POWERON` (oder gleichwertig eindeutig belegten
+   Power-on-Reset) und das **rohe `time(nullptr)` nahe Epoche vor dem ersten
+   Sync**; „untrusted" allein genuegt nicht.
 3. Vor dem Sync keine trusted UTC (`HeaderClock`: nicht vertrauenswuerdig).
 4. Nach dem Sync Header-Uhr gegen unabhaengige Europe/Zurich-Referenz
    vergleichen; Abweichung maximal 1 Minute.
 5. `HeaderClock` zeigt trusted + `Europe/Zurich` + dieselbe Lokalzeit.
-6. Power-Cycle wiederholen (zweiter Cold-Boot-Beweis).
+6. Wiederholung jeweils als echter Power-Cycle (zweiter Cold-Boot-Beweis); beide
+   Laeufe mit `ESP_RST_POWERON`-Beleg.
 7. Keine Panic/WDT/Brownout/`heap_alloc_failed`; `ACTUATOR_RELEASE=NO`.
 
 Danach PR #179 mit dem gemergten Fix-`main` synchronisieren und **nur** die
@@ -294,6 +304,6 @@ AC3 Kein Trust-Promote bei COMPLETED unter SMOOTH aus untrusted
 AC4 RTC-seeded Pfad: trusted, SMOOTH, RTC-Sync nach COMPLETED unveraendert
 AC5 Bestehende Retrograde-/High-Water-Tests gruen
 AC6 Beide ESP-IDF-Profile bauen; gezielte Static-Analysis ohne neue Befunde
-AC7 Hardware-Retest 6 (Power-Cycle, zweifach) PASS, ACTUATOR_RELEASE=NO
-AC8 Root-Cause-Status in Evidence korrekt (PROVEN nur mit N1-N3)
+AC7 Hardware-Retest 6 (echte Power-Cycles mit ESP_RST_POWERON-Beleg, zweifach) PASS, ACTUATOR_RELEASE=NO
+AC8 Root-Cause-Status in Evidence korrekt (PROVEN nur mit belegtem N1-Build-Config und N3-Hardwarebeobachtung)
 ```
