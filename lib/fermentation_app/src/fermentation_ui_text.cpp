@@ -56,7 +56,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 88U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 90U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -122,6 +122,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"network-password", "Password: "},
         std::pair{"network-access-unavailable", "Access data unavailable"},
         std::pair{"network-ip-unavailable", "unavailable"},
+        std::pair{"clock-trusted", "Time trusted"},
+        std::pair{"clock-not-trusted", "Time not trusted"},
         std::pair{"web-access", "Web access"},
         std::pair{"web-access-open", "Web setup"},
         std::pair{"web-access-window-open", "Web setup allowed (10 min)"},
@@ -156,7 +158,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 88U> de{
+            const std::array<std::pair<const char*, const char*>, 90U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -225,6 +227,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-access-unavailable",
                   "Zugangsdaten nicht verfuegbar"},
                  {"network-ip-unavailable", "nicht verfuegbar"},
+                 {"clock-trusted", "Zeit vertrauenswuerdig"},
+                 {"clock-not-trusted", "Zeit nicht vertrauenswuerdig"},
                  {"web-access", "Webzugang"},
                  {"web-access-open", "Web-Setup"},
                  {"web-access-window-open", "Web-Setup frei (10 Min)"},
@@ -257,7 +261,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 88U> es{
+            const std::array<std::pair<const char*, const char*>, 90U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -326,6 +330,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"network-access-unavailable",
                   "Datos de acceso no disponibles"},
                  {"network-ip-unavailable", "no disponible"},
+                 {"clock-trusted", "Hora fiable"},
+                 {"clock-not-trusted", "Hora no fiable"},
                  {"web-access", "Acceso web"},
                  {"web-access-open", "Config. web"},
                  {"web-access-window-open", "Config. web permitida (10 min)"},

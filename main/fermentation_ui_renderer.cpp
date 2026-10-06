@@ -5,9 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <ctime>
 #include <string_view>
 #include <utility>
+
+#include "local_time.hpp"
 
 namespace fermentation::main_ui {
 namespace {
@@ -22,6 +23,11 @@ constexpr device_platform::DisplayRect kHeaderNetworkRect{
 // (x=4..172).
 constexpr device_platform::DisplayRect kHeaderLanguageHitRect{176U, 0U, 44U,
                                                               kHeaderHeight};
+// Header clock touch zone (S4): x=264..320 over the full header height. It
+// starts exactly where kHeaderNetworkRect ends (x=264), so the zones never
+// overlap.
+constexpr device_platform::DisplayRect kHeaderClockHitRect{264U, 0U, 56U,
+                                                           kHeaderHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
 // Touch rows of a content list (same height as the bottom controls) and the
@@ -196,19 +202,18 @@ std::string temperatureText(const TemperatureView& temperature) {
     return result;
 }
 
-// No real IANA time zone database is part of this port (see
-// docs/tasks/issue-31-renderer-display-touch-calibration-plan.md, section 3);
-// this therefore formats the trusted UTC instant directly rather than
-// pretending to apply canonicalTimeZoneId as a local-time offset.
+// Local wall-clock text from the single local-time owner (Issue #178). No
+// trusted UTC or no result of toLocalTime() (for example an unavailable zone
+// rule) yields "--:--"; the UTC value is never shown as a local time.
 std::string formatClockText(
     const device_platform::ClockViewInput& clock) noexcept {
-    if (!clock.trustedUtc.has_value()) return "--:--";
-    const auto epoch = static_cast<std::time_t>(*clock.trustedUtc);
-    std::tm calendar{};
-    gmtime_r(&epoch, &calendar);
+    const auto local =
+        device_platform::toLocalTime(clock.trustedUtc, clock.timeZoneRule);
+    if (!local.has_value()) return "--:--";
     char buffer[6];
-    const auto written = std::snprintf(buffer, sizeof(buffer), "%02d:%02d",
-                                       calendar.tm_hour, calendar.tm_min);
+    const auto written = std::snprintf(buffer, sizeof(buffer), "%02u:%02u",
+                                       static_cast<unsigned>(local->hour),
+                                       static_cast<unsigned>(local->minute));
     if (written != 5) return "--:--";
     return std::string(buffer, 5U);
 }
@@ -435,6 +440,28 @@ RepresentativeScreen makeRepresentativeScreen(
                 {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
+    } else if (screen.workspace.page == FermentationUiPage::HeaderClock) {
+        // The single shared time screen: trust state, canonical zone id and
+        // the local time of the owner. It only shows existing values.
+        const bool trusted = clock.trustedUtc.has_value();
+        addText(commands, textPacks, locale,
+                fermentationTextKey(trusted ? "clock-trusted"
+                                            : "clock-not-trusted"),
+                {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
+                trusted ? device_platform::ThemeToken::StatusInformation
+                        : device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+        addRawText(commands,
+                   {8U, 90U, 304U, RepresentativeScreen::kTextLineHeight},
+                   clock.canonicalTimeZoneId.empty()
+                       ? std::string{"--"}
+                       : clock.canonicalTimeZoneId.value(),
+                   device_platform::ThemeToken::TextSecondary,
+                   device_platform::ThemeToken::Canvas);
+        addRawText(commands,
+                   {8U, 112U, 304U, RepresentativeScreen::kTextLineHeight},
+                   screen.clockText, device_platform::ThemeToken::TextPrimary,
+                   device_platform::ThemeToken::Canvas);
     } else if (screen.workspace.page == FermentationUiPage::HeaderWebAccess) {
         // The Application owns the release state; the page only shows it.
         const char* statusKey = "web-access-unavailable";
@@ -792,6 +819,12 @@ ScreenRenderKey makeScreenRenderKey(
     if (trustedUtc.has_value()) {
         key.utcMinute = *trustedUtc / 60;
     }
+    // The visible clock is the local time derived from UTC and the prepared
+    // zone rule, so the rule is part of the visible inputs.
+    key.timeZoneDst =
+        static_cast<std::uint8_t>(presentation.timeZoneRule().dst);
+    key.timeZoneOffsetMinutes =
+        presentation.timeZoneRule().standardOffsetMinutes;
     key.accessPointRevision = accessPointRevision;
     return key;
 }
@@ -813,6 +846,13 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         y < kHeaderNetworkRect.top + kHeaderNetworkRect.height) {
         return device_platform::DeviceUiTarget{
             device_platform::DeviceUiTargetKind::HeaderNetwork, 0U};
+    }
+    if (x >= kHeaderClockHitRect.left &&
+        x < kHeaderClockHitRect.left + kHeaderClockHitRect.width &&
+        y >= kHeaderClockHitRect.top &&
+        y < kHeaderClockHitRect.top + kHeaderClockHitRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderClock, 0U};
     }
     // Visible program rows only: row r is entry currentIndex + r, so the hit
     // zone follows exactly what the renderer draws.

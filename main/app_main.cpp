@@ -486,7 +486,8 @@ bool updateProductUi(
         const auto* touchProgramCatalog =
             networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
         const device_platform::ClockViewInput loopClock{
-            timeSource.unixTimeSeconds(), touchTimeZoneId};
+            timeSource.unixTimeSeconds(), touchTimeZoneId,
+            renderGate.presentation().timeZoneRule()};
         const auto touchPoint = touchPoll.point.value_or(
             fermentation::main_ui::ProductiveLvglRenderer::TouchPoint{});
         touchTick = fermentation::main_ui::processWorkspaceTouch(
@@ -522,7 +523,8 @@ bool updateProductUi(
             networkPageAfterTouch ? nullptr
                                   : &renderPresentation.programCatalog;
         const device_platform::ClockViewInput renderClock{
-            trustedUtc, renderGate.presentation().canonicalTimeZoneId()};
+            trustedUtc, renderGate.presentation().canonicalTimeZoneId(),
+            renderGate.presentation().timeZoneRule()};
         if (displayRenderer->render(
                 loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
                 touchTick.pressedTarget, renderProgramCatalog,
@@ -678,7 +680,8 @@ extern "C" void app_main(void) {
         const auto uiNetworkStatus =
             toDeviceUiNetworkStatus(networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
-            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
+            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId,
+            uiPresentation.timeZoneRule};
         initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
                             application, uiWorkspace, uiTextPacks,
                             uiPresentation, uiNetworkStatus, uiClock);

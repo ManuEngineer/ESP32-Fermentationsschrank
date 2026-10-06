@@ -98,6 +98,21 @@ void test_autumn_overlap_is_distinguished_by_daylight_saving_flag() {
     TEST_ASSERT_EQUAL_INT16(60, standard->utcOffsetMinutes);
 }
 
+void test_rule_overload_matches_the_prepared_zone_overload() {
+    const auto zone = zurich();
+    for (const auto& vector : kVectors) {
+        const auto viaZone = device_platform::toLocalTime(vector.utc, zone);
+        const auto viaRule =
+            device_platform::toLocalTime(vector.utc, zone.rule);
+        TEST_ASSERT_TRUE(viaZone.has_value());
+        TEST_ASSERT_TRUE(viaRule.has_value());
+        TEST_ASSERT_EQUAL_UINT8(viaZone->hour, viaRule->hour);
+        TEST_ASSERT_EQUAL_UINT8(viaZone->minute, viaRule->minute);
+        TEST_ASSERT_EQUAL_INT16(viaZone->utcOffsetMinutes,
+                                viaRule->utcOffsetMinutes);
+    }
+}
+
 void test_missing_trusted_utc_yields_no_local_time() {
     TEST_ASSERT_FALSE(
         device_platform::toLocalTime(std::nullopt, zurich()).has_value());
@@ -155,6 +170,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_zurich_reference_vectors_including_dst_boundaries);
     RUN_TEST(test_autumn_overlap_is_distinguished_by_daylight_saving_flag);
+    RUN_TEST(test_rule_overload_matches_the_prepared_zone_overload);
     RUN_TEST(test_missing_trusted_utc_yields_no_local_time);
     RUN_TEST(test_unprepared_zone_yields_no_local_time);
     RUN_TEST(test_negative_utc_yields_no_local_time);

@@ -43,6 +43,7 @@ class FermentationUiPresentationCache {
         // the catalog copy, never reverts the language or time zone.
         lastLocale_ = source_->displayLocale;
         lastTimeZone_ = source_->canonicalTimeZoneId;
+        lastTimeZoneRule_ = source_->timeZoneRule;
         adoptedRevisions_ =
             decidable(revisions)
                 ? std::optional<Revisions>{Revisions{
@@ -77,6 +78,14 @@ class FermentationUiPresentationCache {
         const noexcept {
         return lastTimeZone_.has_value() ? *lastTimeZone_
                                          : defaultSource_.canonicalTimeZoneId;
+    }
+
+    // Rule of the last successfully filled zone; survives evict() like the id
+    // (unavailable before the first fill, so no local time is derived).
+    [[nodiscard]] const device_platform::TimeZoneRule& timeZoneRule()
+        const noexcept {
+        return lastTimeZoneRule_.has_value() ? *lastTimeZoneRule_
+                                             : defaultSource_.timeZoneRule;
     }
 
     // Catalog identity of the copy currently in use, for the renderer's
@@ -126,6 +135,7 @@ class FermentationUiPresentationCache {
     std::optional<Revisions> adoptedRevisions_;
     std::optional<device_platform::LocaleId> lastLocale_;
     std::optional<device_platform::TimeZoneId> lastTimeZone_;
+    std::optional<device_platform::TimeZoneRule> lastTimeZoneRule_;
     FermentationUiPresentationSource defaultSource_;
 };
 

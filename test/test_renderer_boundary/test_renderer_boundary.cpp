@@ -123,7 +123,6 @@ void test_network_header_target_matches_rendered_status_icon_rect() {
         TEST_ASSERT_FALSE(
             fermentation::main_ui::targetAt(screen, x, y).has_value());
     };
-    assertNoTarget(264U, 12U);
     assertNoTarget(240U, 3U);
     assertNoTarget(240U, 22U);
 
@@ -941,16 +940,171 @@ void test_clock_text_dash_when_untrusted() {
     TEST_ASSERT_EQUAL_STRING("--:--", screen.clockText.c_str());
 }
 
-void test_clock_text_formats_trusted_utc_as_hh_mm() {
+device_platform::TimeZoneRule zurichRule() {
+    return device_platform::findTimeZoneRule("Europe/Zurich").value();
+}
+
+std::string clockTextFor(std::optional<std::int64_t> utc,
+                         const device_platform::TimeZoneRule& rule) {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
-    const device_platform::ClockViewInput clock{3661, {}};  // 01:01:01 UTC
+    const device_platform::ClockViewInput clock{
+        utc, device_platform::TimeZoneId{"Europe/Zurich"}, rule};
+    return fermentation::main_ui::makeRepresentativeScreen(
+               snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+               device_platform::LocaleId{"en"}, std::nullopt, nullptr,
+               device_platform::DeviceUiNetworkStatus::Unavailable, clock)
+        .clockText;
+}
+
+void test_clock_text_shows_zurich_local_time_not_utc() {
+    // 2026-01-01 00:00:00Z is 01:00 in Europe/Zurich (CET), not 00:00.
+    TEST_ASSERT_EQUAL_STRING("01:00",
+                             clockTextFor(1767225600, zurichRule()).c_str());
+    // Summer: 2026-07-01 00:00:00Z is 02:00 (CEST).
+    TEST_ASSERT_EQUAL_STRING("02:00",
+                             clockTextFor(1782864000, zurichRule()).c_str());
+}
+
+void test_clock_text_follows_the_dst_boundary() {
+    // 2026-03-29 01:00:00Z is the spring transition.
+    TEST_ASSERT_EQUAL_STRING("01:59",
+                             clockTextFor(1774745999, zurichRule()).c_str());
+    TEST_ASSERT_EQUAL_STRING("03:00",
+                             clockTextFor(1774746000, zurichRule()).c_str());
+    // 2026-10-25 01:00:00Z is the autumn transition.
+    TEST_ASSERT_EQUAL_STRING("02:59",
+                             clockTextFor(1792889999, zurichRule()).c_str());
+    TEST_ASSERT_EQUAL_STRING("02:00",
+                             clockTextFor(1792890000, zurichRule()).c_str());
+}
+
+void test_clock_text_dash_without_trusted_utc_even_with_a_zone_rule() {
+    TEST_ASSERT_EQUAL_STRING("--:--",
+                             clockTextFor(std::nullopt, zurichRule()).c_str());
+}
+
+void test_clock_text_dash_when_local_time_owner_yields_no_result() {
+    // Trusted UTC is present but the zone rule is unavailable (default): the
+    // owner returns no local time, and UTC is never shown as a fallback.
+    TEST_ASSERT_EQUAL_STRING(
+        "--:--", clockTextFor(3661, device_platform::TimeZoneRule{}).c_str());
+    // Negative UTC is not representable by the owner either.
+    TEST_ASSERT_EQUAL_STRING("--:--", clockTextFor(-1, zurichRule()).c_str());
+}
+
+void test_header_clock_hit_zone_edges_do_not_overlap_network_or_language() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
     const auto screen = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
-        device_platform::LocaleId{"en"}, std::nullopt, nullptr,
-        device_platform::DeviceUiNetworkStatus::Unavailable, clock);
+        device_platform::LocaleId{"en"});
+    const auto kindAt = [&screen](std::uint16_t x, std::uint16_t y) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        return target.has_value() ? static_cast<int>(target->kind) : -1;
+    };
+    const auto clock =
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderClock);
+    const auto network =
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderNetwork);
 
-    TEST_ASSERT_EQUAL_STRING("01:01", screen.clockText.c_str());
+    // x=263 is still the (unchanged) network zone, x=264 starts the clock.
+    TEST_ASSERT_EQUAL_INT(network, kindAt(263U, 12U));
+    TEST_ASSERT_EQUAL_INT(clock, kindAt(264U, 12U));
+    TEST_ASSERT_EQUAL_INT(clock, kindAt(319U, 12U));
+    TEST_ASSERT_EQUAL_INT(-1, kindAt(320U, 12U));
+    // Full header height y=0..31; y=32 is below the header.
+    TEST_ASSERT_EQUAL_INT(clock, kindAt(264U, 0U));
+    TEST_ASSERT_EQUAL_INT(clock, kindAt(319U, 31U));
+    TEST_ASSERT_EQUAL_INT(-1, kindAt(264U, 32U));
+    // The language zone ends at x=219 and is unchanged.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiTargetKind::HeaderLanguage),
+        kindAt(219U, 12U));
+}
+
+void test_tapping_the_header_clock_opens_the_clock_screen() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto home = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+
+    const auto press =
+        fermentation::main_ui::routePress(workspace, snapshot, home, 300U, 12U);
+    TEST_ASSERT_TRUE(press.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::FermentationUiPage::HeaderClock),
+        static_cast<int>(workspace.page()));
+}
+
+void test_header_clock_page_shows_trust_zone_and_local_time() {
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const struct {
+        const char* locale;
+        const char* trusted;
+        const char* notTrusted;
+    } expectations[] = {
+        {"en", "Time trusted", "Time not trusted"},
+        {"de", "Zeit vertrauenswuerdig", "Zeit nicht vertrauenswuerdig"},
+        {"es", "Hora fiable", "Hora no fiable"},
+    };
+    for (const auto& expected : expectations) {
+        fermentation::FermentationUiSnapshot snapshot;
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::HeaderClock);
+        const device_platform::ClockViewInput trusted{
+            1782864000, device_platform::TimeZoneId{"Europe/Zurich"},
+            zurichRule()};
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs,
+            device_platform::LocaleId{expected.locale}, std::nullopt, nullptr,
+            device_platform::DeviceUiNetworkStatus::Unavailable, trusted);
+        TEST_ASSERT_TRUE(hasText(screen, expected.trusted));
+        TEST_ASSERT_FALSE(hasText(screen, expected.notTrusted));
+        TEST_ASSERT_TRUE(hasText(screen, "Europe/Zurich"));
+        // Header and screen both show the same local time (02:00, not UTC).
+        std::size_t clockTexts = 0U;
+        for (const auto& command : screen.commands) {
+            if (command.text == "02:00") ++clockTexts;
+            TEST_ASSERT_TRUE(command.text != "00:00");
+        }
+        TEST_ASSERT_EQUAL_UINT32(2U, static_cast<std::uint32_t>(clockTexts));
+
+        // Without trusted UTC the page says so and shows no clock value.
+        const device_platform::ClockViewInput untrusted{
+            std::nullopt, device_platform::TimeZoneId{"Europe/Zurich"},
+            zurichRule()};
+        const auto dash = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs,
+            device_platform::LocaleId{expected.locale}, std::nullopt, nullptr,
+            device_platform::DeviceUiNetworkStatus::Unavailable, untrusted);
+        TEST_ASSERT_TRUE(hasText(dash, expected.notTrusted));
+        TEST_ASSERT_FALSE(hasText(dash, expected.trusted));
+        TEST_ASSERT_TRUE(hasText(dash, "--:--"));
+    }
+}
+
+void test_render_key_includes_the_prepared_zone_rule() {
+    fermentation::FermentationUiSnapshot snapshot;
+    fermentation::FermentationTouchWorkspace workspace;
+    fermentation::FermentationUiPresentationCache withoutRule;
+    fermentation::FermentationUiPresentationCache withRule;
+    withRule.update(false, {}, [] {
+        fermentation::FermentationUiPresentationSource source;
+        source.timeZoneRule = zurichRule();
+        return std::optional<fermentation::FermentationUiPresentationSource>{
+            source};
+    });
+
+    TEST_ASSERT_FALSE(
+        keyFor(snapshot, workspace, "en", std::nullopt,
+               device_platform::DeviceUiNetworkStatus::Unavailable, 1782864000,
+               0U, withoutRule) ==
+        keyFor(snapshot, workspace, "en", std::nullopt,
+               device_platform::DeviceUiNetworkStatus::Unavailable, 1782864000,
+               0U, withRule));
 }
 
 void test_network_status_icon_changes_token_and_has_r1_line_height() {
@@ -1596,7 +1750,15 @@ int main() {
     RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);
     RUN_TEST(test_clock_text_dash_when_untrusted);
-    RUN_TEST(test_clock_text_formats_trusted_utc_as_hh_mm);
+    RUN_TEST(test_clock_text_shows_zurich_local_time_not_utc);
+    RUN_TEST(test_clock_text_follows_the_dst_boundary);
+    RUN_TEST(test_clock_text_dash_without_trusted_utc_even_with_a_zone_rule);
+    RUN_TEST(test_clock_text_dash_when_local_time_owner_yields_no_result);
+    RUN_TEST(
+        test_header_clock_hit_zone_edges_do_not_overlap_network_or_language);
+    RUN_TEST(test_tapping_the_header_clock_opens_the_clock_screen);
+    RUN_TEST(test_header_clock_page_shows_trust_zone_and_local_time);
+    RUN_TEST(test_render_key_includes_the_prepared_zone_rule);
     RUN_TEST(test_network_status_icon_changes_token_and_has_r1_line_height);
     RUN_TEST(test_all_single_line_commands_have_r1_text_line_height);
     RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);

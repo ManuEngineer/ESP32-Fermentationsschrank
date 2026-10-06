@@ -106,7 +106,8 @@ struct RepresentativeScreen {
 //  - locale: hash of the locale actually used for drawing;
 //  - pressed target (kind, slot, row and column), network status, trusted UTC
 //  at display
-//    resolution (the clock text is HH:MM from UTC, minute granularity) and the
+//    resolution (the clock text is the local HH:MM, minute granularity; the
+//    prepared zone rule that derives it is part of the key) and the
 //    network lifecycle's access-point change revision (only on HeaderNetwork;
 //    it changes exactly when SSID, password or IPv4 address change or the
 //    data is set or cleared, and is read without copying the secrets).
@@ -125,6 +126,8 @@ struct ScreenRenderKey {
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};
     std::optional<std::int64_t> utcMinute;
+    std::uint8_t timeZoneDst{0U};
+    std::int16_t timeZoneOffsetMinutes{0};
     std::uint64_t accessPointRevision{0U};
 
     friend bool operator==(const ScreenRenderKey& left,
@@ -141,6 +144,8 @@ struct ScreenRenderKey {
                left.pressedColumn == right.pressedColumn &&
                left.networkStatus == right.networkStatus &&
                left.utcMinute == right.utcMinute &&
+               left.timeZoneDst == right.timeZoneDst &&
+               left.timeZoneOffsetMinutes == right.timeZoneOffsetMinutes &&
                left.accessPointRevision == right.accessPointRevision;
     }
     friend bool operator!=(const ScreenRenderKey& left,

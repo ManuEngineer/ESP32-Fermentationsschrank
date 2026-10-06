@@ -9,6 +9,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_presentation_cache.hpp"
 #include "fermentation_ui_text.hpp"
+#include "local_time.hpp"
 #include "mock_network_lifecycle.hpp"
 #include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
@@ -442,6 +443,30 @@ void test_language_page_steady_state_allocates_nothing() {
     TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
 }
 
+void test_clock_page_steady_state_and_local_time_path_allocate_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::HeaderClock);
+    fixture.settle();
+    // The prepared zone rule reached the UI loop through the presentation
+    // cache (not re-resolved), and converts without any allocation.
+    const auto rule = fixture.gate.presentation().timeZoneRule();
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::EuropeanUnion),
+        static_cast<int>(rule.dst));
+    startCounting();
+    bool redraw = false;
+    std::uint32_t convertedHours = 0U;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+        const auto local = device_platform::toLocalTime(1'782'864'000LL, rule);
+        convertedHours += local.has_value() ? local->hour : 99U;
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(200U, convertedHours);  // 02:00 CEST, 100 times
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
 void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
     // Only HeaderNetwork evicts the program catalog copy (it does not consume
     // it); the web access page keeps the existing presentation contract.
@@ -808,6 +833,7 @@ int main() {
     RUN_TEST(
         test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
     RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
+    RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();

@@ -1216,6 +1216,7 @@ FermentationApplication::uiPresentationSource() const {
     }
     source.canonicalTimeZoneId = device_platform::TimeZoneId{
         runtime.lease.get().preparedTimeZone().canonicalIdentifier};
+    source.timeZoneRule = runtime.lease.get().preparedTimeZone().rule;
     source.programCatalog = runtime.lease.get().programCatalog();
     return source;
 }

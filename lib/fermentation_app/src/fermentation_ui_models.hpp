@@ -145,6 +145,9 @@ struct FermentationUiSnapshot {
 struct FermentationUiPresentationSource {
     device_platform::LocaleId displayLocale{"en"};
     device_platform::TimeZoneId canonicalTimeZoneId;
+    // Rule of the already prepared zone (RuntimeConfigurationSnapshot::
+    // preparedTimeZone()), so no consumer resolves the zone again.
+    device_platform::TimeZoneRule timeZoneRule{};
     ProgramCatalog programCatalog;
 };
 
