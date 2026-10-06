@@ -56,7 +56,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 87U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 88U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -146,6 +146,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"language-de", "Deutsch"},
         std::pair{"language-en", "English"},
         std::pair{"language-es", "Espanol"},
+        std::pair{"language-change-failed", "Language not changed"},
     };
     const auto translated = [](const auto& source, const char* locale) {
         std::vector<TextTranslation> result;
@@ -155,7 +156,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 87U> de{
+            const std::array<std::pair<const char*, const char*>, 88U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -246,7 +247,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"message-muted", "Stumm"},
                  {"language-de", "Deutsch"},
                  {"language-en", "English"},
-                 {"language-es", "Espanol"}}};
+                 {"language-es", "Espanol"},
+                 {"language-change-failed", "Sprache nicht geaendert"}}};
             for (const auto& replacement : de) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {
@@ -255,7 +257,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 87U> es{
+            const std::array<std::pair<const char*, const char*>, 88U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -346,7 +348,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"message-muted", "Silenciado"},
                  {"language-de", "Deutsch"},
                  {"language-en", "English"},
-                 {"language-es", "Espanol"}}};
+                 {"language-es", "Espanol"},
+                 {"language-change-failed", "Idioma no cambiado"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

@@ -30,7 +30,9 @@ constexpr std::uint16_t kContentRowTop = 64U;
 constexpr std::uint16_t kContentRowHeight = kControlHeight;
 constexpr std::uint16_t kContentRowLeft = 8U;
 constexpr std::uint16_t kContentRowWidth = 304U;
-constexpr std::uint16_t kListReasonTop = 184U;
+// The drawn rows end at y=182 (2 px gap); the 18 px reason line then ends
+// exactly at the bottom controls (y=200).
+constexpr std::uint16_t kListReasonTop = 182U;
 
 // Pages whose content is a row list over the workspace pager. The pager item
 // count is the number of listed entries (programs, messages or languages).
@@ -642,8 +644,11 @@ RepresentativeScreen makeRepresentativeScreen(
             addText(commands, textPacks, locale,
                     *screen.workspace.blockedReason,
                     {8U,
-                     screen.workspace.programList.empty() ? std::uint16_t{128U}
-                                                          : kListReasonTop,
+                     screen.workspace.programList.empty() &&
+                             screen.workspace.page !=
+                                 FermentationUiPage::HeaderLanguage
+                         ? std::uint16_t{128U}
+                         : kListReasonTop,
                      304U, RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::StatusWarning,
                     device_platform::ThemeToken::Canvas);

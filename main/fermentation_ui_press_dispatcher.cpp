@@ -148,6 +148,14 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
+        if (press.setDisplayLanguage.has_value()) {
+            // The language page shows a refused change; an accepted one
+            // replaces an earlier failure.
+            workspace.noteDisplayLanguageOutcome(
+                result.dispatch.commandResult.has_value() &&
+                result.dispatch.commandResult->category ==
+                    device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+        }
     }
     return result;
 }

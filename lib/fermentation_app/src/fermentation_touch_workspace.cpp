@@ -309,6 +309,7 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
             break;
     }
     page_ = page;
+    displayLanguageChangeFailed_ = false;
 }
 
 void FermentationTouchWorkspace::setSlot(
@@ -802,6 +803,10 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             // One selectable row per language included in this build.
             view.pager.itemCount =
                 makeFermentationR1DeviceUiBuildCatalog().includedLocales.size();
+            // A refused change stays visible on this page until the next
+            // outcome or until the page is left.
+            if (displayLanguageChangeFailed_)
+                view.blockedReason = key("language-change-failed");
             setSlot(view, 1U, "network",
                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
             setSlot(view, 2U, "clock",
@@ -1091,6 +1096,7 @@ bool FermentationTouchWorkspace::navigate(
     if (destination == page_) return false;
     pageStack_.push_back(destination);
     page_ = destination;
+    displayLanguageChangeFailed_ = false;
     pager_.currentIndex = 0U;
     return true;
 }
@@ -1105,6 +1111,7 @@ bool FermentationTouchWorkspace::goBack() {
         pageStack_.pop_back();
         page_ = pageStack_.back();
     }
+    displayLanguageChangeFailed_ = false;
     programEditDirty_ = false;
     return true;
 }

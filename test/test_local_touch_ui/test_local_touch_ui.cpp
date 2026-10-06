@@ -1483,6 +1483,37 @@ void test_language_page_rows_issue_a_language_intent_and_keep_the_slots() {
                           static_cast<int>(workspace.page()));
 }
 
+// Review B1: the refused-change note is transient display state of the
+// language page only.
+void test_language_failure_note_is_transient_and_page_local() {
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    workspace.noteDisplayLanguageOutcome(false);
+    const auto failed = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(failed.blockedReason.has_value());
+    TEST_ASSERT_TRUE(*failed.blockedReason ==
+                     fermentationTextKey("language-change-failed"));
+    // The language slots and rows are unaffected by the note.
+    TEST_ASSERT_TRUE(failed.bottomSlots[3].enabled);
+    // An accepted outcome replaces it.
+    workspace.noteDisplayLanguageOutcome(true);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    // Navigating away (slot) and back discards it.
+    workspace.noteDisplayLanguageOutcome(false);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderLanguage),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    // The note never shows on other pages.
+    workspace.noteDisplayLanguageOutcome(false);
+    workspace.setPage(FermentationUiPage::HeaderNetwork);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1498,6 +1529,7 @@ int main(int, char**) {
         test_manage_list_reaches_new_program_when_the_active_list_is_empty);
     RUN_TEST(
         test_language_page_rows_issue_a_language_intent_and_keep_the_slots);
+    RUN_TEST(test_language_failure_note_is_transient_and_page_local);
     RUN_TEST(test_message_list_cell_selects_the_canonical_message_id);
     RUN_TEST(test_message_list_cell_outside_the_window_or_page_is_blocked);
     RUN_TEST(

@@ -848,6 +848,27 @@ void test_language_texts_exist_in_every_pack() {
     }
 }
 
+void test_language_failure_message_is_drawn_below_the_rows() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::HeaderLanguage);
+    workspace.noteDisplayLanguageOutcome(false);
+    const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"});
+    const auto text = textFor("language-change-failed", "en");
+    const auto message = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [&text](const auto& command) { return command.text == text; });
+    TEST_ASSERT_TRUE(message != screen.commands.end());
+    // Below the three drawn rows (end y=182) and not into the bottom slots.
+    TEST_ASSERT_EQUAL_UINT16(182U, message->rect.top);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT16(200U,
+                                     message->rect.top + message->rect.height);
+    assertWithinDisplay(message->rect);
+}
+
 void test_service_page_shows_blocked_reason() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
@@ -1570,6 +1591,7 @@ int main() {
         test_language_page_rows_show_endonyms_mark_the_active_language_and_hit);
     RUN_TEST(test_language_page_row_hit_issues_the_language_intent);
     RUN_TEST(test_language_texts_exist_in_every_pack);
+    RUN_TEST(test_language_failure_message_is_drawn_below_the_rows);
     RUN_TEST(test_service_page_shows_blocked_reason);
     RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);

@@ -232,6 +232,14 @@ class FermentationTouchWorkspace {
         return pager_.moveDown();
     }
     [[nodiscard]] FermentationUiPage page() const noexcept { return page_; }
+    // Records the owning outcome of the last language row press so the
+    // language page can show a failed change. Purely transient display state
+    // (not a locale or configuration owner): the next outcome replaces it and
+    // leaving the page discards it.
+    void noteDisplayLanguageOutcome(bool accepted) noexcept {
+        markRenderRelevantChange();
+        displayLanguageChangeFailed_ = !accepted;
+    }
     [[nodiscard]] FermentationUiProgramListIntent programListIntent()
         const noexcept {
         return programListIntent_;
@@ -280,6 +288,7 @@ class FermentationTouchWorkspace {
                                         FermentationUiPage destination);
 
     FermentationUiPage page_{FermentationUiPage::Home};
+    bool displayLanguageChangeFailed_{false};
     FermentationUiProgramListIntent programListIntent_{
         FermentationUiProgramListIntent::Start};
     device_platform::VerticalPager pager_;

@@ -706,6 +706,91 @@ void test_language_row_press_reaches_the_owning_configuration_commit() {
     TEST_ASSERT_EQUAL_STRING("es", current().c_str());
 }
 
+// Review B1: a refused language change is shown on the language page, keeps
+// the language, is replaced by the next accepted change and discarded when
+// the page is left. Driven through the real touch adapter.
+void test_refused_language_change_is_visible_and_cleared_by_a_success() {
+    OwningAppFixture fixture;
+    const auto current = [&fixture] {
+        return fixture.application.uiPresentationSource()
+            ->displayLocale.value();
+    };
+    const auto packs = makeFermentationUiTextPacks();
+    const device_platform::ClockViewInput clock{1'700'000'000LL, {}};
+    const auto touch = [&](FermentationTouchWorkspace& workspace,
+                           const FermentationUiSnapshot& snapshot,
+                           std::uint16_t y) {
+        return processWorkspaceTouch(
+            fixture.application, workspace, snapshot, packs,
+            device_platform::LocaleId{"en"}, nullptr,
+            device_platform::DeviceUiNetworkStatus::Connected, clock, true,
+            100U, y, true, 1000U);
+    };
+    const auto failureText = [&packs](const char* locale) {
+        return device_platform::resolveText(
+                   packs, device_platform::LocaleId{locale},
+                   fermentationTextKey("language-change-failed"))
+            .value;
+    };
+    const auto screenHas = [&](FermentationTouchWorkspace& workspace,
+                               const FermentationUiSnapshot& snapshot,
+                               const char* locale, const std::string& text) {
+        const auto screen = makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{locale});
+        for (const auto& command : screen.commands)
+            if (command.text == text) return true;
+        return false;
+    };
+
+    // 1.-2. Open the page with a snapshot, then change the configuration so
+    // that snapshot's revision is stale.
+    const auto stale = fixture.application.uiSnapshot();
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_TRUE(current() != "es");
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            fixture.application
+                .applyDisplayLanguage(
+                    "es", stale.revisions.expectedUserConfigurationRevision)
+                .commit));
+    TEST_ASSERT_FALSE(workspace.view(stale).blockedReason.has_value());
+
+    // 3.-5. Row 0 ("de") with the stale revision through the touch adapter.
+    const auto refused = touch(workspace, stale, 70U);
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // 6. A localized, visible failure message on the language page.
+    TEST_ASSERT_TRUE(workspace.view(stale).blockedReason.has_value());
+    for (const char* locale : {"en", "de", "es"}) {
+        const auto text = failureText(locale);
+        TEST_ASSERT_TRUE(!text.empty());
+        TEST_ASSERT_TRUE(text.find("fermentation") == std::string::npos);
+        TEST_ASSERT_TRUE(screenHas(workspace, stale, locale, text));
+    }
+
+    // 7. A following accepted change takes over and removes the message.
+    const auto fresh = fixture.application.uiSnapshot();
+    const auto accepted = touch(workspace, fresh, 110U);
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("en", current().c_str());
+    TEST_ASSERT_FALSE(workspace.view(fresh).blockedReason.has_value());
+    TEST_ASSERT_FALSE(screenHas(workspace, fresh, "en", failureText("en")));
+
+    // Leaving the page discards a transient failure.
+    static_cast<void>(touch(workspace, stale, 70U));
+    TEST_ASSERT_TRUE(workspace.view(stale).blockedReason.has_value());
+    workspace.setPage(FermentationUiPage::Home);
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_FALSE(workspace.view(stale).blockedReason.has_value());
+}
+
 void test_command_status_projection_keeps_decisions_only() {
     const auto proposed =
         FermentationUiCommandBridge::fromCommandStatus(CommandStatus::Proposed);
@@ -1122,6 +1207,7 @@ int main() {
     RUN_TEST(
         test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path);
     RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
+    RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
