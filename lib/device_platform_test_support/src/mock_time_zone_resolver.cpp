@@ -14,7 +14,11 @@ device_platform::TimeZonePrepareResult MockTimeZoneResolver::prepare(
     if (status_ != device_platform::TimeZonePrepareStatus::Success) {
         return {status_, std::nullopt};
     }
-    return {status_, device_platform::PreparedTimeZone{canonicalIdentifier}};
+    // Unknown test identifiers get the fail-closed default rule.
+    const auto rule = device_platform::findTimeZoneRule(canonicalIdentifier)
+                          .value_or(device_platform::TimeZoneRule{});
+    return {status_,
+            device_platform::PreparedTimeZone{canonicalIdentifier, rule}};
 }
 
 std::size_t MockTimeZoneResolver::callCount() const { return callCount_; }

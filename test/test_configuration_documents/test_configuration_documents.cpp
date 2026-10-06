@@ -8,6 +8,7 @@
 #include "configuration_storage_contract.hpp"
 #include "configuration_text.hpp"
 #include "firmware_configuration_catalog.hpp"
+#include "time_zone_rule.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "standard_program_catalog.hpp"
 #include "storage_types.hpp"
@@ -44,6 +45,16 @@ void test_firmware_catalogs_are_versioned_and_exact() {
     TEST_ASSERT_FALSE(containsLanguageId("fr"));
     TEST_ASSERT_TRUE(containsTimeZoneId("Europe/Zurich"));
     TEST_ASSERT_FALSE(containsTimeZoneId("Europe/Berlin"));
+}
+
+void test_time_zone_catalog_is_derived_from_the_platform_zone_table() {
+    using namespace fermentation::firmware_configuration_catalog;
+    for (const auto& zone : device_platform::kSupportedTimeZones) {
+        TEST_ASSERT_TRUE(containsTimeZoneId(zone.canonicalIdentifier));
+    }
+    TEST_ASSERT_TRUE(containsTimeZoneId(kFactoryTimeZoneId));
+    TEST_ASSERT_FALSE(containsTimeZoneId("europe/zurich"));
+    TEST_ASSERT_FALSE(containsTimeZoneId(""));
 }
 
 void test_user_configuration_prepares_catalogued_time_zone() {
@@ -317,6 +328,7 @@ void test_storage_contract_uses_stable_ids_and_short_keys() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_firmware_catalogs_are_versioned_and_exact);
+    RUN_TEST(test_time_zone_catalog_is_derived_from_the_platform_zone_table);
     RUN_TEST(test_user_configuration_prepares_catalogued_time_zone);
     RUN_TEST(
         test_user_configuration_rejects_unknown_catalog_values_before_resolver);

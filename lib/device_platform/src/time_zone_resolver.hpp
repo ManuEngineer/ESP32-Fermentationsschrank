@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 
+#include "time_zone_rule.hpp"
+
 namespace device_platform {
 
 enum class TimeZonePrepareStatus : std::uint8_t {
@@ -14,6 +16,9 @@ enum class TimeZonePrepareStatus : std::uint8_t {
 
 struct PreparedTimeZone {
     std::string canonicalIdentifier;
+    // Einzige Regelquelle fuer die lokale Zeitumrechnung (siehe
+    // `toLocalTime`); der Default `Unavailable` ist fail-closed.
+    TimeZoneRule rule;
 };
 
 struct TimeZonePrepareResult {
@@ -24,7 +29,8 @@ struct TimeZonePrepareResult {
 // Schmaler, anwendungsneutraler Port fuer die Vorbereitung eines bereits
 // strukturell und katalogseitig validierten kanonischen IANA-Bezeichners.
 // Er kennt weder UserConfiguration noch lokale Terminplanung. Eine reale
-// ESP32-Zeitzonendatenbank ist nicht Bestandteil dieses Ports.
+// ESP32-Zeitzonendatenbank ist nicht Bestandteil dieses Ports; die Regel einer
+// unterstuetzten Zone stammt aus der kanonischen Tabelle `kSupportedTimeZones`.
 class ITimeZoneResolver {
    public:
     ITimeZoneResolver() = default;
