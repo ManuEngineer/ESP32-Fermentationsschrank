@@ -7,21 +7,25 @@ ISSUE=178
 SCOPE=R1_LOCAL_TIME_OWNER
 BASE_BRANCH=main
 BASE_SHA=8bf48ccc28e0286e4550c7e778711e5682b72f42
-PLAN_REVISION=2
+PLAN_REVISION=3
 PLAN_STATUS=AWAITING_OWNER_DECISION_O1_AND_PLAN_APPROVAL
 IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION_AUTHORIZATION=NO
 PRODUCTION_CODE_CHANGED=NO
 OWNER_APPROVED_PLAN_SHA=NONE
-SUPERSEDES_REVISION=1_AT_724c6892a51a6e315f315caa975e9026508a863a
+SUPERSEDES_REVISION=2_AT_e5b5eeff4e0a2c56eff79ab1e1cada6dd74a73ac
+B1_REUSE_BEFORE_BUILD=PASS
+B2_SINGLE_TIMEZONE_TRUTH=PASS
+B3_RTC_2000_2099_LEAK=PASS
+B4_HISTORICAL_RULE_VALIDITY=ADDRESSED_IN_REVISION_3
 BASIS=ISSUE_126_PR_127_MERGED
 S4_OF_ISSUE_172_GATED_ON_THIS_ISSUE=YES
 PR179=SEPARATE_NO_S4_IMPLEMENTATION_HERE
 ACTUATOR_RELEASE=NO
 ```
 
-Plan-only. Diese Revision ist eigenstaendig und vollstaendig; Revision 1 muss
-nicht herangezogen werden. Es gibt keine Produktionslogik, keine produktiven
+Plan-only. Diese Revision ist eigenstaendig und vollstaendig; fruehere Revisionen
+muessen nicht herangezogen werden. Es gibt keine Produktionslogik, keine produktiven
 Tests, keine Dependency und keine #172-/S4-Aenderung vor Freigabe der exakten
 Plan-SHA.
 
@@ -60,6 +64,7 @@ keine Aenderung von `UserConfiguration`-Schema oder Persistenz.
 | F12 | #126 begrenzt nur den **DS3231SN-RTC-Kalender** auf 2000..2099 (`R1_DS3231SN_SUPPORTED_UTC_YEAR_RANGE`); NTP-only ist gueltig, und `ITimeSource` hat keine Jahresgrenze. Es gibt keine kanonische produktweite Lokalzeitgrenze. | `docs/tasks/issue-126-absolute-time-rtc-ntp-plan.md` (Zeilen 107, 454, 1194) |
 | F13 | Referenzprobe (Host-glibc, nicht Ziel-libc): `CET-1CEST,M3.5.0,M10.5.0/3` reproduziert fuer 2026 die IANA-Grenzen von `Europe/Zurich` sekundengenau. Die Probe belegt die Regel, **nicht** newlib. | lokale Probe |
 | F14 | Die `esp_idf_*_host`-Tests laufen mit dem ESP-IDF-Linux-Target gegen Host-libc (vor Umsetzung zu bestaetigen, siehe 7). Es gibt weder QEMU noch einen Hardware-Schritt in den GitHub-Gates fuer Zeitvektoren. | `test/esp_idf_*_host/`, `docs/CI_AND_QUALITY_GATES.md` |
+| F15 | **Historische Zonensemantik:** `Europe/Zurich` hatte 1970 keine Sommerzeit; von 1981 bis 1995 endete die Sommerzeit am letzten Sonntag im September. Die modellierte Regel (letzter Sonntag Maerz/Oktober, 01:00 UTC) trifft erst ab 1996 zu (IANA-Probe: 1995-10-01 +60/ohne DST, die moderne Regel haette dort DST; 1996-03-31 und 1996-10-27 stimmen). #126 begrenzt `ITimeSource::unixTimeSeconds()` nicht auf >= 1996; ein SNTP-Sync kann technisch einen aelteren Wert als trusted publizieren. | IANA-`zoneinfo`-Probe, F1, F12 |
 
 ## 3. Reuse-before-build: Bewertung O1
 
@@ -133,7 +138,7 @@ unveraendert weiter.
 **Einzige Zonenwahrheit.** Genau eine kanonische Tabelle der in diesem Build
 unterstuetzten Zonen: eine `constexpr`-Tabelle in
 `device_platform/src/time_zone_rule.hpp` (je Eintrag kanonische IANA-ID +
-Regel), R1: ein Eintrag `Europe/Zurich`. Keine Registry, keine Provider, keine
+Regel inklusive Gueltigkeitsbeginn), R1: ein Eintrag `Europe/Zurich`. Keine Registry, keine Provider, keine
 Laufzeitregistrierung. Abgeleitet davon, nicht erneut gepflegt:
 
 - `EspTimeZoneResolver::prepare()` und der Lookup `findTimeZoneRule(id)`
@@ -164,6 +169,9 @@ enum class DaylightSavingRule : std::uint8_t { Unavailable, None, EuropeanUnion 
 struct TimeZoneRule {                       // Default = fail-closed
     DaylightSavingRule dst{DaylightSavingRule::Unavailable};
     std::int16_t standardOffsetMinutes{0};  // Europe/Zurich: 60
+    std::int64_t validFromUtcSeconds{0};    // Regel gilt erst ab dieser UTC;
+                                            // Europe/Zurich: 820454400
+                                            // (1996-01-01T00:00:00Z)
 };
 
 struct LocalTime {                          // reine Werte, renderer-/transportneutral
@@ -206,18 +214,25 @@ vorbereiteten Zone vorsehen (Hinweis fuer #172, kein #178-Scope).
 |---|---|
 | `trustedUtc == nullopt` | `nullopt` (keine Lokalzeit, kein UTC-Ersatz) |
 | `zone.rule.dst == Unavailable` (Default, nicht vorbereitet) | `nullopt` |
-| `trustedUtc < 0` oder libc-`gmtime_r` kann die Instanz nicht darstellen | `nullopt` |
+| `trustedUtc < zone.rule.validFromUtcSeconds` (Europe/Zurich: vor 1996-01-01T00:00:00Z) | `nullopt`; keine Umrechnung mit der modernen Regel |
+| libc-`gmtime_r` kann die Instanz nicht darstellen | `nullopt` |
 | unbekannte/ungueltige Zone | `prepare()` liefert `UnsupportedIdentifier`, es entsteht keine `PreparedTimeZone`; Ablehnung ueber den bestehenden Pfad |
 
-**Keine Jahresgrenze.** Die Regel wird fuer jede darstellbare Instanz >= 0
-gleichmaessig angewandt (POSIX-TZ-Semantik, wie Option A). Es gibt keinen
-Lokalzeit-Cut 2000..2099; der RTC-Bereich aus #126 (F12) bleibt auf den
-DS3231SN-Adapter beschraenkt und wird nicht uebertragen. Historische
-CH-/EU-Regeln vor 1996 werden nicht modelliert und nicht beansprucht; fuer
-trusted UTC aus #126 ist das ohne Wirkung. Eine eigene Produktgrenze waere eine
-separate Ownerentscheidung und ist nicht Teil dieses Plans.
+**Gueltigkeitsgrenze der Zonenregel (B4).** Die modellierte Regel ist die
+heutige EU-Regel; fuer `Europe/Zurich` trifft sie ab 1996 zu (F15). Die Grenze
+`validFromUtcSeconds = 820454400` (1996-01-01T00:00:00Z, mitten in der
+Standardzeit, daher ohne DST-Randfall) ist Teil der **kanonischen Zonentabelle**
+und gilt fuer beide Optionen O1=A und O1=B: UTC davor liefert `nullopt`
+(fail-closed), nie eine still falsch umgerechnete Lokalzeit. Es wird keine
+historische IANA-Semantik gebaut oder behauptet; Zeitpunkte vor 1996 zeigen
+keine Lokalzeit, ein spaeterer Bedarf waere eine eigene Scope-Entscheidung. Nach
+oben gibt es keine Grenze: die Regel gilt fort (POSIX-TZ-Semantik); eine
+kuenftige Regelaenderung erfordert eine Firmwareaenderung (Abschnitt 9).
+Die Grenze ist eine Eigenschaft **dieser Zonenregel**, keine allgemeine Produkt-
+oder RTC-Zeitgrenze: der RTC-Bereich 2000..2099 aus #126 (F12) bleibt auf den
+DS3231SN-Adapter beschraenkt, und `ITimeSource` bleibt ungegrenzt.
 
-**Algorithmus.** Ganzzahlarithmetik: Jahr der UTC-Instanz aus `gmtime_r`;
+**Algorithmus.** Nach der Grenzpruefung Ganzzahlarithmetik: Jahr der UTC-Instanz aus `gmtime_r`;
 Beginn/Ende = letzter Sonntag Maerz/Oktober 01:00 UTC aus `daysFromCivil` und
 Wochentag `(tage + 4) mod 7`; `daylightSaving = start <= utc < ende`; Offset =
 `standardOffsetMinutes + (dst ? 60 : 0)`; Felder aus `gmtime_r(utc + offset)`.
@@ -253,8 +268,8 @@ Keine Allokation, kein Zustand, `noexcept`.
 Wird A gewaehlt, wird dieser Plan als neue Revision vollstaendig konsolidiert
 (Port, Adapter, Aktivierungsprotokoll, Hardware-/Emulationsnachweis der
 DST-Grenzen, POSIX-String in der Tabelle) und erneut freigegeben. Die Tabelle
-als einzige Zonenwahrheit und der Verzicht auf UI-Vorverdrahtung gelten fuer
-beide Optionen.
+als einzige Zonenwahrheit, die Gueltigkeitsgrenze 1996 (B4) und der Verzicht
+auf UI-Vorverdrahtung gelten fuer beide Optionen.
 
 Weitere Ownerentscheidungen: keine. Kein neues ADR noetig (ADR-013 eingehalten,
 kein Modul neu geschnitten); die Entscheidung wird in `docs/ADOPT_OR_BUILD.md`
@@ -305,16 +320,22 @@ IANA-Daten (Python `zoneinfo`, `Europe/Zurich`) berechnet; Offset in Minuten.
 | Fruehjahr 2100 (kein Schaltjahr) -1 s / 0 | 4109878799 / 4109878800 | 2100-03-28 01:59:59 / 03:00:00 | +60 / +120 | nein / ja |
 | Herbst 2100 -1 s / 0 | 4128627599 / 4128627600 | 2100-10-31 02:59:59 / 02:00:00 | +120 / +60 | ja / nein |
 | int32-Grenze 2038-01-19 03:14:08Z | 2147483648 | 2038-01-19 04:14:08 | +60 | nein |
+| Gueltigkeitsgrenze: 1995-12-31 23:59:59Z (1 s davor) | 820454399 | `nullopt` | – | – |
+| Gueltigkeitsgrenze: 1996-01-01 00:00:00Z (ab Grenze) | 820454400 | 1996-01-01 01:00:00 | +60 | nein |
+| Fruehjahr 1996 -1 s / 0 | 828233999 / 828234000 | 1996-03-31 01:59:59 / 03:00:00 | +60 / +120 | nein / ja |
+| Herbst 1996 -1 s / 0 | 846377999 / 846378000 | 1996-10-27 02:59:59 / 02:00:00 | +120 / +60 | ja / nein |
+| Historischer Gegenfall Herbst 1995 (1995-10-01 00:00Z; IANA: +60 ohne DST; moderne Regel: DST) | 812505600 | `nullopt` (nicht still +120) | – | – |
+| Historischer Gegenfall Sommer 1970 (1970-07-01 00:00Z; IANA: +60 ohne DST; moderne Regel: DST) | 15638400 | `nullopt` | – | – |
 | Jahreswechsel 2026-12-31 23:30Z | 1798759800 | 2027-01-01 00:30:00 | +60 | nein |
 
-(2100 prueft, dass die Regel ohne kuenstliche Jahresgrenze gilt; die
+(2100 prueft, dass die Regel nach oben ohne kuenstliche Grenze gilt; die
 IANA-Referenz stammt dort aus der POSIX-Regel der tzdata und ist damit kein
 unabhaengiger Beleg ueber die Regel hinaus.)
 
 Zusaetzlich:
 
 - fehlende trusted UTC (`nullopt`) -> `nullopt`, kein UTC-Ersatz;
-- `TimeZoneRule{}` (Default `Unavailable`) -> `nullopt`; negative UTC -> `nullopt`;
+- `TimeZoneRule{}` (Default `Unavailable`) -> `nullopt`; negative UTC -> `nullopt` (liegt vor der Gueltigkeitsgrenze);
 - doppelter lokaler Herbstbereich: zwei verschiedene UTC-Instanzen mit
   identischer lokaler Uhrzeit sind ueber `daylightSaving` unterscheidbar;
 - `findTimeZoneRule`: `Europe/Zurich` -> Regel; unbekannt/leer/falsche
@@ -336,6 +357,7 @@ nach Ownerfreigabe; nicht ausgefuehrt gilt als nicht bestanden.
 
 | Risiko | Behandlung |
 |---|---|
+| Historische UTC (SNTP liefert Wert < 1996) | Gueltigkeitsgrenze 1996 in der Zonentabelle, `nullopt`; Tests an der Grenze und historische Gegenfaelle (F15) |
 | Regelaenderung (EU/CH Sommerzeitabschaffung) | dokumentiertes Wartungsrisiko; Regel an einer Stelle; Firmwareupdate noetig (OTA nicht R1); gilt auch fuer Option A |
 | Zweite Zonenwahrheit | eine Tabelle; Katalog und Resolver leiten ab (Abschnitt 4) |
 | Extraktion beruehrt #126-Code | rein mechanisch; `test_absolute_time_internal` und ESP-Build beider Profile als Nachweis; Commit 1 getrennt |
@@ -345,7 +367,7 @@ nach Ownerfreigabe; nicht ausgefuehrt gilt als nicht bestanden.
 ## 10. Dokumentationswirkung
 
 `docs/ADOPT_OR_BUILD.md` (neuer Abschnitt "Lokale Zeit": Entscheidung, Evidenz
-F7-F14), `docs/CONFIGURATION_PERSISTENCE.md` (Katalogabsatz), `docs/ROADMAP.md`
+F7-F15), `docs/CONFIGURATION_PERSISTENCE.md` (Katalogabsatz), `docs/ROADMAP.md`
 (Zeile #178 zu PR-Beginn und nach Merge), Kommentar in `time_zone_resolver.hpp`,
 `CHANGELOG.md`. Keine Requirements werden in der Roadmap kopiert.
 
