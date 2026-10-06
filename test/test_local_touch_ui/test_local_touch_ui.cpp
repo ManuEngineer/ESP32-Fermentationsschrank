@@ -1205,6 +1205,67 @@ void test_start_and_programs_open_the_list_with_separate_intent() {
         static_cast<int>(manage.programListIntent()));
 }
 
+// Review B2: an empty active list is a valid catalog; the management list must
+// still reach `new`, while the start list keeps its manual path.
+void test_manage_list_reaches_new_program_when_the_active_list_is_empty() {
+    auto catalog = makeFactoryProgramCatalog();
+    for (auto& document : catalog.programs) document.program.installed = false;
+    TEST_ASSERT_EQUAL_UINT32(
+        4U, static_cast<std::uint32_t>(catalog.programs.size()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProgramCatalogStatus::Success),
+                          static_cast<int>(validateProgramCatalog(catalog)));
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+
+    FermentationTouchWorkspace manage;
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(1), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(manage.page()));
+    const auto list = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(list.programList.empty());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NewProgram),
+        static_cast<int>(list.slotActions[3]));
+    TEST_ASSERT_TRUE(list.bottomSlots[3].enabled);
+    // No row exists to hit.
+    TEST_ASSERT_FALSE(manage.press(snapshot, cell(0U), &catalog).navigated);
+
+    // `new` takes the existing NewProgram semantics into the editor path and
+    // carries no application payload (no program/config owner is called).
+    const auto created = manage.press(snapshot, bottom(3), &catalog);
+    TEST_ASSERT_TRUE(created.navigated);
+    TEST_ASSERT_FALSE(created.action.has_value());
+    TEST_ASSERT_FALSE(created.programEdit.has_value());
+    TEST_ASSERT_FALSE(created.transitionAction.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramEdit),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_FALSE(manage.selectedProgramId().has_value());
+
+    // The start intent keeps the manual path on an empty list.
+    FermentationTouchWorkspace start;
+    TEST_ASSERT_TRUE(start.press(snapshot, bottom(0), &catalog).navigated);
+    const auto startList = start.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startList.programList.empty());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateManualModeSelection),
+        static_cast<int>(startList.slotActions[3]));
+
+    // A non-empty management list keeps the default status slot.
+    const auto filled = catalogWithPrograms(1U);
+    FermentationTouchWorkspace nonEmpty;
+    TEST_ASSERT_TRUE(nonEmpty.press(snapshot, bottom(1), &filled).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(nonEmpty.view(snapshot, &filled).slotActions[3]));
+    // Before a catalog is available nothing is offered.
+    FermentationTouchWorkspace noCatalog;
+    TEST_ASSERT_TRUE(noCatalog.press(snapshot, bottom(1)).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(noCatalog.view(snapshot).slotActions[3]));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1216,6 +1277,8 @@ int main(int, char**) {
     RUN_TEST(test_program_list_cell_outside_the_window_or_page_is_blocked);
     RUN_TEST(test_unstartable_program_is_selectable_with_reason_and_no_start);
     RUN_TEST(test_start_and_programs_open_the_list_with_separate_intent);
+    RUN_TEST(
+        test_manage_list_reaches_new_program_when_the_active_list_is_empty);
     RUN_TEST(
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);

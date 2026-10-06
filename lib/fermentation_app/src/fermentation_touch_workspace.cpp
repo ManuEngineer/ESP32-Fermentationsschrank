@@ -468,6 +468,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 setSlot(view, 3U, "manual",
                         FermentationUiWorkspaceSlotAction::
                             NavigateManualModeSelection);
+            } else if (catalog != nullptr && view.programList.empty()) {
+                // An empty active list is a valid catalog state; without a
+                // row to pick, `new` must stay reachable for administration.
+                setSlot(view, 3U, "new",
+                        FermentationUiWorkspaceSlotAction::NewProgram);
             }
             break;
         case FermentationUiPage::ProgramSummary:
