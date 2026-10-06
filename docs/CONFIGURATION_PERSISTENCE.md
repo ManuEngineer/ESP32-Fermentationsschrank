@@ -204,7 +204,9 @@ zusaetzlich:
 2. erfolgreiche Vorbereitung durch `ITimeZoneResolver`
 
 Der Katalog garantiert mindestens `Europe/Zurich` und ist unabhaengig vom
-Konfigurationsschema versioniert. Nicht gespeichert werden lokalisierte Namen,
+Konfigurationsschema versioniert. Die unterstuetzten Zonen und ihre Regel stehen
+in genau einer Tabelle (`device_platform::kSupportedTimeZones`, Issue #178);
+der `fermentation_app`-Katalog und der Resolver leiten davon ab. Nicht gespeichert werden lokalisierte Namen,
 feste UTC-Offsets, aktueller Sommerzeitstatus, freie POSIX-TZ-Strings oder
 kopierte Zeitzonenregeln.
 

@@ -296,6 +296,27 @@ Diagnosebericht verwendet die gemeinsame begrenzte Exportstrecke erst nach
 Redaction. Ressourcenbudgets werden real gemessen, und Serviceablaeufe werden
 vor realen Aktortests vollstaendig mit Mocks geprueft.
 
+## Lokale Zeit
+
+Issue #178 (Plan `docs/tasks/issue-178-r1-local-time-owner-plan.md`, Owner-
+entscheidung O1=B): `trusted UTC + kanonische Zeitzone -> lokale Zeit` ist eine
+reine Funktion `device_platform::toLocalTime` mit einer einzigen Zonentabelle
+`kSupportedTimeZones` (R1: `Europe/Zurich`, aktuelle EU-Sommerzeitregel).
+
+- Geprueft in Espressif-first-Reihenfolge: ESP-IDF/newlib bietet nur POSIX-`TZ`
+  (`setenv`/`tzset`/`localtime_r`, ohne IANA-Datenbank); es gibt keine
+  Espressif-Zeitzonenkomponente. Der newlib-Pfad ist durch newlib-Locks
+  thread-sicher, braucht aber einen globalen `TZ`-Zustand mit
+  Aktivierungsprotokoll, allokiert bei Zonenaenderung (`setenv`/`tzset`) und
+  ist auf dem Ziel nicht ueber die vorhandenen Gates nachweisbar.
+- Gewaehlt (Owner): Eigenanteil mit ca. 25 Zeilen DST-Regel; `daysFromCivil`
+  aus #126 wiederverwendet (extrahiert), Kalenderfelder ueber libc-`gmtime_r`.
+  Keine neue Dependency, keine Lizenzwirkung, kein Heap.
+- Nicht gewaehlt: newlib-`TZ`-Pfad; allgemeine tzdata-/Kalenderbibliothek;
+  historische Zonensemantik (kein R1-Ziel).
+- Wartungsrisiko: Aendert sich die CH-/EU-Sommerzeitregel, ist eine
+  Firmwareaenderung noetig (OTA ist nicht Release 1).
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:
