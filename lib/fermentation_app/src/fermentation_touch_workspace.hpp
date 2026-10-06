@@ -42,6 +42,18 @@ enum class FermentationUiPage : std::uint8_t {
     HeaderWebAccess,
 };
 
+// Intent with which the program list was opened: `Start` picks a program for a
+// new run (ProgramSummary), `Manage` picks a program for administration
+// (ProgramActions).
+enum class FermentationUiProgramListIntent : std::uint8_t {
+    Start,
+    Manage,
+};
+
+// Visible content rows of a list page. The platform target only carries row
+// indices; the capacity is owned here and by the renderer.
+inline constexpr std::size_t kFermentationUiListVisibleRows = 3U;
+
 enum class FermentationUiSafeBootTarget : std::uint8_t {
     PersistentFactoryReset,
     RawTouchRecovery,
@@ -68,6 +80,7 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     NavigateBack,
     NavigateHome,
     NavigateProgramList,
+    NavigateProgramManagement,
     NavigateProgramSummary,
     NavigateProgramEdit,
     NavigateProgramDeleteConfirmation,
@@ -215,6 +228,10 @@ class FermentationTouchWorkspace {
         return pager_.moveDown();
     }
     [[nodiscard]] FermentationUiPage page() const noexcept { return page_; }
+    [[nodiscard]] FermentationUiProgramListIntent programListIntent()
+        const noexcept {
+        return programListIntent_;
+    }
     void setPage(FermentationUiPage page);
     // Monotonic render-invalidation counter (wraps). It is increased by every
     // public mutator that can change what view() returns for an unchanged
@@ -252,7 +269,13 @@ class FermentationTouchWorkspace {
                  bool enabled = true) const;
     void setCanonicalPageStack(FermentationUiPage page);
 
+    [[nodiscard]] bool selectProgramFor(const std::string& programId,
+                                        const ProgramCatalog& catalog,
+                                        FermentationUiPage destination);
+
     FermentationUiPage page_{FermentationUiPage::Home};
+    FermentationUiProgramListIntent programListIntent_{
+        FermentationUiProgramListIntent::Start};
     device_platform::VerticalPager pager_;
     std::vector<FermentationUiPage> pageStack_{FermentationUiPage::Home};
     std::optional<std::string> selectedProgramId_;

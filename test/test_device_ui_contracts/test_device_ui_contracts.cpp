@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "device_ui_contracts.hpp"
+#include "device_ui_interaction.hpp"
 #include "device_ui_session.hpp"
 #include "device_ui_shell.hpp"
 #include "device_ui_text.hpp"
@@ -202,6 +203,52 @@ void test_command_outcome_categories_stay_bounded() {
     TEST_ASSERT_EQUAL_UINT32(5U, categories.size());
 }
 
+void test_content_cell_target_carries_indices_and_follows_the_interaction_gate() {
+    using device_platform::DeviceUiInteractionOutcome;
+    using device_platform::DeviceUiTarget;
+    using device_platform::DeviceUiTargetKind;
+
+    // The platform validates only the kind: capacities belong to the
+    // application, so any row/column index is a valid target.
+    TEST_ASSERT_TRUE(
+        (DeviceUiTarget{DeviceUiTargetKind::ContentCell, 0U, 0U, 0U}).valid());
+    TEST_ASSERT_TRUE(
+        (DeviceUiTarget{DeviceUiTargetKind::ContentCell, 0U, 7U, 9U}).valid());
+    TEST_ASSERT_FALSE((DeviceUiTarget{}).valid());
+    // Existing aggregate initialisation keeps zero row/column.
+    const DeviceUiTarget slot{DeviceUiTargetKind::BottomSlot, 2U};
+    TEST_ASSERT_EQUAL_UINT8(0U, slot.row);
+    TEST_ASSERT_EQUAL_UINT8(0U, slot.column);
+
+    const DeviceUiTarget target{DeviceUiTargetKind::ContentCell, 0U, 2U, 0U};
+    const auto enabled = device_platform::selectDeviceUiTarget(
+        {target, true, false, false,
+         device_platform::PageExitRequirement::None});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(DeviceUiInteractionOutcome::TargetSelected),
+        static_cast<int>(enabled.outcome));
+    TEST_ASSERT_TRUE(enabled.visiblePressFeedback);
+    TEST_ASSERT_EQUAL_UINT8(2U, enabled.target.row);
+    const auto disabled = device_platform::selectDeviceUiTarget(
+        {target, false, false, false,
+         device_platform::PageExitRequirement::None});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DeviceUiInteractionOutcome::Blocked),
+                          static_cast<int>(disabled.outcome));
+    // A content cell is not a page exit and so is not blocked by one.
+    const auto guarded = device_platform::selectDeviceUiTarget(
+        {target, true, false, false,
+         device_platform::PageExitRequirement::ConfirmDiscard});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(DeviceUiInteractionOutcome::TargetSelected),
+        static_cast<int>(guarded.outcome));
+    const auto sleeping = device_platform::selectDeviceUiTarget(
+        {target, true, false, true,
+         device_platform::PageExitRequirement::None});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(DeviceUiInteractionOutcome::WakeOnly),
+        static_cast<int>(sleeping.outcome));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -210,6 +257,8 @@ void tearDown() {}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_build_catalog_and_clock_contract_remain_renderer_independent);
+    RUN_TEST(
+        test_content_cell_target_carries_indices_and_follows_the_interaction_gate);
     RUN_TEST(test_text_resolver_uses_active_then_english_then_visible_key);
     RUN_TEST(test_theme_falls_closed_to_complete_included_default);
     RUN_TEST(test_shell_has_exactly_four_slots_and_home_back_hierarchy);

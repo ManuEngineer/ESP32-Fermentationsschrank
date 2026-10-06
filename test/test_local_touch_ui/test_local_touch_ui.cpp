@@ -1019,6 +1019,192 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
                           static_cast<int>(workspace.page()));
 }
 
+// S1: a catalog with enough installed programs to need the three-row window.
+ProgramCatalog catalogWithPrograms(std::size_t userPrograms) {
+    auto catalog = runnableCatalog();
+    const auto templateDocument = catalog.programs.back();
+    for (std::size_t index = 0U; index < userPrograms; ++index) {
+        auto document = templateDocument;
+        document.program.id = "user-" + std::to_string(index);
+        document.program.name = "Program " + std::to_string(index);
+        catalog.programs.push_back(std::move(document));
+    }
+    return catalog;
+}
+
+device_platform::DeviceUiTarget cell(std::uint8_t row) {
+    return {device_platform::DeviceUiTargetKind::ContentCell, 0U, row, 0U};
+}
+
+void test_program_list_cell_selects_the_row_of_the_visible_window() {
+    const auto catalog = catalogWithPrograms(4U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::ProgramList);
+    const auto list = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(list.programList.size() >= 5U);
+
+    // Row 1 of the unscrolled window is entry 1; the press carries no payload.
+    const auto first = workspace.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_TRUE(first.navigated);
+    TEST_ASSERT_FALSE(first.action.has_value());
+    TEST_ASSERT_FALSE(first.transitionAction.has_value());
+    TEST_ASSERT_FALSE(first.programEdit.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_STRING(list.programList[1].program.program.id.c_str(),
+                             workspace.selectedProgramId()->c_str());
+
+    // Scrolling by two moves the window: row 2 is now entry 4.
+    workspace.setPage(FermentationUiPage::ProgramList);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2), &catalog).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2), &catalog).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, cell(2U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_STRING(list.programList[4].program.program.id.c_str(),
+                             workspace.selectedProgramId()->c_str());
+}
+
+void test_program_list_cell_outside_the_window_or_page_is_blocked() {
+    const auto catalog = catalogWithPrograms(1U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::ProgramList);
+    const auto count = workspace.view(snapshot, &catalog).programList.size();
+    TEST_ASSERT_TRUE(count >= 2U);
+
+    // Scrolled to the last entry only row 0 is backed by an entry.
+    for (std::size_t index = 0U; index + 1U < count; ++index)
+        TEST_ASSERT_TRUE(
+            workspace.press(snapshot, bottom(2), &catalog).navigated);
+    const auto beyond = workspace.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_FALSE(beyond.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(beyond.interaction.outcome));
+    const auto tooHigh = workspace.press(snapshot, cell(3U), &catalog);
+    TEST_ASSERT_FALSE(tooHigh.navigated);
+    const auto wrongColumn = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 1U},
+        &catalog);
+    TEST_ASSERT_FALSE(wrongColumn.navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(workspace.page()));
+
+    // Without a catalog there is no list and no hittable row.
+    FermentationTouchWorkspace noCatalog;
+    noCatalog.setPage(FermentationUiPage::ProgramList);
+    TEST_ASSERT_FALSE(noCatalog.press(snapshot, cell(0U)).navigated);
+    // A content cell never acts on a page without a list.
+    FermentationTouchWorkspace home;
+    TEST_ASSERT_FALSE(home.press(snapshot, cell(0U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Home),
+                          static_cast<int>(home.page()));
+}
+
+// D12: a listed but not startable program stays selectable (administration),
+// shows the owning reason and never becomes the start candidate.
+void test_unstartable_program_is_selectable_with_reason_and_no_start() {
+    auto catalog = catalogWithPrograms(1U);
+    catalog.programs.back().program.enabled = false;
+    const auto id = catalog.programs.back().program.id;
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+
+    TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(workspace.page()));
+    const auto summary = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_FALSE(summary.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(summary.blockedReason.has_value());
+    TEST_ASSERT_TRUE(*summary.blockedReason ==
+                     fermentationTextKey("program-disabled"));
+    // edit stays reachable for administration.
+    TEST_ASSERT_TRUE(summary.bottomSlots[1].enabled);
+    // A forced confirm press yields no start payload.
+    const auto confirm = workspace.press(snapshot, bottom(2), &catalog);
+    TEST_ASSERT_FALSE(confirm.action.has_value());
+
+    // A startable program has no reason and enables confirm.
+    const auto startableId =
+        catalog.programs[catalog.programs.size() - 2U].program.id;
+    TEST_ASSERT_TRUE(workspace.selectProgram(startableId, catalog));
+    const auto startable = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startable.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(startable.blockedReason.has_value());
+    // Unknown ids are still rejected.
+    TEST_ASSERT_FALSE(workspace.selectProgram("does-not-exist", catalog));
+}
+
+// D14: Start and Programme open the same list with a different intent.
+void test_start_and_programs_open_the_list_with_separate_intent() {
+    const auto catalog = catalogWithPrograms(1U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+
+    FermentationTouchWorkspace start;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateProgramList),
+        static_cast<int>(start.view(snapshot, &catalog).slotActions[0]));
+    TEST_ASSERT_TRUE(start.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Start),
+        static_cast<int>(start.programListIntent()));
+    const auto startList = start.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startList.title == fermentationTextKey("start"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateManualModeSelection),
+        static_cast<int>(startList.slotActions[3]));
+    TEST_ASSERT_TRUE(start.press(snapshot, cell(0U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(start.page()));
+
+    FermentationTouchWorkspace manage;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateProgramManagement),
+        static_cast<int>(manage.view(snapshot, &catalog).slotActions[1]));
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(1), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Manage),
+        static_cast<int>(manage.programListIntent()));
+    const auto manageList = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(manageList.title == fermentationTextKey("programs"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(manageList.slotActions[3]));
+    const auto picked = manage.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_TRUE(picked.navigated);
+    TEST_ASSERT_FALSE(picked.action.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramActions),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_EQUAL_STRING(
+        manageList.programList[1].program.program.id.c_str(),
+        manage.selectedProgramId()->c_str());
+    const auto actions = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(actions.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(actions.bottomSlots[2].enabled);
+    // Back returns to the management list, not to the start path.
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Manage),
+        static_cast<int>(manage.programListIntent()));
+
+    // Opening Start afterwards resets the intent.
+    manage.setPage(FermentationUiPage::Home);
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Start),
+        static_cast<int>(manage.programListIntent()));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1026,6 +1212,10 @@ void tearDown() {}
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_program_list_cell_selects_the_row_of_the_visible_window);
+    RUN_TEST(test_program_list_cell_outside_the_window_or_page_is_blocked);
+    RUN_TEST(test_unstartable_program_is_selectable_with_reason_and_no_start);
+    RUN_TEST(test_start_and_programs_open_the_list_with_separate_intent);
     RUN_TEST(
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);

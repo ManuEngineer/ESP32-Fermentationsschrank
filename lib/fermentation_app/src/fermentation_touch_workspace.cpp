@@ -55,6 +55,7 @@ bool FermentationTouchWorkspace::isPageExitAction(
             return true;
         case FermentationUiWorkspaceSlotAction::None:
         case FermentationUiWorkspaceSlotAction::NavigateProgramList:
+        case FermentationUiWorkspaceSlotAction::NavigateProgramManagement:
         case FermentationUiWorkspaceSlotAction::NavigateProgramSummary:
         case FermentationUiWorkspaceSlotAction::NavigateProgramEdit:
         case FermentationUiWorkspaceSlotAction::
@@ -318,8 +319,9 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
         case FermentationHomeMode::Standby:
             setSlot(view, 0U, "start",
                     FermentationUiWorkspaceSlotAction::NavigateProgramList);
-            setSlot(view, 1U, "programs",
-                    FermentationUiWorkspaceSlotAction::NavigateProgramList);
+            setSlot(
+                view, 1U, "programs",
+                FermentationUiWorkspaceSlotAction::NavigateProgramManagement);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "service",
@@ -443,7 +445,10 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
 
     switch (page_) {
         case FermentationUiPage::ProgramList:
-            view.title = key("programs");
+            view.title = key(programListIntent_ ==
+                                     FermentationUiProgramListIntent::Manage
+                                 ? "programs"
+                                 : "start");
             if (catalog != nullptr) {
                 view.programList = makeFermentationUiProgramList(*catalog);
                 view.pager.itemCount = view.programList.size();
@@ -457,12 +462,28 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "down",
                     FermentationUiWorkspaceSlotAction::MovePagerDown,
                     view.pager.canMoveDown());
-            setSlot(
-                view, 3U, "manual",
-                FermentationUiWorkspaceSlotAction::NavigateManualModeSelection);
+            // Manual operation belongs to the start path; the management list
+            // keeps the default status slot.
+            if (programListIntent_ == FermentationUiProgramListIntent::Start) {
+                setSlot(view, 3U, "manual",
+                        FermentationUiWorkspaceSlotAction::
+                            NavigateManualModeSelection);
+            }
             break;
         case FermentationUiPage::ProgramSummary:
             view.title = key("start");
+            // A listed program that cannot be started stays selectable for
+            // administration; the owning list projection names the reason.
+            if (catalog != nullptr && selectedProgramId_.has_value()) {
+                const auto entries = makeFermentationUiProgramList(*catalog);
+                const auto selected = std::find_if(
+                    entries.begin(), entries.end(),
+                    [this](const FermentationUiProgramListEntry& entry) {
+                        return entry.program.program.id == *selectedProgramId_;
+                    });
+                if (selected != entries.end() && !selected->startable)
+                    view.blockedReason = selected->blockedReason;
+            }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "edit",
@@ -907,22 +928,31 @@ FermentationTouchWorkspace::makeCompletionIntent(
 
 bool FermentationTouchWorkspace::selectProgram(const std::string& programId,
                                                const ProgramCatalog& catalog) {
+    return selectProgramFor(programId, catalog,
+                            FermentationUiPage::ProgramSummary);
+}
+
+// Every installed, listed program is selectable (administration must reach
+// programs that cannot be started). Only a startable program becomes the
+// start candidate; for the others `confirm` stays disabled and the page shows
+// the blocked reason of the list projection.
+bool FermentationTouchWorkspace::selectProgramFor(
+    const std::string& programId, const ProgramCatalog& catalog,
+    FermentationUiPage destination) {
     markRenderRelevantChange();
-    const auto found = std::find_if(
-        catalog.programs.begin(), catalog.programs.end(),
-        [&programId](const ProgramDocument& document) {
-            return document.program.id == programId &&
-                   document.program.installed && document.program.enabled &&
-                   validateProgram(document, ValidationPurpose::Runnable)
-                       .valid();
-        });
-    if (found == catalog.programs.end()) return false;
+    const auto entries = makeFermentationUiProgramList(catalog);
+    const auto found =
+        std::find_if(entries.begin(), entries.end(),
+                     [&programId](const FermentationUiProgramListEntry& entry) {
+                         return entry.program.program.id == programId;
+                     });
+    if (found == entries.end()) return false;
     selectedProgramId_ = programId;
     selectedCandidate_ = {};
-    selectedCandidate_.programId = programId;
+    if (found->startable) selectedCandidate_.programId = programId;
     programEditOperation_ = FermentationUiProgramEditOperation::Edit;
     programEditCandidate_.reset();
-    setCanonicalPageStack(FermentationUiPage::ProgramSummary);
+    setCanonicalPageStack(destination);
     return true;
 }
 
@@ -947,6 +977,11 @@ bool FermentationTouchWorkspace::navigate(
         case FermentationUiWorkspaceSlotAction::NavigateBack:
             return goBack();
         case FermentationUiWorkspaceSlotAction::NavigateProgramList:
+            programListIntent_ = FermentationUiProgramListIntent::Start;
+            destination = FermentationUiPage::ProgramList;
+            break;
+        case FermentationUiWorkspaceSlotAction::NavigateProgramManagement:
+            programListIntent_ = FermentationUiProgramListIntent::Manage;
             destination = FermentationUiPage::ProgramList;
             break;
         case FermentationUiWorkspaceSlotAction::NavigateProgramSummary:
@@ -1264,6 +1299,15 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 selectionTarget.kind =
                     device_platform::DeviceUiTargetKind::HomeOrBack;
         }
+    } else if (target.kind ==
+               device_platform::DeviceUiTargetKind::ContentCell) {
+        // Only the visible window of the program list is hittable: row r is
+        // entry currentIndex + r.
+        enabled = page_ == FermentationUiPage::ProgramList &&
+                  target.column == 0U &&
+                  target.row < kFermentationUiListVisibleRows &&
+                  current.pager.currentIndex + target.row <
+                      current.programList.size();
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerUp) {
         enabled = current.pager.canMoveUp();
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerDown) {
@@ -1296,6 +1340,18 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 pressed.interaction = result.interaction;
                 return pressed;
             }();
+        case device_platform::DeviceUiTargetKind::ContentCell: {
+            // `enabled` guarantees ProgramList, a catalog behind the list and
+            // an in-range entry.
+            const auto& entry =
+                current.programList[current.pager.currentIndex + target.row];
+            result.navigated = selectProgramFor(
+                entry.program.program.id, *catalog,
+                programListIntent_ == FermentationUiProgramListIntent::Manage
+                    ? FermentationUiPage::ProgramActions
+                    : FermentationUiPage::ProgramSummary);
+            return result;
+        }
         case device_platform::DeviceUiTargetKind::PagerUp:
             result.navigated = pager_.moveUp();
             return result;

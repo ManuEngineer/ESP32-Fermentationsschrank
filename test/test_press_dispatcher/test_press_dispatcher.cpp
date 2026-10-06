@@ -232,6 +232,44 @@ void test_dispatch_no_typed_payload_is_reported_as_such() {
     TEST_ASSERT_FALSE(result.resumeFallbackStatus.has_value());
 }
 
+// S1: choosing a program row is pure navigation. It yields no typed payload,
+// so the dispatcher reaches neither an envelope nor an owning application path
+// for the start or the management intent.
+void test_dispatch_program_row_selection_yields_no_typed_payload() {
+    AppFixture fixture;
+    auto catalog = makeFactoryProgramCatalog();
+    FermentationUiSnapshot snapshot;
+    snapshot.home.mode = FermentationHomeMode::Standby;
+    for (const auto intent :
+         {FermentationUiWorkspaceSlotAction::NavigateProgramList,
+          FermentationUiWorkspaceSlotAction::NavigateProgramManagement}) {
+        FermentationTouchWorkspace workspace;
+        const auto home = workspace.view(snapshot, &catalog);
+        const std::size_t slotIndex = home.slotActions[0] == intent ? 0U : 1U;
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(intent),
+                              static_cast<int>(home.slotActions[slotIndex]));
+        TEST_ASSERT_TRUE(
+            workspace
+                .press(snapshot,
+                       {device_platform::DeviceUiTargetKind::BottomSlot,
+                        static_cast<std::uint8_t>(slotIndex)},
+                       &catalog)
+                .navigated);
+        const auto press = workspace.press(
+            snapshot,
+            {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U},
+            &catalog);
+        TEST_ASSERT_TRUE(press.navigated);
+        const auto result =
+            dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+            static_cast<int>(result.outcome));
+        TEST_ASSERT_FALSE(result.commandResult.has_value());
+        TEST_ASSERT_FALSE(result.prepareStatus.has_value());
+    }
+}
+
 void test_dispatch_action_reaches_prepare_and_confirm() {
     AppFixture fixture;
     FermentationUiWorkspacePress press;
@@ -957,6 +995,7 @@ void test_physical_touch_manual_start_uses_the_application_owner_path() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_dispatch_no_typed_payload_is_reported_as_such);
+    RUN_TEST(test_dispatch_program_row_selection_yields_no_typed_payload);
     RUN_TEST(test_dispatch_action_reaches_prepare_and_confirm);
     RUN_TEST(test_dispatch_resume_fallback_is_forwarded_unmodified);
     RUN_TEST(test_prepared_request_has_no_owning_mutation_before_handoff);

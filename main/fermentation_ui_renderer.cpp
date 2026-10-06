@@ -24,7 +24,13 @@ constexpr device_platform::DisplayRect kHeaderLanguageHitRect{176U, 0U, 44U,
                                                               kHeaderHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
-constexpr std::uint16_t kProgramRowHeight = 18U;
+// Touch rows of a content list (same height as the bottom controls) and the
+// first row top; three rows fit between the title row and the reason line.
+constexpr std::uint16_t kContentRowTop = 64U;
+constexpr std::uint16_t kContentRowHeight = kControlHeight;
+constexpr std::uint16_t kContentRowLeft = 8U;
+constexpr std::uint16_t kContentRowWidth = 304U;
+constexpr std::uint16_t kListReasonTop = 184U;
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
     8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
@@ -478,21 +484,33 @@ RepresentativeScreen makeRepresentativeScreen(
         }
     } else {
         if (!screen.workspace.programList.empty()) {
-            const auto rowCount =
-                std::min<std::size_t>(screen.workspace.programList.size(), 3U);
+            // Window over the list: row r shows entry currentIndex + r.
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount = std::min<std::size_t>(
+                screen.workspace.programList.size() - first,
+                kFermentationUiListVisibleRows);
             for (std::size_t index = 0U; index < rowCount; ++index) {
-                const auto& entry = screen.workspace.programList[index];
-                const auto top = static_cast<std::uint16_t>(68U + index * 18U);
-                addFill(commands, {8U, top, 304U, kProgramRowHeight},
+                const auto& entry = screen.workspace.programList[first + index];
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                // The drawn row leaves a 2 px gap; the touch row is the full
+                // kContentRowHeight (see targetAt()).
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
                         device_platform::ThemeToken::Surface);
-                addRawText(
-                    commands,
-                    {12U, top, 296U, RepresentativeScreen::kTextLineHeight},
-                    entry.program.program.name,
-                    entry.startable
-                        ? device_platform::ThemeToken::TextPrimary
-                        : device_platform::ThemeToken::TextSecondary,
-                    device_platform::ThemeToken::Surface);
+                addRawText(commands,
+                           {12U,
+                            static_cast<std::uint16_t>(
+                                top + (kContentRowHeight -
+                                       RepresentativeScreen::kTextLineHeight) /
+                                          2U),
+                            296U, RepresentativeScreen::kTextLineHeight},
+                           entry.program.program.name,
+                           entry.startable
+                               ? device_platform::ThemeToken::TextPrimary
+                               : device_platform::ThemeToken::TextSecondary,
+                           device_platform::ThemeToken::Surface);
             }
         } else if (screen.workspace.confirmationProgramName.has_value()) {
             addRawText(commands,
@@ -504,7 +522,10 @@ RepresentativeScreen makeRepresentativeScreen(
         if (screen.workspace.blockedReason.has_value()) {
             addText(commands, textPacks, locale,
                     *screen.workspace.blockedReason,
-                    {8U, 128U, 304U, RepresentativeScreen::kTextLineHeight},
+                    {8U,
+                     screen.workspace.programList.empty() ? std::uint16_t{128U}
+                                                          : kListReasonTop,
+                     304U, RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::StatusWarning,
                     device_platform::ThemeToken::Canvas);
         } else if (!screen.workspace.unavailableCapabilities.empty()) {
@@ -521,8 +542,10 @@ RepresentativeScreen makeRepresentativeScreen(
 
     if (screen.workspace.pager.itemCount > 0U &&
         screen.workspace.pager.valid()) {
+        // The n/N counter sits right in the title row so it never overlaps
+        // content rows.
         addRawText(commands,
-                   {8U, 156U, 72U, RepresentativeScreen::kTextLineHeight},
+                   {248U, 40U, 64U, RepresentativeScreen::kTextLineHeight},
                    std::to_string(screen.workspace.pager.currentIndex + 1U) +
                        "/" + std::to_string(screen.workspace.pager.itemCount),
                    device_platform::ThemeToken::TextSecondary,
@@ -575,6 +598,23 @@ RepresentativeScreen makeRepresentativeScreen(
     }
     if (pressedTarget.has_value() &&
         pressedTarget->kind ==
+            device_platform::DeviceUiTargetKind::ContentCell &&
+        screen.workspace.page == FermentationUiPage::ProgramList &&
+        pressedTarget->column == 0U &&
+        pressedTarget->row < kFermentationUiListVisibleRows) {
+        commands.push_back(
+            {ScreenDrawKind::PressFeedback,
+             {kContentRowLeft,
+              static_cast<std::uint16_t>(
+                  kContentRowTop + pressedTarget->row * kContentRowHeight),
+              kContentRowWidth, kContentRowHeight},
+             device_platform::ThemeToken::SecondaryAction,
+             device_platform::ThemeToken::PrimaryAction,
+             {},
+             {}});
+    }
+    if (pressedTarget.has_value() &&
+        pressedTarget->kind ==
             device_platform::DeviceUiTargetKind::BottomSlot &&
         pressedTarget->slotIndex < screen.workspace.bottomSlots.size()) {
         const auto left =
@@ -620,6 +660,8 @@ ScreenRenderKey makeScreenRenderKey(
         key.hasPressedTarget = true;
         key.pressedKind = pressedTarget->kind;
         key.pressedSlotIndex = pressedTarget->slotIndex;
+        key.pressedRow = pressedTarget->row;
+        key.pressedColumn = pressedTarget->column;
     }
     key.networkStatus = networkStatus;
     if (trustedUtc.has_value()) {
@@ -646,6 +688,28 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         y < kHeaderNetworkRect.top + kHeaderNetworkRect.height) {
         return device_platform::DeviceUiTarget{
             device_platform::DeviceUiTargetKind::HeaderNetwork, 0U};
+    }
+    // Visible program rows only: row r is entry currentIndex + r, so the hit
+    // zone follows exactly what the renderer draws.
+    if (screen.workspace.page == FermentationUiPage::ProgramList &&
+        !screen.workspace.programList.empty() &&
+        screen.workspace.pager.currentIndex <
+            screen.workspace.programList.size() &&
+        x >= kContentRowLeft && x < kContentRowLeft + kContentRowWidth &&
+        y >= kContentRowTop &&
+        y < kContentRowTop +
+                kFermentationUiListVisibleRows * kContentRowHeight) {
+        const auto row =
+            static_cast<std::uint8_t>((y - kContentRowTop) / kContentRowHeight);
+        const auto visible =
+            std::min<std::size_t>(screen.workspace.programList.size() -
+                                      screen.workspace.pager.currentIndex,
+                                  kFermentationUiListVisibleRows);
+        if (row < visible) {
+            return device_platform::DeviceUiTarget{
+                device_platform::DeviceUiTargetKind::ContentCell, 0U, row, 0U};
+        }
+        return std::nullopt;
     }
     if (y < kControlTop || y >= kControlTop + kControlHeight) {
         return std::nullopt;

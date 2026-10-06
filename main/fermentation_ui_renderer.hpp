@@ -104,7 +104,8 @@ struct RepresentativeScreen {
 //  - program catalog: the revision adopted by the presentation cache, absent
 //    while no valid copy exists (HeaderNetwork, unavailable fill);
 //  - locale: hash of the locale actually used for drawing;
-//  - pressed target (kind and slot), network status, trusted UTC at display
+//  - pressed target (kind, slot, row and column), network status, trusted UTC
+//  at display
 //    resolution (the clock text is HH:MM from UTC, minute granularity) and the
 //    network lifecycle's access-point change revision (only on HeaderNetwork;
 //    it changes exactly when SSID, password or IPv4 address change or the
@@ -119,6 +120,8 @@ struct ScreenRenderKey {
     device_platform::DeviceUiTargetKind pressedKind{
         device_platform::DeviceUiTargetKind::None};
     std::uint8_t pressedSlotIndex{0U};
+    std::uint8_t pressedRow{0U};
+    std::uint8_t pressedColumn{0U};
     device_platform::DeviceUiNetworkStatus networkStatus{
         device_platform::DeviceUiNetworkStatus::Unavailable};
     std::optional<std::int64_t> utcMinute;
@@ -134,6 +137,8 @@ struct ScreenRenderKey {
                left.hasPressedTarget == right.hasPressedTarget &&
                left.pressedKind == right.pressedKind &&
                left.pressedSlotIndex == right.pressedSlotIndex &&
+               left.pressedRow == right.pressedRow &&
+               left.pressedColumn == right.pressedColumn &&
                left.networkStatus == right.networkStatus &&
                left.utcMinute == right.utcMinute &&
                left.accessPointRevision == right.accessPointRevision;

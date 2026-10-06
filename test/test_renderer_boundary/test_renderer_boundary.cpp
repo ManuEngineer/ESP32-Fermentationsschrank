@@ -345,6 +345,239 @@ void test_delete_confirmation_page_shows_selected_program_name() {
     TEST_ASSERT_TRUE(hasText(screen, "Miso"));
 }
 
+// S1: program list rows. Entries come from the factory catalog plus copies of
+// the runnable last program so the three-row window must scroll.
+fermentation::ProgramCatalog makeScrollableCatalogForTest() {
+    auto catalog = makeRunnableCatalogForTest();
+    const auto templateDocument = catalog.programs.back();
+    for (std::size_t index = 0U; index < 3U; ++index) {
+        auto document = templateDocument;
+        document.program.id = "scroll-" + std::to_string(index);
+        document.program.name = "Scroll " + std::to_string(index);
+        catalog.programs.push_back(std::move(document));
+    }
+    return catalog;
+}
+
+fermentation::main_ui::RepresentativeScreen listScreen(
+    const fermentation::FermentationUiSnapshot& snapshot,
+    fermentation::FermentationTouchWorkspace& workspace,
+    const fermentation::ProgramCatalog& catalog,
+    std::optional<device_platform::DeviceUiTarget> pressed = std::nullopt) {
+    return fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"}, pressed, &catalog);
+}
+
+void test_program_list_rows_are_40px_touch_rows_with_exact_hit_zones() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    const auto screen = listScreen(snapshot, workspace, catalog);
+    const auto& names = screen.workspace.programList;
+    TEST_ASSERT_TRUE(names.size() >= 5U);
+
+    // Drawn rows: 304 px wide, 40 px pitch starting at y=64, three visible.
+    for (std::size_t row = 0U; row < 3U; ++row) {
+        const auto& name = names[row].program.program.name;
+        const auto text = std::find_if(
+            screen.commands.begin(), screen.commands.end(),
+            [&name](const auto& command) { return command.text == name; });
+        TEST_ASSERT_TRUE(text != screen.commands.end());
+        // Text is vertically centred inside its 40 px row.
+        TEST_ASSERT_EQUAL_UINT16(64U + row * 40U + 11U, text->rect.top);
+        assertWithinDisplay(text->rect);
+    }
+    TEST_ASSERT_FALSE(hasText(screen, names[3].program.program.name));
+
+    const auto assertCell = [&screen](std::uint16_t x, std::uint16_t y,
+                                      std::uint8_t row) {
+        const auto target = fermentation::main_ui::targetAt(screen, x, y);
+        TEST_ASSERT_TRUE(target.has_value());
+        TEST_ASSERT_EQUAL(
+            static_cast<int>(device_platform::DeviceUiTargetKind::ContentCell),
+            static_cast<int>(target->kind));
+        TEST_ASSERT_EQUAL_UINT8(row, target->row);
+        TEST_ASSERT_EQUAL_UINT8(0U, target->column);
+    };
+    assertCell(8U, 64U, 0U);
+    assertCell(311U, 103U, 0U);
+    assertCell(8U, 104U, 1U);
+    assertCell(160U, 143U, 1U);
+    assertCell(8U, 144U, 2U);
+    assertCell(311U, 183U, 2U);
+
+    const auto assertNoTarget = [&screen](std::uint16_t x, std::uint16_t y) {
+        TEST_ASSERT_FALSE(
+            fermentation::main_ui::targetAt(screen, x, y).has_value());
+    };
+    assertNoTarget(7U, 80U);
+    assertNoTarget(312U, 80U);
+    assertNoTarget(160U, 63U);
+    assertNoTarget(160U, 184U);
+    assertNoTarget(160U, 199U);
+    // Header and bottom-slot targets are untouched by the rows.
+    assertCell(100U, 70U, 0U);
+    const auto bottomSlot = fermentation::main_ui::targetAt(screen, 100U, 210U);
+    TEST_ASSERT_TRUE(bottomSlot.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::BottomSlot),
+        static_cast<int>(bottomSlot->kind));
+}
+
+void test_program_list_window_follows_the_pager_and_hits_follow_the_window() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    auto screen = listScreen(snapshot, workspace, catalog);
+    const auto entries = screen.workspace.programList;
+    const auto total = entries.size();
+
+    // "down" bottom slot, twice: window becomes entries 2..4.
+    for (int step = 0; step < 2; ++step) {
+        const auto press = fermentation::main_ui::routePress(
+            workspace, snapshot, screen, 180U, 220U, &catalog);
+        TEST_ASSERT_TRUE(press.navigated);
+        screen = listScreen(snapshot, workspace, catalog);
+    }
+    TEST_ASSERT_FALSE(hasText(screen, entries[0].program.program.name));
+    TEST_ASSERT_FALSE(hasText(screen, entries[1].program.program.name));
+    for (std::size_t row = 0U; row < 3U && 2U + row < total; ++row)
+        TEST_ASSERT_TRUE(
+            hasText(screen, entries[2U + row].program.program.name));
+
+    // Row 2 now selects entry 4 through the real hit-test and press route.
+    const auto selected = fermentation::main_ui::routePress(
+        workspace, snapshot, screen, 100U, 170U, &catalog);
+    TEST_ASSERT_TRUE(selected.navigated);
+    TEST_ASSERT_FALSE(selected.action.has_value());
+    TEST_ASSERT_EQUAL_STRING(entries[4].program.program.id.c_str(),
+                             workspace.selectedProgramId()->c_str());
+
+    // Scrolled to the very end only row 0 is backed by an entry.
+    fermentation::FermentationTouchWorkspace tail;
+    tail.setPage(fermentation::FermentationUiPage::ProgramList);
+    auto tailScreen = listScreen(snapshot, tail, catalog);
+    for (std::size_t step = 0U; step + 1U < total; ++step) {
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(
+                             tail, snapshot, tailScreen, 180U, 220U, &catalog)
+                             .navigated);
+        tailScreen = listScreen(snapshot, tail, catalog);
+    }
+    TEST_ASSERT_TRUE(
+        fermentation::main_ui::targetAt(tailScreen, 100U, 70U).has_value());
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(tailScreen, 100U, 110U).has_value());
+}
+
+void test_program_list_hit_rows_exist_only_on_the_program_list_page() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    const auto home = listScreen(snapshot, workspace, catalog);
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(home, 100U, 80U).has_value());
+}
+
+void test_held_program_row_renders_press_feedback_for_that_row_only() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    const device_platform::DeviceUiTarget held{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const auto screen = listScreen(snapshot, workspace, catalog, held);
+
+    std::size_t feedbackCount = 0U;
+    for (const auto& command : screen.commands) {
+        if (command.kind !=
+            fermentation::main_ui::ScreenDrawKind::PressFeedback)
+            continue;
+        ++feedbackCount;
+        TEST_ASSERT_EQUAL_UINT16(8U, command.rect.left);
+        TEST_ASSERT_EQUAL_UINT16(104U, command.rect.top);
+        TEST_ASSERT_EQUAL_UINT16(304U, command.rect.width);
+        TEST_ASSERT_EQUAL_UINT16(40U, command.rect.height);
+    }
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(feedbackCount));
+
+    // The render key distinguishes the held row so the feedback is redrawn.
+    const auto otherRow = device_platform::DeviceUiTarget{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U};
+    TEST_ASSERT_FALSE(keyFor(snapshot, workspace, "en", held) ==
+                      keyFor(snapshot, workspace, "en", otherRow));
+    TEST_ASSERT_FALSE(keyFor(snapshot, workspace, "en", held) ==
+                      keyFor(snapshot, workspace, "en"));
+}
+
+void test_pager_counter_sits_in_the_title_row_clear_of_the_rows() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    const auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    const auto screen = listScreen(snapshot, workspace, catalog);
+    const auto counter = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) { return command.text.rfind("1/", 0U) == 0U; });
+    TEST_ASSERT_TRUE(counter != screen.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(40U, counter->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(248U, counter->rect.left);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT16(64U,
+                                     counter->rect.top + counter->rect.height);
+    assertWithinDisplay(counter->rect);
+}
+
+void test_not_startable_program_row_is_dimmed_and_stays_hittable() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    // Factory programs are listed first, so the disabled one is row 0.
+    catalog.programs.front().program.enabled = false;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ProgramList);
+    const auto screen = listScreen(snapshot, workspace, catalog);
+    const auto& first = screen.workspace.programList.front();
+    TEST_ASSERT_FALSE(first.startable);
+    const auto text =
+        std::find_if(screen.commands.begin(), screen.commands.end(),
+                     [&first](const auto& command) {
+                         return command.text == first.program.program.name;
+                     });
+    TEST_ASSERT_TRUE(text != screen.commands.end());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::ThemeToken::TextSecondary),
+        static_cast<int>(text->token));
+    // Administration must still reach it: the row is hittable.
+    const auto target = fermentation::main_ui::targetAt(screen, 100U, 80U);
+    TEST_ASSERT_TRUE(target.has_value());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DeviceUiTargetKind::ContentCell),
+        static_cast<int>(target->kind));
+}
+
+void test_program_summary_names_the_reason_of_a_not_startable_program() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    catalog.programs.back().program.enabled = false;
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(catalog.programs.back().program.id, catalog));
+    const auto screen = listScreen(snapshot, workspace, catalog);
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const auto expected = device_platform::resolveText(
+        packs, device_platform::LocaleId{"en"},
+        fermentation::fermentationTextKey("program-disabled"));
+    TEST_ASSERT_TRUE(hasText(screen, expected.value));
+}
+
 void test_service_page_shows_blocked_reason() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
@@ -1051,6 +1284,14 @@ int main() {
     RUN_TEST(test_held_bottom_slot_renders_press_feedback_for_that_slot_only);
     RUN_TEST(test_program_list_page_shows_catalog_program_names);
     RUN_TEST(test_delete_confirmation_page_shows_selected_program_name);
+    RUN_TEST(test_program_list_rows_are_40px_touch_rows_with_exact_hit_zones);
+    RUN_TEST(
+        test_program_list_window_follows_the_pager_and_hits_follow_the_window);
+    RUN_TEST(test_program_list_hit_rows_exist_only_on_the_program_list_page);
+    RUN_TEST(test_held_program_row_renders_press_feedback_for_that_row_only);
+    RUN_TEST(test_pager_counter_sits_in_the_title_row_clear_of_the_rows);
+    RUN_TEST(test_not_startable_program_row_is_dimmed_and_stays_hittable);
+    RUN_TEST(test_program_summary_names_the_reason_of_a_not_startable_program);
     RUN_TEST(test_service_page_shows_blocked_reason);
     RUN_TEST(test_home_service_status_uses_compact_locale_projection);
     RUN_TEST(test_recovery_page_shows_unavailable_capability_count);

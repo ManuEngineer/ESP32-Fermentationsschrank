@@ -13,6 +13,10 @@ enum class DeviceUiTargetKind : std::uint8_t {
     HeaderNetwork,
     HeaderClock,
     BottomSlot,
+    // One cell of an application-defined content grid (a list uses
+    // column 0). The platform only carries the indices; capacities belong to
+    // the application and its renderer.
+    ContentCell,
     HomeOrBack,
     PagerUp,
     PagerDown,
@@ -24,6 +28,8 @@ enum class DeviceUiTargetKind : std::uint8_t {
 struct DeviceUiTarget {
     DeviceUiTargetKind kind{DeviceUiTargetKind::None};
     std::uint8_t slotIndex{0U};
+    std::uint8_t row{0U};
+    std::uint8_t column{0U};
 
     [[nodiscard]] bool valid() const noexcept {
         return kind != DeviceUiTargetKind::None &&

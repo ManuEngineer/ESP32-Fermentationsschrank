@@ -366,6 +366,49 @@ void test_web_access_page_steady_state_allocates_nothing() {
     TEST_ASSERT_FALSE(fixture.step());
 }
 
+// S1: the program list page (content rows, pager window) is a steady state
+// like the other pages: an unchanged list allocates nothing, and only a real
+// visible event (held row, scrolled window) requests a redraw.
+void test_program_list_page_steady_state_allocates_nothing_and_rows_redraw() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::ProgramList);
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto idleAllocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(idleAllocations));
+
+    // A held row changes the render key (kind, row, column).
+    const device_platform::DeviceUiTarget row0{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U};
+    const device_platform::DeviceUiTarget row1{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const auto redrawFor =
+        [&fixture](const device_platform::DeviceUiTarget& target) {
+            fixture.gate.beginStep(fixture.application, false);
+            return fixture.gate.renderRequired(
+                fixture.application, fixture.workspace, fixture.initialLocale,
+                target, device_platform::DeviceUiNetworkStatus::Connected,
+                1'700'000'000LL);
+        };
+    TEST_ASSERT_TRUE(redrawFor(row0));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(row0));
+    TEST_ASSERT_TRUE(redrawFor(row1));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(redrawFor(row0));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
 void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
     // Only HeaderNetwork evicts the program catalog copy (it does not consume
     // it); the web access page keeps the existing presentation contract.
@@ -708,6 +751,8 @@ int main() {
     RUN_TEST(test_catalog_revision_adoption_changes_the_key);
     RUN_TEST(test_every_workspace_mutator_bumps_the_render_revision);
     RUN_TEST(test_web_access_page_steady_state_allocates_nothing);
+    RUN_TEST(
+        test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }
