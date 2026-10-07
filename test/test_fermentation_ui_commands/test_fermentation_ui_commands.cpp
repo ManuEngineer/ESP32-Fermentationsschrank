@@ -18,6 +18,21 @@ namespace fermentation {
 
 class FermentationApplicationTestAccess {
    public:
+    // Manual-run requests are refused on every surface while no owner of the
+    // technical run limits exists (O5, #172 S9); these reach the private
+    // bodies behind that guard so the downstream decision paths stay covered.
+    static FermentationApplicationRequestResult prepareStartManualHoldingBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartManualHoldingIntent& intent) {
+        return application.prepareStartManualHoldingUnguarded(context, intent);
+    }
+    static FermentationApplicationRequestResult prepareStartManualTimedBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const ManualTimedRunValues& values) {
+        return application.prepareStartManualTimedUnguarded(context, values);
+    }
     static bool rename(FermentationApplication& application,
                        const char* deviceName) {
         auto build = application.configurationService_->beginPreview();
@@ -192,7 +207,9 @@ void test_ui_request_id_is_the_existing_command_id() {
     FermentationUiCommandContext value;
     value.surface = device_platform::UiSurface::WebInterface;
     value.monotonicMillis = 100U;
-    const auto prepared = application.prepareStartManualHolding(value, manual);
+    const auto prepared =
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            application, value, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
@@ -219,7 +236,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     manual.plan.qualificationDurationMinutes = 10U;
     manual.plan.maximumTargetReachMinutes = 60U;
     const auto unconfirmedPrepared =
-        application.prepareStartManualHolding(unconfirmedContext, manual);
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            application, unconfirmedContext, manual);
     TEST_ASSERT_TRUE(unconfirmedPrepared.request.has_value());
     const auto unconfirmed = FermentationUiCommandBridge::decidePrepared(
         state, *unconfirmedPrepared.request, confirmation(unconfirmedContext));
@@ -235,7 +253,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
     auto staleContext = unconfirmedContext;
     staleContext.expected.expectedRunRevision = 1U;
     const auto stalePrepared =
-        application.prepareStartManualHolding(staleContext, manual);
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            application, staleContext, manual);
     TEST_ASSERT_TRUE(stalePrepared.request.has_value());
     const auto stale = FermentationUiCommandBridge::decidePrepared(
         state, *stalePrepared.request, confirmation(staleContext));
@@ -250,8 +269,9 @@ void test_canonical_validation_precedes_ui_confirmation() {
 
     auto invalidManual = manual;
     invalidManual.plan.targetTemperatureCelsius = 0.0;
-    const auto invalidPrepared = application.prepareStartManualHolding(
-        unconfirmedContext, invalidManual);
+    const auto invalidPrepared =
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            application, unconfirmedContext, invalidManual);
     TEST_ASSERT_TRUE(invalidPrepared.request.has_value());
     const auto invalidResult = FermentationUiCommandBridge::decidePrepared(
         state, *invalidPrepared.request, confirmation(unconfirmedContext));
@@ -266,7 +286,8 @@ void test_canonical_validation_precedes_ui_confirmation() {
 
     application.publishOwningRuntimeEvidence(CrossRolePlausibilityContext{});
     const auto unsafePrepared =
-        application.prepareStartManualHolding(unconfirmedContext, manual);
+        FermentationApplicationTestAccess::prepareStartManualHoldingBody(
+            application, unconfirmedContext, manual);
     TEST_ASSERT_TRUE(unsafePrepared.request.has_value());
     const auto unsafeResult = FermentationUiCommandBridge::decidePrepared(
         state, *unsafePrepared.request, confirmation(unconfirmedContext));
@@ -720,8 +741,17 @@ void test_manual_timed_ui_intent_uses_the_merged_application_contract() {
     intent.values.maximumTargetReachMinutes = 180U;
     FermentationUiCommandContext value;
     value.expected.expectedStateSequence = 0U;
-    const auto prepared = application.prepareEnvelope(
+    // The public entries refuse it on every surface (O5).
+    const auto refused = application.prepareEnvelope(
         value, FermentationUiEnvelopePayload{intent});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(refused.status));
+    TEST_ASSERT_FALSE(refused.request.has_value());
+
+    const auto prepared =
+        FermentationApplicationTestAccess::prepareStartManualTimedBody(
+            application, value, intent.values);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(prepared.status));
@@ -730,8 +760,9 @@ void test_manual_timed_ui_intent_uses_the_merged_application_contract() {
     TEST_ASSERT_TRUE(prepared.request->runId().has_value());
 
     intent.values.targetTemperatureCelsius = -100.0;
-    const auto invalid = application.prepareEnvelope(
-        value, FermentationUiEnvelopePayload{intent});
+    const auto invalid =
+        FermentationApplicationTestAccess::prepareStartManualTimedBody(
+            application, value, intent.values);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::InvalidInput),
         static_cast<int>(invalid.status));

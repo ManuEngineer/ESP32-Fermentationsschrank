@@ -428,6 +428,90 @@ void test_message_list_page_steady_state_allocates_nothing() {
     TEST_ASSERT_FALSE(fixture.step());
 }
 
+// S7: every read-only content page is a steady state too (no redraw, no
+// allocation while nothing visible changes).
+void test_s7_content_pages_steady_state_allocate_nothing() {
+    const FermentationUiPage pages[] = {
+        FermentationUiPage::ProgramSummary, FermentationUiPage::Process,
+        FermentationUiPage::Technical,      FermentationUiPage::Completion,
+        FermentationUiPage::Status,         FermentationUiPage::Diagnostics,
+        FermentationUiPage::Service,        FermentationUiPage::Pin,
+        FermentationUiPage::Recovery,       FermentationUiPage::ManualHolding,
+        FermentationUiPage::ManualTimed,    FermentationUiPage::StopDialog,
+    };
+    for (const auto page : pages) {
+        WebAccessFixture fixture;
+        fixture.workspace.setPage(FermentationUiPage::ProgramList);
+        fixture.settle();
+        TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+        if (page == FermentationUiPage::ProgramSummary) {
+            const auto& catalog =
+                fixture.gate.presentation().get().programCatalog;
+            TEST_ASSERT_FALSE(catalog.programs.empty());
+            TEST_ASSERT_TRUE(fixture.workspace.selectProgram(
+                catalog.programs.front().program.id, catalog));
+        } else {
+            fixture.workspace.setPage(page);
+        }
+        TEST_ASSERT_TRUE(fixture.step());
+        fixture.gate.markRendered();
+        fixture.settle();
+        TEST_ASSERT_TRUE(fixture.workspace.page() == page);
+        startCounting();
+        bool redraw = false;
+        for (int loop = 0; loop < 100; ++loop) {
+            redraw = redraw || fixture.step();
+        }
+        const auto allocations = stopCounting();
+        TEST_ASSERT_FALSE(redraw);
+        TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    }
+}
+
+// S8: the value edit page (keypad) is a steady state too. Its content is
+// local workspace state, so only a workspace mutation (a key press) changes
+// the render key; the key press path itself is covered with a startable
+// catalog in test_local_touch_ui.
+void test_value_edit_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::ValueEdit);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    // A held keypad key or pager button (ContentCell, any column) changes
+    // the render key once per distinct target and settles afterwards.
+    const auto redrawFor = [&fixture](
+                               const device_platform::DeviceUiTarget& target) {
+        fixture.gate.beginStep(fixture.application, false);
+        return fixture.gate.renderRequired(
+            fixture.application, fixture.workspace, target,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    };
+    const device_platform::DeviceUiTarget keyA{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const device_platform::DeviceUiTarget keyB{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 2U};
+    TEST_ASSERT_TRUE(redrawFor(keyA));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyA));
+    TEST_ASSERT_TRUE(redrawFor(keyB));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyB));
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    // A workspace mutation (what every key press does) redraws once.
+    fixture.workspace.setProgramEditDirty(true);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
 // S3: the language page is a steady state too.
 void test_language_page_steady_state_allocates_nothing() {
     WebAccessFixture fixture;
@@ -835,6 +919,8 @@ int main() {
     RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
     RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
+    RUN_TEST(test_s7_content_pages_steady_state_allocate_nothing);
+    RUN_TEST(test_value_edit_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }

@@ -471,4 +471,52 @@ FermentationUiCommandResult FermentationUiCommandBridge::decidePrepared(
         request.storage());
 }
 
+bool hasStartCandidateOverride(
+    const FermentationUiStartCandidate& candidate) noexcept {
+    return candidate.targetTemperatureCelsius.has_value() ||
+           candidate.fermentationDurationMinutes.has_value() ||
+           candidate.preheatEnabled.has_value() ||
+           candidate.completionMode.has_value() ||
+           candidate.coolingTargetCelsius.has_value() ||
+           candidate.holdDurationMinutes.has_value();
+}
+
+void applyStartCandidateOverrides(
+    ProgramDocument& program, const FermentationUiStartCandidate& candidate) {
+    auto& definition = program.program;
+    if (candidate.targetTemperatureCelsius.has_value() &&
+        !definition.fermentationStages.empty()) {
+        definition.fermentationStages.front().targetTemperatureCelsius =
+            candidate.targetTemperatureCelsius;
+    }
+    if (candidate.fermentationDurationMinutes.has_value() &&
+        !definition.fermentationStages.empty()) {
+        definition.fermentationStages.front().durationMinutes =
+            candidate.fermentationDurationMinutes;
+    }
+    if (candidate.preheatEnabled.has_value()) {
+        definition.preheat = *candidate.preheatEnabled;
+    }
+    if (candidate.completionMode.has_value()) {
+        definition.completion.mode = *candidate.completionMode;
+        if (*candidate.completionMode == CompletionMode::FinishWithoutCooling) {
+            definition.completion.coolingTargetCelsius.reset();
+            definition.completion.holdDurationMinutes.reset();
+        } else if (*candidate.completionMode ==
+                       CompletionMode::CoolThenFinish ||
+                   *candidate.completionMode ==
+                       CompletionMode::CoolAndHoldUntilManualStop) {
+            definition.completion.holdDurationMinutes.reset();
+        }
+    }
+    if (candidate.coolingTargetCelsius.has_value()) {
+        definition.completion.coolingTargetCelsius =
+            candidate.coolingTargetCelsius;
+    }
+    if (candidate.holdDurationMinutes.has_value()) {
+        definition.completion.holdDurationMinutes =
+            candidate.holdDurationMinutes;
+    }
+}
+
 }  // namespace fermentation

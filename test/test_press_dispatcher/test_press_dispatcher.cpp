@@ -26,6 +26,17 @@ namespace fermentation {
 
 class FermentationApplicationTestAccess {
    public:
+    // A manual run needs the technical run limits of a commissioning-released
+    // owner (O5, #172 S9) that does not exist, so the public entries refuse
+    // it. This reaches the private body behind that guard to keep the
+    // downstream owner path (confirm, persist, replay) covered.
+    static FermentationApplicationRequestResult prepareStartManualTimedBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const ManualTimedRunValues& values) {
+        return application.prepareStartManualTimedUnguarded(context, values);
+    }
+
     static RunCommandState& runtimeState(FermentationApplication& application) {
         return *application.runtimeRunState_;
     }
@@ -323,6 +334,35 @@ void assertAppliedOwningResult(const WorkspacePressDispatchResult& result) {
                               result.commandResult->detail)));
 }
 
+FermentationApplicationRequestResult prepareManualRunBody(
+    OwningAppFixture& fixture) {
+    FermentationUiCommandContext context;
+    context.expected = fixture.application.uiSnapshot().revisions;
+    context.monotonicMillis = fixture.timeSource.monotonicMillis();
+    return FermentationApplicationTestAccess::prepareStartManualTimedBody(
+        fixture.application, context, validManualTimedValues());
+}
+
+FermentationUiCommandResult startManualRunViaOwnerBody(
+    OwningAppFixture& fixture) {
+    const auto prepared = prepareManualRunBody(fixture);
+    TEST_ASSERT_TRUE(prepared.request.has_value());
+    const auto confirmed = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    return fixture.application.applyConfirmedPrepared(*confirmed.request);
+}
+
+void assertAppliedCommandResult(const FermentationUiCommandResult& result) {
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.phase));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(result.detail)));
+}
+
 void test_dispatch_no_typed_payload_is_reported_as_such() {
     AppFixture fixture;
     FermentationUiWorkspacePress press;
@@ -377,8 +417,9 @@ void test_dispatch_program_row_selection_yields_no_typed_payload() {
 void test_dispatch_action_reaches_prepare_and_confirm() {
     AppFixture fixture;
     FermentationUiWorkspacePress press;
-    press.action = FermentationUiEnvelopePayload{
-        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
+    FermentationUiStopRunIntent stopIntent;
+    stopIntent.option = StopOption::AbortAndTurnOff;
+    press.action = FermentationUiEnvelopePayload{stopIntent};
     FermentationUiSnapshot snapshot;
     snapshot.revisions.expectedStateSequence = 0U;
 
@@ -391,16 +432,12 @@ void test_dispatch_action_reaches_prepare_and_confirm() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(*result.prepareStatus));
-    // confirmPrepared() is genuinely, correctly reached (proving both
-    // prepare AND confirm are wired, not just prepare): revalidatePrepared
-    // Request() re-checks safety/sensor evidence, and this minimal fixture
-    // (a bare begin(), no update() tick, no published sensor evidence) has
-    // none yet, so the existing, unmodified application logic itself
-    // rejects with Unavailable - this dispatcher invents nothing and
-    // forwards that real outcome untouched.
+    // confirmPrepared() is genuinely reached (proving both prepare AND
+    // confirm are wired): stopping needs no sensor evidence, so the existing
+    // application logic confirms it and forwards that real outcome untouched.
     TEST_ASSERT_TRUE(result.confirmStatus.has_value());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(*result.confirmStatus));
 }
 
@@ -434,10 +471,7 @@ void test_prepared_request_has_no_owning_mutation_before_handoff() {
     FermentationUiCommandContext context;
     context.expected = before.revisions;
     context.monotonicMillis = fixture.timeSource.monotonicMillis();
-    const FermentationUiEnvelopePayload payload =
-        FermentationUiStartManualTimedIntent{validManualTimedValues()};
-
-    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    const auto prepared = prepareManualRunBody(fixture);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationApplicationRequestStatus::Prepared),
         static_cast<int>(prepared.status));
@@ -453,15 +487,7 @@ void test_prepared_request_has_no_owning_mutation_before_handoff() {
 
 void test_confirmed_manual_start_reaches_existing_owning_persist_path() {
     OwningAppFixture fixture;
-    const auto snapshot = fixture.application.uiSnapshot();
-    FermentationUiWorkspacePress press;
-    press.action = FermentationUiEnvelopePayload{
-        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
-
-    const auto result =
-        dispatchWorkspacePress(fixture.application, snapshot, press,
-                               fixture.timeSource.monotonicMillis());
-    assertAppliedOwningResult(result);
+    assertAppliedCommandResult(startManualRunViaOwnerBody(fixture));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationHomeMode::ActiveRun),
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
@@ -469,14 +495,7 @@ void test_confirmed_manual_start_reaches_existing_owning_persist_path() {
 
 void test_confirmed_start_reuses_prepared_envelope_monotonic_time() {
     OwningAppFixture fixture;
-    const auto snapshot = fixture.application.uiSnapshot();
-    FermentationUiCommandContext context;
-    context.expected = snapshot.revisions;
-    context.monotonicMillis = fixture.timeSource.monotonicMillis();
-    const FermentationUiEnvelopePayload payload =
-        FermentationUiStartManualTimedIntent{validManualTimedValues()};
-
-    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    const auto prepared = prepareManualRunBody(fixture);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     const auto envelopeMonotonicMillis =
         prepared.request->commandEnvelope().monotonicMillis;
@@ -517,13 +536,7 @@ void test_confirmed_start_reuses_prepared_envelope_monotonic_time() {
 
 void test_confirmed_stop_reaches_existing_owning_persist_path() {
     OwningAppFixture fixture;
-    FermentationUiWorkspacePress start;
-    start.action = FermentationUiEnvelopePayload{
-        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
-    const auto started = dispatchWorkspacePress(
-        fixture.application, fixture.application.uiSnapshot(), start,
-        fixture.timeSource.monotonicMillis());
-    assertAppliedOwningResult(started);
+    assertAppliedCommandResult(startManualRunViaOwnerBody(fixture));
 
     fixture.timeSource.advanceMonotonicMillis(1U);
     FermentationUiWorkspacePress stop;
@@ -541,13 +554,7 @@ void test_confirmed_stop_reaches_existing_owning_persist_path() {
 
 void test_revalidation_failure_does_not_enter_owning_path() {
     OwningAppFixture fixture;
-    const auto snapshot = fixture.application.uiSnapshot();
-    FermentationUiCommandContext context;
-    context.expected = snapshot.revisions;
-    context.monotonicMillis = fixture.timeSource.monotonicMillis();
-    const FermentationUiEnvelopePayload payload =
-        FermentationUiStartManualTimedIntent{validManualTimedValues()};
-    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    const auto prepared = prepareManualRunBody(fixture);
     TEST_ASSERT_TRUE(prepared.request.has_value());
 
     fixture.application.publishOwningRuntimeEvidence(
@@ -564,13 +571,7 @@ void test_revalidation_failure_does_not_enter_owning_path() {
 
 void test_duplicate_confirmed_request_preserves_owner_idempotency() {
     OwningAppFixture fixture;
-    const auto snapshot = fixture.application.uiSnapshot();
-    FermentationUiCommandContext context;
-    context.expected = snapshot.revisions;
-    context.monotonicMillis = fixture.timeSource.monotonicMillis();
-    const FermentationUiEnvelopePayload payload =
-        FermentationUiStartManualTimedIntent{validManualTimedValues()};
-    const auto prepared = fixture.application.prepareEnvelope(context, payload);
+    const auto prepared = prepareManualRunBody(fixture);
     const auto confirmed = fixture.application.confirmPrepared(prepared);
     TEST_ASSERT_TRUE(confirmed.request.has_value());
     const auto commandId = confirmed.request->commandId();
@@ -1825,43 +1826,50 @@ void test_process_touch_fresh_edge_off_target_does_not_navigate() {
                           static_cast<int>(workspace.page()));
 }
 
-void test_physical_touch_manual_start_uses_the_application_owner_path() {
+// S9 / O5: the technical run limits of a manual run have no owner (#34/#35),
+// so no surface can start a manual run or a cooling plan: the physical touch
+// sequence produces no payload, and a manual payload that reaches the
+// dispatcher anyway is refused by the Application (Unavailable) before any
+// identity is used.
+void test_manual_start_has_no_path_without_an_owner_of_the_run_limits() {
     OwningAppFixture fixture;
     FermentationTouchWorkspace workspace;
     const auto snapshot = fixture.application.uiSnapshot();
     const auto packs = makeFermentationUiTextPacks();
-    workspace.setPage(FermentationUiPage::ManualModeSelection);
+    workspace.setPage(FermentationUiPage::ManualTimed);
     workspace.setManualTimedValues(validManualTimedValues());
+    const auto view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason ==
+                     fermentationTextKey("manual-parameters-not-released"));
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const auto start = processWorkspaceTouch(
+            fixture.application, workspace, snapshot, packs,
+            device_platform::LocaleId{"en"}, nullptr,
+            device_platform::DeviceUiNetworkStatus::Unavailable, {},
+            /*contactHeld=*/attempt == 0, bottomX(2), kBottomY,
+            /*freshPressEdge=*/attempt == 0,
+            fixture.timeSource.monotonicMillis());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+            static_cast<int>(start.dispatch.outcome));
+        TEST_ASSERT_FALSE(start.dispatch.prepareStatus.has_value());
+    }
 
-    const auto modeSelection = processWorkspaceTouch(
-        fixture.application, workspace, snapshot, packs,
-        device_platform::LocaleId{"en"}, nullptr,
-        device_platform::DeviceUiNetworkStatus::Unavailable, {},
-        /*contactHeld=*/true, bottomX(2), kBottomY,
-        /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
-    TEST_ASSERT_TRUE(modeSelection.pressedTarget.has_value());
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ManualTimed),
-                          static_cast<int>(workspace.page()));
-
-    const auto released = processWorkspaceTouch(
-        fixture.application, workspace, snapshot, packs,
-        device_platform::LocaleId{"en"}, nullptr,
-        device_platform::DeviceUiNetworkStatus::Unavailable, {},
-        /*contactHeld=*/false, bottomX(2), kBottomY,
-        /*freshPressEdge=*/false, fixture.timeSource.monotonicMillis());
+    // A payload built outside the UI reaches the Application and is refused.
+    FermentationUiWorkspacePress forced;
+    forced.action = FermentationUiEnvelopePayload{
+        FermentationUiStartManualTimedIntent{validManualTimedValues()}};
+    const auto dispatched =
+        dispatchWorkspacePress(fixture.application, snapshot, forced,
+                               fixture.timeSource.monotonicMillis());
+    TEST_ASSERT_TRUE(dispatched.prepareStatus.has_value());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
-        static_cast<int>(released.dispatch.outcome));
-
-    const auto start = processWorkspaceTouch(
-        fixture.application, workspace, snapshot, packs,
-        device_platform::LocaleId{"en"}, nullptr,
-        device_platform::DeviceUiNetworkStatus::Unavailable, {},
-        /*contactHeld=*/true, bottomX(2), kBottomY,
-        /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
-    assertAppliedOwningResult(start.dispatch);
+        static_cast<int>(FermentationApplicationRequestStatus::Unavailable),
+        static_cast<int>(*dispatched.prepareStatus));
+    TEST_ASSERT_FALSE(dispatched.commandResult.has_value());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(FermentationHomeMode::ActiveRun),
+        static_cast<int>(FermentationHomeMode::Standby),
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
 }
 
@@ -1937,6 +1945,6 @@ int main() {
     RUN_TEST(
         test_process_touch_from_home_reaches_network_page_and_application_owner);
     RUN_TEST(test_process_touch_fresh_edge_off_target_does_not_navigate);
-    RUN_TEST(test_physical_touch_manual_start_uses_the_application_owner_path);
+    RUN_TEST(test_manual_start_has_no_path_without_an_owner_of_the_run_limits);
     return UNITY_END();
 }

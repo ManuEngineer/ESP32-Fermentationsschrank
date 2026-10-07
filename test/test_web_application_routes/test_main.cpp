@@ -788,19 +788,14 @@ device_platform::HttpRequest makeRequest(const Fixture& fixture,
     return request;
 }
 
-ManualTimedRunValues validManualTimedValues() {
-    ManualTimedRunValues values;
-    values.targetTemperatureCelsius = 30.0;
-    values.durationMinutes = 60U;
-    values.qualificationBandCelsius = 0.5;
-    values.qualificationDurationMinutes = 10U;
-    values.maximumTargetReachMinutes = 180U;
-    return values;
-}
+// A RAM-owned acknowledge of the message installed by installMessage(): the
+// regular accepted mutation used by the generic handler tests (a manual run
+// needs the technical run limits of an owner that does not exist yet, O5).
+constexpr std::uint32_t kHandlerMessageId = 7U;
 
 WebRunMutationDto startRequest(const FermentationApplication& application) {
     return {application.uiSnapshot().revisions,
-            FermentationUiStartManualTimedIntent{validManualTimedValues()}};
+            FermentationUiAcknowledgeMessageIntent{kHandlerMessageId}};
 }
 
 device_platform::StateStoreKey runHeadKey() {
@@ -913,6 +908,7 @@ void test_handler_requires_session_csrf_same_origin_and_json() {
 
 void test_handler_runs_prepare_confirm_apply_and_replays_exact_result() {
     Fixture fixture;
+    installMessage(fixture.application, kHandlerMessageId);
     const auto dto = startRequest(fixture.application);
     const auto request = makeRequest(fixture, dto);
     device_platform::HttpResponse first;
@@ -920,8 +916,10 @@ void test_handler_runs_prepare_confirm_apply_and_replays_exact_result() {
     TEST_ASSERT_EQUAL_UINT16(200U, first.statusCode);
     TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}", first.body.c_str());
     const auto afterFirst = fixture.application.uiSnapshot();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::ActiveRun),
-                          static_cast<int>(afterFirst.home.mode));
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acknowledged);
 
     device_platform::HttpResponse replay;
     TEST_ASSERT_TRUE(fixture.handler.handle(request, replay));
@@ -947,6 +945,7 @@ void test_handler_runs_prepare_confirm_apply_and_replays_exact_result() {
 
 void test_handler_maps_stale_revision_and_invalid_program_without_mutation() {
     Fixture fixture;
+    installMessage(fixture.application, kHandlerMessageId);
     auto staleDto = startRequest(fixture.application);
     ++staleDto.expected.expectedStateSequence;
     auto request = makeRequest(fixture, staleDto);
@@ -970,6 +969,45 @@ void test_handler_maps_stale_revision_and_invalid_program_without_mutation() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationHomeMode::Standby),
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+// O5 / #172 S9: no web request can start a manual run or a cooling plan while
+// no owner of the technical run limits exists, even with complete, valid
+// caller-supplied limits; the Application answers Unavailable (503) and
+// nothing changes.
+void test_handler_refuses_manual_runs_and_cooling_plans_without_a_limits_owner() {
+    Fixture fixture;
+    const std::string plan =
+        "{\"x\":8.0,\"s\":\"air\",\"h\":false,\"q\":0.5,\"qd\":10,"
+        "\"tr\":60}";
+    const std::array<std::string, 4U> intents{
+        "{\"t\":\"start-manual-timed\",\"x\":30.5,\"d\":120,"
+        "\"s\":\"air\",\"h\":false,\"q\":0.5,\"qd\":10,\"tr\":180,"
+        "\"c\":\"finish-without-cooling\"}",
+        "{\"t\":\"start-manual-holding\",\"p\":" + plan + "}",
+        "{\"t\":\"stop-run\",\"o\":\"abort-and-cool\",\"p\":" + plan + "}",
+        "{\"t\":\"complete-run\",\"c\":true,\"p\":" + plan + "}"};
+    const auto before = fixture.application.uiSnapshot();
+    std::uint32_t sequence = 1U;
+    for (const auto& intent : intents) {
+        const auto dto = startRequest(fixture.application);
+        auto request = makeRequest(fixture, dto);
+        request.body = "{\"v\":1,\"r\":" + expectedJson(dto.expected) +
+                       ",\"i\":" + intent + "}";
+        request.metadata.mutationSeq = std::to_string(sequence++);
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.handler.handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationHomeMode::Standby),
+            static_cast<int>(fixture.application.uiSnapshot().home.mode));
+    }
+    TEST_ASSERT_EQUAL_UINT32(
+        before.revisions.expectedStateSequence,
+        fixture.application.uiSnapshot().revisions.expectedStateSequence);
+    const auto head = fixture.store.read(runHeadKey(), 8240U);
+    TEST_ASSERT_TRUE(head.status !=
+                     device_platform::StateStoreReadStatus::Success);
 }
 
 std::string validManualMutationJson() {
@@ -3302,6 +3340,8 @@ int main() {
     RUN_TEST(test_handler_applies_ram_owned_mute_without_run_persistence);
     RUN_TEST(
         test_handler_maps_stale_revision_and_invalid_program_without_mutation);
+    RUN_TEST(
+        test_handler_refuses_manual_runs_and_cooling_plans_without_a_limits_owner);
     RUN_TEST(test_mutation_codec_rejects_invalid_bodies_without_partial_dto);
     RUN_TEST(test_mutation_codec_decodes_every_closed_application_intent);
     RUN_TEST(test_mutation_codec_validates_static_field_ranges_and_completion);

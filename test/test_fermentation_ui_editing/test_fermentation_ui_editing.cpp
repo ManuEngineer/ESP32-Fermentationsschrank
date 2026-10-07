@@ -30,6 +30,37 @@ void test_numeric_edit_model_keeps_actions_transient() {
     TEST_ASSERT_TRUE(model.candidate().empty());
 }
 
+// S8 keypad (D8) drives the unchanged model: editing an existing value, the
+// decimal key on an empty candidate, the sign key, clear and commit.
+void test_keypad_key_sequences_commit_the_edited_value() {
+    NumericEditModel model{"25.0"};
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Backspace, 0U}));
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Backspace, 0U}));
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Digit, 7U}));
+    TEST_ASSERT_EQUAL_STRING("257", model.candidate().c_str());
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Commit, 0U}));
+    TEST_ASSERT_DOUBLE_WITHIN(0.001, 257.0, model.committedValue().value());
+
+    model.reset();
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::DecimalSeparator, 0U}));
+    TEST_ASSERT_EQUAL_STRING("0.", model.candidate().c_str());
+    // A second decimal separator is refused.
+    TEST_ASSERT_FALSE(model.apply({NumericEditAction::DecimalSeparator, 0U}));
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Digit, 5U}));
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Minus, 0U}));
+    TEST_ASSERT_EQUAL_STRING("-0.5", model.candidate().c_str());
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Minus, 0U}));
+    TEST_ASSERT_EQUAL_STRING("0.5", model.candidate().c_str());
+
+    model.reset("12");
+    TEST_ASSERT_TRUE(model.apply({NumericEditAction::Clear, 0U}));
+    TEST_ASSERT_TRUE(model.candidate().empty());
+    // An empty candidate cannot be committed; the model stays editing.
+    TEST_ASSERT_FALSE(model.apply({NumericEditAction::Commit, 0U}));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(NumericEditState::Editing),
+                          static_cast<int>(model.state()));
+}
+
 void test_text_edit_model_has_mode_and_commit_without_validation() {
     TextEditModel model;
     TEST_ASSERT_TRUE(model.apply({TextEditAction::Character, 'A'}));
@@ -164,6 +195,7 @@ void tearDown() {}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_numeric_edit_model_keeps_actions_transient);
+    RUN_TEST(test_keypad_key_sequences_commit_the_edited_value);
     RUN_TEST(test_text_edit_model_has_mode_and_commit_without_validation);
     RUN_TEST(
         test_user_program_id_allocation_is_deterministic_and_non_overwriting);

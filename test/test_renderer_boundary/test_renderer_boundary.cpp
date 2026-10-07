@@ -1203,7 +1203,7 @@ void test_render_key_unchanged_workspace_remains_equal() {
                      keyFor(snapshot, workspace));
 }
 
-void test_render_key_changes_when_manual_holding_values_enable_confirm() {
+void test_render_key_changes_when_manual_holding_values_are_staged() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
     workspace.setPage(fermentation::FermentationUiPage::ManualHolding);
@@ -1216,9 +1216,11 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
 
     workspace.setManualHoldingValues(
         fermentation::FermentationUiManualRunPlanValues{});
+    // Staged values alone do not enable the start: the technical limits have
+    // no owner (O5). The render key still reflects the staged change.
     const auto afterValues = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
-    TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(afterValues.workspace.bottomSlots[2].enabled);
 
     TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
 }
@@ -1714,6 +1716,708 @@ void test_network_page_missing_softap_info_is_explicit() {
 #include "../../lib/fermentation_app/src/fermentation_ui_models.cpp"
 #include "../../main/fermentation_ui_renderer.cpp"
 
+// S7: read-only page content from the existing snapshot/catalog.
+fermentation::main_ui::RepresentativeScreen pageScreen(
+    const fermentation::FermentationUiSnapshot& snapshot,
+    fermentation::FermentationTouchWorkspace& workspace,
+    const char* locale = "en",
+    const fermentation::ProgramCatalog* catalog = nullptr) {
+    return fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{locale}, std::nullopt, catalog);
+}
+
+std::string localized(const char* locale, const char* key) {
+    return device_platform::resolveText(
+               fermentation::makeFermentationUiTextPacks(),
+               device_platform::LocaleId{locale},
+               fermentation::fermentationTextKey(key))
+        .value;
+}
+
+// Scrolls the summary field window by pressing the drawn "down" button.
+void scrollSummaryDown(const fermentation::FermentationUiSnapshot& snapshot,
+                       fermentation::FermentationTouchWorkspace& workspace,
+                       const fermentation::ProgramCatalog& catalog,
+                       std::size_t presses) {
+    for (std::size_t press = 0U; press < presses; ++press) {
+        const auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+        const auto result = fermentation::main_ui::routePress(
+            workspace, snapshot, screen, 280U, 150U, &catalog);
+        TEST_ASSERT_TRUE(result.navigated);
+    }
+}
+
+void test_program_summary_shows_program_values_and_marks_absent_ones() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeRunnableCatalogForTest();
+    auto& program = catalog.programs.back().program;
+    program.preheat = true;
+    program.sensorPreference = fermentation::SensorPreference::ProductRequired;
+    program.completion.mode = fermentation::CompletionMode::CoolThenFinish;
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram(program.id, catalog));
+    auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_TRUE(screen.workspace.page ==
+                     fermentation::FermentationUiPage::ProgramSummary);
+    TEST_ASSERT_TRUE(hasText(screen, "Miso"));
+    // Three rows are visible: target, duration, preheat.
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Duration: 60 min"));
+    TEST_ASSERT_TRUE(hasText(screen, "Preheat: On"));
+    TEST_ASSERT_FALSE(hasText(screen, "Sensor: Product required"));
+    scrollSummaryDown(snapshot, workspace, catalog, 2U);
+    screen = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_TRUE(hasText(screen, "Sensor: Product required"));
+    TEST_ASSERT_TRUE(hasText(screen, "End: Cool, finish"));
+    // The cooling target row exists because the completion mode cools.
+    scrollSummaryDown(snapshot, workspace, catalog, 1U);
+    screen = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_TRUE(hasText(screen, "Cooling: --.- C"));
+    TEST_ASSERT_FALSE(hasText(screen, "Hold: --"));
+
+    // A missing stage value is shown as "--", never as 0.
+    program.fermentationStages.front().targetTemperatureCelsius.reset();
+    program.fermentationStages.front().durationMinutes.reset();
+    fermentation::FermentationTouchWorkspace fresh;
+    TEST_ASSERT_TRUE(fresh.selectProgram(program.id, catalog));
+    screen = pageScreen(snapshot, fresh, "en", &catalog);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: --.- C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Duration: --"));
+    TEST_ASSERT_FALSE(hasText(screen, "Duration: 0 min"));
+}
+
+void test_program_summary_applies_candidate_overrides_and_redraws() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeRunnableCatalogForTest();
+    // Default Air: a Product override is a real change.
+    catalog.programs.back().program.sensorPreference =
+        fermentation::SensorPreference::AirProductOptional;
+    const auto id = catalog.programs.back().program.id;
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
+    const auto before = workspace.renderRevision();
+
+    fermentation::FermentationUiStartCandidate candidate;
+    candidate.programId = id;
+    candidate.targetTemperatureCelsius = 27.5;
+    candidate.fermentationDurationMinutes = 90U;
+    candidate.preheatEnabled = true;
+    candidate.sensorMode = fermentation::RunSensorMode::Product;
+    candidate.completionMode =
+        fermentation::CompletionMode::CoolAndHoldUntilManualStop;
+    workspace.setStartCandidate(candidate);
+    TEST_ASSERT_TRUE(workspace.renderRevision() != before);
+    auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+    // Overridden values are marked.
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 27.5 C *"));
+    TEST_ASSERT_TRUE(hasText(screen, "Duration: 90 min *"));
+    TEST_ASSERT_TRUE(hasText(screen, "Preheat: On *"));
+    scrollSummaryDown(snapshot, workspace, catalog, 2U);
+    screen = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_TRUE(hasText(screen, "Sensor: Product *"));
+    TEST_ASSERT_TRUE(hasText(screen, "End: Cool, hold to stop *"));
+
+    // A candidate of another program never leaks into the summary.
+    candidate.programId = "other";
+    workspace.setStartCandidate(candidate);
+    const auto other = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_FALSE(hasText(other, "Sensor: Product *"));
+    TEST_ASSERT_FALSE(hasText(other, "End: Cool, hold to stop *"));
+}
+
+void test_program_summary_reason_line_does_not_overlap_the_content() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    catalog.programs.back().program.enabled = false;
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(catalog.programs.back().program.id, catalog));
+    const auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+    const auto reason = localized("en", "program-disabled");
+    const fermentation::main_ui::ScreenDrawCommand* reasonCommand = nullptr;
+    for (const auto& command : screen.commands) {
+        if (command.text == reason) reasonCommand = &command;
+    }
+    TEST_ASSERT_NOT_NULL(reasonCommand);
+    TEST_ASSERT_EQUAL_UINT16(182U, reasonCommand->rect.top);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+}
+
+void test_process_page_shows_state_and_effective_values() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::ActiveRun;
+    snapshot.home.processState = fermentation::ProcessState::Fermenting;
+    snapshot.home.effectiveValues =
+        fermentation::EffectiveRunValues{26.5, 125U};
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Process);
+    auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Fermenting"));
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 26.5 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Remaining: 125 min"));
+
+    snapshot.home.effectiveValues.reset();
+    screen = pageScreen(snapshot, workspace, "de");
+    TEST_ASSERT_TRUE(hasText(screen, "Ziel: --.- C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Rest: --"));
+    TEST_ASSERT_TRUE(hasText(screen, "Gaerung"));
+}
+
+void test_completion_page_shows_state_and_target_without_remaining_time() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Completed;
+    snapshot.home.processState = fermentation::ProcessState::Completed;
+    snapshot.home.effectiveValues = fermentation::EffectiveRunValues{25.0, 0U};
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Completion);
+    const auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+    TEST_ASSERT_FALSE(hasText(screen, "Remaining: 0 min"));
+}
+
+void test_technical_page_shows_temperatures_with_quality_and_pages() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    for (const auto role :
+         {fermentation::FermentationTemperatureRole::CabinetAir,
+          fermentation::FermentationTemperatureRole::Product,
+          fermentation::FermentationTemperatureRole::Cooling}) {
+        fermentation::TemperatureView view;
+        view.role = role;
+        snapshot.temperatures.push_back(view);
+    }
+    snapshot.temperatures[0].valueCelsius = 23.4;
+    snapshot.temperatures[0].quality.quality =
+        device_platform::SensorQuality::Valid;
+    snapshot.temperatures[1].quality.quality =
+        device_platform::SensorQuality::Stale;
+    snapshot.temperatures[2].quality.quality =
+        device_platform::SensorQuality::Failed;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Technical);
+    auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_EQUAL_UINT32(3U, screen.workspace.pager.itemCount);
+    TEST_ASSERT_TRUE(hasText(screen, "Cabinet air"));
+    TEST_ASSERT_TRUE(hasText(screen, "23.4 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "valid"));
+    TEST_ASSERT_TRUE(hasText(screen, "stale"));
+    TEST_ASSERT_TRUE(hasText(screen, "failed"));
+    // Without a value the sensor shows the placeholder, not 0.
+    TEST_ASSERT_TRUE(hasText(screen, "--.- C"));
+    TEST_ASSERT_FALSE(hasText(screen, "0.0 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "1/3"));
+    // The page is no touch list: a content press yields no ContentCell.
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::targetAt(screen, 100U, 80U).has_value());
+
+    // Down moves the window: row 0 shows the second temperature.
+    const auto press = fermentation::main_ui::routePress(workspace, snapshot,
+                                                         screen, 180U, 220U);
+    TEST_ASSERT_TRUE(press.navigated);
+    screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_FALSE(hasText(screen, "Cabinet air"));
+    TEST_ASSERT_TRUE(hasText(screen, "2/3"));
+}
+
+void test_status_page_shows_mode_readiness_and_fault_code() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Restricted;
+    snapshot.status.ready = false;
+    snapshot.status.presentation.faultCode =
+        fermentation::FaultCode::SafetySensorUnavailable;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Status);
+    auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Application not ready"));
+    TEST_ASSERT_TRUE(hasText(screen, "Fault code: 0x0301"));
+
+    snapshot.status.ready = true;
+    snapshot.status.presentation.faultCode = fermentation::FaultCode::None;
+    screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Application ready"));
+    TEST_ASSERT_FALSE(hasText(screen, "Fault code: 0x0000"));
+}
+
+void test_recovery_page_names_mode_and_unavailable_time_correction() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Recovery;
+    snapshot.recovery.mode =
+        fermentation::RecoveryViewMode::WaitingForTrustedTime;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Recovery);
+    const auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Waiting for trusted time"));
+    TEST_ASSERT_TRUE(hasText(screen, "Time correction: not available (R1)"));
+    // No slot offers the time correction.
+    for (const auto action : screen.workspace.slotActions) {
+        TEST_ASSERT_TRUE(action !=
+                         fermentation::FermentationUiWorkspaceSlotAction::
+                             ApplyRecoveryTimeCorrection);
+    }
+
+    // The safe-boot capability line stays beside the static reason.
+    snapshot.recovery.mode =
+        fermentation::RecoveryViewMode::FallbackSelectionRequired;
+    snapshot.home.processState = fermentation::ProcessState::SafeBoot;
+    const auto safeBoot = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(safeBoot, "Unavailable 4"));
+    TEST_ASSERT_TRUE(hasText(safeBoot, "Time correction: not available (R1)"));
+}
+
+void test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason() {
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto page : {fermentation::FermentationUiPage::Diagnostics,
+                                fermentation::FermentationUiPage::Service,
+                                fermentation::FermentationUiPage::Pin}) {
+            fermentation::FermentationUiSnapshot snapshot;
+            snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+            fermentation::FermentationTouchWorkspace workspace;
+            workspace.setPage(page);
+            const auto screen = pageScreen(snapshot, workspace, locale);
+            TEST_ASSERT_TRUE(hasText(screen, localized(locale, "deferred-28")));
+        }
+    }
+    // The Service page keeps the owner's unavailable reason as a second line.
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Service);
+    const auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Deferred (#28)"));
+    TEST_ASSERT_TRUE(hasText(screen, "Service unavailable"));
+}
+
+void test_messages_page_shows_an_empty_state_only_without_messages() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Messages);
+    TEST_ASSERT_TRUE(hasText(pageScreen(snapshot, workspace), "No messages"));
+    const auto withMessage = snapshotWithMessagesForRender(1U);
+    TEST_ASSERT_FALSE(
+        hasText(pageScreen(withMessage, workspace), "No messages"));
+}
+
+// All content pages: bounded command count, deterministic output and no
+// overlapping text below the header, in every locale.
+void test_content_pages_are_bounded_deterministic_and_do_not_overlap() {
+    auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationUiSnapshot snapshot =
+        snapshotWithMessagesForRender(4U);
+    snapshot.home.mode = fermentation::FermentationHomeMode::ActiveRun;
+    snapshot.home.processState = fermentation::ProcessState::Fermenting;
+    snapshot.home.effectiveValues =
+        fermentation::EffectiveRunValues{26.5, 125U};
+    snapshot.status.presentation.faultCode =
+        fermentation::FaultCode::SafetySensorUnavailable;
+    snapshot.recovery.mode =
+        fermentation::RecoveryViewMode::RecoveryRejectedOrFailClosed;
+    for (const auto role :
+         {fermentation::FermentationTemperatureRole::CabinetAir,
+          fermentation::FermentationTemperatureRole::Product,
+          fermentation::FermentationTemperatureRole::Cooling}) {
+        fermentation::TemperatureView view;
+        view.role = role;
+        view.valueCelsius = 21.0;
+        snapshot.temperatures.push_back(view);
+    }
+    constexpr std::size_t kContentPageCommandCapacity = 40U;
+    const fermentation::FermentationUiPage pages[] = {
+        fermentation::FermentationUiPage::ProgramSummary,
+        fermentation::FermentationUiPage::Process,
+        fermentation::FermentationUiPage::Technical,
+        fermentation::FermentationUiPage::Messages,
+        fermentation::FermentationUiPage::Completion,
+        fermentation::FermentationUiPage::Status,
+        fermentation::FermentationUiPage::Diagnostics,
+        fermentation::FermentationUiPage::Service,
+        fermentation::FermentationUiPage::Pin,
+        fermentation::FermentationUiPage::Recovery,
+        fermentation::FermentationUiPage::ManualHolding,
+        fermentation::FermentationUiPage::ManualTimed,
+        fermentation::FermentationUiPage::StopDialog,
+    };
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto page : pages) {
+            fermentation::FermentationTouchWorkspace workspace;
+            if (page == fermentation::FermentationUiPage::ProgramSummary) {
+                TEST_ASSERT_TRUE(workspace.selectProgram(
+                    catalog.programs.back().program.id, catalog));
+            } else {
+                workspace.setPage(page);
+            }
+            const auto first =
+                pageScreen(snapshot, workspace, locale, &catalog);
+            const auto second =
+                pageScreen(snapshot, workspace, locale, &catalog);
+            TEST_ASSERT_TRUE(first.workspace.page == page);
+            TEST_ASSERT_TRUE(first.commands.size() <=
+                             kContentPageCommandCapacity);
+            TEST_ASSERT_EQUAL_UINT32(first.commands.size(),
+                                     second.commands.size());
+            for (std::size_t index = 0U; index < first.commands.size();
+                 ++index) {
+                TEST_ASSERT_EQUAL_STRING(first.commands[index].text.c_str(),
+                                         second.commands[index].text.c_str());
+                TEST_ASSERT_EQUAL_UINT16(first.commands[index].rect.top,
+                                         second.commands[index].rect.top);
+            }
+            for (std::size_t left = 0U; left < first.commands.size(); ++left) {
+                const auto& a = first.commands[left];
+                if (a.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                    a.rect.top < 34U) {
+                    continue;
+                }
+                assertWithinDisplay(a.rect);
+                for (std::size_t right = left + 1U;
+                     right < first.commands.size(); ++right) {
+                    const auto& b = first.commands[right];
+                    if (b.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                        b.rect.top < 34U) {
+                        continue;
+                    }
+                    TEST_ASSERT_FALSE(overlaps(a.rect, b.rect));
+                }
+            }
+        }
+    }
+}
+
+// Every value an S7 page shows is part of the semantic snapshot comparison,
+// so a change of exactly that value publishes a new refresh revision.
+void test_every_displayed_s7_value_changes_the_refresh_revision() {
+    fermentation::FermentationUiSnapshot base;
+    base.home.mode = fermentation::FermentationHomeMode::ActiveRun;
+    base.home.effectiveValues = fermentation::EffectiveRunValues{25.0, 60U};
+    fermentation::TemperatureView temperature;
+    base.temperatures.push_back(temperature);
+    const auto changes =
+        std::array<void (*)(fermentation::FermentationUiSnapshot&), 8U>{
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.home.processState =
+                    fermentation::ProcessState::Fermenting;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.home.effectiveValues->targetTemperatureCelsius = 26.0;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.home.effectiveValues->remainingDurationMinutes = 59U;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.temperatures[0].valueCelsius = 20.0;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.temperatures[0].quality.quality =
+                    device_platform::SensorQuality::Failed;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.status.ready = true;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.status.presentation.faultCode =
+                    fermentation::FaultCode::SafetySensorUnavailable;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.recovery.mode =
+                    fermentation::RecoveryViewMode::CurrentRunRecovered;
+            },
+        };
+    for (const auto change : changes) {
+        fermentation::FermentationUiRefreshRevisionTracker tracker;
+        const auto before = tracker.publish(base);
+        auto changed = base;
+        change(changed);
+        TEST_ASSERT_TRUE(tracker.publish(changed).value != before.value);
+    }
+}
+
+void test_s7_text_packs_define_every_new_key_in_all_locales() {
+    const auto packs = fermentation::makeFermentationUiTextPacks();
+    const std::array<device_platform::TextKey, 6U> keys{
+        fermentation::processStateTextKey(
+            fermentation::ProcessState::ServiceMode),
+        fermentation::recoveryModeTextKey(
+            fermentation::RecoveryViewMode::Cooling),
+        fermentation::sensorPreferenceTextKey(
+            fermentation::SensorPreference::AirOnly),
+        fermentation::runSensorModeTextKey(fermentation::RunSensorMode::Air),
+        fermentation::completionModeTextKey(
+            fermentation::CompletionMode::CoolAndHoldForDuration),
+        fermentation::temperatureRoleTextKey(
+            fermentation::FermentationTemperatureRole::Cooling)};
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto& key : keys) {
+            const auto result = device_platform::resolveText(
+                packs, device_platform::LocaleId{locale}, key);
+            TEST_ASSERT_FALSE(result.value.empty());
+            TEST_ASSERT_TRUE(result.value != key.value);
+        }
+    }
+}
+
+// S8: start-field rows, pager buttons, value edit page and keypad.
+bool isCell(const std::optional<device_platform::DeviceUiTarget>& target,
+            std::uint8_t row, std::uint8_t column) {
+    return target.has_value() &&
+           target->kind == device_platform::DeviceUiTargetKind::ContentCell &&
+           target->row == row && target->column == column;
+}
+
+void test_program_summary_rows_and_pager_buttons_have_exact_hit_zones() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram("scroll-0", catalog));
+    const auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    // Three 40 px rows (y=64..184) left of the button strip.
+    TEST_ASSERT_TRUE(isCell(at(8U, 64U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(251U, 103U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(8U, 104U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(100U, 183U), 2U, 0U));
+    TEST_ASSERT_FALSE(at(100U, 184U).has_value());
+    TEST_ASSERT_FALSE(at(100U, 63U).has_value());
+    TEST_ASSERT_FALSE(at(7U, 80U).has_value());
+    // The 4 px gap before the buttons is no target.
+    TEST_ASSERT_FALSE(at(252U, 80U).has_value());
+    TEST_ASSERT_FALSE(at(255U, 80U).has_value());
+    // Pager buttons: up y=64..123, down y=124..183 (column 1).
+    TEST_ASSERT_TRUE(isCell(at(256U, 64U), 0U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(311U, 123U), 0U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(256U, 124U), 1U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(311U, 183U), 1U, 1U));
+    TEST_ASSERT_FALSE(at(312U, 80U).has_value());
+}
+
+void test_value_edit_page_shows_the_candidate_and_a_keypad_with_exact_zones() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram("scroll-0", catalog));
+    auto screen = pageScreen(snapshot, workspace, "en", &catalog);
+    // A tap on the target row opens the shared edit page.
+    const auto opened = fermentation::main_ui::routePress(
+        workspace, snapshot, screen, 40U, 80U, &catalog);
+    TEST_ASSERT_TRUE(opened.navigated);
+    screen = pageScreen(snapshot, workspace, "en", &catalog);
+    TEST_ASSERT_TRUE(screen.workspace.page ==
+                     fermentation::FermentationUiPage::ValueEdit);
+    TEST_ASSERT_TRUE(hasText(screen, "Target temp."));
+    TEST_ASSERT_TRUE(hasText(screen, "25.0 C"));
+    for (const auto* label :
+         {"1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "+/-"}) {
+        TEST_ASSERT_TRUE(hasText(screen, label));
+    }
+    // Bottom slots: Cancel | Backspace | Clear | Commit.
+    TEST_ASSERT_TRUE(hasText(screen, "Cancel"));
+    TEST_ASSERT_TRUE(hasText(screen, "Del"));
+    TEST_ASSERT_TRUE(hasText(screen, "Clear"));
+    TEST_ASSERT_TRUE(hasText(screen, "OK"));
+
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    // 4 x 3 keys of 98 x 32 px on a 102 x 34 px pitch from (8, 62).
+    TEST_ASSERT_TRUE(isCell(at(8U, 62U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(105U, 93U), 0U, 0U));
+    TEST_ASSERT_FALSE(at(106U, 70U).has_value());  // gap between columns
+    TEST_ASSERT_FALSE(at(109U, 70U).has_value());
+    TEST_ASSERT_TRUE(isCell(at(110U, 62U), 0U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(309U, 62U), 0U, 2U));
+    TEST_ASSERT_FALSE(at(310U, 70U).has_value());
+    // Every key row is active over its whole 34 px height (no row gap).
+    TEST_ASSERT_TRUE(isCell(at(50U, 94U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 95U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 96U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 129U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 130U), 2U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(8U, 164U), 3U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(309U, 195U), 3U, 2U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 197U), 3U, 0U));
+    TEST_ASSERT_FALSE(at(50U, 198U).has_value());
+    TEST_ASSERT_FALSE(at(50U, 61U).has_value());
+    // The 34 px touch height of every row is the D8 acceptance criterion: all
+    // 34 pixel lines of a row resolve to that row's key.
+    for (std::uint8_t row = 0U; row < 4U; ++row) {
+        for (std::uint16_t line = 0U; line < 34U; ++line) {
+            TEST_ASSERT_TRUE(isCell(
+                at(50U, static_cast<std::uint16_t>(62U + row * 34U + line)),
+                row, 0U));
+        }
+    }
+
+    // The held key draws press feedback exactly on its face.
+    const auto held = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"},
+        device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::ContentCell, 0U, 3U, 1U},
+        &catalog);
+    const auto feedback = std::find_if(
+        held.commands.begin(), held.commands.end(), [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        });
+    TEST_ASSERT_TRUE(feedback != held.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(110U, feedback->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(164U, feedback->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(98U, feedback->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(34U, feedback->rect.height);
+}
+
+void test_value_edit_page_has_no_overlap_and_a_bounded_command_count() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    for (const auto* locale : {"en", "de", "es"}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        TEST_ASSERT_TRUE(workspace.selectProgram("scroll-0", catalog));
+        auto screen = pageScreen(snapshot, workspace, locale, &catalog);
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(
+                             workspace, snapshot, screen, 40U, 80U, &catalog)
+                             .navigated);
+        screen = pageScreen(snapshot, workspace, locale, &catalog);
+        TEST_ASSERT_TRUE(screen.commands.size() <= 60U);
+        for (std::size_t left = 0U; left < screen.commands.size(); ++left) {
+            const auto& a = screen.commands[left];
+            if (a.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                a.rect.top < 34U) {
+                continue;
+            }
+            assertWithinDisplay(a.rect);
+            for (std::size_t right = left + 1U; right < screen.commands.size();
+                 ++right) {
+                const auto& b = screen.commands[right];
+                if (b.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                    b.rect.top < 34U) {
+                    continue;
+                }
+                TEST_ASSERT_FALSE(overlaps(a.rect, b.rect));
+            }
+        }
+    }
+}
+
+void test_summary_press_feedback_follows_row_and_button_geometry() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeScrollableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(workspace.selectProgram("scroll-0", catalog));
+    const auto feedbackFor = [&](std::uint8_t row, std::uint8_t column) {
+        const auto screen = fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+            device_platform::LocaleId{"en"},
+            device_platform::DeviceUiTarget{
+                device_platform::DeviceUiTargetKind::ContentCell, 0U, row,
+                column},
+            &catalog);
+        const auto found = std::find_if(
+            screen.commands.begin(), screen.commands.end(),
+            [](const auto& command) {
+                return command.kind ==
+                       fermentation::main_ui::ScreenDrawKind::PressFeedback;
+            });
+        TEST_ASSERT_TRUE(found != screen.commands.end());
+        return found->rect;
+    };
+    const auto row = feedbackFor(1U, 0U);
+    TEST_ASSERT_EQUAL_UINT16(8U, row.left);
+    TEST_ASSERT_EQUAL_UINT16(104U, row.top);
+    TEST_ASSERT_EQUAL_UINT16(244U, row.width);
+    TEST_ASSERT_EQUAL_UINT16(40U, row.height);
+    const auto down = feedbackFor(1U, 1U);
+    TEST_ASSERT_EQUAL_UINT16(256U, down.left);
+    TEST_ASSERT_EQUAL_UINT16(124U, down.top);
+    TEST_ASSERT_EQUAL_UINT16(56U, down.width);
+}
+
+void test_start_value_labels_exist_in_all_locales() {
+    for (const auto* key :
+         {"label-cooling", "label-hold", "field-target", "field-duration",
+          "field-cooling", "field-hold", "backspace", "clear",
+          "start-values-invalid", "manual-parameters-not-released"}) {
+        for (const auto* locale : {"en", "de", "es"}) {
+            const auto result = device_platform::resolveText(
+                fermentation::makeFermentationUiTextPacks(),
+                device_platform::LocaleId{locale},
+                fermentation::fermentationTextKey(key));
+            TEST_ASSERT_FALSE(result.value.empty());
+            TEST_ASSERT_TRUE(result.value != key);
+        }
+    }
+}
+
+// S9: manual pages show real run values, the not-released reason and keep the
+// page's own content clear of the field rows.
+void test_manual_pages_show_real_values_and_the_not_released_reason() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ManualHolding);
+    auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: --.- C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Preheat: Off"));
+    TEST_ASSERT_TRUE(hasText(screen, "Sensor: Air"));
+    // No technical limit is offered as a value.
+    TEST_ASSERT_FALSE(hasText(screen, "Duration: --"));
+    const auto reason = localized("en", "manual-parameters-not-released");
+    const fermentation::main_ui::ScreenDrawCommand* reasonCommand = nullptr;
+    for (const auto& command : screen.commands) {
+        if (command.text == reason) reasonCommand = &command;
+    }
+    TEST_ASSERT_NOT_NULL(reasonCommand);
+    TEST_ASSERT_EQUAL_UINT16(182U, reasonCommand->rect.top);
+    // The confirm slot (2) is drawn disabled.
+    TEST_ASSERT_FALSE(screen.workspace.bottomSlots[2].enabled);
+
+    for (const auto* locale : {"de", "es"}) {
+        const auto localizedScreen = pageScreen(snapshot, workspace, locale);
+        TEST_ASSERT_TRUE(
+            hasText(localizedScreen,
+                    localized(locale, "manual-parameters-not-released")));
+    }
+}
+
+void test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Completed;
+    snapshot.home.processState = fermentation::ProcessState::Completed;
+    snapshot.home.effectiveValues = fermentation::EffectiveRunValues{25.0, 0U};
+    for (const auto page : {fermentation::FermentationUiPage::StopDialog,
+                            fermentation::FermentationUiPage::Completion}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(page);
+        const auto screen = pageScreen(snapshot, workspace);
+        const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+            return fermentation::main_ui::targetAt(screen, x, y);
+        };
+        // Row 0 (y=64..103) is page content; the single field is row 1.
+        TEST_ASSERT_FALSE(at(50U, 70U).has_value());
+        TEST_ASSERT_TRUE(isCell(at(50U, 104U), 1U, 0U));
+        TEST_ASSERT_TRUE(isCell(at(50U, 143U), 1U, 0U));
+        TEST_ASSERT_FALSE(at(50U, 144U).has_value());
+        // One field: no pager buttons.
+        TEST_ASSERT_FALSE(at(280U, 80U).has_value());
+        TEST_ASSERT_FALSE(at(280U, 130U).has_value());
+        TEST_ASSERT_TRUE(hasText(screen, "Cooling: --.- C"));
+    }
+    // The completion page keeps its own state and target lines.
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Completion);
+    const auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Completed"));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(
@@ -1764,7 +2468,7 @@ int main() {
     RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);
     RUN_TEST(test_render_key_changes_on_network_status_and_clock);
     RUN_TEST(test_render_key_unchanged_workspace_remains_equal);
-    RUN_TEST(test_render_key_changes_when_manual_holding_values_enable_confirm);
+    RUN_TEST(test_render_key_changes_when_manual_holding_values_are_staged);
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);
@@ -1779,5 +2483,28 @@ int main() {
     RUN_TEST(
         test_language_page_offers_the_web_access_entry_with_a_localized_label);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
+    RUN_TEST(test_program_summary_shows_program_values_and_marks_absent_ones);
+    RUN_TEST(test_program_summary_applies_candidate_overrides_and_redraws);
+    RUN_TEST(test_program_summary_reason_line_does_not_overlap_the_content);
+    RUN_TEST(test_process_page_shows_state_and_effective_values);
+    RUN_TEST(
+        test_completion_page_shows_state_and_target_without_remaining_time);
+    RUN_TEST(test_technical_page_shows_temperatures_with_quality_and_pages);
+    RUN_TEST(test_status_page_shows_mode_readiness_and_fault_code);
+    RUN_TEST(test_recovery_page_names_mode_and_unavailable_time_correction);
+    RUN_TEST(
+        test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason);
+    RUN_TEST(test_messages_page_shows_an_empty_state_only_without_messages);
+    RUN_TEST(test_content_pages_are_bounded_deterministic_and_do_not_overlap);
+    RUN_TEST(test_every_displayed_s7_value_changes_the_refresh_revision);
+    RUN_TEST(test_s7_text_packs_define_every_new_key_in_all_locales);
+    RUN_TEST(test_program_summary_rows_and_pager_buttons_have_exact_hit_zones);
+    RUN_TEST(
+        test_value_edit_page_shows_the_candidate_and_a_keypad_with_exact_zones);
+    RUN_TEST(test_value_edit_page_has_no_overlap_and_a_bounded_command_count);
+    RUN_TEST(test_summary_press_feedback_follows_row_and_button_geometry);
+    RUN_TEST(test_start_value_labels_exist_in_all_locales);
+    RUN_TEST(test_manual_pages_show_real_values_and_the_not_released_reason);
+    RUN_TEST(test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content);
     return UNITY_END();
 }

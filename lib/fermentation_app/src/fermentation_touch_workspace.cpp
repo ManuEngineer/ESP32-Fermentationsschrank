@@ -1,10 +1,16 @@
 #include "fermentation_touch_workspace.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "fermentation_ui_editing.hpp"
 #include "fermentation_ui_text.hpp"
+#include "program_limits.hpp"
 
 namespace fermentation {
 
@@ -27,6 +33,319 @@ safeBootUnavailableCapabilities() {
             FermentationUiSafeBootCapability::RawTouchRecovery,
             FermentationUiSafeBootCapability::NetworkProvisioningRecovery,
             FermentationUiSafeBootCapability::DiagnosticsExport};
+}
+
+// Validation field of each numeric start value (the program validator names
+// the field of every error, so the commit check reuses it instead of keeping
+// parallel limits).
+const char* numericStartFieldName(FermentationUiStartField field) noexcept {
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            return "defaults.fermentation_temperature_c";
+        case FermentationUiStartField::Duration:
+            return "defaults.fermentation_duration_min";
+        case FermentationUiStartField::CoolingTarget:
+            return "defaults.completion.cooling_target_c";
+        case FermentationUiStartField::HoldDuration:
+            return "defaults.completion.hold_duration_min";
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+    return "";
+}
+
+// Sets one numeric next-run override on the candidate.
+void setNumericStartOverride(FermentationUiStartCandidate& candidate,
+                             FermentationUiStartField field,
+                             double value) noexcept {
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            candidate.targetTemperatureCelsius = value;
+            break;
+        case FermentationUiStartField::Duration:
+            candidate.fermentationDurationMinutes =
+                static_cast<std::uint32_t>(value);
+            break;
+        case FermentationUiStartField::CoolingTarget:
+            candidate.coolingTargetCelsius = value;
+            break;
+        case FermentationUiStartField::HoldDuration:
+            candidate.holdDurationMinutes = static_cast<std::uint32_t>(value);
+            break;
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+}
+
+// A value is accepted for the field when the existing program validator
+// reports no error for exactly that field on the program with the candidate
+// applied. Errors of other fields (for example a completion mode that still
+// lacks its cooling target) do not block this commit; they keep `confirm`
+// disabled through `valuesValid`.
+bool numericStartValueAccepted(const ProgramDocument& stored,
+                               FermentationUiStartCandidate candidate,
+                               FermentationUiStartField field, double value) {
+    constexpr double kWholeNumberLimit = 4'000'000'000.0;
+    if (!std::isfinite(value)) return false;
+    if (isWholeNumberStartField(field) &&
+        (value < 0.0 || value > kWholeNumberLimit ||
+         value != std::floor(value))) {
+        return false;
+    }
+    setNumericStartOverride(candidate, field, value);
+    auto effective = stored;
+    applyStartCandidateOverrides(effective, candidate);
+    const std::string_view name = numericStartFieldName(field);
+    const auto result = validateProgram(effective, ValidationPurpose::Runnable);
+    return std::none_of(
+        result.errors.begin(), result.errors.end(),
+        [name](const ValidationError& error) { return name == error.field; });
+}
+
+const char* valueEditTitleKey(FermentationUiStartField field) noexcept {
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            return "field-target";
+        case FermentationUiStartField::Duration:
+            return "field-duration";
+        case FermentationUiStartField::CoolingTarget:
+            return "field-cooling";
+        case FermentationUiStartField::HoldDuration:
+            return "field-hold";
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+    return "start";
+}
+
+constexpr std::size_t kMaxValueEditCharacters = 8U;
+
+// Keypad (D8): rows 0..2 are digits 1..9, row 3 is `.`, `0`, `+/-`. Whole-
+// number fields have no decimal separator or sign; input length is bounded.
+bool keypadKeyEnabled(std::uint8_t row, std::uint8_t column,
+                      FermentationUiStartField field,
+                      const std::string& candidate) noexcept {
+    if (row >= kFermentationUiKeypadRows ||
+        column >= kFermentationUiKeypadColumns) {
+        return false;
+    }
+    if (row == 3U && column != 1U) {
+        if (isWholeNumberStartField(field)) return false;
+        if (column == 0U) {
+            return candidate.size() < kMaxValueEditCharacters &&
+                   candidate.find('.') == std::string::npos;
+        }
+        return true;
+    }
+    return candidate.size() < kMaxValueEditCharacters;
+}
+
+std::string startValueText(FermentationUiStartField field,
+                           const FermentationUiProgramSummaryView& summary) {
+    char buffer[24];
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            if (!summary.targetTemperatureCelsius.has_value()) return {};
+            std::snprintf(buffer, sizeof(buffer), "%.1f",
+                          *summary.targetTemperatureCelsius);
+            return buffer;
+        case FermentationUiStartField::CoolingTarget:
+            if (!summary.coolingTargetCelsius.has_value()) return {};
+            std::snprintf(buffer, sizeof(buffer), "%.1f",
+                          *summary.coolingTargetCelsius);
+            return buffer;
+        case FermentationUiStartField::Duration:
+            if (!summary.durationMinutes.has_value()) return {};
+            return std::to_string(*summary.durationMinutes);
+        case FermentationUiStartField::HoldDuration:
+            if (!summary.holdDurationMinutes.has_value()) return {};
+            return std::to_string(*summary.holdDurationMinutes);
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+    return {};
+}
+
+// Real manual run values are accepted with the canonical program limits (the
+// same constants the manual-run validators use); the technical limits are not
+// entered here.
+bool manualNumericValueAccepted(FermentationUiStartField field,
+                                double value) noexcept {
+    if (!std::isfinite(value)) return false;
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            return value >=
+                       program_limits::kMinimumFermentationTemperatureCelsius &&
+                   value <=
+                       program_limits::kMaximumFermentationTemperatureCelsius;
+        case FermentationUiStartField::CoolingTarget:
+            return value >= program_limits::kMinimumCoolingTargetCelsius &&
+                   value <= program_limits::kMaximumCoolingTargetCelsius;
+        case FermentationUiStartField::Duration:
+            return value == std::floor(value) &&
+                   value >=
+                       program_limits::kMinimumFermentationDurationMinutes &&
+                   value <= program_limits::kMaximumFermentationDurationMinutes;
+        case FermentationUiStartField::HoldDuration:
+            return value == std::floor(value) &&
+                   value >= program_limits::kMinimumHoldDurationMinutes &&
+                   value <= program_limits::kMaximumHoldDurationMinutes;
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+    return false;
+}
+
+// A cooling plan's single value is the plan target (the manual-run validator
+// bounds it like a run target), shown as the cooling target.
+FermentationUiStartField manualLimitField(
+    FermentationUiManualDraftSlot slot,
+    FermentationUiStartField field) noexcept {
+    return (slot == FermentationUiManualDraftSlot::StopCooling ||
+            slot == FermentationUiManualDraftSlot::CompletionCooling)
+               ? FermentationUiStartField::TargetTemperature
+               : field;
+}
+
+void setDraftNumeric(FermentationUiManualDraft& draft,
+                     FermentationUiStartField field, double value) noexcept {
+    switch (field) {
+        case FermentationUiStartField::TargetTemperature:
+            draft.targetTemperatureCelsius = value;
+            break;
+        case FermentationUiStartField::Duration:
+            draft.durationMinutes = static_cast<std::uint32_t>(value);
+            break;
+        case FermentationUiStartField::CoolingTarget:
+            draft.coolingTargetCelsius = value;
+            break;
+        case FermentationUiStartField::HoldDuration:
+            draft.holdDurationMinutes = static_cast<std::uint32_t>(value);
+            break;
+        case FermentationUiStartField::Preheat:
+        case FermentationUiStartField::SensorMode:
+        case FermentationUiStartField::CompletionMode:
+            break;
+    }
+}
+
+// The next requested mode of the sensor cycle: none (the stored preference's
+// canonical default) -> each other structurally allowed mode -> none. The
+// rule comes from the #21 start matrix; nothing is derived from sensor
+// evidence here. Returns nullopt when the preference has no alternative.
+std::optional<std::optional<RunSensorMode>> nextSensorOverride(
+    SensorPreference preference,
+    const std::optional<RunSensorMode>& current) noexcept {
+    const auto fallback = defaultProgramStartSensorMode(preference);
+    if (!fallback.has_value()) return std::nullopt;
+    std::array<RunSensorMode, 2U> options{};
+    std::size_t count = 0U;
+    for (const auto mode : {RunSensorMode::Air, RunSensorMode::Product}) {
+        if (mode != *fallback &&
+            programStartSensorModeAllowed(preference, mode))
+            options[count++] = mode;
+    }
+    if (count == 0U) return std::nullopt;
+    if (!current.has_value()) return std::optional<RunSensorMode>{options[0]};
+    for (std::size_t index = 0U; index + 1U < count; ++index) {
+        if (options[index] == *current)
+            return std::optional<RunSensorMode>{options[index + 1U]};
+    }
+    return std::optional<RunSensorMode>{std::nullopt};
+}
+
+// Display projection for ProgramSummary: the stored program with the
+// next-run candidate overrides applied by the single shared definition
+// (applyStartCandidateOverrides). The stage values follow the first stage; a
+// missing value stays absent (rendered as "--"), never 0. The display never
+// mutates the stored program.
+FermentationUiProgramSummaryView makeProgramSummary(
+    const ProgramDocument& document,
+    const FermentationUiStartCandidate* candidate, bool startable) {
+    auto effective = document;
+    if (candidate != nullptr)
+        applyStartCandidateOverrides(effective, *candidate);
+    const auto& stored = document.program;
+    const auto& program = effective.program;
+    FermentationUiProgramSummaryView summary;
+    summary.name = program.name;
+    if (!program.fermentationStages.empty()) {
+        summary.targetTemperatureCelsius =
+            program.fermentationStages.front().targetTemperatureCelsius;
+        summary.durationMinutes =
+            program.fermentationStages.front().durationMinutes;
+    }
+    summary.preheat = program.preheat;
+    summary.sensorPreference = program.sensorPreference;
+    summary.completionMode = program.completion.mode;
+    summary.coolingTargetCelsius = program.completion.coolingTargetCelsius;
+    summary.holdDurationMinutes = program.completion.holdDurationMinutes;
+    // An override equal to the preference's canonical default is no override.
+    const auto sensorDefault =
+        defaultProgramStartSensorMode(program.sensorPreference);
+    if (candidate != nullptr && candidate->sensorMode.has_value() &&
+        candidate->sensorMode != sensorDefault) {
+        summary.sensorModeOverride = candidate->sensorMode;
+    }
+
+    const auto storedStage = stored.fermentationStages.empty()
+                                 ? FermentationStage{}
+                                 : stored.fermentationStages.front();
+    const auto index = [](FermentationUiStartField field) {
+        return static_cast<std::size_t>(field);
+    };
+    summary.changed[index(FermentationUiStartField::TargetTemperature)] =
+        summary.targetTemperatureCelsius !=
+        storedStage.targetTemperatureCelsius;
+    summary.changed[index(FermentationUiStartField::Duration)] =
+        summary.durationMinutes != storedStage.durationMinutes;
+    summary.changed[index(FermentationUiStartField::Preheat)] =
+        summary.preheat != stored.preheat;
+    summary.changed[index(FermentationUiStartField::SensorMode)] =
+        summary.sensorModeOverride.has_value();
+    summary.changed[index(FermentationUiStartField::CompletionMode)] =
+        summary.completionMode != stored.completion.mode;
+    summary.changed[index(FermentationUiStartField::CoolingTarget)] =
+        summary.coolingTargetCelsius != stored.completion.coolingTargetCelsius;
+    summary.changed[index(FermentationUiStartField::HoldDuration)] =
+        summary.holdDurationMinutes != stored.completion.holdDurationMinutes;
+
+    summary.fields[summary.fieldCount++] =
+        FermentationUiStartField::TargetTemperature;
+    summary.fields[summary.fieldCount++] = FermentationUiStartField::Duration;
+    summary.fields[summary.fieldCount++] = FermentationUiStartField::Preheat;
+    summary.fields[summary.fieldCount++] = FermentationUiStartField::SensorMode;
+    summary.fields[summary.fieldCount++] =
+        FermentationUiStartField::CompletionMode;
+    if (summary.completionMode != CompletionMode::FinishWithoutCooling) {
+        summary.fields[summary.fieldCount++] =
+            FermentationUiStartField::CoolingTarget;
+    }
+    if (summary.completionMode == CompletionMode::CoolAndHoldForDuration) {
+        summary.fields[summary.fieldCount++] =
+            FermentationUiStartField::HoldDuration;
+    }
+    summary.editable = startable && candidate != nullptr;
+    // The structural #21 rule (preference + requested mode) is part of the
+    // start values; evidence-dependent decisions stay with the start owner.
+    const bool sensorAllowed =
+        candidate == nullptr || !candidate->sensorMode.has_value() ||
+        programStartSensorModeAllowed(program.sensorPreference,
+                                      *candidate->sensorMode);
+    summary.valuesValid =
+        sensorAllowed &&
+        validateProgram(effective, ValidationPurpose::Runnable).valid();
+    return summary;
 }
 
 }  // namespace
@@ -118,6 +437,11 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::ResumeFallback:
         case FermentationUiWorkspaceSlotAction::AcknowledgeMessage:
         case FermentationUiWorkspaceSlotAction::MuteMessage:
+        case FermentationUiWorkspaceSlotAction::ValueEditCancel:
+        case FermentationUiWorkspaceSlotAction::ValueEditBackspace:
+        case FermentationUiWorkspaceSlotAction::ValueEditClear:
+        case FermentationUiWorkspaceSlotAction::ValueEditCommit:
+        case FermentationUiWorkspaceSlotAction::ResetStartValues:
         case FermentationUiWorkspaceSlotAction::ResetFault:
             return false;
     }
@@ -209,6 +533,10 @@ std::vector<device_platform::TextKey> FermentationTouchWorkspace::routeForPage(
         case FermentationUiPage::HeaderWebAccess:
             route.push_back(key("web-access"));
             break;
+        case FermentationUiPage::ValueEdit:
+            route.push_back(key("programs"));
+            route.push_back(key("edit"));
+            break;
     }
     return route;
 }
@@ -227,6 +555,12 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
             pageStack_.insert(pageStack_.end(),
                               {FermentationUiPage::ProgramList,
                                FermentationUiPage::ProgramSummary});
+            break;
+        case FermentationUiPage::ValueEdit:
+            pageStack_.insert(pageStack_.end(),
+                              {FermentationUiPage::ProgramList,
+                               FermentationUiPage::ProgramSummary,
+                               FermentationUiPage::ValueEdit});
             break;
         case FermentationUiPage::ProgramEdit: {
             pageStack_.insert(pageStack_.end(),
@@ -487,10 +821,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                         FermentationUiWorkspaceSlotAction::NewProgram);
             }
             break;
-        case FermentationUiPage::ProgramSummary:
+        case FermentationUiPage::ProgramSummary: {
             view.title = key("start");
             // A listed program that cannot be started stays selectable for
             // administration; the owning list projection names the reason.
+            bool resetOffered = false;
             if (catalog != nullptr && selectedProgramId_.has_value()) {
                 const auto entries = makeFermentationUiProgramList(*catalog);
                 const auto selected = std::find_if(
@@ -500,6 +835,30 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     });
                 if (selected != entries.end() && !selected->startable)
                     view.blockedReason = selected->blockedReason;
+                if (selected != entries.end()) {
+                    view.programSummary = makeProgramSummary(
+                        selected->program,
+                        selectedCandidate_.programId == *selectedProgramId_
+                            ? &selectedCandidate_
+                            : nullptr,
+                        selected->startable);
+                    const auto& summary = *view.programSummary;
+                    view.pager.itemCount = summary.fieldCount;
+                    view.pager.currentIndex =
+                        summary.fieldCount == 0U
+                            ? 0U
+                            : std::min(pager_.currentIndex,
+                                       summary.fieldCount - 1U);
+                    if (selected->startable && !summary.valuesValid)
+                        view.blockedReason = key("start-values-invalid");
+                    // O8 (a): reset only when the candidate differs from the
+                    // stored program values.
+                    resetOffered =
+                        summary.editable &&
+                        std::any_of(summary.changed.begin(),
+                                    summary.changed.end(),
+                                    [](bool changed) { return changed; });
+                }
             }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
@@ -508,10 +867,63 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "confirm",
                     FermentationUiWorkspaceSlotAction::StartProgram,
                     selectedProgramId_.has_value() &&
-                        selectedCandidate_.programId == *selectedProgramId_);
-            setSlot(view, 3U, "status",
-                    FermentationUiWorkspaceSlotAction::NavigateStatus);
+                        selectedCandidate_.programId == *selectedProgramId_ &&
+                        view.programSummary.has_value() &&
+                        view.programSummary->valuesValid);
+            if (resetOffered) {
+                setSlot(view, 3U, "reset",
+                        FermentationUiWorkspaceSlotAction::ResetStartValues);
+            } else {
+                setSlot(view, 3U, "status",
+                        FermentationUiWorkspaceSlotAction::NavigateStatus);
+            }
             break;
+        }
+        case FermentationUiPage::ValueEdit: {
+            view.title = key(valueEditTitleKey(valueEditField_));
+            view.pager.currentIndex = pager_.currentIndex;
+            FermentationUiValueEditView edit;
+            edit.field = valueEditField_;
+            edit.candidate = valueEdit_.candidate();
+            if (valueEditSlot_ !=
+                FermentationUiManualDraftSlot::StartCandidate) {
+                // Manual run value: the canonical program limits decide.
+                auto probe = valueEdit_;
+                if (probe.apply({NumericEditAction::Commit, 0U}) &&
+                    probe.committedValue().has_value()) {
+                    edit.commitValid = manualNumericValueAccepted(
+                        manualLimitField(valueEditSlot_, valueEditField_),
+                        *probe.committedValue());
+                }
+            } else if (catalog != nullptr && selectedProgramId_.has_value()) {
+                const auto found = std::find_if(
+                    catalog->programs.begin(), catalog->programs.end(),
+                    [this](const ProgramDocument& document) {
+                        return document.program.id == *selectedProgramId_;
+                    });
+                auto probe = valueEdit_;
+                if (found != catalog->programs.end() &&
+                    probe.apply({NumericEditAction::Commit, 0U}) &&
+                    probe.committedValue().has_value()) {
+                    edit.commitValid = numericStartValueAccepted(
+                        *found, selectedCandidate_, valueEditField_,
+                        *probe.committedValue());
+                }
+            }
+            view.valueEdit = std::move(edit);
+            setSlot(view, 0U, "cancel",
+                    FermentationUiWorkspaceSlotAction::ValueEditCancel);
+            setSlot(view, 1U, "backspace",
+                    FermentationUiWorkspaceSlotAction::ValueEditBackspace,
+                    !valueEdit_.candidate().empty());
+            setSlot(view, 2U, "clear",
+                    FermentationUiWorkspaceSlotAction::ValueEditClear,
+                    !valueEdit_.candidate().empty());
+            setSlot(view, 3U, "ok",
+                    FermentationUiWorkspaceSlotAction::ValueEditCommit,
+                    view.valueEdit->commitValid);
+            break;
+        }
         case FermentationUiPage::ProgramActions:
             view.title = key("program-actions");
             setSlot(view, 0U, "back",
@@ -619,25 +1031,28 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::ManualHolding:
             view.title = key("manual-holding");
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::ManualHolding);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 2U, "confirm",
                     FermentationUiWorkspaceSlotAction::StartManualHolding,
-                    manualHoldingValues_.has_value());
+                    false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
         case FermentationUiPage::ManualTimed:
             view.title = key("manual-timed");
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::ManualTimed);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 2U, "confirm",
-                    FermentationUiWorkspaceSlotAction::StartManualTimed,
-                    manualTimedValues_.has_value());
+                    FermentationUiWorkspaceSlotAction::StartManualTimed, false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
@@ -654,18 +1069,21 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::StopDialog:
             view.title = key("stop");
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::StopCooling);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "stop-turn-off",
                     FermentationUiWorkspaceSlotAction::StopTurnOff);
             setSlot(view, 2U, "stop-and-cool",
-                    FermentationUiWorkspaceSlotAction::StopAndCool,
-                    stopCoolingPlan_.has_value());
+                    FermentationUiWorkspaceSlotAction::StopAndCool, false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
         case FermentationUiPage::Technical:
             view.title = key("technical");
+            view.pager.itemCount = snapshot.temperatures.size();
+            view.pager.currentIndex = pager_.currentIndex;
             setSlot(view, 1U, "up",
                     FermentationUiWorkspaceSlotAction::MovePagerUp,
                     view.pager.canMoveUp());
@@ -722,9 +1140,10 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     FermentationUiWorkspaceSlotAction::NavigateTechnical);
             setSlot(view, 2U, "ok",
                     FermentationUiWorkspaceSlotAction::Complete);
+            applyManualFieldView(
+                view, FermentationUiManualDraftSlot::CompletionCooling);
             setSlot(view, 3U, "cool-now",
-                    FermentationUiWorkspaceSlotAction::CompleteAndCool,
-                    completionCoolingPlan_.has_value());
+                    FermentationUiWorkspaceSlotAction::CompleteAndCool, false);
             break;
         case FermentationUiPage::Status:
             view.title = key("status");
@@ -776,16 +1195,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 snapshot.recovery.mode ==
                     RecoveryViewMode::FallbackSelectionRequired &&
                 snapshot.home.processState != ProcessState::SafeBoot;
-            if (recoveryTimeCorrectionSeconds_.has_value() &&
-                !fallbackAllowed) {
-                setSlot(view, 1U, "confirm",
-                        FermentationUiWorkspaceSlotAction::
-                            ApplyRecoveryTimeCorrection);
-            } else {
-                setSlot(view, 1U, "resume-fallback",
-                        FermentationUiWorkspaceSlotAction::ResumeFallback,
-                        fallbackAllowed);
-            }
+            // The time correction has no R1 user path (plan 4.1): the slot is
+            // never offered, even if the test helper staged a value.
+            setSlot(view, 1U, "resume-fallback",
+                    FermentationUiWorkspaceSlotAction::ResumeFallback,
+                    fallbackAllowed);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "diagnostics",
@@ -982,6 +1396,7 @@ bool FermentationTouchWorkspace::selectProgramFor(
     if (found->startable) selectedCandidate_.programId = programId;
     programEditOperation_ = FermentationUiProgramEditOperation::Edit;
     programEditCandidate_.reset();
+    pager_.currentIndex = 0U;
     setCanonicalPageStack(destination);
     return true;
 }
@@ -1266,32 +1681,22 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             }
             break;
         case FermentationUiWorkspaceSlotAction::StartManualHolding:
-            if (manualHoldingValues_.has_value())
-                result.action = FermentationUiEnvelopePayload{
-                    makeManualHoldingIntent(*manualHoldingValues_)};
-            break;
         case FermentationUiWorkspaceSlotAction::StartManualTimed:
-            if (manualTimedValues_.has_value())
-                result.action = FermentationUiEnvelopePayload{
-                    makeManualTimedIntent(*manualTimedValues_)};
+            // O5: the technical run limits of a manual run have no owner yet,
+            // so the local UI builds no manual start payload (the slot is
+            // disabled with a visible reason; the Application refuses it too).
             break;
         case FermentationUiWorkspaceSlotAction::StopTurnOff:
             result.action = FermentationUiEnvelopePayload{
                 makeStopIntent(StopOption::AbortAndTurnOff)};
             break;
         case FermentationUiWorkspaceSlotAction::StopAndCool:
-            if (stopCoolingPlan_.has_value())
-                result.action = FermentationUiEnvelopePayload{
-                    makeStopIntent(StopOption::AbortAndCool, stopCoolingPlan_)};
+        case FermentationUiWorkspaceSlotAction::CompleteAndCool:
+            // O5: a cooling plan is a manual run plan; same fail-closed rule.
             break;
         case FermentationUiWorkspaceSlotAction::Complete:
             result.action =
                 FermentationUiEnvelopePayload{makeCompletionIntent(false)};
-            break;
-        case FermentationUiWorkspaceSlotAction::CompleteAndCool:
-            if (completionCoolingPlan_.has_value())
-                result.action = FermentationUiEnvelopePayload{
-                    makeCompletionIntent(true, completionCoolingPlan_)};
             break;
         case FermentationUiWorkspaceSlotAction::ResumeFallback:
             result.resumeFallback =
@@ -1313,7 +1718,27 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                 FermentationUiEnvelopePayload{FermentationUiResetFaultIntent{}};
             break;
         case FermentationUiWorkspaceSlotAction::NavigateBack:
+        case FermentationUiWorkspaceSlotAction::ValueEditCancel:
             result.navigated = goBack();
+            break;
+        case FermentationUiWorkspaceSlotAction::ValueEditBackspace:
+            result.navigated =
+                valueEdit_.apply({NumericEditAction::Backspace, 0U});
+            break;
+        case FermentationUiWorkspaceSlotAction::ValueEditClear:
+            result.navigated = valueEdit_.apply({NumericEditAction::Clear, 0U});
+            break;
+        case FermentationUiWorkspaceSlotAction::ValueEditCommit:
+            commitValueEdit();
+            result.navigated = true;
+            break;
+        case FermentationUiWorkspaceSlotAction::ResetStartValues:
+            // Back to the stored program values: only the identity stays.
+            if (selectedProgramId_.has_value()) {
+                selectedCandidate_ = {};
+                selectedCandidate_.programId = *selectedProgramId_;
+                result.navigated = true;
+            }
             break;
         default:
             result.navigated = navigate(action);
@@ -1348,16 +1773,48 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                device_platform::DeviceUiTargetKind::ContentCell) {
         // Only the visible window of the program list is hittable: row r is
         // entry currentIndex + r.
-        enabled = target.column == 0U &&
-                  target.row < kFermentationUiListVisibleRows &&
-                  current.pager.currentIndex + target.row <
-                      (page_ == FermentationUiPage::ProgramList
-                           ? current.programList.size()
-                       : page_ == FermentationUiPage::Messages
-                           ? snapshot.messages.size()
-                       : page_ == FermentationUiPage::HeaderLanguage
-                           ? current.pager.itemCount
-                           : std::size_t{0U});
+        if (page_ != FermentationUiPage::ValueEdit &&
+            current.programSummary.has_value()) {
+            // A field list (program summary or manual page): rows are the
+            // visible window of the fields (column 0, only while editable,
+            // after the page's first-row offset); column 1 holds the two
+            // pager buttons when the list needs them.
+            const auto& summary = current.programSummary;
+            const auto first = current.pager.currentIndex;
+            const bool rowHit =
+                target.column == 0U && summary->editable &&
+                target.row >= summary->rowOffset &&
+                static_cast<std::size_t>(target.row - summary->rowOffset) <
+                    kFermentationUiListVisibleRows &&
+                first + (target.row - summary->rowOffset) < summary->fieldCount;
+            enabled =
+                (rowHit &&
+                 (summary->manual ||
+                  summary->fields[first + (target.row - summary->rowOffset)] !=
+                      FermentationUiStartField::SensorMode ||
+                  nextSensorOverride(summary->sensorPreference, std::nullopt)
+                      .has_value())) ||
+                (summary->pagerButtons &&
+                 ((target.column == 1U && target.row == 0U &&
+                   current.pager.canMoveUp()) ||
+                  (target.column == 1U && target.row == 1U &&
+                   current.pager.canMoveDown())));
+        } else if (page_ == FermentationUiPage::ValueEdit) {
+            enabled = current.valueEdit.has_value() &&
+                      keypadKeyEnabled(target.row, target.column,
+                                       current.valueEdit->field,
+                                       current.valueEdit->candidate);
+        } else
+            enabled = target.column == 0U &&
+                      target.row < kFermentationUiListVisibleRows &&
+                      current.pager.currentIndex + target.row <
+                          (page_ == FermentationUiPage::ProgramList
+                               ? current.programList.size()
+                           : page_ == FermentationUiPage::Messages
+                               ? snapshot.messages.size()
+                           : page_ == FermentationUiPage::HeaderLanguage
+                               ? current.pager.itemCount
+                               : std::size_t{0U});
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerUp) {
         enabled = current.pager.canMoveUp();
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerDown) {
@@ -1391,6 +1848,13 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 return pressed;
             }();
         case device_platform::DeviceUiTargetKind::ContentCell: {
+            if (page_ == FermentationUiPage::ValueEdit ||
+                current.programSummary.has_value()) {
+                auto pressed =
+                    pressContentCell(snapshot, target, current, catalog);
+                pressed.interaction = result.interaction;
+                return pressed;
+            }
             if (page_ == FermentationUiPage::HeaderLanguage) {
                 // `enabled` guarantees an in-range language row. The press
                 // only carries intent; the Application owns the catalog
@@ -1461,6 +1925,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                     confirmSlot = 2U;
                     break;
                 case FermentationUiPage::ProgramEdit:
+                case FermentationUiPage::ValueEdit:
                     confirmSlot = 3U;
                     break;
                 case FermentationUiPage::ProgramDeleteConfirmation:
@@ -1500,6 +1965,286 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
             return result;
     }
     return result;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressContentCell(
+    const FermentationUiSnapshot& /*snapshot*/,
+    const device_platform::DeviceUiTarget& target,
+    const FermentationUiWorkspaceView& current,
+    const ProgramCatalog* /*catalog*/) {
+    FermentationUiWorkspacePress result;
+    if (page_ == FermentationUiPage::ValueEdit) {
+        // `enabled` guarantees an in-range, allowed key.
+        NumericEditInput input;
+        if (target.row < 3U) {
+            input = {NumericEditAction::Digit,
+                     static_cast<std::uint8_t>(target.row * 3U + target.column +
+                                               1U)};
+        } else if (target.column == 0U) {
+            input = {NumericEditAction::DecimalSeparator, 0U};
+        } else if (target.column == 1U) {
+            input = {NumericEditAction::Digit, 0U};
+        } else {
+            input = {NumericEditAction::Minus, 0U};
+        }
+        result.navigated = valueEdit_.apply(input);
+        return result;
+    }
+    // A field list (program summary or manual page): `enabled` guarantees a
+    // summary.
+    const auto& summary = *current.programSummary;
+    if (target.column == 1U) {
+        result.navigated =
+            target.row == 0U ? pager_.moveUp() : pager_.moveDown();
+        return result;
+    }
+    const auto field = summary.fields[current.pager.currentIndex +
+                                      (target.row - summary.rowOffset)];
+    const auto manualSlot = manualSlotForPage(page_);
+    if (isNumericStartField(field)) {
+        valueEditField_ = field;
+        valueEditSlot_ =
+            manualSlot.value_or(FermentationUiManualDraftSlot::StartCandidate);
+        valueEdit_.reset(startValueText(field, summary));
+        pageStack_.push_back(FermentationUiPage::ValueEdit);
+        page_ = FermentationUiPage::ValueEdit;
+        displayLanguageChangeFailed_ = false;
+        result.navigated = true;
+        return result;
+    }
+    if (manualSlot.has_value()) {
+        cycleManualField(*manualSlot, field, summary);
+    } else {
+        cycleStartField(field, summary);
+    }
+    result.navigated = true;
+    return result;
+}
+
+// One cycle step per tap for the non-numeric manual fields: preheat toggles,
+// the sensor chooses between the two real modes (no stored preference here),
+// the completion mode walks the four modes and drops values it no longer
+// uses.
+void FermentationTouchWorkspace::cycleManualField(
+    FermentationUiManualDraftSlot slot, FermentationUiStartField field,
+    const FermentationUiProgramSummaryView& summary) {
+    auto& draft = manualDrafts_[static_cast<std::size_t>(slot)];
+    switch (field) {
+        case FermentationUiStartField::Preheat:
+            draft.preheat = !summary.preheat;
+            break;
+        case FermentationUiStartField::SensorMode:
+            draft.sensorMode = summary.sensorMode == RunSensorMode::Air
+                                   ? RunSensorMode::Product
+                                   : RunSensorMode::Air;
+            break;
+        case FermentationUiStartField::CompletionMode: {
+            constexpr std::uint8_t kModeCount = 4U;
+            const auto next = static_cast<CompletionMode>(
+                (static_cast<std::uint8_t>(summary.completionMode) + 1U) %
+                kModeCount);
+            draft.completionMode = next;
+            if (next == CompletionMode::FinishWithoutCooling) {
+                draft.coolingTargetCelsius.reset();
+                draft.holdDurationMinutes.reset();
+            } else if (next != CompletionMode::CoolAndHoldForDuration) {
+                draft.holdDurationMinutes.reset();
+            }
+            break;
+        }
+        case FermentationUiStartField::TargetTemperature:
+        case FermentationUiStartField::Duration:
+        case FermentationUiStartField::CoolingTarget:
+        case FermentationUiStartField::HoldDuration:
+            break;
+    }
+}
+
+// One explicit cycle step per tap for the non-numeric start fields. Only the
+// next-run candidate changes; the stored program is never touched.
+void FermentationTouchWorkspace::cycleStartField(
+    FermentationUiStartField field,
+    const FermentationUiProgramSummaryView& summary) {
+    switch (field) {
+        case FermentationUiStartField::Preheat:
+            selectedCandidate_.preheatEnabled = !summary.preheat;
+            break;
+        case FermentationUiStartField::SensorMode:
+            // Only structurally allowed alternatives to the preference's
+            // default are offered; a mode equal to the default is no override.
+            if (const auto next = nextSensorOverride(
+                    summary.sensorPreference, summary.sensorModeOverride)) {
+                selectedCandidate_.sensorMode = *next;
+            }
+            break;
+        case FermentationUiStartField::CompletionMode: {
+            constexpr std::uint8_t kModeCount = 4U;
+            const auto next = static_cast<CompletionMode>(
+                (static_cast<std::uint8_t>(summary.completionMode) + 1U) %
+                kModeCount);
+            selectedCandidate_.completionMode = next;
+            // Values the new mode does not use are dropped from the candidate
+            // (the shared override definition resets them in the copy).
+            if (next == CompletionMode::FinishWithoutCooling) {
+                selectedCandidate_.coolingTargetCelsius.reset();
+                selectedCandidate_.holdDurationMinutes.reset();
+            } else if (next != CompletionMode::CoolAndHoldForDuration) {
+                selectedCandidate_.holdDurationMinutes.reset();
+            }
+            break;
+        }
+        case FermentationUiStartField::TargetTemperature:
+        case FermentationUiStartField::Duration:
+        case FermentationUiStartField::CoolingTarget:
+        case FermentationUiStartField::HoldDuration:
+            break;
+    }
+}
+
+void FermentationTouchWorkspace::commitValueEdit() {
+    // The view only enables the slot for a value the program validator
+    // accepts for this field, so a parsed value is stored as-is.
+    if (valueEdit_.apply({NumericEditAction::Commit, 0U}) &&
+        valueEdit_.committedValue().has_value()) {
+        if (valueEditSlot_ == FermentationUiManualDraftSlot::StartCandidate) {
+            setNumericStartOverride(selectedCandidate_, valueEditField_,
+                                    *valueEdit_.committedValue());
+        } else {
+            setDraftNumeric(
+                manualDrafts_[static_cast<std::size_t>(valueEditSlot_)],
+                manualLimitField(valueEditSlot_, valueEditField_),
+                *valueEdit_.committedValue());
+        }
+    }
+    (void)goBack();
+}
+
+std::optional<FermentationUiManualDraftSlot>
+FermentationTouchWorkspace::manualSlotForPage(
+    FermentationUiPage page) noexcept {
+    switch (page) {
+        case FermentationUiPage::ManualHolding:
+            return FermentationUiManualDraftSlot::ManualHolding;
+        case FermentationUiPage::ManualTimed:
+            return FermentationUiManualDraftSlot::ManualTimed;
+        case FermentationUiPage::StopDialog:
+            return FermentationUiManualDraftSlot::StopCooling;
+        case FermentationUiPage::Completion:
+            return FermentationUiManualDraftSlot::CompletionCooling;
+        default:
+            return std::nullopt;
+    }
+}
+
+// Field list of a manual page: the values the user entered (draft), else the
+// values already staged for the run; only real run values, never a default
+// for a missing number.
+FermentationUiProgramSummaryView
+FermentationTouchWorkspace::makeManualFieldView(
+    FermentationUiManualDraftSlot slot) const {
+    const auto& draft = manualDrafts_[static_cast<std::size_t>(slot)];
+    FermentationUiProgramSummaryView view;
+    view.manual = true;
+    view.editable = true;
+    using Field = FermentationUiStartField;
+    const auto add = [&view](Field field) {
+        view.fields[view.fieldCount++] = field;
+    };
+    switch (slot) {
+        case FermentationUiManualDraftSlot::ManualHolding: {
+            const auto* base =
+                manualHoldingValues_ ? &*manualHoldingValues_ : nullptr;
+            view.targetTemperatureCelsius =
+                draft.targetTemperatureCelsius.has_value()
+                    ? draft.targetTemperatureCelsius
+                : base ? std::optional<double>{base->targetTemperatureCelsius}
+                       : std::nullopt;
+            view.preheat = draft.preheat.value_or(base && base->preheatEnabled);
+            view.sensorMode = draft.sensorMode.value_or(
+                base ? base->sensorMode : RunSensorMode::Air);
+            add(Field::TargetTemperature);
+            add(Field::Preheat);
+            add(Field::SensorMode);
+            break;
+        }
+        case FermentationUiManualDraftSlot::ManualTimed: {
+            const auto* base =
+                manualTimedValues_ ? &*manualTimedValues_ : nullptr;
+            view.targetTemperatureCelsius =
+                draft.targetTemperatureCelsius.has_value()
+                    ? draft.targetTemperatureCelsius
+                : base ? std::optional<double>{base->targetTemperatureCelsius}
+                       : std::nullopt;
+            view.durationMinutes =
+                draft.durationMinutes.has_value() ? draft.durationMinutes
+                : base ? std::optional<std::uint32_t>{base->durationMinutes}
+                       : std::nullopt;
+            view.preheat = draft.preheat.value_or(base && base->preheatEnabled);
+            view.sensorMode = draft.sensorMode.value_or(
+                base ? base->sensorMode : RunSensorMode::Air);
+            view.completionMode = draft.completionMode.value_or(
+                base ? base->completionMode
+                     : CompletionMode::FinishWithoutCooling);
+            view.coolingTargetCelsius =
+                draft.coolingTargetCelsius.has_value()
+                    ? draft.coolingTargetCelsius
+                    : (base ? base->coolingTargetCelsius : std::nullopt);
+            view.holdDurationMinutes =
+                draft.holdDurationMinutes.has_value()
+                    ? draft.holdDurationMinutes
+                    : (base ? base->holdDurationMinutes : std::nullopt);
+            add(Field::TargetTemperature);
+            add(Field::Duration);
+            add(Field::Preheat);
+            add(Field::SensorMode);
+            add(Field::CompletionMode);
+            if (view.completionMode != CompletionMode::FinishWithoutCooling)
+                add(Field::CoolingTarget);
+            if (view.completionMode == CompletionMode::CoolAndHoldForDuration)
+                add(Field::HoldDuration);
+            break;
+        }
+        case FermentationUiManualDraftSlot::StopCooling:
+        case FermentationUiManualDraftSlot::CompletionCooling: {
+            const auto& plan =
+                slot == FermentationUiManualDraftSlot::StopCooling
+                    ? stopCoolingPlan_
+                    : completionCoolingPlan_;
+            // A cooling plan has one real value: the cooling target.
+            view.coolingTargetCelsius =
+                draft.targetTemperatureCelsius.has_value()
+                    ? draft.targetTemperatureCelsius
+                : plan ? std::optional<double>{plan->targetTemperatureCelsius}
+                       : std::nullopt;
+            add(Field::CoolingTarget);
+            view.rowOffset = 1U;
+            break;
+        }
+        case FermentationUiManualDraftSlot::StartCandidate:
+            break;
+    }
+    view.pagerButtons = view.fieldCount > kFermentationUiListVisibleRows;
+    return view;
+}
+
+// Attaches the manual field list to a page view: pager window, and the
+// visible reason while the technical run limits have no released producer
+// (fail-closed, O5); a page keeps an own reason if it already has one.
+void FermentationTouchWorkspace::applyManualFieldView(
+    FermentationUiWorkspaceView& view,
+    FermentationUiManualDraftSlot slot) const {
+    view.programSummary = makeManualFieldView(slot);
+    const auto& list = *view.programSummary;
+    view.pager.itemCount = list.fieldCount;
+    view.pager.currentIndex =
+        list.fieldCount == 0U
+            ? 0U
+            : std::min(pager_.currentIndex, list.fieldCount - 1U);
+    // O5: the technical run limits have no owner yet, so the start of a manual
+    // run / cooling plan stays disabled with a visible reason.
+    if (!view.blockedReason.has_value()) {
+        view.blockedReason = key("manual-parameters-not-released");
+    }
 }
 
 void FermentationTouchWorkspace::setPage(FermentationUiPage page) {

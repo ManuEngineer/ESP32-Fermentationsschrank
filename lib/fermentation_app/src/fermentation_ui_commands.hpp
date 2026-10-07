@@ -102,6 +102,13 @@ struct FermentationUiStartCandidate {
     std::optional<std::uint32_t> holdDurationMinutes;
 };
 
+// The single definition of how next-run overrides change a copy of a stored
+// program; the Application start path and the local summary share it.
+[[nodiscard]] bool hasStartCandidateOverride(
+    const FermentationUiStartCandidate& candidate) noexcept;
+void applyStartCandidateOverrides(
+    ProgramDocument& program, const FermentationUiStartCandidate& candidate);
+
 struct FermentationUiStartProgramIntent {
     // The candidate is the single canonical user payload. Keeping the
     // program identity and all next-run-only overrides in one object prevents

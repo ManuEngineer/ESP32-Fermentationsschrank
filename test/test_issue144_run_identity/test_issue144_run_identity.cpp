@@ -52,6 +52,34 @@ class RunPersistenceCoordinatorTestAccess {
 
 class FermentationApplicationTestAccess {
    public:
+    // The manual-run / cooling-plan requests are refused on every surface
+    // while no owner of the technical run limits exists (O5). These reach the
+    // private bodies behind that guard so the downstream owner paths (identity,
+    // confirmation, persistence) stay covered.
+    static FermentationApplicationRequestResult prepareStartManualHoldingBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartManualHoldingIntent& intent) {
+        return application.prepareStartManualHoldingUnguarded(context, intent);
+    }
+    static FermentationApplicationRequestResult prepareStartManualTimedBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const ManualTimedRunValues& values) {
+        return application.prepareStartManualTimedUnguarded(context, values);
+    }
+    static FermentationApplicationRequestResult prepareStopBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const FermentationUiStopRunIntent& intent) {
+        return application.prepareStopUnguarded(context, intent);
+    }
+    static FermentationApplicationRequestResult prepareCompletionBody(
+        FermentationApplication& application,
+        const FermentationUiCommandContext& context,
+        const FermentationUiCompleteRunIntent& intent) {
+        return application.prepareCompletionUnguarded(context, intent);
+    }
     static bool applicationReadiness(
         const FermentationApplication& application) {
         return application.applicationReadiness();
@@ -70,6 +98,15 @@ class FermentationApplicationTestAccess {
     static std::uint32_t stateSequence(
         const FermentationApplication& application) {
         return application.runtimeRunState_->processState.transitionSequence;
+    }
+
+    static std::optional<fermentation::RunSensorMode>
+    requestedProgramSensorMode(
+        const fermentation::FermentationApplicationPreparedRequest& request) {
+        const auto* start =
+            std::get_if<fermentation::ProgramStartRequest>(&request.storage());
+        if (start == nullptr) return std::nullopt;
+        return start->sensorMode;
     }
 
     static std::optional<fermentation::CommandDecision> decidePrepared(
@@ -247,8 +284,8 @@ void test_ui_id_is_application_bound_to_existing_command_envelope() {
     context.monotonicMillis = 100U;
     fermentation::FermentationUiStartManualHoldingIntent manual;
     manual.plan.targetTemperatureCelsius = 30.0;
-    const auto prepared =
-        application.prepareStartManualHolding(context, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(application, context, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_TRUE(prepared.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(prepared.uiRequestId->value,
@@ -281,7 +318,8 @@ void test_application_prepares_manual_timed_with_shared_identity() {
     values.qualificationDurationMinutes = 10U;
     values.maximumTargetReachMinutes = 180U;
 
-    const auto prepared = application.prepareStartManualTimed(context, values);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualTimedBody(application, context, values);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),
@@ -317,8 +355,8 @@ void test_application_prepares_manual_timed_with_shared_identity() {
     TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
 
     application.publishOwningRuntimeEvidence(owningEvidence());
-    const auto preparedAgain =
-        application.prepareStartManualTimed(context, values);
+    const auto preparedAgain = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualTimedBody(application, context, values);
     TEST_ASSERT_TRUE(preparedAgain.request.has_value());
     auto failedEvidence = owningEvidence();
     failedEvidence.product.quality = device_platform::SensorQuality::Failed;
@@ -502,7 +540,8 @@ void test_confirmation_preserves_canonical_product_selection_paths() {
     values.qualificationDurationMinutes = 10U;
     values.maximumTargetReachMinutes = 180U;
 
-    const auto prepared = application.prepareStartManualTimed(context, values);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualTimedBody(application, context, values);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     const auto confirmed = application.confirmPrepared(prepared);
     TEST_ASSERT_EQUAL_INT(
@@ -518,7 +557,9 @@ void test_confirmation_preserves_canonical_product_selection_paths() {
 
 std::optional<fermentation::ProgramCatalogRevision>
 installRunnableStoredProductProgram(
-    fermentation::FermentationApplication& application, const char* programId) {
+    fermentation::FermentationApplication& application, const char* programId,
+    fermentation::SensorPreference preference =
+        fermentation::SensorPreference::ProductIfAvailableElseAir) {
     auto& service =
         fermentation::FermentationApplicationTestAccess::configurationService(
             application);
@@ -540,9 +581,21 @@ installRunnableStoredProductProgram(
     if (program.fermentationStages.empty()) {
         return std::nullopt;
     }
-    program.sensorPreference =
-        fermentation::SensorPreference::ProductIfAvailableElseAir;
+    program.sensorPreference = preference;
     program.productSensorFailure.fallbackDelaySeconds = 30U;
+    // Keep the stored combination valid (6.13): no automatic air fallback for
+    // ProductRequired, and the single fixed combination for AirOnly.
+    if (preference == fermentation::SensorPreference::ProductRequired) {
+        program.productSensorFailure.policy =
+            fermentation::ProductSensorFailurePolicy::WaitForUser;
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+    } else if (preference == fermentation::SensorPreference::AirOnly) {
+        program.productSensorFailure.policy =
+            fermentation::ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+        program.productSensorFailure.returnStrategy =
+            fermentation::ReturnStrategy::RemainOnAirUntilEnd;
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+    }
     program.fermentationStages.front().targetTemperatureCelsius = 30.0;
     program.fermentationStages.front().durationMinutes = 60U;
     program.targetQualification.bandCelsius = 0.5;
@@ -653,8 +706,8 @@ void test_application_product_paths_revalidate_before_canonical_decision() {
         intent.plan.qualificationBandCelsius = 0.5;
         intent.plan.qualificationDurationMinutes = 10U;
         intent.plan.maximumTargetReachMinutes = 180U;
-        const auto prepared =
-            application.prepareStartManualHolding(context, intent);
+        const auto prepared = fermentation::FermentationApplicationTestAccess::
+            prepareStartManualHoldingBody(application, context, intent);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(
                 fermentation::FermentationApplicationRequestStatus::Prepared),
@@ -681,6 +734,96 @@ void test_application_product_paths_revalidate_before_canonical_decision() {
             static_cast<int>(fermentation::SensorPeltierPermission::Blocked),
             static_cast<int>(
                 decision->after.sensorSelectionRuntime.permission));
+    }
+}
+
+// Without a next-run override the requested start mode follows the stored
+// SensorPreference; an explicit override wins; the #21 start matrix stays the
+// only authority over effective mode, fallback and rejection.
+void test_program_start_requested_sensor_mode_follows_stored_preference() {
+    struct Case {
+        fermentation::SensorPreference preference;
+        std::optional<fermentation::RunSensorMode> override;
+        bool productValid;
+        fermentation::RunSensorMode requested;
+        bool startable;
+        fermentation::RunSensorMode effective;
+    };
+    using fermentation::RunSensorMode;
+    using fermentation::SensorPreference;
+    const Case cases[] = {
+        {SensorPreference::ProductIfAvailableElseAir, std::nullopt, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::AirProductOptional, std::nullopt, true,
+         RunSensorMode::Air, true, RunSensorMode::Air},
+        {SensorPreference::ProductRequired, std::nullopt, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::AirOnly, std::nullopt, true, RunSensorMode::Air,
+         true, RunSensorMode::Air},
+        // Explicit valid override wins over the preference.
+        {SensorPreference::AirProductOptional, RunSensorMode::Product, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::ProductIfAvailableElseAir, RunSensorMode::Air, true,
+         RunSensorMode::Air, true, RunSensorMode::Air},
+        // #21 matrix: controlled substitution, rejection stay with the owner.
+        {SensorPreference::ProductIfAvailableElseAir, std::nullopt, false,
+         RunSensorMode::Product, true, RunSensorMode::Air},
+        {SensorPreference::ProductRequired, std::nullopt, false,
+         RunSensorMode::Product, false, RunSensorMode::Product},
+        {SensorPreference::ProductRequired, RunSensorMode::Air, true,
+         RunSensorMode::Air, false, RunSensorMode::Air},
+        {SensorPreference::AirOnly, RunSensorMode::Product, true,
+         RunSensorMode::Product, false, RunSensorMode::Product},
+    };
+    for (const auto& item : cases) {
+        device_platform::DevicePlatform platform;
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        fermentation::FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+        const auto revision = installRunnableStoredProductProgram(
+            application, "yogurt-mild", item.preference);
+        TEST_ASSERT_TRUE(revision.has_value());
+        auto evidence = owningEvidence();
+        if (!item.productValid) {
+            evidence.product.quality = device_platform::SensorQuality::Stale;
+        }
+        application.publishOwningRuntimeEvidence(evidence);
+
+        fermentation::FermentationUiCommandContext context;
+        context.expected.expectedStateSequence =
+            fermentation::FermentationApplicationTestAccess::stateSequence(
+                application);
+        context.expected.expectedRunRevision = 0U;
+        context.expected.expectedProgramCatalogRevision = *revision;
+        fermentation::FermentationUiStartProgramIntent intent;
+        intent.candidate.programId = "yogurt-mild";
+        intent.candidate.sensorMode = item.override;
+        const auto prepared = application.prepareStartProgram(context, intent);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(prepared.status));
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        const auto requested = fermentation::FermentationApplicationTestAccess::
+            requestedProgramSensorMode(*prepared.request);
+        TEST_ASSERT_TRUE(requested.has_value());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(item.requested),
+                              static_cast<int>(*requested));
+
+        const auto confirmed = application.confirmPrepared(prepared);
+        TEST_ASSERT_TRUE(confirmed.request.has_value());
+        const auto decision =
+            fermentation::FermentationApplicationTestAccess::decidePrepared(
+                application, *confirmed.request);
+        TEST_ASSERT_TRUE(decision.has_value());
+        TEST_ASSERT_EQUAL_INT(item.startable ? 1 : 0, decision->proposed());
+        if (item.startable) {
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(item.effective),
+                static_cast<int>(*decision->after.activeRunSensorMode));
+        }
     }
 }
 
@@ -735,8 +878,9 @@ void test_pipeline_handoff_drives_application_snapshot_and_confirmation() {
     values.qualificationBandCelsius = 0.5;
     values.qualificationDurationMinutes = 10U;
     values.maximumTargetReachMinutes = 180U;
-    const auto prepared = application.prepareStartManualTimed(
-        fermentation::FermentationUiCommandContext{}, values);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualTimedBody(
+            application, fermentation::FermentationUiCommandContext{}, values);
     TEST_ASSERT_TRUE(
         fermentation::FermentationApplicationTestAccess::applicationReadiness(
             application));
@@ -900,7 +1044,8 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     manualStart.plan.targetTemperatureCelsius = 30.0;
     manualStart.plan.sensorMode = fermentation::RunSensorMode::Air;
     const auto preparedManual =
-        application.prepareStartManualHolding(context, manualStart);
+        fermentation::FermentationApplicationTestAccess::
+            prepareStartManualHoldingBody(application, context, manualStart);
     TEST_ASSERT_TRUE(preparedManual.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, preparedManual.request->commandId());
     TEST_ASSERT_TRUE(preparedManual.request->runId().has_value());
@@ -921,7 +1066,9 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_FALSE(preparedComplete.request->runId().has_value());
 
     stop.option = fermentation::StopOption::AbortAndCool;
-    const auto invalidCoolingStop = application.prepareStop(context, stop);
+    const auto invalidCoolingStop =
+        fermentation::FermentationApplicationTestAccess::prepareStopBody(
+            application, context, stop);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::InvalidInput),
@@ -930,7 +1077,9 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_FALSE(invalidCoolingStop.uiRequestId.has_value());
 
     stop.coolingPlan = coolingValues();
-    const auto preparedCoolingStop = application.prepareStop(context, stop);
+    const auto preparedCoolingStop =
+        fermentation::FermentationApplicationTestAccess::prepareStopBody(
+            application, context, stop);
     TEST_ASSERT_TRUE(preparedCoolingStop.request.has_value());
     TEST_ASSERT_TRUE(preparedCoolingStop.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(4U, preparedCoolingStop.request->commandId());
@@ -941,7 +1090,8 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     complete.startCooling = true;
     complete.coolingPlan = coolingValues();
     const auto preparedCoolingCompletion =
-        application.prepareCompletion(context, complete);
+        fermentation::FermentationApplicationTestAccess::prepareCompletionBody(
+            application, context, complete);
     TEST_ASSERT_TRUE(preparedCoolingCompletion.request.has_value());
     TEST_ASSERT_TRUE(preparedCoolingCompletion.uiRequestId.has_value());
     TEST_ASSERT_EQUAL_UINT64(5U,
@@ -949,6 +1099,88 @@ void test_application_composes_all_run_identities_at_one_boundary() {
     TEST_ASSERT_TRUE(preparedCoolingCompletion.request->runId().has_value());
     TEST_ASSERT_EQUAL_STRING(
         "e1-c5", preparedCoolingCompletion.request->runId()->c_str());
+}
+
+// O5 / #172 S9: the technical run limits of a manual run and of a cooling
+// plan have no commissioning-released owner (#34/#35). Every manual-run and
+// cooling-plan request is Unavailable on every surface, even with complete,
+// valid caller-supplied limits, before a run or command identity is used;
+// stopping/turning off and a normal completion are unchanged.
+void test_manual_run_and_cooling_requests_are_unavailable_on_every_surface() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    application.publishOwningRuntimeEvidence(owningEvidence());
+
+    fermentation::FermentationUiManualRunPlanValues plan = coolingValues();
+    plan.targetTemperatureCelsius = 30.0;
+    fermentation::ManualTimedRunValues timed;
+    timed.targetTemperatureCelsius = 30.0;
+    timed.durationMinutes = 60U;
+    timed.qualificationBandCelsius = 0.5;
+    timed.qualificationDurationMinutes = 10U;
+    timed.maximumTargetReachMinutes = 180U;
+    fermentation::FermentationUiStartManualHoldingIntent holding;
+    holding.plan = plan;
+    fermentation::FermentationUiStopRunIntent coolStop;
+    coolStop.option = fermentation::StopOption::AbortAndCool;
+    coolStop.coolingPlan = plan;
+    fermentation::FermentationUiCompleteRunIntent coolComplete;
+    coolComplete.startCooling = true;
+    coolComplete.coolingPlan = plan;
+
+    const auto assertRefused =
+        [](const fermentation::FermentationApplicationRequestResult& result) {
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    fermentation::FermentationApplicationRequestStatus::
+                        Unavailable),
+                static_cast<int>(result.status));
+            TEST_ASSERT_FALSE(result.request.has_value());
+            TEST_ASSERT_FALSE(result.uiRequestId.has_value());
+        };
+    for (const auto surface : {device_platform::UiSurface::LocalDisplay,
+                               device_platform::UiSurface::WebInterface}) {
+        fermentation::FermentationUiCommandContext context;
+        context.surface = surface;
+        context.expected.expectedStateSequence =
+            fermentation::FermentationApplicationTestAccess::stateSequence(
+                application);
+        assertRefused(application.prepareStartManualHolding(context, holding));
+        assertRefused(application.prepareStartManualTimed(context, timed));
+        assertRefused(application.prepareStop(context, coolStop));
+        assertRefused(application.prepareCompletion(context, coolComplete));
+        // The same payloads through the envelope entry (local dispatcher and
+        // web handler use it).
+        assertRefused(application.prepareEnvelope(
+            context, fermentation::FermentationUiEnvelopePayload{holding}));
+        assertRefused(application.prepareEnvelope(
+            context,
+            fermentation::FermentationUiEnvelopePayload{
+                fermentation::FermentationUiStartManualTimedIntent{timed}}));
+        assertRefused(application.prepareEnvelope(
+            context, fermentation::FermentationUiEnvelopePayload{coolStop}));
+        assertRefused(application.prepareEnvelope(
+            context,
+            fermentation::FermentationUiEnvelopePayload{coolComplete}));
+    }
+
+    // No identity was consumed: the first accepted request still gets id 1.
+    fermentation::FermentationUiCommandContext context;
+    context.expected.expectedStateSequence =
+        fermentation::FermentationApplicationTestAccess::stateSequence(
+            application);
+    fermentation::FermentationUiStopRunIntent stop;
+    stop.option = fermentation::StopOption::AbortAndTurnOff;
+    const auto preparedStop = application.prepareStop(context, stop);
+    TEST_ASSERT_TRUE(preparedStop.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, preparedStop.request->commandId());
+    const auto preparedComplete = application.prepareCompletion(context, {});
+    TEST_ASSERT_TRUE(preparedComplete.request.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U, preparedComplete.request->commandId());
 }
 
 void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
@@ -973,8 +1205,8 @@ void test_application_reset_hands_off_existing_run_store_to_new_epoch() {
     fermentation::FermentationUiCommandContext context;
     context.monotonicMillis = 200U;
     fermentation::FermentationUiStartManualHoldingIntent manual;
-    const auto prepared =
-        application.prepareStartManualHolding(context, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(application, context, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
@@ -1040,8 +1272,8 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
 
     fermentation::FermentationUiStartManualHoldingIntent manual;
     application.publishOwningRuntimeEvidence(owningEvidence());
-    const auto prepared =
-        application.prepareStartManualHolding(context, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(application, context, manual);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::FermentationApplicationRequestStatus::Prepared),
@@ -1073,8 +1305,9 @@ void test_confirmation_reuses_prepared_request_without_reallocation() {
     TEST_ASSERT_FALSE(prepared.request->commandEnvelope().confirmed);
     TEST_ASSERT_TRUE(confirmed.request->commandEnvelope().confirmed);
 
-    const auto next = application.prepareStartManualHolding(
-        fermentation::FermentationUiCommandContext{}, manual);
+    const auto next = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(
+            application, fermentation::FermentationUiCommandContext{}, manual);
     TEST_ASSERT_EQUAL_UINT64(prepared.request->commandId() + 1U,
                              next.request->commandId());
 }
@@ -1107,8 +1340,9 @@ void test_application_reconstructs_reset_handoff_after_run_write_cut() {
     TEST_ASSERT_TRUE(rebooted.ready());
 
     fermentation::FermentationUiStartManualHoldingIntent manual;
-    const auto prepared = rebooted.prepareStartManualHolding(
-        fermentation::FermentationUiCommandContext{}, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(
+            rebooted, fermentation::FermentationUiCommandContext{}, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
@@ -1182,8 +1416,9 @@ void test_application_finishes_committed_handoff_before_ready() {
         static_cast<int>(scan.loaded->record.handoff));
 
     fermentation::FermentationUiStartManualHoldingIntent manual;
-    const auto prepared = application.prepareStartManualHolding(
-        fermentation::FermentationUiCommandContext{}, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(
+            application, fermentation::FermentationUiCommandContext{}, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
@@ -1224,8 +1459,9 @@ void test_application_resumes_empty_partial_handoff_before_allocator() {
     TEST_ASSERT_TRUE(rebooted.begin(rebootedPlatform, store, timeZoneResolver));
     TEST_ASSERT_TRUE(rebooted.ready());
     fermentation::FermentationUiStartManualHoldingIntent manual;
-    const auto prepared = rebooted.prepareStartManualHolding(
-        fermentation::FermentationUiCommandContext{}, manual);
+    const auto prepared = fermentation::FermentationApplicationTestAccess::
+        prepareStartManualHoldingBody(
+            rebooted, fermentation::FermentationUiCommandContext{}, manual);
     TEST_ASSERT_TRUE(prepared.request.has_value());
     TEST_ASSERT_EQUAL_UINT64(1U, prepared.request->commandId());
     TEST_ASSERT_EQUAL_STRING("e2-c1", prepared.request->runId()->c_str());
@@ -1251,6 +1487,8 @@ int main(int, char**) {
     RUN_TEST(
         test_application_product_paths_revalidate_before_canonical_decision);
     RUN_TEST(
+        test_program_start_requested_sensor_mode_follows_stored_preference);
+    RUN_TEST(
         test_pipeline_handoff_drives_application_snapshot_and_confirmation);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
     RUN_TEST(test_application_reset_hands_off_existing_run_store_to_new_epoch);
@@ -1259,5 +1497,7 @@ int main(int, char**) {
     RUN_TEST(test_application_reconstructs_reset_handoff_after_run_write_cut);
     RUN_TEST(test_application_finishes_committed_handoff_before_ready);
     RUN_TEST(test_application_resumes_empty_partial_handoff_before_allocator);
+    RUN_TEST(
+        test_manual_run_and_cooling_requests_are_unavailable_on_every_surface);
     return UNITY_END();
 }
