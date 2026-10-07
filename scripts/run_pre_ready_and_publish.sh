@@ -30,6 +30,7 @@ REPO_NAME=
 CLASS=
 PENDING_PUBLISHED=false
 SUCCESS_PUBLISHED=false
+FAIL_KIND=FAILED
 FAIL_REASON=
 STATE_ERROR=
 
@@ -47,8 +48,8 @@ on_exit() {
     trap - EXIT
     if [[ "$PENDING_PUBLISHED" == true && "$SUCCESS_PUBLISHED" != true ]]; then
         publish_status failure \
-            "$TESTED_SHORT FAILED: ${FAIL_REASON:-abgebrochen}" || true
-        printf 'PRE_READY_LOCAL_GATES=FAILED\n'
+            "$TESTED_SHORT $FAIL_KIND: ${FAIL_REASON:-abgebrochen}" || true
+        printf 'PRE_READY_LOCAL_GATES=%s\n' "$FAIL_KIND"
         printf 'PRE_READY_TESTED_HEAD=%s\n' "$TESTED_HEAD"
         [[ $exit_status -ne 0 ]] || exit_status=1
     fi
@@ -62,10 +63,17 @@ blocked() {
     exit 1
 }
 
+# Abbruch nach pending: der Trap publiziert failure (GitHub kennt kein
+# `blocked`); FAIL_KIND bestimmt Beschreibung und lokales Ergebnis.
 fail() {
     FAIL_REASON=$1
-    printf 'FAILED: %s\n' "$1" >&2
+    printf '%s: %s\n' "$FAIL_KIND" "$1" >&2
     exit 1
+}
+
+blocked_after_pending() {
+    FAIL_KIND=BLOCKED
+    fail "$1"
 }
 
 fetch_remote_state() {
@@ -176,9 +184,9 @@ PENDING_PUBLISHED=true
 # 11. Gates (nur bei FULL)
 if [[ "$CLASS" == FULL ]]; then
     [[ -n "${IDF_PATH:-}" && -f "$IDF_PATH/export.sh" ]] ||
-        fail "IDF_PATH/export.sh fehlt (BLOCKED)"
+        blocked_after_pending "IDF_PATH/export.sh fehlt"
     [[ -n "${IDF_TOOLS_PATH:-}" && -d "$IDF_TOOLS_PATH" ]] ||
-        fail "IDF_TOOLS_PATH fehlt (BLOCKED)"
+        blocked_after_pending "IDF_TOOLS_PATH fehlt"
 
     export PRE_READY_EXPECTED_HEAD=$TESTED_HEAD
     bash "$RUNNER" host || fail "host-Phase fehlgeschlagen"

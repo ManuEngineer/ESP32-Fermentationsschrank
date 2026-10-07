@@ -89,18 +89,14 @@ case "$1" in
 auth) [[ -z "${GH_FAIL_AUTH:-}" ]]; exit ;;
 repo) printf '%s\\n' "${GH_REPO_NAME:-owner/repo}"; exit 0 ;;
 api)
-    state=; description=
+    state=
     for arg in "$@"; do
-        case "$arg" in
-        state=*) state=${arg#state=} ;;
-        description=*) description=${arg#description=} ;;
-        esac
+        [[ "$arg" != state=* ]] || state=${arg#state=}
     done
-    if [[ "$state" == "${GH_FAIL_STATE:-}" ]]; then
-        printf 'FAILED|%s\\n' "$state" >>"$GH_LOG"
-        exit 1
-    fi
-    printf '%s|%s|%s\\n' "$state" "$*" "$description" >>"$GH_LOG"
+    status=OK
+    [[ "$state" != "${GH_FAIL_STATE:-}" ]] || status=FAILED
+    { printf '%s' "$status"; printf '\x1f%s' "$@"; printf '\n'; } >>"$GH_LOG"
+    [[ "$status" == OK ]] || exit 1
     if [[ "$state" == pending && -n "${GH_HOOK_ON_PENDING:-}" ]]; then
         bash -c "$GH_HOOK_ON_PENDING"
     fi
@@ -203,13 +199,24 @@ class WrapperFixture:
             capture_output=True,
         )
 
+    def minimal_path(self):
+        # Nur git, bash und dirname: gh ist garantiert nicht auffindbar.
+        minimal = self.root / "minimal"
+        minimal.mkdir()
+        for tool in ("git", "bash", "dirname"):
+            (minimal / tool).symlink_to(shutil.which(tool))
+        return str(minimal)
+
     def run(self, env_overrides, args=()):
         env = dict(self.env)
         for key, value in env_overrides.items():
             if value is None:
                 env.pop(key, None)
+            elif value == "@MINIMAL@":
+                env[key] = self.minimal_path()
             else:
                 env[key] = str(value)
+        self.tested_head = self.head()
         result = subprocess.run(
             ["bash", "scripts/run_pre_ready_and_publish.sh", *args],
             cwd=self.work, env=env, capture_output=True, text=True,
@@ -217,8 +224,19 @@ class WrapperFixture:
         posts = []
         if self.gh_log.exists():
             for line in self.gh_log.read_text().splitlines():
-                parts = line.split("|")
-                posts.append((parts[0], parts[-1]))
+                outcome, *call = line.split("\x1f")
+                fields = dict(
+                    item.split("=", 1) for item in call[4:] if "=" in item
+                )
+                posts.append({
+                    "outcome": outcome,
+                    "prefix": call[:4],
+                    "endpoint": call[3] if len(call) > 3 else "",
+                    "keys": sorted(fields),
+                    "state": fields.get("state"),
+                    "context": fields.get("context"),
+                    "description": fields.get("description"),
+                })
         phases = []
         if self.run_log.exists():
             phases = [line.split("|") for line in self.run_log.read_text().splitlines()]
@@ -232,15 +250,15 @@ def wrapper_scenarios():
     hook_feat = PUSH_OTHER_HOOK + "feat"
 
     def states(posts):
-        return [state for state, _ in posts]
+        return [post["state"] for post in posts if post["outcome"] == "OK"]
 
     def passed(fx, result, posts, phases, description, ran):
         return (
             result.returncode == 0
             and states(posts) == ["pending", "success"]
-            and posts[-1][1] == f"{fx.head()[:12]} {description}"
+            and posts[-1]["description"] == f"{fx.tested_head[:12]} {description}"
             and [phase[0] for phase in phases] == ran
-            and all(phase[1] == fx.head() for phase in phases)
+            and all(phase[1] == fx.tested_head for phase in phases)
         )
 
     def full_pass(fx, result, posts, phases):
@@ -252,26 +270,42 @@ def wrapper_scenarios():
             and "PRE_READY_LOCAL_GATES=NOT_REQUIRED_MARKDOWN_ONLY" in result.stdout \
             and "PRE_READY_LOCAL_GATES=PASS" not in result.stdout
 
-    def failed_after_pending(ran):
+    def failed_after_pending(ran, kind="FAILED"):
         def check(fx, result, posts, phases):
             return (
                 result.returncode != 0
                 and states(posts) == ["pending", "failure"]
+                and posts[-1]["description"].startswith(
+                    f"{fx.tested_head[:12]} {kind}: ")
+                and f"PRE_READY_LOCAL_GATES={kind}" in result.stdout
+                and "PRE_READY_LOCAL_GATES=PASS" not in result.stdout
                 and [phase[0] for phase in phases] == ran
             )
         return check
+
+    def blocked_after_pending(fx, result, posts, phases):
+        return failed_after_pending([], "BLOCKED")(fx, result, posts, phases)
 
     def rejected_early(fx, result, posts, phases):
         return result.returncode != 0 and posts == [] and phases == []
 
     def api_error_on_pending(fx, result, posts, phases):
-        return result.returncode != 0 and phases == [] and "success" not in states(posts)
+        return (
+            result.returncode != 0 and phases == [] and states(posts) == []
+            and [post["outcome"] for post in posts] == ["FAILED"]
+        )
 
     def api_error_on_success(fx, result, posts, phases):
         return (
             result.returncode != 0
             and "success" not in states(posts)
             and "PRE_READY_LOCAL_GATES=PASS" not in result.stdout
+        )
+
+    def gh_missing(fx, result, posts, phases):
+        return (
+            result.returncode != 0 and posts == [] and phases == []
+            and "BLOCKED: gh fehlt" in result.stderr
         )
 
     def usage_error(fx, result, posts, phases):
@@ -319,8 +353,12 @@ def wrapper_scenarios():
          {"STUB_FAIL_PHASE": "host"}, (), failed_after_pending(["host"])),
         ("esp FAIL: failure", code, (), None, {"STUB_FAIL_PHASE": "esp"}, (),
          failed_after_pending(["host", "esp"])),
-        ("FULL ohne IDF_PATH: failure ohne Gatelauf", code, (), None,
-         {"IDF_PATH": None}, (), failed_after_pending([])),
+        ("FULL ohne IDF_PATH: BLOCKED ohne Gatelauf", code, (), None,
+         {"IDF_PATH": None}, (), blocked_after_pending),
+        ("FULL ohne IDF_TOOLS_PATH: BLOCKED ohne Gatelauf", code, (), None,
+         {"IDF_TOOLS_PATH": None}, (), blocked_after_pending),
+        ("gh fehlt: BLOCKED, kein Gatelauf, kein Status", code, (),
+         lambda fx: None, {"PATH": "@MINIMAL@"}, (), gh_missing),
         ("HEAD aendert sich waehrend des Laufs", code, (), None,
          {**mid_run, "STUB_HOOK": "git commit -q --allow-empty -m moved"}, (),
          failed_after_pending(["host", "esp"])),
@@ -357,6 +395,20 @@ def wrapper_scenarios():
     ]
 
 
+def valid_posts(fixture, posts) -> bool:
+    """Jeder publizierte Status: exakt Context und Ziel-SHA, nur erlaubte
+    States und Felder, kein target_url."""
+    endpoint = f"repos/owner/repo/statuses/{fixture.tested_head}"
+    return all(
+        post["prefix"] == ["api", "-X", "POST", endpoint]
+        and post["context"] == "pre-ready/local"
+        and post["state"] in ("pending", "success", "failure")
+        and post["keys"] == ["context", "description", "state"]
+        and len(post["description"]) <= 140
+        for post in posts
+    )
+
+
 def selftest_pre_ready_attestation() -> str:
     if shutil.which("git") is None or shutil.which("bash") is None:
         return BLOCKED
@@ -370,7 +422,9 @@ def selftest_pre_ready_attestation() -> str:
             if prepare is not None:
                 prepare(fixture)
             result, posts, phases = fixture.run(env, args)
-            if not check(fixture, result, posts, phases):
+            if not check(fixture, result, posts, phases) or not valid_posts(
+                fixture, posts
+            ):
                 print(
                     f"  Wrapper-Szenario FAILED: {name}\n"
                     f"    rc={result.returncode} posts={posts} phases={phases}\n"
