@@ -436,7 +436,8 @@ void test_s7_content_pages_steady_state_allocate_nothing() {
         FermentationUiPage::Technical,      FermentationUiPage::Completion,
         FermentationUiPage::Status,         FermentationUiPage::Diagnostics,
         FermentationUiPage::Service,        FermentationUiPage::Pin,
-        FermentationUiPage::Recovery,
+        FermentationUiPage::Recovery,       FermentationUiPage::ManualHolding,
+        FermentationUiPage::ManualTimed,    FermentationUiPage::StopDialog,
     };
     for (const auto page : pages) {
         WebAccessFixture fixture;

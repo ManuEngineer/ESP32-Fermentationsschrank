@@ -1216,6 +1216,14 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
 
     workspace.setManualHoldingValues(
         fermentation::FermentationUiManualRunPlanValues{});
+    // Staged values alone do not enable the start: the technical limits need
+    // a released producer (O5).
+    TEST_ASSERT_FALSE(
+        fermentation::main_ui::makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{"en"})
+            .workspace.bottomSlots[2]
+            .enabled);
+    snapshot.manualRunParametersReleased = true;
     const auto afterValues = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
     TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
@@ -2035,6 +2043,9 @@ void test_content_pages_are_bounded_deterministic_and_do_not_overlap() {
         fermentation::FermentationUiPage::Service,
         fermentation::FermentationUiPage::Pin,
         fermentation::FermentationUiPage::Recovery,
+        fermentation::FermentationUiPage::ManualHolding,
+        fermentation::FermentationUiPage::ManualTimed,
+        fermentation::FermentationUiPage::StopDialog,
     };
     for (const auto* locale : {"en", "de", "es"}) {
         for (const auto page : pages) {
@@ -2091,7 +2102,7 @@ void test_every_displayed_s7_value_changes_the_refresh_revision() {
     fermentation::TemperatureView temperature;
     base.temperatures.push_back(temperature);
     const auto changes =
-        std::array<void (*)(fermentation::FermentationUiSnapshot&), 8U>{
+        std::array<void (*)(fermentation::FermentationUiSnapshot&), 9U>{
             [](fermentation::FermentationUiSnapshot& value) {
                 value.home.processState =
                     fermentation::ProcessState::Fermenting;
@@ -2119,6 +2130,9 @@ void test_every_displayed_s7_value_changes_the_refresh_revision() {
             [](fermentation::FermentationUiSnapshot& value) {
                 value.recovery.mode =
                     fermentation::RecoveryViewMode::CurrentRunRecovered;
+            },
+            [](fermentation::FermentationUiSnapshot& value) {
+                value.manualRunParametersReleased = true;
             },
         };
     for (const auto change : changes) {
@@ -2336,9 +2350,10 @@ void test_summary_press_feedback_follows_row_and_button_geometry() {
 }
 
 void test_start_value_labels_exist_in_all_locales() {
-    for (const auto* key : {"label-cooling", "label-hold", "field-target",
-                            "field-duration", "field-cooling", "field-hold",
-                            "backspace", "clear", "start-values-invalid"}) {
+    for (const auto* key :
+         {"label-cooling", "label-hold", "field-target", "field-duration",
+          "field-cooling", "field-hold", "backspace", "clear",
+          "start-values-invalid", "manual-parameters-not-released"}) {
         for (const auto* locale : {"en", "de", "es"}) {
             const auto result = device_platform::resolveText(
                 fermentation::makeFermentationUiTextPacks(),
@@ -2348,6 +2363,72 @@ void test_start_value_labels_exist_in_all_locales() {
             TEST_ASSERT_TRUE(result.value != key);
         }
     }
+}
+
+// S9: manual pages show real run values, the not-released reason and keep the
+// page's own content clear of the field rows.
+void test_manual_pages_show_real_values_and_the_not_released_reason() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::ManualHolding);
+    auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: --.- C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Preheat: Off"));
+    TEST_ASSERT_TRUE(hasText(screen, "Sensor: Air"));
+    // No technical limit is offered as a value.
+    TEST_ASSERT_FALSE(hasText(screen, "Duration: --"));
+    const auto reason = localized("en", "manual-parameters-not-released");
+    const fermentation::main_ui::ScreenDrawCommand* reasonCommand = nullptr;
+    for (const auto& command : screen.commands) {
+        if (command.text == reason) reasonCommand = &command;
+    }
+    TEST_ASSERT_NOT_NULL(reasonCommand);
+    TEST_ASSERT_EQUAL_UINT16(182U, reasonCommand->rect.top);
+    // The confirm slot (2) is drawn disabled.
+    TEST_ASSERT_FALSE(screen.workspace.bottomSlots[2].enabled);
+
+    snapshot.manualRunParametersReleased = true;
+    screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_FALSE(hasText(screen, reason));
+    for (const auto* locale : {"de", "es"}) {
+        snapshot.manualRunParametersReleased = false;
+        const auto localizedScreen = pageScreen(snapshot, workspace, locale);
+        TEST_ASSERT_TRUE(
+            hasText(localizedScreen,
+                    localized(locale, "manual-parameters-not-released")));
+    }
+}
+
+void test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Completed;
+    snapshot.home.processState = fermentation::ProcessState::Completed;
+    snapshot.home.effectiveValues = fermentation::EffectiveRunValues{25.0, 0U};
+    for (const auto page : {fermentation::FermentationUiPage::StopDialog,
+                            fermentation::FermentationUiPage::Completion}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(page);
+        const auto screen = pageScreen(snapshot, workspace);
+        const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+            return fermentation::main_ui::targetAt(screen, x, y);
+        };
+        // Row 0 (y=64..103) is page content; the single field is row 1.
+        TEST_ASSERT_FALSE(at(50U, 70U).has_value());
+        TEST_ASSERT_TRUE(isCell(at(50U, 104U), 1U, 0U));
+        TEST_ASSERT_TRUE(isCell(at(50U, 143U), 1U, 0U));
+        TEST_ASSERT_FALSE(at(50U, 144U).has_value());
+        // One field: no pager buttons.
+        TEST_ASSERT_FALSE(at(280U, 80U).has_value());
+        TEST_ASSERT_FALSE(at(280U, 130U).has_value());
+        TEST_ASSERT_TRUE(hasText(screen, "Cooling: --.- C"));
+    }
+    // The completion page keeps its own state and target lines.
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Completion);
+    const auto screen = pageScreen(snapshot, workspace);
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+    TEST_ASSERT_TRUE(hasText(screen, "Completed"));
 }
 
 int main() {
@@ -2436,5 +2517,7 @@ int main() {
     RUN_TEST(test_value_edit_page_has_no_overlap_and_a_bounded_command_count);
     RUN_TEST(test_summary_press_feedback_follows_row_and_button_geometry);
     RUN_TEST(test_start_value_labels_exist_in_all_locales);
+    RUN_TEST(test_manual_pages_show_real_values_and_the_not_released_reason);
+    RUN_TEST(test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content);
     return UNITY_END();
 }

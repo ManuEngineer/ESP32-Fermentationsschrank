@@ -178,7 +178,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 151U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 152U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -324,6 +324,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"backspace", "Del"},
         std::pair{"clear", "Clear"},
         std::pair{"start-values-invalid", "Start values invalid"},
+        std::pair{"manual-parameters-not-released",
+                  "Run parameters not released"},
         std::pair{"status-ready", "Application ready"},
         std::pair{"status-not-ready", "Application not ready"},
         std::pair{"recovery-mode-normal", "No recovery pending"},
@@ -346,7 +348,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 151U> de{
+            const std::array<std::pair<const char*, const char*>, 152U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -494,6 +496,8 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"backspace", "Entf"},
                  {"clear", "Leeren"},
                  {"start-values-invalid", "Startwerte ungueltig"},
+                 {"manual-parameters-not-released",
+                  "Laufparameter nicht freigegeben"},
                  {"status-ready", "Anwendung bereit"},
                  {"status-not-ready", "Anwendung nicht bereit"},
                  {"recovery-mode-normal", "Kein Wiederanlauf offen"},
@@ -515,7 +519,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 151U> es{
+            const std::array<std::pair<const char*, const char*>, 152U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -677,7 +681,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"recovery-mode-rejected-or-fail-closed",
                   "Recuperacion rechazada (fail-closed)"},
                  {"recovery-mode-completed", "Proceso completado"},
-                 {"recovery-mode-cooling", "Enfriando tras recuperacion"}}};
+                 {"recovery-mode-cooling", "Enfriando tras recuperacion"},
+                 {"manual-parameters-not-released",
+                  "Parametros no liberados"}}};
             for (const auto& replacement : es) {
                 for (auto& entry : result) {
                     if (entry.key.value == replacement.first) {

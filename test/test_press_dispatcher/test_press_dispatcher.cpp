@@ -1828,7 +1828,9 @@ void test_process_touch_fresh_edge_off_target_does_not_navigate() {
 void test_physical_touch_manual_start_uses_the_application_owner_path() {
     OwningAppFixture fixture;
     FermentationTouchWorkspace workspace;
-    const auto snapshot = fixture.application.uiSnapshot();
+    auto snapshot = fixture.application.uiSnapshot();
+    // The staged manual values model a released technical-limit producer.
+    snapshot.manualRunParametersReleased = true;
     const auto packs = makeFermentationUiTextPacks();
     workspace.setPage(FermentationUiPage::ManualModeSelection);
     workspace.setManualTimedValues(validManualTimedValues());
@@ -1862,6 +1864,40 @@ void test_physical_touch_manual_start_uses_the_application_owner_path() {
     assertAppliedOwningResult(start.dispatch);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationHomeMode::ActiveRun),
+        static_cast<int>(fixture.application.uiSnapshot().home.mode));
+}
+
+// S9 / O5: without a released producer of the technical run limits (none
+// exists), the same touch sequence never reaches the Application: the confirm
+// slot is disabled with a visible reason and no typed payload is produced.
+void test_physical_touch_manual_start_stays_fail_closed_without_producer() {
+    OwningAppFixture fixture;
+    FermentationTouchWorkspace workspace;
+    const auto snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_FALSE(snapshot.manualRunParametersReleased);
+    const auto packs = makeFermentationUiTextPacks();
+    workspace.setPage(FermentationUiPage::ManualTimed);
+    workspace.setManualTimedValues(validManualTimedValues());
+    const auto view = workspace.view(snapshot);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason ==
+                     fermentationTextKey("manual-parameters-not-released"));
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const auto start = processWorkspaceTouch(
+            fixture.application, workspace, snapshot, packs,
+            device_platform::LocaleId{"en"}, nullptr,
+            device_platform::DeviceUiNetworkStatus::Unavailable, {},
+            /*contactHeld=*/attempt == 0, bottomX(2), kBottomY,
+            /*freshPressEdge=*/attempt == 0,
+            fixture.timeSource.monotonicMillis());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+            static_cast<int>(start.dispatch.outcome));
+        TEST_ASSERT_FALSE(start.dispatch.prepareStatus.has_value());
+    }
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationHomeMode::Standby),
         static_cast<int>(fixture.application.uiSnapshot().home.mode));
 }
 
@@ -1938,5 +1974,7 @@ int main() {
         test_process_touch_from_home_reaches_network_page_and_application_owner);
     RUN_TEST(test_process_touch_fresh_edge_off_target_does_not_navigate);
     RUN_TEST(test_physical_touch_manual_start_uses_the_application_owner_path);
+    RUN_TEST(
+        test_physical_touch_manual_start_stays_fail_closed_without_producer);
     return UNITY_END();
 }

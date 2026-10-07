@@ -243,6 +243,8 @@ void test_sim_26_workspace_action_matrix_and_owner_paths() {
 
     auto completed =
         snapshotFor(ProcessState::Completed, FermentationHomeMode::Completed);
+    // The staged cooling plan models a released technical-limit producer.
+    completed.manualRunParametersReleased = true;
     workspace.setPage(FermentationUiPage::Home);
     const auto completedPress = workspace.press(completed, bottom(0), &catalog);
     TEST_ASSERT_TRUE(completedPress.action.has_value());
@@ -384,8 +386,10 @@ void test_sim_26_navigation_and_non_command_slots() {
 // SIM-26-66: manual modes and program start are reachable as separate
 // existing payloads and never manufacture an identity in the workspace.
 void test_sim_26_manual_and_program_consumer_paths() {
-    const auto snapshot =
+    auto snapshot =
         snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    // The staged manual values model a released technical-limit producer.
+    snapshot.manualRunParametersReleased = true;
     auto catalog = runnableCatalog();
     FermentationTouchWorkspace workspace;
     workspace.setPage(FermentationUiPage::ProgramList);
@@ -1999,6 +2003,303 @@ void test_unstartable_program_start_fields_are_not_editable() {
                      fermentationTextKey("program-disabled"));
 }
 
+// S9: manual run values and cooling plans (real values only; start stays
+// fail-closed until the technical limits have a released producer, O5).
+struct ManualFixture {
+    FermentationUiSnapshot snapshot;
+    FermentationTouchWorkspace workspace;
+
+    ManualFixture()
+        : snapshot(snapshotFor(ProcessState::Standby,
+                               FermentationHomeMode::Standby)) {}
+
+    FermentationUiWorkspaceView view() const {
+        return workspace.view(snapshot);
+    }
+    FermentationUiWorkspacePress tap(std::uint8_t row, std::uint8_t column) {
+        return workspace.press(snapshot, cellAt(row, column));
+    }
+    FermentationUiWorkspacePress slot(std::uint8_t index) {
+        return workspace.press(snapshot, bottom(index));
+    }
+    void type(const char* characters) {
+        for (const char* c = characters; *c != '\0'; ++c) {
+            std::uint8_t row = 3U;
+            std::uint8_t column = 1U;
+            if (*c >= '1' && *c <= '9') {
+                row = static_cast<std::uint8_t>((*c - '1') / 3);
+                column = static_cast<std::uint8_t>((*c - '1') % 3);
+            } else if (*c == '.') {
+                column = 0U;
+            }
+            TEST_ASSERT_TRUE(tap(row, column).navigated);
+        }
+    }
+    // Opens the edit page of the row, replaces the value and commits it.
+    void enter(std::uint8_t row, const char* value) {
+        TEST_ASSERT_TRUE(tap(row, 0U).navigated);
+        TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::ValueEdit);
+        if (!view().valueEdit->candidate.empty())
+            TEST_ASSERT_TRUE(slot(2U).navigated);  // clear
+        type(value);
+        TEST_ASSERT_TRUE(slot(3U).navigated);  // commit
+    }
+};
+
+FermentationUiManualRunPlanValues stagedHolding() {
+    FermentationUiManualRunPlanValues values;
+    values.targetTemperatureCelsius = 30.0;
+    values.qualificationBandCelsius = 0.5;
+    values.qualificationDurationMinutes = 10U;
+    values.maximumTargetReachMinutes = 180U;
+    return values;
+}
+
+ManualTimedRunValues stagedTimed() {
+    ManualTimedRunValues values;
+    values.targetTemperatureCelsius = 30.0;
+    values.durationMinutes = 60U;
+    values.qualificationBandCelsius = 0.5;
+    values.qualificationDurationMinutes = 10U;
+    values.maximumTargetReachMinutes = 180U;
+    return values;
+}
+
+void test_manual_pages_list_only_real_run_values() {
+    ManualFixture holding;
+    holding.workspace.setPage(FermentationUiPage::ManualHolding);
+    auto view = holding.view();
+    TEST_ASSERT_TRUE(view.programSummary.has_value());
+    TEST_ASSERT_TRUE(view.programSummary->manual);
+    TEST_ASSERT_EQUAL_UINT32(3U, view.programSummary->fieldCount);
+    TEST_ASSERT_TRUE(view.programSummary->fields[0] ==
+                     FermentationUiStartField::TargetTemperature);
+    TEST_ASSERT_TRUE(view.programSummary->fields[1] ==
+                     FermentationUiStartField::Preheat);
+    TEST_ASSERT_TRUE(view.programSummary->fields[2] ==
+                     FermentationUiStartField::SensorMode);
+    // No number is invented: an unset target stays absent.
+    TEST_ASSERT_FALSE(
+        view.programSummary->targetTemperatureCelsius.has_value());
+    TEST_ASSERT_FALSE(view.programSummary->pagerButtons);
+
+    ManualFixture timed;
+    timed.workspace.setPage(FermentationUiPage::ManualTimed);
+    view = timed.view();
+    TEST_ASSERT_EQUAL_UINT32(5U, view.programSummary->fieldCount);
+    TEST_ASSERT_TRUE(view.programSummary->pagerButtons);
+    // The technical limits are never a field of any manual page.
+    for (const auto page :
+         {FermentationUiPage::ManualHolding, FermentationUiPage::ManualTimed,
+          FermentationUiPage::StopDialog, FermentationUiPage::Completion}) {
+        ManualFixture fixture;
+        fixture.workspace.setPage(page);
+        const auto fields = fixture.view().programSummary;
+        TEST_ASSERT_TRUE(fields.has_value());
+        for (std::size_t index = 0U; index < fields->fieldCount; ++index) {
+            const auto field = fields->fields[index];
+            TEST_ASSERT_TRUE(
+                field == FermentationUiStartField::TargetTemperature ||
+                field == FermentationUiStartField::Duration ||
+                field == FermentationUiStartField::Preheat ||
+                field == FermentationUiStartField::SensorMode ||
+                field == FermentationUiStartField::CompletionMode ||
+                field == FermentationUiStartField::CoolingTarget ||
+                field == FermentationUiStartField::HoldDuration);
+        }
+    }
+}
+
+void test_manual_start_is_fail_closed_without_a_released_producer() {
+    ManualFixture fixture;
+    fixture.workspace.setManualHoldingValues(stagedHolding());
+    fixture.workspace.setManualTimedValues(stagedTimed());
+    fixture.workspace.setPage(FermentationUiPage::ManualHolding);
+    auto view = fixture.view();
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.blockedReason ==
+                     fermentationTextKey("manual-parameters-not-released"));
+    TEST_ASSERT_FALSE(fixture.slot(2U).action.has_value());
+    TEST_ASSERT_FALSE(
+        fixture.workspace
+            .press(fixture.snapshot,
+                   {device_platform::DeviceUiTargetKind::Confirm, 0U})
+            .action.has_value());
+    fixture.workspace.setPage(FermentationUiPage::ManualTimed);
+    view = fixture.view();
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(fixture.slot(2U).action.has_value());
+
+    // Released: the same staged values start through the existing payloads.
+    fixture.snapshot.manualRunParametersReleased = true;
+    view = fixture.view();
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(view.blockedReason.has_value());
+    TEST_ASSERT_TRUE(fixture.slot(2U).action.has_value());
+}
+
+void test_manual_holding_edits_become_the_real_values_of_the_payload() {
+    ManualFixture fixture;
+    fixture.snapshot.manualRunParametersReleased = true;
+    fixture.workspace.setManualHoldingValues(stagedHolding());
+    fixture.workspace.setPage(FermentationUiPage::ManualHolding);
+    TEST_ASSERT_EQUAL_DOUBLE(
+        30.0, *fixture.view().programSummary->targetTemperatureCelsius);
+    fixture.enter(0U, "34.5");
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ManualHolding);
+    TEST_ASSERT_EQUAL_DOUBLE(
+        34.5, *fixture.view().programSummary->targetTemperatureCelsius);
+    TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);  // preheat
+    TEST_ASSERT_TRUE(fixture.view().programSummary->preheat);
+    TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);  // sensor
+    TEST_ASSERT_TRUE(fixture.view().programSummary->sensorMode ==
+                     RunSensorMode::Product);
+    TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().programSummary->sensorMode ==
+                     RunSensorMode::Air);
+    TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);  // Product again
+
+    const auto start = fixture.slot(2U);
+    TEST_ASSERT_TRUE(start.action.has_value());
+    const auto& plan =
+        std::get<FermentationUiStartManualHoldingIntent>(*start.action).plan;
+    TEST_ASSERT_EQUAL_DOUBLE(34.5, plan.targetTemperatureCelsius);
+    TEST_ASSERT_TRUE(plan.preheatEnabled);
+    TEST_ASSERT_TRUE(plan.sensorMode == RunSensorMode::Product);
+    // The technical limits come from the producer side, not from the UI.
+    TEST_ASSERT_EQUAL_DOUBLE(0.5, plan.qualificationBandCelsius);
+    TEST_ASSERT_EQUAL_UINT32(180U, plan.maximumTargetReachMinutes);
+}
+
+void test_manual_values_use_the_canonical_limits_and_whole_numbers() {
+    ManualFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::ManualTimed);
+    // Target outside the fermentation range cannot be committed.
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    fixture.type("99");
+    TEST_ASSERT_FALSE(fixture.view().valueEdit->commitValid);
+    TEST_ASSERT_FALSE(fixture.slot(3U).navigated);
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);
+    fixture.type("30");
+    TEST_ASSERT_TRUE(fixture.view().valueEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);  // cancel
+    TEST_ASSERT_FALSE(
+        fixture.view().programSummary->targetTemperatureCelsius.has_value());
+
+    // Duration: whole minutes only, no decimal key, zero is outside the range.
+    TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);
+    TEST_ASSERT_FALSE(fixture.tap(3U, 0U).navigated);
+    fixture.type("0");
+    TEST_ASSERT_FALSE(fixture.view().valueEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);
+    fixture.type("90");
+    TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+    TEST_ASSERT_EQUAL_UINT32(90U,
+                             *fixture.view().programSummary->durationMinutes);
+}
+
+void test_manual_timed_completion_cycle_requires_its_real_values() {
+    ManualFixture fixture;
+    fixture.snapshot.manualRunParametersReleased = true;
+    fixture.workspace.setManualTimedValues(stagedTimed());
+    fixture.workspace.setPage(FermentationUiPage::ManualTimed);
+    TEST_ASSERT_TRUE(fixture.slot(2U).action.has_value());
+
+    // Scroll to the completion row (index 4) and cool: the cooling target is
+    // a real value that must be entered before the start is possible.
+    while (fixture.view().pager.currentIndex < 3U)
+        TEST_ASSERT_TRUE(fixture.tap(1U, 1U).navigated);
+    TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);  // completion row
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.programSummary->completionMode ==
+                     CompletionMode::CoolThenFinish);
+    TEST_ASSERT_EQUAL_UINT32(6U, view.programSummary->fieldCount);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(fixture.slot(2U).action.has_value());
+    while (fixture.view().pager.currentIndex < 5U)
+        TEST_ASSERT_TRUE(fixture.tap(1U, 1U).navigated);
+    fixture.enter(0U, "8");
+    view = fixture.view();
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    const auto cool = fixture.slot(2U);
+    TEST_ASSERT_TRUE(cool.action.has_value());
+    const auto& values =
+        std::get<FermentationUiStartManualTimedIntent>(*cool.action).values;
+    TEST_ASSERT_TRUE(values.completionMode == CompletionMode::CoolThenFinish);
+    TEST_ASSERT_EQUAL_DOUBLE(8.0, *values.coolingTargetCelsius);
+    TEST_ASSERT_FALSE(values.holdDurationMinutes.has_value());
+
+    // Hold for a duration needs the hold time; hold until stop needs none.
+    while (fixture.view().pager.currentIndex > 4U)
+        TEST_ASSERT_TRUE(fixture.tap(0U, 1U).navigated);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    view = fixture.view();
+    TEST_ASSERT_TRUE(view.programSummary->completionMode ==
+                     CompletionMode::CoolAndHoldForDuration);
+    TEST_ASSERT_EQUAL_UINT32(7U, view.programSummary->fieldCount);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().bottomSlots[2].enabled);
+}
+
+void test_cooling_plans_edit_the_real_target_and_stay_fail_closed() {
+    for (const auto page :
+         {FermentationUiPage::StopDialog, FermentationUiPage::Completion}) {
+        ManualFixture fixture;
+        auto cooling = stagedHolding();
+        cooling.targetTemperatureCelsius = 8.0;
+        if (page == FermentationUiPage::StopDialog) {
+            fixture.workspace.setStopCoolingPlan(cooling);
+        } else {
+            fixture.snapshot = snapshotFor(ProcessState::Completed,
+                                           FermentationHomeMode::Completed);
+            fixture.workspace.setCompletionCoolingPlan(cooling);
+        }
+        fixture.workspace.setPage(page);
+        const std::uint8_t coolSlot =
+            page == FermentationUiPage::StopDialog ? 2U : 3U;
+        auto view = fixture.view();
+        // One row, below the page's own content.
+        TEST_ASSERT_EQUAL_UINT32(1U, view.programSummary->fieldCount);
+        TEST_ASSERT_EQUAL_UINT8(1U, view.programSummary->rowOffset);
+        TEST_ASSERT_FALSE(view.programSummary->pagerButtons);
+        TEST_ASSERT_TRUE(view.programSummary->fields[0] ==
+                         FermentationUiStartField::CoolingTarget);
+        TEST_ASSERT_EQUAL_DOUBLE(8.0,
+                                 *view.programSummary->coolingTargetCelsius);
+        // Closed gate: disabled with the reason, no payload.
+        TEST_ASSERT_FALSE(view.bottomSlots[coolSlot].enabled);
+        TEST_ASSERT_TRUE(view.blockedReason ==
+                         fermentationTextKey("manual-parameters-not-released"));
+        TEST_ASSERT_FALSE(fixture.slot(coolSlot).action.has_value());
+        // Row 0 is page content, not a field.
+        TEST_ASSERT_FALSE(fixture.tap(0U, 0U).navigated);
+
+        fixture.snapshot.manualRunParametersReleased = true;
+        fixture.enter(1U, "6.5");
+        view = fixture.view();
+        TEST_ASSERT_EQUAL_DOUBLE(6.5,
+                                 *view.programSummary->coolingTargetCelsius);
+        TEST_ASSERT_TRUE(view.bottomSlots[coolSlot].enabled);
+        const auto pressed = fixture.slot(coolSlot);
+        TEST_ASSERT_TRUE(pressed.action.has_value());
+        if (page == FermentationUiPage::StopDialog) {
+            const auto& stop =
+                std::get<FermentationUiStopRunIntent>(*pressed.action);
+            TEST_ASSERT_TRUE(stop.option == StopOption::AbortAndCool);
+            TEST_ASSERT_EQUAL_DOUBLE(
+                6.5, stop.coolingPlan->targetTemperatureCelsius);
+        } else {
+            const auto& complete =
+                std::get<FermentationUiCompleteRunIntent>(*pressed.action);
+            TEST_ASSERT_TRUE(complete.startCooling);
+            TEST_ASSERT_EQUAL_DOUBLE(
+                6.5, complete.coolingPlan->targetTemperatureCelsius);
+        }
+    }
+}
+
 }  // namespace
 
 void setUp() {}
@@ -2049,5 +2350,11 @@ int main(int, char**) {
     RUN_TEST(test_sensor_cycle_follows_the_structural_start_matrix);
     RUN_TEST(test_reset_start_values_is_offered_only_for_a_changed_candidate);
     RUN_TEST(test_unstartable_program_start_fields_are_not_editable);
+    RUN_TEST(test_manual_pages_list_only_real_run_values);
+    RUN_TEST(test_manual_start_is_fail_closed_without_a_released_producer);
+    RUN_TEST(test_manual_holding_edits_become_the_real_values_of_the_payload);
+    RUN_TEST(test_manual_values_use_the_canonical_limits_and_whole_numbers);
+    RUN_TEST(test_manual_timed_completion_cycle_requires_its_real_values);
+    RUN_TEST(test_cooling_plans_edit_the_real_target_and_stay_fail_closed);
     return UNITY_END();
 }

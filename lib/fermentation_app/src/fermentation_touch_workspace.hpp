@@ -200,6 +200,39 @@ struct FermentationUiProgramSummaryView {
     bool valuesValid{false};
     // Fields are editable only for a startable program with a start candidate.
     bool editable{false};
+    // Manual-run field list (S9): the page reuses this shape. `sensorMode` is
+    // an explicit choice there (no stored preference), the technical limits
+    // are never listed, and `released` is the Application-reported state of
+    // the producer of those limits.
+    bool manual{false};
+    bool released{false};
+    RunSensorMode sensorMode{RunSensorMode::Air};
+    // First list row (rows above it hold other page content) and whether the
+    // list needs its pager buttons (more fields than visible rows).
+    std::uint8_t rowOffset{0U};
+    bool pagerButtons{true};
+};
+
+// Where a field list writes: the next-run start candidate or the real run
+// values entered for a manual run / cooling plan (S9).
+enum class FermentationUiManualDraftSlot : std::uint8_t {
+    StartCandidate,
+    ManualHolding,
+    ManualTimed,
+    StopCooling,
+    CompletionCooling,
+};
+
+// Real run values the user entered for a manual page; nothing is invented, so
+// every value is optional until entered. Technical limits are not part of it.
+struct FermentationUiManualDraft {
+    std::optional<double> targetTemperatureCelsius;
+    std::optional<std::uint32_t> durationMinutes;
+    std::optional<bool> preheat;
+    std::optional<RunSensorMode> sensorMode;
+    std::optional<CompletionMode> completionMode;
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
 };
 
 // Content of the shared numeric edit page.
@@ -366,6 +399,23 @@ class FermentationTouchWorkspace {
         const ProgramCatalog* catalog);
     void cycleStartField(FermentationUiStartField field,
                          const FermentationUiProgramSummaryView& summary);
+    void cycleManualField(FermentationUiManualDraftSlot slot,
+                          FermentationUiStartField field,
+                          const FermentationUiProgramSummaryView& summary);
+    [[nodiscard]] static std::optional<FermentationUiManualDraftSlot>
+    manualSlotForPage(FermentationUiPage page) noexcept;
+    [[nodiscard]] FermentationUiProgramSummaryView makeManualFieldView(
+        FermentationUiManualDraftSlot slot,
+        const FermentationUiSnapshot& snapshot) const;
+    void applyManualFieldView(FermentationUiWorkspaceView& view,
+                              FermentationUiManualDraftSlot slot,
+                              const FermentationUiSnapshot& snapshot) const;
+    [[nodiscard]] std::optional<FermentationUiManualRunPlanValues>
+    effectiveManualHolding() const;
+    [[nodiscard]] std::optional<ManualTimedRunValues> effectiveManualTimed()
+        const;
+    [[nodiscard]] std::optional<FermentationUiManualRunPlanValues>
+    effectiveCoolingPlan(FermentationUiManualDraftSlot slot) const;
     void commitValueEdit();
 
     [[nodiscard]] bool selectedMessageExists(
@@ -378,6 +428,11 @@ class FermentationTouchWorkspace {
     FermentationUiStartField valueEditField_{
         FermentationUiStartField::TargetTemperature};
     NumericEditModel valueEdit_;
+    // Where the committed value of the edit page goes: the start candidate or
+    // one of the manual drafts.
+    FermentationUiManualDraftSlot valueEditSlot_{
+        FermentationUiManualDraftSlot::StartCandidate};
+    std::array<FermentationUiManualDraft, 4U> manualDrafts_{};
     bool displayLanguageChangeFailed_{false};
     FermentationUiProgramListIntent programListIntent_{
         FermentationUiProgramListIntent::Start};

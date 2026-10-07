@@ -133,6 +133,13 @@ struct FermentationUiSnapshot {
     FermentationNetworkModeView network;
     FermentationWebAccessState webAccess{
         FermentationWebAccessState::NotApplicable};
+    // The technical run limits of a manual run (qualification band/duration,
+    // maximum target reach, ...) come from a commissioning-released
+    // product/service owner (O5, #34/#35). No such producer exists yet, so
+    // the Application reports false and the manual start and the cooling-plan
+    // starts stay fail-closed with a visible reason; the UI never invents or
+    // asks for these values.
+    bool manualRunParametersReleased{false};
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 

@@ -457,6 +457,141 @@ RepresentativeScreen makeRepresentativeScreen(
                 device_platform::ThemeToken::Canvas);
     }
 
+    // Rows of a field list (program summary start values or manual run
+    // values) with the pager buttons; shared by every page that has one.
+    const auto drawFieldRows = [&]() {
+        // Display projection only: the binding StartSummary stays the
+        // result of the command owner. Absent values show "--"; a value
+        // that differs from the stored program is marked with " *".
+        const auto& summary = *screen.workspace.programSummary;
+        if (!summary.name.empty()) {
+            addRawText(commands,
+                       {kSummaryNameLeft, 40U, kSummaryNameWidth,
+                        RepresentativeScreen::kTextLineHeight},
+                       summary.name, device_platform::ThemeToken::TextPrimary,
+                       device_platform::ThemeToken::Canvas);
+        }
+        const auto first = screen.workspace.pager.currentIndex;
+        const auto rowCount = std::min<std::size_t>(
+            summary.fieldCount > first ? summary.fieldCount - first : 0U,
+            kFermentationUiListVisibleRows - summary.rowOffset);
+        for (std::size_t index = 0U; index < rowCount; ++index) {
+            const auto field = summary.fields[first + index];
+            const auto top = static_cast<std::uint16_t>(
+                kContentRowTop +
+                (index + summary.rowOffset) * kContentRowHeight);
+            addFill(commands,
+                    {kContentRowLeft, top, kSummaryRowWidth,
+                     static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                    device_platform::ThemeToken::Surface);
+            const device_platform::DisplayRect rect{
+                12U,
+                static_cast<std::uint16_t>(
+                    top + (kContentRowHeight -
+                           RepresentativeScreen::kTextLineHeight) /
+                              2U),
+                236U, RepresentativeScreen::kTextLineHeight};
+            const bool changed =
+                summary.changed[static_cast<std::size_t>(field)];
+            const auto token =
+                changed ? device_platform::ThemeToken::PrimaryAction
+                        : (summary.editable
+                               ? device_platform::ThemeToken::TextPrimary
+                               : device_platform::ThemeToken::TextSecondary);
+            const auto surface = device_platform::ThemeToken::Surface;
+            const char* mark = changed ? " *" : "";
+            switch (field) {
+                case FermentationUiStartField::TargetTemperature:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-target",
+                        celsiusText(summary.targetTemperatureCelsius) + mark,
+                        rect, token, surface);
+                    break;
+                case FermentationUiStartField::Duration:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-duration",
+                        minutesText(summary.durationMinutes) + mark, rect,
+                        token, surface);
+                    break;
+                case FermentationUiStartField::CoolingTarget:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-cooling",
+                        celsiusText(summary.coolingTargetCelsius) + mark, rect,
+                        token, surface);
+                    break;
+                case FermentationUiStartField::HoldDuration:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-hold",
+                        minutesText(summary.holdDurationMinutes) + mark, rect,
+                        token, surface);
+                    break;
+                case FermentationUiStartField::Preheat:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-preheat",
+                        resolve(textPacks, locale,
+                                fermentationTextKey(
+                                    summary.preheat ? "value-on" : "value-off"))
+                                .value +
+                            mark,
+                        rect, token, surface);
+                    break;
+                case FermentationUiStartField::SensorMode:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-sensor",
+                        resolve(textPacks, locale,
+                                summary.manual
+                                    ? runSensorModeTextKey(summary.sensorMode)
+                                : summary.sensorModeOverride.has_value()
+                                    ? runSensorModeTextKey(
+                                          *summary.sensorModeOverride)
+                                    : sensorPreferenceTextKey(
+                                          summary.sensorPreference))
+                                .value +
+                            mark,
+                        rect, token, surface);
+                    break;
+                case FermentationUiStartField::CompletionMode:
+                    addLabeledRawText(
+                        commands, textPacks, locale, "label-completion",
+                        resolve(textPacks, locale,
+                                completionModeTextKey(summary.completionMode))
+                                .value +
+                            mark,
+                        rect, token, surface);
+                    break;
+            }
+        }
+        // Pager buttons (ContentCell column 1, rows 0 and 1) when the list
+        // has more fields than visible rows.
+        for (std::uint16_t button = 0U;
+             button < (summary.pagerButtons ? 2U : 0U); ++button) {
+            const bool enabled = button == 0U
+                                     ? screen.workspace.pager.canMoveUp()
+                                     : screen.workspace.pager.canMoveDown();
+            const auto top = static_cast<std::uint16_t>(
+                kContentRowTop + button * kSummaryButtonHeight);
+            const auto fill =
+                enabled ? device_platform::ThemeToken::PrimaryAction
+                        : device_platform::ThemeToken::SecondaryAction;
+            addFill(commands,
+                    {kSummaryButtonLeft, top, kSummaryButtonWidth,
+                     static_cast<std::uint16_t>(kSummaryButtonHeight - 2U)},
+                    fill);
+            addText(commands, textPacks, locale,
+                    fermentationTextKey(button == 0U ? "up" : "down"),
+                    {static_cast<std::uint16_t>(kSummaryButtonLeft + 4U),
+                     static_cast<std::uint16_t>(
+                         top + (kSummaryButtonHeight -
+                                RepresentativeScreen::kTextLineHeight) /
+                                   2U),
+                     static_cast<std::uint16_t>(kSummaryButtonWidth - 8U),
+                     RepresentativeScreen::kTextLineHeight},
+                    enabled ? device_platform::ThemeToken::OnPrimaryAction
+                            : device_platform::ThemeToken::TextSecondary,
+                    fill);
+        }
+    };
+
     // The content area below the title/home-mode row is page-specific: the
     // #26 workspace already carries the page-specific payload (home status,
     // program list, confirmation target, blocked reason, unavailable
@@ -730,134 +865,9 @@ RepresentativeScreen makeRepresentativeScreen(
                             device_platform::ThemeToken::Canvas);
                 }
             }
-        } else if (screen.workspace.programSummary.has_value()) {
-            // Display projection only: the binding StartSummary stays the
-            // result of the command owner. Absent values show "--"; a value
-            // that differs from the stored program is marked with " *".
-            const auto& summary = *screen.workspace.programSummary;
-            addRawText(commands,
-                       {kSummaryNameLeft, 40U, kSummaryNameWidth,
-                        RepresentativeScreen::kTextLineHeight},
-                       summary.name, device_platform::ThemeToken::TextPrimary,
-                       device_platform::ThemeToken::Canvas);
-            const auto first = screen.workspace.pager.currentIndex;
-            const auto rowCount = std::min<std::size_t>(
-                summary.fieldCount > first ? summary.fieldCount - first : 0U,
-                kFermentationUiListVisibleRows);
-            for (std::size_t index = 0U; index < rowCount; ++index) {
-                const auto field = summary.fields[first + index];
-                const auto top = static_cast<std::uint16_t>(
-                    kContentRowTop + index * kContentRowHeight);
-                addFill(commands,
-                        {kContentRowLeft, top, kSummaryRowWidth,
-                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
-                        device_platform::ThemeToken::Surface);
-                const device_platform::DisplayRect rect{
-                    12U,
-                    static_cast<std::uint16_t>(
-                        top + (kContentRowHeight -
-                               RepresentativeScreen::kTextLineHeight) /
-                                  2U),
-                    236U, RepresentativeScreen::kTextLineHeight};
-                const bool changed =
-                    summary.changed[static_cast<std::size_t>(field)];
-                const auto token =
-                    changed
-                        ? device_platform::ThemeToken::PrimaryAction
-                        : (summary.editable
-                               ? device_platform::ThemeToken::TextPrimary
-                               : device_platform::ThemeToken::TextSecondary);
-                const auto surface = device_platform::ThemeToken::Surface;
-                const char* mark = changed ? " *" : "";
-                switch (field) {
-                    case FermentationUiStartField::TargetTemperature:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-target",
-                            celsiusText(summary.targetTemperatureCelsius) +
-                                mark,
-                            rect, token, surface);
-                        break;
-                    case FermentationUiStartField::Duration:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-duration",
-                            minutesText(summary.durationMinutes) + mark, rect,
-                            token, surface);
-                        break;
-                    case FermentationUiStartField::CoolingTarget:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-cooling",
-                            celsiusText(summary.coolingTargetCelsius) + mark,
-                            rect, token, surface);
-                        break;
-                    case FermentationUiStartField::HoldDuration:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-hold",
-                            minutesText(summary.holdDurationMinutes) + mark,
-                            rect, token, surface);
-                        break;
-                    case FermentationUiStartField::Preheat:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-preheat",
-                            resolve(textPacks, locale,
-                                    fermentationTextKey(summary.preheat
-                                                            ? "value-on"
-                                                            : "value-off"))
-                                    .value +
-                                mark,
-                            rect, token, surface);
-                        break;
-                    case FermentationUiStartField::SensorMode:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-sensor",
-                            resolve(textPacks, locale,
-                                    summary.sensorModeOverride.has_value()
-                                        ? runSensorModeTextKey(
-                                              *summary.sensorModeOverride)
-                                        : sensorPreferenceTextKey(
-                                              summary.sensorPreference))
-                                    .value +
-                                mark,
-                            rect, token, surface);
-                        break;
-                    case FermentationUiStartField::CompletionMode:
-                        addLabeledRawText(
-                            commands, textPacks, locale, "label-completion",
-                            resolve(
-                                textPacks, locale,
-                                completionModeTextKey(summary.completionMode))
-                                    .value +
-                                mark,
-                            rect, token, surface);
-                        break;
-                }
-            }
-            // Pager buttons (ContentCell column 1, rows 0 and 1).
-            for (std::uint16_t button = 0U; button < 2U; ++button) {
-                const bool enabled = button == 0U
-                                         ? screen.workspace.pager.canMoveUp()
-                                         : screen.workspace.pager.canMoveDown();
-                const auto top = static_cast<std::uint16_t>(
-                    kContentRowTop + button * kSummaryButtonHeight);
-                const auto fill =
-                    enabled ? device_platform::ThemeToken::PrimaryAction
-                            : device_platform::ThemeToken::SecondaryAction;
-                addFill(commands,
-                        {kSummaryButtonLeft, top, kSummaryButtonWidth,
-                         static_cast<std::uint16_t>(kSummaryButtonHeight - 2U)},
-                        fill);
-                addText(commands, textPacks, locale,
-                        fermentationTextKey(button == 0U ? "up" : "down"),
-                        {static_cast<std::uint16_t>(kSummaryButtonLeft + 4U),
-                         static_cast<std::uint16_t>(
-                             top + (kSummaryButtonHeight -
-                                    RepresentativeScreen::kTextLineHeight) /
-                                       2U),
-                         static_cast<std::uint16_t>(kSummaryButtonWidth - 8U),
-                         RepresentativeScreen::kTextLineHeight},
-                        enabled ? device_platform::ThemeToken::OnPrimaryAction
-                                : device_platform::ThemeToken::TextSecondary,
-                        fill);
-            }
+        } else if (screen.workspace.page != FermentationUiPage::Completion &&
+                   screen.workspace.programSummary.has_value()) {
+            drawFieldRows();
         } else if (screen.workspace.valueEdit.has_value()) {
             // Shared numeric edit page: the candidate text and the 4 x 3
             // keypad (`1 2 3 / 4 5 6 / 7 8 9 / . 0 +/-`); the actions
@@ -935,6 +945,8 @@ RepresentativeScreen makeRepresentativeScreen(
                             : std::nullopt),
                     line(2U), device_platform::ThemeToken::TextPrimary);
             }
+            // The completion page also lists its cooling-plan field.
+            if (screen.workspace.programSummary.has_value()) drawFieldRows();
         } else if (screen.workspace.page == FermentationUiPage::Technical) {
             // Window over snapshot.temperatures: row r shows temperature
             // currentIndex + r (same geometry as the other lists, no touch
@@ -1135,8 +1147,8 @@ RepresentativeScreen makeRepresentativeScreen(
                 static_cast<std::uint16_t>(
                     kContentRowTop + pressedTarget->row * kContentRowHeight),
                 kContentRowWidth, kContentRowHeight};
-        } else if (screen.workspace.page ==
-                   FermentationUiPage::ProgramSummary) {
+        } else if (screen.workspace.page != FermentationUiPage::ValueEdit &&
+                   screen.workspace.programSummary.has_value()) {
             if (pressedTarget->column == 0U &&
                 pressedTarget->row < kFermentationUiListVisibleRows) {
                 pressedRect = device_platform::DisplayRect{
@@ -1261,7 +1273,7 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         return device_platform::DeviceUiTarget{
             device_platform::DeviceUiTargetKind::HeaderClock, 0U};
     }
-    if (screen.workspace.page == FermentationUiPage::ProgramSummary &&
+    if (screen.workspace.page != FermentationUiPage::ValueEdit &&
         screen.workspace.programSummary.has_value() && x >= kContentRowLeft &&
         y >= kContentRowTop &&
         y < kContentRowTop +
@@ -1270,15 +1282,17 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         if (x < kContentRowLeft + kSummaryRowWidth) {
             const auto row = static_cast<std::uint8_t>((y - kContentRowTop) /
                                                        kContentRowHeight);
-            if (screen.workspace.pager.currentIndex + row <
-                summary.fieldCount) {
+            if (row >= summary.rowOffset &&
+                screen.workspace.pager.currentIndex +
+                        static_cast<std::size_t>(row - summary.rowOffset) <
+                    summary.fieldCount) {
                 return device_platform::DeviceUiTarget{
                     device_platform::DeviceUiTargetKind::ContentCell, 0U, row,
                     0U};
             }
             return std::nullopt;
         }
-        if (x >= kSummaryButtonLeft &&
+        if (summary.pagerButtons && x >= kSummaryButtonLeft &&
             x < kSummaryButtonLeft + kSummaryButtonWidth) {
             return device_platform::DeviceUiTarget{
                 device_platform::DeviceUiTargetKind::ContentCell, 0U,
