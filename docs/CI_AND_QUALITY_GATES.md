@@ -25,6 +25,11 @@ Provisionierung der Werkzeuge bleiben Umgebungsaufgabe; eine Abweichung wird
 vom Runner als `BLOCKED` oder `FAILED` behandelt und kann keinen lokalen
 Pre-Ready-PASS erzeugen.
 
+Der lokale Lauf wird ueber den kleinen Wrapper
+`scripts/run_pre_ready_and_publish.sh` ausgefuehrt, der den Runner unveraendert
+aufruft und das Ergebnis als Commit Status publiziert (Abschnitt
+„Pre-Ready-Status und Merge-Gate“). Der Wrapper enthaelt keine Testliste.
+
 Der Runner enthaelt ausschliesslich portable Engineering-Gates, die lokal und
 in GitHub-CI denselben Checkout unabhaengig vom GitHub-Artefakttransport pruefen.
 Der portable Repository-Secret-Check ohne `--scan-path` gehoert dazu.
@@ -95,9 +100,12 @@ Nur wenn:
 - der zu pruefende `HEAD` final ist;
 - der Owner den Lauf ausdruecklich anordnet.
 
-Der autorisierte Lauf wird danach auf demselben finalen `HEAD` in zwei Phasen
-ausgefuehrt. Der Runner ist die einzige Quelle fuer die gemeinsamen portablen
-Gatebefehle und die clang-tidy-Dateiliste:
+Der autorisierte Lauf wird danach auf demselben finalen, gepushten `HEAD` in
+zwei Phasen ausgefuehrt, normalerweise ueber
+`bash scripts/run_pre_ready_and_publish.sh` (siehe „Pre-Ready-Status und
+Merge-Gate“). Der Runner ist die einzige Quelle fuer die gemeinsamen portablen
+Gatebefehle und die clang-tidy-Dateiliste; die folgenden Schritte zeigen die
+beiden Phasen, die der Wrapper aufruft:
 
 ```bash
 export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
@@ -129,25 +137,72 @@ erfolgreich sind, darf
 `PRE_READY_LOCAL_GATES=PASS` dokumentiert werden. Ein nicht ausgeführter
 Teil bleibt `NOT_RUN`.
 
+### Pre-Ready-Status und Merge-Gate
+
+`scripts/run_pre_ready_and_publish.sh` publiziert genau einen Commit-Status-
+Context `pre-ready/local` auf den getesteten PR-HEAD (`pending`, dann `success`
+oder `failure`; GitHub kennt kein `blocked`, die Beschreibung nennt
+`FAILED`/`BLOCKED`). Es gibt keine separaten `host`-/`esp`-Contexts.
+
+Semantik: `success` bedeutet „lokales Pre-Ready-/Merge-Gate erfuellt“, nicht
+zwingend „host+esp ausgefuehrt“. Die Klasse wird automatisch aus dem Diff gegen
+das aktuelle `origin/main` ermittelt (kein Flag):
+
+- Diff mit mindestens einer Nicht-Markdown-Datei (auch Mischdiff, Umbenennung,
+  Loeschung oder leerer Diff): voller Lauf `host` und `esp`; `success`
+  bedeutet `host+esp PASS`, lokal `PRE_READY_LOCAL_GATES=PASS`;
+- rein Markdown-only Diff (jeder Pfad `*.md`): der Runner wird nicht
+  ausgefuehrt; Beschreibung `MARKDOWN_ONLY_NOT_REQUIRED`, lokal
+  `PRE_READY_LOCAL_GATES=NOT_REQUIRED_MARKDOWN_ONLY` – nie `PASS`.
+
+Der Wrapper publiziert nur, wenn Arbeitsbaum sauber, normaler Branch mit
+Upstream `origin/<branch>`, `HEAD == origin/<branch>`, `origin/main` Vorfahre
+von `HEAD` und das `gh`-Repository gleich `origin` ist, und prueft dies vor
+`success` erneut (inklusive unveraendertem `origin/main` und unveraenderter
+Klassifikation). Wird `main` waehrend des Laufs weitergeschrieben, entsteht
+kein `success`. Ein Status gilt nur fuer genau seinen SHA; jeder neue Push
+benoetigt einen neuen Lauf. Der Status ist keine kryptografische Attestierung,
+sondern Ablaufdisziplin im Owner-gefuehrten Einzelrepo.
+
+Branch-Protection-Sollzustand fuer `main`: Required Status Check
+`pre-ready/local` und „Require branches to be up to date before merging“
+(strict); die schwere GitHub-CI ist **kein** Required Check. Der Sollzustand
+gilt als aktiv erst nach der Owner-Umstellung und dem Nachweis
+`REQUIRED_STATUS_HEAD_MERGE_COMMIT_INTEROP=PASS` (Stand siehe
+`docs/ROADMAP.md`), da bei Heavy-CI-PRs nicht vorausgesetzt werden darf, dass
+der Head-Status gegenueber Checks auf dem Test-Merge-Commit massgebend ist.
+
 ### GitHub-CI
 
-`.github/workflows/build.yml` reagiert auf:
+Die schwere Clean-Room-/Artefakt-CI ist nicht mehr das normale zweite
+Engineering-Gate. `.github/workflows/build.yml` reagiert auf:
 
+- `workflow_dispatch` (manueller Full-CI-Lauf);
 - `pull_request.opened`;
 - `pull_request.ready_for_review`;
 - `pull_request.synchronize`;
-- `pull_request.reopened`.
+- `pull_request.reopened`
+
+jeweils bei `pull_request` nur, wenn der Diff eine Datei der positiven Pfadliste
+im Workflow trifft (Gate-/CI-/Toolchain-/Buildsystem-Vertrag und direkte
+Produktions-Buildinputs). Die Liste steht ausschliesslich im Workflow; der
+Selbsttest `scripts/selftest_quality_gates.py` leitet die Pflichtpfade aus dem
+Runner, den Profilen und `sdkconfig.defaults` ab und prueft sie. Normale
+Feature-PRs loesen sie nicht aus. Wurde sie fuer einen PR ausgeloest oder ordnet
+der Owner sie an, ist ihr PASS Pflicht.
 
 Der Firmwarejob laeuft nur, wenn der Pull Request kein Draft ist. Draft-Pushes
 koennen einen sofort uebersprungenen Workfloweintrag erzeugen, fuehren aber
 keine Builds oder Tests aus.
 
-Der Ownerwechsel auf `Ready for review` startet die vollstaendige CI fuer den
-reviewten Head. Jeder spaetere semantische Push auf einen Nicht-Draft-PR startet
-sie erneut und verwirft den vorherigen Firmware-Pruefnachweis.
+Trifft der PR die Pfadliste, startet der Ownerwechsel auf `Ready for review` die
+vollstaendige CI fuer den reviewten Head; jeder spaetere Push auf einen
+Nicht-Draft-PR, der die Pfadliste trifft, startet sie erneut und verwirft den
+vorherigen Firmware-Pruefnachweis. Der `pre-ready/local`-Status eines frueheren
+SHA ersetzt dies nicht und gibt einen spaeteren Push nie frei.
 
-Markdown-only- und Kommentaraenderungen sind durch `paths-ignore` von der
-Firmware-CI ausgenommen. Fuer den Reviewnachweis gilt bei semantischen
+Markdown-only- und Kommentaraenderungen treffen die positive Pfadliste nicht und
+loesen die Firmware-CI daher nicht aus. Fuer den Reviewnachweis gilt bei semantischen
 Aenderungen die Materialitaetsregel: Eine lokal begrenzte Korrektur wird durch
 Fix Verification und den erforderlichen Regression Check verifiziert; eine
 materielle Aenderung oder ein breiter neuer Diff erfordert einen neuen Full
@@ -332,7 +387,8 @@ Fehlgeschlagene Builds sichern den verfuegbaren Buildlog.
 
 ## CI-Pipeline
 
-Der Firmwarejob fuehrt in dieser Reihenfolge aus:
+Der Firmwarejob (schwerer Clean-Room-Pfad; Trigger siehe „GitHub-CI“) fuehrt in
+dieser Reihenfolge aus:
 
 1. Checkout und Python;
 2. PlatformIO installieren;
@@ -371,12 +427,18 @@ Die Statusfelder werden getrennt gefuehrt:
 
 - `INDEPENDENT_REVIEW=PASS` und `OPEN_BLOCKERS=0` bezeichnen den abgeschlossenen
   fachlichen Review;
-- `PRE_READY_LOCAL_GATES=PASS` bezeichnen den autorisierten vollständigen
-  lokalen Lauf auf dem finalen HEAD;
-- `GITHUB_CI=PASS` bezeichnet den CI-Anteil des Merge-Gates.
+- `PRE_READY_LOCAL_GATES=PASS` bezeichnet den autorisierten vollständigen
+  lokalen Lauf (host+esp) auf dem finalen HEAD;
+  `NOT_REQUIRED_MARKDOWN_ONLY` bezeichnet die automatisch klassifizierte rein
+  Markdown-only Klasse und ist nie `PASS`;
+- `pre-ready/local=success` auf exakt dem finalen HEAD ist der publizierte
+  Nachweis beider Klassen und der Required Status Check;
+- `GITHUB_CI=PASS` bezeichnet den Ergebnisstatus der schweren CI; er ist nur
+  Pflicht, wenn der Workflow fuer den PR ausgeloest wurde oder der Owner ihn
+  anordnet.
 
-`Ready for review` darf erst nach `PRE_READY_LOCAL_GATES=PASS` durch den Owner
-gesetzt werden. `INDEPENDENT_REVIEW=PASS` oder `OPEN_BLOCKERS=0` allein sind
+`Ready for review` darf erst nach erfuelltem lokalem Pre-Ready-Gate und
+`pre-ready/local=success` auf dem finalen HEAD durch den Owner gesetzt werden. `INDEPENDENT_REVIEW=PASS` oder `OPEN_BLOCKERS=0` allein sind
 dafür nicht ausreichend.
 
 `SKIPPED`, `NOT_RUN` oder eine fehlende Angabe duerfen nicht als `PASS`
