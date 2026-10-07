@@ -547,11 +547,9 @@ void test_sim_26_shell_locale_and_service_boundaries() {
                                             "factory-reset-required"};
     for (const auto& pack : packs) {
         for (const auto* value : keys) {
-            const auto found =
-                std::find_if(pack.translations.begin(), pack.translations.end(),
-                             [value](const auto& entry) {
-                                 return entry.key.value == value;
-                             });
+            const auto found = std::find_if(
+                pack.translations.begin(), pack.translations.end(),
+                [value](const auto& entry) { return entry.key == value; });
             TEST_ASSERT_TRUE(found != pack.translations.end());
         }
     }
@@ -2417,6 +2415,35 @@ void test_settings_service_and_device_name_rows_state_when_disabled() {
     TEST_ASSERT_TRUE(running.workspace.page() == FermentationUiPage::Settings);
 }
 
+// The firmware texts are immutable static tables: every locale holds the same
+// keys, none is empty, and the views point at static (not owned) storage.
+void test_fermentation_text_packs_are_complete_static_tables() {
+    const auto packs = makeFermentationUiTextPacks();
+    TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
+    const auto& reference = packs.front().translations;
+    TEST_ASSERT_EQUAL_UINT32(183U, reference.size());
+    for (const auto& pack : packs) {
+        TEST_ASSERT_EQUAL_UINT32(reference.size(), pack.translations.size());
+        for (const auto& translation : pack.translations) {
+            TEST_ASSERT_FALSE(translation.key.empty());
+            TEST_ASSERT_FALSE(translation.value.empty());
+            const auto match =
+                std::find_if(reference.begin(), reference.end(),
+                             [&translation](const auto& other) {
+                                 return other.key == translation.key;
+                             });
+            TEST_ASSERT_TRUE(match != reference.end());
+        }
+    }
+    // The views stay valid after the pack vector is copied and destroyed.
+    std::string probe;
+    {
+        const auto copy = packs;
+        probe = std::string{copy.back().translations.begin()->value};
+    }
+    TEST_ASSERT_FALSE(probe.empty());
+}
+
 void test_device_name_is_a_read_only_copy_that_invalidates_the_render_key() {
     SettingsFixture fixture;
     fixture.workspace.setPage(FermentationUiPage::Settings);
@@ -3100,6 +3127,7 @@ int main(int, char**) {
     RUN_TEST(test_settings_service_and_device_name_rows_state_when_disabled);
     RUN_TEST(
         test_device_name_is_a_read_only_copy_that_invalidates_the_render_key);
+    RUN_TEST(test_fermentation_text_packs_are_complete_static_tables);
     RUN_TEST(test_device_name_editor_commits_through_the_owner_command);
     RUN_TEST(test_keyboard_follows_the_owning_text_rules_and_byte_limit);
     RUN_TEST(test_keyboard_backspace_keeps_a_multibyte_name_valid_utf8);

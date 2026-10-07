@@ -77,15 +77,18 @@ void test_build_catalog_and_clock_contract_remain_renderer_independent() {
 }
 
 void test_text_resolver_uses_active_then_english_then_visible_key() {
-    const std::vector<TextPackManifest> packs{
-        {TextNamespace{"platform"},
-         LocaleId{"de"},
-         {"latin", 48U, true},
-         {{key("save"), "Speichern"}}},
-        {TextNamespace{"platform"},
-         LocaleId{"en"},
-         {"latin", 48U, true},
-         {{key("save"), "Save"}, {key("cancel"), "Cancel"}}}};
+    static constexpr std::array<TextTranslation, 1U> kGerman{
+        {{"save", "Speichern"}}};
+    static constexpr std::array<TextTranslation, 2U> kEnglish{
+        {{"save", "Save"}, {"cancel", "Cancel"}}};
+    const std::vector<TextPackManifest> packs{{TextNamespace{"platform"},
+                                               LocaleId{"de"},
+                                               {"latin", 48U, true},
+                                               kGerman},
+                                              {TextNamespace{"platform"},
+                                               LocaleId{"en"},
+                                               {"latin", 48U, true},
+                                               kEnglish}};
 
     const auto german =
         device_platform::resolveText(packs, LocaleId{"de"}, key("save"));
@@ -103,6 +106,43 @@ void test_text_resolver_uses_active_then_english_then_visible_key() {
     TEST_ASSERT_TRUE(visibleKey.source ==
                      TextLookupSource::VisibleTechnicalKey);
     TEST_ASSERT_EQUAL_STRING("platform.missing", visibleKey.value.c_str());
+}
+
+// Firmware texts are non-owning views: they may only be built from string
+// literals (static storage) and a table never from a temporary.
+static_assert(
+    !std::is_constructible_v<TextTranslation, std::string, std::string>);
+static_assert(
+    !std::is_constructible_v<TextTranslation, const char*, const char*>);
+static_assert(std::is_constructible_v<TextTranslation, const char (&)[3],
+                                      const char (&)[4]>);
+static_assert(!std::is_constructible_v<device_platform::TextTranslationTable,
+                                       std::array<TextTranslation, 1U>>);
+static_assert(std::is_constructible_v<device_platform::TextTranslationTable,
+                                      const std::array<TextTranslation, 1U>&>);
+
+void test_platform_text_packs_resolve_in_all_locales_from_static_tables() {
+    const auto packs = device_platform::makePlatformTextPacks();
+    TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
+    for (const auto* locale : {"de", "en", "es"}) {
+        const auto result = device_platform::resolveText(
+            packs, LocaleId{locale},
+            TextKey{TextNamespace{"platform"}, "back"});
+        TEST_ASSERT_TRUE(result.source == TextLookupSource::ActiveLocale);
+    }
+    TEST_ASSERT_EQUAL_STRING(
+        "Zurueck",
+        device_platform::resolveText(packs, LocaleId{"de"},
+                                     TextKey{TextNamespace{"platform"}, "back"})
+            .value.c_str());
+    // The views stay valid after the packs vector is copied and composed.
+    const auto composed = device_platform::composeTextPacks(packs, packs);
+    TEST_ASSERT_EQUAL_UINT32(6U, composed.size());
+    TEST_ASSERT_EQUAL_STRING(
+        "Atras",
+        device_platform::resolveText(composed, LocaleId{"es"},
+                                     TextKey{TextNamespace{"platform"}, "back"})
+            .value.c_str());
 }
 
 void test_theme_falls_closed_to_complete_included_default() {
@@ -260,6 +300,8 @@ int main(int, char**) {
     RUN_TEST(
         test_content_cell_target_carries_indices_and_follows_the_interaction_gate);
     RUN_TEST(test_text_resolver_uses_active_then_english_then_visible_key);
+    RUN_TEST(
+        test_platform_text_packs_resolve_in_all_locales_from_static_tables);
     RUN_TEST(test_theme_falls_closed_to_complete_included_default);
     RUN_TEST(test_shell_has_exactly_four_slots_and_home_back_hierarchy);
     RUN_TEST(test_platform_sections_precede_isolated_application_sections);
