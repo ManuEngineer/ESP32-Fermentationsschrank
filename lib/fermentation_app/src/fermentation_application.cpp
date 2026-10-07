@@ -154,6 +154,14 @@ std::optional<ProgramDocument> findProgram(
     return std::nullopt;
 }
 
+// O5 / #172 S9: the technical run limits of a manual run or a cooling plan
+// (qualification band/duration, maximum target reach, ...) come only from a
+// commissioning-released product/service owner (#34/#35). No such owner exists
+// yet, so these requests stay fail-closed on every surface; values supplied by
+// a caller (UI, web) never stand in for the missing owner and #172 defines no
+// producer.
+constexpr bool kManualRunLimitsOwnerAvailable = false;
+
 // Requested start mode: an explicit next-run override wins; otherwise it
 // follows the stored SensorPreference. The effective mode, the allowed
 // fallback and the rejection stay with the #21 start matrix. An unknown
@@ -265,8 +273,63 @@ FermentationApplication::prepareStartProgram(
     return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
+// Requests that start a manual run or a cooling plan need the technical run
+// limits from a commissioning-released owner (O5, #34/#35). None exists, so
+// every surface gets the existing `Unavailable` before any run or command
+// identity is used; caller-supplied limits never stand in for the owner. The
+// `...Unguarded` bodies are private and only reachable by the test access
+// class, which exercises the downstream owner paths.
 FermentationApplicationRequestResult
 FermentationApplication::prepareStartManualHolding(
+    const FermentationUiCommandContext& context,
+    const FermentationUiStartManualHoldingIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (!kManualRunLimitsOwnerAvailable) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    return prepareStartManualHoldingUnguarded(context, intent);
+}
+
+FermentationApplicationRequestResult
+FermentationApplication::prepareStartManualTimed(
+    const FermentationUiCommandContext& context,
+    const ManualTimedRunValues& values) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (!kManualRunLimitsOwnerAvailable) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    return prepareStartManualTimedUnguarded(context, values);
+}
+
+FermentationApplicationRequestResult FermentationApplication::prepareStop(
+    const FermentationUiCommandContext& context,
+    const FermentationUiStopRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
+    // Stopping and turning off needs no manual-run limits; only the cooling
+    // start does (its plan is a manual run plan).
+    if (intent.option == StopOption::AbortAndCool &&
+        !kManualRunLimitsOwnerAvailable) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    return prepareStopUnguarded(context, intent);
+}
+
+FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
+    const FermentationUiCommandContext& context,
+    const FermentationUiCompleteRunIntent& intent) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (intent.startCooling && !kManualRunLimitsOwnerAvailable) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::Unavailable);
+    }
+    return prepareCompletionUnguarded(context, intent);
+}
+
+FermentationApplicationRequestResult
+FermentationApplication::prepareStartManualHoldingUnguarded(
     const FermentationUiCommandContext& context,
     const FermentationUiStartManualHoldingIntent& intent) {
     const auto guard = applicationCallSerializer_.enter();
@@ -296,7 +359,7 @@ FermentationApplication::prepareStartManualHolding(
 }
 
 FermentationApplicationRequestResult
-FermentationApplication::prepareStartManualTimed(
+FermentationApplication::prepareStartManualTimedUnguarded(
     const FermentationUiCommandContext& context,
     const ManualTimedRunValues& values) {
     const auto guard = applicationCallSerializer_.enter();
@@ -333,7 +396,8 @@ FermentationApplication::prepareStartManualTimed(
     return makePreparedRequest(std::move(request), evidence.plausibility);
 }
 
-FermentationApplicationRequestResult FermentationApplication::prepareStop(
+FermentationApplicationRequestResult
+FermentationApplication::prepareStopUnguarded(
     const FermentationUiCommandContext& context,
     const FermentationUiStopRunIntent& intent) {
     const auto guard = applicationCallSerializer_.enter();
@@ -373,7 +437,8 @@ FermentationApplicationRequestResult FermentationApplication::prepareStop(
     return makePreparedRequest(std::move(request));
 }
 
-FermentationApplicationRequestResult FermentationApplication::prepareCompletion(
+FermentationApplicationRequestResult
+FermentationApplication::prepareCompletionUnguarded(
     const FermentationUiCommandContext& context,
     const FermentationUiCompleteRunIntent& intent) {
     const auto guard = applicationCallSerializer_.enter();

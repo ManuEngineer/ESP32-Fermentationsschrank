@@ -1031,31 +1031,28 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::ManualHolding:
             view.title = key("manual-holding");
-            applyManualFieldView(
-                view, FermentationUiManualDraftSlot::ManualHolding, snapshot);
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::ManualHolding);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 2U, "confirm",
                     FermentationUiWorkspaceSlotAction::StartManualHolding,
-                    snapshot.manualRunParametersReleased &&
-                        effectiveManualHolding().has_value());
+                    false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
         case FermentationUiPage::ManualTimed:
             view.title = key("manual-timed");
-            applyManualFieldView(
-                view, FermentationUiManualDraftSlot::ManualTimed, snapshot);
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::ManualTimed);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 2U, "confirm",
-                    FermentationUiWorkspaceSlotAction::StartManualTimed,
-                    snapshot.manualRunParametersReleased &&
-                        effectiveManualTimed().has_value());
+                    FermentationUiWorkspaceSlotAction::StartManualTimed, false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
@@ -1072,18 +1069,14 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::StopDialog:
             view.title = key("stop");
-            applyManualFieldView(
-                view, FermentationUiManualDraftSlot::StopCooling, snapshot);
+            applyManualFieldView(view,
+                                 FermentationUiManualDraftSlot::StopCooling);
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "stop-turn-off",
                     FermentationUiWorkspaceSlotAction::StopTurnOff);
             setSlot(view, 2U, "stop-and-cool",
-                    FermentationUiWorkspaceSlotAction::StopAndCool,
-                    snapshot.manualRunParametersReleased &&
-                        effectiveCoolingPlan(
-                            FermentationUiManualDraftSlot::StopCooling)
-                            .has_value());
+                    FermentationUiWorkspaceSlotAction::StopAndCool, false);
             setSlot(view, 3U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             break;
@@ -1148,14 +1141,9 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "ok",
                     FermentationUiWorkspaceSlotAction::Complete);
             applyManualFieldView(
-                view, FermentationUiManualDraftSlot::CompletionCooling,
-                snapshot);
+                view, FermentationUiManualDraftSlot::CompletionCooling);
             setSlot(view, 3U, "cool-now",
-                    FermentationUiWorkspaceSlotAction::CompleteAndCool,
-                    snapshot.manualRunParametersReleased &&
-                        effectiveCoolingPlan(
-                            FermentationUiManualDraftSlot::CompletionCooling)
-                            .has_value());
+                    FermentationUiWorkspaceSlotAction::CompleteAndCool, false);
             break;
         case FermentationUiPage::Status:
             view.title = key("status");
@@ -1693,44 +1681,22 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             }
             break;
         case FermentationUiWorkspaceSlotAction::StartManualHolding:
-            // Fail-closed: no manual start without the released technical run
-            // limits (O5); the slot is disabled then, this is the second guard.
-            if (snapshot.manualRunParametersReleased) {
-                if (const auto values = effectiveManualHolding())
-                    result.action = FermentationUiEnvelopePayload{
-                        makeManualHoldingIntent(*values)};
-            }
-            break;
         case FermentationUiWorkspaceSlotAction::StartManualTimed:
-            if (snapshot.manualRunParametersReleased) {
-                if (const auto values = effectiveManualTimed())
-                    result.action = FermentationUiEnvelopePayload{
-                        makeManualTimedIntent(*values)};
-            }
+            // O5: the technical run limits of a manual run have no owner yet,
+            // so the local UI builds no manual start payload (the slot is
+            // disabled with a visible reason; the Application refuses it too).
             break;
         case FermentationUiWorkspaceSlotAction::StopTurnOff:
             result.action = FermentationUiEnvelopePayload{
                 makeStopIntent(StopOption::AbortAndTurnOff)};
             break;
         case FermentationUiWorkspaceSlotAction::StopAndCool:
-            if (snapshot.manualRunParametersReleased) {
-                if (const auto plan = effectiveCoolingPlan(
-                        FermentationUiManualDraftSlot::StopCooling))
-                    result.action = FermentationUiEnvelopePayload{
-                        makeStopIntent(StopOption::AbortAndCool, plan)};
-            }
+        case FermentationUiWorkspaceSlotAction::CompleteAndCool:
+            // O5: a cooling plan is a manual run plan; same fail-closed rule.
             break;
         case FermentationUiWorkspaceSlotAction::Complete:
             result.action =
                 FermentationUiEnvelopePayload{makeCompletionIntent(false)};
-            break;
-        case FermentationUiWorkspaceSlotAction::CompleteAndCool:
-            if (snapshot.manualRunParametersReleased) {
-                if (const auto plan = effectiveCoolingPlan(
-                        FermentationUiManualDraftSlot::CompletionCooling))
-                    result.action = FermentationUiEnvelopePayload{
-                        makeCompletionIntent(true, plan)};
-            }
             break;
         case FermentationUiWorkspaceSlotAction::ResumeFallback:
             result.resumeFallback =
@@ -2175,13 +2141,11 @@ FermentationTouchWorkspace::manualSlotForPage(
 // for a missing number.
 FermentationUiProgramSummaryView
 FermentationTouchWorkspace::makeManualFieldView(
-    FermentationUiManualDraftSlot slot,
-    const FermentationUiSnapshot& snapshot) const {
+    FermentationUiManualDraftSlot slot) const {
     const auto& draft = manualDrafts_[static_cast<std::size_t>(slot)];
     FermentationUiProgramSummaryView view;
     view.manual = true;
     view.editable = true;
-    view.released = snapshot.manualRunParametersReleased;
     using Field = FermentationUiStartField;
     const auto add = [&view](Field field) {
         view.fields[view.fieldCount++] = field;
@@ -2267,84 +2231,20 @@ FermentationTouchWorkspace::makeManualFieldView(
 // visible reason while the technical run limits have no released producer
 // (fail-closed, O5); a page keeps an own reason if it already has one.
 void FermentationTouchWorkspace::applyManualFieldView(
-    FermentationUiWorkspaceView& view, FermentationUiManualDraftSlot slot,
-    const FermentationUiSnapshot& snapshot) const {
-    view.programSummary = makeManualFieldView(slot, snapshot);
+    FermentationUiWorkspaceView& view,
+    FermentationUiManualDraftSlot slot) const {
+    view.programSummary = makeManualFieldView(slot);
     const auto& list = *view.programSummary;
     view.pager.itemCount = list.fieldCount;
     view.pager.currentIndex =
         list.fieldCount == 0U
             ? 0U
             : std::min(pager_.currentIndex, list.fieldCount - 1U);
-    if (!snapshot.manualRunParametersReleased &&
-        !view.blockedReason.has_value()) {
+    // O5: the technical run limits have no owner yet, so the start of a manual
+    // run / cooling plan stays disabled with a visible reason.
+    if (!view.blockedReason.has_value()) {
         view.blockedReason = key("manual-parameters-not-released");
     }
-}
-
-std::optional<FermentationUiManualRunPlanValues>
-FermentationTouchWorkspace::effectiveManualHolding() const {
-    if (!manualHoldingValues_.has_value()) return std::nullopt;
-    auto values = *manualHoldingValues_;
-    const auto& draft = manualDrafts_[static_cast<std::size_t>(
-        FermentationUiManualDraftSlot::ManualHolding)];
-    if (draft.targetTemperatureCelsius.has_value())
-        values.targetTemperatureCelsius = *draft.targetTemperatureCelsius;
-    if (draft.preheat.has_value()) values.preheatEnabled = *draft.preheat;
-    if (draft.sensorMode.has_value()) values.sensorMode = *draft.sensorMode;
-    return values;
-}
-
-std::optional<ManualTimedRunValues>
-FermentationTouchWorkspace::effectiveManualTimed() const {
-    if (!manualTimedValues_.has_value()) return std::nullopt;
-    auto values = *manualTimedValues_;
-    const auto& draft = manualDrafts_[static_cast<std::size_t>(
-        FermentationUiManualDraftSlot::ManualTimed)];
-    if (draft.targetTemperatureCelsius.has_value())
-        values.targetTemperatureCelsius = *draft.targetTemperatureCelsius;
-    if (draft.durationMinutes.has_value())
-        values.durationMinutes = *draft.durationMinutes;
-    if (draft.preheat.has_value()) values.preheatEnabled = *draft.preheat;
-    if (draft.sensorMode.has_value()) values.sensorMode = *draft.sensorMode;
-    if (draft.completionMode.has_value())
-        values.completionMode = *draft.completionMode;
-    if (draft.coolingTargetCelsius.has_value())
-        values.coolingTargetCelsius = *draft.coolingTargetCelsius;
-    if (draft.holdDurationMinutes.has_value())
-        values.holdDurationMinutes = *draft.holdDurationMinutes;
-    // Values the completion mode does not use are dropped; values it needs
-    // must have been entered, otherwise the run is not startable here.
-    if (values.completionMode == CompletionMode::FinishWithoutCooling) {
-        values.coolingTargetCelsius.reset();
-        values.holdDurationMinutes.reset();
-    } else if (values.completionMode !=
-               CompletionMode::CoolAndHoldForDuration) {
-        values.holdDurationMinutes.reset();
-    }
-    if (values.completionMode != CompletionMode::FinishWithoutCooling &&
-        !values.coolingTargetCelsius.has_value()) {
-        return std::nullopt;
-    }
-    if (values.completionMode == CompletionMode::CoolAndHoldForDuration &&
-        !values.holdDurationMinutes.has_value()) {
-        return std::nullopt;
-    }
-    return values;
-}
-
-std::optional<FermentationUiManualRunPlanValues>
-FermentationTouchWorkspace::effectiveCoolingPlan(
-    FermentationUiManualDraftSlot slot) const {
-    const auto& plan = slot == FermentationUiManualDraftSlot::StopCooling
-                           ? stopCoolingPlan_
-                           : completionCoolingPlan_;
-    if (!plan.has_value()) return std::nullopt;
-    auto values = *plan;
-    const auto& draft = manualDrafts_[static_cast<std::size_t>(slot)];
-    if (draft.targetTemperatureCelsius.has_value())
-        values.targetTemperatureCelsius = *draft.targetTemperatureCelsius;
-    return values;
 }
 
 void FermentationTouchWorkspace::setPage(FermentationUiPage page) {

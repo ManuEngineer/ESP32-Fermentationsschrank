@@ -1203,7 +1203,7 @@ void test_render_key_unchanged_workspace_remains_equal() {
                      keyFor(snapshot, workspace));
 }
 
-void test_render_key_changes_when_manual_holding_values_enable_confirm() {
+void test_render_key_changes_when_manual_holding_values_are_staged() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
     workspace.setPage(fermentation::FermentationUiPage::ManualHolding);
@@ -1216,17 +1216,11 @@ void test_render_key_changes_when_manual_holding_values_enable_confirm() {
 
     workspace.setManualHoldingValues(
         fermentation::FermentationUiManualRunPlanValues{});
-    // Staged values alone do not enable the start: the technical limits need
-    // a released producer (O5).
-    TEST_ASSERT_FALSE(
-        fermentation::main_ui::makeRepresentativeScreen(
-            snapshot, workspace, packs, device_platform::LocaleId{"en"})
-            .workspace.bottomSlots[2]
-            .enabled);
-    snapshot.manualRunParametersReleased = true;
+    // Staged values alone do not enable the start: the technical limits have
+    // no owner (O5). The render key still reflects the staged change.
     const auto afterValues = fermentation::main_ui::makeRepresentativeScreen(
         snapshot, workspace, packs, device_platform::LocaleId{"en"});
-    TEST_ASSERT_TRUE(afterValues.workspace.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(afterValues.workspace.bottomSlots[2].enabled);
 
     TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
 }
@@ -2102,7 +2096,7 @@ void test_every_displayed_s7_value_changes_the_refresh_revision() {
     fermentation::TemperatureView temperature;
     base.temperatures.push_back(temperature);
     const auto changes =
-        std::array<void (*)(fermentation::FermentationUiSnapshot&), 9U>{
+        std::array<void (*)(fermentation::FermentationUiSnapshot&), 8U>{
             [](fermentation::FermentationUiSnapshot& value) {
                 value.home.processState =
                     fermentation::ProcessState::Fermenting;
@@ -2130,9 +2124,6 @@ void test_every_displayed_s7_value_changes_the_refresh_revision() {
             [](fermentation::FermentationUiSnapshot& value) {
                 value.recovery.mode =
                     fermentation::RecoveryViewMode::CurrentRunRecovered;
-            },
-            [](fermentation::FermentationUiSnapshot& value) {
-                value.manualRunParametersReleased = true;
             },
         };
     for (const auto change : changes) {
@@ -2388,11 +2379,7 @@ void test_manual_pages_show_real_values_and_the_not_released_reason() {
     // The confirm slot (2) is drawn disabled.
     TEST_ASSERT_FALSE(screen.workspace.bottomSlots[2].enabled);
 
-    snapshot.manualRunParametersReleased = true;
-    screen = pageScreen(snapshot, workspace);
-    TEST_ASSERT_FALSE(hasText(screen, reason));
     for (const auto* locale : {"de", "es"}) {
-        snapshot.manualRunParametersReleased = false;
         const auto localizedScreen = pageScreen(snapshot, workspace, locale);
         TEST_ASSERT_TRUE(
             hasText(localizedScreen,
@@ -2481,7 +2468,7 @@ int main() {
     RUN_TEST(test_theme_is_sourced_from_canonical_r1_catalog);
     RUN_TEST(test_render_key_changes_on_network_status_and_clock);
     RUN_TEST(test_render_key_unchanged_workspace_remains_equal);
-    RUN_TEST(test_render_key_changes_when_manual_holding_values_enable_confirm);
+    RUN_TEST(test_render_key_changes_when_manual_holding_values_are_staged);
     RUN_TEST(test_render_key_changes_when_program_edit_candidate_enables_save);
     RUN_TEST(
         test_logo_command_is_native_size_and_does_not_overlap_header_boxes);

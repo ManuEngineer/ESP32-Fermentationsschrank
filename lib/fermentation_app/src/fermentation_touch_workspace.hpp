@@ -202,10 +202,8 @@ struct FermentationUiProgramSummaryView {
     bool editable{false};
     // Manual-run field list (S9): the page reuses this shape. `sensorMode` is
     // an explicit choice there (no stored preference), the technical limits
-    // are never listed, and `released` is the Application-reported state of
-    // the producer of those limits.
+    // are never listed.
     bool manual{false};
-    bool released{false};
     RunSensorMode sensorMode{RunSensorMode::Air};
     // First list row (rows above it hold other page content) and whether the
     // list needs its pager buttons (more fields than visible rows).
@@ -405,17 +403,9 @@ class FermentationTouchWorkspace {
     [[nodiscard]] static std::optional<FermentationUiManualDraftSlot>
     manualSlotForPage(FermentationUiPage page) noexcept;
     [[nodiscard]] FermentationUiProgramSummaryView makeManualFieldView(
-        FermentationUiManualDraftSlot slot,
-        const FermentationUiSnapshot& snapshot) const;
+        FermentationUiManualDraftSlot slot) const;
     void applyManualFieldView(FermentationUiWorkspaceView& view,
-                              FermentationUiManualDraftSlot slot,
-                              const FermentationUiSnapshot& snapshot) const;
-    [[nodiscard]] std::optional<FermentationUiManualRunPlanValues>
-    effectiveManualHolding() const;
-    [[nodiscard]] std::optional<ManualTimedRunValues> effectiveManualTimed()
-        const;
-    [[nodiscard]] std::optional<FermentationUiManualRunPlanValues>
-    effectiveCoolingPlan(FermentationUiManualDraftSlot slot) const;
+                              FermentationUiManualDraftSlot slot) const;
     void commitValueEdit();
 
     [[nodiscard]] bool selectedMessageExists(

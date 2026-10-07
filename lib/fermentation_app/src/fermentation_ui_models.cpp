@@ -102,7 +102,6 @@ bool equalFermentationUiSemanticSnapshot(
         left.network.selectionRequired != right.network.selectionRequired ||
         left.network.selectableModes != right.network.selectableModes ||
         left.webAccess != right.webAccess ||
-        left.manualRunParametersReleased != right.manualRunParametersReleased ||
         left.service.unavailableReason != right.service.unavailableReason) {
         return false;
     }

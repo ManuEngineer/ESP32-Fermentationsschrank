@@ -447,6 +447,21 @@ class FermentationApplication {
     [[nodiscard]] bool revalidatePreparedRequest(
         FermentationApplicationPreparedRequest& request);
     [[nodiscard]] WebAuthenticationState webAuthenticationStateUnlocked() const;
+    // Bodies of the manual-run / cooling-plan requests behind the O5 guard.
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareStartManualHoldingUnguarded(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStartManualHoldingIntent& intent);
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareStartManualTimedUnguarded(
+        const FermentationUiCommandContext& context,
+        const ManualTimedRunValues& values);
+    [[nodiscard]] FermentationApplicationRequestResult prepareStopUnguarded(
+        const FermentationUiCommandContext& context,
+        const FermentationUiStopRunIntent& intent);
+    [[nodiscard]] FermentationApplicationRequestResult
+    prepareCompletionUnguarded(const FermentationUiCommandContext& context,
+                               const FermentationUiCompleteRunIntent& intent);
     template <typename Request>
     [[nodiscard]] FermentationApplicationRequestResult makePreparedRequest(
         Request request,
