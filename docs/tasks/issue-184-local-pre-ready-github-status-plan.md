@@ -75,8 +75,9 @@ Alle Punkte am 2026-10-07 gegen Repository und GitHub geprueft.
   (Teilpruefungen via `--selftest` der Einzelskripte, in der `host`-Phase).
 - Lokale Voraussetzungen vorhanden: `gh` angemeldet (`ManuEngineer`),
   PyYAML installiert, `shellcheck` nicht installiert (nicht vorausgesetzt).
-- Der lokale Arbeitsbaum enthaelt eine unstaged Aenderung an
-  `.codex/config.toml`. Sie ist nicht Teil dieses PR und wird nie committet.
+- Der lokale Arbeitsbaum enthielt eine Aenderung an `.codex/config.toml`
+  (projektlokale Modellvorgaben entfernt). Auf Owner-Anweisung ist sie als
+  eigener Commit Teil dieses PR; sie hat keine Gate-/Produktwirkung.
 
 ## 3. Quellen
 
@@ -374,7 +375,7 @@ nach dem bisherigen Verfahren qualifiziert** (Abschnitt 7).
 | D1 | ESP-IDF-Umgebung im Wrapper (A: Subshell-`export.sh` fuer `esp`; B: Owner aktiviert vorab) | A |
 | D2 | Produktions-Partitionstabelle (`partitions/issue_90_state_store.csv`) in den Pfadfilter? | nein |
 | D3 | Folge der Required-Check-Umstellung: Mit `pre-ready/local` als Required Check, strict und `enforce_admins=true` benoetigt **jeder** PR vor dem Merge einen vollen host+esp-Lauf – auch Markdown-only-PRs, reine ROADMAP-Syncs und reine Plan-PRs (bisher bewusst von der Firmware-CI ausgenommen). Der Plan erfindet keine Abkuerzung: jede Variante, die `success` ohne host+esp setzt, braeche die Statusbedeutung „host+esp PASS“. Owner entscheidet, ob er diese Last akzeptiert oder fuer solche PRs eine eigene, separat zu planende Regel (z. B. anderer Kontext oder Admin-Bypass) wuenscht. | Owner-Entscheidung, nicht Teil dieses PR |
-| R1 | `.codex/config.toml` ist lokal veraendert; der Wrapper verlangt sauberen Baum. Die Aenderung muss vor dem Pre-Ready-Lauf vom Owner committet/verworfen/gestasht werden. | Owner-Handaktion, nicht Teil des PR |
+| R1 | `.codex/config.toml` ist auf Owner-Anweisung als eigener Commit im PR; der Arbeitsbaum ist damit fuer den Wrapper sauber. | erledigt |
 | R2 | Status ist eine unsignierte Behauptung (siehe Abschnitt 1) | akzeptiert laut Auftrag |
 | R3 | Branch-Upstream eines frisch angelegten Branches zeigt auf `origin/main`; der Wrapper verlangt `origin/<eigener Branch>` und bricht sonst ab | Push mit `-u origin <branch>` |
 | R4 | `main` laeuft waehrend eines langen Laufs weiter -> bewusst kein SUCCESS; Nachziehen von `main` erzeugt neuen SHA und erneuten Lauf | gewollt (strict) |
