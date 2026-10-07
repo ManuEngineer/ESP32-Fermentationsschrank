@@ -113,11 +113,18 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         return result;
     }
     if (press.programEdit.has_value()) {
-        // Program editing (Reset/Uninstall/Delete/SaveProgram) has no
-        // application-side catalog-mutation entry point yet (Issue #172, S6).
-        WorkspacePressDispatchResult unavailable;
-        unavailable.outcome = WorkspacePressDispatchOutcome::UnavailableNoOwner;
-        return unavailable;
+        // The UI carries only the typed request; usage evidence and the
+        // owning mutation stay in the application (Issue #172, S6).  The
+        // expected catalog revision is the one the user saw.
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::applyProgramEdit(
+            application, *press.programEdit,
+            snapshot.revisions.expectedProgramCatalogRevision);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
     }
     return {};
 }

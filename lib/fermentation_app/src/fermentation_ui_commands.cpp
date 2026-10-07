@@ -377,6 +377,22 @@ FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
                                    FermentationUiCommandPhase::OwningOutcome);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::applyProgramEdit(
+    FermentationApplication& application,
+    const FermentationUiProgramEditRequest& request,
+    const std::optional<ProgramCatalogRevision>&
+        expectedProgramCatalogRevision) {
+    // Same coarse projection as the language change: the owning preview
+    // status, and only if the preview was accepted, the owning commit status.
+    const auto outcome =
+        application.applyProgramEdit(request, expectedProgramCatalogRevision);
+    if (outcome.preview != ConfigurationPreviewStatus::Success) {
+        return fromConfigurationPreview(outcome.preview);
+    }
+    return fromConfigurationCommit(outcome.commit,
+                                   FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult
 FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,

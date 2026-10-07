@@ -286,6 +286,17 @@ class FermentationApplication {
     [[nodiscard]] ApplicationConfigurationChangeResult applyDisplayLanguage(
         const std::string& languageId,
         const std::optional<UserConfigurationRevision>& expectedRevision);
+    // Owning ProgramCatalog mutation for the local program management (Issue
+    // #172, S6): usage evidence comes from the runtime run state, never from
+    // the UI; preview, validation against the current user-configuration
+    // revision and confirmation run through the ConfigurationService.  A stale
+    // `expectedProgramCatalogRevision` is rejected (StateChanged), a program
+    // in use is rejected before a preview exists, and every outcome other
+    // than Activated/NoChange releases the preview slot.
+    [[nodiscard]] ApplicationConfigurationChangeResult applyProgramEdit(
+        const FermentationUiProgramEditRequest& request,
+        const std::optional<ProgramCatalogRevision>&
+            expectedProgramCatalogRevision);
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
     // Renderer-independent local setup data for the currently active
     // SoftAP. The caller owns display/QR rendering; HTTP routes never expose

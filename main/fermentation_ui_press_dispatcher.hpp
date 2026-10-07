@@ -21,11 +21,6 @@ enum class WorkspacePressDispatchOutcome : std::uint8_t {
     // The typed payload reached the owning application path. The actual
     // typed result is carried in commandResult.
     OwningOutcome,
-    // A typed payload exists (transitionAction or programEdit) but has no
-    // existing FermentationApplication entry point today. This is reported
-    // explicitly, not silently dropped - see the session handover for the
-    // documented missing owner of each case.
-    UnavailableNoOwner,
 };
 
 struct WorkspacePressDispatchResult {

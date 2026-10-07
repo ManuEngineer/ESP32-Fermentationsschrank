@@ -940,6 +940,55 @@ FermentationApplication::applyDisplayLanguage(
     return {Preview::Success, committed.status};
 }
 
+ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
+    const FermentationUiProgramEditRequest& request,
+    const std::optional<ProgramCatalogRevision>&
+        expectedProgramCatalogRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    // Without the run state the usage of a program cannot be proven, and
+    // without a service no catalog exists: fail closed.
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Without a decidable revision the change cannot be checked for staleness.
+    if (!expectedProgramCatalogRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    const auto installed = applyProgramEditPreview(
+        *configurationService_, *expectedProgramCatalogRevision, request,
+        makeFermentationUiProgramUsageEvidence(*runtimeRunState_));
+    if (installed.status != Preview::Success ||
+        !installed.preview.has_value()) {
+        return {installed.status == Preview::Success ? Preview::InvalidCandidate
+                                                     : installed.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Every exit without an activated change releases the one visible
+    // preview slot.
+    const auto handle = installed.preview->handle;
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+        return {Preview::Success, Commit::ConfigurationRuntimeFailure};
+    }
+    const auto validation =
+        configurationService_->validatePreviewForConfirmation(
+            handle, runtime.lease.get().userConfigurationRevision());
+    if (validation.status != Commit::ReadyForConfirmation) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+        return {Preview::Success, validation.status};
+    }
+    const auto committed = configurationService_->confirmPreview(handle);
+    if (committed.status != Commit::Activated &&
+        committed.status != Commit::NoChange) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+    }
+    return {Preview::Success, committed.status};
+}
+
 NetworkConfigurationResult
 FermentationApplication::beginHomeWifiReconfiguration() {
     const auto guard = applicationCallSerializer_.enter();

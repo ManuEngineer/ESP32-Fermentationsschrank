@@ -6,6 +6,7 @@
 
 #include "application_run_identity.hpp"
 #include "configuration_service.hpp"
+#include "fermentation_ui_editing.hpp"
 #include "fermentation_ui_models.hpp"
 #include "network_configuration_service.hpp"
 #include "sensor_selection.hpp"
@@ -371,6 +372,11 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult setDisplayLanguage(
         FermentationApplication& application,
         const FermentationUiSetDisplayLanguageCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult applyProgramEdit(
+        FermentationApplication& application,
+        const FermentationUiProgramEditRequest& request,
+        const std::optional<ProgramCatalogRevision>&
+            expectedProgramCatalogRevision);
 
    private:
     friend class FermentationApplication;
