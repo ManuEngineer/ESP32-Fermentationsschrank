@@ -164,6 +164,25 @@ bool hasNextRunOverride(
            candidate.holdDurationMinutes.has_value();
 }
 
+// Requested start mode: an explicit next-run override wins; otherwise it
+// follows the stored SensorPreference. The effective mode, the allowed
+// fallback and the rejection stay with the #21 start matrix. An unknown
+// enumerator is never mapped to Air.
+std::optional<RunSensorMode> requestedProgramSensorMode(
+    const ProgramDocument& program,
+    const FermentationUiStartCandidate& candidate) noexcept {
+    if (candidate.sensorMode.has_value()) return candidate.sensorMode;
+    switch (program.program.sensorPreference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+        case SensorPreference::ProductRequired:
+            return RunSensorMode::Product;
+        case SensorPreference::AirProductOptional:
+        case SensorPreference::AirOnly:
+            return RunSensorMode::Air;
+    }
+    return std::nullopt;
+}
+
 void applyNextRunOverrides(ProgramDocument& program,
                            const FermentationUiStartCandidate& candidate) {
     auto& definition = program.program;
@@ -259,7 +278,11 @@ FermentationApplication::prepareStartProgram(
             FermentationApplicationRequestStatus::ProgramUnavailable);
     }
     const bool nextRunOverride = hasNextRunOverride(candidate);
-    const auto sensorMode = candidate.sensorMode.value_or(RunSensorMode::Air);
+    const auto sensorMode = requestedProgramSensorMode(*program, candidate);
+    if (!sensorMode.has_value()) {
+        return requestFailure(
+            FermentationApplicationRequestStatus::InvalidInput);
+    }
     applyNextRunOverrides(*program, candidate);
     if (!validateProgram(*program, ValidationPurpose::Runnable).valid()) {
         return requestFailure(
@@ -288,7 +311,7 @@ FermentationApplication::prepareStartProgram(
     request.runId = *runId;
     request.program = std::move(*program);
     request.sourceProgramRevision = *sourceRevision;
-    request.sensorMode = sensorMode;
+    request.sensorMode = *sensorMode;
     request.safetyAllowsStart = evidence.safetyAllowsStart;
     request.airSensorValid = evidence.airSensorValid;
     request.coolingSensorValid = evidence.coolingSensorValid;

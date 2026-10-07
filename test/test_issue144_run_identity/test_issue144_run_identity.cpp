@@ -72,6 +72,15 @@ class FermentationApplicationTestAccess {
         return application.runtimeRunState_->processState.transitionSequence;
     }
 
+    static std::optional<fermentation::RunSensorMode>
+    requestedProgramSensorMode(
+        const fermentation::FermentationApplicationPreparedRequest& request) {
+        const auto* start =
+            std::get_if<fermentation::ProgramStartRequest>(&request.storage());
+        if (start == nullptr) return std::nullopt;
+        return start->sensorMode;
+    }
+
     static std::optional<fermentation::CommandDecision> decidePrepared(
         const fermentation::FermentationApplication& application,
         const fermentation::FermentationApplicationPreparedRequest& request) {
@@ -518,7 +527,9 @@ void test_confirmation_preserves_canonical_product_selection_paths() {
 
 std::optional<fermentation::ProgramCatalogRevision>
 installRunnableStoredProductProgram(
-    fermentation::FermentationApplication& application, const char* programId) {
+    fermentation::FermentationApplication& application, const char* programId,
+    fermentation::SensorPreference preference =
+        fermentation::SensorPreference::ProductIfAvailableElseAir) {
     auto& service =
         fermentation::FermentationApplicationTestAccess::configurationService(
             application);
@@ -540,9 +551,21 @@ installRunnableStoredProductProgram(
     if (program.fermentationStages.empty()) {
         return std::nullopt;
     }
-    program.sensorPreference =
-        fermentation::SensorPreference::ProductIfAvailableElseAir;
+    program.sensorPreference = preference;
     program.productSensorFailure.fallbackDelaySeconds = 30U;
+    // Keep the stored combination valid (6.13): no automatic air fallback for
+    // ProductRequired, and the single fixed combination for AirOnly.
+    if (preference == fermentation::SensorPreference::ProductRequired) {
+        program.productSensorFailure.policy =
+            fermentation::ProductSensorFailurePolicy::WaitForUser;
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+    } else if (preference == fermentation::SensorPreference::AirOnly) {
+        program.productSensorFailure.policy =
+            fermentation::ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+        program.productSensorFailure.returnStrategy =
+            fermentation::ReturnStrategy::RemainOnAirUntilEnd;
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+    }
     program.fermentationStages.front().targetTemperatureCelsius = 30.0;
     program.fermentationStages.front().durationMinutes = 60U;
     program.targetQualification.bandCelsius = 0.5;
@@ -681,6 +704,96 @@ void test_application_product_paths_revalidate_before_canonical_decision() {
             static_cast<int>(fermentation::SensorPeltierPermission::Blocked),
             static_cast<int>(
                 decision->after.sensorSelectionRuntime.permission));
+    }
+}
+
+// Without a next-run override the requested start mode follows the stored
+// SensorPreference; an explicit override wins; the #21 start matrix stays the
+// only authority over effective mode, fallback and rejection.
+void test_program_start_requested_sensor_mode_follows_stored_preference() {
+    struct Case {
+        fermentation::SensorPreference preference;
+        std::optional<fermentation::RunSensorMode> override;
+        bool productValid;
+        fermentation::RunSensorMode requested;
+        bool startable;
+        fermentation::RunSensorMode effective;
+    };
+    using fermentation::RunSensorMode;
+    using fermentation::SensorPreference;
+    const Case cases[] = {
+        {SensorPreference::ProductIfAvailableElseAir, std::nullopt, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::AirProductOptional, std::nullopt, true,
+         RunSensorMode::Air, true, RunSensorMode::Air},
+        {SensorPreference::ProductRequired, std::nullopt, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::AirOnly, std::nullopt, true, RunSensorMode::Air,
+         true, RunSensorMode::Air},
+        // Explicit valid override wins over the preference.
+        {SensorPreference::AirProductOptional, RunSensorMode::Product, true,
+         RunSensorMode::Product, true, RunSensorMode::Product},
+        {SensorPreference::ProductIfAvailableElseAir, RunSensorMode::Air, true,
+         RunSensorMode::Air, true, RunSensorMode::Air},
+        // #21 matrix: controlled substitution, rejection stay with the owner.
+        {SensorPreference::ProductIfAvailableElseAir, std::nullopt, false,
+         RunSensorMode::Product, true, RunSensorMode::Air},
+        {SensorPreference::ProductRequired, std::nullopt, false,
+         RunSensorMode::Product, false, RunSensorMode::Product},
+        {SensorPreference::ProductRequired, RunSensorMode::Air, true,
+         RunSensorMode::Air, false, RunSensorMode::Air},
+        {SensorPreference::AirOnly, RunSensorMode::Product, true,
+         RunSensorMode::Product, false, RunSensorMode::Product},
+    };
+    for (const auto& item : cases) {
+        device_platform::DevicePlatform platform;
+        device_platform_test_support::SimulatedPersistentStateStore store;
+        device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+        fermentation::FermentationApplication application;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+        const auto revision = installRunnableStoredProductProgram(
+            application, "yogurt-mild", item.preference);
+        TEST_ASSERT_TRUE(revision.has_value());
+        auto evidence = owningEvidence();
+        if (!item.productValid) {
+            evidence.product.quality = device_platform::SensorQuality::Stale;
+        }
+        application.publishOwningRuntimeEvidence(evidence);
+
+        fermentation::FermentationUiCommandContext context;
+        context.expected.expectedStateSequence =
+            fermentation::FermentationApplicationTestAccess::stateSequence(
+                application);
+        context.expected.expectedRunRevision = 0U;
+        context.expected.expectedProgramCatalogRevision = *revision;
+        fermentation::FermentationUiStartProgramIntent intent;
+        intent.candidate.programId = "yogurt-mild";
+        intent.candidate.sensorMode = item.override;
+        const auto prepared = application.prepareStartProgram(context, intent);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::FermentationApplicationRequestStatus::Prepared),
+            static_cast<int>(prepared.status));
+        TEST_ASSERT_TRUE(prepared.request.has_value());
+        const auto requested = fermentation::FermentationApplicationTestAccess::
+            requestedProgramSensorMode(*prepared.request);
+        TEST_ASSERT_TRUE(requested.has_value());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(item.requested),
+                              static_cast<int>(*requested));
+
+        const auto confirmed = application.confirmPrepared(prepared);
+        TEST_ASSERT_TRUE(confirmed.request.has_value());
+        const auto decision =
+            fermentation::FermentationApplicationTestAccess::decidePrepared(
+                application, *confirmed.request);
+        TEST_ASSERT_TRUE(decision.has_value());
+        TEST_ASSERT_EQUAL_INT(item.startable ? 1 : 0, decision->proposed());
+        if (item.startable) {
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(item.effective),
+                static_cast<int>(*decision->after.activeRunSensorMode));
+        }
     }
 }
 
@@ -1250,6 +1363,8 @@ int main(int, char**) {
     RUN_TEST(test_confirmation_preserves_canonical_product_selection_paths);
     RUN_TEST(
         test_application_product_paths_revalidate_before_canonical_decision);
+    RUN_TEST(
+        test_program_start_requested_sensor_mode_follows_stored_preference);
     RUN_TEST(
         test_pipeline_handoff_drives_application_snapshot_and_confirmation);
     RUN_TEST(test_application_composes_all_run_identities_at_one_boundary);
