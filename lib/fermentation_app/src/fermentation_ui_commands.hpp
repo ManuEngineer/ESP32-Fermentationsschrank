@@ -333,7 +333,8 @@ class FermentationUiCommandBridge {
                                    const ProcessRunSnapshot* runSnapshot,
                                    const FermentationUiCommandContext& context,
                                    const ProcessSignals& signals,
-                                   std::uint64_t monotonicMillis);
+                                   std::uint64_t monotonicMillis,
+                                   TransitionDecision* decisionOut = nullptr);
 
     [[nodiscard]] static FermentationUiCommandResult decidePrepared(
         const RunCommandState& current,

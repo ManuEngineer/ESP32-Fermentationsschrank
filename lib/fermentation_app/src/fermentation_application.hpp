@@ -409,6 +409,14 @@ class FermentationApplication {
     [[nodiscard]] RunPersistenceResult resumeFallback(
         const FermentationUiResumeFallbackCommand& command);
 
+    // Owning entry for the explicit ProductInsertedConfirmed intent (Issue
+    // #172, S5).  The UI supplies only the expected state sequence and the
+    // call time through `context`; the process decision and its persistence
+    // use the existing runtime/persistence owners.  Without a runtime context
+    // the result is fail-closed ContextMissing.
+    [[nodiscard]] FermentationUiCommandResult confirmProductInserted(
+        const FermentationUiCommandContext& context);
+
    private:
     struct ApplicationRuntimeEvidence {
         CrossRolePlausibilityContext plausibility;

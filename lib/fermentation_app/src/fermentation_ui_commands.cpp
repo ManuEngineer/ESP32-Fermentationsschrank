@@ -388,7 +388,7 @@ FermentationUiCommandResult
 FermentationUiCommandBridge::decideProductInsertedConfirmed(
     const RunCommandState& current, const ProcessRunSnapshot* runSnapshot,
     const FermentationUiCommandContext& context, const ProcessSignals& signals,
-    std::uint64_t monotonicMillis) {
+    std::uint64_t monotonicMillis, TransitionDecision* decisionOut) {
     if (context.expected.expectedStateSequence !=
         current.processState.transitionSequence) {
         return fromCommandStatus(CommandStatus::StaleState);
@@ -397,6 +397,7 @@ FermentationUiCommandBridge::decideProductInsertedConfirmed(
                                     std::nullopt};
     const auto decision = decideProcessTransition(
         current.processState, runSnapshot, signals, request, monotonicMillis);
+    if (decisionOut != nullptr) *decisionOut = decision;
     return fromTransitionDecision(decision.status);
 }
 

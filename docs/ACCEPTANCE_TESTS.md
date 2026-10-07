@@ -306,6 +306,21 @@ Hardware- oder Pre-Ready-Nachweis.
 | SIM-26-72 | `test_run_checkpoint_codec::test_schema_five_round_trips_manual_timed_without_catalog_provenance` (existing-owner); `test_run_checkpoint_codec::test_manual_snapshot_and_runtime_shape_must_be_canonical` (existing-owner) |
 | SIM-26-73 | `test_run_persistence_coordinator::test_manual_timed_restore_resume_uses_fail_closed_sensor_gate` (existing-owner); `test_run_persistence_coordinator::test_r1_time_pending_is_ram_only_and_rechecks_same_revision` (existing-owner) |
 
+#### Issue #172 – PR B Application-Owner (S5, S6)
+
+Neue native Nachweise fuer die owning Application-Pfade der lokalen Touch-UI.
+Die UI liefert nur Intent und erwartete Revision; Entscheidung und Persistenz
+bleiben bei den bestehenden Runtime-/Persistence-Ownern. Hardware fuer S5 ist
+`NOT_APPLICABLE`, solange der Produktbuild `WaitingForProduct` ohne #30/#35
+nicht real erzeugt.
+
+| ID | Nachweis |
+|---|---|
+| SIM-172-S5-01 | Ohne Runtime-/Persistence-Kontext liefert `confirmProductInserted()` fail-closed `ContextMissing`: `test_press_dispatcher::test_product_inserted_without_runtime_context_is_context_missing`; `test_press_dispatcher::test_dispatch_transition_action_without_context_is_decision_only`. |
+| SIM-172-S5-02 | `WaitingForProduct` wird ueber `decideProcessTransition(ProductInsertedConfirmed)` und `persistTransition()` zu `ReachingTarget` und persistiert (Head aendert sich): `test_press_dispatcher::test_product_inserted_waiting_for_product_reaches_target_and_persists`; Dispatcher-Pfad `test_press_dispatcher::test_dispatch_transition_action_reaches_the_owning_application`. |
+| SIM-172-S5-03 | Falscher Zustand und veraltete `transitionSequence` werden ohne Zustands- und Persistenzaenderung abgelehnt: `test_press_dispatcher::test_product_inserted_in_wrong_state_is_rejected_without_change`; `test_press_dispatcher::test_product_inserted_stale_sequence_is_rejected_without_change`. |
+| SIM-172-S5-04 | Persistenzfehler ist fail-closed (Zustand unveraendert, erneuter Versuch moeglich) und ein wiederholter Press wird abgewiesen: `test_press_dispatcher::test_product_inserted_persistence_failure_is_fail_closed_and_retryable`; `test_press_dispatcher::test_product_inserted_repeated_press_is_rejected`. |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

@@ -611,6 +611,35 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
         persisted.status);
 }
 
+FermentationUiCommandResult FermentationApplication::confirmProductInserted(
+    const FermentationUiCommandContext& context) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::ContextMissing);
+    }
+
+    TransitionDecision decision;
+    const auto decided =
+        FermentationUiCommandBridge::decideProductInsertedConfirmed(
+            *runtimeRunState_,
+            runtimeRunState_->processRunSnapshot.has_value()
+                ? &*runtimeRunState_->processRunSnapshot
+                : nullptr,
+            context, ProcessSignals{}, context.monotonicMillis, &decision);
+    if (!std::holds_alternative<DecisionStatus>(decided.detail) ||
+        std::get<DecisionStatus>(decided.detail) != DecisionStatus::Proposed) {
+        return decided;
+    }
+
+    auto checkpointTime = currentCheckpointTime();
+    checkpointTime.monotonicMillis = context.monotonicMillis;
+    const auto persisted = runPersistenceCoordinator_->persistTransition(
+        *runtimeRunState_, decision, checkpointTime, &owningRuntimeEvidence_);
+    return FermentationUiCommandBridge::fromRunPersistenceResult(
+        persisted.status);
+}
+
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {

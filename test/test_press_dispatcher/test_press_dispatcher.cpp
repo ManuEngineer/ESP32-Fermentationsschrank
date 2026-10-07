@@ -12,6 +12,7 @@
 #include "run_persistence_codec.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 #include "state_store_key.hpp"
 #include "virtual_time_source.hpp"
 
@@ -203,6 +204,100 @@ struct OwningAppFixture {
         application.publishOwningRuntimeEvidence(validOwningEvidence());
     }
 };
+
+// WaitingForProduct reached through the application's own persistence
+// coordinator and runtime state (the same real decisions the production
+// loop would take): a preheat program is started, qualification is tracked
+// and completed.  The product-insertion owner under test is not involved.
+RunCheckpointTime waitingFixtureTime(const std::uint64_t monotonicMillis) {
+    return {monotonicMillis, 1'700'000'000LL + static_cast<std::int64_t>(
+                                                   monotonicMillis / 1'000U)};
+}
+
+ProgramDocument preheatProgramDocument() {
+    auto document = FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    auto& program = document->program;
+    program.preheat = true;
+    program.maximumProductWaitMinutes = 30U;
+    program.productSensorFailure.fallbackDelaySeconds = 30U;
+    program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    program.fermentationStages.front().durationMinutes = 120U;
+    program.targetQualification.bandCelsius = 0.5;
+    program.targetQualification.durationMinutes = 10U;
+    program.maximumTargetReachMinutes = 180U;
+    TEST_ASSERT_TRUE(validateProgram(*document).valid());
+    return *document;
+}
+
+void driveToWaitingForProduct(FermentationApplication& application) {
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    auto& coordinator =
+        FermentationApplicationTestAccess::runPersistenceCoordinator(
+            application);
+    state.processState.state = ProcessState::Standby;
+    ProgramStartRequest request;
+    request.envelope = {1U,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "persisted-run";
+    request.program = preheatProgramDocument();
+    request.sourceProgramRevision = RunProgramSourceRevision{1U};
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(coordinator
+                             .persistCommand(state,
+                                             decideProgramStart(state, request),
+                                             waitingFixtureTime(100U))
+                             .status));
+    const auto tracking = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{QualificationProgress::InBand, false, false},
+        TransitionRequest{}, 100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, tracking, waitingFixtureTime(100U))
+                .status));
+    const auto waiting = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{QualificationProgress::Complete, false, false},
+        TransitionRequest{}, 600100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, waiting, waitingFixtureTime(600100U))
+                .status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(state.processState.state));
+}
+
+FermentationUiCommandContext productInsertedContext(
+    const FermentationApplication& application, const std::uint64_t now) {
+    FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::LocalDisplay;
+    context.monotonicMillis = now;
+    context.expected = application.uiSnapshot().revisions;
+    return context;
+}
+
+ProcessState runtimeProcessState(FermentationApplication& application) {
+    return FermentationApplicationTestAccess::runtimeState(application)
+        .processState.state;
+}
 
 void assertAppliedOwningResult(const WorkspacePressDispatchResult& result) {
     TEST_ASSERT_EQUAL_INT(
@@ -808,16 +903,156 @@ void test_command_status_projection_keeps_decisions_only() {
                         FermentationUiCommandPhase::OwningOutcome);
 }
 
-void test_dispatch_transition_action_is_unavailable_no_owner() {
-    AppFixture fixture;
+void test_product_inserted_without_runtime_context_is_context_missing() {
+    // An application that has not begun owns no runtime/persistence context.
+    FermentationApplication application;
+    FermentationUiCommandContext context;
+    context.monotonicMillis = 700'000U;
+    const auto result = application.confirmProductInserted(context);
+    assertCommandStatus(result, CommandStatus::ContextMissing,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_TRUE(result.category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+}
+
+void test_product_inserted_waiting_for_product_reaches_target_and_persists() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+
+    const auto result = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(result.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    const auto headAfter = readHead(fixture.store);
+    TEST_ASSERT_TRUE(headBefore.value != headAfter.value);
+}
+
+void test_product_inserted_in_wrong_state_is_rejected_without_change() {
+    OwningAppFixture fixture;
+    const auto headBefore = readHead(fixture.store);
+    const auto before = runtimeProcessState(fixture.application);
+
+    const auto result = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(std::holds_alternative<DecisionStatus>(result.detail));
+    TEST_ASSERT_TRUE(std::get<DecisionStatus>(result.detail) !=
+                     DecisionStatus::Proposed);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(result.category));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(before),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_product_inserted_stale_sequence_is_rejected_without_change() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+    auto context = productInsertedContext(fixture.application, 700'000U);
+    context.expected.expectedStateSequence += 1U;
+
+    const auto result = fixture.application.confirmProductInserted(context);
+    assertCommandStatus(result, CommandStatus::StaleState,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::WaitingForProduct),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_product_inserted_persistence_failure_is_fail_closed_and_retryable() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+
+    fixture.store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto failed = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(failed.category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(failed.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(failed.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::WaitingForProduct),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+
+    const auto retried = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(retried.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+}
+
+void test_product_inserted_repeated_press_is_rejected() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto firstContext =
+        productInsertedContext(fixture.application, 700'000U);
+    const auto first = fixture.application.confirmProductInserted(firstContext);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(first.detail)));
+    const auto headAfterFirst = readHead(fixture.store);
+
+    // The same (now stale) press arrives again.
+    const auto second =
+        fixture.application.confirmProductInserted(firstContext);
+    assertCommandStatus(second, CommandStatus::StaleState,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headAfterFirst, readHead(fixture.store));
+}
+
+void test_dispatch_transition_action_reaches_the_owning_application() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
     FermentationUiWorkspacePress press;
     press.transitionAction = FermentationUiProductInsertedConfirmedIntent{};
 
-    const auto result =
-        dispatchWorkspacePress(fixture.application, {}, press, 1000U);
+    const auto result = dispatchWorkspacePress(
+        fixture.application, fixture.application.uiSnapshot(), press, 700'000U);
+    assertAppliedOwningResult(result);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(WorkspacePressDispatchOutcome::UnavailableNoOwner),
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+}
+
+void test_dispatch_transition_action_without_context_is_decision_only() {
+    FermentationApplication application;
+    FermentationUiWorkspacePress press;
+    press.transitionAction = FermentationUiProductInsertedConfirmedIntent{};
+
+    const auto result = dispatchWorkspacePress(application, {}, press, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::DecisionOnly),
         static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    assertCommandStatus(*result.commandResult, CommandStatus::ContextMissing,
+                        FermentationUiCommandPhase::DecisionOnly);
 }
 
 void test_dispatch_program_edit_is_unavailable_no_owner() {
@@ -1209,7 +1444,16 @@ int main() {
     RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
     RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
-    RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
+    RUN_TEST(test_product_inserted_without_runtime_context_is_context_missing);
+    RUN_TEST(
+        test_product_inserted_waiting_for_product_reaches_target_and_persists);
+    RUN_TEST(test_product_inserted_in_wrong_state_is_rejected_without_change);
+    RUN_TEST(test_product_inserted_stale_sequence_is_rejected_without_change);
+    RUN_TEST(
+        test_product_inserted_persistence_failure_is_fail_closed_and_retryable);
+    RUN_TEST(test_product_inserted_repeated_press_is_rejected);
+    RUN_TEST(test_dispatch_transition_action_reaches_the_owning_application);
+    RUN_TEST(test_dispatch_transition_action_without_context_is_decision_only);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
     RUN_TEST(
         test_dispatch_network_touch_actions_use_existing_application_bridge);
