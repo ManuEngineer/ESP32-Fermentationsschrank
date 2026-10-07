@@ -280,7 +280,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"label-remaining", "Remaining: "},
         std::pair{"label-preheat", "Preheat: "},
         std::pair{"label-sensor", "Sensor: "},
-        std::pair{"label-completion", "Finish: "},
+        std::pair{"label-completion", "End: "},
         std::pair{"label-fault-code", "Fault code: "},
         std::pair{"value-on", "On"},
         std::pair{"value-off", "Off"},

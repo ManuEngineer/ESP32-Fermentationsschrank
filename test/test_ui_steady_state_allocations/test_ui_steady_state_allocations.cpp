@@ -483,6 +483,27 @@ void test_value_edit_page_steady_state_allocates_nothing() {
     const auto allocations = stopCounting();
     TEST_ASSERT_FALSE(redraw);
     TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    // A held keypad key or pager button (ContentCell, any column) changes
+    // the render key once per distinct target and settles afterwards.
+    const auto redrawFor = [&fixture](
+                               const device_platform::DeviceUiTarget& target) {
+        fixture.gate.beginStep(fixture.application, false);
+        return fixture.gate.renderRequired(
+            fixture.application, fixture.workspace, target,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    };
+    const device_platform::DeviceUiTarget keyA{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const device_platform::DeviceUiTarget keyB{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 2U};
+    TEST_ASSERT_TRUE(redrawFor(keyA));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyA));
+    TEST_ASSERT_TRUE(redrawFor(keyB));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyB));
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
     // A workspace mutation (what every key press does) redraws once.
     fixture.workspace.setProgramEditDirty(true);
     TEST_ASSERT_TRUE(fixture.step());

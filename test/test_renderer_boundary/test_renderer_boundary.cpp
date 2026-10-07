@@ -1768,7 +1768,7 @@ void test_program_summary_shows_program_values_and_marks_absent_ones() {
     scrollSummaryDown(snapshot, workspace, catalog, 2U);
     screen = pageScreen(snapshot, workspace, "en", &catalog);
     TEST_ASSERT_TRUE(hasText(screen, "Sensor: Product required"));
-    TEST_ASSERT_TRUE(hasText(screen, "Finish: Cool, finish"));
+    TEST_ASSERT_TRUE(hasText(screen, "End: Cool, finish"));
     // The cooling target row exists because the completion mode cools.
     scrollSummaryDown(snapshot, workspace, catalog, 1U);
     screen = pageScreen(snapshot, workspace, "en", &catalog);
@@ -1813,14 +1813,14 @@ void test_program_summary_applies_candidate_overrides_and_redraws() {
     scrollSummaryDown(snapshot, workspace, catalog, 2U);
     screen = pageScreen(snapshot, workspace, "en", &catalog);
     TEST_ASSERT_TRUE(hasText(screen, "Sensor: Product *"));
-    TEST_ASSERT_TRUE(hasText(screen, "Finish: Cool, hold to stop *"));
+    TEST_ASSERT_TRUE(hasText(screen, "End: Cool, hold to stop *"));
 
     // A candidate of another program never leaks into the summary.
     candidate.programId = "other";
     workspace.setStartCandidate(candidate);
     const auto other = pageScreen(snapshot, workspace, "en", &catalog);
     TEST_ASSERT_FALSE(hasText(other, "Sensor: Product *"));
-    TEST_ASSERT_FALSE(hasText(other, "Finish: Cool, hold to stop *"));
+    TEST_ASSERT_FALSE(hasText(other, "End: Cool, hold to stop *"));
 }
 
 void test_program_summary_reason_line_does_not_overlap_the_content() {
