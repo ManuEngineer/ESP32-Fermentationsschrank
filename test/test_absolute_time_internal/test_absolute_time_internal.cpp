@@ -599,13 +599,68 @@ void test_rtc_sync_success_completes_control_and_osf_sequence() {
     TEST_ASSERT_EQUAL_UINT8(0U, fake.raw.status & internal::kDs3231OsfMask);
 }
 
+constexpr auto kFirstSyncMode = internal::SntpSyncMode::Immediate;
+constexpr bool kUntrusted = false;
+constexpr bool kTrusted = true;
+
+void test_sntp_sync_mode_follows_trust_latch() {
+    TEST_ASSERT_TRUE(internal::selectSntpSyncMode(false) ==
+                     internal::SntpSyncMode::Immediate);
+    TEST_ASSERT_TRUE(internal::selectSntpSyncMode(true) ==
+                     internal::SntpSyncMode::Smooth);
+}
+
+void test_sntp_completed_smooth_on_untrusted_clock_does_not_promote_or_write_rtc() {
+    internal::SntpArbitration arbitration;
+
+    const auto action =
+        arbitration.observe(internal::SntpSyncObservation::Completed,
+                            internal::SntpSyncMode::Smooth, kUntrusted);
+    TEST_ASSERT_FALSE(action.promoteSystemTrust);
+    TEST_ASSERT_FALSE(action.synchronizeRtc);
+}
+
+void test_sntp_completed_smooth_on_trusted_clock_keeps_rtc_sync_semantics() {
+    internal::SntpArbitration arbitration;
+    int rtcSynchronizationAttempts = 0;
+
+    auto action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                      internal::SntpSyncMode::Smooth, kTrusted);
+    TEST_ASSERT_TRUE(action.promoteSystemTrust);
+    TEST_ASSERT_TRUE(action.synchronizeRtc);
+    if (action.synchronizeRtc) ++rtcSynchronizationAttempts;
+    action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                 internal::SntpSyncMode::Smooth, kTrusted);
+    TEST_ASSERT_FALSE(action.synchronizeRtc);
+    action = arbitration.observe(internal::SntpSyncObservation::InProgress,
+                                 internal::SntpSyncMode::Smooth, kTrusted);
+    TEST_ASSERT_FALSE(action.synchronizeRtc);
+    action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                 internal::SntpSyncMode::Smooth, kTrusted);
+    TEST_ASSERT_TRUE(action.synchronizeRtc);
+    if (action.synchronizeRtc) ++rtcSynchronizationAttempts;
+    TEST_ASSERT_EQUAL_INT(2, rtcSynchronizationAttempts);
+}
+
+void test_sntp_other_observation_never_promotes() {
+    internal::SntpArbitration arbitration;
+
+    const auto action =
+        arbitration.observe(internal::SntpSyncObservation::Other,
+                            internal::SntpSyncMode::Immediate, kUntrusted);
+    TEST_ASSERT_FALSE(action.promoteSystemTrust);
+    TEST_ASSERT_FALSE(action.synchronizeRtc);
+}
+
 void test_sntp_reset_and_in_progress_do_not_promote_or_write_rtc() {
     internal::SntpArbitration arbitration;
 
-    auto action = arbitration.observe(internal::SntpSyncObservation::Reset);
+    auto action = arbitration.observe(internal::SntpSyncObservation::Reset,
+                                      kFirstSyncMode, kUntrusted);
     TEST_ASSERT_FALSE(action.promoteSystemTrust);
     TEST_ASSERT_FALSE(action.synchronizeRtc);
-    action = arbitration.observe(internal::SntpSyncObservation::InProgress);
+    action = arbitration.observe(internal::SntpSyncObservation::InProgress,
+                                 kFirstSyncMode, kUntrusted);
     TEST_ASSERT_FALSE(action.promoteSystemTrust);
     TEST_ASSERT_FALSE(action.synchronizeRtc);
 }
@@ -614,19 +669,23 @@ void test_sntp_completed_promotes_once_and_retries_after_next_sync() {
     internal::SntpArbitration arbitration;
     int rtcSynchronizationAttempts = 0;
 
-    auto action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    auto action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                      kFirstSyncMode, kUntrusted);
     TEST_ASSERT_TRUE(action.promoteSystemTrust);
     TEST_ASSERT_TRUE(action.synchronizeRtc);
     if (action.synchronizeRtc) ++rtcSynchronizationAttempts;
-    action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                 kFirstSyncMode, kUntrusted);
     TEST_ASSERT_FALSE(action.promoteSystemTrust);
     TEST_ASSERT_FALSE(action.synchronizeRtc);
     if (action.synchronizeRtc) ++rtcSynchronizationAttempts;
     TEST_ASSERT_EQUAL_INT(1, rtcSynchronizationAttempts);
 
-    action = arbitration.observe(internal::SntpSyncObservation::Reset);
+    action = arbitration.observe(internal::SntpSyncObservation::Reset,
+                                 kFirstSyncMode, kUntrusted);
     TEST_ASSERT_FALSE(action.promoteSystemTrust);
-    action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                 kFirstSyncMode, kUntrusted);
     TEST_ASSERT_TRUE(action.promoteSystemTrust);
     TEST_ASSERT_TRUE(action.synchronizeRtc);
     if (action.synchronizeRtc) ++rtcSynchronizationAttempts;
@@ -661,15 +720,17 @@ void test_sntp_completed_keeps_system_trust_when_rtc_write_fails_and_retries() {
                                               &fakeReadSystemUtc,
                                               &fakeSynchronizeRtc};
 
-    auto action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    auto action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                      kFirstSyncMode, kUntrusted);
     internal::consumeSntpArbitrationAction(action, backend);
     TEST_ASSERT_TRUE(fake.systemTimeTrusted);
     TEST_ASSERT_EQUAL_INT(1, fake.rtcSyncCalls);
 
     fake.rtcSyncResult = false;
-    static_cast<void>(
-        arbitration.observe(internal::SntpSyncObservation::Reset));
-    action = arbitration.observe(internal::SntpSyncObservation::Completed);
+    static_cast<void>(arbitration.observe(internal::SntpSyncObservation::Reset,
+                                          kFirstSyncMode, kUntrusted));
+    action = arbitration.observe(internal::SntpSyncObservation::Completed,
+                                 kFirstSyncMode, kUntrusted);
     internal::consumeSntpArbitrationAction(action, backend);
     TEST_ASSERT_TRUE(fake.systemTimeTrusted);
     TEST_ASSERT_TRUE(fake.systemUtc.has_value());
@@ -822,6 +883,12 @@ int main() {
     RUN_TEST(test_rtc_sync_osf_clear_failure_is_untrusted);
     RUN_TEST(test_rtc_sync_final_read_failure_is_untrusted);
     RUN_TEST(test_rtc_sync_success_completes_control_and_osf_sequence);
+    RUN_TEST(test_sntp_sync_mode_follows_trust_latch);
+    RUN_TEST(
+        test_sntp_completed_smooth_on_untrusted_clock_does_not_promote_or_write_rtc);
+    RUN_TEST(
+        test_sntp_completed_smooth_on_trusted_clock_keeps_rtc_sync_semantics);
+    RUN_TEST(test_sntp_other_observation_never_promotes);
     RUN_TEST(test_sntp_reset_and_in_progress_do_not_promote_or_write_rtc);
     RUN_TEST(test_sntp_completed_promotes_once_and_retries_after_next_sync);
     RUN_TEST(

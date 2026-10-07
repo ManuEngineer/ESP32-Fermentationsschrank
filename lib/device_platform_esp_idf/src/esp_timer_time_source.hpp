@@ -33,6 +33,10 @@ class EspTimerTimeSource final : public device_platform::ITimeSource {
     // to be the current boot's source after a later connectivity loss.
     [[nodiscard]] bool markAbsoluteTimeTrusted() const noexcept;
 
+    // Read-only view of the same latch.  Unlike unixTimeSeconds() it does not
+    // advance the high-water mark.
+    [[nodiscard]] bool absoluteTimeTrusted() const noexcept;
+
    private:
     int64_t baselineMicros_;
     mutable std::mutex trustMutex_;

@@ -36,6 +36,16 @@ bool synchronizeSntpRtc(void* context, const std::int64_t utc) {
     return actionContext->rtc->synchronizeFromSystemUtc(utc);
 }
 
+sntp_sync_mode_t toEspSyncMode(const internal::SntpSyncMode mode) {
+    return mode == internal::SntpSyncMode::Smooth ? SNTP_SYNC_MODE_SMOOTH
+                                                  : SNTP_SYNC_MODE_IMMED;
+}
+
+internal::SntpSyncMode fromEspSyncMode(const sntp_sync_mode_t mode) {
+    return mode == SNTP_SYNC_MODE_SMOOTH ? internal::SntpSyncMode::Smooth
+                                         : internal::SntpSyncMode::Immediate;
+}
+
 }  // namespace
 
 EspIdfSntpTimeCoordinator::EspIdfSntpTimeCoordinator(
@@ -53,7 +63,8 @@ esp_err_t EspIdfSntpTimeCoordinator::initialize(
         return ESP_ERR_INVALID_ARG;
 
     esp_sntp_config_t config{};
-    config.smooth_sync = true;
+    // The mode is set explicitly from the trust latch in applySyncMode().
+    config.smooth_sync = false;
     config.server_from_dhcp = configuration.serverFromDhcp;
     config.wait_for_sync = false;
     config.start = false;
@@ -69,13 +80,20 @@ esp_err_t EspIdfSntpTimeCoordinator::initialize(
     if (status == ESP_OK) {
         initialized_ = true;
         arbitration_.reset();
+        applySyncMode();
     }
     return status;
+}
+
+void EspIdfSntpTimeCoordinator::applySyncMode() const noexcept {
+    sntp_set_sync_mode(toEspSyncMode(
+        internal::selectSntpSyncMode(timeSource_.absoluteTimeTrusted())));
 }
 
 esp_err_t EspIdfSntpTimeCoordinator::start() noexcept {
     if (!initialized_) return ESP_ERR_INVALID_STATE;
     arbitration_.reset();
+    applySyncMode();
     return esp_netif_sntp_start();
 }
 
@@ -94,7 +112,9 @@ void EspIdfSntpTimeCoordinator::poll() noexcept {
     } else if (status == SNTP_SYNC_STATUS_COMPLETED) {
         observation = internal::SntpSyncObservation::Completed;
     }
-    const auto action = arbitration_.observe(observation);
+    const auto action =
+        arbitration_.observe(observation, fromEspSyncMode(sntp_get_sync_mode()),
+                             timeSource_.absoluteTimeTrusted());
     // ESP-IDF has already completed the system-time update.  The action
     // explicitly separates trust promotion from RTC synchronization: a
     // failed RTC write must not revoke the current NTP-backed system time.
@@ -102,6 +122,8 @@ void EspIdfSntpTimeCoordinator::poll() noexcept {
     internal::consumeSntpArbitrationAction(
         action, {&actionContext, &promoteSntpSystemTrust, &readSntpSystemUtc,
                  &synchronizeSntpRtc});
+    // After the first promote the clock is set; follow-up syncs smooth.
+    applySyncMode();
 }
 
 }  // namespace device_platform_esp_idf

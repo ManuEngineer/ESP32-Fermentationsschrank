@@ -41,6 +41,11 @@ class EspIdfSntpTimeCoordinator final {
     [[nodiscard]] bool initialized() const noexcept { return initialized_; }
 
    private:
+    // Sets the ESP-IDF SNTP mode from the current trust latch (untrusted:
+    // immediate step, trusted: smooth).  Applied explicitly because
+    // esp_netif_sntp only ever selects the smooth mode.
+    void applySyncMode() const noexcept;
+
     const EspTimerTimeSource& timeSource_;
     Ds3231SnRtcAdapter* rtc_{nullptr};
     bool initialized_{false};
