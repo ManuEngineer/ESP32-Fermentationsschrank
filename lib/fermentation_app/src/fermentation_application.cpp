@@ -161,7 +161,9 @@ std::optional<ProgramDocument> findProgram(
 std::optional<RunSensorMode> requestedProgramSensorMode(
     const ProgramDocument& program,
     const FermentationUiStartCandidate& candidate) noexcept {
-    if (candidate.sensorMode.has_value()) return candidate.sensorMode;
+    if (candidate.sensorMode.has_value()) {
+        return candidate.sensorMode;
+    }
     return defaultProgramStartSensorMode(program.program.sensorPreference);
 }
 
