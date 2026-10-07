@@ -10,7 +10,9 @@ gefunden (z. B. clang-format/clang-tidy lokal nicht installiert), ist das
 Ergebnis BLOCKED statt eines falschen PASS oder FAILED.
 """
 
+import copy
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -434,6 +436,143 @@ def selftest_pre_ready_attestation() -> str:
     return PASS
 
 
+# --- Heavy-CI-Trigger-Vertrag (Issue #184) ------------------------------------
+# Die positive Pfadliste in .github/workflows/build.yml steuert, wann die
+# schwere Clean-Room-CI automatisch laeuft. Der Check leitet die Pflichtpfade
+# aus dem Runner (SSOT), dem Wrapper, den Profilen und sdkconfig.defaults ab
+# und haelt zusaetzlich eine bewusst kleine, redundante Schutzliste der
+# direkten Produktions-Buildinputs, damit keiner davon unbemerkt aus dem
+# Workflow entfernt werden kann.
+
+PROTECTED_BUILD_CONTRACT_FILES = (
+    "CMakeLists.txt",
+    "main/CMakeLists.txt",
+    "main/Kconfig.projbuild",
+    "lib/device_platform/CMakeLists.txt",
+    "lib/device_platform_esp_idf/CMakeLists.txt",
+    "lib/fermentation_app/CMakeLists.txt",
+    "sdkconfig.defaults",
+)
+
+
+def workflow_trigger_problems(workflow, runner_text, sdkconfig_text, profiles, exists):
+    """Liefert eine Liste von Vertragsverletzungen (leer = Vertrag erfuellt)."""
+    problems = []
+    triggers = workflow.get("on", workflow.get(True)) or {}
+    if "workflow_dispatch" not in triggers:
+        problems.append("workflow_dispatch fehlt")
+    if "push" in triggers:
+        problems.append("push-Trigger ist nicht zulaessig")
+    pull_request = triggers.get("pull_request") or {}
+    if "paths-ignore" in pull_request:
+        problems.append("paths-ignore ist nicht zulaessig")
+    paths = pull_request.get("paths")
+    if not paths:
+        problems.append("pull_request.paths fehlt")
+        paths = []
+
+    for path in paths:
+        if not exists(path):
+            problems.append(f"Pfadfilter nennt nicht vorhandene Datei: {path}")
+
+    required = {
+        ".github/workflows/build.yml",
+        "scripts/run_pre_ready_gates.sh",
+        "scripts/run_pre_ready_and_publish.sh",
+        "scripts/selftest_quality_gates.py",
+    }
+    required.update(re.findall(r"scripts/[A-Za-z0-9_]+\.(?:py|sh)", runner_text))
+    required.update(f"sdkconfig.defaults.{profile}" for profile in profiles)
+    required.update(PROTECTED_BUILD_CONTRACT_FILES)
+    partition = re.search(
+        r'^CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="([^"]+)"', sdkconfig_text, re.M
+    )
+    if partition is None:
+        problems.append("Partitionstabelle in sdkconfig.defaults nicht ableitbar")
+    else:
+        required.add(partition.group(1))
+    for path in sorted(required - set(paths)):
+        problems.append(f"Pfadfilter deckt Gate-/Buildinput nicht ab: {path}")
+
+    job = (workflow.get("jobs") or {}).get("firmware") or {}
+    if "workflow_dispatch" not in str(job.get("if", "")):
+        problems.append("Job-if laesst workflow_dispatch nicht ausdruecklich zu")
+    if "||" not in str((workflow.get("concurrency") or {}).get("group", "")):
+        problems.append("concurrency.group ohne Fallback fuer workflow_dispatch")
+    if "||" not in str((job.get("env") or {}).get("SOURCE_GIT_SHA", "")):
+        problems.append("SOURCE_GIT_SHA ohne Fallback fuer workflow_dispatch")
+    return problems
+
+
+def selftest_workflow_trigger_contract(repo_root: Path) -> str:
+    try:
+        import yaml
+    except ImportError:
+        return BLOCKED
+    import esp_idf_contract
+
+    workflow = yaml.safe_load((repo_root / ".github/workflows/build.yml").read_text())
+    runner_text = (repo_root / "scripts/run_pre_ready_gates.sh").read_text()
+    sdkconfig_text = (repo_root / "sdkconfig.defaults").read_text()
+
+    def problems(wf, runner=runner_text, sdkconfig=sdkconfig_text):
+        return workflow_trigger_problems(
+            wf, runner, sdkconfig, esp_idf_contract.PROFILES,
+            lambda path: (repo_root / path).exists(),
+        )
+
+    if problems(workflow):
+        for problem in problems(workflow):
+            print(f"  Trigger-Vertrag verletzt: {problem}")
+        return FAILED
+
+    def mutated(change):
+        wf = copy.deepcopy(workflow)
+        change(wf)
+        return wf
+
+    def pr(wf):
+        return wf[True]["pull_request"] if True in wf else wf["on"]["pull_request"]
+
+    def trigs(wf):
+        return wf[True] if True in wf else wf["on"]
+
+    def drop(path):
+        return lambda wf: pr(wf)["paths"].remove(path)
+
+    def drop_any(prefix):
+        return lambda wf: pr(wf).update(
+            paths=[p for p in pr(wf)["paths"] if not p.startswith(prefix)]
+        )
+
+    bad_cases = [
+        ("workflow_dispatch fehlt", mutated(lambda wf: trigs(wf).pop("workflow_dispatch")), {}),
+        ("push-Trigger", mutated(lambda wf: trigs(wf).update(push={})), {}),
+        ("paths-ignore", mutated(lambda wf: pr(wf).update({"paths-ignore": ["**/*.md"]})), {}),
+        ("nicht vorhandener Pfad", mutated(lambda wf: pr(wf)["paths"].append("nope/x.txt")), {}),
+        ("Partitionstabelle entfernt", mutated(drop("partitions/issue_90_state_store.csv")), {}),
+        ("Kconfig.projbuild entfernt", mutated(drop("main/Kconfig.projbuild")), {}),
+        ("Komponenten-CMakeLists entfernt", mutated(drop("lib/fermentation_app/CMakeLists.txt")), {}),
+        ("Wrapper entfernt", mutated(drop("scripts/run_pre_ready_and_publish.sh")), {}),
+        ("Runner-Skript nicht abgedeckt", mutated(drop("scripts/check_secrets.py")), {}),
+        ("Profil-Overlay entfernt", mutated(drop("sdkconfig.defaults.release")), {}),
+        ("Dispatch-Guard fehlt",
+         mutated(lambda wf: wf["jobs"]["firmware"].update({"if": "github.event.pull_request.draft == false"})), {}),
+        ("concurrency ohne Fallback",
+         mutated(lambda wf: wf["concurrency"].update(group="x-${{ github.event.pull_request.number }}")), {}),
+        ("SOURCE_GIT_SHA ohne Fallback",
+         mutated(lambda wf: wf["jobs"]["firmware"]["env"].update(SOURCE_GIT_SHA="${{ github.event.pull_request.head.sha }}")), {}),
+        ("neues Runner-Skript ohne Pfadfilter", workflow,
+         {"runner": runner_text + "\npython3 scripts/new_gate_tool.py\n"}),
+        ("Partitionstabelle nicht ableitbar", workflow, {"sdkconfig": "# leer\n"}),
+    ]
+    for name, wf, kwargs in bad_cases:
+        if not problems(wf, **kwargs):
+            print(f"  Trigger-Vertrag erkennt Fall nicht: {name}")
+            return FAILED
+    return PASS
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
 
@@ -442,6 +581,10 @@ def main() -> int:
         "Static-Analysis erkennt absichtlich fehlerhaften Fall": selftest_static_analysis(),
         "Pre-Ready-Wrapper publiziert success nur nach bestandenen Pruefungen "
         "(Fixture-Szenarien)": selftest_pre_ready_attestation(),
+        "Heavy-CI-Trigger-/Buildinput-Vertrag der build.yml wird eingehalten "
+        "und erkennt absichtlich fehlerhafte Faelle": selftest_workflow_trigger_contract(
+            repo_root
+        ),
         "Geheimnispruefung erkennt absichtlich fehlerhaften Fall": run_script_selftest(
             repo_root, "check_secrets.py"
         ),
