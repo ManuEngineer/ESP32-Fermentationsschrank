@@ -818,16 +818,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 snapshot.recovery.mode ==
                     RecoveryViewMode::FallbackSelectionRequired &&
                 snapshot.home.processState != ProcessState::SafeBoot;
-            if (recoveryTimeCorrectionSeconds_.has_value() &&
-                !fallbackAllowed) {
-                setSlot(view, 1U, "confirm",
-                        FermentationUiWorkspaceSlotAction::
-                            ApplyRecoveryTimeCorrection);
-            } else {
-                setSlot(view, 1U, "resume-fallback",
-                        FermentationUiWorkspaceSlotAction::ResumeFallback,
-                        fallbackAllowed);
-            }
+            // The time correction has no R1 user path (plan 4.1): the slot is
+            // never offered, even if the test helper staged a value.
+            setSlot(view, 1U, "resume-fallback",
+                    FermentationUiWorkspaceSlotAction::ResumeFallback,
+                    fallbackAllowed);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "diagnostics",

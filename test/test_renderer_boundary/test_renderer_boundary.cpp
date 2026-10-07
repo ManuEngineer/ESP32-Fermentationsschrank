@@ -1919,7 +1919,7 @@ void test_recovery_page_names_mode_and_unavailable_time_correction() {
     const auto screen = pageScreen(snapshot, workspace);
     TEST_ASSERT_TRUE(hasText(screen, "Waiting for trusted time"));
     TEST_ASSERT_TRUE(hasText(screen, "Time correction: not available (R1)"));
-    // Without a staged value no slot offers the time correction.
+    // No slot offers the time correction.
     for (const auto action : screen.workspace.slotActions) {
         TEST_ASSERT_TRUE(action !=
                          fermentation::FermentationUiWorkspaceSlotAction::

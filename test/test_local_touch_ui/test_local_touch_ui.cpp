@@ -901,12 +901,10 @@ void test_sim_26_message_sensor_and_recovery_actions() {
             *sensor.action));
 
     workspace.setPage(FermentationUiPage::Recovery);
+    // The time correction has no R1 user path: a staged test value opens no
+    // press path either (see the dedicated regression test below).
     workspace.setRecoveryTimeCorrectionSeconds(30U);
-    const auto correction = workspace.press(snapshot, bottom(1));
-    TEST_ASSERT_TRUE(correction.action.has_value());
-    TEST_ASSERT_TRUE(
-        std::holds_alternative<FermentationUiRecoveryTimeCorrectionIntent>(
-            *correction.action));
+    TEST_ASSERT_FALSE(workspace.press(snapshot, bottom(1)).action.has_value());
 }
 
 void test_network_page_exposes_only_the_two_modes_and_explicit_setup_action() {
@@ -1110,9 +1108,9 @@ void test_technical_page_pager_follows_the_snapshot_temperatures() {
     TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
 }
 
-// S7 / plan 4.1: without a staged value (no production caller stages one)
-// the Recovery page offers no time-correction slot, in any recovery mode.
-void test_recovery_time_correction_is_never_offered_without_a_staged_value() {
+// S7 / plan 4.1: the Recovery page never offers a time-correction slot, in
+// any recovery mode, also not with a value staged by the test helper.
+void test_recovery_time_correction_is_never_offered_even_with_a_staged_value() {
     for (const auto mode :
          {RecoveryViewMode::Normal, RecoveryViewMode::WaitingForTrustedTime,
           RecoveryViewMode::CurrentRunRecovered,
@@ -1123,6 +1121,7 @@ void test_recovery_time_correction_is_never_offered_without_a_staged_value() {
         snapshot.recovery.mode = mode;
         FermentationTouchWorkspace workspace;
         workspace.setPage(FermentationUiPage::Recovery);
+        workspace.setRecoveryTimeCorrectionSeconds(30U);
         const auto view = workspace.view(snapshot);
         for (const auto action : view.slotActions) {
             TEST_ASSERT_TRUE(
@@ -1656,6 +1655,6 @@ int main(int, char**) {
     RUN_TEST(test_program_summary_view_applies_candidate_overrides_per_value);
     RUN_TEST(test_technical_page_pager_follows_the_snapshot_temperatures);
     RUN_TEST(
-        test_recovery_time_correction_is_never_offered_without_a_staged_value);
+        test_recovery_time_correction_is_never_offered_even_with_a_staged_value);
     return UNITY_END();
 }
