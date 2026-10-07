@@ -2428,6 +2428,15 @@ void test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content() {
 // ---- S10: settings, keyboard and program editor rendering
 // --------------------
 
+bool hasLockIcon(const fermentation::main_ui::RepresentativeScreen& screen) {
+    return std::any_of(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::LockIcon;
+        });
+}
+
 fermentation::main_ui::RepresentativeScreen settingsScreen(
     fermentation::FermentationTouchWorkspace& workspace,
     const fermentation::FermentationUiSnapshot& snapshot, const char* locale,
@@ -2451,7 +2460,6 @@ void test_settings_page_draws_the_rows_in_the_decided_order() {
     TEST_ASSERT_TRUE(hasText(screen, "Time / zone"));
     TEST_ASSERT_TRUE(hasText(screen, "Device name"));
     TEST_ASSERT_TRUE(hasText(screen, "Keller"));
-    TEST_ASSERT_FALSE(hasText(screen, "Service (PIN)"));
     const auto top = [&screen](const char* text) {
         for (const auto& command : screen.commands)
             if (command.text == text) return command.rect.top;
@@ -2473,7 +2481,9 @@ void test_settings_page_draws_the_rows_in_the_decided_order() {
     screen = settingsScreen(workspace, snapshot, "en");
     TEST_ASSERT_TRUE(hasText(screen, "WLAN"));
     TEST_ASSERT_TRUE(hasText(screen, "Web access"));
-    TEST_ASSERT_TRUE(hasText(screen, "Service (PIN)"));
+    TEST_ASSERT_TRUE(hasText(screen, "Service"));
+    TEST_ASSERT_FALSE(hasText(screen, "Service (PIN)"));
+    TEST_ASSERT_TRUE(hasLockIcon(screen));
     TEST_ASSERT_TRUE(hasText(screen, "4/6"));
     TEST_ASSERT_FALSE(hasText(screen, "Language"));
 
@@ -2489,6 +2499,33 @@ void test_settings_page_draws_the_rows_in_the_decided_order() {
     fermentation::FermentationTouchWorkspace home;
     const auto homeScreen = settingsScreen(home, snapshot, "de");
     TEST_ASSERT_TRUE(hasText(homeScreen, "Einstell."));
+}
+
+// B3: the Service row is the LVGL lock symbol plus the localized label; the
+// lock is never a text-pack glyph, so the label has no "(PIN)" suffix.
+void test_settings_service_row_uses_the_lock_symbol_and_a_localized_label() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    snapshot.service.available = true;
+    for (const auto& [locale, label] :
+         {std::pair{"de", "Service"}, std::pair{"en", "Service"},
+          std::pair{"es", "Servicio"}}) {
+        fermentation::FermentationTouchWorkspace workspace;
+        workspace.setPage(fermentation::FermentationUiPage::Settings);
+        for (int step = 0; step < 3; ++step) {
+            auto screen = settingsScreen(workspace, snapshot, locale);
+            static_cast<void>(fermentation::main_ui::routePress(
+                workspace, snapshot, screen, 200U, 220U));
+        }
+        const auto screen = settingsScreen(workspace, snapshot, locale);
+        TEST_ASSERT_TRUE(hasText(screen, label));
+        TEST_ASSERT_TRUE(hasLockIcon(screen));
+        for (const auto& command : screen.commands) {
+            TEST_ASSERT_TRUE(command.text.find("(PIN)") == std::string::npos);
+            TEST_ASSERT_TRUE(command.text.find("\xF0\x9F") ==
+                             std::string::npos);
+        }
+    }
 }
 
 void test_settings_disabled_rows_show_their_reason() {
@@ -2512,7 +2549,8 @@ void test_settings_disabled_rows_show_their_reason() {
                              .navigated);
     }
     screen = settingsScreen(workspace, snapshot, "en");
-    TEST_ASSERT_TRUE(hasText(screen, "Service (PIN)"));
+    TEST_ASSERT_TRUE(hasText(screen, "Service"));
+    TEST_ASSERT_TRUE(hasLockIcon(screen));
     TEST_ASSERT_TRUE(hasText(screen, "Service unavailable"));
 }
 
@@ -2753,7 +2791,6 @@ void test_s10_text_keys_exist_in_all_locales() {
                             "device-name",
                             "device-name-locked-run",
                             "device-name-change-failed",
-                            "service-protected",
                             "program-name",
                             "program-notes",
                             "space",
@@ -2878,6 +2915,8 @@ int main() {
     RUN_TEST(test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content);
     RUN_TEST(test_settings_page_draws_the_rows_in_the_decided_order);
     RUN_TEST(test_settings_disabled_rows_show_their_reason);
+    RUN_TEST(
+        test_settings_service_row_uses_the_lock_symbol_and_a_localized_label);
     RUN_TEST(test_settings_rows_are_list_cells_with_exact_hit_zones);
     RUN_TEST(
         test_keyboard_page_draws_the_mode_keys_and_has_exact_34px_hit_rows);

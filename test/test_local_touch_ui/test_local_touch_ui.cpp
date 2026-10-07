@@ -2840,6 +2840,66 @@ void test_program_editor_name_and_notes_use_the_keyboard_and_save_the_candidate(
         "Brot", fixture.catalog.programs.back().program.name.c_str());
 }
 
+// B2: the shared keyboard page shows its real caller in the route and returns
+// to it on cancel and on commit (the program candidate survives).
+std::vector<std::string> routeValues(const FermentationUiWorkspaceView& view) {
+    std::vector<std::string> values;
+    for (const auto& segment : view.route.segments)
+        values.push_back(segment.value);
+    return values;
+}
+
+void test_text_edit_route_follows_the_device_name_caller() {
+    SettingsFixture fixture;
+    fixture.workspace.adoptDeviceName("Keller");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(2U);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::TextEdit);
+    const auto route = routeValues(fixture.view());
+    TEST_ASSERT_EQUAL_UINT32(3U, route.size());
+    TEST_ASSERT_EQUAL_STRING("home", route[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("settings", route[1].c_str());
+    TEST_ASSERT_EQUAL_STRING("edit", route[2].c_str());
+    // Cancel returns to Settings.
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+}
+
+void test_text_edit_route_follows_the_program_editor_caller() {
+    for (const auto field : {FermentationUiProgramField::Name,
+                             FermentationUiProgramField::Notes}) {
+        EditorFixture fixture;
+        TEST_ASSERT_TRUE(fixture.tapField(field).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::TextEdit);
+        const std::vector<std::string> expectedValues{"home", "programs",
+                                                      "details"};
+        auto route = routeValues(fixture.view());
+        TEST_ASSERT_EQUAL_UINT32(expectedValues.size() + 1U, route.size());
+        for (std::size_t index = 0U; index < expectedValues.size(); ++index)
+            TEST_ASSERT_EQUAL_STRING(expectedValues[index].c_str(),
+                                     route[index].c_str());
+        TEST_ASSERT_EQUAL_STRING("edit", route.back().c_str());
+        TEST_ASSERT_TRUE(route[1] != "settings");
+
+        // Cancel: back in the editor, candidate untouched.
+        TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::ProgramEdit);
+        // Commit: back in the editor with the typed change in the candidate.
+        TEST_ASSERT_TRUE(fixture.tapField(field).navigated);
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);     // digits
+        TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);  // '1'
+        TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::ProgramEdit);
+        const auto& edit = *fixture.view().programEdit;
+        TEST_ASSERT_TRUE(edit.rows[fixture.indexOf(field)].changed);
+    }
+}
+
 void test_program_editor_copy_and_new_take_a_request_name_only() {
     for (const auto operation : {FermentationUiProgramEditOperation::Copy,
                                  FermentationUiProgramEditOperation::New}) {
@@ -3050,6 +3110,8 @@ int main(int, char**) {
     RUN_TEST(
         test_program_editor_name_and_notes_use_the_keyboard_and_save_the_candidate);
     RUN_TEST(test_program_editor_copy_and_new_take_a_request_name_only);
+    RUN_TEST(test_text_edit_route_follows_the_device_name_caller);
+    RUN_TEST(test_text_edit_route_follows_the_program_editor_caller);
     RUN_TEST(
         test_program_editor_edits_are_dirty_and_never_touch_the_stored_program);
     RUN_TEST(

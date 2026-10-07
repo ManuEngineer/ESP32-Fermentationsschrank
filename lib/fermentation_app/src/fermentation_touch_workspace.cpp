@@ -1197,6 +1197,12 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
     FermentationUiWorkspaceView view;
     view.page = page_;
     view.route.segments = routeForPage(page_);
+    if (page_ == FermentationUiPage::TextEdit && pageStack_.size() >= 2U) {
+        // The keyboard is shared; its route is the caller's route (the page
+        // below it on the existing stack) plus the edit step.
+        view.route.segments = routeForPage(pageStack_[pageStack_.size() - 2U]);
+        view.route.segments.push_back(key("edit"));
+    }
     setSlot(view, 0U, "back", FermentationUiWorkspaceSlotAction::NavigateBack);
     setSlot(view, 1U, "up", FermentationUiWorkspaceSlotAction::None, false);
     setSlot(view, 2U, "down", FermentationUiWorkspaceSlotAction::None, false);

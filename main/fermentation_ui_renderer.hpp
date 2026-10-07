@@ -22,6 +22,7 @@ enum class ScreenDrawKind : std::uint8_t {
     Fill,
     Text,
     NetworkStatusIcon,
+    LockIcon,
     QrCode,
     Logo,
     PressFeedback,
