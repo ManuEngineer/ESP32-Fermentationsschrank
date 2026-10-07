@@ -7,13 +7,20 @@ Pull Request: `#185` (Draft)
 Basis-Branch: `main`
 Basis-SHA: `dc938b2bc5cc9f9f2e93065ed5a9009eb99fcfda`
 Auftrag: `Issue184_PreReady_GitHub_Gate_Auftrag.md` (Owner)
-Planrevision: `1`
+Planrevision: `2` (konsolidiert; Rev 1 `63c9291` nur historische Referenz)
+REVIEWED_REV1_HEAD: `63c92914420d52d684bcd9dad360683301219a87`
 Implementation: `NOT_STARTED`
 PRODUCT_CODE_CHANGE: `NO`
 ACTUATOR_RELEASE: `NO`
 
 Dieser Plan ist ein eigenstaendiger CI-/Governance-Plan. Er aendert weder
 Produktcode noch Hardware-, Safety- oder Aktorvertraege.
+
+Ownerentscheidungen dieser Revision (aus dem Plan-Korrekturauftrag nach
+Independent Review): `D1=OPTION_A`;
+`D2=YES_INCLUDE_PRODUCTION_PARTITION_AND_DIRECT_BUILD_CONTRACT_FILES`;
+`D3=MARKDOWN_ONLY_FULL_PRE_READY_NOT_REQUIRED`. Es sind keine
+Ownerentscheidungen offen.
 
 ## 1. Ziel und Nicht-Ziele
 
@@ -23,7 +30,8 @@ Ziel (Owner-Vorgabe, hier nur konkretisiert):
 Independent Review / Fix Verification
 -> OPEN_BLOCKERS=0
 -> Owner autorisiert finalen lokalen Pre-Ready
--> lokaler host + esp Lauf auf exakt finalem, gepushtem PR-HEAD
+-> lokaler Lauf auf exakt finalem, gepushtem PR-HEAD:
+   host + esp PASS (semantischer Diff) bzw. NOT_REQUIRED_MARKDOWN_ONLY
 -> Commit Status `pre-ready/local=success` auf genau diesem SHA
 -> Owner setzt Ready for review
 -> Required Status Check `pre-ready/local` + strict/up-to-date
@@ -34,6 +42,14 @@ Normale Feature-PRs fuehren die vollstaendigen Engineering-Gates nur einmal
 aus (lokal). Die schwere GitHub-CI bleibt als Clean-Room-/Artefaktpfad fuer
 Gate-/Build-/Toolchain-Aenderungen und manuell verfuegbar. Ein Status eines
 aelteren SHA gibt einen spaeteren Push nie frei.
+
+Semantik des Contexts: `pre-ready/local=success` bedeutet „lokales
+Pre-Ready-/Merge-Gate erfuellt“, **nicht** zwingend „host+esp wurde
+ausgefuehrt“. Bei einem Diff mit mindestens einer Nicht-Markdown-Datei heisst
+SUCCESS `host+esp PASS` auf exakt dem gepushten HEAD; bei einem rein
+Markdown-only Diff heisst es `MARKDOWN_ONLY_NOT_REQUIRED` (Abschnitt 4.1). Die
+Statusbeschreibung weist den Grund jeweils sichtbar aus. Es bleibt bei diesem
+einen Context; keine zweite Statusfamilie.
 
 Nicht-Ziele (Owner-Grenzen): kein Server, keine Datenbank, keine GitHub App,
 keine signierte Attestierungs-PKI, kein Self-Hosted Runner, keine zweite
@@ -77,7 +93,9 @@ Alle Punkte am 2026-10-07 gegen Repository und GitHub geprueft.
   PyYAML installiert, `shellcheck` nicht installiert (nicht vorausgesetzt).
 - Der lokale Arbeitsbaum enthielt eine Aenderung an `.codex/config.toml`
   (projektlokale Modellvorgaben entfernt). Auf Owner-Anweisung ist sie als
-  eigener Commit Teil dieses PR; sie hat keine Gate-/Produktwirkung.
+  eigener Commit Teil dieses PR (Owner-Ausnahme, sichtbar im PR-Body); sie ist
+  nicht Teil des fachlichen Scopes von Issue #184 und hat keine
+  Gate-/Produktwirkung.
 
 ## 3. Quellen
 
@@ -120,17 +138,29 @@ Ablauf (jede Pruefung fail-closed; Abbruch ohne `success`):
 7. `origin/main` ist Ancestor von `HEAD` (PR ist aktuell zu `main`).
 8. Merken: `TESTED_HEAD=$(git rev-parse HEAD)`,
    `MAIN_BEFORE=$(git rev-parse origin/main)`.
-9. Status `pending` auf `TESTED_HEAD` publizieren; schlaegt das fehl: Abbruch
-   (ohne Gatelauf – ohne publizierbaren Status ist der Lauf wertlos).
-10. `export PRE_READY_EXPECTED_HEAD=$TESTED_HEAD`.
-11. `bash scripts/run_pre_ready_gates.sh host`; danach `esp` (Aktivierung der
-    ESP-IDF-Umgebung siehe Entscheidung D1).
-12. Abschlusspruefung vor SUCCESS: erneut `git fetch origin main` und
-    `git fetch origin <branch>`; Arbeitsbaum sauber; `HEAD == TESTED_HEAD`;
-    `origin/<branch> == TESTED_HEAD`; `origin/main == MAIN_BEFORE` **und**
-    Ancestor von `HEAD`. Ist `main` weitergelaufen: kein SUCCESS.
-13. Nur wenn Schritt 11 beide Phasen mit PASS beendet hat und Schritt 12
-    vollstaendig besteht: Status `success` auf `TESTED_HEAD`.
+9. **Diff-Klassifikation (automatisch, kein CLI-Flag, kein Umgebungsschalter):**
+   `git diff --name-only --no-renames "$MAIN_BEFORE" "$TESTED_HEAD"`
+   (`--no-renames`, damit bei Umbenennungen Alt- und Neupfad beide erscheinen).
+   `MARKDOWN_ONLY` gilt nur, wenn der Diff nicht leer ist und **jeder**
+   gelistete Pfad auf `.md` endet (dieselbe Abgrenzung wie bisher
+   `paths-ignore: **/*.md`). Jeder andere Fall – Mischdiff, leerer Diff,
+   Klassifikationsfehler – ist `FULL` (fail-closed zur strengeren Seite).
+10. Status `pending` auf `TESTED_HEAD` publizieren; schlaegt das fehl: Abbruch
+    (ohne Gatelauf – ohne publizierbaren Status ist der Lauf wertlos).
+11. Nur bei `FULL`: Voraussetzungen der ESP-Phase pruefen (D1) und
+    `export PRE_READY_EXPECTED_HEAD=$TESTED_HEAD`; dann
+    `bash scripts/run_pre_ready_gates.sh host`, danach `esp`. Bei
+    `MARKDOWN_ONLY` wird der Runner nicht aufgerufen und keine ESP-Umgebung
+    verlangt.
+12. Abschlusspruefung vor SUCCESS (fuer beide Klassen): erneut
+    `git fetch origin main` und `git fetch origin <branch>`; Arbeitsbaum
+    sauber; `HEAD == TESTED_HEAD`; `origin/<branch> == TESTED_HEAD`;
+    `origin/main == MAIN_BEFORE` **und** Ancestor von `HEAD`; die Klassifikation
+    wird auf demselben Diff wiederholt und muss identisch ausfallen. Ist `main`
+    weitergelaufen: kein SUCCESS.
+13. Nur wenn bei `FULL` beide Phasen mit PASS beendet haben (bei
+    `MARKDOWN_ONLY` entfaellt dies) und Schritt 12 vollstaendig besteht:
+    Status `success` auf `TESTED_HEAD`.
 
 Fehlerpfad: Ein `EXIT`-Trap publiziert bei jedem Abbruch nach Schritt 9, bei
 dem noch kein `success` gesetzt wurde, best-effort `failure` auf
@@ -138,12 +168,15 @@ dem noch kein `success` gesetzt wurde, best-effort `failure` auf
 Ist GitHub nicht erreichbar, bleibt der zuvor gesetzte `pending` stehen; das
 ist fail-closed, da `pending` keinen Required Check erfuellt. Der Wrapper
 beendet in jedem Nicht-Erfolgsfall mit Exit != 0 und gibt maschinenlesbar
-`PRE_READY_LOCAL_GATES=PASS|FAILED|BLOCKED` und `PRE_READY_TESTED_HEAD=<sha>`
-aus (`BLOCKED` = fehlende Voraussetzung vor dem Gatelauf, `FAILED` =
-ausgefuehrt und fehlgeschlagen oder Abschlusspruefung verletzt).
+`PRE_READY_LOCAL_GATES=PASS|NOT_REQUIRED_MARKDOWN_ONLY|FAILED|BLOCKED` und
+`PRE_READY_TESTED_HEAD=<sha>` aus (`BLOCKED` = fehlende Voraussetzung vor dem
+Gatelauf, `FAILED` = ausgefuehrt und fehlgeschlagen oder Abschlusspruefung
+verletzt). Der Wert `PASS` wird ausschliesslich nach ausgefuehrtem host+esp
+ausgegeben; `NOT_REQUIRED_MARKDOWN_ONLY` ist nie `PASS`.
 
 Status-Vertrag: Context genau `pre-ready/local`; Beschreibung
-`pre-ready/local pending <short-sha>`, `<short-sha> host+esp PASS` bzw.
+`pre-ready/local pending <short-sha>`, `<short-sha> host+esp PASS`,
+`<short-sha> MARKDOWN_ONLY_NOT_REQUIRED` bzw.
 `<short-sha> FAILED|BLOCKED: <Grund kurz>` (<= 140 Zeichen); kein
 `target_url`; Aufruf ausschliesslich ueber
 `gh api -X POST repos/{owner}/{repo}/statuses/<sha> -f state=... -f
@@ -155,17 +188,14 @@ aufgeloest; der Wrapper vergleicht `gh repo view --json nameWithOwner` mit der
 Origin-URL und bricht bei Abweichung ab, damit der Status nicht auf einem
 Fork/Upstream landet.
 
-Entscheidung D1 (ESP-IDF-Umgebung, Empfehlung A): Das Dokument beschreibt
-heute `host` ohne und `esp` mit aktiviertem `export.sh` (wie in GitHub-CI).
-Empfehlung **A**: Der Wrapper verlangt gesetztes `IDF_PATH`/`IDF_TOOLS_PATH`
-(sonst `BLOCKED`), fuehrt `host` in der aufrufenden Umgebung aus und aktiviert
-fuer die `esp`-Phase `. "$IDF_PATH/export.sh"` in einer Subshell – exakt die
-bereits dokumentierte Sequenz, keine Installation, keine neue Pfadlogik. Der
-Runner prueft die Provenienz danach unveraendert. Alternative **B**: Der
-Owner aktiviert die Umgebung vor dem Wrapperaufruf fuer beide Phasen; das
-setzt voraus, dass die `host`-Phase unter aktivem `export.sh` identisch
-besteht (Python-/PyYAML-Aufloesung), was in C1 empirisch gezeigt werden
-muesste. Auswahl durch den Owner mit der Planfreigabe.
+ESP-IDF-Umgebung (`D1=OPTION_A`, Ownerentscheidung): Das Dokument beschreibt
+`host` ohne und `esp` mit aktiviertem `export.sh` (wie in GitHub-CI). Der
+Wrapper verlangt bei `FULL` gesetztes `IDF_PATH`/`IDF_TOOLS_PATH` (sonst
+`BLOCKED`, vor dem Gatelauf), fuehrt `host` in der aufrufenden Umgebung aus und
+aktiviert fuer die `esp`-Phase `. "$IDF_PATH/export.sh"` in einer Subshell –
+exakt die bereits dokumentierte Sequenz; keine Installation, keine zweite
+Toolchain-Wahrheit, keine neue Pfadlogik. Der Runner prueft die Provenienz
+danach unveraendert.
 
 ### 4.2 C1 – Fixture-Selbsttest
 
@@ -190,7 +220,13 @@ Szenarien (je mit Erwartung auf dem Aufrufprotokoll):
 
 | Szenario | Erwartung |
 |---|---|
-| host+esp PASS, alles stabil | Exit 0; Reihenfolge `pending`, dann genau ein `success` auf `TESTED_HEAD` mit Kurz-SHA und `host+esp PASS` |
+| Diff mit Nicht-Markdown-Datei, host+esp PASS, alles stabil | Exit 0; Reihenfolge `pending`, dann genau ein `success` auf `TESTED_HEAD` mit Kurz-SHA und `host+esp PASS`; Runner `host` und `esp` aufgerufen |
+| rein Markdown-only Diff | Exit 0; `pending`, dann `success` mit `MARKDOWN_ONLY_NOT_REQUIRED`; Runner **nicht** aufgerufen; keine ESP-Umgebung noetig |
+| Mischdiff (`.md` + irgendeine Nicht-Markdown-Datei, z. B. `.sh`, `.cpp`, `.yml`, `.toml`) | **kein** Markdown-Bypass: Runner `host`+`esp` laufen, Beschreibung `host+esp PASS` |
+| Umbenennung `.md` <-> Nicht-Markdown, Loeschung einer Nicht-Markdown-Datei | kein Bypass (`--no-renames`) |
+| leerer Diff (HEAD == `origin/main`) | `FULL`, kein Bypass |
+| Markdown-only, aber Arbeitsbaum/Upstream/SHA/`main` verletzt | gleiche Abbrueche wie bei `FULL`; kein `success` |
+| Diff aendert sich bis zur Abschlusspruefung (z. B. HEAD/`main` bewegt) | kein `success` |
 | `host` FAIL | Exit != 0; `failure`, kein `success`; `esp` wird nicht gestartet |
 | `esp` FAIL | Exit != 0; `failure`, kein `success` |
 | HEAD aendert sich waehrend des Laufs | kein `success`; `failure` |
@@ -203,7 +239,7 @@ Szenarien (je mit Erwartung auf dem Aufrufprotokoll):
 | `gh` fehlt / `gh auth status` schlaegt fehl | `BLOCKED`, kein Gatelauf, Exit != 0 |
 | API-Fehler beim `pending` | Abbruch ohne Gatelauf |
 | API-Fehler beim `success` | Exit != 0, nie ein stilles PASS |
-| Status-Kontext/State-Werte | nur `pre-ready/local`; nur `pending|success|failure` |
+| Status-Kontext/State-Werte | nur `pre-ready/local`; nur `pending|success|failure`; Beschreibung nennt je Klasse `host+esp PASS` bzw. `MARKDOWN_ONLY_NOT_REQUIRED` |
 
 Zusaetzlich `bash -n scripts/run_pre_ready_and_publish.sh`. `shellcheck` wird
 nicht vorausgesetzt.
@@ -243,21 +279,31 @@ sdkconfig.defaults
 sdkconfig.defaults.bringup
 sdkconfig.defaults.release
 main/idf_component.yml
+main/Kconfig.projbuild
+main/CMakeLists.txt
+lib/device_platform/CMakeLists.txt
+lib/device_platform_esp_idf/CMakeLists.txt
+lib/fermentation_app/CMakeLists.txt
 lib/device_platform_esp_idf/idf_component.yml
 lib/fermentation_app/idf_component.yml
+partitions/issue_90_state_store.csv
 ```
 
 Gegenueber der Mindestliste des Auftrags kommen drei Eintraege hinzu, die der
 Runner real aufruft und die damit zum Gate-Vertrag gehoeren:
 `build_esp_idf_profiles.py`, `check_architecture_boundaries.py` und
 `generate_board_profile_header.py`.
-Bewusst **nicht** enthalten: Komponenten-`CMakeLists.txt` unter `lib/`/`main/`
-(Quelllisten sind Featurearbeit und lokal durch die `esp`-Phase gedeckt),
-`sdkconfig.defaults.issue*`/Testpartitionen/`spikes/` (nicht im
-Produktions-Gatepfad), `partitions/issue_90_state_store.csv` (Produktions-
-Partitionstabelle: **Entscheidung D2**, Empfehlung: nicht aufnehmen, da sie
-Produktdaten-Layout und kein Gate-/Toolchainvertrag ist und die lokale
-`esp`-Phase sie baut), `dependencies.lock` (gitignored).
+Die Eintraege `main/Kconfig.projbuild`, die vier Produktions-`CMakeLists.txt`
+unter `main/` und `lib/` sowie `partitions/issue_90_state_store.csv` sind
+direkte Produktions-Buildinputs (`D2`). Die Partitionstabelle ist es ueber
+`sdkconfig.defaults` (`CONFIG_PARTITION_TABLE_CUSTOM_FILENAME`). Bewusst
+**nicht** enthalten: test-/spike-/harnessspezifische CMake-, sdkconfig- und
+Partitionsdateien (`sdkconfig.defaults.issue*`,
+`partitions/issue_90_state_store_test.csv`, `spikes/`, `test/esp_idf_*`), soweit
+der kanonische normale Heavy-CI-Pfad sie nicht verwendet; vor C2 wird anhand
+von `build_esp_idf_profiles.py` und `esp_idf_contract.py` belegt, dass dies fuer
+jede ausgeschlossene Datei zutrifft, andernfalls wird sie aufgenommen.
+`dependencies.lock` ist gitignored.
 
 Weitere Workflowanpassungen fuer `workflow_dispatch` (dabei ist
 `github.event.pull_request` leer):
@@ -296,12 +342,24 @@ prueft:
 - jede im `run_pre_ready_gates.sh` per `scripts/<name>` aufgerufene Datei sowie
   Runner, Wrapper und Workflow selbst sind in der Pfadliste enthalten
   (SSOT = Runner, keine zweite Liste);
+- die Produktions-Partitionstabelle, auf die `sdkconfig.defaults` per
+  `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME` zeigt, ist abgeleitet in der
+  Pfadliste enthalten;
+- die expliziten Buildvertragsdateien (`main/Kconfig.projbuild`,
+  `main/CMakeLists.txt`, `lib/device_platform/CMakeLists.txt`,
+  `lib/device_platform_esp_idf/CMakeLists.txt`,
+  `lib/fermentation_app/CMakeLists.txt`, `CMakeLists.txt`,
+  `sdkconfig.defaults*` der Produktionsprofile) stehen als bewusst kleine
+  feste Schutzliste im Check; sie ist absichtlich redundant zum Workflow,
+  damit niemand eine dieser Dateien unbemerkt aus der Positivliste entfernen
+  kann (Entfernen aus dem Workflow ohne Aenderung der Schutzliste = FAILED);
 - Draft-Guard laesst `workflow_dispatch` zu; `SOURCE_GIT_SHA` und Concurrency
   haben Fallbacks.
 
 Die Pruefung ist eine reine Funktion ueber (Workflow-Dict, Runner-Text,
 Dateimenge); die Fixtures reichen bewusst fehlerhafte Eingaben durch
-(Pfad fehlt, Runner-Skript nicht abgedeckt, `push`-Trigger, `paths-ignore`,
+(Pfad fehlt, Runner-Skript nicht abgedeckt, Partitionstabelle oder
+Schutzlistendatei entfernt, `push`-Trigger, `paths-ignore`,
 fehlender Dispatch-Guard) und erwarten jeweils FAILED. Falls der Owner
 stattdessen ein eigenes Skript wuenscht, waere das eine Runner-Aenderung und
 damit eine ausdrueckliche Ownerentscheidung (nicht empfohlen).
@@ -321,12 +379,19 @@ Neuer normaler Mergevertrag (ersetzt die bisherige Reihenfolge ab
 Independent Review abgeschlossen
 -> OPEN_BLOCKERS=0
 -> Owner autorisiert finalen lokalen Pre-Ready
--> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> lokales Pre-Ready-Gate erfuellt auf exakt finalem HEAD
+   (host+esp PASS, bzw. NOT_REQUIRED_MARKDOWN_ONLY bei rein Markdown-only Diff)
 -> `pre-ready/local=success` auf exakt demselben HEAD
 -> Owner setzt Ready for review
 -> Required Status Check erfuellt
 -> Merge-Gate
 ```
+
+`PRE_READY_LOCAL_GATES=PASS` bleibt ausschliesslich dem ausgefuehrten host+esp
+vorbehalten; die Markdown-only-Klasse wird als
+`NOT_REQUIRED_MARKDOWN_ONLY` gefuehrt und nie als `PASS` bezeichnet. Der
+Context `pre-ready/local` ist als „lokales Pre-Ready-/Merge-Gate erfuellt“
+definiert.
 
 `GitHub Full CI PASS` ist kein allgemeines Pflichtgate mehr; es bleibt
 Pflicht, wenn der schwere Workflow gemaess Pfadfilter fuer den PR ausgeloest
@@ -372,9 +437,11 @@ nach dem bisherigen Verfahren qualifiziert** (Abschnitt 7).
 
 | ID | Frage / Risiko | Empfehlung |
 |---|---|---|
-| D1 | ESP-IDF-Umgebung im Wrapper (A: Subshell-`export.sh` fuer `esp`; B: Owner aktiviert vorab) | A |
-| D2 | Produktions-Partitionstabelle (`partitions/issue_90_state_store.csv`) in den Pfadfilter? | nein |
-| D3 | Folge der Required-Check-Umstellung: Mit `pre-ready/local` als Required Check, strict und `enforce_admins=true` benoetigt **jeder** PR vor dem Merge einen vollen host+esp-Lauf – auch Markdown-only-PRs, reine ROADMAP-Syncs und reine Plan-PRs (bisher bewusst von der Firmware-CI ausgenommen). Der Plan erfindet keine Abkuerzung: jede Variante, die `success` ohne host+esp setzt, braeche die Statusbedeutung „host+esp PASS“. Owner entscheidet, ob er diese Last akzeptiert oder fuer solche PRs eine eigene, separat zu planende Regel (z. B. anderer Kontext oder Admin-Bypass) wuenscht. | Owner-Entscheidung, nicht Teil dieses PR |
+| D1 | ESP-IDF-Umgebung im Wrapper | entschieden: Option A |
+| D2 | Produktions-Partitionstabelle und direkte Buildvertragsdateien im Pfadfilter | entschieden: ja |
+| D3 | Markdown-only-PRs | entschieden: voller Pre-Ready `NOT_REQUIRED`, automatische Diff-Klassifikation, Mischdiff -> voller Lauf |
+| R5 | Markdown-Klassifikation ist eine Lockerung des Gates: ein `.md`-Diff mit semantischer Wirkung (z. B. von Skripten gelesene Markdown-Dateien) wird nicht lokal gebaut. Gleiche Abgrenzung wie bisher (`paths-ignore: **/*.md`); keine neue Lockerung gegenueber dem Ist-Stand. | akzeptiert (Ownerentscheidung D3) |
+| R6 | Head-Status vs. Test-Merge-Commit-Semantik von GitHub (Abschnitt 7, Aktivierungsgate) | empirisch absichern |
 | R1 | `.codex/config.toml` ist auf Owner-Anweisung als eigener Commit im PR; der Arbeitsbaum ist damit fuer den Wrapper sauber. | erledigt |
 | R2 | Status ist eine unsignierte Behauptung (siehe Abschnitt 1) | akzeptiert laut Auftrag |
 | R3 | Branch-Upstream eines frisch angelegten Branches zeigt auf `origin/main`; der Wrapper verlangt `origin/<eigener Branch>` und bricht sonst ab | Push mit `-u origin <branch>` |
@@ -386,31 +453,45 @@ Gelesener Ist-Zustand siehe Abschnitt 2: es existiert **kein**
 `required_status_checks`-Block; es ist daher nichts zu entfernen. Die
 Einstellung wird vom Agenten nicht veraendert.
 
-1. #184 wird nach dem bisherigen Verfahren qualifiziert (Independent Review,
-   Owner-autorisierter lokaler Pre-Ready-Lauf nach heutigem Runner-Vertrag,
-   `Ready for review`, schwere CI – sie wird durch die Aenderung an
-   `build.yml` ohnehin ausgeloest).
-2. Auf dem finalen PR-HEAD (nach Pre-Ready, vor Ready) einmal
-   `bash scripts/run_pre_ready_and_publish.sh` erfolgreich ausfuehren, damit
-   `pre-ready/local` als realer Kontext auf GitHub existiert (erst dann ist er
-   in den Branch-Protection-Einstellungen auswaehlbar). Wird dadurch ein
-   weiterer Commit noetig, gilt die Regel „Status gilt nur fuer genau diesen
-   SHA“ und der Nachweis wird auf dem finalen HEAD wiederholt. Dieser **eine**
-   Wrapperlauf (er ruft denselben Runner auf und gibt
-   `PRE_READY_LOCAL_GATES=PASS` aus) ist zugleich der Owner-autorisierte
-   Pre-Ready-Lauf nach dem alten Verfahren aus Schritt 1; host+esp laeuft fuer
-   #184 nicht zweimal. Voraussetzung: Owner-Autorisierung des Laufs liegt vor
-   und der Wrapper ist auf dem finalen HEAD vollstaendig bestanden.
-3. **Owner-Handaktion (Gate):** fuer `main` Required Status Check
-   `pre-ready/local` setzen und
-   `Require branches to be up to date before merging` (strict) aktivieren;
-   `enforce_admins` bleibt `true`. Die schwere CI wird **nicht** als Required
-   Check eingetragen (nicht noetig und wegen Pfadfilter nicht zulaessig).
-4. Erst danach gilt der neue Vertrag fuer Folge-PRs als aktiv; der Agent
-   dokumentiert den Zustand erst nach Owner-Bestaetigung als `ACTIVE`.
+Risiko B3: Der Wrapper setzt `pre-ready/local` auf den PR-**Head**. Ein
+`pull_request`-Workflow erzeugt Checks dagegen auf dem ephemeren
+Test-Merge-Commit; GitHub dokumentiert, dass fuer Required Checks der
+Test-Merge-Commit massgebend sein kann, wenn dafuer Statuschecks vorhanden
+sind. Fuer PRs mit Heavy-CI darf daher nicht vorausgesetzt werden, dass der
+Head-Status das Required Gate automatisch erfuellt. Es wird **keine**
+Mirror-/Bridge-Architektur vorsorglich gebaut; stattdessen gilt ein
+empirisches Aktivierungsgate:
 
-Bis zu Schritt 3 bleibt `BRANCH_PROTECTION_MIGRATION=OWNER_ACTION_PENDING`
-im PR sichtbar.
+1. #185 wird nach dem bisherigen Verfahren qualifiziert (Independent Review,
+   `OPEN_BLOCKERS=0`, Owner-autorisierter lokaler Pre-Ready-Lauf).
+2. Auf dem finalen #185-Head einmal `bash scripts/run_pre_ready_and_publish.sh`
+   erfolgreich ausfuehren, damit `pre-ready/local` als realer Kontext
+   existiert (erst dann in den Branch-Protection-Einstellungen auswaehlbar).
+   Dieser **eine** Wrapperlauf (derselbe Runner, `PRE_READY_LOCAL_GATES=PASS`)
+   ist zugleich der Owner-autorisierte Pre-Ready-Lauf aus Schritt 1; host+esp
+   laeuft fuer #185 nicht zweimal. Jeder weitere Commit macht den Nachweis auf
+   dem neuen finalen HEAD erneut noetig.
+3. Die durch diesen PR ohnehin ausgeloeste Heavy-CI (Aenderung an `build.yml`
+   und Gate-Skripten trifft den eigenen Pfadfilter) erfolgreich abschliessen
+   (nach `Ready for review` durch den Owner).
+4. **Owner-Handaktion:** fuer `main` Required Status Check `pre-ready/local`
+   setzen und `Require branches to be up to date before merging` (strict)
+   aktivieren; `enforce_admins` bleibt `true`. Die schwere CI wird nicht als
+   Required Check eingetragen.
+5. **Vor dem Merge von #185** in der GitHub-Mergebox verifizieren, dass der
+   Required Context als erfuellt gilt, obwohl Heavy-CI-Checks auf dem
+   Test-Merge-Commit existieren.
+6. Ergebnis dokumentieren: `REQUIRED_STATUS_HEAD_MERGE_COMMIT_INTEROP=PASS`.
+7. Bleibt der Required Context wegen der Merge-Commit-Semantik offen: die
+   Branch-Protection-Aenderung zuruecknehmen bzw. den neuen Required Check
+   deaktivieren, `MIGRATION=BLOCKED`, **nicht mergen** und eine Planrevision
+   fuer eine minimale Bridge-/Mirror-Loesung vorlegen.
+8. Erst nach `INTEROP=PASS` und Owner-Bestaetigung gilt der neue Vertrag fuer
+   Folge-PRs als aktiv (`ACTIVE`).
+
+Bis Schritt 4 bleibt `BRANCH_PROTECTION_MIGRATION=OWNER_ACTION_PENDING`, danach
+bis Schritt 6 `INTEROP_VERIFICATION_PENDING` im PR sichtbar. Der Agent dokumentiert
+Ergebnisse erst nach Owner-Bestaetigung.
 
 ## 8. Dokumentationswirkung und Abschluss
 
@@ -422,4 +503,5 @@ Branch-Protection-Umstellung bleiben Ownerhandlungen. Der PR bleibt Draft.
 
 Freigabe erfolgt ueber die exakte Plan-SHA des Commits, der diese Datei
 enthaelt (`PLAN_STATUS=AWAITING_OWNER_APPROVAL`, `IMPLEMENTATION=NOT_STARTED`),
-einschliesslich der Entscheidungen D1, D2 und D3.
+Rev 2 enthaelt die Ownerentscheidungen D1 bis D3 und die Korrekturen B1 bis B3
+aus dem Independent Review.
