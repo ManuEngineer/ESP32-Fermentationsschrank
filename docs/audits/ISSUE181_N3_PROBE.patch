@@ -1,0 +1,111 @@
+diff --git a/lib/device_platform_esp_idf/src/esp_idf_sntp_time_coordinator.cpp b/lib/device_platform_esp_idf/src/esp_idf_sntp_time_coordinator.cpp
+index 445d0c7..6c7428a 100644
+--- a/lib/device_platform_esp_idf/src/esp_idf_sntp_time_coordinator.cpp
++++ b/lib/device_platform_esp_idf/src/esp_idf_sntp_time_coordinator.cpp
+@@ -2,9 +2,55 @@
+ 
+ #include <algorithm>
+ 
++#include <sys/time.h>
++#include <cerrno>
++#include <ctime>
++#include "esp_log.h"
+ #include "esp_netif_sntp.h"
+ #include "esp_sntp.h"
+ 
++
++// ---- N3 PROBE (Issue #181, nicht Produktcode, nicht committen) ----
++extern "C" void sntp_sync_time(struct timeval* tv) {
++    static const char* kP = "N3_PROBE";
++    struct timeval now;
++    gettimeofday(&now, nullptr);
++    const int64_t cpu = (int64_t)now.tv_sec * 1000000LL + now.tv_usec;
++    const int64_t srv = (int64_t)tv->tv_sec * 1000000LL + tv->tv_usec;
++    const int64_t delta = srv - cpu;
++    ESP_LOGW(kP, "sync_cb mode=%d time_before=%lld server=%lld delta_us=%lld",
++             (int)sntp_get_sync_mode(), (long long)now.tv_sec,
++             (long long)tv->tv_sec, (long long)delta);
++    if (sntp_get_sync_mode() == SNTP_SYNC_MODE_IMMED) {
++        const int r = settimeofday(tv, nullptr);
++        sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
++        ESP_LOGW(kP, "IMMED settimeofday ret=%d", r);
++    } else {
++        struct timeval d = {(time_t)(delta / 1000000LL),
++                            (suseconds_t)(delta % 1000000LL)};
++        errno = 0;
++        const int r = adjtime(&d, nullptr);
++        const int e = errno;
++        struct timeval out = {0, 0};
++        const int r2 = adjtime(nullptr, &out);
++        ESP_LOGW(kP,
++                 "SMOOTH adjtime ret=%d errno=%d tv_sec_arg=%lld "
++                 "readback ret=%d remaining=%lld.%06ld",
++                 r, e, (long long)d.tv_sec, r2, (long long)out.tv_sec,
++                 (long)out.tv_usec);
++        if (r == -1) {
++            settimeofday(tv, nullptr);
++            sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
++            ESP_LOGW(kP, "adjtime failed -> settimeofday fallback");
++        } else {
++            sntp_set_sync_status(SNTP_SYNC_STATUS_IN_PROGRESS);
++        }
++    }
++    struct timeval after;
++    gettimeofday(&after, nullptr);
++    ESP_LOGW(kP, "time_after=%lld", (long long)after.tv_sec);
++}
++
+ namespace device_platform_esp_idf {
+ 
+ namespace {
+@@ -86,9 +132,7 @@ esp_err_t EspIdfSntpTimeCoordinator::initialize(
+ }
+ 
+ void EspIdfSntpTimeCoordinator::applySyncMode() const noexcept {
+-    sntp_set_sync_mode(
+-        toEspSyncMode(internal::selectSntpSyncMode(
+-            timeSource_.absoluteTimeTrusted())));
++    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);  // PROBE: baseline #126 mode
+ }
+ 
+ esp_err_t EspIdfSntpTimeCoordinator::start() noexcept {
+@@ -113,6 +157,16 @@ void EspIdfSntpTimeCoordinator::poll() noexcept {
+     } else if (status == SNTP_SYNC_STATUS_COMPLETED) {
+         observation = internal::SntpSyncObservation::Completed;
+     }
++    {
++        static int64_t lastLog = 0;
++        const time_t t = time(nullptr);
++        if (status != SNTP_SYNC_STATUS_RESET || t - lastLog >= 10) {
++            lastLog = t;
++            ESP_LOGW("N3_PROBE", "poll status=%d mode=%d time=%lld trusted=%d",
++                     (int)status, (int)sntp_get_sync_mode(), (long long)t,
++                     (int)timeSource_.absoluteTimeTrusted());
++        }
++    }
+     const auto action = arbitration_.observe(
+         observation, fromEspSyncMode(sntp_get_sync_mode()),
+         timeSource_.absoluteTimeTrusted());
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 3b6da7c..8fe78d7 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -1,3 +1,4 @@
++#include <sys/time.h>
+ #include <cinttypes>
+ #include <memory>
+ #include <new>
+@@ -542,6 +543,13 @@ bool updateProductUi(
+ }  // namespace
+ 
+ extern "C" void app_main(void) {
++    {
++        struct timeval n3tv;
++        gettimeofday(&n3tv, nullptr);
++        ESP_LOGW("N3_PROBE", "BOOT reset_reason=%d (ESP_RST_POWERON=%d) raw_time=%lld",
++                 (int)esp_reset_reason(), (int)ESP_RST_POWERON,
++                 (long long)n3tv.tv_sec);
++    }
+ #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
+     fermentation::issue_31_touch_calibration_provision::run();
+     return;

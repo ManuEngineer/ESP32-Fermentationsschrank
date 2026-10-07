@@ -286,6 +286,23 @@ enum class SntpSyncObservation : std::uint8_t {
     Completed,
 };
 
+// ESP-IDF SNTP applies a correction either as an immediate step
+// (`settimeofday`, `COMPLETED` in the same call) or as an `adjtime` slew.  A
+// system clock that was never set (NTP-only cold boot) cannot be slewed: the
+// pinned ESP-IDF v6.1 discards the slew on a zero boot time and reports
+// `COMPLETED` without moving the clock (Issue #181).  An untrusted system clock
+// therefore always takes the immediate step; a trusted one keeps the smooth
+// correction for normal drift.
+enum class SntpSyncMode : std::uint8_t {
+    Immediate,
+    Smooth,
+};
+
+[[nodiscard]] constexpr SntpSyncMode selectSntpSyncMode(
+    const bool systemTimeTrusted) noexcept {
+    return systemTimeTrusted ? SntpSyncMode::Smooth : SntpSyncMode::Immediate;
+}
+
 struct SntpArbitrationAction {
     bool promoteSystemTrust{false};
     bool synchronizeRtc{false};
@@ -302,8 +319,13 @@ class SntpArbitration final {
    public:
     void reset() noexcept { completionHandled_ = false; }
 
+    // `mode` is the SNTP mode in effect at the observation and
+    // `systemTimeTrusted` the current trust latch.  `COMPLETED` under `Smooth`
+    // on an untrusted clock is not evidence that the clock was set, so it
+    // neither promotes trust nor writes the RTC from an unverified clock.
     [[nodiscard]] SntpArbitrationAction observe(
-        const SntpSyncObservation observation) noexcept {
+        const SntpSyncObservation observation, const SntpSyncMode mode,
+        const bool systemTimeTrusted) noexcept {
         switch (observation) {
             case SntpSyncObservation::Reset:
             case SntpSyncObservation::InProgress:
@@ -312,6 +334,8 @@ class SntpArbitration final {
             case SntpSyncObservation::Completed:
                 if (completionHandled_) return {};
                 completionHandled_ = true;
+                if (!systemTimeTrusted && mode != SntpSyncMode::Immediate)
+                    return {};
                 return {true, true};
             case SntpSyncObservation::Other:
                 return {};

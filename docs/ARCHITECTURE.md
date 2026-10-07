@@ -403,9 +403,18 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
   ihren bestehenden Verträgen zulässig.
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
 - fehlende NTP-Zeit erzeugt in #24-R1 keine Charge-Rettung oder Aktorfreigabe
-- NTP-Synchronisierung folgt der offiziellen ESP-IDF-SNTP-Semantik. Nach
-  abgeschlossener Konvergenz wird die RTC nachgeführt; Quellenverlust allein
-  entwertet die bereits etablierte lokale Systemzeit nicht.
+- NTP-Synchronisierung nutzt ESP-IDF-SNTP, der Modus folgt dem bestehenden
+  Trust-Latch der Systemzeit (Issue #181): Solange keine trusted Systemzeit
+  existiert (NTP-only Kaltstart, Uhr nie gesetzt), erfolgt die erste
+  Synchronisation als unmittelbarer Schritt (`IMMED`); ein `COMPLETED` unter
+  `SMOOTH` aus dem untrusted Zustand promotet weder Trust noch schreibt es die
+  RTC. Nach dem ersten erfolgreichen Promote und bei RTC-geseedeter Systemzeit
+  gilt `SMOOTH`. Nach abgeschlossener Konvergenz wird die RTC nachgeführt;
+  Quellenverlust allein entwertet die bereits etablierte lokale Systemzeit
+  nicht. Bekanntes Restrisiko (Owner-Entscheidung O1=a, nicht in #181
+  behoben): Weicht eine RTC-geseedete Systemzeit um mehr als rund 35,8 min von
+  NTP ab, wird die Korrektur unter `SMOOTH` im gepinnten ESP-IDF v6.1 wegen
+  32-Bit-Truncation in `adjtime()` falsch dimensioniert.
 
 ## Ressourcenmodell
 
