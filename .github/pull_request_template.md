@@ -18,7 +18,8 @@ Closes #
 - gezielte Tests:
 - Diff-/Architektur-/Secretpruefung:
 - vollstaendiger lokaler Lauf: nicht angeordnet / Ergebnis
-- GitHub-CI: wartet auf `Ready for review` / Ergebnis
+- `pre-ready/local` auf exakt finalem HEAD: nicht gesetzt / Ergebnis (Beschreibung)
+- schwere GitHub-CI: nicht ausgeloest (Pfadfilter) / Ergebnis; nur bei Trigger oder Owneranordnung Pflicht
 
 ## Risiken und offene Gates
 

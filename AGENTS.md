@@ -106,9 +106,11 @@ Die verbindliche Reihenfolge vor einem Ready-Wechsel lautet:
 Independent Review abgeschlossen
 -> OPEN_BLOCKERS=0
 -> Owner autorisiert finalen lokalen Pre-Ready-Lauf
--> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> lokales Pre-Ready-Gate erfuellt auf exakt finalem HEAD
+   (PRE_READY_LOCAL_GATES=PASS bzw. NOT_REQUIRED_MARKDOWN_ONLY)
+-> `pre-ready/local=success` auf exakt demselben HEAD
 -> Owner setzt Ready for review
--> GitHub-CI PASS
+-> Required Status Check erfuellt
 -> Merge-Gate
 ```
 
@@ -118,12 +120,16 @@ ausdruecklicher Owner-Anweisung; `FOLLOW-UP` und `NO-ACTION` blockieren ihn
 nicht. `OPEN_BLOCKERS=0` allein erlaubt weder den Lauf noch den Wechsel auf
 `Ready for review`.
 
-GitHub-Firmware-CI laeuft nicht im Draft. Erst nach
-`PRE_READY_LOCAL_GATES=PASS` setzt der Owner auf `Ready for review`; spaetere
-semantische Pushes eines Nicht-Draft-PR starten CI erneut. Markdown-only loest
-keine Firmware-CI aus. Bei semantischen Aenderungen gilt die im Workflow
-definierte Fix-Verification-/Materialitaetsregel; ein neuer Full Review ist
-nur bei materieller Aenderung oder breitem neuem Diff erforderlich.
+Der lokale Lauf wird ueber `scripts/run_pre_ready_and_publish.sh` ausgefuehrt
+und als Commit Status `pre-ready/local` auf den exakt getesteten, gepushten
+PR-HEAD publiziert; erst danach setzt der Owner auf `Ready for review`. Die
+schwere GitHub-CI ist kein allgemeines Pflichtgate mehr: sie laeuft nicht im
+Draft und automatisch nur bei Aenderungen am Gate-/Build-/Toolchain-Vertrag
+oder manuell; ist sie fuer einen PR ausgeloest oder vom Owner angeordnet,
+bleibt ihr PASS Pflicht. Semantik, Pfadfilter und Branch-Protection stehen in
+`docs/CI_AND_QUALITY_GATES.md`. Bei semantischen Aenderungen gilt die im
+Workflow definierte Fix-Verification-/Materialitaetsregel; ein neuer Full
+Review ist nur bei materieller Aenderung oder breitem neuem Diff erforderlich.
 
 Nach CI-Fehler legt der Agent Befund und Korrekturplan vor; nur der Owner
 entscheidet ueber eine Rueckstufung auf Draft und den erneuten

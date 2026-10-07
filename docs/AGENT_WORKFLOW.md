@@ -241,15 +241,18 @@ Reihenfolge lautet:
 Independent Review abgeschlossen
 -> OPEN_BLOCKERS=0
 -> Owner autorisiert finalen lokalen Pre-Ready-Lauf
--> PRE_READY_LOCAL_GATES=PASS auf exakt finalem HEAD
+-> lokales Pre-Ready-Gate erfuellt auf exakt finalem HEAD
+   (PRE_READY_LOCAL_GATES=PASS bzw. NOT_REQUIRED_MARKDOWN_ONLY)
+-> `pre-ready/local=success` auf exakt demselben HEAD
 -> Owner setzt Ready for review
--> GitHub-CI PASS
+-> Required Status Check erfuellt
 -> Merge-Gate
 ```
 
 Nach Erreichen von `OPEN_BLOCKERS=0` dürfen `FOLLOW-UP` oder `NO-ACTION` den
 autorisierten lokalen Lauf nicht blockieren. `Ready for review` bleibt aber
-bis zum bestandenen `PRE_READY_LOCAL_GATES=PASS` ausgeschlossen. Das bestehende
+bis zum erfuellten lokalen Pre-Ready-Gate samt `pre-ready/local=success` auf
+dem finalen HEAD ausgeschlossen (Details in `CI_AND_QUALITY_GATES.md`). Das bestehende
 Owner-Gate für Ready, Merge und Issue-Abschluss bleibt unverändert.
 
 ## 9. Modell-/Compute-Governance
@@ -288,15 +291,22 @@ Ein vollstaendiger lokaler Pre-Ready-Lauf erfolgt nur nach abgeschlossenem
 Independent Full Review mit `OPEN_BLOCKERS=0`, auf dem finalen `HEAD` und nach
 ausdruecklicher Owner-Anweisung. Klassifizierte `FOLLOW-UP` und `NO-ACTION`
 blockieren den Lauf nicht. Der Lauf verwendet die beiden Phasen des gemeinsamen
-versionierten Runners aus `CI_AND_QUALITY_GATES.md`; erst beide Phasen ergeben
-`PRE_READY_LOCAL_GATES=PASS`.
+versionierten Runners aus `CI_AND_QUALITY_GATES.md`, ausgefuehrt ueber
+`scripts/run_pre_ready_and_publish.sh`; erst beide Phasen ergeben
+`PRE_READY_LOCAL_GATES=PASS`. Bei einem rein Markdown-only Diff gilt
+`NOT_REQUIRED_MARKDOWN_ONLY` (Klassifikation automatisch, siehe
+`CI_AND_QUALITY_GATES.md`).
 
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
-den PR erst nach `PRE_READY_LOCAL_GATES=PASS` auf `Ready for review`; dadurch
-startet der vollstaendige CI-Lauf. Spaetere semantische Pushes auf einen nicht
-als Draft markierten PR starten CI erneut.
+den PR erst nach erfuelltem lokalem Pre-Ready-Gate und `pre-ready/local=success`
+auf dem finalen HEAD auf `Ready for review`. Die schwere GitHub-CI ist kein
+allgemeines Pflichtgate; sie startet nur gemaess ihrem Pfadfilter oder manuell
+und ist dann Pflicht, wenn sie fuer den PR ausgeloest wurde oder der Owner sie
+anordnet. Spaetere semantische Pushes auf einen nicht als Draft markierten PR
+starten sie nur bei Treffer des Pfadfilters erneut; jeder neue HEAD benoetigt
+einen neuen `pre-ready/local`-Status.
 
-Markdown-only- und Kommentaraenderungen bleiben von der Firmware-CI ausgenommen.
+Markdown-only- und Kommentaraenderungen loesen keine Firmware-CI aus.
 Fuer den Reviewnachweis gilt bei semantischen Aenderungen die
 Fix-Verification-/Materialitaetsregel: Eine lokal begrenzte Korrektur wird mit
 Fix Verification und dem erforderlichen Regression Check abgeschlossen; eine

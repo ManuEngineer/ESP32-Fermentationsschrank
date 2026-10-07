@@ -1,16 +1,51 @@
 name: ESP-IDF + Native CI
 
 on:
+  # Schwerer Clean-Room-/Artefaktpfad (Issue #184): normale Feature-PRs
+  # pruefen host+esp lokal und melden `pre-ready/local`; dieser Workflow
+  # laeuft automatisch nur bei Aenderungen am Gate-/Build-/Toolchain-
+  # Vertrag (positive Pfadliste unten) und manuell per workflow_dispatch.
+  # Die Pfadliste wird in scripts/selftest_quality_gates.py gegen den Runner
+  # und die direkten Produktions-Buildinputs geprueft.
+  workflow_dispatch:
   pull_request:
     types: [opened, ready_for_review, synchronize, reopened]
-    paths-ignore:
-      - "**/*.md"
+    paths:
+      - ".github/workflows/build.yml"
+      - "scripts/run_pre_ready_gates.sh"
+      - "scripts/run_pre_ready_and_publish.sh"
+      - "scripts/esp_idf_contract.py"
+      - "scripts/run_esp_idf_static_analysis.py"
+      - "scripts/build_esp_idf_profiles.py"
+      - "scripts/check_build_profiles.py"
+      - "scripts/check_ci_artifact_scan_coverage.py"
+      - "scripts/check_architecture_boundaries.py"
+      - "scripts/check_secrets.py"
+      - "scripts/generate_board_profile_header.py"
+      - "scripts/build_report.py"
+      - "scripts/selftest_quality_gates.py"
+      - ".clang-format"
+      - ".clang-tidy"
+      - "platformio.ini"
+      - "CMakeLists.txt"
+      - "sdkconfig.defaults"
+      - "sdkconfig.defaults.bringup"
+      - "sdkconfig.defaults.release"
+      - "main/idf_component.yml"
+      - "main/Kconfig.projbuild"
+      - "main/CMakeLists.txt"
+      - "lib/device_platform/CMakeLists.txt"
+      - "lib/device_platform_esp_idf/CMakeLists.txt"
+      - "lib/fermentation_app/CMakeLists.txt"
+      - "lib/device_platform_esp_idf/idf_component.yml"
+      - "lib/fermentation_app/idf_component.yml"
+      - "partitions/issue_90_state_store.csv"
 
 permissions:
   contents: read
 
 concurrency:
-  group: firmware-ci-${{ github.event.pull_request.number }}
+  group: firmware-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,8 +53,11 @@ jobs:
     # Draft-Pull-Requests erzeugen hoechstens einen sofort uebersprungenen
     # Workfloweintrag. Die schwere Vollpruefung startet erst nach dem
     # Ownerwechsel auf Ready for review und bei spaeteren semantischen Pushes
-    # auf einen nicht mehr als Draft markierten PR.
-    if: ${{ github.event.pull_request.draft == false }}
+    # auf einen nicht mehr als Draft markierten PR. Ein manueller
+    # workflow_dispatch hat keinen Pull Request und wird ausdruecklich
+    # zugelassen (GitHub-Expressions wandeln null und false beide in 0; der
+    # explizite Zweig vermeidet die Abhaengigkeit von dieser Koerzierung).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
 
     env:
@@ -32,7 +70,7 @@ jobs:
       # Ressourcenbericht separat als "Build-Commit" ausgegeben
       # (build_report.py, immer per `git rev-parse HEAD`) — beide Werte duerfen
       # nicht zusammengelegt werden.
-      SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       # Kanonischer ESP-IDF-Pin (siehe ESP_IDF_UPGRADE_CONTRACT.md). Einmal
       # definiert und von Cache-Schluesseln sowie der Provenienzverifikation
       # unten referenziert, statt inline dupliziert zu werden.
