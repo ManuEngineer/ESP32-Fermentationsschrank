@@ -361,14 +361,11 @@ bool ProductiveLvglRenderer::render(
                 showQrUnavailable(state.root, command.rect);
             }
         } else if (command.kind == ScreenDrawKind::Text ||
-                   command.kind == ScreenDrawKind::NetworkStatusIcon ||
-                   command.kind == ScreenDrawKind::LockIcon) {
+                   command.kind == ScreenDrawKind::NetworkStatusIcon) {
             auto* label = lv_label_create(state.root);
-            const char* text = command.text.c_str();
-            if (command.kind == ScreenDrawKind::NetworkStatusIcon)
-                text = LV_SYMBOL_WIFI;
-            else if (command.kind == ScreenDrawKind::LockIcon)
-                text = LV_SYMBOL_LOCK;
+            const char* text = command.kind == ScreenDrawKind::NetworkStatusIcon
+                                   ? LV_SYMBOL_WIFI
+                                   : command.text.c_str();
             lv_label_set_text(label, text);
             lv_obj_set_pos(label, command.rect.left, command.rect.top);
             lv_obj_set_style_text_font(label, LV_FONT_DEFAULT, 0U);

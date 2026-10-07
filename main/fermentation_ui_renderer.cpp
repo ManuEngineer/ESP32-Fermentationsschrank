@@ -205,14 +205,6 @@ constexpr std::uint16_t pageLineTop(std::uint16_t index,
     return static_cast<std::uint16_t>(62U + index * step);
 }
 
-void addLockIcon(std::vector<ScreenDrawCommand>& commands,
-                 device_platform::DisplayRect rect,
-                 device_platform::ThemeToken token,
-                 device_platform::ThemeToken background) {
-    commands.push_back(
-        {ScreenDrawKind::LockIcon, rect, token, background, {}, {}});
-}
-
 void addNetworkStatusIcon(std::vector<ScreenDrawCommand>& commands,
                           device_platform::DisplayRect rect,
                           device_platform::ThemeToken token,
@@ -956,7 +948,6 @@ RepresentativeScreen makeRepresentativeScreen(
                            RepresentativeScreen::kTextLineHeight) /
                               2U);
                 const char* label = "language";
-                bool lockIcon = false;
                 std::string value;
                 std::optional<device_platform::TextKey> valueKey;
                 bool enabled = true;
@@ -986,8 +977,7 @@ RepresentativeScreen makeRepresentativeScreen(
                         label = "web-access";
                         break;
                     case FermentationUiSettingsRow::Service:
-                        label = "service";
-                        lockIcon = true;
+                        label = "service-protected";
                         enabled = settings.serviceAvailable;
                         if (!enabled && settings.serviceReason.has_value())
                             valueKey = *settings.serviceReason;
@@ -1000,20 +990,10 @@ RepresentativeScreen makeRepresentativeScreen(
                 const auto token =
                     enabled ? device_platform::ThemeToken::TextPrimary
                             : device_platform::ThemeToken::TextSecondary;
-                // The lock is the LVGL symbol, not a text-pack glyph.
-                if (lockIcon) {
-                    addLockIcon(commands,
-                                {12U, textTop, 18U,
-                                 RepresentativeScreen::kTextLineHeight},
-                                token, device_platform::ThemeToken::Surface);
-                }
-                const auto labelLeft =
-                    static_cast<std::uint16_t>(lockIcon ? 32U : 12U);
-                addText(commands, textPacks, locale, fermentationTextKey(label),
-                        {labelLeft, textTop,
-                         static_cast<std::uint16_t>(140U - labelLeft),
-                         RepresentativeScreen::kTextLineHeight},
-                        token, device_platform::ThemeToken::Surface);
+                addText(
+                    commands, textPacks, locale, fermentationTextKey(label),
+                    {12U, textTop, 128U, RepresentativeScreen::kTextLineHeight},
+                    token, device_platform::ThemeToken::Surface);
                 if (valueKey.has_value()) {
                     addText(commands, textPacks, locale, *valueKey,
                             {144U, textTop, 164U,

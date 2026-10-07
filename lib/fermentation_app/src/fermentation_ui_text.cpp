@@ -178,7 +178,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 182U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 183U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -332,6 +332,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"device-name", "Device name"},
         std::pair{"device-name-locked-run", "locked during run"},
         std::pair{"device-name-change-failed", "Name not changed"},
+        std::pair{"service-protected", "Service (PIN)"},
         std::pair{"program-name", "Name"},
         std::pair{"program-notes", "Note"},
         std::pair{"space", "Space"},
@@ -378,7 +379,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 182U> de{
+            const std::array<std::pair<const char*, const char*>, 183U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -534,6 +535,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"device-name", "Geraetename"},
                  {"device-name-locked-run", "gesperrt im Lauf"},
                  {"device-name-change-failed", "Name nicht geaendert"},
+                 {"service-protected", "Service (PIN)"},
                  {"program-name", "Name"},
                  {"program-notes", "Notiz"},
                  {"space", "Leer"},
@@ -579,7 +581,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 182U> es{
+            const std::array<std::pair<const char*, const char*>, 183U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -749,6 +751,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"device-name", "Nombre equipo"},
                  {"device-name-locked-run", "bloqueado en curso"},
                  {"device-name-change-failed", "Nombre no cambiado"},
+                 {"service-protected", "Servicio (PIN)"},
                  {"program-name", "Nombre"},
                  {"program-notes", "Nota"},
                  {"space", "Espacio"},

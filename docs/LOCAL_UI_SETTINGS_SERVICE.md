@@ -50,7 +50,7 @@ Die lokale Touch-UI erreicht Einstellungen ueber den Standby-Slot
 3. Geraetename
 4. Netzwerk
 5. Webzugang
-6. Service (LVGL-Schloss-Symbol plus lokalisiertes Label, kein `Service (PIN)`)
+6. Service (lokalisiertes Textlabel `Service (PIN)` / `Servicio (PIN)`; ein Schloss-Symbol ist nicht umgesetzt)
 
 Navigationspfade: `Sprache` und `Zeit / Zeitzone` oeffnen dieselben Seiten wie
 die Header-Elemente Sprache und Uhrzeit; `Geraetename` oeffnet die
