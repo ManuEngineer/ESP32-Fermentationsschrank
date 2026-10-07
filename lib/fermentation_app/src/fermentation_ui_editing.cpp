@@ -399,13 +399,14 @@ ConfigurationPreviewInstallResult applyProgramEditPreview(
         applyProgramEdit(build.lease.programCatalog(), request, usage);
     if (mutation.status != FermentationUiProgramEditStatus::Applied)
         return {ConfigurationPreviewStatus::InvalidCandidate, std::nullopt};
-    const ChangeOperation operation{
+    // Canonical wire values (decodeChangeOrigin/decodeChangeOperation): a
+    // zero wire value is rejected when the preview is confirmed.
+    const ChangeOperation operation =
         request.operation == FermentationUiProgramEditOperation::Reset
-            ? ChangeOperationKind::StandardProgramReset
-            : ChangeOperationKind::NormalEdit,
-        0U};
+            ? ChangeOperation{ChangeOperationKind::StandardProgramReset, 6U}
+            : ChangeOperation{ChangeOperationKind::NormalEdit, 1U};
     return service.installPreview(std::move(build.lease),
-                                  {ChangeOriginKind::LocalDisplay, 0U},
+                                  {ChangeOriginKind::LocalDisplay, 2U},
                                   operation);
 }
 
