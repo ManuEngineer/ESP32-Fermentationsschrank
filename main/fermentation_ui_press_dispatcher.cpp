@@ -59,6 +59,16 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.setDeviceName.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::setDeviceName(
+            application, *press.setDeviceName);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.setDisplayLanguage.has_value()) {
         WorkspacePressDispatchResult result;
         result.commandResult = FermentationUiCommandBridge::setDisplayLanguage(
@@ -166,6 +176,15 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
+        if (press.setDeviceName.has_value()) {
+            // The settings page shows a refused name change; an accepted one
+            // replaces an earlier failure (the name itself arrives through the
+            // presentation copy).
+            workspace.noteDeviceNameOutcome(
+                result.dispatch.commandResult.has_value() &&
+                result.dispatch.commandResult->category ==
+                    device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+        }
         if (press.setDisplayLanguage.has_value()) {
             // The language page shows a refused change; an accepted one
             // replaces an earlier failure.

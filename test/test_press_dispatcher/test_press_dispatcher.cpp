@@ -811,6 +811,83 @@ void test_language_row_press_reaches_the_owning_configuration_commit() {
     TEST_ASSERT_EQUAL_STRING("es", current().c_str());
 }
 
+// S10: a device name commit from the keyboard reaches the Application's
+// settings path through the bridge and the dispatcher as an owning outcome;
+// while a run is active the Application refuses it (the UI row is only the
+// display of that gate) and the touch adapter shows the refusal.
+void test_device_name_commit_reaches_the_owner_and_an_active_run_refuses_it() {
+    OwningAppFixture fixture;
+    const auto name = [&fixture] {
+        const auto source = fixture.application.uiPresentationSource();
+        TEST_ASSERT_TRUE(source.has_value());
+        return source->deviceName;
+    };
+    const auto typeNeu = [](FermentationTouchWorkspace& workspace,
+                            const FermentationUiSnapshot& snapshot) {
+        // lower case: n = row 1 column 3, e = row 0 column 4, u = row 2 col 0
+        for (const auto& cell : {std::pair<std::uint8_t, std::uint8_t>{1U, 3U},
+                                 {0U, 4U},
+                                 {2U, 0U}}) {
+            TEST_ASSERT_TRUE(
+                workspace
+                    .press(snapshot,
+                           {device_platform::DeviceUiTargetKind::ContentCell,
+                            0U, cell.first, cell.second})
+                    .navigated);
+        }
+    };
+    FermentationTouchWorkspace workspace;
+    workspace.adoptDeviceName(name());
+    workspace.setPage(FermentationUiPage::TextEdit);
+    auto snapshot = fixture.application.uiSnapshot();
+    typeNeu(workspace, snapshot);
+    const auto commit = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 3U});
+    TEST_ASSERT_TRUE(commit.setDeviceName.has_value());
+    const auto result =
+        dispatchWorkspacePress(fixture.application, snapshot, commit, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    TEST_ASSERT_TRUE(std::holds_alternative<ConfigurationCommitStatus>(
+        result.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            std::get<ConfigurationCommitStatus>(result.commandResult->detail)));
+    TEST_ASSERT_EQUAL_STRING("neu", name().c_str());
+
+    // With a run active the owner refuses the change; nothing changes.
+    assertAppliedCommandResult(startManualRunViaOwnerBody(fixture));
+    snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_FALSE(snapshot.home.activeRunId.empty());
+    FermentationTouchWorkspace second;
+    second.adoptDeviceName(name());
+    second.setPage(FermentationUiPage::Settings);
+    TEST_ASSERT_FALSE(second.view(snapshot).settings->deviceNameEditable);
+
+    // A UI that still shows the keyboard (stale) is refused by the owner and
+    // the settings page names the refusal.
+    second.setPage(FermentationUiPage::TextEdit);
+    typeNeu(second, snapshot);
+    const auto packs = makeFermentationUiTextPacks();
+    const auto touched = processWorkspaceTouch(
+        fixture.application, second, snapshot, packs,
+        device_platform::LocaleId{"en"}, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/true, bottomX(3), kBottomY,
+        /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
+    TEST_ASSERT_TRUE(touched.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(touched.dispatch.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("neu", name().c_str());
+    TEST_ASSERT_TRUE(second.page() == FermentationUiPage::Settings);
+    TEST_ASSERT_TRUE(second.view(snapshot).blockedReason ==
+                     std::optional<device_platform::TextKey>{
+                         fermentationTextKey("device-name-change-failed")});
+}
+
 // Review B1: a refused language change is shown on the language page, keeps
 // the language, is replaced by the next accepted change and discarded when
 // the page is left. Driven through the real touch adapter.
@@ -1905,6 +1982,8 @@ int main() {
         test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path);
     RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
     RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
+    RUN_TEST(
+        test_device_name_commit_reaches_the_owner_and_an_active_run_refuses_it);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_product_inserted_without_runtime_context_is_context_missing);
     RUN_TEST(

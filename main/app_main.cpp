@@ -452,7 +452,7 @@ bool updateProductUi(
     // refilled after leaving the page.
     const bool networkPageBeforeTouch =
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
-    renderGate.beginStep(application, networkPageBeforeTouch);
+    renderGate.beginStep(application, networkPageBeforeTouch, uiWorkspace);
     const auto& loopSnapshot = renderGate.snapshot();
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);

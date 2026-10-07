@@ -45,7 +45,8 @@ constexpr std::uint16_t kListReasonTop = 182U;
 bool isContentListPage(FermentationUiPage page) noexcept {
     return page == FermentationUiPage::ProgramList ||
            page == FermentationUiPage::Messages ||
-           page == FermentationUiPage::HeaderLanguage;
+           page == FermentationUiPage::HeaderLanguage ||
+           page == FermentationUiPage::Settings;
 }
 // ProgramSummary start-field rows share the list geometry but leave the right
 // strip (x=256..312) to the two pager buttons (up: y=64..124, down:
@@ -68,6 +69,15 @@ constexpr std::uint16_t kKeypadCellHeight = 32U;
 constexpr std::uint16_t kKeypadTouchHeight = kKeypadPitchY;
 constexpr std::uint16_t kSummaryNameLeft = 68U;
 constexpr std::uint16_t kSummaryNameWidth = 176U;
+// On-screen keyboard (S10, O3): 4 rows x 10 columns from (8, 62); every key
+// row is active over its full 34 px pitch, each column over 30 px (hardware
+// acceptance: 30 px wide keys); the drawn face leaves a 2 px gap.
+constexpr std::uint16_t kKeyboardLeft = 8U;
+constexpr std::uint16_t kKeyboardTop = 62U;
+constexpr std::uint16_t kKeyboardPitchX = 30U;
+constexpr std::uint16_t kKeyboardPitchY = 34U;
+constexpr std::uint16_t kKeyboardFaceWidth = 28U;
+constexpr std::uint16_t kKeyboardFaceHeight = 32U;
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
     8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
@@ -444,6 +454,10 @@ RepresentativeScreen makeRepresentativeScreen(
                 ? device_platform::
                       DisplayRect{8U, 40U, 104U,
                                   RepresentativeScreen::kTextLineHeight}
+            : screen.workspace.page == FermentationUiPage::TextEdit
+                ? device_platform::
+                      DisplayRect{8U, 40U, 84U,
+                                  RepresentativeScreen::kTextLineHeight}
                 : device_platform::
                       DisplayRect{8U, 40U, 144U,
                                   RepresentativeScreen::kTextLineHeight},
@@ -456,6 +470,37 @@ RepresentativeScreen makeRepresentativeScreen(
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
     }
+
+    // The two pager buttons (ContentCell column 1, rows 0 and 1) beside a row
+    // list with more entries than visible rows.
+    const auto drawPagerButtons = [&](bool shown) {
+        for (std::uint16_t button = 0U; button < (shown ? 2U : 0U); ++button) {
+            const bool enabled = button == 0U
+                                     ? screen.workspace.pager.canMoveUp()
+                                     : screen.workspace.pager.canMoveDown();
+            const auto top = static_cast<std::uint16_t>(
+                kContentRowTop + button * kSummaryButtonHeight);
+            const auto fill =
+                enabled ? device_platform::ThemeToken::PrimaryAction
+                        : device_platform::ThemeToken::SecondaryAction;
+            addFill(commands,
+                    {kSummaryButtonLeft, top, kSummaryButtonWidth,
+                     static_cast<std::uint16_t>(kSummaryButtonHeight - 2U)},
+                    fill);
+            addText(commands, textPacks, locale,
+                    fermentationTextKey(button == 0U ? "up" : "down"),
+                    {static_cast<std::uint16_t>(kSummaryButtonLeft + 4U),
+                     static_cast<std::uint16_t>(
+                         top + (kSummaryButtonHeight -
+                                RepresentativeScreen::kTextLineHeight) /
+                                   2U),
+                     static_cast<std::uint16_t>(kSummaryButtonWidth - 8U),
+                     RepresentativeScreen::kTextLineHeight},
+                    enabled ? device_platform::ThemeToken::OnPrimaryAction
+                            : device_platform::ThemeToken::TextSecondary,
+                    fill);
+        }
+    };
 
     // Rows of a field list (program summary start values or manual run
     // values) with the pager buttons; shared by every page that has one.
@@ -561,35 +606,7 @@ RepresentativeScreen makeRepresentativeScreen(
                     break;
             }
         }
-        // Pager buttons (ContentCell column 1, rows 0 and 1) when the list
-        // has more fields than visible rows.
-        for (std::uint16_t button = 0U;
-             button < (summary.pagerButtons ? 2U : 0U); ++button) {
-            const bool enabled = button == 0U
-                                     ? screen.workspace.pager.canMoveUp()
-                                     : screen.workspace.pager.canMoveDown();
-            const auto top = static_cast<std::uint16_t>(
-                kContentRowTop + button * kSummaryButtonHeight);
-            const auto fill =
-                enabled ? device_platform::ThemeToken::PrimaryAction
-                        : device_platform::ThemeToken::SecondaryAction;
-            addFill(commands,
-                    {kSummaryButtonLeft, top, kSummaryButtonWidth,
-                     static_cast<std::uint16_t>(kSummaryButtonHeight - 2U)},
-                    fill);
-            addText(commands, textPacks, locale,
-                    fermentationTextKey(button == 0U ? "up" : "down"),
-                    {static_cast<std::uint16_t>(kSummaryButtonLeft + 4U),
-                     static_cast<std::uint16_t>(
-                         top + (kSummaryButtonHeight -
-                                RepresentativeScreen::kTextLineHeight) /
-                                   2U),
-                     static_cast<std::uint16_t>(kSummaryButtonWidth - 8U),
-                     RepresentativeScreen::kTextLineHeight},
-                    enabled ? device_platform::ThemeToken::OnPrimaryAction
-                            : device_platform::ThemeToken::TextSecondary,
-                    fill);
-        }
+        drawPagerButtons(summary.pagerButtons);
     };
 
     // The content area below the title/home-mode row is page-specific: the
@@ -873,12 +890,11 @@ RepresentativeScreen makeRepresentativeScreen(
             // keypad (`1 2 3 / 4 5 6 / 7 8 9 / . 0 +/-`); the actions
             // (cancel, delete, clear, ok) are the bottom slots.
             const auto& edit = *screen.workspace.valueEdit;
-            const bool whole = isWholeNumberStartField(edit.field);
+            const bool whole = edit.wholeNumber;
             const char* unit =
-                (edit.field == FermentationUiStartField::TargetTemperature ||
-                 edit.field == FermentationUiStartField::CoolingTarget)
-                    ? " C"
-                    : " min";
+                edit.unit == FermentationUiValueUnit::Celsius   ? " C"
+                : edit.unit == FermentationUiValueUnit::Seconds ? " s"
+                                                                : " min";
             addRawText(commands,
                        {120U, 40U, 192U, RepresentativeScreen::kTextLineHeight},
                        edit.candidate.empty() ? std::string{"--"}
@@ -909,6 +925,194 @@ RepresentativeScreen makeRepresentativeScreen(
                                dim ? device_platform::ThemeToken::TextSecondary
                                    : device_platform::ThemeToken::TextPrimary,
                                device_platform::ThemeToken::Surface);
+                }
+            }
+        } else if (screen.workspace.settings.has_value()) {
+            // Normal settings (O1): one row per setting in the decided order;
+            // the device name is a read-only copy of the owner's value and a
+            // disabled row names its reason.
+            const auto& settings = *screen.workspace.settings;
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount = std::min<std::size_t>(
+                kFermentationUiSettingsRowCount > first
+                    ? kFermentationUiSettingsRowCount - first
+                    : 0U,
+                kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto row =
+                    static_cast<FermentationUiSettingsRow>(first + index);
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                const auto textTop = static_cast<std::uint16_t>(
+                    top + (kContentRowHeight -
+                           RepresentativeScreen::kTextLineHeight) /
+                              2U);
+                const char* label = "language";
+                std::string value;
+                std::optional<device_platform::TextKey> valueKey;
+                bool enabled = true;
+                switch (row) {
+                    case FermentationUiSettingsRow::Language:
+                        label = "language";
+                        valueKey = fermentationTextKey(
+                            ("language-" + locale.value()).c_str());
+                        break;
+                    case FermentationUiSettingsRow::TimeZone:
+                        label = "settings-time-zone";
+                        break;
+                    case FermentationUiSettingsRow::DeviceName:
+                        label = "device-name";
+                        enabled = settings.deviceNameEditable;
+                        if (enabled) {
+                            value = settings.deviceName;
+                        } else {
+                            valueKey =
+                                fermentationTextKey("device-name-locked-run");
+                        }
+                        break;
+                    case FermentationUiSettingsRow::Network:
+                        label = "network";
+                        break;
+                    case FermentationUiSettingsRow::WebAccess:
+                        label = "web-access";
+                        break;
+                    case FermentationUiSettingsRow::Service:
+                        label = "service-protected";
+                        enabled = settings.serviceAvailable;
+                        if (!enabled && settings.serviceReason.has_value())
+                            valueKey = *settings.serviceReason;
+                        break;
+                }
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        device_platform::ThemeToken::Surface);
+                const auto token =
+                    enabled ? device_platform::ThemeToken::TextPrimary
+                            : device_platform::ThemeToken::TextSecondary;
+                addText(
+                    commands, textPacks, locale, fermentationTextKey(label),
+                    {12U, textTop, 128U, RepresentativeScreen::kTextLineHeight},
+                    token, device_platform::ThemeToken::Surface);
+                if (valueKey.has_value()) {
+                    addText(commands, textPacks, locale, *valueKey,
+                            {144U, textTop, 164U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::TextSecondary,
+                            device_platform::ThemeToken::Surface);
+                } else if (!value.empty()) {
+                    addRawText(commands,
+                               {144U, textTop, 164U,
+                                RepresentativeScreen::kTextLineHeight},
+                               value,
+                               device_platform::ThemeToken::StatusInformation,
+                               device_platform::ThemeToken::Surface);
+                }
+            }
+        } else if (screen.workspace.programEdit.has_value()) {
+            // Program editor rows (label and value in one line, changed
+            // values marked) with the pager buttons.
+            const auto& edit = *screen.workspace.programEdit;
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount = std::min<std::size_t>(
+                edit.rowCount > first ? edit.rowCount - first : 0U,
+                kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& row = edit.rows[first + index];
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                addFill(commands,
+                        {kContentRowLeft, top, kSummaryRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        device_platform::ThemeToken::Surface);
+                std::string text =
+                    resolve(textPacks, locale, row.label).value +
+                    (row.valueKey.has_value()
+                         ? resolve(textPacks, locale, *row.valueKey).value
+                         : row.text) +
+                    (row.changed ? " *" : "");
+                addRawText(commands,
+                           {12U,
+                            static_cast<std::uint16_t>(
+                                top + (kContentRowHeight -
+                                       RepresentativeScreen::kTextLineHeight) /
+                                          2U),
+                            236U, RepresentativeScreen::kTextLineHeight},
+                           std::move(text),
+                           row.changed
+                               ? device_platform::ThemeToken::PrimaryAction
+                               : device_platform::ThemeToken::TextPrimary,
+                           device_platform::ThemeToken::Surface);
+            }
+            drawPagerButtons(edit.rowCount > kFermentationUiListVisibleRows);
+        } else if (screen.workspace.textEdit.has_value()) {
+            // On-screen keyboard (O3): the candidate's tail and the 4 x 10 key
+            // grid of the current mode; cancel, mode, backspace and ok are the
+            // bottom slots.
+            const auto& edit = *screen.workspace.textEdit;
+            constexpr std::size_t kTailBytes = 28U;
+            std::string shown = edit.candidate;
+            if (shown.size() > kTailBytes) {
+                auto cut = shown.size() - kTailBytes;
+                // Never cut inside a multi-byte character.
+                while (cut < shown.size() &&
+                       (static_cast<unsigned char>(shown[cut]) & 0xC0U) ==
+                           0x80U) {
+                    ++cut;
+                }
+                shown = ".." + shown.substr(cut);
+            }
+            addRawText(commands,
+                       {96U, 40U, 216U, RepresentativeScreen::kTextLineHeight},
+                       shown.empty() ? std::string{"_"} : shown + "_",
+                       device_platform::ThemeToken::StatusInformation,
+                       device_platform::ThemeToken::Canvas);
+            for (std::uint8_t row = 0U; row < kFermentationUiKeyboardRows;
+                 ++row) {
+                std::uint8_t column = 0U;
+                while (column < kFermentationUiKeyboardColumns) {
+                    const auto key =
+                        fermentationUiKeyboardKeyAt(edit.mode, row, column);
+                    // Clear (columns 0-1) and Space (2-7) span several cells.
+                    std::uint8_t span = 1U;
+                    if (row == 3U) {
+                        span = column == 0U ? 2U : (column == 2U ? 6U : 1U);
+                    }
+                    const auto left = static_cast<std::uint16_t>(
+                        kKeyboardLeft + column * kKeyboardPitchX);
+                    const auto top = static_cast<std::uint16_t>(
+                        kKeyboardTop + row * kKeyboardPitchY);
+                    const auto width =
+                        static_cast<std::uint16_t>(span * kKeyboardPitchX - 2U);
+                    if (key.kind != FermentationUiKeyboardKeyKind::None) {
+                        addFill(commands,
+                                {left, top, width, kKeyboardFaceHeight},
+                                device_platform::ThemeToken::Surface);
+                        const device_platform::DisplayRect labelRect{
+                            static_cast<std::uint16_t>(left +
+                                                       (span == 1U ? 9U : 4U)),
+                            static_cast<std::uint16_t>(top + 7U),
+                            static_cast<std::uint16_t>(span == 1U ? 16U
+                                                                  : width - 8U),
+                            RepresentativeScreen::kTextLineHeight};
+                        if (key.kind == FermentationUiKeyboardKeyKind::Clear) {
+                            addText(commands, textPacks, locale,
+                                    fermentationTextKey("clear"), labelRect,
+                                    device_platform::ThemeToken::TextPrimary,
+                                    device_platform::ThemeToken::Surface);
+                        } else if (key.character == ' ') {
+                            addText(commands, textPacks, locale,
+                                    fermentationTextKey("space"), labelRect,
+                                    device_platform::ThemeToken::TextPrimary,
+                                    device_platform::ThemeToken::Surface);
+                        } else {
+                            addRawText(commands, labelRect,
+                                       std::string(1U, key.character),
+                                       device_platform::ThemeToken::TextPrimary,
+                                       device_platform::ThemeToken::Surface);
+                        }
+                    }
+                    column = static_cast<std::uint8_t>(column + span);
                 }
             }
         } else if (screen.workspace.page == FermentationUiPage::Process ||
@@ -1165,6 +1369,32 @@ RepresentativeScreen makeRepresentativeScreen(
                                                    kSummaryButtonHeight),
                     kSummaryButtonWidth, kSummaryButtonHeight};
             }
+        } else if (screen.workspace.page == FermentationUiPage::ProgramEdit) {
+            if (pressedTarget->column == 0U &&
+                pressedTarget->row < kFermentationUiListVisibleRows) {
+                pressedRect = device_platform::DisplayRect{
+                    kContentRowLeft,
+                    static_cast<std::uint16_t>(kContentRowTop +
+                                               pressedTarget->row *
+                                                   kContentRowHeight),
+                    kSummaryRowWidth, kContentRowHeight};
+            } else if (pressedTarget->column == 1U && pressedTarget->row < 2U) {
+                pressedRect = device_platform::DisplayRect{
+                    kSummaryButtonLeft,
+                    static_cast<std::uint16_t>(kContentRowTop +
+                                               pressedTarget->row *
+                                                   kSummaryButtonHeight),
+                    kSummaryButtonWidth, kSummaryButtonHeight};
+            }
+        } else if (screen.workspace.page == FermentationUiPage::TextEdit &&
+                   pressedTarget->row < kFermentationUiKeyboardRows &&
+                   pressedTarget->column < kFermentationUiKeyboardColumns) {
+            pressedRect = device_platform::DisplayRect{
+                static_cast<std::uint16_t>(
+                    kKeyboardLeft + pressedTarget->column * kKeyboardPitchX),
+                static_cast<std::uint16_t>(kKeyboardTop + pressedTarget->row *
+                                                              kKeyboardPitchY),
+                kKeyboardPitchX, kKeyboardPitchY};
         } else if (screen.workspace.page == FermentationUiPage::ValueEdit &&
                    pressedTarget->row < kFermentationUiKeypadRows &&
                    pressedTarget->column < kFermentationUiKeypadColumns) {
@@ -1301,6 +1531,45 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
                 1U};
         }
         return std::nullopt;
+    }
+    if (screen.workspace.page == FermentationUiPage::ProgramEdit &&
+        screen.workspace.programEdit.has_value() && x >= kContentRowLeft &&
+        y >= kContentRowTop &&
+        y < kContentRowTop +
+                kFermentationUiListVisibleRows * kContentRowHeight) {
+        const auto& edit = *screen.workspace.programEdit;
+        if (x < kContentRowLeft + kSummaryRowWidth) {
+            const auto row = static_cast<std::uint8_t>((y - kContentRowTop) /
+                                                       kContentRowHeight);
+            if (screen.workspace.pager.currentIndex + row < edit.rowCount) {
+                return device_platform::DeviceUiTarget{
+                    device_platform::DeviceUiTargetKind::ContentCell, 0U, row,
+                    0U};
+            }
+            return std::nullopt;
+        }
+        if (edit.rowCount > kFermentationUiListVisibleRows &&
+            x >= kSummaryButtonLeft &&
+            x < kSummaryButtonLeft + kSummaryButtonWidth) {
+            return device_platform::DeviceUiTarget{
+                device_platform::DeviceUiTargetKind::ContentCell, 0U,
+                static_cast<std::uint8_t>((y - kContentRowTop) /
+                                          kSummaryButtonHeight),
+                1U};
+        }
+        return std::nullopt;
+    }
+    if (screen.workspace.page == FermentationUiPage::TextEdit &&
+        x >= kKeyboardLeft &&
+        x < kKeyboardLeft + kFermentationUiKeyboardColumns * kKeyboardPitchX &&
+        y >= kKeyboardTop &&
+        y < kKeyboardTop + kFermentationUiKeyboardRows * kKeyboardPitchY) {
+        // Every key row is active over its whole 34 px height, every column
+        // over its 30 px pitch.
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::ContentCell, 0U,
+            static_cast<std::uint8_t>((y - kKeyboardTop) / kKeyboardPitchY),
+            static_cast<std::uint8_t>((x - kKeyboardLeft) / kKeyboardPitchX)};
     }
     if (screen.workspace.page == FermentationUiPage::ValueEdit &&
         x >= kKeypadLeft && y >= kKeypadTop &&

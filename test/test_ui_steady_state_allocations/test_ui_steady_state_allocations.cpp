@@ -144,7 +144,8 @@ struct AppFixture {
             initialLocale = device_platform::LocaleId{locale};
         }
         gate.beginStep(application,
-                       workspace.page() == FermentationUiPage::HeaderNetwork);
+                       workspace.page() == FermentationUiPage::HeaderNetwork,
+                       workspace);
         return gate.renderRequired(application, workspace, pressed, network,
                                    utc);
     }
@@ -247,7 +248,8 @@ struct NetworkFixture {
 
     bool step() {
         gate.beginStep(application,
-                       workspace.page() == FermentationUiPage::HeaderNetwork);
+                       workspace.page() == FermentationUiPage::HeaderNetwork,
+                       workspace);
         return gate.renderRequired(
             application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
@@ -316,7 +318,7 @@ struct WebAccessFixture {
     }
 
     bool step() {
-        gate.beginStep(application, false);
+        gate.beginStep(application, false, workspace);
         return gate.renderRequired(
             application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
@@ -438,6 +440,7 @@ void test_s7_content_pages_steady_state_allocate_nothing() {
         FermentationUiPage::Service,        FermentationUiPage::Pin,
         FermentationUiPage::Recovery,       FermentationUiPage::ManualHolding,
         FermentationUiPage::ManualTimed,    FermentationUiPage::StopDialog,
+        FermentationUiPage::Settings,       FermentationUiPage::TextEdit,
     };
     for (const auto page : pages) {
         WebAccessFixture fixture;
@@ -509,6 +512,43 @@ void test_value_edit_page_steady_state_allocates_nothing() {
     fixture.workspace.setProgramEditDirty(true);
     TEST_ASSERT_TRUE(fixture.step());
     fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S10: the settings page adopts the owner's device name through the render
+// gate (a read-only copy) and stays a steady state; a changed owner name
+// redraws once and settles again.
+void test_settings_page_adopts_the_device_name_and_is_a_steady_state() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.settle();
+    const auto owner = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(owner.has_value());
+    TEST_ASSERT_FALSE(owner->deviceName.empty());
+    TEST_ASSERT_TRUE(
+        fixture.workspace.view(fixture.gate.snapshot()).settings->deviceName ==
+        owner->deviceName);
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+
+    const auto changed = fixture.application.applyUserSettings(
+        {"Keller"},
+        fixture.gate.snapshot().revisions.expectedUserConfigurationRevision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(changed.commit));
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_EQUAL_STRING("Keller",
+                             fixture.workspace.view(fixture.gate.snapshot())
+                                 .settings->deviceName.c_str());
     TEST_ASSERT_FALSE(fixture.step());
 }
 
@@ -919,6 +959,7 @@ int main() {
     RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
     RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
+    RUN_TEST(test_settings_page_adopts_the_device_name_and_is_a_steady_state);
     RUN_TEST(test_s7_content_pages_steady_state_allocate_nothing);
     RUN_TEST(test_value_edit_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);

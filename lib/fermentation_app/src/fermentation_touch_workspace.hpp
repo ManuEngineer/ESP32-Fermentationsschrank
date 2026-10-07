@@ -41,7 +41,71 @@ enum class FermentationUiPage : std::uint8_t {
     HeaderClock,
     HeaderWebAccess,
     ValueEdit,
+    Settings,
+    TextEdit,
 };
+
+// Rows of the normal settings page in the order the owner decided (O1).
+enum class FermentationUiSettingsRow : std::uint8_t {
+    Language,
+    TimeZone,
+    DeviceName,
+    Network,
+    WebAccess,
+    Service,
+};
+inline constexpr std::size_t kFermentationUiSettingsRowCount = 6U;
+
+// Text the shared on-screen keyboard edits (O3).
+enum class FermentationUiTextTarget : std::uint8_t {
+    DeviceName,
+    ProgramName,
+    ProgramNotes,
+};
+
+// Keyboard grid (S10, O3): 4 rows x 10 columns. Rows 0-2 carry the characters
+// of the current mode; row 3 is `Clear` (columns 0-1), `Space` (2-7), `-` (8)
+// and `.` (9).
+inline constexpr std::uint8_t kFermentationUiKeyboardRows = 4U;
+inline constexpr std::uint8_t kFermentationUiKeyboardColumns = 10U;
+
+enum class FermentationUiKeyboardKeyKind : std::uint8_t {
+    None,
+    Character,
+    Clear,
+};
+
+struct FermentationUiKeyboardKey {
+    FermentationUiKeyboardKeyKind kind{FermentationUiKeyboardKeyKind::None};
+    char character{'\0'};
+};
+
+// The key at a grid cell for the keyboard mode; the single layout definition
+// for the workspace (hit routing) and the renderer (drawing). Only ASCII is
+// offered.
+[[nodiscard]] FermentationUiKeyboardKey fermentationUiKeyboardKeyAt(
+    TextEditMode mode, std::uint8_t row, std::uint8_t column) noexcept;
+
+// Program fields of the local editor (S10, D9): the fields
+// LOCAL_UI_PROGRAMS.md names, as far as the program model has them. The
+// technical qualification values stay out (service area).
+enum class FermentationUiProgramField : std::uint8_t {
+    Name,
+    Notes,
+    TargetTemperature,
+    Duration,
+    Preheat,
+    MaxProductWait,
+    SensorPreference,
+    FailurePolicy,
+    FallbackDelay,
+    ReturnStrategy,
+    MaxTargetReach,
+    CompletionMode,
+    CoolingTarget,
+    HoldDuration,
+};
+inline constexpr std::size_t kFermentationUiProgramFieldCount = 14U;
 
 // Next-run start values editable on ProgramSummary (S8). One explicit enum,
 // no generic form model.
@@ -170,6 +234,11 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     ValueEditClear,
     ValueEditCommit,
     ResetStartValues,
+    NavigateSettings,
+    TextEditCancel,
+    TextEditMode,
+    TextEditBackspace,
+    TextEditCommit,
 };
 
 // Read-only content of `ProgramSummary` (S7): the selected program's values
@@ -221,6 +290,8 @@ enum class FermentationUiManualDraftSlot : std::uint8_t {
     CompletionCooling,
 };
 
+inline constexpr std::size_t kFermentationUiManualDraftSlotCount = 5U;
+
 // Real run values the user entered for a manual page; nothing is invented, so
 // every value is optional until entered. Technical limits are not part of it.
 struct FermentationUiManualDraft {
@@ -233,11 +304,66 @@ struct FermentationUiManualDraft {
     std::optional<std::uint32_t> holdDurationMinutes;
 };
 
+enum class FermentationUiValueUnit : std::uint8_t {
+    Celsius,
+    Minutes,
+    Seconds,
+};
+
 // Content of the shared numeric edit page.
 struct FermentationUiValueEditView {
     FermentationUiStartField field{FermentationUiStartField::TargetTemperature};
     std::string candidate;
     bool commitValid{false};
+    // Unit and key set of the field being edited (start values, manual values
+    // and program fields share the page).
+    FermentationUiValueUnit unit{FermentationUiValueUnit::Celsius};
+    bool wholeNumber{false};
+};
+
+// Content of the normal settings page (S10). The device name is a read-only
+// display copy of the owner's value.
+struct FermentationUiSettingsView {
+    std::string deviceName;
+    // Display convenience only: the Application decides whether a run blocks
+    // the change.
+    bool deviceNameEditable{false};
+    bool serviceAvailable{false};
+    std::optional<device_platform::TextKey> serviceReason;
+    bool deviceNameChangeFailed{false};
+};
+
+// Content of the shared on-screen keyboard page (S10, O3).
+struct FermentationUiTextEditView {
+    FermentationUiTextTarget target{FermentationUiTextTarget::DeviceName};
+    std::string candidate;
+    TextEditMode mode{TextEditMode::Lowercase};
+    // The candidate passes the owning text rule (visible name / notes).
+    bool commitValid{false};
+    // No further character fits the owning byte limit.
+    bool full{false};
+};
+
+// One row of the program editor: a label, and either a localized enum value
+// or a formatted value text.
+struct FermentationUiProgramEditRow {
+    FermentationUiProgramField field{FermentationUiProgramField::Name};
+    device_platform::TextKey label;
+    std::string text;
+    std::optional<device_platform::TextKey> valueKey;
+    // A value that differs from the stored program is marked.
+    bool changed{false};
+};
+
+// Content of the program editor for the Edit operation; Copy and New list the
+// name only. Row validity is the existing program validator's verdict.
+struct FermentationUiProgramEditView {
+    // Heap-held (the workspace view is copied on small embedded stacks).
+    std::vector<FermentationUiProgramEditRow> rows;
+    std::size_t rowCount{0U};
+    // The edited program passes the catalog-level program validation and the
+    // owning text rules.
+    bool valid{false};
 };
 
 struct FermentationUiWorkspaceView {
@@ -250,6 +376,9 @@ struct FermentationUiWorkspaceView {
     std::optional<std::string> confirmationProgramName;
     std::optional<FermentationUiProgramSummaryView> programSummary;
     std::optional<FermentationUiValueEditView> valueEdit;
+    std::optional<FermentationUiSettingsView> settings;
+    std::optional<FermentationUiTextEditView> textEdit;
+    std::optional<FermentationUiProgramEditView> programEdit;
     std::optional<device_platform::TextKey> confirmationWarning;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
@@ -279,6 +408,7 @@ struct FermentationUiWorkspacePress {
     std::optional<FermentationUiOpenWebProvisioningWindowCommand>
         openWebProvisioningWindow;
     std::optional<FermentationUiSetDisplayLanguageCommand> setDisplayLanguage;
+    std::optional<FermentationUiSetDeviceNameCommand> setDeviceName;
 };
 
 class FermentationTouchWorkspace {
@@ -341,6 +471,21 @@ class FermentationTouchWorkspace {
         return pager_.moveDown();
     }
     [[nodiscard]] FermentationUiPage page() const noexcept { return page_; }
+    // Read-only display copy of the owner's visible device name, handed in by
+    // the render gate from the presentation source. Never edited locally;
+    // changing it invalidates the render key like any visible input.
+    void adoptDeviceName(const std::string& name) {
+        if (deviceName_ == name) return;
+        markRenderRelevantChange();
+        deviceName_ = name;
+    }
+    // Records the owning outcome of the last device name commit so the
+    // settings page can show a refused change (transient display state like
+    // the language outcome).
+    void noteDeviceNameOutcome(bool accepted) noexcept {
+        markRenderRelevantChange();
+        deviceNameChangeFailed_ = !accepted;
+    }
     // Records the owning outcome of the last language row press so the
     // language page can show a failed change. Purely transient display state
     // (not a locale or configuration owner): the next outcome replaces it and
@@ -407,6 +552,27 @@ class FermentationTouchWorkspace {
     void applyManualFieldView(FermentationUiWorkspaceView& view,
                               FermentationUiManualDraftSlot slot) const;
     void commitValueEdit();
+    [[nodiscard]] FermentationUiSettingsView makeSettingsView(
+        const FermentationUiSnapshot& snapshot) const;
+    [[nodiscard]] FermentationUiProgramEditView makeProgramEditView(
+        const ProgramCatalog* catalog) const;
+    [[nodiscard]] const ProgramDocument* storedSelectedProgram(
+        const ProgramCatalog* catalog) const;
+    // Makes sure the editor works on a candidate copy of the stored program.
+    [[nodiscard]] ProgramDocument* ensureProgramCandidate(
+        const ProgramCatalog* catalog);
+    [[nodiscard]] FermentationUiWorkspacePress pressSettingsRow(
+        const FermentationUiSnapshot& snapshot, std::size_t row);
+    [[nodiscard]] FermentationUiWorkspacePress pressProgramEditCell(
+        const FermentationUiWorkspaceView& current,
+        const device_platform::DeviceUiTarget& target,
+        const ProgramCatalog* catalog);
+    [[nodiscard]] FermentationUiWorkspacePress pressKeyboardCell(
+        const device_platform::DeviceUiTarget& target);
+    void openTextEdit(FermentationUiTextTarget target, std::string initial);
+    [[nodiscard]] FermentationUiWorkspacePress commitTextEdit(
+        const FermentationUiSnapshot& snapshot,
+        const FermentationUiWorkspaceView& current);
 
     [[nodiscard]] bool selectedMessageExists(
         const FermentationUiSnapshot& snapshot) const;
@@ -422,7 +588,20 @@ class FermentationTouchWorkspace {
     // one of the manual drafts.
     FermentationUiManualDraftSlot valueEditSlot_{
         FermentationUiManualDraftSlot::StartCandidate};
-    std::array<FermentationUiManualDraft, 4U> manualDrafts_{};
+    // One draft per FermentationUiManualDraftSlot (indexed by the enumerator;
+    // the start candidate slot keeps an unused entry).
+    std::array<FermentationUiManualDraft, kFermentationUiManualDraftSlotCount>
+        manualDrafts_{};
+    // Settings / keyboard / program editor state (S10).
+    std::string deviceName_;
+    bool deviceNameChangeFailed_{false};
+    TextEditModel textEdit_;
+    FermentationUiTextTarget textTarget_{FermentationUiTextTarget::DeviceName};
+    // Set while the numeric edit page edits a program field (else a start or
+    // manual value).
+    std::optional<FermentationUiProgramField> valueEditProgramField_;
+    // Name entered for a Copy/New request (Edit changes it in the candidate).
+    std::optional<std::string> programEditName_;
     bool displayLanguageChangeFailed_{false};
     FermentationUiProgramListIntent programListIntent_{
         FermentationUiProgramListIntent::Start};
