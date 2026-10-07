@@ -2150,7 +2150,9 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                         ? std::nullopt
                         : programEditName_,
                     true};
-                programEditDirty_ = false;
+                // The editor stays dirty until the owner accepted the request
+                // (noteProgramEditOutcome): a refused save keeps the candidate
+                // and the discard protection.
             }
             break;
         case FermentationUiWorkspaceSlotAction::ApplySensorSelection:

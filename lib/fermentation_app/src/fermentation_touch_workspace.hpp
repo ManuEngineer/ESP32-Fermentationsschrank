@@ -480,6 +480,17 @@ class FermentationTouchWorkspace {
         markRenderRelevantChange();
         deviceName_ = name;
     }
+    // Records the owning outcome of a program edit request (save, reset,
+    // delete): only an accepted request makes the editor clean and drops its
+    // candidate; a refused one keeps both, so the user can retry or discard.
+    void noteProgramEditOutcome(bool accepted) noexcept {
+        markRenderRelevantChange();
+        if (accepted) {
+            programEditDirty_ = false;
+            programEditCandidate_.reset();
+            programEditName_.reset();
+        }
+    }
     // Records the owning outcome of the last device name commit so the
     // settings page can show a refused change (transient display state like
     // the language outcome).

@@ -888,6 +888,94 @@ void test_device_name_commit_reaches_the_owner_and_an_active_run_refuses_it() {
                          fermentationTextKey("device-name-change-failed")});
 }
 
+// S10 review B1: through the real touch adapter and the S6 owner, an accepted
+// save makes the editor clean; a save the owner refuses (stale catalog
+// revision) keeps the candidate, the dirty state and the discard protection.
+void test_program_save_outcome_decides_whether_the_editor_is_clean() {
+    OwningAppFixture fixture;
+    const auto packs = makeFermentationUiTextPacks();
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    const auto& catalog = source->programCatalog;
+    // A user program: copy the first programs list entry via the owner first.
+    FermentationUiProgramEditRequest copy;
+    copy.operation = FermentationUiProgramEditOperation::Copy;
+    copy.programId = catalog.programs.front().program.id;
+    copy.confirmed = true;
+    auto snapshot = fixture.application.uiSnapshot();
+    const auto copied = fixture.application.applyProgramEdit(
+        copy, snapshot.revisions.expectedProgramCatalogRevision,
+        snapshot.revisions.expectedUserConfigurationRevision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(copied.commit));
+    const auto after = fixture.application.uiPresentationSource();
+    const auto& userProgram = after->programCatalog.programs.back();
+
+    FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(userProgram.program.id, after->programCatalog));
+    workspace.setProgramEditOperation(FermentationUiProgramEditOperation::Edit);
+    workspace.setPage(FermentationUiPage::ProgramEdit);
+    auto edited = userProgram;
+    edited.program.notes = "neu";
+    workspace.setProgramEditCandidate(edited);
+    workspace.setProgramEditDirty(true);
+
+    const auto touchSave = [&](const FermentationUiSnapshot& shown) {
+        return processWorkspaceTouch(
+            fixture.application, workspace, shown, packs,
+            device_platform::LocaleId{"en"}, &after->programCatalog,
+            device_platform::DeviceUiNetworkStatus::Unavailable, {},
+            /*contactHeld=*/true, bottomX(3), kBottomY,
+            /*freshPressEdge=*/true, fixture.timeSource.monotonicMillis());
+    };
+
+    // Stale: the UI shows an older catalog revision than the owner holds.
+    snapshot = fixture.application.uiSnapshot();
+    auto stale = snapshot;
+    stale.revisions.expectedProgramCatalogRevision = ProgramCatalogRevision{
+        snapshot.revisions.expectedProgramCatalogRevision->value() + 1U};
+    const auto refused = touchSave(stale);
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    auto view = workspace.view(snapshot, &after->programCatalog);
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+    TEST_ASSERT_EQUAL_STRING("", fixture.application.uiPresentationSource()
+                                     ->programCatalog.programs.back()
+                                     .program.notes.c_str());
+    const auto blockedBack = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &after->programCatalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blockedBack.interaction.outcome));
+
+    // Release the touch, then the same save with the current revision.
+    static_cast<void>(processWorkspaceTouch(
+        fixture.application, workspace, snapshot, packs,
+        device_platform::LocaleId{"en"}, &after->programCatalog,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {},
+        /*contactHeld=*/false, bottomX(3), kBottomY,
+        /*freshPressEdge=*/false, fixture.timeSource.monotonicMillis()));
+    const auto accepted = touchSave(snapshot);
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("neu", fixture.application.uiPresentationSource()
+                                        ->programCatalog.programs.back()
+                                        .program.notes.c_str());
+    view = workspace.view(
+        fixture.application.uiSnapshot(),
+        &fixture.application.uiPresentationSource()->programCatalog);
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::None);
+}
+
 // Review B1: a refused language change is shown on the language page, keeps
 // the language, is replaced by the next accepted change and discarded when
 // the page is left. Driven through the real touch adapter.
@@ -1984,6 +2072,7 @@ int main() {
     RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
     RUN_TEST(
         test_device_name_commit_reaches_the_owner_and_an_active_run_refuses_it);
+    RUN_TEST(test_program_save_outcome_decides_whether_the_editor_is_clean);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_product_inserted_without_runtime_context_is_context_missing);
     RUN_TEST(

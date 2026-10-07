@@ -2890,6 +2890,57 @@ void test_program_editor_edits_are_dirty_and_never_touch_the_stored_program() {
                       .text.c_str());
 }
 
+// B1: the editor is clean only after the owner accepted the save request. The
+// request itself leaves it dirty; a refused outcome keeps candidate and the
+// discard protection, an accepted one releases both.
+void test_program_save_marks_the_editor_clean_only_after_the_owner_accepts() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    fixture.setNumeric(Field::Duration, "75");
+    const auto save = fixture.slot(3U);
+    TEST_ASSERT_TRUE(save.programEdit.has_value());
+    // The request alone does not clean the editor.
+    TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+
+    // Refused by the owner (stale revision, persistence error, ...).
+    fixture.workspace.noteProgramEditOutcome(false);
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+    TEST_ASSERT_EQUAL_STRING(
+        "75 min",
+        view.programEdit->rows[fixture.indexOf(Field::Duration)].text.c_str());
+    TEST_ASSERT_TRUE(
+        view.programEdit->rows[fixture.indexOf(Field::Duration)].changed);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);  // retry possible
+    const auto blocked = fixture.workspace.press(
+        fixture.snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &fixture.catalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blocked.interaction.outcome));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::DeviceUiFeedbackIntent::ConfirmationRequired),
+        static_cast<int>(blocked.interaction.feedback));
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramEdit);
+
+    // Accepted by the owner: clean, the candidate is released (the owner's
+    // catalog is the truth again), leaving works.
+    fixture.workspace.noteProgramEditOutcome(true);
+    view = fixture.view();
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::None);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+}
+
 // A dirty editor cannot be left through the navigation exits; the explicit
 // discard slot is the confirmation. It drops the candidate and the dirty flag,
 // so reopening the editor shows the stored program again.
@@ -3003,5 +3054,7 @@ int main(int, char**) {
         test_program_editor_edits_are_dirty_and_never_touch_the_stored_program);
     RUN_TEST(
         test_program_editor_discard_is_an_explicit_slot_and_drops_the_candidate);
+    RUN_TEST(
+        test_program_save_marks_the_editor_clean_only_after_the_owner_accepts);
     return UNITY_END();
 }

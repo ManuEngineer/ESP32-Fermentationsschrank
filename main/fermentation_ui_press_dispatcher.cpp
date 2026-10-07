@@ -176,6 +176,13 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
+        if (press.programEdit.has_value()) {
+            // The editor is only clean after the owner accepted the request.
+            workspace.noteProgramEditOutcome(
+                result.dispatch.commandResult.has_value() &&
+                result.dispatch.commandResult->category ==
+                    device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+        }
         if (press.setDeviceName.has_value()) {
             // The settings page shows a refused name change; an accepted one
             // replaces an earlier failure (the name itself arrives through the
