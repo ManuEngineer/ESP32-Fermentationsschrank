@@ -48,3 +48,19 @@ ACTUATOR_RELEASE=NO
 - S1-Programmlisten-Identitaetsnachweis (Testdaten) und S3-D10-Ressourcenlog:
   separat durch den Owner zu entscheiden.
 - Independent Review S4 und Fix Verification S3 B1 laut ROADMAP.
+
+## Zusatzbeobachtung nach dem Hauptlauf (nicht Teil des PASS)
+
+- Nach einem weiteren Power-Cut des Owners (EN-Draht wurde wieder angeschlossen)
+  zeigte das Geraet laenger `Zeit nicht vertrauenswuerdig` und `--:--`
+  (Foto des Owners, fail-closed, keine falsche Zeit). Die Dauer wurde nicht
+  gemessen; im Release-Log sind keine SNTP-Zeilen sichtbar.
+- Beim Versuch, passiv mitzulesen, hat das Oeffnen von `/dev/ttyUSB0` das Geraet
+  per EN resettet (`rst:0x1`, Uptime ca. 16 s). Danach zeigte das Geraet wieder
+  `Zeit vertrauenswuerdig`, `Europe/Zurich`, `06:32` (Foto des Owners). Ob die Zeit
+  ohne diesen Reset von selbst gekommen waere, ist nicht belegt.
+- Die Ursache der laengeren Wartezeit ist ungeklaert (Vermutung ohne Beleg:
+  SNTP-Erstanfrage vor WLAN/DNS und Retry-Backoff). Kein Befund gegen den
+  Trust-Gate-Pfad aus #181. Einordnung `FOLLOW-UP` (Zeit bis zum ersten Sync nach
+  Cold Boot schwankt), Owner entscheidet ueber ein Issue; passt zum
+  Netzwerk-Lebenszyklus (#89).
