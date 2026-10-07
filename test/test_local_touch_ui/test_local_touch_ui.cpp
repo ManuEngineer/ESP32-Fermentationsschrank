@@ -2895,7 +2895,7 @@ void test_text_edit_route_follows_the_program_editor_caller() {
         TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
         TEST_ASSERT_TRUE(fixture.workspace.page() ==
                          FermentationUiPage::ProgramEdit);
-        const auto& edit = *fixture.view().programEdit;
+        const auto edit = *fixture.view().programEdit;
         TEST_ASSERT_TRUE(edit.rows[fixture.indexOf(field)].changed);
     }
 }

@@ -786,11 +786,17 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         }
         return result;
     };
-    return {
-        {nameSpace, LocaleId{"de"}, capabilities, translated(entries, "de")},
-        {nameSpace, LocaleId{"en"}, capabilities, translated(entries, "en")},
-        {nameSpace, LocaleId{"es"}, capabilities, translated(entries, "es")},
-    };
+    // Built in place: an initializer_list return would copy every finished
+    // translation vector once more (a contiguous block of about 13 KB per
+    // pack that the device no longer has once WLAN runs).
+    std::vector<TextPackManifest> packs;
+    packs.reserve(3U);
+    for (const char* locale : {"de", "en", "es"}) {
+        packs.push_back(TextPackManifest{nameSpace, LocaleId{locale},
+                                         capabilities,
+                                         translated(entries, locale)});
+    }
+    return packs;
 }
 
 }  // namespace fermentation
