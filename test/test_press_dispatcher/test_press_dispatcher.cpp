@@ -1,6 +1,10 @@
 #include <unity.h>
 
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <optional>
+#include <thread>
 #include <variant>
 
 #include "device_platform.hpp"
@@ -12,6 +16,7 @@
 #include "run_persistence_codec.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 #include "state_store_key.hpp"
 #include "virtual_time_source.hpp"
 
@@ -28,6 +33,11 @@ class FermentationApplicationTestAccess {
     static RunPersistenceCoordinator& runPersistenceCoordinator(
         FermentationApplication& application) {
         return *application.runPersistenceCoordinator_;
+    }
+
+    static ApplicationCallSerializer::Guard enter(
+        FermentationApplication& application) {
+        return application.applicationCallSerializer_.enter();
     }
 };
 
@@ -203,6 +213,100 @@ struct OwningAppFixture {
         application.publishOwningRuntimeEvidence(validOwningEvidence());
     }
 };
+
+// WaitingForProduct reached through the application's own persistence
+// coordinator and runtime state (the same real decisions the production
+// loop would take): a preheat program is started, qualification is tracked
+// and completed.  The product-insertion owner under test is not involved.
+RunCheckpointTime waitingFixtureTime(const std::uint64_t monotonicMillis) {
+    return {monotonicMillis, 1'700'000'000LL + static_cast<std::int64_t>(
+                                                   monotonicMillis / 1'000U)};
+}
+
+ProgramDocument preheatProgramDocument() {
+    auto document = FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    auto& program = document->program;
+    program.preheat = true;
+    program.maximumProductWaitMinutes = 30U;
+    program.productSensorFailure.fallbackDelaySeconds = 30U;
+    program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    program.fermentationStages.front().durationMinutes = 120U;
+    program.targetQualification.bandCelsius = 0.5;
+    program.targetQualification.durationMinutes = 10U;
+    program.maximumTargetReachMinutes = 180U;
+    TEST_ASSERT_TRUE(validateProgram(*document).valid());
+    return *document;
+}
+
+void driveToWaitingForProduct(FermentationApplication& application) {
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    auto& coordinator =
+        FermentationApplicationTestAccess::runPersistenceCoordinator(
+            application);
+    state.processState.state = ProcessState::Standby;
+    ProgramStartRequest request;
+    request.envelope = {1U,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "persisted-run";
+    request.program = preheatProgramDocument();
+    request.sourceProgramRevision = RunProgramSourceRevision{1U};
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(coordinator
+                             .persistCommand(state,
+                                             decideProgramStart(state, request),
+                                             waitingFixtureTime(100U))
+                             .status));
+    const auto tracking = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{QualificationProgress::InBand, false, false},
+        TransitionRequest{}, 100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, tracking, waitingFixtureTime(100U))
+                .status));
+    const auto waiting = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{QualificationProgress::Complete, false, false},
+        TransitionRequest{}, 600100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, waiting, waitingFixtureTime(600100U))
+                .status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(state.processState.state));
+}
+
+FermentationUiCommandContext productInsertedContext(
+    const FermentationApplication& application, const std::uint64_t now) {
+    FermentationUiCommandContext context;
+    context.surface = device_platform::UiSurface::LocalDisplay;
+    context.monotonicMillis = now;
+    context.expected = application.uiSnapshot().revisions;
+    return context;
+}
+
+ProcessState runtimeProcessState(FermentationApplication& application) {
+    return FermentationApplicationTestAccess::runtimeState(application)
+        .processState.state;
+}
 
 void assertAppliedOwningResult(const WorkspacePressDispatchResult& result) {
     TEST_ASSERT_EQUAL_INT(
@@ -808,30 +912,615 @@ void test_command_status_projection_keeps_decisions_only() {
                         FermentationUiCommandPhase::OwningOutcome);
 }
 
-void test_dispatch_transition_action_is_unavailable_no_owner() {
-    AppFixture fixture;
+void test_product_inserted_without_runtime_context_is_context_missing() {
+    // An application that has not begun owns no runtime/persistence context.
+    FermentationApplication application;
+    FermentationUiCommandContext context;
+    context.monotonicMillis = 700'000U;
+    const auto result = application.confirmProductInserted(context);
+    assertCommandStatus(result, CommandStatus::ContextMissing,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_TRUE(result.category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+}
+
+void test_product_inserted_waiting_for_product_reaches_target_and_persists() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+
+    const auto result = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(result.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    const auto headAfter = readHead(fixture.store);
+    TEST_ASSERT_TRUE(headBefore.value != headAfter.value);
+}
+
+void test_product_inserted_in_wrong_state_is_rejected_without_change() {
+    OwningAppFixture fixture;
+    const auto headBefore = readHead(fixture.store);
+    const auto before = runtimeProcessState(fixture.application);
+
+    const auto result = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(std::holds_alternative<DecisionStatus>(result.detail));
+    TEST_ASSERT_TRUE(std::get<DecisionStatus>(result.detail) !=
+                     DecisionStatus::Proposed);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::DeviceUiCommandOutcomeCategory::Rejected),
+        static_cast<int>(result.category));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(before),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_product_inserted_stale_sequence_is_rejected_without_change() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+    auto context = productInsertedContext(fixture.application, 700'000U);
+    context.expected.expectedStateSequence += 1U;
+
+    const auto result = fixture.application.confirmProductInserted(context);
+    assertCommandStatus(result, CommandStatus::StaleState,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::WaitingForProduct),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+}
+
+void test_product_inserted_persistence_failure_is_fail_closed_and_retryable() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto headBefore = readHead(fixture.store);
+
+    fixture.store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto failed = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_TRUE(failed.category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(failed.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(failed.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::WaitingForProduct),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headBefore, readHead(fixture.store));
+
+    const auto retried = fixture.application.confirmProductInserted(
+        productInsertedContext(fixture.application, 700'000U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(retried.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+}
+
+void test_product_inserted_repeated_press_is_rejected() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto firstContext =
+        productInsertedContext(fixture.application, 700'000U);
+    const auto first = fixture.application.confirmProductInserted(firstContext);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(first.detail)));
+    const auto headAfterFirst = readHead(fixture.store);
+
+    // The same (now stale) press arrives again.
+    const auto second =
+        fixture.application.confirmProductInserted(firstContext);
+    assertCommandStatus(second, CommandStatus::StaleState,
+                        FermentationUiCommandPhase::DecisionOnly);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+    assertSameHead(headAfterFirst, readHead(fixture.store));
+}
+
+void test_dispatch_transition_action_reaches_the_owning_application() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
     FermentationUiWorkspacePress press;
     press.transitionAction = FermentationUiProductInsertedConfirmedIntent{};
 
-    const auto result =
-        dispatchWorkspacePress(fixture.application, {}, press, 1000U);
+    const auto result = dispatchWorkspacePress(
+        fixture.application, fixture.application.uiSnapshot(), press, 700'000U);
+    assertAppliedOwningResult(result);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(WorkspacePressDispatchOutcome::UnavailableNoOwner),
-        static_cast<int>(result.outcome));
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
 }
 
-void test_dispatch_program_edit_is_unavailable_no_owner() {
-    AppFixture fixture;
+void test_dispatch_transition_action_without_context_is_decision_only() {
+    FermentationApplication application;
+    FermentationUiWorkspacePress press;
+    press.transitionAction = FermentationUiProductInsertedConfirmedIntent{};
+
+    const auto result = dispatchWorkspacePress(application, {}, press, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::DecisionOnly),
+        static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    assertCommandStatus(*result.commandResult, CommandStatus::ContextMissing,
+                        FermentationUiCommandPhase::DecisionOnly);
+}
+
+// ---- S6: ProgramCatalog mutation owner -----------------------------------
+
+using ProgramEditOp = FermentationUiProgramEditOperation;
+
+ProgramCatalog activeCatalog(const FermentationApplication& application) {
+    const auto source = application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    return source->programCatalog;
+}
+
+const ProgramDocument* findProgram(const ProgramCatalog& catalog,
+                                   const std::string& id) {
+    for (const auto& document : catalog.programs)
+        if (document.program.id == id) return &document;
+    return nullptr;
+}
+
+std::size_t userProgramCount(const ProgramCatalog& catalog) {
+    std::size_t count = 0U;
+    for (const auto& document : catalog.programs)
+        if (!document.program.factoryCatalogEntry) ++count;
+    return count;
+}
+
+ApplicationConfigurationChangeResult applyEdit(
+    FermentationApplication& application, const ProgramEditOp operation,
+    const std::string& programId,
+    std::optional<ProgramDocument> candidate = std::nullopt,
+    std::optional<std::string> name = std::nullopt, bool confirmed = true) {
+    const auto revisions = application.uiSnapshot().revisions;
+    return application.applyProgramEdit(
+        FermentationUiProgramEditRequest{operation, programId,
+                                         std::move(candidate), std::move(name),
+                                         confirmed},
+        revisions.expectedProgramCatalogRevision,
+        revisions.expectedUserConfigurationRevision);
+}
+
+void assertActivated(const ApplicationConfigurationChangeResult& result) {
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ConfigurationPreviewStatus::Success),
+                          static_cast<int>(result.preview));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(result.commit));
+}
+
+void assertRejectedPreview(const ApplicationConfigurationChangeResult& result,
+                           const ConfigurationPreviewStatus expected) {
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(expected),
+                          static_cast<int>(result.preview));
+}
+
+void activateProgramRun(FermentationApplication& application,
+                        const ProgramDocument& document) {
+    auto active = ActiveRun::start(document, ProgramSourceKind::FactoryCatalog,
+                                   RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(active.has_value());
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    state.processState.state = ProcessState::Fermenting;
+    state.activeProgramRun = std::move(*active);
+}
+
+void test_program_copy_and_new_create_user_programs() {
+    OwningAppFixture fixture;
+    const auto before = activeCatalog(fixture.application);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(userProgramCount(before)));
+
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+    auto after = activeCatalog(fixture.application);
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(userProgramCount(after)));
+    const auto* copy = findProgram(after, "user-00");
+    TEST_ASSERT_TRUE(copy != nullptr);
+    TEST_ASSERT_EQUAL_STRING("Joghurt mild copy", copy->program.name.c_str());
+    TEST_ASSERT_TRUE(copy->program.userDeletable);
+
+    assertActivated(applyEdit(fixture.application, ProgramEditOp::New, ""));
+    after = activeCatalog(fixture.application);
+    TEST_ASSERT_EQUAL_UINT32(
+        2U, static_cast<std::uint32_t>(userProgramCount(after)));
+    const auto* created = findProgram(after, "user-01");
+    TEST_ASSERT_TRUE(created != nullptr);
+    // Without a candidate or name the new program is "New program", built
+    // from the water-kefir template with cleared run parameters: selectable
+    // and deletable, not startable.
+    TEST_ASSERT_EQUAL_STRING("New program", created->program.name.c_str());
+    TEST_ASSERT_FALSE(created->program.factoryCatalogEntry);
+    TEST_ASSERT_TRUE(created->program.userDeletable);
+    TEST_ASSERT_FALSE(created->program.fermentationStages.front()
+                          .targetTemperatureCelsius.has_value());
+}
+
+void test_program_delete_removes_user_program_but_never_a_factory_program() {
+    OwningAppFixture fixture;
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Delete, "user-00"));
+    TEST_ASSERT_TRUE(
+        findProgram(activeCatalog(fixture.application), "user-00") == nullptr);
+
+    const auto refused =
+        applyEdit(fixture.application, ProgramEditOp::Delete, "yogurt-mild");
+    assertRejectedPreview(refused,
+                          ConfigurationPreviewStatus::InvalidCandidate);
+    TEST_ASSERT_TRUE(findProgram(activeCatalog(fixture.application),
+                                 "yogurt-mild") != nullptr);
+}
+
+void test_program_uninstall_needs_confirmation_and_reset_restores_factory() {
+    OwningAppFixture fixture;
+    const auto unconfirmed =
+        applyEdit(fixture.application, ProgramEditOp::Uninstall, "yogurt-mild",
+                  std::nullopt, std::nullopt, false);
+    assertRejectedPreview(unconfirmed,
+                          ConfigurationPreviewStatus::InvalidCandidate);
+    TEST_ASSERT_TRUE(
+        findProgram(activeCatalog(fixture.application), "yogurt-mild")
+            ->program.installed);
+
+    assertActivated(applyEdit(fixture.application, ProgramEditOp::Uninstall,
+                              "yogurt-mild"));
+    TEST_ASSERT_FALSE(
+        findProgram(activeCatalog(fixture.application), "yogurt-mild")
+            ->program.installed);
+
+    // Edit a second standard program, then reset it to the factory values
+    // (canonical wire value 6, StandardProgramReset).
+    auto candidate =
+        *findProgram(activeCatalog(fixture.application), "yogurt-firm");
+    candidate.program.name = "Joghurt geaendert";
+    assertActivated(applyEdit(fixture.application, ProgramEditOp::Edit,
+                              "yogurt-firm", candidate));
+    TEST_ASSERT_EQUAL_STRING(
+        "Joghurt geaendert",
+        findProgram(activeCatalog(fixture.application), "yogurt-firm")
+            ->program.name.c_str());
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Reset, "yogurt-firm"));
+    TEST_ASSERT_EQUAL_STRING(
+        "Joghurt stichfest",
+        findProgram(activeCatalog(fixture.application), "yogurt-firm")
+            ->program.name.c_str());
+}
+
+void test_program_edit_of_the_active_program_is_blocked_before_preview() {
+    OwningAppFixture fixture;
+    // The run uses the runnable water-kefir values; the catalog entry with
+    // the same id is the "program in use".
+    activateProgramRun(fixture.application, preheatProgramDocument());
+    const auto activeSnapshotName =
+        storedProgram(
+            FermentationApplicationTestAccess::runtimeState(fixture.application)
+                .activeProgramRun->snapshot()
+                .source)
+            ->program.name;
+
+    const auto blocked =
+        applyEdit(fixture.application, ProgramEditOp::Uninstall, "water-kefir");
+    assertRejectedPreview(blocked, ConfigurationPreviewStatus::NotAllowed);
+    TEST_ASSERT_TRUE(
+        findProgram(activeCatalog(fixture.application), "water-kefir")
+            ->program.installed);
+
+    // No preview slot was taken, and the running snapshot stays untouched
+    // while another program is mutated.
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-firm"));
+    TEST_ASSERT_EQUAL_STRING(
+        activeSnapshotName.c_str(),
+        storedProgram(
+            FermentationApplicationTestAccess::runtimeState(fixture.application)
+                .activeProgramRun->snapshot()
+                .source)
+            ->program.name.c_str());
+}
+
+void test_program_edit_and_reset_of_the_active_program_are_blocked() {
+    OwningAppFixture fixture;
+    activateProgramRun(fixture.application, preheatProgramDocument());
+    const auto before =
+        *findProgram(activeCatalog(fixture.application), "water-kefir");
+
+    auto candidate = before;
+    candidate.program.name = "Wasserkefir geaendert";
+    assertRejectedPreview(applyEdit(fixture.application, ProgramEditOp::Edit,
+                                    "water-kefir", candidate),
+                          ConfigurationPreviewStatus::NotAllowed);
+    assertRejectedPreview(
+        applyEdit(fixture.application, ProgramEditOp::Reset, "water-kefir"),
+        ConfigurationPreviewStatus::NotAllowed);
+    assertRejectedPreview(
+        applyEdit(fixture.application, ProgramEditOp::Delete, "water-kefir"),
+        ConfigurationPreviewStatus::NotAllowed);
+    TEST_ASSERT_EQUAL_STRING(
+        before.program.name.c_str(),
+        findProgram(activeCatalog(fixture.application), "water-kefir")
+            ->program.name.c_str());
+
+    // Copy only reads the source and New addresses no entry; neither is
+    // blocked, and no preview slot stayed taken by the rejected calls.
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "water-kefir"));
+    assertActivated(applyEdit(fixture.application, ProgramEditOp::New, ""));
+    TEST_ASSERT_EQUAL_STRING(
+        before.program.name.c_str(),
+        storedProgram(
+            FermentationApplicationTestAccess::runtimeState(fixture.application)
+                .activeProgramRun->snapshot()
+                .source)
+            ->program.name.c_str());
+}
+
+void test_program_edit_with_stale_catalog_revision_is_rejected() {
+    OwningAppFixture fixture;
+    const auto revisions = fixture.application.uiSnapshot().revisions;
+    TEST_ASSERT_TRUE(revisions.expectedProgramCatalogRevision.has_value());
+    const FermentationUiProgramEditRequest request{
+        ProgramEditOp::Copy, "yogurt-mild", std::nullopt, std::nullopt, true};
+    const auto stale = fixture.application.applyProgramEdit(
+        request,
+        ProgramCatalogRevision{
+            revisions.expectedProgramCatalogRevision->value() + 1U},
+        revisions.expectedUserConfigurationRevision);
+    assertRejectedPreview(stale, ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
+
+    // The failure released the preview slot.
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+}
+
+// The user-configuration revision the user saw must reach the confirmation
+// check; the current runtime value is never substituted.
+void test_program_edit_from_a_stale_user_configuration_snapshot_is_rejected() {
+    OwningAppFixture fixture;
+    const auto seen = fixture.application.uiSnapshot().revisions;
+    TEST_ASSERT_TRUE(seen.expectedUserConfigurationRevision.has_value());
+    TEST_ASSERT_TRUE(seen.expectedProgramCatalogRevision.has_value());
+
+    // A user-configuration change that leaves the program catalog untouched.
+    const auto language = fixture.application.applyDisplayLanguage(
+        "es", seen.expectedUserConfigurationRevision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(language.commit));
+    const auto current = fixture.application.uiSnapshot().revisions;
+    TEST_ASSERT_TRUE(*current.expectedUserConfigurationRevision !=
+                     *seen.expectedUserConfigurationRevision);
+    TEST_ASSERT_TRUE(*current.expectedProgramCatalogRevision ==
+                     *seen.expectedProgramCatalogRevision);
+
+    const FermentationUiProgramEditRequest request{
+        ProgramEditOp::Copy, "yogurt-mild", std::nullopt, std::nullopt, true};
+    const auto stale = fixture.application.applyProgramEdit(
+        request, seen.expectedProgramCatalogRevision,
+        seen.expectedUserConfigurationRevision);
+    TEST_ASSERT_TRUE(stale.commit != ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
+
+    // The same press through the dispatcher with the old snapshot is rejected
+    // as well.
+    FermentationUiWorkspacePress press;
+    press.programEdit = request;
+    FermentationUiSnapshot staleSnapshot;
+    staleSnapshot.revisions = seen;
+    const auto dispatched = dispatchWorkspacePress(fixture.application,
+                                                   staleSnapshot, press, 1000U);
+    TEST_ASSERT_TRUE(dispatched.commandResult.has_value());
+    TEST_ASSERT_TRUE(dispatched.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
+
+    // No preview slot stayed taken: the current snapshot still works.
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+}
+
+void test_program_edit_without_expected_revisions_is_fail_closed() {
+    OwningAppFixture fixture;
+    const auto revisions = fixture.application.uiSnapshot().revisions;
+    const FermentationUiProgramEditRequest request{
+        ProgramEditOp::Copy, "yogurt-mild", std::nullopt, std::nullopt, true};
+
+    const auto noCatalog = fixture.application.applyProgramEdit(
+        request, std::nullopt, revisions.expectedUserConfigurationRevision);
+    assertRejectedPreview(noCatalog, ConfigurationPreviewStatus::StateChanged);
+    const auto noUser = fixture.application.applyProgramEdit(
+        request, revisions.expectedProgramCatalogRevision, std::nullopt);
+    assertRejectedPreview(noUser, ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
+
+    // Current snapshot: the existing success path stays green.
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+}
+
+// Waits until the worker is blocked on the shared application gate held by
+// the caller, then releases it and expects the worker to finish.
+template <typename Call>
+void assertCallWaitsForTheApplicationGate(FermentationApplication& application,
+                                          Call call) {
+    std::mutex synchronization;
+    std::condition_variable changed;
+    bool workerStarted = false;
+    bool workerDone = false;
+
+    std::thread worker;
+    {
+        auto held = FermentationApplicationTestAccess::enter(application);
+        worker = std::thread([&] {
+            {
+                std::lock_guard<std::mutex> lock(synchronization);
+                workerStarted = true;
+            }
+            changed.notify_one();
+            call();
+            {
+                std::lock_guard<std::mutex> lock(synchronization);
+                workerDone = true;
+            }
+            changed.notify_one();
+        });
+        {
+            std::unique_lock<std::mutex> lock(synchronization);
+            TEST_ASSERT_TRUE(changed.wait_for(lock, std::chrono::seconds(1),
+                                              [&] { return workerStarted; }));
+            // Give the worker a chance to (wrongly) pass the gate.
+            changed.wait_for(lock, std::chrono::milliseconds(100),
+                             [&] { return workerDone; });
+            TEST_ASSERT_FALSE(workerDone);
+        }
+    }
+    {
+        std::unique_lock<std::mutex> lock(synchronization);
+        TEST_ASSERT_TRUE(changed.wait_for(lock, std::chrono::seconds(2),
+                                          [&] { return workerDone; }));
+    }
+    worker.join();
+}
+
+// D5: like every public Application entry, the new owners wait for the shared
+// application gate.
+void test_confirm_product_inserted_waits_for_the_application_gate() {
+    OwningAppFixture fixture;
+    driveToWaitingForProduct(fixture.application);
+    const auto context = productInsertedContext(fixture.application, 700'000U);
+    FermentationUiCommandResult result;
+    assertCallWaitsForTheApplicationGate(fixture.application, [&] {
+        result = fixture.application.confirmProductInserted(context);
+    });
+    TEST_ASSERT_TRUE(
+        std::holds_alternative<RunPersistenceResultStatus>(result.detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(std::get<RunPersistenceResultStatus>(result.detail)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(runtimeProcessState(fixture.application)));
+}
+
+void test_apply_program_edit_waits_for_the_application_gate() {
+    OwningAppFixture fixture;
+    const auto revisions = fixture.application.uiSnapshot().revisions;
+    ApplicationConfigurationChangeResult result;
+    assertCallWaitsForTheApplicationGate(fixture.application, [&] {
+        result = fixture.application.applyProgramEdit(
+            FermentationUiProgramEditRequest{ProgramEditOp::Copy, "yogurt-mild",
+                                             std::nullopt, std::nullopt, true},
+            revisions.expectedProgramCatalogRevision,
+            revisions.expectedUserConfigurationRevision);
+    });
+    assertActivated(result);
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
+}
+
+void test_program_capacity_is_reported_and_recoverable() {
+    OwningAppFixture fixture;
+    for (std::size_t index = 0U; index < 12U; ++index) {
+        assertActivated(
+            applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+    }
+    TEST_ASSERT_EQUAL_UINT32(12U, static_cast<std::uint32_t>(userProgramCount(
+                                      activeCatalog(fixture.application))));
+    const auto full =
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild");
+    assertRejectedPreview(full, ConfigurationPreviewStatus::InvalidCandidate);
+    TEST_ASSERT_EQUAL_UINT32(12U, static_cast<std::uint32_t>(userProgramCount(
+                                      activeCatalog(fixture.application))));
+
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Delete, "user-00"));
+    assertActivated(applyEdit(fixture.application, ProgramEditOp::New, ""));
+}
+
+void test_program_edit_without_run_state_or_service_is_fail_closed() {
+    FermentationApplication application;
+    const auto result = application.applyProgramEdit(
+        FermentationUiProgramEditRequest{ProgramEditOp::Copy, "yogurt-mild",
+                                         std::nullopt, std::nullopt, true},
+        ProgramCatalogRevision{1U}, UserConfigurationRevision{1U});
+    assertRejectedPreview(
+        result, ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable);
+}
+
+void test_program_edit_persists_across_a_restart() {
+    OwningAppFixture fixture;
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Copy, "yogurt-mild"));
+    assertActivated(
+        applyEdit(fixture.application, ProgramEditOp::Uninstall, "milk-kefir"));
+
+    FermentationApplication restarted;
+    TEST_ASSERT_TRUE(restarted.begin(fixture.platform, fixture.store,
+                                     fixture.timeZoneResolver,
+                                     fixture.timeSource));
+    const auto catalog = activeCatalog(restarted);
+    TEST_ASSERT_TRUE(findProgram(catalog, "user-00") != nullptr);
+    TEST_ASSERT_FALSE(findProgram(catalog, "milk-kefir")->program.installed);
+}
+
+void test_dispatch_program_edit_reaches_the_owning_application() {
+    OwningAppFixture fixture;
     FermentationUiWorkspacePress press;
     press.programEdit = FermentationUiProgramEditRequest{
-        FermentationUiProgramEditOperation::Reset, "p1", std::nullopt,
-        std::nullopt, true};
+        ProgramEditOp::Copy, "yogurt-mild", std::nullopt, std::nullopt, true};
 
-    const auto result =
-        dispatchWorkspacePress(fixture.application, {}, press, 1000U);
+    const auto result = dispatchWorkspacePress(
+        fixture.application, fixture.application.uiSnapshot(), press, 1000U);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(WorkspacePressDispatchOutcome::UnavailableNoOwner),
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
         static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    TEST_ASSERT_TRUE(std::holds_alternative<ConfigurationCommitStatus>(
+        result.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            std::get<ConfigurationCommitStatus>(result.commandResult->detail)));
+    TEST_ASSERT_TRUE(
+        findProgram(activeCatalog(fixture.application), "user-00") != nullptr);
+
+    // A snapshot without a catalog revision cannot authorize a change.
+    const auto unauthorized =
+        dispatchWorkspacePress(fixture.application, {}, press, 1000U);
+    TEST_ASSERT_TRUE(unauthorized.commandResult.has_value());
+    TEST_ASSERT_TRUE(unauthorized.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(userProgramCount(
+                                     activeCatalog(fixture.application))));
 }
 
 void test_dispatch_network_touch_actions_use_existing_application_bridge() {
@@ -1209,8 +1898,33 @@ int main() {
     RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
     RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
-    RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
-    RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);
+    RUN_TEST(test_product_inserted_without_runtime_context_is_context_missing);
+    RUN_TEST(
+        test_product_inserted_waiting_for_product_reaches_target_and_persists);
+    RUN_TEST(test_product_inserted_in_wrong_state_is_rejected_without_change);
+    RUN_TEST(test_product_inserted_stale_sequence_is_rejected_without_change);
+    RUN_TEST(
+        test_product_inserted_persistence_failure_is_fail_closed_and_retryable);
+    RUN_TEST(test_product_inserted_repeated_press_is_rejected);
+    RUN_TEST(test_dispatch_transition_action_reaches_the_owning_application);
+    RUN_TEST(test_dispatch_transition_action_without_context_is_decision_only);
+    RUN_TEST(test_program_copy_and_new_create_user_programs);
+    RUN_TEST(
+        test_program_delete_removes_user_program_but_never_a_factory_program);
+    RUN_TEST(
+        test_program_uninstall_needs_confirmation_and_reset_restores_factory);
+    RUN_TEST(test_program_edit_of_the_active_program_is_blocked_before_preview);
+    RUN_TEST(test_program_edit_and_reset_of_the_active_program_are_blocked);
+    RUN_TEST(test_program_edit_with_stale_catalog_revision_is_rejected);
+    RUN_TEST(
+        test_program_edit_from_a_stale_user_configuration_snapshot_is_rejected);
+    RUN_TEST(test_program_edit_without_expected_revisions_is_fail_closed);
+    RUN_TEST(test_confirm_product_inserted_waits_for_the_application_gate);
+    RUN_TEST(test_apply_program_edit_waits_for_the_application_gate);
+    RUN_TEST(test_program_capacity_is_reported_and_recoverable);
+    RUN_TEST(test_program_edit_without_run_state_or_service_is_fail_closed);
+    RUN_TEST(test_program_edit_persists_across_a_restart);
+    RUN_TEST(test_dispatch_program_edit_reaches_the_owning_application);
     RUN_TEST(
         test_dispatch_network_touch_actions_use_existing_application_bridge);
     RUN_TEST(test_web_access_open_runs_through_bridge_to_the_application_owner);

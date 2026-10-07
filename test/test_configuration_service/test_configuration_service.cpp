@@ -793,6 +793,68 @@ void test_program_editor_consumes_the_opening_catalog_revision() {
     TEST_ASSERT_FALSE(stale.preview.has_value());
 }
 
+// F14 (Issue #172, S6): a preview produced by applyProgramEditPreview() must
+// pass confirmation and survive a reload from the persisted graph, for a
+// normal edit and for a standard-program reset (canonical wire values).
+void test_program_edit_preview_confirms_and_reloads_from_the_store() {
+    Fixture fixture;
+    struct {
+        fermentation::UserConfigurationRevision revision{1U};
+    } expected;
+    fermentation::ProgramCatalogRevision catalogRevision{1U};
+    fermentation::ProgramDocument candidate;
+    {
+        auto runtime = fixture.service.acquireRuntime();
+        TEST_ASSERT_TRUE(
+            runtime.status ==
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+        const auto session = fermentation::openProgramEditSession(
+            runtime.lease.get(), "yogurt-mild");
+        TEST_ASSERT_TRUE(session.has_value());
+        catalogRevision = session->expectedProgramCatalogRevision;
+        candidate = session->candidate;
+        expected.revision = runtime.lease->userConfigurationRevision();
+    }
+    candidate.program.name = "Joghurt mild reloaded";
+    const auto installed = fermentation::applyProgramEditPreview(
+        fixture.service, catalogRevision,
+        {fermentation::FermentationUiProgramEditOperation::Edit, "yogurt-mild",
+         candidate, std::nullopt, true},
+        fermentation::makeFermentationUiProgramUsageEvidence(
+            fermentation::RunCommandState{}));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(installed.preview.has_value());
+    const auto handle = installed.preview->handle;
+    TEST_ASSERT_TRUE(
+        fixture.service
+            .validatePreviewForConfirmation(handle, expected.revision)
+            .status ==
+        fermentation::ConfigurationCommitStatus::ReadyForConfirmation);
+    const auto committed = fixture.service.confirmPreview(handle);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationCommitStatus::Activated),
+        static_cast<int>(committed.status));
+
+    fermentation::ConfigurationGraphStore reloadStore(fixture.store,
+                                                      fixture.resolver);
+    const auto loaded =
+        reloadStore.loadCanonicalGraph(device_platform::StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.status ==
+                     fermentation::ConfigurationGraphLoadStatus::
+                         ConfigurationGraphAvailable);
+    TEST_ASSERT_TRUE(loaded.graph.has_value());
+    bool found = false;
+    for (const auto& document : loaded.graph->active.programCatalog->programs) {
+        if (document.program.id == "yogurt-mild") {
+            found = true;
+            TEST_ASSERT_EQUAL_STRING("Joghurt mild reloaded",
+                                     document.program.name.c_str());
+        }
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
 // SIM-26-43: owning usage evidence is checked before a preview lease is
 // created for both user deletion and standard deinstallation.
 void test_program_delete_in_use_is_rejected_before_preview() {
@@ -2241,6 +2303,7 @@ int main() {
     RUN_TEST(
         test_program_catalog_expected_revision_is_checked_under_preview_lock);
     RUN_TEST(test_program_editor_consumes_the_opening_catalog_revision);
+    RUN_TEST(test_program_edit_preview_confirms_and_reloads_from_the_store);
     RUN_TEST(test_program_delete_in_use_is_rejected_before_preview);
     return UNITY_END();
 }

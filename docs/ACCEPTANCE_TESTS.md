@@ -306,6 +306,27 @@ Hardware- oder Pre-Ready-Nachweis.
 | SIM-26-72 | `test_run_checkpoint_codec::test_schema_five_round_trips_manual_timed_without_catalog_provenance` (existing-owner); `test_run_checkpoint_codec::test_manual_snapshot_and_runtime_shape_must_be_canonical` (existing-owner) |
 | SIM-26-73 | `test_run_persistence_coordinator::test_manual_timed_restore_resume_uses_fail_closed_sensor_gate` (existing-owner); `test_run_persistence_coordinator::test_r1_time_pending_is_ram_only_and_rechecks_same_revision` (existing-owner) |
 
+#### Issue #172 – PR B Application-Owner (S5, S6)
+
+Neue native Nachweise fuer die owning Application-Pfade der lokalen Touch-UI.
+Die UI liefert nur Intent und erwartete Revision; Entscheidung und Persistenz
+bleiben bei den bestehenden Runtime-/Persistence-Ownern. Hardware fuer S5 ist
+`NOT_APPLICABLE`, solange der Produktbuild `WaitingForProduct` ohne #30/#35
+nicht real erzeugt.
+
+| ID | Nachweis |
+|---|---|
+| SIM-172-S5-01 | Ohne Runtime-/Persistence-Kontext liefert `confirmProductInserted()` fail-closed `ContextMissing`: `test_press_dispatcher::test_product_inserted_without_runtime_context_is_context_missing`; `test_press_dispatcher::test_dispatch_transition_action_without_context_is_decision_only`. |
+| SIM-172-S5-02 | `WaitingForProduct` wird ueber `decideProcessTransition(ProductInsertedConfirmed)` und `persistTransition()` zu `ReachingTarget` und persistiert (Head aendert sich): `test_press_dispatcher::test_product_inserted_waiting_for_product_reaches_target_and_persists`; Dispatcher-Pfad `test_press_dispatcher::test_dispatch_transition_action_reaches_the_owning_application`. |
+| SIM-172-S5-03 | Falscher Zustand und veraltete `transitionSequence` werden ohne Zustands- und Persistenzaenderung abgelehnt: `test_press_dispatcher::test_product_inserted_in_wrong_state_is_rejected_without_change`; `test_press_dispatcher::test_product_inserted_stale_sequence_is_rejected_without_change`. |
+| SIM-172-S5-04 | Persistenzfehler ist fail-closed (Zustand unveraendert, erneuter Versuch moeglich) und ein wiederholter Press wird abgewiesen: `test_press_dispatcher::test_product_inserted_persistence_failure_is_fail_closed_and_retryable`; `test_press_dispatcher::test_product_inserted_repeated_press_is_rejected`. |
+| SIM-172-S6-01 | F14: ein von `applyProgramEditPreview()` erzeugtes Preview ist bestaetigbar und nach Reload aus dem Store sichtbar (kanonische Wire-Werte `LocalDisplay=2`, `NormalEdit=1`, `StandardProgramReset=6`): `test_configuration_service::test_program_edit_preview_confirms_and_reloads_from_the_store`. |
+| SIM-172-S6-02 | Copy, New, Delete, Uninstall (mit Bestaetigung) und Reset laufen ueber `FermentationApplication::applyProgramEdit()` bis zur Aktivierung; Werkprogramme sind nicht loeschbar: `test_press_dispatcher::test_program_copy_and_new_create_user_programs`; `test_press_dispatcher::test_program_delete_removes_user_program_but_never_a_factory_program`; `test_press_dispatcher::test_program_uninstall_needs_confirmation_and_reset_restores_factory`. |
+| SIM-172-S6-03 | `Edit`, `Reset`, `Uninstall` und `Delete` eines aktiven Programms werden vor dem Preview blockiert (`NotAllowed`, Usage-Evidence aus dem Run-State); `Copy` und `New` bleiben moeglich, der laufende Run-Snapshot bleibt unveraendert, es bleibt kein Preview-Slot belegt: `test_press_dispatcher::test_program_edit_of_the_active_program_is_blocked_before_preview`; `test_press_dispatcher::test_program_edit_and_reset_of_the_active_program_are_blocked`. |
+| SIM-172-S6-04 | Veraltete oder fehlende `ProgramCatalogRevision` und fehlende `UserConfigurationRevision` ergeben `StateChanged` ohne Aenderung; eine veraltete `UserConfigurationRevision` des gesehenen Snapshots wird bei der Bestaetigung abgelehnt (die aktuelle Runtime-Revision wird nicht eingesetzt): `test_press_dispatcher::test_program_edit_from_a_stale_user_configuration_snapshot_is_rejected`; `test_press_dispatcher::test_program_edit_without_expected_revisions_is_fail_closed`; Capacity wird als `InvalidCandidate` gemeldet und ist nach Delete wiederherstellbar; ohne Run-State/Service fail-closed: `test_press_dispatcher::test_program_edit_with_stale_catalog_revision_is_rejected`; `test_press_dispatcher::test_program_capacity_is_reported_and_recoverable`; `test_press_dispatcher::test_program_edit_without_run_state_or_service_is_fail_closed`. |
+| SIM-172-S6-05 | Persistenz ueber Neustart und Dispatcher-Pfad (`programEdit` erreicht den Owner, ohne Katalogrevision im Snapshot keine Aenderung): `test_press_dispatcher::test_program_edit_persists_across_a_restart`; `test_press_dispatcher::test_dispatch_program_edit_reaches_the_owning_application`. |
+| SIM-172-D5-01 | Die neuen Application-Entries `confirmProductInserted()` und `applyProgramEdit()` warten auf den gemeinsamen `ApplicationCallSerializer` und setzen nach Freigabe fort: `test_press_dispatcher::test_confirm_product_inserted_waits_for_the_application_gate`; `test_press_dispatcher::test_apply_program_edit_waits_for_the_application_gate`. |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

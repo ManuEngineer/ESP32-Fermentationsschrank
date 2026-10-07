@@ -286,6 +286,19 @@ class FermentationApplication {
     [[nodiscard]] ApplicationConfigurationChangeResult applyDisplayLanguage(
         const std::string& languageId,
         const std::optional<UserConfigurationRevision>& expectedRevision);
+    // Owning ProgramCatalog mutation for the local program management (Issue
+    // #172, S6): usage evidence comes from the runtime run state, never from
+    // the UI; preview, validation and confirmation run through the
+    // ConfigurationService against the two revisions the user saw.  A missing
+    // or stale revision is rejected (StateChanged), editing, resetting or
+    // removing a program in use is rejected before a preview exists, and every
+    // outcome other than Activated/NoChange releases the preview slot.
+    [[nodiscard]] ApplicationConfigurationChangeResult applyProgramEdit(
+        const FermentationUiProgramEditRequest& request,
+        const std::optional<ProgramCatalogRevision>&
+            expectedProgramCatalogRevision,
+        const std::optional<UserConfigurationRevision>&
+            expectedUserConfigurationRevision);
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration();
     // Renderer-independent local setup data for the currently active
     // SoftAP. The caller owns display/QR rendering; HTTP routes never expose
@@ -408,6 +421,14 @@ class FermentationApplication {
         const CrossRolePlausibilityContext& evidence);
     [[nodiscard]] RunPersistenceResult resumeFallback(
         const FermentationUiResumeFallbackCommand& command);
+
+    // Owning entry for the explicit ProductInsertedConfirmed intent (Issue
+    // #172, S5).  The UI supplies only the expected state sequence and the
+    // call time through `context`; the process decision and its persistence
+    // use the existing runtime/persistence owners.  Without a runtime context
+    // the result is fail-closed ContextMissing.
+    [[nodiscard]] FermentationUiCommandResult confirmProductInserted(
+        const FermentationUiCommandContext& context);
 
    private:
     struct ApplicationRuntimeEvidence {

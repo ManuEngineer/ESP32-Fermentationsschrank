@@ -377,6 +377,24 @@ FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
                                    FermentationUiCommandPhase::OwningOutcome);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::applyProgramEdit(
+    FermentationApplication& application,
+    const FermentationUiProgramEditRequest& request,
+    const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,
+    const std::optional<UserConfigurationRevision>&
+        expectedUserConfigurationRevision) {
+    // Same coarse projection as the language change: the owning preview
+    // status, and only if the preview was accepted, the owning commit status.
+    const auto outcome =
+        application.applyProgramEdit(request, expectedProgramCatalogRevision,
+                                     expectedUserConfigurationRevision);
+    if (outcome.preview != ConfigurationPreviewStatus::Success) {
+        return fromConfigurationPreview(outcome.preview);
+    }
+    return fromConfigurationCommit(outcome.commit,
+                                   FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult
 FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,
@@ -388,7 +406,7 @@ FermentationUiCommandResult
 FermentationUiCommandBridge::decideProductInsertedConfirmed(
     const RunCommandState& current, const ProcessRunSnapshot* runSnapshot,
     const FermentationUiCommandContext& context, const ProcessSignals& signals,
-    std::uint64_t monotonicMillis) {
+    std::uint64_t monotonicMillis, TransitionDecision* decisionOut) {
     if (context.expected.expectedStateSequence !=
         current.processState.transitionSequence) {
         return fromCommandStatus(CommandStatus::StaleState);
@@ -397,6 +415,7 @@ FermentationUiCommandBridge::decideProductInsertedConfirmed(
                                     std::nullopt};
     const auto decision = decideProcessTransition(
         current.processState, runSnapshot, signals, request, monotonicMillis);
+    if (decisionOut != nullptr) *decisionOut = decision;
     return fromTransitionDecision(decision.status);
 }
 

@@ -96,18 +96,36 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
         }
         return dispatched;
     }
-    if (press.transitionAction.has_value() || press.programEdit.has_value()) {
-        // No existing FermentationApplication entry point owns either of
-        // these today:
-        //  - ProductInsertedConfirmed's only existing handling
-        //    (FermentationUiCommandBridge::decideProductInsertedConfirmed)
-        //    takes private RunCommandState/ProcessSignals this composition
-        //    boundary does not have access to;
-        //  - program editing (Reset/Uninstall/Delete/SaveProgram) has no
-        //    application-side catalog-mutation entry point at all yet.
-        WorkspacePressDispatchResult unavailable;
-        unavailable.outcome = WorkspacePressDispatchOutcome::UnavailableNoOwner;
-        return unavailable;
+    if (press.transitionAction.has_value()) {
+        // The UI carries only the intent; the expected state sequence comes
+        // from the snapshot the user saw.  The application owns the process
+        // decision and its persistence (Issue #172, S5).
+        FermentationUiCommandContext context;
+        context.surface = device_platform::UiSurface::LocalDisplay;
+        context.monotonicMillis = monotonicMillis;
+        context.expected = snapshot.revisions;
+        WorkspacePressDispatchResult result;
+        result.commandResult = application.confirmProductInserted(context);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
+    if (press.programEdit.has_value()) {
+        // The UI carries only the typed request; usage evidence and the
+        // owning mutation stay in the application (Issue #172, S6).  Both
+        // expected revisions are the ones the user saw.
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::applyProgramEdit(
+            application, *press.programEdit,
+            snapshot.revisions.expectedProgramCatalogRevision,
+            snapshot.revisions.expectedUserConfigurationRevision);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
     }
     return {};
 }

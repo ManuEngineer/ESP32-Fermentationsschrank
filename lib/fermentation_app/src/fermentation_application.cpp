@@ -611,6 +611,34 @@ FermentationUiCommandResult FermentationApplication::applyConfirmedPrepared(
         persisted.status);
 }
 
+FermentationUiCommandResult FermentationApplication::confirmProductInserted(
+    const FermentationUiCommandContext& context) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (runtimeRunState_ == nullptr || runPersistenceCoordinator_ == nullptr) {
+        return FermentationUiCommandBridge::fromCommandStatus(
+            CommandStatus::ContextMissing);
+    }
+
+    TransitionDecision decision;
+    auto decided = FermentationUiCommandBridge::decideProductInsertedConfirmed(
+        *runtimeRunState_,
+        runtimeRunState_->processRunSnapshot.has_value()
+            ? &*runtimeRunState_->processRunSnapshot
+            : nullptr,
+        context, ProcessSignals{}, context.monotonicMillis, &decision);
+    if (!std::holds_alternative<DecisionStatus>(decided.detail) ||
+        std::get<DecisionStatus>(decided.detail) != DecisionStatus::Proposed) {
+        return decided;
+    }
+
+    auto checkpointTime = currentCheckpointTime();
+    checkpointTime.monotonicMillis = context.monotonicMillis;
+    const auto persisted = runPersistenceCoordinator_->persistTransition(
+        *runtimeRunState_, decision, checkpointTime, &owningRuntimeEvidence_);
+    return FermentationUiCommandBridge::fromRunPersistenceResult(
+        persisted.status);
+}
+
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
     const device_platform::IResetCauseSource* resetCauseSource) {
@@ -899,6 +927,53 @@ FermentationApplication::applyDisplayLanguage(
     const auto validation =
         configurationService_->validatePreviewForConfirmation(
             handle, *expectedRevision);
+    if (validation.status != Commit::ReadyForConfirmation) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+        return {Preview::Success, validation.status};
+    }
+    const auto committed = configurationService_->confirmPreview(handle);
+    if (committed.status != Commit::Activated &&
+        committed.status != Commit::NoChange) {
+        static_cast<void>(configurationService_->cancelPreview(handle));
+    }
+    return {Preview::Success, committed.status};
+}
+
+ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
+    const FermentationUiProgramEditRequest& request,
+    const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,
+    const std::optional<UserConfigurationRevision>&
+        expectedUserConfigurationRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    // Without the run state the usage of a program cannot be proven, and
+    // without a service no catalog exists: fail closed.
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Without both decidable revisions the change cannot be checked for
+    // staleness.
+    if (!expectedProgramCatalogRevision.has_value() ||
+        !expectedUserConfigurationRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    const auto installed = applyProgramEditPreview(
+        *configurationService_, *expectedProgramCatalogRevision, request,
+        makeFermentationUiProgramUsageEvidence(*runtimeRunState_));
+    if (installed.status != Preview::Success ||
+        !installed.preview.has_value()) {
+        return {installed.status == Preview::Success ? Preview::InvalidCandidate
+                                                     : installed.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // Every exit without an activated change releases the one visible
+    // preview slot.
+    const auto handle = installed.preview->handle;
+    const auto validation =
+        configurationService_->validatePreviewForConfirmation(
+            handle, *expectedUserConfigurationRevision);
     if (validation.status != Commit::ReadyForConfirmation) {
         static_cast<void>(configurationService_->cancelPreview(handle));
         return {Preview::Success, validation.status};
