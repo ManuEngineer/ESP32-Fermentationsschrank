@@ -2589,6 +2589,46 @@ void test_legacy_start_deciders_delegate_to_inplace_core() {
                       manualInto.startSummary.has_value());
 }
 
+// The structural part of the #21 start matrix, exported as one definition:
+// the requested mode a preference asks for and which requested modes it
+// allows at all; the evidence-dependent resolution uses the same rule.
+void test_program_start_sensor_structure_is_one_definition() {
+    struct Row {
+        SensorPreference preference;
+        RunSensorMode defaultMode;
+        bool allowsAir;
+        bool allowsProduct;
+    };
+    const Row rows[] = {
+        {SensorPreference::ProductIfAvailableElseAir, RunSensorMode::Product,
+         true, true},
+        {SensorPreference::AirProductOptional, RunSensorMode::Air, true, true},
+        {SensorPreference::ProductRequired, RunSensorMode::Product, false,
+         true},
+        {SensorPreference::AirOnly, RunSensorMode::Air, true, false},
+    };
+    for (const auto& row : rows) {
+        TEST_ASSERT_TRUE(defaultProgramStartSensorMode(row.preference) ==
+                         std::optional<RunSensorMode>{row.defaultMode});
+        TEST_ASSERT_EQUAL_INT(
+            row.allowsAir ? 1 : 0,
+            programStartSensorModeAllowed(row.preference, RunSensorMode::Air));
+        TEST_ASSERT_EQUAL_INT(row.allowsProduct ? 1 : 0,
+                              programStartSensorModeAllowed(
+                                  row.preference, RunSensorMode::Product));
+        // The default itself is always allowed.
+        TEST_ASSERT_TRUE(
+            programStartSensorModeAllowed(row.preference, row.defaultMode));
+    }
+    // Unknown enumerators are neither defaulted to Air nor allowed.
+    const auto unknown = static_cast<SensorPreference>(0x7FU);
+    TEST_ASSERT_FALSE(defaultProgramStartSensorMode(unknown).has_value());
+    TEST_ASSERT_FALSE(
+        programStartSensorModeAllowed(unknown, RunSensorMode::Air));
+    TEST_ASSERT_FALSE(programStartSensorModeAllowed(
+        SensorPreference::AirProductOptional, static_cast<RunSensorMode>(9U)));
+}
+
 }  // namespace
 
 int main() {
@@ -2656,5 +2696,6 @@ int main() {
         test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked);
     RUN_TEST(test_start_decision_into_reuses_destination_without_stale_fields);
     RUN_TEST(test_legacy_start_deciders_delegate_to_inplace_core);
+    RUN_TEST(test_program_start_sensor_structure_is_one_definition);
     return UNITY_END();
 }

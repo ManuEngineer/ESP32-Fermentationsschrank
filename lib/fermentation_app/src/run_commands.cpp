@@ -462,6 +462,41 @@ CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
 // Produkt bei ProductIfAvailableElseAir, aber zum Startzeitpunkt nicht
 // gueltig - automatischer Ersatz auf Luft). Die Luft-/Kuehlkoerper-
 // Vorbedingung (Zeile-uebergreifend) wird vom Aufrufer separat geprueft.
+}  // namespace
+
+std::optional<RunSensorMode> defaultProgramStartSensorMode(
+    SensorPreference preference) noexcept {
+    switch (preference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+        case SensorPreference::ProductRequired:
+            return RunSensorMode::Product;
+        case SensorPreference::AirProductOptional:
+        case SensorPreference::AirOnly:
+            return RunSensorMode::Air;
+    }
+    return std::nullopt;
+}
+
+bool programStartSensorModeAllowed(SensorPreference preference,
+                                   RunSensorMode requestedMode) noexcept {
+    if (requestedMode != RunSensorMode::Air &&
+        requestedMode != RunSensorMode::Product) {
+        return false;
+    }
+    switch (preference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+        case SensorPreference::AirProductOptional:
+            return true;
+        case SensorPreference::ProductRequired:
+            return requestedMode == RunSensorMode::Product;
+        case SensorPreference::AirOnly:
+            return requestedMode == RunSensorMode::Air;
+    }
+    return false;
+}
+
+namespace {
+
 struct ProgramStartSensorResolution {
     bool valid{false};
     RunSensorMode effectiveMode{RunSensorMode::Air};
@@ -471,6 +506,9 @@ struct ProgramStartSensorResolution {
 ProgramStartSensorResolution resolveProgramStartSensorMode(
     SensorPreference preference, RunSensorMode requestedMode,
     bool productSensorValid) {
+    if (!programStartSensorModeAllowed(preference, requestedMode)) {
+        return {false, requestedMode, false};
+    }
     switch (preference) {
         case SensorPreference::ProductIfAvailableElseAir:
             if (requestedMode == RunSensorMode::Air) {

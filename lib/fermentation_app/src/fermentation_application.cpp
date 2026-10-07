@@ -162,15 +162,7 @@ std::optional<RunSensorMode> requestedProgramSensorMode(
     const ProgramDocument& program,
     const FermentationUiStartCandidate& candidate) noexcept {
     if (candidate.sensorMode.has_value()) return candidate.sensorMode;
-    switch (program.program.sensorPreference) {
-        case SensorPreference::ProductIfAvailableElseAir:
-        case SensorPreference::ProductRequired:
-            return RunSensorMode::Product;
-        case SensorPreference::AirProductOptional:
-        case SensorPreference::AirOnly:
-            return RunSensorMode::Air;
-    }
-    return std::nullopt;
+    return defaultProgramStartSensorMode(program.program.sensorPreference);
 }
 
 }  // namespace

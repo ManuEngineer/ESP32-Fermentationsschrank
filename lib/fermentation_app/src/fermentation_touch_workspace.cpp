@@ -1,6 +1,7 @@
 #include "fermentation_touch_workspace.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -172,6 +173,31 @@ std::string startValueText(FermentationUiStartField field,
     return {};
 }
 
+// The next requested mode of the sensor cycle: none (the stored preference's
+// canonical default) -> each other structurally allowed mode -> none. The
+// rule comes from the #21 start matrix; nothing is derived from sensor
+// evidence here. Returns nullopt when the preference has no alternative.
+std::optional<std::optional<RunSensorMode>> nextSensorOverride(
+    SensorPreference preference,
+    const std::optional<RunSensorMode>& current) noexcept {
+    const auto fallback = defaultProgramStartSensorMode(preference);
+    if (!fallback.has_value()) return std::nullopt;
+    std::array<RunSensorMode, 2U> options{};
+    std::size_t count = 0U;
+    for (const auto mode : {RunSensorMode::Air, RunSensorMode::Product}) {
+        if (mode != *fallback &&
+            programStartSensorModeAllowed(preference, mode))
+            options[count++] = mode;
+    }
+    if (count == 0U) return std::nullopt;
+    if (!current.has_value()) return std::optional<RunSensorMode>{options[0]};
+    for (std::size_t index = 0U; index + 1U < count; ++index) {
+        if (options[index] == *current)
+            return std::optional<RunSensorMode>{options[index + 1U]};
+    }
+    return std::optional<RunSensorMode>{std::nullopt};
+}
+
 // Display projection for ProgramSummary: the stored program with the
 // next-run candidate overrides applied by the single shared definition
 // (applyStartCandidateOverrides). The stage values follow the first stage; a
@@ -198,8 +224,13 @@ FermentationUiProgramSummaryView makeProgramSummary(
     summary.completionMode = program.completion.mode;
     summary.coolingTargetCelsius = program.completion.coolingTargetCelsius;
     summary.holdDurationMinutes = program.completion.holdDurationMinutes;
-    if (candidate != nullptr)
+    // An override equal to the preference's canonical default is no override.
+    const auto sensorDefault =
+        defaultProgramStartSensorMode(program.sensorPreference);
+    if (candidate != nullptr && candidate->sensorMode.has_value() &&
+        candidate->sensorMode != sensorDefault) {
         summary.sensorModeOverride = candidate->sensorMode;
+    }
 
     const auto storedStage = stored.fermentationStages.empty()
                                  ? FermentationStage{}
@@ -239,7 +270,14 @@ FermentationUiProgramSummaryView makeProgramSummary(
             FermentationUiStartField::HoldDuration;
     }
     summary.editable = startable && candidate != nullptr;
+    // The structural #21 rule (preference + requested mode) is part of the
+    // start values; evidence-dependent decisions stay with the start owner.
+    const bool sensorAllowed =
+        candidate == nullptr || !candidate->sensorMode.has_value() ||
+        programStartSensorModeAllowed(program.sensorPreference,
+                                      *candidate->sensorMode);
     summary.valuesValid =
+        sensorAllowed &&
         validateProgram(effective, ValidationPurpose::Runnable).valid();
     return summary;
 }
@@ -1669,14 +1707,19 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
             // while editable); column 1 holds the two pager buttons.
             const auto& summary = current.programSummary;
             const auto first = current.pager.currentIndex;
-            enabled = summary.has_value() &&
-                      ((target.column == 0U && summary->editable &&
-                        target.row < kFermentationUiListVisibleRows &&
-                        first + target.row < summary->fieldCount) ||
-                       (target.column == 1U && target.row == 0U &&
-                        current.pager.canMoveUp()) ||
-                       (target.column == 1U && target.row == 1U &&
-                        current.pager.canMoveDown()));
+            enabled =
+                summary.has_value() &&
+                ((target.column == 0U && summary->editable &&
+                  target.row < kFermentationUiListVisibleRows &&
+                  first + target.row < summary->fieldCount &&
+                  (summary->fields[first + target.row] !=
+                       FermentationUiStartField::SensorMode ||
+                   nextSensorOverride(summary->sensorPreference, std::nullopt)
+                       .has_value())) ||
+                 (target.column == 1U && target.row == 0U &&
+                  current.pager.canMoveUp()) ||
+                 (target.column == 1U && target.row == 1U &&
+                  current.pager.canMoveDown()));
         } else if (page_ == FermentationUiPage::ValueEdit) {
             enabled = current.valueEdit.has_value() &&
                       keypadKeyEnabled(target.row, target.column,
@@ -1900,13 +1943,11 @@ void FermentationTouchWorkspace::cycleStartField(
             selectedCandidate_.preheatEnabled = !summary.preheat;
             break;
         case FermentationUiStartField::SensorMode:
-            // none (stored preference decides) -> Air -> Product -> none
-            if (!selectedCandidate_.sensorMode.has_value()) {
-                selectedCandidate_.sensorMode = RunSensorMode::Air;
-            } else if (*selectedCandidate_.sensorMode == RunSensorMode::Air) {
-                selectedCandidate_.sensorMode = RunSensorMode::Product;
-            } else {
-                selectedCandidate_.sensorMode.reset();
+            // Only structurally allowed alternatives to the preference's
+            // default are offered; a mode equal to the default is no override.
+            if (const auto next = nextSensorOverride(
+                    summary.sensorPreference, summary.sensorModeOverride)) {
+                selectedCandidate_.sensorMode = *next;
             }
             break;
         case FermentationUiStartField::CompletionMode: {

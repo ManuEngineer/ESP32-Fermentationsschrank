@@ -62,7 +62,10 @@ constexpr std::uint16_t kKeypadTop = 62U;
 constexpr std::uint16_t kKeypadPitchX = 102U;
 constexpr std::uint16_t kKeypadPitchY = 34U;
 constexpr std::uint16_t kKeypadCellWidth = 98U;
+// Drawn key face (leaves a 2 px visual gap); the active touch height of every
+// row is the full 34 px pitch (D8 hardware acceptance criterion).
 constexpr std::uint16_t kKeypadCellHeight = 32U;
+constexpr std::uint16_t kKeypadTouchHeight = kKeypadPitchY;
 constexpr std::uint16_t kSummaryNameLeft = 68U;
 constexpr std::uint16_t kSummaryNameWidth = 176U;
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
@@ -1158,7 +1161,7 @@ RepresentativeScreen makeRepresentativeScreen(
                                                              kKeypadPitchX),
                 static_cast<std::uint16_t>(kKeypadTop +
                                            pressedTarget->row * kKeypadPitchY),
-                kKeypadCellWidth, kKeypadCellHeight};
+                kKeypadCellWidth, kKeypadTouchHeight};
         }
         if (pressedRect.has_value()) {
             commands.push_back({ScreenDrawKind::PressFeedback,
@@ -1292,10 +1295,10 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
             static_cast<std::uint8_t>((x - kKeypadLeft) / kKeypadPitchX);
         const auto row =
             static_cast<std::uint8_t>((y - kKeypadTop) / kKeypadPitchY);
-        // Only the drawn key faces are hittable, not the gaps between them.
+        // Every row is 34 px high and active over its whole height; the
+        // 4 px gap between columns is no target.
         if (column < kFermentationUiKeypadColumns &&
-            (x - kKeypadLeft) % kKeypadPitchX < kKeypadCellWidth &&
-            (y - kKeypadTop) % kKeypadPitchY < kKeypadCellHeight) {
+            (x - kKeypadLeft) % kKeypadPitchX < kKeypadCellWidth) {
             return device_platform::DeviceUiTarget{
                 device_platform::DeviceUiTargetKind::ContentCell, 0U, row,
                 column};

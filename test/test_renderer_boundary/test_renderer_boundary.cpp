@@ -1790,6 +1790,9 @@ void test_program_summary_applies_candidate_overrides_and_redraws() {
     fermentation::FermentationUiSnapshot snapshot;
     snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
     auto catalog = makeRunnableCatalogForTest();
+    // Default Air: a Product override is a real change.
+    catalog.programs.back().program.sensorPreference =
+        fermentation::SensorPreference::AirProductOptional;
     const auto id = catalog.programs.back().program.id;
     fermentation::FermentationTouchWorkspace workspace;
     TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
@@ -2225,14 +2228,26 @@ void test_value_edit_page_shows_the_candidate_and_a_keypad_with_exact_zones() {
     TEST_ASSERT_TRUE(isCell(at(110U, 62U), 0U, 1U));
     TEST_ASSERT_TRUE(isCell(at(309U, 62U), 0U, 2U));
     TEST_ASSERT_FALSE(at(310U, 70U).has_value());
-    TEST_ASSERT_FALSE(at(50U, 94U).has_value());  // gap between rows
+    // Every key row is active over its whole 34 px height (no row gap).
+    TEST_ASSERT_TRUE(isCell(at(50U, 94U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 95U), 0U, 0U));
     TEST_ASSERT_TRUE(isCell(at(50U, 96U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 129U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(50U, 130U), 2U, 0U));
     TEST_ASSERT_TRUE(isCell(at(8U, 164U), 3U, 0U));
     TEST_ASSERT_TRUE(isCell(at(309U, 195U), 3U, 2U));
-    TEST_ASSERT_FALSE(at(50U, 196U).has_value());
+    TEST_ASSERT_TRUE(isCell(at(50U, 197U), 3U, 0U));
+    TEST_ASSERT_FALSE(at(50U, 198U).has_value());
     TEST_ASSERT_FALSE(at(50U, 61U).has_value());
-    // Key height 34 px pitch: the hardware acceptance criterion (D8).
-    TEST_ASSERT_TRUE(isCell(at(50U, 62U + 34U * 2U), 2U, 0U));
+    // The 34 px touch height of every row is the D8 acceptance criterion: all
+    // 34 pixel lines of a row resolve to that row's key.
+    for (std::uint8_t row = 0U; row < 4U; ++row) {
+        for (std::uint16_t line = 0U; line < 34U; ++line) {
+            TEST_ASSERT_TRUE(isCell(
+                at(50U, static_cast<std::uint16_t>(62U + row * 34U + line)),
+                row, 0U));
+        }
+    }
 
     // The held key draws press feedback exactly on its face.
     const auto held = fermentation::main_ui::makeRepresentativeScreen(
@@ -2250,7 +2265,7 @@ void test_value_edit_page_shows_the_candidate_and_a_keypad_with_exact_zones() {
     TEST_ASSERT_EQUAL_UINT16(110U, feedback->rect.left);
     TEST_ASSERT_EQUAL_UINT16(164U, feedback->rect.top);
     TEST_ASSERT_EQUAL_UINT16(98U, feedback->rect.width);
-    TEST_ASSERT_EQUAL_UINT16(32U, feedback->rect.height);
+    TEST_ASSERT_EQUAL_UINT16(34U, feedback->rect.height);
 }
 
 void test_value_edit_page_has_no_overlap_and_a_bounded_command_count() {

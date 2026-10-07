@@ -419,6 +419,17 @@ void beginDecisionInto(const RunCommandState& current,
                        const CommandEnvelope& envelope, CommandKind kind,
                        CommandDecision& destination);
 
+// #21 start matrix, structural part only (independent of any sensor
+// evidence): the requested mode a stored SensorPreference asks for without a
+// next-run override, and whether a requested mode is allowed at all for it
+// (ProductRequired never starts on Air, AirOnly never on Product). An unknown
+// preference or mode is not allowed. Evidence-dependent decisions (substitution
+// to Air, rejection for an invalid product sensor) stay in decideProgramStart.
+[[nodiscard]] std::optional<RunSensorMode> defaultProgramStartSensorMode(
+    SensorPreference preference) noexcept;
+[[nodiscard]] bool programStartSensorModeAllowed(
+    SensorPreference preference, RunSensorMode requestedMode) noexcept;
+
 void decideProgramStartInto(const RunCommandState& current,
                             const ProgramStartRequest& request,
                             CommandDecision& destination);

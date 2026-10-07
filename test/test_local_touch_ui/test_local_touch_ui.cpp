@@ -1632,6 +1632,7 @@ struct StartValueFixture {
         program.completion.mode = CompletionMode::FinishWithoutCooling;
         program.completion.coolingTargetCelsius.reset();
         program.completion.holdDurationMinutes.reset();
+        program.sensorPreference = SensorPreference::AirProductOptional;
         id = program.id;
         TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
     }
@@ -1787,18 +1788,19 @@ void test_start_value_cycles_and_dependent_fields_stay_consistent() {
     TEST_ASSERT_TRUE(fixture.view().programSummary->preheat);
     TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
     TEST_ASSERT_FALSE(fixture.view().programSummary->preheat);
-    // Sensor: none -> Air -> Product -> none; only candidate.sensorMode moves.
+    // Sensor (AirProductOptional, default Air): none -> Product -> none; only
+    // candidate.sensorMode moves and Air (the default) is never an override.
     TEST_ASSERT_FALSE(
         fixture.view().programSummary->sensorModeOverride.has_value());
-    TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);
-    TEST_ASSERT_TRUE(fixture.view().programSummary->sensorModeOverride ==
-                     std::optional<RunSensorMode>{RunSensorMode::Air});
     TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);
     TEST_ASSERT_TRUE(fixture.view().programSummary->sensorModeOverride ==
                      std::optional<RunSensorMode>{RunSensorMode::Product});
     TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);
     TEST_ASSERT_FALSE(
         fixture.view().programSummary->sensorModeOverride.has_value());
+    TEST_ASSERT_FALSE(fixture.workspace.view(fixture.snapshot, &fixture.catalog)
+                          .programSummary->changed[static_cast<std::size_t>(
+                              FermentationUiStartField::SensorMode)]);
 
     // Completion cools: without a cooling target the values are invalid and
     // confirm stays disabled with the reason.
@@ -1856,6 +1858,101 @@ void test_start_value_cycles_and_dependent_fields_stay_consistent() {
     TEST_ASSERT_EQUAL_UINT32(5U, view.programSummary->fieldCount);
     TEST_ASSERT_TRUE(view.programSummary->valuesValid);
     TEST_ASSERT_FALSE(view.programSummary->coolingTargetCelsius.has_value());
+}
+
+// B1: the sensor cycle offers only structurally allowed alternatives to the
+// preference's canonical default (#21 rule); a mode equal to the default is
+// no override (no mark, no reset); a structurally rejected candidate keeps
+// confirm disabled. Sensor quality or availability is never evaluated here.
+void test_sensor_cycle_follows_the_structural_start_matrix() {
+    struct Case {
+        SensorPreference preference;
+        std::optional<RunSensorMode> alternative;  // none: row not cyclable
+    };
+    const Case cases[] = {
+        {SensorPreference::ProductIfAvailableElseAir, RunSensorMode::Air},
+        {SensorPreference::AirProductOptional, RunSensorMode::Product},
+        {SensorPreference::ProductRequired, std::nullopt},
+        {SensorPreference::AirOnly, std::nullopt},
+    };
+    for (const auto& item : cases) {
+        StartValueFixture fixture;
+        auto& program = fixture.catalog.programs.back().program;
+        program.sensorPreference = item.preference;
+        if (item.preference == SensorPreference::ProductRequired) {
+            program.productSensorFailure.policy =
+                ProductSensorFailurePolicy::WaitForUser;
+            program.productSensorFailure.fallbackDelaySeconds.reset();
+        } else if (item.preference == SensorPreference::AirOnly) {
+            program.productSensorFailure.returnStrategy =
+                ReturnStrategy::RemainOnAirUntilEnd;
+            program.productSensorFailure.fallbackDelaySeconds.reset();
+        }
+        TEST_ASSERT_TRUE(
+            fixture.workspace.selectProgram(fixture.id, fixture.catalog));
+        fixture.scrollTo(2U);  // preheat, sensor, completion
+        const auto before = fixture.workspace.renderRevision();
+        const auto tapped = fixture.tap(1U, 0U);
+        if (!item.alternative.has_value()) {
+            // No alternative: the row is not interactive, nothing is staged.
+            TEST_ASSERT_FALSE(tapped.navigated);
+            TEST_ASSERT_FALSE(
+                fixture.view().programSummary->sensorModeOverride.has_value());
+            TEST_ASSERT_TRUE(fixture.view().slotActions[3] ==
+                             FermentationUiWorkspaceSlotAction::NavigateStatus);
+            continue;
+        }
+        (void)before;
+        TEST_ASSERT_TRUE(tapped.navigated);
+        auto view = fixture.view();
+        TEST_ASSERT_TRUE(view.programSummary->sensorModeOverride ==
+                         item.alternative);
+        TEST_ASSERT_TRUE(view.programSummary->changed[static_cast<std::size_t>(
+            FermentationUiStartField::SensorMode)]);
+        TEST_ASSERT_TRUE(view.slotActions[3] ==
+                         FermentationUiWorkspaceSlotAction::ResetStartValues);
+        TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+        TEST_ASSERT_TRUE(fixture.tap(1U, 0U).navigated);
+        view = fixture.view();
+        TEST_ASSERT_FALSE(view.programSummary->sensorModeOverride.has_value());
+        TEST_ASSERT_TRUE(view.slotActions[3] ==
+                         FermentationUiWorkspaceSlotAction::NavigateStatus);
+    }
+
+    // An externally staged redundant override normalizes to no override.
+    {
+        StartValueFixture fixture;
+        FermentationUiStartCandidate candidate;
+        candidate.programId = fixture.id;
+        candidate.sensorMode = RunSensorMode::Air;  // default of the program
+        fixture.workspace.setStartCandidate(candidate);
+        const auto view = fixture.view();
+        TEST_ASSERT_FALSE(view.programSummary->sensorModeOverride.has_value());
+        TEST_ASSERT_FALSE(view.programSummary->changed[static_cast<std::size_t>(
+            FermentationUiStartField::SensorMode)]);
+        TEST_ASSERT_TRUE(view.slotActions[3] ==
+                         FermentationUiWorkspaceSlotAction::NavigateStatus);
+        TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    }
+    // An externally staged structurally rejected candidate disables confirm.
+    {
+        StartValueFixture fixture;
+        auto& program = fixture.catalog.programs.back().program;
+        program.sensorPreference = SensorPreference::AirOnly;
+        program.productSensorFailure.returnStrategy =
+            ReturnStrategy::RemainOnAirUntilEnd;
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+        TEST_ASSERT_TRUE(
+            fixture.workspace.selectProgram(fixture.id, fixture.catalog));
+        FermentationUiStartCandidate candidate;
+        candidate.programId = fixture.id;
+        candidate.sensorMode = RunSensorMode::Product;
+        fixture.workspace.setStartCandidate(candidate);
+        const auto view = fixture.view();
+        TEST_ASSERT_FALSE(view.programSummary->valuesValid);
+        TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+        TEST_ASSERT_FALSE(fixture.slot(2U).action.has_value());
+    }
 }
 
 void test_reset_start_values_is_offered_only_for_a_changed_candidate() {
@@ -1949,6 +2046,7 @@ int main(int, char**) {
     RUN_TEST(test_start_value_edit_cancel_and_invalid_values_store_nothing);
     RUN_TEST(test_whole_number_start_fields_have_no_decimal_or_sign_key);
     RUN_TEST(test_start_value_cycles_and_dependent_fields_stay_consistent);
+    RUN_TEST(test_sensor_cycle_follows_the_structural_start_matrix);
     RUN_TEST(test_reset_start_values_is_offered_only_for_a_changed_candidate);
     RUN_TEST(test_unstartable_program_start_fields_are_not_editable);
     return UNITY_END();
