@@ -2773,6 +2773,7 @@ void test_s10_text_keys_exist_in_all_locales() {
                             "pt-reach",
                             "policy-fallback",
                             "policy-wait",
+                            "discard",
                             "policy-stop",
                             "return-air",
                             "return-manual",

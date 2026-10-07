@@ -2875,6 +2875,8 @@ void test_program_editor_edits_are_dirty_and_never_touch_the_stored_program() {
     using Field = FermentationUiProgramField;
     TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
                      device_platform::PageExitRequirement::None);
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
     fixture.setNumeric(Field::Duration, "75");
     // Back from the value page keeps the editor dirty (a sub-step, no discard).
     TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
@@ -2886,6 +2888,42 @@ void test_program_editor_edits_are_dirty_and_never_touch_the_stored_program() {
         "75 min", fixture.view()
                       .programEdit->rows[fixture.indexOf(Field::Duration)]
                       .text.c_str());
+}
+
+// A dirty editor cannot be left through the navigation exits; the explicit
+// discard slot is the confirmation. It drops the candidate and the dirty flag,
+// so reopening the editor shows the stored program again.
+void test_program_editor_discard_is_an_explicit_slot_and_drops_the_candidate() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    fixture.setNumeric(Field::Duration, "75");
+    const auto blockedBack = fixture.workspace.press(
+        fixture.snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &fixture.catalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blockedBack.interaction.outcome));
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramEdit);
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+    TEST_ASSERT_TRUE(fixture.view().bottomSlots[0].enabled);
+
+    const auto discard = fixture.slot(0U);
+    TEST_ASSERT_TRUE(discard.navigated);
+    TEST_ASSERT_FALSE(discard.programEdit.has_value());
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramSummary);
+    fixture.workspace.setPage(FermentationUiPage::ProgramEdit);
+    const auto edit = *fixture.view().programEdit;
+    TEST_ASSERT_EQUAL_STRING(
+        "60 min", edit.rows[fixture.indexOf(Field::Duration)].text.c_str());
+    for (std::size_t index = 0U; index < edit.rowCount; ++index)
+        TEST_ASSERT_FALSE(edit.rows[index].changed);
+    TEST_ASSERT_FALSE(
+        fixture.view().bottomSlots[3].enabled);  // nothing to save
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
 }
 
 }  // namespace
@@ -2963,5 +3001,7 @@ int main(int, char**) {
     RUN_TEST(test_program_editor_copy_and_new_take_a_request_name_only);
     RUN_TEST(
         test_program_editor_edits_are_dirty_and_never_touch_the_stored_program);
+    RUN_TEST(
+        test_program_editor_discard_is_an_explicit_slot_and_drops_the_candidate);
     return UNITY_END();
 }

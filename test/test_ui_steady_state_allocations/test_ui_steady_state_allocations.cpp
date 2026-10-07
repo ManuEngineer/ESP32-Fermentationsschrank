@@ -441,18 +441,22 @@ void test_s7_content_pages_steady_state_allocate_nothing() {
         FermentationUiPage::Recovery,       FermentationUiPage::ManualHolding,
         FermentationUiPage::ManualTimed,    FermentationUiPage::StopDialog,
         FermentationUiPage::Settings,       FermentationUiPage::TextEdit,
+        FermentationUiPage::ProgramEdit,
     };
     for (const auto page : pages) {
         WebAccessFixture fixture;
         fixture.workspace.setPage(FermentationUiPage::ProgramList);
         fixture.settle();
         TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
-        if (page == FermentationUiPage::ProgramSummary) {
+        if (page == FermentationUiPage::ProgramSummary ||
+            page == FermentationUiPage::ProgramEdit) {
             const auto& catalog =
                 fixture.gate.presentation().get().programCatalog;
             TEST_ASSERT_FALSE(catalog.programs.empty());
             TEST_ASSERT_TRUE(fixture.workspace.selectProgram(
                 catalog.programs.front().program.id, catalog));
+            if (page == FermentationUiPage::ProgramEdit)
+                fixture.workspace.setPage(FermentationUiPage::ProgramEdit);
         } else {
             fixture.workspace.setPage(page);
         }
@@ -538,17 +542,57 @@ void test_settings_page_adopts_the_device_name_and_is_a_steady_state() {
     TEST_ASSERT_FALSE(redraw);
     TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
 
+    // O4: the change is a configuration change only; the network is neither
+    // stopped nor restarted (derived names follow at the next network start).
+    const auto networkModeBefore = fixture.application.networkMode();
+    const auto accessPointBefore =
+        fixture.application.networkAccessPointRevision();
+    const auto transportBefore = fixture.network.status().state;
+    const bool httpBefore = fixture.http.running();
     const auto changed = fixture.application.applyUserSettings(
         {"Keller"},
         fixture.gate.snapshot().revisions.expectedUserConfigurationRevision);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ConfigurationCommitStatus::Activated),
         static_cast<int>(changed.commit));
+    TEST_ASSERT_TRUE(networkModeBefore == fixture.application.networkMode());
+    TEST_ASSERT_EQUAL_UINT64(accessPointBefore,
+                             fixture.application.networkAccessPointRevision());
+    TEST_ASSERT_TRUE(transportBefore == fixture.network.status().state);
+    TEST_ASSERT_EQUAL_INT(httpBefore ? 1 : 0, fixture.http.running() ? 1 : 0);
     TEST_ASSERT_TRUE(fixture.step());
     fixture.gate.markRendered();
     TEST_ASSERT_EQUAL_STRING("Keller",
                              fixture.workspace.view(fixture.gate.snapshot())
                                  .settings->deviceName.c_str());
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S10: a held keyboard key (ContentCell, any column) changes the render key
+// once per distinct target and settles afterwards; keys are the new press kind.
+void test_keyboard_held_key_redraws_once_per_target() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::TextEdit);
+    fixture.settle();
+    const auto redrawFor = [&fixture](
+                               const device_platform::DeviceUiTarget& target) {
+        fixture.gate.beginStep(fixture.application, false, fixture.workspace);
+        return fixture.gate.renderRequired(
+            fixture.application, fixture.workspace, target,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    };
+    const device_platform::DeviceUiTarget keyA{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 4U};
+    const device_platform::DeviceUiTarget keyB{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 3U, 9U};
+    TEST_ASSERT_TRUE(redrawFor(keyA));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyA));
+    TEST_ASSERT_TRUE(redrawFor(keyB));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(keyB));
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
     TEST_ASSERT_FALSE(fixture.step());
 }
 
@@ -960,6 +1004,7 @@ int main() {
     RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_settings_page_adopts_the_device_name_and_is_a_steady_state);
+    RUN_TEST(test_keyboard_held_key_redraws_once_per_target);
     RUN_TEST(test_s7_content_pages_steady_state_allocate_nothing);
     RUN_TEST(test_value_edit_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);

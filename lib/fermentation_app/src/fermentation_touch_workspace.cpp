@@ -620,28 +620,24 @@ device_platform::TextKey returnStrategyKey(ReturnStrategy strategy) {
     return fermentationTextKey("message-unknown");
 }
 
-// Which rows exist for the program's current values. The visibility only
-// follows which values the validator allows to be set (a value the validator
-// would reject as unexpected has no row).
+// Which rows exist for the program's current values: the rows of values the
+// program model's own predicates mark as used (the validator and the editor
+// share them, so the cross-field rules have one definition).
 bool programFieldVisible(const ProgramDefinition& program,
                          EditField field) noexcept {
     switch (field) {
         case EditField::MaxProductWait:
-            return program.preheat;
+            return programUsesProductWait(program);
         case EditField::FallbackDelay:
-            return program.productSensorFailure.policy ==
-                       ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
-                   program.sensorPreference != SensorPreference::AirOnly;
+            return programUsesFallbackDelay(program);
         case EditField::FailurePolicy:
         case EditField::ReturnStrategy:
             // AirOnly has exactly one valid combination (6.13).
-            return program.sensorPreference != SensorPreference::AirOnly;
+            return !programHasFixedSensorFailure(program);
         case EditField::CoolingTarget:
-            return program.completion.mode !=
-                   CompletionMode::FinishWithoutCooling;
+            return programUsesCoolingTarget(program);
         case EditField::HoldDuration:
-            return program.completion.mode ==
-                   CompletionMode::CoolAndHoldForDuration;
+            return programUsesHoldDuration(program);
         default:
             break;
     }
@@ -649,8 +645,9 @@ bool programFieldVisible(const ProgramDefinition& program,
 }
 
 // One cycle step of a non-numeric program field. Values the new setting makes
-// unexpected are dropped, exactly like the validator's cross-field rules
-// (6.13) and the AirOnly normalization (6.2.2) define them.
+// unexpected are dropped by the program model's own rule
+// (clearUnexpectedProgramValues, which also applies the AirOnly
+// normalization).
 void cycleProgramField(ProgramDefinition& program, EditField field) {
     constexpr std::uint8_t kPreferences = 4U;
     constexpr std::uint8_t kPolicies = 3U;
@@ -659,19 +656,11 @@ void cycleProgramField(ProgramDefinition& program, EditField field) {
     switch (field) {
         case EditField::Preheat:
             program.preheat = !program.preheat;
-            if (!program.preheat) program.maximumProductWaitMinutes.reset();
             break;
         case EditField::SensorPreference:
             program.sensorPreference = static_cast<SensorPreference>(
                 (static_cast<std::uint8_t>(program.sensorPreference) + 1U) %
                 kPreferences);
-            if (program.sensorPreference == SensorPreference::AirOnly) {
-                program.productSensorFailure.policy =
-                    ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
-                program.productSensorFailure.returnStrategy =
-                    ReturnStrategy::RemainOnAirUntilEnd;
-                program.productSensorFailure.fallbackDelaySeconds.reset();
-            }
             break;
         case EditField::FailurePolicy:
             program.productSensorFailure.policy =
@@ -680,10 +669,6 @@ void cycleProgramField(ProgramDefinition& program, EditField field) {
                          program.productSensorFailure.policy) +
                      1U) %
                     kPolicies);
-            if (program.productSensorFailure.policy !=
-                ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
-                program.productSensorFailure.fallbackDelaySeconds.reset();
-            }
             break;
         case EditField::ReturnStrategy:
             program.productSensorFailure.returnStrategy =
@@ -697,18 +682,11 @@ void cycleProgramField(ProgramDefinition& program, EditField field) {
             program.completion.mode = static_cast<CompletionMode>(
                 (static_cast<std::uint8_t>(program.completion.mode) + 1U) %
                 kModes);
-            if (program.completion.mode ==
-                CompletionMode::FinishWithoutCooling) {
-                program.completion.coolingTargetCelsius.reset();
-                program.completion.holdDurationMinutes.reset();
-            } else if (program.completion.mode !=
-                       CompletionMode::CoolAndHoldForDuration) {
-                program.completion.holdDurationMinutes.reset();
-            }
             break;
         default:
-            break;
+            return;
     }
+    clearUnexpectedProgramValues(program);
 }
 
 // ---- keyboard
@@ -861,6 +839,7 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::TextEditMode:
         case FermentationUiWorkspaceSlotAction::TextEditBackspace:
         case FermentationUiWorkspaceSlotAction::TextEditCommit:
+        case FermentationUiWorkspaceSlotAction::DiscardProgramEdit:
         case FermentationUiWorkspaceSlotAction::ResetFault:
             return false;
     }
@@ -1404,8 +1383,15 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 programEditDirty_
                     ? device_platform::PageExitRequirement::ConfirmDiscard
                     : device_platform::PageExitRequirement::None;
-            setSlot(view, 0U, "back",
-                    FermentationUiWorkspaceSlotAction::NavigateBack);
+            // A dirty editor cannot be left through the navigation exits
+            // (ConfirmDiscard): the explicit discard is the confirmation.
+            if (programEditDirty_) {
+                setSlot(view, 0U, "discard",
+                        FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+            } else {
+                setSlot(view, 0U, "back",
+                        FermentationUiWorkspaceSlotAction::NavigateBack);
+            }
             bool factoryProgram = false;
             bool resettableProgram = false;
             bool deletableProgram = selectedProgramId_.has_value();
@@ -2073,7 +2059,9 @@ bool FermentationTouchWorkspace::goBack() {
         left != FermentationUiPage::TextEdit) {
         programEditDirty_ = false;
         if (left == FermentationUiPage::ProgramEdit) {
+            // Leaving the editor discards its edits.
             programEditName_.reset();
+            programEditCandidate_.reset();
         }
     }
     return true;
@@ -2273,6 +2261,12 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
         case FermentationUiWorkspaceSlotAction::NavigateBack:
         case FermentationUiWorkspaceSlotAction::ValueEditCancel:
         case FermentationUiWorkspaceSlotAction::TextEditCancel:
+            result.navigated = goBack();
+            break;
+        case FermentationUiWorkspaceSlotAction::DiscardProgramEdit:
+            // The user confirmed the discard: the edits go, the stored
+            // program was never touched.
+            programEditDirty_ = false;
             result.navigated = goBack();
             break;
         case FermentationUiWorkspaceSlotAction::TextEditMode:

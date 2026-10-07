@@ -177,6 +177,49 @@ std::optional<RunSensorMode> requestedProgramSensorMode(
     return defaultProgramStartSensorMode(program.program.sensorPreference);
 }
 
+// The one preview/commit sequence of the user configuration changes (D5):
+// preview from the live configuration, the mutation, install with the
+// canonical wire values, revision validation, confirmation; every exit other
+// than an activated or unchanged configuration releases the one visible
+// preview slot.
+template <typename Mutate>
+ApplicationConfigurationChangeResult commitUserConfigurationChange(
+    ConfigurationService& service, const UserConfigurationRevision& expected,
+    Mutate&& mutate) {
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    auto build = service.beginPreview();
+    if (build.status != Preview::Success || !build.lease.valid()) {
+        return {build.status == Preview::Success
+                    ? Preview::ConfigurationRuntimeUnavailable
+                    : build.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    mutate(build.lease.userConfiguration());
+    const auto installed = service.installPreview(
+        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
+        {ChangeOperationKind::NormalEdit, 1U});
+    if (installed.status != Preview::Success ||
+        !installed.preview.has_value()) {
+        return {installed.status == Preview::Success ? Preview::InvalidCandidate
+                                                     : installed.status,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    const auto handle = installed.preview->handle;
+    const auto validation =
+        service.validatePreviewForConfirmation(handle, expected);
+    if (validation.status != Commit::ReadyForConfirmation) {
+        static_cast<void>(service.cancelPreview(handle));
+        return {Preview::Success, validation.status};
+    }
+    const auto committed = service.confirmPreview(handle);
+    if (committed.status != Commit::Activated &&
+        committed.status != Commit::NoChange) {
+        static_cast<void>(service.cancelPreview(handle));
+    }
+    return {Preview::Success, committed.status};
+}
+
 }  // namespace
 
 template <typename Request>
@@ -940,39 +983,11 @@ FermentationApplication::applyDisplayLanguage(
     if (!expectedRevision.has_value()) {
         return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
     }
-    auto build = configurationService_->beginPreview();
-    if (build.status != Preview::Success || !build.lease.valid()) {
-        return {build.status == Preview::Success
-                    ? Preview::ConfigurationRuntimeUnavailable
-                    : build.status,
-                Commit::ConfigurationRuntimeFailure};
-    }
-    build.lease.userConfiguration().displayLanguageId = languageId;
-    const auto installed = configurationService_->installPreview(
-        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
-        {ChangeOperationKind::NormalEdit, 1U});
-    if (installed.status != Preview::Success ||
-        !installed.preview.has_value()) {
-        return {installed.status == Preview::Success ? Preview::InvalidCandidate
-                                                     : installed.status,
-                Commit::ConfigurationRuntimeFailure};
-    }
-    // Every exit without an activated change releases the one visible
-    // preview slot.
-    const auto handle = installed.preview->handle;
-    const auto validation =
-        configurationService_->validatePreviewForConfirmation(
-            handle, *expectedRevision);
-    if (validation.status != Commit::ReadyForConfirmation) {
-        static_cast<void>(configurationService_->cancelPreview(handle));
-        return {Preview::Success, validation.status};
-    }
-    const auto committed = configurationService_->confirmPreview(handle);
-    if (committed.status != Commit::Activated &&
-        committed.status != Commit::NoChange) {
-        static_cast<void>(configurationService_->cancelPreview(handle));
-    }
-    return {Preview::Success, committed.status};
+    return commitUserConfigurationChange(
+        *configurationService_, *expectedRevision,
+        [&languageId](UserConfiguration& configuration) {
+            configuration.displayLanguageId = languageId;
+        });
 }
 
 ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
@@ -1006,37 +1021,11 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
     if (!expectedRevision.has_value()) {
         return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
     }
-    auto build = configurationService_->beginPreview();
-    if (build.status != Preview::Success || !build.lease.valid()) {
-        return {build.status == Preview::Success
-                    ? Preview::ConfigurationRuntimeUnavailable
-                    : build.status,
-                Commit::ConfigurationRuntimeFailure};
-    }
-    build.lease.userConfiguration().deviceName = *change.deviceName;
-    const auto installed = configurationService_->installPreview(
-        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
-        {ChangeOperationKind::NormalEdit, 1U});
-    if (installed.status != Preview::Success ||
-        !installed.preview.has_value()) {
-        return {installed.status == Preview::Success ? Preview::InvalidCandidate
-                                                     : installed.status,
-                Commit::ConfigurationRuntimeFailure};
-    }
-    const auto handle = installed.preview->handle;
-    const auto validation =
-        configurationService_->validatePreviewForConfirmation(
-            handle, *expectedRevision);
-    if (validation.status != Commit::ReadyForConfirmation) {
-        static_cast<void>(configurationService_->cancelPreview(handle));
-        return {Preview::Success, validation.status};
-    }
-    const auto committed = configurationService_->confirmPreview(handle);
-    if (committed.status != Commit::Activated &&
-        committed.status != Commit::NoChange) {
-        static_cast<void>(configurationService_->cancelPreview(handle));
-    }
-    return {Preview::Success, committed.status};
+    return commitUserConfigurationChange(
+        *configurationService_, *expectedRevision,
+        [&change](UserConfiguration& configuration) {
+            configuration.deviceName = *change.deviceName;
+        });
 }
 
 ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(

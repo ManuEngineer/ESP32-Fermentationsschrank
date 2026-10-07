@@ -196,6 +196,27 @@ struct ValidationResult {
     [[nodiscard]] bool valid() const { return errors.empty(); }
 };
 
+// Which optional values a program's current settings make meaningful. The
+// validator, the AirOnly normalization of the schema migration and the local
+// program editor share these predicates, so there is one definition of the
+// cross-field rules (6.13, 6.2.2): a value for which the predicate is false is
+// "unexpected" for the validator.
+[[nodiscard]] bool programUsesProductWait(
+    const ProgramDefinition& program) noexcept;
+[[nodiscard]] bool programUsesFallbackDelay(
+    const ProgramDefinition& program) noexcept;
+[[nodiscard]] bool programUsesCoolingTarget(
+    const ProgramDefinition& program) noexcept;
+[[nodiscard]] bool programUsesHoldDuration(
+    const ProgramDefinition& program) noexcept;
+// AirOnly never leaves the air sensor, so its sensor-failure settings have one
+// fixed valid combination.
+[[nodiscard]] bool programHasFixedSensorFailure(
+    const ProgramDefinition& program) noexcept;
+void applyAirOnlySensorFailure(ProgramDefinition& program) noexcept;
+// Drops every optional value the current settings do not use.
+void clearUnexpectedProgramValues(ProgramDefinition& program) noexcept;
+
 [[nodiscard]] ValidationResult validateProgram(
     const ProgramDocument& document,
     ValidationPurpose purpose = ValidationPurpose::Runnable);

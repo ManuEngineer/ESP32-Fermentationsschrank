@@ -239,6 +239,7 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     TextEditMode,
     TextEditBackspace,
     TextEditCommit,
+    DiscardProgramEdit,
 };
 
 // Read-only content of `ProgramSummary` (S7): the selected program's values
