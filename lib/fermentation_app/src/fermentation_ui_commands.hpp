@@ -376,7 +376,9 @@ class FermentationUiCommandBridge {
         FermentationApplication& application,
         const FermentationUiProgramEditRequest& request,
         const std::optional<ProgramCatalogRevision>&
-            expectedProgramCatalogRevision);
+            expectedProgramCatalogRevision,
+        const std::optional<UserConfigurationRevision>&
+            expectedUserConfigurationRevision);
 
    private:
     friend class FermentationApplication;

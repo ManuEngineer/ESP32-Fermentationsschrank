@@ -114,12 +114,13 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
     }
     if (press.programEdit.has_value()) {
         // The UI carries only the typed request; usage evidence and the
-        // owning mutation stay in the application (Issue #172, S6).  The
-        // expected catalog revision is the one the user saw.
+        // owning mutation stay in the application (Issue #172, S6).  Both
+        // expected revisions are the ones the user saw.
         WorkspacePressDispatchResult result;
         result.commandResult = FermentationUiCommandBridge::applyProgramEdit(
             application, *press.programEdit,
-            snapshot.revisions.expectedProgramCatalogRevision);
+            snapshot.revisions.expectedProgramCatalogRevision,
+            snapshot.revisions.expectedUserConfigurationRevision);
         result.outcome = result.commandResult->phase ==
                                  FermentationUiCommandPhase::OwningOutcome
                              ? WorkspacePressDispatchOutcome::OwningOutcome

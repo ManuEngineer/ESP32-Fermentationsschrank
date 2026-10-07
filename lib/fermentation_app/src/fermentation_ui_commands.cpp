@@ -380,12 +380,14 @@ FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
 FermentationUiCommandResult FermentationUiCommandBridge::applyProgramEdit(
     FermentationApplication& application,
     const FermentationUiProgramEditRequest& request,
-    const std::optional<ProgramCatalogRevision>&
-        expectedProgramCatalogRevision) {
+    const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,
+    const std::optional<UserConfigurationRevision>&
+        expectedUserConfigurationRevision) {
     // Same coarse projection as the language change: the owning preview
     // status, and only if the preview was accepted, the owning commit status.
     const auto outcome =
-        application.applyProgramEdit(request, expectedProgramCatalogRevision);
+        application.applyProgramEdit(request, expectedProgramCatalogRevision,
+                                     expectedUserConfigurationRevision);
     if (outcome.preview != ConfigurationPreviewStatus::Success) {
         return fromConfigurationPreview(outcome.preview);
     }

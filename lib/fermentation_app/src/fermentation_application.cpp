@@ -941,8 +941,9 @@ FermentationApplication::applyDisplayLanguage(
 
 ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
     const FermentationUiProgramEditRequest& request,
-    const std::optional<ProgramCatalogRevision>&
-        expectedProgramCatalogRevision) {
+    const std::optional<ProgramCatalogRevision>& expectedProgramCatalogRevision,
+    const std::optional<UserConfigurationRevision>&
+        expectedUserConfigurationRevision) {
     const auto guard = applicationCallSerializer_.enter();
     using Preview = ConfigurationPreviewStatus;
     using Commit = ConfigurationCommitStatus;
@@ -952,8 +953,10 @@ ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
         return {Preview::ConfigurationRuntimeUnavailable,
                 Commit::ConfigurationRuntimeFailure};
     }
-    // Without a decidable revision the change cannot be checked for staleness.
-    if (!expectedProgramCatalogRevision.has_value()) {
+    // Without both decidable revisions the change cannot be checked for
+    // staleness.
+    if (!expectedProgramCatalogRevision.has_value() ||
+        !expectedUserConfigurationRevision.has_value()) {
         return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
     }
     const auto installed = applyProgramEditPreview(
@@ -968,14 +971,9 @@ ApplicationConfigurationChangeResult FermentationApplication::applyProgramEdit(
     // Every exit without an activated change releases the one visible
     // preview slot.
     const auto handle = installed.preview->handle;
-    const auto runtime = configurationService_->acquireRuntime();
-    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-        static_cast<void>(configurationService_->cancelPreview(handle));
-        return {Preview::Success, Commit::ConfigurationRuntimeFailure};
-    }
     const auto validation =
         configurationService_->validatePreviewForConfirmation(
-            handle, runtime.lease.get().userConfigurationRevision());
+            handle, *expectedUserConfigurationRevision);
     if (validation.status != Commit::ReadyForConfirmation) {
         static_cast<void>(configurationService_->cancelPreview(handle));
         return {Preview::Success, validation.status};

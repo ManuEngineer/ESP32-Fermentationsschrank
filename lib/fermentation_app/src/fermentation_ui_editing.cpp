@@ -30,8 +30,13 @@ std::optional<std::size_t> findProgramIndex(const ProgramCatalog& catalog,
     return std::nullopt;
 }
 
-bool isDeletionOperation(FermentationUiProgramEditOperation operation) {
-    return operation == FermentationUiProgramEditOperation::Delete ||
+// Every operation that mutates the addressed catalog entry itself.  Copy
+// only reads its source and New addresses no entry, so neither is blocked by
+// a running program.
+bool mutatesAddressedProgram(FermentationUiProgramEditOperation operation) {
+    return operation == FermentationUiProgramEditOperation::Edit ||
+           operation == FermentationUiProgramEditOperation::Reset ||
+           operation == FermentationUiProgramEditOperation::Delete ||
            operation == FermentationUiProgramEditOperation::Uninstall;
 }
 
@@ -256,7 +261,11 @@ FermentationUiProgramEditResult applyProgramEdit(
                                ? *request.candidate
                                : std::move(*templateProgram);
             created.program.id = *allocation.id;
-            if (request.name.has_value()) created.program.name = *request.name;
+            if (request.name.has_value()) {
+                created.program.name = *request.name;
+            } else if (!request.candidate.has_value()) {
+                created.program.name = "New program";
+            }
             if (created.program.name.empty())
                 created.program.name = "New program";
             created.program.builtIn = false;
@@ -388,7 +397,7 @@ ConfigurationPreviewInstallResult applyProgramEditPreview(
     ConfigurationService& service, ProgramCatalogRevision expectedRevision,
     const FermentationUiProgramEditRequest& request,
     const FermentationUiProgramUsageEvidence& usage) {
-    if (isDeletionOperation(request.operation) &&
+    if (mutatesAddressedProgram(request.operation) &&
         usage.isInUse(request.programId)) {
         return {ConfigurationPreviewStatus::NotAllowed, std::nullopt};
     }
