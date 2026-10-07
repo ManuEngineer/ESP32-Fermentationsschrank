@@ -117,7 +117,6 @@ class UiRenderGate {
     [[nodiscard]] bool renderRequired(
         FermentationApplication& application,
         const FermentationTouchWorkspace& workspace,
-        const device_platform::LocaleId& initialDisplayLocale,
         std::optional<device_platform::DeviceUiTarget> pressedTarget,
         device_platform::DeviceUiNetworkStatus networkStatus,
         std::optional<std::int64_t> trustedUtc) {
@@ -126,8 +125,9 @@ class UiRenderGate {
         presentation_.update(networkPage, snapshot_.revisions, [&application] {
             return application.uiPresentationSource();
         });
-        const auto& locale = networkPage ? initialDisplayLocale
-                                         : presentation_.get().displayLocale;
+        // The presentation cache keeps the last filled locale across the
+        // HeaderNetwork eviction, so one accessor serves every page.
+        const auto& locale = presentation_.displayLocale();
         pendingKey_ = makeScreenRenderKey(
             snapshot_, workspace, locale, pressedTarget, presentation_,
             networkStatus, trustedUtc,

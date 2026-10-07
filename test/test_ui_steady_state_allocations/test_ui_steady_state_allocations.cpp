@@ -9,6 +9,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_presentation_cache.hpp"
 #include "fermentation_ui_text.hpp"
+#include "local_time.hpp"
 #include "mock_network_lifecycle.hpp"
 #include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
@@ -144,8 +145,8 @@ struct AppFixture {
         }
         gate.beginStep(application,
                        workspace.page() == FermentationUiPage::HeaderNetwork);
-        return gate.renderRequired(application, workspace, initialLocale,
-                                   pressed, network, utc);
+        return gate.renderRequired(application, workspace, pressed, network,
+                                   utc);
     }
 
     // Warm up and mark the current state as rendered.
@@ -248,7 +249,7 @@ struct NetworkFixture {
         gate.beginStep(application,
                        workspace.page() == FermentationUiPage::HeaderNetwork);
         return gate.renderRequired(
-            application, workspace, initialLocale, std::nullopt,
+            application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
     }
     void settle() {
@@ -317,7 +318,7 @@ struct WebAccessFixture {
     bool step() {
         gate.beginStep(application, false);
         return gate.renderRequired(
-            application, workspace, initialLocale, std::nullopt,
+            application, workspace, std::nullopt,
             device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
     }
     void settle() {
@@ -364,6 +365,106 @@ void test_web_access_page_steady_state_allocates_nothing() {
     TEST_ASSERT_TRUE(fixture.step());
     fixture.gate.markRendered();
     TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S1: the program list page (content rows, pager window) is a steady state
+// like the other pages: an unchanged list allocates nothing, and only a real
+// visible event (held row, scrolled window) requests a redraw.
+void test_program_list_page_steady_state_allocates_nothing_and_rows_redraw() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::ProgramList);
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto idleAllocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(idleAllocations));
+
+    // A held row changes the render key (kind, row, column).
+    const device_platform::DeviceUiTarget row0{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U};
+    const device_platform::DeviceUiTarget row1{
+        device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U};
+    const auto redrawFor = [&fixture](
+                               const device_platform::DeviceUiTarget& target) {
+        fixture.gate.beginStep(fixture.application, false);
+        return fixture.gate.renderRequired(
+            fixture.application, fixture.workspace, target,
+            device_platform::DeviceUiNetworkStatus::Connected, 1'700'000'000LL);
+    };
+    TEST_ASSERT_TRUE(redrawFor(row0));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(redrawFor(row0));
+    TEST_ASSERT_TRUE(redrawFor(row1));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(redrawFor(row0));
+    fixture.gate.markRendered();
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S2: the message list page is a steady state too.
+void test_message_list_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::Messages);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    fixture.workspace.setPage(FermentationUiPage::MessageDetail);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
+// S3: the language page is a steady state too.
+void test_language_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::HeaderLanguage);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
+void test_clock_page_steady_state_and_local_time_path_allocate_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::HeaderClock);
+    fixture.settle();
+    // The prepared zone rule reached the UI loop through the presentation
+    // cache (not re-resolved), and converts without any allocation.
+    const auto rule = fixture.gate.presentation().timeZoneRule();
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::EuropeanUnion),
+        static_cast<int>(rule.dst));
+    startCounting();
+    bool redraw = false;
+    std::uint32_t convertedHours = 0U;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+        const auto local = device_platform::toLocalTime(1'782'864'000LL, rule);
+        convertedHours += local.has_value() ? local->hour : 99U;
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(200U, convertedHours);  // 02:00 CEST, 100 times
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
 }
 
 void test_web_access_page_keeps_the_presentation_copy_like_other_pages() {
@@ -558,16 +659,37 @@ void test_workspace_page_change_requests_redraw() {
     TEST_ASSERT_TRUE(fixture.step());
 }
 
-void test_locale_change_requests_redraw_on_network_page() {
+// D11: the language comes from the configuration, not from a boot-time copy.
+// The HeaderNetwork eviction frees the catalog copy but must keep the language
+// the user chose, so the network page is drawn in it.
+void test_language_change_reaches_the_network_page_through_the_cache() {
     AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().displayLocale().value() !=
+                     "es");
+    const auto revision =
+        fixture.gate.snapshot().revisions.expectedUserConfigurationRevision;
+    TEST_ASSERT_TRUE(revision.has_value());
+    const auto changed =
+        fixture.application.applyDisplayLanguage("es", revision);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(changed.commit));
+
+    // The new revision refills the copy and requests a redraw.
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_EQUAL_STRING(
+        "es", fixture.gate.presentation().displayLocale().value().c_str());
+
+    // On HeaderNetwork the copy is evicted, the language stays German.
     fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
-    for (int loop = 0; loop < 3; ++loop) {
-        if (fixture.step()) fixture.gate.markRendered();
-    }
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.gate.presentation().hasCopy());
+    TEST_ASSERT_EQUAL_STRING(
+        "es", fixture.gate.presentation().displayLocale().value().c_str());
     TEST_ASSERT_FALSE(fixture.step());
-    TEST_ASSERT_TRUE(fixture.step(
-        std::nullopt, device_platform::DeviceUiNetworkStatus::Connected,
-        1'700'000'000LL, "de"));
 }
 
 void test_pressed_target_change_requests_redraw() {
@@ -701,13 +823,18 @@ int main() {
     RUN_TEST(test_recycled_snapshot_equals_a_fresh_snapshot);
     RUN_TEST(test_application_state_change_requests_redraw);
     RUN_TEST(test_workspace_page_change_requests_redraw);
-    RUN_TEST(test_locale_change_requests_redraw_on_network_page);
+    RUN_TEST(test_language_change_reaches_the_network_page_through_the_cache);
     RUN_TEST(test_pressed_target_change_requests_redraw);
     RUN_TEST(test_network_status_change_requests_redraw);
     RUN_TEST(test_clock_minute_change_requests_redraw_but_seconds_do_not);
     RUN_TEST(test_catalog_revision_adoption_changes_the_key);
     RUN_TEST(test_every_workspace_mutator_bumps_the_render_revision);
     RUN_TEST(test_web_access_page_steady_state_allocates_nothing);
+    RUN_TEST(
+        test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
+    RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
+    RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
+    RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }

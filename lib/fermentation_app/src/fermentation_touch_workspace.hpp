@@ -42,6 +42,18 @@ enum class FermentationUiPage : std::uint8_t {
     HeaderWebAccess,
 };
 
+// Intent with which the program list was opened: `Start` picks a program for a
+// new run (ProgramSummary), `Manage` picks a program for administration
+// (ProgramActions).
+enum class FermentationUiProgramListIntent : std::uint8_t {
+    Start,
+    Manage,
+};
+
+// Visible content rows of a list page. The platform target only carries row
+// indices; the capacity is owned here and by the renderer.
+inline constexpr std::size_t kFermentationUiListVisibleRows = 3U;
+
 enum class FermentationUiSafeBootTarget : std::uint8_t {
     PersistentFactoryReset,
     RawTouchRecovery,
@@ -68,6 +80,7 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     NavigateBack,
     NavigateHome,
     NavigateProgramList,
+    NavigateProgramManagement,
     NavigateProgramSummary,
     NavigateProgramEdit,
     NavigateProgramDeleteConfirmation,
@@ -132,6 +145,9 @@ struct FermentationUiWorkspaceView {
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
     // for the explicitly selected action slot.
+    // Canonical id of the explicitly selected message (MessageDetail); the
+    // renderer looks the message up in the snapshot, nothing is copied.
+    std::optional<std::uint32_t> selectedMessageId;
     std::optional<FermentationUiEnvelopePayload> action;
     std::optional<FermentationUiProductInsertedConfirmedIntent>
         transitionAction;
@@ -153,6 +169,7 @@ struct FermentationUiWorkspacePress {
         beginHomeWifiReconfiguration;
     std::optional<FermentationUiOpenWebProvisioningWindowCommand>
         openWebProvisioningWindow;
+    std::optional<FermentationUiSetDisplayLanguageCommand> setDisplayLanguage;
 };
 
 class FermentationTouchWorkspace {
@@ -215,6 +232,18 @@ class FermentationTouchWorkspace {
         return pager_.moveDown();
     }
     [[nodiscard]] FermentationUiPage page() const noexcept { return page_; }
+    // Records the owning outcome of the last language row press so the
+    // language page can show a failed change. Purely transient display state
+    // (not a locale or configuration owner): the next outcome replaces it and
+    // leaving the page discards it.
+    void noteDisplayLanguageOutcome(bool accepted) noexcept {
+        markRenderRelevantChange();
+        displayLanguageChangeFailed_ = !accepted;
+    }
+    [[nodiscard]] FermentationUiProgramListIntent programListIntent()
+        const noexcept {
+        return programListIntent_;
+    }
     void setPage(FermentationUiPage page);
     // Monotonic render-invalidation counter (wraps). It is increased by every
     // public mutator that can change what view() returns for an unchanged
@@ -252,7 +281,16 @@ class FermentationTouchWorkspace {
                  bool enabled = true) const;
     void setCanonicalPageStack(FermentationUiPage page);
 
+    [[nodiscard]] bool selectedMessageExists(
+        const FermentationUiSnapshot& snapshot) const;
+    [[nodiscard]] bool selectProgramFor(const std::string& programId,
+                                        const ProgramCatalog& catalog,
+                                        FermentationUiPage destination);
+
     FermentationUiPage page_{FermentationUiPage::Home};
+    bool displayLanguageChangeFailed_{false};
+    FermentationUiProgramListIntent programListIntent_{
+        FermentationUiProgramListIntent::Start};
     device_platform::VerticalPager pager_;
     std::vector<FermentationUiPage> pageStack_{FermentationUiPage::Home};
     std::optional<std::string> selectedProgramId_;

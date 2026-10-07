@@ -5,9 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <ctime>
 #include <string_view>
 #include <utility>
+
+#include "local_time.hpp"
 
 namespace fermentation::main_ui {
 namespace {
@@ -22,9 +23,30 @@ constexpr device_platform::DisplayRect kHeaderNetworkRect{
 // (x=4..172).
 constexpr device_platform::DisplayRect kHeaderLanguageHitRect{176U, 0U, 44U,
                                                               kHeaderHeight};
+// Header clock touch zone (S4): x=264..320 over the full header height. It
+// starts exactly where kHeaderNetworkRect ends (x=264), so the zones never
+// overlap.
+constexpr device_platform::DisplayRect kHeaderClockHitRect{264U, 0U, 56U,
+                                                           kHeaderHeight};
 constexpr std::uint16_t kControlTop = 200U;
 constexpr std::uint16_t kControlHeight = 40U;
-constexpr std::uint16_t kProgramRowHeight = 18U;
+// Touch rows of a content list (same height as the bottom controls) and the
+// first row top; three rows fit between the title row and the reason line.
+constexpr std::uint16_t kContentRowTop = 64U;
+constexpr std::uint16_t kContentRowHeight = kControlHeight;
+constexpr std::uint16_t kContentRowLeft = 8U;
+constexpr std::uint16_t kContentRowWidth = 304U;
+// The drawn rows end at y=182 (2 px gap); the 18 px reason line then ends
+// exactly at the bottom controls (y=200).
+constexpr std::uint16_t kListReasonTop = 182U;
+
+// Pages whose content is a row list over the workspace pager. The pager item
+// count is the number of listed entries (programs, messages or languages).
+bool isContentListPage(FermentationUiPage page) noexcept {
+    return page == FermentationUiPage::ProgramList ||
+           page == FermentationUiPage::Messages ||
+           page == FermentationUiPage::HeaderLanguage;
+}
 constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
     8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
@@ -180,19 +202,18 @@ std::string temperatureText(const TemperatureView& temperature) {
     return result;
 }
 
-// No real IANA time zone database is part of this port (see
-// docs/tasks/issue-31-renderer-display-touch-calibration-plan.md, section 3);
-// this therefore formats the trusted UTC instant directly rather than
-// pretending to apply canonicalTimeZoneId as a local-time offset.
+// Local wall-clock text from the single local-time owner (Issue #178). No
+// trusted UTC or no result of toLocalTime() (for example an unavailable zone
+// rule) yields "--:--"; the UTC value is never shown as a local time.
 std::string formatClockText(
     const device_platform::ClockViewInput& clock) noexcept {
-    if (!clock.trustedUtc.has_value()) return "--:--";
-    const auto epoch = static_cast<std::time_t>(*clock.trustedUtc);
-    std::tm calendar{};
-    gmtime_r(&epoch, &calendar);
+    const auto local =
+        device_platform::toLocalTime(clock.trustedUtc, clock.timeZoneRule);
+    if (!local.has_value()) return "--:--";
     char buffer[6];
-    const auto written = std::snprintf(buffer, sizeof(buffer), "%02d:%02d",
-                                       calendar.tm_hour, calendar.tm_min);
+    const auto written = std::snprintf(buffer, sizeof(buffer), "%02u:%02u",
+                                       static_cast<unsigned>(local->hour),
+                                       static_cast<unsigned>(local->minute));
     if (written != 5) return "--:--";
     return std::string(buffer, 5U);
 }
@@ -419,6 +440,28 @@ RepresentativeScreen makeRepresentativeScreen(
                 {224U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
                 device_platform::ThemeToken::StatusInformation,
                 device_platform::ThemeToken::Canvas);
+    } else if (screen.workspace.page == FermentationUiPage::HeaderClock) {
+        // The single shared time screen: trust state, canonical zone id and
+        // the local time of the owner. It only shows existing values.
+        const bool trusted = clock.trustedUtc.has_value();
+        addText(commands, textPacks, locale,
+                fermentationTextKey(trusted ? "clock-trusted"
+                                            : "clock-not-trusted"),
+                {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
+                trusted ? device_platform::ThemeToken::StatusInformation
+                        : device_platform::ThemeToken::StatusWarning,
+                device_platform::ThemeToken::Canvas);
+        addRawText(commands,
+                   {8U, 90U, 304U, RepresentativeScreen::kTextLineHeight},
+                   clock.canonicalTimeZoneId.empty()
+                       ? std::string{"--"}
+                       : clock.canonicalTimeZoneId.value(),
+                   device_platform::ThemeToken::TextSecondary,
+                   device_platform::ThemeToken::Canvas);
+        addRawText(commands,
+                   {8U, 112U, 304U, RepresentativeScreen::kTextLineHeight},
+                   screen.clockText, device_platform::ThemeToken::TextPrimary,
+                   device_platform::ThemeToken::Canvas);
     } else if (screen.workspace.page == FermentationUiPage::HeaderWebAccess) {
         // The Application owns the release state; the page only shows it.
         const char* statusKey = "web-access-unavailable";
@@ -478,21 +521,144 @@ RepresentativeScreen makeRepresentativeScreen(
         }
     } else {
         if (!screen.workspace.programList.empty()) {
-            const auto rowCount =
-                std::min<std::size_t>(screen.workspace.programList.size(), 3U);
+            // Window over the list: row r shows entry currentIndex + r.
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount = std::min<std::size_t>(
+                screen.workspace.programList.size() - first,
+                kFermentationUiListVisibleRows);
             for (std::size_t index = 0U; index < rowCount; ++index) {
-                const auto& entry = screen.workspace.programList[index];
-                const auto top = static_cast<std::uint16_t>(68U + index * 18U);
-                addFill(commands, {8U, top, 304U, kProgramRowHeight},
+                const auto& entry = screen.workspace.programList[first + index];
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                // The drawn row leaves a 2 px gap; the touch row is the full
+                // kContentRowHeight (see targetAt()).
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
                         device_platform::ThemeToken::Surface);
-                addRawText(
-                    commands,
-                    {12U, top, 296U, RepresentativeScreen::kTextLineHeight},
-                    entry.program.program.name,
-                    entry.startable
-                        ? device_platform::ThemeToken::TextPrimary
-                        : device_platform::ThemeToken::TextSecondary,
+                addRawText(commands,
+                           {12U,
+                            static_cast<std::uint16_t>(
+                                top + (kContentRowHeight -
+                                       RepresentativeScreen::kTextLineHeight) /
+                                          2U),
+                            296U, RepresentativeScreen::kTextLineHeight},
+                           entry.program.program.name,
+                           entry.startable
+                               ? device_platform::ThemeToken::TextPrimary
+                               : device_platform::ThemeToken::TextSecondary,
+                           device_platform::ThemeToken::Surface);
+            }
+        } else if (screen.workspace.page ==
+                   FermentationUiPage::HeaderLanguage) {
+            // One row per language included in this build; the active
+            // display language is drawn as the selected row.
+            const auto catalog = makeFermentationR1DeviceUiBuildCatalog();
+            const auto rowCount = std::min<std::size_t>(
+                catalog.includedLocales.size(), kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& language = catalog.includedLocales[index];
+                const bool active = language.value() == locale.value();
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                const auto fill =
+                    active ? device_platform::ThemeToken::PrimaryAction
+                           : device_platform::ThemeToken::Surface;
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        fill);
+                addText(commands, textPacks, locale,
+                        fermentationTextKey(
+                            ("language-" + language.value()).c_str()),
+                        {12U,
+                         static_cast<std::uint16_t>(
+                             top + (kContentRowHeight -
+                                    RepresentativeScreen::kTextLineHeight) /
+                                       2U),
+                         296U, RepresentativeScreen::kTextLineHeight},
+                        active ? device_platform::ThemeToken::OnPrimaryAction
+                               : device_platform::ThemeToken::TextPrimary,
+                        fill);
+            }
+        } else if (screen.workspace.page == FermentationUiPage::Messages) {
+            // Window over snapshot.messages: row r shows message
+            // currentIndex + r (same geometry as the program list).
+            const auto first = screen.workspace.pager.currentIndex;
+            const auto rowCount =
+                std::min<std::size_t>(snapshot.messages.size() > first
+                                          ? snapshot.messages.size() - first
+                                          : 0U,
+                                      kFermentationUiListVisibleRows);
+            for (std::size_t index = 0U; index < rowCount; ++index) {
+                const auto& message = snapshot.messages[first + index].message;
+                const auto top = static_cast<std::uint16_t>(
+                    kContentRowTop + index * kContentRowHeight);
+                const auto textTop = static_cast<std::uint16_t>(
+                    top + (kContentRowHeight -
+                           RepresentativeScreen::kTextLineHeight) /
+                              2U);
+                addFill(commands,
+                        {kContentRowLeft, top, kContentRowWidth,
+                         static_cast<std::uint16_t>(kContentRowHeight - 2U)},
+                        device_platform::ThemeToken::Surface);
+                addText(
+                    commands, textPacks, locale,
+                    messageCodeTextKey(message.code),
+                    {12U, textTop, 196U, RepresentativeScreen::kTextLineHeight},
+                    message.acknowledged
+                        ? device_platform::ThemeToken::TextSecondary
+                        : device_platform::ThemeToken::TextPrimary,
                     device_platform::ThemeToken::Surface);
+                if (message.acousticMuted || message.acknowledged) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey(message.acousticMuted
+                                                    ? "message-muted"
+                                                    : "message-acknowledged"),
+                            {212U, textTop, 96U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::TextSecondary,
+                            device_platform::ThemeToken::Surface);
+                }
+            }
+        } else if (screen.workspace.page == FermentationUiPage::MessageDetail &&
+                   screen.workspace.selectedMessageId.has_value()) {
+            const auto selected =
+                std::find_if(snapshot.messages.begin(), snapshot.messages.end(),
+                             [&screen](const MessageView& view) {
+                                 return view.message.id ==
+                                        *screen.workspace.selectedMessageId;
+                             });
+            if (selected != snapshot.messages.end()) {
+                const auto& message = selected->message;
+                addText(commands, textPacks, locale,
+                        messageCodeTextKey(message.code),
+                        {8U, 68U, 304U, RepresentativeScreen::kTextLineHeight},
+                        device_platform::ThemeToken::TextPrimary,
+                        device_platform::ThemeToken::Canvas);
+                addText(commands, textPacks, locale,
+                        messageClassTextKey(message.messageClass),
+                        {8U, 92U, 304U, RepresentativeScreen::kTextLineHeight},
+                        device_platform::ThemeToken::TextSecondary,
+                        device_platform::ThemeToken::Canvas);
+                std::uint16_t stateTop = 116U;
+                if (message.acknowledged) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey("message-acknowledged"),
+                            {8U, stateTop, 304U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::StatusInformation,
+                            device_platform::ThemeToken::Canvas);
+                    stateTop = static_cast<std::uint16_t>(stateTop + 24U);
+                }
+                if (message.acousticMuted) {
+                    addText(commands, textPacks, locale,
+                            fermentationTextKey("message-muted"),
+                            {8U, stateTop, 304U,
+                             RepresentativeScreen::kTextLineHeight},
+                            device_platform::ThemeToken::StatusInformation,
+                            device_platform::ThemeToken::Canvas);
+                }
             }
         } else if (screen.workspace.confirmationProgramName.has_value()) {
             addRawText(commands,
@@ -504,7 +670,13 @@ RepresentativeScreen makeRepresentativeScreen(
         if (screen.workspace.blockedReason.has_value()) {
             addText(commands, textPacks, locale,
                     *screen.workspace.blockedReason,
-                    {8U, 128U, 304U, RepresentativeScreen::kTextLineHeight},
+                    {8U,
+                     screen.workspace.programList.empty() &&
+                             screen.workspace.page !=
+                                 FermentationUiPage::HeaderLanguage
+                         ? std::uint16_t{128U}
+                         : kListReasonTop,
+                     304U, RepresentativeScreen::kTextLineHeight},
                     device_platform::ThemeToken::StatusWarning,
                     device_platform::ThemeToken::Canvas);
         } else if (!screen.workspace.unavailableCapabilities.empty()) {
@@ -520,9 +692,12 @@ RepresentativeScreen makeRepresentativeScreen(
     }
 
     if (screen.workspace.pager.itemCount > 0U &&
-        screen.workspace.pager.valid()) {
+        screen.workspace.pager.valid() &&
+        screen.workspace.page != FermentationUiPage::HeaderLanguage) {
+        // The n/N counter sits right in the title row so it never overlaps
+        // content rows.
         addRawText(commands,
-                   {8U, 156U, 72U, RepresentativeScreen::kTextLineHeight},
+                   {248U, 40U, 64U, RepresentativeScreen::kTextLineHeight},
                    std::to_string(screen.workspace.pager.currentIndex + 1U) +
                        "/" + std::to_string(screen.workspace.pager.itemCount),
                    device_platform::ThemeToken::TextSecondary,
@@ -575,6 +750,23 @@ RepresentativeScreen makeRepresentativeScreen(
     }
     if (pressedTarget.has_value() &&
         pressedTarget->kind ==
+            device_platform::DeviceUiTargetKind::ContentCell &&
+        isContentListPage(screen.workspace.page) &&
+        pressedTarget->column == 0U &&
+        pressedTarget->row < kFermentationUiListVisibleRows) {
+        commands.push_back(
+            {ScreenDrawKind::PressFeedback,
+             {kContentRowLeft,
+              static_cast<std::uint16_t>(
+                  kContentRowTop + pressedTarget->row * kContentRowHeight),
+              kContentRowWidth, kContentRowHeight},
+             device_platform::ThemeToken::SecondaryAction,
+             device_platform::ThemeToken::PrimaryAction,
+             {},
+             {}});
+    }
+    if (pressedTarget.has_value() &&
+        pressedTarget->kind ==
             device_platform::DeviceUiTargetKind::BottomSlot &&
         pressedTarget->slotIndex < screen.workspace.bottomSlots.size()) {
         const auto left =
@@ -620,11 +812,19 @@ ScreenRenderKey makeScreenRenderKey(
         key.hasPressedTarget = true;
         key.pressedKind = pressedTarget->kind;
         key.pressedSlotIndex = pressedTarget->slotIndex;
+        key.pressedRow = pressedTarget->row;
+        key.pressedColumn = pressedTarget->column;
     }
     key.networkStatus = networkStatus;
     if (trustedUtc.has_value()) {
         key.utcMinute = *trustedUtc / 60;
     }
+    // The visible clock is the local time derived from UTC and the prepared
+    // zone rule, so the rule is part of the visible inputs.
+    key.timeZoneDst =
+        static_cast<std::uint8_t>(presentation.timeZoneRule().dst);
+    key.timeZoneOffsetMinutes =
+        presentation.timeZoneRule().standardOffsetMinutes;
     key.accessPointRevision = accessPointRevision;
     return key;
 }
@@ -646,6 +846,35 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
         y < kHeaderNetworkRect.top + kHeaderNetworkRect.height) {
         return device_platform::DeviceUiTarget{
             device_platform::DeviceUiTargetKind::HeaderNetwork, 0U};
+    }
+    if (x >= kHeaderClockHitRect.left &&
+        x < kHeaderClockHitRect.left + kHeaderClockHitRect.width &&
+        y >= kHeaderClockHitRect.top &&
+        y < kHeaderClockHitRect.top + kHeaderClockHitRect.height) {
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::HeaderClock, 0U};
+    }
+    // Visible program rows only: row r is entry currentIndex + r, so the hit
+    // zone follows exactly what the renderer draws.
+    if (isContentListPage(screen.workspace.page) &&
+        screen.workspace.pager.itemCount > 0U &&
+        screen.workspace.pager.currentIndex <
+            screen.workspace.pager.itemCount &&
+        x >= kContentRowLeft && x < kContentRowLeft + kContentRowWidth &&
+        y >= kContentRowTop &&
+        y < kContentRowTop +
+                kFermentationUiListVisibleRows * kContentRowHeight) {
+        const auto row =
+            static_cast<std::uint8_t>((y - kContentRowTop) / kContentRowHeight);
+        const auto visible =
+            std::min<std::size_t>(screen.workspace.pager.itemCount -
+                                      screen.workspace.pager.currentIndex,
+                                  kFermentationUiListVisibleRows);
+        if (row < visible) {
+            return device_platform::DeviceUiTarget{
+                device_platform::DeviceUiTargetKind::ContentCell, 0U, row, 0U};
+        }
+        return std::nullopt;
     }
     if (y < kControlTop || y >= kControlTop + kControlHeight) {
         return std::nullopt;

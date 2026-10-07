@@ -33,9 +33,8 @@ std::int64_t lastSundayTransitionUtc(const int year,
 
 std::optional<LocalTime> toLocalTime(
     const std::optional<std::int64_t> trustedUtc,
-    const PreparedTimeZone& zone) noexcept {
+    const TimeZoneRule& rule) noexcept {
     if (!trustedUtc.has_value() || *trustedUtc < 0) return std::nullopt;
-    const auto& rule = zone.rule;
     if (rule.dst != DaylightSavingRule::EuropeanUnion) return std::nullopt;
 
     const auto utc = *trustedUtc;

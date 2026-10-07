@@ -72,6 +72,15 @@ struct FermentationUiApplyNetworkModeCommand {
 
 struct FermentationUiBeginHomeWifiReconfigurationCommand {};
 
+// Selects the persistent display language. Intent only: the Application owns
+// the catalog check and the ConfigurationService preview/commit path. The
+// expected revision is the one the UI snapshot carried; an undecidable
+// (absent) revision is rejected fail-closed.
+struct FermentationUiSetDisplayLanguageCommand {
+    std::string languageId;
+    std::optional<UserConfigurationRevision> expectedUserConfigurationRevision;
+};
+
 // Opens the volatile local release window for the web first-time setup. The
 // Application owner decides whether it may open; the UI carries intent only.
 struct FermentationUiOpenWebProvisioningWindowCommand {};
@@ -255,7 +264,8 @@ struct FermentationUiCommand {
                  FermentationUiResumeFallbackCommand,
                  FermentationUiApplyNetworkModeCommand,
                  FermentationUiBeginHomeWifiReconfigurationCommand,
-                 FermentationUiOpenWebProvisioningWindowCommand>
+                 FermentationUiOpenWebProvisioningWindowCommand,
+                 FermentationUiSetDisplayLanguageCommand>
         operation;
 };
 
@@ -357,6 +367,9 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult openWebProvisioningWindow(
         FermentationApplication& application,
         const FermentationUiOpenWebProvisioningWindowCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult setDisplayLanguage(
+        FermentationApplication& application,
+        const FermentationUiSetDisplayLanguageCommand& command);
 
    private:
     friend class FermentationApplication;

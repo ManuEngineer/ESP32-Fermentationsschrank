@@ -26,7 +26,13 @@ struct LocalTime {
 // fuer eine nicht vorbereitete Zone (Regel `Unavailable`) und fuer nicht
 // darstellbare Instanzen; nie eine ersatzweise UTC- oder Lokalzeit.
 [[nodiscard]] std::optional<LocalTime> toLocalTime(
-    std::optional<std::int64_t> trustedUtc,
-    const PreparedTimeZone& zone) noexcept;
+    std::optional<std::int64_t> trustedUtc, const TimeZoneRule& rule) noexcept;
+
+// Convenience for callers holding the prepared zone; identical result.
+[[nodiscard]] inline std::optional<LocalTime> toLocalTime(
+    const std::optional<std::int64_t> trustedUtc,
+    const PreparedTimeZone& zone) noexcept {
+    return toLocalTime(trustedUtc, zone.rule);
+}
 
 }  // namespace device_platform

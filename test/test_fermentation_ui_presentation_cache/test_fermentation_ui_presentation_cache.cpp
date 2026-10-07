@@ -44,6 +44,7 @@ struct FakeFill {
     bool available{true};
     const char* locale{"de"};
     const char* timeZone{"Europe/Zurich"};
+    device_platform::TimeZoneRule rule{};
 
     std::optional<FermentationUiPresentationSource> operator()() {
         ++calls;
@@ -53,6 +54,7 @@ struct FakeFill {
         FermentationUiPresentationSource source;
         source.displayLocale = device_platform::LocaleId{locale};
         source.canonicalTimeZoneId = device_platform::TimeZoneId{timeZone};
+        source.timeZoneRule = rule;
         return source;
     }
 };
@@ -237,6 +239,12 @@ void test_application_source_is_a_value_with_granted_runtime_lease() {
     AppFixture fixture;
     const auto source = fixture.application.uiPresentationSource();
     TEST_ASSERT_TRUE(source.has_value());
+    // The prepared zone rule travels with the presentation source, so no
+    // consumer resolves the zone again (Issue #178 bridge).
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::EuropeanUnion),
+        static_cast<int>(source->timeZoneRule.dst));
+    TEST_ASSERT_EQUAL_INT16(60, source->timeZoneRule.standardOffsetMinutes);
 }
 
 void test_application_source_is_unavailable_when_runtime_lease_is_busy() {
@@ -257,6 +265,64 @@ void test_application_source_is_unavailable_when_runtime_lease_is_busy() {
     TEST_ASSERT_TRUE(fixture.application.uiPresentationSource().has_value());
 }
 
+// D11: the last filled locale and time zone survive the HeaderNetwork
+// eviction and follow every later successful fill (a language change).
+void test_time_zone_rule_survives_eviction_and_defaults_to_unavailable() {
+    FermentationUiPresentationCache cache;
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::Unavailable),
+        static_cast<int>(cache.timeZoneRule().dst));
+
+    FakeFill fill;
+    fill.rule = device_platform::findTimeZoneRule("Europe/Zurich").value();
+    cache.update(false, revisions(1U, 1U), fill);
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::EuropeanUnion),
+        static_cast<int>(cache.timeZoneRule().dst));
+
+    // HeaderNetwork frees the copy but keeps the rule, like the zone id.
+    cache.update(true, revisions(1U, 1U), fill);
+    TEST_ASSERT_FALSE(cache.hasCopy());
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(device_platform::DaylightSavingRule::EuropeanUnion),
+        static_cast<int>(cache.timeZoneRule().dst));
+    TEST_ASSERT_EQUAL_INT16(60, cache.timeZoneRule().standardOffsetMinutes);
+}
+
+void test_locale_and_time_zone_survive_eviction_and_follow_refills() {
+    FermentationUiPresentationCache cache;
+    // Safe defaults before any successful fill.
+    TEST_ASSERT_EQUAL_STRING("en", cache.displayLocale().value().c_str());
+
+    FakeFill german;
+    cache.update(false, revisions(1U, 1U), german);
+    TEST_ASSERT_EQUAL_STRING("de", cache.displayLocale().value().c_str());
+    TEST_ASSERT_EQUAL_STRING("Europe/Zurich",
+                             cache.canonicalTimeZoneId().value().c_str());
+
+    // HeaderNetwork frees the copy but not the language.
+    cache.update(true, revisions(1U, 1U), german);
+    TEST_ASSERT_FALSE(cache.hasCopy());
+    TEST_ASSERT_EQUAL_STRING("de", cache.displayLocale().value().c_str());
+    TEST_ASSERT_EQUAL_STRING("Europe/Zurich",
+                             cache.canonicalTimeZoneId().value().c_str());
+
+    // A new user revision refills with the new language.
+    FakeFill spanish;
+    spanish.locale = "es";
+    cache.update(false, revisions(2U, 1U), spanish);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+    cache.update(true, revisions(2U, 1U), spanish);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+
+    // An unavailable fill keeps the last value instead of reverting.
+    FakeFill unavailable;
+    unavailable.available = false;
+    cache.update(false, revisions(3U, 1U), unavailable);
+    TEST_ASSERT_EQUAL_STRING("es", cache.displayLocale().value().c_str());
+    TEST_ASSERT_TRUE(cache.get().displayLocale.value() == "en");
+}
+
 }  // namespace
 
 void setUp() {}
@@ -265,6 +331,8 @@ void tearDown() {}
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_revisions_do_not_call_fill_again);
+    RUN_TEST(test_locale_and_time_zone_survive_eviction_and_follow_refills);
+    RUN_TEST(test_time_zone_rule_survives_eviction_and_defaults_to_unavailable);
     RUN_TEST(test_program_catalog_revision_change_refills_catalog);
     RUN_TEST(
         test_user_configuration_revision_change_refills_locale_and_time_zone);

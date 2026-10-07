@@ -59,6 +59,16 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.setDisplayLanguage.has_value()) {
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::setDisplayLanguage(
+            application, *press.setDisplayLanguage);
+        result.outcome = result.commandResult->phase ==
+                                 FermentationUiCommandPhase::OwningOutcome
+                             ? WorkspacePressDispatchOutcome::OwningOutcome
+                             : WorkspacePressDispatchOutcome::DecisionOnly;
+        return result;
+    }
     if (press.openWebProvisioningWindow.has_value()) {
         WorkspacePressDispatchResult result;
         result.commandResult =
@@ -138,6 +148,14 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,
                                                  monotonicMillis);
+        if (press.setDisplayLanguage.has_value()) {
+            // The language page shows a refused change; an accepted one
+            // replaces an earlier failure.
+            workspace.noteDisplayLanguageOutcome(
+                result.dispatch.commandResult.has_value() &&
+                result.dispatch.commandResult->category ==
+                    device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+        }
     }
     return result;
 }

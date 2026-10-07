@@ -362,6 +362,21 @@ FermentationUiCommandBridge::openWebProvisioningWindow(
         FermentationUiCommandPhase::OwningOutcome);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
+    FermentationApplication& application,
+    const FermentationUiSetDisplayLanguageCommand& command) {
+    // The Application returns the owning preview status and, only if the
+    // preview was accepted, the owning commit status; both map through the
+    // existing configuration projections (no new detail type).
+    const auto outcome = application.applyDisplayLanguage(
+        command.languageId, command.expectedUserConfigurationRevision);
+    if (outcome.preview != ConfigurationPreviewStatus::Success) {
+        return fromConfigurationPreview(outcome.preview);
+    }
+    return fromConfigurationCommit(outcome.commit,
+                                   FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult
 FermentationUiCommandBridge::unsupportedAppDetail() {
     return makeResult(Category::Rejected,

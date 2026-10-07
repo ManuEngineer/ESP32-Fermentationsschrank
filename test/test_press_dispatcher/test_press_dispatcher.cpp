@@ -232,6 +232,44 @@ void test_dispatch_no_typed_payload_is_reported_as_such() {
     TEST_ASSERT_FALSE(result.resumeFallbackStatus.has_value());
 }
 
+// S1: choosing a program row is pure navigation. It yields no typed payload,
+// so the dispatcher reaches neither an envelope nor an owning application path
+// for the start or the management intent.
+void test_dispatch_program_row_selection_yields_no_typed_payload() {
+    AppFixture fixture;
+    auto catalog = makeFactoryProgramCatalog();
+    FermentationUiSnapshot snapshot;
+    snapshot.home.mode = FermentationHomeMode::Standby;
+    for (const auto intent :
+         {FermentationUiWorkspaceSlotAction::NavigateProgramList,
+          FermentationUiWorkspaceSlotAction::NavigateProgramManagement}) {
+        FermentationTouchWorkspace workspace;
+        const auto home = workspace.view(snapshot, &catalog);
+        const std::size_t slotIndex = home.slotActions[0] == intent ? 0U : 1U;
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(intent),
+                              static_cast<int>(home.slotActions[slotIndex]));
+        TEST_ASSERT_TRUE(
+            workspace
+                .press(snapshot,
+                       {device_platform::DeviceUiTargetKind::BottomSlot,
+                        static_cast<std::uint8_t>(slotIndex)},
+                       &catalog)
+                .navigated);
+        const auto press = workspace.press(
+            snapshot,
+            {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U},
+            &catalog);
+        TEST_ASSERT_TRUE(press.navigated);
+        const auto result =
+            dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(WorkspacePressDispatchOutcome::NoTypedPayload),
+            static_cast<int>(result.outcome));
+        TEST_ASSERT_FALSE(result.commandResult.has_value());
+        TEST_ASSERT_FALSE(result.prepareStatus.has_value());
+    }
+}
+
 void test_dispatch_action_reaches_prepare_and_confirm() {
     AppFixture fixture;
     FermentationUiWorkspacePress press;
@@ -553,6 +591,204 @@ void test_mute_message_is_ram_owned_and_persistence_ineligible() {
     assertCommandStatus(replay, CommandStatus::AlreadyProcessed,
                         FermentationUiCommandPhase::DecisionOnly);
     assertSameHead(headBefore, readHead(fixture.store));
+}
+
+// S2: the message selected by a physical row press reaches the unchanged
+// owning acknowledge/mute path with its canonical id.
+void test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path() {
+    OwningAppFixture fixture;
+    installMessage(fixture.application, 7U);
+    const auto snapshot = fixture.application.uiSnapshot();
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(snapshot.messages.size()));
+
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    const auto selected = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U});
+    TEST_ASSERT_TRUE(selected.navigated);
+    TEST_ASSERT_FALSE(selected.action.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+
+    const auto acknowledge = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 1U});
+    TEST_ASSERT_TRUE(acknowledge.action.has_value());
+    const auto* intent = std::get_if<FermentationUiAcknowledgeMessageIntent>(
+        &*acknowledge.action);
+    TEST_ASSERT_TRUE(intent != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(7U, intent->messageId);
+
+    FermentationUiCommandContext context;
+    context.expected = snapshot.revisions;
+    context.monotonicMillis = 10U;
+    const auto prepared =
+        fixture.application.prepareEnvelope(context, *acknowledge.action);
+    const auto confirmed = fixture.application.confirmPrepared(prepared);
+    TEST_ASSERT_TRUE(confirmed.request.has_value());
+    const auto applied =
+        fixture.application.applyConfirmedPrepared(*confirmed.request);
+    assertCommandStatus(applied, CommandStatus::Applied,
+                        FermentationUiCommandPhase::OwningOutcome);
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.application)
+            .messages[0]
+            .acknowledged);
+
+    const auto mute = workspace.press(
+        snapshot, {device_platform::DeviceUiTargetKind::BottomSlot, 2U});
+    TEST_ASSERT_TRUE(mute.action.has_value());
+    const auto* muteIntent =
+        std::get_if<FermentationUiMuteMessageIntent>(&*mute.action);
+    TEST_ASSERT_TRUE(muteIntent != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(7U, muteIntent->messageId);
+}
+
+// S3: a language row press reaches the Application's configuration path
+// through the bridge and the dispatcher as an owning outcome; a stale or
+// absent revision is refused and the language stays unchanged.
+void test_language_row_press_reaches_the_owning_configuration_commit() {
+    OwningAppFixture fixture;
+    const auto current = [&fixture] {
+        const auto source = fixture.application.uiPresentationSource();
+        TEST_ASSERT_TRUE(source.has_value());
+        return source->displayLocale.value();
+    };
+    TEST_ASSERT_TRUE(current() != "es");
+    const auto snapshot = fixture.application.uiSnapshot();
+
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    const auto press = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 2U, 0U});
+    TEST_ASSERT_TRUE(press.setDisplayLanguage.has_value());
+    const auto result =
+        dispatchWorkspacePress(fixture.application, snapshot, press, 1000U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WorkspacePressDispatchOutcome::OwningOutcome),
+        static_cast<int>(result.outcome));
+    TEST_ASSERT_TRUE(result.commandResult.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiCommandPhase::OwningOutcome),
+        static_cast<int>(result.commandResult->phase));
+    TEST_ASSERT_TRUE(std::holds_alternative<ConfigurationCommitStatus>(
+        result.commandResult->detail));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            std::get<ConfigurationCommitStatus>(result.commandResult->detail)));
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // The same (now stale) snapshot revision is refused; nothing changes.
+    const auto stale = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U});
+    const auto refused =
+        dispatchWorkspacePress(fixture.application, snapshot, stale, 1001U);
+    TEST_ASSERT_TRUE(refused.commandResult.has_value());
+    TEST_ASSERT_TRUE(refused.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // An absent revision is refused fail-closed as well.
+    auto undecidable = fixture.application.uiSnapshot();
+    undecidable.revisions.expectedUserConfigurationRevision.reset();
+    const auto absent = workspace.press(
+        undecidable,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U});
+    const auto absentResult =
+        dispatchWorkspacePress(fixture.application, undecidable, absent, 1002U);
+    TEST_ASSERT_TRUE(absentResult.commandResult.has_value());
+    TEST_ASSERT_TRUE(absentResult.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+}
+
+// Review B1: a refused language change is shown on the language page, keeps
+// the language, is replaced by the next accepted change and discarded when
+// the page is left. Driven through the real touch adapter.
+void test_refused_language_change_is_visible_and_cleared_by_a_success() {
+    OwningAppFixture fixture;
+    const auto current = [&fixture] {
+        return fixture.application.uiPresentationSource()
+            ->displayLocale.value();
+    };
+    const auto packs = makeFermentationUiTextPacks();
+    const device_platform::ClockViewInput clock{1'700'000'000LL, {}};
+    const auto touch = [&](FermentationTouchWorkspace& workspace,
+                           const FermentationUiSnapshot& snapshot,
+                           std::uint16_t y) {
+        return processWorkspaceTouch(
+            fixture.application, workspace, snapshot, packs,
+            device_platform::LocaleId{"en"}, nullptr,
+            device_platform::DeviceUiNetworkStatus::Connected, clock, true,
+            100U, y, true, 1000U);
+    };
+    const auto failureText = [&packs](const char* locale) {
+        return device_platform::resolveText(
+                   packs, device_platform::LocaleId{locale},
+                   fermentationTextKey("language-change-failed"))
+            .value;
+    };
+    const auto screenHas = [&](FermentationTouchWorkspace& workspace,
+                               const FermentationUiSnapshot& snapshot,
+                               const char* locale, const std::string& text) {
+        const auto screen = makeRepresentativeScreen(
+            snapshot, workspace, packs, device_platform::LocaleId{locale});
+        for (const auto& command : screen.commands)
+            if (command.text == text) return true;
+        return false;
+    };
+
+    // 1.-2. Open the page with a snapshot, then change the configuration so
+    // that snapshot's revision is stale.
+    const auto stale = fixture.application.uiSnapshot();
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_TRUE(current() != "es");
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationCommitStatus::Activated),
+        static_cast<int>(
+            fixture.application
+                .applyDisplayLanguage(
+                    "es", stale.revisions.expectedUserConfigurationRevision)
+                .commit));
+    TEST_ASSERT_FALSE(workspace.view(stale).blockedReason.has_value());
+
+    // 3.-5. Row 0 ("de") with the stale revision through the touch adapter.
+    const auto refused = touch(workspace, stale, 70U);
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(refused.dispatch.commandResult->category !=
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("es", current().c_str());
+
+    // 6. A localized, visible failure message on the language page.
+    TEST_ASSERT_TRUE(workspace.view(stale).blockedReason.has_value());
+    for (const char* locale : {"en", "de", "es"}) {
+        const auto text = failureText(locale);
+        TEST_ASSERT_TRUE(!text.empty());
+        TEST_ASSERT_TRUE(text.find("fermentation") == std::string::npos);
+        TEST_ASSERT_TRUE(screenHas(workspace, stale, locale, text));
+    }
+
+    // 7. A following accepted change takes over and removes the message.
+    const auto fresh = fixture.application.uiSnapshot();
+    const auto accepted = touch(workspace, fresh, 110U);
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult.has_value());
+    TEST_ASSERT_TRUE(accepted.dispatch.commandResult->category ==
+                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+    TEST_ASSERT_EQUAL_STRING("en", current().c_str());
+    TEST_ASSERT_FALSE(workspace.view(fresh).blockedReason.has_value());
+    TEST_ASSERT_FALSE(screenHas(workspace, fresh, "en", failureText("en")));
+
+    // Leaving the page discards a transient failure.
+    static_cast<void>(touch(workspace, stale, 70U));
+    TEST_ASSERT_TRUE(workspace.view(stale).blockedReason.has_value());
+    workspace.setPage(FermentationUiPage::Home);
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_FALSE(workspace.view(stale).blockedReason.has_value());
 }
 
 void test_command_status_projection_keeps_decisions_only() {
@@ -957,6 +1193,7 @@ void test_physical_touch_manual_start_uses_the_application_owner_path() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_dispatch_no_typed_payload_is_reported_as_such);
+    RUN_TEST(test_dispatch_program_row_selection_yields_no_typed_payload);
     RUN_TEST(test_dispatch_action_reaches_prepare_and_confirm);
     RUN_TEST(test_dispatch_resume_fallback_is_forwarded_unmodified);
     RUN_TEST(test_prepared_request_has_no_owning_mutation_before_handoff);
@@ -967,6 +1204,10 @@ int main() {
     RUN_TEST(test_duplicate_confirmed_request_preserves_owner_idempotency);
     RUN_TEST(test_acknowledge_message_is_ram_owned_and_persistence_ineligible);
     RUN_TEST(test_mute_message_is_ram_owned_and_persistence_ineligible);
+    RUN_TEST(
+        test_selected_message_row_reaches_the_owning_acknowledge_and_mute_path);
+    RUN_TEST(test_language_row_press_reaches_the_owning_configuration_commit);
+    RUN_TEST(test_refused_language_change_is_visible_and_cleared_by_a_success);
     RUN_TEST(test_command_status_projection_keeps_decisions_only);
     RUN_TEST(test_dispatch_transition_action_is_unavailable_no_owner);
     RUN_TEST(test_dispatch_program_edit_is_unavailable_no_owner);

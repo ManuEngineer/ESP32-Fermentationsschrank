@@ -10,6 +10,17 @@ namespace fermentation {
 
 namespace {
 
+// The canonical decision-required message, exactly as the Application-owned
+// projection defines it for the Waiting home mode (fermentation_ui_projector):
+// an earlier active, unresolved message of another kind must not be taken for
+// it.
+bool isCanonicalDecisionRequiredMessage(const RuntimeMessage& message) {
+    return message.active && !message.resolved && message.decisionRequired &&
+           message.messageClass == MessageClass::DecisionRequired &&
+           (message.code == MessageCode::UserDecisionRequired ||
+            message.code == MessageCode::ProductInsertionRequested);
+}
+
 std::vector<FermentationUiSafeBootCapability>
 safeBootUnavailableCapabilities() {
     return {FermentationUiSafeBootCapability::PersistentFactoryReset,
@@ -55,6 +66,7 @@ bool FermentationTouchWorkspace::isPageExitAction(
             return true;
         case FermentationUiWorkspaceSlotAction::None:
         case FermentationUiWorkspaceSlotAction::NavigateProgramList:
+        case FermentationUiWorkspaceSlotAction::NavigateProgramManagement:
         case FermentationUiWorkspaceSlotAction::NavigateProgramSummary:
         case FermentationUiWorkspaceSlotAction::NavigateProgramEdit:
         case FermentationUiWorkspaceSlotAction::
@@ -297,6 +309,7 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
             break;
     }
     page_ = page;
+    displayLanguageChangeFailed_ = false;
 }
 
 void FermentationTouchWorkspace::setSlot(
@@ -318,8 +331,9 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
         case FermentationHomeMode::Standby:
             setSlot(view, 0U, "start",
                     FermentationUiWorkspaceSlotAction::NavigateProgramList);
-            setSlot(view, 1U, "programs",
-                    FermentationUiWorkspaceSlotAction::NavigateProgramList);
+            setSlot(
+                view, 1U, "programs",
+                FermentationUiWorkspaceSlotAction::NavigateProgramManagement);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "service",
@@ -443,7 +457,10 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
 
     switch (page_) {
         case FermentationUiPage::ProgramList:
-            view.title = key("programs");
+            view.title = key(programListIntent_ ==
+                                     FermentationUiProgramListIntent::Manage
+                                 ? "programs"
+                                 : "start");
             if (catalog != nullptr) {
                 view.programList = makeFermentationUiProgramList(*catalog);
                 view.pager.itemCount = view.programList.size();
@@ -457,12 +474,33 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "down",
                     FermentationUiWorkspaceSlotAction::MovePagerDown,
                     view.pager.canMoveDown());
-            setSlot(
-                view, 3U, "manual",
-                FermentationUiWorkspaceSlotAction::NavigateManualModeSelection);
+            // Manual operation belongs to the start path; the management list
+            // keeps the default status slot.
+            if (programListIntent_ == FermentationUiProgramListIntent::Start) {
+                setSlot(view, 3U, "manual",
+                        FermentationUiWorkspaceSlotAction::
+                            NavigateManualModeSelection);
+            } else if (catalog != nullptr && view.programList.empty()) {
+                // An empty active list is a valid catalog state; without a
+                // row to pick, `new` must stay reachable for administration.
+                setSlot(view, 3U, "new",
+                        FermentationUiWorkspaceSlotAction::NewProgram);
+            }
             break;
         case FermentationUiPage::ProgramSummary:
             view.title = key("start");
+            // A listed program that cannot be started stays selectable for
+            // administration; the owning list projection names the reason.
+            if (catalog != nullptr && selectedProgramId_.has_value()) {
+                const auto entries = makeFermentationUiProgramList(*catalog);
+                const auto selected = std::find_if(
+                    entries.begin(), entries.end(),
+                    [this](const FermentationUiProgramListEntry& entry) {
+                        return entry.program.program.id == *selectedProgramId_;
+                    });
+                if (selected != entries.end() && !selected->startable)
+                    view.blockedReason = selected->blockedReason;
+            }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 1U, "edit",
@@ -647,18 +685,24 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             setSlot(view, 2U, "down",
                     FermentationUiWorkspaceSlotAction::MovePagerDown,
                     view.pager.canMoveDown());
+            // The slot opens the explicitly selected message (a row tap does
+            // so directly); it never substitutes another message.
             setSlot(view, 3U, "details",
                     FermentationUiWorkspaceSlotAction::NavigateMessageDetail,
-                    !snapshot.messages.empty());
+                    selectedMessageExists(snapshot));
             break;
         case FermentationUiPage::MessageDetail:
             view.title = key("message-detail");
+            // A selection that is no longer in the snapshot shows no detail
+            // and offers no message action.
+            if (selectedMessageExists(snapshot))
+                view.selectedMessageId = selectedMessageId_;
             setSlot(view, 1U, "acknowledge",
                     FermentationUiWorkspaceSlotAction::AcknowledgeMessage,
-                    selectedMessageId_.has_value());
+                    selectedMessageExists(snapshot));
             setSlot(view, 2U, "mute",
                     FermentationUiWorkspaceSlotAction::MuteMessage,
-                    selectedMessageId_.has_value());
+                    selectedMessageExists(snapshot));
             if (sensorSelectionAction_.has_value()) {
                 setSlot(
                     view, 3U, "continue",
@@ -756,6 +800,13 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
         }
         case FermentationUiPage::HeaderLanguage:
             view.title = key("language");
+            // One selectable row per language included in this build.
+            view.pager.itemCount =
+                makeFermentationR1DeviceUiBuildCatalog().includedLocales.size();
+            // A refused change stays visible on this page until the next
+            // outcome or until the page is left.
+            if (displayLanguageChangeFailed_)
+                view.blockedReason = key("language-change-failed");
             setSlot(view, 1U, "network",
                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
             setSlot(view, 2U, "clock",
@@ -907,22 +958,31 @@ FermentationTouchWorkspace::makeCompletionIntent(
 
 bool FermentationTouchWorkspace::selectProgram(const std::string& programId,
                                                const ProgramCatalog& catalog) {
+    return selectProgramFor(programId, catalog,
+                            FermentationUiPage::ProgramSummary);
+}
+
+// Every installed, listed program is selectable (administration must reach
+// programs that cannot be started). Only a startable program becomes the
+// start candidate; for the others `confirm` stays disabled and the page shows
+// the blocked reason of the list projection.
+bool FermentationTouchWorkspace::selectProgramFor(
+    const std::string& programId, const ProgramCatalog& catalog,
+    FermentationUiPage destination) {
     markRenderRelevantChange();
-    const auto found = std::find_if(
-        catalog.programs.begin(), catalog.programs.end(),
-        [&programId](const ProgramDocument& document) {
-            return document.program.id == programId &&
-                   document.program.installed && document.program.enabled &&
-                   validateProgram(document, ValidationPurpose::Runnable)
-                       .valid();
-        });
-    if (found == catalog.programs.end()) return false;
+    const auto entries = makeFermentationUiProgramList(catalog);
+    const auto found =
+        std::find_if(entries.begin(), entries.end(),
+                     [&programId](const FermentationUiProgramListEntry& entry) {
+                         return entry.program.program.id == programId;
+                     });
+    if (found == entries.end()) return false;
     selectedProgramId_ = programId;
     selectedCandidate_ = {};
-    selectedCandidate_.programId = programId;
+    if (found->startable) selectedCandidate_.programId = programId;
     programEditOperation_ = FermentationUiProgramEditOperation::Edit;
     programEditCandidate_.reset();
-    setCanonicalPageStack(FermentationUiPage::ProgramSummary);
+    setCanonicalPageStack(destination);
     return true;
 }
 
@@ -947,6 +1007,11 @@ bool FermentationTouchWorkspace::navigate(
         case FermentationUiWorkspaceSlotAction::NavigateBack:
             return goBack();
         case FermentationUiWorkspaceSlotAction::NavigateProgramList:
+            programListIntent_ = FermentationUiProgramListIntent::Start;
+            destination = FermentationUiPage::ProgramList;
+            break;
+        case FermentationUiWorkspaceSlotAction::NavigateProgramManagement:
+            programListIntent_ = FermentationUiProgramListIntent::Manage;
             destination = FermentationUiPage::ProgramList;
             break;
         case FermentationUiWorkspaceSlotAction::NavigateProgramSummary:
@@ -1031,6 +1096,7 @@ bool FermentationTouchWorkspace::navigate(
     if (destination == page_) return false;
     pageStack_.push_back(destination);
     page_ = destination;
+    displayLanguageChangeFailed_ = false;
     pager_.currentIndex = 0U;
     return true;
 }
@@ -1045,8 +1111,18 @@ bool FermentationTouchWorkspace::goBack() {
         pageStack_.pop_back();
         page_ = pageStack_.back();
     }
+    displayLanguageChangeFailed_ = false;
     programEditDirty_ = false;
     return true;
+}
+
+bool FermentationTouchWorkspace::selectedMessageExists(
+    const FermentationUiSnapshot& snapshot) const {
+    return selectedMessageId_.has_value() &&
+           std::any_of(snapshot.messages.begin(), snapshot.messages.end(),
+                       [this](const MessageView& message) {
+                           return message.message.id == *selectedMessageId_;
+                       });
 }
 
 FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
@@ -1158,12 +1234,16 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             result.navigated = pager_.moveDown();
             break;
         case FermentationUiWorkspaceSlotAction::NavigateMessageDetail:
-            if (!snapshot.messages.empty()) {
+            // From the message list the explicit selection stands; the first
+            // decision-required message is only the default entry from the
+            // waiting home view.
+            if (page_ != FermentationUiPage::Messages &&
+                !snapshot.messages.empty()) {
                 const auto decision = std::find_if(
                     snapshot.messages.begin(), snapshot.messages.end(),
                     [](const MessageView& message) {
-                        return message.message.active &&
-                               !message.message.resolved;
+                        return isCanonicalDecisionRequiredMessage(
+                            message.message);
                     });
                 if (decision != snapshot.messages.end())
                     selectedMessageId_ = decision->message.id;
@@ -1218,13 +1298,13 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                 FermentationUiResumeFallbackCommand{snapshot.revisions, false};
             break;
         case FermentationUiWorkspaceSlotAction::AcknowledgeMessage:
-            if (selectedMessageId_.has_value())
+            if (selectedMessageExists(snapshot))
                 result.action = FermentationUiEnvelopePayload{
                     FermentationUiAcknowledgeMessageIntent{
                         *selectedMessageId_}};
             break;
         case FermentationUiWorkspaceSlotAction::MuteMessage:
-            if (selectedMessageId_.has_value())
+            if (selectedMessageExists(snapshot))
                 result.action = FermentationUiEnvelopePayload{
                     FermentationUiMuteMessageIntent{*selectedMessageId_}};
             break;
@@ -1264,6 +1344,20 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 selectionTarget.kind =
                     device_platform::DeviceUiTargetKind::HomeOrBack;
         }
+    } else if (target.kind ==
+               device_platform::DeviceUiTargetKind::ContentCell) {
+        // Only the visible window of the program list is hittable: row r is
+        // entry currentIndex + r.
+        enabled = target.column == 0U &&
+                  target.row < kFermentationUiListVisibleRows &&
+                  current.pager.currentIndex + target.row <
+                      (page_ == FermentationUiPage::ProgramList
+                           ? current.programList.size()
+                       : page_ == FermentationUiPage::Messages
+                           ? snapshot.messages.size()
+                       : page_ == FermentationUiPage::HeaderLanguage
+                           ? current.pager.itemCount
+                           : std::size_t{0U});
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerUp) {
         enabled = current.pager.canMoveUp();
     } else if (target.kind == device_platform::DeviceUiTargetKind::PagerDown) {
@@ -1296,6 +1390,40 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 pressed.interaction = result.interaction;
                 return pressed;
             }();
+        case device_platform::DeviceUiTargetKind::ContentCell: {
+            if (page_ == FermentationUiPage::HeaderLanguage) {
+                // `enabled` guarantees an in-range language row. The press
+                // only carries intent; the Application owns the catalog
+                // check and the persistent change.
+                result.setDisplayLanguage =
+                    FermentationUiSetDisplayLanguageCommand{
+                        makeFermentationR1DeviceUiBuildCatalog()
+                            .includedLocales[target.row]
+                            .value(),
+                        snapshot.revisions.expectedUserConfigurationRevision};
+                return result;
+            }
+            if (page_ == FermentationUiPage::Messages) {
+                // `enabled` guarantees an in-range message; its canonical id
+                // becomes the selection.
+                selectedMessageId_ =
+                    snapshot.messages[current.pager.currentIndex + target.row]
+                        .message.id;
+                result.navigated = navigate(
+                    FermentationUiWorkspaceSlotAction::NavigateMessageDetail);
+                return result;
+            }
+            // `enabled` guarantees ProgramList, a catalog behind the list and
+            // an in-range entry.
+            const auto& entry =
+                current.programList[current.pager.currentIndex + target.row];
+            result.navigated = selectProgramFor(
+                entry.program.program.id, *catalog,
+                programListIntent_ == FermentationUiProgramListIntent::Manage
+                    ? FermentationUiPage::ProgramActions
+                    : FermentationUiPage::ProgramSummary);
+            return result;
+        }
         case device_platform::DeviceUiTargetKind::PagerUp:
             result.navigated = pager_.moveUp();
             return result;

@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "time_zone_rule.hpp"
+
 namespace device_platform {
 namespace detail {
 
@@ -93,12 +95,14 @@ enum class DeviceUiCommandOutcomeCategory : std::uint8_t {
 [[nodiscard]] DeviceUiCommandOutcomeCategory safeOutcomeCategory(
     DeviceUiCommandOutcomeCategory category) noexcept;
 
-// UTC is optional until the existing time source is trusted. The platform
-// contract deliberately retains the configured canonical zone rather than
-// inventing a local wall-clock value.
+// UTC is optional until the existing time source is trusted. The canonical
+// zone id is only for display; the local wall-clock value is derived from
+// `trustedUtc` and `timeZoneRule` by `toLocalTime` (Issue #178), never invented
+// here. The default rule is unavailable, so no local time is produced.
 struct ClockViewInput {
     std::optional<std::int64_t> trustedUtc;
     TimeZoneId canonicalTimeZoneId;
+    TimeZoneRule timeZoneRule{};
 };
 
 struct DeviceUiBuildCatalog {

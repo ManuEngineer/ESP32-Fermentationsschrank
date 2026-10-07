@@ -1019,6 +1019,501 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
                           static_cast<int>(workspace.page()));
 }
 
+// S1: a catalog with enough installed programs to need the three-row window.
+ProgramCatalog catalogWithPrograms(std::size_t userPrograms) {
+    auto catalog = runnableCatalog();
+    const auto templateDocument = catalog.programs.back();
+    for (std::size_t index = 0U; index < userPrograms; ++index) {
+        auto document = templateDocument;
+        document.program.id = "user-" + std::to_string(index);
+        document.program.name = "Program " + std::to_string(index);
+        catalog.programs.push_back(std::move(document));
+    }
+    return catalog;
+}
+
+device_platform::DeviceUiTarget cell(std::uint8_t row) {
+    return {device_platform::DeviceUiTargetKind::ContentCell, 0U, row, 0U};
+}
+
+void test_program_list_cell_selects_the_row_of_the_visible_window() {
+    const auto catalog = catalogWithPrograms(4U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::ProgramList);
+    const auto list = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(list.programList.size() >= 5U);
+
+    // Row 1 of the unscrolled window is entry 1; the press carries no payload.
+    const auto first = workspace.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_TRUE(first.navigated);
+    TEST_ASSERT_FALSE(first.action.has_value());
+    TEST_ASSERT_FALSE(first.transitionAction.has_value());
+    TEST_ASSERT_FALSE(first.programEdit.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_STRING(list.programList[1].program.program.id.c_str(),
+                             workspace.selectedProgramId()->c_str());
+
+    // Scrolling by two moves the window: row 2 is now entry 4.
+    workspace.setPage(FermentationUiPage::ProgramList);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2), &catalog).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2), &catalog).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, cell(2U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_STRING(list.programList[4].program.program.id.c_str(),
+                             workspace.selectedProgramId()->c_str());
+}
+
+void test_program_list_cell_outside_the_window_or_page_is_blocked() {
+    const auto catalog = catalogWithPrograms(1U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::ProgramList);
+    const auto count = workspace.view(snapshot, &catalog).programList.size();
+    TEST_ASSERT_TRUE(count >= 2U);
+
+    // Scrolled to the last entry only row 0 is backed by an entry.
+    for (std::size_t index = 0U; index + 1U < count; ++index)
+        TEST_ASSERT_TRUE(
+            workspace.press(snapshot, bottom(2), &catalog).navigated);
+    const auto beyond = workspace.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_FALSE(beyond.navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(beyond.interaction.outcome));
+    const auto tooHigh = workspace.press(snapshot, cell(3U), &catalog);
+    TEST_ASSERT_FALSE(tooHigh.navigated);
+    const auto wrongColumn = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 1U},
+        &catalog);
+    TEST_ASSERT_FALSE(wrongColumn.navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(workspace.page()));
+
+    // Without a catalog there is no list and no hittable row.
+    FermentationTouchWorkspace noCatalog;
+    noCatalog.setPage(FermentationUiPage::ProgramList);
+    TEST_ASSERT_FALSE(noCatalog.press(snapshot, cell(0U)).navigated);
+    // A content cell never acts on a page without a list.
+    FermentationTouchWorkspace home;
+    TEST_ASSERT_FALSE(home.press(snapshot, cell(0U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Home),
+                          static_cast<int>(home.page()));
+}
+
+// D12: a listed but not startable program stays selectable (administration),
+// shows the owning reason and never becomes the start candidate.
+void test_unstartable_program_is_selectable_with_reason_and_no_start() {
+    auto catalog = catalogWithPrograms(1U);
+    catalog.programs.back().program.enabled = false;
+    const auto id = catalog.programs.back().program.id;
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+
+    TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(workspace.page()));
+    const auto summary = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_FALSE(summary.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(summary.blockedReason.has_value());
+    TEST_ASSERT_TRUE(*summary.blockedReason ==
+                     fermentationTextKey("program-disabled"));
+    // edit stays reachable for administration.
+    TEST_ASSERT_TRUE(summary.bottomSlots[1].enabled);
+    // A forced confirm press yields no start payload.
+    const auto confirm = workspace.press(snapshot, bottom(2), &catalog);
+    TEST_ASSERT_FALSE(confirm.action.has_value());
+
+    // A startable program has no reason and enables confirm.
+    const auto startableId =
+        catalog.programs[catalog.programs.size() - 2U].program.id;
+    TEST_ASSERT_TRUE(workspace.selectProgram(startableId, catalog));
+    const auto startable = workspace.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startable.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(startable.blockedReason.has_value());
+    // Unknown ids are still rejected.
+    TEST_ASSERT_FALSE(workspace.selectProgram("does-not-exist", catalog));
+}
+
+// D14: Start and Programme open the same list with a different intent.
+void test_start_and_programs_open_the_list_with_separate_intent() {
+    const auto catalog = catalogWithPrograms(1U);
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+
+    FermentationTouchWorkspace start;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateProgramList),
+        static_cast<int>(start.view(snapshot, &catalog).slotActions[0]));
+    TEST_ASSERT_TRUE(start.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Start),
+        static_cast<int>(start.programListIntent()));
+    const auto startList = start.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startList.title == fermentationTextKey("start"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateManualModeSelection),
+        static_cast<int>(startList.slotActions[3]));
+    TEST_ASSERT_TRUE(start.press(snapshot, cell(0U), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramSummary),
+                          static_cast<int>(start.page()));
+
+    FermentationTouchWorkspace manage;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateProgramManagement),
+        static_cast<int>(manage.view(snapshot, &catalog).slotActions[1]));
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(1), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Manage),
+        static_cast<int>(manage.programListIntent()));
+    const auto manageList = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(manageList.title == fermentationTextKey("programs"));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(manageList.slotActions[3]));
+    const auto picked = manage.press(snapshot, cell(1U), &catalog);
+    TEST_ASSERT_TRUE(picked.navigated);
+    TEST_ASSERT_FALSE(picked.action.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramActions),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_EQUAL_STRING(
+        manageList.programList[1].program.program.id.c_str(),
+        manage.selectedProgramId()->c_str());
+    const auto actions = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(actions.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(actions.bottomSlots[2].enabled);
+    // Back returns to the management list, not to the start path.
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Manage),
+        static_cast<int>(manage.programListIntent()));
+
+    // Opening Start afterwards resets the intent.
+    manage.setPage(FermentationUiPage::Home);
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(0), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiProgramListIntent::Start),
+        static_cast<int>(manage.programListIntent()));
+}
+
+// Review B2: an empty active list is a valid catalog; the management list must
+// still reach `new`, while the start list keeps its manual path.
+void test_manage_list_reaches_new_program_when_the_active_list_is_empty() {
+    auto catalog = makeFactoryProgramCatalog();
+    for (auto& document : catalog.programs) document.program.installed = false;
+    TEST_ASSERT_EQUAL_UINT32(
+        4U, static_cast<std::uint32_t>(catalog.programs.size()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProgramCatalogStatus::Success),
+                          static_cast<int>(validateProgramCatalog(catalog)));
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+
+    FermentationTouchWorkspace manage;
+    TEST_ASSERT_TRUE(manage.press(snapshot, bottom(1), &catalog).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramList),
+                          static_cast<int>(manage.page()));
+    const auto list = manage.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(list.programList.empty());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NewProgram),
+        static_cast<int>(list.slotActions[3]));
+    TEST_ASSERT_TRUE(list.bottomSlots[3].enabled);
+    // No row exists to hit.
+    TEST_ASSERT_FALSE(manage.press(snapshot, cell(0U), &catalog).navigated);
+
+    // `new` takes the existing NewProgram semantics into the editor path and
+    // carries no application payload (no program/config owner is called).
+    const auto created = manage.press(snapshot, bottom(3), &catalog);
+    TEST_ASSERT_TRUE(created.navigated);
+    TEST_ASSERT_FALSE(created.action.has_value());
+    TEST_ASSERT_FALSE(created.programEdit.has_value());
+    TEST_ASSERT_FALSE(created.transitionAction.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::ProgramEdit),
+                          static_cast<int>(manage.page()));
+    TEST_ASSERT_FALSE(manage.selectedProgramId().has_value());
+
+    // The start intent keeps the manual path on an empty list.
+    FermentationTouchWorkspace start;
+    TEST_ASSERT_TRUE(start.press(snapshot, bottom(0), &catalog).navigated);
+    const auto startList = start.view(snapshot, &catalog);
+    TEST_ASSERT_TRUE(startList.programList.empty());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateManualModeSelection),
+        static_cast<int>(startList.slotActions[3]));
+
+    // A non-empty management list keeps the default status slot.
+    const auto filled = catalogWithPrograms(1U);
+    FermentationTouchWorkspace nonEmpty;
+    TEST_ASSERT_TRUE(nonEmpty.press(snapshot, bottom(1), &filled).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(nonEmpty.view(snapshot, &filled).slotActions[3]));
+    // Before a catalog is available nothing is offered.
+    FermentationTouchWorkspace noCatalog;
+    TEST_ASSERT_TRUE(noCatalog.press(snapshot, bottom(1)).navigated);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
+        static_cast<int>(noCatalog.view(snapshot).slotActions[3]));
+}
+
+// S2: a snapshot with several messages (ids 11..15, the first one decision
+// required) for the list window.
+FermentationUiSnapshot snapshotWithMessages(std::size_t count) {
+    auto snapshot = snapshotWithMessage(ProcessState::Fermenting,
+                                        MessageCode::RunCompleted, false);
+    snapshot.messages.clear();
+    for (std::size_t index = 0U; index < count; ++index) {
+        RuntimeMessage message;
+        message.id = static_cast<std::uint32_t>(11U + index);
+        message.code = MessageCode::RunCompleted;
+        message.active = true;
+        message.decisionRequired = index == 0U;
+        snapshot.messages.push_back({message});
+    }
+    return snapshot;
+}
+
+void test_message_list_cell_selects_the_canonical_message_id() {
+    const auto snapshot = snapshotWithMessages(5U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+
+    // The details slot needs an explicit selection and never picks one.
+    TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[3].enabled);
+
+    const auto first = workspace.press(snapshot, cell(1U));
+    TEST_ASSERT_TRUE(first.navigated);
+    TEST_ASSERT_FALSE(first.action.has_value());
+    TEST_ASSERT_FALSE(first.transitionAction.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_UINT32(12U, *workspace.view(snapshot).selectedMessageId);
+
+    // Back to the list: the explicit selection (not the first decision) opens.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Messages),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_TRUE(workspace.view(snapshot).bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(3)).navigated);
+    TEST_ASSERT_EQUAL_UINT32(12U, *workspace.view(snapshot).selectedMessageId);
+
+    // Scrolled by two, row 2 is the fifth message.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, cell(2U)).navigated);
+    TEST_ASSERT_EQUAL_UINT32(15U, *workspace.view(snapshot).selectedMessageId);
+
+    // Ack and mute carry the selected canonical id; slot 3 stays unchanged.
+    const auto acknowledged = workspace.press(snapshot, bottom(1));
+    TEST_ASSERT_TRUE(acknowledged.action.has_value());
+    const auto* ack = std::get_if<FermentationUiAcknowledgeMessageIntent>(
+        &*acknowledged.action);
+    TEST_ASSERT_TRUE(ack != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(15U, ack->messageId);
+    const auto muted = workspace.press(snapshot, bottom(2));
+    const auto* mute =
+        std::get_if<FermentationUiMuteMessageIntent>(&*muted.action);
+    TEST_ASSERT_TRUE(mute != nullptr);
+    TEST_ASSERT_EQUAL_UINT32(15U, mute->messageId);
+    const auto detail = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::ResetFault),
+        static_cast<int>(detail.slotActions[3]));
+    TEST_ASSERT_FALSE(detail.bottomSlots[3].enabled);
+}
+
+void test_message_list_cell_outside_the_window_or_page_is_blocked() {
+    const auto snapshot = snapshotWithMessages(2U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    for (const std::uint8_t row : {std::uint8_t{2U}, std::uint8_t{3U}}) {
+        const auto beyond = workspace.press(snapshot, cell(row));
+        TEST_ASSERT_FALSE(beyond.navigated);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                device_platform::DeviceUiInteractionOutcome::Blocked),
+            static_cast<int>(beyond.interaction.outcome));
+    }
+    TEST_ASSERT_FALSE(
+        workspace
+            .press(snapshot, {device_platform::DeviceUiTargetKind::ContentCell,
+                              0U, 0U, 1U})
+            .navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Messages),
+                          static_cast<int>(workspace.page()));
+    // No messages: no hittable row at all.
+    FermentationTouchWorkspace empty;
+    empty.setPage(FermentationUiPage::Messages);
+    TEST_ASSERT_FALSE(
+        empty.press(snapshotWithMessages(0U), cell(0U)).navigated);
+    // A content cell never selects a message on another page.
+    FermentationTouchWorkspace status;
+    status.setPage(FermentationUiPage::Status);
+    TEST_ASSERT_FALSE(status.press(snapshot, cell(0U)).navigated);
+}
+
+// Review B1: the waiting home opens the canonical decision-required message,
+// not an earlier active, unresolved message of another kind.
+void test_waiting_home_opens_the_canonical_decision_message_not_an_earlier_one() {
+    auto snapshot = snapshotWithMessage(
+        ProcessState::Fermenting, MessageCode::UserDecisionRequired, true);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationHomeMode::Waiting),
+                          static_cast<int>(snapshot.home.mode));
+    RuntimeMessage earlier;
+    earlier.id = 3U;
+    earlier.code = MessageCode::RunCompleted;
+    earlier.messageClass = MessageClass::Information;
+    earlier.active = true;
+    earlier.resolved = false;
+    snapshot.messages.insert(snapshot.messages.begin(), {earlier});
+    FermentationTouchWorkspace workspace;
+    const auto home = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            FermentationUiWorkspaceSlotAction::NavigateMessageDetail),
+        static_cast<int>(home.slotActions[0]));
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::MessageDetail),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_EQUAL_UINT32(7U, *workspace.view(snapshot).selectedMessageId);
+}
+
+// Review B2: a selection that left the snapshot keeps no active actions.
+void test_stale_message_selection_offers_and_creates_no_message_action() {
+    const auto first = snapshotWithMessages(5U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Messages);
+    TEST_ASSERT_TRUE(workspace.press(first, cell(1U)).navigated);
+    TEST_ASSERT_TRUE(workspace.view(first).bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(workspace.view(first).bottomSlots[2].enabled);
+
+    // Same workspace, new snapshot without message id 12.
+    auto later = snapshotWithMessages(5U);
+    later.messages.erase(later.messages.begin() + 1);
+    const auto stale = workspace.view(later);
+    TEST_ASSERT_FALSE(stale.selectedMessageId.has_value());
+    TEST_ASSERT_FALSE(stale.bottomSlots[1].enabled);
+    TEST_ASSERT_FALSE(stale.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(workspace.press(later, bottom(1)).action.has_value());
+    TEST_ASSERT_FALSE(workspace.press(later, bottom(2)).action.has_value());
+    // Back on the list the details slot is disabled as well.
+    TEST_ASSERT_TRUE(workspace.press(later, bottom(0)).navigated);
+    TEST_ASSERT_FALSE(workspace.view(later).bottomSlots[3].enabled);
+    // An empty snapshot behaves the same.
+    workspace.setPage(FermentationUiPage::MessageDetail);
+    const auto none = snapshotWithMessages(0U);
+    TEST_ASSERT_FALSE(workspace.view(none).selectedMessageId.has_value());
+    TEST_ASSERT_FALSE(workspace.press(none, bottom(1)).action.has_value());
+}
+
+// S3: the language page offers one row per build language and only issues the
+// typed intent; the Application owns the change.
+void test_language_page_rows_issue_a_language_intent_and_keep_the_slots() {
+    auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    snapshot.revisions.expectedUserConfigurationRevision =
+        UserConfigurationRevision{7U};
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    const auto view = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_UINT32(3U,
+                             static_cast<std::uint32_t>(view.pager.itemCount));
+    // Slots 1..3 stay as before (network, clock, the provisional #170
+    // web access entry).
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateNetwork),
+        static_cast<int>(view.slotActions[1]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateClock),
+        static_cast<int>(view.slotActions[2]));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateWebAccess),
+        static_cast<int>(view.slotActions[3]));
+
+    const std::array<const char*, 3U> expected{"de", "en", "es"};
+    for (std::uint8_t row = 0U; row < expected.size(); ++row) {
+        const auto press = workspace.press(snapshot, cell(row));
+        TEST_ASSERT_TRUE(press.setDisplayLanguage.has_value());
+        TEST_ASSERT_EQUAL_STRING(expected[row],
+                                 press.setDisplayLanguage->languageId.c_str());
+        TEST_ASSERT_TRUE(
+            press.setDisplayLanguage->expectedUserConfigurationRevision ==
+            snapshot.revisions.expectedUserConfigurationRevision);
+        TEST_ASSERT_FALSE(press.navigated);
+        TEST_ASSERT_FALSE(press.action.has_value());
+        TEST_ASSERT_FALSE(press.transitionAction.has_value());
+        TEST_ASSERT_FALSE(press.programEdit.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(FermentationUiPage::HeaderLanguage),
+            static_cast<int>(workspace.page()));
+    }
+    // No row beyond the build catalog and no second column.
+    const auto beyond = workspace.press(snapshot, cell(3U));
+    TEST_ASSERT_FALSE(beyond.setDisplayLanguage.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(beyond.interaction.outcome));
+    TEST_ASSERT_FALSE(
+        workspace
+            .press(snapshot, {device_platform::DeviceUiTargetKind::ContentCell,
+                              0U, 0U, 1U})
+            .setDisplayLanguage.has_value());
+
+    // An undecidable revision is carried as absent (the Application rejects).
+    snapshot.revisions.expectedUserConfigurationRevision.reset();
+    const auto undecidable = workspace.press(snapshot, cell(0U));
+    TEST_ASSERT_TRUE(undecidable.setDisplayLanguage.has_value());
+    TEST_ASSERT_FALSE(undecidable.setDisplayLanguage
+                          ->expectedUserConfigurationRevision.has_value());
+
+    // The slot press path is unchanged: slot 3 still opens the web access page.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(3)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderWebAccess),
+                          static_cast<int>(workspace.page()));
+}
+
+// Review B1: the refused-change note is transient display state of the
+// language page only.
+void test_language_failure_note_is_transient_and_page_local() {
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    workspace.noteDisplayLanguageOutcome(false);
+    const auto failed = workspace.view(snapshot);
+    TEST_ASSERT_TRUE(failed.blockedReason.has_value());
+    TEST_ASSERT_TRUE(*failed.blockedReason ==
+                     fermentationTextKey("language-change-failed"));
+    // The language slots and rows are unaffected by the note.
+    TEST_ASSERT_TRUE(failed.bottomSlots[3].enabled);
+    // An accepted outcome replaces it.
+    workspace.noteDisplayLanguageOutcome(true);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    // Navigating away (slot) and back discards it.
+    workspace.noteDisplayLanguageOutcome(false);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(1)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(0)).navigated);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderLanguage),
+                          static_cast<int>(workspace.page()));
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+    // The note never shows on other pages.
+    workspace.noteDisplayLanguageOutcome(false);
+    workspace.setPage(FermentationUiPage::HeaderNetwork);
+    TEST_ASSERT_FALSE(workspace.view(snapshot).blockedReason.has_value());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -1026,6 +1521,20 @@ void tearDown() {}
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_program_list_cell_selects_the_row_of_the_visible_window);
+    RUN_TEST(test_program_list_cell_outside_the_window_or_page_is_blocked);
+    RUN_TEST(test_unstartable_program_is_selectable_with_reason_and_no_start);
+    RUN_TEST(test_start_and_programs_open_the_list_with_separate_intent);
+    RUN_TEST(
+        test_manage_list_reaches_new_program_when_the_active_list_is_empty);
+    RUN_TEST(
+        test_language_page_rows_issue_a_language_intent_and_keep_the_slots);
+    RUN_TEST(test_language_failure_note_is_transient_and_page_local);
+    RUN_TEST(test_message_list_cell_selects_the_canonical_message_id);
+    RUN_TEST(test_message_list_cell_outside_the_window_or_page_is_blocked);
+    RUN_TEST(
+        test_waiting_home_opens_the_canonical_decision_message_not_an_earlier_one);
+    RUN_TEST(test_stale_message_selection_offers_and_creates_no_message_action);
     RUN_TEST(
         test_web_access_page_is_reachable_and_slot_follows_application_state);
     RUN_TEST(test_workspace_has_fixed_slots_and_manual_paths_are_separate);

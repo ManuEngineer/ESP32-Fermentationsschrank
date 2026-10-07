@@ -439,8 +439,6 @@ bool updateProductUi(
     fermentation::FermentationTouchWorkspace& uiWorkspace,
     fermentation::main_ui::UiRenderGate& renderGate,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
-    const device_platform::LocaleId& initialDisplayLocale,
-    const device_platform::TimeZoneId& initialTimeZoneId,
     device_platform::INetworkLifecycle& networkLifecycle,
     const device_platform::ITimeSource& timeSource) {
     if (displayRenderer == nullptr || !displayRenderer->initialized()) {
@@ -479,16 +477,17 @@ bool updateProductUi(
         // (which copies the time zone id) is only built while a contact is
         // held, so the idle loop does not allocate for it.
         const auto& loopPresentation = renderGate.presentation().get();
-        const auto& touchDisplayLocale = networkPageBeforeTouch
-                                             ? initialDisplayLocale
-                                             : loopPresentation.displayLocale;
+        // The locale and time zone survive the HeaderNetwork eviction in the
+        // presentation cache, so they follow the user's language there too.
+        const auto& touchDisplayLocale =
+            renderGate.presentation().displayLocale();
         const auto& touchTimeZoneId =
-            networkPageBeforeTouch ? initialTimeZoneId
-                                   : loopPresentation.canonicalTimeZoneId;
+            renderGate.presentation().canonicalTimeZoneId();
         const auto* touchProgramCatalog =
             networkPageBeforeTouch ? nullptr : &loopPresentation.programCatalog;
         const device_platform::ClockViewInput loopClock{
-            timeSource.unixTimeSeconds(), touchTimeZoneId};
+            timeSource.unixTimeSeconds(), touchTimeZoneId,
+            renderGate.presentation().timeZoneRule()};
         const auto touchPoint = touchPoll.point.value_or(
             fermentation::main_ui::ProductiveLvglRenderer::TouchPoint{});
         touchTick = fermentation::main_ui::processWorkspaceTouch(
@@ -509,8 +508,8 @@ bool updateProductUi(
 
     const auto trustedUtc = timeSource.unixTimeSeconds();
     const bool redrawRequired = renderGate.renderRequired(
-        application, uiWorkspace, initialDisplayLocale, touchTick.pressedTarget,
-        loopNetworkStatus, trustedUtc);
+        application, uiWorkspace, touchTick.pressedTarget, loopNetworkStatus,
+        trustedUtc);
     if (redrawRequired) {
         // Only a real visible change reaches the screen model and the LVGL
         // update; ProductiveLvglRenderer::render() builds both.
@@ -519,15 +518,13 @@ bool updateProductUi(
             fermentation::FermentationUiPage::HeaderNetwork;
         const auto& renderPresentation = renderGate.presentation().get();
         const auto& renderDisplayLocale =
-            networkPageAfterTouch ? initialDisplayLocale
-                                  : renderPresentation.displayLocale;
+            renderGate.presentation().displayLocale();
         const auto* renderProgramCatalog =
             networkPageAfterTouch ? nullptr
                                   : &renderPresentation.programCatalog;
         const device_platform::ClockViewInput renderClock{
-            trustedUtc, networkPageAfterTouch
-                            ? initialTimeZoneId
-                            : renderPresentation.canonicalTimeZoneId};
+            trustedUtc, renderGate.presentation().canonicalTimeZoneId(),
+            renderGate.presentation().timeZoneRule()};
         if (displayRenderer->render(
                 loopSnapshot, uiWorkspace, uiTextPacks, renderDisplayLocale,
                 touchTick.pressedTarget, renderProgramCatalog,
@@ -673,8 +670,6 @@ extern "C" void app_main(void) {
     fermentation::FermentationTouchWorkspace uiWorkspace;
     fermentation::main_ui::UiRenderGate uiRenderGate;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
-    device_platform::LocaleId uiDisplayLocale{"en"};
-    device_platform::TimeZoneId uiTimeZoneId;
     // The single renderer-independent source for locale, program catalog and
     // canonical prepared time zone is needed here only for initial UI setup.
     {
@@ -685,12 +680,11 @@ extern "C" void app_main(void) {
         const auto uiNetworkStatus =
             toDeviceUiNetworkStatus(networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
-            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId};
+            timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId,
+            uiPresentation.timeZoneRule};
         initializeProductUi(displayRenderer.get(), stateStoreContext->store(),
                             application, uiWorkspace, uiTextPacks,
                             uiPresentation, uiNetworkStatus, uiClock);
-        uiDisplayLocale = std::move(uiPresentation.displayLocale);
-        uiTimeZoneId = std::move(uiPresentation.canonicalTimeZoneId);
     }
 
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
@@ -717,10 +711,9 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-        const bool touchPressObserved =
-            updateProductUi(application, displayRenderer.get(), uiWorkspace,
-                            uiRenderGate, uiTextPacks, uiDisplayLocale,
-                            uiTimeZoneId, networkLifecycle, timeSource);
+        const bool touchPressObserved = updateProductUi(
+            application, displayRenderer.get(), uiWorkspace, uiRenderGate,
+            uiTextPacks, networkLifecycle, timeSource);
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();
