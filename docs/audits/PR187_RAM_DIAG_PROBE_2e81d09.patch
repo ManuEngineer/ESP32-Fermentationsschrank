@@ -1,0 +1,38 @@
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 7104381..ca35191 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -416,7 +416,10 @@ void initializeProductUi(
+     const fermentation::FermentationUiPresentationSource& uiPresentation,
+     device_platform::DeviceUiNetworkStatus uiNetworkStatus,
+     const device_platform::ClockViewInput& uiClock) {
+-    if (displayRenderer == nullptr || !displayRenderer->initialize()) {
++    logResources("diag_before_display_initialize", application.networkMode(), device_platform::NetworkLifecycleState::Stopped);
++    const bool diagInitOk = displayRenderer != nullptr && displayRenderer->initialize();
++    logResources("diag_after_display_initialize", application.networkMode(), device_platform::NetworkLifecycleState::Stopped);
++    if (!diagInitOk) {
+         ESP_LOGW(kTag,
+                  "productive LVGL display unavailable; UI remains fail-closed");
+         return;
+@@ -661,15 +664,21 @@ extern "C" void app_main(void) {
+     // GPIO assignment, and stay a composition-root constant. No display,
+     // touch, LVGL or command policy enters the application component.
+     namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
++    logResources("diag_before_make_renderer", application.networkMode(), networkLifecycle.status().state);
++    ESP_LOGW(kTag, "diag sizeof workspace=%u gate=%u textpack=%u translation=%u", (unsigned)sizeof(fermentation::FermentationTouchWorkspace), (unsigned)sizeof(fermentation::main_ui::UiRenderGate), (unsigned)sizeof(device_platform::TextPackManifest), (unsigned)sizeof(device_platform::TextTranslation));
+     auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer(
+         {r1_pins::kSpiSckPin, r1_pins::kSpiMosiPin, r1_pins::kSpiMisoPin,
+          r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,
+          r1_pins::kDisplayDataCommandPin, r1_pins::kBacklightPin,
+          r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
+          r1_pins::kBacklightActiveHigh});
++    logResources("diag_after_make_renderer", application.networkMode(), networkLifecycle.status().state);
+     fermentation::FermentationTouchWorkspace uiWorkspace;
+     fermentation::main_ui::UiRenderGate uiRenderGate;
++    logResources("diag_before_textpacks", application.networkMode(), networkLifecycle.status().state);
+     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
++    logResources("diag_after_textpacks", application.networkMode(), networkLifecycle.status().state);
++    { size_t n=0; for (const auto& pk : uiTextPacks) n += pk.translations.size(); ESP_LOGW(kTag, "diag textpacks packs=%u translations=%u capacity_bytes=%u", (unsigned)uiTextPacks.size(), (unsigned)n, (unsigned)(uiTextPacks[0].translations.capacity()*sizeof(device_platform::TextTranslation)*3U)); }
+     // The single renderer-independent source for locale, program catalog and
+     // canonical prepared time zone is needed here only for initial UI setup.
+     {
