@@ -620,13 +620,12 @@ FermentationUiCommandResult FermentationApplication::confirmProductInserted(
     }
 
     TransitionDecision decision;
-    const auto decided =
-        FermentationUiCommandBridge::decideProductInsertedConfirmed(
-            *runtimeRunState_,
-            runtimeRunState_->processRunSnapshot.has_value()
-                ? &*runtimeRunState_->processRunSnapshot
-                : nullptr,
-            context, ProcessSignals{}, context.monotonicMillis, &decision);
+    auto decided = FermentationUiCommandBridge::decideProductInsertedConfirmed(
+        *runtimeRunState_,
+        runtimeRunState_->processRunSnapshot.has_value()
+            ? &*runtimeRunState_->processRunSnapshot
+            : nullptr,
+        context, ProcessSignals{}, context.monotonicMillis, &decision);
     if (!std::holds_alternative<DecisionStatus>(decided.detail) ||
         std::get<DecisionStatus>(decided.detail) != DecisionStatus::Proposed) {
         return decided;
