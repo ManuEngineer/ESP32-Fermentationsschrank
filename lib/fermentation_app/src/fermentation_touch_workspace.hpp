@@ -133,6 +133,22 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     ResetFault,
 };
 
+// Read-only content of `ProgramSummary` (S7): the selected program's values
+// with the next-run candidate overrides already applied (override, else
+// program value). It is a display projection only; the binding StartSummary
+// stays the result of the command owner.
+struct FermentationUiProgramSummaryView {
+    std::string name;
+    std::optional<double> targetTemperatureCelsius;
+    std::optional<std::uint32_t> durationMinutes;
+    bool preheat{false};
+    // A candidate override is a RunSensorMode; without one the program's own
+    // SensorPreference is shown. The two enums are not mapped onto each other.
+    SensorPreference sensorPreference{SensorPreference::AirProductOptional};
+    std::optional<RunSensorMode> sensorModeOverride;
+    CompletionMode completionMode{CompletionMode::FinishWithoutCooling};
+};
+
 struct FermentationUiWorkspaceView {
     FermentationUiPage page{FermentationUiPage::Home};
     device_platform::TextKey title;
@@ -141,6 +157,7 @@ struct FermentationUiWorkspaceView {
     std::array<FermentationUiWorkspaceSlotAction, 4U> slotActions{};
     std::vector<FermentationUiProgramListEntry> programList;
     std::optional<std::string> confirmationProgramName;
+    std::optional<FermentationUiProgramSummaryView> programSummary;
     std::optional<device_platform::TextKey> confirmationWarning;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()

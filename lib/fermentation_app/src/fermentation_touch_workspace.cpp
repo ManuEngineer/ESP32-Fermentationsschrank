@@ -29,6 +29,40 @@ safeBootUnavailableCapabilities() {
             FermentationUiSafeBootCapability::DiagnosticsExport};
 }
 
+// Display projection for ProgramSummary: per value the candidate override,
+// otherwise the program value. Stage values follow the first stage, exactly as
+// the Application applies next-run overrides; a missing value stays absent
+// (rendered as "--"), never 0.
+FermentationUiProgramSummaryView makeProgramSummary(
+    const ProgramDocument& document,
+    const FermentationUiStartCandidate* candidate) {
+    const auto& program = document.program;
+    FermentationUiProgramSummaryView summary;
+    summary.name = program.name;
+    if (!program.fermentationStages.empty()) {
+        summary.targetTemperatureCelsius =
+            program.fermentationStages.front().targetTemperatureCelsius;
+        summary.durationMinutes =
+            program.fermentationStages.front().durationMinutes;
+    }
+    summary.preheat = program.preheat;
+    summary.sensorPreference = program.sensorPreference;
+    summary.completionMode = program.completion.mode;
+    if (candidate != nullptr) {
+        if (candidate->targetTemperatureCelsius.has_value())
+            summary.targetTemperatureCelsius =
+                candidate->targetTemperatureCelsius;
+        if (candidate->fermentationDurationMinutes.has_value())
+            summary.durationMinutes = candidate->fermentationDurationMinutes;
+        if (candidate->preheatEnabled.has_value())
+            summary.preheat = *candidate->preheatEnabled;
+        summary.sensorModeOverride = candidate->sensorMode;
+        if (candidate->completionMode.has_value())
+            summary.completionMode = *candidate->completionMode;
+    }
+    return summary;
+}
+
 }  // namespace
 
 FermentationUiSafeBootCapability safeBootCapabilityFor(
@@ -500,6 +534,12 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     });
                 if (selected != entries.end() && !selected->startable)
                     view.blockedReason = selected->blockedReason;
+                if (selected != entries.end())
+                    view.programSummary = makeProgramSummary(
+                        selected->program,
+                        selectedCandidate_.programId == *selectedProgramId_
+                            ? &selectedCandidate_
+                            : nullptr);
             }
             setSlot(view, 0U, "back",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
@@ -666,6 +706,8 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::Technical:
             view.title = key("technical");
+            view.pager.itemCount = snapshot.temperatures.size();
+            view.pager.currentIndex = pager_.currentIndex;
             setSlot(view, 1U, "up",
                     FermentationUiWorkspaceSlotAction::MovePagerUp,
                     view.pager.canMoveUp());

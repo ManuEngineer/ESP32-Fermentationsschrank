@@ -1032,6 +1032,106 @@ ProgramCatalog catalogWithPrograms(std::size_t userPrograms) {
     return catalog;
 }
 
+// S7: the ProgramSummary view carries the selected program's values with the
+// next-run candidate overrides applied; a candidate of another program and
+// pages other than ProgramSummary carry none.
+void test_program_summary_view_applies_candidate_overrides_per_value() {
+    auto catalog = catalogWithPrograms(1U);
+    auto& program = catalog.programs.back().program;
+    program.fermentationStages.front().targetTemperatureCelsius = 25.0;
+    program.fermentationStages.front().durationMinutes = 60U;
+    program.preheat = false;
+    program.sensorPreference = SensorPreference::AirOnly;
+    program.completion.mode = CompletionMode::FinishWithoutCooling;
+    const auto id = program.id;
+    const auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    FermentationTouchWorkspace workspace;
+
+    TEST_ASSERT_FALSE(
+        workspace.view(snapshot, &catalog).programSummary.has_value());
+    TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
+    auto summary = workspace.view(snapshot, &catalog).programSummary;
+    TEST_ASSERT_TRUE(summary.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(25.0, *summary->targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(60U, *summary->durationMinutes);
+    TEST_ASSERT_FALSE(summary->preheat);
+    TEST_ASSERT_FALSE(summary->sensorModeOverride.has_value());
+    TEST_ASSERT_TRUE(summary->sensorPreference == SensorPreference::AirOnly);
+
+    // Only the overridden values change; the rest stays the program's.
+    FermentationUiStartCandidate candidate;
+    candidate.programId = id;
+    candidate.targetTemperatureCelsius = 28.0;
+    candidate.sensorMode = RunSensorMode::Product;
+    workspace.setStartCandidate(candidate);
+    summary = workspace.view(snapshot, &catalog).programSummary;
+    TEST_ASSERT_EQUAL_DOUBLE(28.0, *summary->targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(60U, *summary->durationMinutes);
+    TEST_ASSERT_TRUE(summary->sensorModeOverride ==
+                     std::optional<RunSensorMode>{RunSensorMode::Product});
+
+    // The summary is a display projection: the program itself is unchanged.
+    TEST_ASSERT_EQUAL_DOUBLE(25.0, *catalog.programs.back()
+                                        .program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
+
+    candidate.programId = "other";
+    workspace.setStartCandidate(candidate);
+    summary = workspace.view(snapshot, &catalog).programSummary;
+    TEST_ASSERT_EQUAL_DOUBLE(25.0, *summary->targetTemperatureCelsius);
+
+    workspace.setPage(FermentationUiPage::Process);
+    TEST_ASSERT_FALSE(
+        workspace.view(snapshot, &catalog).programSummary.has_value());
+}
+
+// S7: the technical page pages over the snapshot temperatures.
+void test_technical_page_pager_follows_the_snapshot_temperatures() {
+    auto snapshot =
+        snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+    snapshot.temperatures.resize(3U);
+    FermentationTouchWorkspace workspace;
+    workspace.setPage(FermentationUiPage::Technical);
+    auto view = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_UINT32(3U, view.pager.itemCount);
+    TEST_ASSERT_FALSE(view.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    view = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_UINT32(1U, view.pager.currentIndex);
+    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
+
+    snapshot.temperatures.clear();
+    workspace.setPage(FermentationUiPage::Home);
+    workspace.setPage(FermentationUiPage::Technical);
+    view = workspace.view(snapshot);
+    TEST_ASSERT_EQUAL_UINT32(0U, view.pager.itemCount);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+}
+
+// S7 / plan 4.1: without a staged value (no production caller stages one)
+// the Recovery page offers no time-correction slot, in any recovery mode.
+void test_recovery_time_correction_is_never_offered_without_a_staged_value() {
+    for (const auto mode :
+         {RecoveryViewMode::Normal, RecoveryViewMode::WaitingForTrustedTime,
+          RecoveryViewMode::CurrentRunRecovered,
+          RecoveryViewMode::FallbackSelectionRequired,
+          RecoveryViewMode::RecoveryRejectedOrFailClosed}) {
+        auto snapshot =
+            snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
+        snapshot.recovery.mode = mode;
+        FermentationTouchWorkspace workspace;
+        workspace.setPage(FermentationUiPage::Recovery);
+        const auto view = workspace.view(snapshot);
+        for (const auto action : view.slotActions) {
+            TEST_ASSERT_TRUE(
+                action !=
+                FermentationUiWorkspaceSlotAction::ApplyRecoveryTimeCorrection);
+        }
+    }
+}
+
 device_platform::DeviceUiTarget cell(std::uint8_t row) {
     return {device_platform::DeviceUiTargetKind::ContentCell, 0U, row, 0U};
 }
@@ -1553,5 +1653,9 @@ int main(int, char**) {
     RUN_TEST(test_sim_26_message_sensor_and_recovery_actions);
     RUN_TEST(
         test_network_page_exposes_only_the_two_modes_and_explicit_setup_action);
+    RUN_TEST(test_program_summary_view_applies_candidate_overrides_per_value);
+    RUN_TEST(test_technical_page_pager_follows_the_snapshot_temperatures);
+    RUN_TEST(
+        test_recovery_time_correction_is_never_offered_without_a_staged_value);
     return UNITY_END();
 }
