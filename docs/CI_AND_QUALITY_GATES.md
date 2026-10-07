@@ -100,39 +100,49 @@ Nur wenn:
 - der zu pruefende `HEAD` final ist;
 - der Owner den Lauf ausdruecklich anordnet.
 
-Der autorisierte Lauf wird danach auf demselben finalen, gepushten `HEAD` in
-zwei Phasen ausgefuehrt, normalerweise ueber
-`bash scripts/run_pre_ready_and_publish.sh` (siehe „Pre-Ready-Status und
-Merge-Gate“). Der Runner ist die einzige Quelle fuer die gemeinsamen portablen
-Gatebefehle und die clang-tidy-Dateiliste; die folgenden Schritte zeigen die
-beiden Phasen, die der Wrapper aufruft:
+Der **normale Owner-Pre-Ready-/Merge-Gate-Pfad ist ausschliesslich der
+Wrapper**, auf demselben finalen, gepushten `HEAD`:
 
 ```bash
-export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
-bash scripts/run_pre_ready_gates.sh host
-
-# Danach die kanonische ESP-IDF-6.1-/esp-clang-Umgebung bereitstellen und
-# export.sh aktivieren; dies ist Provisionierung, kein zweiter Gatepfad.
-export IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-$HOME/.espressif}"
-python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang
-. "$IDF_PATH/export.sh"
-
-bash scripts/run_pre_ready_gates.sh esp
+bash scripts/run_pre_ready_and_publish.sh
 ```
 
-Bei einer normalen lokalen ESP-IDF-Installation verwendet diese Zuweisung den
-Default `$HOME/.espressif`, ohne einen bereits explizit gesetzten Pfad zu
-ueberschreiben. `IDF_TOOLS_PATH` muss vor `idf_tools.py install esp-clang` auf
-ein vorhandenes Verzeichnis zeigen. Der Runner prueft diesen Pfad gemeinsam
-mit `python3`, `IDF_PATH` und `idf.py` vor dem ersten ESP-Build. Die
-detaillierte esp-clang-Pfad-, Versions-, `tools.json`- und `pyclang`-Pruefung
-bleibt beim bestehenden Static-Analysis-Owner.
+Er ruft `host` und danach `esp` des Runners selbst auf und publiziert danach
+`pre-ready/local` (Abschnitt „Pre-Ready-Status und Merge-Gate“). Ein normaler
+Full-PR fuehrt host+esp damit **einmal** aus – nicht zuerst manuell und danach
+nochmals im Wrapper.
+
+Die lokale Werkzeugprovisionierung ist Umgebungsvoraussetzung **vor** dem
+Wrapper; der Wrapper installiert nichts (`D1`):
+
+- PlatformIO `6.1.19` sowie clang-format und clang-tidy der Major-Linie 21 sind
+  fuer die `host`-Phase in der aufrufenden Umgebung verfuegbar (wie in
+  GitHub-CI ueber das `bin`-Verzeichnis des gepinnten `esp-clang`);
+- `IDF_PATH` zeigt auf den ESP-IDF-6.1-Checkout, `IDF_TOOLS_PATH` auf ein
+  vorhandenes Tools-Verzeichnis (Default-Installation `$HOME/.espressif`), und
+  `esp-clang` ist installiert, z. B. einmalig
+  `python3 "$IDF_PATH/tools/idf_tools.py" install esp-clang`;
+- der Wrapper aktiviert `"$IDF_PATH/export.sh"` nur fuer seine `esp`-Phase in
+  einer Subshell; `export.sh` wird vorher nicht fuer den Wrapper aktiviert.
+
+Fehlen `IDF_PATH`/`IDF_TOOLS_PATH`, endet der Wrapper mit `BLOCKED`. Der Runner
+prueft Werkzeug- und ESP-IDF-Provenienz weiterhin selbst; die detaillierte
+esp-clang-Pfad-, Versions-, `tools.json`- und `pyclang`-Pruefung bleibt beim
+bestehenden Static-Analysis-Owner. Der Runner ist die einzige Quelle fuer die
+gemeinsamen portablen Gatebefehle und die clang-tidy-Dateiliste; sie werden hier
+nicht wiederholt.
+
+Die direkten Aufrufe `bash scripts/run_pre_ready_gates.sh host` und
+`bash scripts/run_pre_ready_gates.sh esp` (jeweils mit
+`PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"`) sind Low-Level-/Diagnose-
+bzw. Runner-Referenz, wie sie auch GitHub-CI im Workflow verwendet. Sie sind
+**kein vollstaendiges Merge-Gate**, weil sie keinen Commit-Status publizieren.
 
 `host` umfasst den vollständigen clang-format-21-Check, nativen Build und
 Ressourcenbericht, komplette native Tests, Compile-Datenbank und den exakten
 clang-tidy-21-Lauf sowie Architekturguard und Quality-Gate-Selbsttests. `esp`
 umfasst Bring-up-/Release-Build, Ressourcenbericht und esp-clang-Static-
-Analysis. Nur wenn beide Aufrufe mit dem gleichen `PRE_READY_EXPECTED_HEAD`
+Analysis. Nur wenn beide Phasen mit dem gleichen `PRE_READY_EXPECTED_HEAD`
 erfolgreich sind, darf
 `PRE_READY_LOCAL_GATES=PASS` dokumentiert werden. Ein nicht ausgeführter
 Teil bleibt `NOT_RUN`.
@@ -189,7 +199,9 @@ Produktions-Buildinputs). Die Liste steht ausschliesslich im Workflow; der
 Selbsttest `scripts/selftest_quality_gates.py` leitet die Pflichtpfade aus dem
 Runner, den Profilen und `sdkconfig.defaults` ab und prueft sie. Normale
 Feature-PRs loesen sie nicht aus. Wurde sie fuer einen PR ausgeloest oder ordnet
-der Owner sie an, ist ihr PASS Pflicht.
+der Owner sie an, ist ihr PASS Pflicht. Ein im Draft erzeugter, uebersprungener
+Workfloweintrag ist weder `GITHUB_CI=PASS` noch ein Grund fuer einen zweiten Lauf
+vor `Ready for review`.
 
 Der Firmwarejob laeuft nur, wenn der Pull Request kein Draft ist. Draft-Pushes
 koennen einen sofort uebersprungenen Workfloweintrag erzeugen, fuehren aber
