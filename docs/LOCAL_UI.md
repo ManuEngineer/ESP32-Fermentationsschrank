@@ -79,6 +79,11 @@ Verbindliche Inhalte:
 - Start eines manuellen Betriebs
 - Zugang zu Menue, Einstellungen und Servicefunktionen
 
+Umgesetzter R1-Stand der lokalen Touch-UI (Issue #172): Im Standby belegen die
+vier festen Slots `Start | Programme | Status | Einstellungen`. Servicefunktionen
+liegen unter `Einstellungen`, nicht als eigener Standby-Slot; die Texte der
+Beispielansicht oben sind nicht der Layoutvertrag.
+
 ### Laufender Prozess
 
 Waerend eines Laufes stehen Prozesszustand, Temperaturen und verbleibende Dauer
