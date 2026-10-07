@@ -61,3 +61,20 @@ aa7100c7dea5c4a43b1892e3491caf72872198b5aefa1ade36acd427d1fe6f03  flash_exact.lo
 Rohlog lokal (nicht im Repository). Das Geraet ist mit dem exakten Image `fb8978f`
 geflasht; es bootet stabil, zeigt aber kein Display (UI fail-closed, Aktoren
 deaktiviert).
+
+## Wiederholung (Ownerauftrag Hardware Fix Verification, gleicher Produkt-HEAD)
+
+Zwei weitere Neustarts (EN-Pulse) mit demselben Image `fb8978f`, ohne Neuflashen:
+
+```text
+Lauf 2: heap_alloc_failed size=12800 caps=0x8; LVGL display unavailable; free 7740 B / min 5476 B / largest 6912 B
+Lauf 3: heap_alloc_failed size=12800 caps=0x8; LVGL display unavailable; free 7708 B / min 6180 B / largest 6912 B
+efc4574123c50f557e6a3d418599f4d06887823fc3c040fda053c2b98c7b95be  uart_02_exact_repeat.raw.txt
+1a8d22a7914e2309e4c8d5033d01a17eabf50a1a5163e4c1a3a38a4d1fcc96f4  uart_03_exact_repeat.raw.txt
+```
+
+Der Fehler ist damit 3 von 3 Starts reproduzierbar (Lauf 1 siehe oben). Kein
+`size=13176`, kein `std::bad_alloc`, kein Abort/Reset-Loop, kein Watchdog/Brownout;
+aber kein stabiler UI-Zustand. Gemaess Auftrag (Boot-/UI-Kriterium nicht erfuellt):
+STOP, der restliche konsolidierte Hardware-Smoke und die D10-Probe-Messung wurden
+nicht ausgefuehrt (`BLOCKED`).
