@@ -178,7 +178,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
     using device_platform::TextTranslation;
     const TextNamespace nameSpace{"fermentation"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
-    const auto entries = std::array<std::pair<const char*, const char*>, 142U>{
+    const auto entries = std::array<std::pair<const char*, const char*>, 151U>{
         std::pair{"standby", "Ready"},
         std::pair{"running", "Process running"},
         std::pair{"waiting", "Waiting"},
@@ -280,7 +280,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"label-remaining", "Remaining: "},
         std::pair{"label-preheat", "Preheat: "},
         std::pair{"label-sensor", "Sensor: "},
-        std::pair{"label-completion", "Completion: "},
+        std::pair{"label-completion", "Finish: "},
         std::pair{"label-fault-code", "Fault code: "},
         std::pair{"value-on", "On"},
         std::pair{"value-off", "Off"},
@@ -291,9 +291,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"sensor-pref-product-required", "Product required"},
         std::pair{"sensor-pref-air-only", "Air only"},
         std::pair{"completion-finish", "Finish"},
-        std::pair{"completion-cool-finish", "Cool, then finish"},
-        std::pair{"completion-cool-hold-duration", "Cool and hold (time)"},
-        std::pair{"completion-cool-hold-manual", "Cool and hold until stop"},
+        std::pair{"completion-cool-finish", "Cool, finish"},
+        std::pair{"completion-cool-hold-duration", "Cool, hold (time)"},
+        std::pair{"completion-cool-hold-manual", "Cool, hold to stop"},
         std::pair{"process-state-boot", "Starting"},
         std::pair{"process-state-safe-boot", "Safe boot"},
         std::pair{"process-state-standby", "Standby"},
@@ -315,6 +315,15 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
         std::pair{"quality-valid", "valid"},
         std::pair{"quality-stale", "stale"},
         std::pair{"quality-failed", "failed"},
+        std::pair{"label-cooling", "Cooling: "},
+        std::pair{"label-hold", "Hold: "},
+        std::pair{"field-target", "Target temp."},
+        std::pair{"field-duration", "Duration"},
+        std::pair{"field-cooling", "Cooling target"},
+        std::pair{"field-hold", "Hold time"},
+        std::pair{"backspace", "Del"},
+        std::pair{"clear", "Clear"},
+        std::pair{"start-values-invalid", "Start values invalid"},
         std::pair{"status-ready", "Application ready"},
         std::pair{"status-not-ready", "Application not ready"},
         std::pair{"recovery-mode-normal", "No recovery pending"},
@@ -337,7 +346,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 {{TextNamespace{"fermentation"}, entry.first}, entry.second});
         }
         if (std::string{locale} == "de") {
-            const std::array<std::pair<const char*, const char*>, 142U> de{
+            const std::array<std::pair<const char*, const char*>, 151U> de{
                 {std::pair{"standby", "Bereit"},
                  {"running", "Prozess laeuft"},
                  {"waiting", "Wartet"},
@@ -452,9 +461,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"sensor-pref-product-required", "Produkt erforderlich"},
                  {"sensor-pref-air-only", "Nur Luft"},
                  {"completion-finish", "Beenden"},
-                 {"completion-cool-finish", "Kuehlen, dann beenden"},
-                 {"completion-cool-hold-duration", "Kuehlen und halten (Zeit)"},
-                 {"completion-cool-hold-manual", "Kuehlen und halten bis Stop"},
+                 {"completion-cool-finish", "Kuehlen, beenden"},
+                 {"completion-cool-hold-duration", "Kuehlen, Zeit halten"},
+                 {"completion-cool-hold-manual", "Kuehlen, bis Stop"},
                  {"process-state-boot", "Startet"},
                  {"process-state-safe-boot", "Sicherer Start"},
                  {"process-state-standby", "Bereit"},
@@ -476,6 +485,15 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"quality-valid", "gueltig"},
                  {"quality-stale", "veraltet"},
                  {"quality-failed", "Fehler"},
+                 {"label-cooling", "Kuehlziel: "},
+                 {"label-hold", "Halten: "},
+                 {"field-target", "Zieltemp."},
+                 {"field-duration", "Dauer"},
+                 {"field-cooling", "Kuehlziel"},
+                 {"field-hold", "Haltedauer"},
+                 {"backspace", "Entf"},
+                 {"clear", "Leeren"},
+                 {"start-values-invalid", "Startwerte ungueltig"},
                  {"status-ready", "Anwendung bereit"},
                  {"status-not-ready", "Anwendung nicht bereit"},
                  {"recovery-mode-normal", "Kein Wiederanlauf offen"},
@@ -497,7 +515,7 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                 }
             }
         } else if (std::string{locale} == "es") {
-            const std::array<std::pair<const char*, const char*>, 142U> es{
+            const std::array<std::pair<const char*, const char*>, 151U> es{
                 {std::pair{"standby", "Listo"},
                  {"running", "Proceso en curso"},
                  {"waiting", "Espera"},
@@ -613,11 +631,9 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"sensor-pref-product-required", "Producto obligatorio"},
                  {"sensor-pref-air-only", "Solo aire"},
                  {"completion-finish", "Terminar"},
-                 {"completion-cool-finish", "Enfriar y terminar"},
-                 {"completion-cool-hold-duration",
-                  "Enfriar y mantener (tiempo)"},
-                 {"completion-cool-hold-manual",
-                  "Enfriar y mantener hasta parar"},
+                 {"completion-cool-finish", "Enfriar, terminar"},
+                 {"completion-cool-hold-duration", "Enfriar, mantener"},
+                 {"completion-cool-hold-manual", "Enfriar, hasta parar"},
                  {"process-state-boot", "Iniciando"},
                  {"process-state-safe-boot", "Inicio seguro"},
                  {"process-state-standby", "Listo"},
@@ -640,6 +656,15 @@ std::vector<device_platform::TextPackManifest> makeFermentationUiTextPacks() {
                  {"quality-valid", "valido"},
                  {"quality-stale", "obsoleto"},
                  {"quality-failed", "fallo"},
+                 {"label-cooling", "Frio: "},
+                 {"label-hold", "Mantener: "},
+                 {"field-target", "Temp. objetivo"},
+                 {"field-duration", "Duracion"},
+                 {"field-cooling", "Objetivo frio"},
+                 {"field-hold", "Tiempo mant."},
+                 {"backspace", "Borrar"},
+                 {"clear", "Limpiar"},
+                 {"start-values-invalid", "Valores no validos"},
                  {"status-ready", "Aplicacion lista"},
                  {"status-not-ready", "Aplicacion no lista"},
                  {"recovery-mode-normal", "Sin recuperacion pendiente"},

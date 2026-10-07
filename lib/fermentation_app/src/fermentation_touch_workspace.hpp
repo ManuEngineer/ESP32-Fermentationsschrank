@@ -40,7 +40,41 @@ enum class FermentationUiPage : std::uint8_t {
     HeaderNetwork,
     HeaderClock,
     HeaderWebAccess,
+    ValueEdit,
 };
+
+// Next-run start values editable on ProgramSummary (S8). One explicit enum,
+// no generic form model.
+enum class FermentationUiStartField : std::uint8_t {
+    TargetTemperature,
+    Duration,
+    Preheat,
+    SensorMode,
+    CompletionMode,
+    CoolingTarget,
+    HoldDuration,
+};
+inline constexpr std::size_t kFermentationUiStartFieldCount = 7U;
+
+[[nodiscard]] inline bool isNumericStartField(
+    FermentationUiStartField field) noexcept {
+    return field == FermentationUiStartField::TargetTemperature ||
+           field == FermentationUiStartField::Duration ||
+           field == FermentationUiStartField::CoolingTarget ||
+           field == FermentationUiStartField::HoldDuration;
+}
+
+// Duration-like numeric fields take whole minutes only.
+[[nodiscard]] inline bool isWholeNumberStartField(
+    FermentationUiStartField field) noexcept {
+    return field == FermentationUiStartField::Duration ||
+           field == FermentationUiStartField::HoldDuration;
+}
+
+// Keypad grid of the ValueEdit page (D8): 4 rows x 3 columns,
+// `1 2 3 / 4 5 6 / 7 8 9 / . 0 +-`.
+inline constexpr std::uint8_t kFermentationUiKeypadRows = 4U;
+inline constexpr std::uint8_t kFermentationUiKeypadColumns = 3U;
 
 // Intent with which the program list was opened: `Start` picks a program for a
 // new run (ProgramSummary), `Manage` picks a program for administration
@@ -131,6 +165,11 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
+    ValueEditCancel,
+    ValueEditBackspace,
+    ValueEditClear,
+    ValueEditCommit,
+    ResetStartValues,
 };
 
 // Read-only content of `ProgramSummary` (S7): the selected program's values
@@ -147,6 +186,27 @@ struct FermentationUiProgramSummaryView {
     SensorPreference sensorPreference{SensorPreference::AirProductOptional};
     std::optional<RunSensorMode> sensorModeOverride;
     CompletionMode completionMode{CompletionMode::FinishWithoutCooling};
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
+    // Editable fields in display order (cooling target / hold duration only
+    // when the completion mode uses them) and which of them differ from the
+    // stored program values (indexed by FermentationUiStartField).
+    std::array<FermentationUiStartField, kFermentationUiStartFieldCount>
+        fields{};
+    std::size_t fieldCount{0U};
+    std::array<bool, kFermentationUiStartFieldCount> changed{};
+    // The program with the candidate overrides applied passes the existing
+    // runnable validation; `confirm` stays disabled otherwise.
+    bool valuesValid{false};
+    // Fields are editable only for a startable program with a start candidate.
+    bool editable{false};
+};
+
+// Content of the shared numeric edit page.
+struct FermentationUiValueEditView {
+    FermentationUiStartField field{FermentationUiStartField::TargetTemperature};
+    std::string candidate;
+    bool commitValid{false};
 };
 
 struct FermentationUiWorkspaceView {
@@ -158,6 +218,7 @@ struct FermentationUiWorkspaceView {
     std::vector<FermentationUiProgramListEntry> programList;
     std::optional<std::string> confirmationProgramName;
     std::optional<FermentationUiProgramSummaryView> programSummary;
+    std::optional<FermentationUiValueEditView> valueEdit;
     std::optional<device_platform::TextKey> confirmationWarning;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
@@ -298,6 +359,15 @@ class FermentationTouchWorkspace {
                  bool enabled = true) const;
     void setCanonicalPageStack(FermentationUiPage page);
 
+    [[nodiscard]] FermentationUiWorkspacePress pressContentCell(
+        const FermentationUiSnapshot& snapshot,
+        const device_platform::DeviceUiTarget& target,
+        const FermentationUiWorkspaceView& current,
+        const ProgramCatalog* catalog);
+    void cycleStartField(FermentationUiStartField field,
+                         const FermentationUiProgramSummaryView& summary);
+    void commitValueEdit();
+
     [[nodiscard]] bool selectedMessageExists(
         const FermentationUiSnapshot& snapshot) const;
     [[nodiscard]] bool selectProgramFor(const std::string& programId,
@@ -305,6 +375,9 @@ class FermentationTouchWorkspace {
                                         FermentationUiPage destination);
 
     FermentationUiPage page_{FermentationUiPage::Home};
+    FermentationUiStartField valueEditField_{
+        FermentationUiStartField::TargetTemperature};
+    NumericEditModel valueEdit_;
     bool displayLanguageChangeFailed_{false};
     FermentationUiProgramListIntent programListIntent_{
         FermentationUiProgramListIntent::Start};

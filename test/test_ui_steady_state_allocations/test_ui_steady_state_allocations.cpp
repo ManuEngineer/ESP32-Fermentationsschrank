@@ -467,6 +467,29 @@ void test_s7_content_pages_steady_state_allocate_nothing() {
     }
 }
 
+// S8: the value edit page (keypad) is a steady state too. Its content is
+// local workspace state, so only a workspace mutation (a key press) changes
+// the render key; the key press path itself is covered with a startable
+// catalog in test_local_touch_ui.
+void test_value_edit_page_steady_state_allocates_nothing() {
+    WebAccessFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::ValueEdit);
+    fixture.settle();
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    // A workspace mutation (what every key press does) redraws once.
+    fixture.workspace.setProgramEditDirty(true);
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+}
+
 // S3: the language page is a steady state too.
 void test_language_page_steady_state_allocates_nothing() {
     WebAccessFixture fixture;
@@ -875,6 +898,7 @@ int main() {
     RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_s7_content_pages_steady_state_allocate_nothing);
+    RUN_TEST(test_value_edit_page_steady_state_allocates_nothing);
     RUN_TEST(test_web_access_page_keeps_the_presentation_copy_like_other_pages);
     return UNITY_END();
 }
