@@ -55,6 +55,29 @@ struct WorkspacePressDispatchResult {
     const FermentationUiSnapshot& snapshot,
     const FermentationUiWorkspacePress& press, std::uint64_t monotonicMillis);
 
+// What the UI loop must do with the touch sample of this iteration. This is
+// the single decision point shared by the firmware loop and its host tests:
+// a held contact is processed; without a contact, only the release of an armed
+// factory reset hold is delivered (cheap: no screen model, no clock copy), so a
+// long press that was interrupted can never survive the pause (Issue #19).
+enum class TouchLoopAction : std::uint8_t {
+    None,
+    ProcessContact,
+    ReleaseFactoryResetHold,
+};
+
+[[nodiscard]] inline TouchLoopAction touchLoopAction(
+    bool contactHeld, const FermentationUiSnapshot& snapshot) noexcept {
+    if (contactHeld) return TouchLoopAction::ProcessContact;
+    return snapshot.factoryReset.stage == FactoryResetStage::Hold
+               ? TouchLoopAction::ReleaseFactoryResetHold
+               : TouchLoopAction::None;
+}
+
+// Reports "no contact on the hold target" to the factory reset flow.
+void releaseFactoryResetHold(FermentationApplication& application,
+                             std::uint64_t monotonicMillis);
+
 struct WorkspaceTouchTickResult {
     // The target under the current contact, for the caller to pass as
     // render()'s pressedTarget (nullopt when no contact is held, so

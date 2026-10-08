@@ -216,8 +216,9 @@ Bestaetigung, langes Gedrueckthalten):
 
 Es gibt keine zusaetzliche Hardware und keine neue Boot-Geste; die
 Raw-Touch-Recovery bleibt ausschliesslich der Touchkalibrierung vorbehalten. Die
-Dauer des langen Gedrueckthaltens ist ein noch vom Owner festzulegender
-Bedienparameter; solange er fehlt, ist der Ablauf nicht verfuegbar. Nach dem
+Dauer des langen Gedrueckthaltens betraegt 5000 ms durchgehend auf dem
+Halteziel (Ownerentscheid, fest, keine separate Laufzeitkonfiguration);
+Loslassen oder Verlassen des Halteziels setzt den Fortschritt zurueck. Nach dem
 Reset werden Netzwerk-Verbindung und HTTP-Server geordnet beendet; gelingt das
 nicht erkennbar, meldet die Anzeige "Werksreset durchgefuehrt. Netzwerk konnte
 nicht sicher beendet werden. Geraet vollstaendig aus- und wieder einschalten."

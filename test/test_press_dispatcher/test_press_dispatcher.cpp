@@ -7,6 +7,7 @@
 #include <thread>
 #include <variant>
 
+#include "configuration_bootstrap_store.hpp"
 #include "device_platform.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_text.hpp"
@@ -129,10 +130,13 @@ class MockHttpServerLifecycle final
         return true;
     }
     [[nodiscard]] bool stop() override {
+        ++stopCalls;
         running_ = false;
         return true;
     }
     [[nodiscard]] bool running() const override { return running_; }
+
+    std::size_t stopCalls{0U};
 
    private:
     bool running_{false};
@@ -2197,8 +2201,97 @@ void test_safe_boot_entry_and_every_exit_end_the_flow_without_a_reset() {
     TEST_ASSERT_FALSE(workspace.view(snapshot).bottomSlots[3].enabled);
 }
 
+// Issue #19 review B1: the regression runs on the REAL loop decision
+// (`touchLoopAction`, the one function the firmware loop branches on). A
+// release that never reaches the application used to leave the old start time
+// armed, so a later short contact could trigger the reset.
+void test_interrupted_hold_never_survives_a_pause_in_the_real_loop_decision() {
+    WebAccessFixture fixture;
+    fixture.application.setFactoryResetHoldMillis(5000U);
+    FermentationTouchWorkspace workspace;
+    const auto packs = makeFermentationUiTextPacks();
+    const auto epochOf = [&fixture] {
+        const auto scan = ConfigurationBootstrapStore(fixture.store).scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    };
+
+    // One iteration of the UI loop with the given touch sample.
+    const auto loopStep = [&](bool contactHeld, std::uint8_t slot, bool fresh,
+                              std::uint64_t nowMs) {
+        const auto snapshot = fixture.application.uiSnapshot();
+        switch (touchLoopAction(contactHeld, snapshot)) {
+            case TouchLoopAction::ProcessContact:
+                static_cast<void>(processWorkspaceTouch(
+                    fixture.application, workspace, snapshot, packs,
+                    device_platform::LocaleId{"en"}, nullptr,
+                    device_platform::DeviceUiNetworkStatus::Unavailable, {},
+                    true, bottomX(slot), kBottomY, fresh, nowMs));
+                break;
+            case TouchLoopAction::ReleaseFactoryResetHold:
+                releaseFactoryResetHold(fixture.application, nowMs);
+                break;
+            case TouchLoopAction::None:
+                break;
+        }
+    };
+    const auto stage = [&fixture] {
+        return fixture.application.uiSnapshot().factoryReset.stage;
+    };
+
+    // Reach the hold stage through the real taps.
+    workspace.setPage(FermentationUiPage::Pin);
+    loopStep(true, 3U, true, 100U);
+    loopStep(false, 0U, false, 150U);
+    loopStep(true, 2U, true, 200U);
+    loopStep(false, 0U, false, 250U);
+    loopStep(true, 2U, true, 300U);
+    loopStep(false, 0U, false, 350U);
+    TEST_ASSERT_TRUE(stage() == FactoryResetStage::Hold);
+    const auto epochBefore = epochOf();
+
+    // First, partial hold (3 s of 5 s), then the release.
+    loopStep(true, 1U, true, 10000U);
+    loopStep(true, 1U, false, 11500U);
+    loopStep(true, 1U, false, 13000U);
+    loopStep(false, 0U, false, 13100U);
+    // Long pause (idle iterations), then a short new contact.
+    loopStep(false, 0U, false, 60000U);
+    loopStep(true, 1U, true, 70000U);
+    loopStep(true, 1U, false, 70100U);
+    TEST_ASSERT_TRUE(stage() == FactoryResetStage::Hold);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, epochOf());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+
+    // Sliding off the hold target and cancelling never resets either.
+    loopStep(true, 3U, false, 70200U);
+    loopStep(true, 1U, false, 70300U);
+    loopStep(true, 1U, false, 75200U);
+    TEST_ASSERT_TRUE(stage() == FactoryResetStage::Hold);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, epochOf());
+
+    // Only 5000 ms of uninterrupted contact on the hold target trigger it.
+    loopStep(false, 0U, false, 80000U);
+    loopStep(true, 1U, true, 90000U);
+    loopStep(true, 1U, false, 94999U);
+    TEST_ASSERT_TRUE(stage() == FactoryResetStage::Hold);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, epochOf());
+    loopStep(true, 1U, false, 95000U);
+    TEST_ASSERT_TRUE(stage() == FactoryResetStage::Finished);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, epochOf());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_interrupted_hold_never_survives_a_pause_in_the_real_loop_decision);
     RUN_TEST(test_forgot_pin_entry_runs_the_whole_flow_through_touch);
     RUN_TEST(test_safe_boot_entry_and_every_exit_end_the_flow_without_a_reset);
     RUN_TEST(test_dispatch_no_typed_payload_is_reported_as_such);

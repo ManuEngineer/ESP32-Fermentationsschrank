@@ -1,17 +1,17 @@
 # Plan Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import
 
 ```text
-PLAN_REVISION=7 (konsolidiert, KISS; ersetzt Revision 6 `d2fcf426dd3052d7ce82cdd0043a080d2d77199b` sowie die Revisionen 5, 4, 3, 2 und 1; keine davon wurde freigegeben)
-PLAN_STATUS=OWNER_APPROVED_FOR_R1_FACTORY_RESET (Plan Fix Verification Revision 7: PASS / GO)
+PLAN_REVISION=8 (konsolidiert; Revision 7 `6fbf1304566472c10b7cc52439475a5743960c0e` bleibt der freigegebene Vertrag fuer R0-R4, Revision 8 ergaenzt R5/S1 und die Ownerentscheide nach dem Review)
+PLAN_STATUS=R0_R4_OWNER_APPROVED (Revision 7, Fix Verification PASS / GO); R5_S1_DRAFT_AWAITING_OWNER_APPROVAL_OF_EXACT_PLAN_SHA (Revision 8, siehe PR #191)
 OWNER_APPROVED_PLAN_SHA=6fbf1304566472c10b7cc52439475a5743960c0e (Revision 7; die Freigabe gilt dem Inhalt dieses Commits, spaetere Commits aendern nur Status/Nachweise, nicht den Planvertrag)
-IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset); B1/B2 und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
+IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset Ablauf B) und Review-Fix B1; R5/S1-Produktcode NICHT autorisiert bis zur Ownerfreigabe der exakten Plan-SHA von Revision 8; Ablauf A, B1/B2 (Backup/Import) und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
 OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
 JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-IMPLEMENTATION=R0_DONE_R1_R3_IMPLEMENTED_R4_DOCS (PR #191; unabhaengiger Implementierungsreview steht aus; Ablauf A/O-R2 und Stoppbefund S1 offen; Hardware NOT_RUN)
+IMPLEMENTATION=R0_DONE_R1_R4_IMPLEMENTED_REVIEW_FIX_B1_DONE (PR #191, Ablauf B, Hold 5000 ms; unabhaengiger Implementierungsreview steht aus). NICHT implementiert: R5/S1, Ablauf A (O-R2 = B, spaeter), Journal-Startbedingung K1 unveraendert. Hardware NOT_RUN
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -41,6 +41,20 @@ wird **keine Architektur festgeschrieben**; die Revision-2-Entwuerfe bleiben nur
 als nicht verbindliche fachliche Referenz in Anhang A und gelten bei einer
 spaeteren Wiederaufnahme nicht als freigegeben (neue vollstaendige Planrevision
 auf dann aktuellem `main`).
+
+### 0a. Ownerentscheide (Review-Stand) und tatsaechlicher Umsetzungsstand
+
+Die Ownerentscheide werden hier **getrennt vom Umsetzungsstand** gefuehrt; eine
+Entscheidung ist kein Beleg fuer Umsetzung oder Erfuellung.
+
+| Entscheid | Inhalt | Umsetzungsstand in PR #191 |
+|---|---|---|
+| Hold-Dauer | 5000 ms durchgehend auf dem Halteziel, fest, keine Laufzeitkonfiguration | **umgesetzt** (`kApprovedFactoryResetHoldMillis`) |
+| O-R2 = B (zeitlich nachgelagert) | Ablauf A (PIN-geschuetzt) erst gemeinsam mit dem produktiven lokalen Service-UI/PIN-Zugang; bleibt **R1-Pflicht**; bestehende `PinEntryModel`-/`verifyServicePin`-Vertraege spaeter wiederverwenden, keine provisorische PIN-Loesung | **nicht umgesetzt** (in #191 nur Ablauf B) |
+| S1 = B | PIN-unabhaengiger Werksreset auch im vom Recoverykern nachweislich zugelassenen `ResetEligibleNoRuntime`; keine pauschale Freigabe bei `NoRuntime`, globalen Scanblockern, Identitaetskollisionen oder unbekannter Bootstrap-Integritaet; **materielle Aenderung** des Anwendungs-/Recoveryvertrags | **nur geplant** (Abschnitt 4.8, Revision 8); Produktcode erst nach Ownerfreigabe der exakten Plan-SHA |
+| O-R3/K1 = A, bedingt | Journal-Startbedingung nicht entfernen und nicht als erfuellt markieren; erst Unabhaengigkeit von Safety-/Startfreigaben nachweisen, dann ausdrueckliche SSOT-Anpassung freigeben lassen | **keine** Aenderung; K1 bleibt offen und unerfuellt |
+| O-R3/K2–K7 genehmigt | R1-Abnahme auf vorhandene Funktionen beziehen; 7-Tage-Test, kritische Persistenz, elektrische/thermische Safety, Aktor- und Powercut-Gates bleiben Pflicht; #19 bleibt fuer Teilfunktionen offen; #28 fachlich von spaeteren Journal-/Historienfunktionen entkoppeln; keine kuenstlichen Budgets; Aufbewahrung 5/50 als spaetere Anforderung erhalten; Backup/Import nur nach B0 und O-BI; **die breitere Aenderung der SSOT-, #28- und #37-Vertraege erfolgt separat** | **nicht** in #191 umgesetzt (kein SSOT-/#28-/#37-Eingriff) |
+| O-HW = A | Physische Nachweise `HW-19-R01..R03` in einem separaten Hardware-Folgeissue; Software-PR darf nach Software-Gates und Review ohne Hardware-`PASS` abgeschlossen werden; Hardwaretests bleiben `NOT_RUN` | Folgeissue angelegt (siehe PR #191); alle Eintraege `NOT_RUN` |
 
 ## 1. Ziel und Nicht-Ziele
 
@@ -128,7 +142,7 @@ Raw-Touch-Kalibrierungs-Recovery (#31).
 | Ausloeser | Menueeintrag im PIN-geschuetzten Servicebereich | **Ownerentscheid O-R1 = B+ (verbindlich), zwei lokale Zugaenge zu demselben Ablauf:** (1) *Normalbetrieb:* "PIN vergessen?" auf der lokalen PIN-Seite, **ohne PIN-Eingabe** erreichbar; (2) *`SAFE_BOOT`:* eigener lokaler Eintrag "Vollstaendiger Werksreset", **unabhaengig vom gesperrten Servicebereich**. Keine zusaetzliche Hardware und **keine neue Boot-Touchgeste**; die vorhandene Raw-Touch-Recovery bleibt ausschliesslich der Touchkalibrierung vorbehalten |
 | Berechtigung | lokal verifizierte Service-PIN | keine PIN (die PIN darf fuer ihre eigene Wiederherstellung nicht verlangt werden); **kein isolierter PIN-Reset, kein Servicezugang** |
 | Laufzustand | nur ohne Lauf (kein aktiver, pausierter, unterbrochener, wiederherstellbarer oder unbekannter Lauf) | Normalbetrieb ohne laufenden Prozess oder `SAFE_BOOT`; ein laufender Prozess blockiert den Ablauf (vorher sicher beenden bzw. Neustart) |
-| Bestaetigung | mindestens zweistufig; zeigt geloeschte und wiederhergestellte Daten | mehrstufiger Recoveryablauf (beide Zugaenge identisch): ausdrueckliche Datenverlustwarnung -> bewusste Bestaetigung -> **langes Gedrueckthalten**; Dauer = noch festzulegender Bedienparameter (vom Owner zu bestimmen; kein Wert angenommen) |
+| Bestaetigung | mindestens zweistufig; zeigt geloeschte und wiederhergestellte Daten | mehrstufiger Recoveryablauf (beide Zugaenge identisch): ausdrueckliche Datenverlustwarnung -> bewusste Bestaetigung -> **langes Gedrueckthalten** (durchgehend 5000 ms auf dem Halteziel, Ownerentscheid) |
 | Aktoren | der Ablauf schaltet nichts ein; Aktorpfad bleibt gesperrt | alle Aktoren und beide BTS7960-Richtungen bleiben AUS; es werden keine Aktor-/Servicefunktionen freigeschaltet |
 | Fernausloesung | nie | nie (nicht ueber Web oder Netzwerk) |
 | Ergebnis | Factory-Programme, Factory-Grenzen, Ersteinrichtungszustand; Touchkalibrierung bleibt | wie A, anschliessend Ersteinrichtung; **ausschliesslich vollstaendiger Werksreset** – kein isolierter PIN-Reset, kein PIN-Bypass, keine Service- oder Aktorfreigabe, keine Fernausloesung |
@@ -174,7 +188,7 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 | Kein Bedienpfad (Warn-/Bestaetigungsseiten, PIN-Eingabe, Ergebnis) | Praesentationsmodell in `fermentation_app` (bestehende Touch-Workspace-/Device-UI-Vertraege); Bildschirme im vorhandenen Renderer unter `main/` – eigener Schnitt |
 | Zugaenge fuer Ablauf B ("PIN vergessen?" auf der PIN-Seite, `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset") sind nicht implementiert; `PersistentFactoryReset` ist in `safeBootUnavailableCapabilities()` als nicht verfuegbar gefuehrt | O-R1 = B+ entschieden; Umsetzung `fermentation_app` (Ablauf/Projektion) und Renderer unter `main/` (R2/R3) |
 | **Kein geordnetes Beenden von Netzwerk und HTTP** nach dem Werksreset: die laufende Verbindung und der HTTP-Server laufen weiter | kleine Sequenz an den vorhandenen Grenzen `INetworkLifecycle::stop()`, `IHttpServerLifecycle::stop()`, `NetworkConfigurationService` (4.4a); keine neue Schnittstelle |
-| Unklar, ob der Anwendungs-Einstieg auch ohne geladene Runtime (SAFE_BOOT, beschaedigte Konfiguration) lauffaehig ist (`storageEpoch_`/`stateStore_` Voraussetzungen) | R0-Vorpruefung |
+| Der Anwendungs-Einstieg ist ohne geladene Runtime nicht lauffaehig (`storageEpoch_` fehlt; R0-Befund S1) | Ownerentscheid S1 = B; geplant in Abschnitt 4.8, **nicht implementiert** |
 
 ### 4.4 Invarianten des Ablaufs (pruefbar)
 
@@ -275,6 +289,7 @@ Reihenfolge ohne neue Architektur nicht sicher darstellbar, ist das ein **R0-Sto
 | **R2** Anbindung | Praesentationsmodell, SAFE_BOOT-Capability `PersistentFactoryReset` verfuegbar machen (nur wenn der Ablauf lauffaehig ist), Aktor-AUS-Beleg ueber Mock-Senken. | Planfreigabe |
 | **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Zugang "PIN vergessen?" auf der lokalen PIN-Seite und `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset" auf denselben mehrstufigen Ablauf (O-R1 = B+). Hardware-Anzeige `NOT_RUN`. | – (Bedienparameter lange Bestaetigung vor Abnahme festlegen) |
 | **R4** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP; physische Tests als `NOT_RUN`. | – |
+| **R5** Werksreset im `ResetEligibleNoRuntime` (S1 = B) | Abschnitt 4.8. | **Ownerfreigabe der exakten Plan-SHA von Revision 8**; vorher kein Produktcode |
 
 Zwischen R0–R4 gibt es keine Ownerfreigabe je Schnitt; gezielte Tests und
 Builder-Self-Check je Schnitt. Danach: Stopp fuer den unabhaengigen Review
@@ -336,8 +351,94 @@ umgesetzt fuer **Ablauf B** (beide Zugaenge, O-R1 = B+), Netzwerk-/HTTP-Sequenz 
 **Nicht umgesetzt:** Ablauf A (lokale PIN-Pruefung, O-R2) und der Reset ohne geladene
 Runtime (S1). Die tatsaechlichen Testnachweise stehen in `ACCEPTANCE_TESTS.md`
 (`SIM-19-R01..R07`, `HW-19-R01..R03` = `NOT_RUN`); sie ersetzen die planinternen IDs
-SIM-R-xx dort, wo sie abweichen. Die Hold-Dauer bleibt Ownerparameter
-(`kApprovedFactoryResetHoldMillis = std::nullopt`).
+SIM-R-xx dort, wo sie abweichen. Die Hold-Dauer ist per Ownerentscheid 5000 ms
+(`kApprovedFactoryResetHoldMillis`). Review-Fix B1: der Release-/No-Contact-Pfad der
+Hauptschleife erreicht den Ablauf (`touchLoopAction`/`releaseFactoryResetHold`),
+Regression `SIM-19-R08`.
+
+### 4.8 R5 – Werksreset im `ResetEligibleNoRuntime` (Ownerentscheid S1 = B, Revision 8)
+
+**Status: nur Plan. Es gibt keinen S1-Produktcode, bis der Owner die exakte Plan-SHA
+von Revision 8 freigegeben hat.** S1 aendert den Anwendungs-/Recoveryvertrag
+materiell (der Anwendungs-Reset war bisher an eine geladene Runtime gebunden).
+
+**Ziel/Abgrenzung.** Der PIN-unabhaengige Vollreset B (gleiche Zugaenge, gleicher
+Ablauf, gleiche 5000 ms) funktioniert auch, wenn die Konfiguration keine Runtime
+liefert, der **bestehende Recoverykern** den Zustand aber als `ResetEligibleNoRuntime`
+zulaesst. Nicht Teil von S1 und weiterhin verboten: pauschale Freigabe bei
+`NoRuntime`, bei globalen Scanblockern, Identitaetskollisionen oder unbekannter
+Bootstrap-Integritaet; Bypass; direktes NVS-Erase; neue Boot-Geste; parallele
+Recovery-FSM; Web-Ausloesung; Ablauf A.
+
+#### 4.8.1 Nachweis der Wiederverwendung (Ist-Code, in R5 vor Beginn erneut zu belegen)
+
+| Anforderung | Bestehender Beleg | Aenderungsbedarf |
+|---|---|---|
+| Zulassung nur im bewiesenen Zustand | `ConfigurationRecoveryService::boot()` latcht `ResetEligibleNoRuntime` ausschliesslich, wenn das Bootstrap `Initialized` und gueltig ist und der kanonische Graph `ConfigurationGraphUnavailable` oder `...IntegrityFailure` **ohne** `globalScanBlocker` und **ohne** `persistentIdentityCollision` meldet; `beginAuthorizedFactoryReset()` beweist dasselbe bei **jedem** Aufruf unter dem Lease erneut (`isResetEligibleNoRuntimeGraph`) | keiner |
+| Vertrauenswuerdige alte Epoche | der Kern leitet `targetEpoch = Bootstrap-Epoche + 1` aus dem geprueften Bootstrap (`scan()` = `Available`, `Initialized`, kein offener Run-Handoff, keine Zaehlerueberlaeufe) ab; die Anwendung braucht die alte Epoche nur fuer die Gegenpruefung nach dem Kern (`currentEpoch != previousEpoch`) | `previousEpoch` kommt ohne Runtime aus `bootstrapStore_->scan()` (nur `Available` + `Initialized`, sonst nicht angeboten) statt aus `storageEpoch_` |
+| Bindende Autorisierung/Vorbedingungen | der Kern prueft weder Lauf noch PIN noch Ursprung (4.2); die Vorbedingungen liegen im Ablauf unter dem `ApplicationCallSerializer` (4.4) | Praedikat `factoryResetAvailableUnlocked()`: zusaetzlich zum bisherigen Fall auch `configurationService_->mode() == ResetEligibleNoRuntime` **und** `configurationRecoveryService_`/`bootstrapStore_`/`stateStore_` vorhanden |
+| Epochen- und Run-Persistenz-Handoff ohne vorherige Runtime | der Anwendungs-Einstieg erzeugt den `RunPersistenceCoordinator` fuer die **neue** Epoche selbst, fuehrt Prepare/Commit/Finalize/Consume des Handoffs aus, initialisiert Authentication neu, laedt die Run-Persistenz und publiziert Standby (alles bereits im Bestandscode nach der Resetgrenze) | keiner ausser der Epochenquelle; ein offener Handoff wird andernfalls vom naechsten Boot ueber den vorhandenen Wiederaufnahmepfad abgeschlossen (`test_application_reconstructs_reset_handoff_after_run_write_cut`) |
+| Widerruf Auth/Web/Netzwerk | in diesem Zustand existieren **keine** Authentication-/Web-/Netzwerk-Domaenen: `beginPersistent()` kehrt vor `initializeAuthentication()`/`initializeNetwork()` zurueck; `webSessionManager_`, `networkConfigurationService_`, HTTP-Server sind nie gestartet. Persistierte Credentials der alten Epoche sind durch den Epochenwechsel logisch unerreichbar | keiner; Nachweis: Netzwerk-/HTTP-Mocks zeigen keinen Start und keinen Stopp-Bedarf (die Teardown-Sequenz 4.4a ist dann ein Nullzeit-Durchlauf) |
+| Danach definierter Zustand | nach dem Kern setzt der Bestandscode `lifecycleState_ = Ready`; das Netzwerk bleibt aber unkomponiert, bis ein Neustart den normalen Boot ausfuehrt | **Neu:** nach erfolgreichem NoRuntime-Reset wird der Betrieb bis zum Neustart gesperrt (`requireService`-Latch) und der Ablauf meldet `CompletedRestartRequired` ("Werksreset durchgefuehrt. Geraet vollstaendig aus- und wieder einschalten."); keine In-place-Neukomposition der Boot-Subsysteme |
+
+#### 4.8.2 Lokal erreichbare, passive Reset-UI
+
+Belege (Ist): `beginPersistent()` kehrt ohne Runtime mit `ServiceRequired` zurueck;
+`app_main` initialisiert die Produkt-UI trotzdem (fehlende Presentation-Source ->
+Defaults, Touchkalibrierung aus ihrem eigenen Schluessel); das Home-Modell ist
+dann `Restricted` (lifecycle `ServiceRequired`), `home.processState` ist
+`Boot` (kein `runtimeRunState_`). Der bisherige Eintrag (`processState ==
+SafeBoot`) greift hier nicht. Plan:
+
+- `FermentationFactoryResetView` erhaelt ein Feld `recoveryEntry`
+  (= `ConfigurationServiceMode::ResetEligibleNoRuntime`); es ist Teil des
+  UI-Snapshots und seiner semantischen Gleichheit.
+- Auf der `Restricted`-Startseite ist Slot 0 der Eintrag "Werksreset", wenn
+  `processState == SafeBoot` **oder** `recoveryEntry`; alle anderen Aktionen
+  bleiben so deaktiviert wie heute (**passiv**: keine neue Navigation, kein
+  Service-/Aktorzugang, keine Netzwerkaktion).
+- Derselbe Ablauf B (Warnung, Bestaetigung, 5000 ms), derselbe Resetkern.
+- Grenze (dokumentiert, nicht geloest): ist die Touchkalibrierung ungueltig, bleibt
+  Touch fail-closed (Bestandsverhalten, #31); dann bleibt nur der UART-Recoveryweg.
+
+#### 4.8.3 Fail-closed-Negativmatrix
+
+| Fall | Erwartung | Nachweis (Plan) |
+|---|---|---|
+| Bootstrap fehlt/ungueltig/nicht vertrauenswuerdig (`scan()` nicht `Available`/nicht `Initialized`) | Eintrag nicht angeboten; Kern lehnt ab; kein Write | SIM-19-S1-02 |
+| globaler Scanblocker | Modus bleibt `NoRuntime`, nicht angeboten; Kern lehnt ab (`isResetEligibleNoRuntimeGraph`) | SIM-19-S1-02 |
+| persistente Identitaetskollision | wie oben | SIM-19-S1-02 |
+| offener Run-Epochen-Handoff (`Pending`/`Committed`) | Kern lehnt ab (`StateTransitionRejected`), kein Zweitreset | vorhandene Kerntests + SIM-19-S1-02 |
+| Zaehlerueberlauf (Epoche/Sequenz/High-Water) | Kern lehnt ab (`CounterOverflow`) | vorhandene Kerntests |
+| aktiver oder nicht sicher auszuschliessender Aktorzustand | in `ResetEligibleNoRuntime` ist keine Runtime/kein Lauf publiziert und der `ActuationInterlock` verweigert (bekannter Modus); der Ablauf schaltet nichts; Mock-Senken zaehlen null Enables; ein publizierter aktiver Lauf blockiert wie bisher | SIM-19-S1-03 |
+| Stromunterbrechung vor/nach der Resetgrenze | nach Neustart exakt alter (weiter zugelassener) oder abgeschlossener Zustand; ein `Resetting`-Bootstrap wird vom normalen Boot wiederaufgenommen; nie gemischt | SIM-19-S1-04 (Schreibfehler-/Powercut-Injektion an jedem Write des Kerns und der Handoff-Schritte, `SimulatedPersistentStateStore`) |
+| Netzwerk/HTTP nicht vorhanden | kein Start, kein Stopp-Aufruf noetig, Ergebnis nicht "Netzwerk nicht bestaetigt" | SIM-19-S1-05 |
+| Web-/Remote-Ausloesung | weiterhin nicht erreichbar (kein Eintrag im Command-Variant, keine Route) | SIM-19-R06 bleibt gueltig |
+
+#### 4.8.4 Tests (hardwarefrei; Nummern vorlaeufig)
+
+| ID | Pruefung |
+|---|---|
+| SIM-19-S1-01 | Eligible `NoRuntime`: Fabrikinitialisierung, danach Graph-Records loeschen (Bestandsmuster `eraseConfigurationGraphRecords`) -> `boot()` latcht `ResetEligibleNoRuntime`; `uiSnapshot().factoryReset.recoveryEntry`/`available`; kompletter Ablauf B bis `Finished`; Epoche +1; Ergebnis `CompletedRestartRequired`; lifecycle bleibt `ServiceRequired`; simulierter Neustart auf demselben Store bootet normal mit Fabrikkonfiguration `Operational` und abgeschlossenem Handoff |
+| SIM-19-S1-02 | Nicht angeboten/abgelehnt: ungueltiges Bootstrap, globaler Scanblocker, Identitaetskollision, offener Handoff -> `available == false`, `beginFactoryReset == false`, keine Store-Writes |
+| SIM-19-S1-03 | Keine Aktorwirkung: Mock-Senken zaehlen ueber den gesamten Ablauf null Enable-Aufrufe; Interlock verweigert im Modus unveraendert |
+| SIM-19-S1-04 | Powercut-/Fehlerinjektion an jedem Write: nach Neustart alter oder neuer Zustand, nie gemischt; erneuter Versuch bleibt moeglich |
+| SIM-19-S1-05 | Netzwerk-/HTTP-Mocks: kein Start vor, kein Stopp-Bedarf nach dem Reset; Ergebnis `CompletedRestartRequired` statt "Netzwerk nicht bestaetigt" |
+| SIM-19-S1-06 | UI: `Restricted`-Startseite zeigt mit `recoveryEntry` den Eintrag in Slot 0 (ohne `SafeBoot`), alle uebrigen Aktionen bleiben deaktiviert; derselbe Ablauf und derselbe Hold-Mechanismus (5000 ms, Release ueber `touchLoopAction`) |
+| Regression | `test_factory_reset_flow::test_a_configuration_without_runtime_is_reported_unavailable` ist fuer den **nicht** zugelassenen Fall weiterhin gueltig (wird fuer den zugelassenen Fall ersetzt); alle SIM-19-R01..R08 |
+
+#### 4.8.5 Folgen fuer Scope, Tests und Architektur
+
+- Scope: eine kleine Anwendungsaenderung (`factoryResetAvailableUnlocked`,
+  `previousEpoch`-Quelle, Latch/Outcome, Snapshot-Feld) und eine UI-Bedingung;
+  Kern, Adapter und Ports bleiben unveraendert.
+- Architektur: keine neue Komponente, keine neue Schnittstelle, keine ADR; die
+  materielle Aenderung ist die Aufhebung der Bindung des Anwendungs-Resets an
+  `storageEpoch_` (Recoveryvertrag), begrenzt auf den vom Kern bewiesenen Zustand.
+- Gate: Produktcode R5 erst nach Ownerfreigabe der exakten Plan-SHA von Revision 8.
+  Zeigt die Umsetzung, dass die sichere Loesung groessere Architekturaenderungen
+  braucht (z. B. In-place-Neukomposition der Boot-Subsysteme), wird zuerst Befund und
+  kleinste Alternative vorgelegt.
 
 ## 5. R1-ERWUENSCHT (bedingt): Backup und Import
 
@@ -459,6 +560,18 @@ Entscheidungen sind Ownersache (O-R3); eigenmaechtig wird nichts umdefiniert.
 | K6 | **Aufbewahrungsmodell und Werksreset** (`BACKUP_SECURITY_RETENTION.md`): 5 Detail/50 Zusammenfassungen; Reset loescht Laufhistorie/Fehler- und Komforthistorie | nicht vorhanden; Reset hat dort nichts zu loeschen. Spaeter einfuehrbare Daten muessen die `StorageEpoch` tragen, damit der Reset sie erfasst | Reset-Vertrag ohne Wirkung auf Historie | bei Wiederaufnahme (Anhang A, O4) |
 | K7 | **Backup/Import** als dokumentierte R1-Funktion | nur bedingt (B0/O-BI) und nur ueber #27-Pfade nutzbar | R1 liefert Backup/Import eventuell nicht | Entscheid nach B0 (O-BI) |
 
+**Ownerentscheid zu K1–K7 (Stand nach Review).** K1 = A, bedingt: die Journal-
+Startbedingung wird **nicht** entfernt und **nicht** als erfuellt markiert; erst nach
+dem Nachweis der Unabhaengigkeit von Safety-/Startfreigaben und einer ausdruecklichen,
+nachvollziehbaren SSOT-Anpassung kann sie geaendert werden. K2–K7 sind genehmigt
+(Abnahme auf vorhandene Funktionen; 7-Tage-Test, kritische Persistenz, elektrische/
+thermische Safety, Aktor- und Powercut-Gates bleiben Pflicht; #19 bleibt fuer
+Teilfunktionen offen; #28 fachlich entkoppeln; keine kuenstlichen Budgets;
+Aufbewahrung 5/50 bleibt spaetere Anforderung; Backup/Import nur nach B0 und O-BI).
+Die dafuer noetigen Aenderungen der SSOT-, #28- und #37-Vertraege erfolgen
+**separat** und sind in diesem PR **nicht** enthalten; bis dahin gilt K1–K7 als
+unveraendert offen.
+
 Weder dieser Plan noch sein PR setzen ein R1-Abnahme-`PASS`. Die Kennung
 `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` bleibt bestehen, bis der Owner die
 Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeentscheidung".
@@ -469,12 +582,13 @@ Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeents
 |---|---|---|---|---|
 | **G0** | Freigabe der exakten Plan-SHA | – | – | vor R0 |
 | **O-R1** | *entschieden (Ownerentscheid B+, siehe 4.1):* Zugaenge fuer den PIN-unabhaengigen Vollreset B | – | – | **ERLEDIGT** – bleibt offen nur: Dauer des langen Gedrueckthaltens als Bedienparameter (Ownerwert, nicht geraten) |
-| **O-R2** | Bedingt: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
+| **O-R2** | *entschieden: O-R2 = B, zeitlich nachgelagert (siehe 0a)* – Ablauf A erst mit dem produktiven lokalen Service-UI/PIN-Zugang (R1-Pflicht); frueher: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
 | **O-R4** | *entschieden (Ownerentscheid, vereinfachte Variante A, siehe 4.4a Punkt 4):* Verhalten bei scheiterndem Netzwerk-/HTTP-Stopp nach der Resetgrenze | – | – | **ERLEDIGT** |
 | **O-BI** | Funktionsumfang und Strategie von Backup/Import nach B0 | Gesamtbody / Chunking mit Vorab-Validator / Export-only / Nichtlieferung in R1; jede Reduktion von Limits ist eigene Entscheidung | keine Vorabwahl | nach B0 |
 | **O3** | Bedingt (nur bei B1/B2): geraetegebundene Daten im Backup (`sensorCommissioning` mit ROM-Bindung, Planerparameter) | **A** ausschliessen; **B** mit Warnung; **C** mit Zusatzbestaetigung | **A** | vor B1 |
-| **O-R3** | R1-Vertragsabgleich K1–K7 (Abschnitt 7) und Zuschnitt von #19/#28 | Journal fuer R1 doch umsetzen / R1-SSOT per ADR anpassen / Abweichung ausdruecklich akzeptieren | – (nicht vom Plan entschieden) | vor R1-Abnahme, vor Wiederaufnahme von #1–#4 und vor jeder Aenderung von #19/#28 |
-| **O-HW** | Hardware-Folgeissue fuer die physische Verifikation von Reset (und spaeter Backup/Import) | **A** Folgeissue wie #190 zu #30; **B** Hardwarenachweise bleiben in #19 offen | **A** | spaetestens vor R4; der Agent legt ohne Ownerauftrag kein Issue an |
+| **O-R3** | *entschieden (siehe Abschnitt 7): K1 = A bedingt, K2–K7 genehmigt*; offen bleibt die separate SSOT-/#28-/#37-Vertragsanpassung (nicht in diesem PR) | – | – | separater Vorgang |
+| **O-HW** | *entschieden: A* – separates Hardware-Folgeissue fuer `HW-19-R01..R03` (angelegt, siehe PR #191); Hardwaretests bleiben `NOT_RUN` | – | – | **ERLEDIGT** |
+| **G-S1** | Ownerfreigabe der exakten Plan-SHA von Revision 8 fuer R5/S1 (Abschnitt 4.8) | – | – | **vor jedem S1-Produktcode** |
 
 Entfallen/verlagert in Anhang A (nur bei Wiederaufnahme von #1–#4): Speicherstruktur
 (NVS-Ringe/LittleFS), Journal nach Werksreset (O4), feste vs. konfigurierbare
@@ -520,8 +634,11 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 
 - [ ] Plan-Fix-Verification ohne offene Blocker
 - [ ] exakte Plan-SHA vom Owner freigegeben (G0)
-- [ ] R0-Befunde (insbesondere Resetkern ohne Runtime/SAFE_BOOT, HTTP-Stopp-Reihenfolge) vor R1; Bedienparameter Dauer des langen Gedrueckthaltens vor Abnahme; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
-- [ ] O-R3 (R1-Vertragsabgleich) bis zur R1-Abnahme entschieden
+- [x] R0-Befunde dokumentiert (`docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md`); Hold-Dauer 5000 ms; O-HW = A
+- [ ] G-S1: Ownerfreigabe der exakten Plan-SHA von Revision 8 vor R5/S1-Produktcode
+- [ ] Ablauf A: mit dem produktiven lokalen Service-UI/PIN-Zugang (O-R2 = B)
+- [ ] O-BI nach B0; O3 vor B1
+- [ ] separate SSOT-/#28-/#37-Vertragsanpassung (K1 bedingt, K2–K7 genehmigt) – nicht in #191
 - [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten
 
 ## Anhang A – Zurueckgestellte fachliche Referenz (Revision 2, nicht verbindlich)

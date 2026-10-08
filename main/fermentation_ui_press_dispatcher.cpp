@@ -149,6 +149,11 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
     return {};
 }
 
+void releaseFactoryResetHold(FermentationApplication& application,
+                             std::uint64_t monotonicMillis) {
+    application.updateFactoryResetHold(false, monotonicMillis);
+}
+
 WorkspaceTouchTickResult processWorkspaceTouch(
     FermentationApplication& application, FermentationTouchWorkspace& workspace,
     const FermentationUiSnapshot& snapshot,
@@ -161,8 +166,9 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     WorkspaceTouchTickResult result;
     if (!contactHeld) {
         // Releasing the hold target resets the long press (Issue #19).
-        if (snapshot.factoryReset.stage == FactoryResetStage::Hold) {
-            application.updateFactoryResetHold(false, monotonicMillis);
+        if (touchLoopAction(false, snapshot) ==
+            TouchLoopAction::ReleaseFactoryResetHold) {
+            releaseFactoryResetHold(application, monotonicMillis);
         }
         return result;
     }
