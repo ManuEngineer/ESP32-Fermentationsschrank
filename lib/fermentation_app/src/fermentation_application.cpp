@@ -1822,6 +1822,7 @@ bool FermentationApplication::beginPersistent(
     secureRandomSource_ = randomSource;
     authenticationKdf_ = authenticationKdf;
     storageEpoch_.reset();
+    noRuntimeResetAdmitted_ = false;
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
     presentationState_ = PresentationState{};
@@ -1906,6 +1907,13 @@ bool FermentationApplication::beginPersistent(
         configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        // One-time admission for the no-runtime factory reset: the recovery
+        // core latched ResetEligibleNoRuntime and no run-epoch handoff is
+        // open. Evaluated here, never on a UI tick.
+        noRuntimeResetAdmitted_ =
+            configurationService_->mode() ==
+                ConfigurationServiceMode::ResetEligibleNoRuntime &&
+            noRuntimeResetBootstrapEpochUnlocked().has_value();
         requireService(configurationFault(configurationResult.status));
         return true;
     }
@@ -2284,11 +2292,21 @@ FermentationApplication::factoryResetPreviousEpochUnlocked() const {
     if (!factoryResetRecoveryEntryUnlocked()) {
         return std::nullopt;
     }
+    return noRuntimeResetBootstrapEpochUnlocked();
+}
+
+std::optional<device_platform::StorageEpoch>
+FermentationApplication::noRuntimeResetBootstrapEpochUnlocked() const {
+    if (bootstrapStore_ == nullptr) {
+        return std::nullopt;
+    }
     const auto bootstrap = bootstrapStore_->scan();
     if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
         !bootstrap.loaded.has_value() ||
         bootstrap.loaded->record.state !=
-            ConfigurationBootstrapState::Initialized) {
+            ConfigurationBootstrapState::Initialized ||
+        bootstrap.loaded->record.handoff == RunEpochHandoffState::Pending ||
+        bootstrap.loaded->record.handoff == RunEpochHandoffState::Committed) {
         return std::nullopt;
     }
     return bootstrap.loaded->record.storageEpoch;
@@ -2559,8 +2577,8 @@ bool FermentationApplication::factoryResetRecoveryEntryUnlocked()
     // Only the state the recovery core itself latched as reset-eligible: a
     // plain `NoRuntime`, a global scan blocker, an identity collision or an
     // unknown bootstrap never qualifies.
-    return !storageEpoch_.has_value() && bootstrapStore_ != nullptr &&
-           configurationService_ != nullptr &&
+    return noRuntimeResetAdmitted_ && !storageEpoch_.has_value() &&
+           bootstrapStore_ != nullptr && configurationService_ != nullptr &&
            configurationService_->mode() ==
                ConfigurationServiceMode::ResetEligibleNoRuntime;
 }
@@ -2687,6 +2705,11 @@ void FermentationApplication::updateFactoryResetHold(bool held,
             default:
                 core = FactoryResetCoreResult::Failed;
                 break;
+        }
+        if (withoutRuntime) {
+            // Any attempt consumes the one-time admission; a retry needs the
+            // restart (which re-evaluates it).
+            noRuntimeResetAdmitted_ = false;
         }
         if (withoutRuntime && factoryResetBoundaryCrossed(core)) {
             // Operation stays blocked until the restart composes the normal

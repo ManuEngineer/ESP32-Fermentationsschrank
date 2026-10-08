@@ -348,18 +348,32 @@ Aktor-AUS am realen Geraet, Powercut auf echtem Flash, Dauer der langen Bestaeti
 R0: `docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md` (Stoppbefund S1, O-R2). R1–R3
 umgesetzt fuer **Ablauf B** (beide Zugaenge, O-R1 = B+), Netzwerk-/HTTP-Sequenz nach
 4.4a und ehrlichen `INetworkLifecycle::stop()`-Rueckgabewert im ESP-IDF-Adapter.
-**Nicht umgesetzt:** Ablauf A (lokale PIN-Pruefung, O-R2) und der Reset ohne geladene
-Runtime (S1). Die tatsaechlichen Testnachweise stehen in `ACCEPTANCE_TESTS.md`
+**Nicht umgesetzt:** Ablauf A (lokale PIN-Pruefung, O-R2). Der Reset ohne geladene
+Runtime (S1/R5, Abschnitt 4.8) ist nach der Ownerfreigabe der Plan-SHA `aa665f1`
+software-seitig umgesetzt (Statusnachtrag unten). Die tatsaechlichen Testnachweise stehen in `ACCEPTANCE_TESTS.md`
 (`SIM-19-R01..R07`, `HW-19-R01..R03` = `NOT_RUN`); sie ersetzen die planinternen IDs
 SIM-R-xx dort, wo sie abweichen. Die Hold-Dauer ist per Ownerentscheid 5000 ms
 (`kApprovedFactoryResetHoldMillis`). Review-Fix B1: der Release-/No-Contact-Pfad der
 Hauptschleife erreicht den Ablauf (`touchLoopAction`/`releaseFactoryResetHold`),
 Regression `SIM-19-R08`.
 
+**Statusnachtrag R5/S1 (aktuell; aendert den Planvertrag nicht).** Umgesetzt nach
+4.8. Der Review der Umsetzung ergab zwei Nachbesserungen innerhalb des freigegebenen
+Vertrags: (1) die Zulassung schliesst einen offenen Run-Epochen-Handoff
+(`Pending`/`Committed`) bereits beim Angebot aus – einmalig beim Boot ausgewertet
+(`noRuntimeResetAdmitted_`), nicht pro UI-Tick; der Kern prueft unmittelbar vor dem
+Reset unveraendert erneut; (2) `SIM-19-S1-03`: die Anwendungskomposition besitzt
+keine Aktorsenken, daher ist die Plan-Formulierung "null Enable-Aufrufe der
+Mock-Senken ueber den gesamten Ablauf" nicht direkt pruefbar; als gleichwertige
+Testgrenze gelten die Architektur-Evidence (Quellpruefung) und der Lauf des echten
+Orchestrator-/Planner-/Sink-Driver-Pfads mit Mock-Senken vor, waehrend und nach dem
+Ablauf (Abweichung ausgewiesen in `ACCEPTANCE_TESTS.md`).
+
 ### 4.8 R5 – Werksreset im `ResetEligibleNoRuntime` (Ownerentscheid S1 = B, Revision 8)
 
-**Status: nur Plan. Es gibt keinen S1-Produktcode, bis der Owner die exakte Plan-SHA
-von Revision 8 freigegeben hat.** S1 aendert den Anwendungs-/Recoveryvertrag
+**Status zum Zeitpunkt der Planrevision: nur Plan (kein S1-Produktcode vor der
+Ownerfreigabe der exakten Plan-SHA von Revision 8; die Freigabe `aa665f1` ist
+erfolgt, der aktuelle Umsetzungsstand steht im Statusnachtrag in 4.7).** S1 aendert den Anwendungs-/Recoveryvertrag
 materiell (der Anwendungs-Reset war bisher an eine geladene Runtime gebunden).
 
 **Ziel/Abgrenzung.** Der PIN-unabhaengige Vollreset B (gleiche Zugaenge, gleicher

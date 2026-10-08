@@ -6,6 +6,9 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <functional>
 #include <future>
 #include <memory>
@@ -16,15 +19,28 @@
 #include <variant>
 
 #include "authentication_records.hpp"
+#include "actuation_interlock.hpp"
+#include "actuator_plan_sink_driver.hpp"
+#include "actuator_planner.hpp"
 #include "configuration_bootstrap_store.hpp"
+#include "configuration_graph_store.hpp"
+#include "configuration_mutation_coordinator.hpp"
+#include "configuration_recovery_service.hpp"
+#include "configuration_service.hpp"
 #include "device_platform.hpp"
 #include "factory_reset_flow.hpp"
 #include "fermentation_application.hpp"
 #include "fermentation_ui_commands.hpp"
+#include "mock_bidirectional_actuator_sink.hpp"
+#include "mock_binary_output_sink.hpp"
 #include "mock_network_lifecycle.hpp"
 #include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "target_qualification.hpp"
+#include "temperature_control.hpp"
+#include "temperature_control_orchestrator.hpp"
 #include "touch_calibration.hpp"
 #include "virtual_time_source.hpp"
 
@@ -34,6 +50,17 @@ namespace fermentation {
 // run state into a running-process state without driving the full start flow.
 class FermentationApplicationTestAccess {
    public:
+    // The application's own actuation-start evidence (what the product
+    // composition would hand to the interlock).
+    static bool safetyAllowsStart(FermentationApplication& application) {
+        return application.resolveRuntimeEvidence().safetyAllowsStart;
+    }
+    // Copy of the published run state; default (Boot) while none is published.
+    static RunCommandState runStateCopy(FermentationApplication& application) {
+        return application.runtimeRunState_ != nullptr
+                   ? *application.runtimeRunState_
+                   : RunCommandState{};
+    }
     static void setActiveManualRun(FermentationApplication& application,
                                    bool active) {
         TEST_ASSERT_NOT_NULL(application.runtimeRunState_.get());
@@ -500,12 +527,107 @@ device_platform::StateStoreKey storeKey(const char* bytes) {
     return *created.key;
 }
 
+void eraseGraph(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    for (const char* key :
+         {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2", "sc3",
+          "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2"}) {
+        store.erase(storeKey(key));
+    }
+}
+
+// A real open run-epoch handoff, produced by the recovery core itself: the
+// reset completed (bootstrap Initialized, handoff Pending) and, optionally,
+// the run-persistence side committed (handoff Committed) - not yet consumed.
+void leaveOpenHandoff(
+    device_platform_test_support::SimulatedPersistentStateStore& store,
+    bool commit) {
+    device_platform_test_support::MockTimeZoneResolver resolver;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    TEST_ASSERT_TRUE(recovery->boot().status ==
+                     fermentation::ConfigurationRecoveryStatus::RuntimeReady);
+    TEST_ASSERT_TRUE(
+        recovery->beginAuthorizedFactoryReset().status ==
+        fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted);
+    if (commit) {
+        auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+        TEST_ASSERT_TRUE(proof.has_value());
+        fermentation::RunPersistenceCoordinator runPersistence(
+            store, proof->currentEpoch(),
+            fermentation::RunCheckpointSchedule{});
+        const auto prepared =
+            runPersistence.prepareAuthorizedEpochHandoff(*proof);
+        TEST_ASSERT_TRUE(prepared.persistenceResult.status ==
+                         fermentation::RunPersistenceResultStatus::Applied);
+        TEST_ASSERT_TRUE(
+            recovery
+                ->commitAuthorizedRunEpochHandoff(*proof, *prepared.evidence)
+                .status ==
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady);
+    }
+    const auto scan = bootstrap.scan();
+    TEST_ASSERT_TRUE(scan.loaded.has_value());
+    TEST_ASSERT_TRUE(scan.loaded->record.state ==
+                     fermentation::ConfigurationBootstrapState::Initialized);
+    TEST_ASSERT_TRUE(scan.loaded->record.handoff ==
+                     (commit ? fermentation::RunEpochHandoffState::Committed
+                             : fermentation::RunEpochHandoffState::Pending));
+}
+
+// Precondition of the B1 scenario: the recovery core itself latches
+// ResetEligibleNoRuntime for this store (valid initialized bootstrap, missing
+// graph) although the handoff is open - exactly the case to be rejected.
+void requireCoreLatchesEligible(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    device_platform_test_support::MockTimeZoneResolver resolver;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    static_cast<void>(recovery->boot());
+    TEST_ASSERT_TRUE(
+        service.mode() ==
+        fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime);
+}
+
+// Forwards to the simulated store and counts the writes.
+class CountingStore final : public device_platform::IStateStore {
+   public:
+    explicit CountingStore(
+        device_platform_test_support::SimulatedPersistentStateStore& inner)
+        : inner_(inner) {}
+    [[nodiscard]] device_platform::StateStoreWriteStatus write(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        ++writes_;
+        return inner_.write(key, value);
+    }
+    [[nodiscard]] device_platform::StateStoreReadResult read(
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        return inner_.read(key, maxBytes);
+    }
+    [[nodiscard]] std::size_t writes() const noexcept { return writes_; }
+
+   private:
+    device_platform_test_support::SimulatedPersistentStateStore& inner_;
+    std::size_t writes_{0U};
+};
+
 // A configuration whose graph is unavailable: a throw-away application
 // factory-initializes the store, then both root slots are damaged and the
 // application under test boots from it (no runtime).
 struct NoRuntimeFixture {
     device_platform::DevicePlatform platform;
     device_platform_test_support::SimulatedPersistentStateStore store;
+    CountingStore counted{store};
     device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
     device_platform::VirtualTimeSource timeSource;
     device_platform_test_support::MockNetworkLifecycle network;
@@ -514,7 +636,13 @@ struct NoRuntimeFixture {
     RecordingHttpServerLifecycle http;
     std::unique_ptr<fermentation::FermentationApplication> application;
 
-    enum class Damage { RootSlots, RootSlotReadError, BootstrapSlots };
+    enum class Damage {
+        RootSlots,
+        RootSlotReadError,
+        BootstrapSlots,
+        OpenHandoffPending,
+        OpenHandoffCommitted
+    };
 
     explicit NoRuntimeFixture(Damage damage = Damage::RootSlots) {
         http.network = &network;
@@ -525,6 +653,12 @@ struct NoRuntimeFixture {
             TEST_ASSERT_TRUE(first.ready());
         }
         store.restart();
+        if (damage == Damage::OpenHandoffPending ||
+            damage == Damage::OpenHandoffCommitted) {
+            leaveOpenHandoff(store, damage == Damage::OpenHandoffCommitted);
+            eraseGraph(store);
+            requireCoreLatchesEligible(store);
+        }
         switch (damage) {
             case Damage::RootSlots:
                 // The graph records are gone (the established core-test
@@ -544,11 +678,14 @@ struct NoRuntimeFixture {
                 store.injectCorruption(storeKey("cb0"), "damaged-boot-0");
                 store.injectCorruption(storeKey("cb1"), "damaged-boot-1");
                 break;
+            case Damage::OpenHandoffPending:
+            case Damage::OpenHandoffCommitted:
+                break;
         }
         application = std::make_unique<fermentation::FermentationApplication>();
-        static_cast<void>(application->begin(platform, store, timeZoneResolver,
-                                             timeSource, network, http, random,
-                                             kdf));
+        static_cast<void>(application->begin(platform, counted,
+                                             timeZoneResolver, timeSource,
+                                             network, http, random, kdf));
         application->setFactoryResetHoldMillis(kHoldMs);
     }
 
@@ -807,6 +944,176 @@ void test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed() {
     }
 }
 
+void test_s1_an_open_run_epoch_handoff_is_never_offered_and_changes_nothing() {
+    using Damage = NoRuntimeFixture::Damage;
+    for (const auto damage :
+         {Damage::OpenHandoffPending, Damage::OpenHandoffCommitted}) {
+        NoRuntimeFixture fixture(damage);
+        auto& app = *fixture.application;
+        const auto epochBefore = fixture.epoch();
+        const auto writesBefore = fixture.counted.writes();
+        const auto view = app.factoryResetView(0U);
+        TEST_ASSERT_FALSE(view.recoveryEntry);
+        TEST_ASSERT_FALSE(view.available);
+        TEST_ASSERT_FALSE(
+            app.beginFactoryReset(FactoryResetKind::PinIndependent));
+        // A forged hold sequence cannot reach the core either.
+        app.updateFactoryResetHold(true, 1000U);
+        app.updateFactoryResetHold(true, 1000U + kHoldMs);
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         app.factoryResetView(0U).stage);
+        TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+        TEST_ASSERT_EQUAL_UINT32(
+            static_cast<std::uint32_t>(writesBefore),
+            static_cast<std::uint32_t>(fixture.counted.writes()));
+    }
+}
+
+// --- SIM-19-S1-03: no actuator effect ----------------------------------------
+
+std::string readSource(const char* path) {
+    std::ifstream stream(path, std::ios::binary);
+    TEST_ASSERT_TRUE(stream.good());
+    return std::string(std::istreambuf_iterator<char>(stream),
+                       std::istreambuf_iterator<char>());
+}
+
+// Architecture evidence (the product composition has no sinks): the reset path
+// has no code path to an actuator sink, and the sinks are reachable in
+// fermentation_app only through the plan sink driver.
+void test_s1_reset_path_sources_have_no_actuator_sink_dependency() {
+    const char* const resetPathFiles[] = {
+        "lib/fermentation_app/src/factory_reset_flow.hpp",
+        "lib/fermentation_app/src/factory_reset_flow.cpp",
+        "lib/fermentation_app/src/fermentation_application.hpp",
+        "lib/fermentation_app/src/fermentation_application.cpp",
+        "lib/fermentation_app/src/network_configuration_service.hpp",
+        "lib/fermentation_app/src/network_configuration_service.cpp",
+        "lib/fermentation_app/src/configuration_recovery_service.hpp",
+        "lib/fermentation_app/src/configuration_recovery_service.cpp",
+        "main/app_main.cpp"};
+    for (const char* path : resetPathFiles) {
+        const auto text = readSource(path);
+        for (const char* forbidden :
+             {"IBinaryOutputSink", "IBidirectionalActuatorSink",
+              "ActuatorPlanSinkDriver", "setForward(", "setReverse(",
+              "setEnabled("}) {
+            TEST_ASSERT_TRUE(text.find(forbidden) == std::string::npos);
+        }
+    }
+    // Sinks inside fermentation_app: only the driver (and the orchestrator that
+    // is handed a driver) may mention them.
+    std::size_t sinkUsers = 0U;
+    for (const auto& entry :
+         std::filesystem::directory_iterator("lib/fermentation_app/src")) {
+        const auto name = entry.path().filename().string();
+        const auto text = readSource(entry.path().string().c_str());
+        if (text.find("IBinaryOutputSink") != std::string::npos ||
+            text.find("IBidirectionalActuatorSink") != std::string::npos) {
+            ++sinkUsers;
+            TEST_ASSERT_TRUE(name.rfind("actuator_plan_sink_driver.", 0U) ==
+                             0U);
+        }
+    }
+    TEST_ASSERT_TRUE(sinkUsers >= 1U);
+}
+
+struct SinkRig {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    fermentation::RunPersistenceCoordinator coordinator{
+        store, device_platform::StorageEpoch{1U},
+        fermentation::RunCheckpointSchedule{}};
+    fermentation::TargetQualificationEvaluator evaluator;
+    fermentation::TemperatureController controller{{}, {}};
+    fermentation::ActuatorPlanner planner;
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outer;
+    device_platform_test_support::MockBinaryOutputSink inner;
+    fermentation::ActuatorPlanSinkDriver driver{peltier, outer, inner};
+    fermentation::TemperatureControlApplicationOrchestrator orchestrator{
+        coordinator, controller, evaluator, planner, driver};
+
+    // One planner tick through the only place that writes the sinks, with the
+    // gate the real interlock produces for the given evidence.
+    void tick(const fermentation::RunCommandState& state, std::uint64_t nowMs,
+              fermentation::ActuationEvidence evidence) {
+        const auto decision =
+            fermentation::ActuationInterlock::evaluate(evidence);
+        static_cast<void>(orchestrator.tickActuatorPlan(
+            state, nowMs,
+            fermentation::ActuatorSafetyGateInput{decision.permission}));
+    }
+    [[nodiscard]] bool anyEnableCommand() const {
+        for (const auto& command : peltier.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        for (const auto& command : outer.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        for (const auto& command : inner.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        return peltier.forward() || peltier.reverse() || outer.enabled() ||
+               inner.enabled();
+    }
+};
+
+// Equivalent test boundary (documented deviation from the plan wording): the
+// application composition owns no sinks, so the reset flow cannot be wired to
+// them. The real orchestrator -> planner -> sink driver -> mock sinks path is
+// ticked before, during and after the real S1 flow with (a) the gate the real
+// interlock produces for the S1 state and (b) the application's own run state
+// and start-safety evidence at that moment.
+void test_s1_no_actuator_enable_before_during_and_after_the_reset() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    SinkRig rig;
+    fermentation::ActuationEvidence s1Evidence;
+    s1Evidence.bootValidationComplete = true;
+    s1Evidence.configurationServiceMode =
+        fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime;
+    s1Evidence.configurationRecoveryStatus =
+        fermentation::ConfigurationRecoveryStatus::ConfigurationUnavailable;
+    s1Evidence.configurationValidated = false;
+    s1Evidence.explicitActivationRequested = true;
+
+    // Before: no runtime, no start-safety.
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::safetyAllowsStart(
+            app));
+    rig.tick(fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+             100U, s1Evidence);
+    TEST_ASSERT_FALSE(rig.anyEnableCommand());
+
+    // During: inside the HTTP stop (after the core crossed its boundary).
+    fixture.http.probe = [&] {
+        rig.tick(
+            fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+            200U, s1Evidence);
+        return !fermentation::FermentationApplicationTestAccess::
+            safetyAllowsStart(app);
+    };
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    TEST_ASSERT_TRUE(fixture.http.probeEnteredGate);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     app.factoryResetView(0U).outcome);
+
+    // After, before the restart: the operation stays blocked.
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::safetyAllowsStart(
+            app));
+    rig.tick(fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+             300U, s1Evidence);
+    TEST_ASSERT_FALSE(rig.anyEnableCommand());
+    // The sinks did receive commands (the stop output), none of them an enable.
+    TEST_ASSERT_TRUE(!rig.outer.commandJournal().empty() ||
+                     !rig.peltier.commandJournal().empty());
+}
+
 }  // namespace
 
 void setUp() {}
@@ -839,5 +1146,9 @@ int main(int, char**) {
     RUN_TEST(
         test_s1_no_runtime_never_allows_an_actuator_and_a_running_process_blocks);
     RUN_TEST(test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed);
+    RUN_TEST(
+        test_s1_an_open_run_epoch_handoff_is_never_offered_and_changes_nothing);
+    RUN_TEST(test_s1_reset_path_sources_have_no_actuator_sink_dependency);
+    RUN_TEST(test_s1_no_actuator_enable_before_during_and_after_the_reset);
     return UNITY_END();
 }

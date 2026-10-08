@@ -564,6 +564,10 @@ class FermentationApplication {
     [[nodiscard]] bool factoryResetRecoveryEntryUnlocked() const noexcept;
     [[nodiscard]] std::optional<device_platform::StorageEpoch>
     factoryResetPreviousEpochUnlocked() const;
+    // Epoch of a verified, initialized bootstrap without an open run-epoch
+    // handoff; the only bootstrap the no-runtime reset is offered for.
+    [[nodiscard]] std::optional<device_platform::StorageEpoch>
+    noRuntimeResetBootstrapEpochUnlocked() const;
     // Ends the running network connection and the HTTP server after the
     // irreversible reset boundary (Issue #19, plan 4.4a). Runs outside the
     // Application gate; returns false if either stop is not confirmed.
@@ -650,6 +654,9 @@ class FermentationApplication {
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
     FactoryResetFlow factoryResetFlow_;
+    // Evaluated once at boot (never per UI tick): the recovery core admitted
+    // `ResetEligibleNoRuntime` AND the bootstrap has no open handoff.
+    bool noRuntimeResetAdmitted_{false};
     ApplicationCallSerializer applicationCallSerializer_;
 };
 

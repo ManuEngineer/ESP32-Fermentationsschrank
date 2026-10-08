@@ -56,3 +56,5 @@ angeboten (Epoche aus dem geprueften Bootstrap, Eintrag auf der eingeschraenkten
 Startseite, Ergebnis "Geraet aus- und wieder einschalten"). Nicht zugelassene
 Zustaende bleiben ausgeschlossen. Nachweise: `ACCEPTANCE_TESTS.md`
 `SIM-19-S1-01..06`; Hardware weiter `NOT_RUN` (#192).
+
+Nachbesserung nach Implementierungsreview: die Zulassung schliesst zusaetzlich einen offenen Run-Epochen-Handoff (`Pending`/`Committed`) aus (einmalige Boot-Auswertung, kein Scan pro UI-Tick); `SIM-19-S1-02/03` siehe `ACCEPTANCE_TESTS.md`.
