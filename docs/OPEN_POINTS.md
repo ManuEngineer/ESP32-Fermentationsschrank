@@ -215,7 +215,7 @@ abschließend, soweit sein späterer Scope dies verlangt.
       Planrevision mit Ownerfreigabe der exakten Plan-SHA umsetzbar (Stoppbefund
       S1, `docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md`); **nicht implementiert**
 - [ ] Hardwarenachweise `HW-19-R01..R03` (`ACCEPTANCE_TESTS.md`) in einem
-      separaten Hardware-Folgeissue (Ownerentscheid O-HW = A), `NOT_RUN`
+      separaten Hardware-Folgeissue #192 (Ownerentscheid O-HW = A), `NOT_RUN`
 - [ ] Journal, Laufhistorie, Bereinigung, Laufexport: `DEFERRED_BY_OWNER_PENDING_
       R1_CONTRACT_RECONCILIATION`; R1-Vertragskonflikte K1–K7 im Plan, kein
       R1-`PASS` ohne Ownerentscheid O-R3
