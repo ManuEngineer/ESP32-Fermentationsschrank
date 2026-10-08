@@ -378,7 +378,7 @@ Recovery-FSM; Web-Ausloesung; Ablauf A.
 | Vertrauenswuerdige alte Epoche | der Kern leitet `targetEpoch = Bootstrap-Epoche + 1` aus dem geprueften Bootstrap (`scan()` = `Available`, `Initialized`, kein offener Run-Handoff, keine Zaehlerueberlaeufe) ab; die Anwendung braucht die alte Epoche nur fuer die Gegenpruefung nach dem Kern (`currentEpoch != previousEpoch`) | `previousEpoch` kommt ohne Runtime aus `bootstrapStore_->scan()` (nur `Available` + `Initialized`, sonst nicht angeboten) statt aus `storageEpoch_` |
 | Bindende Autorisierung/Vorbedingungen | der Kern prueft weder Lauf noch PIN noch Ursprung (4.2); die Vorbedingungen liegen im Ablauf unter dem `ApplicationCallSerializer` (4.4) | Praedikat `factoryResetAvailableUnlocked()`: zusaetzlich zum bisherigen Fall auch `configurationService_->mode() == ResetEligibleNoRuntime` **und** `configurationRecoveryService_`/`bootstrapStore_`/`stateStore_` vorhanden |
 | Epochen- und Run-Persistenz-Handoff ohne vorherige Runtime | der Anwendungs-Einstieg erzeugt den `RunPersistenceCoordinator` fuer die **neue** Epoche selbst, fuehrt Prepare/Commit/Finalize/Consume des Handoffs aus, initialisiert Authentication neu, laedt die Run-Persistenz und publiziert Standby (alles bereits im Bestandscode nach der Resetgrenze) | keiner ausser der Epochenquelle; ein offener Handoff wird andernfalls vom naechsten Boot ueber den vorhandenen Wiederaufnahmepfad abgeschlossen (`test_application_reconstructs_reset_handoff_after_run_write_cut`) |
-| Widerruf Auth/Web/Netzwerk | in diesem Zustand existieren **keine** Authentication-/Web-/Netzwerk-Domaenen: `beginPersistent()` kehrt vor `initializeAuthentication()`/`initializeNetwork()` zurueck; `webSessionManager_`, `networkConfigurationService_`, HTTP-Server sind nie gestartet. Persistierte Credentials der alten Epoche sind durch den Epochenwechsel logisch unerreichbar | keiner; Nachweis: Netzwerk-/HTTP-Mocks zeigen keinen Start und keinen Stopp-Bedarf (die Teardown-Sequenz 4.4a ist dann ein Nullzeit-Durchlauf) |
+| Widerruf Auth/Web/Netzwerk | in diesem Zustand existieren **keine** Authentication-/Web-Domaenen und es wurde kein Netzwerk-/HTTP-Dienst gestartet: `beginPersistent()` kehrt vor `initializeAuthentication()`/`initializeNetwork()` zurueck. Die Adapter-Objekte (`INetworkLifecycle`, `IHttpServerLifecycle`) koennen existieren, sind aber nie gestartet worden. Persistierte Credentials der alten Epoche sind durch den Epochenwechsel logisch unerreichbar | keiner. Die vorhandene Sequenz 4.4a (`endNetworkAfterFactoryReset()`) laeuft unveraendert und ruft `stop()` auch auf nie gestarteten Objekten auf; das ist idempotent und erfolgreich (ESP-IDF-Netzwerk-Adapter: nie gestartet = gestoppt, `IHttpServerLifecycle::stop()` ohne Server = `true`). **Keine** Sonderbehandlung, keine Lifecycle-Abfrage, kein zusaetzlicher Ablaufzweig. Ein erfolgreicher NoRuntime-Reset wird dadurch nicht zu `CompletedNetworkNotConfirmed`; nur ein tatsaechlich gescheiterter Stopp bleibt "nicht bestaetigt" |
 | Danach definierter Zustand | nach dem Kern setzt der Bestandscode `lifecycleState_ = Ready`; das Netzwerk bleibt aber unkomponiert, bis ein Neustart den normalen Boot ausfuehrt | **Neu:** nach erfolgreichem NoRuntime-Reset wird der Betrieb bis zum Neustart gesperrt (`requireService`-Latch) und der Ablauf meldet `CompletedRestartRequired` ("Werksreset durchgefuehrt. Geraet vollstaendig aus- und wieder einschalten."); keine In-place-Neukomposition der Boot-Subsysteme |
 
 #### 4.8.2 Lokal erreichbare, passive Reset-UI
@@ -393,10 +393,15 @@ SafeBoot`) greift hier nicht. Plan:
 - `FermentationFactoryResetView` erhaelt ein Feld `recoveryEntry`
   (= `ConfigurationServiceMode::ResetEligibleNoRuntime`); es ist Teil des
   UI-Snapshots und seiner semantischen Gleichheit.
-- Auf der `Restricted`-Startseite ist Slot 0 der Eintrag "Werksreset", wenn
-  `processState == SafeBoot` **oder** `recoveryEntry`; alle anderen Aktionen
-  bleiben so deaktiviert wie heute (**passiv**: keine neue Navigation, kein
-  Service-/Aktorzugang, keine Netzwerkaktion).
+- S1 ergaenzt **ausschliesslich** den lokalen Reset-Einstieg auf Slot 0 der
+  `Restricted`-Startseite (`processState == SafeBoot` **oder** `recoveryEntry`).
+  Alle uebrigen Slots behalten ihren **tatsaechlichen Bestandsvertrag** aus
+  `FermentationTouchWorkspace::makeHomeView()`: im NoRuntime-Fall projiziert die
+  Anwendung `home.mode = Restricted`, `home.processState = Boot`; dort ist der
+  **Status-Slot aktiv** (passiv lesbar), der **Programme-Slot ist bei
+  `ProcessState::Boot` aktiv**, der Service-Slot ist deaktiviert. Es gibt keine
+  pauschale Abschaltung der uebrigen Slots (keine verdeckte Scope-Erweiterung) und
+  **keine neue Service-, Netzwerk- oder Aktorfreigabe** durch S1.
 - Derselbe Ablauf B (Warnung, Bestaetigung, 5000 ms), derselbe Resetkern.
 - Grenze (dokumentiert, nicht geloest): ist die Touchkalibrierung ungueltig, bleibt
   Touch fail-closed (Bestandsverhalten, #31); dann bleibt nur der UART-Recoveryweg.
@@ -412,7 +417,7 @@ SafeBoot`) greift hier nicht. Plan:
 | Zaehlerueberlauf (Epoche/Sequenz/High-Water) | Kern lehnt ab (`CounterOverflow`) | vorhandene Kerntests |
 | aktiver oder nicht sicher auszuschliessender Aktorzustand | in `ResetEligibleNoRuntime` ist keine Runtime/kein Lauf publiziert und der `ActuationInterlock` verweigert (bekannter Modus); der Ablauf schaltet nichts; Mock-Senken zaehlen null Enables; ein publizierter aktiver Lauf blockiert wie bisher | SIM-19-S1-03 |
 | Stromunterbrechung vor/nach der Resetgrenze | nach Neustart exakt alter (weiter zugelassener) oder abgeschlossener Zustand; ein `Resetting`-Bootstrap wird vom normalen Boot wiederaufgenommen; nie gemischt | SIM-19-S1-04 (Schreibfehler-/Powercut-Injektion an jedem Write des Kerns und der Handoff-Schritte, `SimulatedPersistentStateStore`) |
-| Netzwerk/HTTP nicht vorhanden | kein Start, kein Stopp-Aufruf noetig, Ergebnis nicht "Netzwerk nicht bestaetigt" | SIM-19-S1-05 |
+| Netzwerk/HTTP nie gestartet (Objekte existieren, laufen aber nicht) | kein vorheriger Transportstart, keine offenen Dienste, kein Neustart mit alten Credentials; idempotente `stop()`-Aufrufe sind zulaessig; Ergebnis `CompletedRestartRequired`, nicht `CompletedNetworkNotConfirmed` | SIM-19-S1-05 | Netzwerk-/HTTP-Mocks (existieren, nie gestartet): vor dem Reset `startCallCount() == 0` und HTTP nicht laufend; nach dem Reset kein `start()` mit alten Credentials, Netzwerk bleibt `Stopped`, HTTP nicht laufend; `stop()`-Aufrufe sind idempotent und duerfen stattfinden (**keine** Null-Call-Anforderung); Ergebnis ist `CompletedRestartRequired`, nicht `CompletedNetworkNotConfirmed`. Gegenprobe: ein tatsaechlich gescheiterter `stop()` bleibt `CompletedNetworkNotConfirmed` |
 | Web-/Remote-Ausloesung | weiterhin nicht erreichbar (kein Eintrag im Command-Variant, keine Route) | SIM-19-R06 bleibt gueltig |
 
 #### 4.8.4 Tests (hardwarefrei; Nummern vorlaeufig)
@@ -424,12 +429,12 @@ SafeBoot`) greift hier nicht. Plan:
 | SIM-19-S1-03 | Keine Aktorwirkung: Mock-Senken zaehlen ueber den gesamten Ablauf null Enable-Aufrufe; Interlock verweigert im Modus unveraendert |
 | SIM-19-S1-04 | Powercut-/Fehlerinjektion an jedem Write: nach Neustart alter oder neuer Zustand, nie gemischt; erneuter Versuch bleibt moeglich |
 | SIM-19-S1-05 | Netzwerk-/HTTP-Mocks: kein Start vor, kein Stopp-Bedarf nach dem Reset; Ergebnis `CompletedRestartRequired` statt "Netzwerk nicht bestaetigt" |
-| SIM-19-S1-06 | UI: `Restricted`-Startseite zeigt mit `recoveryEntry` den Eintrag in Slot 0 (ohne `SafeBoot`), alle uebrigen Aktionen bleiben deaktiviert; derselbe Ablauf und derselbe Hold-Mechanismus (5000 ms, Release ueber `touchLoopAction`) |
+| SIM-19-S1-06 | UI: `home.mode = Restricted`, `processState = Boot` mit `recoveryEntry` zeigt den Eintrag in Slot 0 (ohne `SafeBoot`); alle uebrigen Slots entsprechen unveraendert dem Bestandsvertrag (Status-Slot aktiv, Programme-Slot bei `Boot` aktiv, Service-Slot deaktiviert) – der Test vergleicht gegen die Bestandsprojektion ohne `recoveryEntry`, ausser Slot 0; derselbe Ablauf und derselbe Hold-Mechanismus (5000 ms, Release ueber `touchLoopAction`) |
 | Regression | `test_factory_reset_flow::test_a_configuration_without_runtime_is_reported_unavailable` ist fuer den **nicht** zugelassenen Fall weiterhin gueltig (wird fuer den zugelassenen Fall ersetzt); alle SIM-19-R01..R08 |
 
 #### 4.8.5 Folgen fuer Scope, Tests und Architektur
 
-- Scope: eine kleine Anwendungsaenderung (`factoryResetAvailableUnlocked`,
+- Scope: keine Aenderung der Teardown-Sequenz 4.4a (auch nicht fuer inaktive Adapter); eine kleine Anwendungsaenderung (`factoryResetAvailableUnlocked`,
   `previousEpoch`-Quelle, Latch/Outcome, Snapshot-Feld) und eine UI-Bedingung;
   Kern, Adapter und Ports bleiben unveraendert.
 - Architektur: keine neue Komponente, keine neue Schnittstelle, keine ADR; die
