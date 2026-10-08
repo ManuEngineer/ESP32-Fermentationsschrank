@@ -1152,6 +1152,7 @@ def create_clean_fixture(root: Path) -> None:
             'esp_event esp_driver_gpio esp_driver_spi esp_lcd '
             'freertos esp_http_server esp_netif esp_wifi mdns esp_timer mbedtls lwip '
             'esp-idf-lib__ds3231 esp-idf-lib__i2cdev '
+            'espressif__onewire_bus espressif__ds18b20 '
             'espressif__esp_lcd_ili9341 espressif__esp_lcd_touch '
             'atanisoft__esp_lcd_touch_xpt2046)\n'
         ),
