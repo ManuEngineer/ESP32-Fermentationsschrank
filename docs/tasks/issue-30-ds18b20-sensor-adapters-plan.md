@@ -1,44 +1,44 @@
 # Plan Issue #30 – reale DS18B20-Sensoradapter
 
 ```text
-PLAN_REVISION=4 (konsolidiert; Softwarepfad vor Hardware, O1-O5 als Entscheidblock)
+PLAN_REVISION=5 (konsolidiert; ADR-013-Korrektur, Owner-Gates O1-O5, Hardware-Folgeissue)
 PLAN_STATUS=DRAFT_AWAITING_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
-SUPERSEDES=Revision 3 (freigegebener Plan-Commit de6d2a0b3c77e1da13c2f830ba5865e11784185b)
+SUPERSEDES=Revision 4 (nicht freigegeben); freigegeben war nur Revision 3 de6d2a0b3c77e1da13c2f830ba5865e11784185b
 ISSUE=30 (E5.2)
 BASE_MAIN=7b16dbeb95ab09fdbe13d6c524c7a09ec721fb7d (PR #187 gemergt)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
-S0_STAGE_1=DONE (PASS_BUILD_GATE, unveraendert: docs/audits/ISSUE30_S0_STAGE1_EVIDENCE.md)
-SOFTWARE_PATH=HARDWARE_FREE_IN_PR_189
-HARDWARE_GATE_H=NOT_RUN_DEFERRED (Abschnitt 6)
+S0_STAGE_1=DONE (PASS_BUILD_GATE, unveraendert: docs/audits/ISSUE30_S0_STAGE1_EVIDENCE.md; keine Wiederholung)
+PR_189_SCOPE=NUR hardwareunabhaengige Softwareimplementierung C1-C4
+HARDWARE_VERIFICATION=SEPARATES_FOLGEISSUE (Owner O5; Anlage und Verknuepfung vor dem Software-Merge)
+HARDWARE_ACCEPTANCE=NOT_RUN (nichts als bestanden gekennzeichnet)
 ACTUATOR_RELEASE=NO
 IMPLEMENTATION=NOT_STARTED
 ```
 
-## 0. Owner-Entscheidblock (vor Implementierung ausdruecklich zu bestaetigen)
+## 0. Owner-Entscheidungen
 
-Die bisher offenen Entscheidungen O1–O4 sind **nicht** stillschweigend entschieden;
-die Empfehlungen gelten erst mit der Ownerbestaetigung, zusammen mit der exakten
-Plan-SHA dieser Revision.
+Stand der Entscheidungen. Eine Entscheidung gilt nur als getroffen, wenn sie hier
+ausdruecklich als solche steht; die Freigabe der exakten Plan-SHA dieser Revision
+ist davon getrennt.
 
-| ID | Entscheidung | Empfehlung | Wirkung bei Abweichung |
-|---|---|---|---|
-| O1 | Persistierter Datensatz (ROM, Rolle, Offset je ROM; ohne Referenzmessdaten, siehe 5.3) und Boot-Bindung in #30 | **ja** | "Verschieben" ist eine Scope-/Akzeptanzaenderung: Boot-Identitaet und ROM-Offsets wandern in ein Folgeissue, feste Rollen bleiben im Produkt ungebunden (kein `Ok`), #30 erreicht seine DoD nicht |
-| O2 | Schreibpfad nur im `esp32_bringup` (UART-Harness hinter Compile-Option, Release `FATAL_ERROR`), Lesen auch im Release | **ja** | anderer Schreibpfad = Planrevision |
-| O3 | Produktbus: jedes **einzelne** gueltige ROM akzeptieren; Offsets nur bei bekanntem ROM (hoechstens 4 bekannte Produktfuehler) | **ja** | Neuzuordnung je Fuehler = Planrevision |
-| O4 | Ein Sampling-Task fuer beide Busse; Stack/Prioritaet/Core/Heap erst nach Hardwaremessung. Bis dahin ist der Task budget-gesperrt (wird nicht erzeugt, Kanaele bleiben `MissingSample`); keine erfundenen Budgets | **ja** | anderer Task-Zuschnitt = Planrevision |
-| O5 | Verbleib der Hardware-Restarbeit (Abschnitt 6) in #30 oder eigenes Hardware-Issue mit explizitem Transfer der Akzeptanzkriterien; Entscheid **vor dem Software-Merge**, kein Issue wird automatisch angelegt | #30 beibehalten (`Refs #30`), bis der Owner anders entscheidet | getrennt = Owner legt Issue und Kriterien-Transfer fest |
-
+| ID | Entscheidung | Stand |
+|---|---|---|
+| O1 | Persistierter Datensatz (ROM, Rolle, Offset je ROM; ohne Referenzmessdaten, siehe 5.3) und Boot-Bindung gehoeren zu #30 | **entschieden mit der Planfreigabe**: folgt bereits aus Scope und Akzeptanzkriterien von Issue #30 ("feste Sensoridentitaeten werden bei Boot geprueft", "individuelle Offsets je ROM-Adresse"); eine Verschiebung waere eine Scope-/Akzeptanzaenderung und ist nicht vorgesehen |
+| O2 | Schreibpfad nur im `esp32_bringup` (UART-Harness hinter Compile-Option, Release `FATAL_ERROR`), Lesen auch im Release | **OFFEN – explizite Ownerbestaetigung erforderlich** (Empfehlung: ja). Bis dahin ist C3-Harness unter diesem Vorbehalt geplant; eine andere Entscheidung ist eine Planrevision |
+| O3 | Produktbus: jedes **einzelne** gueltige ROM akzeptieren; Offsets nur bei bekanntem ROM (hoechstens 4 bekannte Produktfuehler) | **OFFEN – explizite Ownerbestaetigung erforderlich** (Empfehlung: ja). Eine andere Entscheidung ist eine Planrevision |
+| O4 | Ein Sampling-Task fuer beide Busse (die Treiber blockieren, Befund 1); Stack/Prioritaet/Core/Heap erst nach Hardwaremessung, bis dahin budget-gesperrt (Task wird nicht erzeugt, Kanaele bleiben `MissingSample`); keine erfundenen Budgets | **entschieden mit der Planfreigabe**: technisch begruendet (Befund 1), das Budget bleibt ausdruecklich offen und wird erst im Hardware-Folgeissue nach Messung und Ownerfreigabe gesetzt |
+| O5 | Verbleib der Hardwareverifikation | **vom Owner bestaetigt: separates Folgeissue.** PR #189 enthaelt ausschliesslich die vollstaendige hardwareunabhaengige Softwareimplementierung C1–C4. Das Hardware-Folgeissue wird **vor dem Software-Merge** angelegt und mit #30 verknuepft; #30 wird erst nach korrektem Transfer der Hardware-Akzeptanzkriterien (Abschnitt 6, Anhang A) und nach Softwareabschluss geschlossen. Kein Kriterium geht verloren und keines gilt als bestanden |
 
 ## 1. Ziel und Nicht-Ziele
 
 **Ziel.** Die drei DS18B20 des R1-Aufbaus werden ueber einen schmalen ESP-IDF-
 Adapter als `device_platform::ITemperatureSource` (je Rolle eine Instanz) in den
-bestehenden Sensorkern (#20) eingespeist (Softwarepfad hardwarefrei, reale Verifikation im spaeteren Hardware-Gate H): ROM-ID, CRC, 12-Bit-Messung etwa alle
+bestehenden Sensorkern (#20) eingespeist (Softwarepfad hardwarefrei, reale Verifikation im Hardware-Folgeissue): ROM-ID, CRC, 12-Bit-Messung etwa alle
 zwei Sekunden ohne Blockieren der Hauptschleife, Hot-Plug des Produktfuehlers,
 Wiedererkennung, typisierte Fehler und ROM-bezogene Offsets. Die verbindliche
 R1-Zwei-Bus-Topologie aus dem Boardprofil wird unveraendert uebernommen.
 
-**Scope-Entscheid (Owner, Revision 4).** Alle ohne reale Hardware sinnvoll implementierbaren und pruefbaren Anteile von #30 werden im bestehenden PR #189 fertiggestellt; reale Hardwaretests sind ausdruecklich verschoben (Abschnitt 6). Kein zweiter Software-PR. Der PR darf #30 wegen des offenen Hardware-Kriteriums nicht schliessen (`Refs #30`).
+**Scope-Entscheid (Owner).** PR #189 ist ausschliesslich fuer die vollstaendige hardwareunabhaengige Softwareimplementierung C1–C4 vorgesehen (kein zweiter Software-PR). Reale Hardwaretests und die Hardware-Akzeptanzkriterien werden in ein separates Folgeissue ausgelagert (O5, Abschnitt 6). Der PR verwendet `Refs #30` und schliesst #30 nicht.
 
 **Nicht-Ziele.** Keine Topologieentscheidung, keine Aktor-/Peltier-/PI-Arbeit
 (#32/#33/#34/#35), keine Aenderung der Safety-/Interlock-Logik (#24), keine
@@ -92,7 +92,7 @@ Die Komponenten wurden nur gelesen (nicht in das Repo uebernommen):
 
 **Software.** Espressif-first: `espressif/onewire_bus` (RMT-Backend, UART-Backend
 nur Rueckfall) plus `espressif/ds18b20`, konkrete Version: Arbeitsannahme
-`onewire_bus 1.1.2` (S0 Stufe 1, Befund 5), endgueltig im Hardware-Gate H. Keine Eigenimplementierung
+`onewire_bus 1.1.2` (S0 Stufe 1, Befund 5), endgueltig im Hardware-Folgeissue. Keine Eigenimplementierung
 des 1-Wire-Protokolls, keine Sensor-Abstraktionshierarchie.
 DallasTemperature/OneWire (Arduino-Laufzeit) ist per Papier-Check als
 `REQUIRES_UNAPPROVED_FRAMEWORK_CHANGE` bestaetigt (S0 Stufe 1) und wird nur bei einem
@@ -131,7 +131,7 @@ Aenderung des bestehenden Vertrags: `MissingSample` ohne `BusFault`/`CrcFault`
 (abwesend) gegenueber `BusFault`/`CrcFault` (Fehler). Die fachliche Auslegung
 (Rolle fest/optional) bleibt im Konsumenten.
 
-**Sampling-Task.** Ein Task; Prioritaet/Stack/Core werden **nach Hardwaremessung (Gate H)**
+**Sampling-Task.** Ein Task; Prioritaet/Stack/Core werden **nach Hardwaremessung (Hardware-Folgeissue)**
 vom Owner freigegeben, nicht geraten (`TBD_IMPLEMENTATION_BUDGET` ist nie Laufzeitwert);
 bis dahin ist der Task budget-gesperrt (5.4). Start erst nach
 Plattform-/Application-Begin; Ende/Fehler des Tasks fuehrt zu `MissingSample`
@@ -194,7 +194,7 @@ der Umsetzungsreihenfolge:
    benoetigt keinen Datensatz fuer `Ok`; Offsets gibt es nur mit Datensatz.
 7. **Gate.** Ohne gueltigen Datensatz (C2) und ohne freigegebenes Task-Budget (O4)
    kann im Produktpfad keine feste Rolle je `Ok` liefern; dieser Zustand ist
-   bewusst fail-closed. Die Hardwareverifikation (Gate H) setzt beides voraus.
+   bewusst fail-closed. Die Hardwareverifikation (Folgeissue) setzt beides voraus.
 
 ### 4b Identitaet bei Nicht-Ok-Proben (ROM-Wechsel nach Abwesenheit)
 
@@ -251,6 +251,40 @@ Engine-Vertrag: Nicht-Ok-Proben verlieren Produkt-/Rollenidentitaet nie. Scheite
 Umsetzung angehalten und Option C als materielle Plan-/Ownerentscheidung
 vorgelegt.
 
+### 4c ADR-013-Zuordnung: technische Kanaele in `device_platform`, Rollen in `fermentation_app`
+
+`device_platform` bleibt anwendungsneutral. Die Plattform kennt ausschliesslich
+**technische Kanaele**, keine Rollennamen:
+
+* Die Engine bedient zwei Busse und drei feste **Kanalindizes**: Bus 0 (Betriebsart
+  `ExpectedRoms`, Mehrteilnehmerbus) mit den Kanaelen 0 und 1, Bus 1 (Betriebsart
+  `SingleDevice`, genau ein austauschbares Geraet) mit Kanal 2. Das ist die technische
+  Form der SSOT-Topologie (`one_wire_internal` mit zwei Teilnehmern,
+  `one_wire_product` dediziert), ohne die Begriffe Schrankluft, Kuehlkoerper oder Produkt.
+* Die Bindung ist technisch: `Ds18b20ChannelBinding{channel, expectedRom}` fuer die
+  Kanaele der Betriebsart `ExpectedRoms`; fuer `SingleDevice` gibt es keine erwartete
+  ROM-Bindung. Es gibt keine Rollen-Enums, keine Rollenfelder und keine Rollen-
+  Namen in `Ds18b20SamplingEngine`, `Ds18b20ChannelSource`, `IDs18b20Bus`,
+  `Ds18b20EnumerationReport`, im Fake-Bus und im ESP-IDF-Adapter. Keine neue
+  Abstraktionshierarchie.
+* Die **fachliche Zuordnung** gehoert ausschliesslich `fermentation_app` (und
+  `main` als Composition Root): `SensorCommissioningRecord` (Rollen Schrankluft,
+  Kuehlkoerper, bekannte Produktfuehler), die feste Abbildung Schrankluft -> Kanal 0,
+  Kuehlkoerper -> Kanal 1, Produkt -> Kanal 2 (`sensor_channel_map` in
+  `fermentation_app`, reine Konstanten und eine Funktion `toChannelBindings(record)`),
+  die Zuordnung der Kanalquellen zu den spaeteren Rollenverbrauchern (#35) und alle
+  rollenbezogenen Texte des Berichts/der Commissioning-Kommandos.
+* In 4a/4b bezeichnen "feste Rolle" die Kanaele 0/1 (`ExpectedRoms`) und "Produktkanal"
+  den Kanal 2 (`SingleDevice`) aus fachlicher Sicht; die Plattform implementiert die
+  Regeln mit den technischen Begriffen, die Rollen kommen erst ueber die Abbildung
+  in `fermentation_app` hinzu.
+* **Pflichtpruefung:** Quelltextpruefung, dass die neuen `device_platform`-,
+  `device_platform_esp_idf`- und Testsupport-Dateien der Sensorkanaele keine
+  Rollenbegriffe enthalten (`chamber`, `heatsink`, `product`, `schrank`, `kuehlkoerper`,
+  `produkt`; als Suchlauf in C1/C4 bzw. Erweiterung von
+  `scripts/check_architecture_boundaries.py`, kleinste Form in C1), dazu der bestehende
+  Architekturgrenzen-Check.
+
 **Safety-Grenze.** Die Adapterausgabe ist ausschliesslich Messdaten. Hot-Plug,
 Wiedererkennung und Fehler koennen keine Aktorfreigabe erzeugen oder aufheben;
 `ACTUATOR_RELEASE=NO` bleibt, die Interlock-Logik (#24) wird nicht beruehrt, und
@@ -267,10 +301,11 @@ Softwarepfad (hardwarefrei), alle Schnitte im selben PR #189:
   ->  C3 ESP-IDF-Adapter, Task (budget-gesperrt), Komposition, Commissioning-Harness
   ->  C4 Dokumentation, Nachweise, Ressourcendifferenz
   ->  Builder-Self-Check -> STOP fuer den unabhaengigen Review
-Hardware-Gate H (spaeter, getrennt, Abschnitt 6): S0 Stufe 2/3 + Verifikation
+Hardware-Folgeissue (separat, vor dem Software-Merge angelegt, Abschnitt 6 / Anhang A):
+  S0 Stufe 2/3 + Hardwareverifikation, `NOT_RUN`
 ```
 
-Nach der Freigabe dieser Revision und der Bestaetigung von O1–O5 (Abschnitt 0) wird
+Nach der Freigabe dieser Revision und der ausstehenden Bestaetigung von O2 und O3 (Abschnitt 0) wird
 der Softwarepfad ohne Zwischenstopp durchgefuehrt; Stopp nur bei einem der
 Abbruchkriterien (5.6). Governance (Gates, Review, Merge) steht in
 `docs/AGENT_WORKFLOW.md` und wird hier nicht wiederholt.
@@ -287,9 +322,10 @@ Dateien: `lib/device_platform/src/ds18b20_bus.hpp`, `ds18b20_sampling_engine.{hp
   (!= 0), `Ds18b20DriverResult` = `Ok/NotFound/Timeout/InvalidCrc/PowerOnValue/Other`,
   `Ds18b20Enumeration` = Ergebnis + hoechstens 4 ROMs in einem festen Array +
   `overflow`-Flag (mehr als 4 Teilnehmer = Fehlanschluss, kein Heap im Betrieb).
-* **Engine `Ds18b20SamplingEngine`** (bekommt `ITimeSource&` sowie je einen Port fuer den
-  festen und den Produktbus; Bindung ueber `Ds18b20Binding{chamberAir, heatsink}`
-  als `optional<OneWireRom>`; Engine validiert die Bindung selbst erneut):
+* **Engine `Ds18b20SamplingEngine`** (bekommt `ITimeSource&` sowie je einen Port fuer Bus 0
+  (`ExpectedRoms`, Kanaele 0/1) und Bus 1 (`SingleDevice`, Kanal 2); Bindung ueber
+  `Ds18b20ChannelBinding{channel, expectedRom}` fuer die Kanaele 0/1, ohne Rollen
+  (4c); die Engine validiert die Bindung selbst erneut):
   `step()` fuehrt bei Faelligkeit die Busarbeit durch (**blockiert**, nur im
   Sampling-Task oder im Test aufrufen) und liefert `nextDueMillis()`. Zyklus alle
   2000 ms: Presence/Enumeration/Bindungspruefung (4a) -> `setResolution12` bei jeder
@@ -301,13 +337,13 @@ Dateien: `lib/device_platform/src/ds18b20_bus.hpp`, `ds18b20_sampling_engine.{hp
   frischen Konvertierung (`ITimeSource::monotonicMillis()`); ohne neue Konvertierung
   entsteht keine neue Probe, ein Wiederholungslesen derselben Konvertierung ist
   ausgeschlossen. Keine Zaehler, keine Schwellen, keine `VALID`-Logik.
-* **Kanalquellen** `Ds18b20ChannelSource` (drei Instanzen: Schrankluft, Kuehlkoerper,
-  Produkt) implementieren `ITemperatureSource::read() const` und liefern den
+* **Kanalquellen** `Ds18b20ChannelSource` (drei Instanzen fuer die Kanaele 0, 1 und 2;
+  die Rollen ordnet erst `fermentation_app`/`main` zu) implementieren `ITemperatureSource::read() const` und liefern den
   zuletzt veroeffentlichten Stand (kleiner Mutex/kritischer Abschnitt, Kopie). Vor
   dem ersten Engine-Schritt und bei deaktiviertem Task liefern sie
   `MissingSample` mit leerer Identitaet.
 * **Diagnosebericht** `Ds18b20EnumerationReport` (je Bus: Ergebnis, ROMs, `overflow`,
-  `BindingConflict`, Bindungszustand, zuletzt gesehenes Produkt-ROM) fuer das
+  `BindingConflict`, Bindungszustand, zuletzt gesehenes ROM des `SingleDevice`-Kanals) fuer das
   Commissioning und spaetere Diagnose; keine Bedienoberflaeche.
 * **Fake-Bus**: skriptbare Ergebnisse je Aufruf und Zeitpunkt (Sensor 0/1/2,
   Entfernen/Wiederkehr, CRC-/Bus-/Presence-/85-°C-Fehler, ROM-Tausch).
@@ -385,6 +421,7 @@ neues `sensor_commissioning.{hpp,cpp}` (Datenmodell, Validierung, Kommando-Parse
   Kopie aus dem Runtime-Lease (leer, wenn Konfiguration nicht verfuegbar:
   fail-closed). Zusatz: `SensorCommissioningRecord::calibrationFor(rom)` gibt eine
   `SensorCalibration` fuer die spaetere Pipeline-Komposition (#35) zurueck.
+* **Abbildung auf Kanaele.** `sensor_channel_map` (`fermentation_app`) bildet den Datensatz auf technische Kanalbindungen ab (`toChannelBindings`: Schrankluft -> Kanal 0, Kuehlkoerper -> Kanal 1) und die Kanaele auf Rollen zurueck (4c); die Plattform sieht nur Kanalindizes und ROMs.
 * **Wirkung.** Die Bindung wird **nur beim Boot** geladen; eine Aenderung wirkt nach
   einem Neustart (kein Hot-Rebind, keine Laufzeit-Revisionspruefung).
 * **Kommando-Parser** (rein, nativ getestet): `report`, `bind air=<16 Hex>
@@ -407,7 +444,7 @@ Dateien: `lib/device_platform_esp_idf/src/ds18b20_onewire_bus.{hpp,cpp}`,
 * **Abhaengigkeiten** fest gepinnt: `espressif/onewire_bus` **1.1.2**, `espressif/ds18b20`
   **0.4.0** (S0-Stufe-1-Evidence; Hashes aus `dependencies.lock`);
   `PRIV_REQUIRES espressif__onewire_bus espressif__ds18b20`; `sensor_hub` bleibt
-  aus. Die endgueltige Version bestaetigt Gate H; bis dahin ist 1.1.2 die dokumentierte
+  aus. Die endgueltige Version bestaetigt das Hardware-Folgeissue; bis dahin ist 1.1.2 die dokumentierte
   Arbeitsannahme.
 * **`Ds18b20OnewireBus`** (`IDs18b20Bus` auf `onewire_bus`+`ds18b20`): RMT-Backend,
   je ein Bus auf GPIO32 und GPIO33, `max_rx_bytes` nach Treiberdokumentation fuer das
@@ -432,11 +469,11 @@ Dateien: `lib/device_platform_esp_idf/src/ds18b20_onewire_bus.{hpp,cpp}`,
   (nur `device_platform_esp_idf`/Komposition). **Solange der Wert leer ist,
   erzeugt `start()` keinen Task**, die Engine wird nie gesteppt, alle Kanaele bleiben
   `MissingSample`, und der Boot protokolliert "ds18b20 sampler disabled: budget not
-  approved". Der Wert wird erst im Gate H nach Messung und Ownerfreigabe gesetzt;
+  approved". Der Wert wird erst im Hardware-Folgeissue nach Messung und Ownerfreigabe gesetzt;
   kein `TBD_*` ist je Laufzeitwert und kein Budget wird geraten. (Die Messung selbst
   verwendet einen Probe-Patch mit Override, nicht den Produktpfad.)
 * **Komposition (`app_main.cpp`).** Nach Application-Begin: Bindung aus
-  `sensorCommissioning()` laden, Engine/Adapter/Kanalquellen aufbauen, `start()`
+  `sensorCommissioning()` laden und ueber `toChannelBindings` (4c) auf Kanalbindungen abbilden, Engine/Adapter/Kanalquellen aufbauen, `start()`
   aufrufen. Die Quellen werden bereitgestellt; **keine** Anbindung an Regelung,
   Safety, Interlock oder Peltier (kommt mit #35). Die Hauptschleife ruft nie eine
   blockierende Busfunktion.
@@ -481,7 +518,11 @@ Dateien: `lib/device_platform_esp_idf/src/ds18b20_onewire_bus.{hpp,cpp}`,
    widerspruechlich sind: Befund und Alternativen werden vorgelegt, keine
    Hardwareaenderung ohne Ownerfreigabe.
 
-## 6. Hardware-Gate H (spaeter, getrennt, `NOT_RUN`)
+## 6. Hardware-Folgeissue (separat, `NOT_RUN`) und Kriterientransfer
+
+**Entscheid (O5, Owner).** Die Hardwareverifikation wird in ein separates Folgeissue
+ausgelagert. PR #189 bleibt ausschliesslich der vollstaendigen hardwareunabhaengigen
+Softwareimplementierung C1–C4 vorbehalten.
 
 **Hardwaregrenze.** Der Softwarepfad umfasst weder Flashen, physische Verdrahtung,
 Messzyklen, Neustart-/Watchdog-/Heap-HWM-Messungen, ROM-Erfassung, Stoerversuche noch
@@ -489,49 +530,75 @@ eine Aktorfreigabe. GPIO32/33, zwei 3-Leiter-Busse und je 4,7 kOhm Pull-up nach 
 bleiben die SSOT-Ausgangsbasis und sind bei **nachgewiesenem** Problem nach
 Ownerfreigabe aenderbar (eigener Boardprofil-/Plan-Scope).
 
-**Restliste (separat abgrenzbar):**
+### 6.1 Scope des Hardware-Folgeissues (H1–H7)
 
 | Nr. | Inhalt |
 |---|---|
 | H1 | S0 Stufe 2: ein realer Sensor (ROM, 9–12 Bit, CRC, Entfernen/Anstecken, Neustart, Konvertierung ohne Pause der Hauptschleife, keine alte Messung als neu) |
-| H2 | S0 Stufe 3: Zielverdrahtung (GPIO32 zwei Sensoren, GPIO33 Produkt), Zyklusdauer beider Busse im 2-s-Takt, 1000 Zyklen, 10 Neustarts mit stabilen ROMs, Reset waehrend Konvertierung, Wiederinitialisierung |
+| H2 | S0 Stufe 3: Zielverdrahtung (Bus 0 zwei Sensoren, Bus 1 ein Produktfuehler), Zyklusdauer beider Busse im 2-s-Takt, 1000 Zyklen, 10 Neustarts mit stabilen ROMs, Reset waehrend Konvertierung, Wiederinitialisierung |
 | H3 | Messung von Task-Stack-HWM, Heap, groesstem freien Block, RMT-Kanaelen, blockierter CPU-Zeit; Ownerfreigabe von `kApprovedDs18b20TaskBudget` (aktiviert den Task) |
 | H4 | Bestaetigung oder Austausch von `onewire_bus`-Version (1.1.2) und Konvertierungsvariante (B/A) |
-| H5 | ROM-Erfassung ueber `report`, Zuordnung der festen Sensoren (z. B. durch gezieltes Erwaermen), Eintrag per Commissioning, ROM-Liste in `docs/audits/ISSUE30_HW_EVIDENCE_<datum>.md` und `docs/OPEN_POINTS.md` |
+| H5 | ROM-Erfassung ueber `report`, Zuordnung der festen Sensoren (z. B. durch gezieltes Erwaermen), Eintrag per Commissioning, ROM-Liste in einer Hardware-Evidence-Datei und `docs/OPEN_POINTS.md` |
 | H6 | Verifikationsmatrix aus #30: Sensoren einzeln abziehen, Bus stoeren (nur erlaubte Faelle), Produktfuehler hot-pluggen (Stillstand und waehrend Konvertierung), ROM-Zuordnung und Wiedererkennung, Offset-Wirkung, reale Messwerte gegen das Diagnosemodell |
 | H7 | Hardware-Evidence auf dem exakten Implementierungs-Head (Aktoren physisch getrennt oder gesperrt), `logResources`-Vergleich, kein Panic/Watchdog/OOM |
 
-Hardwarefragen an den Owner (fuer H, jetzt nicht blockierend): Anzahl und Verdrahtung der
-vorhandenen DS18B20, bestueckte Pull-ups, Sensortyp und Kabellaengen, erlaubte
+Hardwarefragen an den Owner (Folgeissue, jetzt nicht blockierend): Anzahl und Verdrahtung
+der vorhandenen DS18B20, bestueckte Pull-ups, Sensortyp und Kabellaengen, erlaubte
 Stoerfaelle, ein Dauergeraet fuer 1000 Zyklen/10 Neustarts, Zuordnung per Erwaermen.
 
-**Issue-Abschluss.** #30 darf mit offenem Hardware-Abnahmekriterium **nicht** als
-vollstaendig erledigt gelten; der PR verwendet `Refs #30`, kein `Closes #30`. Ob H in
-#30 verbleibt oder in ein eigenes Hardware-Issue mit explizitem Transfer der
-Akzeptanzkriterien (Boot-Identitaet real, Hot-Plug real, Messwerte stimmen) uebergeht,
-entscheidet der Owner vor dem Software-Merge (O5); es wird kein Issue automatisch
-angelegt.
+### 6.2 Kriterientransfer aus Issue #30 (vollstaendig, keines als bestanden markiert)
+
+Jedes Element von Issue #30 (Scope, Akzeptanzkriterien, Tests, Definition of Done) steht
+unten. "Software" beschreibt den in PR #189 **geplanten** nativen Nachweis (`SIM-30-*`,
+Status: nicht gestartet, nach Umsetzung und Review nachzuweisen); "Hardware-Folgeissue"
+ist der **offene, nicht ausgefuehrte** reale Nachweis. Nichts ist heute bestanden.
+
+| Element aus #30 | Software (PR #189, geplant) | Hardware-Folgeissue (offen, `NOT_RUN`) |
+|---|---|---|
+| Scope: drei DS18B20 (Schrankluft, Produkt, Kuehlkoerper) | drei Kanalquellen, Rollenabbildung in `fermentation_app` | alle drei Sensoren real angebunden (H1/H2) |
+| Scope: verbindliche Zwei-Bus-Topologie | Engine/Adapter auf Bus 0/Bus 1 aus der SSOT | reale Verdrahtung, Pull-ups, Kabel entsprechen der SSOT (H2) |
+| Scope: ROM-Adressen erfassen, Rollen zuordnen | Bericht, Commissioning-Kommandos, Datensatz | reale ROM-Erfassung und Zuordnung, ROM-Dokumentation (H5) |
+| Scope: 12 Bit etwa alle 2 s ohne Blockierung | Engine-Takt, Frische, Hauptschleife ohne Busaufruf | Zyklus-/Blockiermessung, Task-Budget (H2/H3) |
+| Scope: Hot-Plug des Produktfuehlers | Produktbus-Matrix 0/1/2 Geraete, Wiederkehr, ROM-Wechsel (Fake-Bus) | realer Hot-Plug (H6) |
+| Scope: CRC-, Bus-, Wiedererkennungs- und Fehlerstatus in den Sensorkern | Mapping-Matrix, Pipeline-Integrationstests | reale Fehlerarten und Wiedererkennung (H6) |
+| Scope: individuelle Offsets je ROM | Datensatz, Kalibrierung je ROM, Pipeline-Anwendung | Offset-Wirkung an realen Sensoren (H6) |
+| AK: feste Sensoridentitaeten bei Boot geprueft | Bindungsmatrix, Datensatz-Persistenz, Boot-Laden | Boot-Pruefung an realen ROMs, 10 Neustarts stabil (H2/H5) |
+| AK: fehlender optionaler Produktfuehler unterscheidbar von Fehler | `MissingSample` vs. `BusFault`/`CrcFault`, Pipeline-Folgetests (4b) | Abziehen/Anstecken real (H6) |
+| AK: Schrankluft-/Kuehlkoerpersensor fuer Peltierfreigabe erforderlich | feste Kanaele nie `Ok` ohne Bindung/bei Abwesenheit; Entscheidung bleibt #24/#35 | reales Abziehen eines festen Sensors liefert kein `Ok` (H6) |
+| AK: Hot-Plug erzeugt keine unkontrollierte Aktorfreigabe | kein Aktorpfad (Architekturcheck), `ACTUATOR_RELEASE=NO` | Hot-Plug real ohne Aktorverbindung (H6/H7) |
+| AK: reale Messwerte stimmen mit Diagnosemodell ueberein | nicht softwareseitig nachweisbar | reale Messwerte gegen das Diagnosemodell (H6) |
+| Tests: Sensoren einzeln abziehen, Bus stoeren, Produktfuehler hot-pluggen, ROM-Zuordnung und Wiedererkennung | native Fake-Bus-Entsprechungen | reale Durchfuehrung (H6) |
+| DoD: Treiber | Adapter/Engine implementiert und nativ/Build-geprueft | Treiber real bestaetigt (H1–H4) |
+| DoD: Hardwaretests | — | H1–H7 |
+| DoD: ROM-Dokumentation | Format/Bericht | reale ROM-Liste (H5) |
+| DoD: Integration | Kanalquellen, Datensatz, Komposition | Integration real bestaetigt (H7) |
+
+### 6.3 Anlage, Verknuepfung und Abschluss
+
+* Das Hardware-Folgeissue wird **vor dem Software-Merge** angelegt und mit #30 und
+  PR #189 verknuepft (Anhang A liefert den vollstaendigen Text). Der Agent legt es
+  erst nach der Freigabe dieser Revision an; der Owner prueft den Kriterientransfer.
+* PR #189 verwendet `Refs #30`, kein `Closes #30`.
+* **#30 wird erst geschlossen,** wenn (a) der Software-PR gemergt ist, (b) das
+  Hardware-Folgeissue angelegt und verknuepft ist, (c) der Owner den Transfer der
+  Hardware-Akzeptanzkriterien (6.2, Anhang A) bestaetigt hat. Der Agent schliesst das
+  Issue nicht selbst.
 
 ## 7. Akzeptanzkriterien -> Nachweis
 
-| Kriterium aus #30 | Softwarepfad (`SIM-30-*`, nativ) | Hardware-Gate H |
-|---|---|---|
-| feste Sensoridentitaeten bei Boot geprueft | Bindungsmatrix (4a), Datensatz-Codec/Persistenz/Neustart im Store, Application-Pfad | H5/H6 an realen Sensoren |
-| fehlender optionaler Produktfuehler unterscheidbar von Fehler | Mapping-Matrix, Pipeline-Folgetests (4b) | H6 Abziehen |
-| Schrankluft-/Kuehlkoerpersensor fuer Peltierfreigabe erforderlich | feste Rollen nie `Ok` ohne Bindung/bei Abwesenheit; Entscheidung bleibt #24/#35, kein Aktorpfad | — |
-| Hot-Plug erzeugt keine unkontrollierte Aktorfreigabe | kein Aktorpfad (Architekturcheck), `ACTUATOR_RELEASE=NO` | H6 Hot-Plug ohne Aktorverbindung |
-| reale Messwerte stimmen mit Diagnosemodell ueberein | nicht softwareseitig nachweisbar | H6 |
-| individuelle Offsets je ROM | Datensatz, Kalibrierung je ROM, Pipeline-Anwendung nur bei bekannter Identitaet | H6 Offset-Wirkung |
-| 12 Bit etwa alle 2 s ohne Blockieren | Engine-Takt/Frische, Hauptschleife ruft keine Busfunktion | H2/H3 Zyklus-/Blockiermessung |
+Die Tabelle in 6.2 ist die massgebliche, vollstaendige Zuordnung. Im Softwarepfad
+werden die Nachweise ausschliesslich als `SIM-30-*` (native Simulation) gefuehrt;
+die `HW-30-*`-Eintraege gehoeren dem Hardware-Folgeissue und stehen in
+`docs/ACCEPTANCE_TESTS.md` als `NOT_RUN`.
 
 ## 8. Risiken
 
 1. **Blockierende Treiber** (Befund 1): nur im Task; Task-Haenger -> Zeitstempel laeuft
    nicht weiter -> Pipeline meldet `STALE`; TWDT-Anbindung gehoert zum freigegebenen
-   Task-Budget (H3).
+   Task-Budget (Hardware-Folgeissue, H3).
 2. **Zyklusbudget:** zwei Busse mit gemeinsamer Wartezeit (Variante B) ist
-   rechnerisch machbar; die reale Dauer wird in H2 gemessen.
-3. **RAM:** Stack, RMT-Puffer und Handles sind ungemessen; bis H3 laeuft der Task nicht
+   rechnerisch machbar; die reale Dauer wird im Hardware-Folgeissue (H2) gemessen.
+3. **RAM:** Stack, RMT-Puffer und Handles sind ungemessen; bis zur Freigabe in H3 (Folgeissue) laeuft der Task nicht
    (budget-gesperrt), die statische Differenz wird dokumentiert. D10: keine vorsorgliche
    Optimierung.
 4. **Persistenzaenderung:** Schema 2->3 beruehrt Codec, Graph-Store-Referenzpruefung und
@@ -540,7 +607,7 @@ angelegt.
    Kanaele nie `Ok`.
 6. **Gemeinsamer fester Bus:** ein klemmender Teilnehmer stoert beide festen Sensoren
    (SSOT-Topologie, fail-closed fuer die Peltierfreigabe).
-7. **Unbekannte Hardware:** Pull-ups, Kabel und ESD sind real unbekannt (H); ein
+7. **Unbekannte Hardware:** Pull-ups, Kabel und ESD sind real unbekannt (Hardware-Folgeissue); ein
    Widerspruch zur SSOT waere ein eigener Boardprofil-Scope.
 8. **Klone/Fremdsensoren:** Behandlung bleibt auf CRC + Einschaltwert +
    Pipeline-Plausibilitaet begrenzt.
@@ -556,4 +623,40 @@ angelegt.
 * Mit dem Softwarepfad: siehe 5.5. Der Doku-Fehler SIM-26-21/65 gehoert zu Issue #188
   und wird nicht beruehrt.
 * Nicht-Ziele bleiben: #32/#33/#34/#35, Safety-/Interlock (#24), Service-/PIN-/Offset-UI
-  (#28), kein neues Issue ohne Ownerentscheid.
+  (#28). Das Hardware-Folgeissue ist per O5 entschieden (6.3); weitere Issues entstehen
+  nicht ohne Ownerentscheid.
+
+## Anhang A – Entwurf des Hardware-Folgeissues (wird vor dem Software-Merge angelegt)
+
+**Titel:** `[E5.2-HW] DS18B20-Hardwareverifikation (Folge von #30)`
+
+**Status:** `BLOCKED_HARDWARE`. **Abhaengigkeiten:** #30 (Software, PR #189 gemergt),
+Boardprofil-SSOT (GPIO32/33, zwei 3-Leiter-Busse, 4,7 kOhm), `ACTUATOR_RELEASE=NO`.
+
+**Scope:** H1–H7 aus 6.1; Basis ist die in PR #189 gemergte Software (Engine, Adapter,
+Datensatz, Commissioning-Harness im `esp32_bringup`). Aktoren (Peltier, BTS7960, Luefter,
+MOSFET-Verbraucher) bleiben physisch getrennt oder gesperrt.
+
+**Akzeptanzkriterien (aus #30 uebernommen, alle offen):**
+
+* feste Sensoridentitaeten werden bei Boot geprueft;
+* fehlender optionaler Produktfuehler ist unterscheidbar von Fehler;
+* Schrankluft- und Kuehlkoerpersensor sind fuer die Peltierfreigabe erforderlich;
+* Hot-Plug erzeugt keine unkontrollierte Aktorfreigabe;
+* reale Messwerte stimmen mit dem Diagnosemodell ueberein;
+* drei DS18B20 an der gemergten Zwei-Bus-Topologie, ROM-Adressen erfasst und Rollen
+  zugeordnet, 12-Bit-Abfrage etwa alle zwei Sekunden ohne Blockierung, Hot-Plug des
+  Produktfuehlers, CRC-/Bus-/Wiedererkennungs-/Fehlerstatus im Sensorkern, individuelle
+  Offsets je ROM-Adresse.
+
+**Tests:** Sensoren einzeln abziehen, Bus stoeren (nur erlaubte Faelle), Produktfuehler
+hot-pluggen, ROM-Zuordnung und Wiedererkennung pruefen; Verifikationsmatrix H1–H7.
+
+**Definition of Done:** Treiber, Hardwaretests, ROM-Dokumentation und Integration
+abgeschlossen; Hardware-Evidence auf dem exakten Head; Task-Budget gemessen und vom Owner
+freigegeben; `onewire_bus`-Version und Konvertierungsvariante bestaetigt.
+
+**Quellen:** `docs/tasks/issue-30-ds18b20-sensor-adapters-plan.md`,
+`docs/audits/ISSUE30_S0_STAGE1_EVIDENCE.md`, `docs/HARDWARE.md`,
+`docs/SENSOR_TUNING_COMMISSIONING.md`, `docs/SAFETY_COMPONENT_FAULTS.md`,
+`docs/ACCEPTANCE_TESTS.md`.
