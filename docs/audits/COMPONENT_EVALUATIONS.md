@@ -292,7 +292,7 @@ Die Bustopologie ist entschieden (Boardprofil-SSOT, PR #131): GPIO32 Schrankluft
 und Kuehlkoerper (Multidrop), GPIO33 Produktfuehler; sie wird von diesem Audit
 nicht neu bewertet. Fuer den Softwarestack gilt der Espressif-first-Gate aus
 `docs/audits/HARDWARE_SPIKE_PLAN.md` (Spike B, "Geltende Vorgaben", Issue #30,
-Plan Revision 2): der Espressif-Pfad durchlaeuft Stufe 1 (Quelle/Lizenz/Build auf
+Plan ab Revision 2): der Espressif-Pfad durchlaeuft Stufe 1 (Quelle/Lizenz/Build auf
 ESP-IDF v6.1), Stufe 2 (ein realer Sensor) und die Stufe-3-Matrix auf der
 SSOT-Topologie; DallasTemperature/OneWire wird nur bei einem konkret
 nachgewiesenen Misserfolg vertieft.
