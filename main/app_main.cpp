@@ -6,6 +6,7 @@
 
 #include "app_config.hpp"
 #include "device_platform.hpp"
+#include "ds18b20_sampler_task.hpp"
 #include "ds3231_sn_rtc_adapter.hpp"
 #include "esp_idf_authentication_kdf.hpp"
 #include "esp_idf_replay_digest.hpp"
@@ -22,6 +23,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
 #include "fermentation_ui_press_dispatcher.hpp"
+#include "sensor_commissioning.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
 #include "touch_calibration.hpp"
@@ -32,6 +34,10 @@
 
 #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS
 #include "issue_31_touch_calibration_harness.hpp"
+#endif
+
+#ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
+#include "issue_30_sensor_commissioning_harness.hpp"
 #endif
 
 #ifdef APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER
@@ -696,6 +702,32 @@ extern "C" void app_main(void) {
     logResources("after_ui_init", application.networkMode(),
                  networkLifecycle.status().state, displayRenderer.get());
 
+    // Issue #30: technical DS18B20 channels (two buses, one sampling task).
+    // The persisted commissioning record is the only source of the fixed-ROM
+    // binding; without it, or without an approved task budget, the channels
+    // stay fail-closed (MissingSample). The sources are provided for the later
+    // control composition (#35); nothing here reaches control, safety or
+    // actuators, and the main loop never calls a bus function.
+    static device_platform_esp_idf::Ds18b20Sampler ds18b20Sampler(timeSource);
+    {
+        const auto commissioning = application.sensorCommissioning();
+        const auto samplerStart = ds18b20Sampler.start(
+            device_platform_esp_idf::kApprovedDs18b20TaskBudget,
+            fermentation::toChannelBindings(commissioning.has_value()
+                                                ? commissioning->record
+                                                : std::nullopt),
+            board_profile::esp32_32e_quad_mosfet_r1::kOneWireInternalPin,
+            board_profile::esp32_32e_quad_mosfet_r1::kOneWireProductPin);
+        ESP_LOGI(kTag, "ds18b20 sampler: %s",
+                 device_platform_esp_idf::ds18b20SamplerStartResultName(
+                     samplerStart));
+    }
+#ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
+    fermentation::issue_30_commissioning::Harness issue30Harness(
+        application, ds18b20Sampler);
+    issue30Harness.start();
+#endif
+
     // Die Zeitquelle wird vor dem Application-Boot injiziert, damit die
     // Recovery bereits beim Laden des Current-Records dieselbe monotone und
     // absolute Quelle wie die spaetere Laufzeitschleife verwendet.
@@ -722,6 +754,9 @@ extern "C" void app_main(void) {
                                      displayRenderer.get());
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
         issue90Harness.update();
+#endif
+#ifdef APP_ISSUE_30_SENSOR_COMMISSIONING
+        issue30Harness.update();
 #endif
 
         const uint64_t nowMs = timeSource.monotonicMillis();

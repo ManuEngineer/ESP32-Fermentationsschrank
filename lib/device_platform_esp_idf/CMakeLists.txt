@@ -2,7 +2,7 @@ idf_component_register(
     SRC_DIRS "src"
     INCLUDE_DIRS "src"
     REQUIRES device_platform nvs_flash
-    PRIV_REQUIRES esp_event esp_http_server esp_netif esp_wifi mdns esp_timer
+    PRIV_REQUIRES espressif__onewire_bus espressif__ds18b20 esp_event esp_http_server esp_netif esp_wifi mdns esp_timer
                   mbedtls
                   freertos
                   lwip esp-idf-lib__ds3231 esp-idf-lib__i2cdev esp_driver_gpio

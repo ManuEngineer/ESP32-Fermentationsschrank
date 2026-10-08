@@ -11,3 +11,7 @@ dependencies:
     version: "1.1.7"
   esp-idf-lib/i2cdev:
     version: "2.1.2"
+  espressif/onewire_bus:
+    version: "1.1.2"
+  espressif/ds18b20:
+    version: "0.4.0"

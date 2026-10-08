@@ -67,6 +67,8 @@ REQUIRED_FUNCTIONS = {
     "tft_dc_rs": "kDisplayDataCommandPin",
     "tft_backlight_pwm": "kBacklightPin",
     "touch_irq": "kTouchInterruptPin",
+    "one_wire_internal": "kOneWireInternalPin",
+    "one_wire_product": "kOneWireProductPin",
 }
 
 INVALID_ASSIGNMENT_STATUSES = {
@@ -192,6 +194,8 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         "inline constexpr bool kBacklightActiveHigh = "
         + ("true;" if resolved["backlight_active_high"] else "false;"),
         f"inline constexpr int kTouchInterruptPin = {pins['touch_irq']};",
+        f"inline constexpr int kOneWireInternalPin = {pins['one_wire_internal']};",
+        f"inline constexpr int kOneWireProductPin = {pins['one_wire_product']};",
         "inline constexpr device_platform::DisplayRotation kR1DisplayRotation =",
         "    device_platform::DisplayRotation::Rotate90;",
         "",
@@ -248,6 +252,12 @@ def run_selftest() -> int:
   gpio39:
     function: touch_irq
     assignment_status: planned
+  gpio32:
+    function: one_wire_internal
+    assignment_status: planned
+  gpio33:
+    function: one_wire_product
+    assignment_status: planned
 """
 
     checks: dict[str, bool] = {}
@@ -263,6 +273,8 @@ def run_selftest() -> int:
             header = generate(valid_path, output_path)
             checks["valid fixture generates"] = (
                 "kSpiSckPin = 18" in header
+                and "kOneWireInternalPin = 32" in header
+                and "kOneWireProductPin = 33" in header
                 and "kBacklightActiveHigh = true;" in header
                 and output_path.exists()
             )

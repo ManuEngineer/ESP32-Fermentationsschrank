@@ -352,6 +352,8 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "lwip",
                 "esp-idf-lib__ds3231",
                 "esp-idf-lib__i2cdev",
+                "espressif__onewire_bus",
+                "espressif__ds18b20",
                 "espressif__esp_lcd_ili9341",
                 "espressif__esp_lcd_touch",
                 "atanisoft__esp_lcd_touch_xpt2046",
