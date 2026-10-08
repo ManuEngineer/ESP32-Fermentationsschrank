@@ -31,8 +31,9 @@ offiziellen `esp-clang`-Pfad ueber `scripts/run_esp_idf_static_analysis.py`.
 ## Komponenten- und Lockfilevertrag
 
 Der aktuelle Produktionsstand verwendet die fest versionierten
-Component-Manager-Abhaengigkeiten `esp-idf-lib/ds3231` `1.1.7` und
-`esp-idf-lib/i2cdev` `2.1.2` aus
+Component-Manager-Abhaengigkeiten `esp-idf-lib/ds3231` `1.1.7`,
+`esp-idf-lib/i2cdev` `2.1.2`, `espressif/onewire_bus` `1.1.2` und
+`espressif/ds18b20` `0.4.0` (Issue #30; `sensor_hub` bleibt aus) aus
 `lib/device_platform_esp_idf/idf_component.yml`. Die transitive
 `esp-idf-lib/esp_idf_lib_helpers`-Abhaengigkeit und die IDF-Version sind in
 `dependencies.lock` enthalten. Dieser Bestand ist aktive Produktionsprovenienz

@@ -207,6 +207,12 @@ Elektrische Anforderungen:
 - ESD- und Fehlsteckschutz fuer externen Produktanschluss pruefen
 - ROM-Adressen bei Hardwareabnahme dokumentieren
 
+Softwarestand (Issue #30): Die Software bindet die festen Sensoren ausschliesslich
+ueber den persistierten ROM-/Rollen-/Offset-Datensatz der ServiceConfiguration
+(`CONFIGURATION_PERSISTENCE.md`); ohne Datensatz liefern sie fail-closed nie
+einen Messwert. Die reale Verdrahtung, die ROM-Erfassung und die Abnahme bleiben
+`NOT_RUN` und gehoeren zum Hardware-Folgeissue.
+
 ## Luefter
 
 ### Innenluefter

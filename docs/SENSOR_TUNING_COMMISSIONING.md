@@ -126,6 +126,12 @@ Gespeichert werden:
 
 Der Offset ist PIN-geschützt und innerhalb firmwarefester Grenzen.
 
+Umsetzungsstand Issue #30: Die ServiceConfiguration (Schema 3) speichert je
+Sensor ROM-Adresse, Rolle und Offset (siehe `CONFIGURATION_PERSISTENCE.md`).
+Referenzmessgerät, Referenztemperatur, Datum und Bedienquelle sind nicht Teil
+dieses Datensatzes; sie gehören zu #34/#28. Der Schreibpfad existiert vorerst nur
+im `esp32_bringup` (UART-Kommandos); die PIN-geschützte Bedienung folgt mit #28.
+
 Release 1 verwendet zunächst eine Einpunkt-Offsetkorrektur im relevanten
 Temperaturbereich. Eine Zweipunktkorrektur ist nur nötig, wenn Vergleichsmessungen
 eine systematische Steigungsabweichung zeigen.
