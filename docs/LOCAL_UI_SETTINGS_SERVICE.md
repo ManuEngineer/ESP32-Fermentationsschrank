@@ -205,6 +205,31 @@ Geraet einschalten oder SAFE_BOOT aktiv
 -> Ersteinrichtung starten
 ```
 
+Umsetzung in Release 1 (Ownerentscheid O-R1 = B+, Issue #19): zwei lokale
+Zugaenge zu **demselben** mehrstufigen Ablauf (Datenverlustwarnung, bewusste
+Bestaetigung, langes Gedrueckthalten):
+
+- Normalbetrieb: Taste "PIN vergessen?" auf der lokalen PIN-Seite (ohne
+  PIN-Eingabe erreichbar);
+- `SAFE_BOOT`: eigener lokaler Eintrag "Vollstaendiger Werksreset" auf der
+  Startseite, unabhaengig vom gesperrten Servicebereich.
+
+Der Zugang gilt auch fuer eine Konfiguration ohne geladene Runtime, die der
+Recoverykern ausdruecklich als `ResetEligibleNoRuntime` zulaesst (Eintrag auf der
+eingeschraenkten Startseite; nach dem Reset bleibt der Betrieb bis zum Neustart
+gesperrt: "Geraet vollstaendig aus- und wieder einschalten"). Nicht zugelassene
+Zustaende (globaler Scanblocker, Identitaetskollision, unbekannte Bootstrap-
+Integritaet) bieten den Reset nie an.
+
+Es gibt keine zusaetzliche Hardware und keine neue Boot-Geste; die
+Raw-Touch-Recovery bleibt ausschliesslich der Touchkalibrierung vorbehalten. Die
+Dauer des langen Gedrueckthaltens betraegt 5000 ms durchgehend auf dem
+Halteziel (Ownerentscheid, fest, keine separate Laufzeitkonfiguration);
+Loslassen oder Verlassen des Halteziels setzt den Fortschritt zurueck. Nach dem
+Reset werden Netzwerk-Verbindung und HTTP-Server geordnet beendet; gelingt das
+nicht erkennbar, meldet die Anzeige "Werksreset durchgefuehrt. Netzwerk konnte
+nicht sicher beendet werden. Geraet vollstaendig aus- und wieder einschalten."
+
 Regeln:
 
 - nicht ueber Web oder Netzwerk ausloesbar

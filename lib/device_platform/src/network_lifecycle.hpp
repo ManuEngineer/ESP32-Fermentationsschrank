@@ -103,6 +103,10 @@ class INetworkLifecycle {
     [[nodiscard]] virtual NetworkOperationResult start(
         NetworkMode mode,
         const std::optional<NetworkCredentials>& homeCredentials) = 0;
+    // `Applied` means the transport is confirmed stopped. The status
+    // projection after the call (Stopped, httpReady == false, no access point
+    // info) is conservative and never replaces this result: an unconfirmed
+    // stop is reported as `Failed`.
     [[nodiscard]] virtual NetworkOperationResult stop() = 0;
     [[nodiscard]] virtual NetworkScanResult scan() = 0;
     [[nodiscard]] virtual NetworkOperationResult testCandidate(

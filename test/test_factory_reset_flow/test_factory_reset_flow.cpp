@@ -1,0 +1,1154 @@
+// Issue #19, Plan Abschnitt 4 (R1-Werksreset): Ablauf-Zustandsautomat,
+// Anwendungseinstieg (Vorbedingungen unter dem Guard, Resetkern, Netzwerk-/
+// HTTP-Sequenz ausserhalb des Guards) und Fehlerfaelle. Hardwarefrei.
+#include <unity.h>
+
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <functional>
+#include <future>
+#include <memory>
+#include <optional>
+#include <string>
+#include <thread>
+#include <type_traits>
+#include <variant>
+
+#include "authentication_records.hpp"
+#include "actuation_interlock.hpp"
+#include "actuator_plan_sink_driver.hpp"
+#include "actuator_planner.hpp"
+#include "configuration_bootstrap_store.hpp"
+#include "configuration_graph_store.hpp"
+#include "configuration_mutation_coordinator.hpp"
+#include "configuration_recovery_service.hpp"
+#include "configuration_service.hpp"
+#include "device_platform.hpp"
+#include "factory_reset_flow.hpp"
+#include "fermentation_application.hpp"
+#include "fermentation_ui_commands.hpp"
+#include "mock_bidirectional_actuator_sink.hpp"
+#include "mock_binary_output_sink.hpp"
+#include "mock_network_lifecycle.hpp"
+#include "mock_secure_random_source.hpp"
+#include "mock_time_zone_resolver.hpp"
+#include "run_persistence_coordinator.hpp"
+#include "simulated_persistent_state_store.hpp"
+#include "target_qualification.hpp"
+#include "temperature_control.hpp"
+#include "temperature_control_orchestrator.hpp"
+#include "touch_calibration.hpp"
+#include "virtual_time_source.hpp"
+
+namespace fermentation {
+
+// Test seam (declared friend by the application): puts the published runtime
+// run state into a running-process state without driving the full start flow.
+class FermentationApplicationTestAccess {
+   public:
+    // The application's own actuation-start evidence (what the product
+    // composition would hand to the interlock).
+    static bool safetyAllowsStart(FermentationApplication& application) {
+        return application.resolveRuntimeEvidence().safetyAllowsStart;
+    }
+    // Copy of the published run state; default (Boot) while none is published.
+    static RunCommandState runStateCopy(FermentationApplication& application) {
+        return application.runtimeRunState_ != nullptr
+                   ? *application.runtimeRunState_
+                   : RunCommandState{};
+    }
+    static void setActiveManualRun(FermentationApplication& application,
+                                   bool active) {
+        TEST_ASSERT_NOT_NULL(application.runtimeRunState_.get());
+        if (active) {
+            application.runtimeRunState_->activeManualRun = ManualRunPlan{};
+        } else {
+            application.runtimeRunState_->activeManualRun.reset();
+        }
+    }
+};
+
+}  // namespace fermentation
+
+namespace {
+
+using fermentation::FactoryResetCoreResult;
+using fermentation::FactoryResetFlow;
+using fermentation::FactoryResetKind;
+using fermentation::FactoryResetOutcome;
+using fermentation::FactoryResetStage;
+
+template <typename T, typename V>
+struct VariantHas;
+template <typename T, typename... Alternatives>
+struct VariantHas<T, std::variant<Alternatives...>>
+    : std::disjunction<std::is_same<T, Alternatives>...> {};
+// The reset step is deliberately not an alternative of the shared UI command
+// variant: a non-local surface can never carry it (plan 4.4, invariant 1).
+static_assert(
+    !VariantHas<
+        fermentation::FermentationUiFactoryResetCommand,
+        decltype(fermentation::FermentationUiCommand::operation)>::value,
+    "factory reset must stay outside the shared UI command variant");
+
+constexpr std::uint32_t kHoldMs = 1500U;  // Testwert, kein Produktwert.
+
+void test_flow_without_configured_hold_is_unavailable_and_has_no_default() {
+    FactoryResetFlow unset;
+    TEST_ASSERT_FALSE(unset.configured());
+    TEST_ASSERT_FALSE(unset.begin(FactoryResetKind::PinIndependent));
+    FactoryResetFlow zero(0U);
+    TEST_ASSERT_FALSE(zero.configured());
+    TEST_ASSERT_FALSE(zero.begin(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(FactoryResetStage::Idle == unset.stage());
+}
+
+void test_flow_requires_every_stage_in_order_and_cancel_resets() {
+    FactoryResetFlow flow(kHoldMs);
+    TEST_ASSERT_TRUE(flow.begin(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(FactoryResetStage::Warning == flow.stage());
+    // No hold progress before the stages are acknowledged.
+    TEST_ASSERT_FALSE(flow.updateHold(true, 1000U));
+    TEST_ASSERT_FALSE(flow.updateHold(true, 100000U));
+    TEST_ASSERT_TRUE(FactoryResetStage::Warning == flow.stage());
+    TEST_ASSERT_TRUE(flow.acknowledge());
+    TEST_ASSERT_TRUE(FactoryResetStage::Confirm == flow.stage());
+    TEST_ASSERT_FALSE(flow.updateHold(true, 200000U));
+    TEST_ASSERT_TRUE(flow.acknowledge());
+    TEST_ASSERT_TRUE(FactoryResetStage::Hold == flow.stage());
+    // A further acknowledge cannot skip the hold.
+    TEST_ASSERT_FALSE(flow.acknowledge());
+    TEST_ASSERT_TRUE(FactoryResetStage::Hold == flow.stage());
+
+    for (int stages = 0; stages < 3; ++stages) {
+        FactoryResetFlow other(kHoldMs);
+        TEST_ASSERT_TRUE(other.begin(FactoryResetKind::PinIndependent));
+        for (int step = 0; step < stages; ++step) {
+            TEST_ASSERT_TRUE(other.acknowledge());
+        }
+        other.cancel();
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle == other.stage());
+        TEST_ASSERT_TRUE(FactoryResetOutcome::None == other.outcome());
+    }
+}
+
+void test_flow_hold_needs_continuous_contact_for_the_full_duration() {
+    FactoryResetFlow flow(kHoldMs);
+    TEST_ASSERT_TRUE(flow.begin(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(flow.acknowledge());
+    TEST_ASSERT_TRUE(flow.acknowledge());
+    TEST_ASSERT_FALSE(flow.updateHold(true, 10000U));
+    TEST_ASSERT_FALSE(flow.updateHold(true, 10000U + kHoldMs - 1U));
+    TEST_ASSERT_EQUAL_UINT32(kHoldMs - 1U,
+                             flow.heldMillis(10000U + kHoldMs - 1U));
+    // Release resets the progress; the full duration is needed again.
+    TEST_ASSERT_FALSE(flow.updateHold(false, 10000U + kHoldMs));
+    TEST_ASSERT_EQUAL_UINT32(0U, flow.heldMillis(10000U + kHoldMs));
+    TEST_ASSERT_FALSE(flow.updateHold(true, 20000U));
+    TEST_ASSERT_FALSE(flow.updateHold(true, 20000U + kHoldMs - 1U));
+    // Backward time resets instead of completing.
+    TEST_ASSERT_FALSE(flow.updateHold(true, 5000U));
+    TEST_ASSERT_FALSE(flow.updateHold(true, 5000U + kHoldMs - 1U));
+    TEST_ASSERT_TRUE(flow.updateHold(true, 5000U + kHoldMs));
+    TEST_ASSERT_TRUE(FactoryResetStage::Executing == flow.stage());
+    // Executing cannot be cancelled; finish and dismiss close the flow.
+    flow.cancel();
+    TEST_ASSERT_TRUE(FactoryResetStage::Executing == flow.stage());
+    flow.finish(FactoryResetOutcome::Completed);
+    TEST_ASSERT_TRUE(FactoryResetStage::Finished == flow.stage());
+    TEST_ASSERT_FALSE(flow.begin(FactoryResetKind::PinIndependent));
+    flow.dismiss();
+    TEST_ASSERT_TRUE(FactoryResetStage::Idle == flow.stage());
+    TEST_ASSERT_TRUE(flow.begin(FactoryResetKind::PinIndependent));
+}
+
+void test_flow_variant_a_waits_for_a_verified_pin_and_b_never_does() {
+    FactoryResetFlow flow(kHoldMs);
+    TEST_ASSERT_TRUE(flow.begin(FactoryResetKind::PinProtected));
+    TEST_ASSERT_TRUE(FactoryResetStage::PinRequired == flow.stage());
+    TEST_ASSERT_FALSE(flow.acknowledge());
+    TEST_ASSERT_TRUE(flow.pinVerified());
+    TEST_ASSERT_TRUE(FactoryResetStage::Warning == flow.stage());
+    FactoryResetFlow independent(kHoldMs);
+    TEST_ASSERT_TRUE(independent.begin(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_FALSE(independent.pinVerified());
+}
+
+void test_outcome_never_reports_success_for_an_unconfirmed_network_stop() {
+    using fermentation::factoryResetBoundaryCrossed;
+    using fermentation::factoryResetOutcomeFor;
+    TEST_ASSERT_TRUE(
+        FactoryResetOutcome::Completed ==
+        factoryResetOutcomeFor(FactoryResetCoreResult::Completed, true));
+    TEST_ASSERT_TRUE(
+        FactoryResetOutcome::CompletedNetworkNotConfirmed ==
+        factoryResetOutcomeFor(FactoryResetCoreResult::Completed, false));
+    TEST_ASSERT_TRUE(FactoryResetOutcome::HandoffUnavailable ==
+                     factoryResetOutcomeFor(
+                         FactoryResetCoreResult::HandoffUnavailable, true));
+    TEST_ASSERT_TRUE(
+        FactoryResetOutcome::HandoffUnavailableNetworkNotConfirmed ==
+        factoryResetOutcomeFor(FactoryResetCoreResult::HandoffUnavailable,
+                               false));
+    TEST_ASSERT_TRUE(
+        FactoryResetOutcome::Unavailable ==
+        factoryResetOutcomeFor(FactoryResetCoreResult::Unavailable, false));
+    TEST_ASSERT_TRUE(
+        FactoryResetOutcome::Failed ==
+        factoryResetOutcomeFor(FactoryResetCoreResult::Failed, false));
+    TEST_ASSERT_TRUE(
+        factoryResetBoundaryCrossed(FactoryResetCoreResult::Completed));
+    TEST_ASSERT_TRUE(factoryResetBoundaryCrossed(
+        FactoryResetCoreResult::HandoffUnavailable));
+    TEST_ASSERT_FALSE(
+        factoryResetBoundaryCrossed(FactoryResetCoreResult::Unavailable));
+    TEST_ASSERT_FALSE(
+        factoryResetBoundaryCrossed(FactoryResetCoreResult::Failed));
+}
+
+// --- application level -----------------------------------------------------
+
+class DeterministicKdf final : public fermentation::IAuthenticationKdf {
+   public:
+    bool derive(
+        const std::string& secret, const fermentation::AuthVerifier& parameters,
+        std::array<std::uint8_t, fermentation::kAuthenticationVerifierBytes>&
+            out) override {
+        std::uint32_t state = 2166136261U;
+        for (const auto byte : secret) {
+            state ^= static_cast<std::uint8_t>(byte);
+            state *= 16777619U;
+        }
+        for (const auto byte : parameters.salt) {
+            state ^= byte;
+            state *= 16777619U;
+        }
+        for (std::size_t index = 0U; index < out.size(); ++index) {
+            state ^= static_cast<std::uint32_t>(index + 1U);
+            state *= 16777619U;
+            out[index] = static_cast<std::uint8_t>(state >> 24U);
+        }
+        return true;
+    }
+};
+
+// Records the stop order against the network mock and, when armed, proves that
+// stop() runs outside the Application gate: another thread must be able to
+// enter the gate while stop() is blocked.
+class RecordingHttpServerLifecycle final
+    : public device_platform::IHttpServerLifecycle {
+   public:
+    [[nodiscard]] bool start(device_platform::IHttpRouteSink& routes) override {
+        routes_ = &routes;
+        running_ = true;
+        return true;
+    }
+    [[nodiscard]] bool stop() override {
+        ++stopCalls;
+        stoppedWithNetworkStopCalls =
+            network != nullptr ? network->stopCallCount() : 0U;
+        if (probe) {
+            probeEnteredGate = probe();
+        }
+        running_ = false;
+        routes_ = nullptr;
+        return stopResult;
+    }
+    [[nodiscard]] bool running() const override { return running_; }
+
+    device_platform_test_support::MockNetworkLifecycle* network{nullptr};
+    std::function<bool()> probe;
+    bool probeEnteredGate{false};
+    bool stopResult{true};
+    std::size_t stopCalls{0U};
+    std::size_t stoppedWithNetworkStopCalls{0U};
+
+   private:
+    bool running_{false};
+    device_platform::IHttpRouteSink* routes_{nullptr};
+};
+
+struct Fixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource random;
+    DeterministicKdf kdf;
+    RecordingHttpServerLifecycle http;
+    fermentation::FermentationApplication application;
+
+    Fixture() {
+        http.network = &network;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
+                                           timeSource, network, http, random,
+                                           kdf));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::NetworkConfigurationStatus::Applied),
+            static_cast<int>(
+                application
+                    .applyNetworkMode(device_platform::NetworkMode::AP_ONLY)
+                    .status));
+        application.setFactoryResetHoldMillis(kHoldMs);
+    }
+
+    std::uint64_t epoch() const {
+        const auto scan =
+            fermentation::ConfigurationBootstrapStore(
+                const_cast<device_platform_test_support::
+                               SimulatedPersistentStateStore&>(store))
+                .scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    }
+
+    // Drives the PIN-independent flow up to the hold stage.
+    void armHold() {
+        TEST_ASSERT_TRUE(
+            application.beginFactoryReset(FactoryResetKind::PinIndependent));
+        TEST_ASSERT_TRUE(application.acknowledgeFactoryReset());
+        TEST_ASSERT_TRUE(application.acknowledgeFactoryReset());
+    }
+
+    void holdToCompletion(std::uint64_t startMs = 1000U) {
+        application.updateFactoryResetHold(true, startMs);
+        application.updateFactoryResetHold(true, startMs + kHoldMs);
+    }
+};
+
+void test_application_flow_is_unavailable_until_the_owner_parameter_is_set() {
+    Fixture fixture;
+    fixture.application.setFactoryResetHoldMillis(std::nullopt);
+    TEST_ASSERT_FALSE(fixture.application.factoryResetView(0U).available);
+    TEST_ASSERT_FALSE(fixture.application.beginFactoryReset(
+        FactoryResetKind::PinIndependent));
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, fixture.application.factoryResetView(0U).holdRequiredMillis);
+}
+
+void test_application_offers_only_the_pin_independent_variant() {
+    Fixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.factoryResetView(0U).available);
+    // Variant A needs a local PIN verification that does not exist (O-R2).
+    TEST_ASSERT_FALSE(
+        fixture.application.beginFactoryReset(FactoryResetKind::PinProtected));
+    TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                     fixture.application.factoryResetView(0U).stage);
+}
+
+void test_cancel_at_every_stage_changes_no_reset_state() {
+    Fixture fixture;
+    const auto epochBefore = fixture.epoch();
+    for (int stages = 0; stages < 3; ++stages) {
+        TEST_ASSERT_TRUE(fixture.application.beginFactoryReset(
+            FactoryResetKind::PinIndependent));
+        for (int step = 0; step < stages; ++step) {
+            TEST_ASSERT_TRUE(fixture.application.acknowledgeFactoryReset());
+        }
+        fixture.application.cancelFactoryReset();
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         fixture.application.factoryResetView(0U).stage);
+    }
+    // An incomplete hold never reaches the core.
+    fixture.armHold();
+    fixture.application.updateFactoryResetHold(true, 1000U);
+    fixture.application.updateFactoryResetHold(true, 1000U + kHoldMs - 1U);
+    fixture.application.updateFactoryResetHold(false, 1000U + kHoldMs);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+}
+
+void test_full_flow_runs_the_core_then_ends_network_then_http() {
+    Fixture fixture;
+    const auto epochBefore = fixture.epoch();
+    // Touch calibration records survive the reset (device specific).
+    const auto touchKey = device_platform::StateStoreKey::create(
+        device_platform::kTouchCalibrationActiveKeyBytes);
+    TEST_ASSERT_TRUE(touchKey.key.has_value());
+    TEST_ASSERT_TRUE(fixture.store.write(*touchKey.key, "touch-marker") ==
+                     device_platform::StateStoreWriteStatus::Success);
+    fixture.armHold();
+    fixture.holdToCompletion();
+
+    const auto view = fixture.application.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Finished == view.stage);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::Completed == view.outcome);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+    // Network first, then HTTP (the network had been stopped when HTTP ran).
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(
+                                     fixture.http.stoppedWithNetworkStopCalls));
+    TEST_ASSERT_FALSE(fixture.http.running());
+    TEST_ASSERT_TRUE(device_platform::NetworkLifecycleState::Stopped ==
+                     fixture.network.status().state);
+    TEST_ASSERT_FALSE(fixture.network.accessPointInfo().has_value());
+    // The old network mode is dropped; no restart with old credentials.
+    TEST_ASSERT_TRUE(device_platform::NetworkMode::UNSELECTED ==
+                     fixture.application.networkMode());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    // Touch calibration marker unchanged.
+    const auto touch = fixture.store.read(*touchKey.key, 64U);
+    TEST_ASSERT_TRUE(touch.status ==
+                     device_platform::StateStoreReadStatus::Success);
+    TEST_ASSERT_EQUAL_STRING("touch-marker", touch.value.c_str());
+    // The result is acknowledged before a new flow may begin.
+    TEST_ASSERT_FALSE(fixture.application.beginFactoryReset(
+        FactoryResetKind::PinIndependent));
+    fixture.application.dismissFactoryReset();
+    TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                     fixture.application.factoryResetView(0U).stage);
+}
+
+void test_http_is_stopped_outside_the_application_gate() {
+    Fixture fixture;
+    // While stop() is blocked inside the HTTP adapter, another thread (an HTTP
+    // handler) must be able to enter the Application gate. A stop under the
+    // gate would deadlock; the 5 s timeout turns that into a test failure.
+    fixture.http.probe = [&fixture] {
+        auto done = std::make_shared<std::promise<void>>();
+        auto future = done->get_future();
+        std::thread handler([&fixture, done] {
+            static_cast<void>(fixture.application.networkMode());
+            done->set_value();
+        });
+        const bool entered = future.wait_for(std::chrono::seconds(5)) ==
+                             std::future_status::ready;
+        if (entered) {
+            handler.join();
+        } else {
+            // A handler blocked on the gate means stop() ran under it.
+            handler.detach();
+        }
+        return entered;
+    };
+    fixture.armHold();
+    fixture.holdToCompletion();
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+    TEST_ASSERT_TRUE(fixture.http.probeEnteredGate);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::Completed ==
+                     fixture.application.factoryResetView(0U).outcome);
+}
+
+void test_unconfirmed_network_stop_is_never_reported_as_success() {
+    Fixture fixture;
+    fixture.network.setStopStatus(
+        device_platform::NetworkOperationStatus::Failed);
+    const auto startsBefore = fixture.network.startCallCount();
+    fixture.armHold();
+    fixture.holdToCompletion();
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedNetworkNotConfirmed ==
+                     fixture.application.factoryResetView(0U).outcome);
+    // HTTP is still attempted, and nothing is restarted with old credentials.
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(startsBefore),
+        static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    TEST_ASSERT_TRUE(device_platform::NetworkMode::UNSELECTED ==
+                     fixture.application.networkMode());
+}
+
+void test_unconfirmed_http_stop_is_never_reported_as_success() {
+    Fixture fixture;
+    fixture.http.stopResult = false;
+    fixture.armHold();
+    fixture.holdToCompletion();
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedNetworkNotConfirmed ==
+                     fixture.application.factoryResetView(0U).outcome);
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+}
+
+void test_a_running_process_blocks_the_flow_and_the_core_is_not_called() {
+    Fixture fixture;
+    fermentation::FermentationApplicationTestAccess::setActiveManualRun(
+        fixture.application, true);
+    TEST_ASSERT_FALSE(fixture.application.factoryResetView(0U).available);
+    TEST_ASSERT_FALSE(fixture.application.beginFactoryReset(
+        FactoryResetKind::PinIndependent));
+    fermentation::FermentationApplicationTestAccess::setActiveManualRun(
+        fixture.application, false);
+
+    // A run that appears after the flow began is caught at execution time,
+    // under the same gate as the core call.
+    const auto epochBefore = fixture.epoch();
+    fixture.armHold();
+    fixture.application.updateFactoryResetHold(true, 1000U);
+    fermentation::FermentationApplicationTestAccess::setActiveManualRun(
+        fixture.application, true);
+    fixture.application.updateFactoryResetHold(true, 1000U + kHoldMs);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::Rejected ==
+                     fixture.application.factoryResetView(0U).outcome);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+}
+
+void test_a_configuration_without_runtime_is_reported_unavailable() {
+    // Stop finding S1 (R0): a configuration without a loaded runtime has no
+    // storage epoch in the application, so the flow is not offered.
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    const auto bootstrapKey = device_platform::StateStoreKey::create("cb0");
+    TEST_ASSERT_TRUE(bootstrapKey.key.has_value());
+    TEST_ASSERT_TRUE(store.write(*bootstrapKey.key, "not-a-bootstrap-record") ==
+                     device_platform::StateStoreWriteStatus::Success);
+    fermentation::FermentationApplication application;
+    TEST_ASSERT_TRUE(platform.begin({true}));
+    static_cast<void>(application.begin(platform, store, timeZoneResolver));
+    application.setFactoryResetHoldMillis(kHoldMs);
+    TEST_ASSERT_FALSE(application.factoryResetView(0U).available);
+    TEST_ASSERT_FALSE(
+        application.beginFactoryReset(FactoryResetKind::PinIndependent));
+}
+
+// --- Issue #19 S1: reset in the recovery-admitted `ResetEligibleNoRuntime` ---
+
+device_platform::StateStoreKey storeKey(const char* bytes) {
+    const auto created = device_platform::StateStoreKey::create(bytes);
+    TEST_ASSERT_TRUE(created.key.has_value());
+    return *created.key;
+}
+
+void eraseGraph(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    for (const char* key :
+         {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2", "sc3",
+          "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2"}) {
+        store.erase(storeKey(key));
+    }
+}
+
+// A real open run-epoch handoff, produced by the recovery core itself: the
+// reset completed (bootstrap Initialized, handoff Pending) and, optionally,
+// the run-persistence side committed (handoff Committed) - not yet consumed.
+void leaveOpenHandoff(
+    device_platform_test_support::SimulatedPersistentStateStore& store,
+    bool commit) {
+    device_platform_test_support::MockTimeZoneResolver resolver;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    TEST_ASSERT_TRUE(recovery->boot().status ==
+                     fermentation::ConfigurationRecoveryStatus::RuntimeReady);
+    TEST_ASSERT_TRUE(
+        recovery->beginAuthorizedFactoryReset().status ==
+        fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted);
+    if (commit) {
+        auto proof = recovery->takeAuthorizedRunEpochHandoffProof();
+        TEST_ASSERT_TRUE(proof.has_value());
+        fermentation::RunPersistenceCoordinator runPersistence(
+            store, proof->currentEpoch(),
+            fermentation::RunCheckpointSchedule{});
+        const auto prepared =
+            runPersistence.prepareAuthorizedEpochHandoff(*proof);
+        TEST_ASSERT_TRUE(prepared.persistenceResult.status ==
+                         fermentation::RunPersistenceResultStatus::Applied);
+        TEST_ASSERT_TRUE(
+            recovery
+                ->commitAuthorizedRunEpochHandoff(*proof, *prepared.evidence)
+                .status ==
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady);
+    }
+    const auto scan = bootstrap.scan();
+    TEST_ASSERT_TRUE(scan.loaded.has_value());
+    TEST_ASSERT_TRUE(scan.loaded->record.state ==
+                     fermentation::ConfigurationBootstrapState::Initialized);
+    TEST_ASSERT_TRUE(scan.loaded->record.handoff ==
+                     (commit ? fermentation::RunEpochHandoffState::Committed
+                             : fermentation::RunEpochHandoffState::Pending));
+}
+
+// Precondition of the B1 scenario: the recovery core itself latches
+// ResetEligibleNoRuntime for this store (valid initialized bootstrap, missing
+// graph) although the handoff is open - exactly the case to be rejected.
+void requireCoreLatchesEligible(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    device_platform_test_support::MockTimeZoneResolver resolver;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    static_cast<void>(recovery->boot());
+    TEST_ASSERT_TRUE(
+        service.mode() ==
+        fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime);
+}
+
+// Forwards to the simulated store and counts the writes.
+class CountingStore final : public device_platform::IStateStore {
+   public:
+    explicit CountingStore(
+        device_platform_test_support::SimulatedPersistentStateStore& inner)
+        : inner_(inner) {}
+    [[nodiscard]] device_platform::StateStoreWriteStatus write(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        ++writes_;
+        return inner_.write(key, value);
+    }
+    [[nodiscard]] device_platform::StateStoreReadResult read(
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        return inner_.read(key, maxBytes);
+    }
+    [[nodiscard]] std::size_t writes() const noexcept { return writes_; }
+
+   private:
+    device_platform_test_support::SimulatedPersistentStateStore& inner_;
+    std::size_t writes_{0U};
+};
+
+// A configuration whose graph is unavailable: a throw-away application
+// factory-initializes the store, then both root slots are damaged and the
+// application under test boots from it (no runtime).
+struct NoRuntimeFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    CountingStore counted{store};
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource random;
+    DeterministicKdf kdf;
+    RecordingHttpServerLifecycle http;
+    std::unique_ptr<fermentation::FermentationApplication> application;
+
+    enum class Damage {
+        RootSlots,
+        RootSlotReadError,
+        BootstrapSlots,
+        OpenHandoffPending,
+        OpenHandoffCommitted
+    };
+
+    explicit NoRuntimeFixture(Damage damage = Damage::RootSlots) {
+        http.network = &network;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        {
+            fermentation::FermentationApplication first;
+            TEST_ASSERT_TRUE(first.begin(platform, store, timeZoneResolver));
+            TEST_ASSERT_TRUE(first.ready());
+        }
+        store.restart();
+        if (damage == Damage::OpenHandoffPending ||
+            damage == Damage::OpenHandoffCommitted) {
+            leaveOpenHandoff(store, damage == Damage::OpenHandoffCommitted);
+            eraseGraph(store);
+            requireCoreLatchesEligible(store);
+        }
+        switch (damage) {
+            case Damage::RootSlots:
+                // The graph records are gone (the established core-test
+                // pattern for an unavailable graph).
+                for (const char* key :
+                     {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1",
+                      "sc2", "sc3", "pc0", "pc1", "pc2", "pc3", "cm0", "cm1",
+                      "cm2"}) {
+                    store.erase(storeKey(key));
+                }
+                break;
+            case Damage::RootSlotReadError:
+                store.injectReadFailure(storeKey("cr0"), true);
+                store.injectReadFailure(storeKey("cr1"), true);
+                break;
+            case Damage::BootstrapSlots:
+                store.injectCorruption(storeKey("cb0"), "damaged-boot-0");
+                store.injectCorruption(storeKey("cb1"), "damaged-boot-1");
+                break;
+            case Damage::OpenHandoffPending:
+            case Damage::OpenHandoffCommitted:
+                break;
+        }
+        application = std::make_unique<fermentation::FermentationApplication>();
+        static_cast<void>(application->begin(platform, counted,
+                                             timeZoneResolver, timeSource,
+                                             network, http, random, kdf));
+        application->setFactoryResetHoldMillis(kHoldMs);
+    }
+
+    std::uint64_t epoch() {
+        const auto scan =
+            fermentation::ConfigurationBootstrapStore(store).scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    }
+};
+
+void test_s1_eligible_no_runtime_offers_runs_and_requires_a_restart() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    TEST_ASSERT_FALSE(app.ready());
+    const auto offered = app.factoryResetView(0U);
+    TEST_ASSERT_TRUE(offered.recoveryEntry);
+    TEST_ASSERT_TRUE(offered.available);
+    const auto epochBefore = fixture.epoch();
+
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+
+    const auto done = app.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Finished == done.stage);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     done.outcome);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+    // Operation stays blocked until the restart; no run can be offered.
+    TEST_ASSERT_FALSE(app.ready());
+
+    // The restart composes the normal boot on the new epoch.
+    fixture.store.restart();
+    fermentation::FermentationApplication restarted;
+    TEST_ASSERT_TRUE(restarted.begin(
+        fixture.platform, fixture.store, fixture.timeZoneResolver,
+        fixture.timeSource, fixture.network, fixture.http, fixture.random,
+        fixture.kdf));
+    TEST_ASSERT_TRUE(restarted.ready());
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+}
+
+void test_s1_never_started_network_and_http_do_not_make_the_result_unconfirmed() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    // Existing but never started adapters.
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    TEST_ASSERT_FALSE(fixture.http.running());
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    // Idempotent stop() calls are allowed; nothing is (re)started.
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     app.factoryResetView(0U).outcome);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    TEST_ASSERT_FALSE(fixture.http.running());
+    TEST_ASSERT_TRUE(device_platform::NetworkLifecycleState::Stopped ==
+                     fixture.network.status().state);
+}
+
+void test_s1_a_really_failed_stop_is_still_unconfirmed() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    fixture.network.setStopStatus(
+        device_platform::NetworkOperationStatus::Failed);
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedNetworkNotConfirmed ==
+                     app.factoryResetView(0U).outcome);
+}
+
+void test_s1_not_admitted_states_are_never_offered_and_change_nothing() {
+    using Damage = NoRuntimeFixture::Damage;
+    for (const auto damage :
+         {Damage::RootSlotReadError, Damage::BootstrapSlots}) {
+        NoRuntimeFixture fixture(damage);
+        auto& app = *fixture.application;
+        const auto view = app.factoryResetView(0U);
+        TEST_ASSERT_FALSE(view.recoveryEntry);
+        TEST_ASSERT_FALSE(view.available);
+        TEST_ASSERT_FALSE(
+            app.beginFactoryReset(FactoryResetKind::PinIndependent));
+        // Even a forged hold tick cannot start the core.
+        app.updateFactoryResetHold(true, 1000U);
+        app.updateFactoryResetHold(true, 1000U + kHoldMs);
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         app.factoryResetView(0U).stage);
+    }
+}
+
+void test_s1_no_runtime_never_allows_an_actuator_and_a_running_process_blocks() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    // No process is published without a runtime; the interlock denies this
+    // configuration state (test_actuation_interlock).
+    TEST_ASSERT_FALSE(app.ready());
+    TEST_ASSERT_TRUE(app.factoryResetView(0U).available);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+}
+
+// Counts the writes and cuts the power at the k-th one (before or after the
+// commit), the way a real supply loss would.
+class CuttingStore final : public device_platform::IStateStore {
+   public:
+    using Fault =
+        device_platform_test_support::SimulatedPersistentStateStore::WriteFault;
+    explicit CuttingStore(
+        device_platform_test_support::SimulatedPersistentStateStore& inner)
+        : inner_(inner) {}
+    void arm(std::size_t index, Fault fault) {
+        cutAt_ = index;
+        fault_ = fault;
+        writes_ = 0U;
+    }
+    void disarm() { cutAt_.reset(); }
+    [[nodiscard]] std::size_t writes() const noexcept { return writes_; }
+    [[nodiscard]] device_platform::StateStoreWriteStatus write(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        if (cutAt_.has_value() && writes_ == *cutAt_) {
+            inner_.setNextWriteFault(fault_);
+        }
+        ++writes_;
+        return inner_.write(key, value);
+    }
+    [[nodiscard]] device_platform::StateStoreReadResult read(
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        return inner_.read(key, maxBytes);
+    }
+
+   private:
+    device_platform_test_support::SimulatedPersistentStateStore& inner_;
+    std::optional<std::size_t> cutAt_;
+    Fault fault_{Fault::None};
+    std::size_t writes_{0U};
+};
+
+struct CutRun {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore sim;
+    CuttingStore store{sim};
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource random;
+    DeterministicKdf kdf;
+    RecordingHttpServerLifecycle http;
+
+    CutRun() {
+        http.network = &network;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        {
+            fermentation::FermentationApplication first;
+            TEST_ASSERT_TRUE(first.begin(platform, sim, timeZoneResolver));
+        }
+        sim.restart();
+        for (const char* key :
+             {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2",
+              "sc3", "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2"}) {
+            sim.erase(storeKey(key));
+        }
+    }
+
+    std::unique_ptr<fermentation::FermentationApplication> boot() {
+        auto application =
+            std::make_unique<fermentation::FermentationApplication>();
+        static_cast<void>(application->begin(platform, store, timeZoneResolver,
+                                             timeSource, network, http, random,
+                                             kdf));
+        application->setFactoryResetHoldMillis(kHoldMs);
+        return application;
+    }
+
+    std::uint64_t epoch() {
+        const auto scan = fermentation::ConfigurationBootstrapStore(sim).scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    }
+};
+
+void runFlow(fermentation::FermentationApplication& app) {
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+}
+
+void test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed() {
+    // Reference run: how many writes does the whole reset need?
+    std::size_t resetWrites = 0U;
+    {
+        CutRun run;
+        auto app = run.boot();
+        TEST_ASSERT_TRUE(app->factoryResetView(0U).recoveryEntry);
+        run.store.arm(1000000U, CuttingStore::Fault::None);
+        runFlow(*app);
+        TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                         app->factoryResetView(0U).outcome);
+        resetWrites = run.store.writes();
+    }
+    TEST_ASSERT_TRUE(resetWrites > 3U);
+
+    for (const auto fault :
+         {CuttingStore::Fault::PowerCutBeforeCommit,
+          CuttingStore::Fault::PowerCutAfterCommitBeforeReturn}) {
+        for (std::size_t cut = 0U; cut < resetWrites; ++cut) {
+            CutRun run;
+            const auto epochBefore = [&run] {
+                auto probe = run.boot();
+                return run.epoch();
+            }();
+            {
+                auto app = run.boot();
+                TEST_ASSERT_TRUE(app->factoryResetView(0U).recoveryEntry);
+                run.store.arm(cut, fault);
+                runFlow(*app);
+                run.store.disarm();
+            }
+            // Power returns: the committed state is the only survivor.
+            run.sim.restart();
+            auto restarted = run.boot();
+            const auto epochNow = run.epoch();
+            TEST_ASSERT_TRUE(epochNow == epochBefore ||
+                             epochNow == epochBefore + 1U);
+            if (restarted->ready()) {
+                // The reset had crossed its boundary: the normal boot
+                // resumed and finished it on the new epoch.
+                TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, epochNow);
+            } else {
+                // The old, still admitted state: a clean retry completes.
+                TEST_ASSERT_EQUAL_UINT64(epochBefore, epochNow);
+                TEST_ASSERT_TRUE(restarted->factoryResetView(0U).recoveryEntry);
+                runFlow(*restarted);
+                TEST_ASSERT_TRUE(
+                    FactoryResetOutcome::CompletedRestartRequired ==
+                    restarted->factoryResetView(0U).outcome);
+                TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, run.epoch());
+                run.sim.restart();
+                auto finalBoot = run.boot();
+                TEST_ASSERT_TRUE(finalBoot->ready());
+            }
+        }
+    }
+}
+
+void test_s1_an_open_run_epoch_handoff_is_never_offered_and_changes_nothing() {
+    using Damage = NoRuntimeFixture::Damage;
+    for (const auto damage :
+         {Damage::OpenHandoffPending, Damage::OpenHandoffCommitted}) {
+        NoRuntimeFixture fixture(damage);
+        auto& app = *fixture.application;
+        const auto epochBefore = fixture.epoch();
+        const auto writesBefore = fixture.counted.writes();
+        const auto view = app.factoryResetView(0U);
+        TEST_ASSERT_FALSE(view.recoveryEntry);
+        TEST_ASSERT_FALSE(view.available);
+        TEST_ASSERT_FALSE(
+            app.beginFactoryReset(FactoryResetKind::PinIndependent));
+        // A forged hold sequence cannot reach the core either.
+        app.updateFactoryResetHold(true, 1000U);
+        app.updateFactoryResetHold(true, 1000U + kHoldMs);
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         app.factoryResetView(0U).stage);
+        TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+        TEST_ASSERT_EQUAL_UINT32(
+            static_cast<std::uint32_t>(writesBefore),
+            static_cast<std::uint32_t>(fixture.counted.writes()));
+    }
+}
+
+// --- SIM-19-S1-03: no actuator effect ----------------------------------------
+
+std::string readSource(const char* path) {
+    std::ifstream stream(path, std::ios::binary);
+    TEST_ASSERT_TRUE(stream.good());
+    return std::string(std::istreambuf_iterator<char>(stream),
+                       std::istreambuf_iterator<char>());
+}
+
+// Architecture evidence (the product composition has no sinks): the reset path
+// has no code path to an actuator sink, and the sinks are reachable in
+// fermentation_app only through the plan sink driver.
+void test_s1_reset_path_sources_have_no_actuator_sink_dependency() {
+    const char* const resetPathFiles[] = {
+        "lib/fermentation_app/src/factory_reset_flow.hpp",
+        "lib/fermentation_app/src/factory_reset_flow.cpp",
+        "lib/fermentation_app/src/fermentation_application.hpp",
+        "lib/fermentation_app/src/fermentation_application.cpp",
+        "lib/fermentation_app/src/network_configuration_service.hpp",
+        "lib/fermentation_app/src/network_configuration_service.cpp",
+        "lib/fermentation_app/src/configuration_recovery_service.hpp",
+        "lib/fermentation_app/src/configuration_recovery_service.cpp",
+        "main/app_main.cpp"};
+    for (const char* path : resetPathFiles) {
+        const auto text = readSource(path);
+        for (const char* forbidden :
+             {"IBinaryOutputSink", "IBidirectionalActuatorSink",
+              "ActuatorPlanSinkDriver", "setForward(", "setReverse(",
+              "setEnabled("}) {
+            TEST_ASSERT_TRUE(text.find(forbidden) == std::string::npos);
+        }
+    }
+    // Sinks inside fermentation_app: only the driver (and the orchestrator that
+    // is handed a driver) may mention them.
+    std::size_t sinkUsers = 0U;
+    for (const auto& entry :
+         std::filesystem::directory_iterator("lib/fermentation_app/src")) {
+        const auto name = entry.path().filename().string();
+        const auto text = readSource(entry.path().string().c_str());
+        if (text.find("IBinaryOutputSink") != std::string::npos ||
+            text.find("IBidirectionalActuatorSink") != std::string::npos) {
+            ++sinkUsers;
+            TEST_ASSERT_TRUE(name.rfind("actuator_plan_sink_driver.", 0U) ==
+                             0U);
+        }
+    }
+    TEST_ASSERT_TRUE(sinkUsers >= 1U);
+}
+
+struct SinkRig {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    fermentation::RunPersistenceCoordinator coordinator{
+        store, device_platform::StorageEpoch{1U},
+        fermentation::RunCheckpointSchedule{}};
+    fermentation::TargetQualificationEvaluator evaluator;
+    fermentation::TemperatureController controller{{}, {}};
+    fermentation::ActuatorPlanner planner;
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outer;
+    device_platform_test_support::MockBinaryOutputSink inner;
+    fermentation::ActuatorPlanSinkDriver driver{peltier, outer, inner};
+    fermentation::TemperatureControlApplicationOrchestrator orchestrator{
+        coordinator, controller, evaluator, planner, driver};
+
+    // One planner tick through the only place that writes the sinks, with the
+    // gate the real interlock produces for the given evidence.
+    void tick(const fermentation::RunCommandState& state, std::uint64_t nowMs,
+              fermentation::ActuationEvidence evidence) {
+        const auto decision =
+            fermentation::ActuationInterlock::evaluate(evidence);
+        static_cast<void>(orchestrator.tickActuatorPlan(
+            state, nowMs,
+            fermentation::ActuatorSafetyGateInput{decision.permission}));
+    }
+    [[nodiscard]] bool anyEnableCommand() const {
+        for (const auto& command : peltier.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        for (const auto& command : outer.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        for (const auto& command : inner.commandJournal()) {
+            if (command.enabled) return true;
+        }
+        return peltier.forward() || peltier.reverse() || outer.enabled() ||
+               inner.enabled();
+    }
+};
+
+// Equivalent test boundary (documented deviation from the plan wording): the
+// application composition owns no sinks, so the reset flow cannot be wired to
+// them. The real orchestrator -> planner -> sink driver -> mock sinks path is
+// ticked before, during and after the real S1 flow with (a) the gate the real
+// interlock produces for the S1 state and (b) the application's own run state
+// and start-safety evidence at that moment.
+void test_s1_no_actuator_enable_before_during_and_after_the_reset() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    SinkRig rig;
+    fermentation::ActuationEvidence s1Evidence;
+    s1Evidence.bootValidationComplete = true;
+    s1Evidence.configurationServiceMode =
+        fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime;
+    s1Evidence.configurationRecoveryStatus =
+        fermentation::ConfigurationRecoveryStatus::ConfigurationUnavailable;
+    s1Evidence.configurationValidated = false;
+    s1Evidence.explicitActivationRequested = true;
+
+    // Before: no runtime, no start-safety.
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::safetyAllowsStart(
+            app));
+    rig.tick(fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+             100U, s1Evidence);
+    TEST_ASSERT_FALSE(rig.anyEnableCommand());
+
+    // During: inside the HTTP stop (after the core crossed its boundary).
+    fixture.http.probe = [&] {
+        rig.tick(
+            fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+            200U, s1Evidence);
+        return !fermentation::FermentationApplicationTestAccess::
+            safetyAllowsStart(app);
+    };
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    TEST_ASSERT_TRUE(fixture.http.probeEnteredGate);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     app.factoryResetView(0U).outcome);
+
+    // After, before the restart: the operation stays blocked.
+    TEST_ASSERT_FALSE(
+        fermentation::FermentationApplicationTestAccess::safetyAllowsStart(
+            app));
+    rig.tick(fermentation::FermentationApplicationTestAccess::runStateCopy(app),
+             300U, s1Evidence);
+    TEST_ASSERT_FALSE(rig.anyEnableCommand());
+    // The sinks did receive commands (the stop output), none of them an enable.
+    TEST_ASSERT_TRUE(!rig.outer.commandJournal().empty() ||
+                     !rig.peltier.commandJournal().empty());
+}
+
+}  // namespace
+
+void setUp() {}
+void tearDown() {}
+
+int main(int, char**) {
+    UNITY_BEGIN();
+    RUN_TEST(
+        test_flow_without_configured_hold_is_unavailable_and_has_no_default);
+    RUN_TEST(test_flow_requires_every_stage_in_order_and_cancel_resets);
+    RUN_TEST(test_flow_hold_needs_continuous_contact_for_the_full_duration);
+    RUN_TEST(test_flow_variant_a_waits_for_a_verified_pin_and_b_never_does);
+    RUN_TEST(
+        test_outcome_never_reports_success_for_an_unconfirmed_network_stop);
+    RUN_TEST(
+        test_application_flow_is_unavailable_until_the_owner_parameter_is_set);
+    RUN_TEST(test_application_offers_only_the_pin_independent_variant);
+    RUN_TEST(test_cancel_at_every_stage_changes_no_reset_state);
+    RUN_TEST(test_full_flow_runs_the_core_then_ends_network_then_http);
+    RUN_TEST(test_http_is_stopped_outside_the_application_gate);
+    RUN_TEST(test_unconfirmed_network_stop_is_never_reported_as_success);
+    RUN_TEST(test_unconfirmed_http_stop_is_never_reported_as_success);
+    RUN_TEST(test_a_running_process_blocks_the_flow_and_the_core_is_not_called);
+    RUN_TEST(test_a_configuration_without_runtime_is_reported_unavailable);
+    RUN_TEST(test_s1_eligible_no_runtime_offers_runs_and_requires_a_restart);
+    RUN_TEST(
+        test_s1_never_started_network_and_http_do_not_make_the_result_unconfirmed);
+    RUN_TEST(test_s1_a_really_failed_stop_is_still_unconfirmed);
+    RUN_TEST(test_s1_not_admitted_states_are_never_offered_and_change_nothing);
+    RUN_TEST(
+        test_s1_no_runtime_never_allows_an_actuator_and_a_running_process_blocks);
+    RUN_TEST(test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed);
+    RUN_TEST(
+        test_s1_an_open_run_epoch_handoff_is_never_offered_and_changes_nothing);
+    RUN_TEST(test_s1_reset_path_sources_have_no_actuator_sink_dependency);
+    RUN_TEST(test_s1_no_actuator_enable_before_during_and_after_the_reset);
+    return UNITY_END();
+}

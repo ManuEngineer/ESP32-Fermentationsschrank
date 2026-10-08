@@ -43,6 +43,7 @@ enum class FermentationUiPage : std::uint8_t {
     ValueEdit,
     Settings,
     TextEdit,
+    FactoryReset,
 };
 
 // Rows of the normal settings page in the order the owner decided (O1).
@@ -240,6 +241,26 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     TextEditBackspace,
     TextEditCommit,
     DiscardProgramEdit,
+    // Local factory reset flow (Issue #19). Begin also navigates to the
+    // FactoryReset page; Hold carries no payload (sustained contact is
+    // evaluated by the touch dispatcher, not by a press).
+    FactoryResetBegin,
+    FactoryResetAcknowledge,
+    FactoryResetCancel,
+    FactoryResetHold,
+    FactoryResetDismiss,
+};
+
+// The bottom slot that is the hold target while the flow is in its hold stage.
+inline constexpr std::size_t kFermentationUiFactoryResetHoldSlot = 1U;
+
+// Secret-free content of the FactoryReset page; the renderer maps stage and
+// outcome onto text.
+struct FermentationUiFactoryResetPageView {
+    FactoryResetStage stage{FactoryResetStage::Idle};
+    FactoryResetOutcome outcome{FactoryResetOutcome::None};
+    bool available{false};
+    std::uint8_t holdProgressTenths{0U};
 };
 
 // Read-only content of `ProgramSummary` (S7): the selected program's values
@@ -380,6 +401,7 @@ struct FermentationUiWorkspaceView {
     std::optional<FermentationUiSettingsView> settings;
     std::optional<FermentationUiTextEditView> textEdit;
     std::optional<FermentationUiProgramEditView> programEdit;
+    std::optional<FermentationUiFactoryResetPageView> factoryReset;
     std::optional<device_platform::TextKey> confirmationWarning;
     device_platform::VerticalPager pager;
     // view() has no implicit command. A command is returned only by press()
@@ -410,6 +432,7 @@ struct FermentationUiWorkspacePress {
         openWebProvisioningWindow;
     std::optional<FermentationUiSetDisplayLanguageCommand> setDisplayLanguage;
     std::optional<FermentationUiSetDeviceNameCommand> setDeviceName;
+    std::optional<FermentationUiFactoryResetCommand> factoryReset;
 };
 
 class FermentationTouchWorkspace {
@@ -540,6 +563,10 @@ class FermentationTouchWorkspace {
     [[nodiscard]] FermentationUiWorkspacePress pressSlot(
         const FermentationUiSnapshot& snapshot, std::size_t slotIndex,
         const FermentationUiWorkspaceView& current);
+    [[nodiscard]] FermentationUiWorkspacePress pressImpl(
+        const FermentationUiSnapshot& snapshot,
+        const device_platform::DeviceUiTarget& target,
+        const ProgramCatalog* catalog);
     [[nodiscard]] bool navigate(FermentationUiWorkspaceSlotAction action);
     [[nodiscard]] bool goBack();
     void setSlot(FermentationUiWorkspaceView& view, std::size_t index,

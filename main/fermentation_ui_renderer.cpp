@@ -1225,6 +1225,91 @@ RepresentativeScreen makeRepresentativeScreen(
                                    RepresentativeScreen::kTextLineHeight},
                                   device_platform::ThemeToken::StatusError);
             }
+        } else if (screen.workspace.factoryReset.has_value()) {
+            // Local factory reset flow (Issue #19): up to three static lines
+            // per stage and, while holding, a progress bar. Stage and outcome
+            // come from the Application-owned flow, never from the UI.
+            const auto& page = *screen.workspace.factoryReset;
+            const char* lines[3] = {nullptr, nullptr, nullptr};
+            auto token = device_platform::ThemeToken::StatusWarning;
+            switch (page.stage) {
+                case FactoryResetStage::Idle:
+                    lines[0] = "factory-reset-unavailable";
+                    break;
+                case FactoryResetStage::PinRequired:
+                case FactoryResetStage::Warning:
+                    lines[0] = "factory-reset-warning";
+                    lines[1] = "factory-reset-warning-2";
+                    break;
+                case FactoryResetStage::Confirm:
+                    lines[0] = "factory-reset-confirm";
+                    break;
+                case FactoryResetStage::Hold:
+                    lines[0] = "factory-reset-hold-prompt";
+                    break;
+                case FactoryResetStage::Executing:
+                    lines[0] = "factory-reset-running";
+                    token = device_platform::ThemeToken::StatusInformation;
+                    break;
+                case FactoryResetStage::Finished:
+                    switch (page.outcome) {
+                        case FactoryResetOutcome::Completed:
+                            lines[0] = "factory-reset-done";
+                            token =
+                                device_platform::ThemeToken::StatusInformation;
+                            break;
+                        case FactoryResetOutcome::CompletedRestartRequired:
+                            lines[0] = "factory-reset-done";
+                            lines[1] = "factory-reset-power-cycle";
+                            token =
+                                device_platform::ThemeToken::StatusInformation;
+                            break;
+                        case FactoryResetOutcome::CompletedNetworkNotConfirmed:
+                            lines[0] = "factory-reset-done";
+                            lines[1] = "factory-reset-network-failed";
+                            lines[2] = "factory-reset-power-cycle";
+                            break;
+                        case FactoryResetOutcome::HandoffUnavailable:
+                            lines[0] = "factory-reset-handoff";
+                            break;
+                        case FactoryResetOutcome::
+                            HandoffUnavailableNetworkNotConfirmed:
+                            lines[0] = "factory-reset-handoff";
+                            lines[1] = "factory-reset-network-failed";
+                            lines[2] = "factory-reset-power-cycle";
+                            break;
+                        case FactoryResetOutcome::Rejected:
+                            lines[0] = "factory-reset-rejected";
+                            break;
+                        case FactoryResetOutcome::None:
+                        case FactoryResetOutcome::Unavailable:
+                        case FactoryResetOutcome::Failed:
+                            lines[0] = "factory-reset-failed";
+                            break;
+                    }
+                    break;
+            }
+            for (std::uint16_t line = 0U; line < 3U; ++line) {
+                if (lines[line] == nullptr) continue;
+                addText(commands, textPacks, locale,
+                        fermentationTextKey(lines[line]),
+                        {kPageLineLeft,
+                         static_cast<std::uint16_t>(68U + line * 22U),
+                         kPageLineWidth, RepresentativeScreen::kTextLineHeight},
+                        token, device_platform::ThemeToken::Canvas);
+            }
+            if (page.stage == FactoryResetStage::Hold) {
+                constexpr std::uint16_t kBarLeft = 8U;
+                constexpr std::uint16_t kBarWidth = 304U;
+                addFill(commands, {kBarLeft, 118U, kBarWidth, 10U},
+                        device_platform::ThemeToken::Surface);
+                const auto filled = static_cast<std::uint16_t>(
+                    kBarWidth * page.holdProgressTenths / 10U);
+                if (filled > 0U) {
+                    addFill(commands, {kBarLeft, 118U, filled, 10U},
+                            device_platform::ThemeToken::PrimaryAction);
+                }
+            }
         } else if (screen.workspace.page == FermentationUiPage::Recovery) {
             addText(commands, textPacks, locale,
                     recoveryModeTextKey(snapshot.recovery.mode),

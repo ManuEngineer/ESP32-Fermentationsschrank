@@ -86,7 +86,7 @@ void EspIdfNetworkLifecycle::destroyDefaultNetifs() noexcept {
 }
 
 void EspIdfNetworkLifecycle::cleanupInitialization() noexcept {
-    stopWifi();
+    static_cast<void>(stopWifi());
     unregisterEventHandlers();
     if (wifiInitialized_) {
         static_cast<void>(esp_wifi_deinit());
@@ -233,12 +233,16 @@ bool EspIdfNetworkLifecycle::requestIntentionalDisconnect() noexcept {
     return false;
 }
 
-void EspIdfNetworkLifecycle::stopWifi() noexcept {
+bool EspIdfNetworkLifecycle::stopWifi() noexcept {
     if (!wifiStarted_) {
-        return;
+        return true;
     }
-    static_cast<void>(esp_wifi_stop());
-    wifiStarted_ = false;
+    const esp_err_t result = esp_wifi_stop();
+    if (result == ESP_OK || result == ESP_ERR_WIFI_NOT_INIT) {
+        wifiStarted_ = false;
+        return true;
+    }
+    return false;
 }
 
 void EspIdfNetworkLifecycle::unregisterEventHandlers() noexcept {
@@ -404,15 +408,21 @@ device_platform::NetworkOperationResult EspIdfNetworkLifecycle::stop() {
     if (stationWasActive && wifiStarted_) {
         static_cast<void>(requestIntentionalDisconnect());
     }
+    bool stopped = true;
     if (!initialized_) {
         cleanupInitialization();
+        stopped = !wifiStarted_;
     } else {
         // Keep the initialized ESP-IDF Wi-Fi/netif/event objects alive so a
         // later start reuses them and delayed intentional-disconnect events
         // still reach the same lifecycle generation.
-        stopWifi();
+        stopped = stopWifi();
     }
-    return {device_platform::NetworkOperationStatus::Applied};
+    // The status projection above (Stopped, httpReady == false, no access
+    // point info) is deliberately conservative and is not the result: Applied
+    // is reported only if the driver is confirmed stopped.
+    return {stopped ? device_platform::NetworkOperationStatus::Applied
+                    : device_platform::NetworkOperationStatus::Failed};
 }
 
 device_platform::NetworkScanResult EspIdfNetworkLifecycle::scan() {

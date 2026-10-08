@@ -11,6 +11,7 @@
 #include "process_state_machine.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
+#include "factory_reset_flow.hpp"
 #include "reset_cause.hpp"
 #include "state_store.hpp"
 #include "sensor_selection.hpp"
@@ -449,6 +450,27 @@ class FermentationApplication {
     // the run-persistence epoch handoff before publishing the new runtime.
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
 
+    // Local multi-step factory reset flow (Issue #19, plan section 4). The
+    // flow only collects the deliberate local confirmations; the preconditions
+    // are decided here under the Application gate and the existing
+    // beginAuthorizedFactoryReset() remains the single reset owner.  Only the
+    // PIN-independent variant (B) is offered: variant A needs a local PIN
+    // verification that does not exist yet (owner decision O-R2).
+    // The hold duration is an owner operating parameter; without it the flow
+    // is unavailable (fail-closed, no default value).
+    void setFactoryResetHoldMillis(std::optional<std::uint32_t> holdMillis);
+    [[nodiscard]] FermentationFactoryResetView factoryResetView(
+        std::uint64_t nowMs) const;
+    [[nodiscard]] bool beginFactoryReset(FactoryResetKind kind);
+    [[nodiscard]] bool acknowledgeFactoryReset();
+    void cancelFactoryReset();
+    void dismissFactoryReset();
+    // One tick of the long press: `held` = the contact is on the hold target.
+    // When the hold duration is reached this runs the reset (core under the
+    // Application gate) and afterwards, outside the gate, ends network and
+    // HTTP; a failure to end them is reported, never hidden.
+    void updateFactoryResetHold(bool held, std::uint64_t nowMs);
+
     // Explicit R1 selected-fallback action.  The command carries only the
     // app-owned confirmation/revision contract; fresh sensor/planner evidence
     // is supplied by the owning application/orchestrator boundary, never by
@@ -535,6 +557,21 @@ class FermentationApplication {
         device_platform::ISecureRandomSource* randomSource,
         device_platform::IReplayDigest* replayDigest);
     void resetAuthenticationState() noexcept;
+    // True unless a process is actually running (published active run).
+    [[nodiscard]] bool factoryResetRunGateOpenUnlocked() const noexcept;
+    [[nodiscard]] bool factoryResetAvailableUnlocked() const noexcept;
+    // `ResetEligibleNoRuntime` as latched by the recovery core (Issue #19 S1).
+    [[nodiscard]] bool factoryResetRecoveryEntryUnlocked() const noexcept;
+    [[nodiscard]] std::optional<device_platform::StorageEpoch>
+    factoryResetPreviousEpochUnlocked() const;
+    // Epoch of a verified, initialized bootstrap without an open run-epoch
+    // handoff; the only bootstrap the no-runtime reset is offered for.
+    [[nodiscard]] std::optional<device_platform::StorageEpoch>
+    noRuntimeResetBootstrapEpochUnlocked() const;
+    // Ends the running network connection and the HTTP server after the
+    // irreversible reset boundary (Issue #19, plan 4.4a). Runs outside the
+    // Application gate; returns false if either stop is not confirmed.
+    [[nodiscard]] bool endNetworkAfterFactoryReset();
     // Single place that revokes all browser sessions at a trust boundary and
     // advances the trust generation (callers hold the Application gate).
     void revokeWebSessionsAtTrustBoundary() noexcept;
@@ -616,6 +653,10 @@ class FermentationApplication {
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
+    FactoryResetFlow factoryResetFlow_;
+    // Evaluated once at boot (never per UI tick): the recovery core admitted
+    // `ResetEligibleNoRuntime` AND the bootstrap has no open handoff.
+    bool noRuntimeResetAdmitted_{false};
     ApplicationCallSerializer applicationCallSerializer_;
 };
 

@@ -95,6 +95,20 @@ struct FermentationUiSetDeviceNameCommand {
 // Application owner decides whether it may open; the UI carries intent only.
 struct FermentationUiOpenWebProvisioningWindowCommand {};
 
+// One deliberate local step of the factory reset flow (Issue #19). The
+// Application owns the flow and every precondition; the UI carries the intent
+// only. Deliberately NOT part of `FermentationUiCommand::operation`: the reset
+// is never reachable from a web or other non-local surface.
+struct FermentationUiFactoryResetCommand {
+    enum class Step : std::uint8_t {
+        Begin,
+        Acknowledge,
+        Cancel,
+        Dismiss,
+    };
+    Step step{Step::Cancel};
+};
+
 // The renderer-independent UI contract carries intent only.  In particular,
 // these payloads never carry a ProgramDocument, safety/sensor/planner
 // evidence, or an owning decision object.  The later application boundary
@@ -292,6 +306,9 @@ enum class FermentationUiDetailStatus : std::uint8_t {
     // Owning outcomes of OpenWebProvisioningWindow.
     WebProvisioningWindowOpened,
     WebProvisioningWindowNotOpened,
+    // Owning outcomes of the local factory reset flow steps.
+    FactoryResetStepAccepted,
+    FactoryResetStepRejected,
 };
 
 // A canonical Proposed decision is not an owning apply/persist outcome.  The
@@ -386,6 +403,9 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult openWebProvisioningWindow(
         FermentationApplication& application,
         const FermentationUiOpenWebProvisioningWindowCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult factoryResetStep(
+        FermentationApplication& application,
+        const FermentationUiFactoryResetCommand& command);
     [[nodiscard]] static FermentationUiCommandResult setDeviceName(
         FermentationApplication& application,
         const FermentationUiSetDeviceNameCommand& command);

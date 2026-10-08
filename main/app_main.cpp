@@ -1,6 +1,7 @@
 #include <cinttypes>
 #include <memory>
 #include <new>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -69,6 +70,11 @@ constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
 constexpr char kStateStorePartitionLabel[] = "state_store";
 #endif
+// Dauer des langen, durchgehenden Gedrueckthaltens im lokalen Werksreset
+// (Issue #19, Plan 4.1). Ownerentscheid: 5000 ms, fest; keine separate
+// Laufzeitkonfiguration.
+constexpr std::optional<uint32_t> kApprovedFactoryResetHoldMillis = 5000U;
+
 constexpr uint64_t kHeartbeatIntervalMs = 1000U;
 constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // Idle-Messpunkt: 120 s ohne Bedienung (seit Boot bzw. seit dem letzten
@@ -478,7 +484,17 @@ bool updateProductUi(
                      networkLifecycle.status().state, displayRenderer);
     }
     fermentation::main_ui::WorkspaceTouchTickResult touchTick;
-    if (touchPoll.contactHeld) {
+    const auto touchAction = fermentation::main_ui::touchLoopAction(
+        touchPoll.contactHeld, loopSnapshot);
+    if (touchAction ==
+        fermentation::main_ui::TouchLoopAction::ReleaseFactoryResetHold) {
+        // No contact while the factory reset hold is armed: deliver the
+        // release (Issue #19). Without this the interrupted long press would
+        // keep its start time across any pause.
+        fermentation::main_ui::releaseFactoryResetHold(
+            application, timeSource.monotonicMillis());
+    }
+    if (touchAction == fermentation::main_ui::TouchLoopAction::ProcessContact) {
         // Locale, time zone and catalog for the touch path; the clock input
         // (which copies the time zone id) is only built while a contact is
         // held, so the idle loop does not allocate for it.
@@ -634,6 +650,7 @@ extern "C" void app_main(void) {
             authenticationKdf, replayDigest, &resetCauseSource);
         logResources("after_application_begin", application.networkMode(),
                      networkLifecycle.status().state);
+        application.setFactoryResetHoldMillis(kApprovedFactoryResetHoldMillis);
     }
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,

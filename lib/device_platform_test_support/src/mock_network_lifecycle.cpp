@@ -49,7 +49,9 @@ device_platform::NetworkOperationResult MockNetworkLifecycle::stop() {
     status_.httpReady = false;
     status_.ipv4Address.reset();
     setAccessPointInfo(std::nullopt);
-    return {device_platform::NetworkOperationStatus::Applied};
+    // The projection is always Stopped (like the ESP-IDF adapter); only the
+    // returned status can report an unconfirmed stop.
+    return {stopStatus_};
 }
 
 device_platform::NetworkScanResult MockNetworkLifecycle::scan() {

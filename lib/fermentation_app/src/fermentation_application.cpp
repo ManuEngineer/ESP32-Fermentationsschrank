@@ -1440,6 +1440,8 @@ void FermentationApplication::refreshUiSnapshot(
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
     input.webAccess = webAccessState();
+    input.factoryReset = factoryResetView(
+        timeSource_ != nullptr ? timeSource_->monotonicMillis() : 0U);
     input.refreshTracker = &uiRefreshTracker_;
     FermentationUiProjector::projectInto(snapshot, input);
 }
@@ -1820,6 +1822,7 @@ bool FermentationApplication::beginPersistent(
     secureRandomSource_ = randomSource;
     authenticationKdf_ = authenticationKdf;
     storageEpoch_.reset();
+    noRuntimeResetAdmitted_ = false;
     runIdentity_.reset();
     lifecycleState_ = ApplicationLifecycleState::Initializing;
     presentationState_ = PresentationState{};
@@ -1904,6 +1907,13 @@ bool FermentationApplication::beginPersistent(
         configurationRecoveryService_->takeAuthorizedRunEpochHandoffProof();
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        // One-time admission for the no-runtime factory reset: the recovery
+        // core latched ResetEligibleNoRuntime and no run-epoch handoff is
+        // open. Evaluated here, never on a UI tick.
+        noRuntimeResetAdmitted_ =
+            configurationService_->mode() ==
+                ConfigurationServiceMode::ResetEligibleNoRuntime &&
+            noRuntimeResetBootstrapEpochUnlocked().has_value();
         requireService(configurationFault(configurationResult.status));
         return true;
     }
@@ -2266,18 +2276,52 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     return outcome.persistenceResult;
 }
 
+std::optional<device_platform::StorageEpoch>
+FermentationApplication::factoryResetPreviousEpochUnlocked() const {
+    // The old epoch comes from the loaded runtime or, without one, only from
+    // the verified bootstrap of a configuration the recovery core admitted as
+    // `ResetEligibleNoRuntime` (Issue #19 S1). The core re-proves eligibility
+    // on every call; nothing else is accepted.
+    if (configurationRecoveryService_ == nullptr ||
+        configurationService_ == nullptr || stateStore_ == nullptr) {
+        return std::nullopt;
+    }
+    if (storageEpoch_.has_value()) {
+        return storageEpoch_;
+    }
+    if (!factoryResetRecoveryEntryUnlocked()) {
+        return std::nullopt;
+    }
+    return noRuntimeResetBootstrapEpochUnlocked();
+}
+
+std::optional<device_platform::StorageEpoch>
+FermentationApplication::noRuntimeResetBootstrapEpochUnlocked() const {
+    if (bootstrapStore_ == nullptr) {
+        return std::nullopt;
+    }
+    const auto bootstrap = bootstrapStore_->scan();
+    if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
+        !bootstrap.loaded.has_value() ||
+        bootstrap.loaded->record.state !=
+            ConfigurationBootstrapState::Initialized ||
+        bootstrap.loaded->record.handoff == RunEpochHandoffState::Pending ||
+        bootstrap.loaded->record.handoff == RunEpochHandoffState::Committed) {
+        return std::nullopt;
+    }
+    return bootstrap.loaded->record.storageEpoch;
+}
+
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
     const auto guard = applicationCallSerializer_.enter();
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
-    if (configurationRecoveryService_ == nullptr ||
-        configurationService_ == nullptr || stateStore_ == nullptr ||
-        !storageEpoch_.has_value()) {
+    const auto knownEpoch = factoryResetPreviousEpochUnlocked();
+    if (!knownEpoch.has_value()) {
         return unavailable;
     }
-
-    const auto previousEpoch = *storageEpoch_;
+    const auto previousEpoch = *knownEpoch;
     // Wait for running authentication operations before the destructive,
     // epoch-changing reset; new operations fail closed meanwhile.
     authOperationGate_.closeAndDrain();
@@ -2515,6 +2559,172 @@ bool FermentationApplication::publishStandby() {
     }
     runtimeRunState_ = std::move(target);
     return true;
+}
+
+// --- Local factory reset flow (Issue #19, plan section 4) -----------------
+
+bool FermentationApplication::factoryResetRunGateOpenUnlocked() const noexcept {
+    // Blocks only while a process is actually running (published active run).
+    // In SAFE_BOOT no run is published and the actuator interlock denies every
+    // output, so the recovery reset stays reachable there.
+    return runtimeRunState_ == nullptr ||
+           (!runtimeRunState_->activeProgramRun.has_value() &&
+            !runtimeRunState_->activeManualRun.has_value());
+}
+
+bool FermentationApplication::factoryResetRecoveryEntryUnlocked()
+    const noexcept {
+    // Only the state the recovery core itself latched as reset-eligible: a
+    // plain `NoRuntime`, a global scan blocker, an identity collision or an
+    // unknown bootstrap never qualifies.
+    return noRuntimeResetAdmitted_ && !storageEpoch_.has_value() &&
+           bootstrapStore_ != nullptr && configurationService_ != nullptr &&
+           configurationService_->mode() ==
+               ConfigurationServiceMode::ResetEligibleNoRuntime;
+}
+
+bool FermentationApplication::factoryResetAvailableUnlocked() const noexcept {
+    // The core needs a loaded configuration runtime (storageEpoch_); a reset
+    // from a configuration without runtime is not offered (R0 stop finding S1).
+    return factoryResetFlow_.configured() &&
+           configurationRecoveryService_ != nullptr &&
+           configurationService_ != nullptr && stateStore_ != nullptr &&
+           (storageEpoch_.has_value() || factoryResetRecoveryEntryUnlocked()) &&
+           factoryResetRunGateOpenUnlocked();
+}
+
+void FermentationApplication::setFactoryResetHoldMillis(
+    std::optional<std::uint32_t> holdMillis) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (factoryResetFlow_.active()) {
+        return;
+    }
+    factoryResetFlow_ = FactoryResetFlow(holdMillis);
+}
+
+FermentationFactoryResetView FermentationApplication::factoryResetView(
+    std::uint64_t nowMs) const {
+    const auto guard = applicationCallSerializer_.enter();
+    FermentationFactoryResetView view;
+    view.stage = factoryResetFlow_.stage();
+    view.kind = factoryResetFlow_.kind();
+    view.outcome = factoryResetFlow_.outcome();
+    view.available =
+        !factoryResetFlow_.active() && factoryResetAvailableUnlocked();
+    view.recoveryEntry = factoryResetRecoveryEntryUnlocked();
+    view.holdRequiredMillis = factoryResetFlow_.holdMillis().value_or(0U);
+    if (view.holdRequiredMillis != 0U) {
+        const auto held =
+            static_cast<std::uint64_t>(factoryResetFlow_.heldMillis(nowMs));
+        const auto tenths = held * 10U / view.holdRequiredMillis;
+        view.holdProgressTenths =
+            static_cast<std::uint8_t>(tenths > 10U ? 10U : tenths);
+    }
+    return view;
+}
+
+bool FermentationApplication::beginFactoryReset(FactoryResetKind kind) {
+    const auto guard = applicationCallSerializer_.enter();
+    // Variant A (PIN protected) is not offered until a local PIN verification
+    // exists (owner decision O-R2).
+    if (kind != FactoryResetKind::PinIndependent ||
+        !factoryResetAvailableUnlocked()) {
+        return false;
+    }
+    return factoryResetFlow_.begin(kind);
+}
+
+bool FermentationApplication::acknowledgeFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    return factoryResetFlow_.acknowledge();
+}
+
+void FermentationApplication::cancelFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.cancel();
+}
+
+void FermentationApplication::dismissFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.dismiss();
+}
+
+bool FermentationApplication::endNetworkAfterFactoryReset() {
+    // Network first (disconnects the clients), then the HTTP server. Both are
+    // always attempted. `httpd_stop()` blocks until the server task ended and
+    // handlers may wait for the Application gate, so neither call may run
+    // under it. `running()` is not evidence of completion; the return values
+    // are.
+    bool confirmed = true;
+    if (networkLifecycle_ != nullptr) {
+        confirmed = networkLifecycle_->stop().status ==
+                        device_platform::NetworkOperationStatus::Applied &&
+                    confirmed;
+    }
+    if (httpServerLifecycle_ != nullptr) {
+        confirmed = httpServerLifecycle_->stop() && confirmed;
+    }
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (networkConfigurationService_ != nullptr) {
+            networkConfigurationService_->discardAfterFactoryReset();
+        }
+    }
+    return confirmed;
+}
+
+void FermentationApplication::updateFactoryResetHold(bool held,
+                                                     std::uint64_t nowMs) {
+    FactoryResetCoreResult core = FactoryResetCoreResult::Unavailable;
+    bool restartRequired = false;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (!factoryResetFlow_.updateHold(held, nowMs)) {
+            return;
+        }
+        // The flow is Executing. The binding precondition is re-checked here,
+        // under the same gate as the core call and as a run start.
+        if (!factoryResetAvailableUnlocked()) {
+            factoryResetFlow_.finish(FactoryResetOutcome::Rejected);
+            return;
+        }
+        // Without a loaded runtime the boot-time subsystems were never
+        // composed.
+        const bool withoutRuntime = !storageEpoch_.has_value();
+        switch (beginAuthorizedFactoryReset().status) {
+            case ConfigurationRecoveryStatus::FactoryResetCompleted:
+                core = FactoryResetCoreResult::Completed;
+                restartRequired = withoutRuntime;
+                break;
+            case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
+                core = FactoryResetCoreResult::HandoffUnavailable;
+                break;
+            case ConfigurationRecoveryStatus::ConfigurationUnavailable:
+                core = FactoryResetCoreResult::Unavailable;
+                break;
+            default:
+                core = FactoryResetCoreResult::Failed;
+                break;
+        }
+        if (withoutRuntime) {
+            // Any attempt consumes the one-time admission; a retry needs the
+            // restart (which re-evaluates it).
+            noRuntimeResetAdmitted_ = false;
+        }
+        if (withoutRuntime && factoryResetBoundaryCrossed(core)) {
+            // Operation stays blocked until the restart composes the normal
+            // boot (including the network) on the new epoch; held under the
+            // same gate so no run can start in between.
+            requireService(FaultCode::ConfigurationUnavailable);
+        }
+    }
+    // Outside the gate: ending network and HTTP may block.
+    const bool networkEnded = factoryResetBoundaryCrossed(core)
+                                  ? endNetworkAfterFactoryReset()
+                                  : true;
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.finish(
+        factoryResetOutcomeFor(core, networkEnded, restartRequired));
 }
 
 }  // namespace fermentation
