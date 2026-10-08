@@ -1440,6 +1440,8 @@ void FermentationApplication::refreshUiSnapshot(
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
     input.webAccess = webAccessState();
+    input.factoryReset = factoryResetView(
+        timeSource_ != nullptr ? timeSource_->monotonicMillis() : 0U);
     input.refreshTracker = &uiRefreshTracker_;
     FermentationUiProjector::projectInto(snapshot, input);
 }
@@ -2556,7 +2558,13 @@ FermentationFactoryResetView FermentationApplication::factoryResetView(
     view.available =
         !factoryResetFlow_.active() && factoryResetAvailableUnlocked();
     view.holdRequiredMillis = factoryResetFlow_.holdMillis().value_or(0U);
-    view.heldMillis = factoryResetFlow_.heldMillis(nowMs);
+    if (view.holdRequiredMillis != 0U) {
+        const auto held =
+            static_cast<std::uint64_t>(factoryResetFlow_.heldMillis(nowMs));
+        const auto tenths = held * 10U / view.holdRequiredMillis;
+        view.holdProgressTenths =
+            static_cast<std::uint8_t>(tenths > 10U ? 10U : tenths);
+    }
     return view;
 }
 

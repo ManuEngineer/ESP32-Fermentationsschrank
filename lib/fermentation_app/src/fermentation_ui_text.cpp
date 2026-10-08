@@ -173,7 +173,7 @@ namespace {
 
 // Immutable firmware texts: constexpr tables of string-literal views, so they
 // stay in read-only flash and are never copied into the heap.
-constexpr std::size_t kTextCount = 183U;
+constexpr std::size_t kTextCount = 198U;
 using device_platform::TextTranslation;
 
 constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
@@ -363,6 +363,21 @@ constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
      "Recovery rejected (fail-closed)"},
     {"recovery-mode-completed", "Run completed"},
     {"recovery-mode-cooling", "Cooling after recovery"},
+    {"factory-reset", "Factory reset"},
+    {"forgot-pin", "PIN forgotten?"},
+    {"factory-reset-hold", "Hold"},
+    {"factory-reset-unavailable", "Reset not available"},
+    {"factory-reset-warning", "All data will be erased!"},
+    {"factory-reset-warning-2", "Programs, settings, WLAN, PIN."},
+    {"factory-reset-confirm", "Really erase everything?"},
+    {"factory-reset-hold-prompt", "Hold the button to confirm"},
+    {"factory-reset-running", "Resetting..."},
+    {"factory-reset-done", "Factory reset done."},
+    {"factory-reset-network-failed", "Network not ended safely."},
+    {"factory-reset-power-cycle", "Switch the device off and on."},
+    {"factory-reset-handoff", "Reset done, run storage unavailable."},
+    {"factory-reset-failed", "Reset failed, nothing changed."},
+    {"factory-reset-rejected", "Not allowed right now."},
 }};
 
 constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
@@ -552,6 +567,21 @@ constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
      "Wiederanlauf abgelehnt (fail-closed)"},
     {"recovery-mode-completed", "Lauf abgeschlossen"},
     {"recovery-mode-cooling", "Kuehlen nach Wiederanlauf"},
+    {"factory-reset", "Werksreset"},
+    {"forgot-pin", "PIN vergessen?"},
+    {"factory-reset-hold", "Halten"},
+    {"factory-reset-unavailable", "Reset nicht verfuegbar"},
+    {"factory-reset-warning", "Alle Daten gehen verloren!"},
+    {"factory-reset-warning-2", "Programme, Einstellungen, WLAN, PIN."},
+    {"factory-reset-confirm", "Wirklich alles loeschen?"},
+    {"factory-reset-hold-prompt", "Zum Bestaetigen Taste halten"},
+    {"factory-reset-running", "Setze zurueck..."},
+    {"factory-reset-done", "Werksreset durchgefuehrt."},
+    {"factory-reset-network-failed", "Netzwerk nicht sicher beendet."},
+    {"factory-reset-power-cycle", "Geraet aus- und wieder einschalten."},
+    {"factory-reset-handoff", "Reset fertig, Laufspeicher fehlt."},
+    {"factory-reset-failed", "Reset fehlgeschlagen, nichts geaendert."},
+    {"factory-reset-rejected", "Jetzt nicht erlaubt."},
 }};
 
 constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
@@ -742,6 +772,21 @@ constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
     {"return-manual", "Retorno manual"},
     {"return-auto", "Retorno auto"},
     {"discard", "Descartar"},
+    {"factory-reset", "Restablecer"},
+    {"forgot-pin", "PIN olvidado?"},
+    {"factory-reset-hold", "Mantener"},
+    {"factory-reset-unavailable", "Reset no disponible"},
+    {"factory-reset-warning", "Se borraran todos los datos"},
+    {"factory-reset-warning-2", "Programas, ajustes, WLAN, PIN."},
+    {"factory-reset-confirm", "Borrar todo?"},
+    {"factory-reset-hold-prompt", "Mantenga el boton pulsado"},
+    {"factory-reset-running", "Restableciendo..."},
+    {"factory-reset-done", "Restablecido."},
+    {"factory-reset-network-failed", "Red no cerrada de forma segura."},
+    {"factory-reset-power-cycle", "Apague y encienda el equipo."},
+    {"factory-reset-handoff", "Hecho, sin memoria de proceso."},
+    {"factory-reset-failed", "Fallo, sin cambios."},
+    {"factory-reset-rejected", "No permitido ahora."},
 }};
 
 }  // namespace

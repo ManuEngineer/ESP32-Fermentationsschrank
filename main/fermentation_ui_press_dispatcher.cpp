@@ -79,6 +79,15 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.factoryReset.has_value()) {
+        // Local-only step of the factory reset flow; every precondition is
+        // decided by the Application, the UI carries the intent only.
+        WorkspacePressDispatchResult result;
+        result.commandResult = FermentationUiCommandBridge::factoryResetStep(
+            application, *press.factoryReset);
+        result.outcome = WorkspacePressDispatchOutcome::OwningOutcome;
+        return result;
+    }
     if (press.openWebProvisioningWindow.has_value()) {
         WorkspacePressDispatchResult result;
         result.commandResult =
@@ -151,6 +160,10 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     std::uint64_t monotonicMillis) {
     WorkspaceTouchTickResult result;
     if (!contactHeld) {
+        // Releasing the hold target resets the long press (Issue #19).
+        if (snapshot.factoryReset.stage == FactoryResetStage::Hold) {
+            application.updateFactoryResetHold(false, monotonicMillis);
+        }
         return result;
     }
     // The screen is built once here and reused for both targetAt() and
@@ -162,16 +175,36 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     // Destroy its vector/string storage before a typed press can mutate owners.
     FermentationUiWorkspacePress press;
     bool shouldDispatch = false;
+    bool holdTick = false;
+    bool holdTickRequired = false;
     {
         const auto screen = makeRepresentativeScreen(
             snapshot, workspace, textPacks, locale, std::nullopt, catalog,
             networkStatus, clock);
         result.pressedTarget = targetAt(screen, touchX, touchY);
+        if (snapshot.factoryReset.stage == FactoryResetStage::Hold) {
+            // The long press counts only while the contact is on the hold
+            // slot of the factory reset page; any other contact releases it.
+            const bool onHoldTarget =
+                workspace.page() == FermentationUiPage::FactoryReset &&
+                result.pressedTarget.has_value() &&
+                result.pressedTarget->kind ==
+                    device_platform::DeviceUiTargetKind::BottomSlot &&
+                result.pressedTarget->slotIndex ==
+                    kFermentationUiFactoryResetHoldSlot;
+            holdTick = onHoldTarget;
+            holdTickRequired = true;
+        }
         if (freshPressEdge && result.pressedTarget.has_value()) {
             press = routePress(workspace, snapshot, screen, touchX, touchY,
                                catalog);
             shouldDispatch = true;
         }
+    }
+    if (holdTickRequired) {
+        // Outside the screen scope: the tick may run the reset, which ends the
+        // network and HTTP and must not run under any UI-local storage.
+        application.updateFactoryResetHold(holdTick, monotonicMillis);
     }
     if (shouldDispatch) {
         result.dispatch = dispatchWorkspacePress(application, snapshot, press,

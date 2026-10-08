@@ -12,6 +12,7 @@
 #include "device_ui_session.hpp"
 #include "device_ui_theme.hpp"
 #include "network_mode.hpp"
+#include "factory_reset_flow.hpp"
 #include "presentation_state.hpp"
 #include "run_commands.hpp"
 #include "run_persistence_coordinator.hpp"
@@ -133,6 +134,7 @@ struct FermentationUiSnapshot {
     FermentationNetworkModeView network;
     FermentationWebAccessState webAccess{
         FermentationWebAccessState::NotApplicable};
+    FermentationFactoryResetView factoryReset;
     std::optional<device_platform::UiRefreshRevision> refreshRevision;
 };
 

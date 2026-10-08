@@ -29,12 +29,20 @@ bool isCanonicalDecisionRequiredMessage(const RuntimeMessage& message) {
             message.code == MessageCode::ProductInsertionRequested);
 }
 
-std::vector<FermentationUiSafeBootCapability>
-safeBootUnavailableCapabilities() {
-    return {FermentationUiSafeBootCapability::PersistentFactoryReset,
-            FermentationUiSafeBootCapability::RawTouchRecovery,
-            FermentationUiSafeBootCapability::NetworkProvisioningRecovery,
-            FermentationUiSafeBootCapability::DiagnosticsExport};
+// The persistent factory reset is offered (and therefore not listed as
+// unavailable) only while the application reports the flow as available.
+std::vector<FermentationUiSafeBootCapability> safeBootUnavailableCapabilities(
+    bool factoryResetAvailable) {
+    std::vector<FermentationUiSafeBootCapability> result;
+    if (!factoryResetAvailable) {
+        result.push_back(
+            FermentationUiSafeBootCapability::PersistentFactoryReset);
+    }
+    result.push_back(FermentationUiSafeBootCapability::RawTouchRecovery);
+    result.push_back(
+        FermentationUiSafeBootCapability::NetworkProvisioningRecovery);
+    result.push_back(FermentationUiSafeBootCapability::DiagnosticsExport);
+    return result;
 }
 
 // Validation field of each numeric start value (the program validator names
@@ -774,7 +782,12 @@ bool FermentationTouchWorkspace::isPageExitAction(
     switch (action) {
         case FermentationUiWorkspaceSlotAction::NavigateBack:
         case FermentationUiWorkspaceSlotAction::NavigateHome:
+        case FermentationUiWorkspaceSlotAction::FactoryResetCancel:
+        case FermentationUiWorkspaceSlotAction::FactoryResetDismiss:
             return true;
+        case FermentationUiWorkspaceSlotAction::FactoryResetBegin:
+        case FermentationUiWorkspaceSlotAction::FactoryResetAcknowledge:
+        case FermentationUiWorkspaceSlotAction::FactoryResetHold:
         case FermentationUiWorkspaceSlotAction::None:
         case FermentationUiWorkspaceSlotAction::NavigateProgramList:
         case FermentationUiWorkspaceSlotAction::NavigateProgramManagement:
@@ -928,6 +941,9 @@ std::vector<device_platform::TextKey> FermentationTouchWorkspace::routeForPage(
         case FermentationUiPage::Recovery:
             route.push_back(key("recovery"));
             break;
+        case FermentationUiPage::FactoryReset:
+            route.push_back(key("factory-reset"));
+            break;
         case FermentationUiPage::HeaderLanguage:
             route.push_back(key("language"));
             break;
@@ -1051,6 +1067,9 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
         case FermentationUiPage::Recovery:
             pageStack_.push_back(FermentationUiPage::Recovery);
             break;
+        case FermentationUiPage::FactoryReset:
+            pageStack_.push_back(FermentationUiPage::FactoryReset);
+            break;
         case FermentationUiPage::HeaderLanguage:
         case FermentationUiPage::HeaderNetwork:
         case FermentationUiPage::HeaderClock:
@@ -1142,12 +1161,22 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
                 setSlot(view, 0U, "resume-fallback",
                         FermentationUiWorkspaceSlotAction::ResumeFallback);
             } else {
-                setSlot(view, 0U, "recovery",
-                        FermentationUiWorkspaceSlotAction::NavigateRecovery,
-                        snapshot.home.processState != ProcessState::SafeBoot);
+                if (snapshot.home.processState == ProcessState::SafeBoot) {
+                    // SAFE_BOOT: own local entry to the full factory reset,
+                    // independent of the locked service area (O-R1 = B+).
+                    setSlot(
+                        view, 0U, "factory-reset",
+                        FermentationUiWorkspaceSlotAction::FactoryResetBegin,
+                        snapshot.factoryReset.available);
+                } else {
+                    setSlot(
+                        view, 0U, "recovery",
+                        FermentationUiWorkspaceSlotAction::NavigateRecovery);
+                }
                 if (snapshot.home.processState == ProcessState::SafeBoot)
                     view.unavailableCapabilities =
-                        safeBootUnavailableCapabilities();
+                        safeBootUnavailableCapabilities(
+                            snapshot.factoryReset.available);
             }
             setSlot(view, 1U, "programs",
                     FermentationUiWorkspaceSlotAction::NavigateProgramList,
@@ -1158,10 +1187,16 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
                     FermentationUiWorkspaceSlotAction::NavigateService, false);
             break;
         case FermentationHomeMode::Restricted:
-            setSlot(
-                view, 0U, "recovery",
-                FermentationUiWorkspaceSlotAction::NavigateRecovery,
-                snapshot.home.processState == ProcessState::RecoveryEvaluation);
+            if (snapshot.home.processState == ProcessState::SafeBoot) {
+                setSlot(view, 0U, "factory-reset",
+                        FermentationUiWorkspaceSlotAction::FactoryResetBegin,
+                        snapshot.factoryReset.available);
+            } else {
+                setSlot(view, 0U, "recovery",
+                        FermentationUiWorkspaceSlotAction::NavigateRecovery,
+                        snapshot.home.processState ==
+                            ProcessState::RecoveryEvaluation);
+            }
             setSlot(view, 1U, "programs",
                     FermentationUiWorkspaceSlotAction::NavigateProgramList,
                     snapshot.home.processState != ProcessState::SafeBoot);
@@ -1171,8 +1206,8 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
                     FermentationUiWorkspaceSlotAction::NavigateService, false);
             view.blockedReason = key("restricted");
             if (snapshot.home.processState == ProcessState::SafeBoot)
-                view.unavailableCapabilities =
-                    safeBootUnavailableCapabilities();
+                view.unavailableCapabilities = safeBootUnavailableCapabilities(
+                    snapshot.factoryReset.available);
             break;
         case FermentationHomeMode::Unavailable:
             setSlot(view, 0U, "unavailable",
@@ -1634,9 +1669,10 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 view.blockedReason =
                     snapshot.service.unavailableReason.value_or(
                         key("service-locked"));
+            // The PIN page itself is reachable while the service area is
+            // locked: it carries the PIN-independent recovery entry.
             setSlot(view, 1U, "pin",
-                    FermentationUiWorkspaceSlotAction::NavigatePin,
-                    snapshot.service.available);
+                    FermentationUiWorkspaceSlotAction::NavigatePin);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "recovery",
@@ -1645,12 +1681,15 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         case FermentationUiPage::Pin:
             view.title = key("pin");
+            // "PIN forgotten?" needs no PIN entry (O-R1 = B+); it starts the
+            // full factory reset flow, never a PIN-only reset.
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
-            setSlot(view, 3U, "service",
-                    FermentationUiWorkspaceSlotAction::NavigateService);
+            setSlot(view, 3U, "forgot-pin",
+                    FermentationUiWorkspaceSlotAction::FactoryResetBegin,
+                    snapshot.factoryReset.available);
             break;
         case FermentationUiPage::Recovery: {
             view.title = key("recovery");
@@ -1670,8 +1709,45 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             if (!fallbackAllowed &&
                 snapshot.recovery.mode ==
                     RecoveryViewMode::FallbackSelectionRequired) {
-                view.unavailableCapabilities =
-                    safeBootUnavailableCapabilities();
+                view.unavailableCapabilities = safeBootUnavailableCapabilities(
+                    snapshot.factoryReset.available);
+            }
+            break;
+        }
+        case FermentationUiPage::FactoryReset: {
+            view.title = key("factory-reset");
+            const auto& reset = snapshot.factoryReset;
+            view.factoryReset = FermentationUiFactoryResetPageView{
+                reset.stage, reset.outcome, reset.available,
+                reset.holdProgressTenths};
+            using Action = FermentationUiWorkspaceSlotAction;
+            switch (reset.stage) {
+                case FactoryResetStage::Idle:
+                    // The flow is not running (begin refused or flow ended).
+                    setSlot(view, 0U, "back", Action::NavigateBack);
+                    break;
+                case FactoryResetStage::PinRequired:
+                case FactoryResetStage::Warning:
+                    setSlot(view, 0U, "cancel", Action::FactoryResetCancel);
+                    setSlot(view, 2U, "continue",
+                            Action::FactoryResetAcknowledge);
+                    break;
+                case FactoryResetStage::Confirm:
+                    setSlot(view, 0U, "cancel", Action::FactoryResetCancel);
+                    setSlot(view, 2U, "confirm",
+                            Action::FactoryResetAcknowledge);
+                    break;
+                case FactoryResetStage::Hold:
+                    setSlot(view, 0U, "cancel", Action::FactoryResetCancel);
+                    setSlot(view, kFermentationUiFactoryResetHoldSlot,
+                            "factory-reset-hold", Action::FactoryResetHold);
+                    break;
+                case FactoryResetStage::Executing:
+                    // Not cancellable while the core runs.
+                    break;
+                case FactoryResetStage::Finished:
+                    setSlot(view, 0U, "ok", Action::FactoryResetDismiss);
+                    break;
             }
             break;
         }
@@ -2031,6 +2107,9 @@ bool FermentationTouchWorkspace::navigate(
         case FermentationUiWorkspaceSlotAction::NavigateSettings:
             destination = FermentationUiPage::Settings;
             break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetBegin:
+            destination = FermentationUiPage::FactoryReset;
+            break;
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
         case FermentationUiWorkspaceSlotAction::CopyProgram:
         case FermentationUiWorkspaceSlotAction::NewProgram:
@@ -2191,6 +2270,29 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             result.openWebProvisioningWindow =
                 FermentationUiOpenWebProvisioningWindowCommand{};
             break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetBegin:
+            result.navigated = navigate(action);
+            result.factoryReset = FermentationUiFactoryResetCommand{
+                FermentationUiFactoryResetCommand::Step::Begin};
+            break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetAcknowledge:
+            result.factoryReset = FermentationUiFactoryResetCommand{
+                FermentationUiFactoryResetCommand::Step::Acknowledge};
+            break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetCancel:
+            result.factoryReset = FermentationUiFactoryResetCommand{
+                FermentationUiFactoryResetCommand::Step::Cancel};
+            result.navigated = goBack();
+            break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetDismiss:
+            result.factoryReset = FermentationUiFactoryResetCommand{
+                FermentationUiFactoryResetCommand::Step::Dismiss};
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateHome);
+            break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetHold:
+            // Sustained contact only; the touch dispatcher evaluates it.
+            break;
         case FermentationUiWorkspaceSlotAction::MovePagerUp:
             result.navigated = pager_.moveUp();
             break;
@@ -2314,6 +2416,26 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
 }
 
 FermentationUiWorkspacePress FermentationTouchWorkspace::press(
+    const FermentationUiSnapshot& snapshot,
+    const device_platform::DeviceUiTarget& target,
+    const ProgramCatalog* catalog) {
+    const auto pageBefore = page_;
+    auto result = pressImpl(snapshot, target, catalog);
+    // Leaving the factory reset page by any navigation (back, home, header)
+    // ends the flow: a visible flow must never stay armed behind another
+    // page. A finished flow is acknowledged instead.
+    if (pageBefore == FermentationUiPage::FactoryReset &&
+        page_ != FermentationUiPage::FactoryReset &&
+        !result.factoryReset.has_value()) {
+        result.factoryReset = FermentationUiFactoryResetCommand{
+            snapshot.factoryReset.stage == FactoryResetStage::Finished
+                ? FermentationUiFactoryResetCommand::Step::Dismiss
+                : FermentationUiFactoryResetCommand::Step::Cancel};
+    }
+    return result;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressImpl(
     const FermentationUiSnapshot& snapshot,
     const device_platform::DeviceUiTarget& target,
     const ProgramCatalog* catalog) {
@@ -2578,6 +2700,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 pressed.beginHomeWifiReconfiguration;
             result.openWebProvisioningWindow =
                 pressed.openWebProvisioningWindow;
+            result.factoryReset = pressed.factoryReset;
             return result;
         }
         case device_platform::DeviceUiTargetKind::None:

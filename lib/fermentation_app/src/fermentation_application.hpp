@@ -240,27 +240,6 @@ struct FermentationSensorCommissioningSnapshot {
     std::optional<SensorCommissioningRecord> record;
 };
 
-// Secret-free, renderer-independent view of the local factory reset flow.
-struct FermentationFactoryResetView {
-    FactoryResetStage stage{FactoryResetStage::Idle};
-    FactoryResetKind kind{FactoryResetKind::PinIndependent};
-    FactoryResetOutcome outcome{FactoryResetOutcome::None};
-    // A PIN-independent reset may be begun now.
-    bool available{false};
-    // 0 = hold duration not yet configured by the owner.
-    std::uint32_t holdRequiredMillis{0U};
-    std::uint32_t heldMillis{0U};
-
-    friend bool operator==(const FermentationFactoryResetView& left,
-                           const FermentationFactoryResetView& right) {
-        return left.stage == right.stage && left.kind == right.kind &&
-               left.outcome == right.outcome &&
-               left.available == right.available &&
-               left.holdRequiredMillis == right.holdRequiredMillis &&
-               left.heldMillis == right.heldMillis;
-    }
-};
-
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;

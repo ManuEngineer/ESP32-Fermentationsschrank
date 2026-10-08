@@ -83,10 +83,9 @@ enum class FactoryResetCoreResult : std::uint8_t {
                        ? FactoryResetOutcome::Completed
                        : FactoryResetOutcome::CompletedNetworkNotConfirmed;
         case FactoryResetCoreResult::HandoffUnavailable:
-            return networkEnded
-                       ? FactoryResetOutcome::HandoffUnavailable
-                       : FactoryResetOutcome::
-                             HandoffUnavailableNetworkNotConfirmed;
+            return networkEnded ? FactoryResetOutcome::HandoffUnavailable
+                                : FactoryResetOutcome::
+                                      HandoffUnavailableNetworkNotConfirmed;
         case FactoryResetCoreResult::Unavailable:
             return FactoryResetOutcome::Unavailable;
         case FactoryResetCoreResult::Failed:
@@ -149,6 +148,34 @@ class FactoryResetFlow {
     FactoryResetKind kind_{FactoryResetKind::PinIndependent};
     FactoryResetOutcome outcome_{FactoryResetOutcome::None};
     std::optional<std::uint64_t> holdStartedMs_;
+};
+
+// Secret-free, renderer-independent view of the local factory reset flow. It
+// is part of the UI snapshot; the hold progress is quantized to tenths so a
+// running long press does not republish the snapshot on every tick.
+struct FermentationFactoryResetView {
+    FactoryResetStage stage{FactoryResetStage::Idle};
+    FactoryResetKind kind{FactoryResetKind::PinIndependent};
+    FactoryResetOutcome outcome{FactoryResetOutcome::None};
+    // A PIN-independent reset may be begun now.
+    bool available{false};
+    // 0 = hold duration not yet configured by the owner.
+    std::uint32_t holdRequiredMillis{0U};
+    // 0..10, only meaningful in the hold stage.
+    std::uint8_t holdProgressTenths{0U};
+
+    friend bool operator==(const FermentationFactoryResetView& left,
+                           const FermentationFactoryResetView& right) {
+        return left.stage == right.stage && left.kind == right.kind &&
+               left.outcome == right.outcome &&
+               left.available == right.available &&
+               left.holdRequiredMillis == right.holdRequiredMillis &&
+               left.holdProgressTenths == right.holdProgressTenths;
+    }
+    friend bool operator!=(const FermentationFactoryResetView& left,
+                           const FermentationFactoryResetView& right) {
+        return !(left == right);
+    }
 };
 
 }  // namespace fermentation

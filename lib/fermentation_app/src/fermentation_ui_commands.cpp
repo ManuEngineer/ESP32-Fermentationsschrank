@@ -362,6 +362,37 @@ FermentationUiCommandBridge::openWebProvisioningWindow(
         FermentationUiCommandPhase::OwningOutcome);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::factoryResetStep(
+    FermentationApplication& application,
+    const FermentationUiFactoryResetCommand& command) {
+    using Step = FermentationUiFactoryResetCommand::Step;
+    bool accepted = false;
+    switch (command.step) {
+        case Step::Begin:
+            // Only the PIN-independent variant is offered (owner decision
+            // O-R2 pending for the PIN-protected one).
+            accepted =
+                application.beginFactoryReset(FactoryResetKind::PinIndependent);
+            break;
+        case Step::Acknowledge:
+            accepted = application.acknowledgeFactoryReset();
+            break;
+        case Step::Cancel:
+            application.cancelFactoryReset();
+            accepted = true;
+            break;
+        case Step::Dismiss:
+            application.dismissFactoryReset();
+            accepted = true;
+            break;
+    }
+    return makeResult(
+        accepted ? Category::Accepted : Category::Rejected,
+        accepted ? FermentationUiDetailStatus::FactoryResetStepAccepted
+                 : FermentationUiDetailStatus::FactoryResetStepRejected,
+        FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
     FermentationApplication& application,
     const FermentationUiSetDisplayLanguageCommand& command) {

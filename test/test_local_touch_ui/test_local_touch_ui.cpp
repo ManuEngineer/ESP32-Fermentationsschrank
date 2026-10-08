@@ -2421,7 +2421,7 @@ void test_fermentation_text_packs_are_complete_static_tables() {
     const auto packs = makeFermentationUiTextPacks();
     TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
     const auto& reference = packs.front().translations;
-    TEST_ASSERT_EQUAL_UINT32(183U, reference.size());
+    TEST_ASSERT_EQUAL_UINT32(198U, reference.size());
     for (const auto& pack : packs) {
         TEST_ASSERT_EQUAL_UINT32(reference.size(), pack.translations.size());
         for (const auto& translation : pack.translations) {

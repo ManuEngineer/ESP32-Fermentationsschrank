@@ -19,6 +19,7 @@ struct FermentationUiProjectionInput {
     FermentationUiNetworkSource network;
     FermentationWebAccessState webAccess{
         FermentationWebAccessState::NotApplicable};
+    FermentationFactoryResetView factoryReset;
     std::optional<device_platform::TextKey> primaryAction;
     std::vector<device_platform::TextKey> semanticActions;
     FermentationUiRefreshRevisionTracker* refreshTracker{nullptr};
