@@ -627,7 +627,7 @@ erzeugt; erst dann wird der bedingte Kandidat (2) vertieft.
 
 Nicht-Scope sind fachliche Qualitaet, Filter, Rollenwahl, Ersatzregelung,
 PI-Regelung, Aktorfreigabe, finale Sensorposition und finale Schutzbauteilwerte.
-Offsets und Rollenbindung gehoeren zum Datensatz aus Plan Abschnitt 4a/S2, nicht
+Offsets und Rollenbindung gehoeren zum Datensatz aus Plan Abschnitt 4a/5.3, nicht
 zum Spike. Artefakte sind Aufbau-/Topologiefotos, Pull-up-/Leitungsdaten,
 ROM-Liste, Probe-Patch, Mess- und Fehlerdaten, Base-/Kandidaten-
 Ressourcenvergleich, Toolchain-/Abhaengigkeitsbericht und die Empfehlung fuer
