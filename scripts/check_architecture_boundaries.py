@@ -26,6 +26,24 @@ PLATFORM_FORBIDDEN_ROLES = (
     "outsideFan",
 )
 
+# Issue #30 (Plan Abschnitt 4c, ADR-013): die technischen DS18B20-Sensorkanaele
+# kennen nur Busse, ROMs und Kanalindizes. Anwendungsrollen (Schrankluft,
+# Kuehlkoerper, Produkt) gehoeren ausschliesslich nach fermentation_app/main.
+DS18B20_NEUTRAL_GLOBS = (
+    ("lib/device_platform/src", "ds18b20_*"),
+    ("lib/device_platform_esp_idf/src", "ds18b20_*"),
+    ("lib/device_platform_test_support/src", "fake_ds18b20_*"),
+)
+DS18B20_FORBIDDEN_ROLE_TOKENS = (
+    "chamber",
+    "heatsink",
+    "product",
+    "produkt",
+    "schrank",
+    "kuehlkoerper",
+    "kuhlkorper",
+)
+
 # Issue #72/#73: portable Quellwurzeln, die keinen ESP-IDF-/RTOS-Zugriff,
 # keine Arduino-Abhaengigkeit und keinen Zugriff auf die Adaptergrenze
 # device_platform_esp_idf enthalten duerfen. Bewusst eng gehalten (nicht
@@ -441,6 +459,30 @@ def add_reference_violations(
                     violations.append(
                         f"{path}:{line_number}: {description}: {token!r}"
                     )
+
+
+def add_ds18b20_channel_neutrality_violations(
+    violations: list[str], root: Path
+) -> None:
+    for relative_root, pattern in DS18B20_NEUTRAL_GLOBS:
+        directory = root / relative_root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob(pattern)):
+            if not path.is_file() or path.suffix not in SCANNED_SUFFIXES:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            for line_number, line in enumerate(lines, start=1):
+                lowered = line.lower()
+                for token in DS18B20_FORBIDDEN_ROLE_TOKENS:
+                    if token in lowered:
+                        violations.append(
+                            f"{path}:{line_number}: Anwendungsrolle in technischem "
+                            f"DS18B20-Sensorkanal (ADR-013): {token!r}"
+                        )
 
 
 def add_idf_leak_violations(violations: list[str], root: Path) -> None:
@@ -1067,6 +1109,7 @@ def check(root: Path) -> list[str]:
         "geraetespezifische Aktorrolle in allgemeiner Plattform-API",
     )
 
+    add_ds18b20_channel_neutrality_violations(violations, root)
     add_idf_leak_violations(violations, root)
     add_run_persistence_bypass_violations(violations, root)
     add_planner_binding_boundary_violations(violations, root)
@@ -1691,6 +1734,32 @@ def _check_clean_fixture_without_file(relative_path: str) -> list[str]:
         return check(root)
 
 
+DS18B20_NEUTRALITY_VIOLATION_CASES = (
+    (
+        "lib/device_platform/src/ds18b20_binding.hpp",
+        "struct Binding { unsigned long chamberAir; };\n",
+    ),
+    (
+        "lib/device_platform_esp_idf/src/ds18b20_onewire_bus.cpp",
+        "// Produktfuehler am Bus\n",
+    ),
+    (
+        "lib/device_platform_test_support/src/fake_ds18b20_bus.cpp",
+        "int heatsinkChannel = 1;\n",
+    ),
+)
+DS18B20_NEUTRALITY_CLEAN_CASES = (
+    (
+        "lib/device_platform/src/ds18b20_neutral.hpp",
+        "struct Binding { unsigned char channel; unsigned long expectedRom; };\n",
+    ),
+    (
+        "lib/device_platform/src/other_sensor.hpp",
+        "// ein Produkt-Begriff ausserhalb der DS18B20-Dateien ist hier nicht Teil der Regel\n",
+    ),
+)
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1783,6 +1852,21 @@ def selftest() -> int:
             print(
                 f"{FAILED}: sauberer applySensorSelectionDecision-Aufruf "
                 f"{name!r} wurde faelschlich als Parallelfunktion erkannt"
+            )
+            return 1
+
+    for relative_path, content in DS18B20_NEUTRALITY_VIOLATION_CASES:
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: Rollenbegriff in DS18B20-Plattformdatei "
+                f"{relative_path!r} wurde nicht erkannt"
+            )
+            return 1
+    for relative_path, content in DS18B20_NEUTRALITY_CLEAN_CASES:
+        if _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: neutrale DS18B20-Plattformdatei {relative_path!r} "
+                "wurde faelschlich als Rollenverstoss erkannt"
             )
             return 1
 
