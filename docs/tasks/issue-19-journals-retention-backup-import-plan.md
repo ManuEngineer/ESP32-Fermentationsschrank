@@ -205,7 +205,7 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
    dem Epochenwechsel **logisch** ungueltig. (b) Websessions und Auth-Zustand werden an der
    Vertrauensgrenze widerrufen (vorhanden). (c) **Laufende** WLAN-/AP-Verbindungen und
    RAM-gehaltene Credentials (`activeCredential_`, AP-Daten im Lifecycle) werden nach
-   der irreversiblen Resetgrenze sicher beendet beziehungsweise invalidiert (4.7);
+   der irreversiblen Resetgrenze sicher beendet beziehungsweise invalidiert (4.4a);
    danach wird keine alte Verbindung oder SoftAP-Autoritaet weiterverwendet. (d) Ein
    **neues** SoftAP-Passwort wird erst behauptet, wenn die Netzwerkdomaene nachweislich
    erfolgreich neu provisioniert beziehungsweise neu gestartet wurde; es gibt keinen
