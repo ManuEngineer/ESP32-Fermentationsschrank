@@ -32,10 +32,10 @@ Zuordnung zu den bisherigen `NOT_RUN`-Eintraegen: `S7_CONTENT_PAGES_LAYOUT`,
 
 - Die Meldung ist eine Owner-Beobachtung. Es existiert keine UART-Aufnahme, kein
   `commit_probe_*`-Log und keine Messung der Treffbarkeit in Pixeln.
-- Aus „OK“ wird nicht abgeleitet, dass Geraetename-Aenderung und **Persistenz
-  nach Reset** einzeln geprueft wurden; fuer S10 gilt nur „Owner meldet OK“.
-  Eine Einzelbestaetigung der Persistenz ist offen, bis der Owner sie
-  ausdruecklich meldet.
+- Persistenz nach Reset des Geraetenamens (und der Sprache/des Programms aus dem
+  frueheren Smoke) wurde vom Owner am 2026-10-08 ausdruecklich als geprueft
+  bestaetigt (Owner-Aussage, nicht UART-belegt). Der Reset im D10-Lauf
+  (19:37:48) war ein Owner-Reset mit anschliessend wiederhergestelltem Namen.
 - Aus der Meldung folgen weder Ressourcen- noch Stabilitaetsnachweise. Der
   D10-Ressourcennachweis (Sprache S3, Programm S6, Geraetename S10) ist davon
   unberuehrt und wird separat erhoben.
