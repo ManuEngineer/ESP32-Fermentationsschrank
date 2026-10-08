@@ -2,15 +2,16 @@
 
 ```text
 PLAN_REVISION=7 (konsolidiert, KISS; ersetzt Revision 6 `d2fcf426dd3052d7ce82cdd0043a080d2d77199b` sowie die Revisionen 5, 4, 3, 2 und 1; keine davon wurde freigegeben)
-PLAN_STATUS=DRAFT_AWAITING_PLAN_FIX_VERIFICATION_AND_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
+PLAN_STATUS=OWNER_APPROVED_FOR_R1_FACTORY_RESET (Plan Fix Verification Revision 7: PASS / GO)
+OWNER_APPROVED_PLAN_SHA=6fbf1304566472c10b7cc52439475a5743960c0e (Revision 7; die Freigabe gilt dem Inhalt dieses Commits, spaetere Commits aendern nur Status/Nachweise, nicht den Planvertrag)
+IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset); B1/B2 und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
 OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
 JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-SCOPE_OF_THIS_COMMIT=NUR_PLAN (keine Produktionslogik, keine produktiven Tests, keine Schemas, keine Messung); ROADMAP-Bereinigung und Archiv bleiben, nur #19-Zeilen angepasst
-IMPLEMENTATION=NOT_STARTED (dieser Plan autorisiert keinen Produktcode)
+IMPLEMENTATION=R0_STARTED (siehe PR #191; Produktcode nur im Rahmen R1-R4 gemaess Abschnitt 4)
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
