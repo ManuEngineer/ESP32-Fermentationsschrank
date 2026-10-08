@@ -71,6 +71,11 @@ class SimulatedPersistentStateStore final
     // Simuliert einen Neustart: committed Daten bleiben erhalten, eine noch
     // nicht committete laufende Schreiboperation sowie alle Testschalter
     // (Fault, Read-Fehler, erzwungenes NotFound) werden geloescht.
+    // Entfernt einen committed Eintrag physisch (bildet fehlende Records nach,
+    // z. B. eine geloeschte Konfigurationsgraph-Ablage). Kein Portvertrag:
+    // `IStateStore` kennt kein Erase.
+    void erase(const device_platform::StateStoreKey& key);
+
     void restart();
 
     // Nur fuer native Tests: macht sichtbar, ob nach dem letzten `write()`

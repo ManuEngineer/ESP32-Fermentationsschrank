@@ -492,6 +492,321 @@ void test_a_configuration_without_runtime_is_reported_unavailable() {
         application.beginFactoryReset(FactoryResetKind::PinIndependent));
 }
 
+// --- Issue #19 S1: reset in the recovery-admitted `ResetEligibleNoRuntime` ---
+
+device_platform::StateStoreKey storeKey(const char* bytes) {
+    const auto created = device_platform::StateStoreKey::create(bytes);
+    TEST_ASSERT_TRUE(created.key.has_value());
+    return *created.key;
+}
+
+// A configuration whose graph is unavailable: a throw-away application
+// factory-initializes the store, then both root slots are damaged and the
+// application under test boots from it (no runtime).
+struct NoRuntimeFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource random;
+    DeterministicKdf kdf;
+    RecordingHttpServerLifecycle http;
+    std::unique_ptr<fermentation::FermentationApplication> application;
+
+    enum class Damage { RootSlots, RootSlotReadError, BootstrapSlots };
+
+    explicit NoRuntimeFixture(Damage damage = Damage::RootSlots) {
+        http.network = &network;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        {
+            fermentation::FermentationApplication first;
+            TEST_ASSERT_TRUE(first.begin(platform, store, timeZoneResolver));
+            TEST_ASSERT_TRUE(first.ready());
+        }
+        store.restart();
+        switch (damage) {
+            case Damage::RootSlots:
+                // The graph records are gone (the established core-test
+                // pattern for an unavailable graph).
+                for (const char* key :
+                     {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1",
+                      "sc2", "sc3", "pc0", "pc1", "pc2", "pc3", "cm0", "cm1",
+                      "cm2"}) {
+                    store.erase(storeKey(key));
+                }
+                break;
+            case Damage::RootSlotReadError:
+                store.injectReadFailure(storeKey("cr0"), true);
+                store.injectReadFailure(storeKey("cr1"), true);
+                break;
+            case Damage::BootstrapSlots:
+                store.injectCorruption(storeKey("cb0"), "damaged-boot-0");
+                store.injectCorruption(storeKey("cb1"), "damaged-boot-1");
+                break;
+        }
+        application = std::make_unique<fermentation::FermentationApplication>();
+        static_cast<void>(application->begin(platform, store, timeZoneResolver,
+                                             timeSource, network, http, random,
+                                             kdf));
+        application->setFactoryResetHoldMillis(kHoldMs);
+    }
+
+    std::uint64_t epoch() {
+        const auto scan =
+            fermentation::ConfigurationBootstrapStore(store).scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    }
+};
+
+void test_s1_eligible_no_runtime_offers_runs_and_requires_a_restart() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    TEST_ASSERT_FALSE(app.ready());
+    const auto offered = app.factoryResetView(0U);
+    TEST_ASSERT_TRUE(offered.recoveryEntry);
+    TEST_ASSERT_TRUE(offered.available);
+    const auto epochBefore = fixture.epoch();
+
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+
+    const auto done = app.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Finished == done.stage);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     done.outcome);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+    // Operation stays blocked until the restart; no run can be offered.
+    TEST_ASSERT_FALSE(app.ready());
+
+    // The restart composes the normal boot on the new epoch.
+    fixture.store.restart();
+    fermentation::FermentationApplication restarted;
+    TEST_ASSERT_TRUE(restarted.begin(
+        fixture.platform, fixture.store, fixture.timeZoneResolver,
+        fixture.timeSource, fixture.network, fixture.http, fixture.random,
+        fixture.kdf));
+    TEST_ASSERT_TRUE(restarted.ready());
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+}
+
+void test_s1_never_started_network_and_http_do_not_make_the_result_unconfirmed() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    // Existing but never started adapters.
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    TEST_ASSERT_FALSE(fixture.http.running());
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    // Idempotent stop() calls are allowed; nothing is (re)started.
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                     app.factoryResetView(0U).outcome);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+    TEST_ASSERT_FALSE(fixture.http.running());
+    TEST_ASSERT_TRUE(device_platform::NetworkLifecycleState::Stopped ==
+                     fixture.network.status().state);
+}
+
+void test_s1_a_really_failed_stop_is_still_unconfirmed() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    fixture.network.setStopStatus(
+        device_platform::NetworkOperationStatus::Failed);
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedNetworkNotConfirmed ==
+                     app.factoryResetView(0U).outcome);
+}
+
+void test_s1_not_admitted_states_are_never_offered_and_change_nothing() {
+    using Damage = NoRuntimeFixture::Damage;
+    for (const auto damage :
+         {Damage::RootSlotReadError, Damage::BootstrapSlots}) {
+        NoRuntimeFixture fixture(damage);
+        auto& app = *fixture.application;
+        const auto view = app.factoryResetView(0U);
+        TEST_ASSERT_FALSE(view.recoveryEntry);
+        TEST_ASSERT_FALSE(view.available);
+        TEST_ASSERT_FALSE(
+            app.beginFactoryReset(FactoryResetKind::PinIndependent));
+        // Even a forged hold tick cannot start the core.
+        app.updateFactoryResetHold(true, 1000U);
+        app.updateFactoryResetHold(true, 1000U + kHoldMs);
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         app.factoryResetView(0U).stage);
+    }
+}
+
+void test_s1_no_runtime_never_allows_an_actuator_and_a_running_process_blocks() {
+    NoRuntimeFixture fixture;
+    auto& app = *fixture.application;
+    // No process is published without a runtime; the interlock denies this
+    // configuration state (test_actuation_interlock).
+    TEST_ASSERT_FALSE(app.ready());
+    TEST_ASSERT_TRUE(app.factoryResetView(0U).available);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.network.startCallCount()));
+}
+
+// Counts the writes and cuts the power at the k-th one (before or after the
+// commit), the way a real supply loss would.
+class CuttingStore final : public device_platform::IStateStore {
+   public:
+    using Fault =
+        device_platform_test_support::SimulatedPersistentStateStore::WriteFault;
+    explicit CuttingStore(
+        device_platform_test_support::SimulatedPersistentStateStore& inner)
+        : inner_(inner) {}
+    void arm(std::size_t index, Fault fault) {
+        cutAt_ = index;
+        fault_ = fault;
+        writes_ = 0U;
+    }
+    void disarm() { cutAt_.reset(); }
+    [[nodiscard]] std::size_t writes() const noexcept { return writes_; }
+    [[nodiscard]] device_platform::StateStoreWriteStatus write(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        if (cutAt_.has_value() && writes_ == *cutAt_) {
+            inner_.setNextWriteFault(fault_);
+        }
+        ++writes_;
+        return inner_.write(key, value);
+    }
+    [[nodiscard]] device_platform::StateStoreReadResult read(
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        return inner_.read(key, maxBytes);
+    }
+
+   private:
+    device_platform_test_support::SimulatedPersistentStateStore& inner_;
+    std::optional<std::size_t> cutAt_;
+    Fault fault_{Fault::None};
+    std::size_t writes_{0U};
+};
+
+struct CutRun {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore sim;
+    CuttingStore store{sim};
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource random;
+    DeterministicKdf kdf;
+    RecordingHttpServerLifecycle http;
+
+    CutRun() {
+        http.network = &network;
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        {
+            fermentation::FermentationApplication first;
+            TEST_ASSERT_TRUE(first.begin(platform, sim, timeZoneResolver));
+        }
+        sim.restart();
+        for (const char* key :
+             {"cr0", "cr1", "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2",
+              "sc3", "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2"}) {
+            sim.erase(storeKey(key));
+        }
+    }
+
+    std::unique_ptr<fermentation::FermentationApplication> boot() {
+        auto application =
+            std::make_unique<fermentation::FermentationApplication>();
+        static_cast<void>(application->begin(platform, store, timeZoneResolver,
+                                             timeSource, network, http, random,
+                                             kdf));
+        application->setFactoryResetHoldMillis(kHoldMs);
+        return application;
+    }
+
+    std::uint64_t epoch() {
+        const auto scan = fermentation::ConfigurationBootstrapStore(sim).scan();
+        TEST_ASSERT_TRUE(scan.loaded.has_value());
+        return scan.loaded->record.storageEpoch.value();
+    }
+};
+
+void runFlow(fermentation::FermentationApplication& app) {
+    TEST_ASSERT_TRUE(app.beginFactoryReset(FactoryResetKind::PinIndependent));
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(app.acknowledgeFactoryReset());
+    app.updateFactoryResetHold(true, 1000U);
+    app.updateFactoryResetHold(true, 1000U + kHoldMs);
+}
+
+void test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed() {
+    // Reference run: how many writes does the whole reset need?
+    std::size_t resetWrites = 0U;
+    {
+        CutRun run;
+        auto app = run.boot();
+        TEST_ASSERT_TRUE(app->factoryResetView(0U).recoveryEntry);
+        run.store.arm(1000000U, CuttingStore::Fault::None);
+        runFlow(*app);
+        TEST_ASSERT_TRUE(FactoryResetOutcome::CompletedRestartRequired ==
+                         app->factoryResetView(0U).outcome);
+        resetWrites = run.store.writes();
+    }
+    TEST_ASSERT_TRUE(resetWrites > 3U);
+
+    for (const auto fault :
+         {CuttingStore::Fault::PowerCutBeforeCommit,
+          CuttingStore::Fault::PowerCutAfterCommitBeforeReturn}) {
+        for (std::size_t cut = 0U; cut < resetWrites; ++cut) {
+            CutRun run;
+            const auto epochBefore = [&run] {
+                auto probe = run.boot();
+                return run.epoch();
+            }();
+            {
+                auto app = run.boot();
+                TEST_ASSERT_TRUE(app->factoryResetView(0U).recoveryEntry);
+                run.store.arm(cut, fault);
+                runFlow(*app);
+                run.store.disarm();
+            }
+            // Power returns: the committed state is the only survivor.
+            run.sim.restart();
+            auto restarted = run.boot();
+            const auto epochNow = run.epoch();
+            TEST_ASSERT_TRUE(epochNow == epochBefore ||
+                             epochNow == epochBefore + 1U);
+            if (restarted->ready()) {
+                // The reset had crossed its boundary: the normal boot
+                // resumed and finished it on the new epoch.
+                TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, epochNow);
+            } else {
+                // The old, still admitted state: a clean retry completes.
+                TEST_ASSERT_EQUAL_UINT64(epochBefore, epochNow);
+                TEST_ASSERT_TRUE(restarted->factoryResetView(0U).recoveryEntry);
+                runFlow(*restarted);
+                TEST_ASSERT_TRUE(
+                    FactoryResetOutcome::CompletedRestartRequired ==
+                    restarted->factoryResetView(0U).outcome);
+                TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, run.epoch());
+                run.sim.restart();
+                auto finalBoot = run.boot();
+                TEST_ASSERT_TRUE(finalBoot->ready());
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void setUp() {}
@@ -516,5 +831,13 @@ int main(int, char**) {
     RUN_TEST(test_unconfirmed_http_stop_is_never_reported_as_success);
     RUN_TEST(test_a_running_process_blocks_the_flow_and_the_core_is_not_called);
     RUN_TEST(test_a_configuration_without_runtime_is_reported_unavailable);
+    RUN_TEST(test_s1_eligible_no_runtime_offers_runs_and_requires_a_restart);
+    RUN_TEST(
+        test_s1_never_started_network_and_http_do_not_make_the_result_unconfirmed);
+    RUN_TEST(test_s1_a_really_failed_stop_is_still_unconfirmed);
+    RUN_TEST(test_s1_not_admitted_states_are_never_offered_and_change_nothing);
+    RUN_TEST(
+        test_s1_no_runtime_never_allows_an_actuator_and_a_running_process_blocks);
+    RUN_TEST(test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed);
     return UNITY_END();
 }

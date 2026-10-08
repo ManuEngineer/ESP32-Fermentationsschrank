@@ -2288,8 +2288,46 @@ void test_interrupted_hold_never_survives_a_pause_in_the_real_loop_decision() {
         1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
 }
 
+// Issue #19 S1 (SIM-19-S1-06): the restricted no-runtime home page gains only
+// the reset entry on slot 0; every other slot keeps its existing contract.
+void test_restricted_no_runtime_home_adds_only_the_reset_entry() {
+    OwningAppFixture fixture;
+    fixture.application.setFactoryResetHoldMillis(5000U);
+    FermentationTouchWorkspace workspace;
+    auto base = fixture.application.uiSnapshot();
+    base.home.mode = FermentationHomeMode::Restricted;
+    base.home.processState = ProcessState::Boot;
+    base.factoryReset.recoveryEntry = false;
+    base.factoryReset.available = true;
+    auto admitted = base;
+    admitted.factoryReset.recoveryEntry = true;
+
+    const auto before = workspace.view(base);
+    const auto after = workspace.view(admitted);
+    TEST_ASSERT_TRUE(after.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::FactoryResetBegin);
+    TEST_ASSERT_TRUE(after.bottomSlots[0].enabled);
+    TEST_ASSERT_TRUE(before.slotActions[0] !=
+                     FermentationUiWorkspaceSlotAction::FactoryResetBegin);
+    for (std::size_t slot = 1U; slot < 4U; ++slot) {
+        TEST_ASSERT_TRUE(after.slotActions[slot] == before.slotActions[slot]);
+        TEST_ASSERT_EQUAL(before.bottomSlots[slot].enabled,
+                          after.bottomSlots[slot].enabled);
+    }
+    // The existing contract: status stays readable, the program list is
+    // reachable at Boot, the service slot stays disabled.
+    TEST_ASSERT_TRUE(after.bottomSlots[1].enabled);
+    TEST_ASSERT_TRUE(after.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(after.bottomSlots[3].enabled);
+    // Without the recovery-core admission nothing is added.
+    admitted.factoryReset.recoveryEntry = false;
+    TEST_ASSERT_TRUE(workspace.view(admitted).slotActions[0] !=
+                     FermentationUiWorkspaceSlotAction::FactoryResetBegin);
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_restricted_no_runtime_home_adds_only_the_reset_entry);
     RUN_TEST(
         test_interrupted_hold_never_survives_a_pause_in_the_real_loop_decision);
     RUN_TEST(test_forgot_pin_entry_runs_the_whole_flow_through_touch);

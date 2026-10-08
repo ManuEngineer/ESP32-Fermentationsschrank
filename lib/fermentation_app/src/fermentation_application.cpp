@@ -2268,18 +2268,42 @@ RunPersistenceResult FermentationApplication::resumeFallback(
     return outcome.persistenceResult;
 }
 
+std::optional<device_platform::StorageEpoch>
+FermentationApplication::factoryResetPreviousEpochUnlocked() const {
+    // The old epoch comes from the loaded runtime or, without one, only from
+    // the verified bootstrap of a configuration the recovery core admitted as
+    // `ResetEligibleNoRuntime` (Issue #19 S1). The core re-proves eligibility
+    // on every call; nothing else is accepted.
+    if (configurationRecoveryService_ == nullptr ||
+        configurationService_ == nullptr || stateStore_ == nullptr) {
+        return std::nullopt;
+    }
+    if (storageEpoch_.has_value()) {
+        return storageEpoch_;
+    }
+    if (!factoryResetRecoveryEntryUnlocked()) {
+        return std::nullopt;
+    }
+    const auto bootstrap = bootstrapStore_->scan();
+    if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||
+        !bootstrap.loaded.has_value() ||
+        bootstrap.loaded->record.state !=
+            ConfigurationBootstrapState::Initialized) {
+        return std::nullopt;
+    }
+    return bootstrap.loaded->record.storageEpoch;
+}
+
 ConfigurationRecoveryResult
 FermentationApplication::beginAuthorizedFactoryReset() {
     const auto guard = applicationCallSerializer_.enter();
     ConfigurationRecoveryResult unavailable{
         ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
-    if (configurationRecoveryService_ == nullptr ||
-        configurationService_ == nullptr || stateStore_ == nullptr ||
-        !storageEpoch_.has_value()) {
+    const auto knownEpoch = factoryResetPreviousEpochUnlocked();
+    if (!knownEpoch.has_value()) {
         return unavailable;
     }
-
-    const auto previousEpoch = *storageEpoch_;
+    const auto previousEpoch = *knownEpoch;
     // Wait for running authentication operations before the destructive,
     // epoch-changing reset; new operations fail closed meanwhile.
     authOperationGate_.closeAndDrain();
@@ -2530,13 +2554,25 @@ bool FermentationApplication::factoryResetRunGateOpenUnlocked() const noexcept {
             !runtimeRunState_->activeManualRun.has_value());
 }
 
+bool FermentationApplication::factoryResetRecoveryEntryUnlocked()
+    const noexcept {
+    // Only the state the recovery core itself latched as reset-eligible: a
+    // plain `NoRuntime`, a global scan blocker, an identity collision or an
+    // unknown bootstrap never qualifies.
+    return !storageEpoch_.has_value() && bootstrapStore_ != nullptr &&
+           configurationService_ != nullptr &&
+           configurationService_->mode() ==
+               ConfigurationServiceMode::ResetEligibleNoRuntime;
+}
+
 bool FermentationApplication::factoryResetAvailableUnlocked() const noexcept {
     // The core needs a loaded configuration runtime (storageEpoch_); a reset
     // from a configuration without runtime is not offered (R0 stop finding S1).
     return factoryResetFlow_.configured() &&
            configurationRecoveryService_ != nullptr &&
            configurationService_ != nullptr && stateStore_ != nullptr &&
-           storageEpoch_.has_value() && factoryResetRunGateOpenUnlocked();
+           (storageEpoch_.has_value() || factoryResetRecoveryEntryUnlocked()) &&
+           factoryResetRunGateOpenUnlocked();
 }
 
 void FermentationApplication::setFactoryResetHoldMillis(
@@ -2557,6 +2593,7 @@ FermentationFactoryResetView FermentationApplication::factoryResetView(
     view.outcome = factoryResetFlow_.outcome();
     view.available =
         !factoryResetFlow_.active() && factoryResetAvailableUnlocked();
+    view.recoveryEntry = factoryResetRecoveryEntryUnlocked();
     view.holdRequiredMillis = factoryResetFlow_.holdMillis().value_or(0U);
     if (view.holdRequiredMillis != 0U) {
         const auto held =
@@ -2621,6 +2658,7 @@ bool FermentationApplication::endNetworkAfterFactoryReset() {
 void FermentationApplication::updateFactoryResetHold(bool held,
                                                      std::uint64_t nowMs) {
     FactoryResetCoreResult core = FactoryResetCoreResult::Unavailable;
+    bool restartRequired = false;
     {
         const auto guard = applicationCallSerializer_.enter();
         if (!factoryResetFlow_.updateHold(held, nowMs)) {
@@ -2632,9 +2670,13 @@ void FermentationApplication::updateFactoryResetHold(bool held,
             factoryResetFlow_.finish(FactoryResetOutcome::Rejected);
             return;
         }
+        // Without a loaded runtime the boot-time subsystems were never
+        // composed.
+        const bool withoutRuntime = !storageEpoch_.has_value();
         switch (beginAuthorizedFactoryReset().status) {
             case ConfigurationRecoveryStatus::FactoryResetCompleted:
                 core = FactoryResetCoreResult::Completed;
+                restartRequired = withoutRuntime;
                 break;
             case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
                 core = FactoryResetCoreResult::HandoffUnavailable;
@@ -2646,13 +2688,20 @@ void FermentationApplication::updateFactoryResetHold(bool held,
                 core = FactoryResetCoreResult::Failed;
                 break;
         }
+        if (withoutRuntime && factoryResetBoundaryCrossed(core)) {
+            // Operation stays blocked until the restart composes the normal
+            // boot (including the network) on the new epoch; held under the
+            // same gate so no run can start in between.
+            requireService(FaultCode::ConfigurationUnavailable);
+        }
     }
     // Outside the gate: ending network and HTTP may block.
     const bool networkEnded = factoryResetBoundaryCrossed(core)
                                   ? endNetworkAfterFactoryReset()
                                   : true;
     const auto guard = applicationCallSerializer_.enter();
-    factoryResetFlow_.finish(factoryResetOutcomeFor(core, networkEnded));
+    factoryResetFlow_.finish(
+        factoryResetOutcomeFor(core, networkEnded, restartRequired));
 }
 
 }  // namespace fermentation

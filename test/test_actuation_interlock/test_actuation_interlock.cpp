@@ -438,6 +438,23 @@ void test_watchdog_fault_is_sticky_until_explicit_reset() {
                      ActuatorSafetyGateStatus::Allowed);
 }
 
+// Issue #19 S1: a configuration without runtime, even one the recovery core
+// admits for the factory reset, never allows an actuator.
+void test_reset_eligible_no_runtime_never_allows_actuation() {
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    input.configurationServiceMode =
+        ConfigurationServiceMode::ResetEligibleNoRuntime;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::ConfigurationUnavailable;
+    input.configurationValidated = false;
+    const auto result = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(result.permission != ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_TRUE(result.faultCode != FaultCode::None);
+}
+
 void test_configuration_fault_requires_explicit_start_to_clear() {
     ActuationEvidence input;
     device_platform::SensorQualitySnapshot sensor;
@@ -964,6 +981,7 @@ void setup_suite() {
     RUN_TEST(test_missing_selection_projection_blocks_explicit_activation);
     RUN_TEST(test_watchdog_reset_requires_fresh_evidence_and_is_ram_only);
     RUN_TEST(test_watchdog_fault_is_sticky_until_explicit_reset);
+    RUN_TEST(test_reset_eligible_no_runtime_never_allows_actuation);
     RUN_TEST(test_configuration_fault_requires_explicit_start_to_clear);
     RUN_TEST(test_safe_boot_fault_is_not_cleared_by_missing_producer);
     RUN_TEST(test_multiple_faults_keep_each_clear_contract);

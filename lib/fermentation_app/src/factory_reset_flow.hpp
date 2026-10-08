@@ -40,6 +40,10 @@ enum class FactoryResetOutcome : std::uint8_t {
     None,
     // Reset abgeschlossen und Netzwerk/HTTP geordnet beendet.
     Completed,
+    // Reset ohne geladene Konfigurations-Runtime (`ResetEligibleNoRuntime`,
+    // Issue #19 S1) abgeschlossen: die Boot-Subsysteme (u. a. Netzwerk) wurden
+    // nie komponiert, der Betrieb bleibt bis zum Neustart gesperrt.
+    CompletedRestartRequired,
     // Reset abgeschlossen, aber Netzwerk/HTTP liess sich nicht sicher beenden:
     // kein bestaetigter Widerruf, Geraet vollstaendig aus- und einschalten.
     CompletedNetworkNotConfirmed,
@@ -76,12 +80,16 @@ enum class FactoryResetCoreResult : std::uint8_t {
 // Gesamtausgang aus Kernergebnis und bestaetigtem Beenden von Netzwerk/HTTP.
 // Ein nicht bestaetigtes Beenden wird nie als Erfolg gemeldet.
 [[nodiscard]] constexpr FactoryResetOutcome factoryResetOutcomeFor(
-    FactoryResetCoreResult result, bool networkEnded) noexcept {
+    FactoryResetCoreResult result, bool networkEnded,
+    bool restartRequired = false) noexcept {
     switch (result) {
         case FactoryResetCoreResult::Completed:
-            return networkEnded
-                       ? FactoryResetOutcome::Completed
-                       : FactoryResetOutcome::CompletedNetworkNotConfirmed;
+            if (!networkEnded) {
+                return FactoryResetOutcome::CompletedNetworkNotConfirmed;
+            }
+            return restartRequired
+                       ? FactoryResetOutcome::CompletedRestartRequired
+                       : FactoryResetOutcome::Completed;
         case FactoryResetCoreResult::HandoffUnavailable:
             return networkEnded ? FactoryResetOutcome::HandoffUnavailable
                                 : FactoryResetOutcome::
@@ -159,6 +167,10 @@ struct FermentationFactoryResetView {
     FactoryResetOutcome outcome{FactoryResetOutcome::None};
     // A PIN-independent reset may be begun now.
     bool available{false};
+    // The configuration has no runtime but the recovery core admits the reset
+    // (`ResetEligibleNoRuntime`, Issue #19 S1): local entry on the restricted
+    // home page.
+    bool recoveryEntry{false};
     // 0 = hold duration not yet configured by the owner.
     std::uint32_t holdRequiredMillis{0U};
     // 0..10, only meaningful in the hold stage.
@@ -169,6 +181,7 @@ struct FermentationFactoryResetView {
         return left.stage == right.stage && left.kind == right.kind &&
                left.outcome == right.outcome &&
                left.available == right.available &&
+               left.recoveryEntry == right.recoveryEntry &&
                left.holdRequiredMillis == right.holdRequiredMillis &&
                left.holdProgressTenths == right.holdProgressTenths;
     }

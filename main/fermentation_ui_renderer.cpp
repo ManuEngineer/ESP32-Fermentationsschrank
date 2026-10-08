@@ -1258,6 +1258,12 @@ RepresentativeScreen makeRepresentativeScreen(
                             token =
                                 device_platform::ThemeToken::StatusInformation;
                             break;
+                        case FactoryResetOutcome::CompletedRestartRequired:
+                            lines[0] = "factory-reset-done";
+                            lines[1] = "factory-reset-power-cycle";
+                            token =
+                                device_platform::ThemeToken::StatusInformation;
+                            break;
                         case FactoryResetOutcome::CompletedNetworkNotConfirmed:
                             lines[0] = "factory-reset-done";
                             lines[1] = "factory-reset-network-failed";

@@ -2,16 +2,16 @@
 
 ```text
 PLAN_REVISION=8 (konsolidiert; Revision 7 `6fbf1304566472c10b7cc52439475a5743960c0e` bleibt der freigegebene Vertrag fuer R0-R4, Revision 8 ergaenzt R5/S1 und die Ownerentscheide nach dem Review)
-PLAN_STATUS=R0_R4_OWNER_APPROVED (Revision 7, Fix Verification PASS / GO); R5_S1_DRAFT_AWAITING_OWNER_APPROVAL_OF_EXACT_PLAN_SHA (Revision 8, siehe PR #191)
+PLAN_STATUS=R0_R4_OWNER_APPROVED (Revision 7); R5_S1_OWNER_APPROVED (Revision 8, exakte Plan-SHA aa665f1d00fb363db6049b8b9df3af1c1a8be89c)
 OWNER_APPROVED_PLAN_SHA=6fbf1304566472c10b7cc52439475a5743960c0e (Revision 7; die Freigabe gilt dem Inhalt dieses Commits, spaetere Commits aendern nur Status/Nachweise, nicht den Planvertrag)
-IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset Ablauf B) und Review-Fix B1; R5/S1-Produktcode NICHT autorisiert bis zur Ownerfreigabe der exakten Plan-SHA von Revision 8; Ablauf A, B1/B2 (Backup/Import) und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
+IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset Ablauf B) und Review-Fix B1; R5/S1 autorisiert durch die Ownerfreigabe der exakten Plan-SHA von Revision 8 (aa665f1); Ablauf A, B1/B2 (Backup/Import) und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
 OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
 JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-IMPLEMENTATION=R0_DONE_R1_R4_IMPLEMENTED_REVIEW_FIX_B1_DONE (PR #191, Ablauf B, Hold 5000 ms; unabhaengiger Implementierungsreview steht aus). NICHT implementiert: R5/S1, Ablauf A (O-R2 = B, spaeter), Journal-Startbedingung K1 unveraendert. Hardware NOT_RUN
+IMPLEMENTATION=R0_DONE_R1_R4_IMPLEMENTED_REVIEW_FIX_B1_DONE_R5_S1_IMPLEMENTED (PR #191, Ablauf B, Hold 5000 ms; Plan Rev. 8 Ownerfreigabe aa665f1d00fb363db6049b8b9df3af1c1a8be89c; unabhaengiger Implementierungsreview steht aus). NICHT implementiert: Ablauf A (O-R2 = B, spaeter), Journal-Startbedingung K1 unveraendert. Hardware NOT_RUN (#192)
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -51,7 +51,7 @@ Entscheidung ist kein Beleg fuer Umsetzung oder Erfuellung.
 |---|---|---|
 | Hold-Dauer | 5000 ms durchgehend auf dem Halteziel, fest, keine Laufzeitkonfiguration | **umgesetzt** (`kApprovedFactoryResetHoldMillis`) |
 | O-R2 = B (zeitlich nachgelagert) | Ablauf A (PIN-geschuetzt) erst gemeinsam mit dem produktiven lokalen Service-UI/PIN-Zugang; bleibt **R1-Pflicht**; bestehende `PinEntryModel`-/`verifyServicePin`-Vertraege spaeter wiederverwenden, keine provisorische PIN-Loesung | **nicht umgesetzt** (in #191 nur Ablauf B) |
-| S1 = B | PIN-unabhaengiger Werksreset auch im vom Recoverykern nachweislich zugelassenen `ResetEligibleNoRuntime`; keine pauschale Freigabe bei `NoRuntime`, globalen Scanblockern, Identitaetskollisionen oder unbekannter Bootstrap-Integritaet; **materielle Aenderung** des Anwendungs-/Recoveryvertrags | **nur geplant** (Abschnitt 4.8, Revision 8); Produktcode erst nach Ownerfreigabe der exakten Plan-SHA |
+| S1 = B | PIN-unabhaengiger Werksreset auch im vom Recoverykern nachweislich zugelassenen `ResetEligibleNoRuntime`; keine pauschale Freigabe bei `NoRuntime`, globalen Scanblockern, Identitaetskollisionen oder unbekannter Bootstrap-Integritaet; **materielle Aenderung** des Anwendungs-/Recoveryvertrags | Plan Revision 8 (`aa665f1`) vom Owner freigegeben; **software-seitig umgesetzt** (R5, `SIM-19-S1-01..06`) |
 | O-R3/K1 = A, bedingt | Journal-Startbedingung nicht entfernen und nicht als erfuellt markieren; erst Unabhaengigkeit von Safety-/Startfreigaben nachweisen, dann ausdrueckliche SSOT-Anpassung freigeben lassen | **keine** Aenderung; K1 bleibt offen und unerfuellt |
 | O-R3/K2–K7 genehmigt | R1-Abnahme auf vorhandene Funktionen beziehen; 7-Tage-Test, kritische Persistenz, elektrische/thermische Safety, Aktor- und Powercut-Gates bleiben Pflicht; #19 bleibt fuer Teilfunktionen offen; #28 fachlich von spaeteren Journal-/Historienfunktionen entkoppeln; keine kuenstlichen Budgets; Aufbewahrung 5/50 als spaetere Anforderung erhalten; Backup/Import nur nach B0 und O-BI; **die breitere Aenderung der SSOT-, #28- und #37-Vertraege erfolgt separat** | **nicht** in #191 umgesetzt (kein SSOT-/#28-/#37-Eingriff) |
 | O-HW = A | Physische Nachweise `HW-19-R01..R03` in einem separaten Hardware-Folgeissue; Software-PR darf nach Software-Gates und Review ohne Hardware-`PASS` abgeschlossen werden; Hardwaretests bleiben `NOT_RUN` | Folgeissue angelegt (siehe PR #191); alle Eintraege `NOT_RUN` |

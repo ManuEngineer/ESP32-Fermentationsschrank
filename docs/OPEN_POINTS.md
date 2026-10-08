@@ -210,10 +210,9 @@ abschließend, soweit sein späterer Scope dies verlangt.
       umgesetzt (bestehende `PinEntryModel`-/`verifyServicePin`-Vertraege
       wiederverwenden, keine provisorische parallele PIN-Loesung); bis dahin
       wird nur der PIN-unabhaengige Ablauf B angeboten
-- [ ] Werksreset im `ResetEligibleNoRuntime`: Ownerentscheid S1 = B; materielle
-      Aenderung des Anwendungs-/Recovery-Vertrags, daher erst nach neuer
-      Planrevision mit Ownerfreigabe der exakten Plan-SHA umsetzbar (Stoppbefund
-      S1, `docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md`); **nicht implementiert**
+- [x] Werksreset im `ResetEligibleNoRuntime` (Ownerentscheid S1 = B, Plan
+      Revision 8, Ownerfreigabe `aa665f1`): software-seitig umgesetzt
+      (`SIM-19-S1-01..06`); Hardwarenachweis in #192 (`NOT_RUN`)
 - [ ] Hardwarenachweise `HW-19-R01..R03` (`ACCEPTANCE_TESTS.md`) in einem
       separaten Hardware-Folgeissue #192 (Ownerentscheid O-HW = A), `NOT_RUN`
 - [ ] Journal, Laufhistorie, Bereinigung, Laufexport: `DEFERRED_BY_OWNER_PENDING_

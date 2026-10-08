@@ -1187,7 +1187,11 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
                     FermentationUiWorkspaceSlotAction::NavigateService, false);
             break;
         case FermentationHomeMode::Restricted:
-            if (snapshot.home.processState == ProcessState::SafeBoot) {
+            if (snapshot.home.processState == ProcessState::SafeBoot ||
+                snapshot.factoryReset.recoveryEntry) {
+                // SAFE_BOOT or a configuration without runtime that the
+                // recovery core admits (S1): only this slot is added; every
+                // other slot keeps its existing contract.
                 setSlot(view, 0U, "factory-reset",
                         FermentationUiWorkspaceSlotAction::FactoryResetBegin,
                         snapshot.factoryReset.available);

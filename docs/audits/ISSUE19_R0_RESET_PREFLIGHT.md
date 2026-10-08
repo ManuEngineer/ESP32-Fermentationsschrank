@@ -47,3 +47,12 @@ Die uebrigen Punkte (Ablauf B mit beiden Zugaengen, Netzwerk-/HTTP-Sequenz, ehrl
   `ESP_ERR_WIFI_NOT_INIT` liefert; `start()` nach einem solchen Stopp bleibt nutzbar
   (`startWifi()` ist bei `wifiStarted_ == true` ein Erfolg). Nicht nativ am echten
   Adapter beweisbar (`HW-19-R02`).
+
+## Nachtrag S1 (Umsetzung nach Ownerfreigabe von Plan Revision 8 `aa665f1`)
+
+Stoppbefund S1 ist per Ownerentscheid S1 = B aufgeloest und umgesetzt: der Reset
+wird auch im vom Recoverykern als `ResetEligibleNoRuntime` zugelassenen Zustand
+angeboten (Epoche aus dem geprueften Bootstrap, Eintrag auf der eingeschraenkten
+Startseite, Ergebnis "Geraet aus- und wieder einschalten"). Nicht zugelassene
+Zustaende bleiben ausgeschlossen. Nachweise: `ACCEPTANCE_TESTS.md`
+`SIM-19-S1-01..06`; Hardware weiter `NOT_RUN` (#192).

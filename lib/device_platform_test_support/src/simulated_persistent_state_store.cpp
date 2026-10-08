@@ -99,6 +99,10 @@ void SimulatedPersistentStateStore::injectCorruption(
     committed_[key] = std::move(corruptedBytes);
 }
 
+void SimulatedPersistentStateStore::erase(const StateStoreKey& key) {
+    committed_.erase(key);
+}
+
 void SimulatedPersistentStateStore::restart() {
     pendingWrite_.reset();
     nextWriteFault_ = WriteFault::None;

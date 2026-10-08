@@ -560,6 +560,10 @@ class FermentationApplication {
     // True unless a process is actually running (published active run).
     [[nodiscard]] bool factoryResetRunGateOpenUnlocked() const noexcept;
     [[nodiscard]] bool factoryResetAvailableUnlocked() const noexcept;
+    // `ResetEligibleNoRuntime` as latched by the recovery core (Issue #19 S1).
+    [[nodiscard]] bool factoryResetRecoveryEntryUnlocked() const noexcept;
+    [[nodiscard]] std::optional<device_platform::StorageEpoch>
+    factoryResetPreviousEpochUnlocked() const;
     // Ends the running network connection and the HTTP server after the
     // irreversible reset boundary (Issue #19, plan 4.4a). Runs outside the
     // Application gate; returns false if either stop is not confirmed.
