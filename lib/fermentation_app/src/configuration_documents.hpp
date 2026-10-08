@@ -9,6 +9,7 @@
 #include "actuator_plan_types.hpp"
 #include "network_mode.hpp"
 #include "program_model.hpp"
+#include "sensor_commissioning.hpp"
 #include "storage_types.hpp"
 #include "time_zone_resolver.hpp"
 
@@ -25,9 +26,10 @@ inline constexpr std::uint32_t kCurrentUserConfigurationSchemaVersion =
 enum class ServiceConfigurationSchema : std::uint8_t {
     Version1 = 1U,
     Version2 = 2U,
+    Version3 = 3U,
 };
 inline constexpr std::uint32_t kCurrentServiceConfigurationSchemaVersion =
-    static_cast<std::uint32_t>(ServiceConfigurationSchema::Version2);
+    static_cast<std::uint32_t>(ServiceConfigurationSchema::Version3);
 enum class ProgramCatalogSchema : std::uint8_t { Version1 = 1U };
 
 namespace detail {
@@ -71,6 +73,9 @@ struct UserConfiguration {
 
 struct ServiceConfiguration {
     std::optional<ActuatorPlannerParameters> actuatorPlannerParameters;
+    // Schema 3 (Issue #30): Sensor-Inbetriebnahme (ROM, Rolle, Offset je ROM).
+    // Leer = ungebunden (fail-closed).
+    std::optional<SensorCommissioningRecord> sensorCommissioning;
 };
 
 struct ProgramCatalog {

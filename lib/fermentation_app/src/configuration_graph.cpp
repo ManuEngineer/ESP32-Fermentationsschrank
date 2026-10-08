@@ -73,11 +73,32 @@ bool validServiceConfigurationReference(
         static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
         return reference.payloadLength == 0U;
     }
+    const auto plannerLengthValid = [](std::size_t length) {
+        return length == 1U ||
+               length == configuration_limits::
+                             kServiceConfigurationSchema2MaximumPayloadBytes;
+    };
+    if (reference.schemaVersion ==
+        static_cast<std::uint32_t>(ServiceConfigurationSchema::Version2)) {
+        return plannerLengthValid(reference.payloadLength);
+    }
     if (reference.schemaVersion == kCurrentServiceConfigurationSchemaVersion) {
-        return reference.payloadLength == 1U ||
-               reference.payloadLength ==
-                   configuration_limits::
-                       kMaximumServiceConfigurationPayloadBytes;
+        // Planerabschnitt (1 oder 81 Byte) + Sensorabschnitt (Optionaltag 1,
+        // mit Datensatz 1 + 32 + 1 + 16 * Produktfuehler).
+        for (const std::size_t planner :
+             {std::size_t{1U},
+              configuration_limits::
+                  kServiceConfigurationSchema2MaximumPayloadBytes}) {
+            if (reference.payloadLength == planner + 1U) return true;
+            for (std::size_t probes = 0U; probes <= kMaximumKnownProductProbes;
+                 ++probes) {
+                if (reference.payloadLength ==
+                    planner + 1U + 32U + 1U + 16U * probes) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     return false;
 }

@@ -813,6 +813,75 @@ ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
     return {ConfigurationCodecStatus::Success, std::move(candidate)};
 }
 
+namespace {
+
+bool writeSensorRomOffset(ByteWriter& writer, const SensorRomOffset& entry) {
+    return big_endian::writeUint64(writer, entry.rom) &&
+           device_platform::binary64::encode(entry.offset.celsius(), writer);
+}
+
+bool readSensorRomOffset(ByteReader& reader,
+                         std::optional<SensorRomOffset>& out) {
+    device_platform::OneWireRom rom = 0U;
+    double celsius = 0.0;
+    if (!big_endian::readUint64(reader, rom) ||
+        !device_platform::binary64::decode(reader, celsius) || rom == 0U) {
+        return false;
+    }
+    const auto offset = device_platform::SensorOffset::create(celsius);
+    if (!offset.offset.has_value()) return false;
+    out = SensorRomOffset{rom, *offset.offset};
+    return true;
+}
+
+bool writeSensorSection(
+    ByteWriter& writer,
+    const std::optional<SensorCommissioningRecord>& record) {
+    if (!big_endian::writeOptionalTag(writer, record.has_value())) return false;
+    if (!record.has_value()) return true;
+    if (validateSensorCommissioning(*record) !=
+        SensorCommissioningStatus::Success) {
+        return false;
+    }
+    bool ok =
+        writeSensorRomOffset(writer, *record->chamberAir) &&
+        writeSensorRomOffset(writer, *record->heatsink) &&
+        big_endian::writeUint8(
+            writer, static_cast<std::uint8_t>(record->productProbes.size()));
+    for (const auto& probe : record->productProbes) {
+        ok = ok && writeSensorRomOffset(writer, probe);
+    }
+    return ok;
+}
+
+bool readSensorSection(ByteReader& reader,
+                       std::optional<SensorCommissioningRecord>& out) {
+    bool present = false;
+    if (!big_endian::readOptionalTag(reader, present)) return false;
+    if (!present) return true;
+    SensorCommissioningRecord record;
+    std::uint8_t count = 0U;
+    if (!readSensorRomOffset(reader, record.chamberAir) ||
+        !readSensorRomOffset(reader, record.heatsink) ||
+        !big_endian::readUint8(reader, count) ||
+        count > kMaximumKnownProductProbes) {
+        return false;
+    }
+    for (std::uint8_t i = 0U; i < count; ++i) {
+        std::optional<SensorRomOffset> probe;
+        if (!readSensorRomOffset(reader, probe)) return false;
+        record.productProbes.push_back(*probe);
+    }
+    if (validateSensorCommissioning(record) !=
+        SensorCommissioningStatus::Success) {
+        return false;
+    }
+    out = std::move(record);
+    return true;
+}
+
+}  // namespace
+
 ConfigurationCodecStatus encodeServiceConfigurationPayload(
     const ServiceConfiguration& configuration, std::string& out) {
     ByteWriter writer(
@@ -836,9 +905,28 @@ ConfigurationCodecStatus encodeServiceConfigurationPayload(
              big_endian::writeUint64(writer, p.outerFanPostRunMillis) &&
              big_endian::writeUint64(writer, p.innerFanPostRunMillis);
     }
+    ok = ok && writeSensorSection(writer, configuration.sensorCommissioning);
     if (!ok) return ConfigurationCodecStatus::InvalidDocument;
     auto encoded = writer.takeBytes();
     out.swap(encoded);
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus encodeServiceConfigurationPayloadSchema2(
+    const ServiceConfiguration& configuration, std::string& out) {
+    // Schema 2 kennt keinen Sensorabschnitt: nur ohne Datensatz darstellbar.
+    if (configuration.sensorCommissioning.has_value()) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    std::string v3;
+    const auto status = encodeServiceConfigurationPayload(configuration, v3);
+    if (status != ConfigurationCodecStatus::Success || v3.empty()) {
+        return status == ConfigurationCodecStatus::Success
+                   ? ConfigurationCodecStatus::InvalidDocument
+                   : status;
+    }
+    v3.pop_back();  // der abschliessende Sensor-Optionaltag (leer)
+    out.swap(v3);
     return ConfigurationCodecStatus::Success;
 }
 
@@ -852,11 +940,18 @@ decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
         }
         return {ConfigurationCodecStatus::Success, ServiceConfiguration{}};
     }
-    if (schemaVersion != kCurrentServiceConfigurationSchemaVersion) {
+    const bool schema2 =
+        schemaVersion ==
+        static_cast<std::uint32_t>(ServiceConfigurationSchema::Version2);
+    if (!schema2 &&
+        schemaVersion != kCurrentServiceConfigurationSchemaVersion) {
         return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
     }
     if (payload.size() >
-        configuration_limits::kMaximumServiceConfigurationPayloadBytes) {
+        (schema2 ? configuration_limits::
+                       kServiceConfigurationSchema2MaximumPayloadBytes
+                 : configuration_limits::
+                       kMaximumServiceConfigurationPayloadBytes)) {
         return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
     }
     ByteReader reader(payload);
@@ -884,6 +979,9 @@ decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
             return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
         }
         candidate.actuatorPlannerParameters = p;
+    }
+    if (!schema2 && !readSensorSection(reader, candidate.sensorCommissioning)) {
+        return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
     }
     if (reader.remaining() != 0U) {
         return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};

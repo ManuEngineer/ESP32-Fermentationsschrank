@@ -177,14 +177,15 @@ std::optional<RunSensorMode> requestedProgramSensorMode(
     return defaultProgramStartSensorMode(program.program.sensorPreference);
 }
 
-// The one preview/commit sequence of the user configuration changes (D5):
-// preview from the live configuration, the mutation, install with the
-// canonical wire values, revision validation, confirmation; every exit other
-// than an activated or unchanged configuration releases the one visible
-// preview slot.
+// The one preview/commit sequence of the configuration changes (D5): preview
+// from the live configuration, the mutation of the build lease, install with
+// the given canonical wire values, revision validation, confirmation; every
+// exit other than an activated or unchanged configuration releases the one
+// visible preview slot.
 template <typename Mutate>
-ApplicationConfigurationChangeResult commitUserConfigurationChange(
+ApplicationConfigurationChangeResult commitConfigurationChange(
     ConfigurationService& service, const UserConfigurationRevision& expected,
+    const ChangeOrigin& origin, const ChangeOperation& operation,
     Mutate&& mutate) {
     using Preview = ConfigurationPreviewStatus;
     using Commit = ConfigurationCommitStatus;
@@ -195,10 +196,9 @@ ApplicationConfigurationChangeResult commitUserConfigurationChange(
                     : build.status,
                 Commit::ConfigurationRuntimeFailure};
     }
-    mutate(build.lease.userConfiguration());
-    const auto installed = service.installPreview(
-        std::move(build.lease), {ChangeOriginKind::LocalDisplay, 2U},
-        {ChangeOperationKind::NormalEdit, 1U});
+    mutate(build.lease);
+    const auto installed =
+        service.installPreview(std::move(build.lease), origin, operation);
     if (installed.status != Preview::Success ||
         !installed.preview.has_value()) {
         return {installed.status == Preview::Success ? Preview::InvalidCandidate
@@ -218,6 +218,20 @@ ApplicationConfigurationChangeResult commitUserConfigurationChange(
         static_cast<void>(service.cancelPreview(handle));
     }
     return {Preview::Success, committed.status};
+}
+
+// User configuration changes of the local surface (canonical wire values
+// {LocalDisplay,2U} / {NormalEdit,1U}).
+template <typename Mutate>
+ApplicationConfigurationChangeResult commitUserConfigurationChange(
+    ConfigurationService& service, const UserConfigurationRevision& expected,
+    Mutate&& mutate) {
+    return commitConfigurationChange(
+        service, expected, {ChangeOriginKind::LocalDisplay, 2U},
+        {ChangeOperationKind::NormalEdit, 1U},
+        [&mutate](ConfigurationPreviewBuildLease& lease) {
+            mutate(lease.userConfiguration());
+        });
 }
 
 }  // namespace
@@ -1025,6 +1039,74 @@ ApplicationConfigurationChangeResult FermentationApplication::applyUserSettings(
         *configurationService_, *expectedRevision,
         [&change](UserConfiguration& configuration) {
             configuration.deviceName = *change.deviceName;
+        });
+}
+
+std::optional<FermentationSensorCommissioningSnapshot>
+FermentationApplication::sensorCommissioning() const {
+    const auto guard = applicationCallSerializer_.enter();
+    if (configurationService_ == nullptr) {
+        return std::nullopt;
+    }
+    const auto runtime = configurationService_->acquireRuntime();
+    if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+        return std::nullopt;
+    }
+    FermentationSensorCommissioningSnapshot snapshot;
+    snapshot.revision = runtime.lease.get().serviceConfigurationRevision();
+    snapshot.record =
+        runtime.lease.get().serviceConfiguration().sensorCommissioning;
+    return snapshot;
+}
+
+ApplicationConfigurationChangeResult
+FermentationApplication::applySensorCommissioning(
+    const std::optional<SensorCommissioningRecord>& record,
+    const std::optional<ServiceConfigurationRevision>& expectedRevision) {
+    const auto guard = applicationCallSerializer_.enter();
+    using Preview = ConfigurationPreviewStatus;
+    using Commit = ConfigurationCommitStatus;
+    // Without the run state "no active run" cannot be proven and without a
+    // service no configuration exists: fail closed.
+    if (configurationService_ == nullptr || runtimeRunState_ == nullptr) {
+        return {Preview::ConfigurationRuntimeUnavailable,
+                Commit::ConfigurationRuntimeFailure};
+    }
+    // A binding or offset change must not reach a running control: refused
+    // before any preview slot is taken (same predicate as applyUserSettings).
+    if (runtimeRunState_->activeProgramRun.has_value() ||
+        runtimeRunState_->activeManualRun.has_value()) {
+        return {Preview::NotAllowed, Commit::ConfigurationRuntimeFailure};
+    }
+    if (record.has_value() && validateSensorCommissioning(*record) !=
+                                  SensorCommissioningStatus::Success) {
+        return {Preview::InvalidCandidate,
+                Commit::ConfigurationValidationFailure};
+    }
+    if (!expectedRevision.has_value()) {
+        return {Preview::StateChanged, Commit::ConfigurationConflictFailure};
+    }
+    UserConfigurationRevision userRevision{0U};
+    {
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status !=
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            return {Preview::ConfigurationRuntimeUnavailable,
+                    Commit::ConfigurationRuntimeFailure};
+        }
+        if (runtime.lease.get().serviceConfigurationRevision() !=
+            *expectedRevision) {
+            return {Preview::StateChanged,
+                    Commit::ConfigurationConflictFailure};
+        }
+        userRevision = runtime.lease.get().userConfigurationRevision();
+    }
+    return commitConfigurationChange(
+        *configurationService_, userRevision,
+        {ChangeOriginKind::InternalSystem, 1U},
+        {ChangeOperationKind::NormalEdit, 1U},
+        [&record](ConfigurationPreviewBuildLease& lease) {
+            lease.serviceConfiguration().sensorCommissioning = record;
         });
 }
 

@@ -49,6 +49,11 @@ decodeUserConfigurationPayload(
 [[nodiscard]] ConfigurationCodecStatus encodeServiceConfigurationPayload(
     const ServiceConfiguration& configuration, std::string& out);
 
+// Schema-2-Kanonikform (ohne Sensorabschnitt) fuer die Referenzpruefung
+// gespeicherter Schema-2-Dokumente; nur ohne Sensordatensatz darstellbar.
+[[nodiscard]] ConfigurationCodecStatus encodeServiceConfigurationPayloadSchema2(
+    const ServiceConfiguration& configuration, std::string& out);
+
 [[nodiscard]] ConfigurationDecodeResult<ServiceConfiguration>
 decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
                                   const std::string& payload);

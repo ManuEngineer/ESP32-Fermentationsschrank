@@ -218,6 +218,12 @@ SeededGraph seedGraph(
         static_cast<std::uint32_t>(
             fermentation::ServiceConfigurationSchema::Version1)) {
         servicePayload.clear();
+    } else if (serviceSchema ==
+               static_cast<std::uint32_t>(
+                   fermentation::ServiceConfigurationSchema::Version2)) {
+        TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayloadSchema2(
+                             service, servicePayload) ==
+                         fermentation::ConfigurationCodecStatus::Success);
     } else {
         TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
                              service, servicePayload) ==
@@ -654,6 +660,82 @@ void test_v1_service_record_survives_validation_and_changes_until_v2_write() {
     TEST_ASSERT_FALSE(v2Record.envelope->payload.empty());
     TEST_ASSERT_EQUAL_UINT8(
         1U, static_cast<std::uint8_t>(v2Record.envelope->payload.front()));
+}
+
+void test_v2_service_record_survives_validation_and_changes_until_v3_write() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store, 1U, 1U, 0U, 0U,
+              static_cast<std::uint32_t>(
+                  fermentation::ServiceConfigurationSchema::Version2));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.graph.has_value());
+    // Ein bestehendes Schema-2-Dokument verifiziert weiterhin (kanonischer
+    // Vergleich ohne Sensorabschnitt) und ist ohne Sensordatensatz geladen.
+    TEST_ASSERT_TRUE(graphStore.validationScan(*loaded.graph).status ==
+                     fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version2),
+        loaded.graph->active.manifest.serviceConfiguration.schemaVersion);
+    TEST_ASSERT_FALSE(loaded.graph->active.serviceConfiguration
+                          ->sensorCommissioning.has_value());
+
+    // Eine Benutzeraenderung laesst das Schema-2-Dokument unveraendert.
+    auto userChange = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "V2 erhalten"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(userChange.prepared.has_value());
+    TEST_ASSERT_TRUE(
+        graphStore.executePreparedCommit(*userChange.prepared).status ==
+        fermentation::ConfigurationCommitExecutionStatus::Activated);
+    auto afterUserChange = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(afterUserChange.graph.has_value());
+    TEST_ASSERT_TRUE(graphStore.validationScan(*afterUserChange.graph).status ==
+                     fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version2),
+        afterUserChange.graph->active.manifest.serviceConfiguration
+            .schemaVersion);
+
+    // Der erste Service-Commit (Sensordatensatz) schreibt Schema 3.
+    auto service = *afterUserChange.graph->active.serviceConfiguration;
+    fermentation::SensorCommissioningRecord record;
+    const auto offset = [](double celsius) {
+        return device_platform::SensorOffset::create(celsius).offset.value();
+    };
+    record.chamberAir =
+        fermentation::SensorRomOffset{0x28FF000000000001ULL, offset(0.5)};
+    record.heatsink =
+        fermentation::SensorRomOffset{0x28FF000000000002ULL, offset(-0.25)};
+    service.sensorCommissioning = record;
+    const fermentation::ConfigurationCommitCandidate serviceChange{
+        afterUserChange.graph->active.userConfiguration,
+        std::make_shared<const fermentation::ServiceConfiguration>(service),
+        afterUserChange.graph->active.programCatalog};
+    auto preparedService =
+        graphStore.prepareCommit(*afterUserChange.graph, serviceChange,
+                                 fermentation::decodeChangeOrigin(1U),
+                                 fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(preparedService.prepared.has_value());
+    TEST_ASSERT_TRUE(
+        graphStore.executePreparedCommit(*preparedService.prepared).status ==
+        fermentation::ConfigurationCommitExecutionStatus::Activated);
+    const auto afterServiceWrite =
+        graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(afterServiceWrite.graph.has_value());
+    TEST_ASSERT_TRUE(
+        graphStore.validationScan(*afterServiceWrite.graph).status ==
+        fermentation::ConfigurationScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::kCurrentServiceConfigurationSchemaVersion,
+        afterServiceWrite.graph->active.manifest.serviceConfiguration
+            .schemaVersion);
+    TEST_ASSERT_TRUE(afterServiceWrite.graph->active.serviceConfiguration
+                         ->sensorCommissioning == service.sensorCommissioning);
 }
 
 fermentation::ConfigurationCommitCandidate programChangedCandidate(
@@ -1827,6 +1909,8 @@ int main() {
     RUN_TEST(test_loads_complete_active_graph);
     RUN_TEST(
         test_v1_service_record_survives_validation_and_changes_until_v2_write);
+    RUN_TEST(
+        test_v2_service_record_survives_validation_and_changes_until_v3_write);
     RUN_TEST(test_root_read_error_has_priority_over_valid_older_root);
     RUN_TEST(test_root_capacity_error_has_priority_over_valid_older_root);
     RUN_TEST(

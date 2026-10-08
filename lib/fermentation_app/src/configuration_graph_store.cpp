@@ -298,6 +298,18 @@ ConfigurationScanStatus validateServiceReferenceSemantically(
                     ConfigurationGraphReferenceFailure;
             }
         } else if (referenceSchema ==
+                   static_cast<std::uint32_t>(
+                       ServiceConfigurationSchema::Version2)) {
+            // Schema 2 (vor dem Sensorabschnitt): kanonischer Vergleich ohne
+            // Sensorabschnitt; ein Sensordatensatz ist hier nicht darstellbar.
+            if (encodeServiceConfigurationPayloadSchema2(*expected,
+                                                         canonical) !=
+                    ConfigurationCodecStatus::Success ||
+                canonical != loaded.record->envelope.payload) {
+                return ConfigurationScanStatus::
+                    ConfigurationGraphReferenceFailure;
+            }
+        } else if (referenceSchema ==
                        kCurrentServiceConfigurationSchemaVersion &&
                    (encodeServiceConfigurationPayload(*expected, canonical) !=
                         ConfigurationCodecStatus::Success ||
