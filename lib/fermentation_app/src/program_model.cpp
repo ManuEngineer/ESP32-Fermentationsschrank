@@ -198,17 +198,12 @@ MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
     ProgramDocument migrated = source;
     migrated.schema.version = 6U;
     migrated.schema.presentFields = kCurrentRequiredProgramFields;
-    if (migrated.program.sensorPreference == SensorPreference::AirOnly) {
+    if (programHasFixedSensorFailure(migrated.program)) {
         // AirOnly-Normalisierung (6.2.2): inert, weil AirOnly Luft nie
         // verlaesst - bewahrt ein vor diesem Update gueltiges Dokument als
         // weiterhin gueltig, statt es an der neuen 6.13-Cross-Field-Regel
         // scheitern zu lassen.
-        migrated.program.productSensorFailure.returnStrategy =
-            ReturnStrategy::RemainOnAirUntilEnd;
-        migrated.program.productSensorFailure.policy =
-            ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
-        migrated.program.productSensorFailure.fallbackDelaySeconds =
-            std::nullopt;
+        applyAirOnlySensorFailure(migrated.program);
     } else {
         migrated.program.productSensorFailure.returnStrategy =
             ReturnStrategy::AutomaticValidatedReturnToProduct;
@@ -217,6 +212,54 @@ MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
 }
 
 }  // namespace
+
+bool programUsesProductWait(const ProgramDefinition& program) noexcept {
+    return program.preheat;
+}
+
+bool programUsesFallbackDelay(const ProgramDefinition& program) noexcept {
+    return program.productSensorFailure.policy ==
+               ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
+           program.sensorPreference != SensorPreference::AirOnly;
+}
+
+bool programUsesCoolingTarget(const ProgramDefinition& program) noexcept {
+    return validCompletionMode(program.completion.mode) &&
+           hasCooling(program.completion.mode);
+}
+
+bool programUsesHoldDuration(const ProgramDefinition& program) noexcept {
+    return program.completion.mode == CompletionMode::CoolAndHoldForDuration;
+}
+
+bool programHasFixedSensorFailure(const ProgramDefinition& program) noexcept {
+    return program.sensorPreference == SensorPreference::AirOnly;
+}
+
+void applyAirOnlySensorFailure(ProgramDefinition& program) noexcept {
+    program.productSensorFailure.returnStrategy =
+        ReturnStrategy::RemainOnAirUntilEnd;
+    program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    program.productSensorFailure.fallbackDelaySeconds = std::nullopt;
+}
+
+void clearUnexpectedProgramValues(ProgramDefinition& program) noexcept {
+    if (!programUsesProductWait(program)) {
+        program.maximumProductWaitMinutes.reset();
+    }
+    if (programHasFixedSensorFailure(program)) {
+        applyAirOnlySensorFailure(program);
+    } else if (!programUsesFallbackDelay(program)) {
+        program.productSensorFailure.fallbackDelaySeconds.reset();
+    }
+    if (!programUsesCoolingTarget(program)) {
+        program.completion.coolingTargetCelsius.reset();
+    }
+    if (!programUsesHoldDuration(program)) {
+        program.completion.holdDurationMinutes.reset();
+    }
+}
 
 ValidationResult validateProgram(const ProgramDocument& document,
                                  ValidationPurpose purpose) {
@@ -298,7 +341,7 @@ ValidationResult validateProgram(const ProgramDocument& document,
                              program_limits::kMaximumTargetReachMinutes,
                              purpose);
 
-    if (program.preheat) {
+    if (programUsesProductWait(program)) {
         validateOptionalDuration(result, program.maximumProductWaitMinutes,
                                  "defaults.max_product_wait_min",
                                  program_limits::kMinimumProductWaitMinutes,
@@ -309,9 +352,7 @@ ValidationResult validateProgram(const ProgramDocument& document,
                  "defaults.max_product_wait_min");
     }
 
-    if (program.productSensorFailure.policy ==
-            ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
-        program.sensorPreference != SensorPreference::AirOnly) {
+    if (programUsesFallbackDelay(program)) {
         validateOptionalDuration(
             result, program.productSensorFailure.fallbackDelaySeconds,
             "defaults.product_sensor_failure.fallback_delay_s",
@@ -319,8 +360,7 @@ ValidationResult validateProgram(const ProgramDocument& document,
             program_limits::kMaximumFallbackDelaySeconds, purpose);
     }
 
-    if (validCompletionMode(program.completion.mode) &&
-        hasCooling(program.completion.mode)) {
+    if (programUsesCoolingTarget(program)) {
         validateOptionalDouble(result, program.completion.coolingTargetCelsius,
                                "defaults.completion.cooling_target_c",
                                program_limits::kMinimumCoolingTargetCelsius,
@@ -331,7 +371,7 @@ ValidationResult validateProgram(const ProgramDocument& document,
                  "defaults.completion.cooling_target_c");
     }
 
-    if (program.completion.mode == CompletionMode::CoolAndHoldForDuration) {
+    if (programUsesHoldDuration(program)) {
         validateOptionalDuration(result, program.completion.holdDurationMinutes,
                                  "defaults.completion.hold_duration_min",
                                  program_limits::kMinimumHoldDurationMinutes,

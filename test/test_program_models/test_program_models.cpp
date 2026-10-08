@@ -511,6 +511,82 @@ void test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies() {
         "defaults.product_sensor_failure.fallback_delay_s"));
 }
 
+// The cross-field rules have one definition: the predicates, the validator and
+// the local program editor (clearUnexpectedProgramValues) agree.
+void test_unexpected_value_rules_are_shared_by_validator_and_editor() {
+    using namespace fermentation;
+    auto document = makeRunnableProgram();
+    auto& program = document.program;
+    // Preheat on, fallback policy, cooling with hold: every optional is used.
+    program.preheat = true;
+    program.maximumProductWaitMinutes = 30U;
+    program.sensorPreference = SensorPreference::AirProductOptional;
+    program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    program.productSensorFailure.fallbackDelaySeconds = 60U;
+    program.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    program.completion.coolingTargetCelsius = 8.0;
+    program.completion.holdDurationMinutes = 90U;
+    TEST_ASSERT_TRUE(programUsesProductWait(program));
+    TEST_ASSERT_TRUE(programUsesFallbackDelay(program));
+    TEST_ASSERT_TRUE(programUsesCoolingTarget(program));
+    TEST_ASSERT_TRUE(programUsesHoldDuration(program));
+    auto cleared = document;
+    clearUnexpectedProgramValues(cleared.program);
+    TEST_ASSERT_TRUE(cleared.program.maximumProductWaitMinutes.has_value());
+    TEST_ASSERT_TRUE(
+        cleared.program.completion.holdDurationMinutes.has_value());
+    TEST_ASSERT_TRUE(
+        validateProgram(cleared, ValidationPurpose::Runnable).valid());
+
+    // Every setting that makes a value unexpected leaves a document that the
+    // validator rejects until the value is cleared, and clearing fixes it.
+    for (int variant = 0; variant < 5; ++variant) {
+        auto changed = document;
+        auto& changedProgram = changed.program;
+        switch (variant) {
+            case 0:
+                changedProgram.preheat = false;
+                break;
+            case 1:
+                changedProgram.productSensorFailure.policy =
+                    ProductSensorFailurePolicy::WaitForUser;
+                break;
+            case 2:
+                changedProgram.completion.mode =
+                    CompletionMode::FinishWithoutCooling;
+                break;
+            case 3:
+                changedProgram.completion.mode = CompletionMode::CoolThenFinish;
+                break;
+            default:
+                changedProgram.sensorPreference = SensorPreference::AirOnly;
+                break;
+        }
+        TEST_ASSERT_FALSE(
+            validateProgram(changed, ValidationPurpose::Runnable).valid());
+        clearUnexpectedProgramValues(changed.program);
+        TEST_ASSERT_TRUE(
+            validateProgram(changed, ValidationPurpose::Runnable).valid());
+    }
+
+    // AirOnly: the one fixed combination, the same as the schema migration
+    // applies.
+    auto airOnly = document;
+    airOnly.program.sensorPreference = SensorPreference::AirOnly;
+    TEST_ASSERT_TRUE(programHasFixedSensorFailure(airOnly.program));
+    TEST_ASSERT_FALSE(programUsesFallbackDelay(airOnly.program));
+    applyAirOnlySensorFailure(airOnly.program);
+    TEST_ASSERT_TRUE(airOnly.program.productSensorFailure.returnStrategy ==
+                     ReturnStrategy::RemainOnAirUntilEnd);
+    TEST_ASSERT_TRUE(airOnly.program.productSensorFailure.policy ==
+                     ProductSensorFailurePolicy::FallbackToAirAfterTimeout);
+    TEST_ASSERT_FALSE(
+        airOnly.program.productSensorFailure.fallbackDelaySeconds.has_value());
+    TEST_ASSERT_TRUE(
+        validateProgram(airOnly, ValidationPurpose::Runnable).valid());
+}
+
 }  // namespace
 
 int main() {
@@ -535,5 +611,6 @@ int main() {
     RUN_TEST(test_air_only_rejects_fallback_delay_seconds);
     RUN_TEST(
         test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies);
+    RUN_TEST(test_unexpected_value_rules_are_shared_by_validator_and_editor);
     return UNITY_END();
 }

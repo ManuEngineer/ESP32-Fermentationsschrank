@@ -39,6 +39,31 @@ Regeln:
 - ein laufender Prozess bleibt jederzeit erreichbar
 - zerstoererische Funktionen stehen nicht im ersten normalen Menueblick
 
+### Umgesetzter R1-Stand der lokalen Touch-UI (Issue #172)
+
+Die lokale Touch-UI erreicht Einstellungen ueber den Standby-Slot
+`Einstellungen` (`Start | Programme | Status | Einstellungen`). Die Seite
+`Einstellungen` listet in fester Reihenfolge:
+
+1. Sprache
+2. Zeit / Zeitzone
+3. Geraetename
+4. Netzwerk
+5. Webzugang
+6. Service (lokalisiertes Textlabel `Service (PIN)` / `Servicio (PIN)`; ein Schloss-Symbol ist nicht umgesetzt)
+
+Navigationspfade: `Sprache` und `Zeit / Zeitzone` oeffnen dieselben Seiten wie
+die Header-Elemente Sprache und Uhrzeit; `Geraetename` oeffnet die
+Bildschirmtastatur und Zurueck/Abbrechen/Uebernehmen kehren zu `Einstellungen`
+zurueck; `Netzwerk` und `Webzugang` oeffnen die bestehenden Seiten. `Service`
+ist ein Eintrag unter `Einstellungen`; Verfuegbarkeit, Grund und PIN-Ablauf
+liegen unveraendert bei den bestehenden Ownern. Der Geraetename ist waehrend
+eines aktiven Laufs nicht aenderbar (der Owner entscheidet). Diagnose, Service-
+und PIN-Seiten zeigen bis zu ihren Ownern (#28) nur den Hinweis
+`zurueckgestellt`; die Zeitkorrektur im Recovery ist nicht angeboten. Die
+Baumdarstellung oben bleibt die Zielstruktur; sie beschreibt hier kein
+zusaetzlich umgesetztes Hauptmenue.
+
 ## Waehrend eines Laufes
 
 Aenderbar bleiben nur ungefaehrliche Komfortwerte, beispielsweise:

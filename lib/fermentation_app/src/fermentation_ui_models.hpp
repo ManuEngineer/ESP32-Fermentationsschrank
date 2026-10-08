@@ -148,6 +148,8 @@ struct FermentationUiPresentationSource {
     // Rule of the already prepared zone (RuntimeConfigurationSnapshot::
     // preparedTimeZone()), so no consumer resolves the zone again.
     device_platform::TimeZoneRule timeZoneRule{};
+    // Visible device name (UserConfiguration), read-only display copy.
+    std::string deviceName;
     ProgramCatalog programCatalog;
 };
 

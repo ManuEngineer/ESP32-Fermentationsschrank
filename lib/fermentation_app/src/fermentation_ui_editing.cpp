@@ -129,7 +129,14 @@ bool TextEditModel::apply(const TextEditInput& input) noexcept {
             return true;
         case TextEditAction::Backspace:
             if (candidate_.empty()) return false;
-            candidate_.pop_back();
+            // Removes one Unicode scalar: a prefilled name may carry
+            // multi-byte characters, which must never be cut in the middle.
+            while (!candidate_.empty() &&
+                   (static_cast<unsigned char>(candidate_.back()) & 0xC0U) ==
+                       0x80U) {
+                candidate_.pop_back();
+            }
+            if (!candidate_.empty()) candidate_.pop_back();
             return true;
         case TextEditAction::Clear:
             if (candidate_.empty()) return false;

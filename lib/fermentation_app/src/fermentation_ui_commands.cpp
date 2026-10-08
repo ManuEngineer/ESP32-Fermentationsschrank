@@ -377,6 +377,19 @@ FermentationUiCommandResult FermentationUiCommandBridge::setDisplayLanguage(
                                    FermentationUiCommandPhase::OwningOutcome);
 }
 
+FermentationUiCommandResult FermentationUiCommandBridge::setDeviceName(
+    FermentationApplication& application,
+    const FermentationUiSetDeviceNameCommand& command) {
+    // Same coarse projection as the language change.
+    const auto outcome = application.applyUserSettings(
+        {command.deviceName}, command.expectedUserConfigurationRevision);
+    if (outcome.preview != ConfigurationPreviewStatus::Success) {
+        return fromConfigurationPreview(outcome.preview);
+    }
+    return fromConfigurationCommit(outcome.commit,
+                                   FermentationUiCommandPhase::OwningOutcome);
+}
+
 FermentationUiCommandResult FermentationUiCommandBridge::applyProgramEdit(
     FermentationApplication& application,
     const FermentationUiProgramEditRequest& request,

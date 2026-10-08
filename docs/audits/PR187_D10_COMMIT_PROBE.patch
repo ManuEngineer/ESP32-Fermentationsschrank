@@ -1,0 +1,34 @@
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 3f6c12f..5753aad 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -471,6 +471,18 @@ bool updateProductUi(
+         logResources("network_page_press_before", application.networkMode(),
+                      networkLifecycle.status().state, displayRenderer);
+     }
++    // EVIDENCE PROBE (PR #187 D10, not production): commit-scoped resource
++    // samples around every fresh press on the pages that can commit.
++    const bool sampleCommitProbe =
++        touchPoll.freshPressEdge &&
++        (uiWorkspace.page() == fermentation::FermentationUiPage::HeaderLanguage ||
++         uiWorkspace.page() == fermentation::FermentationUiPage::TextEdit ||
++         uiWorkspace.page() == fermentation::FermentationUiPage::ProgramEdit);
++    if (sampleCommitProbe) {
++        ESP_LOGW(kTag, "commit_probe page=%d", static_cast<int>(uiWorkspace.page()));
++        logResources("commit_probe_before", application.networkMode(),
++                     networkLifecycle.status().state, displayRenderer);
++    }
+     fermentation::main_ui::WorkspaceTouchTickResult touchTick;
+     if (touchPoll.contactHeld) {
+         // Locale, time zone and catalog for the touch path; the clock input
+@@ -500,6 +512,10 @@ bool updateProductUi(
+         logResources("network_page_press_after", application.networkMode(),
+                      networkLifecycle.status().state, displayRenderer);
+     }
++    if (sampleCommitProbe) {
++        logResources("commit_probe_after", application.networkMode(),
++                     networkLifecycle.status().state, displayRenderer);
++    }
+     if (touchTick.dispatch.outcome !=
+         fermentation::main_ui::WorkspacePressDispatchOutcome::NoTypedPayload) {
+         ESP_LOGI(kTag, "touch press dispatch: outcome=%d",

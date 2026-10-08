@@ -1228,18 +1228,23 @@ void test_render_key_changes_when_manual_holding_values_are_staged() {
 void test_render_key_changes_when_program_edit_candidate_enables_save() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
+    auto catalog = makeRunnableCatalogForTest();
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(catalog.programs.back().program.id, catalog));
     workspace.setPage(fermentation::FermentationUiPage::ProgramEdit);
     const auto packs = fermentation::makeFermentationUiTextPacks();
 
     const auto beforeCandidate =
         fermentation::main_ui::makeRepresentativeScreen(
-            snapshot, workspace, packs, device_platform::LocaleId{"en"});
+            snapshot, workspace, packs, device_platform::LocaleId{"en"},
+            std::nullopt, &catalog);
     TEST_ASSERT_FALSE(beforeCandidate.workspace.bottomSlots[3].enabled);
     const auto keyBefore = keyFor(snapshot, workspace);
 
-    workspace.setProgramEditCandidate(fermentation::ProgramDocument{});
+    workspace.setProgramEditCandidate(catalog.programs.back());
     const auto afterCandidate = fermentation::main_ui::makeRepresentativeScreen(
-        snapshot, workspace, packs, device_platform::LocaleId{"en"});
+        snapshot, workspace, packs, device_platform::LocaleId{"en"},
+        std::nullopt, &catalog);
     TEST_ASSERT_TRUE(afterCandidate.workspace.bottomSlots[3].enabled);
 
     TEST_ASSERT_FALSE(keyBefore == keyFor(snapshot, workspace));
@@ -1681,14 +1686,16 @@ void test_web_access_page_shows_the_application_state_in_all_locales() {
     }
 }
 
-void test_language_page_offers_the_web_access_entry_with_a_localized_label() {
-    const auto packs = fermentation::makeFermentationUiTextPacks();
+void test_language_page_no_longer_offers_the_web_access_slot() {
     fermentation::FermentationUiSnapshot snapshot;
     fermentation::FermentationTouchWorkspace workspace;
     workspace.setPage(fermentation::FermentationUiPage::HeaderLanguage);
     const auto view = workspace.view(snapshot);
-    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);
-    TEST_ASSERT_TRUE(view.bottomSlots[3].label ==
+    // The provisional #170 entry moved to the settings page (D13).
+    TEST_ASSERT_TRUE(
+        view.slotActions[3] !=
+        fermentation::FermentationUiWorkspaceSlotAction::NavigateWebAccess);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].label !=
                      fermentation::fermentationTextKey("web-access"));
 }
 
@@ -2418,6 +2425,370 @@ void test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content() {
     TEST_ASSERT_TRUE(hasText(screen, "Completed"));
 }
 
+// ---- S10: settings, keyboard and program editor rendering
+// --------------------
+
+fermentation::main_ui::RepresentativeScreen settingsScreen(
+    fermentation::FermentationTouchWorkspace& workspace,
+    const fermentation::FermentationUiSnapshot& snapshot, const char* locale,
+    const fermentation::ProgramCatalog* catalog = nullptr) {
+    return pageScreen(snapshot, workspace, locale, catalog);
+}
+
+void test_settings_page_draws_the_rows_in_the_decided_order() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    snapshot.service.available = true;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.adoptDeviceName("Keller");
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    auto screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(hasText(screen, "Settings"));
+    TEST_ASSERT_TRUE(hasText(screen, "1/6"));
+    // Window 0: Language (with the active endonym), Time / zone, Device name.
+    TEST_ASSERT_TRUE(hasText(screen, "Language"));
+    TEST_ASSERT_TRUE(hasText(screen, "English"));
+    TEST_ASSERT_TRUE(hasText(screen, "Time / zone"));
+    TEST_ASSERT_TRUE(hasText(screen, "Device name"));
+    TEST_ASSERT_TRUE(hasText(screen, "Keller"));
+    TEST_ASSERT_FALSE(hasText(screen, "Service (PIN)"));
+    const auto top = [&screen](const char* text) {
+        for (const auto& command : screen.commands)
+            if (command.text == text) return command.rect.top;
+        TEST_ASSERT_TRUE(false);
+        return std::uint16_t{0U};
+    };
+    TEST_ASSERT_TRUE(top("Language") < top("Time / zone"));
+    TEST_ASSERT_TRUE(top("Time / zone") < top("Device name"));
+
+    // Scroll to the end: WLAN, Web access, Service (PIN).
+    // The bottom slot 2 (x=160..239) is "down".
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    for (int step = 0; step < 3; ++step) {
+        screen = settingsScreen(workspace, snapshot, "en");
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(workspace, snapshot,
+                                                           screen, 200U, 220U)
+                             .navigated);
+    }
+    screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(hasText(screen, "WLAN"));
+    TEST_ASSERT_TRUE(hasText(screen, "Web access"));
+    TEST_ASSERT_TRUE(hasText(screen, "Service (PIN)"));
+    TEST_ASSERT_TRUE(hasText(screen, "4/6"));
+    TEST_ASSERT_FALSE(hasText(screen, "Language"));
+
+    // German and Spanish: the slot label stays short (68 px), the title long.
+    fermentation::FermentationTouchWorkspace german;
+    german.adoptDeviceName("Keller");
+    german.setPage(fermentation::FermentationUiPage::Settings);
+    screen = settingsScreen(german, snapshot, "de");
+    TEST_ASSERT_TRUE(hasText(screen, "Einstellungen"));
+    TEST_ASSERT_TRUE(hasText(screen, "Sprache"));
+    TEST_ASSERT_TRUE(hasText(screen, "Zeit / Zeitzone"));
+    TEST_ASSERT_TRUE(hasText(screen, "Geraetename"));
+    fermentation::FermentationTouchWorkspace home;
+    const auto homeScreen = settingsScreen(home, snapshot, "de");
+    TEST_ASSERT_TRUE(hasText(homeScreen, "Einstell."));
+}
+
+void test_settings_disabled_rows_show_their_reason() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::ActiveRun;
+    snapshot.home.activeRunId = "e1-c1";
+    snapshot.service.available = false;
+    snapshot.service.unavailableReason =
+        fermentation::fermentationTextKey("service-locked");
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.adoptDeviceName("Keller");
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    auto screen = settingsScreen(workspace, snapshot, "en");
+    // The device name is replaced by the reason while a run is active.
+    TEST_ASSERT_TRUE(hasText(screen, "locked during run"));
+    TEST_ASSERT_FALSE(hasText(screen, "Keller"));
+    for (int step = 0; step < 3; ++step) {
+        screen = settingsScreen(workspace, snapshot, "en");
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(workspace, snapshot,
+                                                           screen, 200U, 220U)
+                             .navigated);
+    }
+    screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(hasText(screen, "Service (PIN)"));
+    TEST_ASSERT_TRUE(hasText(screen, "Service unavailable"));
+}
+
+void test_settings_rows_are_list_cells_with_exact_hit_zones() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    const auto screen = settingsScreen(workspace, snapshot, "en");
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    TEST_ASSERT_TRUE(isCell(at(8U, 64U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(311U, 103U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(8U, 104U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(100U, 183U), 2U, 0U));
+    TEST_ASSERT_FALSE(at(100U, 184U).has_value());
+    // The held row draws press feedback over the full row.
+    const auto held = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"},
+        device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::ContentCell, 0U, 1U, 0U});
+    const auto feedback = std::find_if(
+        held.commands.begin(), held.commands.end(), [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        });
+    TEST_ASSERT_TRUE(feedback != held.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(104U, feedback->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(40U, feedback->rect.height);
+}
+
+void test_keyboard_page_draws_the_mode_keys_and_has_exact_34px_hit_rows() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.adoptDeviceName("Keller");
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    auto screen = settingsScreen(workspace, snapshot, "en");
+    // Device name row is row 2: scroll the window to it and open the editor.
+    for (int step = 0; step < 2; ++step) {
+        screen = settingsScreen(workspace, snapshot, "en");
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(workspace, snapshot,
+                                                           screen, 200U, 220U)
+                             .navigated);
+    }
+    screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(
+        fermentation::main_ui::routePress(workspace, snapshot, screen, 40U, 80U)
+            .navigated);
+    screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(screen.workspace.page ==
+                     fermentation::FermentationUiPage::TextEdit);
+    TEST_ASSERT_TRUE(hasText(screen, "Device name"));
+    TEST_ASSERT_TRUE(hasText(screen, "Keller_"));
+    // Lower case letters, the common bottom row and the slot labels.
+    for (const auto* key :
+         {"a", "j", "k", "t", "u", "z", "Clear", "Space", "-", "."}) {
+        TEST_ASSERT_TRUE(hasText(screen, key));
+    }
+    TEST_ASSERT_FALSE(hasText(screen, "A"));
+    TEST_ASSERT_TRUE(hasText(screen, "abc"));
+    TEST_ASSERT_TRUE(hasText(screen, "Cancel"));
+    TEST_ASSERT_TRUE(hasText(screen, "Del"));
+    TEST_ASSERT_TRUE(hasText(screen, "OK"));
+
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    // 10 columns of 30 px from x=8, 4 rows of 34 px from y=62; every pixel of a
+    // key cell resolves to it (no dead gaps), nothing outside the grid does.
+    for (std::uint8_t row = 0U; row < 4U; ++row) {
+        for (std::uint16_t line = 0U; line < 34U; ++line) {
+            TEST_ASSERT_TRUE(isCell(
+                at(20U, static_cast<std::uint16_t>(62U + row * 34U + line)),
+                row, 0U));
+        }
+    }
+    for (std::uint8_t column = 0U; column < 10U; ++column) {
+        for (std::uint16_t offset = 0U; offset < 30U; ++offset) {
+            TEST_ASSERT_TRUE(isCell(
+                at(static_cast<std::uint16_t>(8U + column * 30U + offset), 70U),
+                0U, column));
+        }
+    }
+    TEST_ASSERT_FALSE(at(7U, 70U).has_value());
+    TEST_ASSERT_FALSE(at(308U, 70U).has_value());
+    TEST_ASSERT_FALSE(at(20U, 61U).has_value());
+    TEST_ASSERT_FALSE(at(20U, 198U).has_value());
+    // Press feedback covers the touch cell.
+    const auto held = fermentation::main_ui::makeRepresentativeScreen(
+        snapshot, workspace, fermentation::makeFermentationUiTextPacks(),
+        device_platform::LocaleId{"en"},
+        device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::ContentCell, 0U, 2U, 7U});
+    const auto feedback = std::find_if(
+        held.commands.begin(), held.commands.end(), [](const auto& command) {
+            return command.kind ==
+                   fermentation::main_ui::ScreenDrawKind::PressFeedback;
+        });
+    TEST_ASSERT_TRUE(feedback != held.commands.end());
+    TEST_ASSERT_EQUAL_UINT16(218U, feedback->rect.left);
+    TEST_ASSERT_EQUAL_UINT16(130U, feedback->rect.top);
+    TEST_ASSERT_EQUAL_UINT16(30U, feedback->rect.width);
+    TEST_ASSERT_EQUAL_UINT16(34U, feedback->rect.height);
+}
+
+void test_keyboard_page_shows_the_tail_of_a_long_multibyte_candidate() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    std::string longName;
+    for (int index = 0; index < 20; ++index)
+        longName +=
+            "\xC3\xBC"
+            "x";
+    workspace.adoptDeviceName(longName);
+    workspace.setPage(fermentation::FermentationUiPage::Settings);
+    auto screen = settingsScreen(workspace, snapshot, "en");
+    for (int step = 0; step < 2; ++step) {
+        screen = settingsScreen(workspace, snapshot, "en");
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(workspace, snapshot,
+                                                           screen, 200U, 220U)
+                             .navigated);
+    }
+    screen = settingsScreen(workspace, snapshot, "en");
+    TEST_ASSERT_TRUE(
+        fermentation::main_ui::routePress(workspace, snapshot, screen, 40U, 80U)
+            .navigated);
+    screen = settingsScreen(workspace, snapshot, "en");
+    const fermentation::main_ui::ScreenDrawCommand* shown = nullptr;
+    for (const auto& command : screen.commands) {
+        if (command.rect.top == 40U && command.rect.left == 96U)
+            shown = &command;
+    }
+    TEST_ASSERT_NOT_NULL(shown);
+    // Prefixed, ends with the cursor, and never cut inside a character.
+    TEST_ASSERT_TRUE(shown->text.rfind("..", 0U) == 0U);
+    TEST_ASSERT_TRUE(shown->text.back() == '_');
+    const auto body = shown->text.substr(2U, shown->text.size() - 3U);
+    TEST_ASSERT_TRUE(body.size() <= 28U);
+    TEST_ASSERT_TRUE((static_cast<unsigned char>(body.front()) & 0xC0U) !=
+                     0x80U);
+}
+
+void test_program_editor_draws_rows_marks_changes_and_has_pager_buttons() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    auto catalog = makeRunnableCatalogForTest();
+    fermentation::FermentationTouchWorkspace workspace;
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(catalog.programs.back().program.id, catalog));
+    workspace.setPage(fermentation::FermentationUiPage::ProgramEdit);
+    auto edited = catalog.programs.back();
+    edited.program.name = "Roggen";
+    edited.program.fermentationStages.front().durationMinutes = 75U;
+    workspace.setProgramEditCandidate(edited);
+    auto screen = settingsScreen(workspace, snapshot, "en", &catalog);
+    // Name changed -> marked; the notes row follows; target row is third.
+    TEST_ASSERT_TRUE(hasText(screen, "Name: Roggen *"));
+    TEST_ASSERT_TRUE(hasText(screen, "Note: -"));
+    TEST_ASSERT_TRUE(hasText(screen, "Target: 25.0 C"));
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    TEST_ASSERT_TRUE(isCell(at(8U, 64U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(251U, 183U), 2U, 0U));
+    TEST_ASSERT_FALSE(at(252U, 80U).has_value());
+    TEST_ASSERT_TRUE(isCell(at(256U, 64U), 0U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(311U, 183U), 1U, 1U));
+
+    // Scrolling three rows shows the duration row marked as changed.
+    for (int step = 0; step < 3; ++step) {
+        screen = settingsScreen(workspace, snapshot, "en", &catalog);
+        TEST_ASSERT_TRUE(fermentation::main_ui::routePress(
+                             workspace, snapshot, screen, 280U, 150U, &catalog)
+                             .navigated);
+    }
+    screen = settingsScreen(workspace, snapshot, "en", &catalog);
+    TEST_ASSERT_TRUE(hasText(screen, "Duration: 75 min *"));
+}
+
+void test_s10_pages_are_bounded_deterministic_and_do_not_overlap() {
+    auto catalog = makeRunnableCatalogForTest();
+    for (const auto* locale : {"en", "de", "es"}) {
+        for (const auto page :
+             {fermentation::FermentationUiPage::Settings,
+              fermentation::FermentationUiPage::TextEdit,
+              fermentation::FermentationUiPage::ProgramEdit}) {
+            fermentation::FermentationUiSnapshot snapshot;
+            snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+            snapshot.service.available = false;
+            snapshot.service.unavailableReason =
+                fermentation::fermentationTextKey("service-locked");
+            fermentation::FermentationTouchWorkspace workspace;
+            workspace.adoptDeviceName("Gaerschrank");
+            TEST_ASSERT_TRUE(workspace.selectProgram(
+                catalog.programs.back().program.id, catalog));
+            workspace.setPage(page);
+            const auto first =
+                pageScreen(snapshot, workspace, locale, &catalog);
+            const auto second =
+                pageScreen(snapshot, workspace, locale, &catalog);
+            TEST_ASSERT_TRUE(first.commands.size() <= 90U);
+            TEST_ASSERT_EQUAL_UINT32(first.commands.size(),
+                                     second.commands.size());
+            for (std::size_t index = 0U; index < first.commands.size();
+                 ++index) {
+                TEST_ASSERT_EQUAL_STRING(first.commands[index].text.c_str(),
+                                         second.commands[index].text.c_str());
+            }
+            for (std::size_t left = 0U; left < first.commands.size(); ++left) {
+                const auto& a = first.commands[left];
+                if (a.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                    a.rect.top < 34U) {
+                    continue;
+                }
+                assertWithinDisplay(a.rect);
+                for (std::size_t right = left + 1U;
+                     right < first.commands.size(); ++right) {
+                    const auto& b = first.commands[right];
+                    if (b.kind != fermentation::main_ui::ScreenDrawKind::Text ||
+                        b.rect.top < 34U) {
+                        continue;
+                    }
+                    TEST_ASSERT_FALSE(overlaps(a.rect, b.rect));
+                }
+            }
+        }
+    }
+}
+
+void test_s10_text_keys_exist_in_all_locales() {
+    for (const auto* key : {"settings",
+                            "settings-page",
+                            "settings-time-zone",
+                            "device-name",
+                            "device-name-locked-run",
+                            "device-name-change-failed",
+                            "service-protected",
+                            "program-name",
+                            "program-notes",
+                            "space",
+                            "kbd-lower",
+                            "kbd-upper",
+                            "kbd-digits",
+                            "kbd-symbols",
+                            "pf-name",
+                            "pf-notes",
+                            "pf-wait",
+                            "pf-failure",
+                            "pf-delay",
+                            "pf-return",
+                            "pf-reach",
+                            "pt-wait",
+                            "pt-delay",
+                            "pt-reach",
+                            "policy-fallback",
+                            "policy-wait",
+                            "discard",
+                            "policy-stop",
+                            "return-air",
+                            "return-manual",
+                            "return-auto"}) {
+        for (const auto* locale : {"en", "de", "es"}) {
+            const auto result = device_platform::resolveText(
+                fermentation::makeFermentationUiTextPacks(),
+                device_platform::LocaleId{locale},
+                fermentation::fermentationTextKey(key));
+            TEST_ASSERT_FALSE(result.value.empty());
+            TEST_ASSERT_TRUE(result.value != key);
+        }
+    }
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(
@@ -2480,8 +2851,7 @@ int main() {
     RUN_TEST(test_softap_wifi_qr_escapes_reserved_characters_deterministically);
     RUN_TEST(test_wifi_qr_max_payload_keeps_pinned_lvgl_geometry_contract);
     RUN_TEST(test_web_access_page_shows_the_application_state_in_all_locales);
-    RUN_TEST(
-        test_language_page_offers_the_web_access_entry_with_a_localized_label);
+    RUN_TEST(test_language_page_no_longer_offers_the_web_access_slot);
     RUN_TEST(test_network_page_missing_softap_info_is_explicit);
     RUN_TEST(test_program_summary_shows_program_values_and_marks_absent_ones);
     RUN_TEST(test_program_summary_applies_candidate_overrides_and_redraws);
@@ -2506,5 +2876,15 @@ int main() {
     RUN_TEST(test_start_value_labels_exist_in_all_locales);
     RUN_TEST(test_manual_pages_show_real_values_and_the_not_released_reason);
     RUN_TEST(test_cooling_plan_row_has_its_own_hit_zone_below_the_page_content);
+    RUN_TEST(test_settings_page_draws_the_rows_in_the_decided_order);
+    RUN_TEST(test_settings_disabled_rows_show_their_reason);
+    RUN_TEST(test_settings_rows_are_list_cells_with_exact_hit_zones);
+    RUN_TEST(
+        test_keyboard_page_draws_the_mode_keys_and_has_exact_34px_hit_rows);
+    RUN_TEST(test_keyboard_page_shows_the_tail_of_a_long_multibyte_candidate);
+    RUN_TEST(
+        test_program_editor_draws_rows_marks_changes_and_has_pager_buttons);
+    RUN_TEST(test_s10_pages_are_bounded_deterministic_and_do_not_overlap);
+    RUN_TEST(test_s10_text_keys_exist_in_all_locales);
     return UNITY_END();
 }

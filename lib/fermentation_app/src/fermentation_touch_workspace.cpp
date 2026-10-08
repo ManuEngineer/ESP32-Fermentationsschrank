@@ -8,6 +8,8 @@
 #include <string_view>
 #include <utility>
 
+#include "configuration_limits.hpp"
+#include "configuration_text.hpp"
 #include "fermentation_ui_editing.hpp"
 #include "fermentation_ui_text.hpp"
 #include "program_limits.hpp"
@@ -128,15 +130,14 @@ constexpr std::size_t kMaxValueEditCharacters = 8U;
 
 // Keypad (D8): rows 0..2 are digits 1..9, row 3 is `.`, `0`, `+/-`. Whole-
 // number fields have no decimal separator or sign; input length is bounded.
-bool keypadKeyEnabled(std::uint8_t row, std::uint8_t column,
-                      FermentationUiStartField field,
+bool keypadKeyEnabled(std::uint8_t row, std::uint8_t column, bool wholeNumber,
                       const std::string& candidate) noexcept {
     if (row >= kFermentationUiKeypadRows ||
         column >= kFermentationUiKeypadColumns) {
         return false;
     }
     if (row == 3U && column != 1U) {
-        if (isWholeNumberStartField(field)) return false;
+        if (wholeNumber) return false;
         if (column == 0U) {
             return candidate.size() < kMaxValueEditCharacters &&
                    candidate.find('.') == std::string::npos;
@@ -348,7 +349,398 @@ FermentationUiProgramSummaryView makeProgramSummary(
     return summary;
 }
 
+// ---- S10: program editor and keyboard helpers
+// --------------------------------
+
+using EditField = FermentationUiProgramField;
+
+const char* programFieldLabelKey(EditField field) noexcept {
+    switch (field) {
+        case EditField::Name:
+            return "pf-name";
+        case EditField::Notes:
+            return "pf-notes";
+        case EditField::TargetTemperature:
+            return "label-target";
+        case EditField::Duration:
+            return "label-duration";
+        case EditField::Preheat:
+            return "label-preheat";
+        case EditField::MaxProductWait:
+            return "pf-wait";
+        case EditField::SensorPreference:
+            return "label-sensor";
+        case EditField::FailurePolicy:
+            return "pf-failure";
+        case EditField::FallbackDelay:
+            return "pf-delay";
+        case EditField::ReturnStrategy:
+            return "pf-return";
+        case EditField::MaxTargetReach:
+            return "pf-reach";
+        case EditField::CompletionMode:
+            return "label-completion";
+        case EditField::CoolingTarget:
+            return "label-cooling";
+        case EditField::HoldDuration:
+            return "label-hold";
+    }
+    return "pf-name";
+}
+
+// Title of the numeric edit page for a program field.
+const char* programFieldTitleKey(EditField field) noexcept {
+    switch (field) {
+        case EditField::TargetTemperature:
+            return "field-target";
+        case EditField::Duration:
+            return "field-duration";
+        case EditField::MaxProductWait:
+            return "pt-wait";
+        case EditField::FallbackDelay:
+            return "pt-delay";
+        case EditField::MaxTargetReach:
+            return "pt-reach";
+        case EditField::CoolingTarget:
+            return "field-cooling";
+        case EditField::HoldDuration:
+            return "field-hold";
+        case EditField::Name:
+        case EditField::Notes:
+        case EditField::Preheat:
+        case EditField::SensorPreference:
+        case EditField::FailurePolicy:
+        case EditField::ReturnStrategy:
+        case EditField::CompletionMode:
+            break;
+    }
+    return "program-edit";
+}
+
+bool isNumericProgramField(EditField field) noexcept {
+    switch (field) {
+        case EditField::TargetTemperature:
+        case EditField::Duration:
+        case EditField::MaxProductWait:
+        case EditField::FallbackDelay:
+        case EditField::MaxTargetReach:
+        case EditField::CoolingTarget:
+        case EditField::HoldDuration:
+            return true;
+        case EditField::Name:
+        case EditField::Notes:
+        case EditField::Preheat:
+        case EditField::SensorPreference:
+        case EditField::FailurePolicy:
+        case EditField::ReturnStrategy:
+        case EditField::CompletionMode:
+            break;
+    }
+    return false;
+}
+
+bool isWholeNumberProgramField(EditField field) noexcept {
+    return isNumericProgramField(field) &&
+           field != EditField::TargetTemperature &&
+           field != EditField::CoolingTarget;
+}
+
+FermentationUiValueUnit programFieldUnit(EditField field) noexcept {
+    switch (field) {
+        case EditField::TargetTemperature:
+        case EditField::CoolingTarget:
+            return FermentationUiValueUnit::Celsius;
+        case EditField::FallbackDelay:
+            return FermentationUiValueUnit::Seconds;
+        default:
+            return FermentationUiValueUnit::Minutes;
+    }
+}
+
+// Validation field of each numeric program field: the program validator names
+// the field of every error, so the commit check reuses it (no parallel limits).
+const char* programNumericFieldName(EditField field) noexcept {
+    switch (field) {
+        case EditField::TargetTemperature:
+            return "defaults.fermentation_temperature_c";
+        case EditField::Duration:
+            return "defaults.fermentation_duration_min";
+        case EditField::MaxProductWait:
+            return "defaults.max_product_wait_min";
+        case EditField::FallbackDelay:
+            return "defaults.product_sensor_failure.fallback_delay_s";
+        case EditField::MaxTargetReach:
+            return "defaults.max_target_reach_min";
+        case EditField::CoolingTarget:
+            return "defaults.completion.cooling_target_c";
+        case EditField::HoldDuration:
+            return "defaults.completion.hold_duration_min";
+        default:
+            break;
+    }
+    return "";
+}
+
+std::optional<double> programNumericValue(const ProgramDefinition& program,
+                                          EditField field) {
+    const FermentationStage stage = program.fermentationStages.empty()
+                                        ? FermentationStage{}
+                                        : program.fermentationStages.front();
+    const auto whole = [](const std::optional<std::uint32_t>& value) {
+        return value.has_value() ? std::optional<double>{*value}
+                                 : std::optional<double>{};
+    };
+    switch (field) {
+        case EditField::TargetTemperature:
+            return stage.targetTemperatureCelsius;
+        case EditField::Duration:
+            return whole(stage.durationMinutes);
+        case EditField::MaxProductWait:
+            return whole(program.maximumProductWaitMinutes);
+        case EditField::FallbackDelay:
+            return whole(program.productSensorFailure.fallbackDelaySeconds);
+        case EditField::MaxTargetReach:
+            return whole(program.maximumTargetReachMinutes);
+        case EditField::CoolingTarget:
+            return program.completion.coolingTargetCelsius;
+        case EditField::HoldDuration:
+            return whole(program.completion.holdDurationMinutes);
+        default:
+            break;
+    }
+    return std::nullopt;
+}
+
+void setProgramNumeric(ProgramDefinition& program, EditField field,
+                       double value) {
+    const auto whole = static_cast<std::uint32_t>(value);
+    switch (field) {
+        case EditField::TargetTemperature:
+            if (!program.fermentationStages.empty())
+                program.fermentationStages.front().targetTemperatureCelsius =
+                    value;
+            break;
+        case EditField::Duration:
+            if (!program.fermentationStages.empty())
+                program.fermentationStages.front().durationMinutes = whole;
+            break;
+        case EditField::MaxProductWait:
+            program.maximumProductWaitMinutes = whole;
+            break;
+        case EditField::FallbackDelay:
+            program.productSensorFailure.fallbackDelaySeconds = whole;
+            break;
+        case EditField::MaxTargetReach:
+            program.maximumTargetReachMinutes = whole;
+            break;
+        case EditField::CoolingTarget:
+            program.completion.coolingTargetCelsius = value;
+            break;
+        case EditField::HoldDuration:
+            program.completion.holdDurationMinutes = whole;
+            break;
+        default:
+            break;
+    }
+}
+
+std::string programNumericText(EditField field, double value) {
+    char buffer[24];
+    if (isWholeNumberProgramField(field)) {
+        std::snprintf(buffer, sizeof(buffer), "%u",
+                      static_cast<unsigned>(value));
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "%.1f", value);
+    }
+    return buffer;
+}
+
+std::string programNumericDisplay(EditField field,
+                                  const std::optional<double>& value) {
+    if (!value.has_value()) return "--";
+    auto text = programNumericText(field, *value);
+    switch (programFieldUnit(field)) {
+        case FermentationUiValueUnit::Celsius:
+            text += " C";
+            break;
+        case FermentationUiValueUnit::Minutes:
+            text += " min";
+            break;
+        case FermentationUiValueUnit::Seconds:
+            text += " s";
+            break;
+    }
+    return text;
+}
+
+// A value is accepted for the field when the existing program validator
+// reports no error for exactly that field on the candidate with the value
+// applied; errors of other fields (a dependent value still missing) do not
+// block this commit but keep `valid` false for the save.
+bool programNumericValueAccepted(const ProgramDocument& candidate,
+                                 EditField field, double value) {
+    constexpr double kWholeNumberLimit = 4'000'000'000.0;
+    if (!std::isfinite(value)) return false;
+    if (isWholeNumberProgramField(field) &&
+        (value < 0.0 || value > kWholeNumberLimit ||
+         value != std::floor(value))) {
+        return false;
+    }
+    auto copy = candidate;
+    setProgramNumeric(copy.program, field, value);
+    const std::string_view name = programNumericFieldName(field);
+    const auto result =
+        validateProgram(copy, ValidationPurpose::CatalogTemplate);
+    return std::none_of(
+        result.errors.begin(), result.errors.end(),
+        [name](const ValidationError& error) { return name == error.field; });
+}
+
+device_platform::TextKey failurePolicyKey(ProductSensorFailurePolicy policy) {
+    switch (policy) {
+        case ProductSensorFailurePolicy::FallbackToAirAfterTimeout:
+            return fermentationTextKey("policy-fallback");
+        case ProductSensorFailurePolicy::WaitForUser:
+            return fermentationTextKey("policy-wait");
+        case ProductSensorFailurePolicy::StopToSafeState:
+            return fermentationTextKey("policy-stop");
+    }
+    return fermentationTextKey("message-unknown");
+}
+
+device_platform::TextKey returnStrategyKey(ReturnStrategy strategy) {
+    switch (strategy) {
+        case ReturnStrategy::RemainOnAirUntilEnd:
+            return fermentationTextKey("return-air");
+        case ReturnStrategy::ManualReturnToProduct:
+            return fermentationTextKey("return-manual");
+        case ReturnStrategy::AutomaticValidatedReturnToProduct:
+            return fermentationTextKey("return-auto");
+    }
+    return fermentationTextKey("message-unknown");
+}
+
+// Which rows exist for the program's current values: the rows of values the
+// program model's own predicates mark as used (the validator and the editor
+// share them, so the cross-field rules have one definition).
+bool programFieldVisible(const ProgramDefinition& program,
+                         EditField field) noexcept {
+    switch (field) {
+        case EditField::MaxProductWait:
+            return programUsesProductWait(program);
+        case EditField::FallbackDelay:
+            return programUsesFallbackDelay(program);
+        case EditField::FailurePolicy:
+        case EditField::ReturnStrategy:
+            // AirOnly has exactly one valid combination (6.13).
+            return !programHasFixedSensorFailure(program);
+        case EditField::CoolingTarget:
+            return programUsesCoolingTarget(program);
+        case EditField::HoldDuration:
+            return programUsesHoldDuration(program);
+        default:
+            break;
+    }
+    return true;
+}
+
+// One cycle step of a non-numeric program field. Values the new setting makes
+// unexpected are dropped by the program model's own rule
+// (clearUnexpectedProgramValues, which also applies the AirOnly
+// normalization).
+void cycleProgramField(ProgramDefinition& program, EditField field) {
+    constexpr std::uint8_t kPreferences = 4U;
+    constexpr std::uint8_t kPolicies = 3U;
+    constexpr std::uint8_t kStrategies = 3U;
+    constexpr std::uint8_t kModes = 4U;
+    switch (field) {
+        case EditField::Preheat:
+            program.preheat = !program.preheat;
+            break;
+        case EditField::SensorPreference:
+            program.sensorPreference = static_cast<SensorPreference>(
+                (static_cast<std::uint8_t>(program.sensorPreference) + 1U) %
+                kPreferences);
+            break;
+        case EditField::FailurePolicy:
+            program.productSensorFailure.policy =
+                static_cast<ProductSensorFailurePolicy>(
+                    (static_cast<std::uint8_t>(
+                         program.productSensorFailure.policy) +
+                     1U) %
+                    kPolicies);
+            break;
+        case EditField::ReturnStrategy:
+            program.productSensorFailure.returnStrategy =
+                static_cast<ReturnStrategy>(
+                    (static_cast<std::uint8_t>(
+                         program.productSensorFailure.returnStrategy) +
+                     1U) %
+                    kStrategies);
+            break;
+        case EditField::CompletionMode:
+            program.completion.mode = static_cast<CompletionMode>(
+                (static_cast<std::uint8_t>(program.completion.mode) + 1U) %
+                kModes);
+            break;
+        default:
+            return;
+    }
+    clearUnexpectedProgramValues(program);
+}
+
+// ---- keyboard
+// ----------------------------------------------------------------
+
+// Characters of rows 0-2 per mode (10 columns each; '\0' = no key). Only ASCII
+// is offered (the standard font), longer text such as an existing multi-byte
+// name stays editable through Backspace/Clear.
+constexpr std::array<std::array<const char*, 3U>, 4U> kKeyboardLayout{{
+    {"abcdefghij", "klmnopqrst", "uvwxyz\0\0\0\0"},
+    {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ\0\0\0\0"},
+    {"1234567890", "+*/=%#@&_$", "()[]:;,!?'"},
+    {".,:;!?'\"()", "[]{}<>+=*/", "#%&@_^~|$\0"},
+}};
+
+bool textEditCommitAccepted(FermentationUiTextTarget target,
+                            const std::string& value) {
+    switch (target) {
+        case FermentationUiTextTarget::DeviceName:
+        case FermentationUiTextTarget::ProgramName:
+            return validateVisibleName(value) ==
+                   ConfigurationTextStatus::Success;
+        case FermentationUiTextTarget::ProgramNotes:
+            return validateProgramNotes(value) ==
+                   ConfigurationTextStatus::Success;
+    }
+    return false;
+}
+
+std::size_t textEditByteLimit(FermentationUiTextTarget target) noexcept {
+    return target == FermentationUiTextTarget::ProgramNotes
+               ? configuration_limits::kMaximumNotesBytes
+               : configuration_limits::kMaximumVisibleNameBytes;
+}
+
 }  // namespace
+
+FermentationUiKeyboardKey fermentationUiKeyboardKeyAt(
+    TextEditMode mode, std::uint8_t row, std::uint8_t column) noexcept {
+    if (row >= kFermentationUiKeyboardRows ||
+        column >= kFermentationUiKeyboardColumns) {
+        return {};
+    }
+    if (row == 3U) {
+        if (column < 2U) return {FermentationUiKeyboardKeyKind::Clear, '\0'};
+        if (column < 8U) return {FermentationUiKeyboardKeyKind::Character, ' '};
+        return {FermentationUiKeyboardKeyKind::Character,
+                column == 8U ? '-' : '.'};
+    }
+    const char character =
+        kKeyboardLayout[static_cast<std::size_t>(mode)][row][column];
+    if (character == '\0') return {};
+    return {FermentationUiKeyboardKeyKind::Character, character};
+}
 
 FermentationUiSafeBootCapability safeBootCapabilityFor(
     FermentationUiSafeBootTarget target) noexcept {
@@ -442,6 +834,12 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::ValueEditClear:
         case FermentationUiWorkspaceSlotAction::ValueEditCommit:
         case FermentationUiWorkspaceSlotAction::ResetStartValues:
+        case FermentationUiWorkspaceSlotAction::NavigateSettings:
+        case FermentationUiWorkspaceSlotAction::TextEditCancel:
+        case FermentationUiWorkspaceSlotAction::TextEditMode:
+        case FermentationUiWorkspaceSlotAction::TextEditBackspace:
+        case FermentationUiWorkspaceSlotAction::TextEditCommit:
+        case FermentationUiWorkspaceSlotAction::DiscardProgramEdit:
         case FermentationUiWorkspaceSlotAction::ResetFault:
             return false;
     }
@@ -512,11 +910,20 @@ std::vector<device_platform::TextKey> FermentationTouchWorkspace::routeForPage(
             route.push_back(key("diagnostics"));
             break;
         case FermentationUiPage::Service:
+            route.push_back(key("settings"));
             route.push_back(key("service"));
             break;
         case FermentationUiPage::Pin:
+            route.push_back(key("settings"));
             route.push_back(key("service"));
             route.push_back(key("pin"));
+            break;
+        case FermentationUiPage::Settings:
+            route.push_back(key("settings"));
+            break;
+        case FermentationUiPage::TextEdit:
+            route.push_back(key("settings"));
+            route.push_back(key("edit"));
             break;
         case FermentationUiPage::Recovery:
             route.push_back(key("recovery"));
@@ -625,11 +1032,20 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
         case FermentationUiPage::Completion:
             pageStack_.push_back(FermentationUiPage::Completion);
             break;
+        case FermentationUiPage::Settings:
+            pageStack_.push_back(FermentationUiPage::Settings);
+            break;
+        case FermentationUiPage::TextEdit:
+            pageStack_.insert(pageStack_.end(), {FermentationUiPage::Settings,
+                                                 FermentationUiPage::TextEdit});
+            break;
         case FermentationUiPage::Service:
-            pageStack_.push_back(FermentationUiPage::Service);
+            pageStack_.insert(pageStack_.end(), {FermentationUiPage::Settings,
+                                                 FermentationUiPage::Service});
             break;
         case FermentationUiPage::Pin:
-            pageStack_.insert(pageStack_.end(), {FermentationUiPage::Service,
+            pageStack_.insert(pageStack_.end(), {FermentationUiPage::Settings,
+                                                 FermentationUiPage::Service,
                                                  FermentationUiPage::Pin});
             break;
         case FermentationUiPage::Recovery:
@@ -670,11 +1086,9 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makeHomeView(
                 FermentationUiWorkspaceSlotAction::NavigateProgramManagement);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
-            setSlot(view, 3U, "service",
-                    FermentationUiWorkspaceSlotAction::NavigateService,
-                    snapshot.service.available);
-            if (!snapshot.service.available)
-                view.blockedReason = snapshot.service.unavailableReason;
+            // Service moved under Settings (D14); its reason is shown there.
+            setSlot(view, 3U, "settings",
+                    FermentationUiWorkspaceSlotAction::NavigateSettings);
             break;
         case FermentationHomeMode::ActiveRun:
             setSlot(view, 0U, "stop",
@@ -783,6 +1197,12 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
     FermentationUiWorkspaceView view;
     view.page = page_;
     view.route.segments = routeForPage(page_);
+    if (page_ == FermentationUiPage::TextEdit && pageStack_.size() >= 2U) {
+        // The keyboard is shared; its route is the caller's route (the page
+        // below it on the existing stack) plus the edit step.
+        view.route.segments = routeForPage(pageStack_[pageStack_.size() - 2U]);
+        view.route.segments.push_back(key("edit"));
+    }
     setSlot(view, 0U, "back", FermentationUiWorkspaceSlotAction::NavigateBack);
     setSlot(view, 1U, "up", FermentationUiWorkspaceSlotAction::None, false);
     setSlot(view, 2U, "down", FermentationUiWorkspaceSlotAction::None, false);
@@ -880,13 +1300,39 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             break;
         }
         case FermentationUiPage::ValueEdit: {
-            view.title = key(valueEditTitleKey(valueEditField_));
+            view.title = key(valueEditProgramField_.has_value()
+                                 ? programFieldTitleKey(*valueEditProgramField_)
+                                 : valueEditTitleKey(valueEditField_));
             view.pager.currentIndex = pager_.currentIndex;
             FermentationUiValueEditView edit;
             edit.field = valueEditField_;
             edit.candidate = valueEdit_.candidate();
-            if (valueEditSlot_ !=
-                FermentationUiManualDraftSlot::StartCandidate) {
+            if (valueEditProgramField_.has_value()) {
+                edit.unit = programFieldUnit(*valueEditProgramField_);
+                edit.wholeNumber =
+                    isWholeNumberProgramField(*valueEditProgramField_);
+            } else {
+                edit.unit =
+                    (valueEditField_ ==
+                         FermentationUiStartField::TargetTemperature ||
+                     valueEditField_ == FermentationUiStartField::CoolingTarget)
+                        ? FermentationUiValueUnit::Celsius
+                        : FermentationUiValueUnit::Minutes;
+                edit.wholeNumber = isWholeNumberStartField(valueEditField_);
+            }
+            if (valueEditProgramField_.has_value()) {
+                // Program field: the candidate with the value applied must
+                // pass the existing program validator for exactly this field.
+                auto probe = valueEdit_;
+                if (programEditCandidate_.has_value() &&
+                    probe.apply({NumericEditAction::Commit, 0U}) &&
+                    probe.committedValue().has_value()) {
+                    edit.commitValid = programNumericValueAccepted(
+                        *programEditCandidate_, *valueEditProgramField_,
+                        *probe.committedValue());
+                }
+            } else if (valueEditSlot_ !=
+                       FermentationUiManualDraftSlot::StartCandidate) {
                 // Manual run value: the canonical program limits decide.
                 auto probe = valueEdit_;
                 if (probe.apply({NumericEditAction::Commit, 0U}) &&
@@ -943,8 +1389,15 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 programEditDirty_
                     ? device_platform::PageExitRequirement::ConfirmDiscard
                     : device_platform::PageExitRequirement::None;
-            setSlot(view, 0U, "back",
-                    FermentationUiWorkspaceSlotAction::NavigateBack);
+            // A dirty editor cannot be left through the navigation exits
+            // (ConfirmDiscard): the explicit discard is the confirmation.
+            if (programEditDirty_) {
+                setSlot(view, 0U, "discard",
+                        FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+            } else {
+                setSlot(view, 0U, "back",
+                        FermentationUiWorkspaceSlotAction::NavigateBack);
+            }
             bool factoryProgram = false;
             bool resettableProgram = false;
             bool deletableProgram = selectedProgramId_.has_value();
@@ -969,11 +1422,21 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                         ? FermentationUiWorkspaceSlotAction::UninstallProgram
                         : FermentationUiWorkspaceSlotAction::DeleteProgram,
                     deletableProgram);
+            view.programEdit = makeProgramEditView(catalog);
+            view.pager.itemCount = view.programEdit->rowCount;
+            view.pager.currentIndex =
+                view.programEdit->rowCount == 0U
+                    ? 0U
+                    : std::min(pager_.currentIndex,
+                               view.programEdit->rowCount - 1U);
+            // Edit saves a valid candidate; Copy and New save with an optional
+            // valid name. The owner validates and applies again.
             setSlot(view, 3U, "save",
                     FermentationUiWorkspaceSlotAction::SaveProgram,
-                    programEditOperation_ !=
-                            FermentationUiProgramEditOperation::Edit ||
-                        programEditCandidate_.has_value());
+                    view.programEdit->valid &&
+                        (programEditOperation_ !=
+                             FermentationUiProgramEditOperation::Edit ||
+                         programEditCandidate_.has_value()));
             break;
         }
         case FermentationUiPage::ProgramDeleteConfirmation:
@@ -1212,6 +1675,71 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             }
             break;
         }
+        case FermentationUiPage::Settings:
+            view.title = key("settings-page");
+            view.settings = makeSettingsView(snapshot);
+            view.pager.itemCount = kFermentationUiSettingsRowCount;
+            view.pager.currentIndex = pager_.currentIndex;
+            if (deviceNameChangeFailed_)
+                view.blockedReason = key("device-name-change-failed");
+            setSlot(view, 0U, "back",
+                    FermentationUiWorkspaceSlotAction::NavigateBack);
+            setSlot(view, 1U, "up",
+                    FermentationUiWorkspaceSlotAction::MovePagerUp,
+                    view.pager.canMoveUp());
+            setSlot(view, 2U, "down",
+                    FermentationUiWorkspaceSlotAction::MovePagerDown,
+                    view.pager.canMoveDown());
+            setSlot(view, 3U, "status",
+                    FermentationUiWorkspaceSlotAction::NavigateStatus);
+            break;
+        case FermentationUiPage::TextEdit: {
+            switch (textTarget_) {
+                case FermentationUiTextTarget::DeviceName:
+                    view.title = key("device-name");
+                    break;
+                case FermentationUiTextTarget::ProgramName:
+                    view.title = key("program-name");
+                    break;
+                case FermentationUiTextTarget::ProgramNotes:
+                    view.title = key("program-notes");
+                    break;
+            }
+            FermentationUiTextEditView edit;
+            edit.target = textTarget_;
+            edit.candidate = textEdit_.candidate();
+            edit.mode = textEdit_.mode();
+            edit.commitValid =
+                textEditCommitAccepted(textTarget_, edit.candidate);
+            edit.full = edit.candidate.size() >= textEditByteLimit(textTarget_);
+            const char* modeLabel = "kbd-lower";
+            switch (edit.mode) {
+                case TextEditMode::Lowercase:
+                    modeLabel = "kbd-lower";
+                    break;
+                case TextEditMode::Uppercase:
+                    modeLabel = "kbd-upper";
+                    break;
+                case TextEditMode::Digits:
+                    modeLabel = "kbd-digits";
+                    break;
+                case TextEditMode::Symbols:
+                    modeLabel = "kbd-symbols";
+                    break;
+            }
+            view.textEdit = std::move(edit);
+            setSlot(view, 0U, "cancel",
+                    FermentationUiWorkspaceSlotAction::TextEditCancel);
+            setSlot(view, 1U, modeLabel,
+                    FermentationUiWorkspaceSlotAction::TextEditMode);
+            setSlot(view, 2U, "backspace",
+                    FermentationUiWorkspaceSlotAction::TextEditBackspace,
+                    !textEdit_.candidate().empty());
+            setSlot(view, 3U, "ok",
+                    FermentationUiWorkspaceSlotAction::TextEditCommit,
+                    view.textEdit->commitValid);
+            break;
+        }
         case FermentationUiPage::HeaderLanguage:
             view.title = key("language");
             // One selectable row per language included in this build.
@@ -1225,8 +1753,8 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
             setSlot(view, 2U, "clock",
                     FermentationUiWorkspaceSlotAction::NavigateClock);
-            setSlot(view, 3U, "web-access",
-                    FermentationUiWorkspaceSlotAction::NavigateWebAccess);
+            // The provisional web access slot (#170) moved to the settings
+            // page (D13).
             break;
         case FermentationUiPage::HeaderNetwork:
             view.title = key("network");
@@ -1500,6 +2028,9 @@ bool FermentationTouchWorkspace::navigate(
         case FermentationUiWorkspaceSlotAction::NavigateWebAccess:
             destination = FermentationUiPage::HeaderWebAccess;
             break;
+        case FermentationUiWorkspaceSlotAction::NavigateSettings:
+            destination = FermentationUiPage::Settings;
+            break;
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
         case FermentationUiWorkspaceSlotAction::CopyProgram:
         case FermentationUiWorkspaceSlotAction::NewProgram:
@@ -1519,6 +2050,7 @@ bool FermentationTouchWorkspace::navigate(
 bool FermentationTouchWorkspace::goBack() {
     if (page_ == FermentationUiPage::Home || pageStack_.size() <= 1U)
         return false;
+    const auto left = page_;
     if (pageStack_.size() == 2U) {
         pageStack_.resize(1U);
         page_ = FermentationUiPage::Home;
@@ -1527,7 +2059,17 @@ bool FermentationTouchWorkspace::goBack() {
         page_ = pageStack_.back();
     }
     displayLanguageChangeFailed_ = false;
-    programEditDirty_ = false;
+    // The value and keyboard pages are sub-steps of the program editor; only
+    // leaving the editor itself discards its candidate and name.
+    if (left != FermentationUiPage::ValueEdit &&
+        left != FermentationUiPage::TextEdit) {
+        programEditDirty_ = false;
+        if (left == FermentationUiPage::ProgramEdit) {
+            // Leaving the editor discards its edits.
+            programEditName_.reset();
+            programEditCandidate_.reset();
+        }
+    }
     return true;
 }
 
@@ -1608,8 +2150,15 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
                 programEditCandidate_.has_value()) {
                 result.programEdit = FermentationUiProgramEditRequest{
                     programEditOperation_, selectedProgramId_.value_or(""),
-                    programEditCandidate_, std::nullopt, true};
-                programEditDirty_ = false;
+                    programEditCandidate_,
+                    programEditOperation_ ==
+                            FermentationUiProgramEditOperation::Edit
+                        ? std::nullopt
+                        : programEditName_,
+                    true};
+                // The editor stays dirty until the owner accepted the request
+                // (noteProgramEditOutcome): a refused save keeps the candidate
+                // and the discard protection.
             }
             break;
         case FermentationUiWorkspaceSlotAction::ApplySensorSelection:
@@ -1719,7 +2268,24 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             break;
         case FermentationUiWorkspaceSlotAction::NavigateBack:
         case FermentationUiWorkspaceSlotAction::ValueEditCancel:
+        case FermentationUiWorkspaceSlotAction::TextEditCancel:
             result.navigated = goBack();
+            break;
+        case FermentationUiWorkspaceSlotAction::DiscardProgramEdit:
+            // The user confirmed the discard: the edits go, the stored
+            // program was never touched.
+            programEditDirty_ = false;
+            result.navigated = goBack();
+            break;
+        case FermentationUiWorkspaceSlotAction::TextEditMode:
+            result.navigated = textEdit_.apply({TextEditAction::Mode, ' '});
+            break;
+        case FermentationUiWorkspaceSlotAction::TextEditBackspace:
+            result.navigated =
+                textEdit_.apply({TextEditAction::Backspace, ' '});
+            break;
+        case FermentationUiWorkspaceSlotAction::TextEditCommit:
+            result = commitTextEdit(snapshot, current);
             break;
         case FermentationUiWorkspaceSlotAction::ValueEditBackspace:
             result.navigated =
@@ -1802,8 +2368,44 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
         } else if (page_ == FermentationUiPage::ValueEdit) {
             enabled = current.valueEdit.has_value() &&
                       keypadKeyEnabled(target.row, target.column,
-                                       current.valueEdit->field,
+                                       current.valueEdit->wholeNumber,
                                        current.valueEdit->candidate);
+        } else if (page_ == FermentationUiPage::TextEdit) {
+            // Keyboard: an existing key of the current mode; Clear needs text,
+            // a character needs room under the owning byte limit.
+            const auto key = fermentationUiKeyboardKeyAt(
+                textEdit_.mode(), target.row, target.column);
+            enabled = current.textEdit.has_value() &&
+                      ((key.kind == FermentationUiKeyboardKeyKind::Clear &&
+                        !current.textEdit->candidate.empty()) ||
+                       (key.kind == FermentationUiKeyboardKeyKind::Character &&
+                        !current.textEdit->full));
+        } else if (page_ == FermentationUiPage::ProgramEdit &&
+                   current.programEdit.has_value()) {
+            // Program editor rows (column 0) and pager buttons (column 1).
+            const auto& edit = *current.programEdit;
+            const auto first = current.pager.currentIndex;
+            enabled = (target.column == 0U &&
+                       target.row < kFermentationUiListVisibleRows &&
+                       first + target.row < edit.rowCount) ||
+                      (edit.rowCount > kFermentationUiListVisibleRows &&
+                       ((target.column == 1U && target.row == 0U &&
+                         current.pager.canMoveUp()) ||
+                        (target.column == 1U && target.row == 1U &&
+                         current.pager.canMoveDown())));
+        } else if (page_ == FermentationUiPage::Settings &&
+                   current.settings.has_value()) {
+            const auto index = current.pager.currentIndex + target.row;
+            enabled = target.column == 0U &&
+                      target.row < kFermentationUiListVisibleRows &&
+                      index < kFermentationUiSettingsRowCount;
+            if (enabled) {
+                const auto row = static_cast<FermentationUiSettingsRow>(index);
+                if (row == FermentationUiSettingsRow::DeviceName)
+                    enabled = current.settings->deviceNameEditable;
+                else if (row == FermentationUiSettingsRow::Service)
+                    enabled = current.settings->serviceAvailable;
+            }
         } else
             enabled = target.column == 0U &&
                       target.row < kFermentationUiListVisibleRows &&
@@ -1852,6 +2454,22 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                 current.programSummary.has_value()) {
                 auto pressed =
                     pressContentCell(snapshot, target, current, catalog);
+                pressed.interaction = result.interaction;
+                return pressed;
+            }
+            if (page_ == FermentationUiPage::TextEdit) {
+                auto pressed = pressKeyboardCell(target);
+                pressed.interaction = result.interaction;
+                return pressed;
+            }
+            if (page_ == FermentationUiPage::ProgramEdit) {
+                auto pressed = pressProgramEditCell(current, target, catalog);
+                pressed.interaction = result.interaction;
+                return pressed;
+            }
+            if (page_ == FermentationUiPage::Settings) {
+                auto pressed = pressSettingsRow(
+                    snapshot, current.pager.currentIndex + target.row);
                 pressed.interaction = result.interaction;
                 return pressed;
             }
@@ -1926,6 +2544,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::press(
                     break;
                 case FermentationUiPage::ProgramEdit:
                 case FermentationUiPage::ValueEdit:
+                case FermentationUiPage::TextEdit:
                     confirmSlot = 3U;
                     break;
                 case FermentationUiPage::ProgramDeleteConfirmation:
@@ -2003,6 +2622,7 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressContentCell(
     const auto manualSlot = manualSlotForPage(page_);
     if (isNumericStartField(field)) {
         valueEditField_ = field;
+        valueEditProgramField_.reset();
         valueEditSlot_ =
             manualSlot.value_or(FermentationUiManualDraftSlot::StartCandidate);
         valueEdit_.reset(startValueText(field, summary));
@@ -2106,7 +2726,16 @@ void FermentationTouchWorkspace::commitValueEdit() {
     // accepts for this field, so a parsed value is stored as-is.
     if (valueEdit_.apply({NumericEditAction::Commit, 0U}) &&
         valueEdit_.committedValue().has_value()) {
-        if (valueEditSlot_ == FermentationUiManualDraftSlot::StartCandidate) {
+        if (valueEditProgramField_.has_value()) {
+            // Program editor: the candidate copy takes the value.
+            if (programEditCandidate_.has_value()) {
+                setProgramNumeric(programEditCandidate_->program,
+                                  *valueEditProgramField_,
+                                  *valueEdit_.committedValue());
+                programEditDirty_ = true;
+            }
+        } else if (valueEditSlot_ ==
+                   FermentationUiManualDraftSlot::StartCandidate) {
             setNumericStartOverride(selectedCandidate_, valueEditField_,
                                     *valueEdit_.committedValue());
         } else {
@@ -2245,6 +2874,276 @@ void FermentationTouchWorkspace::applyManualFieldView(
     if (!view.blockedReason.has_value()) {
         view.blockedReason = key("manual-parameters-not-released");
     }
+}
+
+const ProgramDocument* FermentationTouchWorkspace::storedSelectedProgram(
+    const ProgramCatalog* catalog) const {
+    if (catalog == nullptr || !selectedProgramId_.has_value()) return nullptr;
+    const auto found =
+        std::find_if(catalog->programs.begin(), catalog->programs.end(),
+                     [this](const ProgramDocument& document) {
+                         return document.program.id == *selectedProgramId_;
+                     });
+    return found == catalog->programs.end() ? nullptr : &*found;
+}
+
+ProgramDocument* FermentationTouchWorkspace::ensureProgramCandidate(
+    const ProgramCatalog* catalog) {
+    if (!programEditCandidate_.has_value()) {
+        const auto* stored = storedSelectedProgram(catalog);
+        if (stored == nullptr) return nullptr;
+        programEditCandidate_ = *stored;
+    }
+    return &*programEditCandidate_;
+}
+
+FermentationUiSettingsView FermentationTouchWorkspace::makeSettingsView(
+    const FermentationUiSnapshot& snapshot) const {
+    FermentationUiSettingsView settings;
+    settings.deviceName = deviceName_;
+    // Display convenience only: the Application decides (O4).
+    settings.deviceNameEditable = snapshot.home.activeRunId.empty();
+    settings.serviceAvailable = snapshot.service.available;
+    if (!snapshot.service.available) {
+        settings.serviceReason =
+            snapshot.service.unavailableReason.value_or(key("service-locked"));
+    }
+    settings.deviceNameChangeFailed = deviceNameChangeFailed_;
+    return settings;
+}
+
+FermentationUiProgramEditView FermentationTouchWorkspace::makeProgramEditView(
+    const ProgramCatalog* catalog) const {
+    FermentationUiProgramEditView view;
+    const auto* stored = storedSelectedProgram(catalog);
+    if (programEditOperation_ != FermentationUiProgramEditOperation::Edit) {
+        // Copy and New list the name only (the request carries it); all other
+        // values keep the S6 behaviour.
+        view.rows.emplace_back();
+        view.rowCount = view.rows.size();
+        auto& row = view.rows.back();
+        row.field = EditField::Name;
+        row.label = key(programFieldLabelKey(EditField::Name));
+        if (programEditName_.has_value()) {
+            row.text = *programEditName_;
+        } else if (programEditOperation_ ==
+                       FermentationUiProgramEditOperation::Copy &&
+                   stored != nullptr) {
+            row.text = stored->program.name + " copy";
+        } else {
+            row.text = "-";
+        }
+        row.changed = programEditName_.has_value();
+        view.valid = !programEditName_.has_value() ||
+                     validateVisibleName(*programEditName_) ==
+                         ConfigurationTextStatus::Success;
+        return view;
+    }
+    if (stored == nullptr) return view;
+    view.rows.reserve(kFermentationUiProgramFieldCount);
+    const auto& document =
+        programEditCandidate_.has_value() ? *programEditCandidate_ : *stored;
+    const auto makeRow = [](const ProgramDefinition& program, EditField field) {
+        FermentationUiProgramEditRow row;
+        row.field = field;
+        row.label = key(programFieldLabelKey(field));
+        switch (field) {
+            case EditField::Name:
+                row.text = program.name;
+                break;
+            case EditField::Notes:
+                row.text = program.notes.empty() ? "-" : program.notes;
+                break;
+            case EditField::Preheat:
+                row.valueKey = key(program.preheat ? "value-on" : "value-off");
+                break;
+            case EditField::SensorPreference:
+                row.valueKey =
+                    sensorPreferenceTextKey(program.sensorPreference);
+                break;
+            case EditField::FailurePolicy:
+                row.valueKey =
+                    failurePolicyKey(program.productSensorFailure.policy);
+                break;
+            case EditField::ReturnStrategy:
+                row.valueKey = returnStrategyKey(
+                    program.productSensorFailure.returnStrategy);
+                break;
+            case EditField::CompletionMode:
+                row.valueKey = completionModeTextKey(program.completion.mode);
+                break;
+            default:
+                row.text = programNumericDisplay(
+                    field, programNumericValue(program, field));
+                break;
+        }
+        return row;
+    };
+    for (std::size_t index = 0U; index < kFermentationUiProgramFieldCount;
+         ++index) {
+        const auto field = static_cast<EditField>(index);
+        if (!programFieldVisible(document.program, field)) continue;
+        auto row = makeRow(document.program, field);
+        const auto storedRow = makeRow(stored->program, field);
+        row.changed =
+            row.text != storedRow.text || row.valueKey != storedRow.valueKey;
+        view.rows.push_back(std::move(row));
+        view.rowCount = view.rows.size();
+    }
+    // The candidate must pass the catalog-level program validation and the
+    // owning text rules; without a candidate there is nothing to save.
+    view.valid =
+        programEditCandidate_.has_value() &&
+        validateProgram(document, ValidationPurpose::CatalogTemplate).valid() &&
+        validateVisibleName(document.program.name) ==
+            ConfigurationTextStatus::Success &&
+        validateProgramNotes(document.program.notes) ==
+            ConfigurationTextStatus::Success;
+    return view;
+}
+
+void FermentationTouchWorkspace::openTextEdit(FermentationUiTextTarget target,
+                                              std::string initial) {
+    textTarget_ = target;
+    textEdit_.reset(std::move(initial));
+    pageStack_.push_back(FermentationUiPage::TextEdit);
+    page_ = FermentationUiPage::TextEdit;
+    displayLanguageChangeFailed_ = false;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressSettingsRow(
+    const FermentationUiSnapshot& snapshot, std::size_t row) {
+    FermentationUiWorkspacePress result;
+    switch (static_cast<FermentationUiSettingsRow>(row)) {
+        case FermentationUiSettingsRow::Language:
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateLanguage);
+            break;
+        case FermentationUiSettingsRow::TimeZone:
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateClock);
+            break;
+        case FermentationUiSettingsRow::DeviceName:
+            // `enabled` guarantees no active run in the snapshot; the
+            // Application decides again at the commit.
+            deviceNameChangeFailed_ = false;
+            openTextEdit(FermentationUiTextTarget::DeviceName, deviceName_);
+            result.navigated = true;
+            break;
+        case FermentationUiSettingsRow::Network:
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateNetwork);
+            break;
+        case FermentationUiSettingsRow::WebAccess:
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateWebAccess);
+            break;
+        case FermentationUiSettingsRow::Service:
+            result.navigated =
+                navigate(FermentationUiWorkspaceSlotAction::NavigateService);
+            break;
+    }
+    static_cast<void>(snapshot);
+    return result;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressProgramEditCell(
+    const FermentationUiWorkspaceView& current,
+    const device_platform::DeviceUiTarget& target,
+    const ProgramCatalog* catalog) {
+    FermentationUiWorkspacePress result;
+    const auto& edit = *current.programEdit;
+    if (target.column == 1U) {
+        result.navigated =
+            target.row == 0U ? pager_.moveUp() : pager_.moveDown();
+        return result;
+    }
+    const auto field = edit.rows[current.pager.currentIndex + target.row].field;
+    if (programEditOperation_ != FermentationUiProgramEditOperation::Edit) {
+        // Copy / New: the name goes into the request.
+        openTextEdit(FermentationUiTextTarget::ProgramName,
+                     programEditName_.value_or(std::string{}));
+        result.navigated = true;
+        return result;
+    }
+    auto* candidate = ensureProgramCandidate(catalog);
+    if (candidate == nullptr) return result;
+    if (field == EditField::Name || field == EditField::Notes) {
+        openTextEdit(field == EditField::Name
+                         ? FermentationUiTextTarget::ProgramName
+                         : FermentationUiTextTarget::ProgramNotes,
+                     field == EditField::Name ? candidate->program.name
+                                              : candidate->program.notes);
+        result.navigated = true;
+        return result;
+    }
+    if (isNumericProgramField(field)) {
+        valueEditProgramField_ = field;
+        const auto value = programNumericValue(candidate->program, field);
+        valueEdit_.reset(value.has_value() ? programNumericText(field, *value)
+                                           : std::string{});
+        pageStack_.push_back(FermentationUiPage::ValueEdit);
+        page_ = FermentationUiPage::ValueEdit;
+        displayLanguageChangeFailed_ = false;
+        result.navigated = true;
+        return result;
+    }
+    cycleProgramField(candidate->program, field);
+    programEditDirty_ = true;
+    result.navigated = true;
+    return result;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressKeyboardCell(
+    const device_platform::DeviceUiTarget& target) {
+    FermentationUiWorkspacePress result;
+    const auto key = fermentationUiKeyboardKeyAt(textEdit_.mode(), target.row,
+                                                 target.column);
+    // `enabled` guarantees an existing, allowed key.
+    if (key.kind == FermentationUiKeyboardKeyKind::Clear) {
+        result.navigated = textEdit_.apply({TextEditAction::Clear, ' '});
+    } else if (key.kind == FermentationUiKeyboardKeyKind::Character) {
+        result.navigated =
+            textEdit_.apply({TextEditAction::Character, key.character});
+    }
+    return result;
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::commitTextEdit(
+    const FermentationUiSnapshot& snapshot,
+    const FermentationUiWorkspaceView& current) {
+    FermentationUiWorkspacePress result;
+    // The slot is only enabled for a value the owning text rule accepts.
+    if (!current.textEdit.has_value() || !current.textEdit->commitValid ||
+        !textEdit_.apply({TextEditAction::Commit, ' '}) ||
+        !textEdit_.committedValue().has_value()) {
+        return result;
+    }
+    const auto& value = *textEdit_.committedValue();
+    switch (textTarget_) {
+        case FermentationUiTextTarget::DeviceName:
+            deviceNameChangeFailed_ = false;
+            result.setDeviceName = FermentationUiSetDeviceNameCommand{
+                value, snapshot.revisions.expectedUserConfigurationRevision};
+            break;
+        case FermentationUiTextTarget::ProgramName:
+            if (programEditOperation_ ==
+                FermentationUiProgramEditOperation::Edit) {
+                if (programEditCandidate_.has_value())
+                    programEditCandidate_->program.name = value;
+            } else {
+                programEditName_ = value;
+            }
+            programEditDirty_ = true;
+            break;
+        case FermentationUiTextTarget::ProgramNotes:
+            if (programEditCandidate_.has_value())
+                programEditCandidate_->program.notes = value;
+            programEditDirty_ = true;
+            break;
+    }
+    result.navigated = goBack();
+    return result;
 }
 
 void FermentationTouchWorkspace::setPage(FermentationUiPage page) {

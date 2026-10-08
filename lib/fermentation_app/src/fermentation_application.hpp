@@ -217,6 +217,14 @@ struct WebSessionIssueResult {
 // Owning outcome of a local UserConfiguration change through the
 // ConfigurationService preview/commit path. `commit` is only meaningful when
 // `preview` is Success.
+// Normal user settings the local and later web surfaces may change through
+// applyUserSettings (Issue #172 S10). Only the visible device name is a normal
+// setting here; language and network mode keep their own entries, the time
+// zone belongs to its own owner.
+struct FermentationUiUserSettingsChange {
+    std::optional<std::string> deviceName;
+};
+
 struct ApplicationConfigurationChangeResult {
     ConfigurationPreviewStatus preview{
         ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable};
@@ -285,6 +293,16 @@ class FermentationApplication {
     // preview. Surface-neutral: a later web surface may call it unchanged.
     [[nodiscard]] ApplicationConfigurationChangeResult applyDisplayLanguage(
         const std::string& languageId,
+        const std::optional<UserConfigurationRevision>& expectedRevision);
+    // Persists normal user settings (Issue #172 S10, D5/O4) through preview,
+    // revision validation and confirmation, surface-neutral like
+    // applyDisplayLanguage. The visible device name is validated by the
+    // configuration text rules before a preview slot is taken and is only
+    // changeable while no run is active; this is decided here, not by the UI.
+    // The network (hostname, SoftAP SSID, QR) is neither stopped nor
+    // restarted: derived names follow at the next normal network start.
+    [[nodiscard]] ApplicationConfigurationChangeResult applyUserSettings(
+        const FermentationUiUserSettingsChange& change,
         const std::optional<UserConfigurationRevision>& expectedRevision);
     // Owning ProgramCatalog mutation for the local program management (Issue
     // #172, S6): usage evidence comes from the runtime run state, never from

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "configuration_text.hpp"
+#include "fermentation_touch_workspace.hpp"
 #include "fermentation_ui_editing.hpp"
 #include "standard_program_catalog.hpp"
 
@@ -59,6 +61,117 @@ void test_keypad_key_sequences_commit_the_edited_value() {
     TEST_ASSERT_FALSE(model.apply({NumericEditAction::Commit, 0U}));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(NumericEditState::Editing),
                           static_cast<int>(model.state()));
+}
+
+// S10 keyboard (O3): the model removes whole Unicode scalars, so a prefilled
+// multi-byte name never ends up cut inside a character; the owning text rules
+// decide validity.
+void test_text_backspace_removes_whole_scalars() {
+    // "K\xC3\xBCche \xE2\x82\xAC" = K ü c h e space euro (2- and 3-byte)
+    TextEditModel model{
+        "K\xC3\xBC"
+        "che \xE2\x82\xAC"};
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Backspace, ' '}));
+    TEST_ASSERT_EQUAL_STRING(
+        "K\xC3\xBC"
+        "che ",
+        model.candidate().c_str());
+    for (int step = 0; step < 4; ++step)
+        TEST_ASSERT_TRUE(model.apply({TextEditAction::Backspace, ' '}));
+    TEST_ASSERT_EQUAL_STRING("K\xC3\xBC", model.candidate().c_str());
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Backspace, ' '}));
+    TEST_ASSERT_EQUAL_STRING("K", model.candidate().c_str());
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Backspace, ' '}));
+    TEST_ASSERT_TRUE(model.candidate().empty());
+    TEST_ASSERT_FALSE(model.apply({TextEditAction::Backspace, ' '}));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::TooShort),
+        static_cast<int>(validateVisibleName(model.candidate())));
+}
+
+void test_keyboard_text_sequences_meet_the_owning_name_rules() {
+    TextEditModel model;
+    for (const char c : std::string("Gaerschrank 1")) {
+        TEST_ASSERT_TRUE(model.apply({TextEditAction::Character, c}));
+    }
+    TEST_ASSERT_EQUAL_STRING("Gaerschrank 1", model.candidate().c_str());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::Success),
+        static_cast<int>(validateVisibleName(model.candidate())));
+    // A trailing space (the Space key) violates the name rule; the commit slot
+    // follows the rule, not the model.
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Character, ' '}));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::LeadingOrTrailingWhitespace),
+        static_cast<int>(validateVisibleName(model.candidate())));
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Clear, ' '}));
+    TEST_ASSERT_TRUE(model.candidate().empty());
+    // 48 characters are the upper bound; the 49th is refused by the rule.
+    for (int index = 0; index < 48; ++index)
+        TEST_ASSERT_TRUE(model.apply({TextEditAction::Character, 'a'}));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::Success),
+        static_cast<int>(validateVisibleName(model.candidate())));
+    TEST_ASSERT_TRUE(model.apply({TextEditAction::Character, 'a'}));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::TooManyScalars),
+        static_cast<int>(validateVisibleName(model.candidate())));
+    // Notes: empty is valid, the limit is the notes rule.
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ConfigurationTextStatus::Success),
+                          static_cast<int>(validateProgramNotes("")));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::Success),
+        static_cast<int>(validateProgramNotes(std::string(512U, 'n'))));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ConfigurationTextStatus::TooManyScalars),
+        static_cast<int>(validateProgramNotes(std::string(513U, 'n'))));
+}
+
+void test_keyboard_layout_is_one_definition_with_wide_bottom_keys() {
+    using Kind = FermentationUiKeyboardKeyKind;
+    // Row 3 is the same in every mode: Clear (0-1), Space (2-7), `-`, `.`.
+    for (const auto mode : {TextEditMode::Lowercase, TextEditMode::Uppercase,
+                            TextEditMode::Digits, TextEditMode::Symbols}) {
+        TEST_ASSERT_TRUE(fermentationUiKeyboardKeyAt(mode, 3U, 0U).kind ==
+                         Kind::Clear);
+        TEST_ASSERT_TRUE(fermentationUiKeyboardKeyAt(mode, 3U, 1U).kind ==
+                         Kind::Clear);
+        for (std::uint8_t column = 2U; column < 8U; ++column) {
+            const auto key = fermentationUiKeyboardKeyAt(mode, 3U, column);
+            TEST_ASSERT_TRUE(key.kind == Kind::Character);
+            TEST_ASSERT_EQUAL_CHAR(' ', key.character);
+        }
+        TEST_ASSERT_EQUAL_CHAR(
+            '-', fermentationUiKeyboardKeyAt(mode, 3U, 8U).character);
+        TEST_ASSERT_EQUAL_CHAR(
+            '.', fermentationUiKeyboardKeyAt(mode, 3U, 9U).character);
+        // Outside the grid there is no key.
+        TEST_ASSERT_TRUE(fermentationUiKeyboardKeyAt(mode, 4U, 0U).kind ==
+                         Kind::None);
+        TEST_ASSERT_TRUE(fermentationUiKeyboardKeyAt(mode, 0U, 10U).kind ==
+                         Kind::None);
+    }
+    // Every ASCII letter is reachable in the letter modes, every digit in the
+    // digit mode (a name or note can be typed without leaving ASCII).
+    std::string letters;
+    std::string upper;
+    std::string digits;
+    for (std::uint8_t row = 0U; row < 3U; ++row) {
+        for (std::uint8_t column = 0U; column < 10U; ++column) {
+            const auto lower = fermentationUiKeyboardKeyAt(
+                TextEditMode::Lowercase, row, column);
+            if (lower.kind == Kind::Character) letters += lower.character;
+            const auto big = fermentationUiKeyboardKeyAt(
+                TextEditMode::Uppercase, row, column);
+            if (big.kind == Kind::Character) upper += big.character;
+            const auto number =
+                fermentationUiKeyboardKeyAt(TextEditMode::Digits, row, column);
+            if (number.kind == Kind::Character) digits += number.character;
+        }
+    }
+    TEST_ASSERT_EQUAL_STRING("abcdefghijklmnopqrstuvwxyz", letters.c_str());
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJKLMNOPQRSTUVWXYZ", upper.c_str());
+    TEST_ASSERT_TRUE(digits.find("1234567890") == 0U);
 }
 
 void test_text_edit_model_has_mode_and_commit_without_validation() {
@@ -197,6 +310,9 @@ int main(int, char**) {
     RUN_TEST(test_numeric_edit_model_keeps_actions_transient);
     RUN_TEST(test_keypad_key_sequences_commit_the_edited_value);
     RUN_TEST(test_text_edit_model_has_mode_and_commit_without_validation);
+    RUN_TEST(test_text_backspace_removes_whole_scalars);
+    RUN_TEST(test_keyboard_text_sequences_meet_the_owning_name_rules);
+    RUN_TEST(test_keyboard_layout_is_one_definition_with_wide_bottom_keys);
     RUN_TEST(
         test_user_program_id_allocation_is_deterministic_and_non_overwriting);
     RUN_TEST(test_program_list_and_mutations_use_catalog_ownership);

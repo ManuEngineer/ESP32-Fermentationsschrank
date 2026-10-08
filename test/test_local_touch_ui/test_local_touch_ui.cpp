@@ -196,7 +196,12 @@ void test_sim_26_workspace_action_matrix_and_owner_paths() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateStatus),
         static_cast<int>(home.slotActions[2]));
-    TEST_ASSERT_FALSE(home.bottomSlots[3].enabled);
+    // Standby slot 3 is `Einstellungen` (O1/D14); Service lives below it.
+    TEST_ASSERT_TRUE(home.bottomSlots[3].enabled);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateSettings),
+        static_cast<int>(home.slotActions[3]));
+    TEST_ASSERT_FALSE(home.blockedReason.has_value());
     TEST_ASSERT_TRUE(workspace.press(standby, bottom(0), &catalog).navigated);
 
     auto active =
@@ -542,11 +547,9 @@ void test_sim_26_shell_locale_and_service_boundaries() {
                                             "factory-reset-required"};
     for (const auto& pack : packs) {
         for (const auto* value : keys) {
-            const auto found =
-                std::find_if(pack.translations.begin(), pack.translations.end(),
-                             [value](const auto& entry) {
-                                 return entry.key.value == value;
-                             });
+            const auto found = std::find_if(
+                pack.translations.begin(), pack.translations.end(),
+                [value](const auto& entry) { return entry.key == value; });
             TEST_ASSERT_TRUE(found != pack.translations.end());
         }
     }
@@ -631,6 +634,10 @@ void test_sim_26_program_editor_actions_are_real_requests() {
     TEST_ASSERT_TRUE(created.status ==
                      FermentationUiProgramEditStatus::Applied);
 
+    // The editor works on the selected stored program; its candidate is a
+    // valid edited copy (the save needs the existing program validation).
+    TEST_ASSERT_TRUE(
+        workspace.selectProgram(catalog.programs.back().program.id, catalog));
     workspace.setPage(FermentationUiPage::ProgramEdit);
     workspace.setProgramEditOperation(FermentationUiProgramEditOperation::Edit);
     workspace.setProgramEditCandidate(catalog.programs.back());
@@ -947,21 +954,18 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
     auto snapshot =
         snapshotFor(ProcessState::Standby, FermentationHomeMode::Standby);
     FermentationTouchWorkspace workspace;
-    workspace.setPage(FermentationUiPage::HeaderLanguage);
+    workspace.setPage(FermentationUiPage::Settings);
 
-    // Existing header navigation is unchanged; the new entry is slot 3.
+    // The entry is the `Webzugang` row of the settings page (D13): scroll to
+    // the window Device name / Network / Web access and tap the third row.
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
+    TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(2)).navigated);
     auto view = workspace.view(snapshot);
-    TEST_ASSERT_TRUE(view.bottomSlots[1].enabled);
-    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
-    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);
-    TEST_ASSERT_TRUE(view.slotActions[1] ==
-                     FermentationUiWorkspaceSlotAction::NavigateNetwork);
-    TEST_ASSERT_TRUE(view.slotActions[2] ==
-                     FermentationUiWorkspaceSlotAction::NavigateClock);
     TEST_ASSERT_TRUE(view.slotActions[3] ==
-                     FermentationUiWorkspaceSlotAction::NavigateWebAccess);
-
-    const auto entered = workspace.press(snapshot, bottom(3));
+                     FermentationUiWorkspaceSlotAction::NavigateStatus);
+    const auto entered = workspace.press(
+        snapshot,
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 2U, 0U});
     TEST_ASSERT_TRUE(entered.navigated);
     TEST_ASSERT_FALSE(entered.openWebProvisioningWindow.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderWebAccess),
@@ -1010,10 +1014,10 @@ void test_web_access_page_is_reachable_and_slot_follows_application_state() {
     TEST_ASSERT_TRUE(opened.openWebProvisioningWindow.has_value());
     TEST_ASSERT_FALSE(opened.navigated);
 
-    // Back returns to the language page.
+    // Back returns to the settings page it was entered from.
     const auto back = workspace.press(snapshot, bottom(0));
     TEST_ASSERT_TRUE(back.navigated);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderLanguage),
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Settings),
                           static_cast<int>(workspace.page()));
 }
 
@@ -1528,17 +1532,16 @@ void test_language_page_rows_issue_a_language_intent_and_keep_the_slots() {
     const auto view = workspace.view(snapshot);
     TEST_ASSERT_EQUAL_UINT32(3U,
                              static_cast<std::uint32_t>(view.pager.itemCount));
-    // Slots 1..3 stay as before (network, clock, the provisional #170
-    // web access entry).
+    // Slots 1 and 2 stay (network, clock); the provisional #170 web access
+    // slot 3 moved to the settings page (D13).
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateNetwork),
         static_cast<int>(view.slotActions[1]));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateClock),
         static_cast<int>(view.slotActions[2]));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(FermentationUiWorkspaceSlotAction::NavigateWebAccess),
-        static_cast<int>(view.slotActions[3]));
+    TEST_ASSERT_TRUE(view.slotActions[3] !=
+                     FermentationUiWorkspaceSlotAction::NavigateWebAccess);
 
     const std::array<const char*, 3U> expected{"de", "en", "es"};
     for (std::uint8_t row = 0U; row < expected.size(); ++row) {
@@ -1576,9 +1579,10 @@ void test_language_page_rows_issue_a_language_intent_and_keep_the_slots() {
     TEST_ASSERT_FALSE(undecidable.setDisplayLanguage
                           ->expectedUserConfigurationRevision.has_value());
 
-    // The slot press path is unchanged: slot 3 still opens the web access page.
+    // Slot 3 is the common status slot now; the web access entry is the
+    // `Webzugang` row of the settings page.
     TEST_ASSERT_TRUE(workspace.press(snapshot, bottom(3)).navigated);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::HeaderWebAccess),
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(FermentationUiPage::Status),
                           static_cast<int>(workspace.page()));
 }
 
@@ -2260,6 +2264,806 @@ void test_cooling_plan_pages_edit_the_real_target_only() {
     }
 }
 
+// ---- S10: settings, keyboard, program editor --------------------------------
+
+struct SettingsFixture {
+    FermentationUiSnapshot snapshot;
+    FermentationTouchWorkspace workspace;
+
+    SettingsFixture()
+        : snapshot(snapshotFor(ProcessState::Standby,
+                               FermentationHomeMode::Standby)) {
+        snapshot.revisions.expectedUserConfigurationRevision =
+            UserConfigurationRevision{5U};
+        snapshot.service.available = true;
+    }
+    FermentationUiWorkspaceView view() const {
+        return workspace.view(snapshot);
+    }
+    FermentationUiWorkspacePress tap(std::uint8_t row, std::uint8_t column) {
+        return workspace.press(snapshot, cellAt(row, column));
+    }
+    FermentationUiWorkspacePress slot(std::uint8_t index) {
+        return workspace.press(snapshot, bottom(index));
+    }
+    void scrollTo(std::size_t index) {
+        while (view().pager.currentIndex < index) {
+            TEST_ASSERT_TRUE(slot(2U).navigated);
+        }
+        while (view().pager.currentIndex > index) {
+            TEST_ASSERT_TRUE(slot(1U).navigated);
+        }
+    }
+    // Types a string on the keyboard through its cells (letters of the
+    // current mode, space, `-`, `.`).
+    void typeText(const char* characters) {
+        for (const char* c = characters; *c != '\0'; ++c) {
+            bool found = false;
+            for (std::uint8_t row = 0U; row < 4U && !found; ++row) {
+                for (std::uint8_t column = 0U; column < 10U && !found;
+                     ++column) {
+                    const auto key = fermentationUiKeyboardKeyAt(
+                        view().textEdit->mode, row, column);
+                    if (key.kind == FermentationUiKeyboardKeyKind::Character &&
+                        key.character == *c) {
+                        TEST_ASSERT_TRUE(tap(row, column).navigated);
+                        found = true;
+                    }
+                }
+            }
+            TEST_ASSERT_TRUE(found);
+        }
+    }
+};
+
+void test_standby_slot_three_opens_settings_and_service_lives_below_it() {
+    SettingsFixture fixture;
+    auto home = fixture.view();
+    TEST_ASSERT_TRUE(home.slotActions[3] ==
+                     FermentationUiWorkspaceSlotAction::NavigateSettings);
+    TEST_ASSERT_TRUE(home.bottomSlots[3].enabled);
+    // No Service reason is shown on the home page any more.
+    fixture.snapshot.service.available = false;
+    fixture.snapshot.service.unavailableReason =
+        fermentationTextKey("service-locked");
+    home = fixture.view();
+    TEST_ASSERT_FALSE(home.blockedReason.has_value());
+    TEST_ASSERT_TRUE(home.bottomSlots[3].enabled);
+
+    TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+
+    // The canonical stacks (D14): Home -> Settings -> Service -> Pin.
+    fixture.workspace.setPage(FermentationUiPage::Pin);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Home);
+    fixture.workspace.setPage(FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.view().route.segments.size() >= 2U);
+}
+
+// O1: the order of the rows is part of the contract.
+void test_settings_rows_are_in_the_decided_order_and_open_their_pages() {
+    struct Row {
+        std::size_t index;
+        FermentationUiPage page;
+    };
+    const Row rows[] = {
+        {0U, FermentationUiPage::HeaderLanguage},
+        {1U, FermentationUiPage::HeaderClock},
+        {2U, FermentationUiPage::TextEdit},
+        {3U, FermentationUiPage::HeaderNetwork},
+        {4U, FermentationUiPage::HeaderWebAccess},
+        {5U, FermentationUiPage::Service},
+    };
+    TEST_ASSERT_EQUAL_UINT32(kFermentationUiSettingsRowCount,
+                             sizeof(rows) / sizeof(rows[0]));
+    for (const auto& row : rows) {
+        SettingsFixture fixture;
+        fixture.workspace.setPage(FermentationUiPage::Settings);
+        TEST_ASSERT_EQUAL_UINT32(kFermentationUiSettingsRowCount,
+                                 fixture.view().pager.itemCount);
+        fixture.scrollTo(row.index);
+        const auto opened = fixture.tap(0U, 0U);
+        TEST_ASSERT_TRUE(opened.navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() == row.page);
+        // Back returns to the settings page it was opened from.
+        TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::Settings);
+    }
+    // The three-row window: rows past the end are no target.
+    SettingsFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(5U);
+    TEST_ASSERT_FALSE(fixture.tap(1U, 0U).navigated);
+    TEST_ASSERT_FALSE(fixture.tap(0U, 1U).navigated);
+}
+
+void test_settings_service_and_device_name_rows_state_when_disabled() {
+    SettingsFixture fixture;
+    fixture.snapshot.service.available = false;
+    fixture.snapshot.service.unavailableReason =
+        fermentationTextKey("service-locked");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(3U);  // network, web access, service
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.settings.has_value());
+    TEST_ASSERT_FALSE(view.settings->serviceAvailable);
+    TEST_ASSERT_TRUE(view.settings->serviceReason ==
+                     std::optional<device_platform::TextKey>{
+                         fermentationTextKey("service-locked")});
+    TEST_ASSERT_FALSE(fixture.tap(2U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+    fixture.snapshot.service.available = true;
+    TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Service);
+
+    // The device name row is disabled while a run is active (display of the
+    // O4 gate; the Application decides).
+    SettingsFixture running;
+    running.snapshot =
+        snapshotFor(ProcessState::Fermenting, FermentationHomeMode::ActiveRun);
+    running.snapshot.home.activeRunId = "e1-c1";
+    running.workspace.setPage(FermentationUiPage::Settings);
+    running.scrollTo(2U);
+    TEST_ASSERT_FALSE(running.view().settings->deviceNameEditable);
+    TEST_ASSERT_FALSE(running.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(running.workspace.page() == FermentationUiPage::Settings);
+}
+
+// The firmware texts are immutable static tables: every locale holds the same
+// keys, none is empty, and the views point at static (not owned) storage.
+void test_fermentation_text_packs_are_complete_static_tables() {
+    const auto packs = makeFermentationUiTextPacks();
+    TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
+    const auto& reference = packs.front().translations;
+    TEST_ASSERT_EQUAL_UINT32(183U, reference.size());
+    for (const auto& pack : packs) {
+        TEST_ASSERT_EQUAL_UINT32(reference.size(), pack.translations.size());
+        for (const auto& translation : pack.translations) {
+            TEST_ASSERT_FALSE(translation.key.empty());
+            TEST_ASSERT_FALSE(translation.value.empty());
+            const auto match =
+                std::find_if(reference.begin(), reference.end(),
+                             [&translation](const auto& other) {
+                                 return other.key == translation.key;
+                             });
+            TEST_ASSERT_TRUE(match != reference.end());
+        }
+    }
+    // The views stay valid after the pack vector is copied and destroyed.
+    std::string probe;
+    {
+        const auto copy = packs;
+        probe = std::string{copy.back().translations.begin()->value};
+    }
+    TEST_ASSERT_FALSE(probe.empty());
+}
+
+void test_device_name_is_a_read_only_copy_that_invalidates_the_render_key() {
+    SettingsFixture fixture;
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    const auto first = fixture.workspace.renderRevision();
+    fixture.workspace.adoptDeviceName("Keller");
+    const auto adopted = fixture.workspace.renderRevision();
+    TEST_ASSERT_TRUE(adopted != first);
+    TEST_ASSERT_EQUAL_STRING("Keller",
+                             fixture.view().settings->deviceName.c_str());
+    // The same name again is no visible change.
+    fixture.workspace.adoptDeviceName("Keller");
+    TEST_ASSERT_EQUAL_UINT32(adopted, fixture.workspace.renderRevision());
+}
+
+void test_device_name_editor_commits_through_the_owner_command() {
+    SettingsFixture fixture;
+    fixture.workspace.adoptDeviceName("Keller");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(2U);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::TextEdit);
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.textEdit->target ==
+                     FermentationUiTextTarget::DeviceName);
+    // Prefilled with the owner's name; valid as it stands.
+    TEST_ASSERT_EQUAL_STRING("Keller", view.textEdit->candidate.c_str());
+    TEST_ASSERT_TRUE(view.textEdit->commitValid);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::TextEditCancel);
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::TextEditMode);
+    TEST_ASSERT_TRUE(view.slotActions[2] ==
+                     FermentationUiWorkspaceSlotAction::TextEditBackspace);
+    TEST_ASSERT_TRUE(view.slotActions[3] ==
+                     FermentationUiWorkspaceSlotAction::TextEditCommit);
+
+    // Clear cell (columns 0-1 of row 3), then type with the letter mode,
+    // upper case mode, a space and a hyphen.
+    TEST_ASSERT_TRUE(fixture.tap(3U, 1U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().textEdit->candidate.empty());
+    TEST_ASSERT_FALSE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_FALSE(fixture.slot(3U).navigated);
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);  // upper case
+    TEST_ASSERT_TRUE(fixture.view().textEdit->mode == TextEditMode::Uppercase);
+    fixture.typeText("G");
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);  // digits
+    TEST_ASSERT_TRUE(fixture.view().textEdit->mode == TextEditMode::Digits);
+    fixture.typeText("2 -");
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);  // symbols
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);  // lower case again
+    TEST_ASSERT_TRUE(fixture.view().textEdit->mode == TextEditMode::Lowercase);
+    fixture.typeText("x");
+    TEST_ASSERT_EQUAL_STRING("G2 -x",
+                             fixture.view().textEdit->candidate.c_str());
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);  // backspace
+    TEST_ASSERT_EQUAL_STRING("G2 -",
+                             fixture.view().textEdit->candidate.c_str());
+    // A trailing hyphen is allowed by the name rule, the old text is gone.
+    fixture.typeText("b");
+
+    const auto commit = fixture.slot(3U);
+    TEST_ASSERT_TRUE(commit.setDeviceName.has_value());
+    TEST_ASSERT_EQUAL_STRING("G2 -b", commit.setDeviceName->deviceName.c_str());
+    TEST_ASSERT_TRUE(
+        commit.setDeviceName->expectedUserConfigurationRevision ==
+        fixture.snapshot.revisions.expectedUserConfigurationRevision);
+    TEST_ASSERT_FALSE(commit.action.has_value());
+    TEST_ASSERT_FALSE(commit.programEdit.has_value());
+    // The page returns to the settings; the owner decides the outcome.
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+    // The workspace keeps showing the owner's name until the owner changes it.
+    TEST_ASSERT_EQUAL_STRING("Keller",
+                             fixture.view().settings->deviceName.c_str());
+
+    // A refused change is shown on the settings page until the next attempt.
+    fixture.workspace.noteDeviceNameOutcome(false);
+    TEST_ASSERT_TRUE(fixture.view().blockedReason ==
+                     std::optional<device_platform::TextKey>{
+                         fermentationTextKey("device-name-change-failed")});
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_FALSE(fixture.view().blockedReason.has_value());
+    // Cancel leaves without a command.
+    const auto cancel = fixture.slot(0U);
+    TEST_ASSERT_TRUE(cancel.navigated);
+    TEST_ASSERT_FALSE(cancel.setDeviceName.has_value());
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+}
+
+void test_keyboard_follows_the_owning_text_rules_and_byte_limit() {
+    SettingsFixture fixture;
+    fixture.workspace.adoptDeviceName("Name");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(2U);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    // Leading space, trailing space, too many characters: no commit.
+    TEST_ASSERT_TRUE(fixture.tap(3U, 0U).navigated);  // clear
+    fixture.typeText(" a");
+    TEST_ASSERT_FALSE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.tap(3U, 0U).navigated);
+    fixture.typeText("a ");
+    TEST_ASSERT_FALSE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.tap(3U, 0U).navigated);
+    for (int index = 0; index < 48; ++index) fixture.typeText("a");
+    TEST_ASSERT_TRUE(fixture.view().textEdit->commitValid);
+    fixture.typeText("a");  // 49 characters: still typeable, not valid
+    TEST_ASSERT_FALSE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_FALSE(fixture.slot(3U).navigated);
+    // The byte limit stops further input (the cells report blocked).
+    while (!fixture.view().textEdit->full) fixture.typeText("a");
+    TEST_ASSERT_EQUAL_UINT32(96U, fixture.view().textEdit->candidate.size());
+    TEST_ASSERT_FALSE(fixture.tap(0U, 0U).navigated);
+    // Backspace and Clear stay possible.
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);
+    TEST_ASSERT_FALSE(fixture.view().textEdit->full);
+}
+
+void test_keyboard_backspace_keeps_a_multibyte_name_valid_utf8() {
+    SettingsFixture fixture;
+    fixture.workspace.adoptDeviceName(
+        "K\xC3\xBC"
+        "che\xE2\x82\xAC");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(2U);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);  // removes the euro sign
+    TEST_ASSERT_EQUAL_STRING(
+        "K\xC3\xBC"
+        "che",
+        fixture.view().textEdit->candidate.c_str());
+    for (int step = 0; step < 3; ++step)
+        TEST_ASSERT_TRUE(fixture.slot(2U).navigated);
+    TEST_ASSERT_EQUAL_STRING("K\xC3\xBC",
+                             fixture.view().textEdit->candidate.c_str());
+    TEST_ASSERT_TRUE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.slot(2U).navigated);
+    TEST_ASSERT_EQUAL_STRING("K", fixture.view().textEdit->candidate.c_str());
+}
+
+// ---- program editor ---------------------------------------------------------
+
+struct EditorFixture {
+    FermentationUiSnapshot snapshot;
+    ProgramCatalog catalog;
+    FermentationTouchWorkspace workspace;
+    std::string id;
+
+    EditorFixture()
+        : snapshot(snapshotFor(ProcessState::Standby,
+                               FermentationHomeMode::Standby)),
+          catalog(catalogWithPrograms(1U)) {
+        snapshot.revisions.expectedUserConfigurationRevision =
+            UserConfigurationRevision{5U};
+        auto& program = catalog.programs.back().program;
+        program.name = "Brot";
+        program.notes = "alt";
+        program.preheat = false;
+        program.maximumProductWaitMinutes.reset();
+        program.sensorPreference = SensorPreference::AirProductOptional;
+        program.productSensorFailure.policy =
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+        program.productSensorFailure.fallbackDelaySeconds = 60U;
+        program.productSensorFailure.returnStrategy =
+            ReturnStrategy::ManualReturnToProduct;
+        program.completion.mode = CompletionMode::FinishWithoutCooling;
+        program.completion.coolingTargetCelsius.reset();
+        program.completion.holdDurationMinutes.reset();
+        id = program.id;
+        TEST_ASSERT_TRUE(workspace.selectProgram(id, catalog));
+        workspace.setProgramEditOperation(
+            FermentationUiProgramEditOperation::Edit);
+        workspace.setPage(FermentationUiPage::ProgramEdit);
+    }
+    FermentationUiWorkspaceView view() const {
+        return workspace.view(snapshot, &catalog);
+    }
+    FermentationUiWorkspacePress tap(std::uint8_t row, std::uint8_t column) {
+        return workspace.press(snapshot, cellAt(row, column), &catalog);
+    }
+    FermentationUiWorkspacePress slot(std::uint8_t index) {
+        return workspace.press(snapshot, bottom(index), &catalog);
+    }
+    void scrollTo(std::size_t index) {
+        while (view().pager.currentIndex < index)
+            TEST_ASSERT_TRUE(tap(1U, 1U).navigated);
+        while (view().pager.currentIndex > index)
+            TEST_ASSERT_TRUE(tap(0U, 1U).navigated);
+    }
+    // Index of a field in the current row list.
+    std::size_t indexOf(FermentationUiProgramField field) const {
+        const auto edit = view().programEdit;
+        for (std::size_t index = 0U; index < edit->rowCount; ++index) {
+            if (edit->rows[index].field == field) return index;
+        }
+        return edit->rowCount;
+    }
+    // Taps the row of the field (scrolled into the window).
+    FermentationUiWorkspacePress tapField(FermentationUiProgramField field) {
+        const auto index = indexOf(field);
+        TEST_ASSERT_TRUE(index < view().programEdit->rowCount);
+        scrollTo(index);
+        return tap(0U, 0U);
+    }
+    void typeDigits(const char* digits) {
+        for (const char* c = digits; *c != '\0'; ++c) {
+            std::uint8_t row = 3U;
+            std::uint8_t column = 1U;
+            if (*c >= '1' && *c <= '9') {
+                row = static_cast<std::uint8_t>((*c - '1') / 3);
+                column = static_cast<std::uint8_t>((*c - '1') % 3);
+            } else if (*c == '.') {
+                column = 0U;
+            }
+            TEST_ASSERT_TRUE(tap(row, column).navigated);
+        }
+    }
+    void setNumeric(FermentationUiProgramField field, const char* digits) {
+        TEST_ASSERT_TRUE(tapField(field).navigated);
+        TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::ValueEdit);
+        while (!view().valueEdit->candidate.empty())
+            TEST_ASSERT_TRUE(slot(1U).navigated);  // backspace
+        typeDigits(digits);
+        TEST_ASSERT_TRUE(slot(3U).navigated);
+        TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::ProgramEdit);
+    }
+};
+
+void test_program_editor_lists_the_local_fields_in_a_fixed_order() {
+    EditorFixture fixture;
+    auto edit = *fixture.view().programEdit;
+    using Field = FermentationUiProgramField;
+    // Preheat off, fallback policy, finish without cooling: no wait row, the
+    // delay row is present, no cooling or hold rows.
+    const Field expected[] = {
+        Field::Name,           Field::Notes,         Field::TargetTemperature,
+        Field::Duration,       Field::Preheat,       Field::SensorPreference,
+        Field::FailurePolicy,  Field::FallbackDelay, Field::ReturnStrategy,
+        Field::MaxTargetReach, Field::CompletionMode};
+    TEST_ASSERT_EQUAL_UINT32(sizeof(expected) / sizeof(expected[0]),
+                             edit.rowCount);
+    for (std::size_t index = 0U; index < edit.rowCount; ++index)
+        TEST_ASSERT_TRUE(edit.rows[index].field == expected[index]);
+    // The technical qualification values are never a row.
+    TEST_ASSERT_TRUE(fixture.view().pager.itemCount == edit.rowCount);
+    // Without a change nothing is marked, and there is nothing to save yet.
+    for (std::size_t index = 0U; index < edit.rowCount; ++index)
+        TEST_ASSERT_FALSE(edit.rows[index].changed);
+    TEST_ASSERT_FALSE(edit.valid);
+    TEST_ASSERT_FALSE(fixture.view().bottomSlots[3].enabled);
+}
+
+void test_program_editor_cycles_drop_values_the_setting_makes_unexpected() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    // Preheat on adds the product wait row; off removes it and its value.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::Preheat).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::MaxProductWait) <
+                     fixture.view().programEdit->rowCount);
+    fixture.setNumeric(Field::MaxProductWait, "30");
+    TEST_ASSERT_TRUE(fixture.tapField(Field::Preheat).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::MaxProductWait) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.view().programEdit->valid);
+
+    // Sensor preference cycles: Product-if-available -> ... The sequence from
+    // AirProductOptional goes to ProductRequired, then AirOnly, then back.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::SensorPreference).navigated);
+    // ProductRequired with the fallback-to-air policy is an incompatible
+    // combination: the existing validator makes the save unavailable.
+    TEST_ASSERT_FALSE(fixture.view().programEdit->valid);
+    TEST_ASSERT_FALSE(fixture.view().bottomSlots[3].enabled);
+    // Changing the failure policy fixes it (and drops the fallback delay).
+    TEST_ASSERT_TRUE(fixture.tapField(Field::FailurePolicy).navigated);
+    TEST_ASSERT_TRUE(fixture.view().programEdit->valid);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::FallbackDelay) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.view().bottomSlots[3].enabled);
+    // AirOnly has one valid combination: it is set and its rows are hidden.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::SensorPreference).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::FailurePolicy) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::ReturnStrategy) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.view().programEdit->valid);
+
+    // Completion: cool then finish adds the cooling target; hold for a
+    // duration adds the hold time; finish drops both.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::CompletionMode).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::CoolingTarget) <
+                     fixture.view().programEdit->rowCount);
+    fixture.setNumeric(Field::CoolingTarget, "8");
+    TEST_ASSERT_TRUE(fixture.tapField(Field::CompletionMode).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::HoldDuration) <
+                     fixture.view().programEdit->rowCount);
+    fixture.setNumeric(Field::HoldDuration, "90");
+    TEST_ASSERT_TRUE(fixture.tapField(Field::CompletionMode).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::HoldDuration) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.tapField(Field::CompletionMode).navigated);
+    TEST_ASSERT_TRUE(fixture.indexOf(Field::CoolingTarget) ==
+                     fixture.view().programEdit->rowCount);
+    TEST_ASSERT_TRUE(fixture.view().programEdit->valid);
+}
+
+void test_program_editor_numeric_fields_use_the_program_validator() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    // Out of the validator's range: no commit; whole numbers have no decimal.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::TargetTemperature).navigated);
+    while (!fixture.view().valueEdit->candidate.empty())
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+    fixture.typeDigits("999");
+    TEST_ASSERT_FALSE(fixture.view().valueEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.view().valueEdit->unit ==
+                     FermentationUiValueUnit::Celsius);
+    TEST_ASSERT_FALSE(fixture.view().valueEdit->wholeNumber);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);  // cancel
+    TEST_ASSERT_FALSE(
+        fixture.view()
+            .programEdit->rows[fixture.indexOf(Field::TargetTemperature)]
+            .changed);
+
+    TEST_ASSERT_TRUE(fixture.tapField(Field::FallbackDelay).navigated);
+    TEST_ASSERT_TRUE(fixture.view().valueEdit->unit ==
+                     FermentationUiValueUnit::Seconds);
+    TEST_ASSERT_TRUE(fixture.view().valueEdit->wholeNumber);
+    TEST_ASSERT_FALSE(fixture.tap(3U, 0U).navigated);  // no decimal key
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+
+    fixture.setNumeric(Field::TargetTemperature, "27.5");
+    fixture.setNumeric(Field::Duration, "90");
+    fixture.setNumeric(Field::MaxTargetReach, "120");
+    const auto edit = *fixture.view().programEdit;
+    TEST_ASSERT_TRUE(edit.valid);
+    TEST_ASSERT_TRUE(
+        edit.rows[fixture.indexOf(Field::TargetTemperature)].changed);
+    TEST_ASSERT_EQUAL_STRING(
+        "27.5 C",
+        edit.rows[fixture.indexOf(Field::TargetTemperature)].text.c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "90 min", edit.rows[fixture.indexOf(Field::Duration)].text.c_str());
+    TEST_ASSERT_FALSE(edit.rows[fixture.indexOf(Field::Preheat)].changed);
+    // The stored program is untouched.
+    TEST_ASSERT_EQUAL_DOUBLE(25.0, *fixture.catalog.programs.back()
+                                        .program.fermentationStages.front()
+                                        .targetTemperatureCelsius);
+}
+
+void test_program_editor_name_and_notes_use_the_keyboard_and_save_the_candidate() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    TEST_ASSERT_TRUE(fixture.tapField(Field::Name).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::TextEdit);
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.textEdit->target ==
+                     FermentationUiTextTarget::ProgramName);
+    TEST_ASSERT_EQUAL_STRING("Brot", view.textEdit->candidate.c_str());
+    // Clear, then "Roggen" through the cells (upper then lower case).
+    TEST_ASSERT_TRUE(fixture.tap(3U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+    const auto press = [&fixture](char c) {
+        for (std::uint8_t row = 0U; row < 3U; ++row)
+            for (std::uint8_t column = 0U; column < 10U; ++column) {
+                const auto key = fermentationUiKeyboardKeyAt(
+                    fixture.view().textEdit->mode, row, column);
+                if (key.kind == FermentationUiKeyboardKeyKind::Character &&
+                    key.character == c) {
+                    TEST_ASSERT_TRUE(fixture.tap(row, column).navigated);
+                    return;
+                }
+            }
+        TEST_ASSERT_TRUE(false);
+    };
+    press('R');
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+    for (const char c : std::string("oggen")) press(c);
+    TEST_ASSERT_EQUAL_STRING("Roggen",
+                             fixture.view().textEdit->candidate.c_str());
+    TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramEdit);
+    auto edit = *fixture.view().programEdit;
+    TEST_ASSERT_EQUAL_STRING("Roggen", edit.rows[0].text.c_str());
+    TEST_ASSERT_TRUE(edit.rows[0].changed);
+    TEST_ASSERT_TRUE(edit.valid);
+
+    // The note: empty is a valid note.
+    TEST_ASSERT_TRUE(fixture.tapField(Field::Notes).navigated);
+    TEST_ASSERT_TRUE(fixture.view().textEdit->target ==
+                     FermentationUiTextTarget::ProgramNotes);
+    TEST_ASSERT_TRUE(fixture.tap(3U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().textEdit->commitValid);
+    TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+
+    // The edits are dirty: leaving needs the discard confirmation.
+    const auto blockedBack = fixture.workspace.press(
+        fixture.snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &fixture.catalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blockedBack.interaction.outcome));
+
+    // Save: the request carries the candidate with both changes.
+    const auto save = fixture.slot(3U);
+    TEST_ASSERT_TRUE(save.programEdit.has_value());
+    TEST_ASSERT_TRUE(save.programEdit->operation ==
+                     FermentationUiProgramEditOperation::Edit);
+    TEST_ASSERT_EQUAL_STRING(fixture.id.c_str(),
+                             save.programEdit->programId.c_str());
+    TEST_ASSERT_TRUE(save.programEdit->candidate.has_value());
+    TEST_ASSERT_EQUAL_STRING("Roggen",
+                             save.programEdit->candidate->program.name.c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "", save.programEdit->candidate->program.notes.c_str());
+    TEST_ASSERT_TRUE(save.programEdit->confirmed);
+    TEST_ASSERT_FALSE(save.programEdit->name.has_value());
+    // The stored program is untouched until the owner applies the request.
+    TEST_ASSERT_EQUAL_STRING(
+        "Brot", fixture.catalog.programs.back().program.name.c_str());
+}
+
+// B2: the shared keyboard page shows its real caller in the route and returns
+// to it on cancel and on commit (the program candidate survives).
+std::vector<std::string> routeValues(const FermentationUiWorkspaceView& view) {
+    std::vector<std::string> values;
+    for (const auto& segment : view.route.segments)
+        values.push_back(segment.value);
+    return values;
+}
+
+void test_text_edit_route_follows_the_device_name_caller() {
+    SettingsFixture fixture;
+    fixture.workspace.adoptDeviceName("Keller");
+    fixture.workspace.setPage(FermentationUiPage::Settings);
+    fixture.scrollTo(2U);
+    TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::TextEdit);
+    const auto route = routeValues(fixture.view());
+    TEST_ASSERT_EQUAL_UINT32(3U, route.size());
+    TEST_ASSERT_EQUAL_STRING("home", route[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("settings", route[1].c_str());
+    TEST_ASSERT_EQUAL_STRING("edit", route[2].c_str());
+    // Cancel returns to Settings.
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+}
+
+void test_text_edit_route_follows_the_program_editor_caller() {
+    for (const auto field : {FermentationUiProgramField::Name,
+                             FermentationUiProgramField::Notes}) {
+        EditorFixture fixture;
+        TEST_ASSERT_TRUE(fixture.tapField(field).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::TextEdit);
+        const std::vector<std::string> expectedValues{"home", "programs",
+                                                      "details"};
+        auto route = routeValues(fixture.view());
+        TEST_ASSERT_EQUAL_UINT32(expectedValues.size() + 1U, route.size());
+        for (std::size_t index = 0U; index < expectedValues.size(); ++index)
+            TEST_ASSERT_EQUAL_STRING(expectedValues[index].c_str(),
+                                     route[index].c_str());
+        TEST_ASSERT_EQUAL_STRING("edit", route.back().c_str());
+        TEST_ASSERT_TRUE(route[1] != "settings");
+
+        // Cancel: back in the editor, candidate untouched.
+        TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::ProgramEdit);
+        // Commit: back in the editor with the typed change in the candidate.
+        TEST_ASSERT_TRUE(fixture.tapField(field).navigated);
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);     // digits
+        TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);  // '1'
+        TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::ProgramEdit);
+        const auto edit = *fixture.view().programEdit;
+        TEST_ASSERT_TRUE(edit.rows[fixture.indexOf(field)].changed);
+    }
+}
+
+void test_program_editor_copy_and_new_take_a_request_name_only() {
+    for (const auto operation : {FermentationUiProgramEditOperation::Copy,
+                                 FermentationUiProgramEditOperation::New}) {
+        EditorFixture fixture;
+        fixture.workspace.setProgramEditOperation(operation);
+        auto edit = *fixture.view().programEdit;
+        TEST_ASSERT_EQUAL_UINT32(1U, edit.rowCount);
+        TEST_ASSERT_TRUE(edit.rows[0].field ==
+                         FermentationUiProgramField::Name);
+        TEST_ASSERT_TRUE(fixture.view().bottomSlots[3].enabled);
+        TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);
+        TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                         FermentationUiPage::TextEdit);
+        // A new name starts empty; the keyboard types it.
+        TEST_ASSERT_TRUE(fixture.view().textEdit->candidate.empty());
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);
+        TEST_ASSERT_TRUE(fixture.slot(1U).navigated);     // digits
+        TEST_ASSERT_TRUE(fixture.tap(0U, 0U).navigated);  // '1'
+        TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
+        edit = *fixture.view().programEdit;
+        TEST_ASSERT_EQUAL_STRING("1", edit.rows[0].text.c_str());
+        const auto save = fixture.slot(3U);
+        TEST_ASSERT_TRUE(save.programEdit.has_value());
+        TEST_ASSERT_TRUE(save.programEdit->operation == operation);
+        TEST_ASSERT_TRUE(save.programEdit->name ==
+                         std::optional<std::string>{"1"});
+        TEST_ASSERT_FALSE(save.programEdit->candidate.has_value());
+    }
+}
+
+void test_program_editor_edits_are_dirty_and_never_touch_the_stored_program() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
+                     device_platform::PageExitRequirement::None);
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
+    fixture.setNumeric(Field::Duration, "75");
+    // Back from the value page keeps the editor dirty (a sub-step, no discard).
+    TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+    TEST_ASSERT_EQUAL_UINT32(60U, *fixture.catalog.programs.back()
+                                       .program.fermentationStages.front()
+                                       .durationMinutes);
+    TEST_ASSERT_EQUAL_STRING(
+        "75 min", fixture.view()
+                      .programEdit->rows[fixture.indexOf(Field::Duration)]
+                      .text.c_str());
+}
+
+// B1: the editor is clean only after the owner accepted the save request. The
+// request itself leaves it dirty; a refused outcome keeps candidate and the
+// discard protection, an accepted one releases both.
+void test_program_save_marks_the_editor_clean_only_after_the_owner_accepts() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    fixture.setNumeric(Field::Duration, "75");
+    const auto save = fixture.slot(3U);
+    TEST_ASSERT_TRUE(save.programEdit.has_value());
+    // The request alone does not clean the editor.
+    TEST_ASSERT_TRUE(fixture.view().route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+
+    // Refused by the owner (stale revision, persistence error, ...).
+    fixture.workspace.noteProgramEditOutcome(false);
+    auto view = fixture.view();
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::ConfirmDiscard);
+    TEST_ASSERT_EQUAL_STRING(
+        "75 min",
+        view.programEdit->rows[fixture.indexOf(Field::Duration)].text.c_str());
+    TEST_ASSERT_TRUE(
+        view.programEdit->rows[fixture.indexOf(Field::Duration)].changed);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);  // retry possible
+    const auto blocked = fixture.workspace.press(
+        fixture.snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &fixture.catalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blocked.interaction.outcome));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::DeviceUiFeedbackIntent::ConfirmationRequired),
+        static_cast<int>(blocked.interaction.feedback));
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramEdit);
+
+    // Accepted by the owner: clean, the candidate is released (the owner's
+    // catalog is the truth again), leaving works.
+    fixture.workspace.noteProgramEditOutcome(true);
+    view = fixture.view();
+    TEST_ASSERT_TRUE(view.route.exitRequirement ==
+                     device_platform::PageExitRequirement::None);
+    TEST_ASSERT_TRUE(view.slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
+}
+
+// A dirty editor cannot be left through the navigation exits; the explicit
+// discard slot is the confirmation. It drops the candidate and the dirty flag,
+// so reopening the editor shows the stored program again.
+void test_program_editor_discard_is_an_explicit_slot_and_drops_the_candidate() {
+    EditorFixture fixture;
+    using Field = FermentationUiProgramField;
+    fixture.setNumeric(Field::Duration, "75");
+    const auto blockedBack = fixture.workspace.press(
+        fixture.snapshot, {device_platform::DeviceUiTargetKind::Back, 0U},
+        &fixture.catalog);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::DeviceUiInteractionOutcome::Blocked),
+        static_cast<int>(blockedBack.interaction.outcome));
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramEdit);
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::DiscardProgramEdit);
+    TEST_ASSERT_TRUE(fixture.view().bottomSlots[0].enabled);
+
+    const auto discard = fixture.slot(0U);
+    TEST_ASSERT_TRUE(discard.navigated);
+    TEST_ASSERT_FALSE(discard.programEdit.has_value());
+    TEST_ASSERT_TRUE(fixture.workspace.page() ==
+                     FermentationUiPage::ProgramSummary);
+    fixture.workspace.setPage(FermentationUiPage::ProgramEdit);
+    const auto edit = *fixture.view().programEdit;
+    TEST_ASSERT_EQUAL_STRING(
+        "60 min", edit.rows[fixture.indexOf(Field::Duration)].text.c_str());
+    for (std::size_t index = 0U; index < edit.rowCount; ++index)
+        TEST_ASSERT_FALSE(edit.rows[index].changed);
+    TEST_ASSERT_FALSE(
+        fixture.view().bottomSlots[3].enabled);  // nothing to save
+    TEST_ASSERT_TRUE(fixture.view().slotActions[0] ==
+                     FermentationUiWorkspaceSlotAction::NavigateBack);
+}
+
 }  // namespace
 
 void setUp() {}
@@ -2318,5 +3122,29 @@ int main(int, char**) {
     RUN_TEST(
         test_manual_timed_completion_cycle_keeps_only_the_used_real_values);
     RUN_TEST(test_cooling_plan_pages_edit_the_real_target_only);
+    RUN_TEST(test_standby_slot_three_opens_settings_and_service_lives_below_it);
+    RUN_TEST(test_settings_rows_are_in_the_decided_order_and_open_their_pages);
+    RUN_TEST(test_settings_service_and_device_name_rows_state_when_disabled);
+    RUN_TEST(
+        test_device_name_is_a_read_only_copy_that_invalidates_the_render_key);
+    RUN_TEST(test_fermentation_text_packs_are_complete_static_tables);
+    RUN_TEST(test_device_name_editor_commits_through_the_owner_command);
+    RUN_TEST(test_keyboard_follows_the_owning_text_rules_and_byte_limit);
+    RUN_TEST(test_keyboard_backspace_keeps_a_multibyte_name_valid_utf8);
+    RUN_TEST(test_program_editor_lists_the_local_fields_in_a_fixed_order);
+    RUN_TEST(
+        test_program_editor_cycles_drop_values_the_setting_makes_unexpected);
+    RUN_TEST(test_program_editor_numeric_fields_use_the_program_validator);
+    RUN_TEST(
+        test_program_editor_name_and_notes_use_the_keyboard_and_save_the_candidate);
+    RUN_TEST(test_program_editor_copy_and_new_take_a_request_name_only);
+    RUN_TEST(test_text_edit_route_follows_the_device_name_caller);
+    RUN_TEST(test_text_edit_route_follows_the_program_editor_caller);
+    RUN_TEST(
+        test_program_editor_edits_are_dirty_and_never_touch_the_stored_program);
+    RUN_TEST(
+        test_program_editor_discard_is_an_explicit_slot_and_drops_the_candidate);
+    RUN_TEST(
+        test_program_save_marks_the_editor_clean_only_after_the_owner_accepts);
     return UNITY_END();
 }

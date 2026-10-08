@@ -104,6 +104,18 @@ class UiRenderGate {
         });
     }
 
+    // The same step, additionally handing the owner's visible device name to
+    // the workspace (a read-only display copy for the settings page and the
+    // editor prefill, never edited locally). It changes the workspace render
+    // revision only when the name actually changed.
+    void beginStep(FermentationApplication& application, bool networkPage,
+                   FermentationTouchWorkspace& workspace) {
+        beginStep(application, networkPage);
+        if (presentation_.hasCopy()) {
+            workspace.adoptDeviceName(presentation_.get().deviceName);
+        }
+    }
+
     // 2. After touch handling: refresh the presentation copy for the page
     //    that will be drawn, build the key and compare it with the last
     //    successfully rendered key. Returns true if a redraw is required.

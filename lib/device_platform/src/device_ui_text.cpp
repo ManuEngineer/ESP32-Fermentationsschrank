@@ -5,14 +5,15 @@
 namespace device_platform {
 namespace {
 
-const std::string* findTranslation(const std::vector<TextPackManifest>& packs,
-                                   const LocaleId& locale, const TextKey& key) {
+const std::string_view* findTranslation(
+    const std::vector<TextPackManifest>& packs, const LocaleId& locale,
+    const TextKey& key) {
     for (const auto& pack : packs) {
         if (pack.nameSpace != key.nameSpace || pack.locale != locale) continue;
         const auto found =
             std::find_if(pack.translations.begin(), pack.translations.end(),
                          [&key](const TextTranslation& translation) {
-                             return translation.key == key;
+                             return translation.key == key.value;
                          });
         if (found != pack.translations.end() && !found->value.empty()) {
             return &found->value;
@@ -27,10 +28,10 @@ TextLookupResult resolveText(const std::vector<TextPackManifest>& packs,
                              const LocaleId& activeLocale, const TextKey& key,
                              const LocaleId& englishFallback) {
     if (const auto* active = findTranslation(packs, activeLocale, key)) {
-        return {*active, TextLookupSource::ActiveLocale};
+        return {std::string{*active}, TextLookupSource::ActiveLocale};
     }
     if (const auto* english = findTranslation(packs, englishFallback, key)) {
-        return {*english, TextLookupSource::EnglishFallback};
+        return {std::string{*english}, TextLookupSource::EnglishFallback};
     }
     return {key.visibleTechnicalKey(), TextLookupSource::VisibleTechnicalKey};
 }
@@ -47,33 +48,33 @@ std::vector<TextPackManifest> composeTextPacks(
 }
 
 std::vector<TextPackManifest> makePlatformTextPacks() {
+    static constexpr std::array<TextTranslation, 5U> kGerman{{
+        {"home", "Home"},
+        {"back", "Zurueck"},
+        {"status", "Status"},
+        {"service", "Service"},
+        {"unavailable", "Nicht verfuegbar"},
+    }};
+    static constexpr std::array<TextTranslation, 5U> kEnglish{{
+        {"home", "Home"},
+        {"back", "Back"},
+        {"status", "Status"},
+        {"service", "Service"},
+        {"unavailable", "Unavailable"},
+    }};
+    static constexpr std::array<TextTranslation, 5U> kSpanish{{
+        {"home", "Inicio"},
+        {"back", "Atras"},
+        {"status", "Estado"},
+        {"service", "Servicio"},
+        {"unavailable", "No disponible"},
+    }};
     const TextNamespace nameSpace{"platform"};
     const auto capabilities = TextPackCapabilities{"latin-de-en-es", 48U, true};
     return {
-        {nameSpace,
-         LocaleId{"de"},
-         capabilities,
-         {{{nameSpace, "home"}, "Home"},
-          {{nameSpace, "back"}, "Zurueck"},
-          {{nameSpace, "status"}, "Status"},
-          {{nameSpace, "service"}, "Service"},
-          {{nameSpace, "unavailable"}, "Nicht verfuegbar"}}},
-        {nameSpace,
-         LocaleId{"en"},
-         capabilities,
-         {{{nameSpace, "home"}, "Home"},
-          {{nameSpace, "back"}, "Back"},
-          {{nameSpace, "status"}, "Status"},
-          {{nameSpace, "service"}, "Service"},
-          {{nameSpace, "unavailable"}, "Unavailable"}}},
-        {nameSpace,
-         LocaleId{"es"},
-         capabilities,
-         {{{nameSpace, "home"}, "Inicio"},
-          {{nameSpace, "back"}, "Atras"},
-          {{nameSpace, "status"}, "Estado"},
-          {{nameSpace, "service"}, "Servicio"},
-          {{nameSpace, "unavailable"}, "No disponible"}}},
+        {nameSpace, LocaleId{"de"}, capabilities, kGerman},
+        {nameSpace, LocaleId{"en"}, capabilities, kEnglish},
+        {nameSpace, LocaleId{"es"}, capabilities, kSpanish},
     };
 }
 

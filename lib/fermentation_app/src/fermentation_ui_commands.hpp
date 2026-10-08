@@ -82,6 +82,15 @@ struct FermentationUiSetDisplayLanguageCommand {
     std::optional<UserConfigurationRevision> expectedUserConfigurationRevision;
 };
 
+// Local intent to change the visible device name (Issue #172 S10). The
+// Application decides (text rules, no active run, revision) and persists; the
+// expected revision is the one the UI snapshot carried, an undecidable
+// (absent) revision is rejected fail-closed.
+struct FermentationUiSetDeviceNameCommand {
+    std::string deviceName;
+    std::optional<UserConfigurationRevision> expectedUserConfigurationRevision;
+};
+
 // Opens the volatile local release window for the web first-time setup. The
 // Application owner decides whether it may open; the UI carries intent only.
 struct FermentationUiOpenWebProvisioningWindowCommand {};
@@ -273,7 +282,8 @@ struct FermentationUiCommand {
                  FermentationUiApplyNetworkModeCommand,
                  FermentationUiBeginHomeWifiReconfigurationCommand,
                  FermentationUiOpenWebProvisioningWindowCommand,
-                 FermentationUiSetDisplayLanguageCommand>
+                 FermentationUiSetDisplayLanguageCommand,
+                 FermentationUiSetDeviceNameCommand>
         operation;
 };
 
@@ -376,6 +386,9 @@ class FermentationUiCommandBridge {
     [[nodiscard]] static FermentationUiCommandResult openWebProvisioningWindow(
         FermentationApplication& application,
         const FermentationUiOpenWebProvisioningWindowCommand& command);
+    [[nodiscard]] static FermentationUiCommandResult setDeviceName(
+        FermentationApplication& application,
+        const FermentationUiSetDeviceNameCommand& command);
     [[nodiscard]] static FermentationUiCommandResult setDisplayLanguage(
         FermentationApplication& application,
         const FermentationUiSetDisplayLanguageCommand& command);
