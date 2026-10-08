@@ -67,6 +67,11 @@ class NetworkConfigurationService final {
     [[nodiscard]] NetworkConfigurationResult beginHomeWifiReconfiguration(
         std::string canonicalDeviceName);
     void discardCandidate() noexcept;
+    // Nach einem Werksreset: verwirft den RAM-Zustand der alten Epoche
+    // (Credential, Kandidat, AP-SSID, Modus). Beendet den Lifecycle nicht; das
+    // ist Aufgabe des Aufrufers (Issue #19, Plan 4.4a). Danach startet das
+    // Netzwerk nur noch ueber `start()` mit den Credentials der neuen Epoche.
+    void discardAfterFactoryReset() noexcept;
 
     [[nodiscard]] device_platform::NetworkStatus status() const {
         return lifecycle_.status();

@@ -162,6 +162,16 @@ NetworkConfigurationResult NetworkConfigurationService::start(
     return {NetworkConfigurationStatus::Applied};
 }
 
+void NetworkConfigurationService::discardAfterFactoryReset() noexcept {
+    activeCredential_.reset();
+    candidate_.reset();
+    activeSoftApSsid_.clear();
+    selectedMode_ = device_platform::NetworkMode::UNSELECTED;
+    initialized_ = false;
+    setupFlowActive_ = false;
+    recoveryRequired_ = false;
+}
+
 NetworkConfigurationScanResult NetworkConfigurationService::scan() {
     if (!initialized_ || !setupFlowActive_ ||
         selectedMode_ == device_platform::NetworkMode::UNSELECTED) {

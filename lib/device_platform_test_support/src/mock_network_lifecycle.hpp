@@ -46,6 +46,10 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
         device_platform::NetworkOperationStatus status) noexcept {
         startStatus_ = status;
     }
+    void setStopStatus(
+        device_platform::NetworkOperationStatus status) noexcept {
+        stopStatus_ = status;
+    }
     void setScanResult(device_platform::NetworkScanResult result) {
         scanResult_ = std::move(result);
     }
@@ -95,6 +99,8 @@ class MockNetworkLifecycle final : public device_platform::INetworkLifecycle {
     std::optional<device_platform::NetworkAccessPointInfo> accessPointInfo_;
     std::uint64_t accessPointInfoRevision_{0U};
     device_platform::NetworkOperationStatus startStatus_{
+        device_platform::NetworkOperationStatus::Applied};
+    device_platform::NetworkOperationStatus stopStatus_{
         device_platform::NetworkOperationStatus::Applied};
     device_platform::NetworkOperationStatus candidateStatus_{
         device_platform::NetworkOperationStatus::Applied};

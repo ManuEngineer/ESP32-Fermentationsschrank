@@ -2517,4 +2517,134 @@ bool FermentationApplication::publishStandby() {
     return true;
 }
 
+// --- Local factory reset flow (Issue #19, plan section 4) -----------------
+
+bool FermentationApplication::factoryResetRunGateOpenUnlocked() const noexcept {
+    // Blocks only while a process is actually running (published active run).
+    // In SAFE_BOOT no run is published and the actuator interlock denies every
+    // output, so the recovery reset stays reachable there.
+    return runtimeRunState_ == nullptr ||
+           (!runtimeRunState_->activeProgramRun.has_value() &&
+            !runtimeRunState_->activeManualRun.has_value());
+}
+
+bool FermentationApplication::factoryResetAvailableUnlocked() const noexcept {
+    // The core needs a loaded configuration runtime (storageEpoch_); a reset
+    // from a configuration without runtime is not offered (R0 stop finding S1).
+    return factoryResetFlow_.configured() &&
+           configurationRecoveryService_ != nullptr &&
+           configurationService_ != nullptr && stateStore_ != nullptr &&
+           storageEpoch_.has_value() && factoryResetRunGateOpenUnlocked();
+}
+
+void FermentationApplication::setFactoryResetHoldMillis(
+    std::optional<std::uint32_t> holdMillis) {
+    const auto guard = applicationCallSerializer_.enter();
+    if (factoryResetFlow_.active()) {
+        return;
+    }
+    factoryResetFlow_ = FactoryResetFlow(holdMillis);
+}
+
+FermentationFactoryResetView FermentationApplication::factoryResetView(
+    std::uint64_t nowMs) const {
+    const auto guard = applicationCallSerializer_.enter();
+    FermentationFactoryResetView view;
+    view.stage = factoryResetFlow_.stage();
+    view.kind = factoryResetFlow_.kind();
+    view.outcome = factoryResetFlow_.outcome();
+    view.available =
+        !factoryResetFlow_.active() && factoryResetAvailableUnlocked();
+    view.holdRequiredMillis = factoryResetFlow_.holdMillis().value_or(0U);
+    view.heldMillis = factoryResetFlow_.heldMillis(nowMs);
+    return view;
+}
+
+bool FermentationApplication::beginFactoryReset(FactoryResetKind kind) {
+    const auto guard = applicationCallSerializer_.enter();
+    // Variant A (PIN protected) is not offered until a local PIN verification
+    // exists (owner decision O-R2).
+    if (kind != FactoryResetKind::PinIndependent ||
+        !factoryResetAvailableUnlocked()) {
+        return false;
+    }
+    return factoryResetFlow_.begin(kind);
+}
+
+bool FermentationApplication::acknowledgeFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    return factoryResetFlow_.acknowledge();
+}
+
+void FermentationApplication::cancelFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.cancel();
+}
+
+void FermentationApplication::dismissFactoryReset() {
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.dismiss();
+}
+
+bool FermentationApplication::endNetworkAfterFactoryReset() {
+    // Network first (disconnects the clients), then the HTTP server. Both are
+    // always attempted. `httpd_stop()` blocks until the server task ended and
+    // handlers may wait for the Application gate, so neither call may run
+    // under it. `running()` is not evidence of completion; the return values
+    // are.
+    bool confirmed = true;
+    if (networkLifecycle_ != nullptr) {
+        confirmed = networkLifecycle_->stop().status ==
+                        device_platform::NetworkOperationStatus::Applied &&
+                    confirmed;
+    }
+    if (httpServerLifecycle_ != nullptr) {
+        confirmed = httpServerLifecycle_->stop() && confirmed;
+    }
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (networkConfigurationService_ != nullptr) {
+            networkConfigurationService_->discardAfterFactoryReset();
+        }
+    }
+    return confirmed;
+}
+
+void FermentationApplication::updateFactoryResetHold(bool held,
+                                                     std::uint64_t nowMs) {
+    FactoryResetCoreResult core = FactoryResetCoreResult::Unavailable;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (!factoryResetFlow_.updateHold(held, nowMs)) {
+            return;
+        }
+        // The flow is Executing. The binding precondition is re-checked here,
+        // under the same gate as the core call and as a run start.
+        if (!factoryResetAvailableUnlocked()) {
+            factoryResetFlow_.finish(FactoryResetOutcome::Rejected);
+            return;
+        }
+        switch (beginAuthorizedFactoryReset().status) {
+            case ConfigurationRecoveryStatus::FactoryResetCompleted:
+                core = FactoryResetCoreResult::Completed;
+                break;
+            case ConfigurationRecoveryStatus::RunPersistenceHandoffUnavailable:
+                core = FactoryResetCoreResult::HandoffUnavailable;
+                break;
+            case ConfigurationRecoveryStatus::ConfigurationUnavailable:
+                core = FactoryResetCoreResult::Unavailable;
+                break;
+            default:
+                core = FactoryResetCoreResult::Failed;
+                break;
+        }
+    }
+    // Outside the gate: ending network and HTTP may block.
+    const bool networkEnded = factoryResetBoundaryCrossed(core)
+                                  ? endNetworkAfterFactoryReset()
+                                  : true;
+    const auto guard = applicationCallSerializer_.enter();
+    factoryResetFlow_.finish(factoryResetOutcomeFor(core, networkEnded));
+}
+
 }  // namespace fermentation

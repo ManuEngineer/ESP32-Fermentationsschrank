@@ -11,6 +11,7 @@
 #include "process_state_machine.hpp"
 #include "platform_services.hpp"
 #include "presentation_state.hpp"
+#include "factory_reset_flow.hpp"
 #include "reset_cause.hpp"
 #include "state_store.hpp"
 #include "sensor_selection.hpp"
@@ -239,6 +240,27 @@ struct FermentationSensorCommissioningSnapshot {
     std::optional<SensorCommissioningRecord> record;
 };
 
+// Secret-free, renderer-independent view of the local factory reset flow.
+struct FermentationFactoryResetView {
+    FactoryResetStage stage{FactoryResetStage::Idle};
+    FactoryResetKind kind{FactoryResetKind::PinIndependent};
+    FactoryResetOutcome outcome{FactoryResetOutcome::None};
+    // A PIN-independent reset may be begun now.
+    bool available{false};
+    // 0 = hold duration not yet configured by the owner.
+    std::uint32_t holdRequiredMillis{0U};
+    std::uint32_t heldMillis{0U};
+
+    friend bool operator==(const FermentationFactoryResetView& left,
+                           const FermentationFactoryResetView& right) {
+        return left.stage == right.stage && left.kind == right.kind &&
+               left.outcome == right.outcome &&
+               left.available == right.available &&
+               left.holdRequiredMillis == right.holdRequiredMillis &&
+               left.heldMillis == right.heldMillis;
+    }
+};
+
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;
@@ -449,6 +471,27 @@ class FermentationApplication {
     // the run-persistence epoch handoff before publishing the new runtime.
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
 
+    // Local multi-step factory reset flow (Issue #19, plan section 4). The
+    // flow only collects the deliberate local confirmations; the preconditions
+    // are decided here under the Application gate and the existing
+    // beginAuthorizedFactoryReset() remains the single reset owner.  Only the
+    // PIN-independent variant (B) is offered: variant A needs a local PIN
+    // verification that does not exist yet (owner decision O-R2).
+    // The hold duration is an owner operating parameter; without it the flow
+    // is unavailable (fail-closed, no default value).
+    void setFactoryResetHoldMillis(std::optional<std::uint32_t> holdMillis);
+    [[nodiscard]] FermentationFactoryResetView factoryResetView(
+        std::uint64_t nowMs) const;
+    [[nodiscard]] bool beginFactoryReset(FactoryResetKind kind);
+    [[nodiscard]] bool acknowledgeFactoryReset();
+    void cancelFactoryReset();
+    void dismissFactoryReset();
+    // One tick of the long press: `held` = the contact is on the hold target.
+    // When the hold duration is reached this runs the reset (core under the
+    // Application gate) and afterwards, outside the gate, ends network and
+    // HTTP; a failure to end them is reported, never hidden.
+    void updateFactoryResetHold(bool held, std::uint64_t nowMs);
+
     // Explicit R1 selected-fallback action.  The command carries only the
     // app-owned confirmation/revision contract; fresh sensor/planner evidence
     // is supplied by the owning application/orchestrator boundary, never by
@@ -535,6 +578,13 @@ class FermentationApplication {
         device_platform::ISecureRandomSource* randomSource,
         device_platform::IReplayDigest* replayDigest);
     void resetAuthenticationState() noexcept;
+    // True unless a process is actually running (published active run).
+    [[nodiscard]] bool factoryResetRunGateOpenUnlocked() const noexcept;
+    [[nodiscard]] bool factoryResetAvailableUnlocked() const noexcept;
+    // Ends the running network connection and the HTTP server after the
+    // irreversible reset boundary (Issue #19, plan 4.4a). Runs outside the
+    // Application gate; returns false if either stop is not confirmed.
+    [[nodiscard]] bool endNetworkAfterFactoryReset();
     // Single place that revokes all browser sessions at a trust boundary and
     // advances the trust generation (callers hold the Application gate).
     void revokeWebSessionsAtTrustBoundary() noexcept;
@@ -616,6 +666,7 @@ class FermentationApplication {
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;
+    FactoryResetFlow factoryResetFlow_;
     ApplicationCallSerializer applicationCallSerializer_;
 };
 

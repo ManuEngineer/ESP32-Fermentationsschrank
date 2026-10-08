@@ -59,7 +59,11 @@ class EspIdfNetworkLifecycle final : public device_platform::INetworkLifecycle {
     [[nodiscard]] bool startWifi();
     [[nodiscard]] bool connectStationOnce();
     [[nodiscard]] bool requestIntentionalDisconnect() noexcept;
-    void stopWifi() noexcept;
+    // True if the Wi-Fi driver is stopped afterwards: it was never started,
+    // `esp_wifi_stop()` returned ESP_OK, or the driver is not initialized
+    // (ESP_ERR_WIFI_NOT_INIT, the only other documented result). Any other
+    // result for a started driver is NOT a stop; `wifiStarted_` stays true.
+    [[nodiscard]] bool stopWifi() noexcept;
     void unregisterEventHandlers() noexcept;
     [[nodiscard]] static bool validAccessPointConfig(
         const EspIdfNetworkLifecycleConfig& config);
