@@ -1,5 +1,8 @@
 #include <unity.h>
 
+#include <algorithm>
+#include <array>
+
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -145,31 +148,63 @@ void test_manifest_rejects_inconsistent_wire_metadata_and_reference_contracts() 
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::InvalidModel);
 
+    // Schema 2 (vor dem Sensorabschnitt): Payload 1 oder 81 Byte.
+    manifest = validManifest();
+    manifest.serviceConfiguration.schemaVersion = static_cast<std::uint32_t>(
+        fermentation::ServiceConfigurationSchema::Version2);
+    for (const std::uint32_t length : {1U, 81U}) {
+        manifest.serviceConfiguration.payloadLength = length;
+        TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestPayload(
+                             manifest, output) ==
+                         ConfigurationGraphCodecStatus::Success);
+    }
+    manifest.serviceConfiguration.payloadLength = 2U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    // Schema 3: Planerabschnitt (1/81) + Sensorabschnitt (1 oder 34 + 16 n,
+    // n = 0..4); 1 Byte allein ist nicht mehr gueltig.
     manifest = validManifest();
     manifest.serviceConfiguration.schemaVersion =
         fermentation::kCurrentServiceConfigurationSchemaVersion;
     manifest.serviceConfiguration.payloadLength = 1U;
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
-        ConfigurationGraphCodecStatus::Success);
+        ConfigurationGraphCodecStatus::InvalidModel);
+    // Gueltig: 2, 82 (Sensorabschnitt leer) sowie 35/115 + 16 n (n = 0..4).
+    const std::array<std::uint32_t, 12> validV3{
+        {2U, 82U, 35U, 51U, 67U, 83U, 99U, 115U, 131U, 147U, 163U, 179U}};
+    for (std::uint32_t length = 1U; length <= 180U; ++length) {
+        manifest.serviceConfiguration.payloadLength = length;
+        const bool expected =
+            std::find(validV3.begin(), validV3.end(), length) != validV3.end();
+        const auto status =
+            fermentation::encodeConfigurationManifestPayload(manifest, output);
+        TEST_ASSERT_TRUE((status == ConfigurationGraphCodecStatus::Success) ==
+                         expected);
+    }
 
+    output = "sentinel";
+    manifest.serviceConfiguration.payloadLength = 3U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+    manifest.serviceConfiguration.payloadLength = static_cast<std::uint32_t>(
+        fermentation::configuration_limits::
+            kMaximumServiceConfigurationPayloadBytes +
+        1U);
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
     manifest.serviceConfiguration.payloadLength = static_cast<std::uint32_t>(
         fermentation::configuration_limits::
             kMaximumServiceConfigurationPayloadBytes);
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::Success);
-
     output = "sentinel";
-    manifest.serviceConfiguration.payloadLength = 2U;
-    TEST_ASSERT_TRUE(
-        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
-        ConfigurationGraphCodecStatus::InvalidModel);
-
-    manifest.serviceConfiguration.payloadLength = static_cast<std::uint32_t>(
-        fermentation::configuration_limits::
-            kMaximumServiceConfigurationPayloadBytes -
-        1U);
+    manifest.serviceConfiguration.payloadLength = 3U;
     TEST_ASSERT_TRUE(
         fermentation::encodeConfigurationManifestPayload(manifest, output) ==
         ConfigurationGraphCodecStatus::InvalidModel);

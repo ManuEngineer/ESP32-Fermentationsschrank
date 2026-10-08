@@ -27,6 +27,8 @@ inline constexpr int kDisplayDataCommandPin = 2;
 inline constexpr int kBacklightPin = 4;
 inline constexpr bool kBacklightActiveHigh = true;
 inline constexpr int kTouchInterruptPin = 39;
+inline constexpr int kOneWireInternalPin = 32;
+inline constexpr int kOneWireProductPin = 33;
 inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
     device_platform::DisplayRotation::Rotate90;
 

@@ -35,7 +35,17 @@ inline constexpr std::size_t kFactoryProgramCount = 4U;
 inline constexpr std::size_t kMaximumUserProgramCount = 12U;
 inline constexpr std::size_t kMaximumProgramCount = 16U;
 inline constexpr std::size_t kMaximumUserConfigurationPayloadBytes = 256U;
-inline constexpr std::size_t kMaximumServiceConfigurationPayloadBytes = 81U;
+// Schema 2: Optionaltag + Aktorplanerparameter (1 + 80 Byte).
+inline constexpr std::size_t kServiceConfigurationSchema2MaximumPayloadBytes =
+    81U;
+// Schema 3 haengt den Sensorabschnitt an: Optionaltag (1) + 2 feste Rollen
+// (je ROM 8 + binary64 8 = 16) + Anzahl (1) + hoechstens 4 Produktfuehler
+// (je 16): 1 + 16 + 16 + 1 + 64 = 98 Byte.
+inline constexpr std::size_t kServiceConfigurationSensorSectionMaximumBytes =
+    1U + 2U * 16U + 1U + 4U * 16U;
+inline constexpr std::size_t kMaximumServiceConfigurationPayloadBytes =
+    kServiceConfigurationSchema2MaximumPayloadBytes +
+    kServiceConfigurationSensorSectionMaximumBytes;
 inline constexpr std::size_t kMaximumProgramCatalogPayloadBytes = 32768U;
 inline constexpr std::size_t kConfigurationReferenceBytes = 34U;
 inline constexpr std::size_t kConfigurationManifestPayloadBytes = 104U;

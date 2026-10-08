@@ -504,6 +504,35 @@ der ersten Feldallokation und lehnt fehlende oder zusaetzliche Bytes ab.
 Die Payload enthaelt exakt null Bytes. Jedes Byte ist zusaetzlich und damit
 ungueltig.
 
+#### ServiceConfiguration Schema 2 und 3
+
+Schema 2 (im Code seit dem Aktorplaner, hier nachgetragen) besteht aus einem
+Optionaltag (`uint8`) und, falls gesetzt, den Aktorplanerparametern (80 Byte);
+hoechstens 81 Byte. Schema 3 (Issue #30) haengt den **Sensorabschnitt** an und
+ist die aktuelle Schreibversion; Schema 1 und 2 bleiben lesbar (Sensorabschnitt
+leer) und werden beim naechsten Service-Commit als Schema 3 geschrieben.
+
+| Reihenfolge | Feld | Wirebreite | Teilgrenze |
+|---:|---|---|---:|
+| 1 | Aktorplaner (Schema 2) | Optionaltag + optionale Struktur | 1 oder 81 Byte |
+| 2 | Sensordatensatz vorhanden | Optionaltag `uint8` | 0 oder 1 |
+| 3 | Schrankluft | ROM `uint64` + Offset `binary64` | 16 Byte |
+| 4 | Kuehlkoerper | ROM `uint64` + Offset `binary64` | 16 Byte |
+| 5 | Anzahl bekannter Produktfuehler | `uint8` | 0..4 |
+| 6 | Produktfuehler 0..n-1 | ROM `uint64` + Offset `binary64` | je 16 Byte |
+
+Felder 3–6 stehen nur bei gesetztem Optionaltag. Der Datensatz ist nur gueltig,
+wenn beide festen Rollen gesetzt sind, alle ROMs != 0 und paarweise verschieden
+sind (auch gegen die Produktfuehler) und jeder Offset endlich und innerhalb der
+Firmwaregrenze liegt; ein leerer Datensatz bedeutet "ungebunden" (die Sensoren
+liefern fail-closed nie `Ok`). Die Sensorabschnitts-Payload hat hoechstens
+`1 + 16 + 16 + 1 + 4 * 16 = 98` Byte, die gesamte Payload damit hoechstens
+`81 + 98 = 179` Byte. Der Decoder lehnt Trailing Bytes, ungueltige Tags,
+Null-/Doppel-ROMs, mehr als vier Produktfuehler und nicht endliche oder
+ausser-Bereich-Offsets ab. Referenzmessgeraet, Referenztemperatur, Datum und
+Bedienquelle sind nicht Teil des Datensatzes (#34/#28); die Revision liefert die
+monotone Versionsinformation. Die Bindung wird nur beim Boot geladen.
+
 #### ProgramCatalog Schema 1
 
 | Reihenfolge | Feld | Wirebreite | Teilgrenze |

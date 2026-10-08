@@ -232,6 +232,13 @@ struct ApplicationConfigurationChangeResult {
         ConfigurationCommitStatus::ConfigurationRuntimeFailure};
 };
 
+// Gelesener Sensor-Inbetriebnahmedatensatz mit der Service-Revision, auf die
+// sich eine spaetere Aenderung bezieht (Issue #30).
+struct FermentationSensorCommissioningSnapshot {
+    ServiceConfigurationRevision revision{0U};
+    std::optional<SensorCommissioningRecord> record;
+};
+
 class FermentationApplication {
    public:
     FermentationApplication() noexcept;
@@ -304,6 +311,19 @@ class FermentationApplication {
     [[nodiscard]] ApplicationConfigurationChangeResult applyUserSettings(
         const FermentationUiUserSettingsChange& change,
         const std::optional<UserConfigurationRevision>& expectedRevision);
+    // Sensor commissioning record (Issue #30, Plan 5.3): ROM, role and offset
+    // per ROM in the ServiceConfiguration. Written only through preview,
+    // revision validation and confirmation, never while a run is active, and
+    // only with a valid record (both fixed roles, distinct non-zero ROMs).
+    // `nullopt` clears the record (the sensors become unbound = fail-closed).
+    // The binding is read at boot; a change takes effect after a restart.
+    [[nodiscard]] ApplicationConfigurationChangeResult applySensorCommissioning(
+        const std::optional<SensorCommissioningRecord>& record,
+        const std::optional<ServiceConfigurationRevision>& expectedRevision);
+    // Current record and service revision; nullopt while no configuration
+    // runtime exists (unbound).
+    [[nodiscard]] std::optional<FermentationSensorCommissioningSnapshot>
+    sensorCommissioning() const;
     // Owning ProgramCatalog mutation for the local program management (Issue
     // #172, S6): usage evidence comes from the runtime run state, never from
     // the UI; preview, validation and confirmation run through the

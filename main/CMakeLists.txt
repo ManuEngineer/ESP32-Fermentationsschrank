@@ -74,7 +74,8 @@ endif()
 set(APP_SOURCE_GIT_SHA_DEFINE "APP_SOURCE_GIT_SHA=\"${APP_SOURCE_GIT_SHA}\"")
 
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
-if(CONFIG_APP_PROFILE_ESP32_BRINGUP AND NOT APP_ISSUE_90_SLICE7_HARNESS)
+if(CONFIG_APP_PROFILE_ESP32_BRINGUP AND NOT APP_ISSUE_90_SLICE7_HARNESS AND
+   NOT APP_ISSUE_30_SENSOR_COMMISSIONING)
     # The Issue #90 Slice-7 harness is a separate, independent hardware
     # runner and must not automatically compile or run the unrelated
     # Issue #29 diagnostic probe (real-hardware panic observed in the
@@ -164,6 +165,35 @@ if(APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER)
     )
 endif()
 
+# Issue #30 sensor commissioning is the private, bring-up-only write path of
+# the persisted sensor record (plan 5.4, O2). It is enabled only by the
+# dedicated build command; release and native builds compile and link none of
+# it. Like the Issue #90 harness it replaces the unrelated Issue #29 probe and
+# reads the console UART.
+set(APP_ISSUE_30_COMPILE_DEFINITIONS)
+if(APP_ISSUE_30_SENSOR_COMMISSIONING)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #30 sensor commissioning is allowed only in esp32_bringup"
+        )
+    endif()
+    if(APP_ISSUE_90_SLICE7_HARNESS OR APP_ISSUE_31_TOUCH_CALIBRATION_HARNESS OR
+       APP_ISSUE_31_TOUCH_CALIBRATION_PROVISIONER)
+        message(FATAL_ERROR
+            "Issue #30 sensor commissioning cannot be combined with another "
+            "Issue #31/#90 harness"
+        )
+    endif()
+    idf_component_optional_requires(PRIVATE esp_driver_uart)
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_30_sensor_commissioning_harness.cpp"
+    )
+    list(APPEND APP_ISSUE_30_COMPILE_DEFINITIONS
+        APP_ISSUE_30_SENSOR_COMMISSIONING=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -176,6 +206,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS}
     ${APP_ISSUE_31_TOUCH_CALIBRATION_COMPILE_DEFINITIONS}
     ${APP_ISSUE_31_TOUCH_CALIBRATION_PROVISION_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_30_COMPILE_DEFINITIONS}
     ${APP_SOURCE_GIT_SHA_DEFINE}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0

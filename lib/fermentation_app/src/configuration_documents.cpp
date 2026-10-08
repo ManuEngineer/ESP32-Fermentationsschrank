@@ -168,7 +168,8 @@ bool configurationContentEquals(const UserConfiguration& left,
 
 bool configurationContentEquals(const ServiceConfiguration& left,
                                 const ServiceConfiguration& right) {
-    return left.actuatorPlannerParameters == right.actuatorPlannerParameters;
+    return left.actuatorPlannerParameters == right.actuatorPlannerParameters &&
+           left.sensorCommissioning == right.sensorCommissioning;
 }
 
 bool configurationContentEquals(const ProgramDocument& left,

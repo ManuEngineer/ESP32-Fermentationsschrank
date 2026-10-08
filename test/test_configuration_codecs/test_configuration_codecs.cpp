@@ -474,8 +474,10 @@ void test_service_configuration_schema_one_two_and_strict_payloads() {
     TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
                          ServiceConfiguration{}, output) ==
                      ConfigurationCodecStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(1U, output.size());
+    // Schema 3: Planer-Optionaltag + Sensor-Optionaltag, beide leer.
+    TEST_ASSERT_EQUAL_UINT32(2U, output.size());
     TEST_ASSERT_EQUAL_UINT8(0U, static_cast<std::uint8_t>(output[0]));
+    TEST_ASSERT_EQUAL_UINT8(0U, static_cast<std::uint8_t>(output[1]));
     TEST_ASSERT_TRUE(
         fermentation::decodeServiceConfigurationPayload(1U, "").status ==
         ConfigurationCodecStatus::Success);
@@ -503,9 +505,11 @@ void test_service_configuration_schema_one_two_and_strict_payloads() {
     TEST_ASSERT_TRUE(
         fermentation::encodeServiceConfigurationPayload(configured, output) ==
         ConfigurationCodecStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(fermentation::configuration_limits::
-                                 kMaximumServiceConfigurationPayloadBytes,
-                             output.size());
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::configuration_limits::
+                kServiceConfigurationSchema2MaximumPayloadBytes +
+            1U,
+        output.size());
     const auto decoded = fermentation::decodeServiceConfigurationPayload(
         fermentation::kCurrentServiceConfigurationSchemaVersion, output);
     TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
@@ -531,10 +535,16 @@ void test_service_configuration_schema_one_two_and_strict_payloads() {
         fermentation::decodeServiceConfigurationPayload(
             fermentation::kCurrentServiceConfigurationSchemaVersion, nonFinite)
             .status == ConfigurationCodecStatus::InvalidWireValue);
+    // Schema 3: ungueltiger Sensor-Optionaltag bzw. Trailing Bytes.
     TEST_ASSERT_TRUE(
         fermentation::decodeServiceConfigurationPayload(
             fermentation::kCurrentServiceConfigurationSchemaVersion,
             std::string("\0x", 2U))
+            .status == ConfigurationCodecStatus::InvalidWireValue);
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion,
+            std::string("\0\0x", 3U))
             .status == ConfigurationCodecStatus::TrailingBytes);
 
     configured.actuatorPlannerParameters->minimumOnMillis = 0U;
@@ -543,6 +553,198 @@ void test_service_configuration_schema_one_two_and_strict_payloads() {
         fermentation::encodeServiceConfigurationPayload(configured, output) ==
         ConfigurationCodecStatus::InvalidDocument);
     TEST_ASSERT_EQUAL_STRING(unchanged.c_str(), output.c_str());
+}
+
+fermentation::SensorCommissioningRecord validSensorRecord(
+    std::size_t productProbes) {
+    using fermentation::SensorRomOffset;
+    const auto offset = [](double celsius) {
+        return device_platform::SensorOffset::create(celsius).offset.value();
+    };
+    fermentation::SensorCommissioningRecord record;
+    record.chamberAir = SensorRomOffset{0x160100000000FF28ULL, offset(0.5)};
+    record.heatsink = SensorRomOffset{0xF40200000000FF28ULL, offset(-0.25)};
+    constexpr uint64_t kProbeRoms[] = {
+        0xD51000000000FF28ULL, 0x8B1100000000FF28ULL, 0x691200000000FF28ULL,
+        0x371300000000FF28ULL};
+    for (std::size_t i = 0U; i < productProbes; ++i) {
+        record.productProbes.push_back(SensorRomOffset{
+            kProbeRoms[i], offset(0.0625 * static_cast<double>(i))});
+    }
+    return record;
+}
+
+void setBigEndian64(std::string& payload, std::size_t index,
+                    std::uint64_t value) {
+    for (std::size_t i = 0U; i < 8U; ++i) {
+        payload[index + i] =
+            static_cast<char>((value >> (56U - 8U * i)) & 0xFFU);
+    }
+}
+
+void test_service_configuration_schema_three_sensor_section_round_trips() {
+    for (std::size_t probes = 0U; probes <= 4U; ++probes) {
+        ServiceConfiguration configured;
+        configured.sensorCommissioning = validSensorRecord(probes);
+        std::string encoded;
+        TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                             configured, encoded) ==
+                         ConfigurationCodecStatus::Success);
+        // Planer leer (1 Byte) + Sensorabschnitt 1 + 32 + 1 + 16 n.
+        TEST_ASSERT_EQUAL_UINT32(1U + 34U + 16U * probes, encoded.size());
+        const auto decoded = fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion, encoded);
+        TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
+        TEST_ASSERT_TRUE(decoded.document->sensorCommissioning ==
+                         configured.sensorCommissioning);
+        TEST_ASSERT_TRUE(fermentation::configurationContentEquals(
+            *decoded.document, configured));
+        // Kanonisch: erneutes Encodieren ist byte-identisch.
+        std::string again;
+        TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                             *decoded.document, again) ==
+                         ConfigurationCodecStatus::Success);
+        TEST_ASSERT_EQUAL_STRING(encoded.c_str(), again.c_str());
+    }
+    // Maximum: Planer vorhanden + vier Produktfuehler = 179 Byte.
+    ServiceConfiguration full;
+    full.actuatorPlannerParameters = validPlannerParameters();
+    full.sensorCommissioning = validSensorRecord(4U);
+    std::string encoded;
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                         full, encoded) == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(fermentation::configuration_limits::
+                                 kMaximumServiceConfigurationPayloadBytes,
+                             encoded.size());
+    TEST_ASSERT_EQUAL_UINT32(179U, encoded.size());
+    TEST_ASSERT_TRUE(
+        fermentation::decodeServiceConfigurationPayload(
+            fermentation::kCurrentServiceConfigurationSchemaVersion, encoded)
+            .status == ConfigurationCodecStatus::Success);
+}
+
+void test_service_configuration_schema_three_sensor_section_is_strict() {
+    ServiceConfiguration configured;
+    configured.sensorCommissioning = validSensorRecord(1U);
+    std::string valid;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeServiceConfigurationPayload(configured, valid) ==
+        ConfigurationCodecStatus::Success);
+    const auto decodeStatus = [](const std::string& payload) {
+        return fermentation::decodeServiceConfigurationPayload(
+                   fermentation::kCurrentServiceConfigurationSchemaVersion,
+                   payload)
+            .status;
+    };
+    // Layout: [0] Planertag, [1] Sensortag, [2..9] ROM Luft, [10..17] Offset,
+    // [18..25] ROM Kuehlkoerper, [26..33] Offset, [34] Anzahl, [35..] Produkt.
+    auto zeroRom = valid;
+    setBigEndian64(zeroRom, 2U, 0U);
+    TEST_ASSERT_TRUE(decodeStatus(zeroRom) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badAirCrc = valid;
+    setBigEndian64(badAirCrc, 2U, 0x170100000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badAirCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badHeatsinkCrc = valid;
+    setBigEndian64(badHeatsinkCrc, 18U, 0xF50200000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badHeatsinkCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badProductCrc = valid;
+    setBigEndian64(badProductCrc, 35U, 0x8C1100000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badProductCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto duplicate = valid;
+    setBigEndian64(duplicate, 18U, 0x160100000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(duplicate) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto duplicateProduct = valid;
+    setBigEndian64(duplicateProduct, 35U, 0xF40200000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(duplicateProduct) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto tooMany = valid;
+    tooMany[34] = static_cast<char>(5);
+    TEST_ASSERT_TRUE(decodeStatus(tooMany) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto outOfRange = valid;
+    setBigEndian64(outOfRange, 10U, 0x4026000000000000ULL);  // 11,0 Grad
+    TEST_ASSERT_TRUE(decodeStatus(outOfRange) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto nonFinite = valid;
+    setBigEndian64(nonFinite, 26U, 0x7FF8000000000000ULL);
+    TEST_ASSERT_TRUE(decodeStatus(nonFinite) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badTag = valid;
+    badTag[1] = static_cast<char>(2);
+    TEST_ASSERT_TRUE(decodeStatus(badTag) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    // Abgeschnitten und Trailing Byte.
+    TEST_ASSERT_TRUE(decodeStatus(valid.substr(0U, valid.size() - 1U)) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    TEST_ASSERT_TRUE(decodeStatus(valid + std::string(1U, 'x')) ==
+                     ConfigurationCodecStatus::TrailingBytes);
+    TEST_ASSERT_TRUE(decodeStatus(std::string(180U, '\0')) ==
+                     ConfigurationCodecStatus::CapacityExceeded);
+
+    // Ungueltige Modelle werden nicht encodiert und lassen die Ausgabe
+    // unveraendert.
+    std::string output = "old";
+    ServiceConfiguration partial;
+    partial.sensorCommissioning = validSensorRecord(0U);
+    partial.sensorCommissioning->heatsink.reset();
+    TEST_ASSERT_TRUE(
+        fermentation::encodeServiceConfigurationPayload(partial, output) ==
+        ConfigurationCodecStatus::InvalidDocument);
+    ServiceConfiguration five;
+    five.sensorCommissioning = validSensorRecord(4U);
+    five.sensorCommissioning->productProbes.push_back(
+        five.sensorCommissioning->productProbes.front());
+    TEST_ASSERT_TRUE(
+        fermentation::encodeServiceConfigurationPayload(five, output) ==
+        ConfigurationCodecStatus::InvalidDocument);
+    TEST_ASSERT_EQUAL_STRING("old", output.c_str());
+}
+
+void test_service_configuration_schema_two_decodes_and_keeps_its_canonical_form() {
+    ServiceConfiguration configured;
+    configured.actuatorPlannerParameters = validPlannerParameters();
+    std::string v2;
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayloadSchema2(
+                         configured, v2) == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(81U, v2.size());
+    const auto decoded = fermentation::decodeServiceConfigurationPayload(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version2),
+        v2);
+    TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_FALSE(decoded.document->sensorCommissioning.has_value());
+    TEST_ASSERT_TRUE(*decoded.document->actuatorPlannerParameters ==
+                     *configured.actuatorPlannerParameters);
+    // V3-Kanonikform = V2-Payload + leerer Sensor-Optionaltag.
+    std::string v3;
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                         configured, v3) == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_STRING((v2 + std::string(1U, '\0')).c_str(), v3.c_str());
+    // Schema 2 kennt keinen Sensorabschnitt.
+    configured.sensorCommissioning = validSensorRecord(0U);
+    std::string rejected = "old";
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayloadSchema2(
+                         configured, rejected) ==
+                     ConfigurationCodecStatus::InvalidDocument);
+    TEST_ASSERT_EQUAL_STRING("old", rejected.c_str());
+    const auto tooLong = fermentation::decodeServiceConfigurationPayload(
+        static_cast<std::uint32_t>(
+            fermentation::ServiceConfigurationSchema::Version2),
+        std::string(82U, '\0'));
+    TEST_ASSERT_TRUE(tooLong.status ==
+                     ConfigurationCodecStatus::CapacityExceeded);
+    const auto emptyV2WithSensorTag =
+        fermentation::decodeServiceConfigurationPayload(
+            static_cast<std::uint32_t>(
+                fermentation::ServiceConfigurationSchema::Version2),
+            std::string(2U, '\0'));
+    TEST_ASSERT_TRUE(emptyV2WithSensorTag.status ==
+                     ConfigurationCodecStatus::TrailingBytes);
 }
 
 void test_program_catalog_round_trip_is_deterministic_and_preserves_notes() {
@@ -868,6 +1070,11 @@ int main() {
         test_payload_capacity_boundaries_are_independent_from_field_validation);
     RUN_TEST(test_invalid_user_encode_leaves_output_unchanged);
     RUN_TEST(test_service_configuration_schema_one_two_and_strict_payloads);
+    RUN_TEST(
+        test_service_configuration_schema_three_sensor_section_round_trips);
+    RUN_TEST(test_service_configuration_schema_three_sensor_section_is_strict);
+    RUN_TEST(
+        test_service_configuration_schema_two_decodes_and_keeps_its_canonical_form);
     RUN_TEST(
         test_program_catalog_round_trip_is_deterministic_and_preserves_notes);
     RUN_TEST(test_program_catalog_factory_payload_has_fixed_golden_bytes);
