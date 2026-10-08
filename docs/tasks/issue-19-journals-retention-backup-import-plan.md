@@ -1,83 +1,72 @@
 # Plan Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import
 
 ```text
-PLAN_REVISION=2 (konsolidiert; ersetzt Revision 1 `d63279646049e9b5e4b4004dda0adaac6c9489b1`, die nie freigegeben war)
+PLAN_REVISION=3 (konsolidiert; ersetzt Revision 2 `407f2f5ce2b1fa0029023c26085afb5bc9b55560` und Revision 1, beide nie freigegeben)
 PLAN_STATUS=DRAFT_AWAITING_PLAN_FIX_VERIFICATION_AND_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
-ISSUE=19 (E2.4), Epic #4
+ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
+OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
+JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-SCOPE_OF_THIS_COMMIT=NUR_PLAN (keine Produktionslogik, keine produktiven Tests, keine Schemas); ROADMAP-Bereinigung und Archiv sind akzeptiert und unveraendert
-IMPLEMENTATION=NOT_STARTED
+SCOPE_OF_THIS_COMMIT=NUR_PLAN (keine Produktionslogik, keine produktiven Tests, keine Schemas, keine Messung); ROADMAP-Bereinigung und Archiv bleiben, nur #19-Zeilen angepasst
+IMPLEMENTATION=NOT_STARTED (dieser Plan autorisiert keinen Produktcode)
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
 
-## 0. Owner-Entscheidungen und Gates
+## 0. Ownerpriorisierung und R1-Scope
 
-Eine Entscheidung gilt nur als getroffen, wenn sie hier ausdruecklich so steht.
-Die Freigabe der exakten Plan-SHA ist davon getrennt. Empfehlungen sind begruendet,
-aber keine stillen Defaults; ohne Ownerentscheid wird der jeweilige Schnitt nicht
-begonnen. Nur echte, nicht bereits durch Scope-/Abhaengigkeitsvertraege
-entschiedene Fragen stehen in der Tabelle.
+Verbindliche Ownerpriorisierung. **Sie ist keine Freigabe fuer Produktcode.** Die
+Umsetzung der vorgesehenen R1-Funktionen beginnt erst nach (a) Plan-Fix-
+Verification, (b) ausdruecklicher Ownerfreigabe genau dieser Plan-SHA und – wo
+unten genannt – (c) dem jeweiligen Vorab-Nachweis und Ownerentscheid.
 
-**Keine Entscheidung (Scope-Abgrenzung, bereits kanonisch).** #19 liefert
-anwendungsinterne Erzeuger/Verbraucher (Journal, Verlauf, Export-Writer,
-Backup-Projektion, Import-Service, Reset-Ablauf) samt Nativtests. HTTP-
-Transport und Bedienoberflaechen sind Sache von #27 (Web, Mutationspfade) und
-#28 (Diagnose/Service/Berichtexport) beziehungsweise der Touch-UI; #28 haengt
-hart an #19. Wird beim Umsetzen ein echter Konflikt dieser Abgrenzung
-gefunden, wird er dem Owner vorgelegt – bis dahin ist das keine offene
-Architekturentscheidung.
-
-| ID | Entscheidung | Alternativen | Empfehlung | Stand |
+| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 3 | Umsetzung |
 |---|---|---|---|---|
-| O1 | Speicherstruktur fuer Journal und Verlauf | **A** feste Ringslots im vorhandenen `state_store`-NVS ueber `IStateStore` (kein Portumbau, kein Erase); **B** eigene LittleFS-/Datenpartition (Partitionstabelle, neue Komponente, ADR-016-Variante B); **C** Hybrid | **A** | **OFFEN**, Gate G1 (mit neuer ADR, siehe 7) |
-| O3 | Geraetegebundene Daten im normalen Backup (`sensorCommissioning` mit ROM-Bindung, Planerparameter) | **A** ausschliessen (nur nutzerbezogene Daten und ausdruecklich erlaubte Serviceparameter); **B** einschliessen mit Warnung; **C** nur mit zusaetzlicher Bestaetigung | **A** (die ROM-Bindung eines Geraets waere auf einem anderen Geraet eine falsche feste Bindung) | **OFFEN** |
-| O4 | Verbleib des kritischen Journals nach lokalem Werksreset | **A** wie der Verlauf per `StorageEpoch` logisch unerreichbar; **B** kritisches Reset-/Sicherheitsjournal bleibt erhalten (dokumentierte Epochenuebernahme) | **A** (`BACKUP_SECURITY_RETENTION.md` sagt "soweit vorgesehen" und ist hier mehrdeutig) | **OFFEN** |
-| O5 | Importtransport/-groesse | **A** begrenzter Gesamtbody; **B** chunkweises Streaming mit Vorab-Validator; **C** reduziertes Maximum (weniger Benutzerprogramme/kuerzere Notizen) | **keine Vorabwahl**: Wahl erst nach der C0-Messung des maximal gueltigen Kandidaten (`ADOPT_OR_BUILD.md`) | **OFFEN**, an G1 gebunden |
-| O6 | Aufbewahrung in Release 1 | **A** feste Konstanten 5 Detail / 50 Zusammenfassungen; **B** innerhalb des Budgets konfigurierbar | **A** (KISS). **Bewusste Abweichung:** `BACKUP_SECURITY_RETENTION.md` und `RUN_PERSISTENCE.md` beschreiben die Werte als innerhalb fester Obergrenzen konfigurierbar; A schiebt die Konfigurierbarkeit auf eine spaetere Erweiterung (die Grenzen gehen nicht ins Wireformat ein) und verlangt einen Dokumentvermerk | **OFFEN** |
-| O7 | Aktivierung des Journals und Startkriterium (Details 4.7) | **A** Das Journal wird innerhalb von #19 nach G1 produktiv komponiert; das Startkriterium aus `RESOURCE_BUDGET_AND_MAINTENANCE.md` ist dann aktiv. `NOT_COMPOSED` ist nur ein Zwischenzustand der Commits; **B** Das Journal bleibt in #19 bis zu einem Hardware-Folgenachweis nicht komponiert; das Startkriterium wird bis dahin **nicht** ausgewertet = ausdruecklich vorgelegte, befristete SSOT-Abweichung (Eintrag in `OPEN_POINTS.md`) | **A** (SSOT-konform; Risiko: Aktivierung ohne Hardwarenachweis, durch #36/#37 und HW-19 begrenzt) | **OFFEN** |
-| O8 | Werksreset-Bedienung | **A** nur anwendungsinterner mehrstufiger Ablauf samt Praesentationsmodell; **B** zusaetzlich LVGL-Bildschirme | **A** | **OFFEN** |
-| O9 | Hardware-Folgeissue | **A** Folgeissue fuer reale NVS-Wear-/Powercut-/Heap-/Timing-Verifikation (HW-19-xx) anlegen, wie #190 zu #30; **B** Hardwarenachweise bleiben in #19 offen | **A** | **OFFEN**; der Agent legt ohne Ownerauftrag kein Issue an |
-| O10 | Exportumfang, falls das Budget den vollstaendigen Laufexport nicht traegt (4.4/4.5) | **A** Export enthaelt nur Programmsnapshot, Endgrund und Aggregate (ohne Ereignis-/Revisionsverlauf); **B** weniger aufbewahrte Detailplaetze; **C** groesserer Speicheranteil (beruehrt Layout, nur mit ADR) | keine Vorabwahl | **BEDINGT**: nur falls C0 zeigt, dass der vollstaendige Umfang nicht passt |
+| 7 | Vollstaendiger **lokaler Werksreset** inkl. PIN-unabhaengigem Recoveryweg bei vergessener Service-PIN und Erhalt der Touchkalibrierung | **R1-PFLICHT** | konkret geplant (Abschnitt 4) | nach Freigabe dieser Plan-SHA und Entscheid O-R1 |
+| 5 | Normales, geheimnisfreies **Backup** | R1-ERWUENSCHT, nur bei nachgewiesener RAM-/Speichereignung | bedingt geplant (Abschnitt 5) | erst nach Ressourcennachweis B0 **und** Ownerentscheid |
+| 6 | Vollstaendig validierter, atomarer **Import** mit Vorschau | R1-ERWUENSCHT, nur bei nachgewiesener RAM-/Speichereignung | bedingt geplant (Abschnitt 5) | erst nach Ressourcennachweis B0 **und** Ownerentscheid |
+| 1 | Priorisiertes **Journal** | NUR PLANEN – `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` | nur Referenz (Anhang A) | **nicht autorisiert** |
+| 2 | Begrenzte **Mess-/Laufhistorie** | NUR PLANEN – `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` | nur Referenz (Anhang A) | **nicht autorisiert** |
+| 3 | **Speicherbereinigung**/Aufbewahrung | NUR PLANEN – `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` | nur Referenz (Anhang A) | **nicht autorisiert** |
+| 4 | **Laufexport** (JSON/CSV) | NUR PLANEN – `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` | nur Referenz (Anhang A) | **nicht autorisiert** |
 
-**Gates (nur diese).**
-
-- **G0** Plan-Fix-Verification und Ownerfreigabe der exakten Plan-SHA.
-- **G1** nach C0: Budgetzahlen und Konstanten, O1, O5 und gegebenenfalls O10.
-- Danach laufen C1–C7 ohne weitere Ownerfreigabe je Schnitt durch; je Schnitt gelten
-  die gezielten Tests und der Builder-Self-Check. Kanonisch erforderlich bleiben
-  danach: Stopp fuer den unabhaengigen Review, Pre-Ready nur auf ausdrueckliche
-  Owneranweisung, Ready/Merge durch den Owner. Ein Stopp mitten in C1–C7 erfolgt
-  nur bei einer materiellen Planabweichung oder einem Stoppbefund.
+Folgen der Zuordnung: Issue #19 bleibt offen und ist mit dem R1-Zuschnitt **nicht**
+abschliessbar (seine Akzeptanzkriterien zu Journal, Bereinigung und Export sind
+nicht Teil der R1-Umsetzung); die Anpassung von Issue-Scope oder -Abhaengigkeiten
+ist ausschliesslich Ownersache (Abschnitt 7). Fuer die zurueckgestellten Bereiche
+wird **keine Architektur festgeschrieben**; die Revision-2-Entwuerfe bleiben nur
+als nicht verbindliche fachliche Referenz in Anhang A und gelten bei einer
+spaeteren Wiederaufnahme nicht als freigegeben (neue vollstaendige Planrevision
+auf dann aktuellem `main`).
 
 ## 1. Ziel und Nicht-Ziele
 
-**Ziel.** Die in #19 verbliebenen hardwareunabhaengigen Datenfunktionen werden
-auf den vorhandenen Persistenz-, Konfigurations- und Recovery-Ownern umgesetzt:
-priorisiertes Journal, begrenzte Mess-/Laufhistorie mit Zusammenfassungen,
-proaktive atomare Bereinigung, Laufexport (JSON/CSV), secret-freies Backup,
-validierter Import mit Vorschau und atomarer Aktivierung sowie der lokale
-Werksreset-Ablauf. Kritische Daten werden strukturell nie vor Komfortdaten
-verdraengt.
+**Ziel (R1).** (1) Der vollstaendige lokale Werksreset ist auf dem Geraet
+bedienbar und bildet die beiden verbindlichen Abstufungen ab – normal
+PIN-geschuetzt und PIN-unabhaengig bei vergessener Service-PIN –, ohne
+Remote-Ausloeser, mit Aktoren AUS, wiederaufnehmbarem Epochenwechsel, Widerruf
+der Secrets/Sessions und Erhalt der geraetespezifischen Touchkalibrierung.
+(2) Backup und Import werden nur dann umgesetzt, wenn ein belastbarer
+Ressourcennachweis vorliegt und der Owner den konkreten Umfang entscheidet.
 
 **Nicht-Ziele.**
 
-- #28 (Diagnoseanzeige, Diagramme, Serviceablauf, Diagnose-/Servicebericht-Export)
-  wird nicht vorgezogen; #19 liefert nur Datenhaltung und die in #19 genannten
-  Exporte (Lauf, Backup).
-- Keine Web-Routen/-Transporte (#27), keine #27-Mutationspfade und keine Touch-Bildschirme ausser gemaess O8-B.
-- Keine neue Datenbank, kein zweites Aktivierungsmodell, kein Pending/Intent,
-  keine neue Prozessschleife, kein neuer Task.
+- Keine Implementierung von Journal, Laufhistorie, Bereinigung, Laufexport; keine
+  C0-Messung dazu; keine Budgetkonstanten dafuer.
+- #28 (Diagnose, Service, Berichtexport) und #27 (Web-Transport, Mutationspfade)
+  werden nicht vorgezogen oder vervollstaendigt.
 - Keine Aenderung an Regelung, Safety, Interlock (#24), Aktorplanung oder der
-  Laufpersistenz-Wahrheit (#17); keine Aktorfreigabe.
-- Keine Authentication-/Connectivity-Domaenen-Erweiterung; Geheimnisse bleiben
-  in ihren bestehenden epochengebundenen Domaenen und werden nie gelesen,
-  gespiegelt oder exportiert.
-- Keine OTA-/PSRAM-Reserve, kein Roh-Flash-Backup (nicht portabel, nicht ueber
-  das Web).
-- Keine Hardwaretests und keine erfundenen Hardware- oder Budgetwerte.
+  Laufpersistenz-Wahrheit (#17); keine Aktorfreigabe; keine Hardwaretests.
+- Keine neue Datenbank, kein zweites Aktivierungsmodell, kein Pending/Intent, keine
+  neue Prozessschleife, kein neuer Task, kein neuer ESP-IDF-Adapter.
+- Keine Authentication-/Connectivity-Domaenen-Erweiterung; Geheimnisse bleiben in
+  ihren bestehenden epochengebundenen Domaenen.
+- Keine OTA-/PSRAM-Reserve, kein Roh-Flash-Backup (nicht portabel, nicht ueber das
+  Web).
+- Keine stille Kuerzung gueltiger Programm-/Konfigurationslimits und keine
+  eigenmaechtige Umdefinition kanonischer Safety-/Release-Vertraege.
 
 ## 2. Verifizierte Live-Ausgangslage (2026-10-08)
 
@@ -108,13 +97,13 @@ Quellen: `BACKUP_SECURITY_RETENTION.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`,
 
 | Anforderung | Bereits vorhanden (Beleg) | Nachweisbare Luecke |
 |---|---|---|
-| Fehler-/Reset-/Ereignisjournal | Nur der Port `IEventJournal::record(ms, string)` (`lib/device_platform/src/event_journal.hpp`) und ein Testmock; **kein Produktaufrufer, keine Produktimplementierung**. Reset-Ursache wird als Evidenz geliefert (`IResetCauseSource`, "not persisted"). `RESOURCE_BUDGET...` legt fest: der Interlock besitzt keine Fault-Historie (`INTERLOCK_OWNS_FAULT_HISTORY=NO`). | Persistentes, typisiertes, priorisiertes Journal; Bootereignis aus Reset-Ursache; Lebenszyklusereignisse. Der Port ist Freitext; kritische Ereignisse brauchen typisierte Records ohne Freitext (siehe 4.3). |
-| Begrenzte Mess-/Laufhistorie | `RunPersistenceSnapshot` ist ausdruecklich nur Run-Domaene; "journal history are outside Issue #17" (`run_persistence_contract.hpp`). | Alles: Fensteraggregate, Laufzusammenfassungen, Aufbewahrung. |
-| Aufbewahrung/Bereinigung | Nur Dokumentvertrag. `IStateStore` kennt ausschliesslich `read`/`write` (kein Erase, keine Aufzaehlung, keine Belegungsabfrage); Test-Store `SimulatedPersistentStateStore` kann Powercuts/Kapazitaetsfehler pro Write injizieren, hat aber keine begrenzte Gesamtkapazitaet. | Strukturell begrenzte Ablage mit Prioritaetsklassen, idempotente Bereinigung, kapazitaetsbegrenzter Testspeicher. |
-| Laufexport JSON/CSV | `web_json_codec` (cJSON, privat gekapselt) fuer `/api/v1/status|temperatures|alerts`; kein Export. #17 haelt nur den **aktiven** Lauf (`RunPersistenceSnapshot`: Programmsnapshot, Revisionen, Prozesszustand); nach Abschluss/Neustart (`NoActiveRun`) sind Programm, Revisionen sowie Phasen-/Ereignisverlauf nicht mehr vorhanden, und es gibt keinen Mehrlauf-Verlauf. | Begrenztes persistiertes Laufarchiv aus den kanonischen Run-Uebergaengen (4.4), Export-Writer (JSON, CSV) hinter einem kleinen Chunk-Writer-Vertrag (4.5), Zeit-/Qualitaetscodierung, Groessengrenze, Redaction. |
-| Normales Backup | Konfigurationsdokumente sind typisiert (`UserConfiguration`, `ServiceConfiguration` Schema 3, `ProgramCatalog`); `ChangeOperation::BackupImport` existiert als Wire-ID, hat **keinen Produzenten**. Doku: kein portables Format ("wird mit Issue #19 implementiert"). | Portables, versioniertes, secret-freies Format (Whitelist-Projektion). |
-| Validierter Import | Mutationspfad mit fluechtiger Vorschau und atomarem Commit existiert: `ConfigurationService::beginPreview` -> `installPreview(origin, operation)` -> `validatePreviewForConfirmation` -> `confirmPreview` (Active/Fallback, ein persistenter Linearisierungspunkt, ADR-018). Programmaenderungen pruefen bereits Run-Evidenz (`applyProgramEdit`, `makeFermentationUiProgramUsageEvidence`); alle Anwendungseinstiege laufen ueber `ApplicationCallSerializer`. | Parser/Validator/Migration fuer externe Kandidaten, Konflikt-/Vorschauprojektion, atomare Lauf-/Import-Entscheidung im vorhandenen `ApplicationCallSerializer`-Guard, Groessenpfad (O5). |
-| Werksreset | Kern vorhanden: `ConfigurationRecoveryService::beginAuthorizedFactoryReset`, `FermentationApplication::beginAuthorizedFactoryReset` (Auth-Gate drainieren, Websessions widerrufen, Auth-Zustand zuruecksetzen, Run-Persistenz-Epochenuebergabe), wiederaufnehmbar ueber `BootstrapState::Resetting`. **Touchkalibrierung bleibt erhalten** und ist getestet (`test_factory_reset_advances_epoch_and_preserves_touch_key`, `..._preserves_real_touch_calibration_record`). | Produktiver Aufrufer fehlt (ausser Testharness `issue_90_slice7`); lokaler mehrstufiger Bestaetigungsablauf, Aktor-AUS-Vorbedingung, Ablehnung entfernter Ausloeser; Behandlung der neuen #19-Domaenen (4.8). Das SAFE_BOOT-Capability-Modell der Touch-Workspace-Schicht kennt `PersistentFactoryReset` nur als Zielbezeichnung. |
+| Fehler-/Reset-/Ereignisjournal *(zurueckgestellt, Anhang A)* | Nur der Port `IEventJournal::record(ms, string)` (`lib/device_platform/src/event_journal.hpp`) und ein Testmock; **kein Produktaufrufer, keine Produktimplementierung**. Reset-Ursache wird als Evidenz geliefert (`IResetCauseSource`, "not persisted"). `RESOURCE_BUDGET...` legt fest: der Interlock besitzt keine Fault-Historie (`INTERLOCK_OWNS_FAULT_HISTORY=NO`). | Persistentes, typisiertes, priorisiertes Journal; Bootereignis aus Reset-Ursache; Lebenszyklusereignisse. Der Port ist Freitext; kritische Ereignisse brauchen typisierte Records ohne Freitext (Anhang A). |
+| Begrenzte Mess-/Laufhistorie *(zurueckgestellt, Anhang A)* | `RunPersistenceSnapshot` ist ausdruecklich nur Run-Domaene; "journal history are outside Issue #17" (`run_persistence_contract.hpp`). | Alles: Fensteraggregate, Laufzusammenfassungen, Aufbewahrung. |
+| Aufbewahrung/Bereinigung *(zurueckgestellt, Anhang A)* | Nur Dokumentvertrag. `IStateStore` kennt ausschliesslich `read`/`write` (kein Erase, keine Aufzaehlung, keine Belegungsabfrage); Test-Store `SimulatedPersistentStateStore` kann Powercuts/Kapazitaetsfehler pro Write injizieren, hat aber keine begrenzte Gesamtkapazitaet. | Strukturell begrenzte Ablage mit Prioritaetsklassen, idempotente Bereinigung, kapazitaetsbegrenzter Testspeicher. |
+| Laufexport JSON/CSV *(zurueckgestellt, Anhang A)* | `web_json_codec` (cJSON, privat gekapselt) fuer `/api/v1/status|temperatures|alerts`; kein Export. #17 haelt nur den **aktiven** Lauf (`RunPersistenceSnapshot`: Programmsnapshot, Revisionen, Prozesszustand); nach Abschluss/Neustart (`NoActiveRun`) sind Programm, Revisionen sowie Phasen-/Ereignisverlauf nicht mehr vorhanden, und es gibt keinen Mehrlauf-Verlauf. | Begrenztes persistiertes Laufarchiv aus den kanonischen Run-Uebergaengen (Anhang A), Export-Writer (JSON, CSV), Zeit-/Qualitaetscodierung, Groessengrenze, Redaction. |
+| Normales Backup *(bedingt, Abschnitt 5)* | Konfigurationsdokumente sind typisiert (`UserConfiguration`, `ServiceConfiguration` Schema 3, `ProgramCatalog`); `ChangeOperation::BackupImport` existiert als Wire-ID, hat **keinen Produzenten**. Doku: kein portables Format ("wird mit Issue #19 implementiert"). | Portables, versioniertes, secret-freies Format (Whitelist-Projektion). |
+| Validierter Import *(bedingt, Abschnitt 5)* | Mutationspfad mit fluechtiger Vorschau und atomarem Commit existiert: `ConfigurationService::beginPreview` -> `installPreview(origin, operation)` -> `validatePreviewForConfirmation` -> `confirmPreview` (Active/Fallback, ein persistenter Linearisierungspunkt, ADR-018). Programmaenderungen pruefen bereits Run-Evidenz (`applyProgramEdit`, `makeFermentationUiProgramUsageEvidence`); alle Anwendungseinstiege laufen ueber `ApplicationCallSerializer`. | Parser/Validator/Migration fuer externe Kandidaten, Konflikt-/Vorschauprojektion, atomare Lauf-/Import-Entscheidung im vorhandenen `ApplicationCallSerializer`-Guard (nur bei Umsetzung, Abschnitt 5), Groessenpfad (O5). |
+| Werksreset *(R1-PFLICHT, Abschnitt 4)* | Kern vorhanden: `ConfigurationRecoveryService::beginAuthorizedFactoryReset` (wiederaufnehmbar ueber `BootstrapState::Resetting`; prueft **nicht** Laufzustand, PIN oder Ursprung), `FermentationApplication::beginAuthorizedFactoryReset` (Auth-Gate drainieren, Websessions widerrufen, Auth-Zustand zuruecksetzen, Run-Epochenuebergabe). **Touchkalibrierung bleibt erhalten** und ist getestet. Regressionen zu Session-Widerruf, Login-Drain und Run-Handoff vorhanden (4.6). | Produktiver Aufrufer fehlt (nur Testharness `issue_90_slice7`); `PersistentFactoryReset` ist in `safeBootUnavailableCapabilities()` als nicht verfuegbar gefuehrt; kein Ablauf mit Mehrfachbestaetigung/Vorbedingungen, keine Bedienung, Ausloeser fuer den PIN-unabhaengigen Vollreset ungeklaert. |
 | Geheimnisse | Epochengebundene Connectivity-/Authentication-Domaenen mit eigenen Records (`cc0`, Typ 9; Typ 11/12), nie in Konfigurationsdokumenten. SoftAP-Passwort ist fluechtig (pro Start neu). | Nur Nachweis: Whitelist-Projektionen und Sentinel-Tests, dass keine Ausgabe Geheimnisse enthaelt. |
 
 Bereits belegte **Wiederverwendung** (nichts davon wird neu erfunden):
@@ -124,33 +113,325 @@ Bereits belegte **Wiederverwendung** (nichts davon wird neu erfunden):
 (#126), cJSON-Codecgrenze, Crc32-Hilfen, `FakeDs18b20Bus`-artige Testhilfen im
 `device_platform_test_support`. Belegte Record-Typ-IDs: 1–12 (naechste freie: 13).
 
-## 4. Zielarchitektur und Vertraege
+## 4. R1-PFLICHT: Vollstaendiger lokaler Werksreset
 
-### 4.1 Modulzuordnung (ADR-013)
+### 4.1 Zwei verbindliche Abstufungen (SSOT: `LOCAL_UI_SETTINGS_SERVICE.md`, ADR-010)
 
-- `device_platform` (app-neutral): `BoundedRecordRing` – feste Anzahl Slots ueber
-  `IStateStore`, kein Fachbegriff.
-- `fermentation_app`: Ereigniskatalog (typisiert), Journal-/Verlaufsdienst,
-  Export-Writer, Backup-Projektion, Import-Service, Reset-Ablauf.
-- `device_platform_test_support`: kapazitaetsbegrenzter Testspeicher.
-- **Kein neuer ESP-IDF-Adapter.** Der vorhandene generische `NvsStateStore` wird
-  unveraendert genutzt; einzige produktive Beruehrung ausserhalb der Libraries
-  ist die budgetgesperrte Komposition in `main/app_main.cpp` (O7).
-- Der Architekturcheck (`check_architecture_boundaries.py`) wird nur erweitert,
-  wo neue Dateien Rollenneutralitaet oder Abhaengigkeitsgrenzen betreffen.
+Beide enden im selben Resetkern (4.2), unterscheiden sich aber in Ausloeser,
+Berechtigung und Voraussetzungen. Sie sind getrennte, eindeutig bestaetigte
+Ablaeufe und werden nicht vermischt – auch nicht mit der PIN-unabhaengigen
+Raw-Touch-Kalibrierungs-Recovery (#31).
 
-### 4.2 Espressif-/Repository-first-Pruefung (Papierpruefung)
-
-| Kandidat | Befund | Entscheidung |
+| Merkmal | **A – Normaler Vollreset** | **B – PIN-unabhaengiger lokaler Vollreset (vergessene PIN)** |
 |---|---|---|
-| NVS (`IStateStore`-Adapter) | vorhanden, Wear-Leveling und Eintrags-CRC, ADR-016 accepted | **verwenden** |
-| `espressif/cjson` | gepinnt, privat in `fermentation_app` | **verwenden** an Export-/Import-Grenze; kein Zweitcodec |
-| LittleFS / FAT mit Wear-Levelling | benoetigt Partitionstabellenaenderung und Komponente; `RUN_PERSISTENCE.md` verweist die Aufteilung NVS/LittleFS/Ring auf #19 | **nicht vorgewaehlt**; nur ueber O1-B/C |
-| ESP-Diagnostics/Insights, Core Dump | cloud-/telemetriegebunden bzw. eigene Partition; widersprechen lokal-first und dem 4-MB-Layout ohne Zusatzpartition | **nicht verwenden**; nicht vertieft |
-| ESP-IDF-Log | fluechtig | kein Journal |
-| CSV | triviales Zeilenformat | **kein Fremdcode**, eigener schmaler Writer |
+| Ausloeser | Menueeintrag im PIN-geschuetzten Servicebereich | bewusster **physischer lokaler Recoveryweg** (Geraet einschalten oder `SAFE_BOOT` aktiv); konkreter Ausloeser: **offen, Entscheid O-R1** (rohe Touchgeste ist `TBD_HARDWARE`) |
+| Berechtigung | lokal verifizierte Service-PIN | keine PIN (die PIN darf fuer ihre eigene Wiederherstellung nicht verlangt werden); **kein isolierter PIN-Reset, kein Servicezugang** |
+| Laufzustand | nur ohne Lauf (kein aktiver, pausierter, unterbrochener, wiederherstellbarer oder unbekannter Lauf) | Recovery-/Bootfenster ohne laufenden Prozess; ein laufender Prozess blockiert den Ablauf (vorher sicher beenden bzw. Neustart) |
+| Bestaetigung | mindestens zweistufig; zeigt geloeschte und wiederhergestellte Daten | mehrstufige Warnung ueber vollstaendigen Datenverlust, danach **lange bewusste lokale Bestaetigung** (Dauer: Ownerwert, nicht geraten) |
+| Aktoren | der Ablauf schaltet nichts ein; Aktorpfad bleibt gesperrt | alle Aktoren und beide BTS7960-Richtungen bleiben AUS; es werden keine Aktor-/Servicefunktionen freigeschaltet |
+| Fernausloesung | nie | nie (nicht ueber Web oder Netzwerk) |
+| Ergebnis | Factory-Programme, Factory-Grenzen, Ersteinrichtungszustand; Touchkalibrierung bleibt | wie A |
 
-### 4.3 Journal und Ringvertrag (kritisch vs. Information)
+Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
+(`LOCAL_UI_SETTINGS_SERVICE.md`); er ersetzt den lokalen Ablauf in R1 nicht.
+
+### 4.2 Wiederverwendete Vertraege (nichts davon wird neu erfunden)
+
+- `ConfigurationRecoveryService::beginAuthorizedFactoryReset` (Resetkern): wiederaufnehmbarer
+  Epochenwechsel ueber `BootstrapState::Resetting` mit Active/Fallback-Invalidierung und neuer
+  Initialkonfiguration, Run-Epochen-Handoff-Beweis (`takeAuthorizedRunEpochHandoffProof`),
+  Zaehler-/Handoff-Sperren. **Der Kern prueft weder Laufzustand noch PIN noch Ursprung** –
+  "authorized" heisst: der Aufrufer ist dafuer verantwortlich. Diese Pruefungen gehoeren
+  deshalb in den neuen Ablauf (4.3).
+- `FermentationApplication::beginAuthorizedFactoryReset`: drainiert den Auth-Operation-Gate,
+  widerruft Websessions an der Vertrauensgrenze, setzt den Authentication-Zustand zurueck,
+  uebergibt die neue Epoche an die Laufpersistenz; laeuft im `ApplicationCallSerializer`.
+- Touchkalibrierung bleibt ueber den Epochenwechsel erhalten (Schluessel `tc0`/`tc1`).
+- Geheimnisse (Connectivity, Authentication) sind epochengebunden und durch den
+  Epochenwechsel logisch unerreichbar; das SoftAP-Passwort ist fluechtig.
+- SAFE_BOOT-Modell der Touch-Workspace-Schicht (`FermentationUiSafeBootTarget`/
+  `...Capability::PersistentFactoryReset`), Zuordnung nach `ACCEPTANCE_TESTS.md` SIM-26-07
+  (Werksreset = #57-Owner); PIN-Eingabemodell `device_ui_pin`; PIN-Pruefung ueber den
+  vorhandenen Authentication-Record-Pfad (`verifyServicePin`).
+
+### 4.3 Nachweisbare Luecken und Modulzustaendigkeit
+
+| Luecke | Zustaendigkeit (ADR-013) |
+|---|---|
+| **Kein produktiver Aufrufer** des Resetkerns (nur der Testharness `issue_90_slice7`). `safeBootUnavailableCapabilities()` fuehrt `PersistentFactoryReset` heute als *nicht verfuegbar*. | neuer Anwendungs-Einstieg in `fermentation_app` |
+| Kein Ablauf mit Mehrfachbestaetigung, Vorbedingungspruefung (Lauf, PIN, Ursprung) und Ergebnisprojektion | `fermentation_app`: kleiner Zustandsautomat `FactoryResetFlow` (Arbeitsname); keine neue Schleife, kein Task |
+| Kein Bedienpfad (Warn-/Bestaetigungsseiten, PIN-Eingabe, Ergebnis) | Praesentationsmodell in `fermentation_app` (bestehende Touch-Workspace-/Device-UI-Vertraege); Bildschirme im vorhandenen Renderer unter `main/` – eigener Schnitt |
+| Ausloeser fuer Ablauf B (physischer Recoveryweg) ist weder implementiert noch im Konzept festgelegt | Ownerentscheid O-R1 |
+| Unklar, ob der Anwendungs-Einstieg auch ohne geladene Runtime (SAFE_BOOT, beschaedigte Konfiguration) lauffaehig ist (`storageEpoch_`/`stateStore_` Voraussetzungen) | R0-Vorpruefung |
+
+### 4.4 Invarianten des Ablaufs (pruefbar)
+
+1. **Nur lokal.** Der Ablauf nimmt Eingaben ausschliesslich ueber die lokale
+   Praesentationsschicht an; es existiert keine HTTP-/Web-Route und kein
+   Netzwerkkommando, das ihn oder den Resetkern erreicht (Routentabelle wird getestet).
+2. **Keine Aktorwirkung.** Vor, waehrend und nach dem Reset kein Aktor-Enable; der
+   Ablauf liest/aendert keine Interlock-Freigabe (#24 unveraendert).
+3. **Vorbedingungen unter dem Guard.** Die bindende Pruefung (kein Lauf; bei A
+   verifizierte PIN) liegt im selben `ApplicationCallSerializer`-Guard wie der Aufruf
+   des Resetkerns; fruehere Pruefungen in der Bedienung sind nur Fruehabbrueche.
+4. **Keine automatische Ausloesung.** Weder Datenfehler noch SAFE_BOOT noch Timeout
+   loesen den Reset aus; Abbruch/Timeout an jeder Stelle verlaesst den Zustand
+   unveraendert (kein Store-Write vor dem bestaetigten Aufruf).
+5. **Wiederaufnehmbar.** Ein Stromausfall mitten im Reset wird durch den vorhandenen
+   `Resetting`-Mechanismus aufgeloest; der Ablauf zeigt danach den Ausgang und stellt
+   keinen eigenen Zwischenzustand her.
+6. **Widerruf.** Nach Erfolg sind alte Websessions und Auth-Zustand ungueltig, alte
+   Credentials logisch unerreichbar; Touchkalibrierung bleibt.
+7. **Ergebnis ehrlich.** Fehler des Kerns (`...Failure`/`...Rejected`/`CounterOverflow`
+   u. a.) werden als solche projiziert; kein erfundenes Erfolgsbild.
+
+### 4.5 Umsetzungsschnitte (nach Planfreigabe; kein Produktcode vorher)
+
+| Schnitt | Inhalt | Gate |
+|---|---|---|
+| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
+| **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; gezielte Tests. | Planfreigabe |
+| **R2** Anbindung | Praesentationsmodell, SAFE_BOOT-Capability `PersistentFactoryReset` verfuegbar machen (nur wenn der Ablauf lauffaehig ist), Aktor-AUS-Beleg ueber Mock-Senken. | Planfreigabe |
+| **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Ausloeser fuer B gemaess O-R1. Hardware-Anzeige `NOT_RUN`. | **O-R1** |
+| **R4** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP; physische Tests als `NOT_RUN`. | – |
+
+Zwischen R0–R4 gibt es keine Ownerfreigabe je Schnitt; gezielte Tests und
+Builder-Self-Check je Schnitt. Danach: Stopp fuer den unabhaengigen Review
+(kanonisch), Pre-Ready nur auf ausdrueckliche Owneranweisung.
+
+### 4.6 Tests (hardwarefrei)
+
+Bereits vorhanden und **wiederzuverwenden** (Regression, nicht neu):
+`test_factory_reset_advances_epoch_and_preserves_touch_key` und
+`test_factory_reset_preserves_real_touch_calibration_record`
+(`test_configuration_recovery_service`);
+`test_composed_dispatcher_factory_reset_revokes_old_sessions`,
+`test_factory_reset_drains_running_login_before_touching_the_store`,
+`test_failed_factory_reset_reopens_the_gate_and_keeps_the_domain`,
+`test_protected_login_session_created_before_reset_is_revoked`
+(`test_web_application_routes`);
+`test_application_reset_hands_off_existing_run_store_to_new_epoch` und
+`test_application_reconstructs_reset_handoff_after_run_write_cut`
+(`test_issue144_run_identity`).
+
+Neu (gezielt, nur fuer den Ablauf):
+
+| ID | Pruefung |
+|---|---|
+| SIM-R-01 | Ablauf A: Stufen nicht uebersprungen; Abbruch/Timeout an jeder Stufe -> Store-Bytes und `stateRevision` unveraendert, Kern nicht aufgerufen |
+| SIM-R-02 | A lehnt bei aktivem/pausiertem/unterbrochenem/wiederherstellbarem/unbekanntem Lauf ab; Pruefung liegt im Guard (Konkurrenzfall Runstart/Reset deterministisch) |
+| SIM-R-03 | A verlangt verifizierte lokale PIN; falsche/gesperrte PIN -> kein Reset, kein Store-Write |
+| SIM-R-04 | B ohne PIN: nur mit allen Warnstufen und langer Bestaetigung; Abbruch -> unveraendert; B gibt keinen Service-/Aktorzugang frei und setzt die PIN nicht isoliert zurueck |
+| SIM-R-05 | Nicht lokale Ursprungsangabe wird abgelehnt; die Web-Routentabelle enthaelt keinen Pfad zu Ablauf oder Kern |
+| SIM-R-06 | Mock-Aktorsenken zaehlen waehrend des gesamten Ablaufs (A und B) null Enable-Aufrufe; Interlock-Permission unveraendert |
+| SIM-R-07 | Stromausfall-Cutpoints des Kerns (vorhandene Matrix) plus Ablauf-Ebene: nach Neustart wird der Ausgang korrekt projiziert; kein erneuter Reset ohne Bestaetigung |
+| SIM-R-08 | Nach Erfolg: alte Session ungueltig, Auth-Zustand zurueckgesetzt, alte Credentials unerreichbar, SoftAP-Passwort neu (Ablauf-Ebene, ergaenzt die obigen Regressionen) |
+| SIM-R-09 | Touchkalibrierung bleibt ueber den vollstaendigen Ablauf A und B erhalten |
+| SIM-R-10 | SAFE_BOOT-Capability `PersistentFactoryReset` nur verfuegbar, wenn der Ablauf lauffaehig ist |
+| SIM-R-11 | Projektion von A nennt geloeschte und wiederhergestellte Daten; B nennt vollstaendigen Datenverlust |
+
+Zusaetzlich je Schnitt: Format-/Tidy-Self-Check, Architekturcheck (+ Selftest) und
+Build beider ESP-IDF-Profile, soweit Library-/`main/`-Quellen betroffen sind. Ein Build
+ersetzt keinen Hardwarenachweis. **Nicht hardwarefrei beweisbar (`NOT_RUN`):**
+physischer Ausloeser von B, reale Anzeige/Touch-Bedienung, Aktor-AUS am realen Geraet,
+Powercut auf echtem Flash, Dauer der langen Bestaetigung am Geraet.
+
+## 5. R1-ERWUENSCHT (bedingt): Backup und Import
+
+**Bedingung.** Umsetzung nur, wenn (1) ein belastbarer Ressourcennachweis (B0) die
+Eignung zeigt, (2) der Owner den konkreten Funktionsumfang danach entscheidet und
+(3) die minimal erforderlichen Transport-/Bedienpfade aus #27 verfuegbar sind
+(5.4). Ohne diese Bedingungen bleibt Abschnitt 5 Planung.
+
+### 5.1 Fachlicher Vertrag (unveraendert aus den kanonischen Dokumenten)
+
+Normales Backup: vollstaendiges, versioniertes, **geheimnisfreies** Bundle (keine
+WLAN-/Web-/PIN-Geheimnisse oder Pruefnachweise, keine Sitzungen/Tokens, keine
+Schluessel, keine Touchkalibrierung, keine rohen Envelopes/Flashkopie). Import:
+Groesse/Format -> Schema -> Integritaet -> getestete Migration -> vollstaendige
+typisierte Validierung (unbekannte kritische Felder und nicht unterstuetzte
+IANA-Zeitzone = Ablehnung) -> Vorschau/Konflikte -> ausdrueckliche Bestaetigung ->
+atomare Aktivierung; keine Teilaktivierung; fehlende Geheimnisse ueberschreiben
+nichts; Import nur bei sicher festgestelltem `NoActiveOrRecoverableRun`.
+
+### 5.2 Wiederverwendung
+
+- Aktivierung ausschliesslich ueber den **vorhandenen** Pfad `beginPreview` ->
+  `installPreview(origin, ChangeOperation::BackupImport)` -> `validatePreviewForConfirmation`
+  -> `confirmPreview` (ADR-018, ein persistenter Linearisierungspunkt). Kein zweiter
+  Aktivierungspfad, kein Pending, kein paralleler Active-Zweig.
+- Lauf-/Import-Entscheidung im selben `ApplicationCallSerializer`-Guard wie der Commit
+  (Anwendungs-Einstieg `confirmBackupImport`); kein zweiter Lock-Owner. Die Pruefung,
+  dass der Runstart den Guard betritt, ist Teil von R0 (4.5).
+- JSON ausschliesslich ueber die vorhandene, gepinnte cJSON-Codecgrenze
+  (`ADOPT_OR_BUILD.md`); kein Zweitcodec. Ausgabe streamend ueber einen kleinen
+  Chunk-Writer-Vertrag in `fermentation_app` (`write(data, length) -> bool`); der
+  Aktorport `IBinaryOutputSink` ist ausdruecklich **nicht** verwendbar.
+
+### 5.3 Ressourcennachweis B0 (vor jeder Implementierung)
+
+B0 bewertet – ohne Produktcode – das effektive Budget einschliesslich Web-/LVGL-Last
+und liefert dem Owner die Entscheidungsgrundlage:
+
+- **Messgroessen:** freier Heap, **groesster zusammenhaengender Block**, minimaler Heap
+  unter Web- und LVGL-Last, Main-/HTTP-Task-Stack-HWM, statischer RAM. Bekannte
+  Ausgangswerte (Hardware-Evidence PR #170/#174): minimaler freier Heap unter Weblast
+  8148 B, Main-Task-Stack-HWM 6056 B, LVGL-Pool 48 KiB. Der groesste zusammenhaengende
+  Block unter Last liegt nicht als belastbarer Wert vor.
+- **Zu bewertender Maximalfall:** der maximal gueltige externe Kandidat, aus dem
+  **gesamten Schema und den unveraenderten Limits** erzeugt (u. a. bis zu
+  `kMaximumUserProgramCount` = 12 Benutzerprogramme, Programmkatalog-Payload bis
+  `kMaximumProgramCatalogPayloadBytes` = 32768 B, Notizen bis 1024 B). Gueltige Limits
+  werden nicht still gekuerzt.
+- **Keine unbewiesenen Puffergarantien:** cJSON baut einen vollstaendigen Baum auf; ein
+  pauschales Einlesen ganzer JSON-Dateien in RAM wird nicht angenommen. Eine
+  Modellrechnung/Hostmessung ersetzt die Geraetemessung nicht; eine Geraetemessung ist
+  Hardwareaktion und braucht eine eigene Ownerfreigabe.
+- **Ergebnis fuer den Owner:** konkrete Strategie (begrenzter Gesamtbody / Chunking mit
+  Vorab-Validator / Export-only) samt Spitzenbedarf, oder die Feststellung, dass der
+  Vollumfang nicht passt. Eine Reduktion von Limits oder Funktionsumfang ist eine
+  **Ownerentscheidung**, nie ein Default.
+
+### 5.4 Minimal erforderliche Bedien-/Transportpfade und #27-Zustaendigkeit
+
+Ein Export allein ist keine benutzbare Funktion; Backup und Import sind ohne
+Dateitransport nicht bedienbar, und das Geraet hat dafuer ausser dem Web keinen Weg
+(keine SD-Karte/USB-Anwendung). Daher gilt: **Backup/Import sind in Release 1 nur
+ueber die Weboberflaeche nutzbar** und haengen an #27. Minimal noetig (Zustaendigkeit
+#27, nicht Teil von #19 und hier nicht vorweggenommen):
+
+1. authentifizierter, lesender Download des Backups (gestreamt);
+2. authentifizierter Import in den Schritten Upload mit begrenzter/gestreamter
+   Annahme und Validierung -> Vorschau mit Konflikten -> ausdrueckliche Bestaetigung;
+3. Sperre/Ablehnung bei nicht sicherem Laufzustand, CSRF/Replay-/Berechtigungs-
+   Vertrag, Body-Limits (der heutige Provisionierungspfad begrenzt Bodies auf 1024 B;
+   ein Import braucht einen eigenen, bewiesenen Annahmepfad).
+
+#19 liefert nur die anwendungsinternen Erzeuger/Verbraucher samt Nativtests. Ob und
+wann #27 die Pfade bereitstellt, ist Voraussetzung fuer die R1-Nutzbarkeit; fehlt
+sie, ist Backup/Import in R1 nicht lieferbar (kein falsches `DONE`).
+
+### 5.5 Schnitte (alle bedingt)
+
+| Schnitt | Inhalt | Gate |
+|---|---|---|
+| **B0** | Ressourcennachweis (5.3), Entscheidungsvorlage | Planfreigabe; danach **Ownerentscheid O-BI** |
+| **B1** | Backup-Erzeuger (Whitelist-Projektion, deterministisch, CRC-32 als Integritaetspruefsumme, kein Manipulationsschutz), Sentinel-Tests gegen Geheimnisse | B0 + O-BI |
+| **B2** | Import-Service (Validator, Migration, Vorschau/Konflikte, `confirmBackupImport` im Guard, vorhandener Preview-/Commit-Pfad), Powercut-/Konkurrenztests | B0 + O-BI + O3 |
+
+Tests (wenn freigegeben): Backup Golden/deterministisch und Whitelist mit Sentinel-
+Geheimnissen (WLAN-/Web-Passwort, PIN-Nachweis, Tokens, SoftAP-Passwort,
+Touchkalibrierung); Importmatrix (unbekanntes Schema/kritisches Feld, Typ/Bereich,
+nicht unterstuetzte Zeitzone, ueberlang, CRC, abgeschnitten, Migration) mit
+unveraendertem Store/`stateRevision` bei jedem Fehler; Import atomar ueber alle
+Write-Cutpoints (nach Neustart exakt alter oder neuer Graph); Konkurrenz Start/Import im
+Guard; Import ueberschreibt weder Geheimnisse noch Touchkalibrierung noch
+Factory-Katalog.
+
+## 6. Zurueckgestellt: Journal, Laufhistorie, Bereinigung, Laufexport (#1–#4)
+
+Status: `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION`. **Keine
+Implementierung, keine C0-Messung, keine Budgetkonstanten, keine festgeschriebene
+Architektur.** Die bisherigen Entwuerfe (Ring-/Journalvertrag, Laufarchiv,
+Aufbewahrung/Bereinigung, Laufexport, Startkriterium) stehen unveraendert in
+Anhang A als nicht verbindliche fachliche Referenz fuer eine spaetere
+Wiederaufnahme. Vor einer Wiederaufnahme ist eine neue vollstaendige Planrevision
+auf dann aktuellem `main` erforderlich; die Konfliktuebersicht (Abschnitt 7) muss
+vorher entschieden sein.
+
+## 7. R1-Vertragskonflikte (Delta-/Konfliktuebersicht)
+
+Die Zurueckstellung von #1–#4 steht im Widerspruch zu bestehenden
+Release-1-Vertraegen. Diese Uebersicht stellt die Konflikte **transparent** dar. Sie
+entschaerft keine Safety-/Startbedingung still und behauptet kein R1-`PASS`/`DONE`.
+Entscheidungen sind Ownersache (O-R3); eigenmaechtig wird nichts umdefiniert.
+
+| # | Betroffene kanonische Anforderung (Quelle) | Wirkung der Zurueckstellung | Risiko | Spaetere Ownerentscheidung |
+|---|---|---|---|---|
+| K1 | **Startbedingung:** Ein neuer Lauf darf nicht starten, wenn "das Fehlerjournal fuer verriegelte Ereignisse nicht verlaesslich ist" (`RESOURCE_BUDGET_AND_MAINTENANCE.md`, "Kritische Stufe vor einem neuen Lauf") | Es gibt kein Journal; das Kriterium ist weder erfuellbar noch heute im Produkt umgesetzt. Ein nicht vorhandenes Journal ist **nicht** `RELIABLE`. | Safety-nahe Startbedingung bleibt unerfuellt; Gefahr, dass sie unbemerkt als erfuellt gilt | (a) Journal (mindestens kritische Klasse) fuer R1 doch umsetzen; (b) Kriterium fuer R1 per dokumentierter, befristeter SSOT-Aenderung/ADR anpassen; (c) R1 ohne dieses Kriterium abnehmen – nur als ausdrueckliche Abweichung |
+| K2 | **Abnahme #37 / Gate 4–5** (`ACCEPTANCE_TESTS.md`): Speicherbereinigung innerhalb der Budgets, Exporte parallel stabil, Fehler- und Resetjournal innerhalb des Budgets, Exporte und Diagnose geprueft; 7-Tage-Profil mit Exporten, Bereinigung, Flash-/Historienbelegung, Bereinigungen und Schreibfehlern | Diese Kriterien sind ohne #1–#4 nicht pruefbar; ein R1-`PASS` waere falsch | R1-Abnahme nicht moeglich oder nur mit Abweichungsliste | Abnahmekriterien anpassen oder #1–#4 wiederaufnehmen |
+| K3 | **Fehlerinjektion** "Historienspeicher bis zur Bereinigung fuellen" (`ACCEPTANCE_TESTS.md`) und #19-Akzeptanzkriterien (kritische Daten nie vor Komfortdaten loeschen; Speicher bis zur Bereinigung fuellbar; Exporte ohne Geheimnisse) | nicht erfuellbar ohne #1–#4 | #19 nicht abschliessbar | Issue #19 aufteilen/neu zuschneiden (Ownerhandlung auf GitHub) |
+| K4 | **#28 haengt formell von #19 ab** (Issue-Abhaengigkeit); #28 umfasst Fehler-/Resetjournal-Anzeige, Lauf-/Diagnose-/Servicebericht-Exporte | #28 bleibt formal blockiert, obwohl nur die zurueckgestellten Teile von #19 relevant sind; Diagnose/Journal-Anzeige (`DIAGNOSTICS_AND_MAINTENANCE.md`, SAFE_BOOT-Oberflaeche "Fehler- und Resetjournal, Exporte") ist ohne Daten leer | falsche Abhaengigkeitslage, falsche Erwartung an #28 | Owner legt neue #28-Abhaengigkeit/Scope fest; der Agent aendert keine Issues |
+| K5 | **Ressourcenvertrag** (`REQUIREMENTS.md`, "Ressourcen"): Journal und Historie erhalten feste Budgets; alte nichtkritische Protokolle werden proaktiv bereinigt; kritische Daten haben Vorrang | ohne Journal/Historie gibt es nichts zu budgetieren/bereinigen; die Anforderung bleibt offen, nicht erfuellt | Release-Doku sagt mehr zu, als das Produkt liefert | Dokumente an den R1-Zuschnitt anpassen oder Funktionen liefern |
+| K6 | **Aufbewahrungsmodell und Werksreset** (`BACKUP_SECURITY_RETENTION.md`): 5 Detail/50 Zusammenfassungen; Reset loescht Laufhistorie/Fehler- und Komforthistorie | nicht vorhanden; Reset hat dort nichts zu loeschen. Spaeter einfuehrbare Daten muessen die `StorageEpoch` tragen, damit der Reset sie erfasst | Reset-Vertrag ohne Wirkung auf Historie | bei Wiederaufnahme (Anhang A, O4) |
+| K7 | **Backup/Import** als dokumentierte R1-Funktion | nur bedingt (B0/O-BI) und nur ueber #27-Pfade nutzbar | R1 liefert Backup/Import eventuell nicht | Entscheid nach B0 (O-BI) |
+
+Weder dieser Plan noch sein PR setzen ein R1-Abnahme-`PASS`. Die Kennung
+`DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION` bleibt bestehen, bis der Owner die
+Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeentscheidung".
+
+## 8. Verbleibende echte Owner-Gates
+
+| ID | Entscheidung | Alternativen | Empfehlung | Zeitpunkt |
+|---|---|---|---|---|
+| **G0** | Freigabe der exakten Plan-SHA | – | – | vor R0 |
+| **O-R1** | Ausloeser des PIN-unabhaengigen Vollresets B (physischer Recoveryweg) | **A** eigene Boot-Touchgeste, getrennt von der 10-Sekunden-Raw-Touch-Kalibrierung (Geste/Schwellen `TBD_HARDWARE`, Scope #31, Verwechslungsschutz noetig); **B** bewusst tief liegende lokale Funktion auf dem PIN-Eingabebildschirm ("PIN vergessen") mit denselben Warnstufen und langer Bestaetigung (keine neue Hardwareannahme; Ausloesung nur durch physischen Touch am Geraet); **C** in R1 nur `SAFE_BOOT`-Eintritt plus UART-Neuflashen (erfuellt R1-PFLICHT fuer ein gesundes Geraet mit vergessener PIN nicht) | **B** (nur die Ausloesung ist eine Bedienentscheidung; Kern und Schutzstufen bleiben identisch; A kann spaeter ergaenzt werden) | vor R3 |
+| **O-R2** | Bedingt: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
+| **O-BI** | Funktionsumfang und Strategie von Backup/Import nach B0 | Gesamtbody / Chunking mit Vorab-Validator / Export-only / Nichtlieferung in R1; jede Reduktion von Limits ist eigene Entscheidung | keine Vorabwahl | nach B0 |
+| **O3** | Bedingt (nur bei B1/B2): geraetegebundene Daten im Backup (`sensorCommissioning` mit ROM-Bindung, Planerparameter) | **A** ausschliessen; **B** mit Warnung; **C** mit Zusatzbestaetigung | **A** | vor B1 |
+| **O-R3** | R1-Vertragsabgleich K1–K7 (Abschnitt 7) und Zuschnitt von #19/#28 | Journal fuer R1 doch umsetzen / R1-SSOT per ADR anpassen / Abweichung ausdruecklich akzeptieren | – (nicht vom Plan entschieden) | vor R1-Abnahme, vor Wiederaufnahme von #1–#4 und vor jeder Aenderung von #19/#28 |
+| **O-HW** | Hardware-Folgeissue fuer die physische Verifikation von Reset (und spaeter Backup/Import) | **A** Folgeissue wie #190 zu #30; **B** Hardwarenachweise bleiben in #19 offen | **A** | spaetestens vor R4; der Agent legt ohne Ownerauftrag kein Issue an |
+
+Entfallen/verlagert in Anhang A (nur bei Wiederaufnahme von #1–#4): Speicherstruktur
+(NVS-Ringe/LittleFS), Journal nach Werksreset (O4), feste vs. konfigurierbare
+Aufbewahrung (O6, inkl. Abweichung von der dokumentierten Konfigurierbarkeit),
+Journal-Aktivierung (O7), Exportumfang (O10).
+
+## 9. Dokumentationswirkung
+
+Nur wenn die jeweiligen Schnitte umgesetzt werden: `LOCAL_UI_SETTINGS_SERVICE.md`
+(Ausloeserkonzept B, O-R1), `ACCEPTANCE_TESTS.md` (SIM-R-01..11, physische Tests
+`NOT_RUN`; SIM-26-07-Zuordnung), `OPEN_POINTS.md` (Zurueckstellung #1–#4,
+`TBD_HARDWARE` fuer Geste/Dauer), `BACKUP_SECURITY_RETENTION.md` nur bei B-Schnitten,
+`docs/ROADMAP.md` (Status/Reihenfolge). **Keine ADR** in diesem Auftrag; eine ADR
+entsteht nur auf ausdruecklichen Ownerauftrag (z. B. bei O-R3 Variante "SSOT per ADR
+anpassen"). Die Konfliktuebersicht K1–K7 gehoert in dieses Planungsdokument und
+wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
+
+## 10. Risiken
+
+| Risiko | Wirkung | Gegenmassnahme |
+|---|---|---|
+| Resetkern prueft Lauf/PIN/Ursprung nicht | Reset koennte fehlerhaft ausloesbar sein | Vorbedingungen unter dem Guard im neuen Ablauf, SIM-R-02..05, R0-Pruefung |
+| Ablauf B ohne PIN | zu leichte Ausloesbarkeit | Mehrfachwarnung + lange Bestaetigung, nur lokal, Aktoren AUS, O-R1; keine PIN-Rueckstellung ohne Reset |
+| Ausloeser B / Dauer / Geste sind `TBD_HARDWARE` | Verifikation nicht moeglich | O-R1, Hardware `NOT_RUN`, O-HW |
+| Zurueckgestellte Journal-Startbedingung (K1) | Safety-nahe Anforderung bleibt unerfuellt | transparent in Abschnitt 7; kein falsches `PASS`; O-R3 |
+| RAM-Rahmen fuer Backup/Import (8148 B Minimum unter Weblast, grosse Kataloge) | Funktion evtl. nicht lieferbar | B0-Nachweis vor Umsetzung, O-BI, keine stillen Limit-Kuerzungen |
+| #27-Abhaengigkeit von Backup/Import | R1-Nutzbarkeit ungeklaert | 5.4, Voraussetzung explizit, kein falsches `DONE` |
+| Fruehere Entwurfsinhalte nicht auffindbar | moegliche verlorene Anforderungen | Plan stuetzt sich auf Issue-Scope und kanonische Dokumente; Reviewer vergleicht, falls der Owner den Entwurf liefert |
+
+## 11. Grenzen
+
+- **#28** bleibt Diagnose-/Service-/Exportgate; formale #19-Abhaengigkeit siehe K4.
+- **#27**: Web-Transport, Routen und Body-/Streaming-Annahme fuer Backup/Import liegen
+  dort; #19 liefert nur anwendungsinterne Bausteine.
+- **Hardware**: keine Hardwaretests, keine Aktorfreigabe, kein Flash-Geraet;
+  `ACTUATOR_RELEASE=NO`; keine Messung in diesem Auftrag.
+- Release-1-Abgrenzung (`SPECIFICATION_REVIEW.md`): kein OTA, kein
+  Roh-Flash-Backup ueber das Web.
+
+## 12. Checkliste Planfreigabe
+
+- [ ] Plan-Fix-Verification ohne offene Blocker
+- [ ] exakte Plan-SHA vom Owner freigegeben (G0)
+- [ ] O-R1 vor R3; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
+- [ ] O-R3 (R1-Vertragsabgleich) bis zur R1-Abnahme entschieden
+- [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten
+
+## Anhang A – Zurueckgestellte fachliche Referenz (Revision 2, nicht verbindlich)
+
+> **Status: `DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION`.** Dieser Anhang bewahrt die
+> Entwuerfe aus Planrevision 2 fuer Journal, Laufhistorie, Bereinigung, Laufexport und das
+> Startkriterium. Er ist **weder freigegeben noch Umsetzungsvorgabe**; keine Konstante, kein
+> Format und kein Schnitt daraus ist beschlossen. Bei einer Wiederaufnahme ist eine neue
+> vollstaendige Planrevision auf aktuellem `main` noetig. Abschnittsverweise in diesem Anhang
+> (z. B. "4.4", "O7", "C0") beziehen sich auf Revision 2 und sind hier nur historische Marken;
+> Abschnitt 4–5 dieses Plans (Reset, Backup/Import) ersetzen die Revision-2-Schnitte C5/C6.
+> Bei Wiederaufnahme zu entscheiden waeren u. a.: Speicherstruktur (NVS-Ringe, LittleFS, Hybrid), Verbleib
+> des kritischen Journals nach Werksreset, feste vs. konfigurierbare Aufbewahrung (Abweichung von
+> der dokumentierten Konfigurierbarkeit), Aktivierung/Startkriterium, Exportumfang.
+
+### A.4.3 Journal und Ringvertrag (kritisch vs. Information)
 
 **Klassen.** Zwei getrennte Journalklassen mit festen, disjunkten
 Schluesselbereichen: **Kritisch** (Reset-/Brownout-/Watchdog-/Panic-Boot,
@@ -221,7 +502,7 @@ auf einen Flashzugriff. Ein Warteschlangenueberlauf zaehlt und wird, sobald
 schreibbar, als kritisches `EventsDropped` protokolliert (und macht
 `criticalJournalReliable()` bis dahin falsch).
 
-### 4.4 Verlauf, Laufarchiv, Zusammenfassungen, Aufbewahrung
+### A.4.4 Verlauf, Laufarchiv, Zusammenfassungen, Aufbewahrung
 
 **Grundsatz.** Der aktive Lauf (Kontrollpunkte, `RunPersistenceSnapshot`) bleibt
 vollstaendig im #17-Owner; #19 schreibt dort nichts und fuehrt **keine parallele
@@ -310,7 +591,7 @@ ausgesetzt (zaehlend, protokolliert); der Lauf wird wegen Historienknappheit
 wird `criticalJournalReliable()` falsch und der **Start** neuer Laeufe blockiert
 (4.7); ein laufender Prozess laeuft weiter (`RESOURCE_BUDGET_AND_MAINTENANCE.md`).
 
-### 4.5 Laufexport (JSON/CSV)
+### A.4.5 Laufexport (JSON/CSV)
 
 - **Ausgabevertrag.** Es gibt im Repository keinen allgemeinen Byte-Stream-Sink:
   `device_platform::IBinaryOutputSink` ist ein *Aktorausgang* (`setEnabled(bool)`)
@@ -337,49 +618,7 @@ wird `criticalJournalReliable()` falsch und der **Start** neuer Laeufe blockiert
   und kann strukturell keine Geheimnisse sehen (Whitelist). Ein Teilumfang gemaess
   O10 wird im Exportdokument selbst ausgewiesen.
 
-### 4.6 Backup und Import
-
-- **Bundle:** ein JSON-Dokument aus Format-Kennung, Schema-/Revisionsangaben,
-  Benutzereinstellungen, Benutzerprogrammen, Auswahl der Standardprogramme,
-  UI-/Sprach-/Zeitzoneneinstellungen und den ausdruecklich erlaubten
-  Serviceparametern (O3), plus Integritaetspruefsumme (CRC-32, kein Manipulations-
-  schutz). Nicht enthalten: WLAN-/Web-/PIN-Geheimnisse und Pruefnachweise,
-  Sitzungen/Tokens/CSRF, Schluessel, Touchkalibrierung, rohe Flashdaten, rohe
-  interne Envelopes. Die Ausgabe ist deterministisch (feste Feldreihenfolge) und
-  streamt ueber denselben `ExportChunkWriter`.
-- **Importablauf** (verbindlich, `BACKUP_SECURITY_RETENTION.md`): Groesse/Format
-  pruefen -> Schema identifizieren -> Integritaet -> getestete Migration ->
-  **vollstaendige typisierte Validierung** (Bereichsgrenzen, unbekannte kritische
-  Felder = Ablehnung, nicht unterstuetzte IANA-Zeitzone = Ablehnung, kein stiller
-  Rueckfall) -> Vorschau/Konflikte -> ausdrueckliche Bestaetigung -> Commit. Der
-  Kandidat wird als `ConfigurationCommitCandidate` in den **vorhandenen** Pfad
-  `beginPreview`/`installPreview(origin, ChangeOperation::BackupImport)`/
-  `confirmPreview` gegeben. Kein zweiter Aktivierungspfad, kein Pending, kein
-  paralleler Active-Zweig; bis zum Commit bleibt alles fluechtig.
-- **Atomare Lauf-/Import-Entscheidung ueber das vorhandene Application-Gate.**
-  Drei zeitlich getrennte Pruefungen allein schliessen kein Rennen. Der
-  bindende Test liegt deshalb **innerhalb desselben `ApplicationCallSerializer`-
-  Guards** (`applicationCallSerializer_.enter()`, rekursiver Mutex), den die
-  Anwendungseinstiege – darunter Konfigurationsaenderungen wie `applyProgramEdit`
-  und die Run-Kommandos – bereits verwenden: Ein neuer Anwendungseinstieg
-  `confirmBackupImport(handle)` betritt den Guard, wertet den Lauf-Zustand
-  (`NoActiveOrRecoverableRun`, sonst Ablehnung und `cancelPreview`) aus und ruft
-  `ConfigurationService::confirmPreview` **ohne den Guard zu verlassen**. Ein
-  konkurrierender Runstart ist ueber denselben Guard entweder vollstaendig vor
-  der Pruefung (dann Ablehnung des Imports) oder nach dem Commit (dann Start auf
-  der neuen Konfiguration) serialisiert. Die frueheren Pruefungen bei Annahme und
-  Vorschau sind reine Fruehabbrueche fuer die Bedienung. Es gibt keinen zweiten
-  Lock-/Mutation-Owner. Voraussetzung, die C5 zuerst belegt: der Runstart-Pfad
-  betritt den Guard; andernfalls ist das ein Stoppbefund an den Plan.
-- **Geheimnisse:** Fehlende Geheimnisse ueberschreiben nichts; Factory-Katalog
-  und Quellprogramme werden nicht still ueberschrieben; Touchkalibrierung bleibt.
-- **Groesse (O5):** C0 erzeugt aus dem Gesamtschema den maximal gueltigen
-  Kandidaten und misst Textgroesse und Parser-Spitzenbedarf gegen den RAM-Rahmen
-  aus Abschnitt 2. Erst danach faellt die Wahl zwischen Gesamtbody, Chunking mit
-  Vorab-Validator oder reduziertem Maximum. cJSON baut den ganzen Baum auf; passt
-  das nicht, ist ein Chunking-/Reduktionsmodell der Plananker, kein zweiter Codec.
-
-### 4.7 Startkriterium "Journal verlaesslich" und Aktivierung
+### A.4.7 Startkriterium "Journal verlaesslich" und Aktivierung
 
 `RESOURCE_BUDGET_AND_MAINTENANCE.md` verlangt: kein neuer Lauf, wenn das
 Fehlerjournal fuer verriegelte Ereignisse nicht verlaesslich ist. Diese
@@ -402,43 +641,7 @@ Anforderung wird **nicht** aufgeweicht.
   (Vermerk in `OPEN_POINTS.md`, Ende der Abweichung = Komposition). Eine stille
   Ignorierung ist in keiner Variante vorgesehen.
 
-### 4.8 Werksreset und neue Domaenen
-
-- Der Kern bleibt unveraendert. #19 liefert den **lokalen Ablauf**: mehrere
-  Bestaetigungsschritte, Aktoren/Peltier AUS als Vorbedingung, nur lokaler
-  Ursprung (kein Web-/Remote-Ausloeser), Datenverlust-Warnung, Aufruf von
-  `beginAuthorizedFactoryReset`, danach Ersteinrichtungszustand. Vergessene
-  Service-PIN hat keinen Bypass; dies ist der einzige Weg.
-- Journal-/Verlaufsrecords tragen die `StorageEpoch`. Nach dem Epochenwechsel sind
-  alte Records logisch unerreichbar und die Ringe starten neu; ein physisches
-  Loeschen wird nicht zugesichert (`BACKUP_SECURITY_RETENTION.md`). Bei O4-B
-  wird das kritische Journal ueber eine dokumentierte Epochenuebernahme
-  erhalten.
-- Touchkalibrierung bleibt erhalten (bestehende Tests); #19 ergaenzt nur eine
-  Regression, falls der neue Ablauf diesen Pfad beruehrt.
-
-## 5. Umsetzungs- und Commit-Schnitte
-
-Gate G1 liegt nach C0. C1–C7 laufen danach ohne weitere Ownerfreigabe je Schnitt;
-nach jedem Schnitt gelten die gezielten lokalen Tests und der Builder-Self-Check
-(AGENTS.md: nur geaenderter Bereich plus direkte Konsumenten). Dateinamen sind
-Vorschlaege innerhalb der beschriebenen Module.
-
-| Schnitt | Inhalt | Erwartete Dateien | Nachweis |
-|---|---|---|---|
-| **C0** (Doku/Messung, **Gate G1**) | Berechnung der Ring-/Chunk-/Archivgroessen aus den Programm-/Dokumentgrenzen; **NVS-Kapazitaetsbilanz mit kritischer Schreibreserve** (4.4) aus der Quelle der fixierten ESP-IDF-Version; Wear-Abschaetzung als Rechnung; maximal gueltiger Importkandidat (Nativ-Messung); Vorlagen O1/O5/O6/O7/O10. | `docs/audits/ISSUE19_STORAGE_BUDGET.md` (+ kleines Hostwerkzeug nur fuer die Messung, ohne Produktcode) | Zahlen reproduzierbar; Owner setzt Konstanten und entscheidet O1/O5/O10 |
-| **C1** Ring + Journal | `BoundedRecordRing` (Klassifikation, Kopf, Verifikation, Wiederholung), Ereigniskatalog, kritisch/Information, RAM-Warteschlange, `IEventJournal`-Produktimplementierung, Boot-Ereignis aus Reset-Ursache, `criticalJournalReliable()`; kapazitaetsbegrenzter Teststore mit gemeinsamem Kapazitaetsmodell; Epochenbindung. | `device_platform`: ring; `fermentation_app`: journal; `device_platform_test_support`: bounded store; `test_event_journal*` | SIM-19-01..03, 05, 13, 14 |
-| **C2** Laufarchiv + Verlauf + Retention | Archivkopf/Revisionen/Ereignisse/Ende aus den kanonischen Run-Uebergaengen, Fensteraggregate, Detail-/Zusammenfassungsringe, idempotente Bereinigung, Kapazitaetsverhalten, `archiveIncomplete`/*Ende unbekannt*. | `fermentation_app`: run archive/history; Tests | SIM-19-03, 04, 12, 15 |
-| **C3** Laufexport | `ExportChunkWriter`, JSON-/CSV-Writer, Groessengrenze, Whitelist, Zeitqualitaet, Fehlend-Codierung, Export nach Abschluss/Neustart. | `fermentation_app`: run export; Tests mit Golden-Dateien | SIM-19-06, 15 |
-| **C4** Backup-Export | Whitelist-Projektion, Bundle-Writer, deterministische Ausgabe, CRC. | `fermentation_app`: backup; Tests | SIM-19-07 |
-| **C5** Import | Parser/Validator/Migrationstabelle, Kandidatenbau, Vorschau-/Konfliktprojektion, `confirmBackupImport` mit Lauf-Gate im Application-Guard, Aufruf des vorhandenen Preview-/Commit-Pfads. | `fermentation_app`: import; Tests inkl. Powercut-Matrix ueber alle Write-Cutpoints und Konkurrenzfall Start/Import | SIM-19-08..10, 16 |
-| **C6** Werksreset-Ablauf | Mehrstufiger lokaler Ablauf, Aktor-AUS-Vorbedingung, Ablehnung entfernter Ausloeser, Praesentationsmodell (O8-A). | `fermentation_app`: reset flow; Tests | SIM-19-11 |
-| **C7** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP, statischer Ressourcenbericht; Komposition gemaess O7. | siehe Abschnitt 7 | Review-fertig |
-
-Nach C7: Builder-Self-Check, **Stopp fuer den unabhaengigen Review** (kanonisches
-Gate). Pre-Ready erst auf ausdrueckliche Owneranweisung.
-
-## 6. Tests und Nachweise (hardwarefrei)
+### A.6 Tests (Revision 2, Referenz)
 
 Nur tatsaechlich ausgefuehrte Tests werden als bestanden gemeldet. Das
 Kapazitaetsmodell des Teststores ist ein Rechenmodell, kein NVS-Beweis.
@@ -471,54 +674,3 @@ Schreiblatenz der Ringe, reale Kapazitaets-/GC-Reserve der gemeinsamen Partition
 Powercut auf echtem Flash (inkl. Nachbarslot-Verhalten), Heap-/Stack-Spitze beim
 Export/Import auf dem Geraet, Timing der Hauptschleife unter Schreiblast. Diese
 Punkte bleiben `NOT_RUN`.
-
-## 7. Dokumentationswirkung und ADR
-
-- `BACKUP_SECURITY_RETENTION.md`: konkretes Bundle-/Exportformat, Aufbewahrung
-  (O6), Resetdetails (O4).
-- `RUN_PERSISTENCE.md`: Aufteilung Journal/Verlauf/Zusammenfassung; die Zeile
-  "Aufteilung NVS/LittleFS/Ring wird in #19 festgelegt" wird aufgeloest.
-- `RESOURCE_BUDGET_AND_MAINTENANCE.md` / `OPEN_POINTS.md`: freigegebene
-  Budgetkonstanten.
-- `CONFIGURATION_PERSISTENCE.md`: Nicht-Scope-Zeile zu "Backupformat, Journale und
-  Aufbewahrung" auf den Ist-Stand bringen.
-- `ACCEPTANCE_TESTS.md`: SIM-19-01..13 mit geprueften Testnamen; HW-19-xx als
-  `NOT_RUN`.
-- `DECISIONS.md`: **ADR-020** nur bei O1-Entscheid ("Verlaufs-/Journalspeicher");
-  ohne Ownerfreigabe wird keine ADR geschrieben.
-- `docs/ROADMAP.md` bei Planfreigabe, jedem Schnitt-Merge und Abschluss.
-
-## 8. Risiken
-
-| Risiko | Wirkung | Gegenmassnahme |
-|---|---|---|
-| RAM-Rahmen (8148 B Minimum unter Weblast) | Export/Import koennen nicht ganze Dokumente halten | Streaming mit `ExportChunkWriter`, feste Puffer, O5 nach C0-Messung |
-| Gemeinsame NVS-Partition | Komfortdaten koennten die physische Schreibreserve der kritischen Ringe verbrauchen | C0-Kapazitaetsbilanz mit kritischer Reserve und GC-Reserve, Compile-Zeit-Bilanz, SIM-19-14; reale Belegung `HW-19` |
-| Keine OLD/NEW-Garantie des Stores | Ring koennte staerkere Garantien vortaeuschen | nur Klassifikation/Verifikation/idempotente Wiederholung (4.3), SIM-19-02 ohne OLD/NEW-Annahme |
-| Archivumfang gegen Budget | vollstaendiger Export evtl. nicht moeglich | C0-Rechnung, O10 mit konkreten Alternativen, keine stille Kuerzung |
-| Archiv-Hook an Run-Uebergaengen | Rueckwirkung auf Run-Owner/Regelpfad | nur Kopie der validierten Projektion nach Erfolg, Schreiben im niederprioren Schritt, Fehler stoppt nie den Lauf |
-| Import-/Start-Rennen | Aktivierung waehrend eines neuen Laufs | Lauf-Gate im vorhandenen `ApplicationCallSerializer`-Guard, SIM-19-16; Stoppbefund, falls der Runstart den Guard nicht betritt |
-| NVS-Wear und Schreiblatenz | Schreiben nahe am Regelpfad | Schreiben nur im niederprioren Schritt, Fensterflush, Wear als Rechnung (C0) und `HW-19` |
-| Dauer-/Punkteexplosion (bis 14 Tage) | unbegrenzter Detailbedarf | Fensterlaenge aus Laufdauer, `MaxPunkte` als Budgetkonstante |
-| Startkriterium beruehrt Startvorbedingungen | unbeabsichtigte Sperre aller Laeufe bzw. Aufweichen des SSOT | O7: kein neuer FaultCode, `NOT_COMPOSED` != `RELIABLE`, Abweichung nur ausdruecklich vorgelegt |
-| Schluesselraum | NVS-Schluessel <= 15 Zeichen, Kollisionsrisiko | feste Praefixe und Indizes, Review gegen vorhandene Schluessel (`cb0/cb1`, `cc0`, `tc0/tc1`, Run-/Konfigurationsslots) |
-| Kein Hardwarenachweis | Annahmen zu Wear/Latenz unbelegt | O9, ausdruecklich `NOT_RUN` |
-| Fruehere Entwurfsinhalte nicht auffindbar | moegliche verlorene Anforderungen | Plan stuetzt sich auf Issue-Scope und kanonische Dokumente; Reviewer vergleicht, falls der Owner den Entwurf liefert |
-
-## 9. Grenzen
-
-- **#28** bleibt Diagnose-/Service-/Exportgate und nutzt #19-Daten; #19 liefert
-  weder Diagramme noch Diagnoseexport noch Serviceablauf.
-- **#27**: Web-Transport und -Routen fuer Laufexport, Backupdownload und Import
-  folgen dort; #19 vervollstaendigt #27 nicht (Scope-Abgrenzung in Abschnitt 0).
-- **Hardware**: keine Hardwaretests, keine Aktorfreigabe, kein Flash-Geraet;
-  `ACTUATOR_RELEASE=NO`.
-- Release-1-Abgrenzung (`SPECIFICATION_REVIEW.md`): kein OTA, kein
-  Roh-Flash-Backup ueber das Web.
-
-## 10. Checkliste Planfreigabe
-
-- [ ] Plan-Fix-Verification ohne offene Blocker
-- [ ] Ownerentscheide O1, O3, O4, O6, O7, O8 (vor C1 bzw. C5/C6 wo betroffen), O9; O1 und O5 sowie gegebenenfalls O10 spaetestens bei G1
-- [ ] exakte Plan-SHA vom Owner freigegeben (G0)
-- [ ] G1 nach C0 (Budgetzahlen, Kapazitaetsbilanz, O1/O5/O10)
