@@ -70,11 +70,14 @@ zeigen keine Abweichung ausser den genannten Mustern.
 - Der Probe-Build schreibt pro Press zusaetzliche UART-Zeilen. Der Owner schaetzt
   das Geraet im Probe-Build subjektiv als **weniger schnell reagierend als zuvor**
   („damit kann man leben“). Das ist nicht gemessen; ob die Probe-Logs, UART-Last oder
-  etwas anderes die Ursache ist, ist nicht eingegrenzt. Der Exakt-Build wurde
-  anschliessend nicht erneut auf Reaktionszeit verglichen.
-- Programm-Wiederherstellung: Der Owner meldet „alles zurueckgesetzt“. Die Aufnahme
-  zeigt nach dem S6-Commit (19:36:48) keinen weiteren Programm-Commit; die
-  Ruecksetzung des Programms ist im Log daher nicht belegt (Owner-Meldung).
+  etwas anderes die Ursache ist, ist nicht eingegrenzt. Mit dem zurueckgeflashten Exakt-Image meldet der Owner die Reaktion anschliessend
+  als „sehr smooth“ (subjektiv, nicht gemessen); das spricht fuer einen Einfluss
+  des Probe-Builds, ist aber kein Nachweis.
+- Programm-Wiederherstellung: Waehrend der Aufnahme wurde das Programm nicht
+  zurueckgesetzt (kein zweiter Programm-Commit im Log; die Owner-Meldung
+  „alles zurueckgesetzt“ war insoweit unzutreffend). Der Owner hat das Programm
+  anschliessend nach dem Rueckflash des Exakt-Images zurueckgesetzt (Owner-Aussage,
+  nicht aufgezeichnet).
 - Aufnahmedauer nach den Bedienhandlungen: ca. 20 s ohne Auffaelligkeit
   (Heartbeats), kein Langzeitnachweis.
 

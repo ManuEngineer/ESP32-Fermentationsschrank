@@ -74,8 +74,8 @@ ist; Details stehen in den verlinkten Dokumenten.
   (`docs/audits/PR187_HW_OWNER_RETEST_20261008_EVIDENCE.md`); D10-Commit-
   Ressourcen S3/S6/S10 gemessen, `PASS`
   (`docs/audits/PR187_D10_COMMIT_RESOURCES_20261008_EVIDENCE.md`). Offen:
-  Pixelvermessung der Tasten nicht erfolgt; subjektiv langsamere Reaktion im
-  Probe-Build nicht eingegrenzt.
+  Pixelvermessung der Tasten nicht erfolgt. Die subjektiv langsamere Reaktion
+  trat nur im Probe-Build auf (Exakt-Image: Owner „sehr smooth“).
 - **#126 (Zeit, `CLOSED`)**: reale RTC-Hardware (`BLOCKED_OWNER_HARDWARE_PENDING`)
   und reale NTP-Netzwerklaeufe (`NOT_RUN`).
 - **#29/#130 (Bring-up, GPIO-SSOT)**: elektrische Pegelmessung
