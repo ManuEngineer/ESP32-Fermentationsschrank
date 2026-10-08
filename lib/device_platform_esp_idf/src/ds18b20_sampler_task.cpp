@@ -67,13 +67,17 @@ Ds18b20Sampler::Ds18b20Sampler(const device_platform::ITimeSource& time)
       expectedRomForward_(std::make_unique<ForwardingBus>()),
       singleDeviceForward_(std::make_unique<ForwardingBus>()),
       engine_(time, *expectedRomForward_, *singleDeviceForward_),
-      sources_{{{engine_, 0U}, {engine_, 1U}, {engine_, 2U}}} {}
+      sources_{{{engine_, 0U}, {engine_, 1U}, {engine_, 2U}}},
+      invalidChannelSource_(
+          engine_, device_platform::Ds18b20SamplingEngine::kChannelCount) {}
 
 Ds18b20Sampler::~Ds18b20Sampler() = default;
 
 const device_platform::ITemperatureSource& Ds18b20Sampler::source(
     uint8_t channel) const {
-    return sources_[channel < sources_.size() ? channel : 0U];
+    // Die Engine liefert fuer channel >= kChannelCount MissingSample.
+    return channel < sources_.size() ? sources_[channel]
+                                     : invalidChannelSource_;
 }
 
 Ds18b20SamplerStartResult Ds18b20Sampler::start(

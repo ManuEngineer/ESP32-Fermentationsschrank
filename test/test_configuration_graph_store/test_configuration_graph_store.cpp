@@ -708,9 +708,9 @@ void test_v2_service_record_survives_validation_and_changes_until_v3_write() {
         return device_platform::SensorOffset::create(celsius).offset.value();
     };
     record.chamberAir =
-        fermentation::SensorRomOffset{0x28FF000000000001ULL, offset(0.5)};
+        fermentation::SensorRomOffset{0x160100000000FF28ULL, offset(0.5)};
     record.heatsink =
-        fermentation::SensorRomOffset{0x28FF000000000002ULL, offset(-0.25)};
+        fermentation::SensorRomOffset{0xF40200000000FF28ULL, offset(-0.25)};
     service.sensorCommissioning = record;
     const fermentation::ConfigurationCommitCandidate serviceChange{
         afterUserChange.graph->active.userConfiguration,

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "onewire_rom_crc.hpp"
+
 namespace fermentation {
 namespace {
 
@@ -105,6 +107,13 @@ SensorCommissioningStatus validateSensorCommissioning(
     for (const auto& probe : record.productProbes) roms.push_back(probe.rom);
     for (const auto rom : roms) {
         if (rom == 0U) return SensorCommissioningStatus::ZeroRom;
+    }
+    // Kanonische Grenze fuer Parser, Codec und Boot-Bindung: ein ROM mit
+    // ungueltiger 1-Wire-CRC ist keine feste Sensorbindung (fail-closed).
+    for (const auto rom : roms) {
+        if (!device_platform::hasValidOneWireRomCrc(rom)) {
+            return SensorCommissioningStatus::InvalidRomCrc;
+        }
     }
     std::sort(roms.begin(), roms.end());
     if (std::adjacent_find(roms.begin(), roms.end()) != roms.end()) {

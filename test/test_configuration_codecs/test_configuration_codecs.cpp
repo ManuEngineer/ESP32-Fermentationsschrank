@@ -562,12 +562,14 @@ fermentation::SensorCommissioningRecord validSensorRecord(
         return device_platform::SensorOffset::create(celsius).offset.value();
     };
     fermentation::SensorCommissioningRecord record;
-    record.chamberAir = SensorRomOffset{0x28FF000000000001ULL, offset(0.5)};
-    record.heatsink = SensorRomOffset{0x28FF000000000002ULL, offset(-0.25)};
+    record.chamberAir = SensorRomOffset{0x160100000000FF28ULL, offset(0.5)};
+    record.heatsink = SensorRomOffset{0xF40200000000FF28ULL, offset(-0.25)};
+    constexpr uint64_t kProbeRoms[] = {
+        0xD51000000000FF28ULL, 0x8B1100000000FF28ULL, 0x691200000000FF28ULL,
+        0x371300000000FF28ULL};
     for (std::size_t i = 0U; i < productProbes; ++i) {
-        record.productProbes.push_back(
-            SensorRomOffset{0x28FF000000000010ULL + i,
-                            offset(0.0625 * static_cast<double>(i))});
+        record.productProbes.push_back(SensorRomOffset{
+            kProbeRoms[i], offset(0.0625 * static_cast<double>(i))});
     }
     return record;
 }
@@ -640,12 +642,24 @@ void test_service_configuration_schema_three_sensor_section_is_strict() {
     setBigEndian64(zeroRom, 2U, 0U);
     TEST_ASSERT_TRUE(decodeStatus(zeroRom) ==
                      ConfigurationCodecStatus::InvalidWireValue);
+    auto badAirCrc = valid;
+    setBigEndian64(badAirCrc, 2U, 0x170100000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badAirCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badHeatsinkCrc = valid;
+    setBigEndian64(badHeatsinkCrc, 18U, 0xF50200000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badHeatsinkCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
+    auto badProductCrc = valid;
+    setBigEndian64(badProductCrc, 35U, 0x8C1100000000FF28ULL);
+    TEST_ASSERT_TRUE(decodeStatus(badProductCrc) ==
+                     ConfigurationCodecStatus::InvalidWireValue);
     auto duplicate = valid;
-    setBigEndian64(duplicate, 18U, 0x28FF000000000001ULL);
+    setBigEndian64(duplicate, 18U, 0x160100000000FF28ULL);
     TEST_ASSERT_TRUE(decodeStatus(duplicate) ==
                      ConfigurationCodecStatus::InvalidWireValue);
     auto duplicateProduct = valid;
-    setBigEndian64(duplicateProduct, 35U, 0x28FF000000000002ULL);
+    setBigEndian64(duplicateProduct, 35U, 0xF40200000000FF28ULL);
     TEST_ASSERT_TRUE(decodeStatus(duplicateProduct) ==
                      ConfigurationCodecStatus::InvalidWireValue);
     auto tooMany = valid;

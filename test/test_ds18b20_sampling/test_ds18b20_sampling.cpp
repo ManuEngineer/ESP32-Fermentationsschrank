@@ -543,6 +543,16 @@ void test_engine_never_stepped_is_fail_closed_and_invalid_channel_is_missing() {
     assertStatus(f.r(7U), TemperatureSampleStatus::MissingSample);
     const Ds18b20ChannelSource source(f.engine, 0U);
     assertStatus(source.read(), TemperatureSampleStatus::MissingSample);
+    // Ungueltiger Kanal (wie ihn Ds18b20Sampler::source() fuer channel >=
+    // kChannelCount verwendet): MissingSample ohne Identitaet, auch wenn
+    // Kanal 0 gueltige Daten hat.
+    f.bus0.addDevice(kRomB, 5.0);
+    f.cycle();
+    const Ds18b20ChannelSource invalid(f.engine,
+                                       Ds18b20SamplingEngine::kChannelCount);
+    assertStatus(invalid.read(), TemperatureSampleStatus::MissingSample);
+    assertIdentity(invalid.read(), std::nullopt);
+    assertStatus(source.read(), TemperatureSampleStatus::Ok);
 }
 
 void test_channel_source_returns_the_engine_reading() {

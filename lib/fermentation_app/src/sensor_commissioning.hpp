@@ -39,6 +39,7 @@ enum class SensorCommissioningStatus : uint8_t {
     Success,
     MissingFixedRole,
     ZeroRom,
+    InvalidRomCrc,
     DuplicateRom,
     TooManyProductProbes,
 };

@@ -14,6 +14,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "mock_time_zone_resolver.hpp"
+#include "onewire_rom_crc.hpp"
 #include "sensor_commissioning.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "virtual_time_source.hpp"
@@ -131,10 +132,10 @@ SensorOffset offsetOf(double celsius) {
     return SensorOffset::create(celsius).offset.value();
 }
 
-constexpr device_platform::OneWireRom kAir = 0x28FF000000000001ULL;
-constexpr device_platform::OneWireRom kHeat = 0x28FF000000000002ULL;
-constexpr device_platform::OneWireRom kProbe1 = 0x28FF000000000011ULL;
-constexpr device_platform::OneWireRom kProbe2 = 0x28FF000000000012ULL;
+constexpr device_platform::OneWireRom kAir = 0x160100000000FF28ULL;
+constexpr device_platform::OneWireRom kHeat = 0xF40200000000FF28ULL;
+constexpr device_platform::OneWireRom kProbe1 = 0x8B1100000000FF28ULL;
+constexpr device_platform::OneWireRom kProbe2 = 0x691200000000FF28ULL;
 
 SensorCommissioningRecord validRecord(std::size_t probes = 0U) {
     SensorCommissioningRecord record;
@@ -175,6 +176,25 @@ void test_model_validation_covers_every_invalid_shape() {
     zero.chamberAir->rom = 0U;
     TEST_ASSERT_TRUE(validateSensorCommissioning(zero) ==
                      SensorCommissioningStatus::ZeroRom);
+    // Manipulierte CRC (hoechstes Byte) an jeder Stelle: Luft, Kuehlkoerper,
+    // bekannter Produktfuehler.
+    auto badAir = validRecord(1U);
+    badAir.chamberAir->rom ^= 0x0100000000000000ULL;
+    TEST_ASSERT_TRUE(validateSensorCommissioning(badAir) ==
+                     SensorCommissioningStatus::InvalidRomCrc);
+    auto badHeat = validRecord(1U);
+    badHeat.heatsink->rom ^= 0x0100000000000000ULL;
+    TEST_ASSERT_TRUE(validateSensorCommissioning(badHeat) ==
+                     SensorCommissioningStatus::InvalidRomCrc);
+    auto badProbe = validRecord(1U);
+    badProbe.productProbes[0].rom ^= 0x0100000000000000ULL;
+    TEST_ASSERT_TRUE(validateSensorCommissioning(badProbe) ==
+                     SensorCommissioningStatus::InvalidRomCrc);
+    // Kuenstliches, von Null verschiedenes ROM ohne gueltige CRC.
+    auto artificial = validRecord();
+    artificial.chamberAir->rom = 0x28FF000000000001ULL;
+    TEST_ASSERT_TRUE(validateSensorCommissioning(artificial) ==
+                     SensorCommissioningStatus::InvalidRomCrc);
     auto duplicate = validRecord();
     duplicate.heatsink->rom = kAir;
     TEST_ASSERT_TRUE(validateSensorCommissioning(duplicate) ==
@@ -188,12 +208,30 @@ void test_model_validation_covers_every_invalid_shape() {
     TEST_ASSERT_TRUE(validateSensorCommissioning(twoSameProbes) ==
                      SensorCommissioningStatus::DuplicateRom);
     auto tooMany = validRecord();
-    for (std::size_t i = 0U; i < kMaximumKnownProductProbes + 1U; ++i) {
-        tooMany.productProbes.push_back(
-            SensorRomOffset{0x28FF000000000100ULL + i, offsetOf(0.0)});
+    constexpr device_platform::OneWireRom kExtraRoms[] = {
+        0x6B2000000000FF28ULL, 0x352100000000FF28ULL, 0xD72200000000FF28ULL,
+        0x892300000000FF28ULL, 0x0A2400000000FF28ULL};
+    static_assert(sizeof(kExtraRoms) / sizeof(kExtraRoms[0]) ==
+                  kMaximumKnownProductProbes + 1U);
+    for (const auto rom : kExtraRoms) {
+        tooMany.productProbes.push_back(SensorRomOffset{rom, offsetOf(0.0)});
     }
     TEST_ASSERT_TRUE(validateSensorCommissioning(tooMany) ==
                      SensorCommissioningStatus::TooManyProductProbes);
+}
+
+void test_rom_crc_check_matches_the_dallas_reference() {
+    // Maxim-Referenz-ROM 02 1C B8 01 00 00 00 A2 (Byte 0 zuerst) und die
+    // Testwerte; jede Einzelbit-Aenderung muss erkannt werden.
+    constexpr uint64_t kReference = 0xA2000000'01B81C02ULL;
+    TEST_ASSERT_TRUE(device_platform::hasValidOneWireRomCrc(kReference));
+    TEST_ASSERT_TRUE(device_platform::hasValidOneWireRomCrc(kAir));
+    TEST_ASSERT_TRUE(device_platform::hasValidOneWireRomCrc(kProbe2));
+    for (unsigned bit = 0U; bit < 64U; ++bit) {
+        TEST_ASSERT_FALSE(
+            device_platform::hasValidOneWireRomCrc(kReference ^ (1ULL << bit)));
+    }
+    TEST_ASSERT_FALSE(device_platform::hasValidOneWireRomCrc(0x1ULL));
 }
 
 void test_calibration_lookup_is_per_rom_and_unknown_rom_has_none() {
@@ -206,7 +244,7 @@ void test_calibration_lookup_is_per_rom_and_unknown_rom_has_none() {
                              record.calibrationFor(kHeat)->offset().celsius());
     TEST_ASSERT_EQUAL_DOUBLE(
         0.125, record.calibrationFor(kProbe1)->offset().celsius());
-    TEST_ASSERT_FALSE(record.calibrationFor(0x28FF0000000000FFULL).has_value());
+    TEST_ASSERT_FALSE(record.calibrationFor(0x7DFF00000000FF28ULL).has_value());
     TEST_ASSERT_FALSE(record.calibrationFor(0U).has_value());
 }
 
@@ -224,6 +262,16 @@ void test_record_maps_roles_to_technical_channels_and_invalid_stays_unbound() {
 
     for (const auto& unbound :
          {toChannelBindings(std::nullopt), toChannelBindings([] {
+              auto invalid = validRecord();
+              invalid.chamberAir->rom ^= 0x0100000000000000ULL;
+              return std::optional<SensorCommissioningRecord>{invalid};
+          }()),
+          toChannelBindings([] {
+              auto invalid = validRecord();
+              invalid.heatsink->rom ^= 0x0100000000000000ULL;
+              return std::optional<SensorCommissioningRecord>{invalid};
+          }()),
+          toChannelBindings([] {
               auto invalid = validRecord();
               invalid.heatsink.reset();
               return std::optional<SensorCommissioningRecord>{invalid};
@@ -282,7 +330,7 @@ void test_parser_accepts_exact_commands_only() {
         parseSensorCommissioningCommand("  ds18b20   clear \r\n").kind ==
         Kind::Clear);
     const auto bind = parseSensorCommissioningCommand(
-        "ds18b20 bind air=28FF000000000001 heatsink=28ff000000000002");
+        "ds18b20 bind air=160100000000FF28 heatsink=F40200000000FF28");
     TEST_ASSERT_TRUE(bind.kind == Kind::Bind);
     TEST_ASSERT_EQUAL_UINT64(kAir, *bind.chamberAirRom);
     TEST_ASSERT_EQUAL_UINT64(kHeat, *bind.heatsinkRom);
@@ -291,16 +339,16 @@ void test_parser_accepts_exact_commands_only() {
     TEST_ASSERT_TRUE(air.target == SensorCommissioningTarget::ChamberAir);
     TEST_ASSERT_EQUAL_INT32(-250, *air.offsetMilliCelsius);
     const auto product = parseSensorCommissioningCommand(
-        "ds18b20 offset product=28FF000000000011 125");
+        "ds18b20 offset product=8B1100000000FF28 125");
     TEST_ASSERT_TRUE(product.target == SensorCommissioningTarget::Product);
     TEST_ASSERT_EQUAL_UINT64(kProbe1, *product.offsetRom);
 
     for (const char* bad :
          {"", "report", "ds18b20", "ds18b20 reset", "ds18b20 report x",
           "ds18b20 bind", "ds18b20 bind air=1 heatsink=2",
-          "ds18b20 bind air=0000000000000000 heatsink=28FF000000000002",
-          "ds18b20 bind air=28FF00000000000G heatsink=28FF000000000002",
-          "ds18b20 bind heatsink=28FF000000000002 air=28FF000000000001",
+          "ds18b20 bind air=0000000000000000 heatsink=F40200000000FF28",
+          "ds18b20 bind air=28FF00000000000G heatsink=F40200000000FF28",
+          "ds18b20 bind heatsink=F40200000000FF28 air=160100000000FF28",
           "ds18b20 offset air", "ds18b20 offset air x",
           "ds18b20 offset air 12345678", "ds18b20 offset fan 1",
           "ds18b20 offset product=zz 1"}) {
@@ -311,11 +359,17 @@ void test_parser_accepts_exact_commands_only() {
 
 void test_command_application_builds_valid_records_only() {
     const auto bind = parseSensorCommissioningCommand(
-        "ds18b20 bind air=28FF000000000001 heatsink=28FF000000000002");
+        "ds18b20 bind air=160100000000FF28 heatsink=F40200000000FF28");
     auto applied = applySensorCommissioningCommand(std::nullopt, bind);
     TEST_ASSERT_TRUE(applied.accepted && applied.hasRecord);
     TEST_ASSERT_EQUAL_DOUBLE(
         0.0, applied.record.calibrationFor(kAir)->offset().celsius());
+    // Bind mit ungueltiger ROM-CRC wird abgelehnt.
+    TEST_ASSERT_FALSE(applySensorCommissioningCommand(
+                          std::nullopt, parseSensorCommissioningCommand(
+                                            "ds18b20 bind air=170100000000FF28 "
+                                            "heatsink=F40200000000FF28"))
+                          .accepted);
     // Offset ohne Datensatz oder fuer eine ungueltige Eingabe: abgelehnt.
     const auto offsetCommand =
         parseSensorCommissioningCommand("ds18b20 offset heatsink -125");
@@ -334,19 +388,19 @@ void test_command_application_builds_valid_records_only() {
     // Produkt-ROM wird angelegt, ein bereits fester ROM ist ein Duplikat.
     auto product = applySensorCommissioningCommand(
         applied.record, parseSensorCommissioningCommand(
-                            "ds18b20 offset product=28FF000000000011 62"));
+                            "ds18b20 offset product=8B1100000000FF28 62"));
     TEST_ASSERT_TRUE(product.accepted);
     TEST_ASSERT_EQUAL_UINT32(1U, product.record.productProbes.size());
     TEST_ASSERT_FALSE(
         applySensorCommissioningCommand(
             applied.record, parseSensorCommissioningCommand(
-                                "ds18b20 offset product=28FF000000000001 5"))
+                                "ds18b20 offset product=160100000000FF28 5"))
             .accepted);
     // Neubindung behaelt den Offset eines bekannten ROM.
     auto rebind = applySensorCommissioningCommand(
         withOffset.record,
         parseSensorCommissioningCommand(
-            "ds18b20 bind air=28FF000000000002 heatsink=28FF000000000001"));
+            "ds18b20 bind air=F40200000000FF28 heatsink=160100000000FF28"));
     TEST_ASSERT_TRUE(rebind.accepted);
     TEST_ASSERT_EQUAL_DOUBLE(
         -0.125, rebind.record.calibrationFor(kHeat)->offset().celsius());
@@ -531,6 +585,7 @@ void tearDown() {}
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_model_validation_covers_every_invalid_shape);
+    RUN_TEST(test_rom_crc_check_matches_the_dallas_reference);
     RUN_TEST(test_calibration_lookup_is_per_rom_and_unknown_rom_has_none);
     RUN_TEST(
         test_record_maps_roles_to_technical_channels_and_invalid_stays_unbound);

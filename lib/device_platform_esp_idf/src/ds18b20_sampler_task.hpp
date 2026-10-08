@@ -61,6 +61,8 @@ class Ds18b20Sampler {
             bindings,
         int expectedRomBusGpio, int singleDeviceBusGpio);
 
+    // Ein ungueltiger Kanal liefert eine Quelle, die immer `MissingSample`
+    // ohne Identitaet meldet - nie die Probe eines anderen Kanals.
     [[nodiscard]] const device_platform::ITemperatureSource& source(
         uint8_t channel) const;
     [[nodiscard]] device_platform::Ds18b20EnumerationReport report() const {
@@ -80,6 +82,7 @@ class Ds18b20Sampler {
     std::array<device_platform::Ds18b20ChannelSource,
                device_platform::Ds18b20SamplingEngine::kChannelCount>
         sources_;
+    device_platform::Ds18b20ChannelSource invalidChannelSource_;
     std::unique_ptr<device_platform::IDs18b20Bus> expectedRomHardware_;
     std::unique_ptr<device_platform::IDs18b20Bus> singleDeviceHardware_;
     bool started_{false};
