@@ -473,7 +473,7 @@ hervorgehenden Kandidaten auswaehlen.
 
 ## Spike B: DS18B20 und 1-Wire
 
-### Geltende Vorgaben (Synchronisierung mit Issue #30, Plan Revision 2)
+### Geltende Vorgaben (Synchronisierung mit Issue #30, Plan ab Revision 2)
 
 Dieser Spike wird gemaess `docs/tasks/issue-30-ds18b20-sensor-adapters-plan.md`
 (Abschnitt S0) ausgefuehrt. Aeltere Vorgaben dieses Abschnitts, die durch neuere

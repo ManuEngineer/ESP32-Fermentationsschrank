@@ -1,7 +1,7 @@
 # Plan Issue #30 – reale DS18B20-Sensoradapter
 
 ```text
-PLAN_REVISION=2 (konsolidiert; Review-Delta B1-B3 eingearbeitet)
+PLAN_REVISION=3 (konsolidiert; Review-Deltas B1-B3 und Identitaet bei Nicht-Ok-Proben eingearbeitet)
 PLAN_STATUS=DRAFT_AWAITING_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
 ISSUE=30 (E5.2)
 BASE_MAIN=7b16dbeb95ab09fdbe13d6c524c7a09ec721fb7d (PR #187 gemergt)
@@ -98,7 +98,8 @@ ihre portseitigen Vertraege testbar"); der Port hat genau zwei Implementierungen
 | Treiber/Bus | `TemperatureSampleStatus` | Bedeutung |
 |---|---|---|
 | `Ok` | `Ok` | `identity` = ROM, `celsius` mit Offset **nicht** angewandt (Offset bleibt in #20) |
-| `NotFound` (kein Presence-Puls) | `MissingSample`, `identity` leer | Sensor/Bus ohne Teilnehmer; feste Rollen: Fehler, Produktrolle: optional abwesend |
+| jedes andere Ergebnis | siehe Zeilen unten | `identity` immer nach 4b (nie nur wegen eines Fehlers verworfen) |
+| `NotFound` (kein Presence-Puls) | `MissingSample`; `identity` nach 4b: erwartetes ROM (feste Rolle), zuletzt gesehenes ROM (Produktkanal), nur ohne jede Kenntnis leer | Sensor/Bus ohne Teilnehmer; feste Rollen: Fehler, Produktrolle: optional abwesend |
 | `Timeout`, sonstige Busfehler | `BusFault` | Bus elektrisch/zeitlich gestoert |
 | `InvalidCrc` | `CrcFault` | Scratchpad-/ROM-CRC falsch |
 | `PowerOnValue` (85,0 °C) | `KnownInvalidMeasurement` | Einschaltwert, nie als Messwert |
@@ -137,13 +138,15 @@ der Umsetzungsreihenfolge:
    enumerieren (ROM-CRC), (c) Bindung pruefen, (d) erst danach eine Rolle
    aktivieren.
 3. **Ungebunden = nie `Ok`.** Ein fester Kanal veroeffentlicht ausschliesslich
-   `MissingSample` ohne Identitaet, solange die Bindung nicht verifiziert ist.
+   `MissingSample` ohne Identitaet (es gibt keine erwartete Identitaet), solange
+   keine gueltige Bindung vorliegt (4b regelt die Identitaet bei gueltiger Bindung).
    Das gilt bei: leerem oder unlesbarem Datensatz, ungueltigem Schema/ungueltiger
    Revision, fehlender Rolle, Null-ROM, demselben ROM in zwei Rollen, ungueltigem
    ROM-CRC.
 4. **Fester Bus, Laufzeit/Boot:**
    * erwartetes ROM fehlt (nie gefunden, verschwunden, abgezogen) -> genau diese
-     Rolle `MissingSample` bzw. das Treiberergebnis (`BusFault`/`CrcFault`);
+     Rolle `MissingSample` bzw. das Treiberergebnis (`BusFault`/`CrcFault`), jeweils
+     mit der erwarteten Identitaet (4b);
      Wiederkehr desselben ROM liest die Rolle wieder (die Recovery-Entscheidung
      trifft #20);
    * **unbekanntes zusaetzliches ROM** auf dem festen Bus -> `BindingConflict`:
@@ -155,7 +158,7 @@ der Umsetzungsreihenfolge:
    Datensatz gueltig, erwartetes ROM bestaetigt, kein `BindingConflict`, 12 Bit
    gesetzt und eine frische CRC-gueltige Konvertierung vorliegt. Eine Aenderung
    des Datensatzes wirkt erst nach erneuter Enumeration und Pruefung; bis dahin
-   `MissingSample`. (Ablauf der Datensatzaenderung: Planrevision fuer S2.)
+   `MissingSample`. (Ablauf der Datensatzaenderung: spaetere Planrevision fuer S2.)
 6. **Produktbus (GPIO33, abnehmbar, ein Fuehler):** genau ein Geraet -> dessen
    ROM ist die Identitaet des Produktkanals (O3); kein Geraet -> `MissingSample`
    ohne Fehlerstatus (abwesend); **zwei oder mehr Geraete -> `BusFault`**, kein
@@ -163,11 +166,68 @@ der Umsetzungsreihenfolge:
    neue Identitaet wird gemeldet. Erkennung des ROM-Wechsels (`IdentityMismatch`,
    Filter-Reset) und Offset-Zuordnung (nur bei `calibration.identity ==
    sample.identity`, unbekanntes ROM ohne Offset) leistet die bestehende
-   `SensorQualityPipeline`; der Adapter dupliziert das nicht. Der Produktkanal
+   `SensorQualityPipeline`; der Adapter dupliziert das nicht. Damit der
+   ROM-Wechsel auch **nach einer Abwesenheit** erkannt wird, tragen Nicht-Ok-Proben
+   die Identitaet nach 4b. Der Produktkanal
    benoetigt keinen Datensatz fuer `Ok`; Offsets gibt es nur mit Datensatz.
 7. **Gate.** Ohne S2 kann im Produktpfad keine feste Rolle je `Ok` liefern. Das
    Ergebnis von S1 allein ist deshalb bewusst ein fail-closed Zustand und kein
    nutzbarer Sensor. S3 (Hardwareverifikation) setzt S2 voraus.
+
+### 4b Identitaet bei Nicht-Ok-Proben (ROM-Wechsel nach Abwesenheit)
+
+**Grenzfall.** `SensorQualityPipeline` erkennt `IdentityMismatch` nur, wenn die
+vorherige **akzeptierte** Probe (`lastAccepted_`, gleich welchen Status) und die
+neue Probe beide eine gesetzte, unterschiedliche Identitaet haben. Die Folge
+`Ok(A) -> MissingSample(leer) -> Ok(B)` loest daher **keinen** Mismatch aus: der
+Filterzustand von A bliebe erhalten, die Rate-Referenz ist durch die ungueltige
+Probe ohnehin geloescht, und ein Offsetwechsel (A -> B) wuerde den Tiefpass von A
+nur verschieben statt zu verwerfen. Das ist unzulaessig: ein neu erkannter
+Produktfuehler darf keine Filter-/Offsetwerte eines frueheren ROM uebernehmen.
+
+**Bewertete Optionen.**
+
+| Option | Bewertung |
+|---|---|
+| A. Nicht-Ok-Proben tragen die zuletzt bekannte bzw. erwartete Identitaet | Nutzt den vorhandenen Vertrag (`TemperatureReading::identity` ist laut `temperature_source.hpp` unabhaengig vom Status; `Ok` verlangt nur `celsius`). Die Pipeline sieht `Missing(A) -> Ok(B)` als zwei gesetzte, verschiedene Identitaeten und verwirft den Filter. Keine Aenderung an #20, keine zweite Zustandsmaschine. **Gewaehlt.** |
+| B. Bindungs-/Generationszaehler im Reading oder Adapter-seitiger Filter-Neustart | zusaetzliches Vertragsfeld bzw. zweite fachliche Recovery-Logik im Adapter; verworfen (widerspricht B2). |
+| C. Pipeline-Vertrag erweitern (z. B. Vergleich gegen `lastKnownIdentity_` oder Reset-Methode) | materielle Aenderung am Sensorkern #20 mit eigener Plan-/Ownerentscheidung. **Nur Reserve**, falls die S1-Tests (unten) mit Option A an der unveraenderten Pipeline scheitern; dann Stop und Planrevision. |
+
+**Regel (Option A).**
+
+* **Feste Rollen:** Die `identity` jeder Probe (auch `MissingSample`, `BusFault`,
+  `CrcFault`, `KnownInvalidMeasurement`, `BindingConflict`) ist das **erwartete ROM
+  der Rolle** aus dem gueltigen Datensatz. Ohne gueltige Bindung gibt es keine
+  erwartete Identitaet, die Proben tragen keine (4a Punkt 3).
+* **Produktkanal:** Die `identity` jeder Probe ist das **zuletzt auf diesem Kanal
+  gesehene einzelne ROM** (Engine-RAM seit Boot). Sie bleibt ueber `MissingSample`,
+  Bus-/CRC-Fehler, Wiederinitialisierung und "zwei oder mehr Geraete" erhalten und
+  wechselt erst, wenn ein anderes einzelnes ROM gelesen wird. Leer ist sie nur,
+  wenn seit dem Boot nie ein ROM auf dem Kanal gesehen wurde.
+* Die Engine fuehrt dafuer genau **einen** Wert (letztes ROM) und keinen Zaehler,
+  keine Schwelle und keine Recovery-Entscheidung.
+
+**Erwartetes Pipeline-Verhalten (unveraenderte `SensorQualityPipeline`).**
+
+| Folge | Ergebnis |
+|---|---|
+| `Ok(A) -> Missing(A) -> Ok(B)` | erste B-Probe = `IdentityMismatch`: Filter-Reset, Rate-Referenz geloescht, Recovery-Fortschritt 0; kein A-Filterwert, kein A-Offset (Offset nur bei `calibration.identity == B`) |
+| `Ok(A) -> Missing(A) -> Ok(A)` | kein Mismatch; Filter bleibt (Qualitaet `STALE`/`FAILED` und deren Resets nach #20), Offset von A bleibt angewandt |
+| `Missing(leer) -> Ok(A)` (Boot) | keine Historie, normaler Start |
+| dieselben Folgen mit `BusFault`/`CrcFault`/>=2 Geraeten statt `Missing` | identisch |
+
+**Verbindliche S1-Tests** (Engine + Fake-Bus + **echte** `SensorQualityPipeline`
+mit Kalibrierung): (1) `Ok(A)->Missing(A)->Ok(B)` je einmal mit Kalibrierung fuer A
+und fuer B: `lastFaultReason == IdentityMismatch` bei der ersten B-Probe, gefilterter
+Wert und `appliedOffset` ausschliesslich aus B (Vergleich mit einer frischen
+Pipeline, die nur B sieht), Recovery-Fortschritt neu gestartet, Snapshot-Identitaet
+B; (2) `Ok(A)->Missing(A)->Ok(A)`: kein Mismatch, Filterverlauf und angewandter
+Offset gleich einer Referenzpipeline ohne Adapter; (3) Wiederholung beider mit
+`BusFault`, `CrcFault`, Mehrfachgeraet; (4) Boot `Missing(leer)->Ok(A)`; (5)
+Engine-Vertrag: Nicht-Ok-Proben verlieren Produkt-/Rollenidentitaet nie. Scheitert
+(1) an der unveraenderten Pipeline, wird nicht lokal nachgebessert, sondern die
+Umsetzung angehalten und Option C als materielle Plan-/Ownerentscheidung
+vorgelegt.
 
 **Safety-Grenze.** Die Adapterausgabe ist ausschliesslich Messdaten. Hot-Plug,
 Wiedererkennung und Fehler koennen keine Aktorfreigabe erzeugen oder aufheben;
@@ -247,7 +307,7 @@ Die Akzeptanzkriterien "feste Sensoridentitaeten werden bei Boot geprueft" und
 persistierten Datensatz (Rolle, ROM, Offset, Bedienquelle, Revision); heute
 existiert keiner. S2 liefert ihn und die produktive Bindungsquelle fuer 4a
 (Boot-Laden, Validierung, Fail-closed bei jedem Fehler). Vor der Umsetzung folgt
-eine **Planrevision 3**, die Datensatz, Revision/Wire-Werte, den Application-
+eine **spaetere Planrevision** (S2-Detailplan), die Datensatz, Revision/Wire-Werte, den Application-
 Owner-Eintrag (`ConfigurationService` Preview/Commit wie `applyUserSettings`),
 Migration und den Commissioning-Ausloeser (O2) vollstaendig festlegt; dieser Plan
 nimmt bewusst keine Schema-/Persistenzentscheidung vorweg. Ohne S2 bleibt jede
@@ -271,7 +331,7 @@ sondern als eigener Boardprofil-/Plan-Scope gemeldet.
 | Kriterium aus #30 | Nachweis |
 |---|---|
 | feste Sensoridentitaeten bei Boot geprueft | S1 native Bindungsmatrix (4a); S2 persistierter Datensatz als einzige Bindungsquelle; S3 Hardware |
-| fehlender optionaler Produktfuehler unterscheidbar von Fehler | S1 Mapping-Matrix (`MissingSample` ohne Busfehler vs. `BusFault`/`CrcFault`); S3 Abziehen |
+| fehlender optionaler Produktfuehler unterscheidbar von Fehler | S1 Mapping-Matrix (`MissingSample` ohne Busfehler vs. `BusFault`/`CrcFault`) und die Pipeline-Folgetests aus 4b; S3 Abziehen |
 | Schrankluft- und Kuehlkoerpersensor fuer Peltierfreigabe erforderlich | Adapter liefert fuer feste Rollen bei Abwesenheit/Fehler nie `Ok`; die Peltierentscheidung bleibt #24/#35 (nur Daten, kein Ersatz) |
 | Hot-Plug erzeugt keine unkontrollierte Aktorfreigabe | kein Aktorpfad im Adapter (Architekturgrenzen-Check), `ACTUATOR_RELEASE=NO`, S3 Hot-Plug ohne Aktorverbindung |
 | reale Messwerte stimmen mit Diagnosemodell ueberein | S3 Vergleich gegen die Pipeline-Ausgabe/Referenz (Messprotokoll, keine neuen Grenzwerte) |
@@ -375,7 +435,7 @@ GPIOs oder zur Espressif-first-Richtung noetig.
 ```text
 Plan-Freigabe (exakte SHA) -> S0 (Spike, Owner-Hardware H1-H4) -> S0-Gate (Owner)
  -> S1 (+ Builder-Self-Check; feste Rollen ungebunden = fail-closed) -> Independent Review
- -> Planrevision 3 (Datensatz) -> S2 -> S3 Hardwareverifikation -> finaler Pre-Ready -> Owner
+ -> Planrevision S2-Detail (Datensatz) -> S2 -> S3 Hardwareverifikation -> finaler Pre-Ready -> Owner
 ```
 
 Abhaengigkeiten #20/#21/#29 sind erledigt; #31 ist gemergt. Es wird nicht auf
