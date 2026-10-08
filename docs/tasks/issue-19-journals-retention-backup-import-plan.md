@@ -1,7 +1,7 @@
 # Plan Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import
 
 ```text
-PLAN_REVISION=3 (konsolidiert; ersetzt Revision 2 `407f2f5ce2b1fa0029023c26085afb5bc9b55560` und Revision 1, beide nie freigegeben)
+PLAN_REVISION=4 (konsolidiert; ersetzt Revision 3 `fa12ca07b6893302264d48231fc9c30dc8fb194a` sowie die Revisionen 2 und 1; keine davon wurde freigegeben)
 PLAN_STATUS=DRAFT_AWAITING_PLAN_FIX_VERIFICATION_AND_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
@@ -22,7 +22,7 @@ Umsetzung der vorgesehenen R1-Funktionen beginnt erst nach (a) Plan-Fix-
 Verification, (b) ausdruecklicher Ownerfreigabe genau dieser Plan-SHA und – wo
 unten genannt – (c) dem jeweiligen Vorab-Nachweis und Ownerentscheid.
 
-| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 3 | Umsetzung |
+| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 4 | Umsetzung |
 |---|---|---|---|---|
 | 7 | Vollstaendiger **lokaler Werksreset** inkl. PIN-unabhaengigem Recoveryweg bei vergessener Service-PIN und Erhalt der Touchkalibrierung | **R1-PFLICHT** | konkret geplant (Abschnitt 4) | nach Freigabe dieser Plan-SHA und Entscheid O-R1 |
 | 5 | Normales, geheimnisfreies **Backup** | R1-ERWUENSCHT, nur bei nachgewiesener RAM-/Speichereignung | bedingt geplant (Abschnitt 5) | erst nach Ressourcennachweis B0 **und** Ownerentscheid |
@@ -104,7 +104,7 @@ Quellen: `BACKUP_SECURITY_RETENTION.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`,
 | Normales Backup *(bedingt, Abschnitt 5)* | Konfigurationsdokumente sind typisiert (`UserConfiguration`, `ServiceConfiguration` Schema 3, `ProgramCatalog`); `ChangeOperation::BackupImport` existiert als Wire-ID, hat **keinen Produzenten**. Doku: kein portables Format ("wird mit Issue #19 implementiert"). | Portables, versioniertes, secret-freies Format (Whitelist-Projektion). |
 | Validierter Import *(bedingt, Abschnitt 5)* | Mutationspfad mit fluechtiger Vorschau und atomarem Commit existiert: `ConfigurationService::beginPreview` -> `installPreview(origin, operation)` -> `validatePreviewForConfirmation` -> `confirmPreview` (Active/Fallback, ein persistenter Linearisierungspunkt, ADR-018). Programmaenderungen pruefen bereits Run-Evidenz (`applyProgramEdit`, `makeFermentationUiProgramUsageEvidence`); alle Anwendungseinstiege laufen ueber `ApplicationCallSerializer`. | Parser/Validator/Migration fuer externe Kandidaten, Konflikt-/Vorschauprojektion, atomare Lauf-/Import-Entscheidung im vorhandenen `ApplicationCallSerializer`-Guard (nur bei Umsetzung, Abschnitt 5), Groessenpfad (O5). |
 | Werksreset *(R1-PFLICHT, Abschnitt 4)* | Kern vorhanden: `ConfigurationRecoveryService::beginAuthorizedFactoryReset` (wiederaufnehmbar ueber `BootstrapState::Resetting`; prueft **nicht** Laufzustand, PIN oder Ursprung), `FermentationApplication::beginAuthorizedFactoryReset` (Auth-Gate drainieren, Websessions widerrufen, Auth-Zustand zuruecksetzen, Run-Epochenuebergabe). **Touchkalibrierung bleibt erhalten** und ist getestet. Regressionen zu Session-Widerruf, Login-Drain und Run-Handoff vorhanden (4.6). | Produktiver Aufrufer fehlt (nur Testharness `issue_90_slice7`); `PersistentFactoryReset` ist in `safeBootUnavailableCapabilities()` als nicht verfuegbar gefuehrt; kein Ablauf mit Mehrfachbestaetigung/Vorbedingungen, keine Bedienung, Ausloeser fuer den PIN-unabhaengigen Vollreset ungeklaert. |
-| Geheimnisse | Epochengebundene Connectivity-/Authentication-Domaenen mit eigenen Records (`cc0`, Typ 9; Typ 11/12), nie in Konfigurationsdokumenten. SoftAP-Passwort ist fluechtig (pro Start neu). | Nur Nachweis: Whitelist-Projektionen und Sentinel-Tests, dass keine Ausgabe Geheimnisse enthaelt. |
+| Geheimnisse | Epochengebundene Connectivity-/Authentication-Domaenen mit eigenen Records (`cc0`, Typ 9; Typ 11/12), nie in Konfigurationsdokumenten. Das SoftAP-Passwort ist Teil des epochengebundenen `ConnectivityCredential`-Records (V2) und wird vom `NetworkConfigurationService` als `activeCredential_` im RAM gehalten und in die aktive AP-Konfiguration uebergeben. | Nur Nachweis: Whitelist-Projektionen und Sentinel-Tests, dass keine Ausgabe Geheimnisse enthaelt. |
 
 Bereits belegte **Wiederverwendung** (nichts davon wird neu erfunden):
 `IStateStore` + Envelope V1 + `StorageEpoch` + Slotmechanik, ADR-016-Schluesselraum
@@ -147,8 +147,23 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
   widerruft Websessions an der Vertrauensgrenze, setzt den Authentication-Zustand zurueck,
   uebergibt die neue Epoche an die Laufpersistenz; laeuft im `ApplicationCallSerializer`.
 - Touchkalibrierung bleibt ueber den Epochenwechsel erhalten (Schluessel `tc0`/`tc1`).
-- Geheimnisse (Connectivity, Authentication) sind epochengebunden und durch den
-  Epochenwechsel logisch unerreichbar; das SoftAP-Passwort ist fluechtig.
+- Geheimnisse (Connectivity inkl. SoftAP-Passwort, Authentication) sind epochengebunden
+  und durch den Epochenwechsel **logisch** unerreichbar. Das beendet jedoch keine
+  laufende Funkverbindung und leert keine RAM-Kopien (`NetworkConfigurationService::
+  activeCredential_`, `INetworkLifecycle`-AP-Daten): `FermentationApplication::
+  beginAuthorizedFactoryReset` invalidiert Epoche, Websessions und Auth-Zustand, stoppt
+  oder reinitialisiert den Netzwerk-/SoftAP-Lifecycle aber **nicht**. Das schliesst
+  der Ablauf (4.4 Punkt 6, 4.4a).
+- Netzwerkgrenzen: `device_platform::INetworkLifecycle` (`stop()`, `start()`,
+  `setAccessPointCredentials()`, `accessPointInfo()`, `status()`) und
+  `NetworkConfigurationService` (`start(mode, epoch, name)` leitet bei
+  `UNSELECTED` nur `SelectionRequired` ab und stoppt den Lifecycle nicht; bei gesetztem
+  Modus erzeugt `ensureCredential` fuer eine neue Epoche ein neues SoftAP-Passwort).
+- PIN-Pruefung und -Sperre: `AuthenticationDomain::verifyServicePin` schreibt
+  Fehlversuche, Sperrstufe und Recordsequenz **absichtlich persistent**
+  (`writeCredentials`); auch eine erfolgreiche Pruefung kann einen Auth-Record
+  schreiben. Diese neustartfeste Sperrlogik bleibt unveraendert und wird weder
+  deaktiviert noch umgangen.
 - SAFE_BOOT-Modell der Touch-Workspace-Schicht (`FermentationUiSafeBootTarget`/
   `...Capability::PersistentFactoryReset`), Zuordnung nach `ACCEPTANCE_TESTS.md` SIM-26-07
   (Werksreset = #57-Owner); PIN-Eingabemodell `device_ui_pin`; PIN-Pruefung ueber den
@@ -162,6 +177,7 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 | Kein Ablauf mit Mehrfachbestaetigung, Vorbedingungspruefung (Lauf, PIN, Ursprung) und Ergebnisprojektion | `fermentation_app`: kleiner Zustandsautomat `FactoryResetFlow` (Arbeitsname); keine neue Schleife, kein Task |
 | Kein Bedienpfad (Warn-/Bestaetigungsseiten, PIN-Eingabe, Ergebnis) | Praesentationsmodell in `fermentation_app` (bestehende Touch-Workspace-/Device-UI-Vertraege); Bildschirme im vorhandenen Renderer unter `main/` – eigener Schnitt |
 | Ausloeser fuer Ablauf B (physischer Recoveryweg) ist weder implementiert noch im Konzept festgelegt | Ownerentscheid O-R1 |
+| **Kein Netzwerk-/SoftAP-Widerruf** beim Werksreset: alte AP-Zugangsdaten und bestehende WLAN-/AP-Verbindungen laufen nach dem Epochenwechsel weiter, RAM-Kopien bleiben | kleine Ergaenzung an der vorhandenen Grenze `NetworkConfigurationService`/`INetworkLifecycle` (4.4a); keine neue Netzwerkkomponente, keine zweite Credential-Persistenz |
 | Unklar, ob der Anwendungs-Einstieg auch ohne geladene Runtime (SAFE_BOOT, beschaedigte Konfiguration) lauffaehig ist (`storageEpoch_`/`stateStore_` Voraussetzungen) | R0-Vorpruefung |
 
 ### 4.4 Invarianten des Ablaufs (pruefbar)
@@ -174,23 +190,71 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 3. **Vorbedingungen unter dem Guard.** Die bindende Pruefung (kein Lauf; bei A
    verifizierte PIN) liegt im selben `ApplicationCallSerializer`-Guard wie der Aufruf
    des Resetkerns; fruehere Pruefungen in der Bedienung sind nur Fruehabbrueche.
-4. **Keine automatische Ausloesung.** Weder Datenfehler noch SAFE_BOOT noch Timeout
-   loesen den Reset aus; Abbruch/Timeout an jeder Stelle verlaesst den Zustand
-   unveraendert (kein Store-Write vor dem bestaetigten Aufruf).
+4. **Keine automatische Ausloesung; kein Reset-Write vor Bestaetigung.** Weder
+   Datenfehler noch SAFE_BOOT noch Timeout loesen den Reset aus. Vor der
+   abgeschlossenen Bestaetigung (und bei Abbruch, Timeout, falscher oder gesperrter
+   PIN) gibt es **keinen Aufruf des Resetkerns und keinen Werksreset-, Bootstrap-/
+   `StorageEpoch`- oder Konfigurationsgraph-Write**. Legitime Writes der PIN-Pruefung
+   (Auth-Records: Fehlversuche, Sperrstufe, Sequenz; bei Erfolg gegebenenfalls
+   Zuruecksetzen des Fehlzaehlers) sind ausdruecklich erlaubt und fuer Fehlversuche
+   verpflichtend; die vorhandene neustartfeste PIN-Sperre bleibt voll wirksam.
 5. **Wiederaufnehmbar.** Ein Stromausfall mitten im Reset wird durch den vorhandenen
    `Resetting`-Mechanismus aufgeloest; der Ablauf zeigt danach den Ausgang und stellt
    keinen eigenen Zwischenzustand her.
-6. **Widerruf.** Nach Erfolg sind alte Websessions und Auth-Zustand ungueltig, alte
-   Credentials logisch unerreichbar; Touchkalibrierung bleibt.
+6. **Widerruf in vier getrennten Ebenen.** (a) Persistierte alte Credentials sind nach
+   dem Epochenwechsel **logisch** ungueltig. (b) Websessions und Auth-Zustand werden an der
+   Vertrauensgrenze widerrufen (vorhanden). (c) **Laufende** WLAN-/AP-Verbindungen und
+   RAM-gehaltene Credentials (`activeCredential_`, AP-Daten im Lifecycle) werden nach
+   der irreversiblen Resetgrenze sicher beendet beziehungsweise invalidiert (4.7);
+   danach wird keine alte Verbindung oder SoftAP-Autoritaet weiterverwendet. (d) Ein
+   **neues** SoftAP-Passwort wird erst behauptet, wenn die Netzwerkdomaene nachweislich
+   erfolgreich neu provisioniert beziehungsweise neu gestartet wurde; es gibt keinen
+   erfundenen Passwortwechsel ohne tatsaechliche Netzwerktransition. Touchkalibrierung
+   bleibt.
 7. **Ergebnis ehrlich.** Fehler des Kerns (`...Failure`/`...Rejected`/`CounterOverflow`
    u. a.) werden als solche projiziert; kein erfundenes Erfolgsbild.
+
+### 4.4a Netzwerk-/SoftAP-Widerruf (Ablauf nach der Resetgrenze)
+
+Kleiner Ablauf an den **vorhandenen** Grenzen; keine neue Netzwerkkomponente, keine
+zweite Credential-Persistenz, kein neuer Port:
+
+1. *Zeitpunkt.* Unmittelbar nach der irreversiblen Resetgrenze in
+   `FermentationApplication::beginAuthorizedFactoryReset`, neben dem bereits dort
+   stehenden Widerruf der Websessions und dem Zuruecksetzen des Auth-Zustands und
+   **vor** den Run-Epochenuebergabeschritten, die scheitern koennen (gleiche Begruendung wie
+   dort: spaetere Fehler duerfen vorherige Autoritaet nicht erhalten).
+2. *Widerruf.* `NetworkConfigurationService` erhaelt einen kleinen Einstieg
+   (Arbeitsname `revokeAfterFactoryReset`), der `INetworkLifecycle::stop()` aufruft und
+   die RAM-Kopien verwirft (`activeCredential_`, Kandidat, aktive AP-SSID, Initialisierungs-/
+   Setup-Merker), sodass weder `accessPointInfo()` noch ein spaeterer `restoreActiveTransport()`
+   alte Zugangsdaten liefert. R0 belegt, ob `stop()` im Adapter die AP-Daten und
+   `accessPointInfo()` tatsaechlich loescht und HTTP beendet (`httpReady == false`);
+   ist das nicht der Fall, ist das ein Stoppbefund an den Plan.
+3. *Neuprovisionierung.* Nach dem Reset ist der Netzwerkmodus der Factory-Initialkonfiguration massgeblich (erwartet `UNSELECTED`; R0 belegt den Default); die vorhandene
+   Ersteinrichtung waehlt den Netzwerkmodus. Erst dann startet `NetworkConfigurationService::
+   start` die Domaene neu, erzeugt (`ensureCredential`, neue Epoche) ein neues
+   SoftAP-Passwort, schreibt es epochengebunden und startet den Lifecycle. **Erst nach
+   `Applied` dieses Starts wird ein neues Passwort angezeigt oder behauptet.**
+4. *Fehler/Abbruch (fail-closed).* Meldet `stop()` `Failed`/`Busy`, bleibt der Reset
+   abgeschlossen (er ist nicht umkehrbar), das Ergebnis lautet aber ausdruecklich
+   *Netzwerk-Widerruf nicht bestaetigt*: der Netzwerkzustand gilt als nicht vertrauenswuerdig,
+   die Ersteinrichtung des Netzwerks wird nicht gestartet, der Widerruf wird wiederholt
+   (begrenzt, im niederprioren Schritt), und die Anzeige verlangt ein Trennen der
+   Stromversorgung als sicheren Abschluss (RAM-Zugangsdaten verschwinden, persistierte
+   sind logisch ungueltig). Scheitert `start` in der Neuprovisionierung, bleibt der Lifecycle
+   gestoppt (das vorhandene Verhalten von `start` bei Fehlern) und es wird kein neues
+   Passwort behauptet. Details und Wahl der Wiederholungs-/Abschlussstrategie: Gate **O-R4**.
+5. *Reihenfolge-Kontrolle.* Der Widerruf aendert weder Aktorpfad noch Interlock und
+   haengt von keinem Netzwerkerfolg ab, um den lokalen Betrieb zu erhalten: die lokale
+   Bedienung bleibt ohne Netzwerk nutzbar.
 
 ### 4.5 Umsetzungsschnitte (nach Planfreigabe; kein Produktcode vorher)
 
 | Schnitt | Inhalt | Gate |
 |---|---|---|
-| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
-| **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; gezielte Tests. | Planfreigabe |
+| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist, (e) dass `FermentationApplication::beginAuthorizedFactoryReset` den Netzwerk-Lifecycle nicht stoppt, was `INetworkLifecycle::stop()` im Adapter bewirkt (AP-Daten, `accessPointInfo()`, HTTP) und wie `NetworkConfigurationService::start` bei `UNSELECTED` reagiert, (f) die Auth-Writes von `verifyServicePin` und welche Bestandstests die Sperrlogik abdecken. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
+| **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; Netzwerk-/SoftAP-Widerruf nach der Resetgrenze (4.4a) samt Fail-closed-Ergebnis; gezielte Tests. | Planfreigabe |
 | **R2** Anbindung | Praesentationsmodell, SAFE_BOOT-Capability `PersistentFactoryReset` verfuegbar machen (nur wenn der Ablauf lauffaehig ist), Aktor-AUS-Beleg ueber Mock-Senken. | Planfreigabe |
 | **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Ausloeser fuer B gemaess O-R1. Hardware-Anzeige `NOT_RUN`. | **O-R1** |
 | **R4** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP; physische Tests als `NOT_RUN`. | – |
@@ -212,20 +276,30 @@ Bereits vorhanden und **wiederzuverwenden** (Regression, nicht neu):
 (`test_web_application_routes`);
 `test_application_reset_hands_off_existing_run_store_to_new_epoch` und
 `test_application_reconstructs_reset_handoff_after_run_write_cut`
-(`test_issue144_run_identity`).
+(`test_issue144_run_identity`);
+PIN-/Sperrlogik (`test_authentication_records`):
+`test_lockout_is_persisted_and_skips_kdf_while_active_and_after_reboot`,
+`test_credential_change_reports_denial_and_lockout_separately`,
+`test_other_credential_mutations_do_not_restart_lockout_duration`,
+`test_authorized_new_epoch_bootstrap_replaces_corrupt_prior_credentials`;
+Netzwerk (`test_network_configuration`): `test_transport_stop_start_is_restartable`,
+`test_indeterminate_commit_stops_without_restoring_old_runtime`,
+`test_v2_softap_only_record_separates_home_setup_from_ap_only`.
 
 Neu (gezielt, nur fuer den Ablauf):
 
 | ID | Pruefung |
 |---|---|
-| SIM-R-01 | Ablauf A: Stufen nicht uebersprungen; Abbruch/Timeout an jeder Stufe -> Store-Bytes und `stateRevision` unveraendert, Kern nicht aufgerufen |
+| SIM-R-01 | Ablauf A und B: Stufen nicht uebersprungen; Abbruch/Timeout an jeder Stufe -> **Resetkern nicht aufgerufen** und **keine** Aenderung an Bootstrap-/`StorageEpoch`-Records, Konfigurationsgraph, Programmkatalog oder Run-Persistenz (Bytes dieser Schluessel und `stateRevision` unveraendert); Auth-Records duerfen sich nur durch eine tatsaechlich erfolgte PIN-Pruefung aendern (A) und bleiben bei B unveraendert |
 | SIM-R-02 | A lehnt bei aktivem/pausiertem/unterbrochenem/wiederherstellbarem/unbekanntem Lauf ab; Pruefung liegt im Guard (Konkurrenzfall Runstart/Reset deterministisch) |
-| SIM-R-03 | A verlangt verifizierte lokale PIN; falsche/gesperrte PIN -> kein Reset, kein Store-Write |
+| SIM-R-03 | A verlangt verifizierte lokale PIN. **Falsche PIN:** Resetkern nicht aufgerufen, keine Reset-/Bootstrap-/Graph-Writes; der persistente Fehlversuchszaehler, die Sperrstufe und die Recordsequenz im Auth-Record **wurden wie vorgesehen aktualisiert** (geprueft, nicht verboten). **Gesperrte PIN:** kein KDF-Lauf waehrend der Sperre, keine Resetwirkung, Sperrzustand bleibt (auch nach simuliertem Neustart). **Korrekte PIN:** Reset erst nach den weiteren Bestaetigungsstufen; ein dabei erfolgender Auth-Write ist erlaubt. Es wird keine neue Authentifizierungsarchitektur eingefuehrt; vorhandene PIN-/Lockout-Regressionen (oben) bleiben unveraendert gruen |
 | SIM-R-04 | B ohne PIN: nur mit allen Warnstufen und langer Bestaetigung; Abbruch -> unveraendert; B gibt keinen Service-/Aktorzugang frei und setzt die PIN nicht isoliert zurueck |
 | SIM-R-05 | Nicht lokale Ursprungsangabe wird abgelehnt; die Web-Routentabelle enthaelt keinen Pfad zu Ablauf oder Kern |
 | SIM-R-06 | Mock-Aktorsenken zaehlen waehrend des gesamten Ablaufs (A und B) null Enable-Aufrufe; Interlock-Permission unveraendert |
 | SIM-R-07 | Stromausfall-Cutpoints des Kerns (vorhandene Matrix) plus Ablauf-Ebene: nach Neustart wird der Ausgang korrekt projiziert; kein erneuter Reset ohne Bestaetigung |
-| SIM-R-08 | Nach Erfolg: alte Session ungueltig, Auth-Zustand zurueckgesetzt, alte Credentials unerreichbar, SoftAP-Passwort neu (Ablauf-Ebene, ergaenzt die obigen Regressionen) |
+| SIM-R-08 | Nach Erfolg (Ablauf-Ebene, ergaenzt die obigen Regressionen): alte Session ungueltig, Auth-Zustand zurueckgesetzt, alte persistierte Credentials logisch unerreichbar (neue Epoche); **kein** neues SoftAP-Passwort wird vor einer erfolgreichen Neuprovisionierung angezeigt oder behauptet |
+| SIM-R-12 | **Netzwerk-/SoftAP-Widerruf** (Mock-`INetworkLifecycle`): nach der Resetgrenze wird `stop()` aufgerufen, `status()` ist `Stopped`/`httpReady == false`, `accessPointInfo()` liefert nichts, kein weiterer `setAccessPointCredentials`/`start` mit alten Daten, `activeCredential_` verworfen; Reihenfolge: Widerruf vor den scheiternden Run-Epochenuebergabeschritten (Testfall: Handoff-Fehler -> Netzwerk trotzdem widerrufen) |
+| SIM-R-13 | **Fail-closed bei Netzwerkfehlern:** `stop()` -> `Failed`/`Busy`: Reset bleibt abgeschlossen, Ergebnis *Widerruf nicht bestaetigt*, keine Netzwerk-Ersteinrichtung, Wiederholung begrenzt, kein erfundenes Erfolgsbild; Neuprovisionierung nach Modusauswahl: erst nach `Applied` ein neues SoftAP-Passwort, bei `start`-Fehler Lifecycle gestoppt und kein neues Passwort behauptet; lokale Bedienung bleibt ohne Netzwerk nutzbar |
 | SIM-R-09 | Touchkalibrierung bleibt ueber den vollstaendigen Ablauf A und B erhalten |
 | SIM-R-10 | SAFE_BOOT-Capability `PersistentFactoryReset` nur verfuegbar, wenn der Ablauf lauffaehig ist |
 | SIM-R-11 | Projektion von A nennt geloeschte und wiederhergestellte Daten; B nennt vollstaendigen Datenverlust |
@@ -367,6 +441,7 @@ Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeents
 | **G0** | Freigabe der exakten Plan-SHA | – | – | vor R0 |
 | **O-R1** | Ausloeser des PIN-unabhaengigen Vollresets B (physischer Recoveryweg) | **A** eigene Boot-Touchgeste, getrennt von der 10-Sekunden-Raw-Touch-Kalibrierung (Geste/Schwellen `TBD_HARDWARE`, Scope #31, Verwechslungsschutz noetig); **B** bewusst tief liegende lokale Funktion auf dem PIN-Eingabebildschirm ("PIN vergessen") mit denselben Warnstufen und langer Bestaetigung (keine neue Hardwareannahme; Ausloesung nur durch physischen Touch am Geraet); **C** in R1 nur `SAFE_BOOT`-Eintritt plus UART-Neuflashen (erfuellt R1-PFLICHT fuer ein gesundes Geraet mit vergessener PIN nicht) | **B** (nur die Ausloesung ist eine Bedienentscheidung; Kern und Schutzstufen bleiben identisch; A kann spaeter ergaenzt werden) | vor R3 |
 | **O-R2** | Bedingt: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
+| **O-R4** | Fail-closed-Strategie, wenn der Netzwerk-/SoftAP-Widerruf nach der Resetgrenze scheitert (4.4a Punkt 4) | **A** begrenzte Wiederholung plus Anzeige "Stromversorgung trennen" (RAM-Zugangsdaten verschwinden, persistierte sind logisch ungueltig); **B** kontrollierter Software-Neustart ueber einen neuen Plattformport (neuer Port, daher nur mit Ownerentscheid); **C** Reset als fehlgeschlagen melden (unzulaessig: die Resetgrenze ist irreversibel) | **A** (keine neue Abstraktion) | vor R1 |
 | **O-BI** | Funktionsumfang und Strategie von Backup/Import nach B0 | Gesamtbody / Chunking mit Vorab-Validator / Export-only / Nichtlieferung in R1; jede Reduktion von Limits ist eigene Entscheidung | keine Vorabwahl | nach B0 |
 | **O3** | Bedingt (nur bei B1/B2): geraetegebundene Daten im Backup (`sensorCommissioning` mit ROM-Bindung, Planerparameter) | **A** ausschliessen; **B** mit Warnung; **C** mit Zusatzbestaetigung | **A** | vor B1 |
 | **O-R3** | R1-Vertragsabgleich K1–K7 (Abschnitt 7) und Zuschnitt von #19/#28 | Journal fuer R1 doch umsetzen / R1-SSOT per ADR anpassen / Abweichung ausdruecklich akzeptieren | – (nicht vom Plan entschieden) | vor R1-Abnahme, vor Wiederaufnahme von #1–#4 und vor jeder Aenderung von #19/#28 |
@@ -393,6 +468,8 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 | Risiko | Wirkung | Gegenmassnahme |
 |---|---|---|
 | Resetkern prueft Lauf/PIN/Ursprung nicht | Reset koennte fehlerhaft ausloesbar sein | Vorbedingungen unter dem Guard im neuen Ablauf, SIM-R-02..05, R0-Pruefung |
+| Alte AP-/WLAN-Autoritaet nach dem Reset | Funkverbindung mit alten Zugangsdaten laeuft bis zu einer expliziten Transition weiter | 4.4a, SIM-R-12/13, R0-Pruefung des Adapterverhaltens, O-R4 |
+| PIN-Pruefung schreibt persistent | Test/Ablauf koennte faelschlich "kein Store-Write" verlangen und die Sperre umgehen | Invariante 4 und SIM-R-01/03 trennen Reset-Writes von Auth-Writes; Sperrlogik unveraendert |
 | Ablauf B ohne PIN | zu leichte Ausloesbarkeit | Mehrfachwarnung + lange Bestaetigung, nur lokal, Aktoren AUS, O-R1; keine PIN-Rueckstellung ohne Reset |
 | Ausloeser B / Dauer / Geste sind `TBD_HARDWARE` | Verifikation nicht moeglich | O-R1, Hardware `NOT_RUN`, O-HW |
 | Zurueckgestellte Journal-Startbedingung (K1) | Safety-nahe Anforderung bleibt unerfuellt | transparent in Abschnitt 7; kein falsches `PASS`; O-R3 |
@@ -414,7 +491,7 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 
 - [ ] Plan-Fix-Verification ohne offene Blocker
 - [ ] exakte Plan-SHA vom Owner freigegeben (G0)
-- [ ] O-R1 vor R3; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
+- [ ] O-R4 vor R1; O-R1 vor R3; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
 - [ ] O-R3 (R1-Vertragsabgleich) bis zur R1-Abnahme entschieden
 - [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten
 
