@@ -1,0 +1,100 @@
+diff --git a/lib/device_platform_esp_idf/CMakeLists.txt b/lib/device_platform_esp_idf/CMakeLists.txt
+index 4f91241..6fd8611 100644
+--- a/lib/device_platform_esp_idf/CMakeLists.txt
++++ b/lib/device_platform_esp_idf/CMakeLists.txt
+@@ -2,7 +2,7 @@ idf_component_register(
+     SRC_DIRS "src"
+     INCLUDE_DIRS "src"
+     REQUIRES device_platform nvs_flash
+-    PRIV_REQUIRES esp_event esp_http_server esp_netif esp_wifi mdns esp_timer
++    PRIV_REQUIRES espressif__onewire_bus espressif__ds18b20 esp_event esp_http_server esp_netif esp_wifi mdns esp_timer
+                   mbedtls
+                   freertos
+                   lwip esp-idf-lib__ds3231 esp-idf-lib__i2cdev esp_driver_gpio
+diff --git a/lib/device_platform_esp_idf/idf_component.yml b/lib/device_platform_esp_idf/idf_component.yml
+index 30939d9..3bb9926 100644
+--- a/lib/device_platform_esp_idf/idf_component.yml
++++ b/lib/device_platform_esp_idf/idf_component.yml
+@@ -11,3 +11,7 @@ dependencies:
+     version: "1.1.7"
+   esp-idf-lib/i2cdev:
+     version: "2.1.2"
++  espressif/onewire_bus:
++    version: "1.1.2"
++  espressif/ds18b20:
++    version: "0.4.0"
+diff --git a/lib/device_platform_esp_idf/src/ds18b20_spike_probe.cpp b/lib/device_platform_esp_idf/src/ds18b20_spike_probe.cpp
+new file mode 100644
+index 0000000..9f28192
+--- /dev/null
++++ b/lib/device_platform_esp_idf/src/ds18b20_spike_probe.cpp
+@@ -0,0 +1,48 @@
++// ISSUE #30 S0 STAGE 1 - LINK PROBE (spike only, never flashed, not product code).
++// References the Espressif API subset the plan intends to use so the linker
++// keeps it and the resource comparison is meaningful.
++#include <initializer_list>
++
++#include "ds18b20.h"
++#include "onewire_bus.h"
++#include "onewire_cmd.h"
++#include "onewire_device.h"
++
++extern "C" int issue30Stage1LinkProbe() {
++    onewire_bus_handle_t internalBus = nullptr;
++    onewire_bus_handle_t productBus = nullptr;
++    onewire_bus_config_t internalCfg{};
++    internalCfg.bus_gpio_num = 32;
++    onewire_bus_config_t productCfg{};
++    productCfg.bus_gpio_num = 33;
++    onewire_bus_rmt_config_t rmtCfg{};
++    rmtCfg.max_rx_bytes = 10;
++    int result = 0;
++    result |= onewire_new_bus_rmt(&internalCfg, &rmtCfg, &internalBus);
++    result |= onewire_new_bus_rmt(&productCfg, &rmtCfg, &productBus);
++    for (onewire_bus_handle_t bus : {internalBus, productBus}) {
++        result |= onewire_bus_reset(bus);  // presence primitive
++        onewire_device_iter_handle_t iter = nullptr;
++        result |= onewire_new_device_iter(bus, &iter);
++        onewire_device_t device{};
++        while (onewire_device_iter_get_next(iter, &device) == ESP_OK) {
++            ds18b20_config_t config{};
++            ds18b20_device_handle_t handle = nullptr;
++            result |= ds18b20_new_device_from_enumeration(&device, &config, &handle);
++            result |= ds18b20_set_resolution(handle, DS18B20_RESOLUTION_12B);
++            // variant A: driver trigger (blocking vTaskDelay inside)
++            result |= ds18b20_trigger_temperature_conversion_for_all(bus);
++            // variant B: public bus API, one shared wait done by the caller
++            const uint8_t convertAll[2] = {ONEWIRE_CMD_SKIP_ROM, 0x44};
++            result |= onewire_bus_write_bytes(bus, convertAll, sizeof(convertAll));
++            float celsius = 0.0F;
++            result |= ds18b20_get_temperature(handle, &celsius);
++            onewire_device_address_t rom = 0;
++            result |= ds18b20_get_device_address(handle, &rom);
++            result |= ds18b20_del_device(handle);
++        }
++        result |= onewire_del_device_iter(iter);
++        result |= onewire_bus_del(bus);
++    }
++    return result;
++}
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 3f6c12f..1a270ed 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -254,6 +254,8 @@ void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
+                   functionName != nullptr ? functionName : "?");
+ }
+
++extern "C" int issue30Stage1LinkProbe();
++
+ void logResources(const char* samplePoint,
+                   device_platform::NetworkMode selectedMode,
+                   device_platform::NetworkLifecycleState lifecycleState,
+@@ -619,6 +621,7 @@ extern "C" void app_main(void) {
+     // erhalten: application.begin() laeuft nur nach erfolgreichem
+     // platform.begin().
+     bool applicationStarted = platform.begin(startupContext);
++    if (issue30Stage1LinkProbe() == 0x7fffffff) { return; }  // spike link reference only
+     logResources("after_platform_begin", application.networkMode(),
+                  networkLifecycle.status().state);
+     if (applicationStarted) {
