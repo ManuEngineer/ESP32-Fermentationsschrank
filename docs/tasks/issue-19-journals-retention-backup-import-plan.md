@@ -1,7 +1,7 @@
 # Plan Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import
 
 ```text
-PLAN_REVISION=4 (konsolidiert; ersetzt Revision 3 `fa12ca07b6893302264d48231fc9c30dc8fb194a` sowie die Revisionen 2 und 1; keine davon wurde freigegeben)
+PLAN_REVISION=5 (konsolidiert; ersetzt Revision 4 `5b538a1d0e0ae3aad1eb5011a1096d421de97207` sowie die Revisionen 3, 2 und 1; keine davon wurde freigegeben)
 PLAN_STATUS=DRAFT_AWAITING_PLAN_FIX_VERIFICATION_AND_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
@@ -22,7 +22,7 @@ Umsetzung der vorgesehenen R1-Funktionen beginnt erst nach (a) Plan-Fix-
 Verification, (b) ausdruecklicher Ownerfreigabe genau dieser Plan-SHA und – wo
 unten genannt – (c) dem jeweiligen Vorab-Nachweis und Ownerentscheid.
 
-| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 4 | Umsetzung |
+| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 5 | Umsetzung |
 |---|---|---|---|---|
 | 7 | Vollstaendiger **lokaler Werksreset** inkl. PIN-unabhaengigem Recoveryweg bei vergessener Service-PIN und Erhalt der Touchkalibrierung | **R1-PFLICHT** | konkret geplant (Abschnitt 4) | nach Freigabe dieser Plan-SHA und Entscheid O-R1 |
 | 5 | Normales, geheimnisfreies **Backup** | R1-ERWUENSCHT, nur bei nachgewiesener RAM-/Speichereignung | bedingt geplant (Abschnitt 5) | erst nach Ressourcennachweis B0 **und** Ownerentscheid |
@@ -124,13 +124,13 @@ Raw-Touch-Kalibrierungs-Recovery (#31).
 
 | Merkmal | **A – Normaler Vollreset** | **B – PIN-unabhaengiger lokaler Vollreset (vergessene PIN)** |
 |---|---|---|
-| Ausloeser | Menueeintrag im PIN-geschuetzten Servicebereich | bewusster **physischer lokaler Recoveryweg** (Geraet einschalten oder `SAFE_BOOT` aktiv); konkreter Ausloeser: **offen, Entscheid O-R1** (rohe Touchgeste ist `TBD_HARDWARE`) |
+| Ausloeser | Menueeintrag im PIN-geschuetzten Servicebereich | **Ownerentscheid O-R1 = B+ (verbindlich), zwei lokale Zugaenge zu demselben Ablauf:** (1) *Normalbetrieb:* "PIN vergessen?" auf der lokalen PIN-Seite, **ohne PIN-Eingabe** erreichbar; (2) *`SAFE_BOOT`:* eigener lokaler Eintrag "Vollstaendiger Werksreset", **unabhaengig vom gesperrten Servicebereich**. Keine zusaetzliche Hardware und **keine neue Boot-Touchgeste**; die vorhandene Raw-Touch-Recovery bleibt ausschliesslich der Touchkalibrierung vorbehalten |
 | Berechtigung | lokal verifizierte Service-PIN | keine PIN (die PIN darf fuer ihre eigene Wiederherstellung nicht verlangt werden); **kein isolierter PIN-Reset, kein Servicezugang** |
-| Laufzustand | nur ohne Lauf (kein aktiver, pausierter, unterbrochener, wiederherstellbarer oder unbekannter Lauf) | Recovery-/Bootfenster ohne laufenden Prozess; ein laufender Prozess blockiert den Ablauf (vorher sicher beenden bzw. Neustart) |
-| Bestaetigung | mindestens zweistufig; zeigt geloeschte und wiederhergestellte Daten | mehrstufige Warnung ueber vollstaendigen Datenverlust, danach **lange bewusste lokale Bestaetigung** (Dauer: Ownerwert, nicht geraten) |
+| Laufzustand | nur ohne Lauf (kein aktiver, pausierter, unterbrochener, wiederherstellbarer oder unbekannter Lauf) | Normalbetrieb ohne laufenden Prozess oder `SAFE_BOOT`; ein laufender Prozess blockiert den Ablauf (vorher sicher beenden bzw. Neustart) |
+| Bestaetigung | mindestens zweistufig; zeigt geloeschte und wiederhergestellte Daten | mehrstufiger Recoveryablauf (beide Zugaenge identisch): ausdrueckliche Datenverlustwarnung -> bewusste Bestaetigung -> **langes Gedrueckthalten**; Dauer = noch festzulegender Bedienparameter (vom Owner zu bestimmen; kein Wert angenommen) |
 | Aktoren | der Ablauf schaltet nichts ein; Aktorpfad bleibt gesperrt | alle Aktoren und beide BTS7960-Richtungen bleiben AUS; es werden keine Aktor-/Servicefunktionen freigeschaltet |
 | Fernausloesung | nie | nie (nicht ueber Web oder Netzwerk) |
-| Ergebnis | Factory-Programme, Factory-Grenzen, Ersteinrichtungszustand; Touchkalibrierung bleibt | wie A |
+| Ergebnis | Factory-Programme, Factory-Grenzen, Ersteinrichtungszustand; Touchkalibrierung bleibt | wie A, anschliessend Ersteinrichtung; **ausschliesslich vollstaendiger Werksreset** – kein isolierter PIN-Reset, kein PIN-Bypass, keine Service- oder Aktorfreigabe, keine Fernausloesung |
 
 Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 (`LOCAL_UI_SETTINGS_SERVICE.md`); er ersetzt den lokalen Ablauf in R1 nicht.
@@ -176,7 +176,7 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 | **Kein produktiver Aufrufer** des Resetkerns (nur der Testharness `issue_90_slice7`). `safeBootUnavailableCapabilities()` fuehrt `PersistentFactoryReset` heute als *nicht verfuegbar*. | neuer Anwendungs-Einstieg in `fermentation_app` |
 | Kein Ablauf mit Mehrfachbestaetigung, Vorbedingungspruefung (Lauf, PIN, Ursprung) und Ergebnisprojektion | `fermentation_app`: kleiner Zustandsautomat `FactoryResetFlow` (Arbeitsname); keine neue Schleife, kein Task |
 | Kein Bedienpfad (Warn-/Bestaetigungsseiten, PIN-Eingabe, Ergebnis) | Praesentationsmodell in `fermentation_app` (bestehende Touch-Workspace-/Device-UI-Vertraege); Bildschirme im vorhandenen Renderer unter `main/` – eigener Schnitt |
-| Ausloeser fuer Ablauf B (physischer Recoveryweg) ist weder implementiert noch im Konzept festgelegt | Ownerentscheid O-R1 |
+| Zugaenge fuer Ablauf B ("PIN vergessen?" auf der PIN-Seite, `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset") sind nicht implementiert; `PersistentFactoryReset` ist in `safeBootUnavailableCapabilities()` als nicht verfuegbar gefuehrt | O-R1 = B+ entschieden; Umsetzung `fermentation_app` (Ablauf/Projektion) und Renderer unter `main/` (R2/R3) |
 | **Kein Netzwerk-/SoftAP-Widerruf** beim Werksreset: alte AP-Zugangsdaten und bestehende WLAN-/AP-Verbindungen laufen nach dem Epochenwechsel weiter, RAM-Kopien bleiben | kleine Ergaenzung an der vorhandenen Grenze `NetworkConfigurationService`/`INetworkLifecycle` (4.4a); keine neue Netzwerkkomponente, keine zweite Credential-Persistenz |
 | Unklar, ob der Anwendungs-Einstieg auch ohne geladene Runtime (SAFE_BOOT, beschaedigte Konfiguration) lauffaehig ist (`storageEpoch_`/`stateStore_` Voraussetzungen) | R0-Vorpruefung |
 
@@ -253,10 +253,10 @@ zweite Credential-Persistenz, kein neuer Port:
 
 | Schnitt | Inhalt | Gate |
 |---|---|---|
-| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist, (e) dass `FermentationApplication::beginAuthorizedFactoryReset` den Netzwerk-Lifecycle nicht stoppt, was `INetworkLifecycle::stop()` im Adapter bewirkt (AP-Daten, `accessPointInfo()`, HTTP) und wie `NetworkConfigurationService::start` bei `UNSELECTED` reagiert, (f) die Auth-Writes von `verifyServicePin` und welche Bestandstests die Sperrlogik abdecken. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
+| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist, (e) dass `FermentationApplication::beginAuthorizedFactoryReset` den Netzwerk-Lifecycle nicht stoppt, was `INetworkLifecycle::stop()` im Adapter bewirkt (AP-Daten, `accessPointInfo()`, HTTP) und wie `NetworkConfigurationService::start` bei `UNSELECTED` reagiert, (f) die Auth-Writes von `verifyServicePin` und welche Bestandstests die Sperrlogik abdecken, (g) **Nutzbarkeit des vorhandenen Resetkerns ohne geladene Runtime, insbesondere aus `SAFE_BOOT`** (Voraussetzungen von `FermentationApplication::beginAuthorizedFactoryReset`: `configurationService_`, `stateStore_`, `storageEpoch_`; Verhalten des Kerns bei `NoRuntime`/`ResetEligibleNoRuntime`). Funktioniert der Pfad dort nicht sicher, ist das ein **Stoppbefund**: er wird dokumentiert und dem Owner vorgelegt; es wird keine Ersatzarchitektur festgelegt. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
 | **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; Netzwerk-/SoftAP-Widerruf nach der Resetgrenze (4.4a) samt Fail-closed-Ergebnis; gezielte Tests. | Planfreigabe |
 | **R2** Anbindung | Praesentationsmodell, SAFE_BOOT-Capability `PersistentFactoryReset` verfuegbar machen (nur wenn der Ablauf lauffaehig ist), Aktor-AUS-Beleg ueber Mock-Senken. | Planfreigabe |
-| **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Ausloeser fuer B gemaess O-R1. Hardware-Anzeige `NOT_RUN`. | **O-R1** |
+| **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Zugang "PIN vergessen?" auf der lokalen PIN-Seite und `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset" auf denselben mehrstufigen Ablauf (O-R1 = B+). Hardware-Anzeige `NOT_RUN`. | – (Bedienparameter lange Bestaetigung vor Abnahme festlegen) |
 | **R4** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP; physische Tests als `NOT_RUN`. | – |
 
 Zwischen R0–R4 gibt es keine Ownerfreigabe je Schnitt; gezielte Tests und
@@ -293,11 +293,12 @@ Neu (gezielt, nur fuer den Ablauf):
 | SIM-R-01 | Ablauf A und B: Stufen nicht uebersprungen; Abbruch/Timeout an jeder Stufe -> **Resetkern nicht aufgerufen** und **keine** Aenderung an Bootstrap-/`StorageEpoch`-Records, Konfigurationsgraph, Programmkatalog oder Run-Persistenz (Bytes dieser Schluessel und `stateRevision` unveraendert); Auth-Records duerfen sich nur durch eine tatsaechlich erfolgte PIN-Pruefung aendern (A) und bleiben bei B unveraendert |
 | SIM-R-02 | A lehnt bei aktivem/pausiertem/unterbrochenem/wiederherstellbarem/unbekanntem Lauf ab; Pruefung liegt im Guard (Konkurrenzfall Runstart/Reset deterministisch) |
 | SIM-R-03 | A verlangt verifizierte lokale PIN. **Falsche PIN:** Resetkern nicht aufgerufen, keine Reset-/Bootstrap-/Graph-Writes; der persistente Fehlversuchszaehler, die Sperrstufe und die Recordsequenz im Auth-Record **wurden wie vorgesehen aktualisiert** (geprueft, nicht verboten). **Gesperrte PIN:** kein KDF-Lauf waehrend der Sperre, keine Resetwirkung, Sperrzustand bleibt (auch nach simuliertem Neustart). **Korrekte PIN:** Reset erst nach den weiteren Bestaetigungsstufen; ein dabei erfolgender Auth-Write ist erlaubt. Es wird keine neue Authentifizierungsarchitektur eingefuehrt; vorhandene PIN-/Lockout-Regressionen (oben) bleiben unveraendert gruen |
-| SIM-R-04 | B ohne PIN: nur mit allen Warnstufen und langer Bestaetigung; Abbruch -> unveraendert; B gibt keinen Service-/Aktorzugang frei und setzt die PIN nicht isoliert zurueck |
+| SIM-R-04 | B ohne PIN: nur mit allen Stufen (Datenverlustwarnung, bewusste Bestaetigung, langes Gedrueckthalten); Abbruch/vorzeitiges Loslassen -> Resetkern nicht aufgerufen; B gibt keinen Service-/Aktorzugang frei und setzt die PIN nicht isoliert zurueck; die Dauer ist ein konfigurierbarer Bedienparameter ohne im Plan angenommenen Wert |
 | SIM-R-05 | Nicht lokale Ursprungsangabe wird abgelehnt; die Web-Routentabelle enthaelt keinen Pfad zu Ablauf oder Kern |
 | SIM-R-06 | Mock-Aktorsenken zaehlen waehrend des gesamten Ablaufs (A und B) null Enable-Aufrufe; Interlock-Permission unveraendert |
 | SIM-R-07 | Stromausfall-Cutpoints des Kerns (vorhandene Matrix) plus Ablauf-Ebene: nach Neustart wird der Ausgang korrekt projiziert; kein erneuter Reset ohne Bestaetigung |
 | SIM-R-08 | Nach Erfolg (Ablauf-Ebene, ergaenzt die obigen Regressionen): alte Session ungueltig, Auth-Zustand zurueckgesetzt, alte persistierte Credentials logisch unerreichbar (neue Epoche); **kein** neues SoftAP-Passwort wird vor einer erfolgreichen Neuprovisionierung angezeigt oder behauptet |
+| SIM-R-14 | **Zwei Zugaenge, ein Ablauf (O-R1 = B+):** "PIN vergessen?" ist ohne PIN-Eingabe erreichbar und loest dabei **keine** PIN-Pruefung und keinen Auth-Write aus; der `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset" ist unabhaengig vom gesperrten Servicebereich verfuegbar und schaltet diesen nicht frei; beide fuehren in denselben Zustandsautomaten (gleiche Stufen, gleicher Kern, gleiche Invarianten); es existiert kein Pfad, der nur die PIN zuruecksetzt; die vorhandene Raw-Touch-Recovery bleibt unveraendert (Bestandssuite `test_raw_touch_recovery_detector` gruen) und erreicht den Reset nicht |
 | SIM-R-12 | **Netzwerk-/SoftAP-Widerruf** (Mock-`INetworkLifecycle`): nach der Resetgrenze wird `stop()` aufgerufen, `status()` ist `Stopped`/`httpReady == false`, `accessPointInfo()` liefert nichts, kein weiterer `setAccessPointCredentials`/`start` mit alten Daten, `activeCredential_` verworfen; Reihenfolge: Widerruf vor den scheiternden Run-Epochenuebergabeschritten (Testfall: Handoff-Fehler -> Netzwerk trotzdem widerrufen) |
 | SIM-R-13 | **Fail-closed bei Netzwerkfehlern:** `stop()` -> `Failed`/`Busy`: Reset bleibt abgeschlossen, Ergebnis *Widerruf nicht bestaetigt*, keine Netzwerk-Ersteinrichtung, Wiederholung begrenzt, kein erfundenes Erfolgsbild; Neuprovisionierung nach Modusauswahl: erst nach `Applied` ein neues SoftAP-Passwort, bei `start`-Fehler Lifecycle gestoppt und kein neues Passwort behauptet; lokale Bedienung bleibt ohne Netzwerk nutzbar |
 | SIM-R-09 | Touchkalibrierung bleibt ueber den vollstaendigen Ablauf A und B erhalten |
@@ -307,8 +308,8 @@ Neu (gezielt, nur fuer den Ablauf):
 Zusaetzlich je Schnitt: Format-/Tidy-Self-Check, Architekturcheck (+ Selftest) und
 Build beider ESP-IDF-Profile, soweit Library-/`main/`-Quellen betroffen sind. Ein Build
 ersetzt keinen Hardwarenachweis. **Nicht hardwarefrei beweisbar (`NOT_RUN`):**
-physischer Ausloeser von B, reale Anzeige/Touch-Bedienung, Aktor-AUS am realen Geraet,
-Powercut auf echtem Flash, Dauer der langen Bestaetigung am Geraet.
+reale Erreichbarkeit der beiden Zugaenge von B und das Langgedrueckthalten am Geraet, reale Anzeige/Touch-Bedienung,
+Aktor-AUS am realen Geraet, Powercut auf echtem Flash, Dauer der langen Bestaetigung am Geraet.
 
 ## 5. R1-ERWUENSCHT (bedingt): Backup und Import
 
@@ -439,7 +440,7 @@ Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeents
 | ID | Entscheidung | Alternativen | Empfehlung | Zeitpunkt |
 |---|---|---|---|---|
 | **G0** | Freigabe der exakten Plan-SHA | – | – | vor R0 |
-| **O-R1** | Ausloeser des PIN-unabhaengigen Vollresets B (physischer Recoveryweg) | **A** eigene Boot-Touchgeste, getrennt von der 10-Sekunden-Raw-Touch-Kalibrierung (Geste/Schwellen `TBD_HARDWARE`, Scope #31, Verwechslungsschutz noetig); **B** bewusst tief liegende lokale Funktion auf dem PIN-Eingabebildschirm ("PIN vergessen") mit denselben Warnstufen und langer Bestaetigung (keine neue Hardwareannahme; Ausloesung nur durch physischen Touch am Geraet); **C** in R1 nur `SAFE_BOOT`-Eintritt plus UART-Neuflashen (erfuellt R1-PFLICHT fuer ein gesundes Geraet mit vergessener PIN nicht) | **B** (nur die Ausloesung ist eine Bedienentscheidung; Kern und Schutzstufen bleiben identisch; A kann spaeter ergaenzt werden) | vor R3 |
+| **O-R1** | *entschieden (Ownerentscheid B+, siehe 4.1):* Zugaenge fuer den PIN-unabhaengigen Vollreset B | – | – | **ERLEDIGT** – bleibt offen nur: Dauer des langen Gedrueckthaltens als Bedienparameter (Ownerwert, nicht geraten) |
 | **O-R2** | Bedingt: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
 | **O-R4** | Fail-closed-Strategie, wenn der Netzwerk-/SoftAP-Widerruf nach der Resetgrenze scheitert (4.4a Punkt 4) | **A** begrenzte Wiederholung plus Anzeige "Stromversorgung trennen" (RAM-Zugangsdaten verschwinden, persistierte sind logisch ungueltig); **B** kontrollierter Software-Neustart ueber einen neuen Plattformport (neuer Port, daher nur mit Ownerentscheid); **C** Reset als fehlgeschlagen melden (unzulaessig: die Resetgrenze ist irreversibel) | **A** (keine neue Abstraktion) | vor R1 |
 | **O-BI** | Funktionsumfang und Strategie von Backup/Import nach B0 | Gesamtbody / Chunking mit Vorab-Validator / Export-only / Nichtlieferung in R1; jede Reduktion von Limits ist eigene Entscheidung | keine Vorabwahl | nach B0 |
@@ -455,9 +456,9 @@ Journal-Aktivierung (O7), Exportumfang (O10).
 ## 9. Dokumentationswirkung
 
 Nur wenn die jeweiligen Schnitte umgesetzt werden: `LOCAL_UI_SETTINGS_SERVICE.md`
-(Ausloeserkonzept B, O-R1), `ACCEPTANCE_TESTS.md` (SIM-R-01..11, physische Tests
+(Zugaenge von B gemaess O-R1 = B+), `ACCEPTANCE_TESTS.md` (SIM-R-01..14, physische Tests
 `NOT_RUN`; SIM-26-07-Zuordnung), `OPEN_POINTS.md` (Zurueckstellung #1–#4,
-`TBD_HARDWARE` fuer Geste/Dauer), `BACKUP_SECURITY_RETENTION.md` nur bei B-Schnitten,
+Bedienparameter Dauer des langen Gedrueckthaltens), `BACKUP_SECURITY_RETENTION.md` nur bei B-Schnitten,
 `docs/ROADMAP.md` (Status/Reihenfolge). **Keine ADR** in diesem Auftrag; eine ADR
 entsteht nur auf ausdruecklichen Ownerauftrag (z. B. bei O-R3 Variante "SSOT per ADR
 anpassen"). Die Konfliktuebersicht K1–K7 gehoert in dieses Planungsdokument und
@@ -470,8 +471,8 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 | Resetkern prueft Lauf/PIN/Ursprung nicht | Reset koennte fehlerhaft ausloesbar sein | Vorbedingungen unter dem Guard im neuen Ablauf, SIM-R-02..05, R0-Pruefung |
 | Alte AP-/WLAN-Autoritaet nach dem Reset | Funkverbindung mit alten Zugangsdaten laeuft bis zu einer expliziten Transition weiter | 4.4a, SIM-R-12/13, R0-Pruefung des Adapterverhaltens, O-R4 |
 | PIN-Pruefung schreibt persistent | Test/Ablauf koennte faelschlich "kein Store-Write" verlangen und die Sperre umgehen | Invariante 4 und SIM-R-01/03 trennen Reset-Writes von Auth-Writes; Sperrlogik unveraendert |
-| Ablauf B ohne PIN | zu leichte Ausloesbarkeit | Mehrfachwarnung + lange Bestaetigung, nur lokal, Aktoren AUS, O-R1; keine PIN-Rueckstellung ohne Reset |
-| Ausloeser B / Dauer / Geste sind `TBD_HARDWARE` | Verifikation nicht moeglich | O-R1, Hardware `NOT_RUN`, O-HW |
+| Ablauf B ohne PIN | zu leichte Ausloesbarkeit | Mehrfachwarnung + lange Bestaetigung, nur lokal, Aktoren AUS, O-R1 = B+ (kein PIN-Bypass); keine PIN-Rueckstellung ohne Reset |
+| Dauer des langen Gedrueckthaltens ungeklaert; Zugaenge von B nicht am Geraet verifiziert | Verifikation nicht moeglich | Bedienparameter durch den Owner, Hardware `NOT_RUN`, O-HW |
 | Zurueckgestellte Journal-Startbedingung (K1) | Safety-nahe Anforderung bleibt unerfuellt | transparent in Abschnitt 7; kein falsches `PASS`; O-R3 |
 | RAM-Rahmen fuer Backup/Import (8148 B Minimum unter Weblast, grosse Kataloge) | Funktion evtl. nicht lieferbar | B0-Nachweis vor Umsetzung, O-BI, keine stillen Limit-Kuerzungen |
 | #27-Abhaengigkeit von Backup/Import | R1-Nutzbarkeit ungeklaert | 5.4, Voraussetzung explizit, kein falsches `DONE` |
@@ -491,7 +492,7 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 
 - [ ] Plan-Fix-Verification ohne offene Blocker
 - [ ] exakte Plan-SHA vom Owner freigegeben (G0)
-- [ ] O-R4 vor R1; O-R1 vor R3; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
+- [ ] O-R4 vor R1; Bedienparameter Dauer des langen Gedrueckthaltens vor Abnahme; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
 - [ ] O-R3 (R1-Vertragsabgleich) bis zur R1-Abnahme entschieden
 - [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten
 
