@@ -11,7 +11,7 @@ TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
 OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
 JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-IMPLEMENTATION=R0_STARTED (siehe PR #191; Produktcode nur im Rahmen R1-R4 gemaess Abschnitt 4)
+IMPLEMENTATION=R0_DONE_R1_R3_IMPLEMENTED_R4_DOCS (PR #191; unabhaengiger Implementierungsreview steht aus; Ablauf A/O-R2 und Stoppbefund S1 offen; Hardware NOT_RUN)
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -327,6 +327,17 @@ Build beider ESP-IDF-Profile, soweit Library-/`main/`-Quellen betroffen sind. Ei
 ersetzt keinen Hardwarenachweis. **Nicht hardwarefrei beweisbar (`NOT_RUN`):**
 reale Erreichbarkeit der beiden Zugaenge von B und das Langgedrueckthalten am Geraet, reale Anzeige/Touch-Bedienung,
 Aktor-AUS am realen Geraet, Powercut auf echtem Flash, Dauer der langen Bestaetigung am Geraet.
+
+### 4.7 Umsetzungsstand (Nachtrag, kein Planvertrag)
+
+R0: `docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md` (Stoppbefund S1, O-R2). R1–R3
+umgesetzt fuer **Ablauf B** (beide Zugaenge, O-R1 = B+), Netzwerk-/HTTP-Sequenz nach
+4.4a und ehrlichen `INetworkLifecycle::stop()`-Rueckgabewert im ESP-IDF-Adapter.
+**Nicht umgesetzt:** Ablauf A (lokale PIN-Pruefung, O-R2) und der Reset ohne geladene
+Runtime (S1). Die tatsaechlichen Testnachweise stehen in `ACCEPTANCE_TESTS.md`
+(`SIM-19-R01..R07`, `HW-19-R01..R03` = `NOT_RUN`); sie ersetzen die planinternen IDs
+SIM-R-xx dort, wo sie abweichen. Die Hold-Dauer bleibt Ownerparameter
+(`kApprovedFactoryResetHoldMillis = std::nullopt`).
 
 ## 5. R1-ERWUENSCHT (bedingt): Backup und Import
 

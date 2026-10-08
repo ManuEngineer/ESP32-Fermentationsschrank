@@ -382,6 +382,28 @@ liegen in `fermentation_app` (ADR-013).
 | HW-30-05 | `NOT_RUN` (H6): Verifikationsmatrix aus #30 (Abziehen, Stoerungen, Hot-Plug, Offsets, reale Messwerte). |
 | HW-30-06 | `NOT_RUN` (H7): Hardware-Evidence auf dem exakten Head, `logResources`-Vergleich. |
 
+### Issue #19 – lokaler Werksreset (R1-Pflicht, hardwarefrei)
+
+Native Simulationen fuer den lokalen Werksreset-Ablauf (Plan
+`docs/tasks/issue-19-journals-retention-backup-import-plan.md`, Abschnitt 4,
+Ownerfreigabe `6fbf130`). Sie sind **kein** Hardwarenachweis; die physischen
+Eintraege stehen auf `NOT_RUN`. Journal, Laufhistorie, Bereinigung, Laufexport
+sowie Backup/Import sind **nicht** Teil dieser Nachweise (`DEFERRED` bzw.
+bedingt, Plan Abschnitte 5–7).
+
+| ID | Nachweis |
+|---|---|
+| SIM-19-R01 | Ablauf-Zustandsautomat: ohne Ownerparameter nicht verfuegbar, Stufen nur der Reihe nach, Abbruch in jeder Stufe wirkungslos, Dauer erst bei durchgehendem Kontakt erreicht, Loslassen/rueckwaerts laufende Zeit setzt zurueck, Variante A wartet auf verifizierte PIN, B nie: `test_factory_reset_flow::test_flow_without_configured_hold_is_unavailable_and_has_no_default`; `::test_flow_requires_every_stage_in_order_and_cancel_resets`; `::test_flow_hold_needs_continuous_contact_for_the_full_duration`; `::test_flow_variant_a_waits_for_a_verified_pin_and_b_never_does`. |
+| SIM-19-R02 | Anwendungseinstieg: Vorbedingungen unter dem `ApplicationCallSerializer`; ein laufender Prozess blockiert Beginn und Ausfuehrung (Resetkern wird nicht aufgerufen); ohne geladene Runtime nicht angeboten (Stoppbefund S1); nur Variante B wird angeboten (A bis O-R2 nicht): `test_factory_reset_flow::test_a_running_process_blocks_the_flow_and_the_core_is_not_called`; `::test_a_configuration_without_runtime_is_reported_unavailable`; `::test_application_offers_only_the_pin_independent_variant`; `::test_application_flow_is_unavailable_until_the_owner_parameter_is_set`. |
+| SIM-19-R03 | Abbruch aendert nichts: kein Resetkern-Aufruf, keine Epochenaenderung, kein Netzwerk-/HTTP-Stopp: `test_factory_reset_flow::test_cancel_at_every_stage_changes_no_reset_state`. Auth-Writes der PIN-Pruefung sind hier nicht betroffen (Variante A nicht angeboten); vorhandene PIN-/Lockout-Regressionen unveraendert: `test_authentication_records::test_lockout_is_persisted_and_skips_kdf_while_active_and_after_reboot`, `::test_credential_change_reports_denial_and_lockout_separately`. |
+| SIM-19-R04 | Vollstaendiger Ablauf (Ablauf B): Resetkern, Epoche +1, danach Netzwerk-Stopp, dann HTTP-Stopp, alter Netzwerkmodus verworfen, kein Neustart mit alten Daten, Touchkalibrierung unveraendert: `test_factory_reset_flow::test_full_flow_runs_the_core_then_ends_network_then_http`; vorhandene Regressionen: `test_configuration_recovery_service::test_factory_reset_advances_epoch_and_preserves_touch_key`, `::test_factory_reset_preserves_real_touch_calibration_record`, `test_web_application_routes::test_composed_dispatcher_factory_reset_revokes_old_sessions`, `test_issue144_run_identity::test_application_reset_hands_off_existing_run_store_to_new_epoch`, `::test_application_reconstructs_reset_handoff_after_run_write_cut`. |
+| SIM-19-R05 | Netzwerk/HTTP strikt KISS: HTTP-Stopp laeuft nicht unter dem Application-Guard (ein auf den Guard wartender Handler blockiert nicht; Mutationsprobe schlaegt fehl): `test_factory_reset_flow::test_http_is_stopped_outside_the_application_gate`. Nicht bestaetigter Netzwerk- oder HTTP-Stopp wird nie als Erfolg gemeldet, keine Neuprovisionierung: `::test_unconfirmed_network_stop_is_never_reported_as_success`; `::test_unconfirmed_http_stop_is_never_reported_as_success`; Ergebnisabbildung: `::test_outcome_never_reports_success_for_an_unconfirmed_network_stop`. |
+| SIM-19-R06 | Nur lokal: der Resetschritt ist keine Alternative des gemeinsamen UI-Command-Variants (`static_assert` in `test_factory_reset_flow`); keine HTTP-Route erreicht Ablauf oder Kern: `test_web_application_routes::test_no_http_route_reaches_the_local_factory_reset`. |
+| SIM-19-R07 | Zwei Zugaenge, ein Ablauf (O-R1 = B+) ueber den echten Touch-Adapter: "PIN vergessen?" auf der PIN-Seite (bei gesperrtem Servicebereich erreichbar, ohne PIN-Eingabe), `SAFE_BOOT`-Eintrag, Hold-Ziel nur bei durchgehendem Kontakt, Zurueck/Abbruch beendet den Ablauf, ohne Ownerparameter nirgends angeboten: `test_press_dispatcher::test_forgot_pin_entry_runs_the_whole_flow_through_touch`; `::test_safe_boot_entry_and_every_exit_end_the_flow_without_a_reset`. |
+| HW-19-R01 | `NOT_RUN`: physische Erreichbarkeit beider Zugaenge am Geraet, Langgedrueckthalten (Dauer = offener Ownerparameter), Anzeige der Seite, Aktoren AUS am realen Geraet. |
+| HW-19-R02 | `NOT_RUN`: tatsaechliches Verhalten von `esp_wifi_stop()` und `httpd_stop()` (ehrliche Rueckgabe, Abschluss von AP und HTTP), Powercut mitten im Reset auf echtem Flash. |
+| HW-19-R03 | `NOT_RUN`: Werksreset aus `SAFE_BOOT` am Geraet (nur Fall mit geladener Konfigurations-Runtime; Fall ohne Runtime = Stoppbefund S1, nicht umgesetzt). |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

@@ -27,3 +27,23 @@ Jeder Befund nennt die Codestelle (Stand `main` `9beb68f` + PR-Branch).
 
 Die uebrigen Punkte (Ablauf B mit beiden Zugaengen, Netzwerk-/HTTP-Sequenz, ehrliche
 `esp_wifi_stop()`-Rueckgabe, Guard-Vorbedingungen) sind von diesen Befunden nicht betroffen.
+
+## Nachtrag zur Umsetzung (R1–R3)
+
+- **Zusatzbefund (R0-h):** Die Touch-Seite `Pin` war im Produkt unerreichbar: der
+  Service-Bereich hat keinen Produzenten fuer `service.available` (immer `false`),
+  und der `pin`-Slot der Service-Seite war an `service.available` gebunden. Fuer
+  O-R1 = B+ ist der `pin`-Slot jetzt immer aktiv; die PIN-Seite bleibt ein
+  Platzhalter ohne PIN-Pruefung und bietet nur "PIN vergessen?". Der Service-Bereich
+  selbst bleibt gesperrt.
+- **SAFE_BOOT-Eintrag:** Auf der Startseite (`Recovery`/`Restricted`, Zustand
+  `SafeBoot`) ersetzt der Eintrag "Werksreset" den bisher deaktivierten
+  "Recovery"-Slot, solange der Ablauf verfuegbar ist; `PersistentFactoryReset`
+  wird dann nicht mehr als nicht verfuegbar gelistet.
+- **Stoppbefund S1 und O-R2** bleiben offen und sind nicht umgangen: ohne geladene
+  Runtime wird der Ablauf nicht angeboten; Variante A wird nicht angeboten.
+- Befund (e) bestaetigt: Netzwerk-`stop()` meldet im Adapter nun `Failed`, wenn
+  `esp_wifi_stop()` bei gestartetem Treiber einen anderen Fehler als `ESP_OK`/
+  `ESP_ERR_WIFI_NOT_INIT` liefert; `start()` nach einem solchen Stopp bleibt nutzbar
+  (`startWifi()` ist bei `wifiStarted_ == true` ein Erfolg). Nicht nativ am echten
+  Adapter beweisbar (`HW-19-R02`).

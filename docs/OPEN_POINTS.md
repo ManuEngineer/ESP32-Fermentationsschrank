@@ -200,6 +200,23 @@ Nachverfolgung: #10, #28 und #37; #29 dokumentiert hierzu historische reale
 ESP32-Evidenz, ist aber kein offener Owner. #37 bestätigt unter Last
 abschließend, soweit sein späterer Scope dies verlangt.
 
+### Lokaler Werksreset (Issue #19, R1-Pflicht)
+
+- [ ] Dauer des langen Gedrueckthaltens als Bedienparameter durch den Owner
+      festlegen (`kApprovedFactoryResetHoldMillis` in `main/app_main.cpp` ist
+      `std::nullopt`; ohne Wert ist der Werksreset-Ablauf nicht verfuegbar)
+- [ ] Ablauf A (PIN-geschuetzt): lokale Service-PIN-Pruefung existiert nicht
+      (Owner-Entscheid O-R2); bis dahin wird nur der PIN-unabhaengige Ablauf B
+      angeboten
+- [ ] Werksreset ohne geladene Konfigurations-Runtime (`NoRuntime`/
+      `ResetEligibleNoRuntime`): Stoppbefund S1 (`docs/audits/
+      ISSUE19_R0_RESET_PREFLIGHT.md`), erfordert eine Aenderung des
+      Anwendungs-Reset-/Recovery-Vertrags
+- [ ] Hardwarenachweise `HW-19-R01..R03` (`ACCEPTANCE_TESTS.md`)
+- [ ] Journal, Laufhistorie, Bereinigung, Laufexport: `DEFERRED_BY_OWNER_PENDING_
+      R1_CONTRACT_RECONCILIATION`; R1-Vertragskonflikte K1–K7 im Plan, kein
+      R1-`PASS` ohne Ownerentscheid O-R3
+
 ### Aufbewahrung
 
 - [ ] Standard `aktiver Lauf + 5 detaillierte Laeufe + 50 Zusammenfassungen`

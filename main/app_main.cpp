@@ -1,6 +1,7 @@
 #include <cinttypes>
 #include <memory>
 #include <new>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -69,6 +70,13 @@ constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
 constexpr char kStateStorePartitionLabel[] = "state_store";
 #endif
+// Dauer des langen Gedrueckthaltens im lokalen Werksreset (Issue #19, Plan
+// 4.1). Bedienparameter, vom Owner festzulegen: bis dahin kein Wert (kein
+// Standardwert, kein geratener Wert) und der Werksreset-Ablauf bleibt
+// nicht verfuegbar (fail-closed).
+constexpr std::optional<uint32_t> kApprovedFactoryResetHoldMillis =
+    std::nullopt;
+
 constexpr uint64_t kHeartbeatIntervalMs = 1000U;
 constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // Idle-Messpunkt: 120 s ohne Bedienung (seit Boot bzw. seit dem letzten
@@ -634,6 +642,7 @@ extern "C" void app_main(void) {
             authenticationKdf, replayDigest, &resetCauseSource);
         logResources("after_application_begin", application.networkMode(),
                      networkLifecycle.status().state);
+        application.setFactoryResetHoldMillis(kApprovedFactoryResetHoldMillis);
     }
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,

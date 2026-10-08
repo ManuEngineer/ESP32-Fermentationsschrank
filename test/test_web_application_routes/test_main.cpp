@@ -333,6 +333,7 @@ class CapturingHttpServerLifecycle final
     }
 
     [[nodiscard]] bool stop() override {
+        ++stopCount_;
         running_ = false;
         routes_ = nullptr;
         return true;
@@ -352,9 +353,12 @@ class CapturingHttpServerLifecycle final
         return startCount_;
     }
 
+    [[nodiscard]] std::size_t stopCount() const noexcept { return stopCount_; }
+
    private:
     bool running_{false};
     std::size_t startCount_{0U};
+    std::size_t stopCount_{0U};
     device_platform::IHttpRouteSink* routes_{nullptr};
     device_platform::IHttpRouteSink* lastRoutes_{nullptr};
 };
@@ -3134,6 +3138,33 @@ void test_other_states_get_no_provisioning_form_or_bypass() {
     }
 }
 
+// Issue #19 (plan 4.4, invariant 1): the factory reset is local only. No HTTP
+// route reaches the flow or the reset core; a probe of plausible paths and
+// methods never succeeds and never arms the flow.
+void test_no_http_route_reaches_the_local_factory_reset() {
+    ComposedFixture fixture;
+    fixture.application.setFactoryResetHoldMillis(1500U);
+    auto* routes = fixture.http.routes();
+    TEST_ASSERT_NOT_NULL(routes);
+    const char* const paths[] = {
+        "/api/v1/factory-reset",      "/api/v1/reset",      "/api/v1/reset-all",
+        "/internal/ui/factory-reset", "/internal/ui/reset", "/factory-reset"};
+    for (const char* path : paths) {
+        for (const char* method : {"GET", "POST", "PUT", "DELETE"}) {
+            auto request = makeWebRequest(method, path, "{}");
+            request.metadata.contentType = "application/json";
+            device_platform::HttpResponse response;
+            const bool handled = routes->handle(request, response);
+            TEST_ASSERT_TRUE(!handled || response.statusCode >= 400U);
+        }
+    }
+    const auto view = fixture.application.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Idle == view.stage);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::None == view.outcome);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(fixture.http.stopCount()));
+}
+
 void test_provision_commit_outcome_unknown_closes_window_immediately() {
     ComposedFixture fixture;
     TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
@@ -3407,6 +3438,7 @@ int main() {
         test_unprovisioned_shell_explains_local_release_and_creates_no_session);
     RUN_TEST(test_unprovisioned_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_other_states_get_no_provisioning_form_or_bypass);
+    RUN_TEST(test_no_http_route_reaches_the_local_factory_reset);
     RUN_TEST(test_provision_commit_outcome_unknown_closes_window_immediately);
     RUN_TEST(test_provision_lost_race_closes_window_via_current_state);
     RUN_TEST(test_provision_result_projection_is_fail_closed);

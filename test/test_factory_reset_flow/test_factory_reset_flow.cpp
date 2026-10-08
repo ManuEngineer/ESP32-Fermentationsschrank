@@ -12,12 +12,15 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <type_traits>
+#include <variant>
 
 #include "authentication_records.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "device_platform.hpp"
 #include "factory_reset_flow.hpp"
 #include "fermentation_application.hpp"
+#include "fermentation_ui_commands.hpp"
 #include "mock_network_lifecycle.hpp"
 #include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
@@ -51,6 +54,19 @@ using fermentation::FactoryResetFlow;
 using fermentation::FactoryResetKind;
 using fermentation::FactoryResetOutcome;
 using fermentation::FactoryResetStage;
+
+template <typename T, typename V>
+struct VariantHas;
+template <typename T, typename... Alternatives>
+struct VariantHas<T, std::variant<Alternatives...>>
+    : std::disjunction<std::is_same<T, Alternatives>...> {};
+// The reset step is deliberately not an alternative of the shared UI command
+// variant: a non-local surface can never carry it (plan 4.4, invariant 1).
+static_assert(
+    !VariantHas<
+        fermentation::FermentationUiFactoryResetCommand,
+        decltype(fermentation::FermentationUiCommand::operation)>::value,
+    "factory reset must stay outside the shared UI command variant");
 
 constexpr std::uint32_t kHoldMs = 1500U;  // Testwert, kein Produktwert.
 
