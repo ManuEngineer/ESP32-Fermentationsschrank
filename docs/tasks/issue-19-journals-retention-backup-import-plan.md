@@ -1,7 +1,7 @@
 # Plan Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import
 
 ```text
-PLAN_REVISION=6 (konsolidiert; ersetzt Revision 5 `fdce52271ea707e6d76bca1226570a17ed59d1df` sowie die Revisionen 4, 3, 2 und 1; keine davon wurde freigegeben)
+PLAN_REVISION=7 (konsolidiert, KISS; ersetzt Revision 6 `d2fcf426dd3052d7ce82cdd0043a080d2d77199b` sowie die Revisionen 5, 4, 3, 2 und 1; keine davon wurde freigegeben)
 PLAN_STATUS=DRAFT_AWAITING_PLAN_FIX_VERIFICATION_AND_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
@@ -22,7 +22,7 @@ Umsetzung der vorgesehenen R1-Funktionen beginnt erst nach (a) Plan-Fix-
 Verification, (b) ausdruecklicher Ownerfreigabe genau dieser Plan-SHA und – wo
 unten genannt – (c) dem jeweiligen Vorab-Nachweis und Ownerentscheid.
 
-| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 6 | Umsetzung |
+| # | #19-Funktionsbereich | Prioritaet | Planstatus in Revision 7 | Umsetzung |
 |---|---|---|---|---|
 | 7 | Vollstaendiger **lokaler Werksreset** inkl. PIN-unabhaengigem Recoveryweg bei vergessener Service-PIN und Erhalt der Touchkalibrierung | **R1-PFLICHT** | konkret geplant (Abschnitt 4) | nach Freigabe dieser Plan-SHA und Entscheid O-R1 |
 | 5 | Normales, geheimnisfreies **Backup** | R1-ERWUENSCHT, nur bei nachgewiesener RAM-/Speichereignung | bedingt geplant (Abschnitt 5) | erst nach Ressourcennachweis B0 **und** Ownerentscheid |
@@ -148,17 +148,12 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
   uebergibt die neue Epoche an die Laufpersistenz; laeuft im `ApplicationCallSerializer`.
 - Touchkalibrierung bleibt ueber den Epochenwechsel erhalten (Schluessel `tc0`/`tc1`).
 - Geheimnisse (Connectivity inkl. SoftAP-Passwort, Authentication) sind epochengebunden
-  und durch den Epochenwechsel **logisch** unerreichbar. Das beendet jedoch keine
-  laufende Funkverbindung und leert keine RAM-Kopien (`NetworkConfigurationService::
-  activeCredential_`, `INetworkLifecycle`-AP-Daten): `FermentationApplication::
-  beginAuthorizedFactoryReset` invalidiert Epoche, Websessions und Auth-Zustand, stoppt
-  oder reinitialisiert den Netzwerk-/SoftAP-Lifecycle aber **nicht**. Das schliesst
-  der Ablauf (4.4 Punkt 6, 4.4a).
-- Netzwerkgrenzen: `device_platform::INetworkLifecycle` (`stop()`, `start()`,
-  `setAccessPointCredentials()`, `accessPointInfo()`, `status()`) und
-  `NetworkConfigurationService` (`start(mode, epoch, name)` leitet bei
-  `UNSELECTED` nur `SelectionRequired` ab und stoppt den Lifecycle nicht; bei gesetztem
-  Modus erzeugt `ensureCredential` fuer eine neue Epoche ein neues SoftAP-Passwort).
+  und durch den Epochenwechsel **logisch** unerreichbar. Eine bereits laufende
+  WLAN-/AP-Verbindung und der laufende HTTP-Server beendet der Resetkern nicht:
+  `FermentationApplication::beginAuthorizedFactoryReset` widerruft Websessions und
+  Auth-Zustand, stoppt aber weder Netzwerk-Lifecycle noch HTTP-Server (Abschnitt 4.4a).
+- Vorhandene Netzwerkgrenzen: `device_platform::INetworkLifecycle::stop()`,
+  `IHttpServerLifecycle::stop()` und `NetworkConfigurationService`.
 - PIN-Pruefung und -Sperre: `AuthenticationDomain::verifyServicePin` schreibt
   Fehlversuche, Sperrstufe und Recordsequenz **absichtlich persistent**
   (`writeCredentials`); auch eine erfolgreiche Pruefung kann einen Auth-Record
@@ -177,7 +172,7 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 | Kein Ablauf mit Mehrfachbestaetigung, Vorbedingungspruefung (Lauf, PIN, Ursprung) und Ergebnisprojektion | `fermentation_app`: kleiner Zustandsautomat `FactoryResetFlow` (Arbeitsname); keine neue Schleife, kein Task |
 | Kein Bedienpfad (Warn-/Bestaetigungsseiten, PIN-Eingabe, Ergebnis) | Praesentationsmodell in `fermentation_app` (bestehende Touch-Workspace-/Device-UI-Vertraege); Bildschirme im vorhandenen Renderer unter `main/` – eigener Schnitt |
 | Zugaenge fuer Ablauf B ("PIN vergessen?" auf der PIN-Seite, `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset") sind nicht implementiert; `PersistentFactoryReset` ist in `safeBootUnavailableCapabilities()` als nicht verfuegbar gefuehrt | O-R1 = B+ entschieden; Umsetzung `fermentation_app` (Ablauf/Projektion) und Renderer unter `main/` (R2/R3) |
-| **Kein Netzwerk-/SoftAP-Widerruf** beim Werksreset: alte AP-Zugangsdaten und bestehende WLAN-/AP-Verbindungen laufen nach dem Epochenwechsel weiter, RAM-Kopien bleiben | kleine Ergaenzung an der vorhandenen Grenze `NetworkConfigurationService`/`INetworkLifecycle` (4.4a); keine neue Netzwerkkomponente, keine zweite Credential-Persistenz |
+| **Kein geordnetes Beenden von Netzwerk und HTTP** nach dem Werksreset: die laufende Verbindung und der HTTP-Server laufen weiter | kleine Sequenz an den vorhandenen Grenzen `INetworkLifecycle::stop()`, `IHttpServerLifecycle::stop()`, `NetworkConfigurationService` (4.4a); keine neue Schnittstelle |
 | Unklar, ob der Anwendungs-Einstieg auch ohne geladene Runtime (SAFE_BOOT, beschaedigte Konfiguration) lauffaehig ist (`storageEpoch_`/`stateStore_` Voraussetzungen) | R0-Vorpruefung |
 
 ### 4.4 Invarianten des Ablaufs (pruefbar)
@@ -201,96 +196,81 @@ Letzter physischer Recoveryweg bleibt UART-Loeschen beziehungsweise Neu-Flashen
 5. **Wiederaufnehmbar.** Ein Stromausfall mitten im Reset wird durch den vorhandenen
    `Resetting`-Mechanismus aufgeloest; der Ablauf zeigt danach den Ausgang und stellt
    keinen eigenen Zwischenzustand her.
-6. **Widerruf in vier getrennten Ebenen.** (a) Persistierte alte Credentials sind nach
-   dem Epochenwechsel **logisch** ungueltig. (b) Websessions und Auth-Zustand werden an der
-   Vertrauensgrenze widerrufen (vorhanden). (c) **Laufende** WLAN-/AP-Verbindungen und
-   RAM-gehaltene Credentials (`activeCredential_`, AP-Daten im Lifecycle) werden nach
-   der irreversiblen Resetgrenze sicher beendet beziehungsweise invalidiert (4.4a);
-   danach wird keine alte Verbindung oder SoftAP-Autoritaet weiterverwendet. (d) Ein
-   **neues** SoftAP-Passwort wird erst behauptet, wenn die Netzwerkdomaene nachweislich
-   erfolgreich neu provisioniert beziehungsweise neu gestartet wurde; es gibt keinen
-   erfundenen Passwortwechsel ohne tatsaechliche Netzwerktransition. Touchkalibrierung
+6. **Widerruf.** Nach dem Reset sind Epoche, Websessions und Auth-Zustand ungueltig (vorhanden);
+   die laufende WLAN-/AP-Verbindung und der HTTP-Server werden geordnet beendet (4.4a); der
+   Netzwerkaufbau erfolgt danach ausschliesslich mit den Credentials der neuen Epoche. Gelingt
+   das Beenden erkennbar nicht, wird **kein** bestaetigter Widerruf gemeldet (4.4a). Touchkalibrierung
    bleibt.
 7. **Ergebnis ehrlich.** Fehler des Kerns (`...Failure`/`...Rejected`/`CounterOverflow`
    u. a.) werden als solche projiziert; kein erfundenes Erfolgsbild.
 
-### 4.4a Netzwerk-/SoftAP-Widerruf (Ablauf nach der Resetgrenze)
+### 4.4a Netzwerk und HTTP nach dem Werksreset (KISS)
 
-**Ist-Befunde im Code** (`lib/device_platform_esp_idf/src/esp_idf_network_lifecycle.cpp`,
-`lib/device_platform/src/http_server_lifecycle.hpp`; in R0 zu bestaetigen, nicht als Annahme):
+**Sicherheitsbegruendung.** Nach dem Reset sind Epoche, Websessions und Auth-Zustand
+ungueltig; alte persistierte Credentials sind logisch unerreichbar. Damit bleibt nur, die
+bereits laufende Verbindung und den HTTP-Server geordnet zu beenden und das Netzwerk danach
+nur noch mit den Credentials der neuen Epoche aufzubauen. Interne Restkopien alter
+Zugangsdaten im RAM sind fuer sich keine aktive Netzwerkfreigabe; ein vorgeschriebenes
+Scrubbing aller RAM-Kopien gibt es nicht. Eine kleine, lokale Bereinigung des
+`NetworkConfigurationService`-Zustands (z. B. `activeCredential_`, Kandidat) ist zulaessig.
 
-| ID | Befund | Folge |
-|---|---|---|
-| F1 | `stopWifi()` ignoriert das Ergebnis von `esp_wifi_stop()` und setzt `wifiStarted_` trotzdem auf `false` | ein gescheiterter Wi-Fi-Stopp bleibt unbemerkt |
-| F2 | `EspIdfNetworkLifecycle::stop()` liefert immer `Applied`, setzt `status_.state = Stopped` und `httpReady = false` und leert `accessPointInfo()`; die zuvor ueber `setAccessPointCredentials` abgelegten `config_.softApSsid`/`softApPassword` bleiben bestehen und koennen von einem spaeteren `start()` wiederverwendet werden (Replay) | `stop() == Applied` bzw. `status() == Stopped` beweisen weder einen tatsaechlichen Wi-Fi-Stopp noch das Verschwinden der alten Adapter-RAM-Credentials |
-| F3 | `httpReady` ist nur ein Statusfeld des Netzwerk-Lifecycles; der HTTP-Server ist der **separate** Port `IHttpServerLifecycle` (`stop() -> bool`, `running()`), den die Anwendung haelt | ein Netzwerk-`stop()` beendet den HTTP-Server nicht nachweislich |
-| F4 | `FermentationApplication::beginAuthorizedFactoryReset` stoppt weder Netzwerk-Lifecycle noch HTTP-Server; `NetworkConfigurationService` behaelt `activeCredential_` | alte Autoritaet laeuft nach der Resetgrenze weiter |
-| F5 | Alle bisherigen Aufrufer von `stop()` in Anwendung und `NetworkConfigurationService` verwerfen das Ergebnis (`static_cast<void>`); ein Adaptertest fuer den Netzwerk-Lifecycle existiert nicht (nur HTTP-/NVS-Hosttests) | eine ehrliche Rueckgabe wuerde bestehende Aufrufer nicht brechen, ist aber nativ am echten Adapter nicht beweisbar |
+**Sequenz (vorhandene Schnittstellen, keine neue).**
 
-**Fuenf getrennte Ebenen** – jede wird einzeln behandelt und einzeln getestet; keine gilt als durch eine andere bewiesen:
+1. *Gesperrter Teil.* `FermentationApplication::beginAuthorizedFactoryReset` laeuft wie
+   bisher unter dem `ApplicationCallSerializer` (Resetkern, Session-/Auth-Widerruf,
+   Run-Epochenuebergabe). Der HTTP-Server wird darin **nicht** gestoppt.
+2. *Nach dem Verlassen des Guards, im selben lokalen Aufrufkontext des Ablaufs
+   (kein neuer Task, kein neuer Port):* wenn der Resetkern die irreversible Grenze
+   ueberschritten hat (`FactoryResetCompleted` oder der nachgelagerte Handoff-Fehler
+   `RunPersistenceHandoffUnavailable`; die Statusmenge belegt R0), (a)
+   `INetworkLifecycle::stop()` (trennt Clients), (b) danach `IHttpServerLifecycle::stop()`,
+   (c) kleine lokale Bereinigung im `NetworkConfigurationService`.
+3. *Neuaufbau.* Das Netzwerk startet erst wieder ueber die vorhandene Ersteinrichtung
+   (Moduswahl) mit den Credentials der neuen Epoche; ein neues SoftAP-Passwort wird erst nach
+   `Applied` des Starts angezeigt. Die Netzwerk-Ersteinrichtung startet nie mit alten
+   Zugangsdaten.
+4. *Fehlerfall (Ownerentscheid O-R4 = Variante A, entschieden).* Meldet `INetworkLifecycle::stop()`
+   `Failed`/`Busy` oder `IHttpServerLifecycle::stop()` `false`, wird **kein bestaetigter
+   Netzwerk-Widerruf gemeldet**, keine Neuprovisionierung gestartet und lokal angezeigt:
+   *"Werksreset durchgefuehrt. Netzwerk konnte nicht sicher beendet werden. Geraet vollstaendig
+   aus- und wieder einschalten."* Es gibt keine eigene Wiederholungsschleife, keinen neuen
+   Recovery-Zustand und keinen Software-Neustart-Port. Ein Handoff-Fehler nach der Grenze
+   aendert diese Sequenz nicht; das Ergebnis meldet Handoff- und Netzwerkausgang getrennt.
 
-| Ebene | Gegenstand | Beweismittel nach dem Plan |
-|---|---|---|
-| E1 | *Logische Credential-Invalidierung* (persistierter Record der alten Epoche) | Epochenwechsel durch den Resetkern; vorhandene Tests |
-| E2 | *Status-/AP-Informationsprojektion* (`status()`, `accessPointInfo()`) | Mock- und Anwendungstest; gilt **nur** als Projektion, nie als Widerrufsbeweis |
-| E3 | *Tatsaechlich bestaetigter Wi-Fi-Stopp* | Rueckgabe der unten geplanten Widerrufsoperation, die nur bei bestaetigtem `esp_wifi_stop()` `Applied` meldet; Adapter nativ nicht testbar (Build + `NOT_RUN`-Hardware) |
-| E4 | *HTTP-Lifecycle* | `IHttpServerLifecycle::stop()` mit gepruefter Rueckgabe und anschliessend `running() == false` (Mock-/Hosttest vorhanden bzw. erweiterbar) |
-| E5 | *Alte Adapter- und Service-RAM-Credentials* (`config_.softApSsid`/`softApPassword`, `activeCredential_`, Kandidat, aktive AP-SSID) | Verwerfen in der Widerrufsoperation bzw. im Service; Beleg ueber Mock-Zaehler und "kein Replay"-Test; physisches Ueberschreiben des Speichers wird nicht zugesichert |
+**Erforderliche Korrektur im ESP-IDF-Adapter (kein neuer Port).** Im Resetpfad darf
+`EspIdfNetworkLifecycle::stop()` einen fehlgeschlagenen Wi-Fi-Stopp nicht als Erfolg
+melden. Ist-Befund: `stopWifi()` ignoriert das Ergebnis von `esp_wifi_stop()`, setzt
+`wifiStarted_` trotzdem auf `false`, und `stop()` liefert immer `Applied`; eine
+Statusprojektion (`Stopped`, `httpReady=false`, leeres `accessPointInfo()`) ersetzt keinen
+echten Erfolgsrueckgabewert. Soll: `esp_wifi_stop()` dokumentiert `ESP_OK` und
+`ESP_ERR_WIFI_NOT_INIT` (ESP-IDF 6.1, `esp_wifi.h`). `ESP_OK` gilt als gestoppt;
+`ESP_ERR_WIFI_NOT_INIT` und "nie gestartet" (`wifiStarted_ == false`) gelten als bereits
+gestoppt/nichts laufend; jeder andere Fehler bei einem nachweislich gestarteten Treiber gilt
+als **nicht gestoppt**: `wifiStarted_` bleibt `true` und `stop()` meldet `Failed` (die
+Statusprojektion darf konservativ `Stopped` bleiben). Die vorhandenen normalen
+`stop()`/`start()`-Aufrufer verwerfen das Ergebnis ohnehin; die Wiederverwendbarkeit
+(`stop()` -> `start()`) bleibt erhalten, R0 belegt insbesondere das Verhalten von `start()`
+bei `wifiStarted_ == true` nach einem fehlgeschlagenen Stopp.
 
-**Minimale Korrekturstrategie (nur Resetfall, bestehende Grenzen).**
-
-1. *Reihenfolge.* Unmittelbar nach der irreversiblen Resetgrenze in
-   `FermentationApplication::beginAuthorizedFactoryReset`, neben dem vorhandenen Widerruf
-   der Websessions und dem Zuruecksetzen des Auth-Zustands und **vor** den Run-Epochen-
-   uebergabeschritten, die scheitern koennen: (a) `IHttpServerLifecycle::stop()` (Ergebnis
-   pruefen, `running()` bestaetigen), (b) Netzwerk-Widerruf (2.), (c) Verwerfen der Service-
-   RAM-Kopien in `NetworkConfigurationService` (kleiner Einstieg, Arbeitsname
-   `revokeAfterFactoryReset`).
-2. *Widerrufsoperation am vorhandenen Port.* Der normale `stop()`/`start()`-Vertrag bleibt
-   unveraendert (er wird weder zum Credential-Scrub noch zum Replay-Sperren umgebaut, damit
-   Neustart- und Wiederherstellungspfade nicht unbeabsichtigt brechen). Fuer den Resetfall
-   wird **eine** schmale, additive Operation am bestehenden `INetworkLifecycle` vorgesehen
-   (Arbeitsname `revokeAccessPoint()`; keine neue Schicht, kein neues Objekt): sie stoppt
-   Wi-Fi, meldet `Applied` **nur**, wenn `esp_wifi_stop()` den Stopp bestaetigt (oder Wi-Fi
-   nachweislich nie gestartet war), laesst bei echtem Fehler `wifiStarted_` unveraendert
-   `true` und meldet `Failed`, verwirft `config_.softApSsid`/`softApPassword` und die
-   Home-Zugangsdaten und lehnt jedes spaetere `start()` ab, bis `setAccessPointCredentials`
-   erneut aufgerufen wurde. Die Mock-Implementierung im `device_platform_test_support` folgt
-   derselben Semantik. Dies ist eine Port-Ergaenzung und wird deshalb als Ownerentscheid
-   **O-R5** gefuehrt (Abschnitt 8); ohne O-R5 wird sie nicht umgesetzt.
-3. *Neuprovisionierung.* Nach dem Reset gilt der Netzwerkmodus der Factory-Initialkonfiguration
-   (erwartet `UNSELECTED`; R0 belegt den Default). Erst die vorhandene Ersteinrichtung waehlt den
-   Modus; `NetworkConfigurationService::start` erzeugt dann (`ensureCredential`, neue Epoche) ein
-   neues SoftAP-Passwort, schreibt es epochengebunden, ruft `setAccessPointCredentials` und startet
-   den Lifecycle. **Erst nach `Applied` dieses Starts wird ein neues Passwort angezeigt oder
-   behauptet.** Scheitert dieser Start, bleibt der Lifecycle gestoppt und es wird kein neues Passwort
-   behauptet.
-4. *Gescheiterter Run-Epochen-Handoff nach der Resetgrenze.* Der Netzwerk-Widerruf ist zu diesem
-   Zeitpunkt bereits erfolgt und wird nicht rueckgaengig gemacht; das Ergebnis meldet beides
-   getrennt (z. B. Handoff nicht verfuegbar **und** Netzwerk widerrufen). Die Anwendung bleibt
-   fail-closed, startet das Netzwerk nicht neu und zeigt keine neuen Zugangsdaten; der vorhandene
-   Boot-/Handoff-Wiederaufnahmemechanismus loest den Zustand beim naechsten Start auf.
-5. *Fehler des Widerrufs.* Meldet (a) der HTTP-Stopp oder (b) die Widerrufsoperation `Failed`/`Busy`
-   (oder fehlt die Operation, weil O-R5 sie nicht freigibt), bleibt der Reset abgeschlossen (nicht
-   umkehrbar), das Ergebnis lautet ausdruecklich *Netzwerk-Widerruf nicht bestaetigt*, die Netzwerk-
-   Ersteinrichtung wird nicht gestartet, und es wird **kein Erfolg** gemeldet. Die weitere
-   Fail-closed-Strategie (Wiederholung, Abschluss, Anzeige) ist der unveraenderte, noch **offene
-   Ownerentscheid O-R4**; keine Strategie wird hier vorweggenommen oder implementiert.
-6. *Lokale Bedienung.* Der Widerruf aendert weder Aktorpfad noch Interlock; die lokale Bedienung
-   bleibt ohne Netzwerk nutzbar.
-
-**Wenn die Sicherheit nicht gewaehrleistbar ist.** Gibt O-R5 die schmale Port-Ergaenzung nicht frei
-oder zeigt R0, dass ein bestaetigter Wi-Fi-Stopp bzw. das Verwerfen der Adapter-Credentials mit
-den vorhandenen Grenzen nicht erreichbar ist, wird **kein** Widerrufserfolg behauptet: der Reset
-meldet dann dauerhaft *Netzwerk-Widerruf nicht gesichert* (Punkt 5), und der Owner entscheidet ueber
-O-R4/O-R5 vor R1 (Stoppbefund, keine Ersatzarchitektur).
+**HTTP-Abschluss: Aufruf- und Lock-Reihenfolge.** `IHttpServerLifecycle::stop()` ruft
+`httpd_stop()` und blockiert bis der Server-Task beendet ist; der Adapter setzt den Handle
+**vor** `httpd_stop()` zurueck. Daraus folgt: (1) `running() == false` beweist den Abschluss
+**nicht**, massgeblich ist der Rueckgabewert von `stop()` (`httpd_stop() == ESP_OK`);
+(2) laufende HTTP-Handler koennen auf den `ApplicationCallSerializer` warten. Eine
+synchrone, blockierende HTTP-Stoppoperation **unter demselben Guard** koennte deshalb
+einen wartenden Handler blockieren (Deadlock). Die Sequenz oben stoppt den Server darum
+erst nach dem Verlassen des Guards und nach dem Trennen der Clients durch den
+Netzwerk-Stopp, im lokalen Aufrufkontext des Ablaufs (nicht im HTTP-Task). Ist diese
+Reihenfolge ohne neue Architektur nicht sicher darstellbar, ist das ein **R0-Stoppbefund**
+(Dokumentation und Vorlage an den Owner, keine spekulative Konstruktion).
 
 ### 4.5 Umsetzungsschnitte (nach Planfreigabe; kein Produktcode vorher)
 
 | Schnitt | Inhalt | Gate |
 |---|---|---|
-| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist, (e) die Netzwerk-Ist-Befunde F1–F5 aus 4.4a (Wi-Fi-Stopp-Ergebnis, `config_`-Credentials nach `stop()`, `httpReady` gegenueber `IHttpServerLifecycle`, fehlender Widerruf im Anwendungsreset, alle Aufrufer von `stop()`), wie `NetworkConfigurationService::start` bei `UNSELECTED` reagiert und ob ein anderer Aufrufer `INetworkLifecycle::start` ohne vorheriges `setAccessPointCredentials` nutzt, (f) die Auth-Writes von `verifyServicePin` und welche Bestandstests die Sperrlogik abdecken, (g) **Nutzbarkeit des vorhandenen Resetkerns ohne geladene Runtime, insbesondere aus `SAFE_BOOT`** (Voraussetzungen von `FermentationApplication::beginAuthorizedFactoryReset`: `configurationService_`, `stateStore_`, `storageEpoch_`; Verhalten des Kerns bei `NoRuntime`/`ResetEligibleNoRuntime`). Funktioniert der Pfad dort nicht sicher, ist das ein **Stoppbefund**: er wird dokumentiert und dem Owner vorgelegt; es wird keine Ersatzarchitektur festgelegt. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
-| **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; Netzwerk-/SoftAP-Widerruf nach der Resetgrenze (4.4a) samt Fail-closed-Ergebnis; gezielte Tests. | Planfreigabe |
+| **R0** Vorpruefung (nur Lesen/Dokumentieren) | Belegen: (a) wo die lokale Service-PIN-Pruefung und der PIN-geschuetzte Servicebereich im Code liegen (oder fehlen), (b) ob `FermentationApplication::beginAuthorizedFactoryReset` ohne geladene Runtime nutzbar ist, (c) dass der Runstart-Pfad den `ApplicationCallSerializer` betritt, (d) was "Ersteinrichtung" im Produkt heute ist, (e) Netzwerk/HTTP: `stopWifi()`-Ergebnis und `start()` nach fehlgeschlagenem Stopp, die Statusmenge fuer "Resetgrenze ueberschritten", dass kein Aufrufer ausser dem Ablauf den Server blockierend unter dem Guard stoppt, sowie die Machbarkeit der Reihenfolge aus 4.4a ohne neue Architektur (sonst Stoppbefund),
+   (f) die Auth-Writes von `verifyServicePin` und welche Bestandstests die Sperrlogik abdecken, (g) **Nutzbarkeit des vorhandenen Resetkerns ohne geladene Runtime, insbesondere aus `SAFE_BOOT`** (Voraussetzungen von `FermentationApplication::beginAuthorizedFactoryReset`: `configurationService_`, `stateStore_`, `storageEpoch_`; Verhalten des Kerns bei `NoRuntime`/`ResetEligibleNoRuntime`). Funktioniert der Pfad dort nicht sicher, ist das ein **Stoppbefund**: er wird dokumentiert und dem Owner vorgelegt; es wird keine Ersatzarchitektur festgelegt. Befunde als kurzer Nachtrag im PR; ein Widerspruch zum Plan ist ein Stoppbefund, keine stille Umplanung. | keiner (nur Lesen) |
+| **R1** Ablauf-Zustandsautomat | `FactoryResetFlow` fuer A und B inkl. Vorbedingungen im Guard, Stufen, Abbruch, Ergebnisprojektion; Aufruf des vorhandenen Resetkerns; geordnetes Beenden von Netzwerk und HTTP nach der Resetgrenze (4.4a) samt Fehleranzeige; gezielte Tests. | Planfreigabe |
 | **R2** Anbindung | Praesentationsmodell, SAFE_BOOT-Capability `PersistentFactoryReset` verfuegbar machen (nur wenn der Ablauf lauffaehig ist), Aktor-AUS-Beleg ueber Mock-Senken. | Planfreigabe |
 | **R3** Bildschirme/Ausloeser | Minimale Warn-/Bestaetigungs-/PIN-/Ergebnisseiten im vorhandenen Renderer; Zugang "PIN vergessen?" auf der lokalen PIN-Seite und `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset" auf denselben mehrstufigen Ablauf (O-R1 = B+). Hardware-Anzeige `NOT_RUN`. | – (Bedienparameter lange Bestaetigung vor Abnahme festlegen) |
 | **R4** Doku/Abnahme | Acceptance-Eintraege, Dokumentsynchronisierung, ROADMAP; physische Tests als `NOT_RUN`. | – |
@@ -335,8 +315,8 @@ Neu (gezielt, nur fuer den Ablauf):
 | SIM-R-07 | Stromausfall-Cutpoints des Kerns (vorhandene Matrix) plus Ablauf-Ebene: nach Neustart wird der Ausgang korrekt projiziert; kein erneuter Reset ohne Bestaetigung |
 | SIM-R-08 | Nach Erfolg (Ablauf-Ebene, ergaenzt die obigen Regressionen): alte Session ungueltig, Auth-Zustand zurueckgesetzt, alte persistierte Credentials logisch unerreichbar (neue Epoche); **kein** neues SoftAP-Passwort wird vor einer erfolgreichen Neuprovisionierung angezeigt oder behauptet |
 | SIM-R-14 | **Zwei Zugaenge, ein Ablauf (O-R1 = B+):** "PIN vergessen?" ist ohne PIN-Eingabe erreichbar und loest dabei **keine** PIN-Pruefung und keinen Auth-Write aus; der `SAFE_BOOT`-Eintrag "Vollstaendiger Werksreset" ist unabhaengig vom gesperrten Servicebereich verfuegbar und schaltet diesen nicht frei; beide fuehren in denselben Zustandsautomaten (gleiche Stufen, gleicher Kern, gleiche Invarianten); es existiert kein Pfad, der nur die PIN zuruecksetzt; die vorhandene Raw-Touch-Recovery bleibt unveraendert (Bestandssuite `test_raw_touch_recovery_detector` gruen) und erreicht den Reset nicht |
-| SIM-R-12 | **Netzwerk-/SoftAP-Widerruf, Ebenen E2–E5 (Mock-`INetworkLifecycle`, Mock-`IHttpServerLifecycle`):** nach der Resetgrenze wird zuerst `IHttpServerLifecycle::stop()` aufgerufen und `running() == false` bestaetigt (E4), dann die Widerrufsoperation (E3); danach liefert `accessPointInfo()` nichts (E2, nur Projektion), das Mock haelt keine AP-/Home-Zugangsdaten mehr, `NetworkConfigurationService::activeCredential_` ist verworfen (E5), und ein `start()` ohne erneutes `setAccessPointCredentials` wird abgelehnt (**kein Replay**, E5); der normale `stop()`/`start()`-Pfad bleibt unveraendert gruen (`test_transport_stop_start_is_restartable`). Reihenfolge-Testfall: **Run-Epochen-Handoff scheitert nach der Resetgrenze** -> Netzwerk und HTTP sind trotzdem bereits widerrufen und werden nicht neu gestartet; das Ergebnis meldet Handoff-Fehler und Widerruf getrennt (4.4a Punkt 4) |
-| SIM-R-13 | **Fail-closed am echten Adaptervertrag:** (a) Mock-Widerrufsoperation `Failed` (entspricht einem gescheiterten `esp_wifi_stop()`, F1) -> Reset bleibt abgeschlossen, Ergebnis *Netzwerk-Widerruf nicht bestaetigt*, **kein Erfolg**, keine Netzwerk-Ersteinrichtung; (b) HTTP-`stop()` liefert `false` -> dasselbe Ergebnis; (c) `stop()` meldet `Applied`, ohne dass der Widerruf bestaetigt ist (Verhalten des Ist-Adapters) darf **nie** als Widerrufserfolg gelten – der Test fordert die Widerrufsoperation, nicht `stop()`; (d) O-R5 nicht freigegeben/Operation fehlt -> Ergebnis *Widerruf nicht gesichert*; (e) Neuprovisionierung: erst nach `Applied` von `start` ein neues SoftAP-Passwort, bei `start`-Fehler gestoppt und kein Passwort behauptet; lokale Bedienung bleibt ohne Netzwerk nutzbar. **Nicht nativ beweisbar (`NOT_RUN`):** reales Verhalten von `esp_wifi_stop()`, tatsaechlicher AP-Abschluss und HTTP-Abschluss am Geraet; Adapteraenderungen sind nur durch Build und spaeteren Hardwarenachweis belegt |
+| SIM-R-12 | **Netzwerk/HTTP nach dem Reset (Erfolgsfall, Mocks):** nach der Resetgrenze wird ausserhalb des Guards zuerst `INetworkLifecycle::stop()`, dann `IHttpServerLifecycle::stop()` (Rueckgabe geprueft, nicht `running()`) aufgerufen; die Netzwerk-Ersteinrichtung startet erst nach Moduswahl mit den Credentials der neuen Epoche; ein neues SoftAP-Passwort wird erst nach `Applied` angezeigt. Handoff-Fehler nach der Resetgrenze: Netzwerk/HTTP werden trotzdem beendet, Ergebnis meldet beides getrennt. Der HTTP-Stopp laeuft nicht unter dem `ApplicationCallSerializer` (Test mit einem Mock-Stop, der auf den Guard wartet: kein Deadlock) |
+| SIM-R-13 | **Fehlerfall:** `INetworkLifecycle::stop()` -> `Failed` oder HTTP-`stop()` -> `false`: kein bestaetigter Widerruf, keine Neuprovisionierung, lokale Meldung "Werksreset durchgefuehrt. Netzwerk konnte nicht sicher beendet werden. Geraet vollstaendig aus- und wieder einschalten."; keine Wiederholungsschleife, kein neuer Recovery-Zustand. Adapter (`stopWifi()`): `ESP_OK`, `ESP_ERR_WIFI_NOT_INIT`/nie gestartet und sonstiger Fehler werden unterschieden (Fehler -> `Failed`, `wifiStarted_` bleibt `true`); normaler `stop()` -> `start()`-Pfad bleibt gruen (`test_transport_stop_start_is_restartable`). **`NOT_RUN`:** reales Verhalten von `esp_wifi_stop()`/`httpd_stop()` am Geraet; der Adapter ist nur durch Build und spaeteren Hardwarenachweis belegt |
 | SIM-R-09 | Touchkalibrierung bleibt ueber den vollstaendigen Ablauf A und B erhalten |
 | SIM-R-10 | SAFE_BOOT-Capability `PersistentFactoryReset` nur verfuegbar, wenn der Ablauf lauffaehig ist |
 | SIM-R-11 | Projektion von A nennt geloeschte und wiederhergestellte Daten; B nennt vollstaendigen Datenverlust |
@@ -478,8 +458,7 @@ Konflikte K1–K7 entschieden hat; das ist die "notwendige spaetere R1-Scopeents
 | **G0** | Freigabe der exakten Plan-SHA | – | – | vor R0 |
 | **O-R1** | *entschieden (Ownerentscheid B+, siehe 4.1):* Zugaenge fuer den PIN-unabhaengigen Vollreset B | – | – | **ERLEDIGT** – bleibt offen nur: Dauer des langen Gedrueckthaltens als Bedienparameter (Ownerwert, nicht geraten) |
 | **O-R2** | Bedingt: PIN-Quelle fuer Ablauf A, falls R0 keinen lokalen PIN-geschuetzten Servicebereich im Code belegt | **A** vorhandene lokale PIN-Pruefung wiederverwenden; **B** Ablauf A zunaechst nur ueber die lokal verifizierte PIN-Eingabe (`device_ui_pin` + Authentication-Records) ohne Servicebereich | nach R0-Befund | nach R0 |
-| **O-R4** | Fail-closed-Strategie, wenn der Netzwerk-/SoftAP-Widerruf nach der Resetgrenze scheitert (4.4a Punkt 5) | **A** begrenzte Wiederholung plus Anzeige "Stromversorgung trennen" (RAM-Zugangsdaten verschwinden, persistierte sind logisch ungueltig); **B** kontrollierter Software-Neustart ueber einen neuen Plattformport (neuer Port, daher nur mit Ownerentscheid); **C** Reset als fehlgeschlagen melden (unzulaessig: die Resetgrenze ist irreversibel) | **A** (keine neue Abstraktion) | vor R1 |
-| **O-R5** | Schmale additive Port-Ergaenzung `INetworkLifecycle::revokeAccessPoint()` (bestaetigter Wi-Fi-Stopp, Verwerfen der Adapter-Credentials, Replay-Sperre; normaler `stop()`/`start()`-Vertrag unveraendert) fuer den Resetfall | **A** Ergaenzung wie in 4.4a Punkt 2 (empfohlen); **B** keine Port-Ergaenzung: Widerruf bleibt dauerhaft "nicht gesichert" (Punkt 5), Sicherheit ruht allein auf O-R4; **C** `stop()` selbst staerken (aendert den normalen Vertrag, hoeheres Regressionsrisiko) | **A** | vor R1 (nur falls R0 die Befunde F1–F5 bestaetigt) |
+| **O-R4** | *entschieden (Ownerentscheid, vereinfachte Variante A, siehe 4.4a Punkt 4):* Verhalten bei scheiterndem Netzwerk-/HTTP-Stopp nach der Resetgrenze | – | – | **ERLEDIGT** |
 | **O-BI** | Funktionsumfang und Strategie von Backup/Import nach B0 | Gesamtbody / Chunking mit Vorab-Validator / Export-only / Nichtlieferung in R1; jede Reduktion von Limits ist eigene Entscheidung | keine Vorabwahl | nach B0 |
 | **O3** | Bedingt (nur bei B1/B2): geraetegebundene Daten im Backup (`sensorCommissioning` mit ROM-Bindung, Planerparameter) | **A** ausschliessen; **B** mit Warnung; **C** mit Zusatzbestaetigung | **A** | vor B1 |
 | **O-R3** | R1-Vertragsabgleich K1–K7 (Abschnitt 7) und Zuschnitt von #19/#28 | Journal fuer R1 doch umsetzen / R1-SSOT per ADR anpassen / Abweichung ausdruecklich akzeptieren | – (nicht vom Plan entschieden) | vor R1-Abnahme, vor Wiederaufnahme von #1–#4 und vor jeder Aenderung von #19/#28 |
@@ -506,7 +485,7 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 | Risiko | Wirkung | Gegenmassnahme |
 |---|---|---|
 | Resetkern prueft Lauf/PIN/Ursprung nicht | Reset koennte fehlerhaft ausloesbar sein | Vorbedingungen unter dem Guard im neuen Ablauf, SIM-R-02..05, R0-Pruefung |
-| Alte AP-/WLAN-/HTTP-Autoritaet nach dem Reset | `stop() == Applied` beweist weder Wi-Fi-Stopp (F1) noch HTTP-Ende (F3) noch Entfernung der Adapter-Credentials (F2); Replay moeglich | fuenf Ebenen (4.4a), bestaetigte Widerrufsoperation (O-R5), HTTP-`stop()` mit Pruefung, SIM-R-12/13, O-R4; Adapterverhalten nativ nicht beweisbar -> `NOT_RUN` |
+| Laufende Verbindung/HTTP nach dem Reset; blockierender HTTP-Stopp unter dem Application-Guard | alte Autoritaet laeuft weiter bzw. Deadlock mit wartenden Handlern | 4.4a (Sequenz ausserhalb des Guards, Rueckgabewert statt `running()`), ehrliche `stop()`-Rueckgabe im Adapter, SIM-R-12/13, R0-Stoppbefund; Adapterwirkung `NOT_RUN` |
 | PIN-Pruefung schreibt persistent | Test/Ablauf koennte faelschlich "kein Store-Write" verlangen und die Sperre umgehen | Invariante 4 und SIM-R-01/03 trennen Reset-Writes von Auth-Writes; Sperrlogik unveraendert |
 | Ablauf B ohne PIN | zu leichte Ausloesbarkeit | Mehrfachwarnung + lange Bestaetigung, nur lokal, Aktoren AUS, O-R1 = B+ (kein PIN-Bypass); keine PIN-Rueckstellung ohne Reset |
 | Dauer des langen Gedrueckthaltens ungeklaert; Zugaenge von B nicht am Geraet verifiziert | Verifikation nicht moeglich | Bedienparameter durch den Owner, Hardware `NOT_RUN`, O-HW |
@@ -529,7 +508,7 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 
 - [ ] Plan-Fix-Verification ohne offene Blocker
 - [ ] exakte Plan-SHA vom Owner freigegeben (G0)
-- [ ] O-R4 und O-R5 vor R1 (O-R4 weiterhin offen, keine Strategie vorweggenommen); Bedienparameter Dauer des langen Gedrueckthaltens vor Abnahme; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
+- [ ] R0-Befunde (insbesondere Resetkern ohne Runtime/SAFE_BOOT, HTTP-Stopp-Reihenfolge) vor R1; Bedienparameter Dauer des langen Gedrueckthaltens vor Abnahme; O-R2 nach R0; O-BI nach B0; O3 vor B1; O-HW spaetestens vor R4
 - [ ] O-R3 (R1-Vertragsabgleich) bis zur R1-Abnahme entschieden
 - [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten
 
