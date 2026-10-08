@@ -288,22 +288,24 @@ pauschal primaer. Der feste Kuehlkoerper-/Peltier-Schutzsensor ist verpflichtend
 Sicherheitsgrundlage; fehlendes, ungueltiges, veraltetes oder nicht ausreichend
 vertrauenswuerdiges Signal sperrt die Peltierfreigabe ausserhalb des Treibers.
 
-Softwarestack und elektrische Bustopologie sind getrennte Entscheidungen. Beide
-Kandidaten durchlaufen Stufe 1 fuer Quelle/Lizenz/Build, Stufe 2 mit einem realen
-Sensor und nur nach Erfolg die identische Topologie-/Fehlermatrix der Stufe 3.
-Dabei werden Topologie A mit drei getrennten Bussen und Topologie B mit separatem
-Produktfuehler sowie gemeinsamem festen Bus identisch verglichen. Topologie C
-mit allen Sensoren auf einem Bus ist keine regulaere Zielvariante.
+Die Bustopologie ist entschieden (Boardprofil-SSOT, PR #131): GPIO32 Schrankluft
+und Kuehlkoerper (Multidrop), GPIO33 Produktfuehler; sie wird von diesem Audit
+nicht neu bewertet. Fuer den Softwarestack gilt der Espressif-first-Gate aus
+`docs/audits/HARDWARE_SPIKE_PLAN.md` (Spike B, "Geltende Vorgaben", Issue #30,
+Plan Revision 2): der Espressif-Pfad durchlaeuft Stufe 1 (Quelle/Lizenz/Build auf
+ESP-IDF v6.1), Stufe 2 (ein realer Sensor) und die Stufe-3-Matrix auf der
+SSOT-Topologie; DallasTemperature/OneWire wird nur bei einem konkret
+nachgewiesenen Misserfolg vertieft.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP-IDF-6.0.2-/ESP32-Kompatibilitaet | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
 | DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/-Betrieb oder dokumentierter Integrationspfad ohne Arduino-Produktionspfad) messen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, Espressif-first-Evaluationsgate, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | ergebnisoffener konditionaler Evaluationskandidat neben dem Espressif-first-Erstkandidaten `onewire_bus`/`ds18b20`; gleicher Funktions-, Ressourcen- und Hardwarevergleich, keine Auswahl vor Stufe 3; ein Arduino-basierter Integrationsweg benoetigt weiterhin den dokumentierten Ownerentscheid |
 | Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; die Produktionstoolchain ist seit Issue #71/PR #79 ESP-IDF `6.0.2`, die Mindestanforderung ist damit erfuellt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | ESP-Component-Manager-Integration in `main/app_main.cpp`, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze real pruefen | Espressif-first-Erstkandidat fuer Stufe 1; `SPIKE_REQUIRED`, keine ausgewaehlte Abhaengigkeit |
 
-Der Produktfuehler erhaelt verbindlich einen eigenen Bus. Ein eigener Bus auch
-fuer den Schutzsensor ist bevorzugt; der gemeinsame feste Bus aus Topologie B
-bleibt Rueckfall, falls die reale Pinpruefung keinen dritten unproblematischen
-GPIO ergibt. Vorab werden keine drei GPIOs reserviert.
+Der Produktfuehler hat verbindlich einen eigenen Bus (GPIO33); Schrankluft und
+Kuehlkoerper teilen den festen Bus (GPIO32). Das ist die per Boardprofil-SSOT
+entschiedene R1-Topologie; die frueher offene Variantenwahl (drei Busse,
+Rueckfall, GPIO-Reservierung) ist erledigt.
 
 Das konkrete trennbare Produktfuehler-Stecksystem und seine elektrische
 Ausfuehrung sind keine Komponente dieses Softwareaudits und bleiben eine
@@ -317,7 +319,7 @@ Kuehlkoerper-/Peltier-Schutzsensor als verpflichtende Freigabegrundlage,
 `VALID`/`STALE`/`FAILED`, Filter, Plausibilitaet, Offset, Rueckkehr und
 Aktorfreigabe. Der Adapter liefert nur Bus-ID, ROM-Adresse, Messwert, Zeitpunkt,
 Aufloesung, CRC, Anwesenheit, Timeout und technischen Fehlerstatus.
-Entscheidungsstatus: `SPIKE_REQUIRED` fuer Softwarestack und Topologie getrennt.
+Entscheidungsstatus: `SPIKE_REQUIRED` fuer Version und Konvertierungsvariante des Softwarestacks (Topologie entschieden).
 
 Quellen: [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library),
 [OneWire](https://github.com/PaulStoffregen/OneWire),

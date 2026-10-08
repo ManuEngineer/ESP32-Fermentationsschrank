@@ -1,7 +1,7 @@
 # Plan Issue #30 – reale DS18B20-Sensoradapter
 
 ```text
-PLAN_REVISION=1
+PLAN_REVISION=2 (konsolidiert; Review-Delta B1-B3 eingearbeitet)
 PLAN_STATUS=DRAFT_AWAITING_OWNER_APPROVAL (exakte Plan-SHA steht im Draft-PR)
 ISSUE=30 (E5.2)
 BASE_MAIN=7b16dbeb95ab09fdbe13d6c524c7a09ec721fb7d (PR #187 gemergt)
@@ -82,7 +82,7 @@ Spike zu bestaetigen, nicht zu unterstellen).
 | Baustein | Modul | Inhalt |
 |---|---|---|
 | `IDs18b20Bus` (technischer Port, 4–5 Methoden) | `device_platform` | `presence()`, `enumerate(out ROMs)`, `startConversionAll()`, `readScratchpad(rom) -> {celsius, DriverResult}`, `setResolution12(rom)`; `DriverResult` = `Ok/NotFound/Timeout/InvalidCrc/PowerOnValue/Other`. Keine IDF-Typen, kein Rollenbegriff (Kanalindex). |
-| `Ds18b20SamplingEngine` | `device_platform` | Reiner Zyklus-/Zustandsautomat: 2-s-Takt, Trigger -> Wartezeit >= Konvertierungszeit -> Lesen je gebundenem ROM, ROM-Pruefung gegen Erwartung, Presence-Entprellung, Mapping `DriverResult` -> `TemperatureSampleStatus`, begrenzte Neuinitialisierung nach Fehlern. Veroeffentlicht je Kanal genau ein unveraenderliches `TemperatureReading` mit dem Zeitstempel der abgeschlossenen Konvertierung; ohne neue Konvertierung wird **keine** alte Messung erneut als neu ausgegeben. |
+| `Ds18b20SamplingEngine` | `device_platform` | Reiner Zyklus-/Zustandsautomat: 2-s-Takt, Trigger -> Wartezeit >= Konvertierungszeit -> Lesen je gebundenem ROM (MATCH ROM), Bindungspruefung nach Abschnitt 4a, Mapping `DriverResult` -> `TemperatureSampleStatus`, begrenzte Neuinitialisierung nach Fehlern. Keine eigene Anzahl guter Proben, keine eigene `VALID`-Schwelle, keine Presence-Entprellung: jeder Zyklus meldet das tatsaechliche technische Ergebnis. Veroeffentlicht je Kanal genau ein unveraenderliches `TemperatureReading` mit dem Zeitstempel der abgeschlossenen Konvertierung; ohne neue Konvertierung wird **keine** alte Messung erneut als neu ausgegeben. |
 | `Ds18b20ChannelSource` | `device_platform` | `ITemperatureSource`-Sicht auf ein Engine-Ergebnis (`read() const`, kopiert den letzten Stand unter kurzem kritischen Abschnitt). |
 | ESP-IDF-Adapter | `device_platform_esp_idf` | `IDs18b20Bus`-Implementierung auf `onewire_bus`+`ds18b20`, Sampling-Task (ein Task fuer beide Busse, TWDT-ueberwacht), Buserzeugung auf GPIO32/33 aus dem generierten Boardprofil-Header. |
 | Fake-Bus | `device_platform_test_support` | Skriptbarer `IDs18b20Bus` fuer die native Matrix. |
@@ -113,10 +113,61 @@ Aenderung des bestehenden Vertrags: `MissingSample` ohne `BusFault`/`CrcFault`
 nicht geraten (`TBD_IMPLEMENTATION_BUDGET` ist nie Laufzeitwert). Start erst nach
 Plattform-/Application-Begin; Ende/Fehler des Tasks fuehrt zu `MissingSample`
 statt zu altem Wert (Zeitstempel wird nicht fortgeschrieben). Hot-Plug und
-Wiedererkennung laufen vollstaendig im Task: Presence-Poll des Produktbusses
-im selben Takt, bei Wiederkehr Enumeration, ROM-Vergleich, 12-Bit setzen, mehrere
-gueltige Proben in Folge, bevor `Ok` veroeffentlicht wird (die Plausibilitaets-/
-Stabilitaetsentscheidung selbst bleibt in der Pipeline #20).
+Wiedererkennung laufen vollstaendig im Task und sind rein technisch:
+Presence-Poll des Produktbusses im selben Takt, bei Wiederkehr Enumeration,
+ROM-Pruefung nach Abschnitt 4a, 12 Bit neu setzen, frische Konvertierung mit
+CRC-Pruefung. Die **erste** frische, korrekt konvertierte, CRC-gueltige Probe
+wird als `Ok` gemeldet. Die fachliche Recovery-Entscheidung (Zaehler
+`minConsecutiveValidSamples`, `minRecoveryStabilityDurationMs`, Plausibilitaet,
+ROM-Wechsel-Erkennung `IdentityMismatch`) liegt ausschliesslich in
+`SensorQualityPipeline` (#20); der Adapter fuehrt dafuer keine zweite
+konfigurierbare Schwelle ein.
+
+### 4a Rollenbindung und Aktivierung (fail-closed)
+
+Auf GPIO32 liegen zwei feste Sensoren; ohne verbindliche Zuordnung `ROM -> Rolle`
+ist Schrankluft nicht von Kuehlkoerper unterscheidbar. Daher gilt, unabhaengig von
+der Umsetzungsreihenfolge:
+
+1. **Einzige Quelle** der Bindung fester Rollen ist der persistierte Datensatz
+   (Rolle, ROM, Offset; S2). Verboten sind: Enumerationsreihenfolge, "erstes ROM =
+   Luft", ROM-Konstanten im Code, eine temporaere Bring-up-Zuordnung im
+   Produktpfad.
+2. **Bootablauf:** (a) Datensatz lesen und validieren, (b) beide Busse
+   enumerieren (ROM-CRC), (c) Bindung pruefen, (d) erst danach eine Rolle
+   aktivieren.
+3. **Ungebunden = nie `Ok`.** Ein fester Kanal veroeffentlicht ausschliesslich
+   `MissingSample` ohne Identitaet, solange die Bindung nicht verifiziert ist.
+   Das gilt bei: leerem oder unlesbarem Datensatz, ungueltigem Schema/ungueltiger
+   Revision, fehlender Rolle, Null-ROM, demselben ROM in zwei Rollen, ungueltigem
+   ROM-CRC.
+4. **Fester Bus, Laufzeit/Boot:**
+   * erwartetes ROM fehlt (nie gefunden, verschwunden, abgezogen) -> genau diese
+     Rolle `MissingSample` bzw. das Treiberergebnis (`BusFault`/`CrcFault`);
+     Wiederkehr desselben ROM liest die Rolle wieder (die Recovery-Entscheidung
+     trifft #20);
+   * **unbekanntes zusaetzliches ROM** auf dem festen Bus -> `BindingConflict`:
+     beide festen Rollen `MissingSample`, bis die Enumeration wieder genau dem
+     Datensatz entspricht oder der Datensatz bewusst geaendert wurde;
+   * ein ROM kommt in der Enumeration eines Busses nur einmal vor; Duplikate gibt
+     es nur im Datensatz (Punkt 3).
+5. **Aktivierungszeitpunkt.** Eine Rolle liefert erst dann ihr erstes `Ok`, wenn
+   Datensatz gueltig, erwartetes ROM bestaetigt, kein `BindingConflict`, 12 Bit
+   gesetzt und eine frische CRC-gueltige Konvertierung vorliegt. Eine Aenderung
+   des Datensatzes wirkt erst nach erneuter Enumeration und Pruefung; bis dahin
+   `MissingSample`. (Ablauf der Datensatzaenderung: Planrevision fuer S2.)
+6. **Produktbus (GPIO33, abnehmbar, ein Fuehler):** genau ein Geraet -> dessen
+   ROM ist die Identitaet des Produktkanals (O3); kein Geraet -> `MissingSample`
+   ohne Fehlerstatus (abwesend); **zwei oder mehr Geraete -> `BusFault`**, kein
+   `Ok`, keine Auswahl nach Reihenfolge; anderer Fuehler angesteckt ->
+   neue Identitaet wird gemeldet. Erkennung des ROM-Wechsels (`IdentityMismatch`,
+   Filter-Reset) und Offset-Zuordnung (nur bei `calibration.identity ==
+   sample.identity`, unbekanntes ROM ohne Offset) leistet die bestehende
+   `SensorQualityPipeline`; der Adapter dupliziert das nicht. Der Produktkanal
+   benoetigt keinen Datensatz fuer `Ok`; Offsets gibt es nur mit Datensatz.
+7. **Gate.** Ohne S2 kann im Produktpfad keine feste Rolle je `Ok` liefern. Das
+   Ergebnis von S1 allein ist deshalb bewusst ein fail-closed Zustand und kein
+   nutzbarer Sensor. S3 (Hardwareverifikation) setzt S2 voraus.
 
 **Safety-Grenze.** Die Adapterausgabe ist ausschliesslich Messdaten. Hot-Plug,
 Wiedererkennung und Fehler koennen keine Aktorfreigabe erzeugen oder aufheben;
@@ -171,34 +222,40 @@ mit neuer Plan-SHA. Ohne Freigabe keine Produktimplementierung.
   gepinnten** Versionen, `PRIV_REQUIRES`, `dependencies.lock`;
   `docs/THIRD_PARTY_COMPONENTS.md` und `docs/LICENSE_STATUS.md`/Notices,
   `docs/ESP_IDF_UPGRADE_CONTRACT.md` (Komponentenliste) aktualisieren.
-* `main/app_main.cpp`: Instanziierung und Start nach Application-Begin;
+* `main/app_main.cpp`: Instanziierung und Start nach Application-Begin; die
+  Bindungsquelle ist bis S2 **leer** (alle festen Kanaele ungebunden, siehe 4a);
   GPIO32/33 ausschliesslich aus `main/generated/board_profile_r1.hpp`
   (der Header hat heute keine OneWire-Konstanten; die Erweiterung erfolgt ueber
   den vorhandenen Generator `scripts/generate_board_profile_header.py` aus der
   YAML-SSOT, nicht von Hand).
-* Native Tests (Fake-Bus): Boot-Enumeration, ROM-Erwartung, Presence/Hot-Plug,
-  Entprellung, Wiedererkennung, jede Fehlermapping-Zeile, 85,0-°C-Einschaltwert,
+* Native Tests (Fake-Bus, Bindung ueber injizierten Test-Provider): komplette
+  Bindungsmatrix aus 4a (leer, unlesbar, Null-ROM, doppeltes ROM, fehlendes ROM,
+  unbekanntes zusaetzliches ROM, Reihenfolge-Unabhaengigkeit der Enumeration,
+  Aktivierungszeitpunkt, Produktbus 0/1/2 Geraete und ROM-Wechsel), Presence/
+  Hot-Plug, Wiedererkennung (erste frische CRC-gueltige Probe ist `Ok`, keine
+  Engine-Zaehlerlogik), jede Fehlermapping-Zeile, 85,0-°C-Einschaltwert,
   keine wiederholte alte Messung, unbekanntes ROM, Zyklus-Takt, Task-Ausfall,
   Zusammenspiel mit `SensorQualityPipeline` (Bus-/CRC-/Missing-Proben fuehren zu
   den erwarteten Pipeline-Zustaenden), kein Pfad zu Aktoren (Architektur-Check).
 * Builder-Self-Check (`bash scripts/run_pre_ready_gates.sh self-check`) und
   `esp32_bringup`/`esp32_release`-Build; Ressourcen-Ist gegen S0-Budget.
 
-### S2 – ROM-/Rollen-/Offset-Datensatz (**bedingt auf Ownerentscheid O1**)
+### S2 – ROM-/Rollen-/Offset-Datensatz und Bindungsquelle (Voraussetzung fuer S3)
 
 Die Akzeptanzkriterien "feste Sensoridentitaeten werden bei Boot geprueft" und
-"individuelle Offsets je ROM-Adresse" setzen einen persistierten Datensatz
-(Rolle, ROM, Offset, Bedienquelle, Revision) voraus; heute existiert keiner.
-Ist O1 = A (in #30), folgt **vor** der Umsetzung eine Planrevision 2, die den
-Datensatz, seine Revision/Wire-Werte, den Application-Owner-Eintrag
-(`ConfigurationService` Preview/Commit wie `applyUserSettings`), die Migration und
-den Commissioning-Ausloeser (O2) vollstaendig festlegt. Dieser Plan beschreibt den
-Schnitt bewusst nicht weiter, um keine ungefragte Schema-/Persistenzentscheidung
-vorwegzunehmen.
+"individuelle Offsets je ROM-Adresse" sowie Abschnitt 4a verlangen einen
+persistierten Datensatz (Rolle, ROM, Offset, Bedienquelle, Revision); heute
+existiert keiner. S2 liefert ihn und die produktive Bindungsquelle fuer 4a
+(Boot-Laden, Validierung, Fail-closed bei jedem Fehler). Vor der Umsetzung folgt
+eine **Planrevision 3**, die Datensatz, Revision/Wire-Werte, den Application-
+Owner-Eintrag (`ConfigurationService` Preview/Commit wie `applyUserSettings`),
+Migration und den Commissioning-Ausloeser (O2) vollstaendig festlegt; dieser Plan
+nimmt bewusst keine Schema-/Persistenzentscheidung vorweg. Ohne S2 bleibt jede
+feste Rolle ungebunden (4a Punkt 7).
 
 ### S3 – Gezielte Hardwareverifikation und ROM-Dokumentation
 
-Auf dem exakten finalen Implementierungs-Head (`ESP_IDF_UPGRADE_CONTRACT`), Peltier/
+Nach S1 und S2, auf dem exakten finalen Implementierungs-Head (`ESP_IDF_UPGRADE_CONTRACT`), Peltier/
 BTS7960/Luefter/MOSFET physisch getrennt oder gesperrt: Sensoren einzeln abziehen,
 Bus stoeren (Unterbruch, strombegrenzter Kurzschluss nur nach Ownerfreigabe),
 Produktfuehler hot-pluggen (Stillstand und waehrend Konvertierung), ROM-
@@ -213,7 +270,7 @@ sondern als eigener Boardprofil-/Plan-Scope gemeldet.
 
 | Kriterium aus #30 | Nachweis |
 |---|---|
-| feste Sensoridentitaeten bei Boot geprueft | S1 native Boot-Enumeration/ROM-Erwartung; S2 Datensatz; S3 Hardware |
+| feste Sensoridentitaeten bei Boot geprueft | S1 native Bindungsmatrix (4a); S2 persistierter Datensatz als einzige Bindungsquelle; S3 Hardware |
 | fehlender optionaler Produktfuehler unterscheidbar von Fehler | S1 Mapping-Matrix (`MissingSample` ohne Busfehler vs. `BusFault`/`CrcFault`); S3 Abziehen |
 | Schrankluft- und Kuehlkoerpersensor fuer Peltierfreigabe erforderlich | Adapter liefert fuer feste Rollen bei Abwesenheit/Fehler nie `Ok`; die Peltierentscheidung bleibt #24/#35 (nur Daten, kein Ersatz) |
 | Hot-Plug erzeugt keine unkontrollierte Aktorfreigabe | kein Aktorpfad im Adapter (Architekturgrenzen-Check), `ACTUATOR_RELEASE=NO`, S3 Hot-Plug ohne Aktorverbindung |
@@ -236,10 +293,12 @@ Wiedererkennung) liegen in S1 (nativ) und S3 (real).
 4. **Klon-/Fremdsensoren** (85-°C-Verhalten, abweichende Scratchpads): hinge vom
    realen Sensor ab (Frage H2); die Behandlung bleibt auf CRC + Einschaltwert +
    Pipeline-Plausibilitaet begrenzt.
-5. **Shared Bus mit zwei Sensoren:** ein Teilnehmer, der den Bus klemmt, stoert
+5. **Ungebundener Zustand ist nutzlos, aber sicher:** ohne S2 liefern die festen
+   Kanaele nie `Ok`; das ist gewollt und muss in Reviews nicht als Fehler gelten.
+6. **Shared Bus mit zwei Sensoren:** ein Teilnehmer, der den Bus klemmt, stoert
    beide festen Sensoren; das Boardprofil legt dies als gewollte Topologie fest
    (Fehler wirkt fuer die Peltierfreigabe fail-closed).
-6. **Unbekannte Hardware:** Pull-ups, Kabellaengen und ESD sind real unbekannt;
+7. **Unbekannte Hardware:** Pull-ups, Kabellaengen und ESD sind real unbekannt;
    Ergebnis kann ein Topologie-/Boardprofil-Thema sein (eigener Scope).
 
 ## 8. Ownerfragen und -entscheide
@@ -263,17 +322,23 @@ Wiedererkennung) liegen in S1 (nativ) und S3 (real).
 ### Entscheidungen
 
 * **O1 (Scope).** Wird der persistierte ROM-/Rollen-/Offset-Datensatz samt
-  Boot-Pruefung in #30 umgesetzt (Empfehlung, da er Akzeptanzkriterium ist) oder
-  bis zu einem eigenen Issue/#34 verschoben? Bei Verschiebung wird das
-  Boot-Pruef-Kriterium in #30 nur mit einer bring-up-lokalen, nicht
-  persistierten Zuordnung nachgewiesen und die Abweichung im PR ausgewiesen.
-* **O2 (nur bei O1 = A).** Wie wird die Zuordnung ausgeloest, solange Service/PIN
-  fehlen: ausschliesslich ueber den `esp32_bringup`-Pfad (UART/Harness,
-  Empfehlung) oder ueber einen minimalen lokalen Pfad? Keine Bedien-UI in #30.
+  Boot-Pruefung in #30 umgesetzt (S2; **Empfehlung**, da er Akzeptanzkriterium
+  ist und die einzige zulaessige Bindungsquelle) oder verschoben? Eine
+  Verschiebung ist keine stille Vereinfachung, sondern eine **Scope-/
+  Akzeptanzaenderung** von #30, die der Owner ausdruecklich bestaetigen muss: die
+  Kriterien "Identitaeten bei Boot geprueft" und "Offsets je ROM" wandern in ein
+  Folgeissue, feste Rollen bleiben im Produkt dauerhaft ungebunden (kein `Ok`),
+  #30 erreicht seine Definition of Done nicht vollstaendig und #35 erhaelt keine
+  Rollenwerte. Eine nur temporaere Bring-up-Zuordnung ersetzt O1 nicht.
+* **O2 (nur bei O1 = A).** Wie wird der Datensatz geschrieben, solange
+  Service/PIN fehlen: ausschliesslich ueber den `esp32_bringup`-Pfad
+  (UART/Harness, **Empfehlung**) oder ueber einen minimalen lokalen Pfad? Der
+  Datensatz selbst ist persistierte Produktdaten und wird im Release-Profil
+  gelesen; nur das Schreiben ist bring-up-seitig. Keine Bedien-UI in #30.
 * **O3.** Austausch des Produktfuehlers: darf auf dem dedizierten Produktbus
-  jedes einzelne gueltige ROM uebernommen werden (Offset je ROM, unbekanntes ROM
-  ohne Offset), oder ist eine erneute Zuordnung noetig (Empfehlung: jedes
-  einzelne gueltige ROM akzeptieren, Offset nur bei bekanntem ROM)?
+  jedes **einzelne** gueltige ROM uebernommen werden (Regel 4a Punkt 6: Offset je
+  ROM, unbekanntes ROM ohne Offset, ROM-Wechsel erkennt die Pipeline), oder ist
+  eine erneute Zuordnung noetig (Empfehlung: einzelnes gueltiges ROM akzeptieren)?
 * **O4.** Freigabe eines eigenen Sampling-Tasks (Befund 1) als
   Architekturentscheid; das Budget (Stack/Prioritaet/Core/Heap) wird nach S0
   separat freigegeben.
@@ -292,13 +357,25 @@ GPIOs oder zur Espressif-first-Richtung noetig.
   `docs/ACCEPTANCE_TESTS.md` (neue SIM-IDs), `docs/OPEN_POINTS.md` (ROM-
   Adressen), Hardware-Evidence. Der vorbestehende Fehler SIM-26-21/65 gehoert zu
   Issue #188 und wird hier nicht beruehrt.
+* **In diesem Plan-PR bereits synchronisiert** (kanonische Spike-/Komponentenvorgaben,
+  soweit fuer #30 bindend): `docs/audits/HARDWARE_SPIKE_PLAN.md` (Spike B: Tabelle
+  "Geltende Vorgaben" legt fest, was durch neuere Entscheidungen ersetzt ist -
+  Topologien A/B/C und GPIO-Reservierung durch die Boardprofil-SSOT, ESP-IDF 6.0.2
+  durch v6.1, identischer Vollvergleich beider Kandidaten durch den Espressif-
+  first-Gate), `docs/audits/COMPONENT_EVALUATIONS.md` (DS18B20-Abschnitt),
+  `docs/THIRD_PARTY_COMPONENTS.md` (beide DS18B20-Zeilen). Historisch und **nicht**
+  angepasst (spiegeln den Entscheidungsstand vor PR #131): `OD-03a/OD-03b` und
+  Topologie-A/B-Aussagen in `docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`,
+  `docs/audits/RELEASE_1_FUNCTION_MATRIX.md` und
+  `docs/audits/OPEN_BACKLOG_CLASSIFICATION.md`; fuer #30 gilt ausschliesslich die
+  Boardprofil-SSOT.
 
 ## 10. Reihenfolge, Gates, Abgrenzung
 
 ```text
 Plan-Freigabe (exakte SHA) -> S0 (Spike, Owner-Hardware H1-H4) -> S0-Gate (Owner)
- -> S1 (+ Builder-Self-Check) -> Independent Review -> [O1=A: Planrevision 2 -> S2]
- -> S3 Hardwareverifikation -> finaler Pre-Ready -> Owner
+ -> S1 (+ Builder-Self-Check; feste Rollen ungebunden = fail-closed) -> Independent Review
+ -> Planrevision 3 (Datensatz) -> S2 -> S3 Hardwareverifikation -> finaler Pre-Ready -> Owner
 ```
 
 Abhaengigkeiten #20/#21/#29 sind erledigt; #31 ist gemergt. Es wird nicht auf

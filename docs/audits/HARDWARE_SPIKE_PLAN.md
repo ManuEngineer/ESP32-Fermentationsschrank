@@ -473,17 +473,24 @@ hervorgehenden Kandidaten auswaehlen.
 
 ## Spike B: DS18B20 und 1-Wire
 
-### Ziel und getrennte Entscheidungen
+### Geltende Vorgaben (Synchronisierung mit Issue #30, Plan Revision 2)
 
-Der Spike bestimmt den kleinsten stabilen Softwarestack und bewertet getrennt
-davon die elektrische Bustopologie. Beide Softwarekandidaten muessen die
-zulaessigen Topologien A und B unter identischen Bedingungen pruefen. Ein gutes
-Ergebnis einer Bibliothek waehlt keine Topologie, und eine gute Topologie waehlt
-keine Bibliothek.
+Dieser Spike wird gemaess `docs/tasks/issue-30-ds18b20-sensor-adapters-plan.md`
+(Abschnitt S0) ausgefuehrt. Aeltere Vorgaben dieses Abschnitts, die durch neuere
+kanonische Entscheidungen ersetzt sind, gelten **nicht** mehr:
 
-Der Treiber liefert ausschliesslich technische Bus-, Adress-, Mess- und
-Fehlerinformationen. Rollenprioritaet, fachliche Sensorqualitaet und
-Peltierfreigabe bleiben vollstaendig ausserhalb.
+| Frueher in diesem Abschnitt | Ersetzt durch |
+|---|---|
+| Topologien A (drei Busse), B (Produkt separat + feste gemeinsam), C und die offene Topologiewahl; "keine vorab reservierten GPIOs" | Die R1-Zwei-Bus-Topologie ist per Boardprofil-SSOT (`config/board_profiles/esp32_32e_quad_mosfet_r1.yaml`, PR #131) entschieden: GPIO32 Schrankluft + Kuehlkoerper (Multidrop), GPIO33 Produktfuehler; Pull-ups, 3-Leiter und Rollen stehen dort. Der Spike prueft diese Topologie, er waehlt keine neu. Ein materieller Hardwarewiderspruch ist ein eigener Boardprofil-/Plan-Scope. |
+| Toolchain ESP-IDF `6.0.2` | ESP-IDF `v6.1` (Issue #159, `docs/ESP_IDF_UPGRADE_CONTRACT.md`) |
+| Beide Softwarekandidaten durchlaufen identisch alle Stufen und die vollstaendige Matrix | Espressif-first-Gate: `espressif/onewire_bus` + `espressif/ds18b20` werden vollstaendig geprueft; DallasTemperature/OneWire nur per Papier-Check und nur bei einem konkret nachgewiesenen Misserfolg des Espressif-Pfads vertieft (jeder Arduino-Pfad bleibt ownerpflichtig) |
+| "Softwarestack und Topologie getrennt entscheiden" | Topologie ist entschieden; es bleibt die Auswahl der Espressif-Komponentenversion und der Konvertierungsvariante |
+
+Weiterhin bindend bleiben die Sensorrollen, die Trennungs-/Wiederkehrpruefungen,
+die Architekturgrenze des Adapters und der Nicht-Scope unten. Der Treiber
+liefert ausschliesslich technische Bus-, Adress-, Mess- und Fehlerinformationen;
+Rollenprioritaet, fachliche Sensorqualitaet und Peltierfreigabe bleiben
+vollstaendig ausserhalb.
 
 ### Verbindliche Sensorrollen fuer die Spikegrenze
 
@@ -500,120 +507,55 @@ Peltierfreigabe bleiben vollstaendig ausserhalb.
   ausreichend vertrauenswuerdigem Signal gibt es keine Peltierfreigabe. Diese
   Safety-Semantik wird nicht im 1-Wire-Treiber implementiert.
 
-### Verbindliche Softwarekandidaten
+### Softwarekandidaten (Espressif-first-Gate)
 
-1. DallasTemperature `4.0.6` (`dadbbf7d`) plus OneWire `2.3.8`
-   (`800f26f3`)
-2. Espressif `onewire_bus 1.1.1` (`a269e1fe`) plus `ds18b20 0.4.0`
-   (`bf92b0b3`)
+1. **Primaer:** Espressif `onewire_bus` (Kandidatenversionen `1.1.1` und neuer
+   `1.1.2`; Registry-Stand 2026-10-08) plus `ds18b20 0.4.0`. Der Stand wird nur
+   weitergefuehrt, wenn er ohne verdeckten Toolchain- oder Frameworkwechsel
+   reproduzierbar im Release-Profil auf ESP-IDF v6.1 baut.
+2. **Bedingt:** DallasTemperature `4.0.6` plus OneWire `2.3.8` nur nach einem
+   konkret nachgewiesenen Misserfolg von (1); bis dahin Papier-Check
+   (Arduino-Laufzeitabhaengigkeit, Lizenz). Ein Arduino-Pfad braucht weiterhin
+   den dokumentierten Ownerentscheid.
 
-Die bestehende Produktionstoolchain ist ESP-IDF `6.0.2`; die
-`onewire_bus`-Mindestanforderung ESP-IDF >=5.0 ist damit erfuellt. Der
-Espressif-Kandidat wird dennoch nur weitergefuehrt, wenn er ohne verdeckten
-Toolchain- oder Frameworkwechsel reproduzierbar in `main/app_main.cpp`
-gebaut werden kann. Ein Konflikt lautet weiterhin
-`INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`; dies ist keine Aussage, dass der Treiber
-allgemein technisch ungeeignet waere.
+### Stufe 1 – Quelle, Lizenz und Build (ohne Hardware)
 
-### Stufe 1 – Quelle, Lizenz und Build
+Fuer den Espressif-Pfad werden geprueft: offizielle Quelle, Version/Commit,
+Lizenz und mitgelieferte Notices, transitive Abhaengigkeiten, Build im
+`esp32_release`-Profil auf ESP-IDF v6.1, Mehrbus-/Mehrsensorfaehigkeit, stabile
+64-Bit-ROM-Adressen, CRC-, Busfehler-, Trennungs- und Wiederkehrvertrag, Blockier-
+verhalten der Treiberfunktionen sowie Flash-, statische RAM- und Heapwirkung (Base
+gegen Kandidat). Ergebnisvokabular unveraendert: `PASS_BUILD_GATE`,
+`INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, `BUILD_CONFIGURATION_NOT_REPRODUCIBLE`,
+`MULTIBUS_NOT_SUPPORTED`, `MULTISENSOR_NOT_SUPPORTED`,
+`UNRESOLVED_TRANSITIVE_DEPENDENCY`, `REQUIRES_UNAPPROVED_FRAMEWORK_CHANGE`.
 
-Fuer beide Kandidaten werden geprueft:
+### Stufe 2 – Sensorsmoke-Test (ein realer Sensor)
 
-- offizielle Quelle, Version beziehungsweise Commit und Lizenz;
-- transitive Abhaengigkeiten und Toolchainkompatibilitaet;
-- mehrere 1-Wire-Busse und mehrere Sensoren je Bus;
-- stabile 64-Bit-ROM-Adressen;
-- nicht blockierende beziehungsweise asynchron integrierbare Konvertierung;
-- CRC-, Busfehler-, Trennungs- und Wiederkehrvertrag;
-- reproduzierbarer isolierter Build;
-- Flash-, statische RAM- und Heapwirkung.
+Unveraendert: 64-Bit-ROM lesen; Aufloesungen 9–12 Bit setzen; wiederholt messen;
+CRC-Status erfassen; Sensor entfernen und wieder anschliessen; Neustart;
+Konvertierung ohne blockierende Anwendungspause integrieren; keine alte Messung
+als neuen gueltigen Wert ausgeben.
 
-Moegliche Ergebnisse:
+### Stufe 3 – Matrix auf der Zieltopologie
 
-```text
-PASS_BUILD_GATE
-INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN
-BUILD_CONFIGURATION_NOT_REPRODUCIBLE
-MULTIBUS_NOT_SUPPORTED
-MULTISENSOR_NOT_SUPPORTED
-UNRESOLVED_TRANSITIVE_DEPENDENCY
-REQUIRES_UNAPPROVED_FRAMEWORK_CHANGE
-```
+Alle Tests im 3-Leiter-Betrieb ohne Parasitspeisung auf der SSOT-Topologie
+(GPIO32: zwei feste Sensoren, GPIO33: Produktfuehler). Reale Pull-ups,
+Leitungslaengen und Steckverbindung werden gemessen, nicht vorgegeben. Peltier,
+BTS7960, Luefter, MOSFET-Verbraucher und Summer bleiben getrennt oder gesperrt.
 
-Nur Kandidaten mit ausreichendem Ergebnis erreichen Stufe 2.
-
-### Stufe 2 – Sensorsmoke-Test
-
-Mit einem einzelnen realen DS18B20 wird fuer jeden verbliebenen Kandidaten
-identisch geprueft:
-
-1. 64-Bit-ROM-Adresse lesen;
-2. Aufloesungen 9, 10, 11 und 12 Bit setzen;
-3. wiederholt messen;
-4. CRC-Status erfassen;
-5. Sensor entfernen;
-6. Sensor wieder anschliessen;
-7. Neustart durchfuehren;
-8. Konvertierung ohne blockierende Anwendungspause integrieren;
-9. keine alte Messung als neuen gueltigen Wert ausgeben.
-
-Nur Kandidaten, die diesen Sensorsmoke-Test bestehen, erreichen Stufe 3.
-
-### Stufe 3 – Vollstaendige Topologie- und Fehlermatrix
-
-Alle folgenden Tests verwenden 3-Leiter-Betrieb ohne Parasitspeisung. Reale
-Pull-ups, Leitungslaengen, Steckverbindung und Schutzmassnahmen werden gemessen,
-nicht vorgegeben. Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und
-Summer bleiben getrennt oder gesperrt.
-
-#### Topologie A – drei getrennte Busse
-
-```text
-Bus 1 -> Produktfuehler
-Bus 2 -> Raum-/Luftsensor
-Bus 3 -> Kuehlkoerper-/Peltier-Schutzsensor
-```
-
-Zu bewerten sind GPIO-Bedarf, drei Pull-ups, Fehlerisolation, Trennung/Wiederkehr,
-Diagnose, Wartbarkeit, Ressourcen sowie Pinqualitaet und Bootstrapping-Risiken
-des konkreten ESP32-Boards.
-
-#### Topologie B – Produkt separat, feste Sensoren gemeinsam
-
-```text
-Bus 1 -> Produktfuehler
-Bus 2 -> Raum-/Luftsensor
-         Kuehlkoerper-/Peltier-Schutzsensor
-```
-
-Zu bewerten sind geringerer GPIO-Bedarf, Mehrsensorbetrieb, stabile
-ROM-Zuordnung, gemeinsamer Busfehler der festen Sensoren, Fehlererkennung,
-Wiederherstellung und die sichere Sperrung der Peltierfreigabe ausserhalb des
-Treibers.
-
-#### Topologie C – alle drei Sensoren gemeinsam
-
-Topologie C wird nicht als regulaere Zieltopologie weiterverfolgt. Der
-abnehmbare Produktfuehler wuerde denselben Bus wie der verpflichtende
-Schutzsensor verwenden. Kurzschluss, beschaedigtes Kabel, halb eingesteckter
-Stecker oder ein anderer externer Busfehler koennten dadurch die festen
-Sensoren und insbesondere die Safety-Sensorverfuegbarkeit beeintraechtigen.
-
-Topologie C darf hoechstens als negativer Referenztest dokumentiert werden.
-Dafuer entsteht keine produktive Planung.
-
-#### Bevorzugte Zielrichtung und Rueckfall
-
-Der Produktfuehler erhaelt verbindlich einen eigenen 1-Wire-Bus. Bevorzugt
-erhaelt auch der Kuehlkoerper-/Peltier-Schutzsensor einen eigenen Bus, also
-Topologie A. Topologie B ist der zulaessige Rueckfall, falls die reale
-ESP32-Pinpruefung zeigt, dass ein dritter geeigneter GPIO nur mit problematischen
-Boot-, SPI-, Flash- oder Hardwarekonflikten verfuegbar waere.
-
-Die endgueltige Entscheidung erfolgt erst nach minimaler Hardwarebaseline,
-realem GPIO-Inventar, realer Pinpruefung, identischem Test von A und B sowie
-Fehlerisolationsvergleich. Es werden vorab keine drei GPIOs verbindlich
-reserviert.
+1. ein Sensor je Bus; zwei feste Sensoren gemeinsam und Produktfuehler separat;
+2. zehn Neustarts mit stabilen ROM-Adressen;
+3. asynchrone 12-Bit-Konvertierung, Konvertierungsvariante (Treiber-Trigger je
+   Bus gegen gemeinsames Convert-Kommando mit einer Wartezeit) gemessen;
+4. 1.000 Messzyklen im 2-s-Takt;
+5. Produktfuehler trennen und wieder anschliessen; Fehler eines festen Sensors;
+   gemeinsamer Busfehler der festen Sensoren; Unterbruch; strombegrenzter
+   Kurzschluss (nur nach Ownerfreigabe); CRC-Fehlerinjektion, soweit
+   reproduzierbar;
+6. Reset waehrend einer Konvertierung; Wiederinitialisierung;
+7. Flash-, RAM-, Heap- und Puffervergleich (inkl. Task-Stack-HWM), blockierte
+   CPU-Zeit der Hauptschleife, transitive Abhaengigkeiten, Wartungsaufwand.
 
 ### Allgemeine Trennungs-, Fehler- und Wiederkehrpruefungen
 
@@ -638,40 +580,22 @@ automatische Rollenumschaltung noch Safety-Freigabe. Die spaetere konkrete
 Hardwareausfuehrung und ihre elektrische Abnahme bleiben ausserhalb dieses
 Plans.
 
-### Identische Volltests pro Softwarekandidat
-
-1. ein Sensor auf einem Bus;
-2. drei Sensoren auf drei getrennten Bussen;
-3. zwei feste Sensoren gemeinsam und Produktfuehler separat;
-4. zehn Neustarts mit stabilen ROM-Adressen;
-5. asynchrone 12-Bit-Konvertierung;
-6. 1.000 Messzyklen;
-7. Produktfuehler trennen und wieder anschliessen;
-8. Fehler eines festen Sensors;
-9. gemeinsamer Busfehler in Topologie B;
-10. Unterbruch;
-11. strombegrenzter Kurzschlusstest;
-12. CRC-Fehlerinjektion, soweit reproduzierbar;
-13. Reset waehrend einer Konvertierung;
-14. Wiederinitialisierung;
-15. Flash-, RAM-, Heap- und Puffervergleich;
-16. blockierte CPU-Zeit;
-17. transitive Abhaengigkeiten;
-18. Wartungs- und Konfigurationsaufwand.
-
 ### Messwerte und Erfolgskriterien
 
 Erfasst werden Erkennungs-, Konvertierungs- und Lesedauer pro Aufloesung,
-erfolgreiche Reads, CRC-/Bus-/Timeoutfehler, Wiederanschlusszeit,
-ROM-Stabilitaet, blockierte CPU-Zeit, maximaler Adapterpuffer, Flash, statisches
-RAM, `firmware.bin`, `firmware.elf`, freier und niedrigster Heap, groesster
-freier Heapblock, transitive Abhaengigkeiten sowie das Verhalten auf A und B.
+Zyklusdauer beider Busse, erfolgreiche Reads, CRC-/Bus-/Timeoutfehler,
+Wiederanschlusszeit, ROM-Stabilitaet, blockierte CPU-Zeit, Task-Stack-HWM und
+maximaler Adapterpuffer, Flash, statisches RAM, `firmware.bin`, `firmware.elf`,
+freier und niedrigster Heap, groesster freier Heapblock sowie transitive
+Abhaengigkeiten.
 
-Erfolgreich ist ein Kandidat nur, wenn beide Topologien, Mehrsensorbetrieb,
-stabile 64-Bit-Adressen und asynchrone 12-Bit-Konvertierung funktionieren,
-Fehler und Wiederanschluss typisiert sind, keine alte Messung als neu gilt, der
-Produktfuehlerbus die festen Busse nicht beeintraechtigt und 1.000 Zyklen ohne
-Haenger, Watchdog oder unerklaerten Reset laufen.
+Erfolgreich ist der Espressif-Pfad nur, wenn beide Busse, Mehrsensorbetrieb,
+stabile 64-Bit-Adressen und asynchrone 12-Bit-Konvertierung im 2-s-Takt
+funktionieren, Fehler und Wiederanschluss typisiert sind, keine alte Messung als
+neu gilt, der Produktfuehlerbus die festen Busse nicht beeintraechtigt und 1.000
+Zyklen ohne Haenger, Watchdog oder unerklaerten Reset laufen. Task-Budget
+(Stack, Prioritaet, Core) und Ressourcenbudget werden gemessen und als
+Ownerentscheid freigegeben; kein Wert wird geraten.
 
 ### Architekturgrenze des spaeteren Adapters
 
@@ -695,23 +619,23 @@ Peltierfreigabe oder Safety-Verriegelung. Diese Semantik bleibt in #20, #21 und
 
 ### Abbruchkriterien, Nicht-Scope und Artefakte
 
-Ein Kandidat wird abgebrochen, wenn er nur mit Toolchain-/Frameworkwechsel,
+Der Espressif-Pfad wird abgebrochen, wenn er nur mit Toolchain-/Frameworkwechsel,
 ungebundener Task-/Heapnutzung oder unaufgeloesten Abhaengigkeiten funktioniert,
-keine stabile ROM-/Mehrbus-/Mehrsensorunterstuetzung besitzt, Trennung/Wiederkehr einen
-Geraetereset erfordert oder eine unkontrollierte elektrische Situation erzeugt.
+keine stabile ROM-/Mehrbus-/Mehrsensorunterstuetzung besitzt, Trennung/Wiederkehr
+einen Geraetereset erfordert oder eine unkontrollierte elektrische Situation
+erzeugt; erst dann wird der bedingte Kandidat (2) vertieft.
 
-Nicht-Scope sind fachliche Qualitaet, Filter, Offsets, Rollenwahl,
-Ersatzregelung, PI-Regelung, Aktorfreigabe, finale Sensorposition, finale GPIOs
-und finale Schutzbauteilwerte. Artefakte sind Aufbau-/Topologiefotos,
-Pull-up-/Leitungsdaten, ROM-Liste, identischer Testcode,
-Mess- und Fehlerdaten, Base-/Kandidaten-Ressourcenvergleich,
-Toolchain-/Abhaengigkeitsbericht sowie getrennte Empfehlungen fuer Softwarestack
-und Bustopologie.
+Nicht-Scope sind fachliche Qualitaet, Filter, Rollenwahl, Ersatzregelung,
+PI-Regelung, Aktorfreigabe, finale Sensorposition und finale Schutzbauteilwerte.
+Offsets und Rollenbindung gehoeren zum Datensatz aus Plan Abschnitt 4a/S2, nicht
+zum Spike. Artefakte sind Aufbau-/Topologiefotos, Pull-up-/Leitungsdaten,
+ROM-Liste, Probe-Patch, Mess- und Fehlerdaten, Base-/Kandidaten-
+Ressourcenvergleich, Toolchain-/Abhaengigkeitsbericht und die Empfehlung fuer
+Version und Konvertierungsvariante.
 
-Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren und geeignete
-Testleitungen bereitstellen; allgemeine Trennungs-, Stoer- und Wiederkehrtests
-bestaetigen; Software- und Topologieentscheidung erst anhand der identischen
-Messprotokolle treffen. Die Anschlussausfuehrung bleibt eine spaetere separate
+Notwendige Owner-/Hardwareaktion: die realen Sensoren und Testleitungen
+bereitstellen und die erlaubten Stoer-, Trennungs- und Wiederkehrtests bestaetigen
+(Plan Fragen H1–H4). Die Anschlussausfuehrung bleibt eine spaetere separate
 Hardwareentscheidung.
 
 ## Aktorfreier Webserver-Baselineprototyp fuer #27
@@ -1089,11 +1013,10 @@ Hardwaregates.
 5. In Stufe 4 genau einen bevorzugten Display-/Touchkandidaten und einen
    Rueckfallkandidaten bestimmen. Reservekandidaten werden nur bei einem
    dokumentierten Ausloeser nachgezogen.
-6. Beide DS18B20-/1-Wire-Kandidaten durch Stufe 1 fuehren, nur ausreichende
-   Kandidaten mit einem einzelnen Sensor in Stufe 2 pruefen und nur deren
-   Erfolge in Stufe 3 identisch auf Topologie A und B testen. Softwarestack und
-   elektrische Bustopologie getrennt entscheiden; Topologie C nicht produktiv
-   planen.
+6. DS18B20/1-Wire: den Espressif-Pfad durch die Stufen 1 bis 3 auf der per
+   Boardprofil-SSOT entschiedenen Zwei-Bus-Topologie fuehren (Spike B,
+   "Geltende Vorgaben"); DallasTemperature/OneWire nur bei einem konkret
+   nachgewiesenen Misserfolg vertiefen. Keine erneute Topologieentscheidung.
 7. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
    aktualisieren.
 8. Die drei Espressif-Pfade und WiFiManager gleichwertig durch Stufe 1 und 2
