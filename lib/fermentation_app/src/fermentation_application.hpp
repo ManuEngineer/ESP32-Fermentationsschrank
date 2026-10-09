@@ -215,25 +215,6 @@ struct WebSessionIssueResult {
     WebSessionResult session;
 };
 
-// Local touch Service-PIN check (Issue #188 A). Only Authorized grants the
-// local service lease; every other status leaves the service area locked.
-enum class LocalServicePinStatus : std::uint8_t {
-    Authorized,
-    Invalid,
-    LockedOut,
-    // No Service-PIN exists yet (web access not provisioned).
-    NotProvisioned,
-    // Not in a validated STANDBY (run, fault, recovery, service required).
-    NotAllowedInState,
-    // Authentication not usable, or it changed during the check.
-    Unavailable,
-};
-
-struct LocalServicePinResult {
-    LocalServicePinStatus status{LocalServicePinStatus::Unavailable};
-    std::uint64_t retryAfterMs{0U};
-};
-
 // Owning outcome of a local UserConfiguration change through the
 // ConfigurationService preview/commit path. `commit` is only meaningful when
 // `preview` is Success.

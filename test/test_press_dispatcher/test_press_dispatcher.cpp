@@ -8,6 +8,7 @@
 #include <thread>
 #include <variant>
 
+#include "authentication_records.hpp"
 #include "configuration_bootstrap_store.hpp"
 #include "device_platform.hpp"
 #include "fermentation_application.hpp"
@@ -2112,16 +2113,98 @@ WorkspaceTouchTickResult factoryResetTouch(
         bottomX(slot), kBottomY, fresh, nowMs);
 }
 
+// Issue #188 A: real touch path. The point of a target is searched on the
+// rendered screen through targetAt(), never hard coded; every touch is a
+// fresh edge followed by a release.
+device_platform::DeviceUiTarget contentCell(std::uint8_t row,
+                                            std::uint8_t column) {
+    return {device_platform::DeviceUiTargetKind::ContentCell, 0U, row, column};
+}
+
+device_platform::DeviceUiTarget bottomSlot(std::uint8_t index) {
+    return {device_platform::DeviceUiTargetKind::BottomSlot, index, 0U, 0U};
+}
+
+WorkspaceTouchTickResult touchUi(FermentationApplication& application,
+                                 FermentationTouchWorkspace& workspace,
+                                 const device_platform::DeviceUiTarget& wanted,
+                                 std::uint64_t nowMs) {
+    const auto packs = makeFermentationUiTextPacks();
+    const device_platform::LocaleId locale{"en"};
+    auto snapshot = application.uiSnapshot();
+    std::optional<std::pair<std::uint16_t, std::uint16_t>> point;
+    {
+        const auto screen =
+            makeRepresentativeScreen(snapshot, workspace, packs, locale);
+        for (std::uint16_t y = 0U; y < 240U && !point.has_value(); y += 2U) {
+            for (std::uint16_t x = 0U; x < 320U; x += 2U) {
+                const auto hit = targetAt(screen, x, y);
+                if (hit.has_value() && hit->kind == wanted.kind &&
+                    hit->slotIndex == wanted.slotIndex &&
+                    hit->row == wanted.row && hit->column == wanted.column) {
+                    point = std::make_pair(x, y);
+                    break;
+                }
+            }
+        }
+    }
+    TEST_ASSERT_TRUE(point.has_value());
+    const auto tick = processWorkspaceTouch(
+        application, workspace, snapshot, packs, locale, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, true,
+        point->first, point->second, true, nowMs);
+    snapshot = application.uiSnapshot();
+    static_cast<void>(processWorkspaceTouch(
+        application, workspace, snapshot, packs, locale, nullptr,
+        device_platform::DeviceUiNetworkStatus::Unavailable, {}, false,
+        point->first, point->second, false, nowMs + 1U));
+    return tick;
+}
+
+// Home -> Settings (slot 3) -> scroll to the Service row -> Service (PIN).
+void tapSettingsServiceRow(FermentationApplication& application,
+                           FermentationTouchWorkspace& workspace,
+                           std::uint64_t nowMs) {
+    if (workspace.page() != FermentationUiPage::Settings) {
+        TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Home);
+        static_cast<void>(
+            touchUi(application, workspace, bottomSlot(3U), nowMs));
+        TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Settings);
+    }
+    while (workspace.view(application.uiSnapshot()).pager.currentIndex < 3U) {
+        nowMs += 10U;
+        static_cast<void>(
+            touchUi(application, workspace, bottomSlot(2U), nowMs));
+    }
+    // Rows 3-5 visible: network, web access, service.
+    static_cast<void>(
+        touchUi(application, workspace, contentCell(2U, 0U), nowMs + 10U));
+}
+
+// PIN pad row 0 holds 1 2 3 4 5 6 7 8 9 0.
+void typePin(FermentationApplication& application,
+             FermentationTouchWorkspace& workspace, const char* digits,
+             std::uint64_t nowMs) {
+    for (const char* digit = digits; *digit != '\0'; ++digit) {
+        const auto value = static_cast<std::uint8_t>(*digit - '0');
+        const auto column =
+            static_cast<std::uint8_t>(value == 0U ? 9U : value - 1U);
+        nowMs += 10U;
+        static_cast<void>(
+            touchUi(application, workspace, contentCell(0U, column), nowMs));
+    }
+}
+
 void test_forgot_pin_entry_runs_the_whole_flow_through_touch() {
     OwningAppFixture fixture;
     fixture.application.setFactoryResetHoldMillis(kFactoryResetHoldMs);
     FermentationTouchWorkspace workspace;
-    // The PIN page is reachable while the service area is locked.
-    workspace.setPage(FermentationUiPage::Service);
+    // The PIN page is reached through the real Settings path while the
+    // service area is locked (Issue #188 A).
     auto snapshot = fixture.application.uiSnapshot();
     TEST_ASSERT_FALSE(snapshot.service.available);
-    TEST_ASSERT_TRUE(workspace.view(snapshot).bottomSlots[1].enabled);
-    workspace.setPage(FermentationUiPage::Pin);
+    tapSettingsServiceRow(fixture.application, workspace, 100U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
     snapshot = fixture.application.uiSnapshot();
     TEST_ASSERT_TRUE(snapshot.factoryReset.available);
     TEST_ASSERT_TRUE(workspace.view(snapshot).slotActions[3] ==
@@ -2591,6 +2674,191 @@ void test_local_service_lease_ends_on_authentication_reinitialisation() {
                     fixture.app().verifyLocalServicePin("1234"));
 }
 
+// ---- Issue #188 A: Service-PIN end to end through the touch path (C2) -----
+
+device_platform::StorageEpoch currentEpoch(LocalServiceFixture& fixture) {
+    const auto scan = ConfigurationBootstrapStore(fixture.store).scan();
+    TEST_ASSERT_TRUE(scan.loaded.has_value());
+    return scan.loaded->record.storageEpoch;
+}
+
+AuthenticationCredentialRecord credentials(LocalServiceFixture& fixture) {
+    const auto read = AuthenticationRecordStore(fixture.store)
+                          .readCredentials(currentEpoch(fixture));
+    TEST_ASSERT_TRUE(read.value.has_value());
+    return *read.value;
+}
+
+void pressConfirm(LocalServiceFixture& fixture,
+                  FermentationTouchWorkspace& workspace, std::uint64_t nowMs) {
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), nowMs));
+}
+
+void test_touch_service_row_without_lease_opens_the_pin_entry() {
+    LocalServiceFixture fixture;
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
+    const auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(view.pinEntry.has_value());
+    TEST_ASSERT_EQUAL_UINT8(0U, view.pinEntry->digitCount);
+    TEST_ASSERT_TRUE(view.slotActions[2] ==
+                     FermentationUiWorkspaceSlotAction::ServicePinCommit);
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_touch_correct_pin_opens_the_protected_service_page() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    typePin(fixture.app(), workspace, "1234", 200U);
+    TEST_ASSERT_EQUAL_UINT8(
+        4U, workspace.view(fixture.app().uiSnapshot()).pinEntry->digitCount);
+    pressConfirm(fixture, workspace, 400U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+    const auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_FALSE(view.blockedReason.has_value());
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::ServiceSignOut);
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);  // recovery (G5)
+    // Back returns to Settings; with the lease the row opens Service again.
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 500U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Settings);
+    tapSettingsServiceRow(fixture.app(), workspace, 600U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    // Sign-out ends the lease; the page is locked again.
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(1U), 700U));
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    TEST_ASSERT_TRUE(
+        workspace.view(fixture.app().uiSnapshot()).slotActions[1] ==
+        FermentationUiWorkspaceSlotAction::NavigatePin);
+}
+
+void test_touch_wrong_pin_and_lockout_keep_the_service_area_locked() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    fixture.app().setFactoryResetHoldMillis(kFactoryResetHoldMs);
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    typePin(fixture.app(), workspace, "9999", 200U);
+    pressConfirm(fixture, workspace, 300U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
+    auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_EQUAL_UINT8(0U, view.pinEntry->digitCount);
+    TEST_ASSERT_TRUE(view.pinEntry->message ==
+                     std::optional<device_platform::TextKey>{
+                         fermentationTextKey("pin-wrong")});
+    for (std::uint64_t attempt = 0U; attempt < 2U; ++attempt) {
+        typePin(fixture.app(), workspace, "9999", 400U + attempt * 100U);
+        pressConfirm(fixture, workspace, 480U + attempt * 100U);
+    }
+    view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(view.pinEntry->message ==
+                     std::optional<device_platform::TextKey>{
+                         fermentationTextKey("pin-locked")});
+    TEST_ASSERT_FALSE(view.bottomSlots[2].enabled);  // confirm
+    TEST_ASSERT_TRUE(view.bottomSlots[3].enabled);   // forgot-pin
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_touch_diagnostics_route_needs_the_pin_and_returns_to_service() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    FermentationTouchWorkspace workspace;
+    // Home -> Status -> Diagnostics -> Service without a lease: locked.
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 100U));
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 110U));
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(3U), 120U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::NavigatePin);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);  // recovery locked
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(1U), 130U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
+    typePin(fixture.app(), workspace, "1234", 200U);
+    pressConfirm(fixture, workspace, 300U);
+    // Back on that Service page, no second Service page in the stack.
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 400U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Diagnostics);
+}
+
+void test_touch_forgot_pin_in_lockout_and_cancel_change_nothing() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    fixture.app().setFactoryResetHoldMillis(kFactoryResetHoldMs);
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    for (std::uint64_t attempt = 0U; attempt < 3U; ++attempt) {
+        typePin(fixture.app(), workspace, "9999", 200U + attempt * 100U);
+        pressConfirm(fixture, workspace, 280U + attempt * 100U);
+    }
+    // Lockout writes are legitimate; the reference is taken afterwards.
+    const auto recordBefore = credentials(fixture);
+    const auto epochBefore = currentEpoch(fixture);
+    const auto revisionsBefore = fixture.app().uiSnapshot().revisions;
+    const auto networkStopsBefore = fixture.network.stopCallCount();
+    const auto httpStopsBefore = fixture.http.stopCalls;
+    // "PIN forgotten?" without any entry, independent of the lockout.
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(3U), 600U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::FactoryReset);
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Warning);
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 700U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Idle);
+    // No reset, bootstrap, configuration or authentication mutation.
+    TEST_ASSERT_TRUE(currentEpoch(fixture) == epochBefore);
+    TEST_ASSERT_EQUAL_UINT(networkStopsBefore, fixture.network.stopCallCount());
+    TEST_ASSERT_EQUAL_UINT(httpStopsBefore, fixture.http.stopCalls);
+    const auto revisionsAfter = fixture.app().uiSnapshot().revisions;
+    TEST_ASSERT_TRUE(revisionsAfter.expectedUserConfigurationRevision ==
+                     revisionsBefore.expectedUserConfigurationRevision);
+    TEST_ASSERT_TRUE(revisionsAfter.expectedProgramCatalogRevision ==
+                     revisionsBefore.expectedProgramCatalogRevision);
+    const auto recordAfter = credentials(fixture);
+    TEST_ASSERT_EQUAL_UINT64(recordBefore.recordSequence,
+                             recordAfter.recordSequence);
+    TEST_ASSERT_TRUE(recordBefore.servicePinLockout ==
+                     recordAfter.servicePinLockout);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_touch_forgot_pin_is_disabled_without_the_factory_reset_owner() {
+    LocalServiceFixture fixture;
+    fixture.app().setFactoryResetHoldMillis(std::nullopt);
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Pin);
+    const auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(view.slotActions[3] ==
+                     FermentationUiWorkspaceSlotAction::FactoryResetBegin);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+}
+
+void test_touch_expired_lease_locks_the_open_service_page() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    FermentationTouchWorkspace workspace;
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    typePin(fixture.app(), workspace, "1234", 200U);
+    pressConfirm(fixture, workspace, 300U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    fixture.timeSource.advanceMonotonicMillis(kLocalServiceInactivityMs);
+    const auto view = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(view.blockedReason.has_value());
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::NavigatePin);
+    TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_restricted_no_runtime_home_adds_only_the_reset_entry);
@@ -2669,5 +2937,12 @@ int main() {
     RUN_TEST(test_local_service_lease_ends_for_good_when_standby_is_left);
     RUN_TEST(test_local_service_lease_ends_on_service_required_and_recovery);
     RUN_TEST(test_local_service_lease_ends_on_authentication_reinitialisation);
+    RUN_TEST(test_touch_service_row_without_lease_opens_the_pin_entry);
+    RUN_TEST(test_touch_correct_pin_opens_the_protected_service_page);
+    RUN_TEST(test_touch_wrong_pin_and_lockout_keep_the_service_area_locked);
+    RUN_TEST(test_touch_diagnostics_route_needs_the_pin_and_returns_to_service);
+    RUN_TEST(test_touch_forgot_pin_in_lockout_and_cancel_change_nothing);
+    RUN_TEST(test_touch_forgot_pin_is_disabled_without_the_factory_reset_owner);
+    RUN_TEST(test_touch_expired_lease_locks_the_open_service_page);
     return UNITY_END();
 }

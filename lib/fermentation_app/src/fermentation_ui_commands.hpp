@@ -95,6 +95,32 @@ struct FermentationUiSetDeviceNameCommand {
 // Application owner decides whether it may open; the UI carries intent only.
 struct FermentationUiOpenWebProvisioningWindowCommand {};
 
+// Local touch Service-PIN check (Issue #188 A). Only Authorized grants the
+// local service lease; every other status leaves the service area locked.
+enum class LocalServicePinStatus : std::uint8_t {
+    Authorized,
+    Invalid,
+    LockedOut,
+    // No Service-PIN exists yet (web access not provisioned).
+    NotProvisioned,
+    // Not in a validated STANDBY (run, fault, recovery, service required).
+    NotAllowedInState,
+    // Authentication not usable, or it changed during the check.
+    Unavailable,
+};
+
+struct LocalServicePinResult {
+    LocalServicePinStatus status{LocalServicePinStatus::Unavailable};
+    std::uint64_t retryAfterMs{0U};
+};
+
+// Local Service-PIN entry (Issue #188 A). The candidate is transient: the
+// Application verifies it through the authentication owner; it is never
+// stored or logged. Local only, like the factory reset command.
+struct FermentationUiVerifyServicePinCommand {
+    std::string pin;
+};
+
 // One deliberate local step of the factory reset flow (Issue #19). The
 // Application owns the flow and every precondition; the UI carries the intent
 // only. Deliberately NOT part of `FermentationUiCommand::operation`: the reset

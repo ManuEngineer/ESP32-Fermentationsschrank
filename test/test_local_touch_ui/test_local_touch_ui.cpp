@@ -2333,10 +2333,9 @@ void test_standby_slot_three_opens_settings_and_service_lives_below_it() {
     TEST_ASSERT_TRUE(fixture.slot(3U).navigated);
     TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
 
-    // The canonical stacks (D14): Home -> Settings -> Service -> Pin.
+    // The canonical stack of the real path (Issue #188 A):
+    // Home -> Settings -> Pin.
     fixture.workspace.setPage(FermentationUiPage::Pin);
-    TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
-    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Service);
     TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
     TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
     TEST_ASSERT_TRUE(fixture.slot(0U).navigated);
@@ -2357,12 +2356,15 @@ void test_settings_rows_are_in_the_decided_order_and_open_their_pages() {
         {2U, FermentationUiPage::TextEdit},
         {3U, FermentationUiPage::HeaderNetwork},
         {4U, FermentationUiPage::HeaderWebAccess},
-        {5U, FermentationUiPage::Service},
+        // Without a local service lease (the product default) the Service
+        // row opens the PIN entry directly (Issue #188 A).
+        {5U, FermentationUiPage::Pin},
     };
     TEST_ASSERT_EQUAL_UINT32(kFermentationUiSettingsRowCount,
                              sizeof(rows) / sizeof(rows[0]));
     for (const auto& row : rows) {
         SettingsFixture fixture;
+        fixture.snapshot.service.available = false;
         fixture.workspace.setPage(FermentationUiPage::Settings);
         TEST_ASSERT_EQUAL_UINT32(kFermentationUiSettingsRowCount,
                                  fixture.view().pager.itemCount);
@@ -2390,15 +2392,17 @@ void test_settings_service_and_device_name_rows_state_when_disabled() {
         fermentationTextKey("service-locked");
     fixture.workspace.setPage(FermentationUiPage::Settings);
     fixture.scrollTo(3U);  // network, web access, service
-    auto view = fixture.view();
-    TEST_ASSERT_TRUE(view.settings.has_value());
-    TEST_ASSERT_FALSE(view.settings->serviceAvailable);
-    TEST_ASSERT_TRUE(view.settings->serviceReason ==
-                     std::optional<device_platform::TextKey>{
-                         fermentationTextKey("service-locked")});
-    TEST_ASSERT_FALSE(fixture.tap(2U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.view().settings.has_value());
+    // Locked service area (Issue #188 A): the row is still a target and
+    // opens the PIN entry; opening it grants nothing.
+    TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);
+    TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Pin);
+    TEST_ASSERT_FALSE(fixture.snapshot.service.available);
+    TEST_ASSERT_TRUE(fixture.slot(1U).navigated);  // cancel
     TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Settings);
+    // With an active local lease the row opens the Service page directly.
     fixture.snapshot.service.available = true;
+    fixture.scrollTo(3U);
     TEST_ASSERT_TRUE(fixture.tap(2U, 0U).navigated);
     TEST_ASSERT_TRUE(fixture.workspace.page() == FermentationUiPage::Service);
 
@@ -2421,7 +2425,7 @@ void test_fermentation_text_packs_are_complete_static_tables() {
     const auto packs = makeFermentationUiTextPacks();
     TEST_ASSERT_EQUAL_UINT32(3U, packs.size());
     const auto& reference = packs.front().translations;
-    TEST_ASSERT_EQUAL_UINT32(198U, reference.size());
+    TEST_ASSERT_EQUAL_UINT32(205U, reference.size());
     for (const auto& pack : packs) {
         TEST_ASSERT_EQUAL_UINT32(reference.size(), pack.translations.size());
         for (const auto& translation : pack.translations) {
