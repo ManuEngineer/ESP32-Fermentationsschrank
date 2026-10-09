@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-10-09 (Live-Abgleich gegen GitHub, `main` `f33e859`)
+Stand: 2026-10-09 (Live-Abgleich gegen GitHub, `main` `8a9e445`)
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -46,7 +46,7 @@ notwendig sind.
 | #106 – Aktorplaner Per-Run-Snapshot und Recovery-Bindung | `OPEN`; strukturell erledigt (PR #157, `2c010e8`); produktiver Abschluss an #35 gebunden | Produktive Werte nach #35 |
 | #34 / #35 – Sensorvergleich, PI-/Luft-/Aktor-/Sicherheitsparameter | `OPEN / TBD_COMMISSIONING`; nach #30/#31/#32/#33 | Reale Messreihen, Werte- und Safetyfreigabe |
 | #36 / #37 – Hardwareabnahme, 7-Tage-Belastungstest | `OPEN`; spaetere Releasegates | Nach den Hardware- und Commissioningissues |
-| #188 – Doku: SIM-26-21/65 verweisen auf nicht existierenden Testpfad | `OPEN`; vorbestehender Doku-Befund | Eigener Scope, nicht Teil anderer PRs |
+| #188 – A: Service (PIN) aus Einstellungen gesperrt; B: Doku SIM-26-21/65 | `OPEN`; **A** Produktfehler bestaetigt (Service-Zeile in `Einstellungen` immer gesperrt, PIN-Seite und "PIN vergessen?" ueber diesen Weg unerreichbar); Plan `docs/tasks/issue-188-service-pin-entry-plan.md` im Draft-Plan-PR (Branch `agent/issue-188-service-pin-entry-plan`), wartet auf Ownerfreigabe; lokale PIN-Eingabe/-Pruefung nicht im Scope (O1); Hardware `NOT_RUN`; **B** vorbestehender Doku-Befund unveraendert offen, nicht Teil des A-PRs; `ACTUATOR_RELEASE=NO` | A: Ownerfreigabe der Plan-SHA und O1–O4; B: eigenes Tracking nach Ownerentscheid O4 |
 | #176 / #177 – Device-Platform-Architekturziel, Projektlizenz | `OPEN`; Governance-/Zielbild | Ownerentscheid |
 | #114 / #163 – Future-Scope (Advanced Safety v2, Produkt-Enhancements) | `OPEN`; `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`, kein Release-1-Gate | Vollstaendige Neuplanung auf dann aktuellem Stand |
 
