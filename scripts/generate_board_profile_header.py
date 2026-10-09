@@ -34,6 +34,11 @@ ebenfalls fail-fast:
   eine separate elektrische Designklassifikation, kein Ersatz dafuer);
 - der Backlight-Pin hat einen `active_level` von exakt `high` oder `low`.
 
+Zusaetzlich (Issue #33) werden die drei BTS7960-Signale (RPWM, LPWM und das
+gemeinsame R_EN/L_EN) nach demselben Verfahren ueber `bts7960_rpwm`,
+`bts7960_lpwm` und `shared_r_en_l_en` abgeleitet; R_IS/L_IS (GPIO34/35,
+`reserved_disabled`) werden bewusst nicht erzeugt.
+
 Zusaetzlich (Issue #32) werden die drei Onboard-MOSFET-Ausgaenge Innenluefter,
 Aussenluefter und Summer ueber ihre SSOT-`application_role` (`internal_fan`,
 `external_heatsink_fan`, `active_buzzer`) abgeleitet: GPIO-Nummer und
@@ -86,6 +91,13 @@ OUTPUT_ROLES = {
     "internal_fan": ("kInternalFanPin", "kInternalFanPolarity"),
     "external_heatsink_fan": ("kOuterFanPin", "kOuterFanPolarity"),
     "active_buzzer": ("kBuzzerPin", "kBuzzerPolarity"),
+}
+
+# BTS7960-H-Bruecke (Issue #33): RPWM, LPWM und gemeinsames R_EN/L_EN.
+BRIDGE_ROLES = {
+    "bts7960_rpwm": ("kBtsRpwmPin", "kBtsRpwmPolarity"),
+    "bts7960_lpwm": ("kBtsLpwmPin", "kBtsLpwmPolarity"),
+    "shared_r_en_l_en": ("kBtsEnablePin", "kBtsEnablePolarity"),
 }
 
 POLARITY_BY_ACTIVE_LEVEL = {
@@ -182,16 +194,19 @@ def extract_pins(profile: dict, path_for_errors: str) -> dict:
         },
         "backlight_active_high": backlight_active_level == "high",
         "outputs": extract_outputs(profile, path_for_errors),
+        "bridge": extract_outputs(profile, path_for_errors, BRIDGE_ROLES),
     }
 
 
-def extract_outputs(profile: dict, path_for_errors: str) -> dict:
+def extract_outputs(
+    profile: dict, path_for_errors: str, roles: dict = OUTPUT_ROLES
+) -> dict:
     by_role: dict[str, tuple[int, str]] = {}
     for gpio_key, pin_data in profile["pins"].items():
         if not isinstance(pin_data, dict):
             continue
         role = pin_data.get("application_role")
-        if role not in OUTPUT_ROLES:
+        if role not in roles:
             continue
         match = GPIO_KEY_PATTERN.match(str(gpio_key))
         if not match:
@@ -227,7 +242,7 @@ def extract_outputs(profile: dict, path_for_errors: str) -> dict:
             )
         by_role[role] = (gpio_number, POLARITY_BY_ACTIVE_LEVEL[active_level])
 
-    missing = sorted(set(OUTPUT_ROLES) - set(by_role))
+    missing = sorted(set(roles) - set(by_role))
     if missing:
         raise BoardProfileError(
             f"{path_for_errors}: missing required output role(s): "
@@ -282,6 +297,19 @@ def render_header(resolved: dict, source_path_display: str) -> str:
     ]
     for role, (pin_name, polarity_name) in OUTPUT_ROLES.items():
         gpio_number, polarity = resolved["outputs"][role]
+        lines.append(f"inline constexpr int {pin_name} = {gpio_number};")
+        lines.append(
+            f"inline constexpr device_platform::OutputPolarity {polarity_name} ="
+        )
+        lines.append(f"    device_platform::OutputPolarity::{polarity};")
+    lines += [
+        "",
+        "// BTS7960 H-bridge signals (Issue #33): RPWM, LPWM and the shared",
+        "// R_EN/L_EN enable. R_IS/L_IS (GPIO34/35) are disabled and unwired in R1",
+        "// and are intentionally not generated.",
+    ]
+    for role, (pin_name, polarity_name) in BRIDGE_ROLES.items():
+        gpio_number, polarity = resolved["bridge"][role]
         lines.append(f"inline constexpr int {pin_name} = {gpio_number};")
         lines.append(
             f"inline constexpr device_platform::OutputPolarity {polarity_name} ="
@@ -368,6 +396,29 @@ def run_selftest() -> int:
     application_role: reserve
     active_level: TBD_HARDWARE
     assignment_status: board_fixed_pending_functional_verification
+  gpio13:
+    function: peltier_rpwm
+    application_role: bts7960_rpwm
+    active_level: high
+    assignment_status: planned
+  gpio14:
+    function: peltier_lpwm
+    application_role: bts7960_lpwm
+    active_level: high
+    assignment_status: planned
+  gpio25:
+    function: bts7960_enable
+    application_role: shared_r_en_l_en
+    active_level: high
+    assignment_status: planned
+  gpio34:
+    function: bts7960_r_is_reserve
+    application_role: disabled
+    assignment_status: reserved_disabled
+  gpio35:
+    function: bts7960_l_is_reserve
+    application_role: disabled
+    assignment_status: reserved_disabled
 """
 
     checks: dict[str, bool] = {}
@@ -391,6 +442,14 @@ def run_selftest() -> int:
                 and "kBuzzerPin = 26;" in header
                 and header.count("OutputPolarity::Unconfirmed;") == 3
                 and "27" not in header.split("kOneWireProductPin")[1]
+                and "kBtsRpwmPin = 13;" in header
+                and "kBtsLpwmPin = 14;" in header
+                and "kBtsEnablePin = 25;" in header
+                and header.count("OutputPolarity::ActiveHigh;") == 3
+                and "= 34;" not in header
+                and "= 35;" not in header
+                and "Ris" not in header
+                and "Lis" not in header
                 and output_path.exists()
             )
         except BoardProfileError:
@@ -530,6 +589,52 @@ def run_selftest() -> int:
                 "application_role: reserve", "application_role: internal_fan"
             ),
             "internal_fan",
+        )
+        # Bridge (Issue #33) roles: same fail-fast rules, R_IS/L_IS never emitted.
+        output_case(
+            "bridge role missing rejected",
+            valid_pins.replace(
+                "application_role: shared_r_en_l_en", "application_role: other"
+            ),
+            "shared_r_en_l_en",
+        )
+        output_case(
+            "bridge role duplicated rejected",
+            valid_pins.replace(
+                "application_role: disabled\n    assignment_status: "
+                "reserved_disabled\n  gpio35:",
+                "application_role: bts7960_rpwm\n    active_level: high\n"
+                "    assignment_status: planned\n  gpio35:",
+            ),
+            "bts7960_rpwm",
+        )
+        output_case(
+            "bridge invalid active_level rejected",
+            valid_pins.replace(
+                "application_role: bts7960_lpwm\n    active_level: high\n",
+                "application_role: bts7960_lpwm\n    active_level: maybe\n",
+            ),
+            "bts7960_lpwm",
+        )
+        output_case(
+            "bridge missing active_level rejected",
+            valid_pins.replace(
+                "application_role: bts7960_rpwm\n    active_level: high\n",
+                "application_role: bts7960_rpwm\n",
+            ),
+            "bts7960_rpwm",
+        )
+        output_case(
+            "bridge TBD_HARDWARE active_level maps to Unconfirmed",
+            valid_pins.replace(
+                "application_role: shared_r_en_l_en\n    active_level: high\n",
+                "application_role: shared_r_en_l_en\n"
+                "    active_level: TBD_HARDWARE\n",
+            ),
+            lambda h: "kBtsEnablePolarity =\n    device_platform::OutputPolarity::Unconfirmed;"
+            in h
+            and "kBtsRpwmPolarity =\n    device_platform::OutputPolarity::ActiveHigh;"
+            in h,
         )
         output_case(
             "unavailable output assignment_status rejected",

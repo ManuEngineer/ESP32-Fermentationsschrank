@@ -309,7 +309,19 @@ Fuer `IBinaryOutputSink` existiert der rollenfreie GPIO-Adapter
 `OutputPolarity` kommen aus der generierten SSOT-Ableitung, die Rollenzuordnung
 (Innenluefter, Aussenluefter, Summer) erfolgt nur in der Composition Root; bei
 `Unconfirmed` fuehrt der Adapter keine GPIO-Operation aus. Die Ausgaenge sind
-nicht an den Aktorplaner angeschlossen. Weitere reale ESP32-Adapter dieser
+nicht an den Aktorplaner angeschlossen. `IBinaryOutputSink::setEnabled` liefert
+`bool` (nur: Befehl im betriebsbereiten Zustand erfolgreich ausgefuehrt, keine
+Lastaussage); der `ActuatorPlanSinkDriver` gibt den Peltier bei verworfenem
+Aussenluefter-EIN nicht frei. Fuer `IBidirectionalActuatorSink` bildet die
+portable `SharedEnableBridgeSink` (`device_platform`) eine zweischenklige Bruecke
+mit gemeinsamem Enable auf drei Binaerausgaenge ab (Enable zuletzt ein/zuerst aus,
+nie beide Schenkel, Richtungswechsel nur ueber All-off, Fehler = Abschaltung und
+Verriegelung bis Neustart, kein Zeitgeber; Mindest-Auszeit/Totzeit bleiben im
+Planner). Der reale ESP-IDF-Adapter `EspIdfSharedEnableBridge` (drei
+`EspIdfBinaryOutputSink` + Bruecke) initialisiert beim Boot Enable, RPWM, LPWM
+inaktiv; die Composition Root erzeugt ihn (Pins/Polaritaet aus der SSOT-Ableitung,
+R_IS/L_IS nicht erzeugt), ruft aber weder Richtungsbefehle auf noch verbindet sie ihn
+mit Planner/Driver. Weitere reale ESP32-Adapter dieser
 Schnittstellen sowie `IResourceMonitor` sind noch nicht Teil dieser Grundlage. Eine Auslagerung von `device_platform` oder
 `device_platform_test_support` in ein separates Repository erfolgt weiterhin
 nicht (siehe ADR-013).

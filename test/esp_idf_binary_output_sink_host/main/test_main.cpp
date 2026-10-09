@@ -83,9 +83,9 @@ void test_unconfirmed_never_touches_gpio() {
     EspIdfBinaryOutputSink sink(16, OutputPolarity::Unconfirmed);
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::PolarityUnconfirmed,
                       sink.begin());
-    sink.setEnabled(true);
-    sink.setEnabled(false);
-    sink.setEnabled(true);
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
+    TEST_ASSERT_FALSE(sink.setEnabled(false));
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::PolarityUnconfirmed,
                       sink.begin());
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
@@ -93,8 +93,8 @@ void test_unconfirmed_never_touches_gpio() {
 
 void test_constructor_and_enable_before_begin_do_not_touch_gpio() {
     EspIdfBinaryOutputSink sink(16, OutputPolarity::ActiveHigh);
-    sink.setEnabled(true);
-    sink.setEnabled(false);
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
+    TEST_ASSERT_FALSE(sink.setEnabled(false));
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
 }
 
@@ -127,8 +127,8 @@ void test_level_mapping(OutputPolarity polarity, int onLevel, int offLevel) {
     EspIdfBinaryOutputSink sink(26, polarity);
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Ready, sink.begin());
     calls.clear();
-    sink.setEnabled(true);
-    sink.setEnabled(false);
+    TEST_ASSERT_TRUE(sink.setEnabled(true));
+    TEST_ASSERT_TRUE(sink.setEnabled(false));
     TEST_ASSERT_EQUAL(2, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(26, calls[0].pin);
     TEST_ASSERT_EQUAL(onLevel, calls[0].level);
@@ -148,9 +148,10 @@ void test_config_failure_is_fail_closed() {
     EspIdfBinaryOutputSink sink(16, OutputPolarity::ActiveHigh);
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Failed, sink.begin());
     calls.clear();
-    sink.setEnabled(true);
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
-    sink.setEnabled(false);  // best effort towards inactive only
+    TEST_ASSERT_FALSE(
+        sink.setEnabled(false));  // best effort towards inactive only
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(0, calls[0].level);
 }
@@ -163,7 +164,7 @@ void test_preset_failure_is_fail_closed_without_config() {
         TEST_ASSERT_TRUE(call.kind == Call::Kind::SetLevel);
     }
     calls.clear();
-    sink.setEnabled(true);
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
 }
 
@@ -172,15 +173,16 @@ void test_enable_write_failure_latches_fault_and_tries_inactive_once() {
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Ready, sink.begin());
     calls.clear();
     setLevelResultQueue = {ESP_FAIL};  // the EIN write fails
-    sink.setEnabled(true);
+    TEST_ASSERT_FALSE(sink.setEnabled(true));
     // failed EIN attempt + exactly one immediate inactive attempt
     TEST_ASSERT_EQUAL(2, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(1, calls[0].level);
     TEST_ASSERT_EQUAL(0, calls[1].level);
     calls.clear();
-    sink.setEnabled(true);  // refused, no GPIO access
+    TEST_ASSERT_FALSE(sink.setEnabled(true));  // refused, no GPIO access
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
-    sink.setEnabled(false);  // keeps the best-effort AUS contract
+    TEST_ASSERT_FALSE(
+        sink.setEnabled(false));  // keeps the best-effort AUS contract
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(0, calls[0].level);
 }
@@ -189,19 +191,21 @@ void test_disable_write_failure_after_enable_tries_inactive_once_and_blocks() {
     EspIdfBinaryOutputSink sink(17, OutputPolarity::ActiveLow);
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Ready, sink.begin());
     calls.clear();
-    sink.setEnabled(true);  // succeeds, drives the active level (LOW)
+    TEST_ASSERT_TRUE(
+        sink.setEnabled(true));  // succeeds, drives the active level (LOW)
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(0, calls[0].level);
     calls.clear();
     setLevelResultQueue = {ESP_FAIL};  // the AUS write fails
-    sink.setEnabled(false);
+    TEST_ASSERT_FALSE(sink.setEnabled(false));
     // failed AUS attempt + exactly one additional inactive attempt (HIGH);
     // no retry loop. This is a software attempt, not a guaranteed shutdown.
     TEST_ASSERT_EQUAL(2, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(1, calls[0].level);
     TEST_ASSERT_EQUAL(1, calls[1].level);
     calls.clear();
-    sink.setEnabled(true);  // never re-enabled after the fault
+    TEST_ASSERT_FALSE(
+        sink.setEnabled(true));  // never re-enabled after the fault
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
 }
 
@@ -212,11 +216,11 @@ void test_invalid_pin_and_invalid_polarity_fail_closed() {
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Failed, negative.begin());
     EspIdfBinaryOutputSink garbage(16, static_cast<OutputPolarity>(99));
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Failed, garbage.begin());
-    garbage.setEnabled(true);
-    garbage.setEnabled(false);
-    badPin.setEnabled(true);
-    badPin.setEnabled(false);
-    negative.setEnabled(false);
+    TEST_ASSERT_FALSE(garbage.setEnabled(true));
+    TEST_ASSERT_FALSE(garbage.setEnabled(false));
+    TEST_ASSERT_FALSE(badPin.setEnabled(true));
+    TEST_ASSERT_FALSE(badPin.setEnabled(false));
+    TEST_ASSERT_FALSE(negative.setEnabled(false));
     // Only the driver-rejected preset and the best-effort inactive write
     // reach the driver for the input-only pin; no config, no active level.
     for (const auto& call : calls) {
@@ -235,13 +239,13 @@ void test_channels_are_independent() {
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::PolarityUnconfirmed,
                       buzzer.begin());
     calls.clear();
-    inner.setEnabled(true);
-    buzzer.setEnabled(true);
+    TEST_ASSERT_TRUE(inner.setEnabled(true));
+    TEST_ASSERT_FALSE(buzzer.setEnabled(true));
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(16, calls[0].pin);
     TEST_ASSERT_EQUAL(1, calls[0].level);
     calls.clear();
-    outer.setEnabled(true);
+    TEST_ASSERT_TRUE(outer.setEnabled(true));
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(17, calls[0].pin);
     TEST_ASSERT_EQUAL(0, calls[0].level);

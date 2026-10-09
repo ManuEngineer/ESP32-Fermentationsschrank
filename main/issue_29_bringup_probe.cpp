@@ -258,9 +258,12 @@ class AllOffBidirectionalSink final
 
 class AllOffBinarySink final : public device_platform::IBinaryOutputSink {
    public:
-    void setEnabled(bool enabled) override {
+    // An enable request is never reported as applied: this sink drives
+    // nothing, so only the all-off command counts as applied.
+    [[nodiscard]] bool setEnabled(bool enabled) override {
         ++callCount_;
         releaseObserved_ = releaseObserved_ || enabled;
+        return !enabled;
     }
 
     [[nodiscard]] std::size_t callCount() const { return callCount_; }
