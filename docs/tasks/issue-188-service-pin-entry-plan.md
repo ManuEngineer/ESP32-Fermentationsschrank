@@ -1,6 +1,6 @@
 # Issue #188 A – Service-PIN End-to-End aus den Einstellungen
 
-Revision 2 (ersetzt Revision 1 `9ae345e`, die nicht freigegeben ist)
+Revision 3 (ersetzt Revision 2 `0b185d0` und Revision 1 `9ae345e`; keine davon ist freigegeben)
 Status: Planvorschlag zur Ownerfreigabe (Plan-PR #199, keine Produktimplementierung)
 Datum: 2026-10-09
 Issue: #188, Produktfehler A (`Refs #188`; das Issue bleibt offen)
@@ -136,36 +136,68 @@ Eine Uhr: Vergabe, Aktivität, `activeAt()` in `uiSnapshot()` und der
 Ergebnis `Unavailable` und `service.available` bleibt `false`.
 
 Zulassungsprädikat `localServiceEntryAllowedUnlocked()` („validiertes
-`STANDBY`“): `runtimeRunState_ != nullptr`,
-`runtimeRunState_->processState.state == ProcessState::Standby`, kein
-veröffentlichter Lauf (bestehendes `factoryResetRunGateOpenUnlocked()`,
-`fermentation_application.cpp:2566-2573`: weder `activeProgramRun` noch
-`activeManualRun`) und geladene Konfiguration (`storageEpoch_`). Damit sind
-aktiver Lauf, `Fault`, `SafeBoot` und `RecoveryEvaluation` ausgeschlossen.
+`STANDBY`“). Es ist die **einzige** Zulassungsquelle und wird vor der KDF,
+nach der KDF, für `service.available`, für die Invalidierung einer bestehenden
+Lease und für die Guards späterer geschützter Aktionen verwendet; es gibt
+keine zweite, schwächere UI-Ableitung. Alle Bedingungen müssen gelten:
 
-Ablauf von `verifyLocalServicePin()`:
+1. `lifecycleState_ == ApplicationLifecycleState::Ready` (bestehendes
+   `ready()`, `fermentation_application.cpp:2528-2530`). `ServiceRequired`
+   (gesetzt von `requireService()`, `:2540-2546`, auch zur Laufzeit) und
+   `Initializing` sind ausgeschlossen, selbst wenn der Run-State formal noch
+   `Standby` meldet.
+2. `runtimeRunState_ != nullptr` und
+   `runtimeRunState_->processState.state == ProcessState::Standby`.
+3. Kein veröffentlichter Lauf: bestehendes `factoryResetRunGateOpenUnlocked()`
+   (`:2566-2573`, weder `activeProgramRun` noch `activeManualRun`).
+4. Kein offener Recovery-Kontext: `pendingRecoverySource_ == nullptr`, kein
+   `recoveryDisposition_` und der Run-Persistence-Koordinator nicht in
+   `FallbackRecoveryPending`. Das sind dieselben Quellen, aus denen
+   `uiSnapshot()` `recovery.mode` projiziert (`:1433-1440`,
+   `fermentation_ui_projector.cpp:97-130`).
+5. Geladene Konfiguration (`storageEpoch_`).
 
-1. Unter `ApplicationCallSerializer`: Ist das Zulassungsprädikat nicht
+Damit sind aktiver Lauf, `Fault`, `SafeBoot`, `RecoveryEvaluation`,
+`ServiceRequired` und jede offene Recovery-Entscheidung ausgeschlossen.
+
+Ablauf von `verifyLocalServicePin()` (Trennung wie in
+`authenticateWebPassword()`, `fermentation_application.cpp:1505-1571`):
+
+1. **Unter `ApplicationCallSerializer`:** Ist das Zulassungsprädikat nicht
    erfüllt, Ergebnis `NotAllowedInState` **vor** jeder KDF und jedem
    Auth-Write. Danach `webAuthenticationStateUnlocked()`
-   (`fermentation_application.cpp:1473-1498`) einzeln abbilden:
-   `PasswordProtected` und `PasswordDisabled` → weiter (beide Modi verlangen
-   die Service-PIN); `Unprovisioned` → `NotProvisioned` ohne KDF;
-   `RecoveryRequired` und `Indeterminate` → `Unavailable` ohne KDF. Fehlen
-   Domain oder Kontext oder liefert `authOperationGate_.tryBegin()` keinen
-   Token, Ergebnis `Unavailable`.
-2. Außerhalb des Serializers mit gehaltenem Token:
+   (`:1473-1498`) einzeln abbilden: `PasswordProtected` und
+   `PasswordDisabled` → weiter (beide Modi verlangen die Service-PIN);
+   `Unprovisioned` → `NotProvisioned` ohne KDF; `RecoveryRequired` und
+   `Indeterminate` → `Unavailable` ohne KDF. Fehlen Domain oder Kontext oder
+   liefert `authOperationGate_.tryBegin()` keinen Token, Ergebnis
+   `Unavailable`. Sonst Token, Domain-Zeiger und eine Kopie des
+   `AuthenticationBootstrapContext` übernehmen und dessen `storageEpoch()` und
+   `bootstrapSequence()` festhalten. Serializer verlassen.
+2. **Außerhalb des Serializers, Token gehalten:**
    `AuthenticationDomain::verifyServicePin(context, pin, nowMs, retryAfterMs)`.
-3. Abbildung: `Authenticated` → Lease vergeben (Schritt 4); `Invalid` ohne
-   `retryAfterMs` → `Invalid`; `Invalid` mit `retryAfterMs` oder `LockedOut`
-   → `LockedOut`; `RecoveryRequired` (ungültiger Kontext oder unlesbare
-   Credentials, kein unprovisioniertes Gerät) und `KdfUnavailable` →
-   `Unavailable`.
-4. Erneut unter dem Serializer: Zustand erneut prüfen (der Prozess kann sich
-   während der KDF geändert haben, oder ein Werksreset hat das Auth-Gate
-   geschlossen). Nur wenn das Zulassungsprädikat weiterhin erfüllt ist, wird
-   `localServiceLease_ = ServiceSessionLease(fermentationTouchServicePolicy(), nowMs)`
-   gesetzt; sonst `NotAllowedInState`.
+3. **Token freigeben, bevor der Serializer erneut betreten wird:**
+   `token.reset()`, Domain-Zeiger und Kontextkopie verwerfen. Grund: Werksreset
+   und Auth-Reinitialisierung rufen `authOperationGate_.closeAndDrain()`
+   **unter** dem Serializer auf (`:2327`, `:2037`). Hielte die PIN-Prüfung
+   ihr Token beim erneuten Lock-Versuch, warteten beide aufeinander.
+4. **Abbildung des Prüfergebnisses:** `Authenticated` → weiter mit Schritt 5;
+   `Invalid` ohne `retryAfterMs` → `Invalid`; `Invalid` mit `retryAfterMs`
+   oder `LockedOut` → `LockedOut`; `RecoveryRequired` (ungültiger Kontext oder
+   unlesbare Credentials, kein unprovisioniertes Gerät) und `KdfUnavailable`
+   → `Unavailable`. Nur `Authenticated` führt zu Schritt 5.
+5. **Erneut unter dem Serializer, fail-closed:** Eine Lease wird nur vergeben,
+   wenn
+   - das Zulassungsprädikat weiterhin erfüllt ist (sonst
+     `NotAllowedInState`), und
+   - `authenticationDomain_` und `authenticationContext_` weiterhin vorhanden
+     sind, `authenticationResolutionStatus_ ==
+     AuthenticationBootstrapResolutionStatus::Ready` gilt und
+     `storageEpoch()` sowie `bootstrapSequence()` des aktuellen Kontexts den
+     in Schritt 1 festgehaltenen Werten entsprechen (sonst `Unavailable`).
+   Ein Werksreset, Epochenwechsel oder eine Auth-Reinitialisierung zwischen
+   Prüfung und Vergabe ergibt damit nie eine Lease. Erst dann
+   `localServiceLease_ = ServiceSessionLease(fermentationTouchServicePolicy(), nowMs)`.
 
 Lease-Haltung und Projektion:
 
@@ -179,7 +211,10 @@ Lease-Haltung und Projektion:
   Zeitablauf, erhöht deshalb die Refresh-Revision und erzwingt ein
   Neuzeichnen.
 - `update()` meldet `SafetyStateInvalidated`, sobald das Zulassungsprädikat
-  nicht mehr erfüllt ist; die Lease ist dann terminal beendet.
+  nicht mehr erfüllt ist; die Lease ist dann terminal beendet. Zusätzlich
+  beendet `requireService()` die Lease sofort. Bis dahin verhindert das
+  Prädikat in `service.available` und in jedem Guard, dass eine noch nicht
+  beendete Lease wirkt.
 - `resetAuthenticationState()` (Werksreset, Auth-Reinitialisierung) beendet die
   Lease.
 - Trust-Boundary: `revokeWebSessionsAtTrustBoundary()` (Netzwerkmoduswechsel,
@@ -290,12 +325,20 @@ gegenüber Revision 1 ist.
 
 - **A (Empfehlung):** synchron in der Hauptschleife wie beschrieben, mit
   Hardware-Mess-Gate vor dem Merge: reale Dauer einer lokalen PIN-Prüfung,
-  größte Herzschlaglücke, kein Task-Watchdog, kein Reset. Begründung: Die
+  größte Herzschlaglücke, kein Task-Watchdog, kein Reset. Die bisher
+  gemessenen 3605 ms (Web-Pfad, anderer Task) sind kein Freigabenachweis für
+  den neuen Aufruf in der Hauptschleife; die Beurteilung erfolgt erst mit der
+  neuen Messung. Begründung für A: Die
   Prüfung läuft nur in `Standby`, also ohne aktiven Lauf; ein Lauf kann
   während der Prüfung auch nicht über das Web starten, weil der produktive
   Run-Mutationspfad `POST /internal/ui/run` nicht registriert ist (Roadmap
-  #27). Gleichzeitige Web-Authentifizierungen serialisiert das bestehende
-  `AuthOperationGate`. R1-Aktoren sind gesperrt (`ACTUATOR_RELEASE=NO`); der
+  #27). Das `AuthOperationGate` ist ein Lifetime-/Drain-Gate mit mehreren
+  gleichzeitig möglichen Tokens; es serialisiert nicht. Die Verifikation
+  selbst serialisiert die `AuthenticationDomain` über ihren Domain-Mutex
+  (`authentication_records.hpp:358`). Eine gleichzeitige Web-Anmeldung kann
+  die lokale Prüfung also verzögern; der Hardware-Nachweis zu A umfasst
+  deshalb auch eine lokale PIN-Prüfung bei gleichzeitig laufender
+  Web-Anmeldung. R1-Aktoren sind gesperrt (`ACTUATOR_RELEASE=NO`); der
   Lockout begrenzt Wiederholungen; dieselbe KDF verursacht im Web-Pfad bereits
   eine gemessene Lücke von 3605 ms; ein eigener Task kostet RAM in einem
   knappen System.
@@ -362,6 +405,22 @@ bestehendem `epochOf`-Muster; Auth-Record per
 | Abmelden | Lease beendet |
 | Laufstart bei aktiver Lease | Lease terminal beendet |
 | Werksreset bzw. `resetAuthenticationState()` | Lease beendet |
+| `ServiceRequired` bei weiterhin `Standby` im Run-State (test-lokaler Aufruf von `requireService()` über das friend-`FermentationApplicationTestAccess`) | PIN-Prüfung `NotAllowedInState` vor KDF und Auth-Write; eine vorher vergebene Lease ist beendet, `uiSnapshot().service.available == false` |
+| offener Recovery-Kontext (`recoveryDisposition_` oder `pendingRecoverySource_` gesetzt, über bestehende Recovery-Fixtures bzw. test-lokalen friend-Zugriff) | wie `ServiceRequired`: verweigert vor KDF, bestehende Lease wirkt nicht |
+
+### 6.1a Interleaving (C1, `test/test_web_application_routes`)
+
+Wiederverwendung der bestehenden Seams `BlockableKdf` (`arm`, `waitEntered`,
+`release`), `ComposedFixture`, `FermentationApplicationTestAccess::provision`
+und `authRecordBytes()` nach dem Muster von
+`test_factory_reset_drains_running_login_before_touching_the_store` und
+`test_stale_protected_login_cannot_create_a_session_after_factory_reset`:
+
+| Fall | Erwartung |
+|---|---|
+| lokale PIN-Prüfung blockiert in der KDF; ein zweiter Thread startet den Werksreset | Reset wartet auf das Token, hängt aber nicht; nach `release()` endet die Prüfung, der Reset läuft durch; die Prüfung liefert `Unavailable` (Epoche/Kontext geändert) und vergibt keine Lease |
+| lokale PIN-Prüfung blockiert in der KDF; der Reset schlägt fehl und öffnet das Gate wieder | Kontext unverändert; Ergebnis wie ohne Reset |
+| Prüfung nach geschlossenem Gate | `Unavailable` ohne KDF |
 
 ### 6.2 Touch-Ende-zu-Ende (C2, `test/test_press_dispatcher`)
 
@@ -415,8 +474,10 @@ C++-Pfad nichts; eine Ziffer erzwingt genau ein Neuzeichnen.
 ### 6.6 Ausführung
 
 - Native: `test_press_dispatcher`, `test_local_touch_ui`,
-  `test_renderer_boundary`, `test_ui_steady_state_allocations`, `test_authentication_records` (unverändert grün),
-  `test_web_session` (unverändert grün).
+  `test_renderer_boundary`, `test_ui_steady_state_allocations`,
+  `test_web_application_routes`, `test_authentication_records` (unverändert
+  grün), `test_web_session` (unverändert grün), `test_factory_reset_flow`
+  (unverändert grün).
 - ESP-IDF-Builds `esp32_bringup` und `esp32_release`, inklusive
   Ressourcenbericht.
 - Builder-Self-Check (`scripts/run_pre_ready_gates.sh self-check`) vor dem
@@ -431,7 +492,9 @@ Auf dem Owner-ESP32, ohne Werksreset und ohne Powercut:
    Herzschlaglücke (G2), kein Watchdog, kein Reset.
 3. falsche PIN, Lockout nach 3 Fehlversuchen.
 4. „PIN vergessen?“ → Warnung → Abbrechen, ohne Reset.
-5. Inaktivitätsablauf (oder Abmelden) sperrt wieder.
+5. lokale PIN-Prüfung, während eine Web-Anmeldung läuft: größte
+   Herzschlaglücke, kein Watchdog, kein Reset (G2).
+6. Inaktivitätsablauf (oder Abmelden) sperrt wieder.
 
 `HW-19-R01` bleibt nicht bestanden, `HW-19-R02=NOT_RUN`, `HW-19-R03=BLOCKED`;
 der tatsächliche Werksreset und Powercut nur separat über #192.
@@ -443,7 +506,7 @@ Nach jedem Commit wird angehalten.
 
 | Schnitt | Inhalt | Nachweis |
 |---|---|---|
-| C1 | Application-Grenze 3.1 und Tests 6.1 | Native-Suites |
+| C1 | Application-Grenze 3.1 und Tests 6.1/6.1a | Native-Suites |
 | C2 | Workspace 3.2, Dispatcher 3.3, Renderer 3.4, Textschlüssel, Tests 6.2–6.4 und umgestellte Bestandstests | Native-Suites, beide ESP-Profile |
 | C3 | Doku: `docs/LOCAL_UI_SETTINGS_SERVICE.md:56-63` (Service-Zeile öffnet die PIN-Eingabe; nach korrekter PIN geschützte Service-Seite ohne eigene Funktionen bis #28); `docs/ACCEPTANCE_TESTS.md` neue Zeilen `SIM-188-A01..` sowie Traces SIM-172-S10-01 und SIM-19-R07; `docs/ROADMAP.md` | Doku-Diff |
 
