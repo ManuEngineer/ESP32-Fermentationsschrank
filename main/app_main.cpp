@@ -12,6 +12,7 @@
 #include "esp_idf_authentication_kdf.hpp"
 #include "esp_idf_binary_output_sink.hpp"
 #include "esp_idf_replay_digest.hpp"
+#include "esp_idf_shared_enable_bridge.hpp"
 #include "esp_idf_i2c_subsystem.hpp"
 #include "esp_idf_http_server_lifecycle.hpp"
 #include "esp_idf_network_lifecycle.hpp"
@@ -608,6 +609,24 @@ extern "C" void app_main(void) {
              binaryOutputBeginResultName(innerFanOutput.begin()),
              binaryOutputBeginResultName(outerFanOutput.begin()),
              binaryOutputBeginResultName(buzzerOutput.begin()));
+
+    // BTS7960 H-bridge (Issue #33). The role of the instance is assigned only
+    // here; pins and polarities come from the generated SSOT header. begin()
+    // initialises GPIO25 (shared enable), GPIO13 (RPWM) and GPIO14 (LPWM) to
+    // their inactive level, in this order, and starts the bridge only after
+    // all three succeeded; otherwise the bridge stays unstarted and refuses
+    // every enable request. The LOW levels are the SSOT design state and no
+    // proof of module polarity or boot/reset hardware behaviour. The bridge is
+    // deliberately not connected to the actuator planner or driver, and
+    // nothing in this product calls its direction commands. R_IS/L_IS
+    // (GPIO34/35) are disabled and unwired in R1.
+    device_platform_esp_idf::EspIdfSharedEnableBridge peltierBridge(
+        r1_pins::kBtsEnablePin, r1_pins::kBtsEnablePolarity,
+        r1_pins::kBtsRpwmPin, r1_pins::kBtsRpwmPolarity, r1_pins::kBtsLpwmPin,
+        r1_pins::kBtsLpwmPolarity);
+    ESP_LOGI(kTag, "peltier bridge: %s",
+             peltierBridge.begin() ? "ready_all_off_not_connected_to_planner"
+                                   : "not_ready_fail_closed");
 
     const esp_err_t defaultNvsStatus = nvs_flash_init();
     if (defaultNvsStatus != ESP_OK) {

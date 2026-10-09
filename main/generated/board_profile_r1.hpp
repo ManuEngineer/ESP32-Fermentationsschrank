@@ -47,4 +47,17 @@ inline constexpr int kBuzzerPin = 26;
 inline constexpr device_platform::OutputPolarity kBuzzerPolarity =
     device_platform::OutputPolarity::Unconfirmed;
 
+// BTS7960 H-bridge signals (Issue #33): RPWM, LPWM and the shared
+// R_EN/L_EN enable. R_IS/L_IS (GPIO34/35) are disabled and unwired in R1
+// and are intentionally not generated.
+inline constexpr int kBtsRpwmPin = 13;
+inline constexpr device_platform::OutputPolarity kBtsRpwmPolarity =
+    device_platform::OutputPolarity::ActiveHigh;
+inline constexpr int kBtsLpwmPin = 14;
+inline constexpr device_platform::OutputPolarity kBtsLpwmPolarity =
+    device_platform::OutputPolarity::ActiveHigh;
+inline constexpr int kBtsEnablePin = 25;
+inline constexpr device_platform::OutputPolarity kBtsEnablePolarity =
+    device_platform::OutputPolarity::ActiveHigh;
+
 }  // namespace board_profile::esp32_32e_quad_mosfet_r1

@@ -401,6 +401,28 @@ erforderlich) und sind kein Teil von `scripts/run_pre_ready_gates.sh`.
 | HW-32-02 | `NOT_RUN`: Boot-/Reset-/Brownout-Verhalten vor und nach `app_main` mit sicherem Einzelverbraucher (haengt an `external_bias`, `TBD_BOARD_CIRCUIT`). |
 | HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). |
 
+### Issue #33 – BTS7960-H-Bruecke (Software, hardwarefrei)
+
+Softwarenachweise fuer Portvertrag, Aussenluefter-Sperre, Brueckenlogik, ESP-Adapter und
+SSOT-Ableitung. `true` aus `setEnabled` ist nur ein im betriebsbereiten Zustand
+erfolgreich ausgefuehrter Befehl, keine Lueferdrehung oder Lastfunktion; „AUS“ ist ein
+softwareseitiger Befehl, keine garantierte physische Abschaltung. Die Linux-CMock-
+Hosttests (`test/esp_idf_*_host`, Ruby erforderlich) sind kein Teil von
+`scripts/run_pre_ready_gates.sh`. R_IS/L_IS sind kein Testfall.
+
+| ID | Nachweis |
+|---|---|
+| SIM-33-01 | Portvertrag `setEnabled -> bool` und Aussenluefter-Sperre: abgelehntes Aussenluefter-EIN gibt weder Heizen noch Kuehlen frei, ein laufender Peltier wird abgeschaltet, `Idle`/`Unknown`/ungueltig bleiben AUS; Mock-Ablehnung aendert Zustand/Journal nicht: `test_actuator_plan_sink_driver::test_driver_refused_outer_fan_never_releases_heating`; `::test_driver_refused_outer_fan_never_releases_cooling`; `::test_driver_refused_outer_fan_switches_running_peltier_off`; `::test_driver_idle_and_unknown_stay_all_off_with_refusing_fans`; `test_sensor_actuator_mocks::test_binary_output_sink_can_reject_commands_without_changing_state`; Rueckgabewerte des ESP-Ausgabeadapters: `esp_idf_binary_output_sink_host` (12 Tests). |
+| SIM-33-02 | Brueckenlogik: `begin()` nur mit drei initialisierten Ausgaengen, Enable zuletzt ein/zuerst aus, Mutual Exclusion, Richtungswechsel nur ueber All-off, Fehler an jedem Einzelbefehl, Verriegelung ohne Re-Arm, Best-effort-AUS im Faulted-Zustand: `test_shared_enable_bridge_sink` (22 Faelle). |
+| SIM-33-03 | ESP-Adapter `EspIdfSharedEnableBridge`: Initialisierungsreihenfolge Enable (GPIO25) → RPWM (GPIO13) → LPWM (GPIO14), Fehler an jeder Stufe (Preset/Konfiguration) → Bruecke ungestartet, je Ausgang ein Best-effort-AUS, danach kein GPIO-Zugriff; `Unconfirmed` inert; Sequenzen/Konflikt/Schreibfehler auf Pin-Ebene: `esp_idf_shared_enable_bridge_host` (13 Tests). |
+| SIM-33-04 | SSOT-Ableitung: GPIO13/14/25 und Polaritaet aus `application_role`/`active_level` (`TBD_HARDWARE` → `Unconfirmed`, `high`/`low` → `ActiveHigh`/`ActiveLow`, ungueltig/fehlend/doppelt/Rolle fehlt = Fehler); GPIO34/35 (R_IS/L_IS) werden nicht erzeugt; bisherige Konstanten unveraendert: `TRACE: python3 scripts/generate_board_profile_header.py --selftest` und `--check`. |
+| SIM-33-05 | Composition-Guard: `main/` ruft nirgends `setForward(`/`setReverse(` auf (ausser der Bring-up-Probe mit eigenen AllOff-Sinks); `app_main` erzeugt und startet die Bruecke aus den generierten Pin-/Polaritaetskonstanten, ohne `ActuatorPlanSinkDriver`/`ActuatorPlanner`, ADC oder R_IS/L_IS: `test_peltier_composition_guard`. |
+| HW-33-01 | `NOT_RUN` (H1/H2): konkrete IBT-2-/BTS7960-Variante, 3,3-V-Logikvertraeglichkeit, gemeinsame Masse, Enable-Funktion und reale Polaritaet, Pulldowns real vorhanden. |
+| HW-33-02 | `NOT_RUN` (H3): Boot/Reset/Brownout/Bootloader mit Richtungen und Enable aus (GPIO13/14/25 gegen Datenblatt/TRM und funktional). |
+| HW-33-03 | `NOT_RUN` (H4): unbelasteter Adapterpfad; Sicherung, einmalige Temperatursicherung, Kuehlkoerper, funktionsgepruefter Aussenluefter, Pflichtsensoren. |
+| HW-33-04 | `NOT_RUN` (H5): begrenzte Heiz-/Kuehl-Servicepulse im geschuetzten Service-/Bring-up-Modus, Abbruch, Nachlauf, reale Mindest-Auszeit/Totzeit, Sensorentfernung. |
+| HW-33-05 | `NOT_RUN` (H6): Release-Kette ausserhalb von #33 (Aktor-Gate `Allowed`, Planner-/Regelschleifen-Komposition #35/#90, Luefterfehler nach oben). |
+
 ### Issue #19 – lokaler Werksreset (R1-Pflicht, hardwarefrei)
 
 Native Simulationen fuer den lokalen Werksreset-Ablauf (Plan
