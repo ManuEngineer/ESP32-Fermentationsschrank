@@ -2,7 +2,7 @@
 
 Plan: `docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2 (Freigabe `d55d2db`).
 Dieses Dokument fuehrt nur tatsaechlich ausgefuehrte Nachweise je Schnitt mit dem
-getesteten Code-Commit. Stand: **S1, S2 und S3 umgesetzt**; S4–S5 nicht begonnen.
+getesteten Code-Commit. Stand: **S1–S4 umgesetzt**; S5 (Self-Check, Gesamtevidence) nicht begonnen.
 
 ```text
 ACTUATOR_RELEASE=NO   REAL_PELTIER_TEST=NOT_RUN
@@ -133,3 +133,38 @@ nicht an Driver/Planner angeschlossen. Der Linux-Hosttest ist nicht Teil von
 `scripts/run_pre_ready_gates.sh`.
 
 Weiterhin `NOT_RUN`: Builder-Self-Check, Pre-Ready-Lauf, alle Hardwarenachweise.
+
+## S4 – Generator, Header, Composition Root, Doku
+
+```text
+GETESTETER_CODE_COMMIT=efcd80e691afbc46cf00cd49d9f826ef631b7a7a (sauberer Arbeitsbaum)
+UMGEBUNG=Linux, PlatformIO 6.1.19 (-e native), ESP-IDF v6.1 (CMock, Ruby 3.3.8), clang-format 21.1.3
+```
+
+| Nachweis | Befehl | Ergebnis |
+|---|---|---|
+| SSOT-Header aktuell | `python3 scripts/generate_board_profile_header.py --check` | PASS |
+| Generator-Selbsttest (bestehende + #32- + #33-Faelle) | `python3 scripts/generate_board_profile_header.py --selftest` | PASS, 18 Faelle (davon 5 neue Bruecken-Faelle: Rolle fehlt, Rolle doppelt, ungueltiges/fehlendes `active_level`, `TBD_HARDWARE` → `Unconfirmed`; GPIO34/35 nicht erzeugt) |
+| Composition-Guard (neu) | `pio test -e native -f test_peltier_composition_guard` | PASS, 2 Faelle |
+| Native Suiten gemeinsam (Guard, Reset-Flow-Quelltext-Guard, Bruecke, Driver, Mocks, Planner, Interlock) | `pio test -e native -f <sieben Suiten>` | PASS, 159 Faelle |
+| CMock-Hosttests | `idf.py -C test/esp_idf_shared_enable_bridge_host ... build` + `.elf`; `test/esp_idf_binary_output_sink_host` | PASS, 13 bzw. 12 Tests |
+| ESP-IDF-Profile (Composition Root kompiliert) | `python3 scripts/build_esp_idf_profiles.py all` | PASS (keine Compiler-Warnung im Log) |
+| Architekturgrenzen | `python3 scripts/check_architecture_boundaries.py` | PASS |
+| Format | `clang-format --dry-run -Werror`, `git diff --check` | PASS |
+
+Mutationsprobe des Composition-Guards: ein angehaengter Aufruf `peltierBridge.setForward(true)`
+in `main/app_main.cpp` laesst den Guard fehlschlagen (Original danach wiederhergestellt).
+
+Header: die bisherigen Konstanten (Display/Touch/OneWire, drei MOSFET-Ausgaenge) sind
+unveraendert; neu `kBtsRpwmPin`=13, `kBtsLpwmPin`=14, `kBtsEnablePin`=25 mit je
+`ActiveHigh` aus `active_level: high`. Die Boardprofil-YAML ist unveraendert.
+
+Abgrenzung: Die Composition Root erzeugt die Bruecke und ruft `begin()` (GPIO25 → 13 → 14,
+LOW/inaktiv); sie ist nicht an Driver/Planner angeschlossen, und `main/` ruft keine
+Richtungsbefehle auf. Die LOW-Pegel sind der SSOT-Designzustand, kein Nachweis fuer
+Modulpolaritaet oder Boot-/Reset-Hardwareverhalten. Das Bootlog der Composition Root
+(`peltier bridge: ...`) wurde **nicht** auf Hardware beobachtet.
+
+Weiterhin `NOT_RUN`: Builder-Self-Check (`run_pre_ready_gates.sh self-check`) inklusive
+statischem Stack-Gate (#121) fuer die erweiterte `app_main`, Pre-Ready-Lauf, alle
+Hardwarenachweise (HW-33-01..05).
