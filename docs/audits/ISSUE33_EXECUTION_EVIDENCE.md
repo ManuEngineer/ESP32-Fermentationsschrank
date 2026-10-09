@@ -2,7 +2,7 @@
 
 Plan: `docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2 (Freigabe `d55d2db`).
 Dieses Dokument fuehrt nur tatsaechlich ausgefuehrte Nachweise je Schnitt mit dem
-getesteten Code-Commit. Stand: **S1 und S2 umgesetzt**; S3–S5 nicht begonnen.
+getesteten Code-Commit. Stand: **S1, S2 und S3 umgesetzt**; S4–S5 nicht begonnen.
 
 ```text
 ACTUATOR_RELEASE=NO   REAL_PELTIER_TEST=NOT_RUN
@@ -88,5 +88,48 @@ Abgrenzung: Die Bruecke erzwingt Reihenfolge und Konflikte, keine Dauer (kein Ze
 Mindest-Auszeit und Polaritaetswechsel-Totzeit bleiben im Planner. „AUS“ ist ein
 softwareseitiger Befehl, keine garantierte physische Abschaltung. Die Bruecke ist noch
 nicht an einen realen GPIO-Ausgang gebunden (S3) und nicht in `main/` komponiert (S4).
+
+Weiterhin `NOT_RUN`: Builder-Self-Check, Pre-Ready-Lauf, alle Hardwarenachweise.
+
+## S3 – `EspIdfSharedEnableBridge` (ESP-IDF-Adapter) und Boot-Initialisierung
+
+```text
+GETESTETER_CODE_COMMIT=f6117631ff57ab0e513af11473059855c38bc878 (sauberer Arbeitsbaum)
+UMGEBUNG=Linux-Target, ESP-IDF v6.1 (CMock-GPIO-Mock, Ruby 3.3.8), PlatformIO 6.1.19 (-e native)
+```
+
+| Nachweis | Befehl | Ergebnis |
+|---|---|---|
+| Adapter-Hosttest (neu) | `idf.py -C test/esp_idf_shared_enable_bridge_host -B <build> build` und `<build>/issue33_shared_enable_bridge_host.elf` | PASS, 13 Tests, 0 Failures |
+| Hosttest #32-Ausgabeadapter (Regression) | `idf.py -C test/esp_idf_binary_output_sink_host -B <build> build` und `.elf` | PASS, 12 Tests |
+| Native Bruecke/Driver/Mock (Regression) | `pio test -e native -f test_shared_enable_bridge_sink -f test_actuator_plan_sink_driver -f test_sensor_actuator_mocks` | PASS, 47 Faelle |
+| Architekturgrenzen | `python3 scripts/check_architecture_boundaries.py` und `--selftest` | PASS |
+| ESP-IDF-Profile (Adapter kompiliert in beiden) | `python3 scripts/build_esp_idf_profiles.py all` | PASS (keine Compiler-Warnung im Log) |
+| Format | `clang-format --dry-run -Werror`, `git diff --check` | PASS |
+
+Abgedeckt durch `esp_idf_shared_enable_bridge_host` (GPIO-Aufrufprotokoll der gemockten
+ESP-IDF-GPIO-Funktionen): Konstruktor und Aufrufe vor `begin()` ohne GPIO-Zugriff;
+Initialisierungsreihenfolge exakt Enable (GPIO25) → RPWM (GPIO13) → LPWM (GPIO14), je
+inaktiv vorgesetzt, dann Ausgang ohne Pulls, danach die All-off-Pruefung der Bruecke (9
+GPIO-Aufrufe, nie ein HIGH); Fehler an **jeder** der drei Stufen, je als Preset- und als
+Konfigurationsfehler (alle drei Stufen werden versucht, `Bridge.begin()` laeuft nicht, je
+Ausgang genau ein Best-effort-AUS, danach erreicht kein Befehl mehr einen GPIO);
+`Unconfirmed`-Polaritaet des Enable → Adapter inert ohne Zugriff auf diesen Pin und ohne
+HIGH; EIN-/AUS-Sequenzen beider Richtungen auf GPIO-Ebene (Schenkel zuerst, Enable zuletzt;
+Enable zuerst aus); widerspruechliche Befehle → Abschaltung aller drei Pins und
+Verriegelung; GPIO-Schreibfehler beim Enable-EIN und beim Schenkel-AUS → Abschaltrunde,
+Verriegelung, keine Freigabe der Gegenrichtung; Pin-Invarianten ueber das gesamte Protokoll
+(RPWM/LPWM nie gleichzeitig HIGH, ein Schenkel nur bei LOW-Enable HIGH).
+
+Mutationsproben (Original danach wiederhergestellt, Quelle diff-identisch):
+`Bridge.begin()` auch bei fehlgeschlagener Stufe → 6 Tests schlagen fehl;
+Initialisierungsreihenfolge vertauscht → 1; Best-effort-AUS entfernt → 6.
+
+Abgrenzung: Die Pins im Test sind die SSOT-Werte (13/14/25), aber der Adapter selbst kennt
+keine Rollen und bekommt Pins/Polaritaet vom Aufrufer. Die LOW-Pegel der
+Initialisierung sind der SSOT-Designzustand, kein Nachweis fuer Modulpolaritaet oder
+Boot-/Reset-Hardwareverhalten. Der Adapter ist noch nicht in `main/` komponiert (S4) und
+nicht an Driver/Planner angeschlossen. Der Linux-Hosttest ist nicht Teil von
+`scripts/run_pre_ready_gates.sh`.
 
 Weiterhin `NOT_RUN`: Builder-Self-Check, Pre-Ready-Lauf, alle Hardwarenachweise.
