@@ -2,7 +2,7 @@
 
 Plan: `docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2 (Freigabe `d55d2db`).
 Dieses Dokument fuehrt nur tatsaechlich ausgefuehrte Nachweise je Schnitt mit dem
-getesteten Code-Commit. Stand: **S1–S4 umgesetzt**; S5 (Self-Check, Gesamtevidence) nicht begonnen.
+getesteten Code-Commit. Stand: **S1–S5 umgesetzt** (S5 = Builder-Self-Check).
 
 ```text
 ACTUATOR_RELEASE=NO   REAL_PELTIER_TEST=NOT_RUN
@@ -168,3 +168,49 @@ Modulpolaritaet oder Boot-/Reset-Hardwareverhalten. Das Bootlog der Composition 
 Weiterhin `NOT_RUN`: Builder-Self-Check (`run_pre_ready_gates.sh self-check`) inklusive
 statischem Stack-Gate (#121) fuer die erweiterte `app_main`, Pre-Ready-Lauf, alle
 Hardwarenachweise (HW-33-01..05).
+
+## S5 – Builder-Self-Check und Gesamtstand vor Independent Review
+
+```text
+IMPLEMENTIERUNGS_HEAD=3a6483a73af57bb9c80dd2289189173c20a054d0
+  (Quellcode identisch mit dem S4-Code-Commit efcd80e691afbc46cf00cd49d9f826ef631b7a7a;
+   Differenz = nur diese Evidence-Datei)
+BUILDER_SELF_CHECK=PASS   bash scripts/run_pre_ready_gates.sh self-check
+  BOARD_PROFILE_SINGLE_SOURCE=PASS  CLANG_FORMAT=PASS  CLANG_TIDY=PASS
+  BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
+```
+
+Die Schnitt-Nachweise S1–S4 (getestete Code-Commits `d751515`, `e850e1a`, `f611763`,
+`efcd80e`) stehen unveraendert in den Abschnitten oben. Der Self-Check ist die
+statische Analyse (Format, clang-tidy, Board-Header-Einzelquelle); er enthaelt **nicht**
+das statische Stack-Gate (#121) der `esp`-Phase und ersetzt weder Fachtests noch den
+Pre-Ready-Lauf.
+
+Planabdeckung (`docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2, Freigabe `d55d2db`):
+
+| Plan | Stand |
+|---|---|
+| S1 Portvertrag `bool` + Driver-Sperre | umgesetzt (`d751515`) |
+| S2 `SharedEnableBridgeSink` + native Tests | umgesetzt (`e850e1a`) |
+| S3 `EspIdfSharedEnableBridge` + Linux-CMock-Hosttest | umgesetzt (`f611763`) |
+| S4 Generator, Header, Composition Root, Guard, Doku | umgesetzt (`efcd80e`) |
+| S5 Self-Check, Beweisdokumentation | dieser Abschnitt |
+| O1 = A / O2 / O3 / O4 = A | wie beschlossen umgesetzt; kein Re-Arm, keine eigene Zeitbasis, Bruecke ohne Planner-Anbindung |
+
+Abweichungen/Praezisierungen gegenueber dem Planwortlaut (keine Architekturaenderung):
+1. `EspIdfSharedEnableBridge::begin()` liefert `bool` (`true` = alle drei Ausgaenge und die
+   Bruecke bereit) statt eines Ergebnis-Enums.
+2. Die Quelltext-Pruefung „kein `setForward(`/`setReverse(` in `main/`“ ist die eigene
+   Suite `test_peltier_composition_guard` (zusaetzlich zum bestehenden Reset-Flow-Guard).
+3. Die Pinvalidierung der GPIO-Ausgaenge liegt wie in #32 beim ESP-IDF-Treiber
+   (Maskenschutz 0..63 im Adapter).
+
+Weiterhin offen bzw. `NOT_RUN`: Independent Review, statisches Stack-Gate (#121) und
+vollstaendiger Pre-Ready-Lauf (Ownerfreigabe), alle Hardwarenachweise (HW-33-01..05),
+Laufzeitverhalten der `AllOffBinarySink` (Bring-up-Probe, nativ nicht testbar). Der
+Linux-CMock-Hosttest ist nicht Teil des Pre-Ready-Gates. `ACTUATOR_RELEASE=NO`,
+`REAL_PELTIER_TEST=NOT_RUN`, `SSOT_CONFORMANCE=PENDING`,
+`FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`, `ADAPTER_SAFETY_VERIFICATION=PENDING`;
+R_IS/L_IS bleiben deaktiviert und unbeschaltet. Vorbedingung fuer eine reale
+Peltierfreigabe ausserhalb von #33: Release-Kette (Aktor-Gate `Allowed`, Planner-/
+Regelschleifen-Komposition #35/#90, Meldung eines Luefterfehlers nach oben).
