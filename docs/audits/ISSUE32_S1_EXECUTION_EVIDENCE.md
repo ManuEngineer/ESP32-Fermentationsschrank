@@ -47,3 +47,39 @@ PRE_READY_GATE=NOT_RUN  clang-tidy=NOT_RUN  statisches Stack-Gate (#121)=NOT_RUN
 Das Boot-Log der Composition Root (`onboard outputs: inner_fan=... outer_fan=...
 buzzer=...`) wurde **nicht** auf Hardware beobachtet (kein Flash). Erwartet bei
 `TBD_HARDWARE`: alle drei `polarity_unconfirmed_no_gpio_access`.
+
+## S3 (Builder-Self-Check, Gesamtstand vor Independent Review)
+
+```text
+IMPLEMENTIERUNGS_HEAD=750ea2111761be2c2cfee380ca71091f8550979f
+  (Quellcode identisch mit 39bad999ff17fa128d412933de2ad45b6e3c1e88; Differenz = nur diese Evidence-Datei)
+BUILDER_SELF_CHECK=PASS   bash scripts/run_pre_ready_gates.sh self-check
+  BOARD_PROFILE_SINGLE_SOURCE=PASS  CLANG_FORMAT=PASS  CLANG_TIDY=PASS
+  BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
+```
+
+Planabdeckung (`docs/tasks/issue-32-onboard-mosfet-outputs-plan.md`, Rev. 1):
+
+| Plan | Stand |
+|---|---|
+| S1 Adapter + Linux-Hosttest | umgesetzt, 12/12 PASS |
+| S2 Generator/Header, Composition Root, Doku | umgesetzt (Header: bisherige zehn Konstanten unveraendert, nicht acht — redaktioneller Altstand im Plan; GPIO27 nicht erzeugt) |
+| S3 Self-Check, Builds, Beweisdokumentation | dieser Abschnitt |
+| O1a/O1b/O2/O3/O4 | A / A / A / B / Ja umgesetzt; keine Summermuster-Engine, keine Ton-/PWM-Ansteuerung |
+
+Abweichungen vom Planwortlaut (keine Architekturaenderung):
+1. Die Pinvalidierung nutzt nicht `GPIO_IS_VALID_OUTPUT_GPIO` (auf dem Linux-Target nicht
+   definiert); der Adapter schuetzt nur die 64-Bit-Maskenverschiebung (0..63), die
+   Ausgangsfaehigkeit entscheidet der ESP-IDF-Treiber.
+2. `begin()` liefert `BinaryOutputBeginResult` (`PolarityUnconfirmed`/`Ready`/`Failed`)
+   fuer das Boot-Log; das ist keine Zustandsabfrage.
+3. Nach einem Schreibfehler verriegelt der Adapter `Faulted` und versucht einmalig den
+   inaktiven Pegel (Review B1); ein softwareseitiger Versuch ohne Garantie.
+
+Offen bzw. `NOT_RUN`: Independent Review, vollstaendiger Pre-Ready-Lauf, statisches
+Stack-Gate (#121, Teil der `esp`-Phase), alle Hardwarenachweise (HW-32-01..03).
+`SSOT_CONFORMANCE=PENDING`, `FUNCTIONAL_HARDWARE_VERIFICATION=PENDING`,
+`ACTUATOR_RELEASE=NO`. Vorbedingung fuer #33/#90 (nicht in #32 geloest): ein
+verworfenes EIN am Aussenluefter ist fuer Driver/Planner unsichtbar; der
+Interlock-Pfad muss vor einer realen Peltierfreigabe einen fehlgeschlagenen oder
+unbestaetigten Aussenluefter erkennen.
