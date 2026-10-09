@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -50,6 +51,37 @@ class FermentationApplicationTestAccess {
     static ApplicationCallSerializer::Guard enter(
         FermentationApplication& application) {
         return application.applicationCallSerializer_.enter();
+    }
+
+    // Issue #188 A: entry-predicate states for the local service area.
+    static void setActiveManualRun(FermentationApplication& application,
+                                   bool active) {
+        TEST_ASSERT_NOT_NULL(application.runtimeRunState_.get());
+        if (active) {
+            application.runtimeRunState_->activeManualRun = ManualRunPlan{};
+        } else {
+            application.runtimeRunState_->activeManualRun.reset();
+        }
+    }
+
+    static void requireService(FermentationApplication& application) {
+        const auto guard = application.applicationCallSerializer_.enter();
+        application.requireService(FaultCode::None);
+    }
+
+    static void setRecoveryDisposition(
+        FermentationApplication& application,
+        std::optional<RecoveryDisposition> disposition) {
+        const auto guard = application.applicationCallSerializer_.enter();
+        application.recoveryDisposition_ = disposition;
+    }
+
+    // Replaces the authentication domain within the same epoch, as the
+    // runtime re-initialisation after a reset handoff does.
+    static void reinitializeAuthentication(
+        FermentationApplication& application) {
+        const auto guard = application.applicationCallSerializer_.enter();
+        application.initializeAuthentication(*application.stateStore_);
     }
 };
 
@@ -147,6 +179,10 @@ class TestKdf final : public IAuthenticationKdf {
     bool derive(
         const std::string& secret, const AuthVerifier& parameters,
         std::array<std::uint8_t, kAuthenticationVerifierBytes>& out) override {
+        ++calls;
+        if (onDerive) {
+            onDerive();
+        }
         std::uint32_t state = 2166136261U;
         for (const auto byte : secret) {
             state = (state ^ static_cast<std::uint8_t>(byte)) * 16777619U;
@@ -160,6 +196,10 @@ class TestKdf final : public IAuthenticationKdf {
         }
         return true;
     }
+
+    unsigned calls{0U};
+    // Runs inside the slow KDF window (test-local hook, Issue #188 A).
+    std::function<void()> onDerive;
 };
 
 // Application with the authentication stack, so the web first-time setup can
@@ -2325,6 +2365,232 @@ void test_restricted_no_runtime_home_adds_only_the_reset_entry() {
                      FermentationUiWorkspaceSlotAction::FactoryResetBegin);
 }
 
+// ---- Issue #188 A: local Service-PIN and local service lease (C1) ---------
+
+constexpr std::uint64_t kLocalServiceInactivityMs = 10U * 60U * 1000U;
+
+// Authentication stack plus a restartable Application on the same store.
+struct LocalServiceFixture {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    device_platform::VirtualTimeSource timeSource;
+    device_platform_test_support::MockNetworkLifecycle network;
+    device_platform_test_support::MockSecureRandomSource randomSource;
+    MockHttpServerLifecycle http;
+    TestKdf kdf;
+    std::optional<FermentationApplication> application;
+
+    LocalServiceFixture() {
+        TEST_ASSERT_TRUE(platform.begin({true}));
+        timeSource.setUnixTimeSeconds(1'700'000'000LL);
+        start();
+    }
+
+    void start() {
+        application.emplace();
+        TEST_ASSERT_TRUE(application->begin(platform, store, timeZoneResolver,
+                                            timeSource, network, http,
+                                            randomSource, kdf));
+    }
+
+    void restart() {
+        application.reset();
+        store.restart();
+        start();
+    }
+
+    void provision() {
+        TEST_ASSERT_TRUE(application->openWebProvisioningWindow());
+        TEST_ASSERT_TRUE(application->provisionWebAccess(
+                             WebProvisionMode::Disable, "", "1234") ==
+                         WebProvisionStatus::Provisioned);
+    }
+
+    [[nodiscard]] FermentationApplication& app() { return *application; }
+    [[nodiscard]] bool serviceAvailable() {
+        return application->uiSnapshot().service.available;
+    }
+};
+
+void assertPinStatus(LocalServicePinStatus expected,
+                     const LocalServicePinResult& result) {
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(expected),
+                          static_cast<int>(result.status));
+}
+
+void test_local_service_pin_grants_the_lease_only_after_a_correct_pin() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    assertPinStatus(LocalServicePinStatus::Invalid,
+                    fixture.app().verifyLocalServicePin("9999"));
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+}
+
+void test_local_service_lockout_holds_during_the_wait_and_after_restart() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    LocalServicePinResult last;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        last = fixture.app().verifyLocalServicePin("9999");
+    }
+    assertPinStatus(LocalServicePinStatus::LockedOut, last);
+    TEST_ASSERT_TRUE(last.retryAfterMs > 0U);
+    // The correct PIN does not open the service area during the lockout.
+    const auto blocked = fixture.app().verifyLocalServicePin("1234");
+    assertPinStatus(LocalServicePinStatus::LockedOut, blocked);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+
+    // The persisted lockout survives a restart; no lease comes back.
+    fixture.restart();
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    assertPinStatus(LocalServicePinStatus::LockedOut,
+                    fixture.app().verifyLocalServicePin("1234"));
+    fixture.timeSource.advanceMonotonicMillis(31U * 1000U);
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+}
+
+void test_local_service_pin_without_provisioning_runs_no_kdf() {
+    LocalServiceFixture fixture;
+    const auto callsBefore = fixture.kdf.calls;
+    assertPinStatus(LocalServicePinStatus::NotProvisioned,
+                    fixture.app().verifyLocalServicePin("1234"));
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_pin_is_refused_outside_validated_standby() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    const auto callsBefore = fixture.kdf.calls;
+    FermentationApplicationTestAccess::setActiveManualRun(fixture.app(), true);
+    assertPinStatus(LocalServicePinStatus::NotAllowedInState,
+                    fixture.app().verifyLocalServicePin("1234"));
+    FermentationApplicationTestAccess::setActiveManualRun(fixture.app(), false);
+
+    for (const auto state : {ProcessState::Fault, ProcessState::SafeBoot,
+                             ProcessState::RecoveryEvaluation}) {
+        auto& runtime =
+            FermentationApplicationTestAccess::runtimeState(fixture.app());
+        const auto saved = runtime.processState.state;
+        runtime.processState.state = state;
+        assertPinStatus(LocalServicePinStatus::NotAllowedInState,
+                        fixture.app().verifyLocalServicePin("1234"));
+        runtime.processState.state = saved;
+    }
+    FermentationApplicationTestAccess::setRecoveryDisposition(
+        fixture.app(), RecoveryDisposition::WaitingForTrustedTime);
+    assertPinStatus(LocalServicePinStatus::NotAllowedInState,
+                    fixture.app().verifyLocalServicePin("1234"));
+    FermentationApplicationTestAccess::setRecoveryDisposition(fixture.app(),
+                                                              std::nullopt);
+    // Every refusal was decided before the KDF and any auth write.
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_pin_refuses_a_run_started_during_the_check() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    fixture.kdf.onDerive = [&fixture] {
+        FermentationApplicationTestAccess::setActiveManualRun(fixture.app(),
+                                                              true);
+    };
+    assertPinStatus(LocalServicePinStatus::NotAllowedInState,
+                    fixture.app().verifyLocalServicePin("1234"));
+    fixture.kdf.onDerive = nullptr;
+    FermentationApplicationTestAccess::setActiveManualRun(fixture.app(), false);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_lease_ends_after_ten_minutes_without_activity() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    fixture.timeSource.advanceMonotonicMillis(kLocalServiceInactivityMs - 1U);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+    // Relevant activity restarts the inactivity window.
+    fixture.app().noteLocalServiceActivity();
+    fixture.timeSource.advanceMonotonicMillis(kLocalServiceInactivityMs - 1U);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+    fixture.timeSource.advanceMonotonicMillis(1U);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    // Activity after the expiry never resurrects the lease.
+    fixture.app().noteLocalServiceActivity();
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_sign_out_ends_the_lease() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    fixture.app().endLocalServiceSession();
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_lease_ends_for_good_when_standby_is_left() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    FermentationApplicationTestAccess::setActiveManualRun(fixture.app(), true);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    fixture.app().update();
+    FermentationApplicationTestAccess::setActiveManualRun(fixture.app(), false);
+    // Back in STANDBY the PIN is needed again.
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+}
+
+void test_local_service_lease_ends_on_service_required_and_recovery() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    FermentationApplicationTestAccess::setRecoveryDisposition(
+        fixture.app(), RecoveryDisposition::RecoveryRejectedOrFailClosed);
+    // The predicate alone already keeps the lease from acting ...
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    // ... and the next update() ends it for good.
+    fixture.app().update();
+    FermentationApplicationTestAccess::setRecoveryDisposition(fixture.app(),
+                                                              std::nullopt);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    const auto callsBefore = fixture.kdf.calls;
+    // ServiceRequired while the run state still reports Standby.
+    FermentationApplicationTestAccess::requireService(fixture.app());
+    TEST_ASSERT_TRUE(
+        FermentationApplicationTestAccess::runtimeState(fixture.app())
+            .processState.state == ProcessState::Standby);
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    assertPinStatus(LocalServicePinStatus::NotAllowedInState,
+                    fixture.app().verifyLocalServicePin("1234"));
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls);
+}
+
+void test_local_service_lease_ends_on_authentication_reinitialisation() {
+    LocalServiceFixture fixture;
+    fixture.provision();
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+    FermentationApplicationTestAccess::reinitializeAuthentication(
+        fixture.app());
+    TEST_ASSERT_FALSE(fixture.serviceAvailable());
+    // The re-initialised domain still knows the PIN.
+    assertPinStatus(LocalServicePinStatus::Authorized,
+                    fixture.app().verifyLocalServicePin("1234"));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_restricted_no_runtime_home_adds_only_the_reset_entry);
@@ -2392,5 +2658,16 @@ int main() {
         test_process_touch_from_home_reaches_network_page_and_application_owner);
     RUN_TEST(test_process_touch_fresh_edge_off_target_does_not_navigate);
     RUN_TEST(test_manual_start_has_no_path_without_an_owner_of_the_run_limits);
+    RUN_TEST(test_local_service_pin_grants_the_lease_only_after_a_correct_pin);
+    RUN_TEST(
+        test_local_service_lockout_holds_during_the_wait_and_after_restart);
+    RUN_TEST(test_local_service_pin_without_provisioning_runs_no_kdf);
+    RUN_TEST(test_local_service_pin_is_refused_outside_validated_standby);
+    RUN_TEST(test_local_service_pin_refuses_a_run_started_during_the_check);
+    RUN_TEST(test_local_service_lease_ends_after_ten_minutes_without_activity);
+    RUN_TEST(test_local_service_sign_out_ends_the_lease);
+    RUN_TEST(test_local_service_lease_ends_for_good_when_standby_is_left);
+    RUN_TEST(test_local_service_lease_ends_on_service_required_and_recovery);
+    RUN_TEST(test_local_service_lease_ends_on_authentication_reinitialisation);
     return UNITY_END();
 }

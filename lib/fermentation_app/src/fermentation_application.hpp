@@ -215,6 +215,25 @@ struct WebSessionIssueResult {
     WebSessionResult session;
 };
 
+// Local touch Service-PIN check (Issue #188 A). Only Authorized grants the
+// local service lease; every other status leaves the service area locked.
+enum class LocalServicePinStatus : std::uint8_t {
+    Authorized,
+    Invalid,
+    LockedOut,
+    // No Service-PIN exists yet (web access not provisioned).
+    NotProvisioned,
+    // Not in a validated STANDBY (run, fault, recovery, service required).
+    NotAllowedInState,
+    // Authentication not usable, or it changed during the check.
+    Unavailable,
+};
+
+struct LocalServicePinResult {
+    LocalServicePinStatus status{LocalServicePinStatus::Unavailable};
+    std::uint64_t retryAfterMs{0U};
+};
+
 // Owning outcome of a local UserConfiguration change through the
 // ConfigurationService preview/commit path. `commit` is only meaningful when
 // `preview` is Success.
@@ -395,6 +414,19 @@ class FermentationApplication {
     // a running KDF cannot stall the UI loop; the press path
     // (openWebProvisioningWindow) re-validates authoritatively.
     [[nodiscard]] FermentationWebAccessState webAccessState() const;
+    // Verifies the local Service-PIN through the existing authentication
+    // owner and, only on success in a validated STANDBY, grants the local
+    // touch service lease (fermentationTouchServicePolicy()). The slow KDF
+    // runs outside the Application gate; the token is released before the
+    // gate is entered again, and the lease is refused if the entry predicate,
+    // the authentication context or the trust generation changed meanwhile.
+    // The PIN is neither stored nor logged.
+    [[nodiscard]] LocalServicePinResult verifyLocalServicePin(
+        const std::string& pin);
+    // Explicit sign-out of the local service lease.
+    void endLocalServiceSession();
+    // Relevant user activity in the protected area; extends an active lease.
+    void noteLocalServiceActivity();
 
     [[nodiscard]] bool ready() const;
     [[nodiscard]] ApplicationLifecycleState lifecycleState() const noexcept {
@@ -562,6 +594,11 @@ class FermentationApplication {
     [[nodiscard]] bool factoryResetAvailableUnlocked() const noexcept;
     // `ResetEligibleNoRuntime` as latched by the recovery core (Issue #19 S1).
     [[nodiscard]] bool factoryResetRecoveryEntryUnlocked() const noexcept;
+    // The single entry predicate of the local service area ("validated
+    // STANDBY", Issue #188 A): used before and after the PIN check, for
+    // service.available and for ending an existing lease.
+    [[nodiscard]] bool localServiceEntryAllowedUnlocked() const noexcept;
+    [[nodiscard]] bool localServiceAvailableUnlocked() const noexcept;
     [[nodiscard]] std::optional<device_platform::StorageEpoch>
     factoryResetPreviousEpochUnlocked() const;
     // Epoch of a verified, initialized bootstrap without an open run-epoch
@@ -626,6 +663,9 @@ class FermentationApplication {
     IAuthenticationKdf* authenticationKdf_{nullptr};
     AuthOperationGate authOperationGate_;
     std::uint64_t webTrustGeneration_{0U};
+    // Local touch service lease (Issue #188 A), separate from web sessions;
+    // RAM only, so a restart never restores it.
+    device_platform::ServiceSessionLease localServiceLease_;
     bool webProvisioningWindowOpen_{false};
     std::uint64_t webProvisioningWindowOpenedAtMs_{0U};
     std::unique_ptr<AuthenticationRecordStore> authenticationRecordStore_;
