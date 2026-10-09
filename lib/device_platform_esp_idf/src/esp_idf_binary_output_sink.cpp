@@ -83,7 +83,7 @@ void EspIdfBinaryOutputSink::driveInactiveBestEffort() noexcept {
     }
 }
 
-void EspIdfBinaryOutputSink::setEnabled(bool enabled) {
+bool EspIdfBinaryOutputSink::setEnabled(bool enabled) {
     if (state_ == State::Ready) {
         if (gpio_set_level(static_cast<gpio_num_t>(gpioNumber_),
                            static_cast<std::uint32_t>(levelFor(enabled))) !=
@@ -92,13 +92,16 @@ void EspIdfBinaryOutputSink::setEnabled(bool enabled) {
             // latch the fault and immediately try the inactive level once.
             state_ = State::Faulted;
             driveInactiveBestEffort();
+            return false;
         }
-        return;
+        return true;
     }
     if (state_ == State::Faulted && !enabled) {
-        // Best effort towards the inactive level only; never enables.
+        // Best effort towards the inactive level only; never enables and
+        // never reports success or lifts the latch.
         driveInactiveBestEffort();
     }
+    return false;
 }
 
 }  // namespace device_platform_esp_idf

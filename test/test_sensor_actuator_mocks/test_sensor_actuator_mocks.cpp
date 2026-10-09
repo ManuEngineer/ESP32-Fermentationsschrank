@@ -127,14 +127,32 @@ void test_binary_output_sink_tracks_current_state_and_journal() {
 
     TEST_ASSERT_FALSE(output.enabled());
 
-    output.setEnabled(true);
-    output.setEnabled(false);
+    TEST_ASSERT_TRUE(output.setEnabled(true));
+    TEST_ASSERT_TRUE(output.setEnabled(false));
 
     TEST_ASSERT_FALSE(output.enabled());
     const auto& journal = output.commandJournal();
     TEST_ASSERT_EQUAL_UINT32(2U, journal.size());
     TEST_ASSERT_TRUE(journal[0].enabled);
     TEST_ASSERT_FALSE(journal[1].enabled);
+}
+
+void test_binary_output_sink_can_reject_commands_without_changing_state() {
+    device_platform_test_support::MockBinaryOutputSink output;
+    TEST_ASSERT_TRUE(output.setEnabled(true));
+
+    output.setAcceptingCommands(false);
+    TEST_ASSERT_FALSE(output.setEnabled(false));
+    TEST_ASSERT_FALSE(output.setEnabled(true));
+
+    // Rejected commands neither change the state nor enter the journal.
+    TEST_ASSERT_TRUE(output.enabled());
+    TEST_ASSERT_EQUAL_UINT32(1U, output.commandJournal().size());
+    TEST_ASSERT_EQUAL_UINT32(2U, output.rejectedCommandCount());
+
+    output.setAcceptingCommands(true);
+    TEST_ASSERT_TRUE(output.setEnabled(false));
+    TEST_ASSERT_FALSE(output.enabled());
 }
 
 void test_thermal_model_heats_deterministically() {
@@ -214,7 +232,7 @@ void test_power_loss_and_restart_reset_to_safe_defaults() {
         actuatorBeforeRestart;
     device_platform_test_support::MockBinaryOutputSink outputBeforeRestart;
     actuatorBeforeRestart.setForward(true);
-    outputBeforeRestart.setEnabled(true);
+    TEST_ASSERT_TRUE(outputBeforeRestart.setEnabled(true));
     beforeRestart.advanceMonotonicMillis(60000);
     beforeRestart.setUnixTimeSeconds(1700000000);
 
@@ -245,6 +263,8 @@ int main() {
     RUN_TEST(
         test_bidirectional_actuator_sink_makes_simultaneous_activation_visible);
     RUN_TEST(test_binary_output_sink_tracks_current_state_and_journal);
+    RUN_TEST(
+        test_binary_output_sink_can_reject_commands_without_changing_state);
     RUN_TEST(test_thermal_model_heats_deterministically);
     RUN_TEST(test_thermal_model_cools_deterministically);
     RUN_TEST(test_thermal_model_drifts_toward_ambient_when_idle);

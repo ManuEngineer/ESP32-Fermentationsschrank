@@ -24,7 +24,7 @@ class EspIdfBinaryOutputSink final : public device_platform::IBinaryOutputSink {
                            device_platform::OutputPolarity polarity) noexcept;
 
     [[nodiscard]] BinaryOutputBeginResult begin() noexcept;
-    void setEnabled(bool enabled) override;
+    [[nodiscard]] bool setEnabled(bool enabled) override;
 
    private:
     enum class State : std::uint8_t { NotStarted, Unconfirmed, Ready, Faulted };
