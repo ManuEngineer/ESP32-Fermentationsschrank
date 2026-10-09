@@ -2,13 +2,21 @@
 
 Plan: `docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2 (Freigabe `d55d2db`).
 Dieses Dokument fuehrt nur tatsaechlich ausgefuehrte Nachweise je Schnitt mit dem
-getesteten Code-Commit. Stand: **S1–S5 umgesetzt** (S5 = Builder-Self-Check).
+getesteten Code-Commit. Die Abschnitte S1–S4 sind historische Schnittnachweise; ihre
+`NOT_RUN`-Angaben galten fuer den damaligen Stand. Der folgende Block ist der **aktuelle
+verifizierte Gesamtstand** (Stand 2026-10-09).
 
 ```text
+STATUS (aktuell, verifiziert 2026-10-09)
+SOFTWARE=S1–S5 umgesetzt; PR #196 in main gemergt (Merge-Commit f33e8593c79920aca9084528547a220f284b9f42)
+BUILDER_SELF_CHECK=PASS           (Abschnitt S5, Implementierungs-HEAD 3a6483a73af57bb9c80dd2289189173c20a054d0)
+PR_HEAD=1a525217865f97e318211bba4e2b04e809b19123
+PRE_READY_LOCAL (GitHub-Commit-Status am PR_HEAD)=success, Beschreibung "host+esp PASS"
+  (Einzelphasen Host/ESP/Stack nicht gesondert in Repository-Evidence belegt; kein Einzel-PASS ausgewiesen)
+Hardware, Flash, reale Peltiertests=NOT_RUN
 ACTUATOR_RELEASE=NO   REAL_PELTIER_TEST=NOT_RUN
 SSOT_CONFORMANCE=PENDING   FUNCTIONAL_HARDWARE_VERIFICATION=PENDING
 ADAPTER_SAFETY_VERIFICATION=PENDING
-Hardware, Flash, Pre-Ready-Lauf, Self-Check = NOT_RUN
 ```
 
 ## S1 – Portvertrag `setEnabled -> bool` und Aussenluefter-Sperre im Driver
