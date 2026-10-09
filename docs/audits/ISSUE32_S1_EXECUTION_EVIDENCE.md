@@ -1,7 +1,10 @@
-# Issue #32 – S1/S2 Execution-Evidence (Zwischenstand)
+# Issue #32 – S1–S3 Execution-Evidence
 
 Plan: `docs/tasks/issue-32-onboard-mosfet-outputs-plan.md` (Revision 1, Freigabe `2c1d32b`).
-Schnitt S1 (Adapter `EspIdfBinaryOutputSink`, Linux-CMock-Hosttest). S2/S3 nicht begonnen.
+Schnitte S1 (Adapter `EspIdfBinaryOutputSink`, Linux-CMock-Hosttest), S2 (SSOT-Generator,
+Composition Root, Doku) und S3 (Builder-Self-Check). Die Abschnitte unten sind die
+historischen Nachweise je Schnitt mit dem jeweils getesteten Commit; der
+unabhaengige Review steht getrennt am Ende.
 
 ```text
 GETESTETER_COMMIT=6e74ed571e8abe0e22d5ff6155e3f25e3927ac34 (sauberer Worktree)
@@ -83,3 +86,19 @@ Stack-Gate (#121, Teil der `esp`-Phase), alle Hardwarenachweise (HW-32-01..03).
 verworfenes EIN am Aussenluefter ist fuer Driver/Planner unsichtbar; der
 Interlock-Pfad muss vor einer realen Peltierfreigabe einen fehlgeschlagenen oder
 unbestaetigten Aussenluefter erkennen.
+
+## Independent Software Review (getrennter Status)
+
+Spaeter erfolgter Review; er veraendert keine der obigen Testnachweise.
+
+```text
+INDEPENDENT_SOFTWARE_REVIEW=PASS/GO
+REVIEWED_HEAD=515386b1cdee3d25ded1eacc9545fc96af2be18b
+OPEN_BLOCKERS=0
+PRE_READY_LOCAL_GATES=NOT_RUN   (wartet auf ausdrueckliche Ownerfreigabe)
+HARDWARE_GATES=NOT_RUN
+```
+
+Hinweis zur Historie: `clang-tidy=NOT_RUN` im S1-/S2-Abschnitt gilt fuer deren
+damalige Laeufe; der tatsaechliche clang-tidy-Lauf ist ausschliesslich der
+Builder-Self-Check im S3-Abschnitt.
