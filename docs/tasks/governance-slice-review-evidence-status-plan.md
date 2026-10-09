@@ -34,23 +34,27 @@ rueckwirkende Gate-Freigabe und keine PR-Wiedereroeffnung.
   nicht gemergt bzw. S1 (`ResetEligibleNoRuntime`) als noch nicht implementiert, #33 fuehrt `REAL_ESP_IDF_BTS7960_ADAPTER_EXISTS=NO`, #32 hat keinen
   Merge-Statusabgleich.
 
-## 2. Issue-Zuordnung (Ownerentscheid O-G1)
+## 2. Issue-Zuordnung (Ownerentscheid O-G1 = Ja: zugeordnet, Issue #198)
+
+O-G1 ist entschieden: das Issue ist als **#198**
+(<https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/198>) angelegt und diesem
+Plan/PR #197 zugeordnet; es wird nicht erneut erstellt. Der folgende Entwurf bleibt als
+Ursprungstext erhalten.
 
 Es existiert kein inhaltlich passendes **offenes** Governance-Issue (#177 = Lizenz, nicht
 passend; die verwandten #145/#154/#150 sind geschlossen und werden nicht wiedereroeffnet).
-Vorschlag: neues Issue
+Vorschlag (umgesetzt als #198): neues Issue
 
 > **[Governance] Slice-Review vs. finaler Independent Review, Evidence-Status und
 > Post-Merge-Statuspflege praezisieren**
 > Scope: (1) eine kanonische Unterscheidung Slice-/Zwischenreview ↔ abschliessender Independent
 > Full Review in `docs/AGENT_WORKFLOW.md`; (2) Evidence-Zeitbezug (Kopf = aktueller Stand,
 > Abschnitte = Schnittstand) und Bereinigung der Statuswidersprueche in den Evidence-Dateien
-> #32/#33; (3) Post-Merge-Roadmap-/Issue-Statusabgleich fuer #19/#30/#32/#33/#190. Nur
+> #32/#33; (3) Post-Merge-Roadmap-/Issue-Statusabgleich fuer #19/#30/#32/#33/#190/#192. Nur
 > Markdown. Nicht-Scope: Runner, CI, Hardware, Safety, Merge-/Modellvertraege.
 
-Bis zur Ownerentscheidung traegt dieser Plan keine Issue-Nummer; sie wird nach der
-Zuordnung in Plan und PR-Beschreibung nachgetragen. Das Issue wird nicht vom Agenten
-angelegt, bevor der Owner zugeordnet hat.
+Die Zuordnung zu #198 ist administrativ in Plan und PR-Beschreibung nachgetragen; sie ist
+keine neue Planentscheidung.
 
 ## 3. Textdelta (minimal)
 
@@ -137,8 +141,8 @@ ausdruecklicher Ownerfreigabe.
 
 ## 6. Offene Ownerentscheidungen
 
-- **O-G1** Issue-Zuordnung (Abschnitt 2); Empfehlung: neues Governance-Issue wie skizziert.
-- **O-G2** Der Agent darf die Statusbloecke der Live-Issues #19/#30/#32/#33/#190/#192 nach dem
+- **O-G1** Issue-Zuordnung (Abschnitt 2): entschieden, Ja, #198.
+- **O-G2 (Ja, Ownerfreigabe)** Der Agent darf die Statusbloecke der Live-Issues #19/#30/#32/#33/#190/#192 nach dem
   vorhandenen Muster voranstellen (Empfehlung: ja, rein administrativ, Originaltext
   unveraendert). Andernfalls liefert der Agent die Texte im PR und der Owner uebernimmt sie.
 
