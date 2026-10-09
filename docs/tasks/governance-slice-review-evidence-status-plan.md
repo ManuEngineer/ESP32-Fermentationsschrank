@@ -1,4 +1,7 @@
-# Governance – Slice-Review, Evidence-Status und Post-Merge-Statuspflege (Plan, Revision 1)
+# Governance – Slice-Review, Evidence-Status und Post-Merge-Statuspflege (Plan, Revision 2)
+
+Eigenstaendige Fassung; sie ersetzt Revision 1 (`d11c1de`) vollstaendig (Delta: Live-Statusabgleich
+von Hardware-Issue #192, Abschnitte 1, 4, 5, 6).
 
 Nur Markdown. Keine Produktcode-, GPIO-, ADC-, Safety-, Build-, Toolchain-, Runner-, CI-,
 Hardware-, Modell-/Compute- oder Mergevertragsaenderung; keine neue Pruefebene, kein Checker,
@@ -27,8 +30,8 @@ rueckwirkende Gate-Freigabe und keine PR-Wiedereroeffnung.
   dem PR-HEAD `1c15da6` vorlag).
 - Tracking: `docs/ROADMAP.md` fuehrt #19/#32/#33/#192 teils noch mit „Draft-PR“-/
   „Review ausstehend“-Staenden; die Tabelle der gemergten PRs enthaelt #191/#195/#196 nicht.
-  Live-Issues: #30 und #190 nennen PR #189 noch als offen, #19 nennt PR #191 als nicht
-  gemergt, #33 fuehrt `REAL_ESP_IDF_BTS7960_ADAPTER_EXISTS=NO`, #32 hat keinen
+  Live-Issues: #30 und #190 nennen PR #189 noch als offen, #19 und #192 nennen PR #191 als
+  nicht gemergt bzw. S1 (`ResetEligibleNoRuntime`) als noch nicht implementiert, #33 fuehrt `REAL_ESP_IDF_BTS7960_ADAPTER_EXISTS=NO`, #32 hat keinen
   Merge-Statusabgleich.
 
 ## 2. Issue-Zuordnung (Ownerentscheid O-G1)
@@ -101,9 +104,13 @@ angelegt, bevor der Owner zugeordnet hat.
   der realen Tests unveraendert `#190 → #32 → #33`; Gesamtabnahme/Belastung #36/#37.
 - **Live-Issue-Texte** (administrativ, nur ein vorangestellter datierter Statusabgleich-
   Block nach dem bereits bei #30/#190 verwendeten Muster; Originaltext und Akzeptanzkriterien
-  bleiben; Schreibweg `gh api` PATCH): #30 (Software in #189 gemergt; Hardware H1–H7 in
-  #190 offen), #190 (PR #189 gemergt, Software-Voraussetzung erfuellt, H1–H7 `NOT_RUN`),
-  #32 (Software in #195 gemergt; Hardware `NOT_RUN`), #33 (Software in #196 gemergt;
+  bleiben; Schreibweg `gh api` PATCH; betroffen sind #19, #30, #32, #33, #190 und #192): #30
+  (Software in #189 gemergt; Hardware H1–H7 in #190 offen), #190 (PR #189 gemergt, Software-Voraussetzung erfuellt, H1–H7 `NOT_RUN`),
+  #32 (Software in #195 gemergt; Hardware `NOT_RUN`), #192 (PR #191 gemergt, Merge-Commit
+  `df5a3ddf41889b46f9b4d3c64085092a88e25a0a`; S1 `ResetEligibleNoRuntime` softwareseitig
+  implementiert; `HW-19-R01..R03` weiterhin `NOT_RUN`, `ACTUATOR_RELEASE=NO`; die bestehenden
+  Hardware-Akzeptanzkriterien, historischen Aussagen und urspruenglichen Gate-Texte werden
+  weder geloescht noch als bestanden deklariert), #33 (Software in #196 gemergt;
   `REAL_ESP_IDF_BTS7960_ADAPTER_EXISTS=NO` ist ueberholt: Adapter existiert in `main`,
   Hardware-/Adaptersicherheitsverifikation `PENDING`, `REAL_PELTIER_TEST=NOT_RUN`), #19
   (PR #191 gemergt). **Keine** Issue wird geschlossen, keine Hardware-, Safety- oder
@@ -119,19 +126,19 @@ angelegt, bevor der Owner zugeordnet hat.
 
 1. **S1** Governance-Text (Abschnitte 3.1–3.3: `AGENT_WORKFLOW.md`, ggf. `CI_AND_QUALITY_GATES.md`).
 2. **S2** Evidence-Bereinigung (3.4).
-3. **S3** ROADMAP und Live-Issue-Statusbloecke (4); #30-Befund an den Owner.
+3. **S3** ROADMAP und Live-Issue-Statusbloecke (4, inkl. #192); #30-Befund an den Owner.
 
 Pruefungen (nur Markdown): `git diff --check`; Textsuche, dass keine Restformulierung
 „vor jeder normalen Uebergabe an den Independent Review“ im Widerspruch verbleibt; Abgleich
 jeder geaenderten Statusaussage mit dem Live-Stand (`gh pr view`, Commit-Status,
-`gh issue view`); keine Pfade/Links gebrochen. Der Pre-Ready-Lauf dieses PR ergibt
-voraussichtlich `NOT_REQUIRED_MARKDOWN_ONLY` und erfolgt erst nach Review und
+`gh issue view`, einschliesslich der tatsaechlichen Live-Texte von #192 und #19);
+keine Pfade/Links gebrochen. Der Pre-Ready-Lauf dieses PR ergibt voraussichtlich `NOT_REQUIRED_MARKDOWN_ONLY` und erfolgt erst nach Review und
 ausdruecklicher Ownerfreigabe.
 
 ## 6. Offene Ownerentscheidungen
 
 - **O-G1** Issue-Zuordnung (Abschnitt 2); Empfehlung: neues Governance-Issue wie skizziert.
-- **O-G2** Der Agent darf die Statusbloecke der Live-Issues #19/#30/#32/#33/#190 nach dem
+- **O-G2** Der Agent darf die Statusbloecke der Live-Issues #19/#30/#32/#33/#190/#192 nach dem
   vorhandenen Muster voranstellen (Empfehlung: ja, rein administrativ, Originaltext
   unveraendert). Andernfalls liefert der Agent die Texte im PR und der Owner uebernimmt sie.
 
