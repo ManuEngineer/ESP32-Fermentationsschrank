@@ -4,7 +4,20 @@ Plan: `docs/tasks/issue-32-onboard-mosfet-outputs-plan.md` (Revision 1, Freigabe
 Schnitte S1 (Adapter `EspIdfBinaryOutputSink`, Linux-CMock-Hosttest), S2 (SSOT-Generator,
 Composition Root, Doku) und S3 (Builder-Self-Check). Die Abschnitte unten sind die
 historischen Nachweise je Schnitt mit dem jeweils getesteten Commit; der
-unabhaengige Review steht getrennt am Ende.
+unabhaengige Review steht getrennt am Ende. Statusangaben in den Schnittabschnitten sind
+historische Schnittnachweise (`NOT_RUN` galt fuer den damaligen Stand); der aktuelle
+verifizierte Gesamtstand steht im folgenden Block (Stand 2026-10-09).
+
+```text
+STATUS (aktuell, verifiziert 2026-10-09)
+SOFTWARE=S1–S3 umgesetzt; PR #195 in main gemergt (Merge-Commit 92d6b823d566443226952917ec36c6b4f4125ef8)
+INDEPENDENT_SOFTWARE_REVIEW=PASS/GO auf 515386b1cdee3d25ded1eacc9545fc96af2be18b (siehe unten)
+PR_HEAD=1c15da6530f70199abcbe7009cfcc0b72c54960e
+PRE_READY_LOCAL (GitHub-Commit-Status am PR_HEAD)=success, Beschreibung "host+esp PASS"
+  (Einzelphasen Host/ESP/Stack nicht gesondert in Repository-Evidence belegt; kein Einzel-PASS ausgewiesen)
+Hardware, Flash, Last=NOT_RUN   ACTUATOR_RELEASE=NO
+SSOT_CONFORMANCE=PENDING   FUNCTIONAL_HARDWARE_VERIFICATION=PENDING
+```
 
 ```text
 GETESTETER_COMMIT=6e74ed571e8abe0e22d5ff6155e3f25e3927ac34 (sauberer Worktree)
@@ -95,7 +108,7 @@ Spaeter erfolgter Review; er veraendert keine der obigen Testnachweise.
 INDEPENDENT_SOFTWARE_REVIEW=PASS/GO
 REVIEWED_HEAD=515386b1cdee3d25ded1eacc9545fc96af2be18b
 OPEN_BLOCKERS=0
-PRE_READY_LOCAL_GATES=NOT_RUN   (wartet auf ausdrueckliche Ownerfreigabe)
+PRE_READY_LOCAL_GATES=NOT_RUN   (Stand zum Zeitpunkt des Reviews; spaeter ausgefuehrt, siehe Statusblock am Kopf)
 HARDWARE_GATES=NOT_RUN
 ```
 
