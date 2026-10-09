@@ -1,6 +1,6 @@
 # Issue #188 A – Service-PIN End-to-End aus den Einstellungen
 
-Revision 3 (ersetzt Revision 2 `0b185d0` und Revision 1 `9ae345e`; keine davon ist freigegeben)
+Revision 4 (ersetzt Revision 3 `9c6f20c`, Revision 2 `0b185d0` und Revision 1 `9ae345e`; keine davon ist freigegeben)
 Status: Planvorschlag zur Ownerfreigabe (Plan-PR #199, keine Produktimplementierung)
 Datum: 2026-10-09
 Issue: #188, Produktfehler A (`Refs #188`; das Issue bleibt offen)
@@ -8,9 +8,11 @@ Plan-Basis: `origin/main` `8a9e4451874f0b6c9074c1e826d7067157999b10`
 
 ```text
 SCOPE=ISSUE188_A_SERVICE_PIN_END_TO_END
-ISSUE28_OVERLAP=MINIMAL_LOCAL_PIN_AND_LEASE_OWNER_GATE_G1
+ISSUE28_OVERLAP=MINIMAL_LOCAL_PIN_AND_LEASE_G1_OWNER_DECIDED_YES
 ISSUE19_RESET_A=NOT_IN_SCOPE
-ISSUE188_B_DOC_FINDING=OUT_OF_SCOPE_STAYS_OPEN
+ISSUE188_B_DOC_FINDING=OUT_OF_SCOPE_STAYS_OPEN_SEPARATE_ISSUE_G4
+O0=PENDING_NEW_PLAN_SHA
+G1_G5=OWNER_DECIDED
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -107,7 +109,7 @@ zeigte das PR-#170-Hardwaregate eine Herzschlaglücke der Hauptschleife von
 (`docs/audits/PR170_HW_TOUCH_PATH_FINDING.md:121`). Eine lokale Prüfung aus der
 Touch-Dispatch läuft in der Hauptschleife selbst, die auch `platform.update()`
 und `application.update()` taktet. Die reine KDF-Dauer auf dem Gerät ist nicht
-gemessen. Daraus folgt Owner-Gate G2 (Abschnitt 4).
+gemessen. Daraus folgt der Ownerentscheid G2 mit Mess-Gate (Abschnitt 4).
 
 ## 3. Lösungsentwurf
 
@@ -173,7 +175,8 @@ Ablauf von `verifyLocalServicePin()` (Trennung wie in
    liefert `authOperationGate_.tryBegin()` keinen Token, Ergebnis
    `Unavailable`. Sonst Token, Domain-Zeiger und eine Kopie des
    `AuthenticationBootstrapContext` übernehmen und dessen `storageEpoch()` und
-   `bootstrapSequence()` festhalten. Serializer verlassen.
+   `bootstrapSequence()` sowie die bestehende `webTrustGeneration_`
+   festhalten. Serializer verlassen.
 2. **Außerhalb des Serializers, Token gehalten:**
    `AuthenticationDomain::verifyServicePin(context, pin, nowMs, retryAfterMs)`.
 3. **Token freigeben, bevor der Serializer erneut betreten wird:**
@@ -194,9 +197,20 @@ Ablauf von `verifyLocalServicePin()` (Trennung wie in
      sind, `authenticationResolutionStatus_ ==
      AuthenticationBootstrapResolutionStatus::Ready` gilt und
      `storageEpoch()` sowie `bootstrapSequence()` des aktuellen Kontexts den
-     in Schritt 1 festgehaltenen Werten entsprechen (sonst `Unavailable`).
+     in Schritt 1 festgehaltenen Werten entsprechen (sonst `Unavailable`), und
+   - die aktuelle `webTrustGeneration_` der in Schritt 1 festgehaltenen
+     entspricht (sonst `Unavailable`). `resetAuthenticationState()` erhöht sie
+     bei jedem Ersetzen der Auth-Domain (`fermentation_application.cpp:2033-2047`,
+     aufgerufen aus `initializeAuthentication()`, `:2003`). Damit wird auch eine
+     Auth-Reinitialisierung **innerhalb derselben Epoche und
+     Bootstrap-Sequenz** erkannt, die Epoche und Sequenz allein nicht zeigen.
    Ein Werksreset, Epochenwechsel oder eine Auth-Reinitialisierung zwischen
-   Prüfung und Vergabe ergibt damit nie eine Lease. Erst dann
+   Prüfung und Vergabe ergibt damit nie eine Lease. Auch ein Web-Trust-Wechsel
+   (Netzwerkmodus, HOME_WIFI-Einrichtung) erhöht die Generation; eine noch
+   laufende lokale Anmeldung wird dann konservativ mit `Unavailable`
+   abgelehnt. Eine bereits rechtmäßig bestehende lokale Lease beendet ein
+   solcher Wechsel nicht (siehe Trust-Boundary unten). Es entsteht keine neue
+   Generation, Domain- oder Token-Architektur. Erst dann
    `localServiceLease_ = ServiceSessionLease(fermentationTouchServicePolicy(), nowMs)`.
 
 Lease-Haltung und Projektion:
@@ -308,62 +322,64 @@ Lockout-Regeln, Web-Sessions und Web-Policy, Lauf-Recovery-Seite und deren
 Gates, Diagnose-Seite, Aktor- und Safetypfade. Die Lease ist nur in
 `service.available` projiziert und mit keinem Aktorpfad verbunden.
 
-## 4. Owner-Gates
+## 4. Ownerentscheide (G1–G5 `OWNER_DECIDED`)
 
-### G1 – Minimaler #28-Überlapp (Scope-Erweiterung)
+Die Entscheide G1–G5 sind getroffen. Sie sind keine vorweggenommene Freigabe
+dieser Plan-SHA oder der Implementierung (O0, Abschnitt 9).
 
-Dieser Plan setzt aus dem von #28 besessenen „geführten PIN-Serviceablauf“
-genau folgende Teile um: lokale PIN-Eingabe, lokale PIN-Prüfung über den
-bestehenden Auth-Owner, lokale Service-Lease mit 10-min-Policy und deren
-Invalidierung, Projektion `service.available`, Service-Seite als geschützter
-Einstieg mit Abmelden. Nicht umgesetzt: jede Servicefunktion hinter dem
-Einstieg, Diagnose-/Chart-/Exportinhalte, Werksreset A. #28 bleibt offen.
-Freigabe erforderlich, weil es eine materielle Auth-/Security-Erweiterung
-gegenüber Revision 1 ist.
+### G1 = JA – minimaler #28-Überlapp
 
-### G2 – Ausführung der PBKDF2-Prüfung
+Zugelassen ist genau: vierstellige lokale PIN-Eingabe und -Verifikation über
+den bestehenden Auth-Owner, lokale Service-Lease mit 10-min-Inaktivität und
+deren Invalidierung, Projektion `service.available`, Service-Seite als
+geschützter Einstieg mit Abmelden. Nicht zugelassen: jede weitere Service-,
+Diagnose-, Chart-, Export- oder Aktorfunktion aus #28 und der Werksreset-
+Ablauf A aus #19. #28 bleibt offen.
 
-- **A (Empfehlung):** synchron in der Hauptschleife wie beschrieben, mit
-  Hardware-Mess-Gate vor dem Merge: reale Dauer einer lokalen PIN-Prüfung,
-  größte Herzschlaglücke, kein Task-Watchdog, kein Reset. Die bisher
-  gemessenen 3605 ms (Web-Pfad, anderer Task) sind kein Freigabenachweis für
-  den neuen Aufruf in der Hauptschleife; die Beurteilung erfolgt erst mit der
-  neuen Messung. Begründung für A: Die
-  Prüfung läuft nur in `Standby`, also ohne aktiven Lauf; ein Lauf kann
-  während der Prüfung auch nicht über das Web starten, weil der produktive
-  Run-Mutationspfad `POST /internal/ui/run` nicht registriert ist (Roadmap
-  #27). Das `AuthOperationGate` ist ein Lifetime-/Drain-Gate mit mehreren
-  gleichzeitig möglichen Tokens; es serialisiert nicht. Die Verifikation
-  selbst serialisiert die `AuthenticationDomain` über ihren Domain-Mutex
-  (`authentication_records.hpp:358`). Eine gleichzeitige Web-Anmeldung kann
-  die lokale Prüfung also verzögern; der Hardware-Nachweis zu A umfasst
-  deshalb auch eine lokale PIN-Prüfung bei gleichzeitig laufender
-  Web-Anmeldung. R1-Aktoren sind gesperrt (`ACTUATOR_RELEASE=NO`); der
-  Lockout begrenzt Wiederholungen; dieselbe KDF verursacht im Web-Pfad bereits
-  eine gemessene Lücke von 3605 ms; ein eigener Task kostet RAM in einem
-  knappen System.
-  Vor einer späteren Aktorfreigabe (#35) ist die Blockade erneut zu bewerten.
-- **B:** Prüfung in einem eigenen Worker-Task mit Zustand `Pending` und
-  Ergebnisübergabe. Höhere Komplexität und zusätzlicher Stack.
-- Ergibt die Messung zu A eine nicht akzeptable Lücke oder einen Watchdog,
-  wird vor dem Merge angehalten und G2 erneut vorgelegt.
+### G2 = A – PBKDF2 synchron in der Hauptschleife
 
-### G3 – Darstellung der Settings-Zeile
+Kein vorsorglicher Worker-Task. **Vor dem Merge zwingendes
+Owner-Hardware-Mess-Gate** (Abschnitt 7): reale Dauer einer lokalen
+PIN-Prüfung, größte Hauptschleifen-/Herzschlaglücke, Watchdog- und
+Resetverhalten, auch bei gleichzeitiger Web-Anmeldung. Die bisher im Web-Pfad
+gemessenen 3605 ms (`docs/audits/PR170_HW_TOUCH_PATH_FINDING.md:121`, anderer
+Task) sind kein Bestehensnachweis. Bei unvertretbarer Blockade oder einem
+Watchdog: **STOPP** und erneuter Ownerentscheid; keine eigenmächtige
+Umstellung auf einen Worker-Task. `ACTUATOR_RELEASE=NO`.
 
-Empfehlung: immer aktiv, ohne Grundtext; der Sperrgrund erscheint auf der
-Service-Seite. Alternative: aktiv mit Grundtext als Zweitzeile.
+Fakten zur Beurteilung: Die Prüfung läuft nur bei erfülltem
+Zulassungsprädikat, also ohne aktiven Lauf; über das Web kann währenddessen
+kein Lauf starten, weil der produktive Run-Mutationspfad
+`POST /internal/ui/run` nicht registriert ist (Roadmap #27). Das
+`AuthOperationGate` ist ein Lifetime-/Drain-Gate mit mehreren gleichzeitig
+möglichen Tokens und serialisiert nicht; die Verifikation serialisiert die
+`AuthenticationDomain` über ihren Domain-Mutex
+(`authentication_records.hpp:358`). Eine gleichzeitige Web-Anmeldung kann die
+lokale Prüfung deshalb verzögern. Vor einer späteren Aktorfreigabe (#35) ist
+die Blockade erneut zu bewerten.
 
-### G4 – Tracking von Befund B (Abschnitt 10)
+### G3 = JA – Settings-Zeile
 
-### G5 – Slot `recovery` auf der freigegebenen Service-Seite
+`Einstellungen → Service (PIN)` ist immer antippbar und hat **keinen**
+Sperrgrund-Zweittext. Ohne Lease führt sie zur PIN-Eingabe, mit gültiger
+Lease zur Service-Seite. Das Öffnen erteilt keine Berechtigung.
 
-Der Slot öffnet die Lauf-Recovery-Seite. Im `Standby`, dem einzigen Zustand
-mit Lease, bietet sie nichts Bedienbares: `resume-fallback` ist nur in
-`FallbackSelectionRequired` aktiv, sonst nur `status` und `diagnostics`
-(`fermentation_touch_workspace.cpp:1698-1715`). Das Label kann wie das
-fehlende „normale Wiederherstellungsmenü“ wirken.
-Empfehlung: bestehendes Verhalten unverändert lassen (kleinstes Delta) und in
-der Doku benennen. Alternative: Slot auf der Service-Seite in R1 deaktivieren.
+### G4 = JA – Tracking von Befund B
+
+Befund B (`SIM-26-21`/`SIM-26-65`) wird in einem separaten Doku-Issue mit
+Rückverweis auf #188 nachverfolgt. Das administrative Tracking wird nach der
+Planfreigabe vorbereitet bzw. ausgeführt; PR #199 enthält keinen Doku-Fix und
+keinen zweiten Implementierungsscope. #188 B wird erst nach nachvollziehbarer
+Übergabe oder Erledigung als übertragen gekennzeichnet (Abschnitt 10).
+
+### G5 = A – Slot `recovery` unverändert
+
+Der bestehende Slot `recovery` der Service-Seite bleibt unverändert. Er öffnet
+die Lauf-Recovery-Seite; im `Standby` bietet sie nichts Bedienbares
+(`resume-fallback` nur in `FallbackSelectionRequired`, sonst `status` und
+`diagnostics`, `fermentation_touch_workspace.cpp:1698-1715`). Die Doku (C3)
+kennzeichnet ihn ausdrücklich als *Lauf-Recovery-Seite*; er ist **nicht** das
+noch fehlende normale PIN-geschützte Wiederherstellungsmenü aus #28.
 
 ## 5. Abbildung auf die Akzeptanz aus #188 A
 
@@ -421,6 +437,8 @@ und `authRecordBytes()` nach dem Muster von
 | lokale PIN-Prüfung blockiert in der KDF; ein zweiter Thread startet den Werksreset | Reset wartet auf das Token, hängt aber nicht; nach `release()` endet die Prüfung, der Reset läuft durch; die Prüfung liefert `Unavailable` (Epoche/Kontext geändert) und vergibt keine Lease |
 | lokale PIN-Prüfung blockiert in der KDF; der Reset schlägt fehl und öffnet das Gate wieder | Kontext unverändert; Ergebnis wie ohne Reset |
 | Prüfung nach geschlossenem Gate | `Unavailable` ohne KDF |
+| lokale PIN-Prüfung blockiert in der KDF; ein zweiter Thread ersetzt die Auth-Domain innerhalb derselben Epoche und Bootstrap-Sequenz (test-lokaler friend-Aufruf von `initializeAuthentication(*stateStore_)` unter dem Serializer, bestehender Seam `trustGeneration()` zur Kontrolle) | Reinitialisierung wartet auf das Token, hängt aber nicht; nach `release()`: `storageEpoch()` und `bootstrapSequence()` unverändert, `trustGeneration()` erhöht; Ergebnis `Unavailable`, kein `Authorized`, keine Lease |
+| bestehende lokale Lease, danach Netzwerkmoduswechsel (Web-Trust-Wechsel) | Lease bleibt aktiv |
 
 ### 6.2 Touch-Ende-zu-Ende (C2, `test/test_press_dispatcher`)
 
@@ -508,27 +526,35 @@ Nach jedem Commit wird angehalten.
 |---|---|---|
 | C1 | Application-Grenze 3.1 und Tests 6.1/6.1a | Native-Suites |
 | C2 | Workspace 3.2, Dispatcher 3.3, Renderer 3.4, Textschlüssel, Tests 6.2–6.4 und umgestellte Bestandstests | Native-Suites, beide ESP-Profile |
-| C3 | Doku: `docs/LOCAL_UI_SETTINGS_SERVICE.md:56-63` (Service-Zeile öffnet die PIN-Eingabe; nach korrekter PIN geschützte Service-Seite ohne eigene Funktionen bis #28); `docs/ACCEPTANCE_TESTS.md` neue Zeilen `SIM-188-A01..` sowie Traces SIM-172-S10-01 und SIM-19-R07; `docs/ROADMAP.md` | Doku-Diff |
+| C3 | Doku: `docs/LOCAL_UI_SETTINGS_SERVICE.md:56-63` (Service-Zeile öffnet die PIN-Eingabe; nach korrekter PIN geschützte Service-Seite ohne eigene Funktionen bis #28; Slot `recovery` als *Lauf-Recovery-Seite*, nicht das normale Wiederherstellungsmenü, G5); `docs/ACCEPTANCE_TESTS.md` neue Zeilen `SIM-188-A01..` sowie Traces SIM-172-S10-01 und SIM-19-R07; `docs/ROADMAP.md` | Doku-Diff |
 
 `SIM-26-21`/`SIM-26-65` werden in keinem Schnitt angefasst.
 
-## 9. Offene Ownerentscheidungen
+## 9. Ownerentscheidungen
 
-- [ ] O0: Freigabe dieser Plan-SHA.
-- [ ] G1: minimaler #28-Überlapp (Abschnitt 4).
-- [ ] G2: Ausführung der PBKDF2-Prüfung, Empfehlung A mit Mess-Gate.
-- [ ] G3: Darstellung der Settings-Zeile.
-- [ ] G4: Tracking von Befund B.
-- [ ] G5: Slot `recovery` auf der freigegebenen Service-Seite.
+```text
+O0=PENDING_NEW_PLAN_SHA
+G1=OWNER_DECIDED_YES
+G2=OWNER_DECIDED_A_SYNC_MAIN_LOOP_HW_MEASUREMENT_GATE_BEFORE_MERGE
+G3=OWNER_DECIDED_YES
+G4=OWNER_DECIDED_YES_SEPARATE_DOC_ISSUE
+G5=OWNER_DECIDED_A_UNCHANGED_LABELLED_RUN_RECOVERY
+```
+
+- [ ] O0: Freigabe dieser Plan-SHA (Revision 3 wurde nicht freigegeben).
+- [x] G1–G5: entschieden (Abschnitt 4).
 
 ## 10. Befund B – getrennt halten
 
 `docs/ACCEPTANCE_TESTS.md` SIM-26-21 und SIM-26-65 bleiben unverändert; ihr
-offener Status in #188 bleibt erhalten. Empfehlung: ein eigenes Doku-Issue mit
-Verweis auf #188 B und ein kleiner Markdown-only-PR, der beide Referenzen
-gegen die tatsächliche Testsemantik prüft und Lücken ehrlich markiert. #188
-wird erst geschlossen, wenn A (inklusive Hardware) und B erledigt oder
-übergeben sind. Das Issue legt der Owner an.
+offener Status in #188 bleibt erhalten. Entschieden (G4): ein separates
+Doku-Issue mit Rückverweis auf #188 B; seine Erledigung erfolgt in einem
+eigenen kleinen Markdown-only-PR, der beide Referenzen gegen die tatsächliche
+Testsemantik prüft und Lücken ehrlich markiert. Das administrative Tracking
+wird nach der Planfreigabe vorbereitet bzw. ausgeführt, nicht in PR #199.
+#188 B gilt erst nach nachvollziehbarer Übergabe oder Erledigung als
+übertragen; #188 wird erst geschlossen, wenn A (inklusive Hardware) und B
+erledigt oder übergeben sind.
 
 ## 11. Risiken
 
