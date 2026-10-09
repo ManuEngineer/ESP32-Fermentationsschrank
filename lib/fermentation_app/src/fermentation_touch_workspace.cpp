@@ -750,6 +750,22 @@ FermentationUiKeyboardKey fermentationUiKeyboardKeyAt(
     return {FermentationUiKeyboardKeyKind::Character, character};
 }
 
+FermentationUiPinPadKey fermentationUiPinPadKeyAt(
+    std::uint8_t row, std::uint8_t column) noexcept {
+    if (row >= kFermentationUiPinPadRows ||
+        column >= kFermentationUiKeyboardColumns) {
+        return {};
+    }
+    if (row == 0U) {
+        // 1 2 3 4 5 6 7 8 9 0
+        return {FermentationUiPinPadKeyKind::Digit,
+                static_cast<std::uint8_t>((column + 1U) % 10U)};
+    }
+    return {column < 5U ? FermentationUiPinPadKeyKind::Backspace
+                        : FermentationUiPinPadKeyKind::Clear,
+            0U};
+}
+
 FermentationUiSafeBootCapability safeBootCapabilityFor(
     FermentationUiSafeBootTarget target) noexcept {
     switch (target) {
@@ -811,6 +827,8 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::NavigateDiagnostics:
         case FermentationUiWorkspaceSlotAction::NavigateService:
         case FermentationUiWorkspaceSlotAction::NavigatePin:
+        case FermentationUiWorkspaceSlotAction::ServicePinCommit:
+        case FermentationUiWorkspaceSlotAction::ServiceSignOut:
         case FermentationUiWorkspaceSlotAction::NavigateRecovery:
         case FermentationUiWorkspaceSlotAction::NavigateLanguage:
         case FermentationUiWorkspaceSlotAction::NavigateNetwork:
@@ -1060,8 +1078,8 @@ void FermentationTouchWorkspace::setCanonicalPageStack(
                                                  FermentationUiPage::Service});
             break;
         case FermentationUiPage::Pin:
+            // The real path (Issue #188 A): Settings -> Service (PIN) row.
             pageStack_.insert(pageStack_.end(), {FermentationUiPage::Settings,
-                                                 FermentationUiPage::Service,
                                                  FermentationUiPage::Pin});
             break;
         case FermentationUiPage::Recovery:
@@ -1673,10 +1691,14 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
                 view.blockedReason =
                     snapshot.service.unavailableReason.value_or(
                         key("service-locked"));
-            // The PIN page itself is reachable while the service area is
-            // locked: it carries the PIN-independent recovery entry.
-            setSlot(view, 1U, "pin",
-                    FermentationUiWorkspaceSlotAction::NavigatePin);
+            // Locked: the PIN page (entry and the PIN-independent recovery
+            // entry). Released: explicit sign-out of the local lease.
+            if (snapshot.service.available)
+                setSlot(view, 1U, "sign-out",
+                        FermentationUiWorkspaceSlotAction::ServiceSignOut);
+            else
+                setSlot(view, 1U, "pin",
+                        FermentationUiWorkspaceSlotAction::NavigatePin);
             setSlot(view, 2U, "status",
                     FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "recovery",
@@ -1687,10 +1709,16 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             view.title = key("pin");
             // "PIN forgotten?" needs no PIN entry (O-R1 = B+); it starts the
             // full factory reset flow, never a PIN-only reset.
+            view.pinEntry = FermentationUiPinEntryView{
+                static_cast<std::uint8_t>(pinEntry_.candidate().size()),
+                pinEntry_.state(), pinEntry_.message()};
             setSlot(view, 1U, "cancel",
                     FermentationUiWorkspaceSlotAction::NavigateBack);
-            setSlot(view, 2U, "status",
-                    FermentationUiWorkspaceSlotAction::NavigateStatus);
+            setSlot(view, 2U, "confirm",
+                    FermentationUiWorkspaceSlotAction::ServicePinCommit,
+                    pinEntry_.complete() &&
+                        pinEntry_.state() !=
+                            device_platform::PinEntryState::Pending);
             setSlot(view, 3U, "forgot-pin",
                     FermentationUiWorkspaceSlotAction::FactoryResetBegin,
                     snapshot.factoryReset.available);
@@ -2123,6 +2151,10 @@ bool FermentationTouchWorkspace::navigate(
             return false;
     }
     if (destination == page_) return false;
+    // Entering or leaving the PIN page drops any partial entry.
+    if (destination == FermentationUiPage::Pin ||
+        page_ == FermentationUiPage::Pin)
+        pinEntry_.reset();
     pageStack_.push_back(destination);
     page_ = destination;
     displayLanguageChangeFailed_ = false;
@@ -2134,6 +2166,7 @@ bool FermentationTouchWorkspace::goBack() {
     if (page_ == FermentationUiPage::Home || pageStack_.size() <= 1U)
         return false;
     const auto left = page_;
+    if (left == FermentationUiPage::Pin) pinEntry_.reset();
     if (pageStack_.size() == 2U) {
         pageStack_.resize(1U);
         page_ = FermentationUiPage::Home;
@@ -2404,6 +2437,18 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             commitValueEdit();
             result.navigated = true;
             break;
+        case FermentationUiWorkspaceSlotAction::ServicePinCommit:
+            // The slot is only enabled for a complete entry. The candidate
+            // leaves the workspace in the command and is dropped here.
+            if (pinEntry_.complete()) {
+                result.verifyServicePin = FermentationUiVerifyServicePinCommand{
+                    pinEntry_.candidate()};
+                pinEntry_.reset();
+            }
+            break;
+        case FermentationUiWorkspaceSlotAction::ServiceSignOut:
+            result.endServiceSession = true;
+            break;
         case FermentationUiWorkspaceSlotAction::ResetStartValues:
             // Back to the stored program values: only the identity stays.
             if (selectedProgramId_.has_value()) {
@@ -2496,6 +2541,19 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressImpl(
                       keypadKeyEnabled(target.row, target.column,
                                        current.valueEdit->wholeNumber,
                                        current.valueEdit->candidate);
+        } else if (page_ == FermentationUiPage::Pin) {
+            // PIN pad: a digit while the entry is not full and not being
+            // checked; Backspace and Clear need an entered digit.
+            const auto key =
+                fermentationUiPinPadKeyAt(target.row, target.column);
+            const auto count = pinEntry_.candidate().size();
+            enabled = (key.kind == FermentationUiPinPadKeyKind::Digit &&
+                       !pinEntry_.complete() &&
+                       pinEntry_.state() !=
+                           device_platform::PinEntryState::Pending) ||
+                      ((key.kind == FermentationUiPinPadKeyKind::Backspace ||
+                        key.kind == FermentationUiPinPadKeyKind::Clear) &&
+                       count > 0U);
         } else if (page_ == FermentationUiPage::TextEdit) {
             // Keyboard: an existing key of the current mode; Clear needs text,
             // a character needs room under the owning byte limit.
@@ -2529,8 +2587,6 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressImpl(
                 const auto row = static_cast<FermentationUiSettingsRow>(index);
                 if (row == FermentationUiSettingsRow::DeviceName)
                     enabled = current.settings->deviceNameEditable;
-                else if (row == FermentationUiSettingsRow::Service)
-                    enabled = current.settings->serviceAvailable;
             }
         } else
             enabled = target.column == 0U &&
@@ -2585,6 +2641,11 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressImpl(
             }
             if (page_ == FermentationUiPage::TextEdit) {
                 auto pressed = pressKeyboardCell(target);
+                pressed.interaction = result.interaction;
+                return pressed;
+            }
+            if (page_ == FermentationUiPage::Pin) {
+                auto pressed = pressPinPadCell(target);
                 pressed.interaction = result.interaction;
                 return pressed;
             }
@@ -3030,11 +3091,6 @@ FermentationUiSettingsView FermentationTouchWorkspace::makeSettingsView(
     settings.deviceName = deviceName_;
     // Display convenience only: the Application decides (O4).
     settings.deviceNameEditable = snapshot.home.activeRunId.empty();
-    settings.serviceAvailable = snapshot.service.available;
-    if (!snapshot.service.available) {
-        settings.serviceReason =
-            snapshot.service.unavailableReason.value_or(key("service-locked"));
-    }
     settings.deviceNameChangeFailed = deviceNameChangeFailed_;
     return settings;
 }
@@ -3166,11 +3222,14 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSettingsRow(
                 navigate(FermentationUiWorkspaceSlotAction::NavigateWebAccess);
             break;
         case FermentationUiSettingsRow::Service:
-            result.navigated =
-                navigate(FermentationUiWorkspaceSlotAction::NavigateService);
+            // Always a target (Issue #188 A): without a local service lease
+            // directly to the PIN entry; opening it grants nothing.
+            result.navigated = navigate(
+                snapshot.service.available
+                    ? FermentationUiWorkspaceSlotAction::NavigateService
+                    : FermentationUiWorkspaceSlotAction::NavigatePin);
             break;
     }
-    static_cast<void>(snapshot);
     return result;
 }
 
@@ -3275,7 +3334,75 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::commitTextEdit(
 
 void FermentationTouchWorkspace::setPage(FermentationUiPage page) {
     markRenderRelevantChange();
+    pinEntry_.reset();
     setCanonicalPageStack(page);
+}
+
+FermentationUiWorkspacePress FermentationTouchWorkspace::pressPinPadCell(
+    const device_platform::DeviceUiTarget& target) {
+    FermentationUiWorkspacePress result;
+    const auto key = fermentationUiPinPadKeyAt(target.row, target.column);
+    // `enabled` guarantees an allowed key.
+    switch (key.kind) {
+        case FermentationUiPinPadKeyKind::Digit:
+            result.navigated = pinEntry_.apply(
+                {device_platform::PinEntryActionKind::Digit, key.digit});
+            break;
+        case FermentationUiPinPadKeyKind::Backspace:
+            result.navigated = pinEntry_.apply(
+                {device_platform::PinEntryActionKind::Backspace, 0U});
+            break;
+        case FermentationUiPinPadKeyKind::Clear:
+            result.navigated = pinEntry_.apply(
+                {device_platform::PinEntryActionKind::Clear, 0U});
+            break;
+        case FermentationUiPinPadKeyKind::None:
+            break;
+    }
+    return result;
+}
+
+void FermentationTouchWorkspace::noteServicePinOutcome(
+    const LocalServicePinResult& result) {
+    markRenderRelevantChange();
+    using device_platform::PinEntryState;
+    switch (result.status) {
+        case LocalServicePinStatus::Authorized:
+            pinEntry_.reset();
+            if (page_ != FermentationUiPage::Pin) return;
+            // Reached through Status -> Diagnostics -> Service -> Pin: back to
+            // that Service page; otherwise the Service page replaces the PIN
+            // page, so Back returns to Settings.
+            if (pageStack_.size() >= 2U && pageStack_[pageStack_.size() - 2U] ==
+                                               FermentationUiPage::Service) {
+                static_cast<void>(goBack());
+            } else {
+                pageStack_.back() = FermentationUiPage::Service;
+                page_ = FermentationUiPage::Service;
+                pager_.currentIndex = 0U;
+            }
+            return;
+        case LocalServicePinStatus::Invalid:
+            pinEntry_.setOwnerState(
+                {PinEntryState::Rejected, key("pin-wrong")});
+            return;
+        case LocalServicePinStatus::LockedOut:
+            pinEntry_.setOwnerState(
+                {PinEntryState::RetryWait, key("pin-locked")});
+            return;
+        case LocalServicePinStatus::NotProvisioned:
+            pinEntry_.setOwnerState(
+                {PinEntryState::Rejected, key("pin-not-provisioned")});
+            return;
+        case LocalServicePinStatus::NotAllowedInState:
+            pinEntry_.setOwnerState(
+                {PinEntryState::Rejected, key("service-locked-state")});
+            return;
+        case LocalServicePinStatus::Unavailable:
+            pinEntry_.setOwnerState(
+                {PinEntryState::Rejected, key("pin-unavailable")});
+            return;
+    }
 }
 
 }  // namespace fermentation
