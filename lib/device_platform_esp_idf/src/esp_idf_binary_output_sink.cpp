@@ -71,23 +71,33 @@ BinaryOutputBeginResult EspIdfBinaryOutputSink::begin() noexcept {
     return BinaryOutputBeginResult::Ready;
 }
 
+void EspIdfBinaryOutputSink::driveInactiveBestEffort() noexcept {
+    if ((polarity_ == device_platform::OutputPolarity::ActiveHigh ||
+         polarity_ == device_platform::OutputPolarity::ActiveLow) &&
+        gpioNumberInMaskRange(gpioNumber_)) {
+        // One bounded software attempt towards the inactive level; the result
+        // is not retried and is no guarantee of a physical shutdown.
+        static_cast<void>(
+            gpio_set_level(static_cast<gpio_num_t>(gpioNumber_),
+                           static_cast<std::uint32_t>(inactiveLevel())));
+    }
+}
+
 void EspIdfBinaryOutputSink::setEnabled(bool enabled) {
     if (state_ == State::Ready) {
         if (gpio_set_level(static_cast<gpio_num_t>(gpioNumber_),
                            static_cast<std::uint32_t>(levelFor(enabled))) !=
             ESP_OK) {
+            // A failed write may leave the last effective level standing:
+            // latch the fault and immediately try the inactive level once.
             state_ = State::Faulted;
+            driveInactiveBestEffort();
         }
         return;
     }
-    if (state_ == State::Faulted && !enabled &&
-        (polarity_ == device_platform::OutputPolarity::ActiveHigh ||
-         polarity_ == device_platform::OutputPolarity::ActiveLow) &&
-        gpioNumberInMaskRange(gpioNumber_)) {
+    if (state_ == State::Faulted && !enabled) {
         // Best effort towards the inactive level only; never enables.
-        static_cast<void>(
-            gpio_set_level(static_cast<gpio_num_t>(gpioNumber_),
-                           static_cast<std::uint32_t>(inactiveLevel())));
+        driveInactiveBestEffort();
     }
 }
 

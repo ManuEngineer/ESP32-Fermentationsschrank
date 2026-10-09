@@ -27,6 +27,9 @@ struct Call {
 
 std::vector<Call> calls;
 esp_err_t setLevelResult = ESP_OK;
+// Results consumed in order by gpio_set_level before falling back to
+// setLevelResult.
+std::vector<esp_err_t> setLevelResultQueue;
 esp_err_t configResult = ESP_OK;
 
 constexpr int kInputOnlyPin = 34;  // the real driver rejects it for output
@@ -35,8 +38,15 @@ esp_err_t setLevelStub(gpio_num_t pin, uint32_t level, int) {
     calls.push_back({Call::Kind::SetLevel, static_cast<int>(pin),
                      static_cast<int>(level), GPIO_MODE_DISABLE, GPIO_FLOATING,
                      false, false});
-    return static_cast<int>(pin) == kInputOnlyPin ? ESP_ERR_INVALID_ARG
-                                                  : setLevelResult;
+    if (static_cast<int>(pin) == kInputOnlyPin) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!setLevelResultQueue.empty()) {
+        const esp_err_t next = setLevelResultQueue.front();
+        setLevelResultQueue.erase(setLevelResultQueue.begin());
+        return next;
+    }
+    return setLevelResult;
 }
 
 esp_err_t configStub(const gpio_config_t* config, int) {
@@ -57,6 +67,7 @@ esp_err_t configStub(const gpio_config_t* config, int) {
 extern "C" void setUp() {
     calls.clear();
     setLevelResult = ESP_OK;
+    setLevelResultQueue.clear();
     configResult = ESP_OK;
     Mockgpio_Init();
     gpio_set_level_Stub(setLevelStub);
@@ -156,20 +167,42 @@ void test_preset_failure_is_fail_closed_without_config() {
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
 }
 
-void test_write_failure_latches_fault_and_blocks_enable() {
+void test_enable_write_failure_latches_fault_and_tries_inactive_once() {
     EspIdfBinaryOutputSink sink(16, OutputPolarity::ActiveHigh);
     TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Ready, sink.begin());
     calls.clear();
-    setLevelResult = ESP_FAIL;
-    sink.setEnabled(true);  // write fails -> Faulted
-    TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
-    setLevelResult = ESP_OK;
+    setLevelResultQueue = {ESP_FAIL};  // the EIN write fails
+    sink.setEnabled(true);
+    // failed EIN attempt + exactly one immediate inactive attempt
+    TEST_ASSERT_EQUAL(2, static_cast<int>(calls.size()));
+    TEST_ASSERT_EQUAL(1, calls[0].level);
+    TEST_ASSERT_EQUAL(0, calls[1].level);
     calls.clear();
-    sink.setEnabled(true);  // dropped
+    sink.setEnabled(true);  // refused, no GPIO access
     TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
-    sink.setEnabled(false);  // best effort inactive
+    sink.setEnabled(false);  // keeps the best-effort AUS contract
     TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
     TEST_ASSERT_EQUAL(0, calls[0].level);
+}
+
+void test_disable_write_failure_after_enable_tries_inactive_once_and_blocks() {
+    EspIdfBinaryOutputSink sink(17, OutputPolarity::ActiveLow);
+    TEST_ASSERT_EQUAL(BinaryOutputBeginResult::Ready, sink.begin());
+    calls.clear();
+    sink.setEnabled(true);  // succeeds, drives the active level (LOW)
+    TEST_ASSERT_EQUAL(1, static_cast<int>(calls.size()));
+    TEST_ASSERT_EQUAL(0, calls[0].level);
+    calls.clear();
+    setLevelResultQueue = {ESP_FAIL};  // the AUS write fails
+    sink.setEnabled(false);
+    // failed AUS attempt + exactly one additional inactive attempt (HIGH);
+    // no retry loop. This is a software attempt, not a guaranteed shutdown.
+    TEST_ASSERT_EQUAL(2, static_cast<int>(calls.size()));
+    TEST_ASSERT_EQUAL(1, calls[0].level);
+    TEST_ASSERT_EQUAL(1, calls[1].level);
+    calls.clear();
+    sink.setEnabled(true);  // never re-enabled after the fault
+    TEST_ASSERT_EQUAL(0, static_cast<int>(calls.size()));
 }
 
 void test_invalid_pin_and_invalid_polarity_fail_closed() {
@@ -224,7 +257,9 @@ extern "C" void app_main(void) {
     RUN_TEST(test_mapping_active_low);
     RUN_TEST(test_config_failure_is_fail_closed);
     RUN_TEST(test_preset_failure_is_fail_closed_without_config);
-    RUN_TEST(test_write_failure_latches_fault_and_blocks_enable);
+    RUN_TEST(test_enable_write_failure_latches_fault_and_tries_inactive_once);
+    RUN_TEST(
+        test_disable_write_failure_after_enable_tries_inactive_once_and_blocks);
     RUN_TEST(test_invalid_pin_and_invalid_polarity_fail_closed);
     RUN_TEST(test_channels_are_independent);
     std::exit(UNITY_END() == 0 ? 0 : 1);

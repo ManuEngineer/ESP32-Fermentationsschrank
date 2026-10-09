@@ -29,6 +29,7 @@ class EspIdfBinaryOutputSink final : public device_platform::IBinaryOutputSink {
    private:
     enum class State : std::uint8_t { NotStarted, Unconfirmed, Ready, Faulted };
 
+    void driveInactiveBestEffort() noexcept;
     [[nodiscard]] int inactiveLevel() const noexcept;
     [[nodiscard]] int levelFor(bool enabled) const noexcept;
 
