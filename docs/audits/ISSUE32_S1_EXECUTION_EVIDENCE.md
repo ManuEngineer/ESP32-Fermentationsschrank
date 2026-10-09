@@ -1,4 +1,4 @@
-# Issue #32 – S1 Execution-Evidence (Zwischenstand)
+# Issue #32 – S1/S2 Execution-Evidence (Zwischenstand)
 
 Plan: `docs/tasks/issue-32-onboard-mosfet-outputs-plan.md` (Revision 1, Freigabe `2c1d32b`).
 Schnitt S1 (Adapter `EspIdfBinaryOutputSink`, Linux-CMock-Hosttest). S2/S3 nicht begonnen.
@@ -29,3 +29,21 @@ softwareseitiger Abschaltversuch ohne Garantie einer physischen Abschaltung bei
 Treiber-/Hardwarefehler. Die Pinvalidierung (Ausgangsfaehigkeit) liegt beim
 ESP-IDF-Treiber; der Adapter schuetzt nur die Maskenverschiebung (0..63).
 Der Hosttest ist nicht Teil von `scripts/run_pre_ready_gates.sh`.
+
+## S2 (Generator, Composition Root, Doku)
+
+```text
+GETESTETER_COMMIT_S2=39bad999ff17fa128d412933de2ad45b6e3c1e88 (Quellstand identisch mit dem Arbeitsbaum der Laeufe)
+HOSTTEST_LAUF=PASS   12 Tests, 0 Failures (Neubau im leeren Build-Verzeichnis)
+GENERATOR_CHECK=PASS python3 scripts/generate_board_profile_header.py --check
+GENERATOR_SELFTEST=PASS  13 Faelle (7 bestehende + 6 neue Ausgangsfaelle)
+ESP_IDF_PROFILE_BUILD=PASS  python3 scripts/build_esp_idf_profiles.py all  (0 Compiler-Warnungen im Log)
+ARCHITEKTURGRENZEN=PASS  check_architecture_boundaries.py und --selftest
+REGRESSION_NATIVE=PASS   pio test -e native -f test_actuator_plan_sink_driver -f test_actuator_planner -f test_actuation_interlock
+FORMAT=PASS              clang-format --dry-run -Werror (geaenderte C++-Dateien), git diff --check
+PRE_READY_GATE=NOT_RUN  clang-tidy=NOT_RUN  statisches Stack-Gate (#121)=NOT_RUN
+```
+
+Das Boot-Log der Composition Root (`onboard outputs: inner_fan=... outer_fan=...
+buzzer=...`) wurde **nicht** auf Hardware beobachtet (kein Flash). Erwartet bei
+`TBD_HARDWARE`: alle drei `polarity_unconfirmed_no_gpio_access`.
