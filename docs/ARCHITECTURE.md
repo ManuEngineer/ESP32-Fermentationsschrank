@@ -304,8 +304,13 @@ sie nicht ein. Der bidirektionale Mock macht eine gleichzeitige Aktivierung
 beider Richtungen dauerhaft sichtbar, statt sie zu verhindern oder zu
 verbergen.
 
-Reale ESP32-Adapter dieser Schnittstellen sowie `IResourceMonitor` sind noch
-nicht Teil dieser Grundlage. Eine Auslagerung von `device_platform` oder
+Fuer `IBinaryOutputSink` existiert der rollenfreie GPIO-Adapter
+`EspIdfBinaryOutputSink` in `device_platform_esp_idf` (Issue #32): GPIO und
+`OutputPolarity` kommen aus der generierten SSOT-Ableitung, die Rollenzuordnung
+(Innenluefter, Aussenluefter, Summer) erfolgt nur in der Composition Root; bei
+`Unconfirmed` fuehrt der Adapter keine GPIO-Operation aus. Die Ausgaenge sind
+nicht an den Aktorplaner angeschlossen. Weitere reale ESP32-Adapter dieser
+Schnittstellen sowie `IResourceMonitor` sind noch nicht Teil dieser Grundlage. Eine Auslagerung von `device_platform` oder
 `device_platform_test_support` in ein separates Repository erfolgt weiterhin
 nicht (siehe ADR-013).
 
