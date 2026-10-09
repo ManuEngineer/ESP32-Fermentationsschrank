@@ -382,6 +382,25 @@ liegen in `fermentation_app` (ADR-013).
 | HW-30-05 | `NOT_RUN` (H6): Verifikationsmatrix aus #30 (Abziehen, Stoerungen, Hot-Plug, Offsets, reale Messwerte). |
 | HW-30-06 | `NOT_RUN` (H7): Hardware-Evidence auf dem exakten Head, `logResources`-Vergleich. |
 
+### Issue #32 – Onboard-MOSFET-Ausgaenge (Software, hardwarefrei)
+
+Softwarenachweise fuer den rollenfreien Ausgangsadapter `EspIdfBinaryOutputSink`
+und die SSOT-Ableitung. `Unconfirmed` bedeutet nur „kein aktiver GPIO-Zugriff“,
+nicht nachgewiesen „Verbraucher AUS“. Die Hosttests laufen als Linux-Target-Projekt
+`test/esp_idf_binary_output_sink_host` (ESP-IDF-CMock fuer `driver/gpio.h`, Ruby
+erforderlich) und sind kein Teil von `scripts/run_pre_ready_gates.sh`.
+
+| ID | Nachweis |
+|---|---|
+| SIM-32-01 | `Unconfirmed` fuehrt keine GPIO-Operation aus (weder `begin()` noch `setEnabled`); Konstruktor und Aufrufe vor `begin()` greifen nicht auf GPIO zu: `esp_idf_binary_output_sink_host::test_unconfirmed_never_touches_gpio`; `::test_constructor_and_enable_before_begin_do_not_touch_gpio`. |
+| SIM-32-02 | `begin()` setzt zuerst den inaktiven Pegel, danach Ausgang ohne Pull-up/Pull-down; EIN/AUS-Pegelabbildung fuer `ActiveHigh`/`ActiveLow`: `::test_begin_active_high`; `::test_begin_active_low`; `::test_mapping_active_high`; `::test_mapping_active_low`. |
+| SIM-32-03 | Fehlerpfade fail-closed: `gpio_config`-/Preset-Fehler, Schreibfehler bei EIN und bei AUS (Faulted-Verriegelung, einmaliger Inaktiv-Versuch, keine Reaktivierung; softwareseitiger Abschaltversuch, keine garantierte physische Abschaltung), ungueltiger Pin/ungueltige Polaritaet: `::test_config_failure_is_fail_closed`; `::test_preset_failure_is_fail_closed_without_config`; `::test_enable_write_failure_latches_fault_and_tries_inactive_once`; `::test_disable_write_failure_after_enable_tries_inactive_once_and_blocks`; `::test_invalid_pin_and_invalid_polarity_fail_closed`. |
+| SIM-32-04 | Kanaltrennung: Instanzen mit verschiedenen Pins/Polaritaeten beeinflussen sich nicht: `::test_channels_are_independent`. |
+| SIM-32-05 | SSOT-Ableitung: GPIO16/17/26 und Polaritaet aus `application_role`/`active_level` (`TBD_HARDWARE` -> `Unconfirmed`, `high`/`low` -> `ActiveHigh`/`ActiveLow`, ungueltig/fehlend/doppelt/Rolle fehlt = Fehler), GPIO27 (Reserve) nicht erzeugt, bisherige zehn Konstanten unveraendert: `TRACE: python3 scripts/generate_board_profile_header.py --selftest` und `--check`. |
+| HW-32-01 | `NOT_RUN` (Hardware-Folgescope): Polaritaetsbestimmung je Kanal mit sicherer Einzel-/Ersatzlast; SSOT-Aenderung nur ueber eigenen Plan-/Owner-Gate-Scope. |
+| HW-32-02 | `NOT_RUN`: Boot-/Reset-/Brownout-Verhalten vor und nach `app_main` mit sicherem Einzelverbraucher (haengt an `external_bias`, `TBD_BOARD_CIRCUIT`). |
+| HW-32-03 | `NOT_RUN`: Kanal-/Verbraucherzuordnung Innenluefter, Aussenluefter, Summer; Aussenluefter-Nachlauf bei Sicherheitsabschaltung; Summertyp (aktiv/passiv), nichtblockierende Summermuster (offen, Ownerentscheid O3 = B). |
+
 ### Issue #19 – lokaler Werksreset (R1-Pflicht, hardwarefrei)
 
 Native Simulationen fuer den lokalen Werksreset-Ablauf (Plan
