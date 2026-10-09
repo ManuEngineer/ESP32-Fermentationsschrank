@@ -2,7 +2,7 @@
 
 Plan: `docs/tasks/issue-33-bts7960-hbridge-plan.md`, Revision 2 (Freigabe `d55d2db`).
 Dieses Dokument fuehrt nur tatsaechlich ausgefuehrte Nachweise je Schnitt mit dem
-getesteten Code-Commit. Stand: **S1 umgesetzt**; S2–S5 nicht begonnen.
+getesteten Code-Commit. Stand: **S1 und S2 umgesetzt**; S3–S5 nicht begonnen.
 
 ```text
 ACTUATOR_RELEASE=NO   REAL_PELTIER_TEST=NOT_RUN
@@ -48,3 +48,45 @@ Nicht ausgefuehrt (`NOT_RUN`): Builder-Self-Check (`run_pre_ready_gates.sh self-
 und vollstaendiger Pre-Ready-Lauf (S5 bzw. Ownerfreigabe), alle Hardwarenachweise.
 Unveraendert offen laut Plan: Meldung eines Luefterfehlers nach oben, Klassifikation und
 Wiederanlauf (#35/#90).
+
+## S2 – `SharedEnableBridgeSink` (portabel, `device_platform`)
+
+```text
+GETESTETER_CODE_COMMIT=e850e1acfb738409e667d41da9706cca00f33446 (sauberer Arbeitsbaum)
+UMGEBUNG=Linux, PlatformIO 6.1.19 (-e native), ESP-IDF v6.1, clang-format 21.1.3
+```
+
+| Nachweis | Befehl | Ergebnis |
+|---|---|---|
+| Bruecken-Logik (neu) | `pio test -e native -f test_shared_enable_bridge_sink` | PASS, 22 Faelle |
+| Regression Driver/Mock/Planner/Interlock | `pio test -e native -f test_actuator_plan_sink_driver -f test_sensor_actuator_mocks -f test_actuator_planner -f test_actuation_interlock` | PASS, 112 Faelle |
+| Architekturgrenzen (Bruecke rollen- und ESP-frei) | `python3 scripts/check_architecture_boundaries.py` und `--selftest` | PASS |
+| ESP-IDF-Profile | `python3 scripts/build_esp_idf_profiles.py all` | PASS (keine Compiler-Warnung im Log) |
+| Format | `clang-format --dry-run -Werror`, `git diff --check` | PASS |
+
+Abgedeckt durch `test_shared_enable_bridge_sink` (Befehlsfolgen ueber ein gemeinsames
+Ablaufprotokoll mit Ablehnungsschalter je Ausgang): `begin()` mit drei bereiten Ausgaengen
+(AUS-Folge Enable, Vorwaerts, Rueckwaerts) und mit je einem nicht initialisierten
+Ausgang (Enable, Vorwaerts, Rueckwaerts einzeln → nicht Ready, zwei Versuchsrunden,
+keine Aktivierung danach; ein `setEnabled(false)` auf nicht initialisiertem Ausgang zaehlt
+nicht als All-off-Initialisierung); Aufrufe vor `begin()`; EIN-Folge (Schenkel zuerst,
+Enable zuletzt) und AUS-Folge (Enable zuerst) fuer beide Richtungen; Idempotenz;
+Mutual Exclusion (beide Reihenfolgen) mit Abschaltung und Verriegelung;
+Break-before-make (Richtungswechsel nur ueber All-off, auch bei unmittelbar folgendem
+Gegenrichtungsbefehl; fehlgeschlagenes AUS blockiert die neue Richtung); Fehler an jedem
+Einzelbefehl bei EIN und bei AUS (Schenkel, Enable, beide Richtungen) → Abschaltrunde,
+Verriegelung, keine Reaktivierung auch nach Erholung des Ausgangs; Best-effort-AUS im
+`Faulted`-Zustand ohne Entriegelung; Abschaltung versucht jeden Ausgang einmal auch bei
+ablehnenden Ausgaengen; Sitzungs-Invarianten ueber die gesamte Befehlsfolge (nie beide
+Schenkel EIN, Schenkel nur bei ausgeschaltetem Enable EIN).
+
+Mutationsproben (Original danach wiederhergestellt, Quelle diff-identisch): Konfliktpruefung
+entfernt → 4 Tests schlagen fehl; `begin()` ignoriert Ergebnisse → 3; Enable vor Schenkel
+einschalten → 4; Schenkel vor Enable ausschalten → 7.
+
+Abgrenzung: Die Bruecke erzwingt Reihenfolge und Konflikte, keine Dauer (kein Zeitgeber);
+Mindest-Auszeit und Polaritaetswechsel-Totzeit bleiben im Planner. „AUS“ ist ein
+softwareseitiger Befehl, keine garantierte physische Abschaltung. Die Bruecke ist noch
+nicht an einen realen GPIO-Ausgang gebunden (S3) und nicht in `main/` komponiert (S4).
+
+Weiterhin `NOT_RUN`: Builder-Self-Check, Pre-Ready-Lauf, alle Hardwarenachweise.
