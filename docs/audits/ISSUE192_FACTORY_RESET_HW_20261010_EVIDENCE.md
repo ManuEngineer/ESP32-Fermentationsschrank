@@ -1,4 +1,4 @@
-# Issue #192 – Werksreset-Hardwareverifikation: nichtdestruktiver R01-Teil N1–N8 auf `main` 21082de (2026-10-10)
+# Issue #192 – Werksreset-Hardwareverifikation: N1–N8, P2b und P3 auf `main` 21082de (2026-10-10)
 
 Plan: `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md` (Revision 2).
 Die Evidence vom 2026-10-08 (`ISSUE192_FACTORY_RESET_HW_20261008_EVIDENCE.md`,
@@ -79,22 +79,47 @@ freigegebenen Umfangs. Folgen:
   kein Verschieben, keine UART-Zeile. Das Ergebnis wird als Einzelbeobachtung gefuehrt;
   P2b bleibt `NOT_RUN`, bis es nach G2 geplant wiederholt wird.
 
+## 3a. Folgelauf nach G2: P2b und P3 (2026-10-10, 07:52–07:58 UTC) – **BEFUND: Stack Overflow und Bootloop**
+
+G2 wurde vom Owner ausdruecklich fuer P2b + P3 erteilt (Datenverlustliste bestaetigt).
+G3/G4 nicht erteilt. Geraet unveraendert `f859ef6` (Boot-Log: `source git sha f859ef632def5c4f2167192904fda5e9f339d3af`, kein Flash).
+
+```text
+ROHLOG=lokal, uart192_p2b_p3.raw.txt, 6968 Zeilen, SHA256=ccbe55312ea708b73b1ec451bca2afa16906c0eaf7dc949e6ae38c75c886bee4
+ZEITRAUM=07:52:18 .. 07:58:33 UTC (Aufnahme manuell beendet); Start mit RTS-Reset-Puls (POWERON_RESET)
+```
+
+**P2b (Hold-Abbruch vor 5000 ms) = PASS (Ownerbeobachtung, UART ohne Auffaelligkeit):**
+Loslassen bei ca. 30–50 % zweimal: Fortschritt fiel auf 0 %. Wegziehen vom Halteziel bei gedrueckt gehaltenem Finger: Fortschritt fiel auf 0 %. Neueintritt der Hold-Seite begann bei 0 %. Bis 07:56:27 UTC nur Heartbeats und Dispatches, kein Reset, kein Panic.
+
+**P3 (voller Hold) = FAIL:**
+
+- Owner: Halteziel ca. 6 s durchgehend gehalten; die Anzeige bleibt danach **eingefroren** (Hold-Seite "Werksreset / Zum Bestaetigen Taste halten", Balken fast voll; Foto vom Owner im Chat, nicht im Repository).
+- UART: Heartbeats bis 07:56:27.554; **07:56:28.356 `***ERROR*** A stack overflow in task main has been detected`**, Backtrace, `Rebooting...`, `rst:0xc (SW_CPU_RESET)`.
+- Danach **Bootloop**: bis 07:58:33 UTC 92 Stack Overflows und 93 Resets in der Aufnahme. In 91 der 92 Zyklen tritt der Fehler an derselben Stelle auf: unmittelbar nach `app_main: resources: point=after_platform_begin network_mode=UNSELECTED network_state=Stopped` (Backtrace `0x4008ced1:0x3ffc9550`, identisch); der erste Absturz (07:56:28, Backtrace-Frame `0x3ffc8850`) trat dagegen nach einem Heartbeat auf, also im laufenden Betrieb beim Abschluss des Holds.
+- Das Log enthaelt **keine** Werksreset-Ausfuehrungs-/Ergebniszeile; ob der Reset persistiert wurde, ist nicht belegt. `network_mode=UNSELECTED` im Bootloop deutet auf einen ungueltigen/zurueckgesetzten Netzwerkzustand hin (Vermutung, nicht verifiziert).
+- Fail-closed: Bei jedem Boot `inner_fan/outer_fan/buzzer=polarity_unconfirmed_no_gpio_access`, `peltier bridge: ready_all_off_not_connected_to_planner`; Aktoren physisch getrennt, `ACTUATOR_RELEASE=NO`.
+- Nicht ausgefuehrt/nicht belegt: Ergebnisseite, Netzwerk-/HTTP-Stopp, Ersteinrichtung, Erhalt der Touchkalibrierung, Zustand nach Reset.
+- Backtrace nicht aufgeloest (kein ELF zu `f859ef6` zur Hand; der Build `21082de` ist kein binaergleiches Image). Ursache **nicht untersucht**.
+- Es erfolgte nach dem Befund kein weiterer Geraetezugriff (kein Power-Cycle, kein Flash, kein Erase, keine Tasteingaben), wie im Auftrag gefordert (bei Unerwartetem stoppen).
+
 ## 4. Status je Akzeptanztest
 
 ```text
-HW-19-R01=TEIL-BELEGT (Ownerbeobachtung, kein vollstaendiger PASS)
+HW-19-R01=FAIL (P3): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
+  Stack Overflow in task main (07:56:28 UTC) und anschliessendem Bootloop; kein Ergebnisbildschirm.
   belegt:  Touchweg Einstellungen -> Service (PIN) -> PIN-Seite -> "PIN vergessen?" (N1/N2),
-           Warnungs- und Confirm-Seite lesbar DE/EN/ES (N3/N5), Abbrechen (N4/N5),
-           Hold-Seite mit Fortschrittsanzeige (N6), Einzelbeobachtung: Fortschritt fiel nach Loslassen bei ca. 40 % auf 0 % zurueck (ungeplant, Abweichung A1), "PIN vergessen?" waehrend PIN-Sperre erreichbar (N7),
-           Daten unveraendert, kein Reset/Panic (N8). Aktoren AUS (physisch getrennt).
-  nicht belegt: 5000-ms-Hold und Vollreset, gesicherter Rueckfall des Fortschritts (Loslassen/Verschieben, UART-Beleg),
-           Ergebnisseite, Ersteinrichtung nach Reset, Zugang SAFE_BOOT.
+           Warnungs-/Confirm-Seite DE/EN/ES (N3/N5), Abbrechen (N4/N5), Hold-Seite mit Fortschritt (N6),
+           Hold-Abbruch Loslassen/Wegziehen -> 0 % (P2b), "PIN vergessen?" bei PIN-Sperre (N7, Ownerbeobachtung),
+           Daten bis P3 unveraendert (N8). Aktoren AUS (physisch getrennt).
+  nicht belegt: Ergebnisseite, Persistenz des Resets, Ersteinrichtung, Erhalt der Touchkalibrierung, Zugang SAFE_BOOT.
 HW-19-R02=NOT_RUN (Netzwerk-/HTTP-Stopp beim Reset, Powercut; setzt G2/G3 voraus)
 HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht erteilt)
 ```
 
 ## 5. Offen / naechste Gates
 
-- **G2** vor Hold-Abbruchtest (P2b) und erstem vollstaendigen Hold (P3): Entscheidungsvorlage siehe Handover in PR #200.
+- **Befund P3** (Stack Overflow, Bootloop) ist dem Owner vorzulegen; Geraet bleibt im Bootloop bis zur Ownerentscheidung. Wiederherstellung (Neu-Flash, ggf. NVS-/State-Erase) erfordert eine neue Ownerfreigabe (G1 gilt nur fuer App-Flash ohne Erase).
+- **G2** ist verbraucht (ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
 - Heap-Minimum-Entwicklung im Folgelauf mitmessen.

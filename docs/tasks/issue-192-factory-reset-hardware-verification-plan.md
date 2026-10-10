@@ -11,9 +11,11 @@ Ownerfreigabe fuer Revision 1 (G1 fuer `df5a3dd`, G4 = `BLOCKED` belassen) war
 an den damaligen Stand gebunden und gilt fuer den neuen Stand **nicht**; alle
 Gates in Abschnitt 4 sind neu zu erteilen.
 
-**Ausfuehrungsstand (2026-10-10):** G1 erteilt; P1 und P2/R01-N (N1–N8) ohne
-Hold/Vollreset ausgefuehrt, Befund in
-`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`. G2–G4 offen.
+**Ausfuehrungsstand (2026-10-10):** G1 und G2 (P2b + P3) erteilt; N1–N8 und P2b
+ausgefuehrt; P3 (voller Hold) = **FAIL**: Stack Overflow in task `main` und
+Bootloop, Geraet unveraendert belassen. Befund in
+`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`. G3/G4 offen,
+weitere Schritte nur nach Ownerentscheid.
 
 ## 1. Ausgangslage (geprueft am 2026-10-10)
 
