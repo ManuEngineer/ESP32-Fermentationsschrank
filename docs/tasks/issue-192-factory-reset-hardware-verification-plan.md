@@ -9,21 +9,34 @@ Draft-PR auf aktuellem `main` fort. PR #193 (#172/D10) bleibt unberuehrt.
 Revision 2 ersetzt Revision 1 vollstaendig (kein paralleler Plan). Die
 Ownerfreigabe fuer Revision 1 (G1 fuer `df5a3dd`, G4 = `BLOCKED` belassen) war
 an den damaligen Stand gebunden und gilt fuer den neuen Stand **nicht**; alle
-Gates in Abschnitt 4 sind neu zu erteilen.
+Gates in Abschnitt 4 waren neu zu erteilen (aktueller Gate-Stand: Ausfuehrungsstand
+unten und Abschnitt 4).
 
-**Ausfuehrungsstand (2026-10-10):** G1 und G2 (P2b + P3) erteilt; N1–N8 und P2b
-ausgefuehrt; P3 (voller Hold) = **FAIL**: Stack Overflow in task `main` und
-Bootloop, Geraet unveraendert belassen. Befund in
-`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`. G3/G4 offen,
-weitere Schritte nur nach Ownerentscheid.
+**Ausfuehrungsstand (2026-10-10, nach Offline-Diagnose):** G1 erteilt und
+verbraucht (Flash selbst war nicht noetig: das Geraet lief bereits mit
+`f859ef6`). G2 wurde fuer P2b + P3 erteilt und ist mit dem einen Vollreset-
+Versuch **verbraucht**. N1–N8 und P2b ausgefuehrt (PASS); P3 (voller Hold) =
+**FAIL**: Stack Overflow in task `main` beim Hold und reproduzierbarer Bootloop
+(92 `stack overflow`-Meldungen in der Aufnahme). Das Geraet ist unveraendert im
+fail-closed Bootloop belassen; seither kein Geraetezugriff. **G3 und G4 sind
+nicht erteilt**; HW-19-R01 = `FAIL`, HW-19-R02 = `NOT_RUN`, HW-19-R03 =
+`BLOCKED`. Die Offline-Diagnose (ELF-Hashes gegen HW-188-A01 verifiziert,
+Backtraces dekodiert, statische Stackpfadanalyse) steht in
+`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`, Abschnitt 3b:
+belegt ist der Stack-Overflow und, dass `prepareAuthorizedEpochHandoff` plus
+`makeAuthorizedEpochHandoffTarget` allein 29 680 B Frames benoetigen (Main-Task
+24 576 B); ein gemeinsames Stack-Budget-Problem ist **Hypothese**, kein Beweis.
+Ein Produktcode-Fix ist ausdruecklich nicht Teil dieses PR und wartet auf die
+Ownerentscheidungen zu Fixscope/Issue und Geraeterecovery (3b, «Ownerentscheidungen»).
+Abschnitt 1 beschreibt den Stand **vor** der Hardwareausfuehrung.
 
-## 1. Ausgangslage (geprueft am 2026-10-10)
+## 1. Ausgangslage (geprueft am 2026-10-10, vor der Hardwareausfuehrung)
 
 ```text
 BASELINE=21082de766a0b7b52108448c85ae51ba8d84b3f1 (main, Merge von PR #199; enthaelt PR #191 inkl. S1 ResetEligibleNoRuntime und PR #199 Service-PIN-Einstieg)
 QUELLUNTERSCHIED_ZU_f859ef6=nur docs/ (4393d27 docs: HW-188-A01 Evidence + Merge-Commit); Produktquellen identisch zum in HW-188-A01 geflashten Stand f859ef6
 GERAET_AKTUELL=f859ef6 (UART-Boot-Log 2026-10-10, quellgleich zu main 21082de, kein Flash; Provenienz in der Evidence 20261010)
-ISSUE_STAND=#192 OPEN / BLOCKED_HARDWARE; PR #191 und PR #199 gemergt; HW-19-R01..R03 auf dem aktuellen main NOT_RUN
+ISSUE_STAND(vor Hardwareausfuehrung)=#192 OPEN / BLOCKED_HARDWARE; PR #191 und PR #199 gemergt; HW-19-R01..R03 auf dem aktuellen main NOT_RUN  [heute: R01=FAIL, R02=NOT_RUN, R03=BLOCKED, siehe Ausfuehrungsstand]
 ```
 
 Build-Provenienz der Baseline (sauberer Build, `--require-clean-source-tree`,
@@ -38,7 +51,7 @@ APP_ELF_SHA256=d3196493f3b8f734a0d7c1fd24e6fbbaef0b34fc7e8c971921ad6823c7e2af10
 PARTITION_TABLE_SHA256=d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d  (identisch zu df5a3dd und f859ef6 -> nur App flashbar, kein Erase)
 BOOTLOADER_SHA256=d70a1e164a87b2950cb569fba92ab123fab45f770b8814010f2926968416902f  (weicht vom in HW-188-A01 genannten Wert 2c1b4979... ab; Ursache nicht untersucht; Bootloader wird nicht geflasht)
 FLASH_ARGS=0x1000 bootloader, 0x8000 Partitionstabelle, 0x10000 App; geplant ist ausschliesslich 0x10000
-FLASH_UND_GERAETEZUGRIFF=NICHT AUSGEFUEHRT (kein Flash, kein Port geoeffnet)
+FLASH_UND_GERAETEZUGRIFF(vor Hardwareausfuehrung)=NICHT AUSGEFUEHRT (kein Flash, kein Port geoeffnet)  [spaeter: UART-Zugriff und Bedienung N1–N8/P2b/P3 unter G1/G2; kein Flash]
 ```
 
 Bisherige Hashes/Images von `df5a3dd` (App `06e08f0c...`) gelten **nicht** fuer
@@ -128,7 +141,12 @@ Reset-Folge.
   Resetursache, Einschraenkungen. Ergebnisse des Stands `df5a3dd` bleiben als
   historische Evidence erhalten und werden nicht uebernommen.
 
-## 4. Konkrete Ownerentscheide (neu zu erteilen)
+## 4. Konkrete Ownerentscheide (Stand 2026-10-10)
+
+Gate-Stand heute: **G1 erteilt/verbraucht, G2 erteilt/verbraucht (P2b + P3),
+G3 nicht erteilt, G4 nicht erteilt.** Neu erforderlich: Ownerfreigabe fuer die
+Geraeterecovery und jede weitere Hardwareausfuehrung (siehe Evidence 3b). Der
+folgende Text ist die urspruengliche Gate-Definition (Revision 2).
 
 - **G1** Flash des aktuellen `main` (`21082de`, nur App, ohne Erase) freigeben,
   falls der festgestellte Geraetestand nicht bereits dem Build entspricht;
