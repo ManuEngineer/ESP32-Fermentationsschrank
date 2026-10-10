@@ -7,7 +7,7 @@ Baseline `df5a3dd`) bleibt historisch und wird nicht uebernommen.
 Ownerfreigaben (Stand 2026-10-10, nach Diagnose): **G1 voll** fuer diesen
 Plan-/Firmwarestand. **G2 wurde im Verlauf ausdruecklich fuer P2b + P3 erteilt**
 (ein Vollreset-Versuch ausgefuehrt; G2 damit verbraucht, Befund siehe 3a/3b).
-**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Abschnitt 3d). **G3 und G4 nicht erteilt**, G2-R3 gesperrt. `ACTUATOR_RELEASE=NO`; Aktoren physisch
+**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung; G5/P3b `PASS`, Abschnitt 3d). **G3 und G4 nicht erteilt**, G2-R3 gesperrt. `ACTUATOR_RELEASE=NO`; Aktoren physisch
 getrennt/deaktiviert, kein Aktortest. Die Abschnitte 1–3 beschreiben den jeweils
 datierten Stand ihres Laufs (N1–N8 vor G2); der aktuelle Stand steht in 3a, 3b
 und 4.
@@ -473,17 +473,35 @@ Einordnung (nur Belegtes):
   101 ROM-Boots nicht in 200 ms Platz haben). Die Restzeile `uptime_ms=3804`
   entspricht der Heartbeat-Form eines frueheren Starts, ist aber kein Beleg fuer
   dessen Verlauf.
-- Nicht beobachtet vom Agenten: Display-/Startanzeige (Ownerbeobachtung nicht
-  eingeholt) und die physische Trennung der Aktoren (Ownervorgabe seit G1,
-  unveraendert; Firmwareseite: `real actuators: disabled`, Policy
-  `REQUIRE_VERIFIED_HARDWARE`).
+- Nicht beobachtet vom Agenten: die physische Trennung der Aktoren (Ownervorgabe
+  seit G1, unveraendert; Firmwareseite: `real actuators: disabled`, Policy
+  `REQUIRE_VERIFIED_HARDWARE`). Die Display-/Startanzeige ist durch die
+  Ownerbeobachtung (unten) belegt, nicht durch UART.
 - Vertrauliche Inhalte: Die UART-Zeilen enthalten keine Zugangsdaten; die Rohdatei
   bleibt dennoch lokal.
 
-Folge: Das Geraet ist wiederhergestellt und bootet stabil mit `b9564e6`
-(P3b-Recovery-Nachweis). Das ist **kein** Nachweis fuer den Werksreset;
-`HW-19-R01` bleibt `FAIL` bis zum separat freizugebenden P3c-Retest (G2-R3).
-Kein zweiter Flash, kein Erase, kein Powercycle-Experiment, kein Hold-Test.
+Ownerbeobachtung (2026-10-10, Chat, nach dem G5-Flash), Wortlaut: **«Display
+normal. Einstellungen zurückgestellt. Alles wie erwartet.»** Kennzeichnung:
+`PASS_OWNER_OBSERVED` (keine UART- oder automatische Messung, kein Foto/Video).
+Darueber hinausgehende Detailpruefungen (einzelne Einstellungen,
+Kalibrierungswerte, Ergebnisbildschirm) wurden weder durchgefuehrt noch werden sie
+behauptet.
+
+Status G5/P3b:
+
+```text
+G5_FLASH=PASS (UART-/Flash-Evidence oben)
+P3b_BOOT=PASS (stabiler Boot b9564e6, kein Panic/WDT/Reset in ca. 150 s)
+P3b_DISPLAY_SETTINGS=PASS_OWNER_OBSERVED
+G5/P3b=PASS (abgeschlossen)
+HANDOFF_PFAD_Pending/Committed=NOT_RESOLVED (nicht geloggt; zurueckgestellte Einstellungen sind nur ein Indiz, kein Beweis des exakten Recoveryverlaufs)
+```
+
+Folge: Das Geraet ist wiederhergestellt (kein Bootloop mehr) und bootet stabil mit
+`b9564e6`. Das ist **kein** Nachweis fuer einen Werksreset am neuen Stand;
+`HW-19-R01` bleibt `FAIL` bis zum separat freizugebenden P3c-Retest (G2-R3, nicht
+freigegeben). `HW-19-R02=NOT_RUN`, `HW-19-R03=BLOCKED`. Kein zweiter Flash, kein
+Erase, kein Powercycle-Experiment, kein Hold-Test.
 
 ## 4. Status je Akzeptanztest
 
@@ -501,7 +519,7 @@ HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht
 
 ## 5. Offen / naechste Gates
 
-- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5 ist ausgefuehrt (3d): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s). Der Recovery-Pfad ist aus dem Log nicht ableitbar (3d). Offen: **G2-R3 / P3c** (erneuter 5000-ms-Werksreset mit `stack_hwm_bytes` und Heap-Spitze, Plan 5.2) nur nach separater Ownerfreigabe.
+- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5/P3b ist abgeschlossen (3d, `PASS`): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s; Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung, `PASS_OWNER_OBSERVED`). Der interne Handoff-Pfad bleibt `NOT_RESOLVED` (3d). Offen: **G2-R3 / P3c** (erneuter 5000-ms-Werksreset mit `stack_hwm_bytes` und Heap-Spitze, Plan 5.2) nur nach separater Ownerfreigabe.
 - **G2** ist verbraucht (ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
 - Heap-Minimum-Entwicklung im Folgelauf mitmessen.
