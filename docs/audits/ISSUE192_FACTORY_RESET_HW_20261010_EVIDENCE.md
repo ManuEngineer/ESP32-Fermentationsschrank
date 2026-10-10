@@ -61,7 +61,7 @@ Die Ownerantworten stammen aus dem Chat; es gibt keine Bild-/Videoaufnahme.
 | N4 Warnung -> Abbrechen | "ja" | Owner-bestaetigt |
 | N5 Confirm-Seite, Text, Abbrechen | "wirklich alles loeschen = ok" | Owner-bestaetigt |
 | N6 Hold-Seite nur Anzeige, Abbrechen | "Fortschritt geht" (Halteseite mit Fortschrittsanzeige) | siehe Abweichung A1 |
-| N7 PIN-Sperre (3 Fehlversuche), "PIN vergessen?" erreichbar | Sperre mit Hinweis "zu viele Versuche, warten"; "ja"; ein weiterer Versuch zeigte "bitte warten" | Owner-bestaetigt. Teil "richtige PIN nach Ablauf der Sperre" **nicht ausgefuehrt** |
+| N7 PIN-Sperre (3 Fehlversuche), "PIN vergessen?" erreichbar | Sperre mit Hinweis "zu viele Versuche, warten"; "ja"; ein weiterer Versuch zeigte "bitte warten" | Owner-bestaetigt. Teil "richtige PIN nach Ablauf der Sperre" in diesem Lauf nicht ausgefuehrt; Owner: bereits bei HW-188-A01 (PR #199) gemacht, hier obsolet |
 | N8 Daten vorher/nachher | "ja" (unveraendert) | Owner-bestaetigt; UART: kein Reset, kein Panic/WDT/Brownout/OOM |
 
 ### Abweichung A1 (nicht von G1 gedeckt)
@@ -73,10 +73,11 @@ freigegebenen Umfangs. Folgen:
 
 - Kein 5000-ms-Hold, kein Werksreset: Das Log enthaelt keine Ausfuehrungszeilen
   und keinen Reset; der Owner meldet unveraenderte Daten (N8).
-- Der Fortschritt lief **sichtbar an**; ob er nach dem Loslassen auf 0 %
-  zurueckfiel, wurde nicht beobachtet/gemeldet und ist **nicht belegt**.
-- Dies ist **kein PASS fuer P2b** (Hold-Abbruch vor 5000 ms). Es bleibt `NOT_RUN`,
-  bis es nach G2 geplant und mit Beobachtung/Log wiederholt wird.
+- Der Fortschritt lief sichtbar an; **Ownernachtrag:** nach dem Loslassen bei ca. 40 %
+  fiel er auf 0 % zurueck (einmalige Ownerbeobachtung, ohne Video/UART-Beleg).
+- Dies ist **kein PASS fuer P2b**: ungeplant, einmalig, nur ein Abbruchweg (Loslassen),
+  kein Verschieben, keine UART-Zeile. Das Ergebnis wird als Einzelbeobachtung gefuehrt;
+  P2b bleibt `NOT_RUN`, bis es nach G2 geplant wiederholt wird.
 
 ## 4. Status je Akzeptanztest
 
@@ -84,9 +85,9 @@ freigegebenen Umfangs. Folgen:
 HW-19-R01=TEIL-BELEGT (Ownerbeobachtung, kein vollstaendiger PASS)
   belegt:  Touchweg Einstellungen -> Service (PIN) -> PIN-Seite -> "PIN vergessen?" (N1/N2),
            Warnungs- und Confirm-Seite lesbar DE/EN/ES (N3/N5), Abbrechen (N4/N5),
-           Hold-Seite mit Fortschrittsanzeige (N6), "PIN vergessen?" waehrend PIN-Sperre erreichbar (N7),
+           Hold-Seite mit Fortschrittsanzeige (N6), Einzelbeobachtung: Fortschritt fiel nach Loslassen bei ca. 40 % auf 0 % zurueck (ungeplant, Abweichung A1), "PIN vergessen?" waehrend PIN-Sperre erreichbar (N7),
            Daten unveraendert, kein Reset/Panic (N8). Aktoren AUS (physisch getrennt).
-  nicht belegt: 5000-ms-Hold und Vollreset, Rueckfall des Fortschritts bei Loslassen/Verschieben,
+  nicht belegt: 5000-ms-Hold und Vollreset, gesicherter Rueckfall des Fortschritts (Loslassen/Verschieben, UART-Beleg),
            Ergebnisseite, Ersteinrichtung nach Reset, Zugang SAFE_BOOT.
 HW-19-R02=NOT_RUN (Netzwerk-/HTTP-Stopp beim Reset, Powercut; setzt G2/G3 voraus)
 HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht erteilt)
