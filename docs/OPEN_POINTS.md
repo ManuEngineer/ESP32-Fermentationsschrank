@@ -214,7 +214,7 @@ abschließend, soweit sein späterer Scope dies verlangt.
       Revision 8, Ownerfreigabe `aa665f1`): software-seitig umgesetzt
       (`SIM-19-S1-01..06`); Hardwarenachweis in #192 (`HW-19-R03` `BLOCKED`, siehe unten)
 - [ ] Hardwarenachweise `HW-19-R01..R03` (`ACCEPTANCE_TESTS.md`) in einem
-      separaten Hardware-Folgeissue #192 (Ownerentscheid O-HW = A); Stand 2026-10-10: `HW-19-R01` `FAIL` (Stack Overflow beim vollen Hold, Bootloop; Offline-Diagnose in der #192-Evidence 3b, Fix im PR #200 nach freigegebener Plan Revision 3 (`43a65d3`) umgesetzt, statischer Stacknachweis in Evidence 3c, Review des Owners ausstehend, FOLLOW-UP: UI-Command-Stackpfad (`UNVERIFIED_STATIC`) und Aufnahme von `scripts/analyze_issue_192_handoff_stack.py` in die Gates; Recovery/Retest nur nach neuen Gates G5/G2-R3), `HW-19-R02` `NOT_RUN`, `HW-19-R03` `BLOCKED`
+      separaten Hardware-Folgeissue #192 (Ownerentscheid O-HW = A); Stand 2026-10-10: `HW-19-R01` `FAIL` (Stack Overflow beim vollen Hold, Bootloop; Offline-Diagnose in der #192-Evidence 3b, Fix im PR #200 nach freigegebener Plan Revision 3 (`43a65d3`) umgesetzt, statischer Stacknachweis in Evidence 3c, Review akzeptiert; G5 erteilt und ausgefuehrt: App-only-Flash `b9564e6` ohne Erase, Geraet bootet stabil (P3b-Recovery, Evidence 3d, kein Reset-Nachweis), FOLLOW-UP: UI-Command-Stackpfad (`UNVERIFIED_STATIC`) und Aufnahme von `scripts/analyze_issue_192_handoff_stack.py` in die Gates; Retest nur nach neuer Freigabe G2-R3/P3c), `HW-19-R02` `NOT_RUN`, `HW-19-R03` `BLOCKED`
 - [ ] Journal, Laufhistorie, Bereinigung, Laufexport: `DEFERRED_BY_OWNER_PENDING_
       R1_CONTRACT_RECONCILIATION`; R1-Vertragskonflikte K1–K7 im Plan, kein
       R1-`PASS` ohne Ownerentscheid O-R3

@@ -7,7 +7,7 @@ Baseline `df5a3dd`) bleibt historisch und wird nicht uebernommen.
 Ownerfreigaben (Stand 2026-10-10, nach Diagnose): **G1 voll** fuer diesen
 Plan-/Firmwarestand. **G2 wurde im Verlauf ausdruecklich fuer P2b + P3 erteilt**
 (ein Vollreset-Versuch ausgefuehrt; G2 damit verbraucht, Befund siehe 3a/3b).
-**G3 und G4 nicht erteilt.** `ACTUATOR_RELEASE=NO`; Aktoren physisch
+**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Abschnitt 3d). **G3 und G4 nicht erteilt**, G2-R3 gesperrt. `ACTUATOR_RELEASE=NO`; Aktoren physisch
 getrennt/deaktiviert, kein Aktortest. Die Abschnitte 1–3 beschreiben den jeweils
 datierten Stand ihres Laufs (N1–N8 vor G2); der aktuelle Stand steht in 3a, 3b
 und 4.
@@ -324,8 +324,8 @@ Gezielte Regressionsnachweise (Vorschlag):
    bestehenden Draft-PR #200 fortzufuehren (kein neues Issue, kein neuer PR).
    Der begrenzte Fix am autorisierten Run-Epochen-Handoff ist in Plan
    Revision 3 (Abschnitt 4) beschrieben; der Owner hat den exakten Plan-Commit
-   `43a65d3` freigegeben, die Software-Umsetzung C1–C3 liegt vor (Abschnitt 3c,
-   Review ausstehend); die allgemeine Stack-Absicherung (Gate, UI-Command-Pfad) bleibt
+   `43a65d3` freigegeben, die Software-Umsetzung C1–C4 liegt vor (Abschnitt 3c,
+   Review und Fix Verification akzeptiert; G5 ausgefuehrt, Abschnitt 3d); die allgemeine Stack-Absicherung (Gate, UI-Command-Pfad) bleibt
    FOLLOW-UP.
 2. **Geraeterecovery (neue Freigabe G5 nach Software-Review, G1 deckt sie nicht;
    Plan Revision 3, Abschnitt 5.1; Ausgangsoptionen):** (A) Geraet bleibt im
@@ -413,10 +413,82 @@ groesster Block 7 168 B, Low-Water 4 124 B), nicht die Betriebswerte
 Low-Water-Wert ist fuer den Reset-Zeitpunkt **nicht belegt**. Die Heap-Spitze am
 Geraet wird erst im Retest (Plan 5.2) gemessen.
 
+## 3d. G5 – App-only-Recovery-Flash und P3b (2026-10-10, 10:2x UTC)
+
+Owner-Freigabe G5: ausschliesslich der App-only-Flash des Images aus
+`SOURCE_HEAD=b9564e67a2d9dc067bc4d6a873c376cb7f3ca4b3` (SHA-256 unten) mit dem
+vorgelegten esptool-Kommando auf Offset `0x10000`, danach P3b; kein NVS-/State-Erase
+(Entwicklungsboard ohne wichtige Benutzerdaten, aber der vorhandene Recoveryzustand
+sollte geprueft werden). G2-R3, G3, G4 und `ACTUATOR_RELEASE` bleiben gesperrt.
+
+Korrektur der Freigabevorlage: Das Image-Ende war dort falsch mit `0x1B5260`
+angegeben. Richtig: Laenge 1 739 104 B = `0x1A8960`, Bereich `0x10000`–`0x1B895F`
+(Ende exklusiv `0x1B8960`), innerhalb der Partition `factory` (bis `0x300000`).
+esptool meldete `Flash will be erased from 0x00010000 to 0x001b8fff` (4-KiB-Sektor-
+Rundung), also nur Bereich der App.
+
+```text
+SOURCE_HEAD=b9564e67a2d9dc067bc4d6a873c376cb7f3ca4b3, Profil esp32_release, ESP-IDF v6.1
+IMAGE_SHA256=cc0f0ffffec6a76447c377a91cf2303033e86089925b812814710f751eb38308 (vor dem Flash erneut geprueft: OK, 1 739 104 B)
+ELF_SHA256=fc837421c2ea87f3a5355f3c5679218655b1329421399a3dd32ceb22e739c910
+FLASH=genau 1x, esptool 5.4.0, 115200 Baud, --before default-reset --after hard-reset, write-flash 0x10000, Exit 0,
+  "Hash of data verified.", kein Erase-Befehl, kein weiterer Flashbereich
+CHIP=ESP32-D0WD-V3 rev v3.1, Flash 4MB dio 40m
+FLASHLOG=lokal (~/.cache/ev192-build/g5_flash_b9564e6.log), UARTLOG=lokal (g5_p3b_uart_b9564e6.log, 573 Zeilen), nicht im Repository
+```
+
+Boot-Beleg (UART, eine Aufnahme ca. 150 s):
+
+```text
+Bootloader: ESP-IDF v6.1, Partitionstabelle unveraendert (factory 0x10000/0x2f0000, state_store 0x300000/0x100000),
+  "Loaded app from partition at offset 0x10000"
+app_init: App version b9564e6, Compile time Oct 10 2026 12:06:00, ELF file SHA256 fc837421c... (= ELF_SHA256)
+app_main: profile esp32_release, source git sha b9564e67a2d9dc067bc4d6a873c376cb7f3ca4b3
+app_main: hardware state HARDWARE_UNVERIFIED, actuator policy REQUIRE_VERIFIED_HARDWARE, real actuators: disabled
+app_main: application: ready (nach application_begin, ca. 1,4 s Uptime)
+PANIC/GURU/TASK_WDT/BROWNOUT/OOM/STACK_OVERFLOW=0; weiterer Reset nach dem Boot=0; Herzschlag 148 Zeilen bis uptime 148,8 s
+stack_hwm_bytes (Main-Task, kleinste freie Reserve): 18632 (after_platform_begin) -> 11800 (after_application_begin, unveraendert bis idle_120s)
+Heap (after_application_begin): frei 135232, Minimum 131260, groesster Block 110592
+Heap (idle_120s): frei 108644, Minimum 104700, groesster Block 98304 (nach UI-Init; LVGL-Pool 29 % belegt)
+```
+
+Einordnung (nur Belegtes):
+
+- **Boot-/Recovery-Pfad nicht aus dem Log ableitbar.** Die Firmware loggt weder den
+  persistierten Handoff-Zustand noch einen Wiederaufnahmepfad. Der Boot erreicht
+  `application: ready`; ob ein `Pending`-Handoff vorlag und abgeschlossen wurde, ob
+  `Committed`/`Idle` vorlag oder der Zustand anders war, ist **nicht belegt**. Die
+  Hypothese aus Plan 5.1 ist damit weder bestaetigt noch widerlegt; belegt ist nur,
+  dass der Start mit der korrigierten Firmware den Bootloop nicht reproduziert.
+- Die Messung `stack_hwm_bytes=11800` entspricht einer Spitzennutzung von
+  12 776 B des 24 576-B-Stacks bis zum Messpunkt. Sie deckt den Bootpfad der
+  Hauptaufgabe, **nicht** den Hold-/Reset-Pfad (K-HOLD); der bleibt P3c vorbehalten.
+- **Aufnahme-Artefakte, nicht bewertet:** Die Aufnahme setzt beim Start absichtlich
+  einen RTS-Resetpuls; das protokollierte Booten ist daher der Neustart durch diesen
+  Puls und nicht notwendig der erste Start nach dem esptool-`hard-reset`. Dieser
+  erste Start ist nicht aufgezeichnet. Die ersten ca. 200 ms der Datei enthalten
+  144 identische, abgeschnittene Zeilen (`...fe test mode, uptime_ms=3804`) und 101
+  ROM-Bannerzeilen mit identischem Empfangszeitstempel; das sind beim Oeffnen des
+  Ports ausgelesene Puffer-/Restdaten (nicht als echte Resets interpretierbar, da
+  101 ROM-Boots nicht in 200 ms Platz haben). Die Restzeile `uptime_ms=3804`
+  entspricht der Heartbeat-Form eines frueheren Starts, ist aber kein Beleg fuer
+  dessen Verlauf.
+- Nicht beobachtet vom Agenten: Display-/Startanzeige (Ownerbeobachtung nicht
+  eingeholt) und die physische Trennung der Aktoren (Ownervorgabe seit G1,
+  unveraendert; Firmwareseite: `real actuators: disabled`, Policy
+  `REQUIRE_VERIFIED_HARDWARE`).
+- Vertrauliche Inhalte: Die UART-Zeilen enthalten keine Zugangsdaten; die Rohdatei
+  bleibt dennoch lokal.
+
+Folge: Das Geraet ist wiederhergestellt und bootet stabil mit `b9564e6`
+(P3b-Recovery-Nachweis). Das ist **kein** Nachweis fuer den Werksreset;
+`HW-19-R01` bleibt `FAIL` bis zum separat freizugebenden P3c-Retest (G2-R3).
+Kein zweiter Flash, kein Erase, kein Powercycle-Experiment, kein Hold-Test.
+
 ## 4. Status je Akzeptanztest
 
 ```text
-HW-19-R01=FAIL (P3): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
+HW-19-R01=FAIL (P3; P3b-Recovery mit b9564e6 belegt, 3d, aber kein Reset-Nachweis; FAIL bis P3c): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
   Stack Overflow in task main (07:56:28 UTC) und anschliessendem Bootloop; kein Ergebnisbildschirm.
   belegt:  Touchweg Einstellungen -> Service (PIN) -> PIN-Seite -> "PIN vergessen?" (N1/N2),
            Warnungs-/Confirm-Seite DE/EN/ES (N3/N5), Abbrechen (N4/N5), Hold-Seite mit Fortschritt (N6),
@@ -429,7 +501,7 @@ HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht
 
 ## 5. Offen / naechste Gates
 
-- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). Geraet bleibt im fail-closed Bootloop bis zu den neuen Gates G5/G2-R3 (Plan Revision 3, nach Software-Review). Wiederherstellung (Neu-Flash, ggf. NVS-/State-Erase) erfordert eine neue Ownerfreigabe (G1 gilt nur fuer App-Flash ohne Erase).
+- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5 ist ausgefuehrt (3d): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s). Der Recovery-Pfad ist aus dem Log nicht ableitbar (3d). Offen: **G2-R3 / P3c** (erneuter 5000-ms-Werksreset mit `stack_hwm_bytes` und Heap-Spitze, Plan 5.2) nur nach separater Ownerfreigabe.
 - **G2** ist verbraucht (ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
 - Heap-Minimum-Entwicklung im Folgelauf mitmessen.
