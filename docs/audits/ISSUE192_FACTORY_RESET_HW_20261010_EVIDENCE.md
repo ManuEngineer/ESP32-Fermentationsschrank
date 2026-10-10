@@ -1,6 +1,6 @@
 # Issue #192 – Werksreset-Hardwareverifikation: N1–N8, P2b und P3 auf `main` 21082de (2026-10-10)
 
-Plan: `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md` (Revision 2).
+Plan: `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md` (Revision 3).
 Die Evidence vom 2026-10-08 (`ISSUE192_FACTORY_RESET_HW_20261008_EVIDENCE.md`,
 Baseline `df5a3dd`) bleibt historisch und wird nicht uebernommen.
 
@@ -318,21 +318,24 @@ Gezielte Regressionsnachweise (Vorschlag):
   (HWM-Reserve gegen den zu vereinbarenden Wert); Ergebnisseite, Ersteinrichtung,
   Touchkalibrierung wie in P3 geplant.
 
-### Ownerentscheidungen (offen)
+### Ownerentscheidungen (Stand Planrevision 3)
 
-1. **Fixscope/Issue:** Der Fix ist Produktcode und ausserhalb des #192-Scopes
-   (nur Evidence). Vorschlag: eigenes Defekt-Issue/PR mit dem oben genannten
-   minimalen Umfang; ob eine allgemeine Stack-Absicherung (Gate, Nebenbefund)
-   dazugehoert oder getrennt wird, entscheidet der Owner.
-2. **Geraeterecovery (neue Freigabe, G1 deckt sie nicht):** (A) Geraet bleibt im
+1. **Fixscope/Issue (entschieden):** Der Owner hat angeordnet, den Fix im
+   bestehenden Draft-PR #200 fortzufuehren (kein neues Issue, kein neuer PR).
+   Der begrenzte Fix am autorisierten Run-Epochen-Handoff ist in Plan
+   Revision 3 (Abschnitt 4) beschrieben und wartet auf die Freigabe der exakten
+   Plan-SHA; die allgemeine Stack-Absicherung (Gate, UI-Command-Pfad) bleibt
+   FOLLOW-UP.
+2. **Geraeterecovery (neue Freigabe G5 nach Software-Review, G1 deckt sie nicht;
+   Plan Revision 3, Abschnitt 5.1; Ausgangsoptionen):** (A) Geraet bleibt im
    fail-closed Bootloop, bis eine korrigierte App-Firmware (ohne Erase) geflasht
    wird; sie wuerde, falls die Hypothese stimmt, den offenen Handoff
    wiederaufnehmen und zugleich als Nachweis dienen. (B) Erase von State/NVS plus
    App-Flash: Daten inkl. Touchkalibrierung (`tc0`/`tc1`) gehen verloren,
    Ersteinrichtung noetig. (C) Den bestehenden `main`-Stand erneut flashen hilft
    nicht (gleicher Fehler). Empfehlung: (A).
-3. **PR #200:** bleibt Draft; Evidence-FAIL kann separat reviewt werden; ob PR #200
-   bis zum Wiederholungstest offen bleibt, entscheidet der Owner.
+3. **PR #200:** bleibt Draft und enthaelt nach Planfreigabe zusaetzlich den Fix;
+   Wiederholungstest nur nach G5 und G2-R3 (Plan Revision 3, Abschnitt 5).
 
 ## 4. Status je Akzeptanztest
 
@@ -350,7 +353,7 @@ HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht
 
 ## 5. Offen / naechste Gates
 
-- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). Geraet bleibt im fail-closed Bootloop bis zur Ownerentscheidung (3b, Ownerentscheidungen 1–3). Wiederherstellung (Neu-Flash, ggf. NVS-/State-Erase) erfordert eine neue Ownerfreigabe (G1 gilt nur fuer App-Flash ohne Erase).
+- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). Geraet bleibt im fail-closed Bootloop bis zu den neuen Gates G5/G2-R3 (Plan Revision 3, nach Software-Review). Wiederherstellung (Neu-Flash, ggf. NVS-/State-Erase) erfordert eine neue Ownerfreigabe (G1 gilt nur fuer App-Flash ohne Erase).
 - **G2** ist verbraucht (ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
 - Heap-Minimum-Entwicklung im Folgelauf mitmessen.

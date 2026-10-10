@@ -11,7 +11,7 @@
 > Schritt" sind ueberholt. Auf dem aktuellen `main` sind `HW-19-R01..R03`
 > `NOT_RUN`; der fortgeschriebene Testablauf steht in
 > `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md`
-> (Revision 2). PR #194 wurde geschlossen und nicht gemergt.
+> (jetzt Revision 3). PR #194 wurde geschlossen und nicht gemergt.
 
 Plan: `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md`. Ownerentscheid
 (PR #194): G1 freigegeben, G4 = `BLOCKED` belassen, G2/G3 nicht freigegeben.
