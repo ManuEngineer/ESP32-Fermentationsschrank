@@ -1,5 +1,18 @@
 # Issue #192 – Werksreset-Hardwareverifikation: Stand nach P1 und nicht destruktivem R01 (2026-10-08)
 
+> **HISTORISCHE EVIDENCE (Stand 2026-10-08, Baseline `df5a3dd`).** Diese Datei
+> dokumentiert unveraendert den damaligen Lauf und ist **nicht** der aktuelle
+> Zustand. Seither gilt: PR #199 (Service-PIN-Einstieg, #188 A) ist in `main`
+> gemergt (`21082de`); der unten genannte Zugangsblocker (Service-Menue/PIN-Seite
+> am Geraet nicht aufrufbar) ist im Produktcode behoben. Die Ergebnisse
+> `HW-19-R01=BLOCKED`, `HW-19-R03=BLOCKED`, `HW-19-R02=NOT_RUN` gelten nur fuer
+> `df5a3dd` und werden **nicht** rueckwirkend geaendert oder auf den neuen Stand
+> uebertragen. Die Aussagen zu Baseline, Geraetefirmware, Hashes und "Naechster
+> Schritt" sind ueberholt. Auf dem aktuellen `main` sind `HW-19-R01..R03`
+> `NOT_RUN`; der fortgeschriebene Testablauf steht in
+> `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md`
+> (Revision 2). PR #194 wurde geschlossen und nicht gemergt.
+
 Plan: `docs/tasks/issue-192-factory-reset-hardware-verification-plan.md`. Ownerentscheid
 (PR #194): G1 freigegeben, G4 = `BLOCKED` belassen, G2/G3 nicht freigegeben.
 

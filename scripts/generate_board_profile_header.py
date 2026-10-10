@@ -34,6 +34,21 @@ ebenfalls fail-fast:
   eine separate elektrische Designklassifikation, kein Ersatz dafuer);
 - der Backlight-Pin hat einen `active_level` von exakt `high` oder `low`.
 
+Zusaetzlich (Issue #33) werden die drei BTS7960-Signale (RPWM, LPWM und das
+gemeinsame R_EN/L_EN) nach demselben Verfahren ueber `bts7960_rpwm`,
+`bts7960_lpwm` und `shared_r_en_l_en` abgeleitet; R_IS/L_IS (GPIO34/35,
+`reserved_disabled`) werden bewusst nicht erzeugt.
+
+Zusaetzlich (Issue #32) werden die drei Onboard-MOSFET-Ausgaenge Innenluefter,
+Aussenluefter und Summer ueber ihre SSOT-`application_role` (`internal_fan`,
+`external_heatsink_fan`, `active_buzzer`) abgeleitet: GPIO-Nummer und
+Ausgangspolaritaet. Hier ist `board_fixed_pending_functional_verification` der
+erwartete Status (die funktionale Pruefung steht aus). Die Polaritaet kommt
+ausschliesslich aus `active_level`: `high` -> `ActiveHigh`, `low` ->
+`ActiveLow`, `TBD_HARDWARE` -> `Unconfirmed`; jeder andere oder fehlende Wert
+ist ein Fehler. Es wird keine Polaritaet geraten. Die Reserve (`reserve`,
+GPIO27) wird nicht erzeugt.
+
 `width`/`height` sind eine Panel-/Displayeigenschaft, keine GPIO-Zuordnung,
 und daher nicht Teil dieser SSOT-Ableitung; sie bleiben ein
 composition-root-seitiger Konstantwert.
@@ -69,6 +84,26 @@ REQUIRED_FUNCTIONS = {
     "touch_irq": "kTouchInterruptPin",
     "one_wire_internal": "kOneWireInternalPin",
     "one_wire_product": "kOneWireProductPin",
+}
+
+# Onboard-MOSFET-Ausgaenge (Issue #32), ueber `application_role` gefunden.
+OUTPUT_ROLES = {
+    "internal_fan": ("kInternalFanPin", "kInternalFanPolarity"),
+    "external_heatsink_fan": ("kOuterFanPin", "kOuterFanPolarity"),
+    "active_buzzer": ("kBuzzerPin", "kBuzzerPolarity"),
+}
+
+# BTS7960-H-Bruecke (Issue #33): RPWM, LPWM und gemeinsames R_EN/L_EN.
+BRIDGE_ROLES = {
+    "bts7960_rpwm": ("kBtsRpwmPin", "kBtsRpwmPolarity"),
+    "bts7960_lpwm": ("kBtsLpwmPin", "kBtsLpwmPolarity"),
+    "shared_r_en_l_en": ("kBtsEnablePin", "kBtsEnablePolarity"),
+}
+
+POLARITY_BY_ACTIVE_LEVEL = {
+    "high": "ActiveHigh",
+    "low": "ActiveLow",
+    "TBD_HARDWARE": "Unconfirmed",
 }
 
 INVALID_ASSIGNMENT_STATUSES = {
@@ -158,7 +193,62 @@ def extract_pins(profile: dict, path_for_errors: str) -> dict:
             for function, (gpio_number, _pin_data) in by_function.items()
         },
         "backlight_active_high": backlight_active_level == "high",
+        "outputs": extract_outputs(profile, path_for_errors),
+        "bridge": extract_outputs(profile, path_for_errors, BRIDGE_ROLES),
     }
+
+
+def extract_outputs(
+    profile: dict, path_for_errors: str, roles: dict = OUTPUT_ROLES
+) -> dict:
+    by_role: dict[str, tuple[int, str]] = {}
+    for gpio_key, pin_data in profile["pins"].items():
+        if not isinstance(pin_data, dict):
+            continue
+        role = pin_data.get("application_role")
+        if role not in roles:
+            continue
+        match = GPIO_KEY_PATTERN.match(str(gpio_key))
+        if not match:
+            raise BoardProfileError(
+                f"{path_for_errors}: pin key {gpio_key!r} for output role "
+                f"{role!r} is not of the form 'gpio<N>'"
+            )
+        gpio_number = int(match.group(1))
+        if role in by_role:
+            raise BoardProfileError(
+                f"{path_for_errors}: output role {role!r} is assigned to "
+                f"both gpio{by_role[role][0]} and gpio{gpio_number} "
+                "- exactly one assignment is required"
+            )
+        status = pin_data.get("assignment_status")
+        if (
+            not isinstance(status, str)
+            or not status
+            or status == "unavailable_not_exposed"
+        ):
+            raise BoardProfileError(
+                f"{path_for_errors}: output role {role!r} on gpio"
+                f"{gpio_number} has an invalid assignment_status "
+                f"({status!r})"
+            )
+        active_level = pin_data.get("active_level")
+        if active_level not in POLARITY_BY_ACTIVE_LEVEL:
+            raise BoardProfileError(
+                f"{path_for_errors}: output role {role!r} on gpio"
+                f"{gpio_number} has no valid active_level (got "
+                f"{active_level!r}); expected 'high', 'low' or "
+                "'TBD_HARDWARE'"
+            )
+        by_role[role] = (gpio_number, POLARITY_BY_ACTIVE_LEVEL[active_level])
+
+    missing = sorted(set(roles) - set(by_role))
+    if missing:
+        raise BoardProfileError(
+            f"{path_for_errors}: missing required output role(s): "
+            f"{', '.join(missing)}"
+        )
+    return by_role
 
 
 def render_header(resolved: dict, source_path_display: str) -> str:
@@ -172,7 +262,8 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         "//   python3 scripts/generate_board_profile_header.py",
         "//",
         "// This is the single deterministic build-time derivation of the",
-        "// R1 display/touch GPIO assignment from the canonical wiring SSOT",
+        "// R1 display/touch/sensor GPIO assignment and onboard MOSFET output",
+        "// assignment and polarity from the canonical wiring SSOT",
         "// (Issue #130). No second hand-maintained pin list is permitted in",
         "// main/app_main.cpp, CMake, or any other configuration file.",
         "// The R1 display rotation below is the single shared candidate used",
@@ -181,6 +272,7 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         "#pragma once",
         "",
         "#include \"device_ui_hardware_ports.hpp\"",
+        "#include \"output_polarity.hpp\"",
         "",
         "namespace board_profile::esp32_32e_quad_mosfet_r1 {",
         "",
@@ -198,6 +290,32 @@ def render_header(resolved: dict, source_path_display: str) -> str:
         f"inline constexpr int kOneWireProductPin = {pins['one_wire_product']};",
         "inline constexpr device_platform::DisplayRotation kR1DisplayRotation =",
         "    device_platform::DisplayRotation::Rotate90;",
+        "",
+        "// Onboard-MOSFET outputs (Issue #32). A polarity of `Unconfirmed` means",
+        "// the SSOT active_level is still TBD_HARDWARE: the output adapter then",
+        "// performs no GPIO operation. The reserve channel is not generated.",
+    ]
+    for role, (pin_name, polarity_name) in OUTPUT_ROLES.items():
+        gpio_number, polarity = resolved["outputs"][role]
+        lines.append(f"inline constexpr int {pin_name} = {gpio_number};")
+        lines.append(
+            f"inline constexpr device_platform::OutputPolarity {polarity_name} ="
+        )
+        lines.append(f"    device_platform::OutputPolarity::{polarity};")
+    lines += [
+        "",
+        "// BTS7960 H-bridge signals (Issue #33): RPWM, LPWM and the shared",
+        "// R_EN/L_EN enable. R_IS/L_IS (GPIO34/35) are disabled and unwired in R1",
+        "// and are intentionally not generated.",
+    ]
+    for role, (pin_name, polarity_name) in BRIDGE_ROLES.items():
+        gpio_number, polarity = resolved["bridge"][role]
+        lines.append(f"inline constexpr int {pin_name} = {gpio_number};")
+        lines.append(
+            f"inline constexpr device_platform::OutputPolarity {polarity_name} ="
+        )
+        lines.append(f"    device_platform::OutputPolarity::{polarity};")
+    lines += [
         "",
         "}  // namespace board_profile::esp32_32e_quad_mosfet_r1",
         "",
@@ -258,6 +376,49 @@ def run_selftest() -> int:
   gpio33:
     function: one_wire_product
     assignment_status: planned
+  gpio16:
+    function: onboard_mosfet_1
+    application_role: internal_fan
+    active_level: TBD_HARDWARE
+    assignment_status: board_fixed_pending_functional_verification
+  gpio17:
+    function: onboard_mosfet_2
+    application_role: external_heatsink_fan
+    active_level: TBD_HARDWARE
+    assignment_status: board_fixed_pending_functional_verification
+  gpio26:
+    function: onboard_mosfet_3
+    application_role: active_buzzer
+    active_level: TBD_HARDWARE
+    assignment_status: board_fixed_pending_functional_verification
+  gpio27:
+    function: onboard_mosfet_4
+    application_role: reserve
+    active_level: TBD_HARDWARE
+    assignment_status: board_fixed_pending_functional_verification
+  gpio13:
+    function: peltier_rpwm
+    application_role: bts7960_rpwm
+    active_level: high
+    assignment_status: planned
+  gpio14:
+    function: peltier_lpwm
+    application_role: bts7960_lpwm
+    active_level: high
+    assignment_status: planned
+  gpio25:
+    function: bts7960_enable
+    application_role: shared_r_en_l_en
+    active_level: high
+    assignment_status: planned
+  gpio34:
+    function: bts7960_r_is_reserve
+    application_role: disabled
+    assignment_status: reserved_disabled
+  gpio35:
+    function: bts7960_l_is_reserve
+    application_role: disabled
+    assignment_status: reserved_disabled
 """
 
     checks: dict[str, bool] = {}
@@ -276,6 +437,19 @@ def run_selftest() -> int:
                 and "kOneWireInternalPin = 32" in header
                 and "kOneWireProductPin = 33" in header
                 and "kBacklightActiveHigh = true;" in header
+                and "kInternalFanPin = 16;" in header
+                and "kOuterFanPin = 17;" in header
+                and "kBuzzerPin = 26;" in header
+                and header.count("OutputPolarity::Unconfirmed;") == 3
+                and "27" not in header.split("kOneWireProductPin")[1]
+                and "kBtsRpwmPin = 13;" in header
+                and "kBtsLpwmPin = 14;" in header
+                and "kBtsEnablePin = 25;" in header
+                and header.count("OutputPolarity::ActiveHigh;") == 3
+                and "= 34;" not in header
+                and "= 35;" not in header
+                and "Ris" not in header
+                and "Lis" not in header
                 and output_path.exists()
             )
         except BoardProfileError:
@@ -359,6 +533,119 @@ def run_selftest() -> int:
             checks["missing backlight active_level rejected"] = (
                 "active_level" in str(error)
             )
+
+        def output_case(name: str, pins_yaml: str, expect) -> None:
+            # `expect` is a predicate on the generated header (success case)
+            # or a substring that must appear in the fail-fast error.
+            path = write_profile(tmp_path, pins_yaml)
+            try:
+                header_text = generate(path, tmp_path / "out_case.hpp")
+                checks[name] = callable(expect) and bool(expect(header_text))
+            except BoardProfileError as error:
+                checks[name] = isinstance(expect, str) and expect in str(error)
+
+        # Confirmed polarities map exactly; nothing is guessed.
+        output_case(
+            "active_level high/low map to ActiveHigh/ActiveLow",
+            valid_pins.replace(
+                "    application_role: internal_fan\n    active_level: TBD_HARDWARE\n",
+                "    application_role: internal_fan\n    active_level: high\n",
+            ).replace(
+                "    application_role: active_buzzer\n    active_level: TBD_HARDWARE\n",
+                "    application_role: active_buzzer\n    active_level: low\n",
+            ),
+            lambda h: "kInternalFanPolarity =\n    device_platform::OutputPolarity::ActiveHigh;" in h
+            and "kBuzzerPolarity =\n    device_platform::OutputPolarity::ActiveLow;" in h
+            and "kOuterFanPolarity =\n    device_platform::OutputPolarity::Unconfirmed;" in h,
+        )
+        # An unknown or missing output active_level must fail fast.
+        output_case(
+            "invalid output active_level rejected",
+            valid_pins.replace(
+                "    application_role: internal_fan\n    active_level: TBD_HARDWARE\n",
+                "    application_role: internal_fan\n    active_level: maybe\n",
+            ),
+            "internal_fan",
+        )
+        output_case(
+            "missing output active_level rejected",
+            valid_pins.replace(
+                "    application_role: external_heatsink_fan\n    active_level: TBD_HARDWARE\n",
+                "    application_role: external_heatsink_fan\n",
+            ),
+            "external_heatsink_fan",
+        )
+        # A missing or duplicated output role must fail fast.
+        output_case(
+            "missing output role rejected",
+            valid_pins.replace(
+                "application_role: active_buzzer", "application_role: other"
+            ),
+            "active_buzzer",
+        )
+        output_case(
+            "duplicate output role rejected",
+            valid_pins.replace(
+                "application_role: reserve", "application_role: internal_fan"
+            ),
+            "internal_fan",
+        )
+        # Bridge (Issue #33) roles: same fail-fast rules, R_IS/L_IS never emitted.
+        output_case(
+            "bridge role missing rejected",
+            valid_pins.replace(
+                "application_role: shared_r_en_l_en", "application_role: other"
+            ),
+            "shared_r_en_l_en",
+        )
+        output_case(
+            "bridge role duplicated rejected",
+            valid_pins.replace(
+                "application_role: disabled\n    assignment_status: "
+                "reserved_disabled\n  gpio35:",
+                "application_role: bts7960_rpwm\n    active_level: high\n"
+                "    assignment_status: planned\n  gpio35:",
+            ),
+            "bts7960_rpwm",
+        )
+        output_case(
+            "bridge invalid active_level rejected",
+            valid_pins.replace(
+                "application_role: bts7960_lpwm\n    active_level: high\n",
+                "application_role: bts7960_lpwm\n    active_level: maybe\n",
+            ),
+            "bts7960_lpwm",
+        )
+        output_case(
+            "bridge missing active_level rejected",
+            valid_pins.replace(
+                "application_role: bts7960_rpwm\n    active_level: high\n",
+                "application_role: bts7960_rpwm\n",
+            ),
+            "bts7960_rpwm",
+        )
+        output_case(
+            "bridge TBD_HARDWARE active_level maps to Unconfirmed",
+            valid_pins.replace(
+                "application_role: shared_r_en_l_en\n    active_level: high\n",
+                "application_role: shared_r_en_l_en\n"
+                "    active_level: TBD_HARDWARE\n",
+            ),
+            lambda h: "kBtsEnablePolarity =\n    device_platform::OutputPolarity::Unconfirmed;"
+            in h
+            and "kBtsRpwmPolarity =\n    device_platform::OutputPolarity::ActiveHigh;"
+            in h,
+        )
+        output_case(
+            "unavailable output assignment_status rejected",
+            valid_pins.replace(
+                "    application_role: internal_fan\n    active_level: TBD_HARDWARE\n"
+                "    assignment_status: board_fixed_pending_functional_verification\n",
+                "    application_role: internal_fan\n    active_level: TBD_HARDWARE\n"
+                "    assignment_status: unavailable_not_exposed\n",
+            ),
+            "internal_fan",
+        )
 
     ok = True
     for name, passed in checks.items():

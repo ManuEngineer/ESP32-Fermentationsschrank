@@ -1978,8 +1978,7 @@ void test_recovery_page_names_mode_and_unavailable_time_correction() {
 void test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason() {
     for (const auto* locale : {"en", "de", "es"}) {
         for (const auto page : {fermentation::FermentationUiPage::Diagnostics,
-                                fermentation::FermentationUiPage::Service,
-                                fermentation::FermentationUiPage::Pin}) {
+                                fermentation::FermentationUiPage::Service}) {
             fermentation::FermentationUiSnapshot snapshot;
             snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
             fermentation::FermentationTouchWorkspace workspace;
@@ -1996,6 +1995,11 @@ void test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason() {
     const auto screen = pageScreen(snapshot, workspace);
     TEST_ASSERT_TRUE(hasText(screen, "Deferred (#28)"));
     TEST_ASSERT_TRUE(hasText(screen, "Service unavailable"));
+    // The PIN page is the real PIN entry now (Issue #188 A).
+    workspace.setPage(fermentation::FermentationUiPage::Pin);
+    const auto pin = pageScreen(snapshot, workspace);
+    TEST_ASSERT_FALSE(hasText(pin, "Deferred (#28)"));
+    TEST_ASSERT_TRUE(hasText(pin, "Enter 4-digit PIN"));
 }
 
 void test_messages_page_shows_an_empty_state_only_without_messages() {
@@ -2042,7 +2046,6 @@ void test_content_pages_are_bounded_deterministic_and_do_not_overlap() {
         fermentation::FermentationUiPage::Status,
         fermentation::FermentationUiPage::Diagnostics,
         fermentation::FermentationUiPage::Service,
-        fermentation::FermentationUiPage::Pin,
         fermentation::FermentationUiPage::Recovery,
         fermentation::FermentationUiPage::ManualHolding,
         fermentation::FermentationUiPage::ManualTimed,
@@ -2513,7 +2516,9 @@ void test_settings_disabled_rows_show_their_reason() {
     }
     screen = settingsScreen(workspace, snapshot, "en");
     TEST_ASSERT_TRUE(hasText(screen, "Service (PIN)"));
-    TEST_ASSERT_TRUE(hasText(screen, "Service unavailable"));
+    // Issue #188 A (G3): the Service row is always a target without a lock
+    // reason; the reason stays on the Service page.
+    TEST_ASSERT_FALSE(hasText(screen, "Service unavailable"));
 }
 
 void test_settings_rows_are_list_cells_with_exact_hit_zones() {
@@ -2702,7 +2707,9 @@ void test_s10_pages_are_bounded_deterministic_and_do_not_overlap() {
         for (const auto page :
              {fermentation::FermentationUiPage::Settings,
               fermentation::FermentationUiPage::TextEdit,
-              fermentation::FermentationUiPage::ProgramEdit}) {
+              fermentation::FermentationUiPage::ProgramEdit,
+              // The Service-PIN entry is an input page (Issue #188 A).
+              fermentation::FermentationUiPage::Pin}) {
             fermentation::FermentationUiSnapshot snapshot;
             snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
             snapshot.service.available = false;
@@ -2754,6 +2761,13 @@ void test_s10_text_keys_exist_in_all_locales() {
                             "device-name-locked-run",
                             "device-name-change-failed",
                             "service-protected",
+                            "pin-enter",
+                            "pin-wrong",
+                            "pin-locked",
+                            "pin-not-provisioned",
+                            "pin-unavailable",
+                            "service-locked-state",
+                            "sign-out",
                             "program-name",
                             "program-notes",
                             "space",
@@ -2787,6 +2801,56 @@ void test_s10_text_keys_exist_in_all_locales() {
             TEST_ASSERT_TRUE(result.value != key);
         }
     }
+}
+
+// Issue #188 A: the Service-PIN page on the keyboard grid geometry.
+void test_pin_page_has_exact_pad_hit_zones_and_shows_only_a_mask() {
+    fermentation::FermentationUiSnapshot snapshot;
+    snapshot.home.mode = fermentation::FermentationHomeMode::Standby;
+    fermentation::FermentationTouchWorkspace workspace;
+    workspace.setPage(fermentation::FermentationUiPage::Pin);
+    auto screen = pageScreen(snapshot, workspace);
+    const auto at = [&screen](std::uint16_t x, std::uint16_t y) {
+        return fermentation::main_ui::targetAt(screen, x, y);
+    };
+    // Row 0: digits 1..0 in ten 30 px columns from (8, 62), 34 px high.
+    TEST_ASSERT_TRUE(isCell(at(8U, 62U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(37U, 95U), 0U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(38U, 62U), 0U, 1U));
+    TEST_ASSERT_TRUE(isCell(at(307U, 95U), 0U, 9U));
+    // Row 1: Backspace (columns 0-4) and Clear (5-9).
+    TEST_ASSERT_TRUE(isCell(at(8U, 96U), 1U, 0U));
+    TEST_ASSERT_TRUE(isCell(at(158U, 129U), 1U, 5U));
+    // Below the pad and left of it: no pad target.
+    TEST_ASSERT_FALSE(isCell(at(8U, 130U), 2U, 0U));
+    TEST_ASSERT_FALSE(at(8U, 130U).has_value() &&
+                      at(8U, 130U)->kind ==
+                          device_platform::DeviceUiTargetKind::ContentCell);
+    TEST_ASSERT_FALSE(at(4U, 70U).has_value() &&
+                      at(4U, 70U)->kind ==
+                          device_platform::DeviceUiTargetKind::ContentCell);
+    TEST_ASSERT_TRUE(hasText(screen, "_"));
+    TEST_ASSERT_TRUE(hasText(screen, "Enter 4-digit PIN"));
+    TEST_ASSERT_TRUE(hasText(screen, "Del"));
+    TEST_ASSERT_TRUE(hasText(screen, "Clear"));
+
+    // Two digits: the entry line is a mask, the digits never appear there.
+    for (const std::uint8_t column : {std::uint8_t{6U}, std::uint8_t{2U}}) {
+        static_cast<void>(workspace.press(
+            snapshot, {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U,
+                       column}));
+    }
+    screen = pageScreen(snapshot, workspace);
+    const auto entry = std::find_if(
+        screen.commands.begin(), screen.commands.end(),
+        [](const auto& command) {
+            return command.kind ==
+                       fermentation::main_ui::ScreenDrawKind::Text &&
+                   command.rect.left == 96U && command.rect.top == 40U;
+        });
+    TEST_ASSERT_TRUE(entry != screen.commands.end());
+    TEST_ASSERT_EQUAL_STRING("**_", entry->text.c_str());
+    TEST_ASSERT_FALSE(hasText(screen, "73"));
 }
 
 int main() {
@@ -2879,6 +2943,7 @@ int main() {
     RUN_TEST(test_settings_page_draws_the_rows_in_the_decided_order);
     RUN_TEST(test_settings_disabled_rows_show_their_reason);
     RUN_TEST(test_settings_rows_are_list_cells_with_exact_hit_zones);
+    RUN_TEST(test_pin_page_has_exact_pad_hit_zones_and_shows_only_a_mask);
     RUN_TEST(
         test_keyboard_page_draws_the_mode_keys_and_has_exact_34px_hit_rows);
     RUN_TEST(test_keyboard_page_shows_the_tail_of_a_long_multibyte_candidate);

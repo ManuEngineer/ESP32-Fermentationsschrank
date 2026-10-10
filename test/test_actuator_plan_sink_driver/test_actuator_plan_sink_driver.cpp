@@ -54,9 +54,9 @@ class TracingBinarySink final : public device_platform::IBinaryOutputSink {
                       SharedActuatorCallTrace& trace)
         : inner_(inner), sink_(sink), trace_(trace) {}
 
-    void setEnabled(bool enabled) override {
+    [[nodiscard]] bool setEnabled(bool enabled) override {
         trace_.entries.push_back({sink_, 0U, enabled});
-        inner_.setEnabled(enabled);
+        return inner_.setEnabled(enabled);
     }
 
    private:
@@ -243,6 +243,111 @@ void test_driver_forces_outer_fan_for_heating_and_cooling_regardless_of_result()
     TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
 }
 
+// Issue #33 interlock: a refused outer fan enable never releases the Peltier.
+// The outer fan attempt stays in the trace (the command was issued), but no
+// Peltier direction is enabled afterwards.
+void test_driver_refused_outer_fan_never_releases_heating() {
+    MockBidirectionalActuatorSink peltier;
+    MockBinaryOutputSink outer;
+    MockBinaryOutputSink inner;
+    outer.setAcceptingCommands(false);
+    SharedActuatorCallTrace trace;
+    TracingBidirectionalSink tracedPeltier(peltier, trace);
+    TracingBinarySink tracedOuter(
+        outer, SharedActuatorCallTrace::Sink::OuterFan, trace);
+    TracingBinarySink tracedInner(
+        inner, SharedActuatorCallTrace::Sink::InnerFan, trace);
+    ActuatorPlanSinkDriver driver(tracedPeltier, tracedOuter, tracedInner);
+
+    driver.apply(result(AbstractControlDirection::Heating, true, true));
+
+    TEST_ASSERT_EQUAL_UINT(5U, trace.entries.size());
+    assertTraceEntry(trace.entries[0], SharedActuatorCallTrace::Sink::Peltier,
+                     1U, false);
+    assertTraceEntry(trace.entries[1], SharedActuatorCallTrace::Sink::OuterFan,
+                     0U, true);
+    assertTraceEntry(trace.entries[2], SharedActuatorCallTrace::Sink::Peltier,
+                     0U, false);
+    assertTraceEntry(trace.entries[3], SharedActuatorCallTrace::Sink::Peltier,
+                     1U, false);
+    assertTraceEntry(trace.entries[4], SharedActuatorCallTrace::Sink::InnerFan,
+                     0U, true);
+    for (const auto& entry : trace.entries) {
+        TEST_ASSERT_FALSE(entry.sink ==
+                              SharedActuatorCallTrace::Sink::Peltier &&
+                          entry.value);
+    }
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    TEST_ASSERT_FALSE(outer.enabled());
+}
+
+void test_driver_refused_outer_fan_never_releases_cooling() {
+    MockBidirectionalActuatorSink peltier;
+    MockBinaryOutputSink outer;
+    MockBinaryOutputSink inner;
+    outer.setAcceptingCommands(false);
+    SharedActuatorCallTrace trace;
+    TracingBidirectionalSink tracedPeltier(peltier, trace);
+    TracingBinarySink tracedOuter(
+        outer, SharedActuatorCallTrace::Sink::OuterFan, trace);
+    TracingBinarySink tracedInner(
+        inner, SharedActuatorCallTrace::Sink::InnerFan, trace);
+    ActuatorPlanSinkDriver driver(tracedPeltier, tracedOuter, tracedInner);
+
+    driver.apply(result(AbstractControlDirection::Cooling, true, false));
+
+    TEST_ASSERT_EQUAL_UINT(5U, trace.entries.size());
+    for (const auto& entry : trace.entries) {
+        TEST_ASSERT_FALSE(entry.sink ==
+                              SharedActuatorCallTrace::Sink::Peltier &&
+                          entry.value);
+    }
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+}
+
+// A fan that stops being accepted while the Peltier is running switches the
+// Peltier off on the next application; accepting again allows a release.
+void test_driver_refused_outer_fan_switches_running_peltier_off() {
+    MockBidirectionalActuatorSink peltier;
+    MockBinaryOutputSink outer;
+    MockBinaryOutputSink inner;
+    ActuatorPlanSinkDriver driver(peltier, outer, inner);
+
+    driver.apply(result(AbstractControlDirection::Heating, true, true));
+    TEST_ASSERT_TRUE(peltier.forward());
+
+    outer.setAcceptingCommands(false);
+    driver.apply(result(AbstractControlDirection::Heating, true, true));
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
+
+    outer.setAcceptingCommands(true);
+    driver.apply(result(AbstractControlDirection::Heating, true, true));
+    TEST_ASSERT_TRUE(peltier.forward());
+    TEST_ASSERT_TRUE(outer.enabled());
+}
+
+// Idle, Unknown and corrupted directions keep their all-off behaviour even
+// when the outer fan refuses commands; nothing can be released there.
+void test_driver_idle_and_unknown_stay_all_off_with_refusing_fans() {
+    MockBidirectionalActuatorSink peltier;
+    MockBinaryOutputSink outer;
+    MockBinaryOutputSink inner;
+    outer.setAcceptingCommands(false);
+    inner.setAcceptingCommands(false);
+    ActuatorPlanSinkDriver driver(peltier, outer, inner);
+
+    driver.apply(result(AbstractControlDirection::Idle, true, true));
+    driver.apply(result(AbstractControlDirection::Unknown, true, true));
+    driver.apply(result(static_cast<AbstractControlDirection>(99), true, true));
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -255,5 +360,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_driver_fails_closed_for_corrupted_direction_after_cooling);
     RUN_TEST(
         test_driver_forces_outer_fan_for_heating_and_cooling_regardless_of_result);
+    RUN_TEST(test_driver_refused_outer_fan_never_releases_heating);
+    RUN_TEST(test_driver_refused_outer_fan_never_releases_cooling);
+    RUN_TEST(test_driver_refused_outer_fan_switches_running_peltier_off);
+    RUN_TEST(test_driver_idle_and_unknown_stay_all_off_with_refusing_fans);
     return UNITY_END();
 }

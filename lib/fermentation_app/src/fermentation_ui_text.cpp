@@ -173,7 +173,7 @@ namespace {
 
 // Immutable firmware texts: constexpr tables of string-literal views, so they
 // stay in read-only flash and are never copied into the heap.
-constexpr std::size_t kTextCount = 198U;
+constexpr std::size_t kTextCount = 205U;
 using device_platform::TextTranslation;
 
 constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
@@ -365,6 +365,13 @@ constexpr std::array<TextTranslation, kTextCount> kEnglishTexts{{
     {"recovery-mode-cooling", "Cooling after recovery"},
     {"factory-reset", "Factory reset"},
     {"forgot-pin", "PIN forgotten?"},
+    {"pin-enter", "Enter 4-digit PIN"},
+    {"pin-wrong", "Wrong PIN"},
+    {"pin-locked", "Too many attempts, wait"},
+    {"pin-not-provisioned", "Set up PIN via web access"},
+    {"pin-unavailable", "PIN check unavailable"},
+    {"service-locked-state", "Service only in standby"},
+    {"sign-out", "Sign out"},
     {"factory-reset-hold", "Hold"},
     {"factory-reset-unavailable", "Reset not available"},
     {"factory-reset-warning", "All data will be erased!"},
@@ -569,6 +576,13 @@ constexpr std::array<TextTranslation, kTextCount> kGermanTexts{{
     {"recovery-mode-cooling", "Kuehlen nach Wiederanlauf"},
     {"factory-reset", "Werksreset"},
     {"forgot-pin", "PIN vergessen?"},
+    {"pin-enter", "4-stellige PIN eingeben"},
+    {"pin-wrong", "Falsche PIN"},
+    {"pin-locked", "Zu viele Versuche, warten"},
+    {"pin-not-provisioned", "PIN ueber Webzugang einrichten"},
+    {"pin-unavailable", "PIN-Pruefung nicht verfuegbar"},
+    {"service-locked-state", "Service nur im Standby"},
+    {"sign-out", "Abmelden"},
     {"factory-reset-hold", "Halten"},
     {"factory-reset-unavailable", "Reset nicht verfuegbar"},
     {"factory-reset-warning", "Alle Daten gehen verloren!"},
@@ -774,6 +788,13 @@ constexpr std::array<TextTranslation, kTextCount> kSpanishTexts{{
     {"discard", "Descartar"},
     {"factory-reset", "Restablecer"},
     {"forgot-pin", "PIN olvidado?"},
+    {"pin-enter", "Introducir PIN de 4 cifras"},
+    {"pin-wrong", "PIN incorrecto"},
+    {"pin-locked", "Demasiados intentos, esperar"},
+    {"pin-not-provisioned", "Configurar PIN por acceso web"},
+    {"pin-unavailable", "Comprobacion de PIN no disponible"},
+    {"service-locked-state", "Servicio solo en espera"},
+    {"sign-out", "Cerrar sesion"},
     {"factory-reset-hold", "Mantener"},
     {"factory-reset-unavailable", "Reset no disponible"},
     {"factory-reset-warning", "Se borraran todos los datos"},

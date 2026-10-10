@@ -454,7 +454,8 @@ RepresentativeScreen makeRepresentativeScreen(
                 ? device_platform::
                       DisplayRect{8U, 40U, 104U,
                                   RepresentativeScreen::kTextLineHeight}
-            : screen.workspace.page == FermentationUiPage::TextEdit
+            : screen.workspace.page == FermentationUiPage::TextEdit ||
+                    screen.workspace.page == FermentationUiPage::Pin
                 ? device_platform::
                       DisplayRect{8U, 40U, 84U,
                                   RepresentativeScreen::kTextLineHeight}
@@ -977,10 +978,8 @@ RepresentativeScreen makeRepresentativeScreen(
                         label = "web-access";
                         break;
                     case FermentationUiSettingsRow::Service:
+                        // Always a target, never a lock reason (G3).
                         label = "service-protected";
-                        enabled = settings.serviceAvailable;
-                        if (!enabled && settings.serviceReason.has_value())
-                            valueKey = *settings.serviceReason;
                         break;
                 }
                 addFill(commands,
@@ -1045,6 +1044,71 @@ RepresentativeScreen makeRepresentativeScreen(
                            device_platform::ThemeToken::Surface);
             }
             drawPagerButtons(edit.rowCount > kFermentationUiListVisibleRows);
+        } else if (screen.workspace.pinEntry.has_value()) {
+            // Service-PIN pad (Issue #188 A) on the keyboard grid: masked
+            // entry, digits 1-0, Backspace and Clear, then the owner message.
+            const auto& entry = *screen.workspace.pinEntry;
+            std::string masked(entry.digitCount, '*');
+            if (entry.digitCount < device_platform::PinEntryModel::kDigitCount)
+                masked.push_back('_');
+            addRawText(commands,
+                       {96U, 40U, 216U, RepresentativeScreen::kTextLineHeight},
+                       std::move(masked),
+                       device_platform::ThemeToken::StatusInformation,
+                       device_platform::ThemeToken::Canvas);
+            for (std::uint8_t row = 0U; row < kFermentationUiPinPadRows;
+                 ++row) {
+                std::uint8_t column = 0U;
+                while (column < kFermentationUiKeyboardColumns) {
+                    const auto key = fermentationUiPinPadKeyAt(row, column);
+                    // Backspace (columns 0-4) and Clear (5-9) span five cells.
+                    const std::uint8_t span = row == 0U ? 1U : 5U;
+                    const auto left = static_cast<std::uint16_t>(
+                        kKeyboardLeft + column * kKeyboardPitchX);
+                    const auto top = static_cast<std::uint16_t>(
+                        kKeyboardTop + row * kKeyboardPitchY);
+                    const auto width =
+                        static_cast<std::uint16_t>(span * kKeyboardPitchX - 2U);
+                    addFill(commands, {left, top, width, kKeyboardFaceHeight},
+                            device_platform::ThemeToken::Surface);
+                    const device_platform::DisplayRect labelRect{
+                        static_cast<std::uint16_t>(left +
+                                                   (span == 1U ? 9U : 4U)),
+                        static_cast<std::uint16_t>(top + 7U),
+                        static_cast<std::uint16_t>(span == 1U ? 16U
+                                                              : width - 8U),
+                        RepresentativeScreen::kTextLineHeight};
+                    if (key.kind == FermentationUiPinPadKeyKind::Digit) {
+                        addRawText(
+                            commands, labelRect,
+                            std::string(1U, static_cast<char>('0' + key.digit)),
+                            device_platform::ThemeToken::TextPrimary,
+                            device_platform::ThemeToken::Surface);
+                    } else {
+                        addText(
+                            commands, textPacks, locale,
+                            fermentationTextKey(
+                                key.kind ==
+                                        FermentationUiPinPadKeyKind::Backspace
+                                    ? "backspace"
+                                    : "clear"),
+                            labelRect, device_platform::ThemeToken::TextPrimary,
+                            device_platform::ThemeToken::Surface);
+                    }
+                    column = static_cast<std::uint8_t>(column + span);
+                }
+            }
+            addText(commands, textPacks, locale,
+                    entry.message.value_or(fermentationTextKey("pin-enter")),
+                    {kPageLineLeft,
+                     static_cast<std::uint16_t>(
+                         kKeyboardTop +
+                         kFermentationUiPinPadRows * kKeyboardPitchY + 6U),
+                     kPageLineWidth, RepresentativeScreen::kTextLineHeight},
+                    entry.message.has_value()
+                        ? device_platform::ThemeToken::StatusWarning
+                        : device_platform::ThemeToken::TextSecondary,
+                    device_platform::ThemeToken::Canvas);
         } else if (screen.workspace.textEdit.has_value()) {
             // On-screen keyboard (O3): the candidate's tail and the 4 x 10 key
             // grid of the current mode; cancel, mode, backspace and ok are the
@@ -1326,8 +1390,7 @@ RepresentativeScreen makeRepresentativeScreen(
                     device_platform::ThemeToken::TextSecondary,
                     device_platform::ThemeToken::Canvas);
         } else if (screen.workspace.page == FermentationUiPage::Diagnostics ||
-                   screen.workspace.page == FermentationUiPage::Service ||
-                   screen.workspace.page == FermentationUiPage::Pin) {
+                   screen.workspace.page == FermentationUiPage::Service) {
             // Content is owned by #28; no function is promised here.
             addText(commands, textPacks, locale,
                     fermentationTextKey("deferred-28"),
@@ -1471,8 +1534,10 @@ RepresentativeScreen makeRepresentativeScreen(
                                                    kSummaryButtonHeight),
                     kSummaryButtonWidth, kSummaryButtonHeight};
             }
-        } else if (screen.workspace.page == FermentationUiPage::TextEdit &&
-                   pressedTarget->row < kFermentationUiKeyboardRows &&
+        } else if (((screen.workspace.page == FermentationUiPage::TextEdit &&
+                     pressedTarget->row < kFermentationUiKeyboardRows) ||
+                    (screen.workspace.page == FermentationUiPage::Pin &&
+                     pressedTarget->row < kFermentationUiPinPadRows)) &&
                    pressedTarget->column < kFermentationUiKeyboardColumns) {
             pressedRect = device_platform::DisplayRect{
                 static_cast<std::uint16_t>(
@@ -1643,6 +1708,17 @@ std::optional<device_platform::DeviceUiTarget> targetAt(
                 1U};
         }
         return std::nullopt;
+    }
+    if (screen.workspace.page == FermentationUiPage::Pin &&
+        x >= kKeyboardLeft &&
+        x < kKeyboardLeft + kFermentationUiKeyboardColumns * kKeyboardPitchX &&
+        y >= kKeyboardTop &&
+        y < kKeyboardTop + kFermentationUiPinPadRows * kKeyboardPitchY) {
+        // Same pitch as the keyboard: whole 34 px rows, 30 px columns.
+        return device_platform::DeviceUiTarget{
+            device_platform::DeviceUiTargetKind::ContentCell, 0U,
+            static_cast<std::uint8_t>((y - kKeyboardTop) / kKeyboardPitchY),
+            static_cast<std::uint8_t>((x - kKeyboardLeft) / kKeyboardPitchX)};
     }
     if (screen.workspace.page == FermentationUiPage::TextEdit &&
         x >= kKeyboardLeft &&
