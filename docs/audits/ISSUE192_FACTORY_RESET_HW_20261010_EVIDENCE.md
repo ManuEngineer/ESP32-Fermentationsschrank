@@ -278,7 +278,7 @@ belegt wird, ob ein Lambda-Frame real beschrieben wird und ob der Pfad bei der
 Qualifizierung erreicht wurde, ist **nicht untersucht**. Er gehoert nur in die
 Ownerentscheidung zum Umfang einer Stack-Absicherung.
 
-### Kleinster KISS-Fixkandidat (Vorschlag, nicht umgesetzt)
+### Kleinster KISS-Fixkandidat (Vorschlag; umgesetzt in C2, siehe 3c)
 
 Nur Stackverbrauch der Handoff-Funktionen senken, **ohne** Task-Stack oder
 Worker-Task zu aendern:
@@ -323,8 +323,9 @@ Gezielte Regressionsnachweise (Vorschlag):
 1. **Fixscope/Issue (entschieden):** Der Owner hat angeordnet, den Fix im
    bestehenden Draft-PR #200 fortzufuehren (kein neues Issue, kein neuer PR).
    Der begrenzte Fix am autorisierten Run-Epochen-Handoff ist in Plan
-   Revision 3 (Abschnitt 4) beschrieben und wartet auf die Freigabe der exakten
-   Plan-SHA; die allgemeine Stack-Absicherung (Gate, UI-Command-Pfad) bleibt
+   Revision 3 (Abschnitt 4) beschrieben; der Owner hat den exakten Plan-Commit
+   `43a65d3` freigegeben, die Software-Umsetzung C1–C3 liegt vor (Abschnitt 3c,
+   Review ausstehend); die allgemeine Stack-Absicherung (Gate, UI-Command-Pfad) bleibt
    FOLLOW-UP.
 2. **Geraeterecovery (neue Freigabe G5 nach Software-Review, G1 deckt sie nicht;
    Plan Revision 3, Abschnitt 5.1; Ausgangsoptionen):** (A) Geraet bleibt im
@@ -334,7 +335,7 @@ Gezielte Regressionsnachweise (Vorschlag):
    App-Flash: Daten inkl. Touchkalibrierung (`tc0`/`tc1`) gehen verloren,
    Ersteinrichtung noetig. (C) Den bestehenden `main`-Stand erneut flashen hilft
    nicht (gleicher Fehler). Empfehlung: (A).
-3. **PR #200:** bleibt Draft und enthaelt nach Planfreigabe zusaetzlich den Fix;
+3. **PR #200:** bleibt Draft und enthaelt nach der Planfreigabe (`43a65d3`) zusaetzlich den Fix;
    Wiederholungstest nur nach G5 und G2-R3 (Plan Revision 3, Abschnitt 5).
 
 ## 3c. Software-Fix und statischer Stacknachweis (2026-10-10, ohne Geraetezugriff)
