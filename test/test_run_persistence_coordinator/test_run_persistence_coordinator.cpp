@@ -10284,6 +10284,62 @@ std::string makePreparedHeadForTest(device_platform::StorageEpoch epoch) {
     return head.value;
 }
 
+std::string toHexForTest(const std::string& bytes) {
+    static const char digits[] = "0123456789abcdef";
+    std::string hex;
+    for (const char byte : bytes) {
+        const auto value = static_cast<unsigned char>(byte);
+        hex.push_back(digits[value >> 4U]);
+        hex.push_back(digits[value & 0x0FU]);
+    }
+    return hex;
+}
+
+void test_issue192_handoff_target_bytes_are_stable() {
+    const auto oldEpoch = device_platform::StorageEpoch{60U};
+    const auto newEpoch = device_platform::StorageEpoch{61U};
+    SequencedWriteStore store;
+    seedHandoffSource(store, oldEpoch);
+    RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
+    auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+        oldEpoch, newEpoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(handoff.prepareAuthorizedEpochHandoff(proof)
+                             .persistenceResult.status));
+    RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(handoff.finalizeAuthorizedEpochHandoff(proof)
+                             .persistenceResult.status));
+
+    const auto slot0 = store.read(slotKey("rc0"), 8240U);
+    const auto slot1 = store.read(slotKey("rc1"), 8240U);
+    const auto head = store.read(slotKey("rh0"), 256U);
+    // Golden bytes of the empty-run handoff target for epoch 61; the wire
+    // format must not change when the target construction is refactored.
+    const std::string expectedSlot0 =
+        "445052460001000700000006000000000000003d00000000000000010000003f"
+        "006dc6cae4030100000000000000000005000000000000030000000000000000"
+        "0000000000000000000000000001000000000200020002000000000000000100"
+        "00000000";
+    const std::string expectedSlot1 =
+        "445052460001000700000006000000000000003d00000000000000020000003f"
+        "00c9b84821030100000000000000000005000000000000030000000000000000"
+        "0000000000000000000000000001000000000200020002000000000000000100"
+        "00000000";
+    const std::string expectedHead =
+        "445052460001000800000006000000000000003d000000000000000100000029"
+        "00bb73bcee020000000006000000000000003d00000000000000010000003fb6"
+        "1442210300010000000000000000";
+    TEST_ASSERT_EQUAL_STRING(expectedSlot0.c_str(),
+                             toHexForTest(slot0.value).c_str());
+    TEST_ASSERT_EQUAL_STRING(expectedSlot1.c_str(),
+                             toHexForTest(slot1.value).c_str());
+    TEST_ASSERT_EQUAL_STRING(expectedHead.c_str(),
+                             toHexForTest(head.value).c_str());
+}
+
 void test_issue144_committed_handoff_rejects_previous_prepared_head() {
     const auto oldEpoch = device_platform::StorageEpoch{76U};
     const auto newEpoch = device_platform::StorageEpoch{77U};
@@ -10712,6 +10768,7 @@ int main(int, char**) {
     RUN_TEST(
         test_issue144_periodic_checkpoint_keeps_committed_hwm_not_fifo_max);
     RUN_TEST(test_issue144_authorized_epoch_handoff_restarts_identity_at_one);
+    RUN_TEST(test_issue192_handoff_target_bytes_are_stable);
     RUN_TEST(test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed);
     RUN_TEST(
         test_issue144_epoch_handoff_durability_matches_each_write_cutpoint);
