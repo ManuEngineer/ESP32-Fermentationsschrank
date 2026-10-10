@@ -257,7 +257,7 @@ Hardware- oder Pre-Ready-Nachweis.
 | SIM-26-18 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_expired_session_activity_cannot_resurrect_or_move_backwards` |
 | SIM-26-19 | `test_device_ui_contracts::test_touch_and_web_session_policies_remain_separate` |
 | SIM-26-20 | `test_run_persistence_coordinator::test_r1_time_pending_is_ram_only_and_rechecks_same_revision` (existing-owner); `test_local_touch_ui::test_sim_26_message_sensor_and_recovery_actions` |
-| SIM-26-21 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths`; `test_run_persistence_coordinator::test_fallback_pending_never_allows_before_recovery_apply` (existing-owner) |
+| SIM-26-21 | `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths` (Recovery-Seite bei `FallbackSelectionRequired`: Slot `ResumeFallback` vorhanden, Druck liefert den `resumeFallback`-Intent); `test_actuation_interlock::test_fallback_pending_never_allows_before_recovery_apply` (existing-owner; Gate bleibt vor dem Recovery-Apply `Unresolved`/`RunPersistenceUntrusted`, nie `Allowed`). Kein dedizierter Test fuer "nur diese Aktion" und "Back/Home/Quittieren mutieren nichts" (siehe Hinweis zu Issue #188 B) |
 | SIM-26-22 | `test_boot_classification::test_all_load_outcomes_map_to_the_r1_boot_classification` (existing-owner); `test_local_touch_ui::test_sim_26_workspace_action_matrix_and_owner_paths` |
 | SIM-26-23 | `test_actuation_interlock::test_recovery_evaluation_actuation_is_blocked` (existing-owner); `test_actuation_interlock::test_fallback_selection_required_never_allows_even_with_complete_evidence` (existing-owner) |
 | SIM-26-24 | `test_local_touch_ui::test_sim_26_shell_locale_and_service_boundaries`; `test_device_ui_contracts::test_shell_has_exactly_four_slots_and_home_back_hierarchy` |
@@ -301,7 +301,7 @@ Hardware- oder Pre-Ready-Nachweis.
 | SIM-26-62 | `test_configuration_service::test_ui_configuration_confirmation_uses_current_owning_basis`; `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
 | SIM-26-63 | `test_configuration_service::test_program_catalog_expected_revision_is_checked_under_preview_lock`; `test_configuration_service::test_persistent_failure_causes_remain_distinct` |
 | SIM-26-64 | `test_configuration_service::test_confirmed_preview_commits_root_then_publishes_runtime`; `test_fermentation_ui_commands::test_command_result_preserves_typed_app_details` |
-| SIM-26-65 | `test_run_persistence_coordinator::test_fallback_pending_never_allows_before_recovery_apply`; `test_actuation_interlock::test_fallback_selection_required_never_allows_even_with_complete_evidence` (existing-owner) |
+| SIM-26-65 | `test_actuation_interlock::test_fallback_pending_never_allows_before_recovery_apply` (existing-owner); `test_actuation_interlock::test_fallback_selection_required_never_allows_even_with_complete_evidence` (existing-owner). Beide pruefen die Gate-Ebene (nie `Allowed`); kein dedizierter Test fuer "`RecoveryPending` aus `resumeFallback()` bleibt `DecisionOnly`" (siehe Hinweis zu Issue #188 B) |
 | SIM-26-66 | `test_local_touch_ui::test_sim_26_manual_and_program_consumer_paths`; `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` (existing-owner) |
 | SIM-26-67 | `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract`; `test_run_commands::test_manual_timed_rejects_invalid_values_without_starting` (existing-owner) |
 | SIM-26-68 | `test_issue144_run_identity::test_application_prepares_manual_timed_with_shared_identity` (existing-owner); `test_fermentation_ui_commands::test_manual_timed_ui_intent_uses_the_merged_application_contract` |
@@ -448,9 +448,9 @@ bedingt, Plan Abschnitte 5–7).
 | SIM-19-S1-04 | Stromausfall an **jedem** Write des Resets, vor und nach dem Commit: nach Neustart exakt alter (weiter zugelassen, Retry gelingt) oder neuer Zustand (normaler Boot setzt fort), nie gemischt: `test_factory_reset_flow::test_s1_a_power_cut_at_every_write_leaves_old_or_new_never_mixed`. |
 | SIM-19-S1-05 | Nie gestartete Netzwerk-/HTTP-Adapter: kein Start, idempotente `stop()`-Aufrufe, Ergebnis `CompletedRestartRequired` statt `CompletedNetworkNotConfirmed`; ein wirklich gescheiterter Stopp bleibt nicht bestaetigt: `test_factory_reset_flow::test_s1_never_started_network_and_http_do_not_make_the_result_unconfirmed`; `::test_s1_a_really_failed_stop_is_still_unconfirmed`. |
 | SIM-19-S1-06 | Restricted-Startseite ohne Runtime: nur Slot 0 kommt hinzu, alle uebrigen Slots entsprechen dem Bestandsvertrag: `test_press_dispatcher::test_restricted_no_runtime_home_adds_only_the_reset_entry`. |
-| HW-19-R01 | `NOT_RUN` (Hardware-Folgeissue #192): physische Erreichbarkeit beider Zugaenge am Geraet, Langgedrueckthalten (5000 ms, Ownerentscheid), Anzeige der Seite, Aktoren AUS am realen Geraet. |
+| HW-19-R01 | `FAIL` (Hardware-Folgeissue #192, Geraet `f859ef6`, quellgleich zu `main` `21082de`, 2026-10-10; `docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`): Touchweg, Warnung/Confirm/Hold-Anzeige, Hold-Abbruch vor 5000 ms und Daten unveraendert per Ownerbeobachtung belegt; der **volle 5000-ms-Hold fuehrt zu `A stack overflow in task main` und anschliessendem Bootloop**, Ergebnis/Persistenz/Ersteinrichtung nicht belegt. Offline-Diagnose (Evidence 3b): Backtraces gegen das mit `HW-188-A01` hashgleiche `f859ef6`-ELF dekodiert; der Backtrace zeigt nur die Erkennung im Kontextwechsel, die ueberlaufende Callsite und der erreichte Persistenzzustand sind `NOT_RESOLVED`; Stack-Budget-Problem im Handoff-Pfad ist Hypothese; Der Fix ist nach freigegebener Plan Revision 3 (`43a65d3`) in PR #200 software-seitig umgesetzt (Host-Tests und statischer Stacknachweis, Evidence 3c; Review akzeptiert); Geraeterecovery mit G5 ausgefuehrt (App-only-Flash `b9564e6` ohne Erase, stabiler Boot, `stack_hwm_bytes=11800`, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung `PASS_OWNER_OBSERVED`, Evidence 3d; G5/P3b `PASS`, interner Handoff-Pfad `NOT_RESOLVED`; **nur P3b-Recovery-Nachweis, kein Reset-Nachweis**, `FAIL` bleibt bis P3c); Wiederholungstest erst nach neuem Gate G2-R3. Aktoren AUS am realen Geraet (physisch getrennt). |
 | HW-19-R02 | `NOT_RUN`: tatsaechliches Verhalten von `esp_wifi_stop()` und `httpd_stop()` (ehrliche Rueckgabe, Abschluss von AP und HTTP), Powercut mitten im Reset auf echtem Flash. |
-| HW-19-R03 | `NOT_RUN` (Hardware-Folgeissue #192): Werksreset aus `SAFE_BOOT` am Geraet **einschliesslich des NoRuntime-Falls** (`ResetEligibleNoRuntime`, software-seitig umgesetzt, `SIM-19-S1-01..06`); Hardwarenachweis steht aus. |
+| HW-19-R03 | `BLOCKED` (Hardware-Folgeissue #192; kein sicherer `SAFE_BOOT`-/NoRuntime-Einstieg benannt, G4 nicht erteilt; der Bootloop aus HW-19-R01 ist durch G5/P3b behoben, Evidence 3d): Werksreset aus `SAFE_BOOT` am Geraet **einschliesslich des NoRuntime-Falls** (`ResetEligibleNoRuntime`, software-seitig umgesetzt, `SIM-19-S1-01..06`); Hardwarenachweis steht aus. |
 
 ### Issue #188 A – lokaler Service-PIN-Einstieg (hardwarefrei)
 
@@ -460,7 +460,19 @@ Native Simulationen fuer den Weg `Einstellungen -> Service (PIN) -> PIN-Eingabe
 `389e2b2`). Sie sind **kein** Hardwarenachweis. Touchfaelle laufen ueber den
 echten Hit-Test und `processWorkspaceTouch` mit Koordinaten aus dem gerenderten
 Screen, nicht ueber `setPage(Pin)`. Der unabhaengige Doku-Befund #188 B
-(`SIM-26-21`/`SIM-26-65`) ist hiervon getrennt und bleibt offen.
+(`SIM-26-21`/`SIM-26-65`) ist hiervon getrennt.
+
+**Hinweis zu Issue #188 B (Ownerentscheid 2026-10-10):** Die Trace-Referenzen
+`SIM-26-21` und `SIM-26-65` verwiesen auf einen in `test_run_persistence_coordinator`
+nicht vorhandenen Test; der Test liegt in
+`test/test_actuation_interlock/test_actuation_interlock.cpp` und wurde dort
+korrigiert referenziert. Die Korrektur erfolgt im Zuge von Issue #192, ohne neue
+Tests und ohne Nachtests (Owner-Verzicht). Es wird keine zusaetzliche Coverage
+behauptet: Die beiden Interlock-Tests belegen die Gate-Ebene (kein `Allowed` vor
+dem Recovery-Apply bzw. bei `FallbackSelectionRequired`); fuer die
+UI-/Command-Aussagen "nur die bestaetigte ResumeFallback-Aktion",
+"Back/Home/Quittieren mutieren nichts" und "`RecoveryPending` aus
+`resumeFallback()` bleibt `DecisionOnly`" existiert kein dedizierter Test.
 
 | ID | Nachweis |
 |---|---|
