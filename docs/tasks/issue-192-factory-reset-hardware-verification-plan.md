@@ -11,12 +11,16 @@ Ownerfreigabe fuer Revision 1 (G1 fuer `df5a3dd`, G4 = `BLOCKED` belassen) war
 an den damaligen Stand gebunden und gilt fuer den neuen Stand **nicht**; alle
 Gates in Abschnitt 4 sind neu zu erteilen.
 
+**Ausfuehrungsstand (2026-10-10):** G1 erteilt; P1 und P2/R01-N (N1–N8) ohne
+Hold/Vollreset ausgefuehrt, Befund in
+`docs/audits/ISSUE192_FACTORY_RESET_HW_20261010_EVIDENCE.md`. G2–G4 offen.
+
 ## 1. Ausgangslage (geprueft am 2026-10-10)
 
 ```text
 BASELINE=21082de766a0b7b52108448c85ae51ba8d84b3f1 (main, Merge von PR #199; enthaelt PR #191 inkl. S1 ResetEligibleNoRuntime und PR #199 Service-PIN-Einstieg)
 QUELLUNTERSCHIED_ZU_f859ef6=nur docs/ (4393d27 docs: HW-188-A01 Evidence + Merge-Commit); Produktquellen identisch zum in HW-188-A01 geflashten Stand f859ef6
-GERAET_AKTUELL=unbekannt. Letzter dokumentierter Flash: f859ef6 (HW-188-A01, 2026-10-09, App ohne Erase). Es wurde in diesem Auftrag KEIN Geraetezugriff durchgefuehrt; der heutige Geraetestand ist vor G1 per UART-Boot-Log (version/source git sha) festzustellen.
+GERAET_AKTUELL=f859ef6 (UART-Boot-Log 2026-10-10, quellgleich zu main 21082de, kein Flash; Provenienz in der Evidence 20261010)
 ISSUE_STAND=#192 OPEN / BLOCKED_HARDWARE; PR #191 und PR #199 gemergt; HW-19-R01..R03 auf dem aktuellen main NOT_RUN
 ```
 
