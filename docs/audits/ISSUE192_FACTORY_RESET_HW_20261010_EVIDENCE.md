@@ -337,6 +337,81 @@ Gezielte Regressionsnachweise (Vorschlag):
 3. **PR #200:** bleibt Draft und enthaelt nach Planfreigabe zusaetzlich den Fix;
    Wiederholungstest nur nach G5 und G2-R3 (Plan Revision 3, Abschnitt 5).
 
+## 3c. Software-Fix und statischer Stacknachweis (2026-10-10, ohne Geraetezugriff)
+
+Plan Revision 3 (Commit `43a65d3`, vom Owner freigegeben) wurde in C1–C3
+umgesetzt: Golden-Bytes-Test (C1, `79ef0ce`), Heap-Scratch im autorisierten
+Handoff (C2, `48bd1f3`), Messung und Evidence (C3, dieser Abschnitt). Wireformat,
+State-Store-/Epoch-/`Pending`-/`Committed`-/Idempotenzvertraege sind unveraendert
+(Golden-Test aus C1 unveraendert gruen). Fallback D2 war nicht noetig. Die
+Messung ist **statisch** (ELF-Disassembly); der Nachweis am Geraet steht aus und
+setzt G5/G2-R3 voraus (Abschnitt 5).
+
+Methode: `scripts/analyze_issue_192_handoff_stack.py ELF` (Frame `entry a1, N`
+je Funktion, direkte `call0/4/8/12`-Kanten, laengster Pfad `app_main` -> Kette).
+Kalibrierung mit `--calibrate` gegen das ELF von `f859ef6` (Hash-verifiziert,
+Abschnitt 3b): reproduziert 17520 / 12160 / 8512 B und 35 744 B (K-BOOT-P)
+exakt. K-HOLD ergibt im Callgraph **38 960 B** statt der manuellen 38 928 B aus
+3b, weil der Release-Pfad der Hauptschleife zusaetzlich
+`main_ui::releaseFactoryResetHold` (32 B) durchlaeuft; die Differenz ist
+erklaert, die 3b-Zahl war eine Untergrenze.
+
+### Framegroessen vorher/nachher (Release-ELF `48bd1f3`, Bringup identisch)
+
+| Funktion | vorher (`f859ef6`) | nachher |
+|---|---|---|
+| `makeAuthorizedEpochHandoffTarget` | 17 520 B | **5 680 B** |
+| `prepareAuthorizedEpochHandoff` | 12 160 B | **608 B** |
+| `finalizeAuthorizedEpochHandoff` | 8 512 B (make inline) | **656 B** |
+
+### Ketten gegen Stackbudget 24 576 B (Reserve-Ziel 6 144 B, Kettengrenze 18 432 B)
+
+| Kette | direkt benannt vorher | direkt benannt nachher | inkl. tiefstem Callee vorher | inkl. tiefstem Callee nachher | Reserve nachher |
+|---|---|---|---|---|---|
+| K-HOLD (`beginAuthorizedFactoryReset` -> `prepare`) | 38 960 B | **15 568 B** | 39 920 B | **16 528 B** | **8 048 B** |
+| K-BOOT-P (`completeAuthorizedEpochHandoff` -> `prepare`, Phase `Pending`) | 35 744 B | **12 352 B** | 36 704 B | **13 312 B** | **11 264 B** |
+| K-BOOT-C (`completeAuthorizedEpochHandoff` -> `finalize`, Phase `Committed`) | 14 576 B | **12 400 B** | 15 280 B | **13 360 B** | **11 216 B** |
+
+Release und Bringup liefern identische Werte; alle drei Ketten liegen unter der
+Kettengrenze (18 432 B). Das Stackgate aus Plan 4.5 ist **statisch erfuellt**.
+Die schwerste Kette K-HOLD besteht aus `app_main` 4 928, `updateProductUi` 816,
+`processWorkspaceTouch` 2 576, `releaseFactoryResetHold` 32,
+`updateFactoryResetHold` 112, `beginAuthorizedFactoryReset` 816, `prepare` 608,
+`make` 5 680 B; der tiefste Callee unterhalb von `make` (Encode/Validate) addiert
+weitere 960 B.
+
+Grenzen (explizit, die Summen sind Untergrenzen): Das Skript zaehlt nur direkte
+Kanten. Unaufgeloeste `callx`-Kanten auf den Ketten (Release): K-HOLD 148 in 17,
+K-BOOT-P 110 in 14, K-BOOT-C 112 in 14 Funktionen (u. a. State-Store-Port,
+`ConfigurationRecoveryService`); Bringup 150 / 113 / 113. Calls ins Symbol-Innere
+(geteilter/ausgelagerter Code) werden nicht als Kanten gezaehlt: 458 (Release),
+496 (Bringup). Interrupt-Frames und ROM-Callees ohne `entry` sind nicht erfasst.
+Die Aussage ist daher "unter der Kettengrenze nach direktem Callgraph", nicht
+"Stackverbrauch am Geraet gemessen". Der Ursprungsueberlauf bleibt Hypothese
+(Callsite `NOT_RESOLVED`, Abschnitt 3b). Der separat gefundene UI-Command-Stackpfad
+(ca. 41,6 kB, `UNVERIFIED_STATIC`) ist nicht Teil dieses Fixes und bleibt FOLLOW-UP;
+das Skript ist bewusst nicht in `run_pre_ready_gates.sh`/CI verdrahtet
+(Ownerentscheid ausstehend).
+
+### Heap-Spitze und Reihenfolge Netzwerkstopp/Handoff
+
+Der Fix legt je `prepare`/`finalize` genau einen `RunPersistenceRawRecord`
+(3 952 B) per `new (std::nothrow)` an, sequentiell und kurzlebig; Spitze wie in
+Plan 4.4 (ca. 4,4 kB, groesster Block 3 952 B). Ein Allokationsfehler endet vor
+jedem Schreibzugriff mit `reject(CandidateApply, InvalidProjection)`,
+`durability == Unchanged` (Host-Test `test_issue192_handoff_scratch_allocation_failure_fails_closed`).
+
+Reihenfolge in `beginAuthorizedFactoryReset` (`fermentation_application.cpp`):
+`closeAndDrain()` -> `ConfigurationRecoveryService::beginAuthorizedFactoryReset`
+-> `prepareAuthorizedEpochHandoff` -> `commitAuthorizedRunEpochHandoff`.
+`endNetworkAfterFactoryReset()` laeuft erst im Aufrufer nach Core-Reset **und**
+Handoff. Das Netzwerk ist beim Handoff-`prepare` daher noch aktiv; massgeblich ist
+die Netzwerkmodus-Heap-Evidenz (`R1_RAM_S8_EVALUATION.md`: kleinster gesampelter
+groesster Block 7 168 B, Low-Water 4 124 B), nicht die Betriebswerte
+(40 960 B Block). Die Reserve im groessten Block betraegt dort ca. 3,2 kB; der
+Low-Water-Wert ist fuer den Reset-Zeitpunkt **nicht belegt**. Die Heap-Spitze am
+Geraet wird erst im Retest (Plan 5.2) gemessen.
+
 ## 4. Status je Akzeptanztest
 
 ```text
