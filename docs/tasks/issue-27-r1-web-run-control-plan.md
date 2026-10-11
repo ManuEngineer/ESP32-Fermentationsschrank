@@ -21,7 +21,10 @@ Nicht-Ziele (gehoeren nicht in diesen PR):
   (`ACTUATOR_RELEASE=NO` bleibt), R_IS/L_IS bleibt `FUTURE_RELEASE`;
 - Servicebereich im Web (PIN-Lease), Konfigurationsaenderungen, Moduswechsel
   Passwortschutz, Werksreset (bleibt bewusst nicht ueber HTTP erreichbar);
-- neue Wireformate, neue Auth-/Session-/Replay-Mechanik, Frameworks;
+- neue Auth-/Session-/Replay-Mechanik, persistente Anmeldung, Frameworks;
+- neue Wireformate, mit genau einer ownerabhaengigen Ausnahme: der
+  Read-only-Response `GET /api/v1/programs` (C4, nur bei D2 = A);
+  Request-Format (`v`,`r`,`i`) und bestehende Responses bleiben unveraendert;
 - erfundene PI-/Safety-/GPIO-Werte; OTA.
 
 ## 2. Verifizierte Ausgangslage (Repository `b390207`)
@@ -37,6 +40,10 @@ Nicht-Ziele (gehoeren nicht in diesen PR):
 | `ApplicationCallSerializer` (rekursiv) serialisiert jede oeffentliche Application-Methode; zwischen Prepare/Confirm/Apply kann Touch einschieben -> Ausdruck ueber Revisionen/Revalidierung | `fermentation_application.hpp/.cpp` |
 | Read-only `/api/v1/status` liefert `revisions` (`stateSequence`, `run`, `messages`, `fault`, `recoveryEpisode`, `userConfiguration`, `programCatalog`), `/alerts` liefert `id` und `revision` je Meldung | `web_json_codec.cpp:875-1017` |
 | **Luecke:** Es gibt keine Programmliste; `start-program` braucht eine `programId`, die ein Client nicht kennt | Codec / API-Routen |
+| **Luecke:** Der Browser kennt die naechste Mutationssequenz nicht. `WebSessionManager::mutationSequence()` liefert `Available(nextMutationSeq)`, `InFlight(inFlightMutationSeq)` oder `Exhausted`, wird aber weder von Shell, `/status`, Login noch POST-Resultaten ausgegeben. `reserveMutation` akzeptiert nur exakt `highWater+1` (Gap/Reused/Expired/Conflict -> 409 `sequence-conflict`); eine Sequenz wird erst nach `reserveMutation` verbraucht (auch bei 409-stale/422/503-Outcome), nicht bei Fehlern davor (400/401/403/415) | `web_session.cpp`, `reservationError` |
+| Die Shell wird serverseitig pro Request mit Session gerendert und bettet bereits das CSRF-Token ein (`handleShell`/`webShell`); derselbe Mechanismus kann die Sequenz einbetten, ohne neuen Endpunkt | `web_application_routes.cpp` |
+| Persistenzergebnisse werden unterschiedlich projiziert: `WriteFailed` -> 500 `write-failed` (nur mit `OwningOutcome`+`Rejected`); `PersistenceIndeterminate`, `PersistenceCommittedApplyFailed`, `RecoveryPending`, `NotInitialized`, `Blocked` -> 503 `unavailable`; `CapacityExceeded` -> 413. `PersistenceCommittedApplyFailed` bedeutet: Durability `MayHaveChanged`, Koordinator-Zustand gesperrt (Recovery/Service), es kann bereits dauerhaft geschrieben sein | `projectCommandResult`, `fermentation_application.cpp:2395-2410`, `run_persistence_coordinator.cpp` |
+| Heute positiv ueber den echten Application-Pfad nachgewiesen im Web-Testfixture: `ack-message`/`mute-message` (RAM-owned). Programmstart/Stop/Abschluss mit Persistenz haben dort **keinen** positiven Web-Test; Manuallaeufe, `abort-and-cool` und Abschluss mit Kuehlstart sind durch `kManualRunLimitsOwnerAvailable=false` gesperrt (503) | `test_web_application_routes`, `fermentation_application.cpp:159-385` |
 | Shell (max. 4096 Byte) hat nur Login/Logout/Polling, keine Mutationssteuerung | `webShell` |
 | Vier-Session-/RAM-Gate bestanden | `docs/ROADMAP.md`, `docs/audits/PR170_HW_GATE_20261005/` |
 
@@ -67,44 +74,114 @@ Erreichbarkeit wird zum Positivtest.
 
 **C2 – Nativer Integrations-/Negativnachweis ueber den Dispatcher.**
 Tests im bestehenden `test_web_application_routes` mit vorhandenen Fakes
-(kein neues Test-Framework):
+(kein neues Test-Framework). C2 testet nur ueber direkte HTTP-Requests
+(vorhandene Request-Helfer); die Shell-Bedienung aus C3/C4 wird nicht
+vorausgesetzt.
 
-- Positiv: Login -> Status lesen -> `ack-message`/`mute-message` und
-  `stop-run`/`complete-run` (soweit ohne Limits-Owner zulaessig) mit
-  Revisionen aus `/api/v1/status`; Replay desselben Requests liefert
-  identisches Ergebnis ohne zweite Wirkung.
-- Auth/CSRF/Replay: fehlende/abgelaufene Session 401; falsches CSRF 403;
-  fremder Origin 403; falscher Content-Type 415; Sequenz-Luecke/-Wiederholung/
-  In-Flight; geaenderter Body bei gleicher Sequenz; `password-disabled`
-  funktioniert mit Session, anonym nicht.
-- Stale: Revision aus `/status`, dann Touch-seitige Aenderung ueber dieselbe
-  Application, dann Web-POST -> 409 stale, keine Mutation; umgekehrt
-  Web zuerst, Touch mit alter Revision wird abgelehnt (Doppelausfuehrung
-  verhindert).
-- Konkurrenz: zwei Web-Sessions starten dasselbe Programm -> genau eine
-  Ausfuehrung, die andere 409.
-- Fail-closed: kein/ungueltiger Sensor, offenes Safety-Gate, Recovery/
-  Indeterminate -> typisierte Ablehnung (409/422/503), Zustand und Persistenz
-  unveraendert; Persistenzfehler -> 500 `write-failed`, kein Teilzustand.
-- Quelle: Journal-/Audit-Kontext traegt `WebInterface`.
-- Ressourcen: bestehende Vier-Session-Konstanten werden referenziert, nicht
+Zuerst ein kurzer Erreichbarkeits-Check (Teil von C2, Ergebnis im
+Commit-Text): Welche Run-Aktionen sind unter der heutigen Limits-/Safety-
+Evidence ueber den produktiven Application-Pfad mit simulierter owning
+Evidence (Sensoren, Safety-Gate, Katalog) positiv erreichbar?
+
+- **Garantiert positiv:** `ack-message`, `mute-message` (existierender
+  RAM-owned Pfad) ueber den Dispatcher inkl. Replay desselben Requests ohne
+  zweite Wirkung.
+- **Bedingt positiv:** `start-program`, `stop-run` (ohne Kuehlung) und
+  `complete-run` (ohne Kuehlstart) nur, wenn der Check zeigt, dass Katalog und
+  owning Evidence im nativen Fixture ohne Commissioning-Werte und ohne
+  Gate-Umgehung bereitstellbar sind. Dann: Start, Stop, Abschluss als
+  Positivfaelle; Konkurrenz «zwei Sessions starten dasselbe Programm -> genau
+  ein Start erfolgreich, der andere stale».
+- **Sonst (Fallback, ohne Anspruch auf Programmstart-Erfolg):** die Stale-/
+  Doppelwirkungsinvariante am zulaessigen Pfad: zwei Sessions quittieren
+  dieselbe Meldung mit gleicher Revision -> genau eine Wirkung (zweite stale
+  oder `NoChange` laut Application), Touch-seitige Aenderung zwischen
+  Statuslesen und POST -> 409, kein Zustandswechsel. `start-program` wird
+  separat nur fail-closed geprueft (unbekanntes Programm 422, stale
+  Katalogrevision 409, fehlende Sensor-/Safety-Evidence -> typisierte
+  Ablehnung, Zustand und Persistenz unveraendert).
+- **Dauerhaft gesperrt (503, unveraendert):** Manuallaeufe, `abort-and-cool`,
+  Abschluss mit Kuehlstart; bestehender Test bleibt, wird um den Dispatcher-
+  Pfad ergaenzt.
+- **Auth/CSRF/Replay:** fehlende/abgelaufene Session 401; falsches CSRF 403;
+  fremder Origin 403; falscher Content-Type 415; Auth-State-Gate (503 bei
+  `Unprovisioned`/`RecoveryRequired`/`Indeterminate`, kein Digest, kein
+  Application-Aufruf); `password-disabled` mit Session ok, anonym 401;
+  Setup-Flow-Vorrang; Replay mit identischem Body liefert identischen
+  Outcome, geaenderter Body bei gleicher Sequenz -> 409.
+- **Mutationssequenz (Ergaenzung, siehe C3):** `Available` -> naechste
+  Sequenz exakt `highWater+1`; `InFlight` (gleiche Sequenz, gleicher Digest ->
+  409 `sequence-conflict`; andere Sequenz -> 409); Gap, Reused, ReplayExpired
+  (nach 8 Outcomes), `Exhausted` -> 409 ohne Application-Aufruf und ohne
+  Verbrauch; Sequenz wird nach Outcomes 200/409-stale/422/503 verbraucht,
+  nach 400/401/403/415 nicht; zwei Sessions haben unabhaengige Sequenzen.
+- **Persistenz-Negativmatrix (je Fehlerklasse, getrennt):**
+  | Klasse | Antwort | Erwarteter unveraenderter Vertrag / Nachbehandlung |
+  |---|---|---|
+  | `WriteFailed` (`OwningOutcome`+`Rejected`) | 500 `write-failed` | Run-Zustand und Application-Revision unveraendert; Replay liefert dieselbe 500 |
+  | `CapacityExceeded` | 413 | unveraendert |
+  | `PersistenceIndeterminate` | 503 `unavailable` | kein Erfolg behauptet, kein Nichtcommit behauptet; Koordinator bleibt in Recovery/Indeterminate; weitere Mutationen werden 503/typisiert abgelehnt; Nachbehandlung nur ueber Status/Recovery, nicht durch Wiederholung mit neuer Sequenz |
+  | `PersistenceCommittedApplyFailed` | 503 `unavailable` | Durability `MayHaveChanged`: es kann bereits dauerhaft geschrieben sein; Test prueft nur Antwort, gesperrten Koordinatorzustand (weitere Run-Mutationen abgelehnt) und dass das Replay-Outcome 503 bleibt; keine Behauptung eines Nicht-Commits |
+  | `RecoveryPending`/`NotInitialized`/`Blocked` | 503 | unveraendert, fail-closed |
+  Die Fehlerklassen werden mit den existierenden Fault-Injection-Hilfen des
+  Fixtures (StateStore-Fehler) erzeugt, soweit der Pfad per Application
+  erreichbar ist; sonst bleibt der Projektionstest (bestehende Matrix) der
+  Nachweis und die Luecke wird im Commit-Text benannt.
+- **Quelle:** der Kontext traegt `WebInterface` (Protokollquelle `web`).
+- **Ressourcen:** bestehende Vier-Session-Konstanten werden referenziert, nicht
   wiederholt; `static_assert`/Groessenreport bleibt gruen.
 
-**C3 – Minimale Shell-Bedienung (nur wenn D1/D2 entschieden).**
+**C3 – Minimale Shell-Bedienung (nur wenn D1/D4 entschieden).**
 Im 4096-Byte-Budget: Anzeige aktueller Lauf-/Meldungsstatus aus den
-bestehenden APIs; Buttons Stop, Abschliessen, Quittieren, Stumm; jede
-Mutation erst nach zweitem expliziten Klick (clientseitige Bestaetigung, kein
-`window.confirm`), sendet `X-CSRF-Token`, `X-Mutation-Seq` (monoton, aus
-Antwort/Zustand der Seite), Revisionen aus dem letzten Status; bei 409 Neu-
-laden des Snapshots statt blindem Wiederholen. Sprachen de/en/es wie bisher.
-Falls das Budget nicht reicht: Messung vorlegen, Ownerentscheid (nicht
-still Limit anheben oder Shell aufblasen).
+bestehenden APIs; Buttons Stop, Abschliessen, Quittieren, Stumm; jede Mutation
+erst nach zweitem expliziten Klick (clientseitige Bestaetigung, kein
+`window.confirm`), sendet `X-CSRF-Token`, `X-Mutation-Seq`, Revisionen aus dem
+letzten Status. Sprachen de/en/es wie bisher. Falls das Budget nicht reicht:
+Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
 
-**C4 – Programm-Start (nur bei D2 = A).** Bounded read-only
-`GET /api/v1/programs` (id, Anzeigename, Katalogrevision) im bestehenden
-Codec-Stil, Body <= `kMaximumWebApiResponseBodyBytes`; `start-program`-
-Steuerung in der Shell nur, wenn das 4096-Byte-Budget haelt, sonst Messung
-und Ownerentscheid.
+*Sequenz-Bootstrap und Resynchronisation (nutzt nur vorhandene Vertraege):*
+
+1. `handleShell` bettet bei gueltiger Session neben dem CSRF-Token das
+   Ergebnis von `WebSessionManager::mutationSequence()` ein (`Available` ->
+   `nextMutationSeq`; `InFlight`/`Exhausted` -> Bedienung deaktiviert,
+   Hinweis «Neu laden»). Kein neuer Endpunkt, kein neues JSON, keine Aenderung
+   an Login/Status/POST-Responses. Die Abfrage erneuert die Idle-Frist nicht.
+2. Der Client haelt `nextSeq` nur im Seitenspeicher; kein `localStorage`, kein
+   persistentes Login. Pro Zeitpunkt ist hoechstens ein Request in Flight.
+3. Nach `200`, `409 stale`, `409 busy`, `409 confirmation-required`, `413`,
+   `422` und `500 write-failed` (Antworten mit Outcome aus
+   `completeMutation`) wird `nextSeq` um 1 erhoeht und der Status neu
+   geladen. Nach `400/401/403/415` (vor Reservierung) bleibt `nextSeq`.
+4. Nach `409 sequence-conflict` (Gap, Reused, Expired, InFlight, mehrere
+   Tabs/Reload mit veraltetem Wert), nach jedem `503` (nicht unterscheidbar,
+   ob vor oder nach der Reservierung) und nach `Exhausted`: kein Folge-Request
+   mit neuer Sequenz; die Seite wird neu geladen (`GET /`), was den Wert aus
+   Punkt 1 neu liest. Der Nutzer entscheidet danach anhand des frischen
+   Status erneut; die Revisionspruefung verhindert Doppelwirkung.
+5. Unsicherer Ausgang (Timeout/Netzfehler ohne Antwort): hoechstens ein
+   Wiederholungsversuch mit **byte-identischem Body und derselben Sequenz**
+   (Replay liefert den gespeicherten Outcome bzw. 409 `InFlight`); danach
+   Neuladen wie in 4. Keine blinde Wiederholung mit neuer Sequenz.
+6. Tests: native Dispatcher-Tests fuer Shell-Einbettung (Available, InFlight,
+   Exhausted, mehrere Sessions, kein `touch`), Replay byte-identisch, Konflikt
+   bei zweitem Tab; Verhalten der Client-Skriptlogik wird mangels Browser im
+   Gate als Textvertrag der Shell (erwartete Marker, Groessenlimit) geprueft;
+   echter Browsertest bleibt `NOT_RUN`.
+
+**C4 – Programm-Start (nur bei D2 = A).** Die Ausnahme von «keine neuen
+Wireformate» ist eng begrenzt: ein neuer *Read-only-Response*
+`GET /api/v1/programs`, Request-Vertrag und uebrige Responses unveraendert.
+Vertrag: Quelle ist ausschliesslich der kanonische Programmkatalog-Owner der
+Application (aus dem `uiSnapshot`; kein zweiter Katalog, keine Kopie); je
+Eintrag nur `id` und Anzeigename; Feld `catalogRevision` (gleiche
+Dezimalstring-Konvention wie `revisions.programCatalog`); begrenzt auf
+`kMaximumWebApiResponseBodyBytes` (3072) und eine feste Maximalzahl, bei
+Ueberschreitung 503 statt Kuerzung; GET-only, Session-/Auth-State-Gate wie die
+uebrigen Read-only-Routen; ohne Katalog (Fehler/leer) leere Liste bzw. 503,
+**keine** Platzhalter oder Geraetedaten. Ohne D2 = A wird C4 aus diesem Slice
+genommen und `start-program` bleibt am Touch; C1–C3 bleiben unberuehrt.
+`start-program`-Steuerung in der Shell nur, wenn das 4096-Byte-Budget haelt,
+sonst Messung und Ownerentscheid.
 
 **C5 – Dokumentation.** `docs/ROADMAP.md` (zu Beginn des PR und nach Merge),
 `docs/WEB_UI.md` (Mutationsroute produktiv, Gate-Hinweis zum Vier-Session-
@@ -131,6 +208,12 @@ Tests gelten als nicht bestanden; Hardware: `NOT_RUN`.
 
 ## 6. Offene Ownerentscheidungen
 
+Alle D1–D4 sind Empfehlungen; es wird keine Entscheidung und keine
+Freigabe unterstellt. Bis zur Ownerentscheidung wird nur C1/C2 vorbereitet
+(Freigabe der Plan-SHA vorausgesetzt); in C1/C2 benoetigte Tests laufen
+ausschliesslich ueber direkte HTTP-Requests und setzen keine Shell-
+Bedienung (C3) und keine Programmliste (C4) voraus.
+
 - **D1 – Bestaetigungsmodell.** Empfehlung: Der POST ist die Bestaetigung (wie
   heute implementiert, kein serverseitiger Pending-State, kein Zusatz-RAM);
   Sicherheitsabfrage ausschliesslich clientseitig durch zweiten Klick.
@@ -147,11 +230,18 @@ Tests gelten als nicht bestanden; Hardware: `NOT_RUN`.
   Quittieren, Stumm; Fehler-Reset, Sensorauswahl, Recovery-Zeitkorrektur
   folgen separat.
 
-Keine dieser Entscheidungen blockiert C1/C2; C3/C4 warten auf D1/D2/D4.
+Keine dieser Entscheidungen blockiert C1/C2; C3 wartet auf D1/D4, C4 auf D2.
+`ACTUATOR_RELEASE=NO`; kein Flash, keine Hardwaretests (`NOT_RUN`).
 
 ## 7. Risiken
 
 - Shell-Budget 4096 Byte (Messung in C3, kein stilles Anheben).
+- Mutationssequenz-Resynchronisation (mehrere Tabs, Reload, verlorene
+  Antwort): durch Einbettung in die Shell und Reload-Regel geloest, aber nur
+  ueber Textvertrag und Dispatcher-Tests nachweisbar; Browserverhalten bleibt
+  `NOT_RUN`.
+- Persistenz-Teilfehler (`PersistenceCommittedApplyFailed`): Web meldet nur
+  503; Nachbehandlung bleibt Recovery/Service, keine Web-Wiederholung.
 - Interleaving Touch/Web zwischen den drei Application-Aufrufen: abgesichert
   durch Revisionen/Revalidierung; Nachweis in C2, kein neuer Lock um den
   Gesamtablauf (waere Blockade der Hauptschleife).
