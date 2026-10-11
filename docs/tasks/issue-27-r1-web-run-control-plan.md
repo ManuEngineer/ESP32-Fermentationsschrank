@@ -1,7 +1,9 @@
 # Issue #27 – R1-Webbedienung: Run-Mutationsroute produktiv komponieren (Plan)
 
-Status: `PLAN_PROPOSED` – keine Implementierung vor Ownerfreigabe der exakten
-Plan-SHA. Basis: `main` bei `b390207`. Scope: genau Issue #27.
+Status: `PLAN_OWNER_DECISIONS_D1_D4_INCORPORATED` – Independent Plan Review
+`PASS / GO` (Plan-HEAD `5b892b2`); Ownerentscheidungen D1–D4 getroffen und
+eingearbeitet. Keine Implementierung vor Ownerfreigabe der exakten
+aktualisierten Plan-SHA. Basis: `main` bei `b390207`. Scope: genau Issue #27.
 
 ## 1. Ziel und Nicht-Ziele
 
@@ -23,7 +25,7 @@ Nicht-Ziele (gehoeren nicht in diesen PR):
   Passwortschutz, Werksreset (bleibt bewusst nicht ueber HTTP erreichbar);
 - neue Auth-/Session-/Replay-Mechanik, persistente Anmeldung, Frameworks;
 - neue Wireformate, mit genau einer ownerabhaengigen Ausnahme: der
-  Read-only-Response `GET /api/v1/programs` (C4, nur bei D2 = A);
+  Read-only-Response `GET /api/v1/programs` (C4, Ownerentscheid D2 = A);
   Request-Format (`v`,`r`,`i`) und bestehende Responses bleiben unveraendert;
 - erfundene PI-/Safety-/GPIO-Werte; OTA.
 
@@ -53,7 +55,7 @@ massgebend sind Code, `docs/WEB_UI.md`, ROADMAP und Live-Issue.
 ## 3. Betroffene Module, Vertraege, Gates
 
 - `fermentation_app` (nur gegen abstrakte Ports): `web_application_routes`,
-  ggf. `web_json_codec` (nur falls D2 = A). Keine Aenderung an
+  ggf. `web_json_codec` (C4, D2 = A). Keine Aenderung an
   `device_platform*`.
 - Vertraege: `docs/WEB_UI.md` (Gleichbehandlung, Revisionsschutz, Quelle
   `web`), Replay-/Session-Vertrag PR #170, Touch-Bestaetigungssemantik.
@@ -133,12 +135,20 @@ Evidence (Sensoren, Safety-Gate, Katalog) positiv erreichbar?
 - **Ressourcen:** bestehende Vier-Session-Konstanten werden referenziert, nicht
   wiederholt; `static_assert`/Groessenreport bleibt gruen.
 
-**C3 – Minimale Shell-Bedienung (nur wenn D1/D4 entschieden).**
+**C3 – Minimale Shell-Bedienung (D1/D4 entschieden).**
 Im 4096-Byte-Budget: Anzeige aktueller Lauf-/Meldungsstatus aus den
-bestehenden APIs; Buttons Stop, Abschliessen, Quittieren, Stumm; jede Mutation
-erst nach zweitem expliziten Klick (clientseitige Bestaetigung, kein
-`window.confirm`), sendet `X-CSRF-Token`, `X-Mutation-Seq`, Revisionen aus dem
-letzten Status. Sprachen de/en/es wie bisher. Falls das Budget nicht reicht:
+bestehenden APIs; Buttons Stop, Abschliessen, Quittieren, Stumm. Die
+Browser-Bestaetigung ist aktionsabhaengig (D1): **Stop und Abschliessen**
+verlangen einen zweiten, ausdruecklichen Klick (clientseitig, kein
+`window.confirm`); **Quittieren und Stumm** werden mit einem einzigen Klick
+gesendet, ohne Dialog. Der Programmstart (zwei Klicks) gehoert zu C4. Jede
+Mutation sendet `X-CSRF-Token`, `X-Mutation-Seq` und Revisionen aus dem
+letzten Status; serverseitig laufen fuer alle Aktionen unveraendert
+`prepareEnvelope` -> `confirmPrepared` -> `applyConfirmedPrepared`, ohne neuen
+Pending-State. Deaktivierte oder unerreichbare Aktionen (z. B. kein aktiver
+Lauf, Sequenz fehlt, `InFlight`) sind deaktiviert; stale, abgelehnte oder
+unklare Ergebnisse (`409`, `422`, `503`, nicht parsebar) werden nie als Erfolg
+angezeigt, sondern als Hinweis mit Statusneuladen. Sprachen de/en/es wie bisher. Falls das Budget nicht reicht:
 Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
 
 *Sequenz-Bootstrap und Resynchronisation (nutzt nur vorhandene Vertraege):*
@@ -181,7 +191,9 @@ Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
    Wiederholungsversuch mit **byte-identischem Body und derselben Sequenz**
    (Replay liefert den gespeicherten Outcome bzw. 409 `InFlight`); danach
    Neuladen wie in 4. Keine blinde Wiederholung mit neuer Sequenz.
-6. Tests: native Dispatcher-Tests fuer Shell-Einbettung (Available, InFlight,
+6. Tests: Textvertrag der Shell enthaelt je Aktion die korrekte Anzahl
+   Bestaetigungsschritte (Stop/Abschliessen zwei, Quittieren/Stumm eins);
+   native Dispatcher-Tests fuer Shell-Einbettung (Available, InFlight,
    Exhausted, mehrere Sessions, kein `touch`), Replay byte-identisch, Konflikt
    bei zweitem Tab; Login-Pfad: `GET /` ohne Session enthaelt keine Sequenz,
    nach Login mit Sessioncookie liefert `GET /` die Sequenz (`Available`,
@@ -190,7 +202,7 @@ Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
    Gate als Textvertrag der Shell (erwartete Marker, Groessenlimit) geprueft;
    echter Browsertest bleibt `NOT_RUN`.
 
-**C4 – Programm-Start (nur bei D2 = A).** Die Ausnahme von «keine neuen
+**C4 – Programm waehlen und starten (D2 = A beschlossen).** Die Ausnahme von «keine neuen
 Wireformate» ist eng begrenzt: ein neuer *Read-only-Response*
 `GET /api/v1/programs`, Request-Vertrag und uebrige Responses unveraendert.
 Vertrag: Quelle ist ausschliesslich der kanonische Programmkatalog der
@@ -209,10 +221,18 @@ Ueberschreitung 503 statt Kuerzung; GET-only, Session-/Auth-State-Gate wie die
 uebrigen Read-only-Routen; nicht verfuegbarer
 Katalog (`uiPresentationSource()` liefert `std::nullopt`, Lease/Konsistenz
 fehlt) -> 503, nie eine scheinbar gueltige leere Liste; ein tatsaechlich
-leerer Katalog -> leere Liste; **keine** Platzhalter oder Geraetedaten. Ohne D2 = A wird C4 aus diesem Slice
-genommen und `start-program` bleibt am Touch; C1–C3 bleiben unberuehrt.
-`start-program`-Steuerung in der Shell nur, wenn das 4096-Byte-Budget haelt,
-sonst Messung und Ownerentscheid.
+leerer Katalog -> leere Liste; **keine** Platzhalter oder Geraetedaten.
+Die Shell erhaelt eine Programmauswahl nach Name und eine Startbedienung ueber
+den bestehenden `start-program`-Intent (mit Katalogrevision aus der Liste bzw.
+`/status`), mit zwei ausdruecklichen Klicks (D1); der Start gelingt nur bei
+erfuellten fachlichen/Safety-Voraussetzungen, sonst wird die typisierte
+Ablehnung angezeigt (nie als Erfolg). Programmliste und Shell bleiben in den
+bestehenden Budgets (Antwort <= 3072 Byte, Shell <= 4096 Byte); bei
+Ueberschreitung wird gemessen und ein Ownerentscheid eingeholt, nicht still
+erhoeht und nicht durch zusaetzliche Infrastruktur umgangen. Native Tests:
+Programmliste (Gate, Bounds, 503 bei fehlendem Katalog, leerer Katalog),
+Start ueber Programmauswahl inkl. Textvertrag (zwei Bestaetigungsschritte,
+Name -> `programId`) und die C2-Fail-closed-Faelle.
 
 **C5 – Dokumentation.** `docs/ROADMAP.md` (zu Beginn des PR und nach Merge),
 `docs/WEB_UI.md` (Mutationsroute produktiv, Gate-Hinweis zum Vier-Session-
@@ -231,38 +251,40 @@ Tests gelten als nicht bestanden; Hardware: `NOT_RUN`.
 | Prio | Funktion | Behandlung |
 |---|---|---|
 | R1-Pflicht, diese Planung | Laufbedienung Stop/Abschluss/Quittieren/Stumm | C1–C3 |
-| R1-Pflicht, Owner-abhaengig | Programmstart | C4 bei D2 = A |
+| R1-Pflicht | Programm waehlen und starten | C4 (D2 = A beschlossen) |
 | Folge-PR #27 | Fehler zuruecksetzen, Sensorauswahl, Recovery-Zeitkorrektur, Anpassung laufender Laeufe (Codec kennt Intents; Shell-Bedienung folgt) | eigener Schnitt, kleine PRs |
 | Folge-PR #27 | Konfiguration (Programme, Netzwerk), Servicebereich mit PIN-Lease | separat, braucht Konfigurationsvertraege |
 | Ausserhalb | Journal/Historie/Backup/Import (#19), #28-Funktionen | nicht Teil von #27-Run-Control |
 | Spaeter | Manuelle Laeufe | Application liefert heute 503 ohne Limits-Owner; kein Web-Vorgriff |
 
-## 6. Offene Ownerentscheidungen
+## 6. Getroffene Ownerentscheidungen
 
-Alle D1–D4 sind Empfehlungen; es wird keine Entscheidung und keine
-Freigabe unterstellt. Bis zur Ownerentscheidung wird nur C1/C2 vorbereitet
-(Freigabe der Plan-SHA vorausgesetzt); in C1/C2 benoetigte Tests laufen
-ausschliesslich ueber direkte HTTP-Requests und setzen keine Shell-
-Bedienung (C3) und keine Programmliste (C4) voraus.
+Verbindlich (Owner, Vorgabe zu PR #201); keine offenen D1–D4-Gates.
 
-- **D1 – Bestaetigungsmodell.** Empfehlung: Der POST ist die Bestaetigung (wie
-  heute implementiert, kein serverseitiger Pending-State, kein Zusatz-RAM);
-  Sicherheitsabfrage ausschliesslich clientseitig durch zweiten Klick.
-  Alternative: serverseitige Zwei-Phasen-Bestaetigung (neuer Zustand, Replay-
-  und RAM-Wirkung, eigener Vertrag).
-- **D2 – Programmliste fuer `start-program`.** Empfehlung A: bounded
-  `GET /api/v1/programs` in diesem PR (C4). B: Programmstart bleibt Touch-
-  only, Web in R1 ohne Start (Stop/Quittieren/Stumm zuerst). Ohne Liste ist
-  Web-Start nicht sinnvoll bedienbar.
-- **D3 – Routenpfad.** Empfehlung: `POST /internal/ui/run` unveraendert
-  beibehalten (Codec, Tests, Replay-Digest und PR-#170-Nachweis beziehen sich
-  darauf); Umbenennung nach `/api/v1/...` waere ein Vertragswechsel.
-- **D4 – Umfang der ersten Shell-Bedienung.** Empfehlung: Stop, Abschliessen,
-  Quittieren, Stumm; Fehler-Reset, Sensorauswahl, Recovery-Zeitkorrektur
-  folgen separat.
+- **D1 – Einfache Bestaetigung (nur Browser-Interaktion).** Programmstart,
+  Stop und Laufabschluss: zweite, ausdrueckliche Nutzerbestaetigung.
+  Meldung quittieren und stummschalten: ein Klick, kein Dialog. Der
+  serverseitige Ablauf `prepareEnvelope` -> `confirmPrepared` ->
+  `applyConfirmedPrepared`, Revisionspruefung, Auth/Session, CSRF, Replay und
+  Fail-closed gelten fuer alle Mutationen unveraendert; kein serverseitiger
+  Pending-State.
+- **D2 – Variante A.** Begrenzte lesende Programmliste `GET /api/v1/programs`
+  (C4); Auswahl ueber Namen, Start ueber den bestehenden `start-program`-
+  Intent, nur bei erfuellten fachlichen/Safety-Voraussetzungen; bestehende
+  Application-Katalogquelle mit konsistenter Revision, keine zweite
+  Kataloghaltung.
+- **D3 – Bestehende Route.** `POST /internal/ui/run` unveraendert; keine
+  zusaetzliche oder umbenannte Mutations-API.
+- **D4 – Erste Webbedienung.** C3: Stop, Abschliessen, Quittieren, Stumm;
+  C4: Programm waehlen und starten. Fehler-Reset, Sensorauswahl, Recovery-
+  Zeitkorrektur und Konfigurations-/Servicefunktionen bleiben spaeteren
+  Schnitten (Abschnitt 5).
 
-Keine dieser Entscheidungen blockiert C1/C2; C3 wartet auf D1/D4, C4 auf D2.
-`ACTUATOR_RELEASE=NO`; kein Flash, keine Hardwaretests (`NOT_RUN`).
+Offen bleibt nur die Ownerfreigabe der exakten aktualisierten Plan-SHA sowie
+ein Ownerentscheid, falls ein Budget (Antwort 3072 B, Shell 4096 B) in C3/C4
+nicht haelt. C1/C2 setzen weder Shell-Bedienung noch Programmliste voraus.
+`ACTUATOR_RELEASE=NO`; `R_IS/L_IS=FUTURE_RELEASE`; kein Flash, keine
+Hardwaretests (`NOT_RUN`).
 
 ## 7. Risiken
 
