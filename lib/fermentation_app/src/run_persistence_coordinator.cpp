@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
+#include <new>
 #include <utility>
 
 #include "run_persistence_codec.hpp"
@@ -37,9 +39,17 @@ constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
 constexpr std::size_t kMaximumHeadRecordBytes = 256U;
 
 struct AuthorizedEpochHandoffTarget {
-    std::array<RunPersistenceRawRecord, 2U> records{};
+    std::array<std::string, 2U> slotBytes;
     std::string headBytes;
 };
+
+// One heap block shared by target construction and slot validation keeps the
+// ~4 kB persistence object off the main task stack. nullptr means out of
+// memory; callers fail closed before any write.
+std::unique_ptr<RunPersistenceRawRecord> makeHandoffScratchRecord() {
+    return std::unique_ptr<RunPersistenceRawRecord>{
+        new (std::nothrow) RunPersistenceRawRecord{}};
+}
 
 std::optional<std::uint64_t> checkedAdd(std::uint64_t left,
                                         std::uint64_t right) {
@@ -49,29 +59,28 @@ std::optional<std::uint64_t> checkedAdd(std::uint64_t left,
     return left + right;
 }
 
-std::optional<AuthorizedEpochHandoffTarget> makeAuthorizedEpochHandoffTarget(
-    device_platform::StorageEpoch epoch,
-    const RunCheckpointSchedule& schedule) {
+bool makeAuthorizedEpochHandoffTarget(device_platform::StorageEpoch epoch,
+                                      const RunCheckpointSchedule& schedule,
+                                      RunPersistenceRawRecord& scratch,
+                                      AuthorizedEpochHandoffTarget& target) {
     RunCommandState emptyState;
     if (!establishBootCompletedStandby(emptyState.processState, 0U)) {
-        return std::nullopt;
+        return false;
     }
-    RunPersistenceSnapshot emptySnapshot;
     std::array<CommandId, kMaximumPersistedRunCommandIds> noIds{};
     if (!makeRunPersistenceSnapshotInto(
             emptyState, noIds, 0U, RunCheckpointTrigger::Command,
             RunCheckpointTime{0U, std::nullopt}, schedule.intervalMinutes(),
-            emptySnapshot)) {
-        return std::nullopt;
+            scratch.snapshot)) {
+        return false;
     }
     std::string payload;
-    if (encodeRunPersistenceSnapshot(emptySnapshot, payload) !=
+    if (encodeRunPersistenceSnapshot(scratch.snapshot, payload) !=
         RunPersistenceCodecStatus::Success) {
-        return std::nullopt;
+        return false;
     }
 
-    AuthorizedEpochHandoffTarget target;
-    for (std::size_t slot = 0U; slot < target.records.size(); ++slot) {
+    for (std::size_t slot = 0U; slot < target.slotBytes.size(); ++slot) {
         device_platform::StorageEnvelope envelope{
             kCheckpointRecordType,
             kCurrentRunPersistenceSchema,
@@ -79,28 +88,27 @@ std::optional<AuthorizedEpochHandoffTarget> makeAuthorizedEpochHandoffTarget(
             static_cast<std::uint64_t>(slot + 1U),
             std::nullopt,
             payload};
-        if (device_platform::encodeEnvelope(envelope,
-                                            target.records[slot].bytes,
+        if (device_platform::encodeEnvelope(envelope, target.slotBytes[slot],
                                             kMaximumCheckpointRecordBytes) !=
             device_platform::EnvelopeEncodeStatus::Success) {
-            return std::nullopt;
+            return false;
         }
-        target.records[slot].snapshot = emptySnapshot;
-        target.records[slot].checkpointRevision = slot + 1U;
-        target.records[slot].utcUnixSeconds = std::nullopt;
     }
 
+    scratch.bytes = target.slotBytes[0];
+    scratch.checkpointRevision = 1U;
+    scratch.utcUnixSeconds = std::nullopt;
     RunPersistenceHead head;
     head.state = RunPersistenceHeadState::Committed;
     head.revision = 1U;
-    head.current = makeRunCheckpointReference(0U, target.records[0], epoch);
+    head.current = makeRunCheckpointReference(0U, scratch, epoch);
     head.commandIdHighWater = CommandId{0U};
     const auto encodedHead = encodeRunPersistenceHead(head, epoch);
     if (!encodedHead.has_value()) {
-        return std::nullopt;
+        return false;
     }
     target.headBytes = *encodedHead;
-    return target;
+    return true;
 }
 
 std::optional<std::uint32_t> checkedToUint32(std::uint64_t value) {
@@ -458,8 +466,10 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
         }
     }
 
-    const auto target = makeAuthorizedEpochHandoffTarget(epoch_, schedule_);
-    if (!target.has_value()) {
+    const auto scratch = makeHandoffScratchRecord();
+    AuthorizedEpochHandoffTarget target;
+    if (scratch == nullptr || !makeAuthorizedEpochHandoffTarget(
+                                  epoch_, schedule_, *scratch, target)) {
         return reject(RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
@@ -472,7 +482,7 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
             physical[slot] = PhysicalKind::Absent;
             continue;
         }
-        if (slotReads[slot].value == target->records[slot].bytes) {
+        if (slotReads[slot].value == target.slotBytes[slot]) {
             physical[slot] = PhysicalKind::Target;
             continue;
         }
@@ -483,9 +493,8 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
             return reject(RunPersistenceStep::LoadCurrent,
                           RunPersistenceTechnicalReason::InvalidProjection);
         }
-        RunPersistenceRawRecord record;
         if (!decodeRunPersistenceRecordInto(slotReads[slot].value,
-                                            proof.previousEpoch(), record)) {
+                                            proof.previousEpoch(), *scratch)) {
             return reject(RunPersistenceStep::LoadCurrent,
                           RunPersistenceTechnicalReason::CodecError);
         }
@@ -518,11 +527,10 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
                     device_platform::StateStoreReadStatus::Success) {
                 return false;
             }
-            RunPersistenceRawRecord record;
             return decodeRunPersistenceRecordInto(slotReads[ref.slot].value,
                                                   proof.previousEpoch(),
-                                                  record) &&
-                   runCheckpointReferenceMatches(ref, record, ref.slot);
+                                                  *scratch) &&
+                   runCheckpointReferenceMatches(ref, *scratch, ref.slot);
         };
         if (!validateReferenced(oldHead->current) ||
             (oldHead->fallback.has_value() &&
@@ -532,7 +540,7 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
         }
     }
 
-    for (std::size_t slot = 0U; slot < target->records.size(); ++slot) {
+    for (std::size_t slot = 0U; slot < target.slotBytes.size(); ++slot) {
         if (physical[slot] == PhysicalKind::Target) continue;
         const auto oldSlot =
             slotReads[slot].status ==
@@ -540,7 +548,7 @@ RunPersistenceCoordinator::prepareAuthorizedEpochHandoff(
                 ? std::optional<std::string>{slotReads[slot].value}
                 : std::nullopt;
         const auto written =
-            store_.writeSlotExact(slot, target->records[slot].bytes, oldSlot,
+            store_.writeSlotExact(slot, target.slotBytes[slot], oldSlot,
                                   kMaximumCheckpointRecordBytes);
         if (written != RunPersistenceStoreWriteResult::Written) {
             enterBlockedIndeterminate();
@@ -590,8 +598,10 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
 
-    const auto target = makeAuthorizedEpochHandoffTarget(epoch_, schedule_);
-    if (!target.has_value()) {
+    const auto scratch = makeHandoffScratchRecord();
+    AuthorizedEpochHandoffTarget target;
+    if (scratch == nullptr || !makeAuthorizedEpochHandoffTarget(
+                                  epoch_, schedule_, *scratch, target)) {
         return reject(RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
@@ -608,7 +618,7 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
                       RunPersistenceTechnicalReason::StoreReadError);
     }
 
-    for (std::size_t slot = 0U; slot < target->records.size(); ++slot) {
+    for (std::size_t slot = 0U; slot < target.slotBytes.size(); ++slot) {
         const auto read = store_.readSlot(slot, kMaximumCheckpointRecordBytes);
         if (read.status ==
                 device_platform::StateStoreReadStatus::CapacityError ||
@@ -617,21 +627,21 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
                           RunPersistenceTechnicalReason::StoreReadError);
         }
         if (read.status != device_platform::StateStoreReadStatus::Success ||
-            read.value != target->records[slot].bytes) {
+            read.value != target.slotBytes[slot]) {
             return reject(RunPersistenceStep::LoadCurrent,
                           RunPersistenceTechnicalReason::InvalidProjection);
         }
     }
     if (headRead.status == device_platform::StateStoreReadStatus::NotFound ||
         (headRead.status == device_platform::StateStoreReadStatus::Success &&
-         headRead.value != target->headBytes)) {
+         headRead.value != target.headBytes)) {
         // Both target slots are a definite prior handoff mutation. Any later
         // head failure therefore reports at least Changed, never Unchanged.
         durability = RunPersistenceDurability::Changed;
     }
 
     if (headRead.status == device_platform::StateStoreReadStatus::Success) {
-        if (headRead.value == target->headBytes) {
+        if (headRead.value == target.headBytes) {
             return {result(RunPersistenceResultStatus::Applied,
                            RunPersistenceStep::CommittedHead,
                            RunPersistenceTechnicalReason::None,
@@ -664,7 +674,7 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
         headRead.status == device_platform::StateStoreReadStatus::Success
             ? std::optional<std::string>{headRead.value}
             : std::nullopt;
-    const auto written = store_.writeHeadExact(target->headBytes, expectedHead,
+    const auto written = store_.writeHeadExact(target.headBytes, expectedHead,
                                                kMaximumHeadRecordBytes);
     if (written != RunPersistenceStoreWriteResult::Written) {
         enterBlockedIndeterminate();
@@ -688,7 +698,7 @@ RunPersistenceCoordinator::finalizeAuthorizedEpochHandoff(
         return reject(RunPersistenceStep::CommittedHead,
                       RunPersistenceTechnicalReason::StoreOutcomeUnknown);
     }
-    if (verified.value != target->headBytes) {
+    if (verified.value != target.headBytes) {
         enterBlockedIndeterminate();
         return reject(RunPersistenceStep::CommittedHead,
                       RunPersistenceTechnicalReason::InvalidProjection);
