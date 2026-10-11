@@ -51,8 +51,8 @@ Nur gezielte lokale Tests und Pruefungen fuer den tatsaechlich geaenderten
 Bereich. Bei geaenderten gemeinsamen Vertraegen gehoeren die direkt betroffenen
 Konsumententests zum gezielten Umfang. Nicht betroffene Profile und der
 vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt. Nach einer
-tatsaechlichen Implementation und vor jeder normalen Uebergabe an den
-Independent Review fuehrt der Builder den Builder-Static-Analysis-Self-Check
+tatsaechlichen Implementation und vor der Uebergabe an den abschliessenden
+Independent Full Review fuehrt der Builder den Builder-Static-Analysis-Self-Check
 des bestehenden Runners aus. Im Plan-only-Stand ist dieser
 Implementation-Self-Check noch nicht erforderlich. Der Runner entscheidet fuer
 den konkreten PR selbst, ob clang-format und/oder clang-tidy jeweils
@@ -61,8 +61,8 @@ diese Entscheidung wird nicht manuell durch den Builder vorselektiert.
 
 ### Builder-Static-Analysis-Self-Check
 
-Vor der Uebergabe an den Independent Review fuehrt der Builder auf dem
-Implementierungs-`HEAD` den gezielten Self-Check aus:
+Vor der Uebergabe an den abschliessenden Independent Full Review fuehrt der
+Builder auf dem Implementierungs-`HEAD` den gezielten Self-Check aus:
 
 ```bash
 export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"

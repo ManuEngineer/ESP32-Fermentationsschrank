@@ -19,7 +19,12 @@ class MockBinaryOutputSink final : public device_platform::IBinaryOutputSink {
    public:
     static constexpr std::size_t kMaxJournalEntries = 256;
 
-    void setEnabled(bool enabled) override;
+    [[nodiscard]] bool setEnabled(bool enabled) override;
+
+    // Testschalter: lehnt Befehle ab (Zustand und Journal bleiben unveraendert,
+    // `setEnabled` liefert `false`). Standard: akzeptiert.
+    void setAcceptingCommands(bool accepting);
+    [[nodiscard]] std::size_t rejectedCommandCount() const;
 
     [[nodiscard]] bool enabled() const;
     [[nodiscard]] const std::vector<BinaryOutputCommand>& commandJournal()
@@ -27,6 +32,8 @@ class MockBinaryOutputSink final : public device_platform::IBinaryOutputSink {
 
    private:
     bool enabled_{false};
+    bool accepting_{true};
+    std::size_t rejectedCommandCount_{0U};
     std::vector<BinaryOutputCommand> journal_;
 };
 

@@ -1,5 +1,7 @@
+#include <cstdlib>
 #include <limits>
 #include <map>
+#include <new>
 #include <set>
 #include <utility>
 
@@ -30,6 +32,25 @@
 #include "device_platform.hpp"
 #include "virtual_time_source.hpp"
 #include "mock_time_zone_resolver.hpp"
+
+namespace {
+
+// Armable failure of large nothrow allocations (>= 3000 B), used to prove the
+// authorised epoch handoff fails closed when its heap scratch is unavailable.
+bool g_failNextLargeNothrowNew = false;
+std::size_t g_failedLargeNothrowNewCount = 0U;
+constexpr std::size_t kLargeNothrowNewThreshold = 3000U;
+
+}  // namespace
+
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    if (g_failNextLargeNothrowNew && size >= kLargeNothrowNewThreshold) {
+        g_failNextLargeNothrowNew = false;
+        ++g_failedLargeNothrowNewCount;
+        return nullptr;
+    }
+    return std::malloc(size == 0U ? 1U : size);
+}
 
 namespace fermentation {
 
@@ -10284,6 +10305,146 @@ std::string makePreparedHeadForTest(device_platform::StorageEpoch epoch) {
     return head.value;
 }
 
+std::string toHexForTest(const std::string& bytes) {
+    static const char digits[] = "0123456789abcdef";
+    std::string hex;
+    for (const char byte : bytes) {
+        const auto value = static_cast<unsigned char>(byte);
+        hex.push_back(digits[value >> 4U]);
+        hex.push_back(digits[value & 0x0FU]);
+    }
+    return hex;
+}
+
+void test_issue192_handoff_target_bytes_are_stable() {
+    const auto oldEpoch = device_platform::StorageEpoch{60U};
+    const auto newEpoch = device_platform::StorageEpoch{61U};
+    SequencedWriteStore store;
+    seedHandoffSource(store, oldEpoch);
+    RunPersistenceCoordinator handoff(store, newEpoch, RunCheckpointSchedule{});
+    auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+        oldEpoch, newEpoch);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(handoff.prepareAuthorizedEpochHandoff(proof)
+                             .persistenceResult.status));
+    RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(handoff.finalizeAuthorizedEpochHandoff(proof)
+                             .persistenceResult.status));
+
+    const auto slot0 = store.read(slotKey("rc0"), 8240U);
+    const auto slot1 = store.read(slotKey("rc1"), 8240U);
+    const auto head = store.read(slotKey("rh0"), 256U);
+    // Golden bytes of the empty-run handoff target for epoch 61; the wire
+    // format must not change when the target construction is refactored.
+    const std::string expectedSlot0 =
+        "445052460001000700000006000000000000003d00000000000000010000003f"
+        "006dc6cae4030100000000000000000005000000000000030000000000000000"
+        "0000000000000000000000000001000000000200020002000000000000000100"
+        "00000000";
+    const std::string expectedSlot1 =
+        "445052460001000700000006000000000000003d00000000000000020000003f"
+        "00c9b84821030100000000000000000005000000000000030000000000000000"
+        "0000000000000000000000000001000000000200020002000000000000000100"
+        "00000000";
+    const std::string expectedHead =
+        "445052460001000800000006000000000000003d000000000000000100000029"
+        "00bb73bcee020000000006000000000000003d00000000000000010000003fb6"
+        "1442210300010000000000000000";
+    TEST_ASSERT_EQUAL_STRING(expectedSlot0.c_str(),
+                             toHexForTest(slot0.value).c_str());
+    TEST_ASSERT_EQUAL_STRING(expectedSlot1.c_str(),
+                             toHexForTest(slot1.value).c_str());
+    TEST_ASSERT_EQUAL_STRING(expectedHead.c_str(),
+                             toHexForTest(head.value).c_str());
+}
+
+void test_issue192_handoff_scratch_allocation_failure_fails_closed() {
+    const auto oldEpoch = device_platform::StorageEpoch{62U};
+    const auto newEpoch = device_platform::StorageEpoch{63U};
+    const auto snapshotStore = [](SequencedWriteStore& store) {
+        return std::array<std::string, 3U>{
+            store.read(slotKey("rc0"), 8240U).value,
+            store.read(slotKey("rc1"), 8240U).value,
+            store.read(slotKey("rh0"), 256U).value};
+    };
+    const auto expectBlockedUnchanged = [](const RunPersistenceResult& result) {
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Blocked),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceStep::CandidateApply),
+            static_cast<int>(result.step));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceTechnicalReason::InvalidProjection),
+            static_cast<int>(result.technicalReason));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceDurability::Unchanged),
+            static_cast<int>(result.durability));
+    };
+
+    // prepare: allocation failure before any write, retry then succeeds.
+    {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+            oldEpoch, newEpoch);
+        const auto before = snapshotStore(store);
+        const auto writesBefore = store.writeCount();
+        g_failedLargeNothrowNewCount = 0U;
+        g_failNextLargeNothrowNew = true;
+        const auto failed = handoff.prepareAuthorizedEpochHandoff(proof);
+        g_failNextLargeNothrowNew = false;
+        TEST_ASSERT_EQUAL_UINT(
+            1U, static_cast<unsigned>(g_failedLargeNothrowNewCount));
+        expectBlockedUnchanged(failed.persistenceResult);
+        TEST_ASSERT_FALSE(failed.evidence.has_value());
+        TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                               static_cast<unsigned>(store.writeCount()));
+        TEST_ASSERT_TRUE(before == snapshotStore(store));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(handoff.prepareAuthorizedEpochHandoff(proof)
+                                 .persistenceResult.status));
+    }
+
+    // finalize: allocation failure leaves the prepared state untouched and
+    // the same call succeeds afterwards.
+    {
+        SequencedWriteStore store;
+        seedHandoffSource(store, oldEpoch);
+        RunPersistenceCoordinator handoff(store, newEpoch,
+                                          RunCheckpointSchedule{});
+        auto proof = RunPersistenceCoordinatorTestAccess::epochHandoffProof(
+            oldEpoch, newEpoch);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(handoff.prepareAuthorizedEpochHandoff(proof)
+                                 .persistenceResult.status));
+        RunPersistenceCoordinatorTestAccess::promoteHandoffProof(proof);
+        const auto before = snapshotStore(store);
+        const auto writesBefore = store.writeCount();
+        g_failedLargeNothrowNewCount = 0U;
+        g_failNextLargeNothrowNew = true;
+        const auto failed = handoff.finalizeAuthorizedEpochHandoff(proof);
+        g_failNextLargeNothrowNew = false;
+        TEST_ASSERT_EQUAL_UINT(
+            1U, static_cast<unsigned>(g_failedLargeNothrowNewCount));
+        expectBlockedUnchanged(failed.persistenceResult);
+        TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                               static_cast<unsigned>(store.writeCount()));
+        TEST_ASSERT_TRUE(before == snapshotStore(store));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(handoff.finalizeAuthorizedEpochHandoff(proof)
+                                 .persistenceResult.status));
+    }
+}
+
 void test_issue144_committed_handoff_rejects_previous_prepared_head() {
     const auto oldEpoch = device_platform::StorageEpoch{76U};
     const auto newEpoch = device_platform::StorageEpoch{77U};
@@ -10712,6 +10873,8 @@ int main(int, char**) {
     RUN_TEST(
         test_issue144_periodic_checkpoint_keeps_committed_hwm_not_fifo_max);
     RUN_TEST(test_issue144_authorized_epoch_handoff_restarts_identity_at_one);
+    RUN_TEST(test_issue192_handoff_target_bytes_are_stable);
+    RUN_TEST(test_issue192_handoff_scratch_allocation_failure_fails_closed);
     RUN_TEST(test_issue144_foreign_epoch_and_failed_handoff_stay_fail_closed);
     RUN_TEST(
         test_issue144_epoch_handoff_durability_matches_each_write_cutpoint);

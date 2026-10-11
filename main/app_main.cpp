@@ -10,7 +10,9 @@
 #include "ds18b20_sampler_task.hpp"
 #include "ds3231_sn_rtc_adapter.hpp"
 #include "esp_idf_authentication_kdf.hpp"
+#include "esp_idf_binary_output_sink.hpp"
 #include "esp_idf_replay_digest.hpp"
+#include "esp_idf_shared_enable_bridge.hpp"
 #include "esp_idf_i2c_subsystem.hpp"
 #include "esp_idf_http_server_lifecycle.hpp"
 #include "esp_idf_network_lifecycle.hpp"
@@ -63,6 +65,21 @@
 namespace {
 
 constexpr char kTag[] = "app_main";
+
+const char* binaryOutputBeginResultName(
+    device_platform_esp_idf::BinaryOutputBeginResult result) {
+    switch (result) {
+        case device_platform_esp_idf::BinaryOutputBeginResult::
+            PolarityUnconfirmed:
+            return "polarity_unconfirmed_no_gpio_access";
+        case device_platform_esp_idf::BinaryOutputBeginResult::Ready:
+            return "ready_inactive";
+        case device_platform_esp_idf::BinaryOutputBeginResult::Failed:
+            return "failed_fail_closed";
+    }
+    return "failed_fail_closed";
+}
+
 // Tag fuer den Failed-Allocation-Hook; muss in DRAM liegen (ESP_DRAM_LOGE).
 DRAM_ATTR const char kHeapAllocFailedTag[] = "heap_alloc_failed";
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
@@ -575,6 +592,42 @@ extern "C" void app_main(void) {
     static_cast<void>(
         heap_caps_register_failed_alloc_callback(logFailedHeapAllocation));
 
+    // Onboard-MOSFET outputs (Issue #32). The role of each instance (inner
+    // fan, outer fan, buzzer) is assigned only here; pins and polarity come
+    // from the generated SSOT header. With an unconfirmed polarity the adapter
+    // performs no GPIO operation (this does not prove the load is off). The
+    // outputs are deliberately not connected to the actuator planner; the
+    // reserve channel (GPIO27) is not used.
+    namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
+    device_platform_esp_idf::EspIdfBinaryOutputSink innerFanOutput(
+        r1_pins::kInternalFanPin, r1_pins::kInternalFanPolarity);
+    device_platform_esp_idf::EspIdfBinaryOutputSink outerFanOutput(
+        r1_pins::kOuterFanPin, r1_pins::kOuterFanPolarity);
+    device_platform_esp_idf::EspIdfBinaryOutputSink buzzerOutput(
+        r1_pins::kBuzzerPin, r1_pins::kBuzzerPolarity);
+    ESP_LOGI(kTag, "onboard outputs: inner_fan=%s outer_fan=%s buzzer=%s",
+             binaryOutputBeginResultName(innerFanOutput.begin()),
+             binaryOutputBeginResultName(outerFanOutput.begin()),
+             binaryOutputBeginResultName(buzzerOutput.begin()));
+
+    // BTS7960 H-bridge (Issue #33). The role of the instance is assigned only
+    // here; pins and polarities come from the generated SSOT header. begin()
+    // initialises GPIO25 (shared enable), GPIO13 (RPWM) and GPIO14 (LPWM) to
+    // their inactive level, in this order, and starts the bridge only after
+    // all three succeeded; otherwise the bridge stays unstarted and refuses
+    // every enable request. The LOW levels are the SSOT design state and no
+    // proof of module polarity or boot/reset hardware behaviour. The bridge is
+    // deliberately not connected to the actuator planner or driver, and
+    // nothing in this product calls its direction commands. R_IS/L_IS
+    // (GPIO34/35) are disabled and unwired in R1.
+    device_platform_esp_idf::EspIdfSharedEnableBridge peltierBridge(
+        r1_pins::kBtsEnablePin, r1_pins::kBtsEnablePolarity,
+        r1_pins::kBtsRpwmPin, r1_pins::kBtsRpwmPolarity, r1_pins::kBtsLpwmPin,
+        r1_pins::kBtsLpwmPolarity);
+    ESP_LOGI(kTag, "peltier bridge: %s",
+             peltierBridge.begin() ? "ready_all_off_not_connected_to_planner"
+                                   : "not_ready_fail_closed");
+
     const esp_err_t defaultNvsStatus = nvs_flash_init();
     if (defaultNvsStatus != ESP_OK) {
         ESP_LOGE(kTag,
@@ -683,7 +736,6 @@ extern "C" void app_main(void) {
     // hand-maintained pin list. Width/height are a panel property, not a
     // GPIO assignment, and stay a composition-root constant. No display,
     // touch, LVGL or command policy enters the application component.
-    namespace r1_pins = board_profile::esp32_32e_quad_mosfet_r1;
     auto displayRenderer = fermentation::main_ui::makeProductiveUiRenderer(
         {r1_pins::kSpiSckPin, r1_pins::kSpiMosiPin, r1_pins::kSpiMisoPin,
          r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,

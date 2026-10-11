@@ -67,6 +67,10 @@ zeigen keine Abweichung ausser den genannten Mustern.
 
 - Das Messfenster umfasst Dispatch und Persistenz im selben Touch-Tick; das
   anschliessende Neuzeichnen (Render) liegt ausserhalb.
+- Geltungsbereich: `PASS` gilt ausschliesslich fuer die belegten Commit-/Ressourcenfenster
+  (Dispatch und Persistenz) der drei Pfade S3, S6, S10 im Probe-Build auf Basis `3918c50`.
+  Nicht hardwareverifiziert sind das anschliessende Rendering, die Pixel-Treffbarkeit der
+  Tasten und die aktuelle Firmware von `main` nach PR #200 (`44121fc`).
 - Der Probe-Build schreibt pro Press zusaetzliche UART-Zeilen. Der Owner schaetzt
   das Geraet im Probe-Build subjektiv als **weniger schnell reagierend als zuvor**
   („damit kann man leben“). Das ist nicht gemessen; ob die Probe-Logs, UART-Last oder

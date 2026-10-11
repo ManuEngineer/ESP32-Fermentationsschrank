@@ -19,6 +19,11 @@ namespace {
     return false;
 }
 
+void peltierOff(device_platform::IBidirectionalActuatorSink& peltier) {
+    peltier.setForward(false);
+    peltier.setReverse(false);
+}
+
 }  // namespace
 
 ActuatorPlanSinkDriver::ActuatorPlanSinkDriver(
@@ -33,10 +38,9 @@ void ActuatorPlanSinkDriver::apply(const ActuatorPlanTickResult& result) {
         // (e.g. a corrupted cast bypassing the planner's own structural
         // validation) is fail-closed identically to Unknown; it must never
         // leave a previously applied H-bridge state standing.
-        peltier_.setForward(false);
-        peltier_.setReverse(false);
-        outerFan_.setEnabled(false);
-        innerFan_.setEnabled(false);
+        peltierOff(peltier_);
+        static_cast<void>(outerFan_.setEnabled(false));
+        static_cast<void>(innerFan_.setEnabled(false));
         return;
     }
 
@@ -48,29 +52,38 @@ void ActuatorPlanSinkDriver::apply(const ActuatorPlanTickResult& result) {
             // from result.outerFanEnabled - Peltier power must never be
             // released without it, regardless of an inconsistent result.
             peltier_.setReverse(false);
-            outerFan_.setEnabled(true);
+            if (!outerFan_.setEnabled(true)) {
+                // Issue #33: a refused outer fan enable never releases the
+                // Peltier. The result is only an applied-command statement,
+                // not proof of fan rotation.
+                peltierOff(peltier_);
+                static_cast<void>(innerFan_.setEnabled(result.innerFanEnabled));
+                return;
+            }
             peltier_.setForward(true);
-            innerFan_.setEnabled(result.innerFanEnabled);
+            static_cast<void>(innerFan_.setEnabled(result.innerFanEnabled));
             return;
         case AbstractControlDirection::Cooling:
             peltier_.setForward(false);
-            outerFan_.setEnabled(true);
+            if (!outerFan_.setEnabled(true)) {
+                peltierOff(peltier_);
+                static_cast<void>(innerFan_.setEnabled(result.innerFanEnabled));
+                return;
+            }
             peltier_.setReverse(true);
-            innerFan_.setEnabled(result.innerFanEnabled);
+            static_cast<void>(innerFan_.setEnabled(result.innerFanEnabled));
             return;
         case AbstractControlDirection::Idle:
-            peltier_.setForward(false);
-            peltier_.setReverse(false);
-            outerFan_.setEnabled(result.outerFanEnabled);
-            innerFan_.setEnabled(result.innerFanEnabled);
+            peltierOff(peltier_);
+            static_cast<void>(outerFan_.setEnabled(result.outerFanEnabled));
+            static_cast<void>(innerFan_.setEnabled(result.innerFanEnabled));
             return;
         case AbstractControlDirection::Unknown:
             // Unknown output is fail-closed. This branch is defensive because
             // the planner's structural validation rejects Unknown first.
-            peltier_.setForward(false);
-            peltier_.setReverse(false);
-            outerFan_.setEnabled(false);
-            innerFan_.setEnabled(false);
+            peltierOff(peltier_);
+            static_cast<void>(outerFan_.setEnabled(false));
+            static_cast<void>(innerFan_.setEnabled(false));
             return;
     }
 }

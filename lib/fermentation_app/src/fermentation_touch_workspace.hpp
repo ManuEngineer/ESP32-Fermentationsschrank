@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "device_ui_interaction.hpp"
+#include "device_ui_pin.hpp"
 #include "fermentation_ui_commands.hpp"
 #include "fermentation_ui_editing.hpp"
 #include "fermentation_ui_models.hpp"
@@ -86,6 +87,26 @@ struct FermentationUiKeyboardKey {
 // offered.
 [[nodiscard]] FermentationUiKeyboardKey fermentationUiKeyboardKeyAt(
     TextEditMode mode, std::uint8_t row, std::uint8_t column) noexcept;
+
+// Service-PIN pad (Issue #188 A) on the keyboard grid geometry: row 0 holds
+// the digits 1-9 and 0, row 1 Backspace (columns 0-4) and Clear (5-9).
+inline constexpr std::uint8_t kFermentationUiPinPadRows = 2U;
+
+enum class FermentationUiPinPadKeyKind : std::uint8_t {
+    None,
+    Digit,
+    Backspace,
+    Clear,
+};
+
+struct FermentationUiPinPadKey {
+    FermentationUiPinPadKeyKind kind{FermentationUiPinPadKeyKind::None};
+    std::uint8_t digit{0U};
+};
+
+// The single PIN pad layout for the workspace (hit routing) and the renderer.
+[[nodiscard]] FermentationUiPinPadKey fermentationUiPinPadKeyAt(
+    std::uint8_t row, std::uint8_t column) noexcept;
 
 // Program fields of the local editor (S10, D9): the fields
 // LOCAL_UI_PROGRAMS.md names, as far as the program model has them. The
@@ -198,6 +219,9 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     NavigateDiagnostics,
     NavigateService,
     NavigatePin,
+    // Issue #188 A: commit the entered Service-PIN; end the local lease.
+    ServicePinCommit,
+    ServiceSignOut,
     NavigateRecovery,
     NavigateLanguage,
     NavigateNetwork,
@@ -350,9 +374,15 @@ struct FermentationUiSettingsView {
     // Display convenience only: the Application decides whether a run blocks
     // the change.
     bool deviceNameEditable{false};
-    bool serviceAvailable{false};
-    std::optional<device_platform::TextKey> serviceReason;
     bool deviceNameChangeFailed{false};
+};
+
+// Content of the Service-PIN page (Issue #188 A). Only the digit count is
+// projected: the page never carries the candidate itself.
+struct FermentationUiPinEntryView {
+    std::uint8_t digitCount{0U};
+    device_platform::PinEntryState state{device_platform::PinEntryState::Empty};
+    std::optional<device_platform::TextKey> message;
 };
 
 // Content of the shared on-screen keyboard page (S10, O3).
@@ -400,6 +430,7 @@ struct FermentationUiWorkspaceView {
     std::optional<FermentationUiValueEditView> valueEdit;
     std::optional<FermentationUiSettingsView> settings;
     std::optional<FermentationUiTextEditView> textEdit;
+    std::optional<FermentationUiPinEntryView> pinEntry;
     std::optional<FermentationUiProgramEditView> programEdit;
     std::optional<FermentationUiFactoryResetPageView> factoryReset;
     std::optional<device_platform::TextKey> confirmationWarning;
@@ -433,6 +464,9 @@ struct FermentationUiWorkspacePress {
     std::optional<FermentationUiSetDisplayLanguageCommand> setDisplayLanguage;
     std::optional<FermentationUiSetDeviceNameCommand> setDeviceName;
     std::optional<FermentationUiFactoryResetCommand> factoryReset;
+    // Issue #188 A: local Service-PIN check and explicit sign-out.
+    std::optional<FermentationUiVerifyServicePinCommand> verifyServicePin;
+    bool endServiceSession{false};
 };
 
 class FermentationTouchWorkspace {
@@ -525,6 +559,10 @@ class FermentationTouchWorkspace {
     // language page can show a failed change. Purely transient display state
     // (not a locale or configuration owner): the next outcome replaces it and
     // leaving the page discards it.
+    // Owner verdict of a committed Service-PIN (Issue #188 A): Authorized
+    // replaces the PIN page by the Service page, every other status keeps
+    // the PIN page with its message.
+    void noteServicePinOutcome(const LocalServicePinResult& result);
     void noteDisplayLanguageOutcome(bool accepted) noexcept {
         markRenderRelevantChange();
         displayLanguageChangeFailed_ = !accepted;
@@ -608,6 +646,8 @@ class FermentationTouchWorkspace {
         const ProgramCatalog* catalog);
     [[nodiscard]] FermentationUiWorkspacePress pressKeyboardCell(
         const device_platform::DeviceUiTarget& target);
+    [[nodiscard]] FermentationUiWorkspacePress pressPinPadCell(
+        const device_platform::DeviceUiTarget& target);
     void openTextEdit(FermentationUiTextTarget target, std::string initial);
     [[nodiscard]] FermentationUiWorkspacePress commitTextEdit(
         const FermentationUiSnapshot& snapshot,
@@ -636,6 +676,8 @@ class FermentationTouchWorkspace {
     bool deviceNameChangeFailed_{false};
     TextEditModel textEdit_;
     FermentationUiTextTarget textTarget_{FermentationUiTextTarget::DeviceName};
+    // Transient Service-PIN entry; reset on entering and leaving the page.
+    device_platform::PinEntryModel pinEntry_;
     // Set while the numeric edit page edits a program field (else a start or
     // manual value).
     std::optional<FermentationUiProgramField> valueEditProgramField_;

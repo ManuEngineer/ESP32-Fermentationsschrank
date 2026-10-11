@@ -118,6 +118,22 @@ class FermentationApplicationTestAccess {
         application.authOperationGate_.reopen();
     }
 
+    // Issue #188 A: replaces the authentication domain within the same epoch
+    // and bootstrap sequence (runtime re-initialisation path).
+    static void reinitializeAuthentication(
+        FermentationApplication& application) {
+        const auto guard = application.applicationCallSerializer_.enter();
+        application.initializeAuthentication(*application.stateStore_);
+    }
+
+    static std::pair<device_platform::StorageEpoch, std::uint64_t>
+    authContextIdentity(FermentationApplication& application) {
+        const auto guard = application.applicationCallSerializer_.enter();
+        TEST_ASSERT_TRUE(application.authenticationContext_.has_value());
+        return {application.authenticationContext_->storageEpoch(),
+                application.authenticationContext_->bootstrapSequence()};
+    }
+
     static bool provision(FermentationApplication& application,
                           const std::string& password,
                           const std::string& servicePin) {
@@ -3358,6 +3374,134 @@ void test_auth_operation_gate_object_size_is_reported() {
     TEST_ASSERT_TRUE(sizeof(AuthOperationGate) > 0U);
 }
 
+// ---- Issue #188 A: local Service-PIN check vs. reset and re-init (6.1a) ---
+
+void assertLocalPinStatus(LocalServicePinStatus expected,
+                          const LocalServicePinResult& result) {
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(expected),
+                          static_cast<int>(result.status));
+}
+
+void test_local_pin_check_and_factory_reset_neither_hang_nor_grant_access() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    fixture.kdf.arm();
+    LocalServicePinResult pinResult;
+    std::thread check(
+        [&] { pinResult = fixture.application.verifyLocalServicePin("1234"); });
+    TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+
+    std::atomic<bool> resetDone{false};
+    ConfigurationRecoveryResult reset;
+    std::thread resetter([&] {
+        reset = fixture.application.beginAuthorizedFactoryReset();
+        resetDone = true;
+    });
+    // The reset closed the gate and waits for the running PIN check.
+    TEST_ASSERT_TRUE(eventually([&] {
+        return FermentationApplicationTestAccess::authGateClosed(
+            fixture.application);
+    }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    TEST_ASSERT_FALSE(resetDone.load());
+
+    fixture.kdf.release();
+    check.join();
+    resetter.join();
+    TEST_ASSERT_TRUE(resetFinished(reset));
+    // The check finished against the old context: no access afterwards.
+    assertLocalPinStatus(LocalServicePinStatus::Unavailable, pinResult);
+    TEST_ASSERT_FALSE(fixture.application.uiSnapshot().service.available);
+}
+
+void test_local_pin_check_after_a_failed_reset_still_authorizes() {
+    // A failed reset reopens the gate and keeps the domain; an in-flight
+    // variant needs a counting write fault the store does not offer (every
+    // PIN check writes), so the sequence is checked here.
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    fixture.store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto reset = fixture.application.beginAuthorizedFactoryReset();
+    TEST_ASSERT_TRUE(reset.status !=
+                     ConfigurationRecoveryStatus::FactoryResetCompleted);
+    assertLocalPinStatus(LocalServicePinStatus::Authorized,
+                         fixture.application.verifyLocalServicePin("1234"));
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().service.available);
+}
+
+void test_local_pin_check_after_gate_close_is_unavailable_without_kdf() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    FermentationApplicationTestAccess::closeAuthGate(fixture.application);
+    const auto callsBefore = fixture.kdf.calls();
+    assertLocalPinStatus(LocalServicePinStatus::Unavailable,
+                         fixture.application.verifyLocalServicePin("1234"));
+    TEST_ASSERT_EQUAL_UINT(callsBefore, fixture.kdf.calls());
+    FermentationApplicationTestAccess::reopenAuthGate(fixture.application);
+    assertLocalPinStatus(LocalServicePinStatus::Authorized,
+                         fixture.application.verifyLocalServicePin("1234"));
+}
+
+void test_local_pin_check_refuses_access_after_a_same_epoch_reinit() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto identityBefore =
+        FermentationApplicationTestAccess::authContextIdentity(
+            fixture.application);
+    const auto generationBefore =
+        FermentationApplicationTestAccess::trustGeneration(fixture.application);
+    fixture.kdf.arm();
+    LocalServicePinResult pinResult;
+    std::thread check(
+        [&] { pinResult = fixture.application.verifyLocalServicePin("1234"); });
+    TEST_ASSERT_TRUE(fixture.kdf.waitEntered());
+    std::atomic<bool> reinitDone{false};
+    std::thread reinit([&] {
+        FermentationApplicationTestAccess::reinitializeAuthentication(
+            fixture.application);
+        reinitDone = true;
+    });
+    TEST_ASSERT_TRUE(eventually([&] {
+        return FermentationApplicationTestAccess::authGateClosed(
+            fixture.application);
+    }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    TEST_ASSERT_FALSE(reinitDone.load());
+    fixture.kdf.release();
+    check.join();
+    reinit.join();
+
+    // Same epoch and bootstrap sequence, but a new domain and generation.
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::authContextIdentity(
+                         fixture.application) == identityBefore);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::trustGeneration(
+                         fixture.application) > generationBefore);
+    assertLocalPinStatus(LocalServicePinStatus::Unavailable, pinResult);
+    TEST_ASSERT_FALSE(fixture.application.uiSnapshot().service.available);
+}
+
+void test_existing_local_lease_survives_a_network_trust_boundary() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    assertLocalPinStatus(LocalServicePinStatus::Authorized,
+                         fixture.application.verifyLocalServicePin("1234"));
+    const auto generationBefore =
+        FermentationApplicationTestAccess::trustGeneration(fixture.application);
+    static_cast<void>(fixture.application.applyNetworkMode(
+        device_platform::NetworkMode::HOME_WIFI));
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::trustGeneration(
+                         fixture.application) > generationBefore);
+    // Browser sessions are revoked; the local lease is not network-bound.
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().service.available);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_outcome_matrix_accepts_only_owning_apply_results);
@@ -3399,6 +3543,12 @@ int main() {
     RUN_TEST(test_login_after_gate_close_is_fail_closed_without_kdf);
     RUN_TEST(test_failed_factory_reset_reopens_the_gate_and_keeps_the_domain);
     RUN_TEST(test_reset_may_proceed_right_after_the_domain_returns);
+    RUN_TEST(
+        test_local_pin_check_and_factory_reset_neither_hang_nor_grant_access);
+    RUN_TEST(test_local_pin_check_after_a_failed_reset_still_authorizes);
+    RUN_TEST(test_local_pin_check_after_gate_close_is_unavailable_without_kdf);
+    RUN_TEST(test_local_pin_check_refuses_access_after_a_same_epoch_reinit);
+    RUN_TEST(test_existing_local_lease_survives_a_network_trust_boundary);
     RUN_TEST(
         test_stale_protected_login_cannot_create_a_session_after_factory_reset);
     RUN_TEST(test_protected_login_session_created_before_reset_is_revoked);

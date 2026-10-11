@@ -55,14 +55,45 @@ Die lokale Touch-UI erreicht Einstellungen ueber den Standby-Slot
 Navigationspfade: `Sprache` und `Zeit / Zeitzone` oeffnen dieselben Seiten wie
 die Header-Elemente Sprache und Uhrzeit; `Geraetename` oeffnet die
 Bildschirmtastatur und Zurueck/Abbrechen/Uebernehmen kehren zu `Einstellungen`
-zurueck; `Netzwerk` und `Webzugang` oeffnen die bestehenden Seiten. `Service`
-ist ein Eintrag unter `Einstellungen`; Verfuegbarkeit, Grund und PIN-Ablauf
-liegen unveraendert bei den bestehenden Ownern. Der Geraetename ist waehrend
-eines aktiven Laufs nicht aenderbar (der Owner entscheidet). Diagnose, Service-
-und PIN-Seiten zeigen bis zu ihren Ownern (#28) nur den Hinweis
-`zurueckgestellt`; die Zeitkorrektur im Recovery ist nicht angeboten. Die
+zurueck; `Netzwerk` und `Webzugang` oeffnen die bestehenden Seiten. Der
+Geraetename ist waehrend eines aktiven Laufs nicht aenderbar (der Owner
+entscheidet). Die Zeitkorrektur im Recovery ist nicht angeboten. Die
 Baumdarstellung oben bleibt die Zielstruktur; sie beschreibt hier kein
 zusaetzlich umgesetztes Hauptmenue.
+
+Umsetzungsstand `Service (PIN)` in Release 1 (Issue #188 A, Plan
+`docs/tasks/issue-188-service-pin-entry-plan.md`):
+
+- Der Eintrag `Service (PIN)` ist immer antippbar und zeigt keinen
+  Sperrgrund. Ohne lokale Servicefreigabe oeffnet er direkt die PIN-Seite, mit
+  gueltiger Freigabe die Service-Seite. Das Oeffnen der PIN-Seite erteilt keine
+  Berechtigung.
+- Die PIN-Seite bietet eine vierstellige maskierte Eingabe (Ziffern 1-0,
+  Entf, Leeren), `Abbrechen`, `Bestaetigen` und "PIN vergessen?". Die Pruefung
+  erfolgt ausschliesslich ueber den bestehenden Authentifizierungs-Owner
+  (`AuthenticationDomain::verifyServicePin`, persistente Fehlversuchs- und
+  Sperrregeln); die PIN wird weder gespeichert noch protokolliert. Eine
+  Service-PIN entsteht nur ueber die Webzugangs-Einrichtung.
+- Freigabe nur aus validiertem `STANDBY` (Lebenszyklus `Ready`, kein Lauf,
+  keine offene Recovery-Entscheidung, Konfiguration geladen). Die lokale
+  Freigabe endet nach 10 Minuten Inaktivitaet, bei ausdruecklichem
+  `Abmelden`, beim Verlassen von `STANDBY`, bei `ServiceRequired`, bei jedem
+  Neustart sowie bei Werksreset oder Neuinitialisierung der Authentifizierung.
+  Sie ist von Web-Sitzungen getrennt.
+- Nach korrekter PIN ist die Service-Seite der geschuetzte Einstieg mit
+  `Abmelden`. Servicefunktionen hinter diesem Einstieg (Aktortests,
+  Sensorzuordnung, Parameter, normales Wiederherstellungsmenue,
+  PIN-geschuetzter Werksreset, Touchkalibrierung) sind bis zu ihren Ownern
+  (#28, #19 Ablauf A) nicht umgesetzt; die Seite zeigt weiter den Hinweis
+  `zurueckgestellt`.
+- Der Slot `Wiederherstellung` der Service-Seite oeffnet die
+  **Lauf-Recovery-Seite** (Fortsetzung/Fallback eines unterbrochenen Laufs). Er
+  ist **nicht** das normale PIN-geschuetzte Wiederherstellungsmenue weiter
+  unten in diesem Dokument; im `STANDBY` bietet die Lauf-Recovery-Seite nichts
+  Bedienbares.
+- Ohne Freigabe bleiben Service-Seite und geschuetzte Ziele gesperrt, auch ueber
+  `Status -> Diagnose -> Service`; dort fuehrt `PIN` zur PIN-Eingabe. Diagnose
+  zeigt bis zu ihrem Owner (#28) nur den Hinweis `zurueckgestellt`.
 
 ## Waehrend eines Laufes
 
@@ -209,8 +240,9 @@ Umsetzung in Release 1 (Ownerentscheid O-R1 = B+, Issue #19): zwei lokale
 Zugaenge zu **demselben** mehrstufigen Ablauf (Datenverlustwarnung, bewusste
 Bestaetigung, langes Gedrueckthalten):
 
-- Normalbetrieb: Taste "PIN vergessen?" auf der lokalen PIN-Seite (ohne
-  PIN-Eingabe erreichbar);
+- Normalbetrieb: Taste "PIN vergessen?" auf der lokalen PIN-Seite
+  (`Einstellungen -> Service (PIN)`, ohne PIN-Eingabe und auch waehrend einer
+  PIN-Sperre erreichbar, sofern der Werksreset-Owner den Ablauf zulaesst);
 - `SAFE_BOOT`: eigener lokaler Eintrag "Vollstaendiger Werksreset" auf der
   Startseite, unabhaengig vom gesperrten Servicebereich.
 

@@ -36,6 +36,9 @@ Zuordnung zu den bisherigen `NOT_RUN`-Eintraegen: `S7_CONTENT_PAGES_LAYOUT`,
   frueheren Smoke) wurde vom Owner am 2026-10-08 ausdruecklich als geprueft
   bestaetigt (Owner-Aussage, nicht UART-belegt). Der Reset im D10-Lauf
   (19:37:48) war ein Owner-Reset mit anschliessend wiederhergestelltem Namen.
+- Geltungsbereich: Die Owner-Beobachtung bezieht sich auf das exakte Image `3918c50`; sie
+  verifiziert weder die Pixel-Treffbarkeit der Tasten noch die aktuelle Firmware von `main`
+  nach PR #200 (`44121fc`).
 - Aus der Meldung folgen weder Ressourcen- noch Stabilitaetsnachweise. Der
   D10-Ressourcennachweis (Sprache S3, Programm S6, Geraetename S10) ist davon
   unberuehrt und wird separat erhoben.

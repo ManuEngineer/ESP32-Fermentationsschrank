@@ -79,6 +79,22 @@ WorkspacePressDispatchResult dispatchWorkspacePress(
                              : WorkspacePressDispatchOutcome::DecisionOnly;
         return result;
     }
+    if (press.verifyServicePin.has_value()) {
+        // Local-only Service-PIN check (Issue #188 A). The Application owns
+        // the verification, the lockout and the lease; the result goes back
+        // to the workspace. Neither the PIN nor the command is logged.
+        WorkspacePressDispatchResult result;
+        result.servicePinResult =
+            application.verifyLocalServicePin(press.verifyServicePin->pin);
+        result.outcome = WorkspacePressDispatchOutcome::OwningOutcome;
+        return result;
+    }
+    if (press.endServiceSession) {
+        application.endLocalServiceSession();
+        WorkspacePressDispatchResult result;
+        result.outcome = WorkspacePressDispatchOutcome::OwningOutcome;
+        return result;
+    }
     if (press.factoryReset.has_value()) {
         // Local-only step of the factory reset flow; every precondition is
         // decided by the Application, the UI carries the intent only.
@@ -180,6 +196,7 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     // represents the state as displayed *before* this press is routed.
     // Destroy its vector/string storage before a typed press can mutate owners.
     FermentationUiWorkspacePress press;
+    const auto screenPageBefore = workspace.page();
     bool shouldDispatch = false;
     bool holdTick = false;
     bool holdTickRequired = false;
@@ -207,6 +224,12 @@ WorkspaceTouchTickResult processWorkspaceTouch(
             shouldDispatch = true;
         }
     }
+    if (shouldDispatch && (screenPageBefore == FermentationUiPage::Service ||
+                           screenPageBefore == FermentationUiPage::Recovery)) {
+        // Relevant operation in the protected area extends the local lease
+        // (Issue #188 A); background updates never do.
+        application.noteLocalServiceActivity();
+    }
     if (holdTickRequired) {
         // Outside the screen scope: the tick may run the reset, which ends the
         // network and HTTP and must not run under any UI-local storage.
@@ -230,6 +253,10 @@ WorkspaceTouchTickResult processWorkspaceTouch(
                 result.dispatch.commandResult.has_value() &&
                 result.dispatch.commandResult->category ==
                     device_platform::DeviceUiCommandOutcomeCategory::Accepted);
+        }
+        if (press.verifyServicePin.has_value() &&
+            result.dispatch.servicePinResult.has_value()) {
+            workspace.noteServicePinOutcome(*result.dispatch.servicePinResult);
         }
         if (press.setDisplayLanguage.has_value()) {
             // The language page shows a refused change; an accepted one

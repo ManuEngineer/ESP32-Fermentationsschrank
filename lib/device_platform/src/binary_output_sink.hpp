@@ -17,7 +17,13 @@ class IBinaryOutputSink {
     IBinaryOutputSink(IBinaryOutputSink&&) = delete;
     IBinaryOutputSink& operator=(IBinaryOutputSink&&) = delete;
 
-    virtual void setEnabled(bool enabled) = 0;
+    // Liefert `true` ausschliesslich, wenn der Befehl in einem
+    // betriebsbereiten Zustand erfolgreich am Ausgang ausgefuehrt wurde.
+    // Das ist keine Aussage ueber die Last (zum Beispiel Luefterdrehung).
+    // `false` bei nicht gestartetem, unbestaetigtem oder verriegeltem
+    // Ausgang, verworfenem Befehl oder Treiberfehler; ein Best-effort-AUS in
+    // einem verriegelten Zustand liefert ebenfalls `false`.
+    [[nodiscard]] virtual bool setEnabled(bool enabled) = 0;
 };
 
 }  // namespace device_platform

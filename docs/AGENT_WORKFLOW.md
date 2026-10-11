@@ -159,9 +159,10 @@ seinen Aufgaben gehören Planerstellung, Implementierung, gezielte Tests,
 notwendige Diagnose, CI- und Evidence-Aufbereitung sowie die Aktualisierung
 des PR.
 
-Nach einer tatsächlichen Implementation und vor jeder normalen Übergabe an den
-Independent Review führt der Builder als Bestandteil seines Implementation
-Self-Checks auf dem Implementierungs-`HEAD` den versionierten Runner-Aufruf aus:
+Nach einer tatsächlichen Implementation und vor der Übergabe an den
+abschliessenden Independent Full Review führt der Builder als Bestandteil seines
+Implementation Self-Checks auf dem Implementierungs-`HEAD` den versionierten
+Runner-Aufruf aus:
 
 ```bash
 bash scripts/run_pre_ready_gates.sh self-check
@@ -175,6 +176,22 @@ Draft-Nachweis gegen den freigegebenen Plan und die unmittelbar betroffenen
 Nachweise. Er ersetzt weder gezielte Fach- oder Konsumententests noch den
 unabhängigen Full Review oder den vollständigen Pre-Ready-Lauf. Danach hält der
 Builder für den externen Owner-/Reviewer-Schritt an.
+
+Ein vom Owner gewünschter Slice-/Zwischenreview einzelner Umsetzungsschnitte ist
+eine gezielte Code-, Vertrags- und Evidence-Prüfung des jeweiligen Schnitts. Er
+erzwingt weder den Builder-Self-Check noch automatisch einen neuen Full Review.
+Der Self-Check bleibt der einmalige Pflichtnachweis vor der Übergabe an den
+abschliessenden Independent Full Review und wird bei materiellen späteren
+Änderungen nach den bestehenden Regeln (Fix Verification, Materialität)
+wiederholt. Er enthält nicht das statische Stack-Gate; dieses gehört zur
+`esp`-Phase des Pre-Ready-Laufs.
+
+Bei laufend fortgeschriebenen Evidence-Dateien zeigt der allgemeine Statuskopf den
+neuesten verifizierten Stand mit Datum beziehungsweise `HEAD`; Statusangaben in
+Schnittabschnitten sind historische Schnittnachweise und bleiben als solche
+erkennbar. Ein Gate-Status wird nur mit dem tatsächlich verifizierten Nachweis
+(Runner-Ausgabe oder GitHub-Commit-Status) als `PASS` ausgewiesen; Einzelphasen
+ohne eigenen Nachweis werden nicht einzeln als `PASS` geführt.
 
 Der formale Independent Review erfolgt grundsätzlich unabhängig vom Builder.
 Der aktuelle Owner-Reviewkanal liegt ausserhalb von ChatGPT Work/Codex; aktuell

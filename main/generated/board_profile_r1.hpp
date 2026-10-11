@@ -6,7 +6,8 @@
 //   python3 scripts/generate_board_profile_header.py
 //
 // This is the single deterministic build-time derivation of the
-// R1 display/touch GPIO assignment from the canonical wiring SSOT
+// R1 display/touch/sensor GPIO assignment and onboard MOSFET output
+// assignment and polarity from the canonical wiring SSOT
 // (Issue #130). No second hand-maintained pin list is permitted in
 // main/app_main.cpp, CMake, or any other configuration file.
 // The R1 display rotation below is the single shared candidate used
@@ -15,6 +16,7 @@
 #pragma once
 
 #include "device_ui_hardware_ports.hpp"
+#include "output_polarity.hpp"
 
 namespace board_profile::esp32_32e_quad_mosfet_r1 {
 
@@ -31,5 +33,31 @@ inline constexpr int kOneWireInternalPin = 32;
 inline constexpr int kOneWireProductPin = 33;
 inline constexpr device_platform::DisplayRotation kR1DisplayRotation =
     device_platform::DisplayRotation::Rotate90;
+
+// Onboard-MOSFET outputs (Issue #32). A polarity of `Unconfirmed` means
+// the SSOT active_level is still TBD_HARDWARE: the output adapter then
+// performs no GPIO operation. The reserve channel is not generated.
+inline constexpr int kInternalFanPin = 16;
+inline constexpr device_platform::OutputPolarity kInternalFanPolarity =
+    device_platform::OutputPolarity::Unconfirmed;
+inline constexpr int kOuterFanPin = 17;
+inline constexpr device_platform::OutputPolarity kOuterFanPolarity =
+    device_platform::OutputPolarity::Unconfirmed;
+inline constexpr int kBuzzerPin = 26;
+inline constexpr device_platform::OutputPolarity kBuzzerPolarity =
+    device_platform::OutputPolarity::Unconfirmed;
+
+// BTS7960 H-bridge signals (Issue #33): RPWM, LPWM and the shared
+// R_EN/L_EN enable. R_IS/L_IS (GPIO34/35) are disabled and unwired in R1
+// and are intentionally not generated.
+inline constexpr int kBtsRpwmPin = 13;
+inline constexpr device_platform::OutputPolarity kBtsRpwmPolarity =
+    device_platform::OutputPolarity::ActiveHigh;
+inline constexpr int kBtsLpwmPin = 14;
+inline constexpr device_platform::OutputPolarity kBtsLpwmPolarity =
+    device_platform::OutputPolarity::ActiveHigh;
+inline constexpr int kBtsEnablePin = 25;
+inline constexpr device_platform::OutputPolarity kBtsEnablePolarity =
+    device_platform::OutputPolarity::ActiveHigh;
 
 }  // namespace board_profile::esp32_32e_quad_mosfet_r1

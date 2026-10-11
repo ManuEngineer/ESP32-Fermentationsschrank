@@ -36,6 +36,8 @@ struct WorkspacePressDispatchResult {
     // The existing bridge result, including its DecisionOnly versus
     // OwningOutcome phase. This is the authoritative typed outcome.
     std::optional<FermentationUiCommandResult> commandResult;
+    // Set only when press.verifyServicePin was populated (Issue #188 A).
+    std::optional<LocalServicePinResult> servicePinResult;
 };
 
 // The single app-specific adapter that turns an already-typed #26

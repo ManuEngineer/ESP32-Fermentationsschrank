@@ -747,6 +747,7 @@ bool FermentationApplication::begin(
     configurationRecoveryService_.reset();
     runPersistenceCoordinator_.reset();
     recoveryDisposition_.reset();
+    localServiceLease_ = device_platform::ServiceSessionLease{};
     owningRuntimeEvidence_ = CrossRolePlausibilityContext{};
     uiRefreshTracker_ = FermentationUiRefreshRevisionTracker{};
     lifecycleState_ = ApplicationLifecycleState::Ready;
@@ -1440,6 +1441,9 @@ void FermentationApplication::refreshUiSnapshot(
     input.application.presentation = presentationState_;
     input.network.currentMode = networkMode();
     input.webAccess = webAccessState();
+    // Only the lease plus the single entry predicate open the service area;
+    // the UI falls back to its generic locked reason (no per-tick text key).
+    input.service.available = localServiceAvailableUnlocked();
     input.factoryReset = factoryResetView(
         timeSource_ != nullptr ? timeSource_->monotonicMillis() : 0U);
     input.refreshTracker = &uiRefreshTracker_;
@@ -1657,6 +1661,143 @@ FermentationWebAccessState FermentationApplication::webAccessState() const {
     return webProvisioningWindowStillOpenUnlocked()
                ? FermentationWebAccessState::WindowOpen
                : FermentationWebAccessState::Closed;
+}
+
+// --- Local service area (Issue #188 A) -------------------------------------
+
+bool FermentationApplication::localServiceEntryAllowedUnlocked()
+    const noexcept {
+    // Validated STANDBY only: a ServiceRequired lifecycle, a run, an open
+    // recovery decision or a missing configuration runtime never qualifies,
+    // even while the run state still reports Standby.
+    return lifecycleState_ == ApplicationLifecycleState::Ready &&
+           runtimeRunState_ != nullptr &&
+           runtimeRunState_->processState.state == ProcessState::Standby &&
+           factoryResetRunGateOpenUnlocked() &&
+           pendingRecoverySource_ == nullptr &&
+           !recoveryDisposition_.has_value() &&
+           (runPersistenceCoordinator_ == nullptr ||
+            runPersistenceCoordinator_->state() !=
+                RunPersistenceCoordinatorState::FallbackRecoveryPending) &&
+           storageEpoch_.has_value();
+}
+
+bool FermentationApplication::localServiceAvailableUnlocked() const noexcept {
+    return timeSource_ != nullptr && localServiceEntryAllowedUnlocked() &&
+           localServiceLease_.activeAt(timeSource_->monotonicMillis());
+}
+
+LocalServicePinResult FermentationApplication::verifyLocalServicePin(
+    const std::string& pin) {
+    AuthenticationDomain* domain = nullptr;
+    std::optional<AuthenticationBootstrapContext> context;
+    std::optional<AuthOperationGate::Token> token;
+    std::uint64_t trustGeneration = 0U;
+    std::uint64_t nowMs = 0U;
+    {
+        const auto guard = applicationCallSerializer_.enter();
+        if (timeSource_ == nullptr) {
+            return {LocalServicePinStatus::Unavailable, 0U};
+        }
+        // Decided before any KDF run or authentication write.
+        if (!localServiceEntryAllowedUnlocked()) {
+            return {LocalServicePinStatus::NotAllowedInState, 0U};
+        }
+        switch (webAuthenticationStateUnlocked()) {
+            case WebAuthenticationState::PasswordProtected:
+            case WebAuthenticationState::PasswordDisabled:
+                // Both modes keep the Service-PIN protection.
+                break;
+            case WebAuthenticationState::Unprovisioned:
+                return {LocalServicePinStatus::NotProvisioned, 0U};
+            case WebAuthenticationState::RecoveryRequired:
+            case WebAuthenticationState::Indeterminate:
+                return {LocalServicePinStatus::Unavailable, 0U};
+        }
+        if (authenticationDomain_ == nullptr ||
+            !authenticationContext_.has_value()) {
+            return {LocalServicePinStatus::Unavailable, 0U};
+        }
+        token = authOperationGate_.tryBegin();
+        if (!token.has_value()) {
+            return {LocalServicePinStatus::Unavailable, 0U};
+        }
+        domain = authenticationDomain_.get();
+        context = authenticationContext_;
+        trustGeneration = webTrustGeneration_;
+        nowMs = timeSource_->monotonicMillis();
+    }
+
+    // The domain pointer and the context copy are valid only while the token
+    // is active; the Application gate is released for the slow PBKDF2.
+    std::uint64_t retryAfterMs = 0U;
+    const auto checked =
+        domain->verifyServicePin(*context, pin, nowMs, retryAfterMs);
+    const auto checkedEpoch = context->storageEpoch();
+    const auto checkedBootstrapSequence = context->bootstrapSequence();
+    // Release the token before the Application gate is entered again: a
+    // factory reset or authentication re-initialisation drains the gate
+    // while holding the Application gate.
+    token.reset();
+    domain = nullptr;
+    context.reset();
+
+    switch (checked) {
+        case AuthCheckStatus::Authenticated:
+            break;
+        case AuthCheckStatus::Invalid:
+            return retryAfterMs == 0U
+                       ? LocalServicePinResult{LocalServicePinStatus::Invalid,
+                                               0U}
+                       : LocalServicePinResult{LocalServicePinStatus::LockedOut,
+                                               retryAfterMs};
+        case AuthCheckStatus::LockedOut:
+            return {LocalServicePinStatus::LockedOut, retryAfterMs};
+        case AuthCheckStatus::Disabled:
+        case AuthCheckStatus::RecoveryRequired:
+        case AuthCheckStatus::KdfUnavailable:
+            return {LocalServicePinStatus::Unavailable, 0U};
+    }
+
+    // Fail closed: the decision is only valid for the same entry state, the
+    // same authentication context and the same trust generation it was taken
+    // in (a domain replacement within one epoch bumps the generation).
+    const auto guard = applicationCallSerializer_.enter();
+    if (!localServiceEntryAllowedUnlocked()) {
+        return {LocalServicePinStatus::NotAllowedInState, 0U};
+    }
+    if (timeSource_ == nullptr || authenticationDomain_ == nullptr ||
+        !authenticationContext_.has_value() ||
+        authenticationResolutionStatus_ !=
+            AuthenticationBootstrapResolutionStatus::Ready ||
+        authenticationContext_->storageEpoch() != checkedEpoch ||
+        authenticationContext_->bootstrapSequence() !=
+            checkedBootstrapSequence ||
+        webTrustGeneration_ != trustGeneration) {
+        return {LocalServicePinStatus::Unavailable, 0U};
+    }
+    const auto grantedAtMs = timeSource_->monotonicMillis();
+    localServiceLease_ = device_platform::ServiceSessionLease(
+        fermentationTouchServicePolicy(), grantedAtMs);
+    if (!localServiceLease_.activeAt(grantedAtMs)) {
+        return {LocalServicePinStatus::Unavailable, 0U};
+    }
+    return {LocalServicePinStatus::Authorized, 0U};
+}
+
+void FermentationApplication::endLocalServiceSession() {
+    const auto guard = applicationCallSerializer_.enter();
+    localServiceLease_ = device_platform::ServiceSessionLease{};
+}
+
+void FermentationApplication::noteLocalServiceActivity() {
+    const auto guard = applicationCallSerializer_.enter();
+    if (!localServiceAvailableUnlocked()) {
+        return;
+    }
+    localServiceLease_.observe(
+        device_platform::ServiceSessionEvent::RelevantUserActivity,
+        timeSource_->monotonicMillis());
 }
 
 bool FermentationApplication::openWebProvisioningWindow() {
@@ -2039,6 +2180,7 @@ void FermentationApplication::resetAuthenticationState() noexcept {
     // pending authentication decisions.
     ++webTrustGeneration_;
     closeWebProvisioningWindow();
+    localServiceLease_ = device_platform::ServiceSessionLease{};
     authenticationContext_.reset();
     authenticationDomain_.reset();
     authenticationRecordStore_.reset();
@@ -2185,6 +2327,11 @@ void FermentationApplication::update() {
         networkLifecycle_->poll();
     }
     reevaluateWaitingForTrustedTime();
+    // Leaving the validated STANDBY ends the local service lease for good
+    // (SafetyStateInvalidated); a later return to STANDBY needs the PIN again.
+    if (!localServiceEntryAllowedUnlocked()) {
+        localServiceLease_ = device_platform::ServiceSessionLease{};
+    }
 }
 
 void FermentationApplication::publishOwningRecoveryEvidence(
@@ -2540,6 +2687,7 @@ FermentationApplication::publishedProcessState() const {
 void FermentationApplication::requireService(
     FaultCode faultCode, bool applicationAllocationFailure) noexcept {
     lifecycleState_ = ApplicationLifecycleState::ServiceRequired;
+    localServiceLease_ = device_platform::ServiceSessionLease{};
     presentationState_.faultCode = faultCode;
     presentationState_.applicationAllocationFailure =
         applicationAllocationFailure;

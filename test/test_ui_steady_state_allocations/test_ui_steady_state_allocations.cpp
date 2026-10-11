@@ -979,6 +979,46 @@ void tearDown() {}
 #include "../../main/fermentation_ui_press_dispatcher.cpp"
 #include "../../main/fermentation_ui_renderer.cpp"
 
+// Issue #188 A: the Service-PIN page (empty and with a partial entry) and the
+// released Service page are steady states like every other page.
+void test_pin_and_released_service_pages_steady_state_allocate_nothing() {
+    WebAccessFixture fixture;
+    TEST_ASSERT_TRUE(fixture.application.openWebProvisioningWindow());
+    TEST_ASSERT_TRUE(fixture.application.provisionWebAccess(
+                         WebProvisionMode::Disable, "", "1234") ==
+                     WebProvisionStatus::Provisioned);
+    const auto quiet = [&fixture] {
+        startCounting();
+        bool redraw = false;
+        for (int loop = 0; loop < 100; ++loop) {
+            redraw = redraw || fixture.step();
+        }
+        const auto allocations = stopCounting();
+        TEST_ASSERT_FALSE(redraw);
+        TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+    };
+
+    fixture.workspace.setPage(FermentationUiPage::Pin);
+    fixture.settle();
+    quiet();
+
+    // One digit is exactly one redraw; the partial entry is quiet again.
+    static_cast<void>(fixture.workspace.press(
+        fixture.application.uiSnapshot(),
+        {device_platform::DeviceUiTargetKind::ContentCell, 0U, 0U, 0U}));
+    TEST_ASSERT_TRUE(fixture.step());
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.step());
+    quiet();
+
+    TEST_ASSERT_TRUE(fixture.application.verifyLocalServicePin("1234").status ==
+                     LocalServicePinStatus::Authorized);
+    fixture.workspace.setPage(FermentationUiPage::Service);
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.application.uiSnapshot().service.available);
+    quiet();
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_control_counter_detects_allocations_of_the_former_pipeline);
@@ -1001,6 +1041,7 @@ int main() {
     RUN_TEST(
         test_program_list_page_steady_state_allocates_nothing_and_rows_redraw);
     RUN_TEST(test_message_list_page_steady_state_allocates_nothing);
+    RUN_TEST(test_pin_and_released_service_pages_steady_state_allocate_nothing);
     RUN_TEST(test_clock_page_steady_state_and_local_time_path_allocate_nothing);
     RUN_TEST(test_language_page_steady_state_allocates_nothing);
     RUN_TEST(test_settings_page_adopts_the_device_name_and_is_a_steady_state);
