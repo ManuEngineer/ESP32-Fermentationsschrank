@@ -69,9 +69,13 @@ ist; Details stehen in den verlinkten Dokumenten.
   `docs/audits/R1_RAM_LVGL48_HW_EVIDENCE.md`, `docs/audits/PR170_HW_GATE_20261005/`.
   Endgueltige harte Systemgrenzen bleiben der finalen R1-Integrationsqualifikation
   vorbehalten.
-- **#172 (Touch-UI, `CLOSED`)**: Hardware nur teilweise Ownerabnahme; nicht
-  ausgefuehrt: Layout S7, S8/S9, Geraetename-Persistenz, Labelbreiten,
-  Tastengroesse/Detail, D10-Commit-Logs.
+- **#172 (Touch-UI, `CLOSED`)**: Hardware-Ownerabnahme S7-S10 inkl. Labels/
+  Tastengroessen und Namenspersistenz am 2026-10-08 `PASS_OWNER_OBSERVED`
+  (`docs/audits/PR187_HW_OWNER_RETEST_20261008_EVIDENCE.md`); D10-Commit-
+  Ressourcen S3/S6/S10 gemessen, `PASS`
+  (`docs/audits/PR187_D10_COMMIT_RESOURCES_20261008_EVIDENCE.md`). Offen:
+  Pixelvermessung der Tasten nicht erfolgt. Die subjektiv langsamere Reaktion
+  trat nur im Probe-Build auf (Exakt-Image: Owner „sehr smooth“).
 - **#126 (Zeit, `CLOSED`)**: reale RTC-Hardware (`BLOCKED_OWNER_HARDWARE_PENDING`)
   und reale NTP-Netzwerklaeufe (`NOT_RUN`).
 - **#29/#130 (Bring-up, GPIO-SSOT)**: elektrische Pegelmessung
