@@ -7,7 +7,7 @@ Baseline `df5a3dd`) bleibt historisch und wird nicht uebernommen.
 Ownerfreigaben (Stand 2026-10-10, nach Diagnose): **G1 voll** fuer diesen
 Plan-/Firmwarestand. **G2 wurde im Verlauf ausdruecklich fuer P2b + P3 erteilt**
 (ein Vollreset-Versuch ausgefuehrt; G2 damit verbraucht, Befund siehe 3a/3b).
-**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung; G5/P3b `PASS`, Abschnitt 3d). **G3 und G4 nicht erteilt**. **G2-R3 wurde erteilt und ausgefuehrt (2026-10-11, ein 5000-ms-Reset, P3c, Abschnitt 3e):** Reset funktional durchgefuehrt (Ownerbeobachtung, kein Panic/Overflow/WDT/OOM), aber **`stack_hwm_bytes` nach dem Reset 5 432 B < Ziel 6 144 B** und Heap-Minimum 4 084 B; Ergebnis liegt beim Owner, kein PASS; `HW-19-R01` bleibt `FAIL`. `ACTUATOR_RELEASE=NO`; Aktoren physisch
+**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung; G5/P3b `PASS`, Abschnitt 3d). **G3 und G4 nicht erteilt**. **G2-R3 wurde erteilt und ausgefuehrt (2026-10-11, ein 5000-ms-Reset, P3c, Abschnitt 3e):** Reset funktional durchgefuehrt (Ownerbeobachtung, kein Panic/Overflow/WDT/OOM), aber **`stack_hwm_bytes` nach dem Reset 5 432 B < Ziel 6 144 B** und Heap-Minimum 4 084 B; der Owner hat die Stackreserve als begruendete Abweichung akzeptiert (Abschnitt 3e, Ownerentscheid), `HW-19-R01` damit `PASS` mit akzeptierter Abweichung; die Messwerte und das Ziel 6 144 B bleiben unveraendert dokumentiert. `ACTUATOR_RELEASE=NO`; Aktoren physisch
 getrennt/deaktiviert, kein Aktortest. Die Abschnitte 1–3 beschreiben den jeweils
 datierten Stand ihres Laufs (N1–N8 vor G2); der aktuelle Stand steht in 3a, 3b
 und 4.
@@ -636,14 +636,28 @@ Powercut-Anteil. `HW-19-R02` bleibt `NOT_RUN` (Teilbeobachtung ohne Vollnachweis
 - Aufnahme per `kill` beendet (kein «capture end» im Rohlog, stattdessen ein
   nachtraeglicher Vermerk). Der erste Block des Rohlogs ist der RTS-Boot.
 
+### Ownerentscheid zur Abweichung (2026-10-11, Chat)
+
+Wortlaut-Kern: Der Owner akzeptiert fuer PR #200 die im G2-R3-Hardwaretest gemessene
+Stackreserve von 5 432 B als begruendete Abweichung vom geplanten Reserveziel von 6 144 B.
+Der Werksreset wurde funktional erfolgreich durchgefuehrt, ohne Stack Overflow, Panic, WDT oder
+OOM; der Folgeboot war erfolgreich. Das Heap-Minimum von 4 084 B wird als Messbefund
+dokumentiert und begruendet aktuell keinen zusaetzlichen Softwarefix. Keine weitere
+Implementierung und kein zusaetzlicher Hardwaretest allein aufgrund dieser Ressourcenwerte.
+
+Einordnung: Das urspruengliche Ziel (>= 6 144 B, Plan 4.5/5.2), der gemessene Wert
+(5 432 B, 712 B darunter) und das Heap-Minimum bleiben unveraendert stehen; die Akzeptanz
+aendert die Messung nicht. Die Messluecken (oben) bleiben bestehen: der Wert ist ein
+Minimum seit Boot und nicht dem Hold zugeordnet.
+
 ### Status P3c
 
 ```text
 P3c_RESET_FUNKTIONAL=PASS_OWNER_OBSERVED (Werksreset durchgefuehrt, Sprache wieder de, WLAN zurueckgesetzt, Touch ok, kein Panic/Overflow/WDT/OOM im UART-Log)
-P3c_STACKZIEL_6144=NICHT_ERFUELLT (5 432 B nach dem Reset, 712 B unter Ziel) -> Owner-Entscheid, kein PASS
-P3c_HEAP_MINIMUM=4 084 B (knapp, kein OOM) -> Owner-Befund
+P3c_STACKZIEL_6144=NICHT_ERFUELLT (5 432 B nach dem Reset, 712 B unter Ziel; Messwert unveraendert) -> vom Owner als begruendete Abweichung akzeptiert (siehe Ownerentscheid)
+P3c_HEAP_MINIMUM=4 084 B (knapp, kein OOM) -> Messbefund, kein zusaetzlicher Softwarefix (Ownerentscheid)
 P3c_FOLGEBOOT=PASS (Boot-HWM 11 800 B, kein Fehler; Boot-Resume-Ketten nicht belegt)
-HW-19-R01=FAIL (Stackziel verfehlt; funktional bestanden; Ownerentscheid ausstehend)
+HW-19-R01=PASS (funktional bestanden; Stackreserve 5 432 B < Ziel 6 144 B als Abweichung vom Owner akzeptiert; historisch P3: FAIL)
 HW-19-R02=NOT_RUN (nur Teilaspekte beobachtet)
 HW-19-R03=BLOCKED
 ACTUATOR_RELEASE=NO
@@ -652,7 +666,7 @@ ACTUATOR_RELEASE=NO
 ## 4. Status je Akzeptanztest
 
 ```text
-HW-19-R01=FAIL (P3c, 3e: Reset funktional durchgefuehrt, Ownerbeobachtung; Stackziel verfehlt: HWM 5 432 B < 6 144 B, Heap-Minimum 4 084 B; Ownerentscheid ausstehend. Historisch P3: FAIL; P3b-Recovery mit b9564e6 belegt, 3d): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
+HW-19-R01=PASS (P3c, 3e: Reset funktional durchgefuehrt, Ownerbeobachtung; Stackziel verfehlt: HWM 5 432 B < 6 144 B, vom Owner als begruendete Abweichung akzeptiert; Heap-Minimum 4 084 B als Messbefund ohne Fix. Historisch P3: FAIL; P3b-Recovery mit b9564e6 belegt, 3d): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
   Stack Overflow in task main (07:56:28 UTC) und anschliessendem Bootloop; kein Ergebnisbildschirm.
   belegt:  Touchweg Einstellungen -> Service (PIN) -> PIN-Seite -> "PIN vergessen?" (N1/N2),
            Warnungs-/Confirm-Seite DE/EN/ES (N3/N5), Abbrechen (N4/N5), Hold-Seite mit Fortschritt (N6),
@@ -666,7 +680,7 @@ HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht
 
 ## 5. Offen / naechste Gates
 
-- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5/P3b ist abgeschlossen (3d, `PASS`): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s; Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung, `PASS_OWNER_OBSERVED`). Der interne Handoff-Pfad bleibt `NOT_RESOLVED` (3d). **G2-R3 / P3c ist ausgefuehrt (3e)**; offen ist die Ownerentscheidung zur unterschrittenen Stackreserve (5 432 B < 6 144 B) und zum Heap-Minimum 4 084 B sowie der unabhaengige Review.
+- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5/P3b ist abgeschlossen (3d, `PASS`): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s; Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung, `PASS_OWNER_OBSERVED`). Der interne Handoff-Pfad bleibt `NOT_RESOLVED` (3d). **G2-R3 / P3c ist ausgefuehrt (3e)**; der Owner hat die unterschrittene Stackreserve (5 432 B < 6 144 B) als begruendete Abweichung akzeptiert und das Heap-Minimum 4 084 B als Messbefund ohne Softwarefix bewertet (3e); offen ist der unabhaengige Review.
 - **G2 und G2-R3** sind verbraucht (je ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
-- Heap-Minimum-Entwicklung im Folgelauf mitmessen.
+- Kein zusaetzlicher Hardwaretest und keine Implementierung allein wegen Stackreserve/Heap-Minimum (Ownerentscheid 2026-10-11).
