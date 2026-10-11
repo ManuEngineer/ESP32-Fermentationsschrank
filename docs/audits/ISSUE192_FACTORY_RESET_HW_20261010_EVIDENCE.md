@@ -7,7 +7,7 @@ Baseline `df5a3dd`) bleibt historisch und wird nicht uebernommen.
 Ownerfreigaben (Stand 2026-10-10, nach Diagnose): **G1 voll** fuer diesen
 Plan-/Firmwarestand. **G2 wurde im Verlauf ausdruecklich fuer P2b + P3 erteilt**
 (ein Vollreset-Versuch ausgefuehrt; G2 damit verbraucht, Befund siehe 3a/3b).
-**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung; G5/P3b `PASS`, Abschnitt 3d). **G3 und G4 nicht erteilt**, G2-R3 gesperrt. `ACTUATOR_RELEASE=NO`; Aktoren physisch
+**G5 wurde erteilt und ausgefuehrt** (App-only-Recovery-Flash `b9564e6`, P3b: stabiler Boot, Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung; G5/P3b `PASS`, Abschnitt 3d). **G3 und G4 nicht erteilt**. **G2-R3 wurde erteilt und ausgefuehrt (2026-10-11, ein 5000-ms-Reset, P3c, Abschnitt 3e):** Reset funktional durchgefuehrt (Ownerbeobachtung, kein Panic/Overflow/WDT/OOM), aber **`stack_hwm_bytes` nach dem Reset 5 432 B < Ziel 6 144 B** und Heap-Minimum 4 084 B; Ergebnis liegt beim Owner, kein PASS; `HW-19-R01` bleibt `FAIL`. `ACTUATOR_RELEASE=NO`; Aktoren physisch
 getrennt/deaktiviert, kein Aktortest. Die Abschnitte 1–3 beschreiben den jeweils
 datierten Stand ihres Laufs (N1–N8 vor G2); der aktuelle Stand steht in 3a, 3b
 und 4.
@@ -499,27 +499,174 @@ HANDOFF_PFAD_Pending/Committed=NOT_RESOLVED (nicht geloggt; zurueckgestellte Ein
 
 Folge: Das Geraet ist wiederhergestellt (kein Bootloop mehr) und bootet stabil mit
 `b9564e6`. Das ist **kein** Nachweis fuer einen Werksreset am neuen Stand;
-`HW-19-R01` bleibt `FAIL` bis zum separat freizugebenden P3c-Retest (G2-R3, nicht
-freigegeben). `HW-19-R02=NOT_RUN`, `HW-19-R03=BLOCKED`. Kein zweiter Flash, kein
+`HW-19-R01` bleibt `FAIL` bis zum separat freizugebenden P3c-Retest (G2-R3, zum Stand von 3d nicht
+freigegeben; inzwischen erteilt und ausgefuehrt, siehe 3e). `HW-19-R02=NOT_RUN`, `HW-19-R03=BLOCKED`. Kein zweiter Flash, kein
 Erase, kein Powercycle-Experiment, kein Hold-Test.
+
+## 3e. G2-R3 / P3c – 5000-ms-Werksreset am Stand `b9564e6` (2026-10-11, 06:49–07:15 UTC)
+
+Owner-Freigabe G2-R3 (2026-10-11, Chat): genau ein vollstaendiger 5000-ms-Werksreset
+gemaess vorgelegter Testbeschreibung und Plan Revision 3 (5.2), Sprache auf English als
+Testwert, UART-Aufzeichnung samt Stack-/Heap-Messung, Pruefung der zurueckgesetzten
+Einstellungen und der Touchfunktion, ein kontrollierter Folgeboot erst nach
+abgeschlossenem Reset. Entwicklungsboard ohne wichtige Nutzdaten, Datenverlust
+akzeptiert. G3, G4, weitere Flash-/Erase-Versuche und `ACTUATOR_RELEASE` blieben
+ausgeschlossen. Ownerbestaetigung vor dem Test: keine Aktoren am Geraet.
+
+Voraussetzungen (belegt): Quellstand der Auswertung `8e5b99f` (Doku-only gegenueber
+`b9564e6`), Geraet laeuft mit `source git sha: b9564e67a2d9dc067bc4d6a873c376cb7f3ca4b3`
+(Boot-Log, beide Boots), `real actuators: disabled`, `hardware state:
+HARDWARE_UNVERIFIED`, `actuator policy: REQUIRE_VERIFIED_HARDWARE`, kein Flash, kein
+Erase, kein Hold ausser dem einen.
+
+### Vorbereitung durch den Owner (vor der Aufnahme, Ownerangabe, Werte nicht dokumentiert)
+
+Sprache English, Geraetename geaendert, WLAN eingerichtet (Modus `HOME_WIFI`),
+Web-Passwort und PIN gesetzt. Die Zeitzone wurde nicht geaendert; «Zeitzone korrekt»
+nach dem Reset ist daher **kein** Vorher-/Nachher-Beleg. Die Zugangsdaten stehen weder
+hier noch im Repository.
+
+### Ablauf und Belege
+
+Eine durchgehende Aufnahme (ein `capture.py`-Lauf, Port nicht erneut geoeffnet;
+Aufnahmestart 06:49:58 UTC mit einem RTS-Resetpuls, Ende per `kill` um 07:15:28 UTC).
+Rohlog lokal `~/.cache/ev192-build/g2r3_p3c_uart_b9564e6.log`, 1829 Zeilen, SHA-256
+`dfd866fc2f22c43d69b4ef1a7a3cac64b33f3f437f736156358dc6e17fc59b3e` (nicht im
+Repository; enthaelt SSID/IP/MAC). Zwei Reset-Header im Log: 06:49:58 (RTS-Puls beim
+Aufnahmestart) und 07:10:58 (Folgeboot durch den Owner, `POWERON_RESET`); sonst kein
+Reset-Header. Kein `panic`, `Guru`, `stack overflow` oder WDT im gesamten Log.
+
+```text
+06:49:58  Boot (RTS) mit b9564e6, Modus HOME_WIFI, verbunden
+06:54:40  V2 Ownerbeobachtung: Display zeigt nach dem Boot weiter English, Aenderungen stehen
+06:55:57  Hold-Seite erreicht (Ownermeldung), danach 130 s ohne Beruehrung
+06:57:38  Vorher-Messung (idle_120s)
+~07:00:1x Hold (Owner, ein Mal, 5 s) – Beginn und Dauer NICHT geloggt (Messluecke)
+07:00:16  UART: wifi: run -> init, wifi stop, 6x httpd_sock_err (recv: 113)
+07:01      Ownermeldung: Display Deutsch, «Werksreset durchgefuehrt»
+07:02:11  Nachher-Messung (idle_120s)
+07:10:58  Folgeboot (Owner), Boot ohne Panic
+```
+
+Anzeige nach dem Hold laut Owner: Sprache wieder Deutsch, Text «Werksreset
+durchgefuehrt» (Ergebnis `Completed`: weder Neustart- noch Netzwerk-Hinweis).
+Ein automatischer Neustart fand nicht statt (`uptime_ms` lief bis zum
+Owner-Folgeboot durch).
+
+### Messwerte (`app_main: resources:`, Main-Task, Stack 24 576 B)
+
+| Messpunkt | `stack_hwm_bytes` | Heap frei | Heap Minimum | groesster Block | Netzwerk |
+|---|---|---|---|---|---|
+| Boot `after_application_begin` 06:50:00 | 11 800 | 71 732 | 67 760 | 65 536 | HOME_WIFI / ConnectingHome |
+| Boot `periodic_30s` 06:50:30 | 11 800 | 40 424 | 26 496 | 31 744 | HOME_WIFI / HomeConnected |
+| **Vorher** `idle_120s` auf der Hold-Seite 06:57:38 | **11 576** | 40 588 | 26 496 | 31 744 | HOME_WIFI / HomeConnected |
+| **Nachher** `idle_120s` 07:02:11 | **5 432** | 57 656 | **4 084** | 21 504 | UNSELECTED / Stopped |
+| Folgeboot `after_platform_begin` 07:10:59 | 18 632 | 169 548 | 169 548 | 110 592 | UNSELECTED / Stopped |
+| Folgeboot `after_application_begin` 07:11:00 | 11 800 | 135 364 | 131 392 | 110 592 | UNSELECTED / Stopped |
+| Folgeboot `after_ui_init` 07:11:00 | 11 800 | 110 476 | 105 040 | 98 304 | UNSELECTED / Stopped |
+| Folgeboot `periodic_30s` 07:11:30 | 11 800 | 108 800 | 104 852 | 98 304 | UNSELECTED / Stopped |
+
+Der Boot-`idle_120s` um 06:52:00 (HWM 11 800) gehoert zum Boot und nicht zur Hold-Seite.
+Ein `idle_120s` nach dem Folgeboot gibt es nicht, weil der Owner dort bedient hat.
+
+Einordnung (belegt vs. nicht belegt):
+
+- `stack_hwm_bytes` ist das **Minimum seit Taskstart**. Die Nachher-Messung um 07:02:11
+  liegt im selben Boot und umfasst damit Hold, Handoff und Netzwerkstopp mit. Die
+  Hold-Phase wird dadurch erfasst (anders als bei einer Messung erst nach Reboot), aber
+  nur als Minimum ueber den ganzen Zeitraum 06:50–07:02; eine Zuordnung zur einzelnen
+  Funktion oder zum Zeitpunkt ist **nicht** moeglich.
+- Reserve nach dem Reset-Handoff: **5 432 B < Ziel 6 144 B (Plan 4.5/5.2), Differenz
+  712 B**. Verbrauch seit Boot 24 576 − 5 432 = 19 144 B, also **ueber** der statischen
+  Kettengrenze 18 432 B; die statischen Ketten (K-HOLD 15 568 B) sind laut Plan nur eine
+  Untergrenze. Der Mehrverbrauch gegenueber der Vorher-Messung betraegt 11 576 − 5 432 =
+  6 144 B. Das Ergebnis wird dem Owner vorgelegt und **nicht als PASS gefuehrt** (Plan 5.2).
+  Ursache nicht analysiert; kein Fix in diesem Auftrag.
+- Heap: Das Minimum fiel von 26 496 auf **4 084 B** (unter dem R1-Low-Water-Wert 4 124 B).
+  Zeitpunkt und Ursache sind nicht geloggt (zwischen 06:57:38 und 07:02:11). Es gab kein
+  OOM, keinen `heap_alloc_failed`-Eintrag und keinen Fehler; nach dem Netzwerkstopp
+  stieg der freie Heap auf 57 656 B. Der groesste Block blieb mit 21 504 B deutlich ueber
+  dem Scratchbedarf von 3 952 B. Das knappe Minimum ist ein Befund fuer den Owner.
+- Folgeboot: Boot-HWM 11 800 B (≥ 6 144 B) und Heap vergleichbar mit dem G5-Boot (108 644 / 104 700 /
+  98 304 B bei `idle_120s`; hier `periodic_30s` 108 800 / 104 852 / 98 304 B), kein `stack overflow`. Weil der Reset als `Completed`
+  endete, gab es keinen offenen Handoff: der Folgeboot belegt **nicht** die Boot-Resume-
+  Ketten K-BOOT-P/-C und nicht den internen Pending-/Committed-Pfad.
+- Eine zusaetzliche Beobachtung ausserhalb der P3c-Messung: Nach dem Folgeboot
+  richtete der Owner WLAN und Web-Passwort neu ein; dabei zeigte `stable_home_wifi`
+  um 07:13:09 `stack_hwm_bytes=4 408` (ebenso `network_page_press_*`, Heap frei
+  43 356 / Minimum 30 308 / groesster Block 32 768 B). Das liegt im Bereich des im
+  Plan 4.5 genannten Betriebsminimums (4 312 B in N1–N8), ist keine Messung des
+  Resetpfads, zeigt aber, dass die 6 144-B-Reserve im normalen Bedienbetrieb mit
+  WLAN-Einrichtung ebenfalls unterschritten wird.
+
+### Vorher-/Nachher-Vergleich der Daten (Ownerbeobachtung, kein UART-Beleg)
+
+| Pruefpunkt | Vorher | Nachher |
+|---|---|---|
+| Anzeigesprache | English (V2 nach RTS-Reboot bestaetigt = Persistenz) | Deutsch |
+| Geraetename | geaendert (Wert nicht dokumentiert) | «ok» (Werkswert laut Ownerangabe; Wortlaut nicht protokolliert) |
+| WLAN | eingerichtet, Modus HOME_WIFI | zurueckgesetzt, Modus UNSELECTED (auch UART) |
+| Web-Passwort | gesetzt | Neueinrichtung war noetig (Owner: «wieder … Webpasswort gemacht»); Ruecksetzung nicht ausdruecklich gemeldet |
+| PIN | gesetzt | **nicht ausdruecklich berichtet** |
+| Zeitzone | nicht geaendert | korrekt (kein Vergleichswert) |
+| Touchkalibrierung | `touch calibration: active_status=Available` | Touch ohne Neukalibrierung korrekt (Owner), nach Reset und nach Folgeboot; Folgeboot-Log `active_status=Available` |
+| Aktoren | `real actuators: disabled` | unveraendert `disabled`, physisch getrennt (Owner) |
+
+Eine eigene «Ersteinrichtung» als Ablauf wurde nicht beobachtet: nach dem Reset standen
+die Werkseinstellungen, WLAN und Web-Passwort wurden vom Owner neu gesetzt. Die Programme
+und Grenzen wurden nicht verglichen (kein Programm angelegt; kein Programmlauf).
+
+### R02 (Netzwerk-/HTTP-Stopp) – nur Teilaspekte beobachtet
+
+Vorher erreichbar (Ping und TCP 80 um 06:50 und 06:57), nachher nicht erreichbar
+(Ping 100 % Verlust, TCP 80 Timeout um 07:01). UART: `wifi: run -> init` um 07:00:16
+mit sechs `httpd_sock_err (recv: 113)` Warnungen, `network_state=Stopped` bei der
+Nachher-Messung. **Nicht belegt:** Rueckgaben von `esp_wifi_stop()`/`httpd_stop()`,
+Reihenfolge innerhalb des Abschlusses, Abschluss offener Verbindungen. Kein
+Powercut-Anteil. `HW-19-R02` bleibt `NOT_RUN` (Teilbeobachtung ohne Vollnachweis).
+
+### Messluecken
+
+- Kein Log fuer Hold-Beginn, Hold-Dauer und Reset-Ergebnis; Zeitpunkt nur aus dem
+  WLAN-Stopp (07:00:16) und der Ownermeldung abgeleitet.
+- HWM nur als Minimum seit Boot, keine Aufschluesselung nach Phase/Funktion; vor dem Hold
+  einmal (06:57:38), danach einmal (07:02:11).
+- Zeitpunkt und Ursache des Heap-Minimums 4 084 B nicht bekannt.
+- Persistenz-Nachweis V2 nur per Ownerbeobachtung (kein Logeintrag fuer Konfiguration).
+- Aufnahme per `kill` beendet (kein «capture end» im Rohlog, stattdessen ein
+  nachtraeglicher Vermerk). Der erste Block des Rohlogs ist der RTS-Boot.
+
+### Status P3c
+
+```text
+P3c_RESET_FUNKTIONAL=PASS_OWNER_OBSERVED (Werksreset durchgefuehrt, Sprache wieder de, WLAN zurueckgesetzt, Touch ok, kein Panic/Overflow/WDT/OOM im UART-Log)
+P3c_STACKZIEL_6144=NICHT_ERFUELLT (5 432 B nach dem Reset, 712 B unter Ziel) -> Owner-Entscheid, kein PASS
+P3c_HEAP_MINIMUM=4 084 B (knapp, kein OOM) -> Owner-Befund
+P3c_FOLGEBOOT=PASS (Boot-HWM 11 800 B, kein Fehler; Boot-Resume-Ketten nicht belegt)
+HW-19-R01=FAIL (Stackziel verfehlt; funktional bestanden; Ownerentscheid ausstehend)
+HW-19-R02=NOT_RUN (nur Teilaspekte beobachtet)
+HW-19-R03=BLOCKED
+ACTUATOR_RELEASE=NO
+```
 
 ## 4. Status je Akzeptanztest
 
 ```text
-HW-19-R01=FAIL (P3; P3b-Recovery mit b9564e6 belegt, 3d, aber kein Reset-Nachweis; FAIL bis P3c): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
+HW-19-R01=FAIL (P3c, 3e: Reset funktional durchgefuehrt, Ownerbeobachtung; Stackziel verfehlt: HWM 5 432 B < 6 144 B, Heap-Minimum 4 084 B; Ownerentscheid ausstehend. Historisch P3: FAIL; P3b-Recovery mit b9564e6 belegt, 3d): P1/N1-N8 und P2b belegt (Ownerbeobachtung), aber der volle 5000-ms-Hold fuehrt zu
   Stack Overflow in task main (07:56:28 UTC) und anschliessendem Bootloop; kein Ergebnisbildschirm.
   belegt:  Touchweg Einstellungen -> Service (PIN) -> PIN-Seite -> "PIN vergessen?" (N1/N2),
            Warnungs-/Confirm-Seite DE/EN/ES (N3/N5), Abbrechen (N4/N5), Hold-Seite mit Fortschritt (N6),
            Hold-Abbruch Loslassen/Wegziehen -> 0 % (P2b), "PIN vergessen?" bei PIN-Sperre (N7, Ownerbeobachtung),
            Daten bis P3 unveraendert (N8). Aktoren AUS (physisch getrennt).
-  nicht belegt: Ergebnisseite, Persistenz des Resets, Ersteinrichtung, Erhalt der Touchkalibrierung, Zugang SAFE_BOOT.
-HW-19-R02=NOT_RUN (Netzwerk-/HTTP-Stopp beim Reset, Powercut; setzt G2/G3 voraus)
+  P3c belegt (Ownerbeobachtung, 3e): Ergebnisseite «Werksreset durchgefuehrt», Sprache English -> Deutsch, WLAN zurueckgesetzt, Touch ohne Neukalibrierung, Folgeboot stabil.
+  nicht belegt: PIN-Ruecksetzung (nicht berichtet), Programme/Grenzen (nicht verglichen), Ersteinrichtung als eigener Ablauf, Boot-Resume-Ketten, Zugang SAFE_BOOT.
+HW-19-R02=NOT_RUN (Netzwerk-/HTTP-Stopp beim Reset, Powercut; Teilaspekte in P3c beobachtet, 3e: WLAN-Stopp im Log, Geraet nicht mehr erreichbar; Rueckgaben von wifi_stop/httpd_stop nicht belegt; kein Powercut-Anteil)
 HW-19-R03=BLOCKED (kein sicherer SAFE_BOOT-/NoRuntime-Einstieg benannt; G4 nicht erteilt)
 ```
 
 ## 5. Offen / naechste Gates
 
-- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5/P3b ist abgeschlossen (3d, `PASS`): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s; Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung, `PASS_OWNER_OBSERVED`). Der interne Handoff-Pfad bleibt `NOT_RESOLVED` (3d). Offen: **G2-R3 / P3c** (erneuter 5000-ms-Werksreset mit `stack_hwm_bytes` und Heap-Spitze, Plan 5.2) nur nach separater Ownerfreigabe.
-- **G2** ist verbraucht (ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
+- **Befund P3** (Stack Overflow, Bootloop): Offline-Diagnose liegt vor (3b; gemeinsames Stack-Budget-Problem als Hypothese, belegt: `prepare` + `make` = 29 680 B Frames > 24 576 B Stack). **G5/P3b ist abgeschlossen (3d, `PASS`): das Geraet bootet mit `b9564e6` stabil** (`application: ready`, kein Panic/WDT/Reset in ca. 150 s; Display normal und Einstellungen zurueckgestellt laut Ownerbeobachtung, `PASS_OWNER_OBSERVED`). Der interne Handoff-Pfad bleibt `NOT_RESOLVED` (3d). **G2-R3 / P3c ist ausgefuehrt (3e)**; offen ist die Ownerentscheidung zur unterschrittenen Stackreserve (5 432 B < 6 144 B) und zum Heap-Minimum 4 084 B sowie der unabhaengige Review.
+- **G2 und G2-R3** sind verbraucht (je ein Vollreset ausgefuehrt); ein weiterer Hold-Test erst nach Befundanalyse und neuer Freigabe.
 - **G3** Powercut-Cutpoints, **G4** SAFE_BOOT/NoRuntime: nicht erteilt.
 - Heap-Minimum-Entwicklung im Folgelauf mitmessen.
