@@ -114,7 +114,9 @@ Evidence (Sensoren, Safety-Gate, Katalog) positiv erreichbar?
   409 `sequence-conflict`; andere Sequenz -> 409); Gap, Reused, ReplayExpired
   (nach 8 Outcomes), `Exhausted` -> 409 ohne Application-Aufruf und ohne
   Verbrauch; Sequenz wird nach Outcomes 200/409-stale/422/503 verbraucht,
-  nach 400/401/403/415 nicht; zwei Sessions haben unabhaengige Sequenzen.
+  nach 400/401/403/415 und nach `413 {"error":"request-too-large"}`
+  (Dekodierfehler vor Reservierung) nicht, `413 {"outcome":"too-large"}` nach
+  Reservierung verbraucht; zwei Sessions haben unabhaengige Sequenzen.
 - **Persistenz-Negativmatrix (je Fehlerklasse, getrennt):**
   | Klasse | Antwort | Erwarteter unveraenderter Vertrag / Nachbehandlung |
   |---|---|---|
@@ -146,12 +148,29 @@ Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
    `nextMutationSeq`; `InFlight`/`Exhausted` -> Bedienung deaktiviert,
    Hinweis «Neu laden»). Kein neuer Endpunkt, kein neues JSON, keine Aenderung
    an Login/Status/POST-Responses. Die Abfrage erneuert die Idle-Frist nicht.
+   *Bootstrap nach normalem Login:* Bei Passwortschutz rendert `GET /` vor dem
+   Login eine nicht authentifizierte Seite ohne Sequenz; das Login (`POST
+   /api/v1/login`) setzt das Sessioncookie, der bestehende Client ruft danach
+   nur `refresh()` auf. C3 aendert das: Nach erfolgreichem Login fuehrt der
+   Client einen Seiten-Reload (`GET /` mit Sessioncookie) aus; erst die dadurch
+   gerenderte authentifizierte Seite enthaelt die Sequenz und aktiviert die
+   Mutationsbuttons. Bis dahin (und bei fehlender Sequenz) bleiben die Buttons
+   deaktiviert. Gilt ebenso fuer `password-disabled` (Login erzeugt Session,
+   dann Reload). Kein Login-Response-Feld wird ergaenzt.
 2. Der Client haelt `nextSeq` nur im Seitenspeicher; kein `localStorage`, kein
    persistentes Login. Pro Zeitpunkt ist hoechstens ein Request in Flight.
-3. Nach `200`, `409 stale`, `409 busy`, `409 confirmation-required`, `413`,
-   `422` und `500 write-failed` (Antworten mit Outcome aus
-   `completeMutation`) wird `nextSeq` um 1 erhoeht und der Status neu
-   geladen. Nach `400/401/403/415` (vor Reservierung) bleibt `nextSeq`.
+3. `nextSeq` wird **ausschliesslich** anhand eines eindeutig abgeschlossenen
+   Outcomes fortgeschrieben: Antwort-JSON enthaelt das Feld `outcome` mit
+   einem der Werte `applied`, `stale`, `busy`, `confirmation-required`,
+   `rejected`, `too-large`, `write-failed` (jeweils aus `completeMutation`/
+   Replay; Sequenz verbraucht) -> `nextSeq` + 1 und Status neu laden.
+   Antworten mit `error` (z. B. `400`, `401`, `403`, `415`, `413
+   {"error":"request-too-large"}` beim Dekodieren, Sequenz **nicht**
+   verbraucht) inkrementieren nicht. Entscheidend ist das JSON-Feld, nicht der
+   HTTP-Status: `413 {"outcome":"too-large"}` (nach Reservierung) verbraucht,
+   `413 {"error":"request-too-large"}` (vor Reservierung) nicht. Fehlt beides,
+   ist das Feld unbekannt oder die Antwort nicht parsebar: Resynchronisation
+   wie in Punkt 4. Keine neuen Wireformate.
 4. Nach `409 sequence-conflict` (Gap, Reused, Expired, InFlight, mehrere
    Tabs/Reload mit veraltetem Wert), nach jedem `503` (nicht unterscheidbar,
    ob vor oder nach der Reservierung) und nach `Exhausted`: kein Folge-Request
@@ -164,21 +183,33 @@ Messung vorlegen, Ownerentscheid (nicht still Limit anheben).
    Neuladen wie in 4. Keine blinde Wiederholung mit neuer Sequenz.
 6. Tests: native Dispatcher-Tests fuer Shell-Einbettung (Available, InFlight,
    Exhausted, mehrere Sessions, kein `touch`), Replay byte-identisch, Konflikt
-   bei zweitem Tab; Verhalten der Client-Skriptlogik wird mangels Browser im
+   bei zweitem Tab; Login-Pfad: `GET /` ohne Session enthaelt keine Sequenz,
+   nach Login mit Sessioncookie liefert `GET /` die Sequenz (`Available`,
+   frische Session = Startwert), fuer `password-protected` und
+   `password-disabled`; Verhalten der Client-Skriptlogik wird mangels Browser im
    Gate als Textvertrag der Shell (erwartete Marker, Groessenlimit) geprueft;
    echter Browsertest bleibt `NOT_RUN`.
 
 **C4 – Programm-Start (nur bei D2 = A).** Die Ausnahme von «keine neuen
 Wireformate» ist eng begrenzt: ein neuer *Read-only-Response*
 `GET /api/v1/programs`, Request-Vertrag und uebrige Responses unveraendert.
-Vertrag: Quelle ist ausschliesslich der kanonische Programmkatalog-Owner der
-Application (aus dem `uiSnapshot`; kein zweiter Katalog, keine Kopie); je
-Eintrag nur `id` und Anzeigename; Feld `catalogRevision` (gleiche
-Dezimalstring-Konvention wie `revisions.programCatalog`); begrenzt auf
+Vertrag: Quelle ist ausschliesslich der kanonische Programmkatalog der
+Application. `FermentationUiSnapshot` enthaelt nur die Katalogrevision, nicht
+den Katalog; der Zugang laeuft ueber die vorhandene Application-Grenze
+(`FermentationApplication::uiPresentationSource()` bzw. die runtime-lease-
+basierte Application-Grenze, genauer Zugang in C4 anhand des Codes
+festzulegen). Eintraege und `catalogRevision` stammen aus einem
+konsistenten Application-/Runtime-Stand, innerhalb einer Application-
+Aufrufserialisierung; kein zweiter Katalog, keine parallele Kataloghaltung,
+keine Domaenenerweiterung. Je Eintrag nur `id` und Anzeigename; Feld
+`catalogRevision` (gleiche Dezimalstring-Konvention wie
+`revisions.programCatalog`); begrenzt auf
 `kMaximumWebApiResponseBodyBytes` (3072) und eine feste Maximalzahl, bei
 Ueberschreitung 503 statt Kuerzung; GET-only, Session-/Auth-State-Gate wie die
-uebrigen Read-only-Routen; ohne Katalog (Fehler/leer) leere Liste bzw. 503,
-**keine** Platzhalter oder Geraetedaten. Ohne D2 = A wird C4 aus diesem Slice
+uebrigen Read-only-Routen; nicht verfuegbarer
+Katalog (`uiPresentationSource()` liefert `std::nullopt`, Lease/Konsistenz
+fehlt) -> 503, nie eine scheinbar gueltige leere Liste; ein tatsaechlich
+leerer Katalog -> leere Liste; **keine** Platzhalter oder Geraetedaten. Ohne D2 = A wird C4 aus diesem Slice
 genommen und `start-program` bleibt am Touch; C1–C3 bleiben unberuehrt.
 `start-program`-Steuerung in der Shell nur, wenn das 4096-Byte-Budget haelt,
 sonst Messung und Ownerentscheid.
