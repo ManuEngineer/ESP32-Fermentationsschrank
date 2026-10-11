@@ -12,10 +12,10 @@ struct WebRunMutationDto {
     FermentationUiEnvelopePayload intent;
 };
 
-// Narrow, synchronous application handler for POST /internal/ui/run. It is
-// deliberately not registered by the current composition root. It decodes
-// the bounded DTO from the exact request body whose bytes are replay-bound;
-// composition must still serialize calls with the Application owner.
+// Narrow, synchronous application handler for POST /internal/ui/run. It decodes
+// the bounded DTO from the exact request body whose bytes are replay-bound.
+// The Application serializes its public calls itself; the dispatcher gates the
+// route by authentication state before calling the handler.
 class WebRunMutationHandler final {
    public:
     WebRunMutationHandler(FermentationApplication& application,
@@ -58,8 +58,7 @@ class WebReadOnlyApiHandler final {
 
 // The one productive route sink. It gives the existing setup/recovery route
 // priority while setup is active and otherwise composes authentication,
-// read-only APIs and the bounded static shell. The run-mutation handler is
-// intentionally not a member and therefore cannot be reached productively.
+// read-only APIs, the run-mutation route and the bounded static shell.
 class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
    public:
     WebRouteDispatcher(NetworkSetupRoutes& networkSetupRoutes,
@@ -70,7 +69,8 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
           application_(application),
           sessions_(sessions),
           timeSource_(timeSource),
-          readOnly_(application) {}
+          readOnly_(application),
+          run_(application, sessions, timeSource) {}
 
     [[nodiscard]] bool handle(const device_platform::HttpRequest& request,
                               device_platform::HttpResponse& response) override;
@@ -89,11 +89,15 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
         const device_platform::HttpRequest& request,
         device_platform::HttpResponse& response);
 
+    [[nodiscard]] bool handleRun(const device_platform::HttpRequest& request,
+                                 device_platform::HttpResponse& response);
+
     NetworkSetupRoutes& networkSetupRoutes_;
     FermentationApplication& application_;
     WebSessionManager& sessions_;
     const device_platform::ITimeSource& timeSource_;
     WebReadOnlyApiHandler readOnly_;
+    WebRunMutationHandler run_;
 };
 
 }  // namespace fermentation

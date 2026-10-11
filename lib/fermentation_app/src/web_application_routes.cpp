@@ -928,6 +928,19 @@ bool WebRouteDispatcher::handleReadOnly(
     return readOnly_.handle(request, response);
 }
 
+bool WebRouteDispatcher::handleRun(const device_platform::HttpRequest& request,
+                                   device_platform::HttpResponse& response) {
+    const auto state = application_.webAuthenticationState();
+    if (state == WebAuthenticationState::Unprovisioned ||
+        state == WebAuthenticationState::RecoveryRequired ||
+        state == WebAuthenticationState::Indeterminate) {
+        setJsonResponse(response, 503U,
+                        "{\"error\":\"authentication-unavailable\"}");
+        return true;
+    }
+    return run_.handle(request, response);
+}
+
 bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
                                 device_platform::HttpResponse& response) {
     const bool networkPath = request.path == "/api/network/status" ||
@@ -953,7 +966,7 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
         request.path == kAlertsApiPath) {
         return handleReadOnly(request, response);
     }
-    // No productive branch exists for /internal/ui/run in Slice 4C.
+    if (request.path == kRoutePath) return handleRun(request, response);
     return false;
 }
 

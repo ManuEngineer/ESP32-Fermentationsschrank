@@ -387,6 +387,7 @@ struct ComposedFixture {
     device_platform_test_support::MockNetworkLifecycle network;
     DeterministicRandom random;
     BlockableKdf kdf;
+    DeterministicReplayDigest replayDigest;
     CapturingHttpServerLifecycle http;
     FermentationApplication application;
 
@@ -406,7 +407,7 @@ struct ComposedFixture {
                                  .status));
         TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver,
                                            timeSource, network, http, random,
-                                           kdf));
+                                           kdf, replayDigest));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(NetworkConfigurationStatus::Applied),
             static_cast<int>(
@@ -1666,7 +1667,8 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
     request = makeWebRequest("POST", "/internal/ui/run");
-    TEST_ASSERT_FALSE(routes->handle(request, response));
+    TEST_ASSERT_TRUE(routes->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
 
     const auto home = fixture.application.applyNetworkMode(
         device_platform::NetworkMode::HOME_WIFI);
@@ -2998,11 +3000,66 @@ void test_provision_route_is_not_served_during_setup_flow() {
                      WebAuthenticationState::PasswordProtected);
 }
 
-void test_provision_route_does_not_open_the_run_mutation_route() {
+device_platform::HttpRequest makeRunRequest(const std::string& cookie,
+                                            const std::string& csrf,
+                                            const std::string& seq,
+                                            std::string body) {
+    auto request =
+        makeAuthenticatedRequest("POST", "/internal/ui/run", cookie, csrf);
+    request.body = std::move(body);
+    request.metadata.contentType = "application/json; charset=utf-8";
+    request.metadata.mutationSeq = seq;
+    return request;
+}
+
+void test_run_route_is_gated_by_authentication_state() {
     ComposedFixture fixture;
-    auto request = makeWebRequest("POST", "/internal/ui/run");
+    TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
+                     WebAuthenticationState::Unprovisioned);
+    auto request = makeRunRequest("0", "0", "1", "{}");
     device_platform::HttpResponse response;
-    TEST_ASSERT_FALSE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.find("authentication-unavailable") !=
+                     std::string::npos);
+    TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
+}
+
+void test_run_route_is_composed_with_session_csrf_and_replay() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto session = loginComposed(fixture);
+    const auto sequence =
+        fixture.application.uiSnapshot().revisions.expectedStateSequence;
+    const std::string body =
+        "{\"v\":1,\"r\":{\"s\":" + std::to_string(sequence) +
+        "},\"i\":{\"t\":\"reset-fault\"}}";
+
+    device_platform::HttpResponse response;
+    auto request = makeWebRequest("POST", "/internal/ui/run", body);
+    request.metadata.contentType = "application/json; charset=utf-8";
+    request.metadata.mutationSeq = "1";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
+
+    request = makeRunRequest(session.cookie, "wrong", "1", body);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(403U, response.statusCode);
+
+    request = makeRunRequest(session.cookie, session.csrf, "1", body);
+    request.method = "GET";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+
+    request = makeRunRequest(session.cookie, session.csrf, "1", body);
+    device_platform::HttpResponse first;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, first));
+    TEST_ASSERT_TRUE(first.body.find("\"outcome\"") != std::string::npos);
+    device_platform::HttpResponse replay;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, replay));
+    TEST_ASSERT_EQUAL_UINT16(first.statusCode, replay.statusCode);
+    TEST_ASSERT_EQUAL_STRING(first.body.c_str(), replay.body.c_str());
 }
 
 // ---- S6: first-time setup form in the web shell -----------------------------
@@ -3580,7 +3637,8 @@ int main() {
     RUN_TEST(test_provision_route_credential_errors_are_422_and_retryable);
     RUN_TEST(test_provision_route_recovery_and_failure_mapping);
     RUN_TEST(test_provision_route_is_not_served_during_setup_flow);
-    RUN_TEST(test_provision_route_does_not_open_the_run_mutation_route);
+    RUN_TEST(test_run_route_is_gated_by_authentication_state);
+    RUN_TEST(test_run_route_is_composed_with_session_csrf_and_replay);
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
     RUN_TEST(test_unprovisioned_shell_requests_match_the_s4_contract);
