@@ -127,7 +127,10 @@ struct FermentationUiVerifyServicePinCommand {
 // is never reachable from a web or other non-local surface.
 struct FermentationUiFactoryResetCommand {
     enum class Step : std::uint8_t {
+        // Variant B (PIN independent) and variant A (bound to the active local
+        // service lease).
         Begin,
+        BeginPinProtected,
         Acknowledge,
         Cancel,
         Dismiss,

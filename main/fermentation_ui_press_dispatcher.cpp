@@ -224,10 +224,14 @@ WorkspaceTouchTickResult processWorkspaceTouch(
             shouldDispatch = true;
         }
     }
-    if (shouldDispatch && (screenPageBefore == FermentationUiPage::Service ||
-                           screenPageBefore == FermentationUiPage::Recovery)) {
+    if (shouldDispatch &&
+        (screenPageBefore == FermentationUiPage::Service ||
+         screenPageBefore == FermentationUiPage::Recovery ||
+         (screenPageBefore == FermentationUiPage::FactoryReset &&
+          snapshot.factoryReset.kind == FactoryResetKind::PinProtected))) {
         // Relevant operation in the protected area extends the local lease
-        // (Issue #188 A); background updates never do.
+        // (Issue #188 A), also while a PIN-protected factory reset is
+        // confirmed (Issue #19 A); background updates never do.
         application.noteLocalServiceActivity();
     }
     if (holdTickRequired) {

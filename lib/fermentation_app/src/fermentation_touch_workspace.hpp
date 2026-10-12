@@ -269,6 +269,8 @@ enum class FermentationUiWorkspaceSlotAction : std::uint8_t {
     // FactoryReset page; Hold carries no payload (sustained contact is
     // evaluated by the touch dispatcher, not by a press).
     FactoryResetBegin,
+    // Variant A from the unlocked service page (Issue #19 A).
+    FactoryResetBeginPinProtected,
     FactoryResetAcknowledge,
     FactoryResetCancel,
     FactoryResetHold,
