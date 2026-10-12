@@ -154,7 +154,7 @@ struct FermentationUiPresentationSource {
     std::string deviceName;
     ProgramCatalog programCatalog;
     // Revision of the same lease the catalog was read from.
-    ProgramCatalogRevision programCatalogRevision{};
+    ProgramCatalogRevision programCatalogRevision;
 };
 
 struct FermentationUiTemperatureInput {
