@@ -3426,7 +3426,7 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "X-CSRF-Token"));
     // Ack/Mute are sent directly; Stop, Done and Start are armed first (D1).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
-    TEST_ASSERT_TRUE(contains(body, "if(K!==a){K=a;"));
+    TEST_ASSERT_TRUE(contains(body, "if(K!==a){K=a;KC='';"));
     TEST_ASSERT_TRUE(contains(body, "T.sure"));
     // Intents match the fixed wire contract.
     TEST_ASSERT_TRUE(contains(body, "t:a+'-message'"));
@@ -3444,6 +3444,36 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "sure:'"));
     TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "ok:'"));
     TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "fail:'"));
+}
+
+// String/state contract only: the native tools cannot execute the shell script
+// (a browser run stays NOT_RUN). The application remains the decisive gate.
+void test_shell_action_availability_and_confirmation_binding_contract() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, passwordUnderTest(), kPinUnderTest));
+    const auto body = shellBody(fixture);
+    // Availability per home mode: Stop only for active-run/waiting, Complete
+    // only for completed, Start only for standby with a selected program.
+    TEST_ASSERT_TRUE(contains(body, "r=h==='active-run'||h==='waiting'"));
+    TEST_ASSERT_TRUE(contains(body,
+                              "stop:!r,done:h!=='completed',"
+                              "start:h!=='standby'||!pg.value"));
+    // A pending confirmation is bound to mode, run and catalog revision and
+    // the selected program; it is dropped on change, on send and without a
+    // valid snapshot. Unchanged polls keep it.
+    TEST_ASSERT_TRUE(contains(body,
+                              "c=P?[h,P[0].revisions.run,P[0]."
+                              "revisions.programCatalog,pg.value]"
+                              ".join():''"));
+    TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
+    TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
+    TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
+    // A failed refresh makes the snapshot unusable until a fresh one arrives.
+    TEST_ASSERT_TRUE(contains(body, "catch(e){P=null;ui();"));
+    TEST_ASSERT_TRUE(contains(body, "b.disabled=B||!P||d[k]"));
+    // Ack/Mute name their target message.
+    TEST_ASSERT_TRUE(contains(body, "T[k]+(g[k]?' #'+g[k].id:'')"));
 }
 
 void test_shell_embeds_mutation_sequence_per_session() {
@@ -4015,6 +4045,7 @@ int main() {
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
     RUN_TEST(test_shell_run_controls_text_contract);
+    RUN_TEST(test_shell_action_availability_and_confirmation_binding_contract);
     RUN_TEST(test_shell_embeds_mutation_sequence_per_session);
     RUN_TEST(test_shell_login_reload_bootstrap_for_protected_and_disabled);
     RUN_TEST(test_shell_stays_within_the_limit_in_all_states);
