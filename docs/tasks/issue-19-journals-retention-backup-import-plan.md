@@ -4,14 +4,14 @@
 PLAN_REVISION=8 (konsolidiert; Revision 7 `6fbf1304566472c10b7cc52439475a5743960c0e` bleibt der freigegebene Vertrag fuer R0-R4, Revision 8 ergaenzt R5/S1 und die Ownerentscheide nach dem Review)
 PLAN_STATUS=R0_R4_OWNER_APPROVED (Revision 7); R5_S1_OWNER_APPROVED (Revision 8, exakte Plan-SHA aa665f1d00fb363db6049b8b9df3af1c1a8be89c)
 OWNER_APPROVED_PLAN_SHA=6fbf1304566472c10b7cc52439475a5743960c0e (Revision 7; die Freigabe gilt dem Inhalt dieses Commits, spaetere Commits aendern nur Status/Nachweise, nicht den Planvertrag)
-IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset Ablauf B) und Review-Fix B1; R5/S1 autorisiert durch die Ownerfreigabe der exakten Plan-SHA von Revision 8 (aa665f1); Ablauf A, B1/B2 (Backup/Import) und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
+IMPLEMENTATION_SCOPE_AUTHORIZED=R0-R4 (R1-Werksreset Ablauf B) und Review-Fix B1; R5/S1 autorisiert durch die Ownerfreigabe der exakten Plan-SHA von Revision 8 (aa665f1); Ablauf A autorisiert durch die Ownerfreigabe der exakten Plan-SHA `adb0aa575a55befd40a39e8351354eceebf7b73e` von `issue-19-factory-reset-a-plan.md` (D-A1 = A); B1/B2 (Backup/Import) und #1-#4 NICHT autorisiert; B0 nur als lesender Nachweis
 ISSUE=19 (E2.4), Epic #4 - Issue bleibt offen
 BASE_MAIN=9beb68f1935f80c6d2a59b5a612d542e5d9109a7 (PR #189 gemergt am 2026-10-08)
 TOOLCHAIN=ESP-IDF v6.1 (fff9895c82d744c7237be8847347bdd1b07c6643)
 OWNER_PRIORISIERUNG=Werksreset R1-PFLICHT; Backup und Import R1-ERWUENSCHT (nur bei nachgewiesener RAM-/Speichereignung); Journal, Laufhistorie, Bereinigung, Laufexport NUR PLANEN
 JOURNAL_HISTORY_CLEANUP_EXPORT=DEFERRED_BY_OWNER_PENDING_R1_CONTRACT_RECONCILIATION
 EARLIER_DRAFT=REVIEW_DRAFT - PRESERVE, NOT APPROVED, NOT CANONICAL (im Repository und in allen PRs nicht auffindbar; dieser Plan stuetzt sich nicht darauf)
-IMPLEMENTATION=R0_DONE_R1_R4_IMPLEMENTED_REVIEW_FIX_B1_DONE_R5_S1_IMPLEMENTED (PR #191, Ablauf B, Hold 5000 ms; Plan Rev. 8 Ownerfreigabe aa665f1d00fb363db6049b8b9df3af1c1a8be89c; unabhaengiger Implementierungsreview steht aus). NICHT implementiert: Ablauf A (O-R2 = B, spaeter), Journal-Startbedingung K1 unveraendert. Hardware NOT_RUN (#192)
+IMPLEMENTATION=R0_DONE_R1_R4_IMPLEMENTED_REVIEW_FIX_B1_DONE_R5_S1_IMPLEMENTED (PR #191, Ablauf B, Hold 5000 ms; Plan Rev. 8 Ownerfreigabe aa665f1d00fb363db6049b8b9df3af1c1a8be89c; unabhaengiger Implementierungsreview steht aus). Ablauf A (PIN-geschuetzt) implementiert nach `docs/tasks/issue-19-factory-reset-a-plan.md` (`SIM-19-A-01..05`, `A-03b`; unabhaengiger Implementierungsreview steht aus). NICHT implementiert: Journal-Startbedingung K1 unveraendert. Hardware NOT_RUN (#192)
 HARDWARE=NOT_RUN
 ACTUATOR_RELEASE=NO
 ```
@@ -348,7 +348,7 @@ Aktor-AUS am realen Geraet, Powercut auf echtem Flash, Dauer der langen Bestaeti
 R0: `docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md` (Stoppbefund S1, O-R2). R1–R3
 umgesetzt fuer **Ablauf B** (beide Zugaenge, O-R1 = B+), Netzwerk-/HTTP-Sequenz nach
 4.4a und ehrlichen `INetworkLifecycle::stop()`-Rueckgabewert im ESP-IDF-Adapter.
-**Nicht umgesetzt:** Ablauf A (lokale PIN-Pruefung, O-R2). Der Reset ohne geladene
+**Ablauf A** ist in `docs/tasks/issue-19-factory-reset-a-plan.md` umgesetzt (Bindung an die lokale Service-Lease, keine zweite PIN-Pruefung). Der Reset ohne geladene
 Runtime (S1/R5, Abschnitt 4.8) ist nach der Ownerfreigabe der Plan-SHA `aa665f1`
 software-seitig umgesetzt (Statusnachtrag unten). Die tatsaechlichen Testnachweise stehen in `ACCEPTANCE_TESTS.md`
 (`SIM-19-R01..R07`, `HW-19-R01..R03` = `NOT_RUN`); sie ersetzen die planinternen IDs
@@ -655,7 +655,7 @@ wird nicht in kanonische Dokumente kopiert, bevor der Owner entschieden hat.
 - [ ] exakte Plan-SHA vom Owner freigegeben (G0)
 - [x] R0-Befunde dokumentiert (`docs/audits/ISSUE19_R0_RESET_PREFLIGHT.md`); Hold-Dauer 5000 ms; O-HW = A
 - [ ] G-S1: Ownerfreigabe der exakten Plan-SHA von Revision 8 vor R5/S1-Produktcode
-- [ ] Ablauf A: mit dem produktiven lokalen Service-UI/PIN-Zugang (O-R2 = B)
+- [x] Ablauf A: mit dem produktiven lokalen Service-UI/PIN-Zugang (O-R2 = B); umgesetzt laut `issue-19-factory-reset-a-plan.md`, Review und Hardware (#192) stehen aus
 - [ ] O-BI nach B0; O3 vor B1
 - [ ] separate SSOT-/#28-/#37-Vertragsanpassung (K1 bedingt, K2–K7 genehmigt) – nicht in #191
 - [ ] Issue #19 bleibt offen; keine Aenderung an Issues durch den Agenten

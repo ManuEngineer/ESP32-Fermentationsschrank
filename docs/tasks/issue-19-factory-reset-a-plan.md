@@ -1,7 +1,7 @@
 # Issue #19 – Normaler Werksreset A (PIN-geschuetzt, nur fehlendes Delta) (Plan)
 
-Status: `PLAN_AWAITING_OWNER_APPROVAL`. Keine Implementierung vor Ownerfreigabe
-der exakten Plan-SHA. Basis: `main` bei `93116d2`. Scope: ausschliesslich
+Status: `PLAN_APPROVED_IMPLEMENTED_AWAITING_REVIEW` (freigegebene Plan-SHA
+`adb0aa575a55befd40a39e8351354eceebf7b73e`; D-A1 = A entschieden). Basis: `main` bei `93116d2`. Scope: ausschliesslich
 Ablauf A des Werksresets aus Issue #19; ergaenzt Plan Revision 8
 (`issue-19-journals-retention-backup-import-plan.md`), die A ausdruecklich
 ausschliesst (O-R2 = B, "erst mit produktivem lokalen Service-UI/PIN-Zugang").
