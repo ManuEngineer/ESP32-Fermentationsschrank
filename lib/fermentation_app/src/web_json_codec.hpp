@@ -63,4 +63,9 @@ enum class WebProvisionDecodeStatus : unsigned char {
 [[nodiscard]] bool encodeWebApiAlerts(const FermentationUiSnapshot& snapshot,
                                       std::string& output);
 
+// Selectable catalog entries (installed and enabled) as id/name pairs plus the
+// catalog revision of the same source. False if the bounded body is exceeded.
+[[nodiscard]] bool encodeWebApiPrograms(
+    const FermentationUiPresentationSource& source, std::string& output);
+
 }  // namespace fermentation

@@ -1016,4 +1016,36 @@ bool encodeWebApiAlerts(const FermentationUiSnapshot& snapshot,
     return serializeBounded(document.get(), output);
 }
 
+bool encodeWebApiPrograms(const FermentationUiPresentationSource& source,
+                          std::string& output) {
+    CJsonDocument document(cJSON_CreateObject());
+    if (!document ||
+        cJSON_AddNumberToObject(document.get(), "version", 1.0) == nullptr) {
+        return false;
+    }
+    const auto revision = std::to_string(source.programCatalogRevision.value());
+    if (!addString(document.get(), "catalogRevision", revision.c_str())) {
+        return false;
+    }
+    if (source.programCatalog.programs.size() >
+        configuration_limits::kMaximumProgramCount) {
+        return false;
+    }
+    auto* programs = cJSON_AddArrayToObject(document.get(), "programs");
+    if (programs == nullptr) return false;
+    for (const auto& entry : source.programCatalog.programs) {
+        const auto& program = entry.program;
+        if (!program.installed || !program.enabled) continue;
+        auto* item = cJSON_CreateObject();
+        if (item == nullptr) return false;
+        if (!addString(item, "id", program.id.c_str()) ||
+            !addString(item, "name", program.name.c_str()) ||
+            !cJSON_AddItemToArray(programs, item)) {
+            cJSON_Delete(item);
+            return false;
+        }
+    }
+    return serializeBounded(document.get(), output);
+}
+
 }  // namespace fermentation

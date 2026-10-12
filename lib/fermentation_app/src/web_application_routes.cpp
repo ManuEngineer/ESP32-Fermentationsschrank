@@ -17,12 +17,13 @@ constexpr char kJsonContentType[] = "application/json; charset=utf-8";
 constexpr char kStatusApiPath[] = "/api/v1/status";
 constexpr char kTemperaturesApiPath[] = "/api/v1/temperatures";
 constexpr char kAlertsApiPath[] = "/api/v1/alerts";
+constexpr char kProgramsApiPath[] = "/api/v1/programs";
 constexpr char kLoginPath[] = "/api/v1/login";
 constexpr char kLogoutPath[] = "/api/v1/logout";
 constexpr char kProvisionPath[] = "/api/v1/provision";
 constexpr char kSessionCookieName[] = "FSSESSION=";
 constexpr char kHtmlContentType[] = "text/html; charset=utf-8";
-constexpr std::size_t kMaximumWebShellBytes = 4096U;
+constexpr std::size_t kMaximumWebShellBytes = 6656U;
 
 WebMutationOutcome outcome(std::uint16_t status, const char* body) {
     return {status, kJsonContentType, body};
@@ -228,109 +229,154 @@ std::string provisioningShell() {
 }
 
 std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
-                     bool authenticated) {
+                     bool authenticated, std::uint64_t mutationSequence) {
     if (state == WebAuthenticationState::Unprovisioned) {
         return provisioningShell();
     }
     // This is intentionally a small static shell. It has no framework,
-    // generated bundle, history, chart or mutation control. All three API
-    // requests are repeated together so a reconnect receives a full snapshot.
-    std::string html =
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" "
-        "content=\"width=device-width,initial-scale=1\">"
-        "<title>Fermentation</title><style>body{font-family:system-ui;"
-        "max-width:48rem;margin:auto;padding:1rem}main{display:grid;gap:1rem}"
-        "section{border:1px solid #bbb;border-radius:.5rem;padding:1rem}"
-        "button,input{font:inherit;padding:.45rem}#connection{font-weight:600}"
-        "</style></head><body><main><h1>Fermentation</h1>"
-        "<p id=\"auth-state\"></p><p id=\"warning\" hidden></p>"
-        "<form id=\"login\"><label><span id=\"password-label\">Password"
-        "</span> <input id=\"password\""
-        "type=\"password\" autocomplete=\"current-password\"></label>"
-        "<button>Login</button></form><button id=\"logout\" "
-        "hidden>Logout</button>"
-        "<section><div id=\"connection\">Offline</div>"
-        "<pre id=\"status\">No snapshot</pre></section></main>"
-        "<script>const S=";
+    // generated bundle, history or chart. The only mutation controls are the
+    // run actions below. All three API requests are repeated together so
+    // a reconnect receives a full snapshot.
+    std::string html;
+    html.reserve(kMaximumWebShellBytes);
+    html +=
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta "
+        "name=\"viewport\" "
+        "content=\"width=device-width,initial-scale=1\"><title>Fermentation</"
+        "title><style>body{font-family:system-ui;max-width:48rem;margin:auto;"
+        "padding:1rem}main{display:grid;gap:1rem}section{border:1px solid "
+        "#bbb;border-radius:.5rem;padding:1rem}button,input{font:inherit;"
+        "padding:.45rem}#connection{font-weight:600}</style></"
+        "head><body><main><h1>Fermentation</h1><p id=\"auth-state\"></p><p "
+        "id=\"warning\" hidden></p><form id=\"login\"><label><span "
+        "id=\"password-label\">Password</span> <input "
+        "id=\"password\"type=\"password\" "
+        "autocomplete=\"current-password\"></label><button>Login</button></"
+        "form><button id=\"logout\" hidden>Logout</button><section><div "
+        "id=\"connection\">Offline</div><pre id=\"status\">No "
+        "snapshot</pre></section><section id=\"ops\" hidden><button "
+        "data-a=\"ack\"></button> <button data-a=\"mute\"></button> <button "
+        "data-a=\"stop\"></button> <button data-a=\"done\"></button> <select "
+        "id=\"pg\"></select> <button data-a=\"start\"></button> <span "
+        "id=\"note\"></span></section></main><script>const S=";
     html += "'";
     html += csrfToken;
     html += "';const A='";
     html += authenticationStateName(state);
     html += "';const U=";
     html += authenticated ? "true" : "false";
+    html += ";let Q=";
+    html += std::to_string(mutationSequence);
     html +=
-        ";const L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',"
-        "stale:'Veraltet',online:'Online',warning:'Passwortschutz deaktiviert',"
-        "required:'Lokale Provisionierung oder Recovery erforderlich',"
-        "passwordLabel:'Passwort',noSnapshot:'Kein Snapshot',"
-        "protected:'Passwortschutz aktiv',disabled:'Passwortschutz "
-        "deaktiviert'},"
-        "en:{login:'Login',logout:'Logout',offline:'Offline',stale:'Stale',"
-        "online:'Online',warning:'Password protection is disabled',"
-        "required:'Local provisioning or recovery "
-        "required',passwordLabel:'Password',"
-        "noSnapshot:'No snapshot',protected:'Password protection enabled',"
-        "disabled:'Password protection disabled'},"
-        "es:{login:'Iniciar sesion',logout:'Cerrar sesion',offline:'Sin "
-        "conexion',"
-        "stale:'Anticuado',online:'En linea',warning:'Proteccion por "
-        "contrasena desactivada',"
-        "required:'Se requiere provision local o recuperacion',"
-        "passwordLabel:'Contrasena',noSnapshot:'Sin instantanea',"
-        "protected:'Proteccion por contrasena activa',"
-        "disabled:'Proteccion por contrasena desactivada'}};"
-        "const lang=(navigator.language||'en').slice(0,2);const "
-        "locale=L[lang]?lang:'en';const T=L[locale]||L.en;"
-        "document.documentElement.lang=locale;"
-        "document.querySelector('#login button').textContent=T.login;"
-        "document.querySelector('#logout').textContent=T.logout;"
-        "document.querySelector('#password-label').textContent=T.passwordLabel;"
-        "const "
-        "auth=document.querySelector('#auth-state'),warning=document."
-        "querySelector('#warning'),"
-        "login=document.querySelector('#login'),logout=document.querySelector('"
-        "#logout'),"
-        "connection=document.querySelector('#connection'),status=document."
-        "querySelector('#status');"
-        "auth.textContent=A==='unprovisioned'||A==='recovery-required'||A==='"
+        ";const "
+        "L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',stale:'"
+        "Veraltet',online:'Online',warning:'Passwortschutz "
+        "deaktiviert',required:'Lokale Provisionierung oder Recovery "
+        "erforderlich',passwordLabel:'Passwort',noSnapshot:'Kein "
+        "Snapshot',protected:'Passwortschutz aktiv',disabled:'Passwortschutz "
+        "deaktiviert',ack:'Quittieren',mute:'Stumm',stop:'Stop',done:'"
+        "Abschliessen',start:'Starten',sure:'Sicher?',ok:'Erledigt',fail:'"
+        "Nicht "
+        "ausgefuehrt'},en:{login:'Login',logout:'Logout',offline:'Offline',"
+        "stale:'Stale',online:'Online',warning:'Password protection is "
+        "disabled',required:'Local provisioning or recovery "
+        "required',passwordLabel:'Password',noSnapshot:'No "
+        "snapshot',protected:'Password protection enabled',disabled:'Password "
+        "protection "
+        "disabled',ack:'Acknowledge',mute:'Mute',stop:'Stop',done:'Complete',"
+        "start:'Start',sure:'Sure?',ok:'Done',fail:'Not "
+        "executed'},es:{login:'Iniciar sesion',logout:'Cerrar "
+        "sesion',offline:'Sin conexion',stale:'Anticuado',online:'En "
+        "linea',warning:'Proteccion por contrasena desactivada',required:'Se "
+        "requiere provision local o "
+        "recuperacion',passwordLabel:'Contrasena',noSnapshot:'Sin "
+        "instantanea',protected:'Proteccion por contrasena "
+        "activa',disabled:'Proteccion por contrasena "
+        "desactivada',ack:'Confirmar',mute:'Silenciar',stop:'Parar',done:'"
+        "Finalizar',start:'Iniciar',sure:'Seguro?',ok:'Hecho',fail:'No "
+        "ejecutado'}};const q=x=>document.querySelector(x);const "
+        "lang=(navigator.language||'en').slice(0,2);const "
+        "locale=L[lang]?lang:'en';const "
+        "T=L[locale]||L.en;document.documentElement.lang=locale;q('#login "
+        "button').textContent=T.login;q('#logout').textContent=T.logout;q('#"
+        "password-label').textContent=T.passwordLabel;const "
+        "auth=q('#auth-state'),warning=q('#warning'),login=q('#login'),logout="
+        "q('#logout'),connection=q('#connection'),status=q('#status');auth."
+        "textContent=A==='unprovisioned'||A==='recovery-required'||A==='"
         "indeterminate'?T.required:A==='password-protected'?T.protected:T."
-        "disabled;"
-        "warning.textContent=T.warning;warning.hidden=A!=='password-disabled';"
-        "status.textContent=T.noSnapshot;login.hidden=A!=='password-protected'|"
-        "|U;"
-        "logout.hidden=!U;"
-        "async function refresh(){try{const r=await "
-        "Promise.all(['/api/v1/status',"
-        "'/api/v1/temperatures','/api/v1/"
-        "alerts'].map(x=>fetch(x,{credentials:'same-origin',"
-        "cache:'no-store'})));if(r.some(x=>!x.ok))throw Error('offline');"
-        "const p=await "
+        "disabled;warning.textContent=T.warning;warning.hidden=A!=='password-"
+        "disabled';status.textContent=T.noSnapshot;login.hidden=A!=='password-"
+        "protected'||U;logout.hidden=!U;async function refresh(){try{const "
+        "r=await "
+        "Promise.all(['/api/v1/status','/api/v1/temperatures','/api/v1/"
+        "alerts'].map(x=>fetch(x,{cache:'no-store'})));if(r.some(x=>!x.ok))"
+        "throw Error('offline');const p=await "
         "Promise.all(r.map(x=>x.json()));status.textContent=JSON.stringify(p,"
-        "null,2);"
-        "connection.textContent=T.online;connection.dataset.state='online';}"
-        "catch(e){"
-        "connection.textContent=T.stale;connection.dataset.state='stale';}}"
-        "login.addEventListener('submit',async e=>{e.preventDefault();const "
-        "r=await fetch('/api/v1/login',"
-        "{method:'POST',credentials:'same-origin',headers:{'Content-Type':'"
-        "application/json'},"
-        "body:JSON.stringify({password:document.querySelector('#password')."
-        "value})});"
-        "if(r.ok){const p=await "
-        "r.json();window.__WEB_CSRF__=p.csrfToken||'';logout.hidden=!window.__"
-        "WEB_CSRF__;"
-        "login.hidden=true;document.querySelector('#password').value='';"
-        "refresh();}});"
-        "logout.addEventListener('click',async()=>{await "
-        "fetch('/api/v1/logout',{method:'POST',"
-        "credentials:'same-origin',headers:{'Content-Type':'application/json',"
-        "'X-CSRF-Token':window.__WEB_CSRF__|"
-        "|''}});"
-        "window.__WEB_CSRF__='';logout.hidden=true;login.hidden=A!=='password-"
+        "null,2);P=p;if(U&&Q&&p[0].revisions.programCatalog&&p[0].revisions."
+        "programCatalog!==PC)lp();ui();connection.textContent=T.online;"
+        "connection.dataset."
+        "state='online';}catch(e){P=null;ui();connection.textContent=T.stale;"
+        "connection.dataset.state='stale';}}login.addEventListener('submit',"
+        "async "
+        "e=>{e.preventDefault();const r=await "
+        "fetch('/api/v1/"
+        "login',{method:'POST',headers:{'Content-Type':'application/"
+        "json'},body:JSON.stringify({password:q('#password').value})});if(r.ok)"
+        "location.reload();});logout.addEventListener('click',async()=>{await "
+        "fetch('/api/v1/"
+        "logout',{method:'POST',headers:{'Content-Type':'application/"
+        "json','X-CSRF-Token':window.__WEB_CSRF__||''}});window.__WEB_CSRF__=''"
+        ";Q=0;P=null;ui();logout.hidden=true;login.hidden=A!=='password-"
         "protected';});"
-        "window.__WEB_CSRF__=S;refresh();"
-        "setInterval(refresh,5000);</script></body></html>";
+        "const ops=q('#ops'),note=q('#note'),pg=q('#pg');let "
+        "P=null,B=false,LB=false,K='',KC='',PC='';pg.onchange=()=>ui()"
+        ";function "
+        "al(f){return P&&P[2].alerts.find(m=>m.active&&f(m));}function "
+        "ui(){ops.hidden=!U||!Q;const "
+        "h=P&&P[0].homeMode,r=h==='active-run'||h==='waiting',a=al(m=>!m."
+        "acknowledged),u=al(m=>!m.muted);const "
+        "d={ack:!a,mute:!u,stop:!r,done:h!=='completed',start:h!=='standby'||!"
+        "pg.value||!PC||P[0].revisions.programCatalog!==PC},g={ack:a,mute:u},c="
+        "P?[h,P[0].revisions.run,P[0].revisions."
+        "programCatalog,PC,pg.value].join():'';if(!P||KC&&c!==KC)K='';KC=K?KC||"
+        "c:'"
+        "';"
+        "ops.querySelectorAll('button').forEach(b=>{const "
+        "k=b.dataset.a;b.disabled=B||!P||d[k];if(K!==k)b.textContent=T[k]+(g[k]"
+        "?"
+        "' #'+g[k].id:'');});}async function "
+        "send(i){K='';B=true;ui();const "
+        "m={stateSequence:'s',run:'r',messages:'m',fault:'f',recoveryEpisode:'"
+        "e',userConfiguration:'u',programCatalog:'c'},v=P[0].revisions,o={};"
+        "for(const k in v)if(m[k])o[m[k]]=v[k];if(i.t==='start-program')o.c=PC;"
+        "const "
+        "body=JSON.stringify({v:1,r:o,i}),n=Q;let r=null,j=null;for(let "
+        "t=0;t<2&&!r;t++){try{r=await "
+        "fetch('/internal/ui/"
+        "run',{method:'POST',headers:{'Content-Type':'application/"
+        "json','X-CSRF-Token':window.__WEB_CSRF__,'X-Mutation-Seq':String(n)},"
+        "body});}catch(e){}}if(r&&r.status!==503){try{j=await "
+        "r.json();}catch(e){}}if(!j||!/"
+        "^(applied|stale|busy|confirmation-required|rejected|too-large|write-"
+        "failed)$/"
+        ".test(j.outcome)){location.reload();return;}Q=n+1;B=false;note."
+        "textContent=j.outcome==='applied'?T.ok:T.fail;await "
+        "refresh();}ops.addEventListener('click',e=>{const "
+        "a=e.target.dataset&&e.target.dataset.a;if(!a||B||e.target.disabled)"
+        "return;if(a==='ack'||a==='mute'){const "
+        "m=al(x=>a==='ack'?!x.acknowledged:!x.muted);if(m)send({t:a+'-message',"
+        "id:m.id});return;}if(K!==a){K=a;KC='';ui();e.target.textContent=T."
+        "sure;"
+        "return;}K='';send(a==='start'?{t:'start-program',c:{p:pg.value}}:a==='"
+        "stop'?{t:'stop-run',o:'abort-and-turn-off'}:{t:'complete-run',c:false}"
+        ");});async function "
+        "lp(){if(LB)return;LB=true;PC='';pg.replaceChildren();"
+        "try{const r=await fetch('/api/v1/programs',{cache:'no-store'});const "
+        "j=r.ok&&await r.json();if(j&&/^[0-9]+$/.test(j.catalogRevision)){pg."
+        "replaceChildren(...j.programs.map(x=>new "
+        "Option(x.name,x.id)));PC=j.catalogRevision;}}catch(e){}LB=false;ui();}"
+        "window.__WEB_CSRF__=S;"
+        "refresh();setInterval(refresh,5000);</script></body></html>";
     return html;
 }
 
@@ -630,7 +676,8 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     const bool status = request.path == kStatusApiPath;
     const bool temperatures = request.path == kTemperaturesApiPath;
     const bool alerts = request.path == kAlertsApiPath;
-    if (!status && !temperatures && !alerts) return false;
+    const bool programs = request.path == kProgramsApiPath;
+    if (!status && !temperatures && !alerts && !programs) return false;
     if (request.method != "GET") {
         setResponse(response,
                     requestError(405U, "{\"error\":\"method-not-allowed\"}"));
@@ -642,12 +689,18 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    const auto snapshot = application_.uiSnapshot();
     std::string body;
-    const bool encoded = status ? encodeWebApiStatus(snapshot, body)
-                         : temperatures
-                             ? encodeWebApiTemperatures(snapshot, body)
-                             : encodeWebApiAlerts(snapshot, body);
+    bool encoded = false;
+    if (programs) {
+        // An unavailable catalog is 503, never an empty list.
+        const auto source = application_.uiPresentationSource();
+        encoded = source.has_value() && encodeWebApiPrograms(*source, body);
+    } else {
+        const auto snapshot = application_.uiSnapshot();
+        encoded = status         ? encodeWebApiStatus(snapshot, body)
+                  : temperatures ? encodeWebApiTemperatures(snapshot, body)
+                                 : encodeWebApiAlerts(snapshot, body);
+    }
     if (!encoded || body.size() > kMaximumWebApiResponseBodyBytes) {
         setResponse(response, unavailable());
         return true;
@@ -694,9 +747,19 @@ bool WebRouteDispatcher::handleShell(
         }
     }
 
+    std::uint64_t mutationSequence = 0U;
+    if (session.has_value()) {
+        const auto sequence =
+            sessions_.mutationSequence(*session, timeSource_.monotonicMillis());
+        if (sequence.state == MutationSequenceState::Available) {
+            mutationSequence = sequence.nextMutationSeq;
+        }
+    }
+
     response.statusCode = 200U;
     response.contentType = kHtmlContentType;
-    response.body = webShell(state, csrf, session.has_value());
+    response.body =
+        webShell(state, csrf, session.has_value(), mutationSequence);
     if (response.body.size() > kMaximumWebShellBytes) {
         setJsonResponse(response, 503U,
                         "{\"error\":\"web-shell-unavailable\"}");
@@ -928,6 +991,19 @@ bool WebRouteDispatcher::handleReadOnly(
     return readOnly_.handle(request, response);
 }
 
+bool WebRouteDispatcher::handleRun(const device_platform::HttpRequest& request,
+                                   device_platform::HttpResponse& response) {
+    const auto state = application_.webAuthenticationState();
+    if (state == WebAuthenticationState::Unprovisioned ||
+        state == WebAuthenticationState::RecoveryRequired ||
+        state == WebAuthenticationState::Indeterminate) {
+        setJsonResponse(response, 503U,
+                        "{\"error\":\"authentication-unavailable\"}");
+        return true;
+    }
+    return run_.handle(request, response);
+}
+
 bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
                                 device_platform::HttpResponse& response) {
     const bool networkPath = request.path == "/api/network/status" ||
@@ -950,10 +1026,10 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
     }
     if (request.path == kStatusApiPath ||
         request.path == kTemperaturesApiPath ||
-        request.path == kAlertsApiPath) {
+        request.path == kAlertsApiPath || request.path == kProgramsApiPath) {
         return handleReadOnly(request, response);
     }
-    // No productive branch exists for /internal/ui/run in Slice 4C.
+    if (request.path == kRoutePath) return handleRun(request, response);
     return false;
 }
 

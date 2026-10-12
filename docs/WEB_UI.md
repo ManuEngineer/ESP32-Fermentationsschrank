@@ -261,7 +261,7 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-4096 Bytes.
+6656 Bytes (Ownerentscheid fuer #27, `html.reserve` auf diese Schranke).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
 (optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
@@ -326,8 +326,45 @@ Ziel-Replay-RAM 1760 Bytes (`WebSessionManager` Ziel 2344 Bytes); die feste
 `WebSessionManager`-Speichergroesse wird zusaetzlich zur Compile-Zeit auf
 4096 Bytes begrenzt. Die frueheren Werte (512-Byte-Fingerprint,
 29.952-Byte-Replay-Payload, ca. 31 KiB) sind nur noch historische
-Vor-Candidate-C-Evidence. Vor Aktivierung der ersten Web-Mutationsroute ist weiterhin der
-integrierte Vier-Session-Ressourcennachweis erforderlich.
+Vor-Candidate-C-Evidence. Der fuer die erste Web-Mutationsroute geforderte integrierte
+Vier-Session-Ressourcennachweis ist erfuellt
+(`docs/audits/PR170_HW_GATE_20261005/`); die Ressourcenqualifikation der
+Shell-Erweiterung aus #27 ist auf Hardware `NOT_RUN`.
+
+## Laufbedienung in der Weboberflaeche (Issue #27)
+
+Die Shell bedient den Lauf ueber die produktive Mutationsroute
+`POST /internal/ui/run` (Session, CSRF und Replay-Vertrag wie oben; die
+Application entscheidet fachlich, die Shell spiegelt keine zweite Domainregel).
+Die Mutationssequenz wird pro Session in die Shell eingebettet (`0` =
+Mutation nicht verfuegbar) und gilt nach Anmeldung erst nach erneutem Laden.
+
+| Aktion | Angeboten in | Bestaetigung |
+|---|---|---|
+| Stop | `active-run`, `waiting` | zwei Klicks |
+| Abschliessen | `completed` | zwei Klicks |
+| Start | `standby` mit gewaehltem Programm und passender Katalogrevision | zwei Klicks |
+| Quittieren, Stumm | bei aktiver Meldung (Ziel-ID am Button) | ein Klick |
+
+Der erste Klick bindet die Bestaetigung an Modus, Laufrevision, Katalogrevision
+und gewaehltes Programm; jeder Wechsel dieser Werte, ein fehlgeschlagener
+Statusabruf oder eine andere Aktion verwirft sie. Unveraenderte 5-s-Polls
+verwerfen sie nicht. Bei fehlgeschlagenem Statusabruf sind alle Aktionen
+deaktiviert, bis wieder ein gueltiger Status vorliegt.
+
+**Programmliste.** `GET /api/v1/programs` (Session, nur lesend) liefert
+`{"version":1,"catalogRevision":"<n>","programs":[{"id","name"}]}` fuer
+installierte und aktivierte Programme, hoechstens
+`configuration_limits::kMaximumProgramCount` Eintraege und 3072 Bytes Body. Eine
+Ueberschreitung oder eine fehlende Katalogquelle ergibt `503`, nie eine
+Teilantwort oder eine falsche leere Liste; ein wirklich leerer Katalog ergibt
+`programs:[]`. `Start` ist nur freigegeben, wenn die geladene `catalogRevision`
+der `revisions.programCatalog` aus `/api/v1/status` entspricht; der Start
+uebergibt genau diese Revision. Bei Abweichung oder Ladefehler wird die Auswahl
+verworfen und die Liste neu geladen, ohne automatische Mutation.
+
+Die Shell-JavaScript-Logik ist nativ nur als Text-/Zustandsvertrag getestet;
+ein ausfuehrender Browsertest ist `NOT_RUN`.
 
 ## Servicebereich in der Weboberflaeche
 
