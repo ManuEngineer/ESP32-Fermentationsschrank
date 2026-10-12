@@ -3572,6 +3572,114 @@ void test_shell_stays_within_the_limit_in_all_states() {
     }
 }
 
+// ---- C4: read-only program list ---------------------------------------------
+
+device_platform::HttpResponse getPrograms(ComposedFixture& fixture,
+                                          const std::string& cookie) {
+    auto request = cookie.empty() ? makeWebRequest("GET", "/api/v1/programs")
+                                  : makeAuthenticatedRequest(
+                                        "GET", "/api/v1/programs", cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    return response;
+}
+
+void test_programs_route_gate_and_request_contract() {
+    ComposedFixture fixture;
+    // Unprovisioned: no authentication yet.
+    TEST_ASSERT_EQUAL_UINT16(503U, getPrograms(fixture, "").statusCode);
+    auto session = composedRunSession(fixture);
+    TEST_ASSERT_EQUAL_UINT16(401U, getPrograms(fixture, "").statusCode);
+    TEST_ASSERT_EQUAL_UINT16(401U, getPrograms(fixture, "bogus").statusCode);
+
+    auto request = makeAuthenticatedRequest("POST", "/api/v1/programs",
+                                            session.web.cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+    request =
+        makeAuthenticatedRequest("GET", "/api/v1/programs", session.web.cookie);
+    request.body = "x";
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(400U, response.statusCode);
+}
+
+void test_programs_route_lists_catalog_names_with_the_status_revision() {
+    ComposedFixture fixture;
+    auto session = composedRunSession(fixture);
+    const auto response = getPrograms(fixture, session.web.cookie);
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(response.body.size() <= kMaximumWebApiResponseBodyBytes);
+    const auto source = fixture.application.uiPresentationSource();
+    TEST_ASSERT_TRUE(source.has_value());
+    TEST_ASSERT_TRUE(!source->programCatalog.programs.empty());
+    // The revision is the same decimal string the status exposes.
+    const auto revision =
+        std::to_string(fixture.application.uiSnapshot()
+                           .revisions.expectedProgramCatalogRevision->value());
+    TEST_ASSERT_TRUE(contains(
+        response.body, ("\"catalogRevision\":\"" + revision + "\"").c_str()));
+    // Only id and name per entry; no notes, stages or device data.
+    for (const auto& entry : source->programCatalog.programs) {
+        if (!entry.program.installed || !entry.program.enabled) continue;
+        TEST_ASSERT_TRUE(contains(
+            response.body, ("{\"id\":\"" + entry.program.id + "\",\"name\":\"" +
+                            entry.program.name + "\"}")
+                               .c_str()));
+    }
+    TEST_ASSERT_FALSE(contains(response.body, "notes"));
+    TEST_ASSERT_FALSE(contains(response.body, "stages"));
+    // Reading the list does not advance the mutation sequence.
+    TEST_ASSERT_TRUE(
+        contains(authenticatedShell(fixture, session.web.cookie), "let Q=1;"));
+}
+
+void test_programs_encoder_filters_empty_and_bounded() {
+    FermentationUiPresentationSource source;
+    source.programCatalogRevision = ProgramCatalogRevision{7U};
+    std::string body;
+    // A genuinely empty catalog is an empty list, not an error.
+    TEST_ASSERT_TRUE(encodeWebApiPrograms(source, body));
+    TEST_ASSERT_TRUE(contains(body, "\"catalogRevision\":\"7\""));
+    TEST_ASSERT_TRUE(contains(body, "\"programs\":[]"));
+
+    ProgramDocument visible;
+    visible.program.id = "a";
+    visible.program.name = "A";
+    ProgramDocument hidden = visible;
+    hidden.program.id = "b";
+    hidden.program.enabled = false;
+    ProgramDocument removed = visible;
+    removed.program.id = "c";
+    removed.program.installed = false;
+    source.programCatalog.programs = {visible, hidden, removed};
+    TEST_ASSERT_TRUE(encodeWebApiPrograms(source, body));
+    TEST_ASSERT_TRUE(contains(body, "{\"id\":\"a\",\"name\":\"A\"}"));
+    TEST_ASSERT_FALSE(contains(body, "\"b\""));
+    TEST_ASSERT_FALSE(contains(body, "\"c\""));
+
+    // Over the response budget: refused (the route answers 503), never cut.
+    visible.program.name = std::string(400U, 'n');
+    source.programCatalog.programs.assign(16U, visible);
+    TEST_ASSERT_FALSE(encodeWebApiPrograms(source, body));
+}
+
+void test_shell_start_flow_text_contract() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, passwordUnderTest(), kPinUnderTest));
+    const auto body = shellBody(fixture);
+    // Names are shown, ids are sent; the list is only requested with a
+    // usable sequence and its result never makes Start available by itself.
+    TEST_ASSERT_TRUE(contains(body, "fetch('/api/v1/programs'"));
+    TEST_ASSERT_TRUE(contains(body, "new Option(x.name,x.id)"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
+    TEST_ASSERT_TRUE(contains(body, "start:h!=='standby'||!pg.value"));
+    // Start needs two clicks like Stop/Complete (no direct-send branch).
+    TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
+    TEST_ASSERT_FALSE(contains(body, "a==='start'&&"));
+}
+
 void test_other_states_get_no_provisioning_form_or_bypass() {
     // Protected, disabled and recovery states keep the existing shell and
     // never offer a provisioning path.
@@ -4042,6 +4150,10 @@ int main() {
         test_dispatcher_run_start_program_is_fail_closed_and_changes_nothing);
     RUN_TEST(test_dispatcher_run_limits_gated_actions_stay_503);
     RUN_TEST(test_dispatcher_run_mutation_sequence_contract);
+    RUN_TEST(test_programs_route_gate_and_request_contract);
+    RUN_TEST(test_programs_route_lists_catalog_names_with_the_status_revision);
+    RUN_TEST(test_programs_encoder_filters_empty_and_bounded);
+    RUN_TEST(test_shell_start_flow_text_contract);
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
     RUN_TEST(test_shell_run_controls_text_contract);

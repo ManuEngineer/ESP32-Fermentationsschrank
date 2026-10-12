@@ -17,6 +17,7 @@ constexpr char kJsonContentType[] = "application/json; charset=utf-8";
 constexpr char kStatusApiPath[] = "/api/v1/status";
 constexpr char kTemperaturesApiPath[] = "/api/v1/temperatures";
 constexpr char kAlertsApiPath[] = "/api/v1/alerts";
+constexpr char kProgramsApiPath[] = "/api/v1/programs";
 constexpr char kLoginPath[] = "/api/v1/login";
 constexpr char kLogoutPath[] = "/api/v1/logout";
 constexpr char kProvisionPath[] = "/api/v1/provision";
@@ -669,7 +670,8 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     const bool status = request.path == kStatusApiPath;
     const bool temperatures = request.path == kTemperaturesApiPath;
     const bool alerts = request.path == kAlertsApiPath;
-    if (!status && !temperatures && !alerts) return false;
+    const bool programs = request.path == kProgramsApiPath;
+    if (!status && !temperatures && !alerts && !programs) return false;
     if (request.method != "GET") {
         setResponse(response,
                     requestError(405U, "{\"error\":\"method-not-allowed\"}"));
@@ -681,12 +683,18 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
         return true;
     }
 
-    const auto snapshot = application_.uiSnapshot();
     std::string body;
-    const bool encoded = status ? encodeWebApiStatus(snapshot, body)
-                         : temperatures
-                             ? encodeWebApiTemperatures(snapshot, body)
-                             : encodeWebApiAlerts(snapshot, body);
+    bool encoded = false;
+    if (programs) {
+        // An unavailable catalog is 503, never an empty list.
+        const auto source = application_.uiPresentationSource();
+        encoded = source.has_value() && encodeWebApiPrograms(*source, body);
+    } else {
+        const auto snapshot = application_.uiSnapshot();
+        encoded = status         ? encodeWebApiStatus(snapshot, body)
+                  : temperatures ? encodeWebApiTemperatures(snapshot, body)
+                                 : encodeWebApiAlerts(snapshot, body);
+    }
     if (!encoded || body.size() > kMaximumWebApiResponseBodyBytes) {
         setResponse(response, unavailable());
         return true;
@@ -1012,7 +1020,7 @@ bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
     }
     if (request.path == kStatusApiPath ||
         request.path == kTemperaturesApiPath ||
-        request.path == kAlertsApiPath) {
+        request.path == kAlertsApiPath || request.path == kProgramsApiPath) {
         return handleReadOnly(request, response);
     }
     if (request.path == kRoutePath) return handleRun(request, response);

@@ -153,6 +153,8 @@ struct FermentationUiPresentationSource {
     // Visible device name (UserConfiguration), read-only display copy.
     std::string deviceName;
     ProgramCatalog programCatalog;
+    // Revision of the same lease the catalog was read from.
+    ProgramCatalogRevision programCatalogRevision{};
 };
 
 struct FermentationUiTemperatureInput {

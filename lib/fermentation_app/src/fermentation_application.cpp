@@ -1471,6 +1471,8 @@ FermentationApplication::uiPresentationSource() const {
     source.timeZoneRule = runtime.lease.get().preparedTimeZone().rule;
     source.deviceName = userConfiguration.deviceName;
     source.programCatalog = runtime.lease.get().programCatalog();
+    source.programCatalogRevision =
+        runtime.lease.get().programCatalogRevision();
     return source;
 }
 
