@@ -46,7 +46,12 @@ Recovery-Vertraegen: stoppen und Befund vorlegen.
   Touchkalibrierung, Web.
 - Sicherheitsgrundsatz: fail-closed. Keine Aktorwirkung, kein Hardwarezugriff.
 
-## 4. Schnitte (je Commit anhalten, Ownerfreigabe)
+## 4. Schnitte (eine Planfreigabe vor A1–A3)
+
+Die Ownerfreigabe der exakten Plan-SHA gilt einmal fuer A1–A3; kein zusaetzliches
+Owner-Gate je Commit. Die kanonischen Stopp-/Abweichungsregeln
+(`docs/AGENT_WORKFLOW.md`, materielle Abweichung, Review-Gates) bleiben
+massgeblich.
 
 **A1 – Application-Bindung (kein UI).**
 
@@ -55,13 +60,29 @@ Recovery-Vertraegen: stoppen und Befund vorlegen.
   `ApplicationCallSerializer`; danach unmittelbar `begin(PinProtected)` und
   `pinVerified()` (Lease ist der Nachweis; keine PIN-Daten im Flow, keine
   zusaetzliche PIN-Ablage, kein Bypass). Der Ablauf steht danach in `Warning`.
-- Lease-Bindung in jedem Schritt eines A-Ablaufs: `acknowledgeFactoryReset`
+- **Bindung an dieselbe Freigabe (kein Erben einer neuen Lease):** Ein noch
+  nicht ausgefuehrter A-Ablauf (`kind == PinProtected`, Stufe ungleich
+  `Executing`) wird bei Ende **oder Ersatz** der lokalen Servicefreigabe
+  unwiderruflich per `FactoryResetFlow::cancel()` verworfen (Flow -> `Idle`,
+  kein Reset). Dazu ein kleiner privater Helfer
+  (`cancelPinProtectedFlowUnlocked()`, nur `kind`/`stage` pruefen), aufgerufen
+  an den **vorhandenen** Stellen, an denen `localServiceLease_` beendet oder
+  neu gesetzt wird: `endLocalServiceSession` (Sign-out), die Lease-Neuvergabe in
+  `verifyLocalServicePin` (deckt Ablauf/Abmeldung + neuer PIN-Login), die
+  Auth-/Safety-Invalidierung (`resetAuthenticationState`) und das Verlassen des
+  validierten `STANDBY` (die bestehenden Lease-Reset-Stellen). Kein zweiter
+  PIN-Check, kein Token-/Generationssystem. Da ein spaeter erneuerter Login die
+  Lease erst nach dem Verwerfen setzt, kann der alte Flow die neue Lease nicht
+  erben; ein neuer A-Beginn ist erforderlich.
+- **Lazy-Pruefung fuer Zeitablauf ohne Ereignis:** `acknowledgeFactoryReset`
   und `updateFactoryResetHold` pruefen bei `kind == PinProtected` zuerst
-  `localServiceAvailableUnlocked()`; bei Verlust wird der Ablauf ohne Wirkung
-  abgebrochen (`cancel()`), der Schritt abgelehnt. Die bestehende
-  Wiedervalidierung unmittelbar vor `beginAuthorizedFactoryReset()` wird um
-  genau diese Lease-Bedingung fuer A erweitert (Ergebnis `Rejected`, Kern nicht
-  aufgerufen). B-Pfade bleiben bytegleich im Verhalten.
+  `localServiceAvailableUnlocked()`; bei Verlust `cancel()` (Flow -> `Idle`),
+  Schritt abgelehnt, **kein** `Rejected`. `Rejected` entsteht ausschliesslich im
+  bereits erreichten `Executing`-Zweig: die bestehende Wiedervalidierung
+  unmittelbar vor `beginAuthorizedFactoryReset()` wird um die Lease-Bedingung
+  fuer A erweitert (Ergebnis `Rejected`, Kern nicht aufgerufen). Eine bereits
+  gestartete irreversible Ausfuehrung wird durch Abmeldung nicht rueckgaengig
+  gemacht. B-Pfade bleiben im Verhalten unveraendert.
 - `FermentationFactoryResetView`: ein neues Feld `pinProtectedAvailable`
   (`!active && factoryResetAvailableUnlocked() && localServiceAvailableUnlocked()`),
   in `operator==` aufgenommen. `available` bleibt B.
@@ -86,7 +107,7 @@ Recovery-Vertraegen: stoppen und Befund vorlegen.
 - Tests (nativ, `test_press_dispatcher`): siehe Abschnitt 5.
 
 **A3 – Dokumentation.** Nur betroffene Eintraege: `docs/ACCEPTANCE_TESTS.md`
-(neue Zeilen `SIM-19-A-01..`; `SIM-19-R02`/`R03`/`R07` ohne "A nicht
+(neue Zeilen `SIM-19-A-01..05`, `A-03b`; `SIM-19-R02`/`R03`/`R07` ohne "A nicht
 angeboten" nachfuehren), Status-Zeilen in
 `docs/tasks/issue-19-journals-retention-backup-import-plan.md` (A umgesetzt,
 Verweis auf diesen Plan; `IMPLEMENTATION_SCOPE_AUTHORIZED` nennt A erst nach
@@ -98,11 +119,12 @@ Freigabe dieser Plan-SHA), `docs/ROADMAP.md`. Hardware `NOT_RUN`.
 |---|---|
 | SIM-19-A-01 | Aktive Lease im validierten `STANDBY`: `pinProtectedAvailable`, A beginnt in `Warning`, vollstaendiger Ablauf bis `Finished`, **genau ein** Kernaufruf, Epoche +1, Netzwerk-/HTTP-Reihenfolge wie B |
 | SIM-19-A-02 | Ohne Lease, nach falscher PIN, bei PIN-Sperre, nach Sign-out, nach Timeout: `beginFactoryReset(PinProtected) == false`, kein Slot aktiv, keine Store-Writes ausser tatsaechlich erfolgter PIN-Pruefung (Lockout) |
-| SIM-19-A-03 | Lease endet **zwischen** Beginn/Warnung/Bestaetigung/Hold-Beginn und Hold-Ablauf (Sign-out, Timeout per virtueller Zeit, Lifecycle-/Run-/Recovery-Wechsel): Schritt abgelehnt bzw. `Rejected`, Kern nicht aufgerufen, keine Store-Aenderung |
+| SIM-19-A-03 | Lease endet **vor dem Kernaufruf** zwischen Beginn/Warnung/Bestaetigung/Hold (Sign-out, Timeout per virtueller Zeit, Lifecycle-/Run-/Recovery-Wechsel): Flow `Idle` (`cancel()`), Schritt abgelehnt, Kern nicht aufgerufen. `Rejected` wird nur fuer den Pfad geprueft, in dem der Flow bereits `Executing` erreicht hat und die Lease unmittelbar vor dem Kernaufruf fehlt (Kern nicht aufgerufen). Je Pfad genau ein Ergebnis. Geprueft werden nur **durch den verweigerten Reset verursachte** Writes (Reset-/Epochen-/Konfigurationsgraph-Records unveraendert); normale persistente Effekte des simulierten Zustandswechsels zaehlen nicht als Fehler |
+| SIM-19-A-03b | Regression Lease-Ersatz: A beginnen -> Warnung/Bestaetigung -> Lease beenden (Sign-out bzw. Timeout) -> neue erfolgreiche PIN-Freigabe -> die alte Bestaetigung/der alte Hold loesen **keinen** Reset aus (Flow `Idle`, Kern nicht aufgerufen, Epoche unveraendert); ein neuer A-Beginn ist erforderlich und laeuft dann normal |
 | SIM-19-A-04 | Abbruch in jeder Stufe und unterbrochener Hold (Loslassen, Pause, Verschieben) ohne Reset-Write; kurzer Neukontakt loest nicht aus (Muster `SIM-19-R08`, echte `touchLoopAction`) |
 | SIM-19-A-05 | UI ueber den echten Touch-Adapter: Service-Seite -> Werksreset -> Warnung -> Bestaetigung -> Hold; `recovery`-Slot bleibt Lauf-Recovery und startet nie den Reset; B-Eintraege ("PIN vergessen?", `SAFE_BOOT`, S1) unveraendert |
 | Regression | `SIM-19-R01..R08`, `SIM-19-S1-01..06`, lokale PIN-/Lockout-Tests (`test_authentication_records`, #188-Servicetests in `test_press_dispatcher`), Touchkalibrierung, Netzwerk-/Epochentests; der Test "nur Variante B wird angeboten" wird durch SIM-19-A-01/02 ersetzt |
-| Mutationsproben | ohne Lease-Pruefung vor dem Kernaufruf schlaegt SIM-19-A-03 fehl; ohne `Begin`-Lease-Pruefung schlaegt SIM-19-A-02 fehl |
+| Mutationsproben | ohne Lease-Pruefung vor dem Kernaufruf schlaegt SIM-19-A-03 fehl; ohne Verwerfen bei Lease-Ende/-Ersatz schlaegt SIM-19-A-03b fehl; ohne `Begin`-Lease-Pruefung schlaegt SIM-19-A-02 fehl |
 
 Gezielte lokale Tests im Draft: `test_factory_reset_flow`, `test_press_dispatcher`,
 direkt betroffene Konsumenten (`test_configuration_recovery_service`,
