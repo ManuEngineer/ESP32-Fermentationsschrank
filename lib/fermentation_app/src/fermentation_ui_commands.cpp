@@ -369,10 +369,12 @@ FermentationUiCommandResult FermentationUiCommandBridge::factoryResetStep(
     bool accepted = false;
     switch (command.step) {
         case Step::Begin:
-            // Only the PIN-independent variant is offered (owner decision
-            // O-R2 pending for the PIN-protected one).
             accepted =
                 application.beginFactoryReset(FactoryResetKind::PinIndependent);
+            break;
+        case Step::BeginPinProtected:
+            accepted =
+                application.beginFactoryReset(FactoryResetKind::PinProtected);
             break;
         case Step::Acknowledge:
             accepted = application.acknowledgeFactoryReset();

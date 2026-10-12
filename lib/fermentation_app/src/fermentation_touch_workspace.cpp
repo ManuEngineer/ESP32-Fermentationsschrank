@@ -802,6 +802,7 @@ bool FermentationTouchWorkspace::isPageExitAction(
         case FermentationUiWorkspaceSlotAction::FactoryResetDismiss:
             return true;
         case FermentationUiWorkspaceSlotAction::FactoryResetBegin:
+        case FermentationUiWorkspaceSlotAction::FactoryResetBeginPinProtected:
         case FermentationUiWorkspaceSlotAction::FactoryResetAcknowledge:
         case FermentationUiWorkspaceSlotAction::FactoryResetHold:
         case FermentationUiWorkspaceSlotAction::None:
@@ -1699,8 +1700,16 @@ FermentationUiWorkspaceView FermentationTouchWorkspace::makePageView(
             else
                 setSlot(view, 1U, "pin",
                         FermentationUiWorkspaceSlotAction::NavigatePin);
-            setSlot(view, 2U, "status",
-                    FermentationUiWorkspaceSlotAction::NavigateStatus);
+            // Released: slot 2 offers the PIN-protected factory reset (Issue
+            // #19 A); the status page stays reachable via diagnostics/home.
+            if (snapshot.service.available)
+                setSlot(view, 2U, "factory-reset",
+                        FermentationUiWorkspaceSlotAction::
+                            FactoryResetBeginPinProtected,
+                        snapshot.factoryReset.pinProtectedAvailable);
+            else
+                setSlot(view, 2U, "status",
+                        FermentationUiWorkspaceSlotAction::NavigateStatus);
             setSlot(view, 3U, "recovery",
                     FermentationUiWorkspaceSlotAction::NavigateRecovery,
                     snapshot.service.available);
@@ -2140,6 +2149,7 @@ bool FermentationTouchWorkspace::navigate(
             destination = FermentationUiPage::Settings;
             break;
         case FermentationUiWorkspaceSlotAction::FactoryResetBegin:
+        case FermentationUiWorkspaceSlotAction::FactoryResetBeginPinProtected:
             destination = FermentationUiPage::FactoryReset;
             break;
         case FermentationUiWorkspaceSlotAction::BeginProgramEdit:
@@ -2311,6 +2321,11 @@ FermentationUiWorkspacePress FermentationTouchWorkspace::pressSlot(
             result.navigated = navigate(action);
             result.factoryReset = FermentationUiFactoryResetCommand{
                 FermentationUiFactoryResetCommand::Step::Begin};
+            break;
+        case FermentationUiWorkspaceSlotAction::FactoryResetBeginPinProtected:
+            result.navigated = navigate(action);
+            result.factoryReset = FermentationUiFactoryResetCommand{
+                FermentationUiFactoryResetCommand::Step::BeginPinProtected};
             break;
         case FermentationUiWorkspaceSlotAction::FactoryResetAcknowledge:
             result.factoryReset = FermentationUiFactoryResetCommand{

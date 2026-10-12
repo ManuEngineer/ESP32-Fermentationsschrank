@@ -2102,12 +2102,12 @@ void test_manual_start_has_no_path_without_an_owner_of_the_run_limits() {
 constexpr std::uint32_t kFactoryResetHoldMs = 1500U;  // test value only
 
 WorkspaceTouchTickResult factoryResetTouch(
-    OwningAppFixture& fixture, FermentationTouchWorkspace& workspace,
+    FermentationApplication& application, FermentationTouchWorkspace& workspace,
     bool contactHeld, std::uint8_t slot, bool fresh, std::uint64_t nowMs) {
     const auto packs = makeFermentationUiTextPacks();
-    const auto snapshot = fixture.application.uiSnapshot();
+    const auto snapshot = application.uiSnapshot();
     return processWorkspaceTouch(
-        fixture.application, workspace, snapshot, packs,
+        application, workspace, snapshot, packs,
         device_platform::LocaleId{"en"}, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable, {}, contactHeld,
         bottomX(slot), kBottomY, fresh, nowMs);
@@ -2211,65 +2211,72 @@ void test_forgot_pin_entry_runs_the_whole_flow_through_touch() {
                      FermentationUiWorkspaceSlotAction::FactoryResetBegin);
 
     // "PIN forgotten?" starts the flow without any PIN entry.
-    auto step = factoryResetTouch(fixture, workspace, true, 3U, true, 1000U);
+    auto step = factoryResetTouch(fixture.application, workspace, true, 3U,
+                                  true, 1000U);
     TEST_ASSERT_TRUE(step.dispatch.commandResult.has_value());
     TEST_ASSERT_TRUE(step.dispatch.commandResult->category ==
                      device_platform::DeviceUiCommandOutcomeCategory::Accepted);
     TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::FactoryReset);
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Warning);
-    static_cast<void>(
-        factoryResetTouch(fixture, workspace, false, 3U, false, 1100U));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, false,
+                                        3U, false, 1100U));
     // Warning -> Confirm -> Hold, one deliberate tap each.
-    static_cast<void>(
-        factoryResetTouch(fixture, workspace, true, 2U, true, 1200U));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        2U, true, 1200U));
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Confirm);
-    static_cast<void>(
-        factoryResetTouch(fixture, workspace, false, 2U, false, 1300U));
-    static_cast<void>(
-        factoryResetTouch(fixture, workspace, true, 2U, true, 1400U));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, false,
+                                        2U, false, 1300U));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        2U, true, 1400U));
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Hold);
-    static_cast<void>(
-        factoryResetTouch(fixture, workspace, false, 2U, false, 1500U));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, false,
+                                        2U, false, 1500U));
 
     // The long press counts only on the hold slot and only if continuous.
     const std::uint64_t t0 = 5000U;
     static_cast<void>(
-        factoryResetTouch(fixture, workspace, true, 1U, true, t0));
-    static_cast<void>(factoryResetTouch(fixture, workspace, true, 1U, false,
+        factoryResetTouch(fixture.application, workspace, true, 1U, true, t0));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        1U, false,
                                         t0 + kFactoryResetHoldMs - 1U));
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Hold);
     // Sliding off the hold slot releases the long press.
-    static_cast<void>(factoryResetTouch(fixture, workspace, true, 3U, false,
-                                        t0 + kFactoryResetHoldMs));
-    static_cast<void>(factoryResetTouch(fixture, workspace, true, 1U, false,
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        3U, false, t0 + kFactoryResetHoldMs));
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        1U, false,
                                         t0 + kFactoryResetHoldMs + 10U));
     static_cast<void>(factoryResetTouch(
-        fixture, workspace, true, 1U, false,
+        fixture.application, workspace, true, 1U, false,
         t0 + kFactoryResetHoldMs + 10U + kFactoryResetHoldMs - 1U));
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Hold);
     // Releasing the contact also restarts the count.
-    static_cast<void>(factoryResetTouch(fixture, workspace, false, 1U, false,
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, false,
+                                        1U, false,
                                         t0 + 3U * kFactoryResetHoldMs));
-    static_cast<void>(factoryResetTouch(fixture, workspace, true, 1U, false,
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        1U, false,
                                         t0 + 4U * kFactoryResetHoldMs));
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
                      FactoryResetStage::Hold);
     static_cast<void>(
-        factoryResetTouch(fixture, workspace, true, 1U, false,
+        factoryResetTouch(fixture.application, workspace, true, 1U, false,
                           t0 + 4U * kFactoryResetHoldMs + kFactoryResetHoldMs));
     const auto done = fixture.application.uiSnapshot();
     TEST_ASSERT_TRUE(done.factoryReset.stage == FactoryResetStage::Finished);
     TEST_ASSERT_TRUE(done.factoryReset.outcome ==
                      FactoryResetOutcome::Completed);
     // Acknowledging the result returns to the home page and closes the flow.
-    static_cast<void>(factoryResetTouch(fixture, workspace, false, 0U, false,
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, false,
+                                        0U, false,
                                         t0 + 6U * kFactoryResetHoldMs));
-    static_cast<void>(factoryResetTouch(fixture, workspace, true, 0U, true,
+    static_cast<void>(factoryResetTouch(fixture.application, workspace, true,
+                                        0U, true,
                                         t0 + 7U * kFactoryResetHoldMs));
     TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Home);
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().factoryReset.stage ==
@@ -2831,6 +2838,138 @@ void test_touch_forgot_pin_in_lockout_and_cancel_change_nothing() {
     TEST_ASSERT_FALSE(fixture.serviceAvailable());
 }
 
+// Issue #19 A: unlock the service area through the real PIN page and return
+// the workspace on the unlocked service page.
+void openUnlockedServicePage(LocalServiceFixture& fixture,
+                             FermentationTouchWorkspace& workspace) {
+    fixture.provision();
+    fixture.app().setFactoryResetHoldMillis(kFactoryResetHoldMs);
+    tapSettingsServiceRow(fixture.app(), workspace, 100U);
+    typePin(fixture.app(), workspace, "1234", 200U);
+    pressConfirm(fixture, workspace, 400U);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+}
+
+// SIM-19-A-05: service page -> factory reset -> warning -> confirm -> hold,
+// through the real touch adapter; the lease stays alive across the dialog.
+void test_touch_service_page_runs_the_pin_protected_reset() {
+    LocalServiceFixture fixture;
+    FermentationTouchWorkspace workspace;
+    openUnlockedServicePage(fixture, workspace);
+    const auto epochBefore = currentEpoch(fixture);
+
+    auto view = workspace.view(fixture.app().uiSnapshot());
+    // Slot 2 offers the reset, `recovery` stays the run recovery.
+    TEST_ASSERT_TRUE(
+        view.slotActions[2] ==
+        FermentationUiWorkspaceSlotAction::FactoryResetBeginPinProtected);
+    TEST_ASSERT_TRUE(view.bottomSlots[2].enabled);
+    TEST_ASSERT_TRUE(view.slotActions[3] ==
+                     FermentationUiWorkspaceSlotAction::NavigateRecovery);
+    TEST_ASSERT_TRUE(view.slotActions[1] ==
+                     FermentationUiWorkspaceSlotAction::ServiceSignOut);
+
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 500U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::FactoryReset);
+    auto reset = fixture.app().uiSnapshot().factoryReset;
+    TEST_ASSERT_TRUE(reset.stage == FactoryResetStage::Warning);
+    TEST_ASSERT_TRUE(reset.kind == FactoryResetKind::PinProtected);
+    // Each deliberate step is activity: 9 minutes between the steps exceed
+    // the 10 minute inactivity window in total, not per step.
+    fixture.timeSource.advanceMonotonicMillis(kLocalServiceInactivityMs -
+                                              60000U);
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 600U));
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Confirm);
+    fixture.timeSource.advanceMonotonicMillis(kLocalServiceInactivityMs -
+                                              60000U);
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 700U));
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Hold);
+    TEST_ASSERT_TRUE(fixture.serviceAvailable());
+
+    const std::uint64_t t0 = 5000U;
+    static_cast<void>(
+        factoryResetTouch(fixture.app(), workspace, true, 1U, true, t0));
+    static_cast<void>(factoryResetTouch(fixture.app(), workspace, true, 1U,
+                                        false, t0 + kFactoryResetHoldMs));
+    const auto done = fixture.app().uiSnapshot();
+    TEST_ASSERT_TRUE(done.factoryReset.stage == FactoryResetStage::Finished);
+    TEST_ASSERT_TRUE(done.factoryReset.outcome ==
+                     FactoryResetOutcome::Completed);
+    TEST_ASSERT_TRUE(currentEpoch(fixture) != epochBefore);
+}
+
+// SIM-19-A-05: the `recovery` slot never starts the reset; the locked service
+// page and the PIN page keep their contracts.
+void test_touch_recovery_slot_and_locked_service_page_never_start_the_reset() {
+    LocalServiceFixture fixture;
+    FermentationTouchWorkspace workspace;
+    openUnlockedServicePage(fixture, workspace);
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(3U), 500U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Recovery);
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Idle);
+
+    // Signed out: slot 2 is the status page again and offers no reset.
+    fixture.app().endLocalServiceSession();
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 600U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    const auto locked = workspace.view(fixture.app().uiSnapshot());
+    TEST_ASSERT_TRUE(locked.slotActions[2] ==
+                     FermentationUiWorkspaceSlotAction::NavigateStatus);
+    TEST_ASSERT_FALSE(
+        fixture.app().uiSnapshot().factoryReset.pinProtectedAvailable);
+}
+
+// SIM-19-A-04: cancel and an interrupted hold never reach the core.
+void test_touch_pin_protected_reset_cancel_and_interrupted_hold_change_nothing() {
+    LocalServiceFixture fixture;
+    FermentationTouchWorkspace workspace;
+    openUnlockedServicePage(fixture, workspace);
+    const auto epochBefore = currentEpoch(fixture);
+    const auto networkStopsBefore = fixture.network.stopCallCount();
+    const auto httpStopsBefore = fixture.http.stopCalls;
+
+    // Cancel in the warning stage returns to the service page.
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(2U), 500U));
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 600U));
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Idle);
+
+    // Hold stage: release, slide-off and a short re-contact never trigger.
+    for (int step = 0; step < 3; ++step) {
+        static_cast<void>(
+            touchUi(fixture.app(), workspace, bottomSlot(2U),
+                    700U + static_cast<std::uint64_t>(step) * 10U));
+    }
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Hold);
+    const std::uint64_t t0 = 5000U;
+    static_cast<void>(
+        factoryResetTouch(fixture.app(), workspace, true, 1U, true, t0));
+    static_cast<void>(factoryResetTouch(fixture.app(), workspace, true, 3U,
+                                        false, t0 + kFactoryResetHoldMs));
+    static_cast<void>(factoryResetTouch(fixture.app(), workspace, true, 1U,
+                                        false, t0 + kFactoryResetHoldMs + 10U));
+    static_cast<void>(factoryResetTouch(
+        fixture.app(), workspace, true, 1U, false,
+        t0 + kFactoryResetHoldMs + 10U + kFactoryResetHoldMs - 1U));
+    static_cast<void>(factoryResetTouch(fixture.app(), workspace, false, 1U,
+                                        false, t0 + 3U * kFactoryResetHoldMs));
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Hold);
+    static_cast<void>(touchUi(fixture.app(), workspace, bottomSlot(0U), 9000U));
+    TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                     FactoryResetStage::Idle);
+    TEST_ASSERT_TRUE(workspace.page() == FermentationUiPage::Service);
+    TEST_ASSERT_TRUE(currentEpoch(fixture) == epochBefore);
+    TEST_ASSERT_EQUAL_UINT(networkStopsBefore, fixture.network.stopCallCount());
+    TEST_ASSERT_EQUAL_UINT(httpStopsBefore, fixture.http.stopCalls);
+}
+
 void test_touch_forgot_pin_is_disabled_without_the_factory_reset_owner() {
     LocalServiceFixture fixture;
     fixture.app().setFactoryResetHoldMillis(std::nullopt);
@@ -2942,6 +3081,11 @@ int main() {
     RUN_TEST(test_touch_wrong_pin_and_lockout_keep_the_service_area_locked);
     RUN_TEST(test_touch_diagnostics_route_needs_the_pin_and_returns_to_service);
     RUN_TEST(test_touch_forgot_pin_in_lockout_and_cancel_change_nothing);
+    RUN_TEST(test_touch_service_page_runs_the_pin_protected_reset);
+    RUN_TEST(
+        test_touch_recovery_slot_and_locked_service_page_never_start_the_reset);
+    RUN_TEST(
+        test_touch_pin_protected_reset_cancel_and_interrupted_hold_change_nothing);
     RUN_TEST(test_touch_forgot_pin_is_disabled_without_the_factory_reset_owner);
     RUN_TEST(test_touch_expired_lease_locks_the_open_service_page);
     return UNITY_END();

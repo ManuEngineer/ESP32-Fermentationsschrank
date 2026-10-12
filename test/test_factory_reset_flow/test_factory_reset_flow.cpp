@@ -96,6 +96,7 @@ static_assert(
     "factory reset must stay outside the shared UI command variant");
 
 constexpr std::uint32_t kHoldMs = 1500U;  // Testwert, kein Produktwert.
+constexpr std::uint64_t kServiceInactivityMs = 10U * 60U * 1000U;
 
 void test_flow_without_configured_hold_is_unavailable_and_has_no_default() {
     FactoryResetFlow unset;
@@ -316,6 +317,29 @@ struct Fixture {
         TEST_ASSERT_TRUE(application.acknowledgeFactoryReset());
     }
 
+    // Provisions the PIN "1234" and grants the local service lease (Issue #19
+    // A). The lease is the only PIN proof variant A uses.
+    void unlockService() {
+        TEST_ASSERT_TRUE(application.openWebProvisioningWindow());
+        TEST_ASSERT_TRUE(
+            application.provisionWebAccess(
+                fermentation::WebProvisionMode::Disable, "", "1234") ==
+            fermentation::WebProvisionStatus::Provisioned);
+        grantLease();
+    }
+
+    void grantLease() {
+        TEST_ASSERT_TRUE(application.verifyLocalServicePin("1234").status ==
+                         fermentation::LocalServicePinStatus::Authorized);
+    }
+
+    void armPinProtectedHold() {
+        TEST_ASSERT_TRUE(
+            application.beginFactoryReset(FactoryResetKind::PinProtected));
+        TEST_ASSERT_TRUE(application.acknowledgeFactoryReset());
+        TEST_ASSERT_TRUE(application.acknowledgeFactoryReset());
+    }
+
     void holdToCompletion(std::uint64_t startMs = 1000U) {
         application.updateFactoryResetHold(true, startMs);
         application.updateFactoryResetHold(true, startMs + kHoldMs);
@@ -332,14 +356,166 @@ void test_application_flow_is_unavailable_until_the_owner_parameter_is_set() {
         0U, fixture.application.factoryResetView(0U).holdRequiredMillis);
 }
 
-void test_application_offers_only_the_pin_independent_variant() {
+// SIM-19-A-02: variant A needs the active local service lease.
+void test_variant_a_is_refused_without_a_service_lease() {
     Fixture fixture;
-    TEST_ASSERT_TRUE(fixture.application.factoryResetView(0U).available);
-    // Variant A needs a local PIN verification that does not exist (O-R2).
-    TEST_ASSERT_FALSE(
+    fixture.unlockService();
+    const auto epochBefore = fixture.epoch();
+    const auto refused = [&fixture] {
+        const auto view = fixture.application.factoryResetView(0U);
+        TEST_ASSERT_TRUE(view.available);
+        TEST_ASSERT_FALSE(view.pinProtectedAvailable);
+        TEST_ASSERT_FALSE(fixture.application.beginFactoryReset(
+            FactoryResetKind::PinProtected));
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         fixture.application.factoryResetView(0U).stage);
+    };
+    fixture.application.endLocalServiceSession();
+    refused();
+    // A wrong PIN grants nothing.
+    TEST_ASSERT_TRUE(fixture.application.verifyLocalServicePin("9999").status ==
+                     fermentation::LocalServicePinStatus::Invalid);
+    refused();
+    // Timeout.
+    fixture.grantLease();
+    TEST_ASSERT_TRUE(
+        fixture.application.factoryResetView(0U).pinProtectedAvailable);
+    fixture.timeSource.advanceMonotonicMillis(kServiceInactivityMs);
+    refused();
+    TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+}
+
+// SIM-19-A-01: complete variant A flow, one core call.
+void test_variant_a_full_flow_runs_the_core_once() {
+    Fixture fixture;
+    fixture.unlockService();
+    const auto epochBefore = fixture.epoch();
+    TEST_ASSERT_TRUE(
+        fixture.application.factoryResetView(0U).pinProtectedAvailable);
+    TEST_ASSERT_TRUE(
         fixture.application.beginFactoryReset(FactoryResetKind::PinProtected));
+    auto view = fixture.application.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Warning == view.stage);
+    TEST_ASSERT_TRUE(FactoryResetKind::PinProtected == view.kind);
+    TEST_ASSERT_TRUE(fixture.application.acknowledgeFactoryReset());
+    TEST_ASSERT_TRUE(fixture.application.acknowledgeFactoryReset());
+    fixture.holdToCompletion();
+
+    view = fixture.application.factoryResetView(0U);
+    TEST_ASSERT_TRUE(FactoryResetStage::Finished == view.stage);
+    TEST_ASSERT_TRUE(FactoryResetOutcome::Completed == view.outcome);
+    TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.network.stopCallCount()));
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+    TEST_ASSERT_EQUAL_UINT32(1U, static_cast<std::uint32_t>(
+                                     fixture.http.stoppedWithNetworkStopCalls));
+    // The reset ended the authentication domain and with it the lease.
+    TEST_ASSERT_FALSE(fixture.application.uiSnapshot().service.available);
+    fixture.application.dismissFactoryReset();
     TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
                      fixture.application.factoryResetView(0U).stage);
+}
+
+// SIM-19-A-03: the lease ends before the core call at every stage.
+void test_variant_a_lease_loss_discards_the_flow_at_every_stage() {
+    enum class Loss { SignOut, Timeout, RunStarted };
+    for (const auto loss : {Loss::SignOut, Loss::Timeout, Loss::RunStarted}) {
+        for (int stages = 0; stages < 3; ++stages) {
+            Fixture fixture;
+            fixture.unlockService();
+            const auto epochBefore = fixture.epoch();
+            TEST_ASSERT_TRUE(fixture.application.beginFactoryReset(
+                FactoryResetKind::PinProtected));
+            for (int step = 0; step < stages; ++step) {
+                TEST_ASSERT_TRUE(fixture.application.acknowledgeFactoryReset());
+            }
+            if (stages == 2) {
+                fixture.application.updateFactoryResetHold(true, 1000U);
+            }
+            switch (loss) {
+                case Loss::SignOut:
+                    fixture.application.endLocalServiceSession();
+                    break;
+                case Loss::Timeout:
+                    fixture.timeSource.advanceMonotonicMillis(
+                        kServiceInactivityMs);
+                    break;
+                case Loss::RunStarted:
+                    fermentation::FermentationApplicationTestAccess::
+                        setActiveManualRun(fixture.application, true);
+                    break;
+            }
+            // The next step is refused and the flow is gone; no core call.
+            if (stages == 2) {
+                fixture.application.updateFactoryResetHold(true,
+                                                           1000U + kHoldMs);
+            } else {
+                TEST_ASSERT_FALSE(
+                    fixture.application.acknowledgeFactoryReset());
+            }
+            const auto view = fixture.application.factoryResetView(0U);
+            TEST_ASSERT_TRUE(FactoryResetStage::Idle == view.stage);
+            TEST_ASSERT_TRUE(FactoryResetOutcome::None == view.outcome);
+            TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+            TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(
+                                             fixture.network.stopCallCount()));
+            TEST_ASSERT_EQUAL_UINT32(
+                0U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+        }
+    }
+}
+
+// SIM-19-A-03b: a new PIN login never revives a flow of an earlier lease.
+void test_variant_a_flow_is_not_inherited_by_a_new_lease() {
+    for (const bool viaTimeout : {false, true}) {
+        Fixture fixture;
+        fixture.unlockService();
+        const auto epochBefore = fixture.epoch();
+        fixture.armPinProtectedHold();
+        fixture.application.updateFactoryResetHold(true, 1000U);
+        if (viaTimeout) {
+            fixture.timeSource.advanceMonotonicMillis(kServiceInactivityMs);
+        } else {
+            fixture.application.endLocalServiceSession();
+        }
+        fixture.grantLease();
+        TEST_ASSERT_TRUE(fixture.application.uiSnapshot().service.available);
+        // The grant itself discarded the old flow.
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         fixture.application.factoryResetView(0U).stage);
+        fixture.application.updateFactoryResetHold(true, 1000U + kHoldMs);
+        TEST_ASSERT_FALSE(fixture.application.acknowledgeFactoryReset());
+        TEST_ASSERT_TRUE(FactoryResetStage::Idle ==
+                         fixture.application.factoryResetView(0U).stage);
+        TEST_ASSERT_EQUAL_UINT64(epochBefore, fixture.epoch());
+        TEST_ASSERT_EQUAL_UINT32(
+            0U, static_cast<std::uint32_t>(fixture.http.stopCalls));
+        // A new begin is required and then runs normally.
+        fixture.armPinProtectedHold();
+        fixture.holdToCompletion(5000U);
+        TEST_ASSERT_TRUE(FactoryResetOutcome::Completed ==
+                         fixture.application.factoryResetView(0U).outcome);
+        TEST_ASSERT_EQUAL_UINT64(epochBefore + 1U, fixture.epoch());
+    }
+}
+
+// Variant B is independent of the lease and of a variant A decision.
+void test_variant_b_ignores_the_service_lease() {
+    Fixture fixture;
+    fixture.unlockService();
+    TEST_ASSERT_TRUE(fixture.application.beginFactoryReset(
+        FactoryResetKind::PinIndependent));
+    fixture.application.endLocalServiceSession();
+    TEST_ASSERT_TRUE(FactoryResetStage::Warning ==
+                     fixture.application.factoryResetView(0U).stage);
+    TEST_ASSERT_TRUE(fixture.application.acknowledgeFactoryReset());
+    fixture.application.cancelFactoryReset();
+    fixture.armHold();
+    fixture.holdToCompletion();
+    TEST_ASSERT_TRUE(FactoryResetOutcome::Completed ==
+                     fixture.application.factoryResetView(0U).outcome);
 }
 
 void test_cancel_at_every_stage_changes_no_reset_state() {
@@ -1130,7 +1306,11 @@ int main(int, char**) {
         test_outcome_never_reports_success_for_an_unconfirmed_network_stop);
     RUN_TEST(
         test_application_flow_is_unavailable_until_the_owner_parameter_is_set);
-    RUN_TEST(test_application_offers_only_the_pin_independent_variant);
+    RUN_TEST(test_variant_a_is_refused_without_a_service_lease);
+    RUN_TEST(test_variant_a_full_flow_runs_the_core_once);
+    RUN_TEST(test_variant_a_lease_loss_discards_the_flow_at_every_stage);
+    RUN_TEST(test_variant_a_flow_is_not_inherited_by_a_new_lease);
+    RUN_TEST(test_variant_b_ignores_the_service_lease);
     RUN_TEST(test_cancel_at_every_stage_changes_no_reset_state);
     RUN_TEST(test_full_flow_runs_the_core_then_ends_network_then_http);
     RUN_TEST(test_http_is_stopped_outside_the_application_gate);

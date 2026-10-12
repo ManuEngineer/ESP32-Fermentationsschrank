@@ -167,6 +167,9 @@ struct FermentationFactoryResetView {
     FactoryResetOutcome outcome{FactoryResetOutcome::None};
     // A PIN-independent reset may be begun now.
     bool available{false};
+    // A PIN-protected reset (variant A) may be begun now: `available` plus an
+    // active local service lease.
+    bool pinProtectedAvailable{false};
     // The configuration has no runtime but the recovery core admits the reset
     // (`ResetEligibleNoRuntime`, Issue #19 S1): local entry on the restricted
     // home page.
@@ -181,6 +184,7 @@ struct FermentationFactoryResetView {
         return left.stage == right.stage && left.kind == right.kind &&
                left.outcome == right.outcome &&
                left.available == right.available &&
+               left.pinProtectedAvailable == right.pinProtectedAvailable &&
                left.recoveryEntry == right.recoveryEntry &&
                left.holdRequiredMillis == right.holdRequiredMillis &&
                left.holdProgressTenths == right.holdProgressTenths;
