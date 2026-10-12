@@ -3464,7 +3464,7 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     // valid snapshot. Unchanged polls keep it.
     TEST_ASSERT_TRUE(contains(body,
                               "c=P?[h,P[0].revisions.run,P[0]."
-                              "revisions.programCatalog,pg.value]"
+                              "revisions.programCatalog,PC,pg.value]"
                               ".join():''"));
     TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
     TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
@@ -3658,10 +3658,31 @@ void test_programs_encoder_filters_empty_and_bounded() {
     TEST_ASSERT_FALSE(contains(body, "\"b\""));
     TEST_ASSERT_FALSE(contains(body, "\"c\""));
 
+    // The canonical count limit applies even when the body would fit.
+    visible.program.name = "n";
+    source.programCatalog.programs.assign(16U, visible);
+    TEST_ASSERT_TRUE(encodeWebApiPrograms(source, body));
+    TEST_ASSERT_TRUE(body.size() < kMaximumWebApiResponseBodyBytes);
+    source.programCatalog.programs.assign(17U, visible);
+    body.clear();
+    TEST_ASSERT_FALSE(encodeWebApiPrograms(source, body));
+    TEST_ASSERT_TRUE(body.empty());
+
     // Over the response budget: refused (the route answers 503), never cut.
     visible.program.name = std::string(400U, 'n');
     source.programCatalog.programs.assign(16U, visible);
     TEST_ASSERT_FALSE(encodeWebApiPrograms(source, body));
+}
+
+void test_programs_route_without_catalog_source_is_503_not_empty() {
+    FermentationApplication application;  // never begun: no catalog source
+    TEST_ASSERT_FALSE(application.uiPresentationSource().has_value());
+    WebReadOnlyApiHandler api(application);
+    auto request = makeWebRequest("GET", "/api/v1/programs");
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(api.handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
+    TEST_ASSERT_FALSE(contains(response.body, "\"programs\""));
 }
 
 void test_shell_start_flow_text_contract() {
@@ -3678,6 +3699,16 @@ void test_shell_start_flow_text_contract() {
     // Start needs two clicks like Stop/Complete (no direct-send branch).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
     TEST_ASSERT_FALSE(contains(body, "a==='start'&&"));
+    // The start is bound to the catalog revision of the loaded list: it is
+    // enabled only while list and status revision agree, a mismatch or failed
+    // load clears the selection and reloads, and the intent carries the
+    // list revision instead of the latest status revision.
+    TEST_ASSERT_TRUE(contains(body, "!PC||P[0].revisions.programCatalog!==PC"));
+    TEST_ASSERT_TRUE(contains(body, "programCatalog!==PC)lp();"));
+    TEST_ASSERT_TRUE(contains(body, "PC='';pg.replaceChildren();"));
+    TEST_ASSERT_TRUE(contains(body, "PC=j.catalogRevision;"));
+    TEST_ASSERT_TRUE(contains(body, "if(i.t==='start-program')o.c=PC;"));
+    TEST_ASSERT_TRUE(contains(body, "revisions.programCatalog,PC,pg.value]"));
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
@@ -4153,6 +4184,7 @@ int main() {
     RUN_TEST(test_programs_route_gate_and_request_contract);
     RUN_TEST(test_programs_route_lists_catalog_names_with_the_status_revision);
     RUN_TEST(test_programs_encoder_filters_empty_and_bounded);
+    RUN_TEST(test_programs_route_without_catalog_source_is_503_not_empty);
     RUN_TEST(test_shell_start_flow_text_contract);
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);

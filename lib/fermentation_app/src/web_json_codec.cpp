@@ -1027,6 +1027,10 @@ bool encodeWebApiPrograms(const FermentationUiPresentationSource& source,
     if (!addString(document.get(), "catalogRevision", revision.c_str())) {
         return false;
     }
+    if (source.programCatalog.programs.size() >
+        configuration_limits::kMaximumProgramCount) {
+        return false;
+    }
     auto* programs = cJSON_AddArrayToObject(document.get(), "programs");
     if (programs == nullptr) return false;
     for (const auto& entry : source.programCatalog.programs) {
