@@ -1689,6 +1689,37 @@ bool FermentationApplication::localServiceAvailableUnlocked() const noexcept {
            localServiceLease_.activeAt(timeSource_->monotonicMillis());
 }
 
+bool FermentationApplication::pinProtectedFlowPendingUnlocked() const noexcept {
+    // Pending = begun but not yet executing. A running core call is never
+    // interrupted and a finished outcome stays visible until acknowledged.
+    const auto stage = factoryResetFlow_.stage();
+    return factoryResetFlow_.kind() == FactoryResetKind::PinProtected &&
+           stage != FactoryResetStage::Idle &&
+           stage != FactoryResetStage::Executing &&
+           stage != FactoryResetStage::Finished;
+}
+
+void FermentationApplication::cancelPinProtectedFlowUnlocked() noexcept {
+    // A PIN-protected flow is bound to the one lease it began under.
+    if (pinProtectedFlowPendingUnlocked()) {
+        factoryResetFlow_.cancel();
+    }
+}
+
+bool FermentationApplication::pinProtectedFlowLeaseLostUnlocked() noexcept {
+    // Lease expiry produces no event; it is detected at the next step.
+    if (!pinProtectedFlowPendingUnlocked() || localServiceAvailableUnlocked()) {
+        return false;
+    }
+    factoryResetFlow_.cancel();
+    return true;
+}
+
+void FermentationApplication::endLocalServiceLeaseUnlocked() noexcept {
+    cancelPinProtectedFlowUnlocked();
+    localServiceLease_ = device_platform::ServiceSessionLease{};
+}
+
 LocalServicePinResult FermentationApplication::verifyLocalServicePin(
     const std::string& pin) {
     AuthenticationDomain* domain = nullptr;
@@ -1779,6 +1810,8 @@ LocalServicePinResult FermentationApplication::verifyLocalServicePin(
         return {LocalServicePinStatus::Unavailable, 0U};
     }
     const auto grantedAtMs = timeSource_->monotonicMillis();
+    // A new grant never continues a flow begun under an earlier lease.
+    cancelPinProtectedFlowUnlocked();
     localServiceLease_ = device_platform::ServiceSessionLease(
         fermentationTouchServicePolicy(), grantedAtMs);
     if (!localServiceLease_.activeAt(grantedAtMs)) {
@@ -1789,7 +1822,7 @@ LocalServicePinResult FermentationApplication::verifyLocalServicePin(
 
 void FermentationApplication::endLocalServiceSession() {
     const auto guard = applicationCallSerializer_.enter();
-    localServiceLease_ = device_platform::ServiceSessionLease{};
+    endLocalServiceLeaseUnlocked();
 }
 
 void FermentationApplication::noteLocalServiceActivity() {
@@ -2182,7 +2215,7 @@ void FermentationApplication::resetAuthenticationState() noexcept {
     // pending authentication decisions.
     ++webTrustGeneration_;
     closeWebProvisioningWindow();
-    localServiceLease_ = device_platform::ServiceSessionLease{};
+    endLocalServiceLeaseUnlocked();
     authenticationContext_.reset();
     authenticationDomain_.reset();
     authenticationRecordStore_.reset();
@@ -2332,7 +2365,7 @@ void FermentationApplication::update() {
     // Leaving the validated STANDBY ends the local service lease for good
     // (SafetyStateInvalidated); a later return to STANDBY needs the PIN again.
     if (!localServiceEntryAllowedUnlocked()) {
-        localServiceLease_ = device_platform::ServiceSessionLease{};
+        endLocalServiceLeaseUnlocked();
     }
 }
 
@@ -2689,7 +2722,7 @@ FermentationApplication::publishedProcessState() const {
 void FermentationApplication::requireService(
     FaultCode faultCode, bool applicationAllocationFailure) noexcept {
     lifecycleState_ = ApplicationLifecycleState::ServiceRequired;
-    localServiceLease_ = device_platform::ServiceSessionLease{};
+    endLocalServiceLeaseUnlocked();
     presentationState_.faultCode = faultCode;
     presentationState_.applicationAllocationFailure =
         applicationAllocationFailure;
@@ -2761,6 +2794,8 @@ FermentationFactoryResetView FermentationApplication::factoryResetView(
     view.outcome = factoryResetFlow_.outcome();
     view.available =
         !factoryResetFlow_.active() && factoryResetAvailableUnlocked();
+    view.pinProtectedAvailable =
+        view.available && localServiceAvailableUnlocked();
     view.recoveryEntry = factoryResetRecoveryEntryUnlocked();
     view.holdRequiredMillis = factoryResetFlow_.holdMillis().value_or(0U);
     if (view.holdRequiredMillis != 0U) {
@@ -2775,17 +2810,25 @@ FermentationFactoryResetView FermentationApplication::factoryResetView(
 
 bool FermentationApplication::beginFactoryReset(FactoryResetKind kind) {
     const auto guard = applicationCallSerializer_.enter();
-    // Variant A (PIN protected) is not offered until a local PIN verification
-    // exists (owner decision O-R2).
-    if (kind != FactoryResetKind::PinIndependent ||
-        !factoryResetAvailableUnlocked()) {
+    if (!factoryResetAvailableUnlocked()) {
         return false;
     }
-    return factoryResetFlow_.begin(kind);
+    if (kind == FactoryResetKind::PinIndependent) {
+        return factoryResetFlow_.begin(kind);
+    }
+    // The active local service lease is the PIN proof; no PIN data enters the
+    // flow.
+    if (!localServiceAvailableUnlocked() || !factoryResetFlow_.begin(kind)) {
+        return false;
+    }
+    return factoryResetFlow_.pinVerified();
 }
 
 bool FermentationApplication::acknowledgeFactoryReset() {
     const auto guard = applicationCallSerializer_.enter();
+    if (pinProtectedFlowLeaseLostUnlocked()) {
+        return false;
+    }
     return factoryResetFlow_.acknowledge();
 }
 
@@ -2829,12 +2872,16 @@ void FermentationApplication::updateFactoryResetHold(bool held,
     bool restartRequired = false;
     {
         const auto guard = applicationCallSerializer_.enter();
-        if (!factoryResetFlow_.updateHold(held, nowMs)) {
+        if (pinProtectedFlowLeaseLostUnlocked() ||
+            !factoryResetFlow_.updateHold(held, nowMs)) {
             return;
         }
         // The flow is Executing. The binding precondition is re-checked here,
-        // under the same gate as the core call and as a run start.
-        if (!factoryResetAvailableUnlocked()) {
+        // under the same gate as the core call and as a run start; variant A
+        // additionally needs its service lease.
+        if (!factoryResetAvailableUnlocked() ||
+            (factoryResetFlow_.kind() == FactoryResetKind::PinProtected &&
+             !localServiceAvailableUnlocked())) {
             factoryResetFlow_.finish(FactoryResetOutcome::Rejected);
             return;
         }

@@ -580,6 +580,11 @@ class FermentationApplication {
     // service.available and for ending an existing lease.
     [[nodiscard]] bool localServiceEntryAllowedUnlocked() const noexcept;
     [[nodiscard]] bool localServiceAvailableUnlocked() const noexcept;
+    // Variant A of the factory reset is bound to the lease it began under.
+    [[nodiscard]] bool pinProtectedFlowPendingUnlocked() const noexcept;
+    void cancelPinProtectedFlowUnlocked() noexcept;
+    [[nodiscard]] bool pinProtectedFlowLeaseLostUnlocked() noexcept;
+    void endLocalServiceLeaseUnlocked() noexcept;
     [[nodiscard]] std::optional<device_platform::StorageEpoch>
     factoryResetPreviousEpochUnlocked() const;
     // Epoch of a verified, initialized bootstrap without an open run-epoch
