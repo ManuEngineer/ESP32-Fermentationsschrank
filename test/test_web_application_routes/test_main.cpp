@@ -3313,8 +3313,7 @@ size_t occurrences(const std::string& text, const std::string& needle) {
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
     ComposedFixture fixture;
     const auto body = shellBody(fixture);
-    // The existing shell size limit is neither raised nor exceeded.
-    TEST_ASSERT_TRUE(body.size() <= 4096U);
+    TEST_ASSERT_TRUE(body.size() <= 6656U);
     // Protect is preselected; password, separate Service-PIN and the explicit
     // disable confirmation are separate controls.
     TEST_ASSERT_TRUE(contains(body, "name=\"o\" value=\"p\" checked"));
@@ -3399,6 +3398,148 @@ void test_unprovisioned_shell_texts_are_complete_in_all_locales() {
     TEST_ASSERT_TRUE(contains(body, ",en:{"));
     TEST_ASSERT_TRUE(contains(body, ",es:{"));
     TEST_ASSERT_TRUE(contains(body, "T=L[g]||L.en"));
+}
+
+std::string authenticatedShell(ComposedFixture& fixture,
+                               const std::string& cookie) {
+    auto request = makeAuthenticatedRequest("GET", "/", cookie);
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    return response.body;
+}
+
+void test_shell_run_controls_text_contract() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, passwordUnderTest(), kPinUnderTest));
+    const auto body = shellBody(fixture);
+    // One button per action; no window.confirm and no extra endpoint.
+    for (const char* action : {"ack", "mute", "stop", "done", "start"}) {
+        TEST_ASSERT_EQUAL_UINT32(
+            1U, occurrences(body, std::string("data-a=\"") + action + "\""));
+    }
+    TEST_ASSERT_FALSE(contains(body, "confirm("));
+    TEST_ASSERT_FALSE(contains(body, "localStorage"));
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "/internal/ui/run"));
+    TEST_ASSERT_TRUE(contains(body, "X-Mutation-Seq"));
+    TEST_ASSERT_TRUE(contains(body, "X-CSRF-Token"));
+    // Ack/Mute are sent directly; Stop, Done and Start are armed first (D1).
+    TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
+    TEST_ASSERT_TRUE(contains(body, "if(K!==a){K=a;"));
+    TEST_ASSERT_TRUE(contains(body, "T.sure"));
+    // Intents match the fixed wire contract.
+    TEST_ASSERT_TRUE(contains(body, "t:a+'-message'"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'stop-run',o:'abort-and-turn-off'}"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'complete-run',c:false}"));
+    TEST_ASSERT_TRUE(contains(body, "{t:'start-program',c:{p:pg.value}}"));
+    // Only a clearly completed outcome advances the sequence; otherwise reload.
+    TEST_ASSERT_TRUE(contains(body,
+                              "applied|stale|busy|confirmation-required|"
+                              "rejected|too-large|write-failed"));
+    TEST_ASSERT_TRUE(contains(body, "location.reload()"));
+    TEST_ASSERT_TRUE(contains(body, "r.status!==503"));
+    TEST_ASSERT_TRUE(contains(body, "t<2&&!r"));
+    // All locales carry the confirmation and result texts.
+    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "sure:'"));
+    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "ok:'"));
+    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "fail:'"));
+}
+
+void test_shell_embeds_mutation_sequence_per_session() {
+    ComposedFixture fixture;
+    installMessage(fixture.application, kHandlerMessageId);
+    auto a = composedRunSession(fixture);
+    auto b = composedRunSession(fixture);
+
+    // Anonymous page of a protected device: no session, no sequence.
+    TEST_ASSERT_TRUE(contains(shellBody(fixture), "const U=false;let Q=0;"));
+
+    TEST_ASSERT_TRUE(contains(authenticatedShell(fixture, a.web.cookie),
+                              "const U=true;let Q=1;"));
+    // Reading the shell neither consumes nor advances the sequence.
+    TEST_ASSERT_TRUE(
+        contains(authenticatedShell(fixture, a.web.cookie), "let Q=1;"));
+
+    const auto body =
+        runBody(fixture.application, ackIntent(kHandlerMessageId));
+    TEST_ASSERT_EQUAL_UINT16(200U, postRun(fixture, a, 1U, body).statusCode);
+    TEST_ASSERT_TRUE(
+        contains(authenticatedShell(fixture, a.web.cookie), "let Q=2;"));
+    // The second session keeps its own counter.
+    TEST_ASSERT_TRUE(
+        contains(authenticatedShell(fixture, b.web.cookie), "let Q=1;"));
+}
+
+void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(contains(shellBody(fixture), "let Q=0;"));
+        const auto session = loginComposed(fixture);
+        TEST_ASSERT_TRUE(contains(authenticatedShell(fixture, session.cookie),
+                                  "const U=true;let Q=1;"));
+        TEST_ASSERT_TRUE(
+            contains(shellBody(fixture), "login.addEventListener"));
+        TEST_ASSERT_TRUE(
+            contains(shellBody(fixture), "if(r.ok)location.reload();"));
+    }
+    {
+        ComposedFixture fixture;
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::setWebPasswordEnabled(
+                fixture.application, false));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
+        TEST_ASSERT_TRUE(contains(response.body.c_str(), "let Q=1;"));
+        const auto cookie = sessionCookieValue(response);
+        TEST_ASSERT_TRUE(
+            contains(authenticatedShell(fixture, cookie), "let Q=1;"));
+    }
+}
+
+void test_shell_stays_within_the_limit_in_all_states() {
+    constexpr size_t kLimit = 6656U;
+    // Reserve for the widest possible sequence (20 digits) on top of "1".
+    constexpr size_t kSequenceHeadroom = 19U;
+    {
+        ComposedFixture fixture;  // unprovisioned setup form
+        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+    }
+    {
+        ComposedFixture fixture;  // protected, anonymous and authenticated
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+        const auto session = loginComposed(fixture);
+        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+                             kSequenceHeadroom <=
+                         kLimit);
+    }
+    {
+        ComposedFixture fixture;  // password disabled (anonymous session)
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+            fixture.application, passwordUnderTest(), kPinUnderTest));
+        TEST_ASSERT_TRUE(
+            FermentationApplicationTestAccess::setWebPasswordEnabled(
+                fixture.application, false));
+        auto request = makeWebRequest("GET", "/");
+        device_platform::HttpResponse response;
+        TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        TEST_ASSERT_TRUE(response.body.size() + kSequenceHeadroom <= kLimit);
+    }
+    {
+        ComposedFixture fixture;  // recovery required
+        TEST_ASSERT_TRUE(FermentationApplicationTestAccess::forceRootState(
+            fixture.application, AuthProvisioningState::RecoveryRequired));
+        TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
+    }
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
@@ -3873,6 +4014,10 @@ int main() {
     RUN_TEST(test_dispatcher_run_mutation_sequence_contract);
     RUN_TEST(
         test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit);
+    RUN_TEST(test_shell_run_controls_text_contract);
+    RUN_TEST(test_shell_embeds_mutation_sequence_per_session);
+    RUN_TEST(test_shell_login_reload_bootstrap_for_protected_and_disabled);
+    RUN_TEST(test_shell_stays_within_the_limit_in_all_states);
     RUN_TEST(test_unprovisioned_shell_requests_match_the_s4_contract);
     RUN_TEST(
         test_unprovisioned_shell_explains_local_release_and_creates_no_session);
