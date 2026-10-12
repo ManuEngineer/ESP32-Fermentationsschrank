@@ -83,9 +83,11 @@ Umsetzungsstand `Service (PIN)` in Release 1 (Issue #188 A, Plan
 - Nach korrekter PIN ist die Service-Seite der geschuetzte Einstieg mit
   `Abmelden`. Servicefunktionen hinter diesem Einstieg (Aktortests,
   Sensorzuordnung, Parameter, normales Wiederherstellungsmenue,
-  PIN-geschuetzter Werksreset, Touchkalibrierung) sind bis zu ihren Ownern
-  (#28, #19 Ablauf A) nicht umgesetzt; die Seite zeigt weiter den Hinweis
-  `zurueckgestellt`.
+  Touchkalibrierung) sind bis zu ihrem Owner (#28) nicht umgesetzt; die Seite
+  zeigt weiter den Hinweis `zurueckgestellt`. Der PIN-geschuetzte Werksreset
+  (#19 Ablauf A) ist umgesetzt: auf der **entsperrten** Service-Seite belegt
+  `Werksreset` den Slot 2 (ersetzt dort `Status`, der ueber Diagnose und
+  Startseite erreichbar bleibt); die gesperrte Seite zeigt weiter `Status`.
 - Der Slot `Wiederherstellung` der Service-Seite oeffnet die
   **Lauf-Recovery-Seite** (Fortsetzung/Fallback eines unterbrochenen Laufs). Er
   ist **nicht** das normale PIN-geschuetzte Wiederherstellungsmenue weiter
@@ -217,6 +219,20 @@ neue Kalibrierung. Nicht waehrend eines Laufes.
 - mindestens zweistufig bestaetigt
 - zeigt geloeschte und wiederhergestellte Daten
 - stellt Factory-Programme und Ersteinrichtung her
+
+Umsetzung (Issue #19 Ablauf A): Der Ablauf ist derselbe wie beim
+PIN-unabhaengigen Vollreset (Datenverlustwarnung, bewusste Bestaetigung,
+langes Gedrueckthalten, vorhandener Resetkern). Als PIN-Nachweis dient die
+aktive lokale Servicefreigabe; es gibt keine zweite PIN-Eingabe und keine
+PIN-Ablage im Ablauf. Der Beginn setzt die Freigabe im validierten `STANDBY`
+voraus. Ein noch nicht ausgefuehrter Ablauf ist an genau diese Freigabe
+gebunden: Endet sie (Abmelden, 10 Minuten Inaktivitaet, Verlassen von
+`STANDBY`, Neuinitialisierung der Authentifizierung) oder wird sie durch einen
+neuen PIN-Login ersetzt, wird der Ablauf verworfen, ohne Reset; ein neuer
+Beginn ist noetig. Jede bewusste Eingabe auf der Reset-Seite verlaengert die
+Freigabe. Eine bereits gestartete Ausfuehrung wird durch Abmelden nicht
+rueckgaengig gemacht. Der `Wiederherstellung`-Slot bleibt ausschliesslich die
+Lauf-Recovery.
 
 ## Vergessene Service-PIN
 
