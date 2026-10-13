@@ -1,3 +1,8 @@
+#include "esp_debug_helpers.h"
+#include "esp_cpu.h"
+#include "esp_rom_sys.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <cinttypes>
 #include <memory>
 #include <new>
@@ -281,6 +286,20 @@ void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
     ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
                   static_cast<unsigned>(size), static_cast<unsigned>(caps),
                   functionName != nullptr ? functionName : "?");
+    // PR203 RES-01 diagnostic candidate (temporary): who allocates. Bounded
+    // (first 6 events), allocation free, ROM output only; no heap query, no
+    // lock, no ESP_LOGx.
+    static volatile uint32_t diagEvents = 0U;
+    if (diagEvents < 6U) {
+        diagEvents = diagEvents + 1U;
+        const bool inIsr = xPortInIsrContext() != 0;
+        esp_rom_printf(
+            DRAM_STR("diag_alloc_fail: n=%u isr=%d core=%d task=%s\n"),
+            static_cast<unsigned>(diagEvents), inIsr ? 1 : 0,
+            static_cast<int>(esp_cpu_get_core_id()),
+            inIsr ? "-" : pcTaskGetName(nullptr));
+        static_cast<void>(esp_backtrace_print(12));
+    }
 }
 
 void logResources(const char* samplePoint,
@@ -836,6 +855,14 @@ extern "C" void app_main(void) {
         if (nowMs - lastHeartbeatMs >= kHeartbeatIntervalMs) {
             lastHeartbeatMs = nowMs;
             logHeartbeat(nowMs);
+        }
+
+        static uint64_t nextDiagResourceMs = 60000U;
+        if (nowMs - startMs >= nextDiagResourceMs) {
+            nextDiagResourceMs += 30000U;
+            logResources("diag_30s", application.networkMode(),
+                         networkLifecycle.status().state,
+                         displayRenderer.get());
         }
 
         if (!secondResourceLogDone &&
