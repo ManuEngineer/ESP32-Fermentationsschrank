@@ -1,8 +1,16 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `PLAN_AWAITING_INDEPENDENT_REVIEW_AND_OWNER_APPROVAL`. Keine Implementierung,
-kein Flash und keine Hardwareeingriffe vor Ownerfreigabe der exakten Plan-SHA und
-des jeweiligen Hardware-Gates. Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
+Status: `OWNER_APPROVED_C0_SOFTWARE_PREPARED_AWAITING_G0`.
+Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
+`6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
+TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
+Softwarevorbereitung ist erlaubt; Flash/Hardwaretests bleiben an G0/G1/G2 gebunden.
+C0-Spike ausschliesslich auf Diagnosebranch `agent/pr203-res01-diag-local`
+@ `9a9a8bd`; C0-Go/No-Go noch nicht gemessen, C1–C3 noch nicht begonnen.
+[Diagnose-Vorbereitung/Testblatt](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/9a9a8bd/diag/RES01_C0.md),
+Build-/Hash-/Review-Paket: `hw-evidence-pr203/diag/c0/REVIEW_PACKAGE.md`.
+Diese Fortschreibung aendert nur den Status, nicht den freigegebenen Planvertrag.
+Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
 
@@ -329,7 +337,7 @@ trotz F1+F4. Dann eigener Plan: `CONFIG_LWIP_TCP_SND_BUF_DEFAULT` 5760 -> 2880 (
 ≈ 3 KB je gleichzeitiger Antwort laut Rechnung), Hardwaremessung von Latenz und
 Durchsatz; ggf. Begrenzung der Verbindungsparallelitaet im Adapter. Nicht Teil dieses Plans.
 
-## 9. Offene Ownerentscheidungen
+## 9. Ownerentscheidungen (D1–D5 freigegeben; Hardware-Gates separat)
 
 | ID | Frage | Empfehlung |
 |---|---|---|
@@ -344,7 +352,7 @@ Durchsatz; ggf. Begrenzung der Verbindungsparallelitaet im Adapter. Nicht Teil d
 - Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung;
   C0 entscheidet anhand messbarer Ressourcen-/HTTP-/Latenzwerte; No-Go moeglich).
 - F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren;
-  nach bestandenem Gate bleiben OOM/Abort/Reset moeglich (D3 offen, Testgrenze Abschnitt 4/6).
+  nach bestandenem Gate bleiben OOM/Abort/Reset moeglich (D3 ownerakzeptiert, Testgrenze Abschnitt 4/6).
 - Der Lastprofil-Vergleich ist durch das Verbindungsmodell des Treibers beeinflusst (P-B mit echten
   Browsern ergaenzt das); keine Aussage ueber beliebige LAN-Clients.
 - Die Erwartung (≈ 14 KB) ist Rechnung, nicht Messung.
