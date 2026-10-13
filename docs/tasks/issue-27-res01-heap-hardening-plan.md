@@ -10,11 +10,15 @@ des jeweiligen Hardware-Gates. Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 
 Ziel: Die in D3 nachgewiesene Kette "ueberlappende Web-Antworten erschoepfen den
 Heap -> WLAN-RX-/TX-Puffer scheitern -> anhaltende Erschoepfung -> `abort()` im
-UI-Rendering" mit dem kleinsten wirksamen Eingriff beseitigen:
+UI-Rendering" mit dem kleinsten wirksamen Eingriff entschaerfen und die
+Fehlerfreiheit unter den definierten Lastprofilen nachweisen:
 
 - **F1:** Spitzenheapbedarf der Shell-Auslieferung nachhaltig senken.
-- **F4:** Den belegten OOM-Absturzpfad im UI-Rendering kontrolliert abfangen
-  (bei Speichermangel keine Darstellung, kein Abort, Main-Task und Safety laufen).
+- **F4:** Begrenzte Risikominderung des belegten OOM-Absturzpfads im UI-Rendering:
+  Erkennt das Gate Speichermangel, entfaellt der UI-Schritt und der Main-Loop
+  laeuft weiter. Nach bestandenem Gate bleibt ein OOM mit `abort()`/Reset moeglich;
+  keine allgemeine OOM-Sicherheitszusage. Diese Restgefahr benoetigt ausdrueckliche
+  Ownerakzeptanz (D3); Regelung/Safety bleiben architektonisch UI-unabhaengig.
 - **F2** (TCP-Sendepuffer / lwIP-Konfiguration) nur als dokumentierte
   Eskalation (Abschnitt 8), nicht vorsorglich.
 
@@ -65,6 +69,15 @@ unterstuetzt) und damit Antwortheader und Framing auf der Leitung. Die
 Groessenpruefung in `handleShell` (503 bei Ueberschreitung der Schranke) gilt
 fuer **Body plus Anhang**.
 
+**Antwortinvariante (alle Routen/Konsumenten):** JSON- und Fehlerantworten haben
+immer einen leeren statischen Anhang. Jeder Helfer, der eine Antwort ersetzt
+(insbesondere `setJsonResponse` und `setResponse`), loescht den optionalen Anhang
+neben den bisherigen Feldern; nur die erfolgreiche Shell-Erzeugung setzt ihn.
+Das gilt auch dann, wenn `handleShell()` zunaechst Kopf und Anhang aufbaut und
+erst danach wegen Gesamtlaenge > 8 192 B auf 503 umschaltet: vollstaendiger Body
+`{"error":"web-shell-unavailable"}`, Status 503, JSON-Content-Type, keine
+HTML-/JS-Suffixbytes. Die bestehende Metadatenpolitik bleibt erhalten.
+
 Erwartete Wirkung (grobe Rechnung aus Messwerten, **zu verifizieren**):
 Spitzenreserve bei 4 Sessions ≈ 42,3 − (21,1 + 6,9 + 1,5) ≈ **12,8 KB** statt 5–7 KB
 (≈ +7,2 KB). Der Wert 21,1 KB ist der Tiefststand seit dem Boot im D1-Lauf (er
@@ -83,7 +96,7 @@ im Cache-gesperrten Kontext relevant). (c) Alle Tests, die `response.body` der
 Shell vergleichen, brauchen den zusammengesetzten Body (Testhelfer); die
 Groessenpruefung (503 `web-shell-unavailable`) deckt Body plus Anhang.
 
-## 4. F4 – OOM-Absicherung des UI-Renderings
+## 4. F4 – Begrenzte OOM-Risikominderung des UI-Renderings
 
 Befund: Weder `makeRepresentativeScreen` (reserviert nur fuer die Netzwerkseite),
 noch `ProductiveLvglRenderer::render`, noch die Touch-Pfade (`processWorkspaceTouch`
@@ -103,28 +116,56 @@ Entwurf (kleinster wirksamer Schnitt):
    Main-Loops laufen weiter. Hysterese: Wiederaufnahme erst bei `Schwelle + Marge`,
    damit kein Flattern. Ratenbegrenzte Protokollzeile (`ui_skipped_low_memory`,
    Zaehler, hoechstens 1 pro 10 s) und ein Zaehler fuer die Evidence.
-2. **Schwelle nicht raten:** `kUiMinimumLargestBlockBytes` wird aus dem
-   gemessenen/analytisch begrenzten Spitzenbedarf des UI-Schritts abgeleitet:
-   (a) obere Schranke fuer den groessten Einzelblock = `kMaximumDrawCommands ×
+2. **Schwelle nicht raten:** `kUiMinimumLargestBlockBytes` wird als empirische
+   Risikominderung aus dem beobachteten Bedarf des UI-Schritts abgeleitet:
+   (a) obere Schranke fuer den reservierten Vektorblock = `kMaximumDrawCommands ×
    sizeof(ScreenDrawCommand)` mit einem nativen Test, der ueber alle Seiten die
    maximale Befehlsanzahl prueft; (b) Messung des Heapbedarfs je Render/Touch-Screen
    auf Hardware mit dem Diagnose-Overlay (Heap vor/nach). Schwelle = hoeherer Wert aus (a)
    und (b) mit Faktor 2 (dokumentiert). Erwartung (Groessenordnung, **nicht** Wert):
-   einige KB bis niedrige zweistellige KB.
+   einige KB bis niedrige zweistellige KB. Diese Vektorschranke begrenzt weder
+   andere Einzelallokationen noch den kumulativen Bedarf von Vektor, Strings und
+   LVGL. Heap-vor/nach-Messungen koennen transiente Spitzen verfehlen; Schwelle
+   und Faktor 2 sind keine Garantie fuer den gesamten Render-/Touch-Pfad.
 3. **Reserve statt Wachstum:** `makeRepresentativeScreen` reserviert die geprueft
    begrenzte Befehlsanzahl **einmal** fuer alle Seiten (Test erzwingt, dass keine Seite
    die Schranke ueberschreitet), damit Vektorwachstum (Verdopplung, zwei Puffer
-   gleichzeitig) im Normalbetrieb entfaellt; das Gate garantiert, dass ein
-   einziger Block dieser Groesse verfuegbar ist.
+   gleichzeitig) im Normalbetrieb entfaellt. Das Gate beobachtet einen geeigneten
+   freien Block nur zum Messzeitpunkt, reserviert ihn aber nicht; auch `reserve`
+   kann bei konkurrierendem Heapverbrauch weiterhin abbrechen.
 4. **Skip-Semantik (Werksreset-Hold, fail-closed):** `updateProductUi` stellt die
    Loslass-Meldung des Werksreset-Holds zu (`releaseFactoryResetHold`,
    `fermentation_ui_press_dispatcher.cpp`). Ein uebersprungener UI-Schritt wird fuer einen
    armierten Hold wie eine **Kontaktunterbrechung** behandelt: bei jedem
    uebersprungenen Schritt wird `releaseFactoryResetHold(application, now)` aufgerufen
-   (allokationsfrei, vorhandene Funktion), bevor der Schritt entfaellt. Ein Neukontakt nach der Wiederaufnahme
-   beginnt die Haltezeit neu; kein Reset durch ein "durchgehendes" Halten ueber die
-   Luecke (Muster `SIM-19-R08`). Natives Pflichttest `SIM-27-H-xx`: Hold armiert, Schritt
-   uebersprungen, kurzer Neukontakt loest nicht aus, voller Neukontakt nach Wiederaufnahme schon.
+   (allokationsfrei, vorhandene Funktion), bevor der Schritt entfaellt.
+   **Allein genuegt dies nicht:** `FactoryResetFlow::updateHold(false)` verwirft
+   nur den Zeitbeginn; ein spaeteres `true` startet trotz unveraendert gehaltenem
+   Finger erneut. Deshalb eine minimale allokationsfreie Sperre im bestehenden
+   Touch-/Hold-Adapter unter `main/` vorsehen: nach Skip zunaechst auf beobachtetes
+   physisches Loslassen warten, danach auf einen neuen Kontakt; bis dahin darf
+   kein `updateFactoryResetHold(true, ...)` das Hold-Ziel aktivieren. Der
+   bestehende Flow bleibt alleiniger Owner von Stufen, 5-s-Timer und Reset.
+   Ein kleiner lokaler Zustand (warte auf Loslassen / neuen Kontakt / freigegeben)
+   genuegt; erneuter Skip setzt die Sperre wieder auf "warte auf Loslassen".
+   Die Sperre betrifft nur den Hold-Pfad, nicht andere UI-Kommandos.
+   Loslassen ist nur durch einen frischen, nach dem letzten Skip tatsaechlich
+   beobachteten `RawTouchSampleStatus::NoContact` aus dem vorhandenen Sampling-Pfad
+   belegt; ein alter publizierter No-Contact-Zustand reicht nicht.
+   Ein Default-`TouchPollResult` bei Lock-Timeout, Controllerfehler, fehlender
+   Kalibrierung oder ein nicht beobachteter Kontaktwechsel waehrend des Skips
+   ist kein Nachweis. Die lokale Touch-Publikation/`pollTouch` muss diese Evidenz
+   allokationsfrei unterscheidbar liefern; keine zweite Hardware-Abtastung.
+   Erst ein nach diesem Loslassen beobachteter neuer gueltiger Kontakt darf den
+   vorhandenen Hold-Timer wieder starten (keine vor dem Skip vorgemerkte Presskante).
+   Native Regression durch die echte gemeinsame Schleifen-/Touch-Entscheidung:
+   Hold beginnen, Skip bei weiter gehaltenem Finger, nach Wiederaufnahme > 5 s
+   weiterhin auf dem Ziel halten -> **kein Reset**, keine Epochenaenderung und
+   kein Netzwerk-/HTTP-Stopp. Erst beobachtetes Loslassen + neuer Kontakt:
+   < 5 s kein Reset, bei 5 s ununterbrochen auf dem Hold-Ziel genau ein Reset.
+   Fehlende/fehlerhafte Samples loesen die Sperre nicht. Fuer Variante A und B
+   pruefen; bisherige `SIM-19-R08`-Regeln (Loslassen, Verschieben, Abbruch,
+   kurzer Neukontakt) bleiben erhalten.
    Das Gate liegt **vor** `renderGate.beginStep`; ein uebersprungener Schritt veraendert weder
    den Render-Schluessel noch die Praesentationskopie (kein Eviction-/Network-Page-Sampling-Nebeneffekt);
    nach der Wiederaufnahme zeichnet `renderRequired` aus dem aktuellen Snapshot neu, falls sich
@@ -133,17 +174,29 @@ Entwurf (kleinster wirksamer Schnitt):
    keine Safety-Funktion (AGENTS.md: Regelung/Safety brauchen Netzwerk, Web, Anzeige
    nicht). Ein uebersprungener Schritt bedeutet bei Speichermangel: Anzeige friert ein,
    Touch ist voruebergehend ohne Wirkung, danach automatische Wiederaufnahme. Das
-   ist strikt besser als das heutige `abort()` (Neustart des gesamten Geraets). Der
+   vermeidet den UI-bedingten Abort in den vom Gate ausgelassenen Schritten,
+   garantiert aber keinen unterbrechungsfreien Geraetebetrieb nach bestandenem Gate. Der
    Gate-Messaufruf allokiert nicht (`heap_caps_get_largest_free_block` ist
    allokationsfrei, haelt kurz das Heap-Lock). Die Gegenmassnahme gegen dauerhaft
    eingefrorene Anzeige ist F1 (Reserve), nicht F4.
-6. **Restrisiko (ausdruecklich):** Das Gate **senkt** das Abort-Risiko, **schliesst es nicht aus**:
+6. **Vertragsentscheidung: begrenzte Risikominderung mit Ownerakzeptanz (D3).**
+   Das Gate **senkt** das Abort-Risiko, **schliesst es nicht aus**:
    zwischen Pruefung und Allokation koennen WLAN- oder httpd-Task Heap verbrauchen (TOCTOU),
-   und der Render-Schritt enthaelt viele einzelne Allokationen (Strings). Ausschliessen liesse es
-   sich nur mit einem allokationsfreien Render-Pfad (z. B. dauerhaft wiederverwendeter
-   Befehlspuffer und feste Stringpuffer). Das waere eine groessere Umbaustufe
-   (Alternative **F4-B**, hier **nicht** geplant). Die Verifikation misst, ob das Gate
-   in P-A/P-B ausloest und ob nach F1 trotz knapper Phasen kein Abort mehr auftritt.
+   und der Render-Schritt enthaelt weitere Allokationen (Strings/LVGL).
+   Realistisches Hardware-Fehlerszenario: Gate passiert bei ausreichendem groessten
+   Block, anschliessend bindet ein WLAN-/HTTP-Burst Speicher vor `reserve` oder
+   waehrend weiterer String-/LVGL-Allokationen; `operator new` scheitert bei
+   ausgeschalteten Exceptions -> `abort()`/unerwarteter Geraetereset. Boot und
+   Recovery bleiben fail-closed; D3 muss dieses Restrisiko ausdruecklich akzeptieren,
+   weder Aktorfreigabe noch ein beobachteter Reset werden dadurch akzeptiert.
+   Native Tests beweisen Gate-/Sperrlogik und Vektorschranke, nicht konkurrierende
+   Heapverfuegbarkeit oder Renderer-Absturzfreiheit. Fehlerfreie Hardwarelaeufe
+   belegen nur die getesteten Profile, Zeitraeume und Images (Abschnitt 7).
+   Alternative **F4-B** waere eine nachweisbar absturzfreie Allokations-/Fallback-
+   Strategie fuer den belegten Pfad, etwa wiederverwendete/feste Puffer; ein
+   vollstaendiger allokationsfreier UI-Umbau ist keine automatische Pflicht.
+   F4-B ist hier **nicht** geplant. Ohne Ownerakzeptanz von D3: HOLD und
+   neu freizugebende Planrevision statt Umsetzung mit OOM-Sicherheitszusage.
 7. Nicht Teil von F4: andere Heapnutzer im Main-Task (z. B. `application.update()`); sie
    sind nicht als Absturzpfad belegt.
 
@@ -158,7 +211,8 @@ Speicher (bestehende UI-Tests bleiben unveraendert gruen).
   Auf `agent/pr203-res01-diag-local` (Basis v3) die Chunk-Variante von F1-4 als
   Wegwerfpatch messen: Spitzenheap und Segmentierung (`res01_http`, `diag_30s`)
   unter dem P-A-Profil (Abschnitt 7). Go/No-Go: Spitzenbedarf sinkt messbar
-  (erwartet ≈ −6,6 bis −8,7 KB) und es entstehen nicht mehr WLAN-TX-Puffer. Bei No-Go
+  (erwartet ≈ −6,6 bis −8,7 KB); die Entscheidung folgt den messbaren
+  C0-Kriterien in Abschnitt 7. Bei No-Go
   zurueck zum Plan (F1-2/F1-3/F2 neu bewerten).
 - **C1 – F4:** `UiMemoryGate`, Anbindung in `updateProductUi`, Reserve in
   `makeRepresentativeScreen`, native Tests.
@@ -166,12 +220,24 @@ Speicher (bestehende UI-Tests bleiben unveraendert gruen).
   `webShell`/`provisioningShell` mit konstantem Anhang, Testhelfer fuer den
   zusammengesetzten Body, Anpassung der Tests (byteweise Gleichheit des
   zusammengesetzten Bodys zur bisherigen Shell, 8 192-B-Schranke weiter auf die
-  Gesamtlaenge, Provisioning-Shell unveraendert in den Bytes).
+  Gesamtlaenge, Provisioning-Shell unveraendert in den Bytes). Antworthelfer und
+  direkte Antwort-Ersetzungen aller Konsumenten auf die Anhangsinvariante aus
+  Abschnitt 3 pruefen/anpassen. Native Regressionen: vorbelegter Shell-Anhang ->
+  JSON-/Fehlerantwort sowie tatsaechlicher `handleShell`-Wechsel bei Gesamtlaenge
+  > 8 192 B -> vollstaendiger 503-Body, Status, Content-Type und leerer Anhang
+  (eng begrenzte native Fehlerinjektion der Shell-Laenge, keine Aenderung der
+  produktiven 8 192-B-Schranke).
+  Adapter-Hosttests pruefen die gesendeten Bytes desselben 503 ohne HTML-/JS-Suffix;
+  im Erfolgszweig Kopf + Anhang in korrekter Reihenfolge und genau einen
+  0-Byte-Terminator nach den Daten. Sendefehler in Kopf, Anhang und Terminator
+  injizieren: erster Fehler wird propagiert, danach keine weiteren Sendeschritte
+  und kein faelschlicher Erfolgsabschluss. Antworten ohne Anhang behalten den
+  bisherigen Sendezweig.
 - **C3 – Dokumentation:** `WEB_UI.md` (Antwortvertrag "statischer Anhang", Ressourcen-
   vertrag), `ACCEPTANCE_TESTS.md` (neue IDs, Abschnitt 7), `ROADMAP.md`, Evidence-Verweise.
 - **C4 – Hardwareverifikation (Abschnitt 7)** mit zwei Gates G1/G2; Evidence als
   PR-Kommentar und Rohartefakte, kein Produktcode.
-Reihenfolge: C1 vor C2 (F4 beseitigt den fatalen Effekt unabhaengig von F1).
+Reihenfolge: C1 vor C2 (F4 senkt das Risiko des fatalen Effekts unabhaengig von F1).
 Materielle Abweichung (z. B. C0 No-Go) -> Plan aktualisieren und neu freigeben lassen.
 
 ## 6. Trennung von Diagnosecode und Produktcode
@@ -192,6 +258,16 @@ frische Sessions (< 30 min Inaktivitaetsablauf), kein erneutes Login waehrend de
 harter Lastabbruch bei jeder Anomalie (alle Sockets schliessen, kein Logout, 3-s-Timeouts;
 Korrektur gegenueber D3), Passwort nur aus `~/pw`.
 
+Vor Teststart im freizugebenden Testblatt (D4/D5) je Profil festhalten:
+Lasttreiber-/Browserversion, Verbindungsmodell, Session-/Socketzustand,
+Netzwerkbedingungen, Latenzbewertung und Idle-Referenz. Fuer API-Latenzen eine
+begruendete Fehlerschranke oder eine Referenz **unter gleicher Last** samt
+zulaessiger Abweichung vorab bestimmen; keine nachtraeglich an Messwerte
+angepasste Schwelle. Sind Altlaeufe nicht vergleichbar und fehlt eine solche
+vorab festgelegte Schranke, bleiben Latenzen/Trend Befunde fuer den Owner,
+keine automatische Abnahmebedingung. Die festgelegten 3-s-Timeouts und
+HTTP-Fehlerkriterien gelten weiterhin.
+
 **Lastprofile (reproduzierbar, Skripte in `hw-evidence-pr203/`, Version und Hash in der Evidence):**
 
 | ID | Beschreibung | Dauer | Wiederholungen |
@@ -205,21 +281,44 @@ Korrektur gegenueber D3), Passwort nur aus `~/pw`.
 (`diag_30s`, `res01_http` je Shell-Antwort `pre/built/sent`), HTTPD- und Main-Stack-HWM,
 `heap_alloc_failed`/Backtraces, Resetursache, Heartbeat-Luecken, HTTP-Statusklassen,
 p50/p95/p99/max-Latenz je Minute, Timeouts, Zaehler `ui_skipped_low_memory`.
+API- und Shell-Latenzen jeweils getrennt fuer P-A, P-A2 und P-B ausweisen;
+API-only-D1 ist Kontext, kein harter Leistungsvergleich mit zusaetzlicher
+Shell-Last oder anderem Verbindungsmodell.
+
+**C0-Go/No-Go unter identischer Last:** Diagnose-Baseline und Chunk-Kandidat
+mit gleichem P-A-Profil, Messaufbau und vergleichbarem Session-/Socket-/
+Netzwerkzustand vergleichen; Referenz und Bewertung vor dem Lauf dokumentieren.
+Go erfordert messbar geringeren Shell-Spitzenbedarf (Erwartung ≈ −6,6 bis −8,7 KB,
+keine harte Schranke), keine schlechtere gemessene Heap-/Blockreserve, keine
+Allokationsfehler/Resets und erfuellte HTTP-/Timeout-Kriterien; Latenzen gemaess
+vorab festgelegter Bewertung (Schranke/gleiche Last oder Befundstatus) behandeln.
+Ohne vergleichbare Ressourcenreferenz ist C0-Go nicht belegt.
+"Es entstehen nicht mehr WLAN-TX-Puffer" ist mit der vorhandenen Heap-
+Instrumentierung nur eine **Hypothese**. Als hartes Kriterium darf die Aussage
+nur verwendet werden, wenn eine tatsaechliche Pufferzaehlung (gleiche Messpunkte,
+Definition der gleichzeitig belegten Puffer, Referenz) instrumentiert und im
+Diagnose-Overlay/G0 freigegeben ist. Sonst entscheiden die genannten messbaren
+Werte; Heap-/Blockmessungen sind kein Nachweis der Pufferanzahl. Bei No-Go
+zurueck zum Plan, keine automatische F2-Umsetzung.
 
 **Abnahmekriterien (Fehlerfreiheit, keine willkuerlichen Heap-Grenzwerte):**
 1. **Kein** `heap_alloc_failed`, **kein** `abort`/Panic/Watchdog/Brownout, **kein** unerwarteter Reset in allen Laeufen (P-A 3×, P-A2, P-B).
-2. HTTP: 100 % 2xx fuer alle Read-/Shell-Requests, **keine** Timeouts, keine Verbindungsabbrueche. Latenz: **nur API-GETs** je Minute werden gegen die API-GETs der Referenz D1 (`load_D1.json`, selber Treiber) verglichen (p99 nicht schlechter als dort, Wert vorab festgehalten); **Shell-GETs werden getrennt** berichtet (keine Referenz im API-only-Lauf); kein Latenzanstieg ueber die 20 min (Trend je Minute dokumentiert).
-3. **Heap-Erholung:** In P-R kehrt der aktuelle freie Heap innerhalb von 120 s auf ≥ 90 % des Idle-Referenzwerts (gemessen im Idle-Lauf desselben Images, heute ≈ 42,3–42,6 KB) und der groesste Block auf ≥ 90 % (≈ 40,9 KB) zurueck; **keine** fortschreitende Abnahme ueber die 20 min.
+2. HTTP: 100 % 2xx fuer alle Read-/Shell-Requests, **keine** Timeouts, keine Verbindungsabbrueche waehrend der Last. API-Latenzen je Profil und Minute gegen die vorab bestimmte Fehlerschranke oder vergleichbare Referenz unter gleicher Last bewerten; Shell-Latenzen getrennt berichten. D1 ohne Shell-Last ist keine harte Referenz. Bei unvergleichbaren Altlaeufen ohne vorab festgelegte Schranke Latenzen und 20-min-Trend als Befund fuehren.
+3. **Heap-Erholung bei vergleichbarem Idle-Zustand:** Vor Last einen Idle-Referenzwert desselben Images **mit denselben vier Sessions** und beruhigtem Netzwerk erfassen. Nach Lastende Polling/Reloads beenden, offene Keep-Alive-/sonstige Clientverbindungen kontrolliert schliessen und das Abklingen der Server-Sockets dokumentieren; Sessions ohne Logout erhalten (Anzahl, Gueltigkeit und Ablaufzustand dokumentieren), WLAN-Modus/-Verbindung vergleichbar halten. P-R beginnt beim dokumentierten Last-/Clientverbindungsende; fehlen vergleichbare Zustaende innerhalb von 120 s, ist die Erholung nicht belegt. Aktueller freier Heap und aktueller groesster Block muessen innerhalb dieser 120 s jeweils ≥ 90 % ihrer passenden Referenz erreichen. Alternativ ist eine andere Idle-Referenz nur bei belegbar gleichem Session-, Socket- und Netzwerkzustand zulaessig. Die alten ≈ 42,3–42,6 KB frei / ≈ 40,9 KB Block sind Kontext, keine automatische Vier-Session-Referenz. Das monotone Boot-Minimum `min_free` dient nie als Erholungsmessung. Vergleichbare aktuelle Heap-/Blockwerte ueber den Lauf auf fortschreitende Abnahme pruefen und dokumentieren.
 4. **Stackreserve:** HTTPD- und Main-Stack-HWM nicht schlechter als die Baseline-Werte (2 336 B bzw. 11 416 B frei) um mehr als 256 B; sonst Stopp und Befund.
 5. `min_free` unter P-A/P-A2/P-B wird berichtet und gegen den Altwert (6,6–7,9 KB) und die Erwartung (≈ 14 KB) verglichen; eine Unterschreitung der Erwartung bei fehlerfreiem Lauf ist **kein** automatischer Fail, sondern ein Befund fuer den Owner. Ein einzelnes `heap_alloc_failed` ist Fail und loest die F2-Eskalationsbewertung aus.
-6. F4: Falls das Gate ausloest, ist es geloggt, die Anzeige erholt sich, es folgt kein Abort; ein Ausloesen in P-A/P-B ist ein Befund (F1-Reserve zu gering), kein Fail.
+6. F4: Falls das Gate ausloest, ist es geloggt, bei ausreichender Reserve erholt sich die Anzeige, ein gesperrter Reset-Hold bleibt bis Loslassen + neuem Kontakt wirkungslos. Gate-Ausloesen in P-A/P-A2/P-B ist ein Befund (F1-Reserve zu gering), kein Fail. Jeder beobachtete Abort/Reset bleibt Fail nach Kriterium 1, auch bei akzeptiertem TOCTOU-Restrisiko; ein fehlerfreier Lauf beweist keine allgemeine Renderer-Absturzfreiheit.
 
 **Hardware-Gates (je eigene Ownerfreigabe, konkret mit Commit, Image-/ELF-Hash, App-only `0x10000`,
 Rueckfall, Stoppbedingungen):** G0 (C0 Spike, Diagnosebranch), G1 (Diagnose-Overlay auf Fixcommit,
 Messung), G2 (reines Produktimage, Bestaetigung). Keine Flash-/Resetvorgaenge ohne Freigabe.
 
 **Native/Build-Nachweise:** neue IDs `SIM-27-H-01..` (Gate-Logik, Befehlsobergrenze,
-byteweise Gleichheit der Shell, Chunk-Zusammensetzung, Provisioning-Shell unveraendert),
+Reset-Hold-Sperre fuer A/B durch die echte Schleifenentscheidung inkl. > 5 s
+weiter gehaltenem Finger und fehlendem Loslass-Nachweis, Regression `SIM-19-R08`,
+byteweise Gleichheit der Shell, Shell-zu-503-Wechsel/Anhangsloeschung,
+Adapter-Bytes/Status/Content-Type, Chunk-Terminierung/Fehlerpropagation,
+Provisioning-Shell unveraendert),
 bestehende Web-/Session-/Codec-/UI-Tests gruen, Architekturcheck, beide ESP-IDF-Profile,
 `self-check`, spaeter Pre-Ready nach unabhaengigem Review.
 
@@ -236,14 +335,16 @@ Durchsatz; ggf. Begrenzung der Verbindungsparallelitaet im Adapter. Nicht Teil d
 |---|---|---|
 | D1 | F1-Form: **F1-4** (nicht besitzender statischer Anhang + `httpd_resp_send_chunk`) | Ja, mit C0-Spike als Go/No-Go |
 | D2 | C0-Spike (Hardware-Gate G0) vor dem Produktvertrag | Ja (Kosten ≈ 1 Flash/Messlauf, verhindert einen unnoetigen Vertragswechsel) |
-| D3 | F4: gesamter UI-Schritt wird bei Speichermangel uebersprungen (Touch inklusive), Hold wird dabei freigegeben; Restrisiko TOCTOU akzeptiert, F4-B (allokationsfreier Renderpfad) nicht geplant | Ja (keine Safety-Funktion, besser als Abort) |
-| D4 | Verifikationsprofile P-A (3×20 min), P-A2, P-B, Erholung P-R und die Abnahmekriterien | Ja |
-| D5 | Messbasis 90 % des Idle-Referenzwerts fuer Heap-Erholung | Ja |
+| D3 | F4 als **begrenzte Risikominderung**: UI-Skip inkl. Touch, Hold-Timer freigeben und bis beobachtetem physischem Loslassen + neuem Kontakt sperren; ausdrueckliche Akzeptanz des in Abschnitt 4/6 beschriebenen TOCTOU-/kumulativen OOM-Risikos mit weiterhin moeglichem Geraetereset; F4-B nicht geplant | Ja, nur mit ausdruecklicher Restgefahrakzeptanz; beobachteter Reset bleibt Fail/HOLD |
+| D4 | Verifikationsprofile P-A (3×20 min), P-A2, P-B, Erholung P-R und C0-/Abnahmekriterien; Latenzbewertung je Profil vor Teststart festlegen (gleiche Last oder begruendete Schranke, sonst Befund); TX-Pufferanzahl ohne Zaehlinstrumentierung nur Hypothese | Ja, Testblatt vor Lauf freigeben |
+| D5 | Messbasis 90 % des passenden Idle-Referenzwerts fuer aktuellen Heap und groessten Block; bevorzugt dieselben vier Sessions vor Last, kontrollierter Socketabbau und vergleichbarer Netzwerkzustand | Ja, Referenz/Zustandsvergleich vor Lauf festlegen |
 
 ## 10. Risiken
 
-- Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (C0 misst; No-Go moeglich).
-- F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren (bewusst, besser als Abort).
+- Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung;
+  C0 entscheidet anhand messbarer Ressourcen-/HTTP-/Latenzwerte; No-Go moeglich).
+- F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren;
+  nach bestandenem Gate bleiben OOM/Abort/Reset moeglich (D3 offen, Testgrenze Abschnitt 4/6).
 - Der Lastprofil-Vergleich ist durch das Verbindungsmodell des Treibers beeinflusst (P-B mit echten
   Browsern ergaenzt das); keine Aussage ueber beliebige LAN-Clients.
 - Die Erwartung (≈ 14 KB) ist Rechnung, nicht Messung.
