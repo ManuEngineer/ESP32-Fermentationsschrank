@@ -2,7 +2,6 @@
 #include "esp_cpu.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include <cinttypes>
 #include <memory>
 #include <new>
@@ -281,24 +280,47 @@ void logHeartbeat(uint64_t uptimeMs) {
 // noch ESP_LOGx verwenden; nur ROM-Ausgabe mit DRAM-Formatstrings. Auch
 // erwartete Fehlschlaege (nothrow-new, Capability-Fallbacks in ESP-IDF)
 // loesen ihn aus. Reine Diagnose: der Hook aendert kein Verhalten.
+// Same mapping as ESP-IDF esp_cpu_process_stack_pc() (xtensa/esp_cpu_utils.h,
+// not exported to main): window-increment bits to address space, minus the
+// call instruction length. Forced inline so no out-of-line (flash) copy exists.
+[[gnu::always_inline]] inline uint32_t diagStackPc(uint32_t pc) {
+    if ((pc & 0x80000000U) != 0U) {
+        pc = (pc & 0x3fffffffU) | 0x40000000U;
+    }
+    return pc - 3U;
+}
+
 void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
                                        const char* functionName) {
     ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
                   static_cast<unsigned>(size), static_cast<unsigned>(caps),
                   functionName != nullptr ? functionName : "?");
-    // PR203 RES-01 diagnostic candidate (temporary): who allocates. Bounded
-    // (first 6 events), allocation free, ROM output only; no heap query, no
-    // lock, no ESP_LOGx.
+    // PR203 RES-01 diagnostic candidate v2 (temporary): who allocates. Bounded
+    // (first 4 events), allocation free, ROM output only, DRAM format strings.
+    // It reads no flash-resident code or data beyond what the hook above
+    // already reads (the IDF-provided function name): only IRAM functions
+    // (esp_backtrace_get_start/next_frame, xPortInIsrContext) and the ROM
+    // printf are used; no heap query, no lock, no ESP_LOGx, no task-name call.
     static volatile uint32_t diagEvents = 0U;
-    if (diagEvents < 6U) {
+    if (diagEvents < 4U) {
         diagEvents = diagEvents + 1U;
-        const bool inIsr = xPortInIsrContext() != 0;
-        esp_rom_printf(
-            DRAM_STR("diag_alloc_fail: n=%u isr=%d core=%d task=%s\n"),
-            static_cast<unsigned>(diagEvents), inIsr ? 1 : 0,
-            static_cast<int>(esp_cpu_get_core_id()),
-            inIsr ? "-" : pcTaskGetName(nullptr));
-        static_cast<void>(esp_backtrace_print(12));
+        esp_backtrace_frame_t frame = {};
+        esp_backtrace_get_start(&frame.pc, &frame.sp, &frame.next_pc);
+        esp_rom_printf(DRAM_STR("diag_alloc_fail: n=%u isr=%d core=%d pc:"),
+                       static_cast<unsigned>(diagEvents),
+                       xPortInIsrContext() != 0 ? 1 : 0,
+                       static_cast<int>(esp_cpu_get_core_id()));
+        esp_rom_printf(DRAM_STR(" %08x"),
+                       static_cast<unsigned>(diagStackPc(frame.pc)));
+        for (int depth = 0; depth < 8 && frame.next_pc != 0; ++depth) {
+            if (!esp_backtrace_get_next_frame(&frame)) {
+                esp_rom_printf(DRAM_STR(" !"));
+                break;
+            }
+            esp_rom_printf(DRAM_STR(" %08x"),
+                           static_cast<unsigned>(diagStackPc(frame.pc)));
+        }
+        esp_rom_printf(DRAM_STR("\n"));
     }
 }
 
