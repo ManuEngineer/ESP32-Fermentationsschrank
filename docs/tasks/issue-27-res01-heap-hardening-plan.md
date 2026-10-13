@@ -1,6 +1,6 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `OWNER_APPROVED_C0_SOFTWARE_PREPARED_AWAITING_G0`.
+Status: `G0_BASELINE_LOGIN_FAILED_AWAITING_OWNER_DECISION`.
 Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
 `6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
 TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
@@ -9,6 +9,11 @@ C0-Spike ausschliesslich auf Diagnosebranch `agent/pr203-res01-diag-local`
 @ `9a9a8bd`; C0-Go/No-Go noch nicht gemessen, C1–C3 noch nicht begonnen.
 [Diagnose-Vorbereitung/Testblatt](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/9a9a8bd/diag/RES01_C0.md),
 Build-/Hash-/Review-Paket: `hw-evidence-pr203/diag/c0/REVIEW_PACKAGE.md`.
+Owner-G0 am 2026-10-13 freigegeben (`C0_SOFTWARE_REVIEW=PASS`); Baselineversuch
+bei erster Login-Anforderung mit `request-failure` nach 3113.678 ms gestoppt.
+Keine Vier-Session-Last, kein Kandidatenflash, kein RAM-Vergleich; kein Retry/Reset/Rollback.
+[Ergebnis/Evidence](../audits/PR203_G0_20261013_RESULT.md). Fortsetzung nur nach
+Ownerentscheid; `G1_G2=NOT_AUTHORIZED`. Der freigegebene Treiber bleibt `70b3059`.
 Diese Fortschreibung aendert nur den Status, nicht den freigegebenen Planvertrag.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
