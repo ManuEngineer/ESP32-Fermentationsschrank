@@ -261,7 +261,8 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-6656 Bytes (Ownerentscheid fuer #27, `html.reserve` auf diese Schranke).
+8192 Bytes (Ownerentscheid fuer #27, `html.reserve` auf diese Schranke; sie
+betrug bis zur Startseiten-Umsetzung 6656 Bytes, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
 (optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
@@ -365,6 +366,46 @@ verworfen und die Liste neu geladen, ohne automatische Mutation.
 
 Die Shell-JavaScript-Logik ist nativ nur als Text-/Zustandsvertrag getestet;
 ein ausfuehrender Browsertest ist `NOT_RUN`.
+
+## Startseite der angemeldeten Shell (R1-Slice, Issue #27)
+
+Die authentifizierte Shell zeigt statt der rohen JSON-Ausgabe eine lesbare,
+responsive Uebersicht, ausschliesslich aus den vorhandenen Read-only-APIs
+(`/api/v1/status`, `/temperatures`, `/alerts`; drei Abrufe, 5-s-Takt,
+unveraendert). Es gibt keinen neuen Endpunkt und keine Codec-Aenderung.
+
+- **Ueberschrift** nach `homeMode` (`standby`, `active-run`, `waiting`,
+  `completed`, `restricted`, `recovery`, `unavailable`) in Deutsch, Englisch
+  und Spanisch; ein unbekanntes Token wird unveraendert angezeigt.
+  `processState` wird nicht zusaetzlich lokalisiert.
+- **Temperaturen** in fester Reihenfolge Schrank, Produkt, Kuehlung: Wert mit
+  einer Nachkommastelle nur bei `valid`; sonst `--` mit Grund (`stale`,
+  `failed`); eine nicht gelieferte Rolle erscheint als nicht verfuegbar, nie
+  als `0`.
+- **Meldungen:** Zaehler und je aktiver Meldung der Code (Bindestriche zu
+  Leerzeichen) mit Schweregrad als Klasse sowie Marker quittiert/stumm; die
+  Meldungscodes selbst sind nicht lokalisiert.
+- **Verbindung und Alter:** `Offline` (nie ein gueltiger Snapshot), `Online`,
+  `Stale` mit `Stand vor N s`; die letzten Werte bleiben gedimmt sichtbar.
+  `N` ist das Alter des **Statusabrufs** seit dessen Beginn, keine Aussage ueber
+  das Alter des Sensor-Messwerts (dafuer gilt die Sensor-`quality`).
+- **Aktionssperre:** `P` (Gating) wird bei einem angewendeten Fehler und bei
+  Ueberschreiten von 15 s seit dem letzten Abrufbeginn `null`; die Anzeigekopie
+  (`LP`/`LT`) gibt nie Aktionen frei.
+- **Reihenfolge:** jeder Abruf erhaelt eine Generation (`G`); ein Ergebnis,
+  Erfolg wie Fehler, einer aelteren als der bereits angewendeten Generation
+  (`H`) wird verworfen, ohne Wirkung auf Stand, Alter oder Verbindungsstatus.
+- **Darstellung:** einspaltig mit grossen Bedienflaechen, ab 40 rem zwei
+  Spalten; dynamischer Text nur ueber `textContent`.
+- **Groessenschranke:** 8192 Bytes (Ownerentscheid D1 = A); die gemessene
+  authentifizierte Shell hat 8048 Bytes (Reserve 144 Bytes, inklusive der
+  19 Bytes fuer die breiteste Mutationssequenz).
+
+Nicht Teil dieses Slices (benoetigen neue API-Felder, eigener Slice): Geraete-
+und Programmname, Solltemperatur, verstrichene/verbleibende Zeit,
+Abschlussverhalten, Netzwerk-/Zeitstatus, Aktorstatus und die Mehrseiten-
+Navigation. Browsertests, Hardware-Heapmessung der groesseren Shell und die
+dynamischen Reihenfolge-/Stale-Szenarien sind `NOT_RUN`.
 
 ## Servicebereich in der Weboberflaeche
 

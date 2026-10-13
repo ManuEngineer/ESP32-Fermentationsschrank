@@ -1,7 +1,7 @@
 # Issue #27 – R1-Web-Startseite: lesbare, zustandsabhaengige Uebersicht (Plan)
 
-Status: `PLAN_AWAITING_OWNER_APPROVAL`. Keine Implementierung vor Ownerfreigabe
-der exakten Plan-SHA. Basis: `main` bei `b903de8` (nach Merge PR #202; PR #170
+Status: `PLAN_APPROVED_IMPLEMENTED_AWAITING_REVIEW` (freigegebene Plan-SHA
+`a2c04b0d4a83e4768daecc635bad7e66f499834f`; D1 = A, D2 = A, D3 = A, D4 = Ja). Basis: `main` bei `b903de8` (nach Merge PR #202; PR #170
 und PR #201 gemergt). Scope: genau ein kleiner R1-Slice von Issue #27; Issue
 bleibt offen, weitere Web-Slices erst getrennt.
 

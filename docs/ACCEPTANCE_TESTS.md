@@ -491,6 +491,21 @@ UI-/Command-Aussagen "nur die bestaetigte ResumeFallback-Aktion",
 | SIM-188-A07 | PIN-Seite: exakte Hit-Zonen des Ziffernfelds im Tastaturraster, die Eingabezeile zeigt nur die Maske, alle neuen Texte in allen Locales, begrenzt und ueberlappungsfrei; PIN-Seite (leer und teilweise) und freigegebene Service-Seite sind stationaer ohne Allokation, eine Ziffer erzwingt genau ein Neuzeichnen: `test_renderer_boundary::test_pin_page_has_exact_pad_hit_zones_and_shows_only_a_mask`; `::test_s10_text_keys_exist_in_all_locales`; `::test_s10_pages_are_bounded_deterministic_and_do_not_overlap`; `::test_deferred_pages_show_the_hint_in_all_locales_and_keep_owner_reason`; `test_ui_steady_state_allocations::test_pin_and_released_service_pages_steady_state_allocate_nothing`. |
 | HW-188-A01 | `AUSGEFUEHRT 2026-10-09` auf dem Owner-ESP32 (`f859ef6`, `esp32_release`, ohne Erase, ohne Werksreset, ohne Powercut, `ACTUATOR_RELEASE=NO`): Bedienweg, falsche/richtige PIN, Sperre nach drei Fehlversuchen, "PIN vergessen?" -> Abbrechen, Abmelden; keine Reset-/Panic-/Watchdog-/Brownout-Signatur. Gemessen (G2, 1-s-Herzschlagraster): synchrone PIN-Pruefung ohne Web-Anmeldung bis 3510 ms, mit gleichzeitiger Web-Anmeldung bis 4930 ms, groesste Herzschlagluecke 5190 ms (ueber dem 5-s-Task-Watchdog, ohne `task_wdt`-Meldung); der Owner bewertet die Blockade als vertretbar. Inaktivitaetsablauf auf Hardware `NOT_RUN`, vom Owner ohne diesen Test akzeptiert (SIM-188-A* deckt ihn ab). Evidence `docs/audits/ISSUE_188_A_HW_G2_20261009_EVIDENCE.md`. Keine Mergefreigabe. |
 
+### Issue #27 – Web-Startseite der angemeldeten Shell (hardwarefrei)
+
+Nativ nur als Text-/Vertragstest (kein JS-Runner in der Toolchain); ausfuehrende
+Browsertests sind `NOT_RUN`.
+
+| ID | Pruefung |
+|---|---|
+| SIM-27-W-01 | Shell-Struktur: kein `JSON.stringify(p`/`<pre`/`innerHTML`; `connection`, `mode`, `temps`, `alerts`, `board` je einmal; `viewport`, genau ein `@media(min-width:40rem)`, Mindesthoehe der Bedienflaechen; Aktionsbuttons, `let Q=` und `const A=` unveraendert; kein neuer Endpunkt, drei Read-only-Abrufe, 5-s-Takt: `test_web_application_routes::test_dashboard_shell_structure_and_responsive_contract`. |
+| SIM-27-W-02 | Jeder Textschluessel genau je Sprache (de/en/es) einmal, englischer Rueckfall, Warntext des deaktivierten Passwortschutzes unveraendert: `::test_dashboard_shell_texts_are_complete_in_all_locales`. |
+| SIM-27-W-03 | Drift-Schutz ueber die oeffentlichen Codec-Encoder (Enum-Bereich 0..15): 7 `homeMode`, 3 Rollen, 3 Qualitaeten; jedes Token hat in jeder Sprache ein Label (`valid` bewusst nicht); Schweregrad-Klassen im Shell-Stylesheet: `::test_dashboard_shell_labels_cover_every_codec_token`. |
+| SIM-27-W-04 | Feldvertrag: Standby ueber den echten Application-Pfad; die uebrigen Modi sind im Fixture nicht ueber den echten Pfad erreichbar (kein Programm ohne Commissioning-Werte startbar) und werden ueber konstruierte Snapshots nachgewiesen: `::test_dashboard_feed_fields_in_standby_and_constructed_states`. |
+| SIM-27-W-05 | Fehlende/stale Daten (Codec: leere Liste, fehlende Rolle, `valid:false` ohne Wert) und Reihenfolge-/Zeitstempelregel als Positionsvergleich im Shell-Text (Generation vor dem ersten `fetch`; Guard nach dem `await` vor jeder Wirkung in Erfolgs- und Fehlerpfad; `LT=t0`; Altersschwelle 15 s vor dem `fetch`; `P`/`LP` getrennt, `ui()` liest `LP` nie): `::test_dashboard_missing_and_stale_data_contract`; `::test_dashboard_ordering_guard_and_age_contract_in_the_shell_text`; aktualisierter Fehlerpfad-Pin `::test_shell_action_availability_and_confirmation_binding_contract`. **Dynamisch `NOT_RUN`:** (1) langsamer alter Erfolg nach schnellerem neuem Erfolg, (2) verspaeteter Fehler nach neuerem Erfolg, (3) haengende Anfrage ueber 15 s. |
+| SIM-27-W-06 | Grenzen: Shell <= 8192 B in allen Zustaenden, authentifiziert 8048 B mit Reserve >= 128 B (inklusive 19 B Sequenzreserve); Provisioning-Shell, JSON-Budgets, Session/CSRF/Replay-Tests unveraendert gruen: `::test_shell_stays_within_the_limit_in_all_states`; `::test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit`. |
+| HW-27-W01 | `NOT_RUN`: Browser-/Layoutpruefung der Startseite (Mobil/Desktop) und Heap-/Ressourcenmessung der 8048-B-Shell auf dem Geraet. |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:
