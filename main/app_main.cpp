@@ -86,6 +86,10 @@ const char* binaryOutputBeginResultName(
 
 // Tag fuer den Failed-Allocation-Hook; muss in DRAM liegen (ESP_DRAM_LOGE).
 DRAM_ATTR const char kHeapAllocFailedTag[] = "heap_alloc_failed";
+// Ersatztexte fuer den Hook: nie aus dem Flash lesen (Flash-Cache kann aus
+// sein).
+DRAM_ATTR const char kHeapAllocFailedUnknown[] = "?";
+DRAM_ATTR const char kHeapAllocFailedCacheOff[] = "<cache-off>";
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
@@ -280,6 +284,11 @@ void logHeartbeat(uint64_t uptimeMs) {
 // noch ESP_LOGx verwenden; nur ROM-Ausgabe mit DRAM-Formatstrings. Auch
 // erwartete Fehlschlaege (nothrow-new, Capability-Fallbacks in ESP-IDF)
 // loesen ihn aus. Reine Diagnose: der Hook aendert kein Verhalten.
+// IRAM-resident IDF query (components/spi_flash/cache_utils.c, declared in the
+// private header esp_private/cache_utils.h which is not on main's include
+// path). Declared here with the identical signature for this temporary patch.
+extern "C" bool spi_flash_cache_enabled(void);
+
 // Same mapping as ESP-IDF esp_cpu_process_stack_pc() (xtensa/esp_cpu_utils.h,
 // not exported to main): window-increment bits to address space, minus the
 // call instruction length. Forced inline so no out-of-line (flash) copy exists.
@@ -292,22 +301,33 @@ void logHeartbeat(uint64_t uptimeMs) {
 
 void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
                                        const char* functionName) {
+    // IDF passes __func__ strings that live in flash rodata; dereference them
+    // only while the flash cache is enabled (IRAM-safe query).
+    const char* shownName = kHeapAllocFailedCacheOff;
+    if (spi_flash_cache_enabled()) {
+        shownName =
+            functionName != nullptr ? functionName : kHeapAllocFailedUnknown;
+    }
     ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
                   static_cast<unsigned>(size), static_cast<unsigned>(caps),
-                  functionName != nullptr ? functionName : "?");
+                  shownName);
     // PR203 RES-01 diagnostic candidate v2 (temporary): who allocates. Bounded
     // (first 4 events), allocation free, ROM output only, DRAM format strings.
     // It reads no flash-resident code or data beyond what the hook above
     // already reads (the IDF-provided function name): only IRAM functions
     // (esp_backtrace_get_start/next_frame, xPortInIsrContext) and the ROM
     // printf are used; no heap query, no lock, no ESP_LOGx, no task-name call.
-    static volatile uint32_t diagEvents = 0U;
-    if (diagEvents < 4U) {
-        diagEvents = diagEvents + 1U;
+    static uint32_t diagEvents = 0U;
+    // Atomic (inline s32c1i, no libatomic call): at most 4 events in total,
+    // even with two cores or an ISR racing; n is unique per printed event.
+    if (__atomic_load_n(&diagEvents, __ATOMIC_RELAXED) < 4U) {
+        const uint32_t eventNo =
+            __atomic_fetch_add(&diagEvents, 1U, __ATOMIC_RELAXED) + 1U;
+        if (eventNo > 4U) return;
         esp_backtrace_frame_t frame = {};
         esp_backtrace_get_start(&frame.pc, &frame.sp, &frame.next_pc);
         esp_rom_printf(DRAM_STR("diag_alloc_fail: n=%u isr=%d core=%d pc:"),
-                       static_cast<unsigned>(diagEvents),
+                       static_cast<unsigned>(eventNo),
                        xPortInIsrContext() != 0 ? 1 : 0,
                        static_cast<int>(esp_cpu_get_core_id()));
         esp_rom_printf(DRAM_STR(" %08x"),
