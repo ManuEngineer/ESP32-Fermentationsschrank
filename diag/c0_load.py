@@ -14,6 +14,7 @@ import threading
 import time
 
 BAD = re.compile(r"heap_alloc_failed|abort\(\)|panic|Guru Meditation|task_wdt|Brownout|stack overflow|rst:0x", re.I)
+HEARTBEAT = re.compile(r"heartbeat: safe test mode, uptime_ms=\d+\b")
 
 
 class Guard:
@@ -71,18 +72,29 @@ class Guard:
             connection.close()
 
 
-def monitor_uart(path, offset, guard, finished):
+def monitor_uart(path, offset, guard, finished, heartbeat_ready, *,
+                 heartbeat_timeout=5.0, monotonic=time.monotonic):
+    last_heartbeat = monotonic()
     try:
         with path.open(errors="replace") as stream:
             stream.seek(offset)
             pending = ""
-            while not finished.is_set():
+            while not guard.stopped.is_set():
+                # Check before reading: a late heartbeat cannot forgive a gap.
+                if monotonic() - last_heartbeat > heartbeat_timeout:
+                    guard.abort("uart-heartbeat-timeout")
+                    return
+                if finished.is_set():
+                    return
                 pending += stream.read()
                 lines = pending.split("\n")
                 pending = lines.pop()
                 if any(BAD.search(line) for line in lines) or BAD.search(pending):
                     guard.abort("uart-anomaly")
                     return
+                if any(HEARTBEAT.search(line) for line in lines):
+                    last_heartbeat = monotonic()
+                    heartbeat_ready.set()
                 finished.wait(0.05)
     except OSError:
         guard.abort("uart-monitor-failure")
@@ -96,6 +108,7 @@ def run(args):
     args.output.mkdir(parents=True, exist_ok=False)
     guard = Guard()
     finished = threading.Event()
+    heartbeat_ready = threading.Event()
     samples = []
     samples_lock = threading.Lock()
     marks = []
@@ -116,10 +129,18 @@ def run(args):
         return status, payload, set_cookie
 
     monitor = threading.Thread(target=monitor_uart,
-                               args=(args.uart, args.uart.stat().st_size, guard, finished))
+                               args=(args.uart, args.uart.stat().st_size, guard,
+                                     finished, heartbeat_ready))
     monitor.start()
     sessions = []
     try:
+        mark("uart-heartbeat-wait")
+        while not heartbeat_ready.wait(0.05):
+            if guard.stopped.is_set():
+                break
+        if guard.stopped.is_set():
+            return 1
+        mark("uart-heartbeat-ready")
         password = (Path.home() / "pw").read_text().splitlines()[0]
         mark("login-start")
         for index in range(4):
@@ -185,6 +206,9 @@ def run(args):
                     "idle_reference_seconds": 60, "recovery_seconds": 300,
                     "session_policy": "no logout; no re-login; same four sessions",
                     "connection_policy": "new per request; Connection close; 3 s timeout",
+                    "monitoring_policy": "fresh heartbeat before login; max 5 s gap throughout all phases",
+                    "status": "FAIL" if guard.stopped.is_set() else "COMPLETED_PENDING_REVIEW",
+                    "evidence_gate": "HOLD" if guard.stopped.is_set() else "NOT_EVALUATED",
                     "abort": guard.reason, "marks": marks, "samples": samples}
         (args.output / "load.json").write_text(json.dumps(document, indent=2))
         sessions.clear()

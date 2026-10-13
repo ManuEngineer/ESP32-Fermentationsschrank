@@ -47,6 +47,14 @@ python3 scripts/build_esp_idf_profiles.py release --require-clean-source-tree
   sessions offset by 1.2 s; a shell GET every 30 s per session, first at its
   second tick. 1200 s load. New connection per request, explicit client close,
   3-s timeout. No re-login, no logout on any outcome.
+- Monitoring prerequisite (C0-1): from the capture's current end offset, observe
+  a fresh `heartbeat: safe test mode, uptime_ms=` board line before the first
+  device request/login. Existing old lines cannot satisfy readiness. The board
+  emits a heartbeat every 1 s; require the first one within 5 s and keep watching
+  with monotonic host time throughout login, idle reference, load and recovery.
+  A gap exceeding 5 s aborts with `uart-heartbeat-timeout`, closes connections,
+  prevents further requests and records FAIL/HOLD. Other UART lines do not extend
+  the deadline. Use this same corrected runner/hash for baseline and candidate.
 - Before load: 60 s idle with those same four sessions, all runner sockets
   closed. Use current free heap/largest block in the v3 `diag_30s` UART samples,
   not boot minima. Record actual session validity/network/connection state.
