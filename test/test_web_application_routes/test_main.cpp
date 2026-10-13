@@ -10,9 +10,11 @@
 #include <cstring>
 #include <iomanip>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 #include <type_traits>
 #include <variant>
 
@@ -3597,6 +3599,304 @@ void test_shell_stays_within_the_limit_in_all_states() {
     }
 }
 
+// ---- Issue #27 dashboard slice: SIM-27-W-01..06
+// ------------------------------ String/state contract only: the native tools
+// cannot execute the shell script. Dynamic browser behaviour (layout,
+// overlapping fetches, hanging requests) is NOT_RUN; the structural position
+// checks below only prove that the ordering guard exists and is placed before
+// every effect.
+
+std::string loggedInShell(ComposedFixture& fixture) {
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, passwordUnderTest(), kPinUnderTest));
+    const auto session = loginComposed(fixture);
+    return authenticatedShell(fixture, session.cookie);
+}
+
+// Text of the refresh function (from its declaration to the next top-level
+// function) so position checks cannot match other code.
+std::string refreshFunction(const std::string& body) {
+    const auto begin = body.find("async function rf(){");
+    TEST_ASSERT_TRUE(begin != std::string::npos);
+    const auto end = body.find("login.addEventListener", begin);
+    TEST_ASSERT_TRUE(end != std::string::npos);
+    return body.substr(begin, end - begin);
+}
+
+std::string uiFunction(const std::string& body) {
+    const auto begin = body.find("function ui(){");
+    TEST_ASSERT_TRUE(begin != std::string::npos);
+    const auto end = body.find("async function send(", begin);
+    TEST_ASSERT_TRUE(end != std::string::npos);
+    return body.substr(begin, end - begin);
+}
+
+size_t labelCount(const std::string& body, const std::string& token) {
+    const bool plain = token.find('-') == std::string::npos;
+    const auto key = plain ? token : "'" + token + "'";
+    return occurrences(body, "{" + key + ":'") +
+           occurrences(body, "," + key + ":'");
+}
+
+std::vector<std::string> jsonTokens(const std::string& json,
+                                    const std::string& key) {
+    std::vector<std::string> tokens;
+    const auto needle = "\"" + key + "\":\"";
+    for (auto at = json.find(needle); at != std::string::npos;
+         at = json.find(needle, at + needle.size())) {
+        const auto start = at + needle.size();
+        tokens.push_back(json.substr(start, json.find('"', start) - start));
+    }
+    return tokens;
+}
+
+void test_dashboard_shell_structure_and_responsive_contract() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    // SIM-27-W-01: readable board instead of the raw JSON dump.
+    TEST_ASSERT_FALSE(contains(body, "JSON.stringify(p"));
+    TEST_ASSERT_FALSE(contains(body, "<pre"));
+    TEST_ASSERT_FALSE(contains(body, "innerHTML"));
+    for (const char* id : {"connection", "mode", "temps", "alerts", "board"}) {
+        TEST_ASSERT_EQUAL_UINT32(
+            1U, occurrences(body, std::string("id=\"") + id + "\""));
+    }
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "name=\"viewport\""));
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "@media(min-width:40rem)"));
+    TEST_ASSERT_TRUE(contains(body, "min-height:2.75rem"));
+    // API strings reach the DOM only through textContent/className.
+    TEST_ASSERT_TRUE(contains(body, "e.textContent=x;"));
+    // The existing controls, session embedding and polling are unchanged.
+    for (const char* action : {"ack", "mute", "stop", "done", "start"}) {
+        TEST_ASSERT_EQUAL_UINT32(
+            1U, occurrences(body, std::string("data-a=\"") + action + "\""));
+    }
+    TEST_ASSERT_TRUE(contains(body, "const U=true;let Q=1;"));
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "const A='"));
+    // SIM-27-W-06: no new endpoint, three read-only requests, 5 s polling.
+    TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
+    TEST_ASSERT_TRUE(contains(body, "setInterval(rf,5000)"));
+    TEST_ASSERT_TRUE(contains(
+        body, "['status','temperatures','alerts'].map(x=>fetch('/api/v1/'+x,"));
+    TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
+}
+
+void test_dashboard_shell_texts_are_complete_in_all_locales() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    // SIM-27-W-02: every dictionary key exists exactly once per locale.
+    for (const char* key :
+         {"login",      "logout",   "offline",     "stale",   "online",
+          "rq",         "pl",       "pt",          "ds",      "ack",
+          "mute",       "stop",     "done",        "start",   "sure",
+          "ok",         "fail",     "age",         "failed",  "alerts",
+          "qd",         "sm",       "standby",     "waiting", "completed",
+          "restricted", "recovery", "unavailable", "product", "cooling"}) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, key));
+    }
+    for (const char* key : {"active-run", "cabinet-air"}) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, key));
+    }
+    TEST_ASSERT_TRUE(contains(body, "de:{"));
+    TEST_ASSERT_TRUE(contains(body, ",en:{"));
+    TEST_ASSERT_TRUE(contains(body, ",es:{"));
+    // English fallback is kept (T=L[locale], locale falls back to 'en').
+    TEST_ASSERT_TRUE(contains(body, "locale=L[g]?g:'en'"));
+    // The warning text of the disabled mode stays as before.
+    TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
+}
+
+void test_dashboard_shell_labels_cover_every_codec_token() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    // SIM-27-W-03: the name tables are private to the codec, so the tokens are
+    // collected through the public encoders over the whole enum range; a new
+    // enumerator changes the count or lacks a label and fails here.
+    std::set<std::string> modes;
+    std::set<std::string> roles;
+    std::set<std::string> qualities;
+    for (unsigned value = 0U; value < 16U; ++value) {
+        FermentationUiSnapshot snapshot;
+        snapshot.home.mode = static_cast<FermentationHomeMode>(value);
+        std::string status;
+        if (encodeWebApiStatus(snapshot, status)) {
+            for (const auto& token : jsonTokens(status, "homeMode")) {
+                modes.insert(token);
+            }
+        }
+        FermentationUiSnapshot temperatures;
+        temperatures.temperatures = {
+            {static_cast<FermentationTemperatureRole>(value), 1.0, {}}};
+        temperatures.temperatures[0].quality.quality =
+            static_cast<device_platform::SensorQuality>(value);
+        std::string encoded;
+        if (encodeWebApiTemperatures(temperatures, encoded)) {
+            for (const auto& token : jsonTokens(encoded, "role")) {
+                roles.insert(token);
+            }
+            for (const auto& token : jsonTokens(encoded, "quality")) {
+                qualities.insert(token);
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(7U, static_cast<std::uint32_t>(modes.size()));
+    TEST_ASSERT_EQUAL_UINT32(3U, static_cast<std::uint32_t>(roles.size()));
+    TEST_ASSERT_EQUAL_UINT32(3U, static_cast<std::uint32_t>(qualities.size()));
+    for (const auto& token : modes) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, token));
+    }
+    for (const auto& token : roles) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, token));
+    }
+    // `valid` needs no reason text; `stale` and `failed` do.
+    for (const auto& token : qualities) {
+        TEST_ASSERT_EQUAL_UINT32(token == "valid" ? 0U : 3U,
+                                 labelCount(body, token));
+    }
+    // Severity classes that carry a colour exist in the shell style.
+    TEST_ASSERT_TRUE(contains(body, ".safety-fault"));
+    TEST_ASSERT_TRUE(contains(body, ".decision-required"));
+}
+
+void test_dashboard_feed_fields_in_standby_and_constructed_states() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, passwordUnderTest(), kPinUnderTest));
+    const auto session = loginComposed(fixture);
+    // SIM-27-W-04, standby through the real Application path.
+    device_platform::HttpResponse response;
+    auto request =
+        makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+    TEST_ASSERT_TRUE(contains(response.body, "\"homeMode\":\"standby\""));
+    TEST_ASSERT_TRUE(contains(response.body, "\"revisions\":{"));
+    TEST_ASSERT_TRUE(contains(response.body, "\"programCatalog\":\""));
+    request =
+        makeAuthenticatedRequest("GET", "/api/v1/temperatures", session.cookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_TRUE(contains(response.body, "\"temperatures\":["));
+    request = makeAuthenticatedRequest("GET", "/api/v1/alerts", session.cookie);
+    TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
+    TEST_ASSERT_TRUE(contains(response.body, "\"alerts\":["));
+
+    // The other modes are not reachable through the real path in this fixture
+    // (no program is startable without commissioning values, see commit
+    // 0b7cea0): field contract over constructed snapshots only.
+    for (const auto mode :
+         {FermentationHomeMode::Standby, FermentationHomeMode::ActiveRun,
+          FermentationHomeMode::Waiting, FermentationHomeMode::Completed,
+          FermentationHomeMode::Restricted, FermentationHomeMode::Recovery,
+          FermentationHomeMode::Unavailable}) {
+        FermentationUiSnapshot snapshot;
+        snapshot.home.mode = mode;
+        snapshot.revisions.expectedRunRevision = 7U;
+        snapshot.revisions.expectedProgramCatalogRevision =
+            ProgramCatalogRevision{3U};
+        snapshot.temperatures = {
+            {FermentationTemperatureRole::CabinetAir, 21.5, {}},
+            {FermentationTemperatureRole::Product, 18.0, {}},
+            {FermentationTemperatureRole::Cooling, std::nullopt, {}}};
+        snapshot.temperatures[0].quality.quality =
+            device_platform::SensorQuality::Valid;
+        RuntimeMessage message;
+        message.id = 5U;
+        message.code = MessageCode::ProductInsertionRequested;
+        message.messageClass = MessageClass::SafetyFault;
+        message.active = true;
+        snapshot.messages.push_back(MessageView{message});
+        std::string status;
+        std::string temperatures;
+        std::string alerts;
+        TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+        TEST_ASSERT_TRUE(encodeWebApiTemperatures(snapshot, temperatures));
+        TEST_ASSERT_TRUE(encodeWebApiAlerts(snapshot, alerts));
+        for (const char* field :
+             {"\"homeMode\":\"", "\"run\":7", "\"programCatalog\":\"3\""}) {
+            TEST_ASSERT_TRUE(contains(status, field));
+        }
+        for (const char* field : {"\"role\":\"", "\"quality\":\"",
+                                  "\"valid\":", "\"valueCelsius\":"}) {
+            TEST_ASSERT_TRUE(contains(temperatures, field));
+        }
+        for (const char* field :
+             {"\"id\":5", "\"code\":\"", "\"severity\":\"safety-fault\"",
+              "\"active\":true", "\"acknowledged\":", "\"muted\":"}) {
+            TEST_ASSERT_TRUE(contains(alerts, field));
+        }
+    }
+}
+
+void test_dashboard_missing_and_stale_data_contract() {
+    // SIM-27-W-05, codec side: an unavailable reading never carries a value;
+    // a missing role or an empty list is simply absent.
+    FermentationUiSnapshot snapshot;
+    std::string temperatures;
+    TEST_ASSERT_TRUE(encodeWebApiTemperatures(snapshot, temperatures));
+    TEST_ASSERT_TRUE(contains(temperatures, "\"temperatures\":[]"));
+    snapshot.temperatures = {{FermentationTemperatureRole::Product, 19.0, {}}};
+    snapshot.temperatures[0].quality.quality =
+        device_platform::SensorQuality::Stale;
+    TEST_ASSERT_TRUE(encodeWebApiTemperatures(snapshot, temperatures));
+    TEST_ASSERT_TRUE(contains(temperatures, "\"role\":\"product\""));
+    TEST_ASSERT_FALSE(contains(temperatures, "cabinet-air"));
+    TEST_ASSERT_TRUE(contains(
+        temperatures,
+        "\"quality\":\"stale\",\"valid\":false,\"valueCelsius\":null"));
+    TEST_ASSERT_FALSE(contains(temperatures, "19"));
+}
+
+void test_dashboard_ordering_guard_and_age_contract_in_the_shell_text() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+    const auto rf = refreshFunction(body);
+    // SIM-27-W-05, structure: generation and start time before the first fetch.
+    const auto generation = rf.find("my=++G");
+    const auto started = rf.find("t0=Date.now()");
+    const auto firstFetch = rf.find("fetch(");
+    TEST_ASSERT_TRUE(generation != std::string::npos);
+    TEST_ASSERT_TRUE(started != std::string::npos);
+    TEST_ASSERT_TRUE(firstFetch != std::string::npos);
+    TEST_ASSERT_TRUE(generation < firstFetch);
+    TEST_ASSERT_TRUE(started < firstFetch);
+    // `A` stays the authentication state; the generation uses G/H.
+    TEST_ASSERT_TRUE(contains(body, "G=0,H=0"));
+    TEST_ASSERT_FALSE(contains(body, "my<A"));
+    TEST_ASSERT_FALSE(contains(body, "A=my"));
+    // Success path: guard after the awaited responses, before any effect.
+    const auto awaited = rf.find("await Promise.all(r.map");
+    const auto guard = rf.find("if(my<H)return;H=my;", awaited);
+    const auto displayCopy = rf.find("LP=p", guard);
+    const auto gating = rf.find("P=Date.now()-t0<=15000", guard);
+    TEST_ASSERT_TRUE(awaited != std::string::npos);
+    TEST_ASSERT_TRUE(guard != std::string::npos);
+    TEST_ASSERT_TRUE(displayCopy != std::string::npos);
+    TEST_ASSERT_TRUE(gating != std::string::npos);
+    TEST_ASSERT_TRUE(awaited < guard);
+    // Age is the start of the request, never the arrival time.
+    TEST_ASSERT_TRUE(contains(rf, "LT=t0"));
+    TEST_ASSERT_FALSE(contains(rf, "LT=Date.now()"));
+    // Failure path: guard first, then P=null, then the action lock.
+    const auto handler = rf.find("catch(e){");
+    const auto failGuard = rf.find("if(my<H)return;H=my;", handler);
+    const auto failClear = rf.find("P=null;", handler);
+    const auto failLock = rf.find("ui();", failClear);
+    TEST_ASSERT_TRUE(handler != std::string::npos);
+    TEST_ASSERT_TRUE(failGuard < failClear);
+    TEST_ASSERT_TRUE(failClear < failLock);
+    // Age threshold is evaluated at the start of the tick, before any fetch,
+    // and depends only on LT (a hanging fetch cannot suppress it).
+    const auto threshold = rf.find("t0-LT>15000");
+    TEST_ASSERT_TRUE(threshold != std::string::npos);
+    TEST_ASSERT_TRUE(threshold < firstFetch);
+    TEST_ASSERT_TRUE(contains(rf, "P=null"));
+    // P (gating) and LP (display copy) stay separate: ui() never reads LP.
+    TEST_ASSERT_FALSE(contains(uiFunction(body), "LP"));
+    TEST_ASSERT_TRUE(contains(body, "b.disabled=B||!P||d[k]"));
+    // A value is never shown for an unavailable reading.
+    TEST_ASSERT_TRUE(contains(body, "e.valid&&e.valueCelsius!=null?"));
+}
+
 // ---- C4: read-only program list ---------------------------------------------
 
 device_platform::HttpResponse getPrograms(ComposedFixture& fixture,
@@ -4218,6 +4518,12 @@ int main() {
     RUN_TEST(test_shell_embeds_mutation_sequence_per_session);
     RUN_TEST(test_shell_login_reload_bootstrap_for_protected_and_disabled);
     RUN_TEST(test_shell_stays_within_the_limit_in_all_states);
+    RUN_TEST(test_dashboard_shell_structure_and_responsive_contract);
+    RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
+    RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
+    RUN_TEST(test_dashboard_feed_fields_in_standby_and_constructed_states);
+    RUN_TEST(test_dashboard_missing_and_stale_data_contract);
+    RUN_TEST(test_dashboard_ordering_guard_and_age_contract_in_the_shell_text);
     RUN_TEST(test_unprovisioned_shell_requests_match_the_s4_contract);
     RUN_TEST(
         test_unprovisioned_shell_explains_local_release_and_creates_no_session);
