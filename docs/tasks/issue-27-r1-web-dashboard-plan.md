@@ -110,7 +110,11 @@ Lokalisierung der 7 Meldungscodes ist **nicht** Teil dieses Slices (D3).
   eintreffenden Fehler.
 - `LP`/`LT` (neu) sind nur die **Anzeigekopie** des letzten gueltigen Snapshots
   samt Zeitstempel. `ui()` liest sie nie; sie geben nie Aktionen frei.
-- `G`/`A` (neu) sind Abrufgeneration und hoechste angewendete Generation.
+- `G`/`H` (neu, `let G=0,H=0`) sind Abrufgeneration und hoechste angewendete
+  Generation. `A` bleibt unveraendert der vorhandene Authentifizierungszustand
+  (`const A='<auth-state>'`, Login-/Shell-Semantik unveraendert); `G`, `H`,
+  `LP`, `LT`, `my` und `t0` sind in der heutigen Shell unbelegt (geprueft am
+  Dump der echten Antwort auf `b903de8`).
 
 **Reihenfolgeregel.** `setInterval(refresh,5000)` und `send()` (`await
 refresh()` nach einer Mutation) koennen Abrufe ueberlappen; die Latenz liegt
@@ -121,7 +125,7 @@ Polling-Rahmen gilt clientseitig:
   (`t0` gilt fuer alle drei parallelen Abrufe gemeinsam).
 - Nach `await`, im Erfolgs- **und** im Fehlerpfad (`catch`), und **vor jeder
   Wirkung** (Zuweisung an `P`, `LP`, `LT`, Verbindungsanzeige, `ui()`) gilt
-  `if(my<A)return;A=my;`. Ein aelteres Ergebnis kann damit weder einen
+  `if(my<H)return;H=my;`. Ein aelteres Ergebnis kann damit weder einen
   spaeter bereits angewendeten gueltigen Stand noch dessen Status
   ueberschreiben.
 - Ein **angewendeter Fehler** setzt `P=null`, ruft `ui()` (Aktionssperre,
@@ -159,7 +163,7 @@ begrenzt).
 Reihenfolgeregel unvereinbar (die Generationspruefung steht im `catch` vor
 `P=null`) und wird in C1 **gezielt angepasst**, nicht entfernt oder
 uebersprungen: Die Assertion prueft stattdessen semantisch per
-Positionsvergleich im Shell-Text, dass im `catch` zuerst `if(my<A)return;`,
+Positionsvergleich im Shell-Text, dass im `catch` zuerst `if(my<H)return;`,
 danach `P=null`, danach `ui()` steht. Der Pin `b.disabled=B||!P||d[k]` bleibt
 unveraendert erhalten.
 
@@ -187,7 +191,7 @@ gemessen.
   an, wenn die Logik unveraendert bleibt (Anpassung, kein Aufweichen).
 - Bedarf (Prototyp-Zaehlung, DE/EN/ES): neue Texte (7 `homeMode`, 3 Rollen,
   Qualitaets-/Alterstexte) ca. 970 B, Renderfunktion ca. 630 B,
-  Stale-/Altersanzeige ca. 90 B, Reihenfolgeregel (`G`, `A`, `t0`, Pruefung)
+  Stale-/Altersanzeige ca. 90 B, Reihenfolgeregel (`G`, `H`, `t0`, Pruefung)
   ca. 100 B, CSS ca. 110 B, Markup ca. 120 B: zusammen ca. **2,0 KB**. Netto
   also ca. **+1,4 KB**, erwartete Shell ca. 8,0 KB. Passt die fertige Shell
   nicht mit >= 128 B Spielraum (einschliesslich 19 B Sequenzreserve) unter
@@ -239,7 +243,7 @@ Browsertest bleibt `NOT_RUN`.
 | SIM-27-W-02 | Textvollstaendigkeit: jeder neue Textschluessel kommt genau je Sprache (de/en/es) einmal vor (Muster `test_unprovisioned_shell_texts_are_complete_in_all_locales`); Rueckfall `T=L[lang]||L.en` unveraendert |
 | SIM-27-W-03 | Drift-Schutz ueber den echten Codec: `homeModeName`/`temperatureRoleName` liegen im anonymen Namespace und werden nur ueber `encodeWebApiStatus`/`encodeWebApiTemperatures` erreicht. Der Test iteriert den Wertebereich 0..15 der jeweiligen Enum (`static_cast`), sammelt alle Tokens, die erfolgreich kodiert werden, und prueft (1) die **Anzahl** (7 `homeMode`, 3 Rollen; ein neuer Enum-Wert aendert die Anzahl und faellt auf) und (2) dass jedes Token Schluessel der Shell-Labeltabelle ist |
 | SIM-27-W-04 | Feldvertrag je Zustand. **Standby** ueber den echten Application-Pfad des Fixtures (`/status`, `/temperatures`, `/alerts` liefern die gelesenen Felder). **active-run, waiting, completed, restricted, recovery, unavailable** sind im Web-Fixture nicht ueber den echten Pfad erreichbar (kein Programm ohne Commissioning-Werte startbar, siehe Commit `0b7cea0`); sie werden ueber `encodeWebApi*` mit konstruierten `FermentationUiSnapshot`s nachgewiesen (Feldpraesenz-/Typvertrag, keine Annahme ueber nicht vorhandene Felder wie Programmname/Restzeit). Der Plan behauptet fuer diese Zustaende keinen Produktpfad-Nachweis |
-| SIM-27-W-05 | Fehlende/stale Daten und Reihenfolge. **Codec (nativ, konstruierte Snapshots):** `quality` `stale`/`failed` -> `valid:false`, `valueCelsius:null`; fehlende Rolle; leere Temperaturliste. **Struktur-/Textvertrag der Shell (nativ):** Wert nie fuer `valid:false`; Offline-/Stale-/`Stand vor`-Pfad vorhanden; `P` und `LP` getrennte Variablen, `ui()` liest `LP` nie; der Pin `b.disabled=B||!P||d[k]` bleibt unveraendert, der Pin `catch(e){P=null;ui();` wird in C1 **gezielt angepasst** (nicht entfernt): im `catch` steht per Positionsvergleich zuerst `if(my<A)return;`, dann `P=null`, dann `ui()`; `my=++G` und `t0=Date.now()` stehen **vor** dem ersten `fetch`; `if(my<A)return;A=my;` steht in Erfolgs- **und** Fehlerpfad nach dem `await` und **vor** der ersten Zuweisung an `P`/`LP`/`LT`/Verbindungsanzeige (Positionsvergleich im Shell-Text); `LT=t0` (nie `Date.now()` bei Ankunft); Altersschwelle 15 s zu Beginn jedes Ticks setzt `P=null` ohne Abhaengigkeit vom Abschluss eines `fetch`. **Dynamische Szenarien (Sollverhalten, nativ nicht ausfuehrbar):** (1) *langsamer alter Erfolg nach schnellerem neuem Erfolg:* Generation 1 startet bei t=0 und antwortet bei t=12 s, Generation 2 startet bei t=5 s und antwortet bei t=6 s; nach t=12 s bleiben `LP`/`LT`/Anzeige bei Generation 2 (`LT=5 s`), Alter wird ab t=5 s gezaehlt, nicht ab 12 s; (2) *verspaeteter Fehler nach neuerem Erfolg:* Generation 1 schlaegt bei t=12 s fehl, nachdem Generation 2 bei t=6 s erfolgreich war: Status bleibt `online`, `P` unveraendert; (3) *haengende Anfrage:* kein `fetch` schliesst nach dem letzten Erfolg bei `LT` ab: bei `Date.now()-LT>15000` setzt der naechste Tick `P=null`, `stale` und `Stand vor N s` mit gedimmten Werten und gesperrten Aktionen; kommt die haengende Antwort danach doch an, aktualisiert sie `P` nicht (zu alt, `Date.now()-t0>15000`). Ein ausfuehrender JS-Test mit vorhandenen Projektmitteln ist nicht moeglich (PlatformIO/Unity, kein JS-Runner und kein Node in Projekt-Toolchain oder CI; ein JS-Runner waere eine neue Abhaengigkeit); der dynamische Nachweis der Szenarien (1)-(3) bleibt `NOT_RUN`. Optional darf der Builder sie einmalig mit lokalem `node` gegen die aus der Shell extrahierte Funktion mit gefaelschtem `fetch`/DOM durchspielen (Scratch, nicht committet, kein Gate); das Ergebnis wird im Commit-Text als `MANUAL_SCRATCH` benannt und ersetzt den Browsernachweis nicht |
+| SIM-27-W-05 | Fehlende/stale Daten und Reihenfolge. **Codec (nativ, konstruierte Snapshots):** `quality` `stale`/`failed` -> `valid:false`, `valueCelsius:null`; fehlende Rolle; leere Temperaturliste. **Struktur-/Textvertrag der Shell (nativ):** Wert nie fuer `valid:false`; Offline-/Stale-/`Stand vor`-Pfad vorhanden; `P` und `LP` getrennte Variablen, `ui()` liest `LP` nie; der Pin `b.disabled=B||!P||d[k]` bleibt unveraendert, der Pin `catch(e){P=null;ui();` wird in C1 **gezielt angepasst** (nicht entfernt): im `catch` steht per Positionsvergleich zuerst `if(my<H)return;`, dann `P=null`, dann `ui()`; `my=++G` und `t0=Date.now()` stehen **vor** dem ersten `fetch`; `if(my<H)return;H=my;` steht in Erfolgs- **und** Fehlerpfad nach dem `await` und **vor** der ersten Zuweisung an `P`/`LP`/`LT`/Verbindungsanzeige (Positionsvergleich im Shell-Text); `LT=t0` (nie `Date.now()` bei Ankunft); Altersschwelle 15 s zu Beginn jedes Ticks setzt `P=null` ohne Abhaengigkeit vom Abschluss eines `fetch`. **Dynamische Szenarien (Sollverhalten, nativ nicht ausfuehrbar):** (1) *langsamer alter Erfolg nach schnellerem neuem Erfolg:* Generation 1 startet bei t=0 und antwortet bei t=12 s, Generation 2 startet bei t=5 s und antwortet bei t=6 s; nach t=12 s bleiben `LP`/`LT`/Anzeige bei Generation 2 (`LT=5 s`), Alter wird ab t=5 s gezaehlt, nicht ab 12 s; (2) *verspaeteter Fehler nach neuerem Erfolg:* Generation 1 schlaegt bei t=12 s fehl, nachdem Generation 2 bei t=6 s erfolgreich war: Status bleibt `online`, `P` unveraendert; (3) *haengende Anfrage:* kein `fetch` schliesst nach dem letzten Erfolg bei `LT` ab: bei `Date.now()-LT>15000` setzt der naechste Tick `P=null`, `stale` und `Stand vor N s` mit gedimmten Werten und gesperrten Aktionen; kommt die haengende Antwort danach doch an, aktualisiert sie `P` nicht (zu alt, `Date.now()-t0>15000`). Ein ausfuehrender JS-Test mit vorhandenen Projektmitteln ist nicht moeglich (PlatformIO/Unity, kein JS-Runner und kein Node in Projekt-Toolchain oder CI; ein JS-Runner waere eine neue Abhaengigkeit); der dynamische Nachweis der Szenarien (1)-(3) bleibt `NOT_RUN`. Optional darf der Builder sie einmalig mit lokalem `node` gegen die aus der Shell extrahierte Funktion mit gefaelschtem `fetch`/DOM durchspielen (Scratch, nicht committet, kein Gate); das Ergebnis wird im Commit-Text als `MANUAL_SCRATCH` benannt und ersetzt den Browsernachweis nicht |
 | SIM-27-W-06 | Grenzen unveraendert: Shell <= neue Schranke in allen Zustaenden (unprovisioniert, geschuetzt anonym/angemeldet inkl. 19 B Sequenzreserve, Passwortschutz aus, Recovery); JSON-Response-Budgets 3072 B, 5-s-Polling mit genau drei Requests, kein neuer Endpunkt, Session/CSRF/Replay-Tests unveraendert gruen |
 | Build/Statik | beide ESP-IDF-Profile (`build_esp_idf_profiles.py all`), `self-check`, Architekturcheck |
 | `NOT_RUN` | ausfuehrende Browsertests (Layout, JS-Logik **einschliesslich der dynamischen Reihenfolge-/Stale-Szenarien (1)-(3) aus SIM-27-W-05**), Hardware-Ressourcen-/Heap-Messung der groesseren Shell, Flash; `ACTUATOR_RELEASE=NO` |
