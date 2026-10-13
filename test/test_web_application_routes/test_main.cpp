@@ -1894,7 +1894,9 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_TRUE(
         response.body.find("document.documentElement.lang=locale") !=
         std::string::npos);
-    TEST_ASSERT_TRUE(response.body.find("noSnapshot") != std::string::npos);
+    // The raw JSON placeholder is gone; the board replaces it.
+    TEST_ASSERT_TRUE(response.body.find("id=\"board\"") != std::string::npos);
+    TEST_ASSERT_TRUE(response.body.find("<pre") == std::string::npos);
 
     request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
@@ -3310,10 +3312,16 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
+// Owner limit of the web shell (Issue #27 dashboard slice, D1 = A: at most
+// 8192 bytes) and the required reserve below it, including the 19 byte reserve
+// for the widest mutation sequence.
+constexpr size_t kShellLimit = 8192U;
+constexpr size_t kShellMinimumReserve = 128U;
+
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
     ComposedFixture fixture;
     const auto body = shellBody(fixture);
-    TEST_ASSERT_TRUE(body.size() <= 6656U);
+    TEST_ASSERT_TRUE(body.size() <= kShellLimit);
     // Protect is preselected; password, separate Service-PIN and the explicit
     // disable confirmation are separate controls.
     TEST_ASSERT_TRUE(contains(body, "name=\"o\" value=\"p\" checked"));
@@ -3470,7 +3478,18 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
     TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
     // A failed refresh makes the snapshot unusable until a fresh one arrives.
-    TEST_ASSERT_TRUE(contains(body, "catch(e){P=null;ui();"));
+    // The older-generation guard comes first (Issue #27 dashboard slice); an
+    // applied failure then clears P, updates the action lock and the display.
+    {
+        const auto handler = body.find("catch(e){");
+        TEST_ASSERT_TRUE(handler != std::string::npos);
+        const auto guard = body.find("if(my<H)return;H=my;", handler);
+        const auto clear = body.find("P=null;", handler);
+        const auto lock = body.find("ui();", clear);
+        TEST_ASSERT_TRUE(guard != std::string::npos);
+        TEST_ASSERT_TRUE(guard < clear);
+        TEST_ASSERT_TRUE(clear < lock);
+    }
     TEST_ASSERT_TRUE(contains(body, "b.disabled=B||!P||d[k]"));
     // Ack/Mute name their target message.
     TEST_ASSERT_TRUE(contains(body, "T[k]+(g[k]?' #'+g[k].id:'')"));
@@ -3534,7 +3553,7 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
 }
 
 void test_shell_stays_within_the_limit_in_all_states() {
-    constexpr size_t kLimit = 6656U;
+    constexpr size_t kLimit = kShellLimit;
     // Reserve for the widest possible sequence (20 digits) on top of "1".
     constexpr size_t kSequenceHeadroom = 19U;
     {
@@ -3550,6 +3569,11 @@ void test_shell_stays_within_the_limit_in_all_states() {
         TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
                              kSequenceHeadroom <=
                          kLimit);
+        // The measured shell keeps the owner reserve (it includes the
+        // sequence headroom above).
+        TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
+                             kShellMinimumReserve <=
+                         kLimit);
     }
     {
         ComposedFixture fixture;  // password disabled (anonymous session)
@@ -3563,6 +3587,7 @@ void test_shell_stays_within_the_limit_in_all_states() {
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
         TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
         TEST_ASSERT_TRUE(response.body.size() + kSequenceHeadroom <= kLimit);
+        TEST_ASSERT_TRUE(response.body.size() + kShellMinimumReserve <= kLimit);
     }
     {
         ComposedFixture fixture;  // recovery required
