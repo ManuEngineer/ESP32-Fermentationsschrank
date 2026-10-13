@@ -72,17 +72,20 @@ class Guard:
 
 
 def monitor_uart(path, offset, guard, finished):
-    with path.open(errors="replace") as stream:
-        stream.seek(offset)
-        pending = ""
-        while not finished.is_set():
-            pending += stream.read()
-            lines = pending.split("\n")
-            pending = lines.pop()
-            if any(BAD.search(line) for line in lines) or BAD.search(pending):
-                guard.abort("uart-anomaly")
-                return
-            finished.wait(0.05)
+    try:
+        with path.open(errors="replace") as stream:
+            stream.seek(offset)
+            pending = ""
+            while not finished.is_set():
+                pending += stream.read()
+                lines = pending.split("\n")
+                pending = lines.pop()
+                if any(BAD.search(line) for line in lines) or BAD.search(pending):
+                    guard.abort("uart-anomaly")
+                    return
+                finished.wait(0.05)
+    except OSError:
+        guard.abort("uart-monitor-failure")
 
 
 def run(args):

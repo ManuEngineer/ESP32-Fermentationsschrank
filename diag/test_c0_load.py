@@ -44,6 +44,13 @@ class C0RunnerTests(unittest.TestCase):
             server.server_close()
             serving.join()
 
+    def test_uart_monitor_failure_is_fail_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            guard = Guard()
+            monitor_uart(Path(folder) / "missing.log", 0, guard, threading.Event())
+            self.assertTrue(guard.stopped.is_set())
+            self.assertEqual(guard.reason, "uart-monitor-failure")
+
     def test_uart_anomaly_stops_immediately_between_request_ticks(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "uart.log"
