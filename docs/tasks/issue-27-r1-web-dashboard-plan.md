@@ -111,19 +111,60 @@ gueltiger Snapshot), `online`, `stale`. Zwei getrennte Variablen:
   Zeitstempel `LT`. Sie wird nie von `ui()` gelesen und darf nie Aktionen
   freigeben.
 
-`stale` entsteht auf zwei Wegen, unabhaengig voneinander: (a) ein Poll
-schlaegt fehl (bestehender `catch`/`!ok`-Pfad) und (b) **Altersschwelle**: zu
-Beginn jedes 5-s-Ticks wird `Date.now()-LT` geprueft; ueberschreitet es
-**15 s**, wird `P=null` gesetzt und `stale` gezeigt, auch wenn kein `fetch`
-je abgeschlossen oder fehlgeschlagen ist (ein haengender `fetch` hat im
-Browser kein Zeitlimit). Begruendung der 15 s: drei Poll-Perioden und ueber
-der im PR170-Gate gemessenen Spitzenlatenz von 10,6 s
-(`POLL_600S.txt`, `lat_ms max=10648`, 3 Sessions); eine kuerzere Schwelle
-wuerde im normalen Betrieb flackern. Im Zustand `stale` bleiben die letzten
-Werte **gedimmt** sichtbar mit `Stand vor N s` (aus `LT`, bei jedem Tick
-aktualisiert). Ein erfolgreicher Poll setzt `P`, `LP`, `LT` und `online` und
-stellt damit ein vollstaendiges Bild her (Wiederverbindung = voller
-Snapshot, bereits Ist-Verhalten).
+**Reihenfolge- und Zeitstempelregel (neu).** `setInterval(refresh,5000)` und
+`send()` (`await refresh()` nach einer Mutation) koennen Abrufe ueberlappen; die
+Latenz liegt gemessen ueber dem Pollintervall (bis 10,6 s). Daher gilt, ohne
+neuen Timer, Endpunkt oder Polling-Rahmen, clientseitig:
+
+- Jeder `refresh()`-Aufruf nimmt **vor** dem ersten `fetch` eine Generation
+  `my=++G` und den Startzeitpunkt `t0=Date.now()`. `t0` gilt fuer alle drei
+  parallelen Abrufe des Dreifachabrufs gemeinsam.
+- Nach `await` (Erfolg **und** Fehler) und **vor** jeder Zuweisung an `P`,
+  `LP`, `LT` oder die Verbindungsanzeige gilt: `if(my<A)return;A=my;`
+  (`A` = hoechste bereits angewendete Generation). Ein aelteres Ergebnis -
+  Erfolg oder Fehler - kann damit weder einen spaeter bereits angewendeten
+  gueltigen Stand noch dessen Verbindungsstatus ueberschreiben.
+- Der Datenzeitpunkt ist `LT=t0` (Abrufbeginn), nicht der Ankunftszeitpunkt: die
+  API liefert keinen Erfassungszeitstempel, Daten sind frueestens bei `t0`
+  erfasst und hoechstens so alt wie `Date.now()-t0`. Das ist eine
+  **konservative Obergrenze des Alters**; eine verspaetet eintreffende
+  Antwort wird nie auf `jetzt` datiert.
+- Ein Erfolg setzt `P` (Gating) nur, wenn `Date.now()-t0<=15000`; ein zu alter
+  Erfolg aktualisiert hoechstens die gedimmte Anzeige (`LP`/`LT`, nur wenn
+  `t0>LT`), gibt aber keine Aktion frei.
+
+**Verbindung, Alter und Aktionssperre.** Zustaende: `offline` (noch nie ein
+gueltiger Snapshot), `online`, `stale`. Zwei getrennte Variablen:
+
+- `P` (bestehend, **unveraendert** als Gating-Zustand): `null` bei jedem
+  angewendeten Fehler; `ui()` deaktiviert damit alle Aktionen und verwirft eine
+  offene Zwei-Klick-Bestaetigung (`if(!P||KC&&c!==KC)K=''`). Die bestehenden
+  Textvertraege `catch(e){P=null;ui();` und `b.disabled=B||!P||d[k]` bleiben.
+- `LP` (neu) ist nur die **Anzeigekopie** des letzten gueltigen Snapshots samt
+  Zeitstempel `LT`. Sie wird nie von `ui()` gelesen und darf nie Aktionen
+  freigeben.
+
+`stale` entsteht auf zwei Wegen, unabhaengig voneinander: (a) ein
+**angewendeter** Fehler (bestehender `catch`/`!ok`-Pfad; ein verspaeteter Fehler
+einer aelteren Generation wird nach der Regel oben verworfen) und (b) die
+**Altersschwelle**: zu Beginn jedes 5-s-Ticks wird `Date.now()-LT` geprueft;
+ueberschreitet es **15 s**, wird `P=null` gesetzt und `stale` gezeigt, auch wenn
+kein `fetch` je abgeschlossen oder fehlgeschlagen ist (ein haengender `fetch`
+hat im Browser kein Zeitlimit). Die Schwelle haengt nur an `LT`, nie am
+Abschluss eines Abrufs; ein haengender Abruf kann sie daher nicht
+unterdruecken. Begruendung der 15 s: drei Poll-Perioden und ueber der im
+PR170-Gate gemessenen Spitzenlatenz von 10,6 s (`POLL_600S.txt`,
+`lat_ms max=10648`, 3 Sessions); eine kuerzere Schwelle wuerde im normalen
+Betrieb flackern. Im Zustand `stale` bleiben die letzten Werte **gedimmt**
+sichtbar mit `Stand vor N s` (aus `LT`, bei jedem Tick aktualisiert). Ein
+angewendeter Erfolg mit `Date.now()-t0<=15000` setzt `P`, `LP`, `LT` und
+`online` und stellt damit ein vollstaendiges Bild her (Wiederverbindung =
+voller Snapshot, bereits Ist-Verhalten). Session-, Revisions-, Mutations- und
+Sicherheitslogik sowie der bestehende `location.reload()`-Pfad in `send()`
+bleiben unveraendert; nicht beendete aeltere Abrufe werden nicht abgebrochen
+(kein `AbortController`: braucht Merkmalspruefung fuer aeltere Browser und
+Zusatzbytes; die Anzahl haengender Abrufe bleibt wie heute durch die
+5-s-Taktung und das Browser-Verbindungslimit begrenzt).
 
 **Responsiv.** Einspaltig mit grossen Bedienflaechen (`min-height:2.75rem`) auf
 schmalen Anzeigen; ab `min-width:40rem` zwei Spalten (Temperaturen | Meldungen);
@@ -149,12 +190,16 @@ gemessen.
   an, wenn die Logik unveraendert bleibt (Anpassung, kein Aufweichen).
 - Bedarf (Prototyp-Zaehlung, DE/EN/ES): neue Texte (7 `homeMode`, 3 Rollen,
   Qualitaets-/Alterstexte) ca. 970 B, Renderfunktion ca. 630 B,
-  Stale-/Altersanzeige ca. 90 B, CSS ca. 110 B, Markup ca. 120 B: zusammen
-  ca. **1,9 KB**. Netto also ca. **+1,3 KB**, erwartete Shell ca. 7,9 KB.
+  Stale-/Altersanzeige ca. 90 B, Reihenfolgeregel (`G`, `A`, `t0`, Pruefung)
+  ca. 100 B, CSS ca. 110 B, Markup ca. 120 B: zusammen ca. **2,0 KB**. Netto
+  also ca. **+1,4 KB**, erwartete Shell ca. 8,0 KB. Passt die fertige Shell
+  nicht mit >= 128 B Spielraum (einschliesslich 19 B Sequenzreserve) unter
+  die in D1 freigegebene Obergrenze, stoppt C1 und legt den Befund vor; die
+  Schranke wird nie still ueber D1 hinaus angehoben.
 - Variante ohne Schrankenaenderung (D1 = B): Selbst ohne neue Texte (rohe
   Tokens), ohne Spaltenlayout und ohne Altersschwelle liegt der Prototyp bei
-  ca. 0,75-0,95 KB gegenueber ca. 0,6 KB Freimachbarem; sie verfehlt die
-  Schranke um ca. 0,15-0,35 KB und verletzt zudem die Vorgabe DE/EN/ES fuer
+  ca. 0,85-1,05 KB gegenueber ca. 0,6 KB Freimachbarem; sie verfehlt die
+  Schranke um ca. 0,25-0,45 KB und verletzt zudem die Vorgabe DE/EN/ES fuer
   neue Inhalte. Sie ist damit nicht als lieferbar belegt.
 
 ## 5. Schnitte (eine Planfreigabe vor C1-C3; kein Owner-Gate je Commit)
@@ -194,10 +239,10 @@ Browsertest bleibt `NOT_RUN`.
 | SIM-27-W-02 | Textvollstaendigkeit: jeder neue Textschluessel kommt genau je Sprache (de/en/es) einmal vor (Muster `test_unprovisioned_shell_texts_are_complete_in_all_locales`); Rueckfall `T=L[lang]||L.en` unveraendert |
 | SIM-27-W-03 | Drift-Schutz ueber den echten Codec: `homeModeName`/`temperatureRoleName` liegen im anonymen Namespace und werden nur ueber `encodeWebApiStatus`/`encodeWebApiTemperatures` erreicht. Der Test iteriert den Wertebereich 0..15 der jeweiligen Enum (`static_cast`), sammelt alle Tokens, die erfolgreich kodiert werden, und prueft (1) die **Anzahl** (7 `homeMode`, 3 Rollen; ein neuer Enum-Wert aendert die Anzahl und faellt auf) und (2) dass jedes Token Schluessel der Shell-Labeltabelle ist |
 | SIM-27-W-04 | Feldvertrag je Zustand. **Standby** ueber den echten Application-Pfad des Fixtures (`/status`, `/temperatures`, `/alerts` liefern die gelesenen Felder). **active-run, waiting, completed, restricted, recovery, unavailable** sind im Web-Fixture nicht ueber den echten Pfad erreichbar (kein Programm ohne Commissioning-Werte startbar, siehe Commit `0b7cea0`); sie werden ueber `encodeWebApi*` mit konstruierten `FermentationUiSnapshot`s nachgewiesen (Feldpraesenz-/Typvertrag, keine Annahme ueber nicht vorhandene Felder wie Programmname/Restzeit). Der Plan behauptet fuer diese Zustaende keinen Produktpfad-Nachweis |
-| SIM-27-W-05 | Fehlende/stale Daten: `quality` `stale`/`failed` -> `valid:false`, `valueCelsius:null`; fehlende Rolle; leere Temperaturliste (Codec, konstruierte Snapshots). Textvertrag der Shell: Wert nie fuer `valid:false`; Offline-/Stale-/`Stand vor`-Pfad vorhanden; **Altersschwelle 15 s** zu Beginn jedes Ticks setzt `P=null` unabhaengig vom `fetch`-Ausgang; `P` und `LP` sind getrennte Variablen, `ui()` liest `LP` nie; bestehende Pins `catch(e){P=null;ui();` und `b.disabled=B||!P||d[k]` bleiben |
+| SIM-27-W-05 | Fehlende/stale Daten und Reihenfolge. **Codec (nativ, konstruierte Snapshots):** `quality` `stale`/`failed` -> `valid:false`, `valueCelsius:null`; fehlende Rolle; leere Temperaturliste. **Struktur-/Textvertrag der Shell (nativ):** Wert nie fuer `valid:false`; Offline-/Stale-/`Stand vor`-Pfad vorhanden; `P` und `LP` getrennte Variablen, `ui()` liest `LP` nie; bestehende Pins `catch(e){P=null;ui();` und `b.disabled=B||!P||d[k]` bleiben; `my=++G` und `t0=Date.now()` stehen **vor** dem ersten `fetch`; `if(my<A)return;A=my;` steht in Erfolgs- **und** Fehlerpfad nach dem `await` und **vor** der ersten Zuweisung an `P`/`LP`/`LT`/Verbindungsanzeige (Positionsvergleich im Shell-Text); `LT=t0` (nie `Date.now()` bei Ankunft); Altersschwelle 15 s zu Beginn jedes Ticks setzt `P=null` ohne Abhaengigkeit vom Abschluss eines `fetch`. **Dynamische Szenarien (Sollverhalten, nativ nicht ausfuehrbar):** (1) *langsamer alter Erfolg nach schnellerem neuem Erfolg:* Generation 1 startet bei t=0 und antwortet bei t=12 s, Generation 2 startet bei t=5 s und antwortet bei t=6 s; nach t=12 s bleiben `LP`/`LT`/Anzeige bei Generation 2 (`LT=5 s`), Alter wird ab t=5 s gezaehlt, nicht ab 12 s; (2) *verspaeteter Fehler nach neuerem Erfolg:* Generation 1 schlaegt bei t=12 s fehl, nachdem Generation 2 bei t=6 s erfolgreich war: Status bleibt `online`, `P` unveraendert; (3) *haengende Anfrage:* kein `fetch` schliesst nach dem letzten Erfolg bei `LT` ab: bei `Date.now()-LT>15000` setzt der naechste Tick `P=null`, `stale` und `Stand vor N s` mit gedimmten Werten und gesperrten Aktionen; kommt die haengende Antwort danach doch an, aktualisiert sie `P` nicht (zu alt, `Date.now()-t0>15000`). Ein ausfuehrender JS-Test mit vorhandenen Projektmitteln ist nicht moeglich (PlatformIO/Unity, kein JS-Runner und kein Node in Projekt-Toolchain oder CI; ein JS-Runner waere eine neue Abhaengigkeit); der dynamische Nachweis der Szenarien (1)-(3) bleibt `NOT_RUN`. Optional darf der Builder sie einmalig mit lokalem `node` gegen die aus der Shell extrahierte Funktion mit gefaelschtem `fetch`/DOM durchspielen (Scratch, nicht committet, kein Gate); das Ergebnis wird im Commit-Text als `MANUAL_SCRATCH` benannt und ersetzt den Browsernachweis nicht |
 | SIM-27-W-06 | Grenzen unveraendert: Shell <= neue Schranke in allen Zustaenden (unprovisioniert, geschuetzt anonym/angemeldet inkl. 19 B Sequenzreserve, Passwortschutz aus, Recovery); JSON-Response-Budgets 3072 B, 5-s-Polling mit genau drei Requests, kein neuer Endpunkt, Session/CSRF/Replay-Tests unveraendert gruen |
 | Build/Statik | beide ESP-IDF-Profile (`build_esp_idf_profiles.py all`), `self-check`, Architekturcheck |
-| `NOT_RUN` | ausfuehrende Browsertests (Layout, JS-Logik), Hardware-Ressourcen-/Heap-Messung der groesseren Shell, Flash; `ACTUATOR_RELEASE=NO` |
+| `NOT_RUN` | ausfuehrende Browsertests (Layout, JS-Logik **einschliesslich der dynamischen Reihenfolge-/Stale-Szenarien (1)-(3) aus SIM-27-W-05**), Hardware-Ressourcen-/Heap-Messung der groesseren Shell, Flash; `ACTUATOR_RELEASE=NO` |
 
 Gezielte lokale Tests im Draft: `test_web_application_routes`, `test_web_session`,
 `test_web_browser_policy`, Architekturcheck, `self-check`, ESP-IDF-Build.
@@ -208,7 +253,7 @@ Ownerfreigabe.
 
 | ID | Frage | Empfehlung |
 |---|---|---|
-| D1 | Die Shell-Schranke (6656 B, Ownerwert) laesst 44 B Raum; der Slice braucht netto ca. +1,3 KB (Schaetzung, Beleg in Abschnitt 4). **A:** Schranke auf bis zu **8192 B** anheben (Obergrenze; umgesetzt wird der kleinste passende Wert, mindestens 128 B Spielraum, erwartet ca. 7,9 KB). **B:** Schranke bleibt: als lieferbar nicht belegt (Abschnitt 4: Fehlbetrag ca. 0,15-0,35 KB selbst ohne neue Texte). **C:** Auslieferung ueber eigene Route(n): neuer Endpunkt, mehr Umfang, kein Heap-Gewinn, da `HttpResponse::body` ein `std::string` ist | **A.** Heap: ein Request haelt hoechstens eine Shell (der einzelne httpd-Task bedient Requests nacheinander); +1,3 KB gegenueber 6656 B bei groesstem freien Block 25 600 B ist rechnerisch klein, aber **nicht** auf Hardware gemessen (`NOT_RUN`); der Hardwarenachweis bleibt Owner-/Folgegate |
+| D1 | Die Shell-Schranke (6656 B, Ownerwert) laesst 44 B Raum; der Slice braucht netto ca. +1,4 KB (Schaetzung, Beleg in Abschnitt 4). **A:** Schranke auf bis zu **8192 B** anheben (Obergrenze; umgesetzt wird der kleinste passende Wert, mindestens 128 B Spielraum, erwartet ca. 8,0 KB). **B:** Schranke bleibt: als lieferbar nicht belegt (Abschnitt 4: Fehlbetrag ca. 0,25-0,45 KB selbst ohne neue Texte). **C:** Auslieferung ueber eigene Route(n): neuer Endpunkt, mehr Umfang, kein Heap-Gewinn, da `HttpResponse::body` ein `std::string` ist | **A.** Heap: ein Request haelt hoechstens eine Shell (der einzelne httpd-Task bedient Requests nacheinander); +1,4 KB gegenueber 6656 B bei groesstem freien Block 25 600 B ist rechnerisch klein, aber **nicht** auf Hardware gemessen (`NOT_RUN`); der Hardwarenachweis bleibt Owner-/Folgegate |
 | D2 | `processState` (15 Tokens) lokalisiert anzeigen? **A:** nein, nur `homeMode` (7 Texte) als Ueberschrift. **B:** zusaetzlich `processState` (ca. +0,7 KB; ueberschreitet die D1-Obergrenze 8192 B und braucht einen eigenen Schrankenentscheid) | **A** (KISS; Standby/Lauf/Abschluss sind ueber `homeMode` unterscheidbar) |
 | D3 | Meldungscodes (7) lokalisieren? **A:** nein, Code-Token lesbar gemacht (Bindestriche -> Leerzeichen), Schweregrad als Farbe/Klasse. **B:** vollstaendig DE/EN/ES (ca. +0,6 KB) | **A** |
 | D4 | Fehlende Fachfelder (Programmname, Soll, Restzeit, Netzwerk/Zeit, Geraetename) als **eigener Folge-Slice** mit Codec-Erweiterung planen? | Ja, getrennt nach diesem Slice; hier nicht vorgebaut |
@@ -218,8 +263,11 @@ Ownerfreigabe.
 - Ohne D1 = A ist der Slice nicht lieferbar (kein Rest-Spielraum); die
   Entscheidung ist ressourcenwirksam und die Hardware-Heapmessung fehlt
   weiterhin (`NOT_RUN`, bereits fuer die 6656-B-Shell offen).
-- JavaScript-Logik ist nativ nur textuell geprueft; Rendering-/Layoutfehler
-  koennen erst ein Browsertest zeigen (`NOT_RUN`).
+- JavaScript-Logik ist nativ nur textuell/strukturell geprueft; Rendering-,
+  Layout- und Reihenfolgefehler (Ueberlappung von Abrufen) zeigt erst ein
+  ausfuehrender Browsertest (`NOT_RUN`). Der Struktur-Positionstest sichert nur,
+  dass die Reihenfolgepruefung vorhanden und richtig platziert ist, nicht ihr
+  dynamisches Verhalten.
 - Ein dauerhaft abgelaufenes Session-Cookie (`401` bei den Read-APIs) wird wie
   heute als `Stale` dargestellt; eine eigene Session-abgelaufen-Anzeige ist
   nicht Teil dieses Slices (Befund, keine Aenderung).
