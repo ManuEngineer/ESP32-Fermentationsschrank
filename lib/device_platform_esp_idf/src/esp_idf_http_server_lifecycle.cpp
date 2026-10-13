@@ -324,14 +324,30 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    "response metadata unavailable");
     }
-    const bool largeResponse = response.body.size() > 4096U;
-    if (largeResponse) logHttpResources("built", response.body.size(), 0);
-    const esp_err_t sendResult =
-        httpd_resp_send(request, response.body.data(), response.body.size());
-    if (largeResponse) {
-        logHttpResources("sent", response.body.size(),
-                         static_cast<int>(sendResult));
+    const auto totalBytes =
+        response.body.size() + response.staticBodySuffix.size();
+    const bool largeResponse = totalBytes > 4096U;
+    if (largeResponse) logHttpResources("built", totalBytes, 0);
+    esp_err_t sendResult = ESP_OK;
+    if (response.staticBodySuffix.empty()) {
+        sendResult = httpd_resp_send(request, response.body.data(),
+                                     response.body.size());
+    } else {
+        if (!response.body.empty()) {
+            sendResult = httpd_resp_send_chunk(request, response.body.data(),
+                                               response.body.size());
+        }
+        if (sendResult == ESP_OK) {
+            sendResult =
+                httpd_resp_send_chunk(request, response.staticBodySuffix.data(),
+                                      response.staticBodySuffix.size());
+        }
+        if (sendResult == ESP_OK) {
+            sendResult = httpd_resp_send_chunk(request, nullptr, 0U);
+        }
     }
+    if (largeResponse)
+        logHttpResources("sent", totalBytes, static_cast<int>(sendResult));
     return sendResult;
 }
 

@@ -55,6 +55,7 @@ void setResponse(device_platform::HttpResponse& response,
     response.contentType = projected.contentType;
     response.body = projected.body;
     response.metadata = {};
+    response.staticBodySuffix = {};
 }
 
 void setJsonResponse(device_platform::HttpResponse& response,
@@ -63,6 +64,7 @@ void setJsonResponse(device_platform::HttpResponse& response,
     response.contentType = kJsonContentType;
     response.body = body;
     response.metadata = {};
+    response.staticBodySuffix = {};
 }
 
 bool validWebMetadata(const device_platform::HttpRequest& request,
@@ -228,8 +230,112 @@ std::string provisioningShell() {
            "</html>";
 }
 
+// C0 diagnostic prototype; immutable bytes from the v3 shell.
+constexpr char kC0WebShellSuffix[] =
+    ";const L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',s"
+    "tale:'Veraltet',online:'Online',rq:'Lokale Provisionierung oder Reco"
+    "very erforderlich',pl:'Passwort',pt:'Passwortschutz aktiv',ds:'Passw"
+    "ortschutz deaktiviert',ack:'Quittieren',mute:'Stumm',stop:'Stop',don"
+    "e:'Abschliessen',start:'Starten',sure:'Sicher?',ok:'Erledigt',fail:'"
+    "Nicht ausgefuehrt',age:'Stand vor',failed:'Fehler',alerts:'Meldungen"
+    "',qd:'quittiert',sm:'stumm',standby:'Bereit','active-run':'Lauf akti"
+    "v',waiting:'Wartet',completed:'Abgeschlossen',restricted:'Eingeschra"
+    "enkt',recovery:'Wiederherstellung',unavailable:'Nicht verfuegbar','c"
+    "abinet-air':'Schrank',product:'Produkt',cooling:'Kuehlung'},en:{logi"
+    "n:'Login',logout:'Logout',offline:'Offline',stale:'Stale',online:'On"
+    "line',rq:'Local provisioning or recovery required',pl:'Password',pt:"
+    "'Password protection enabled',ds:'Password protection is disabled',a"
+    "ck:'Acknowledge',mute:'Mute',stop:'Stop',done:'Complete',start:'Star"
+    "t',sure:'Sure?',ok:'Done',fail:'Not executed',age:'Age',failed:'Fail"
+    "ed',alerts:'Alerts',qd:'acknowledged',sm:'muted',standby:'Ready','ac"
+    "tive-run':'Run active',waiting:'Waiting',completed:'Completed',restr"
+    "icted:'Restricted',recovery:'Recovery',unavailable:'Unavailable','ca"
+    "binet-air':'Cabinet',product:'Product',cooling:'Cooling'},es:{login:"
+    "'Iniciar sesion',logout:'Cerrar sesion',offline:'Sin conexion',stale"
+    ":'Anticuado',online:'En linea',rq:'Se requiere provision local o rec"
+    "uperacion',pl:'Contrasena',pt:'Proteccion por contrasena activa',ds:"
+    "'Proteccion por contrasena desactivada',ack:'Confirmar',mute:'Silenc"
+    "iar',stop:'Parar',done:'Finalizar',start:'Iniciar',sure:'Seguro?',ok"
+    ":'Hecho',fail:'No ejecutado',age:'Hace',failed:'Fallo',alerts:'Alert"
+    "as',qd:'confirmada',sm:'silenciada',standby:'Listo','active-run':'Ac"
+    "tivo',waiting:'Esperando',completed:'Finalizado',restricted:'Restrin"
+    "gido',recovery:'Recuperacion',unavailable:'No disponible','cabinet-a"
+    "ir':'Armario',product:'Producto',cooling:'Enfriamiento'}};const q=x="
+    ">document.querySelector(x),g=(navigator.language||'en').slice(0,2),l"
+    "ocale=L[g]?g:'en',T=L[locale];document.documentElement.lang=locale;q"
+    "('#login button').textContent=T.login;q('#password-label').textConte"
+    "nt=T.pl;const au=q('#auth-state'),wr=q('#warning'),login=q('#login')"
+    ",lo=q('#logout'),cn=q('#connection'),md=q('#mode'),tp=q('#temps'),ls"
+    "=q('#alerts'),bd=q('#board');lo.textContent=T.logout;au.textContent="
+    "A==='password-protected'?T.pt:A==='password-disabled'?T.ds:T.rq;wr.t"
+    "extContent=T.ds;wr.hidden=A!=='password-disabled';login.hidden=A!=='"
+    "password-protected'||U;lo.hidden=!U;function el(x,c){const e=documen"
+    "t.createElement('p');e.textContent=x;e.className=c||'';return e;}fun"
+    "ction draw(){const f=P?'online':LP?'stale':'offline';cn.textContent="
+    "T[f]+(f==='stale'?' \u00b7 '+T.age+' '+((Date.now()-LT)/1e3|0)+' s':"
+    "'');cn.dataset.state=f;bd.className=P?'':'x';bd.hidden=!LP;if(!LP)re"
+    "turn;const[a,b,c]=LP;md.textContent=T[a.homeMode]||a.homeMode;tp.rep"
+    "laceChildren(...['cabinet-air','product','cooling'].map(r=>{const e="
+    "b.temperatures.find(x=>x.role===r);return el(T[r]+': '+(!e?T.unavail"
+    "able:e.valid&&e.valueCelsius!=null?e.valueCelsius.toFixed(1)+' \u00b0"
+    "C':'-- '+(T[e.quality]||T.unavailable)));}));const n=c.alerts.filter"
+    "(x=>x.active);ls.replaceChildren(el(T.alerts+': '+n.length),...n.map"
+    "(x=>el(x.code.replace(/-/g,' ')+(x.acknowledged?' \u00b7 '+T.qd:'')+"
+    "(x.muted?' \u00b7 '+T.sm:''),x.severity)));}async function rf(){cons"
+    "t my=++G,t0=Date.now();if(LT){if(t0-LT>15000)P=null;ui();draw();}try"
+    "{const r=await Promise.all(['status','temperatures','alerts'].map(x="
+    ">fetch('/api/v1/'+x,{cache:'no-store'})));if(r.some(x=>!x.ok))throw "
+    "0;const p=await Promise.all(r.map(x=>x.json()));if(my<H)return;H=my;"
+    "if(t0>LT){LP=p;LT=t0;}const c=p[0].revisions;P=Date.now()-t0<=15000?"
+    "p:null;if(P&&U&&Q&&c.programCatalog&&c.programCatalog!==PC)lp();ui()"
+    ";draw();}catch(e){if(my<H)return;H=my;P=null;ui();draw();}}login.add"
+    "EventListener('submit',async e=>{e.preventDefault();const r=await fe"
+    "tch('/api/v1/login',{method:'POST',headers:{'Content-Type':'applicat"
+    "ion/json'},body:JSON.stringify({password:q('#password').value})});if"
+    "(r.ok)location.reload();});lo.onclick=async()=>{await fetch('/api/v1"
+    "/logout',{method:'POST',headers:{'Content-Type':'application/json','"
+    "X-CSRF-Token':window.__WEB_CSRF__||''}});window.__WEB_CSRF__='';Q=0;"
+    "P=null;ui();lo.hidden=true;login.hidden=A!=='password-protected';};c"
+    "onst ops=q('#ops'),note=q('#note'),pg=q('#pg');let P=null,B=false,LB"
+    "=false,K='',KC='',PC='',G=0,H=0,LP=null,LT=0;pg.onchange=()=>ui();fu"
+    "nction al(f){return P&&P[2].alerts.find(m=>m.active&&f(m));}function"
+    " ui(){ops.hidden=!U||!Q;const h=P&&P[0].homeMode,r=h==='active-run'|"
+    "|h==='waiting',a=al(m=>!m.acknowledged),u=al(m=>!m.muted);const d={a"
+    "ck:!a,mute:!u,stop:!r,done:h!=='completed',start:h!=='standby'||!pg."
+    "value||!PC||P[0].revisions.programCatalog!==PC},g={ack:a,mute:u},c=P"
+    "?[h,P[0].revisions.run,P[0].revisions.programCatalog,PC,pg.value].jo"
+    "in():'';if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';ops.querySelectorAll('b"
+    "utton').forEach(b=>{const k=b.dataset.a;b.disabled=B||!P||d[k];if(K!"
+    "==k)b.textContent=T[k]+(g[k]?' #'+g[k].id:'');});}async function sen"
+    "d(i){K='';B=true;ui();const m={stateSequence:'s',run:'r',messages:'m"
+    "',fault:'f',recoveryEpisode:'e',userConfiguration:'u',programCatalog"
+    ":'c'},v=P[0].revisions,o={};for(const k in v)if(m[k])o[m[k]]=v[k];if"
+    "(i.t==='start-program')o.c=PC;const body=JSON.stringify({v:1,r:o,i})"
+    ",n=Q;let r=null,j=null;for(let t=0;t<2&&!r;t++){try{r=await fetch('/"
+    "internal/ui/run',{method:'POST',headers:{'Content-Type':'application"
+    "/json','X-CSRF-Token':window.__WEB_CSRF__,'X-Mutation-Seq':String(n)"
+    "},body});}catch(e){}}if(r&&r.status!==503){try{j=await r.json();}cat"
+    "ch(e){}}if(!j||!/^(applied|stale|busy|confirmation-required|rejected"
+    "|too-large|write-failed)$/.test(j.outcome)){location.reload();return"
+    ";}Q=n+1;B=false;note.textContent=j.outcome==='applied'?T.ok:T.fail;a"
+    "wait rf();}ops.onclick=e=>{const a=e.target.dataset&&e.target.datase"
+    "t.a;if(!a||B||e.target.disabled)return;if(a==='ack'||a==='mute'){con"
+    "st m=al(x=>a==='ack'?!x.acknowledged:!x.muted);if(m)send({t:a+'-mess"
+    "age',id:m.id});return;}if(K!==a){K=a;KC='';ui();e.target.textContent"
+    "=T.sure;return;}K='';send(a==='start'?{t:'start-program',c:{p:pg.val"
+    "ue}}:a==='stop'?{t:'stop-run',o:'abort-and-turn-off'}:{t:'complete-r"
+    "un',c:false});};async function lp(){if(LB)return;LB=true;PC='';pg.re"
+    "placeChildren();try{const r=await fetch('/api/v1/programs',{cache:'n"
+    "o-store'});const j=r.ok&&await r.json();if(j&&/^[0-9]+$/.test(j.cata"
+    "logRevision)){pg.replaceChildren(...j.programs.map(x=>new Option(x.n"
+    "ame,x.id)));PC=j.catalogRevision;}}catch(e){}LB=false;ui();}window._"
+    "_WEB_CSRF__=S;draw();rf();setInterval(rf,5000);</script></body></htm"
+    "l>";
+
 std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
-                     bool authenticated, std::uint64_t mutationSequence) {
+                     bool authenticated, std::uint64_t mutationSequence,
+                     std::string_view& staticBodySuffix) {
+    staticBodySuffix = {};
     if (state == WebAuthenticationState::Unprovisioned) {
         return provisioningShell();
     }
@@ -238,7 +344,7 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
     // run actions below. All three API requests are repeated together so
     // a reconnect receives a full snapshot.
     std::string html;
-    html.reserve(kMaximumWebShellBytes);
+    html.reserve(1536U);  // C0: only the small dynamic head is owned.
     html +=
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta"
         " name=\"viewport\" content=\"width=device-width,initial-scale=1\"><t"
@@ -269,106 +375,7 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
     html += authenticated ? "true" : "false";
     html += ";let Q=";
     html += std::to_string(mutationSequence);
-    html +=
-        ";const L={de:{login:'Anmelden',logout:'Abmelden',offline:'Offline',s"
-        "tale:'Veraltet',online:'Online',rq:'Lokale Provisionierung oder Reco"
-        "very erforderlich',pl:'Passwort',pt:'Passwortschutz aktiv',ds:'Passw"
-        "ortschutz deaktiviert',ack:'Quittieren',mute:'Stumm',stop:'Stop',don"
-        "e:'Abschliessen',start:'Starten',sure:'Sicher?',ok:'Erledigt',fail:'"
-        "Nicht ausgefuehrt',age:'Stand vor',failed:'Fehler',alerts:'Meldungen"
-        "',qd:'quittiert',sm:'stumm',standby:'Bereit','active-run':'Lauf akti"
-        "v',waiting:'Wartet',completed:'Abgeschlossen',restricted:'Eingeschra"
-        "enkt',recovery:'Wiederherstellung',unavailable:'Nicht verfuegbar','c"
-        "abinet-air':'Schrank',product:'Produkt',cooling:'Kuehlung'},en:{logi"
-        "n:'Login',logout:'Logout',offline:'Offline',stale:'Stale',online:'On"
-        "line',rq:'Local provisioning or recovery required',pl:'Password',pt:"
-        "'Password protection enabled',ds:'Password protection is disabled',a"
-        "ck:'Acknowledge',mute:'Mute',stop:'Stop',done:'Complete',start:'Star"
-        "t',sure:'Sure?',ok:'Done',fail:'Not executed',age:'Age',failed:'Fail"
-        "ed',alerts:'Alerts',qd:'acknowledged',sm:'muted',standby:'Ready','ac"
-        "tive-run':'Run active',waiting:'Waiting',completed:'Completed',restr"
-        "icted:'Restricted',recovery:'Recovery',unavailable:'Unavailable','ca"
-        "binet-air':'Cabinet',product:'Product',cooling:'Cooling'},es:{login:"
-        "'Iniciar sesion',logout:'Cerrar sesion',offline:'Sin conexion',stale"
-        ":'Anticuado',online:'En linea',rq:'Se requiere provision local o rec"
-        "uperacion',pl:'Contrasena',pt:'Proteccion por contrasena activa',ds:"
-        "'Proteccion por contrasena desactivada',ack:'Confirmar',mute:'Silenc"
-        "iar',stop:'Parar',done:'Finalizar',start:'Iniciar',sure:'Seguro?',ok"
-        ":'Hecho',fail:'No ejecutado',age:'Hace',failed:'Fallo',alerts:'Alert"
-        "as',qd:'confirmada',sm:'silenciada',standby:'Listo','active-run':'Ac"
-        "tivo',waiting:'Esperando',completed:'Finalizado',restricted:'Restrin"
-        "gido',recovery:'Recuperacion',unavailable:'No disponible','cabinet-a"
-        "ir':'Armario',product:'Producto',cooling:'Enfriamiento'}};const q=x="
-        ">document.querySelector(x),g=(navigator.language||'en').slice(0,2),l"
-        "ocale=L[g]?g:'en',T=L[locale];document.documentElement.lang=locale;q"
-        "('#login button').textContent=T.login;q('#password-label').textConte"
-        "nt=T.pl;const au=q('#auth-state'),wr=q('#warning'),login=q('#login')"
-        ",lo=q('#logout'),cn=q('#connection'),md=q('#mode'),tp=q('#temps'),ls"
-        "=q('#alerts'),bd=q('#board');lo.textContent=T.logout;au.textContent="
-        "A==='password-protected'?T.pt:A==='password-disabled'?T.ds:T.rq;wr.t"
-        "extContent=T.ds;wr.hidden=A!=='password-disabled';login.hidden=A!=='"
-        "password-protected'||U;lo.hidden=!U;function el(x,c){const e=documen"
-        "t.createElement('p');e.textContent=x;e.className=c||'';return e;}fun"
-        "ction draw(){const f=P?'online':LP?'stale':'offline';cn.textContent="
-        "T[f]+(f==='stale'?' \u00b7 '+T.age+' '+((Date.now()-LT)/1e3|0)+' s':"
-        "'');cn.dataset.state=f;bd.className=P?'':'x';bd.hidden=!LP;if(!LP)re"
-        "turn;const[a,b,c]=LP;md.textContent=T[a.homeMode]||a.homeMode;tp.rep"
-        "laceChildren(...['cabinet-air','product','cooling'].map(r=>{const e="
-        "b.temperatures.find(x=>x.role===r);return el(T[r]+': '+(!e?T.unavail"
-        "able:e.valid&&e.valueCelsius!=null?e.valueCelsius.toFixed(1)+' \u00b0"
-        "C':'-- '+(T[e.quality]||T.unavailable)));}));const n=c.alerts.filter"
-        "(x=>x.active);ls.replaceChildren(el(T.alerts+': '+n.length),...n.map"
-        "(x=>el(x.code.replace(/-/g,' ')+(x.acknowledged?' \u00b7 '+T.qd:'')+"
-        "(x.muted?' \u00b7 '+T.sm:''),x.severity)));}async function rf(){cons"
-        "t my=++G,t0=Date.now();if(LT){if(t0-LT>15000)P=null;ui();draw();}try"
-        "{const r=await Promise.all(['status','temperatures','alerts'].map(x="
-        ">fetch('/api/v1/'+x,{cache:'no-store'})));if(r.some(x=>!x.ok))throw "
-        "0;const p=await Promise.all(r.map(x=>x.json()));if(my<H)return;H=my;"
-        "if(t0>LT){LP=p;LT=t0;}const c=p[0].revisions;P=Date.now()-t0<=15000?"
-        "p:null;if(P&&U&&Q&&c.programCatalog&&c.programCatalog!==PC)lp();ui()"
-        ";draw();}catch(e){if(my<H)return;H=my;P=null;ui();draw();}}login.add"
-        "EventListener('submit',async e=>{e.preventDefault();const r=await fe"
-        "tch('/api/v1/login',{method:'POST',headers:{'Content-Type':'applicat"
-        "ion/json'},body:JSON.stringify({password:q('#password').value})});if"
-        "(r.ok)location.reload();});lo.onclick=async()=>{await fetch('/api/v1"
-        "/logout',{method:'POST',headers:{'Content-Type':'application/json','"
-        "X-CSRF-Token':window.__WEB_CSRF__||''}});window.__WEB_CSRF__='';Q=0;"
-        "P=null;ui();lo.hidden=true;login.hidden=A!=='password-protected';};c"
-        "onst ops=q('#ops'),note=q('#note'),pg=q('#pg');let P=null,B=false,LB"
-        "=false,K='',KC='',PC='',G=0,H=0,LP=null,LT=0;pg.onchange=()=>ui();fu"
-        "nction al(f){return P&&P[2].alerts.find(m=>m.active&&f(m));}function"
-        " ui(){ops.hidden=!U||!Q;const h=P&&P[0].homeMode,r=h==='active-run'|"
-        "|h==='waiting',a=al(m=>!m.acknowledged),u=al(m=>!m.muted);const d={a"
-        "ck:!a,mute:!u,stop:!r,done:h!=='completed',start:h!=='standby'||!pg."
-        "value||!PC||P[0].revisions.programCatalog!==PC},g={ack:a,mute:u},c=P"
-        "?[h,P[0].revisions.run,P[0].revisions.programCatalog,PC,pg.value].jo"
-        "in():'';if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';ops.querySelectorAll('b"
-        "utton').forEach(b=>{const k=b.dataset.a;b.disabled=B||!P||d[k];if(K!"
-        "==k)b.textContent=T[k]+(g[k]?' #'+g[k].id:'');});}async function sen"
-        "d(i){K='';B=true;ui();const m={stateSequence:'s',run:'r',messages:'m"
-        "',fault:'f',recoveryEpisode:'e',userConfiguration:'u',programCatalog"
-        ":'c'},v=P[0].revisions,o={};for(const k in v)if(m[k])o[m[k]]=v[k];if"
-        "(i.t==='start-program')o.c=PC;const body=JSON.stringify({v:1,r:o,i})"
-        ",n=Q;let r=null,j=null;for(let t=0;t<2&&!r;t++){try{r=await fetch('/"
-        "internal/ui/run',{method:'POST',headers:{'Content-Type':'application"
-        "/json','X-CSRF-Token':window.__WEB_CSRF__,'X-Mutation-Seq':String(n)"
-        "},body});}catch(e){}}if(r&&r.status!==503){try{j=await r.json();}cat"
-        "ch(e){}}if(!j||!/^(applied|stale|busy|confirmation-required|rejected"
-        "|too-large|write-failed)$/.test(j.outcome)){location.reload();return"
-        ";}Q=n+1;B=false;note.textContent=j.outcome==='applied'?T.ok:T.fail;a"
-        "wait rf();}ops.onclick=e=>{const a=e.target.dataset&&e.target.datase"
-        "t.a;if(!a||B||e.target.disabled)return;if(a==='ack'||a==='mute'){con"
-        "st m=al(x=>a==='ack'?!x.acknowledged:!x.muted);if(m)send({t:a+'-mess"
-        "age',id:m.id});return;}if(K!==a){K=a;KC='';ui();e.target.textContent"
-        "=T.sure;return;}K='';send(a==='start'?{t:'start-program',c:{p:pg.val"
-        "ue}}:a==='stop'?{t:'stop-run',o:'abort-and-turn-off'}:{t:'complete-r"
-        "un',c:false});};async function lp(){if(LB)return;LB=true;PC='';pg.re"
-        "placeChildren();try{const r=await fetch('/api/v1/programs',{cache:'n"
-        "o-store'});const j=r.ok&&await r.json();if(j&&/^[0-9]+$/.test(j.cata"
-        "logRevision)){pg.replaceChildren(...j.programs.map(x=>new Option(x.n"
-        "ame,x.id)));PC=j.catalogRevision;}}catch(e){}LB=false;ui();}window._"
-        "_WEB_CSRF__=S;draw();rf();setInterval(rf,5000);</script></body></htm"
-        "l>";
+    staticBodySuffix = kC0WebShellSuffix;
     return html;
 }
 
@@ -701,6 +708,7 @@ bool WebReadOnlyApiHandler::handle(const device_platform::HttpRequest& request,
     response.contentType = kJsonContentType;
     response.body = std::move(body);
     response.metadata = {};
+    response.staticBodySuffix = {};
     return true;
 }
 
@@ -750,9 +758,10 @@ bool WebRouteDispatcher::handleShell(
 
     response.statusCode = 200U;
     response.contentType = kHtmlContentType;
-    response.body =
-        webShell(state, csrf, session.has_value(), mutationSequence);
-    if (response.body.size() > kMaximumWebShellBytes) {
+    response.body = webShell(state, csrf, session.has_value(), mutationSequence,
+                             response.staticBodySuffix);
+    if (response.body.size() + response.staticBodySuffix.size() >
+        kMaximumWebShellBytes) {
         setJsonResponse(response, 503U,
                         "{\"error\":\"web-shell-unavailable\"}");
     }
@@ -846,6 +855,7 @@ bool WebRouteDispatcher::handleLogin(
             : "{\"authenticated\":true,\"csrfToken\":\"" + created.csrfToken +
                   "\",\"passwordProtection\":\"enabled\"}";
     response.metadata = {};
+    response.staticBodySuffix = {};
     setSessionCookie(response, created.cookieValue);
     return true;
 }
@@ -998,6 +1008,7 @@ bool WebRouteDispatcher::handleRun(const device_platform::HttpRequest& request,
 
 bool WebRouteDispatcher::handle(const device_platform::HttpRequest& request,
                                 device_platform::HttpResponse& response) {
+    response.staticBodySuffix = {};
     const bool networkPath = request.path == "/api/network/status" ||
                              request.path == "/api/network/scan" ||
                              request.path == "/api/network/candidate";

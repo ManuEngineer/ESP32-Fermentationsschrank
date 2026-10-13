@@ -78,6 +78,7 @@ bool findFormValue(const std::string& body, const std::string& name,
 
 bool NetworkSetupRoutes::handle(const device_platform::HttpRequest& request,
                                 device_platform::HttpResponse& response) {
+    response.staticBodySuffix = {};
     if (request.method == "GET" && request.path == "/") {
         response.statusCode = 200U;
         response.contentType = "text/html; charset=utf-8";

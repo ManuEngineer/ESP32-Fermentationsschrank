@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <atomic>
 #include <cstring>
 #include <cerrno>
 #include <cstdio>
@@ -26,6 +27,18 @@ struct PublicApiObservation {
     esp_err_t csrfResult{ESP_FAIL};
     std::string csrfValue;
 };
+
+std::atomic<unsigned> c0Mode{0U};
+std::atomic<unsigned> chunkCalls{0U};
+std::atomic<unsigned> failChunkAt{0U};
+std::atomic<esp_err_t> lastHandlerResult{ESP_OK};
+esp_err_t (*originalHandler)(httpd_req_t*) = nullptr;
+
+esp_err_t observeHandler(httpd_req_t* request) {
+    const auto result = originalHandler(request);
+    lastHandlerResult.store(result);
+    return result;
+}
 
 std::mutex observationsMutex;
 std::vector<PublicApiObservation> observations;
@@ -62,6 +75,25 @@ extern "C" esp_err_t __wrap_httpd_get_raw_req_data(httpd_req_t* request,
     return result;
 }
 
+extern "C" esp_err_t __real_httpd_register_uri_handler(httpd_handle_t,
+                                                       const httpd_uri_t*);
+extern "C" esp_err_t __wrap_httpd_register_uri_handler(httpd_handle_t handle,
+                                                       const httpd_uri_t* uri) {
+    auto observed = *uri;
+    adapter_test::originalHandler = uri->handler;
+    observed.handler = adapter_test::observeHandler;
+    return __real_httpd_register_uri_handler(handle, &observed);
+}
+extern "C" esp_err_t __real_httpd_resp_send_chunk(httpd_req_t*, const char*,
+                                                  ssize_t);
+extern "C" esp_err_t __wrap_httpd_resp_send_chunk(httpd_req_t* request,
+                                                  const char* bytes,
+                                                  ssize_t length) {
+    const auto call = adapter_test::chunkCalls.fetch_add(1U) + 1U;
+    if (adapter_test::failChunkAt.load() == call) return ESP_FAIL;
+    return __real_httpd_resp_send_chunk(request, bytes, length);
+}
+
 namespace {
 
 class RecordingRouteSink final : public device_platform::IHttpRouteSink {
@@ -72,6 +104,17 @@ class RecordingRouteSink final : public device_platform::IHttpRouteSink {
         response.statusCode = 200U;
         response.contentType = "text/plain; charset=utf-8";
         response.body = "route-sink-reached";
+        if (adapter_test::c0Mode.load() == 1U) {
+            response.body = "head";
+            response.staticBodySuffix = "<script>suffix</script>";
+        } else if (adapter_test::c0Mode.load() == 2U) {
+            response.body.clear();
+            response.staticBodySuffix = "<script>suffix</script>";
+        } else if (adapter_test::c0Mode.load() == 3U) {
+            response.statusCode = 503U;
+            response.contentType = "application/json; charset=utf-8";
+            response.body = "{\"error\":\"web-shell-unavailable\"}";
+        }
         return true;
     }
 
@@ -157,6 +200,11 @@ std::string exchange(const std::string& request) {
             response.size() >= headerEnd + 4U + *bodyLength) {
             break;
         }
+        if (response.find("Transfer-Encoding: chunked\r\n") !=
+                std::string::npos &&
+            response.size() >= 5U &&
+            response.compare(response.size() - 5U, 5U, "0\r\n\r\n") == 0)
+            break;
         if (response.size() > 8192U) break;
     }
     static_cast<void>(::close(socketFd));
@@ -303,10 +351,65 @@ void runAdapterDispatchCases() {
     expect(server.stop(), "server-stop");
 }
 
+void runC0ChunkCases() {
+    RecordingRouteSink routes;
+    device_platform_esp_idf::EspIdfHttpServerLifecycle server;
+    expect(server.start(routes), "c0-server-start");
+    if (!server.running()) return;
+    const auto request = requestWithHeaders("GET", "/", "Host: esp.local\r\n");
+    for (const auto mode : {1U, 2U, 3U}) {
+        adapter_test::c0Mode.store(mode);
+        adapter_test::chunkCalls.store(0U);
+        adapter_test::failChunkAt.store(0U);
+        const auto response = exchange(request);
+        const auto headerEnd = response.find("\r\n\r\n");
+        expect(headerEnd != std::string::npos, "c0-complete-headers");
+        if (headerEnd == std::string::npos) continue;
+        const auto body = response.substr(headerEnd + 4U);
+        if (mode == 3U) {
+            expect(
+                hasStatus(response, "503 Service Unavailable") &&
+                    response.find(
+                        "Content-Type: application/json; charset=utf-8\r\n") !=
+                        std::string::npos &&
+                    body == "{\"error\":\"web-shell-unavailable\"}" &&
+                    adapter_test::chunkCalls.load() == 0U,
+                "c0-json-503-no-suffix");
+        } else {
+            const auto expected =
+                mode == 1U
+                    ? "4\r\nhead\r\n17\r\n<script>suffix</script>\r\n0\r\n\r\n"
+                    : "17\r\n<script>suffix</script>\r\n0\r\n\r\n";
+            expect(
+                hasStatus(response, "200 OK") && body == expected &&
+                    response.find("Transfer-Encoding: chunked\r\n") !=
+                        std::string::npos &&
+                    adapter_test::chunkCalls.load() == (mode == 1U ? 3U : 2U),
+                "c0-chunk-bytes-and-single-terminator");
+        }
+    }
+    adapter_test::c0Mode.store(1U);
+    for (const auto failedCall : {1U, 2U, 3U}) {
+        adapter_test::chunkCalls.store(0U);
+        adapter_test::failChunkAt.store(failedCall);
+        adapter_test::lastHandlerResult.store(ESP_OK);
+        static_cast<void>(exchange(request));
+        for (unsigned i = 0U;
+             i < 100U && adapter_test::lastHandlerResult.load() == ESP_OK; ++i)
+            usleep(1000U);
+        expect(adapter_test::chunkCalls.load() == failedCall &&
+                   adapter_test::lastHandlerResult.load() == ESP_FAIL,
+               "c0-first-send-error-propagated-no-later-chunks");
+    }
+    adapter_test::failChunkAt.store(0U);
+    expect(server.stop(), "c0-server-stop");
+}
+
 }  // namespace
 
 extern "C" void app_main() {
     runAdapterDispatchCases();
+    runC0ChunkCases();
     std::cout << "ESP_IDF_HTTP_ADAPTER_DISPATCH="
               << (failures == 0U ? "PASS" : "FAIL") << std::endl;
     std::exit(failures == 0U ? 0 : 1);

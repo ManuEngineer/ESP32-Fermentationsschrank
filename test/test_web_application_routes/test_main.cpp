@@ -209,7 +209,13 @@ struct WebRunMutationHandlerTestAccess {
 
 }  // namespace fermentation
 
+#include "../../diag/c0_shell_golden.hpp"
+
 namespace {
+
+std::string c0ResponseBody(const device_platform::HttpResponse& response) {
+    return response.body + std::string(response.staticBodySuffix);
+}
 
 using namespace fermentation;
 using Category = device_platform::DeviceUiCommandOutcomeCategory;
@@ -447,12 +453,12 @@ std::string sessionCookieValue(const device_platform::HttpResponse& response) {
 
 std::string csrfToken(const device_platform::HttpResponse& response) {
     constexpr char marker[] = "\"csrfToken\":\"";
-    const auto start = response.body.find(marker);
+    const auto start = c0ResponseBody(response).find(marker);
     TEST_ASSERT_TRUE(start != std::string::npos);
     const auto valueStart = start + sizeof(marker) - 1U;
-    const auto end = response.body.find('"', valueStart);
+    const auto end = c0ResponseBody(response).find('"', valueStart);
     TEST_ASSERT_TRUE(end != std::string::npos);
-    return response.body.substr(valueStart, end - valueStart);
+    return c0ResponseBody(response).substr(valueStart, end - valueStart);
 }
 
 device_platform::HttpRequest makeLoginRequest(const std::string& password) {
@@ -506,8 +512,8 @@ void assertComposedSessionFailClosed(ComposedFixture& fixture,
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("authentication-unavailable") !=
-                     std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find(
+                         "authentication-unavailable") != std::string::npos);
 }
 
 FermentationUiCommandResult commandResult(Category category,
@@ -852,7 +858,7 @@ void assertRamOwnedMessageMutation(bool mute) {
     TEST_ASSERT_TRUE(fixture.handler.handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_EQUAL_STRING("{\"outcome\":\"applied\"}",
-                             response.body.c_str());
+                             c0ResponseBody(response).c_str());
 
     const auto& message =
         FermentationApplicationTestAccess::runtimeState(fixture.application)
@@ -1629,17 +1635,20 @@ void test_read_only_api_routes_are_get_only_and_uncomposed() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
                              response.contentType.c_str());
-    TEST_ASSERT_TRUE(response.body.size() <= kMaximumWebApiResponseBodyBytes);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).size() <=
+                     kMaximumWebApiResponseBodyBytes);
 
     request.path = "/api/v1/temperatures";
     TEST_ASSERT_TRUE(api.handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("temperatures") != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("temperatures") !=
+                     std::string::npos);
 
     request.path = "/api/v1/alerts";
     TEST_ASSERT_TRUE(api.handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("alerts") != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("alerts") !=
+                     std::string::npos);
 
     request.method = "POST";
     TEST_ASSERT_TRUE(api.handle(request, response));
@@ -1663,7 +1672,8 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("Fermentation") != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("Fermentation") !=
+                     std::string::npos);
 
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_TRUE(routes->handle(request, response));
@@ -1682,7 +1692,8 @@ void test_composed_dispatcher_preserves_setup_priority_and_single_server() {
     request = makeWebRequest("GET", "/");
     TEST_ASSERT_TRUE(routes->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("Network setup") != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("Network setup") !=
+                     std::string::npos);
 
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_FALSE(routes->handle(request, response));
@@ -1764,7 +1775,7 @@ void test_composed_dispatcher_revokes_sessions_for_home_wifi_reconfiguration() {
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("candidate committed") !=
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("candidate committed") !=
                      std::string::npos);
     assertComposedSessionRejected(fixture, first.cookie);
     assertComposedSessionRejected(fixture, second.cookie);
@@ -1803,12 +1814,13 @@ void test_composed_dispatcher_factory_reset_revokes_old_sessions() {
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    TEST_ASSERT_TRUE(response.body.find("authenticated") == std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("authenticated") ==
+                     std::string::npos);
     if (postResetAuth == WebAuthenticationState::Unprovisioned) {
-        TEST_ASSERT_TRUE(response.body.find("provisioning-required") !=
-                         std::string::npos);
+        TEST_ASSERT_TRUE(c0ResponseBody(response).find(
+                             "provisioning-required") != std::string::npos);
     } else {
-        TEST_ASSERT_TRUE(response.body.find("recovery-required") !=
+        TEST_ASSERT_TRUE(c0ResponseBody(response).find("recovery-required") !=
                          std::string::npos);
     }
 }
@@ -1821,7 +1833,7 @@ void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
     // Unprovisioned: the first-time setup form (S6) instead of the old hint.
-    TEST_ASSERT_TRUE(response.body.find("/api/v1/provision") !=
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("/api/v1/provision") !=
                      std::string::npos);
     request = makeWebRequest("GET", "/api/v1/status");
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
@@ -1837,9 +1849,11 @@ void test_composed_dispatcher_anonymous_and_recovery_states_fail_closed() {
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
-    TEST_ASSERT_TRUE(response.body.find("Password protection is disabled") !=
+    TEST_ASSERT_TRUE(
+        c0ResponseBody(response).find("Password protection is disabled") !=
+        std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("password-label") !=
                      std::string::npos);
-    TEST_ASSERT_TRUE(response.body.find("password-label") != std::string::npos);
     const auto anonymousCookie = sessionCookieValue(response);
     request =
         makeAuthenticatedRequest("GET", "/api/v1/status", anonymousCookie);
@@ -1873,7 +1887,7 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(401U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    TEST_ASSERT_TRUE(response.body.find("invalid-credentials") !=
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("invalid-credentials") !=
                      std::string::npos);
 
     request = makeLoginRequest("correct horse battery");
@@ -1892,18 +1906,22 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     request = makeAuthenticatedRequest("GET", "/", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("const U=true") != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("const U=true") !=
+                     std::string::npos);
     TEST_ASSERT_TRUE(
-        response.body.find("document.documentElement.lang=locale") !=
+        c0ResponseBody(response).find("document.documentElement.lang=locale") !=
         std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
-    TEST_ASSERT_TRUE(response.body.find("id=\"board\"") != std::string::npos);
-    TEST_ASSERT_TRUE(response.body.find("<pre") == std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("id=\"board\"") !=
+                     std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("<pre") ==
+                     std::string::npos);
 
     request = makeAuthenticatedRequest("GET", "/api/v1/status", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("password") == std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("password") ==
+                     std::string::npos);
     request =
         makeAuthenticatedRequest("GET", "/api/v1/temperatures", firstCookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
@@ -2678,7 +2696,7 @@ device_platform::HttpResponse postProvision(ComposedFixture& fixture,
 void assertError(const device_platform::HttpResponse& response,
                  std::uint16_t status, const char* error) {
     TEST_ASSERT_EQUAL_UINT16(status, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find(error) != std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find(error) != std::string::npos);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
 }
 
@@ -2855,13 +2873,15 @@ void test_provision_route_protect_success_creates_no_session() {
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(response.contentType == "application/json; charset=utf-8");
     TEST_ASSERT_TRUE(
-        response.body ==
+        c0ResponseBody(response) ==
         "{\"provisioned\":true,\"passwordProtection\":\"enabled\"}");
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    TEST_ASSERT_TRUE(response.body.find("csrf") == std::string::npos);
-    TEST_ASSERT_TRUE(response.body.find(passwordUnderTest()) ==
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find("csrf") ==
                      std::string::npos);
-    TEST_ASSERT_TRUE(response.body.find(kPinUnderTest) == std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find(passwordUnderTest()) ==
+                     std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find(kPinUnderTest) ==
+                     std::string::npos);
     TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
                      WebAuthenticationState::PasswordProtected);
     TEST_ASSERT_FALSE(
@@ -2884,7 +2904,7 @@ void test_provision_route_disable_success_creates_no_session() {
         postProvision(fixture, provisionBodyDisable(kPinUnderTest));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_TRUE(
-        response.body ==
+        c0ResponseBody(response) ==
         "{\"provisioned\":true,\"passwordProtection\":\"disabled\"}");
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
     TEST_ASSERT_TRUE(fixture.application.webAuthenticationState() ==
@@ -3024,8 +3044,8 @@ void test_run_route_is_gated_by_authentication_state() {
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.find("authentication-unavailable") !=
-                     std::string::npos);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).find(
+                         "authentication-unavailable") != std::string::npos);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
 }
 
@@ -3261,7 +3281,7 @@ void test_dispatcher_run_mutation_sequence_contract() {
                                  std::string(600U, 'x'));
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
         TEST_ASSERT_EQUAL_UINT16(413U, response.statusCode);
-        TEST_ASSERT_TRUE(response.body.find("request-too-large") !=
+        TEST_ASSERT_TRUE(c0ResponseBody(response).find("request-too-large") !=
                          std::string::npos);
     }
 
@@ -3292,13 +3312,37 @@ void test_dispatcher_run_mutation_sequence_contract() {
 
 // ---- S6: first-time setup form in the web shell -----------------------------
 
+void c0CheckGoldenShell(const device_platform::HttpResponse& response,
+                        WebAuthenticationState state) {
+    const auto actual = c0ResponseBody(response);
+    if (state == WebAuthenticationState::Unprovisioned) {
+        TEST_ASSERT_TRUE(actual == c0_golden::webShell(state, "", false, 0U));
+        return;
+    }
+    const auto tokenStart = actual.find("const S='");
+    TEST_ASSERT_TRUE(tokenStart != std::string::npos);
+    const auto tokenEnd = actual.find("';const A=", tokenStart + 9U);
+    TEST_ASSERT_TRUE(tokenEnd != std::string::npos);
+    const auto token =
+        actual.substr(tokenStart + 9U, tokenEnd - tokenStart - 9U);
+    const bool authenticated =
+        actual.find("const U=true;") != std::string::npos;
+    const auto q = actual.find(";let Q=");
+    TEST_ASSERT_TRUE(q != std::string::npos);
+    const auto sequence = std::stoull(actual.substr(q + 7U));
+    TEST_ASSERT_TRUE(
+        actual == c0_golden::webShell(state, token, authenticated, sequence));
+    TEST_ASSERT_TRUE(response.body.size() < 1536U);
+    TEST_ASSERT_TRUE(response.staticBodySuffix.size() > 6000U);
+}
 std::string shellBody(ComposedFixture& fixture) {
     auto request = makeWebRequest("GET", "/");
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
     TEST_ASSERT_FALSE(response.metadata.setCookie.has_value());
-    return response.body;
+    c0CheckGoldenShell(response, fixture.application.webAuthenticationState());
+    return c0ResponseBody(response);
 }
 
 bool contains(const std::string& text, const char* needle) {
@@ -3416,7 +3460,8 @@ std::string authenticatedShell(ComposedFixture& fixture,
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    return response.body;
+    c0CheckGoldenShell(response, fixture.application.webAuthenticationState());
+    return c0ResponseBody(response);
 }
 
 void test_shell_run_controls_text_contract() {
@@ -3547,7 +3592,8 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
         TEST_ASSERT_TRUE(response.metadata.setCookie.has_value());
-        TEST_ASSERT_TRUE(contains(response.body.c_str(), "let Q=1;"));
+        TEST_ASSERT_TRUE(
+            contains(c0ResponseBody(response).c_str(), "let Q=1;"));
         const auto cookie = sessionCookieValue(response);
         TEST_ASSERT_TRUE(
             contains(authenticatedShell(fixture, cookie), "let Q=1;"));
@@ -3588,8 +3634,10 @@ void test_shell_stays_within_the_limit_in_all_states() {
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
         TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-        TEST_ASSERT_TRUE(response.body.size() + kSequenceHeadroom <= kLimit);
-        TEST_ASSERT_TRUE(response.body.size() + kShellMinimumReserve <= kLimit);
+        TEST_ASSERT_TRUE(c0ResponseBody(response).size() + kSequenceHeadroom <=
+                         kLimit);
+        TEST_ASSERT_TRUE(
+            c0ResponseBody(response).size() + kShellMinimumReserve <= kLimit);
     }
     {
         ComposedFixture fixture;  // recovery required
@@ -3769,16 +3817,18 @@ void test_dashboard_feed_fields_in_standby_and_constructed_states() {
         makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(contains(response.body, "\"homeMode\":\"standby\""));
-    TEST_ASSERT_TRUE(contains(response.body, "\"revisions\":{"));
-    TEST_ASSERT_TRUE(contains(response.body, "\"programCatalog\":\""));
+    TEST_ASSERT_TRUE(
+        contains(c0ResponseBody(response), "\"homeMode\":\"standby\""));
+    TEST_ASSERT_TRUE(contains(c0ResponseBody(response), "\"revisions\":{"));
+    TEST_ASSERT_TRUE(
+        contains(c0ResponseBody(response), "\"programCatalog\":\""));
     request =
         makeAuthenticatedRequest("GET", "/api/v1/temperatures", session.cookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
-    TEST_ASSERT_TRUE(contains(response.body, "\"temperatures\":["));
+    TEST_ASSERT_TRUE(contains(c0ResponseBody(response), "\"temperatures\":["));
     request = makeAuthenticatedRequest("GET", "/api/v1/alerts", session.cookie);
     TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
-    TEST_ASSERT_TRUE(contains(response.body, "\"alerts\":["));
+    TEST_ASSERT_TRUE(contains(c0ResponseBody(response), "\"alerts\":["));
 
     // The other modes are not reachable through the real path in this fixture
     // (no program is startable without commissioning values, see commit
@@ -3934,7 +3984,8 @@ void test_programs_route_lists_catalog_names_with_the_status_revision() {
     auto session = composedRunSession(fixture);
     const auto response = getPrograms(fixture, session.web.cookie);
     TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
-    TEST_ASSERT_TRUE(response.body.size() <= kMaximumWebApiResponseBodyBytes);
+    TEST_ASSERT_TRUE(c0ResponseBody(response).size() <=
+                     kMaximumWebApiResponseBodyBytes);
     const auto source = fixture.application.uiPresentationSource();
     TEST_ASSERT_TRUE(source.has_value());
     TEST_ASSERT_TRUE(!source->programCatalog.programs.empty());
@@ -3942,18 +3993,20 @@ void test_programs_route_lists_catalog_names_with_the_status_revision() {
     const auto revision =
         std::to_string(fixture.application.uiSnapshot()
                            .revisions.expectedProgramCatalogRevision->value());
-    TEST_ASSERT_TRUE(contains(
-        response.body, ("\"catalogRevision\":\"" + revision + "\"").c_str()));
+    TEST_ASSERT_TRUE(
+        contains(c0ResponseBody(response),
+                 ("\"catalogRevision\":\"" + revision + "\"").c_str()));
     // Only id and name per entry; no notes, stages or device data.
     for (const auto& entry : source->programCatalog.programs) {
         if (!entry.program.installed || !entry.program.enabled) continue;
-        TEST_ASSERT_TRUE(contains(
-            response.body, ("{\"id\":\"" + entry.program.id + "\",\"name\":\"" +
-                            entry.program.name + "\"}")
-                               .c_str()));
+        TEST_ASSERT_TRUE(
+            contains(c0ResponseBody(response),
+                     ("{\"id\":\"" + entry.program.id + "\",\"name\":\"" +
+                      entry.program.name + "\"}")
+                         .c_str()));
     }
-    TEST_ASSERT_FALSE(contains(response.body, "notes"));
-    TEST_ASSERT_FALSE(contains(response.body, "stages"));
+    TEST_ASSERT_FALSE(contains(c0ResponseBody(response), "notes"));
+    TEST_ASSERT_FALSE(contains(c0ResponseBody(response), "stages"));
     // Reading the list does not advance the mutation sequence.
     TEST_ASSERT_TRUE(
         contains(authenticatedShell(fixture, session.web.cookie), "let Q=1;"));
@@ -4007,7 +4060,7 @@ void test_programs_route_without_catalog_source_is_503_not_empty() {
     device_platform::HttpResponse response;
     TEST_ASSERT_TRUE(api.handle(request, response));
     TEST_ASSERT_EQUAL_UINT16(503U, response.statusCode);
-    TEST_ASSERT_FALSE(contains(response.body, "\"programs\""));
+    TEST_ASSERT_FALSE(contains(c0ResponseBody(response), "\"programs\""));
 }
 
 void test_shell_start_flow_text_contract() {
@@ -4057,7 +4110,8 @@ void test_other_states_get_no_provisioning_form_or_bypass() {
         auto request = makeWebRequest("GET", "/");
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
-        TEST_ASSERT_FALSE(contains(response.body, "/api/v1/provision"));
+        TEST_ASSERT_FALSE(
+            contains(c0ResponseBody(response), "/api/v1/provision"));
     }
     {
         ComposedFixture fixture;
@@ -4418,8 +4472,27 @@ void test_existing_local_lease_survives_a_network_trust_boundary() {
     TEST_ASSERT_TRUE(fixture.application.uiSnapshot().service.available);
 }
 
+void test_c0_shell_suffix_is_cleared_when_response_becomes_json() {
+    ComposedFixture fixture;
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    device_platform::HttpResponse response;
+    TEST_ASSERT_TRUE(
+        fixture.http.routes()->handle(makeWebRequest("GET", "/"), response));
+    TEST_ASSERT_FALSE(response.staticBodySuffix.empty());
+    TEST_ASSERT_TRUE(
+        fixture.http.routes()->handle(makeWebRequest("POST", "/"), response));
+    TEST_ASSERT_EQUAL_UINT16(405U, response.statusCode);
+    TEST_ASSERT_TRUE(response.staticBodySuffix.empty());
+    TEST_ASSERT_EQUAL_STRING("application/json; charset=utf-8",
+                             response.contentType.c_str());
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"method-not-allowed\"}",
+                             response.body.c_str());
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_c0_shell_suffix_is_cleared_when_response_becomes_json);
     RUN_TEST(test_outcome_matrix_accepts_only_owning_apply_results);
     RUN_TEST(test_outcome_matrix_conflicts_busy_and_stale_are_409);
     RUN_TEST(test_outcome_matrix_rejections_and_capacity_are_typed);

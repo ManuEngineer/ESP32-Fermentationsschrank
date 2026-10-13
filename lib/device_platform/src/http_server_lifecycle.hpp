@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace device_platform {
 
@@ -69,6 +70,8 @@ struct HttpResponse {
     std::string contentType{"text/plain; charset=utf-8"};
     std::string body;
     HttpResponseMetadata metadata{};
+    // C0 diagnostic prototype only: static lifetime, never heap-backed.
+    std::string_view staticBodySuffix{};
 };
 
 class IHttpRouteSink {
