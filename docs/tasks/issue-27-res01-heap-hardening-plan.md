@@ -1,28 +1,31 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `G0_R2_BASELINE_FAILED_BOUNDED_REFERENCE_AWAITING_REVIEW_OWNER_CONTINUATION`.
+Status: `G0_R3_BUILDER_GO_RECOMMENDATION_AWAITING_INDEPENDENT_RESULT_REVIEW`.
 Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
 `6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
 TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
-C0-Firmware ausschliesslich auf Diagnosebranch `agent/pr203-res01-diag-local`
-@ `9a9a8bd`, gepinnter Treiber `cfcf282`; RES-01-C1–C3 noch nicht begonnen.
-Owner hat am 2026-10-14 den Loginfix (8-s-Sockettimeout nur Login-POST), das
-feste 120-s-Referenzfenster und G0-R2 ausdruecklich freigegeben; maßgeblich
-[gepinntes G0-Testblatt](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/cfcf2826027d0e39fec5f0036bfefb30eec42b3f/diag/G0_TEST_SHEET.md)
-plus Ownerauftrag im neuen Evidence-Paket.
-**G0-R2 STOP:** erste Baseline-Allokationsfehler nach 126,847 s P-A; Baseline
-bleibt FAIL. Begrenzte 120-s-Referenz (304 GETs HTTP 200, 16 erfolgreiche
-Shell-Tripel) auswertbar als Builder-Befund; voller Baseline-Lauf/Erholung nicht
-abgeschlossen. Kandidatenflash/-lauf, RAM-Gewinn und C0-Entscheid nicht belegt.
-[Ergebnis/Evidence R2](../audits/PR203_G0_R2_20261014_RESULT.md), Paket
-`hw-evidence-pr203/diag/c0/g0_r2_20261014_run01/`. Kein Flash erforderlich,
-0 Flash-Writes; nach Fehler keine weitere Geräteanfrage, kein Reset/Rollback.
-[Alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
-Nächster Schritt: unabhängiger Ergebnisreview und separate konkrete
-Ownerfreigabe fuer eine Kandidatenfortsetzung. `C0=UNDECIDED/HOLD`,
-`RAM_GAIN_COMPARISON=NOT_RUN`, `G1_G2=NOT_AUTHORIZED`.
-Diese Fortschreibung aktualisiert den Status und dokumentiert die ausdrücklich
-ownerfreigegebene G0-Testprofilergänzung; Produktplan/Implementierungsumfang unverändert.
+C0-Firmware ausschliesslich Diagnosebranch @ `9a9a8bd`, Treiber `cfcf282`;
+RES-01-Produkt-C1–C3 noch nicht begonnen. Owner akzeptiert nach unabhängigem
+Review die begrenzte R2-Referenz (Baseline bleibt FAIL) und genehmigt am
+2026-10-14 separat G0-R3: Preflight, ein gepinnter C0-App-only-Flash, P-A/Recovery.
+**G0-R3 Builder empfiehlt C0-GO:** 120-s-Phasenvergleich zeigt medianes
+Build-Delta −7104 B, bessere minimale/mediane Heap-/Blockreserven; alle geplanten
+240 API-/40 Shell-Ticks je Session (3044 Antworten HTTP 200) und 300-s-Recovery
+ohne Anomalie. ≥90% des vergleichbaren Vier-Session-Idle nach 73,823 s,
+Stackgrenzen erfüllt. Aktive Antworten enden im unveränderten 1200-s-Schedule
+bei 1198,820 s; diese Ausführungsgrenze ist explizit dokumentiert.
+Befunde: Boot-Heapminimum 5228 B, fünf GET-Gesamtdauern >3 s bei
+unveränderten Sockettimeouts ohne Timeout-Exception; kein allgemeiner OOM-/F4-Nachweis.
+[Ergebnis/Evidence R3](../audits/PR203_G0_R3_20261014_RESULT.md), versiegeltes Paket
+`hw-evidence-pr203/diag/c0/g0_r3_20261014_run01/`. Ein App-Flash, keine Erase-all-
+oder Nicht-App-Änderung. Nach Messung keine weitere Hardwarehandlung.
+[Akzeptierte R2-Referenz](../audits/PR203_G0_R2_20261014_RESULT.md) und
+[alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
+Nächster Schritt: unabhängiger R3-Ergebnisreview und C0-Ownerentscheid;
+kein eigenständiger Übergang zur Produktimplementierung, zu G1/G2 oder Merge.
+`C0_RECOMMENDATION=GO`, `C0_OWNER_DECISION=PENDING`, `G1_G2=NOT_AUTHORIZED`.
+Diese Fortschreibung aktualisiert nur Evidence/Status der ownerfreigegebenen
+G0-Ausführung; der Produktplan/Implementierungsumfang bleibt unverändert.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
