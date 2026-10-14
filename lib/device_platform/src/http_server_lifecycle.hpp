@@ -72,7 +72,7 @@ struct HttpResponse {
     HttpResponseMetadata metadata{};
     // Optional immutable process-lifetime bytes, sent after the owned body.
     // Response replacements (especially JSON/errors) must clear this view.
-    std::string_view staticBodySuffix{};
+    std::string_view staticBodySuffix;
 };
 
 class IHttpRouteSink {
