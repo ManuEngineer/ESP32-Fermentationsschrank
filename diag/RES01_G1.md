@@ -27,8 +27,9 @@ Targeted Builder self-check is not the final Pre-Ready run. Pre-Ready remains
 separately Owner-gated on the final product HEAD after hardware qualification.
 
 First proposed G1 Gate: one diagnostic P-A/P-R plus controlled real reference
-coverage, then independent result review. Full pure-product G2 matrix remains
-P-A3x20min/P-A2/P-B/P-R. Missing paths/touch/transient bounds => NOT_PROVEN /
+coverage, then independent result review. Overall matrix remains
+P-A3x20min/P-A2/P-B/P-R; missing diagnostic evidence stays OPEN_G1, final
+pure-product confirmation OPEN_G2. No silent transfer of missing G1 evidence. Missing paths/touch/transient bounds => NOT_PROVEN /
 THRESHOLD_NOT_QUALIFIED/HOLD. No automatic threshold/image edit or next run.
 
 RES-01=BLOCKER; PR203_FINAL_GO=HOLD; G2=NOT_AUTHORIZED; ACTUATOR_RELEASE=NO.

@@ -69,10 +69,13 @@ Do not open UART or issue device requests until this concrete Gate is approved.
 - After successful recovery the capture stays supervised for manual coverage;
   host STOP ends it. No second load, reconnect, reboot or new phase automatically.
 - This first G1 Gate is one diagnostic P-A/P-R plus reference/coverage measurements,
-  **not full acceptance**. G2 on the final pure product retains full P-A3×20min
-  fresh boots, P-A2×20min synchronized shells, P-B×20min four real Chromium
-  contexts/Keep-Alive/reloads, and P-R after each P-A. Pin their exact runners/
-  browser versions in the later separate Gate; they are not run/authorized here.
+  **not full acceptance**. The overall matrix retains P-A3×20min fresh boots,
+  P-A2×20min synchronized shells, P-B×20min four real Chromium contexts/
+  Keep-Alive/reloads, and P-R after each P-A. Remaining diagnostic profile/resource
+  evidence stays OPEN_G1; final pure-product confirmation stays OPEN_G2. This
+  first run does not silently transfer missing diagnostic measurements to G2.
+  Pin exact runners/browser versions and G1/G2 allocation before later separate
+  Gates; those runs are not authorized here.
   Missing G1 coverage or needed extra diagnostic profiles require a reviewed
   follow-up Gate, not a silent reduced matrix or automatic next run.
 
@@ -89,6 +92,8 @@ not a new hard threshold. Current free internal8-bit heap and largest internal8-
 block determine reserves/recovery. Same four valid sessions before/after,
 60-s idle reference and calming server/client sockets; close client connections,
 observe server cleanup/host socket states including TIME_WAIT, same network mode.
+Capture records host ss snapshots before/throughout the run at30-s intervals;
+correlate these with UART and client phase marks (no extra device queries).
 Within120s after last request/closed client connections: both current metrics
 ≥90% of their own comparable four-session idle. If comparability is absent,
 recovery NOT_PROVEN/HOLD. Never use boot min_free as current recovery heap.

@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import re
+import subprocess
 import threading
 import time
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ def capture(args):
     args.output.mkdir(parents=True,exist_ok=False)
     uart=args.output/'uart.log'
     abort_file=args.output/'ABORT'
-    result={}
+    result={'start_epoch':time.time(),'start_monotonic':time.monotonic()}
     ready=actors=profile=network=source=False
     last_heartbeat=started=time.monotonic()
     resets=0
@@ -26,6 +27,15 @@ def capture(args):
     offset=b''
     failure=None
     loader=None
+    next_socket_snapshot=0.0
+    max_gap=0.0
+    def socket_snapshot():
+        check=subprocess.run(['ss','-tan','dst',args.host],capture_output=True,text=True,timeout=2)
+        if check.returncode:
+            raise RuntimeError('host-socket-evidence-unavailable')
+        with (args.output/'host_sockets.jsonl').open('a') as sink:
+            sink.write(json.dumps({'epoch':time.time(),'monotonic':time.monotonic(),
+                                   'socket_states':check.stdout})+'\n')
     board=serial.Serial(port=None,baudrate=115200,timeout=0.05)
     board.port=args.port;board.dtr=False;board.rts=False
     try:
@@ -35,6 +45,9 @@ def capture(args):
                 now=time.monotonic()
                 if now-last_heartbeat>5:
                     failure='uart-heartbeat-timeout';break
+                if now>=next_socket_snapshot:
+                    socket_snapshot()
+                    next_socket_snapshot=now+30
                 data=board.read(4096)
                 raw.write(data)
                 offset+=data
@@ -52,8 +65,12 @@ def capture(args):
                         stamp=time.monotonic()
                         if stamp-last_heartbeat>5:
                             failure='uart-heartbeat-timeout';break
+                        max_gap=max(max_gap,stamp-last_heartbeat)
+                        uptime=int(re.search(r'uptime_ms=(\d+)',text)[1])
+                        if last_uptime is not None and uptime<last_uptime:
+                            failure='uart-uptime-regression';break
                         last_heartbeat=stamp
-                        last_uptime=int(re.search(r'uptime_ms=(\d+)',text)[1])
+                        last_uptime=uptime
                     if 'source git sha:' in text:
                         source=args.expected_source in text
                         if not source:failure='source-mismatch';break
@@ -84,6 +101,8 @@ def capture(args):
                 if (args.output/'STOP').exists():
                     if loader is not None and loader.is_alive():failure='owner-stop'
                     break
+    except KeyboardInterrupt:
+        failure='host-interrupt'
     except Exception:
         failure='capture-failure'  # fixed class, no exception/body/credentials
     finally:
@@ -92,7 +111,7 @@ def capture(args):
         if board.is_open:board.close()
         if loader is not None and loader.is_alive():
             result['runner_not_joined']=True
-        result.update(gate=args.gate_id,source_proven=source,ready=ready,actors_disabled=actors,
+        result.update(end_epoch=time.time(),end_monotonic=time.monotonic(),max_heartbeat_gap_seconds=max_gap,gate=args.gate_id,source_proven=source,ready=ready,actors_disabled=actors,
                       release_profile=profile,network_home_connected=network,expected_initial_reset_lines=resets,
                       failure=failure,status='FAIL/HOLD' if failure else 'CAPTURE_COMPLETE_PENDING_REVIEW')
         (args.output/'capture.json').write_text(json.dumps(result,indent=2)+'\n')
