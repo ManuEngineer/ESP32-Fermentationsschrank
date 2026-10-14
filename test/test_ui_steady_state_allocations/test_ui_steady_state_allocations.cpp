@@ -1019,8 +1019,39 @@ void test_pin_and_released_service_pages_steady_state_allocate_nothing() {
     quiet();
 }
 
+void test_low_memory_skip_keeps_cache_and_resume_redraws_current_state() {
+    AppFixture fixture;
+    fixture.settle();
+    TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+    const auto revisionBefore = fixture.gate.snapshot().refreshRevision;
+    UiMemoryGate memory(100U, 20U);
+    UiResetHoldContactGate contact;
+    fixture.workspace.setPage(FermentationUiPage::HeaderNetwork);
+    startCounting();
+    const bool allowed = beginProductUiStep(
+        memory, contact, [] { return 99U; }, 100U, fixture.application,
+        fixture.gate, fixture.workspace);
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(allowed);
+    TEST_ASSERT_EQUAL_UINT32(0U, allocations);
+    TEST_ASSERT_TRUE(fixture.gate.presentation().hasCopy());
+    TEST_ASSERT_TRUE(fixture.gate.snapshot().refreshRevision == revisionBefore);
+    TEST_ASSERT_TRUE(beginProductUiStep(
+        memory, contact, [] { return 120U; }, 101U, fixture.application,
+        fixture.gate, fixture.workspace));
+    TEST_ASSERT_FALSE(fixture.gate.presentation().hasCopy());
+    TEST_ASSERT_TRUE(fixture.gate.renderRequired(
+        fixture.application, fixture.workspace, std::nullopt,
+        device_platform::DeviceUiNetworkStatus::Unavailable, std::nullopt));
+    fixture.gate.markRendered();
+    TEST_ASSERT_FALSE(fixture.gate.renderRequired(
+        fixture.application, fixture.workspace, std::nullopt,
+        device_platform::DeviceUiNetworkStatus::Unavailable, std::nullopt));
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_low_memory_skip_keeps_cache_and_resume_redraws_current_state);
     RUN_TEST(test_control_counter_detects_allocations_of_the_former_pipeline);
     RUN_TEST(test_unchanged_state_builds_no_render_and_allocates_nothing);
     RUN_TEST(test_header_network_with_real_access_point_data_allocates_nothing);

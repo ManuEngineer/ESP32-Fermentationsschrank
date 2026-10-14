@@ -1441,7 +1441,8 @@ void test_network_page_projects_softap_data_only_in_local_display_model() {
         heldBottomSlot, nullptr,
         device_platform::DeviceUiNetworkStatus::Unavailable, {}, accessPoint);
     TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.size());
-    TEST_ASSERT_EQUAL_UINT(21U, pressedScreen.commands.capacity());
+    TEST_ASSERT_EQUAL_UINT(fermentation::main_ui::kMaximumDrawCommands,
+                           pressedScreen.commands.capacity());
 
     workspace.setPage(fermentation::FermentationUiPage::Home);
     const auto ordinaryScreen = fermentation::main_ui::makeRepresentativeScreen(
@@ -1721,7 +1722,32 @@ void test_network_page_missing_softap_info_is_explicit() {
 #include "../../lib/fermentation_app/src/fermentation_touch_workspace.cpp"
 #include "../../lib/fermentation_app/src/fermentation_ui_text.cpp"
 #include "../../lib/fermentation_app/src/fermentation_ui_models.cpp"
+// Apply the bound assertion to every existing rich renderer regression too,
+// including keyboard modes, long values, dialogs, lists and QR variants.
+#define makeRepresentativeScreen makeRepresentativeScreenUnchecked
 #include "../../main/fermentation_ui_renderer.cpp"
+#undef makeRepresentativeScreen
+
+namespace fermentation::main_ui {
+RepresentativeScreen makeRepresentativeScreen(
+    const FermentationUiSnapshot& snapshot,
+    FermentationTouchWorkspace& workspace,
+    const std::vector<device_platform::TextPackManifest>& packs,
+    const device_platform::LocaleId& locale,
+    std::optional<device_platform::DeviceUiTarget> pressed,
+    const ProgramCatalog* catalog,
+    device_platform::DeviceUiNetworkStatus network,
+    device_platform::ClockViewInput clock,
+    const std::optional<device_platform::NetworkAccessPointInfo>& accessPoint) {
+    auto screen = makeRepresentativeScreenUnchecked(
+        snapshot, workspace, packs, locale, pressed, catalog, network, clock,
+        accessPoint);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaximumDrawCommands,
+                                     screen.commands.size());
+    TEST_ASSERT_EQUAL_UINT32(kMaximumDrawCommands, screen.commands.capacity());
+    return screen;
+}
+}  // namespace fermentation::main_ui
 
 // S7: read-only page content from the existing snapshot/catalog.
 fermentation::main_ui::RepresentativeScreen pageScreen(
@@ -2853,8 +2879,40 @@ void test_pin_page_has_exact_pad_hit_zones_and_shows_only_a_mask() {
     TEST_ASSERT_FALSE(hasText(screen, "73"));
 }
 
+void test_all_pages_draw_vector_stays_within_structural_bound() {
+    using namespace fermentation;
+    using namespace fermentation::main_ui;
+    const auto packs = makeFermentationUiTextPacks();
+    for (unsigned page = 0U;
+         page <= static_cast<unsigned>(FermentationUiPage::FactoryReset);
+         ++page) {
+        for (const auto locale : {"de", "en", "es"}) {
+            for (const auto mode : {FermentationHomeMode::Standby,
+                                    FermentationHomeMode::ActiveRun,
+                                    FermentationHomeMode::Recovery}) {
+                FermentationUiSnapshot snapshot;
+                snapshot.home.mode = mode;
+                snapshot.service.available = true;
+                FermentationTouchWorkspace workspace;
+                workspace.setPage(static_cast<FermentationUiPage>(page));
+                const auto screen = makeRepresentativeScreen(
+                    snapshot, workspace, packs,
+                    device_platform::LocaleId{locale},
+                    device_platform::DeviceUiTarget{
+                        device_platform::DeviceUiTargetKind::BottomSlot, 0U, 0U,
+                        0U});
+                TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaximumDrawCommands,
+                                                 screen.commands.size());
+                TEST_ASSERT_EQUAL_UINT32(kMaximumDrawCommands,
+                                         screen.commands.capacity());
+            }
+        }
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_all_pages_draw_vector_stays_within_structural_bound);
     RUN_TEST(
         test_representative_screen_uses_existing_workspace_and_three_locales);
     RUN_TEST(test_bottom_press_returns_existing_target);

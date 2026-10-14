@@ -299,7 +299,21 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    "response metadata unavailable");
     }
-    return httpd_resp_send(request, response.body.data(), response.body.size());
+    if (response.staticBodySuffix.empty()) {
+        return httpd_resp_send(request, response.body.data(),
+                               response.body.size());
+    }
+    // A zero-length data chunk would terminate the response prematurely.
+    if (!response.body.empty()) {
+        const auto error = httpd_resp_send_chunk(request, response.body.data(),
+                                                 response.body.size());
+        if (error != ESP_OK) return error;
+    }
+    const auto error =
+        httpd_resp_send_chunk(request, response.staticBodySuffix.data(),
+                              response.staticBodySuffix.size());
+    if (error != ESP_OK) return error;
+    return httpd_resp_send_chunk(request, nullptr, 0U);
 }
 
 }  // namespace device_platform_esp_idf

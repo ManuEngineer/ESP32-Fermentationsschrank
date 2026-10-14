@@ -741,7 +741,8 @@ extern "C" void app_main(void) {
          r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,
          r1_pins::kDisplayDataCommandPin, r1_pins::kBacklightPin,
          r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
-         r1_pins::kBacklightActiveHigh});
+         r1_pins::kBacklightActiveHigh},
+        timeSource);
     fermentation::FermentationTouchWorkspace uiWorkspace;
     fermentation::main_ui::UiRenderGate uiRenderGate;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();

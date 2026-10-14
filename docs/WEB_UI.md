@@ -261,7 +261,8 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-8192 Bytes (Ownerentscheid fuer #27, `html.reserve` auf diese Schranke; sie
+8192 Bytes (Ownerentscheid fuer #27, Gesamtlaenge aus besessenem Kopf und
+statischem Anhang; sie
 betrug bis zur Startseiten-Umsetzung 6656 Bytes, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
@@ -366,6 +367,51 @@ verworfen und die Liste neu geladen, ohne automatische Mutation.
 
 Die Shell-JavaScript-Logik ist nativ nur als Text-/Zustandsvertrag getestet;
 ein ausfuehrender Browsertest ist `NOT_RUN`.
+
+## Shell-Transport und UI-Speicherreserve (RES-01)
+
+Umsetzungsstand: statischer Shell-Anhang und native Gate-/Hold-Logik vorbereitet.
+Die produktive F4-Anbindung wartet auf die Schwellenentscheidung gemäß
+[Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md); F4 ist noch nicht
+als vollständiger produktiver Fix verifiziert. Der folgende F4-Abschnitt
+beschreibt den freigegebenen Zielvertrag.
+
+`HttpResponse::staticBodySuffix` bezeichnet optionale, unveränderliche Bytes mit
+Prozesslebensdauer. Der Adapter sendet den besessenen `body` zuerst und danach
+den Anhang mit dem öffentlichen ESP-IDF-6.1-`httpd_resp_send_chunk`-API; genau ein
+leerer Chunk beendet eine erfolgreiche Antwort. Ein leerer Kopf wird ausgelassen.
+Nach dem ersten Sendefehler folgen keine weiteren Chunks, auch kein Terminator;
+der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
+`httpd_resp_send`-Pfad. Shell-Antworten verwenden damit Chunked Transfer statt
+Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
+
+Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
+6651-B-Anhang liegt im Flash. Die Provisionierungs-Shell teilt ebenfalls ihren
+konstanten Script-Anhang ab. Die 8192-B-Grenze gilt für Kopf **plus** Anhang.
+Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
+auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
+Status 503, `application/json; charset=utf-8` und
+`{"error":"web-shell-unavailable"}`. Es folgen keine HTML-/JS-Bytes.
+
+F4 ist eine begrenzte Risikominderung. Ein ausgelassener UI-Schritt friert die
+Anzeige ein und verarbeitet keinen Touch; Regelung und Safety laufen unabhängig
+weiter. Der Skip gibt den bestehenden Werksreset-Hold frei und sperrt dessen
+erneutes Starten bis zu tatsächlich beobachtetem physischem Loslassen nach dem
+letzten Skip und einem danach beobachteten neuen kalibrierten Kontakt. Alte
+NoContact-Zustände, Lock-Timeouts, Controllerfehler und fehlende Kalibrierung
+lösen diese Sperre nicht. Der vorhandene Factory-Reset-Flow bleibt alleiniger
+Owner der Stufen, der fünf Sekunden und des Resets, für Variante A und B.
+
+Die einmalige Vektorreserve ist durch eine nativ geprüfte strukturelle
+Befehlsobergrenze begrenzt. Sie begrenzt weder Strings/LVGL noch den gesamten
+Render-/Touch-Heapbedarf. Größter-Block-Prüfung und Hysterese reservieren keinen
+Speicher: konkurrierende WLAN-/HTTP-Allokationen können nach bestandenem Gate
+weiterhin OOM/Abort/Reset verursachen. Der Owner akzeptiert diese Restgefahr;
+jeder beobachtete Reset bleibt ein Testfehler. Hardwarequalifikation und konkrete
+Schwellenkalibrierung gehören zu separat freigegebenem G1/G2, nicht zum nativen
+Logiknachweis. C0=GO ist seit dem Ownerentscheid vom 2026-10-14 akzeptiert;
+Bootminimum 5228 B und lange GET-Gesamtdauern aus G0-R3 bleiben Hardwarebefunde.
+F2 ist nicht Teil dieses Umfangs. `ACTUATOR_RELEASE=NO`.
 
 ## Startseite der angemeldeten Shell (R1-Slice, Issue #27)
 

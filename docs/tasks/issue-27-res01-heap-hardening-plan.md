@@ -1,11 +1,18 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `G0_R3_BUILDER_GO_RECOMMENDATION_AWAITING_INDEPENDENT_RESULT_REVIEW`.
+Status: `C0_OWNER_GO_SOFTWARE_PREPARATION_F4_THRESHOLD_DECISION_PENDING`.
 Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
 `6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
 TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
 C0-Firmware ausschliesslich Diagnosebranch @ `9a9a8bd`, Treiber `cfcf282`;
-RES-01-Produkt-C1–C3 noch nicht begonnen. Owner akzeptiert nach unabhängigem
+Owner akzeptiert am 2026-10-14 den unabhängigen R3-Ergebnisreview auf
+`ab0ae55e78fbd1f27825338cf5913b0648b59c19`, entscheidet **C0=GO** und
+genehmigt produktive Software-C1–C3 gemäß dieser freigegebenen Planbasis.
+F2 bleibt außerhalb; keine weiteren Hardwarehandlungen, G1/G2 separat.
+Softwarevorbereitung und gezielte Tests laufen; die konkrete produktive
+F4-Schwellenanbindung wartet auf die fehlende Messbasis aus Abschnitt 4/2
+beziehungsweise eine ausdrückliche Ownerentscheidung zum dokumentierten
+vorläufigen Vektorwert. [Softwarestand/Entscheidung](../audits/PR203_RES01_SOFTWARE_20261014.md). Owner akzeptiert nach unabhängigem
 Review die begrenzte R2-Referenz (Baseline bleibt FAIL) und genehmigt am
 2026-10-14 separat G0-R3: Preflight, ein gepinnter C0-App-only-Flash, P-A/Recovery.
 **G0-R3 Builder empfiehlt C0-GO:** 120-s-Phasenvergleich zeigt medianes
@@ -21,11 +28,13 @@ unveränderten Sockettimeouts ohne Timeout-Exception; kein allgemeiner OOM-/F4-N
 oder Nicht-App-Änderung. Nach Messung keine weitere Hardwarehandlung.
 [Akzeptierte R2-Referenz](../audits/PR203_G0_R2_20261014_RESULT.md) und
 [alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
-Nächster Schritt: unabhängiger R3-Ergebnisreview und C0-Ownerentscheid;
-kein eigenständiger Übergang zur Produktimplementierung, zu G1/G2 oder Merge.
-`C0_RECOMMENDATION=GO`, `C0_OWNER_DECISION=PENDING`, `G1_G2=NOT_AUTHORIZED`.
-Diese Fortschreibung aktualisiert nur Evidence/Status der ownerfreigegebenen
-G0-Ausführung; der Produktplan/Implementierungsumfang bleibt unverändert.
+Nächster Schritt: F4-Schwellenentscheidung, Software-C1–C3 abschließen,
+Builder-Self-Check und unabhängiger Software-Review. Kein G1/G2/Ready/Merge.
+`C0=GO`, `C0_OWNER_DECISION=GO`, `INDEPENDENT_G0_R3_RESULT_REVIEW=OWNER_ACCEPTED`,
+`G1_G2=NOT_AUTHORIZED`.
+Diese Fortschreibung aktualisiert den Owner-/Softwarestatus; die
+freigegebenen Abschnitte 1–10 bleiben unverändert. Die Schwellenalternative
+ist ein vorgelegter Vorschlag, keine stillschweigende Planänderung.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.

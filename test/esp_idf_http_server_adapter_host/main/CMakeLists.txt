@@ -17,3 +17,7 @@ target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
 # Keep the real ESP-IDF server on an unprivileged local port in this host test.
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=httpd_start" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=httpd_get_raw_req_data" APPEND)
+
+# Test-only observation and error injection around the real public IDF API.
+idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=httpd_resp_send_chunk" APPEND)
+idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=httpd_register_uri_handler" APPEND)

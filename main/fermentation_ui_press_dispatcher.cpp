@@ -178,7 +178,7 @@ WorkspaceTouchTickResult processWorkspaceTouch(
     device_platform::DeviceUiNetworkStatus networkStatus,
     device_platform::ClockViewInput clock, bool contactHeld,
     std::uint16_t touchX, std::uint16_t touchY, bool freshPressEdge,
-    std::uint64_t monotonicMillis) {
+    std::uint64_t monotonicMillis, bool factoryResetHoldAllowed) {
     WorkspaceTouchTickResult result;
     if (!contactHeld) {
         // Releasing the hold target resets the long press (Issue #19).
@@ -215,7 +215,7 @@ WorkspaceTouchTickResult processWorkspaceTouch(
                     device_platform::DeviceUiTargetKind::BottomSlot &&
                 result.pressedTarget->slotIndex ==
                     kFermentationUiFactoryResetHoldSlot;
-            holdTick = onHoldTarget;
+            holdTick = onHoldTarget && factoryResetHoldAllowed;
             holdTickRequired = true;
         }
         if (freshPressEdge && result.pressedTarget.has_value()) {

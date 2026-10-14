@@ -59,8 +59,9 @@ std::uint16_t clampToDisplay(double value, std::uint16_t maxInclusive) {
 }  // namespace
 
 struct ProductiveLvglRenderer::Impl final {
-    explicit Impl(device_platform_esp_idf::EspIdfDisplayTouchConfig value)
-        : config(std::move(value)) {}
+    Impl(device_platform_esp_idf::EspIdfDisplayTouchConfig value,
+         const device_platform::ITimeSource& clock)
+        : config(std::move(value)), timeSource(clock) {}
 
     ~Impl() {
         // lvgl_port_deinit() only clears a flag the LVGL task observes on
@@ -101,6 +102,7 @@ struct ProductiveLvglRenderer::Impl final {
     }
 
     device_platform_esp_idf::EspIdfDisplayTouchConfig config;
+    const device_platform::ITimeSource& timeSource;
     std::unique_ptr<device_platform_esp_idf::EspIdfDisplayTouchAdapter> adapter;
     lv_display_t* display{nullptr};
     lv_obj_t* root{nullptr};
@@ -128,6 +130,8 @@ struct ProductiveLvglRenderer::Impl final {
     std::uint16_t touchPressX{0U};
     std::uint16_t touchPressY{0U};
     bool touchPressEdgePending{false};
+    bool physicalRelease{false};
+    std::optional<std::uint64_t> sampledAtMillis;
 
     static void readTouchFailClosed(lv_indev_t* indev, lv_indev_data_t* data) {
         auto* state = static_cast<Impl*>(lv_indev_get_user_data(indev));
@@ -138,6 +142,8 @@ struct ProductiveLvglRenderer::Impl final {
         // values. Without an available, well-formed persisted calibration,
         // raw values are never turned into a coordinate or an action.
         const auto sample = state->adapter->sampleTouch();
+        state->physicalRelease = false;
+        state->sampledAtMillis.reset();
         if (!state->touchCalibrationModel.has_value()) {
             if (!state->touchCalibrationWarningLogged) {
                 state->touchCalibrationWarningLogged = true;
@@ -148,11 +154,16 @@ struct ProductiveLvglRenderer::Impl final {
             state->touchPressActive = false;
             return;
         }
+        if (sample.status == device_platform::RawTouchSampleStatus::NoContact) {
+            state->physicalRelease = true;
+            state->sampledAtMillis = state->timeSource.monotonicMillis();
+        }
         if (sample.status != device_platform::RawTouchSampleStatus::Contact ||
             !sample.contact) {
             state->touchPressActive = false;
             return;
         }
+        state->sampledAtMillis = state->timeSource.monotonicMillis();
         auto calibrated = device_platform::applyTouchCalibration(
             *state->touchCalibrationModel, sample.rawX, sample.rawY);
         // Clamp to the fixed 320x240 display surface: a calibration record
@@ -176,13 +187,16 @@ struct ProductiveLvglRenderer::Impl final {
 };
 
 std::unique_ptr<ProductiveLvglRenderer> makeProductiveUiRenderer(
-    device_platform_esp_idf::EspIdfDisplayTouchConfig config) {
-    return std::make_unique<ProductiveLvglRenderer>(std::move(config));
+    device_platform_esp_idf::EspIdfDisplayTouchConfig config,
+    const device_platform::ITimeSource& timeSource) {
+    return std::make_unique<ProductiveLvglRenderer>(std::move(config),
+                                                    timeSource);
 }
 
 ProductiveLvglRenderer::ProductiveLvglRenderer(
-    device_platform_esp_idf::EspIdfDisplayTouchConfig config)
-    : impl_(std::make_unique<Impl>(std::move(config))) {}
+    device_platform_esp_idf::EspIdfDisplayTouchConfig config,
+    const device_platform::ITimeSource& timeSource)
+    : impl_(std::make_unique<Impl>(std::move(config), timeSource)) {}
 
 ProductiveLvglRenderer::~ProductiveLvglRenderer() = default;
 
@@ -210,6 +224,8 @@ void ProductiveLvglRenderer::setTouchCalibration(
     // under the same lock - no second event state is introduced.
     state.touchPressActive = false;
     state.touchPressEdgePending = false;
+    state.physicalRelease = false;
+    state.sampledAtMillis.reset();
     state.touchPressX = 0U;
     state.touchPressY = 0U;
     lvgl_port_unlock();
@@ -225,6 +241,8 @@ ProductiveLvglRenderer::TouchPollResult ProductiveLvglRenderer::pollTouch() {
     if (!lvgl_port_lock(1000U)) {
         return result;
     }
+    result.physicalRelease = state.physicalRelease;
+    result.sampledAtMillis = state.sampledAtMillis;
     result.contactHeld = state.touchPressActive;
     if (state.touchPressActive) {
         result.point = TouchPoint{state.touchPressX, state.touchPressY};
