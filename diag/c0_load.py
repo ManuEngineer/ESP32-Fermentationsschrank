@@ -32,13 +32,20 @@ class Guard:
     def close_sockets(self):
         with self.lock:
             connections = list(self.connections)
-        with self.lock:
-            self.shut_down.update(connections)
         for connection in connections:
             try:
                 active_socket = connection.sock
                 if active_socket is not None:
-                    active_socket.shutdown(socket.SHUT_RDWR)
+                    # Recorded before the shutdown: the failing request thread may
+                    # classify itself the instant the shutdown takes effect.
+                    with self.lock:
+                        self.shut_down.add(connection)
+                    try:
+                        active_socket.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        with self.lock:
+                            self.shut_down.discard(connection)
+                        raise
             except OSError:
                 pass
             connection.close()

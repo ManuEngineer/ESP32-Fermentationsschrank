@@ -375,6 +375,22 @@ class C0LoginBudgetTests(unittest.TestCase):
         # the first reason stays: the request's own failure must not replace it
         self.assertEqual(guard.reason, "g1-supervisor-stop")
 
+    def test_abort_induced_needs_a_socket_the_guard_actually_shut_down(self):
+        for label, sock in (("inactive", None),
+                            ("shutdown-fails", Mock(shutdown=Mock(side_effect=OSError("closed"))))):
+            with self.subTest(label):
+                guard = Guard()
+                connection = Mock(sock=sock)
+                guard.connections.add(connection)
+                guard.close_sockets()
+                self.assertNotIn(connection, guard.shut_down)
+        guard = Guard()
+        active = Mock(sock=Mock())
+        guard.connections.add(active)
+        guard.close_sockets()
+        active.sock.shutdown.assert_called_once()
+        self.assertIn(active, guard.shut_down)
+
     def test_load_json_records_abort_time_and_sample_start(self):
         exit_code, evidence, _ = self.run_script([(8.001, 200)])
         self.assertEqual(exit_code, 1)

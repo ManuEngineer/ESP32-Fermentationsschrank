@@ -32,40 +32,69 @@ Toolchain `xtensa-esp-elf` 15.2.0, in dieser Vorbereitung wiederholt): Aufrufabs
 +832 B Image, ≈ +112 B Stack in der fehlschlagenden Task, +10,5 ms je Ereignis, ≤ 4 Ereignisse.
 
 Folge: Ändert der Owner dieses Image nicht, ist **kein Flash** nötig. Ob noch dieses Image
-läuft, wird vor dem ersten Lauf ohne Schreibzugriff geprüft (Abschnitt 3). Bei Abweichung: HOLD,
+läuft, wird vor dem ersten Lauf ohne Schreibzugriff, aber mit den in Abschnitt 3 benannten Resets P1/P3
+geprüft. Bei Abweichung: HOLD,
 kein Reparaturflash ohne neue konkrete Freigabe.
 
-## 2. Host-Werkzeuge (Hosttests grün, 40 Tests)
+## 2. Host-Werkzeuge (Hosttests grün, 54 Tests)
 
-| Werkzeug | Änderung | Zweck (Plan) |
+| Werkzeug | Verhalten | Zweck (Plan) |
 |---|---|---|
-| `diag/g1_capture.py` | Nach einer Anomalie bleibt der Port **≤ 5 s** (höchstens 120 Reads) offen, die Last ist zuvor über `ABORT` gestoppt; Nachlauf in `uart_tail.log` und Rohstrom; jeder Rohchunk mit Hostzeit in `uart_chunks.jsonl`; Tail-Dauer/Bytes in `capture.json`. Kein Nachlauf bei Ctrl-C und Capture-Fehler. | D3, Q3 |
-| `diag/c0_load.py` | Je Sample zusätzlich `start_epoch`, `error_phase` (`connect`/`io`), `abort_induced` (nur wahr, wenn `close_sockets` genau diese Verbindung beendete); `load.json` zusätzlich `abort_epoch`/`abort_monotonic` des ersten Abbruchs. `epoch` bleibt das Request-**Ende**. Fehlerklassen unverändert. | D3 |
-| `diag/g1_pcap.py` (neu) | `capture` (tcpdump, `-s 54`, Filter `tcp and port 80 and host <Gerät>`), `verify` (schlägt geschlossen fehl bei Länge > 54, nicht untaggedem Ethernet/IPv4/TCP, IP-Optionen, anderem Linktyp; `capture` löscht die Datei bei Fehlschlag), `analyze` (Zähler ohne Adressen/Ports). | D2, Q2 |
+| `diag/g1_capture.py` | Nach einer Anomalie bleibt der Port **≤ 5 s** (höchstens 120 Reads) offen, die Last ist zuvor über `ABORT` gestoppt; Nachlauf in `uart_tail.log` und Rohstrom; jeder Rohchunk mit Hostzeit in `uart_chunks.jsonl`; Tail-Dauer/Bytes und die SHA-256 von `g1_capture.py`/`c0_load.py` in `capture.json`. Kein Nachlauf bei Ctrl-C und Capture-Fehler. | D3, Q3 |
+| `diag/c0_load.py` | Je Sample zusätzlich `start_epoch`, `error_phase` (`connect`/`io`), `abort_induced`; `load.json` zusätzlich `abort_epoch`/`abort_monotonic` des ersten Abbruchs. `epoch` bleibt das Request-**Ende**. Fehlerklassen unverändert. **`abort_induced` ist abort-assoziiert, nicht beweisend kausal:** wahr nur, wenn der Guard auf genau dieser Verbindung ein aktives Socket erfolgreich per `shutdown` beendet hat (inaktive Verbindung oder fehlgeschlagenes `shutdown` ⇒ falsch). Ein Fehler ohne dieses Merkmal ist ein eigener Clientbefund. | D3 |
+| `diag/g1_pcap.py` | `capture`: tcpdump mit `-s 54`, Filter `tcp and port 80 and host <Gerät>`; endet bei einem der `--stop-file`-Pfade (für G1b: `<Lauf>/candidate_capture/ABORT` **und** `STOP`) oder `PCAP_STOP`, bei hartem Limit (`--max-seconds`, Vorgabe 1800 s), bei Interrupt, und beendet tcpdump immer (SIGINT → terminate → kill). Ergebnis in `pcap_result.json` (Status, Exitcode, Grund, Paketzahl, Tool-Hash); Exitcodes: 0 PASS, 2 nicht payloadfrei (Datei gelöscht), 3 tcpdump-Fehler (Start, Berechtigung, Exitcode, Beenden), 4 Datei fehlt/leer/unvollständig/Paketzahl ≠ tcpdump-Meldung, 5 Interrupt, 6 hartes Limit. **Nur Exitcode 0 ist ein PASS**; sonst HOLD für die Drahtevidence des Laufs (eine gültige, payloadfreie Datei bleibt privat erhalten). Verweigert Speicherorte innerhalb eines Git-Worktrees. `verify`: streng (siehe unten). `analyze`: Zähler ohne Adressen/Ports. | D2, Q2 |
 
-Treiber-/Tool-Hashes werden im Gate-Manifest mit dem finalen Commit gebunden.
+**Payloadfreier Nachweis (`verify`, fail-closed):** `-s 54` ist nur eine Obergrenze; der Beweis ist die
+Prüfung jedes Records: klassisches pcap, Linktyp Ethernet, keine Restbytes, keine abgeschnittenen oder
+zu kurzen Records, gespeicherte Länge **genau** `min(Originallänge, 54)`, ungetaggtes Ethernet, IPv4 mit
+IHL 5, **ohne Fragmentierung** (MF und Fragment-Offset 0), TCP, TCP-Headerlänge ≥ 20 B,
+IP-Gesamtlänge konsistent mit TCP-Header und Drahtlänge, gespeicherte Bytes enden spätestens im TCP-Header.
+Ein leerer Mitschnitt ist kein PASS. Nicht eindeutig header-only lesbare Frames ⇒ Datei verweigert.
+Negativtests: Länge > 54, VLAN, UDP, IP-Optionen, Fragmente, ungültige/inkonsistente Längen, Restbytes,
+abgeschnittene Records, leere/zu kurze Dateien, falscher Linktyp (`test_g1_pcap.py`).
+Die privaten Originale werden **nie** veröffentlicht oder ins Repository gelegt; nur abgeleitete Zähler.
 
-## 3. Ablauf (je Schritt nur unter konkreter Ownerfreigabe)
+**Skriptidentität (H0, vor jedem Gate-Lauf):** Die auszuführenden Skripte müssen dem geprüften,
+**gepushten** Commit des Review-Branches entsprechen: `git rev-parse HEAD` des Arbeitsbaums = im Gate
+genannter Commit, sauberer Baum, und `sha256sum -c diag/review/g1b/HOST_TOOLS_SHA256SUMS` = OK.
+Zusätzlich schreiben `g1_capture.py` und `g1_pcap.py` ihre tatsächlichen Hashes in `capture.json` bzw.
+`pcap_result.json`; Abweichung vom Manifest ⇒ HOLD, Lauf nicht auswerten.
 
-1. **Identität ohne Schreibzugriff:** MAC `20:50:0d:1b:2f:34`, Chip ESP32-D0WD-V3; Partitionstabelle
-   und App-Bereich lesen (`0x10000`, 1 760 560 B) und gegen die Hashes oben prüfen; State-Store
-   (`0x300000–0x3FFFFF`) nicht verändern. Abweichung ⇒ HOLD.
-2. **Host-Voraussetzungen (F2-D6):** Paketmitschnitt-Berechtigung für tcpdump (Owner richtet sie
-   ein, z. B. Capabilities für das Binary; keine Passwortweitergabe an den Agenten); Interface
-   `enp2s0`; Zielverzeichnis privat (`chmod 700`). Vor dem ersten Lauf ein Trockentest auf
-   `lo` mit einem lokalen HTTP-Server: `verify` PASS, `analyze` plausibel, **keine Bytes jenseits
-   Offset 54** in der Datei (`g1_pcap.py verify` plus Sichtprüfung der Dateigrösse = 24 + 16·N + Σcaplen).
-3. **Lauf (bis zu 3 frische Boots):** je Boot Portöffnung (bekanntes FT232R-Reset), P-A wie G1
-   (vier Sessions, 60 s Idle, 1200 s Last, 300 s Recovery), `g1_capture.py` mit Tail,
-   `g1_pcap.py capture` parallel, Stopp bei erster Anomalie wie G1 (harter Lastabbruch, kein
-   Logout, kein Retry). Zwischen den Läufen keine weitere Aktion; nach dem letzten Lauf keine
-   Abfrage.
-4. **Nach jedem Lauf:** `verify` über die Pcap-Datei; bei Fehlschlag Datei gelöscht und Lauf als
-   `PCAP_NOT_PAYLOAD_FREE` markiert; Pcap bleibt privat (nie veröffentlichen); veröffentlicht werden nur
-   `analyze`-Zähler, `uart_tail.log` (ohne Netzwerk-Initialisierungszeilen), `uart_chunks.jsonl`,
-   `load.json`-Auszüge und die Bytebereiche des Fehlerfensters, jeweils mit Quellhash.
-5. **Stopp/HOLD:** unerwarteter Reset ausserhalb des erwarteten Bootresets, Stack unter den
-   G1-Stopgrenzen (Main 11 160 B, HTTPD 2 080 B), Identitätsabweichung, Host-Capture-Fehler.
+## 3. Ablauf (je Schritt nur unter konkreter, noch zu erteilender Ownerfreigabe)
+
+**Geräteaktionen, ausdrücklich und nummeriert (Anzahl und Reihenfolge sind Teil des Gates):**
+
+| Nr. | Aktion | Wirkung auf das Gerät | Trennung |
+|---|---|---|---|
+| P1 | esptool-Sitzung zur Identität: automatischer Reset in den ROM-Bootloader über DTR/RTS des FT232R, MAC/Chip lesen | **1 Reset** (Bootloader), App läuft nicht | Preflight, nicht Testboot |
+| P2 | in derselben Sitzung: Partitionstabelle (`0x8000`, 3072 B) und App-Bereich (`0x10000`, 1 760 560 B) **nur lesen**, SHA-256 gegen Abschnitt 1 prüfen; State-Store nicht lesen/schreiben | kein Schreibzugriff | Preflight |
+| P3 | Sitzungsende mit Hard-Reset zurück in die Anwendung | **1 Reset** (App-Boot), UART dabei **nicht** Teil der Messung | Preflight, kein Testboot |
+| R1–R3 | je Lauf: Portöffnung `g1_capture.py` (bekannter FT232R-Reset beim Öffnen), danach P-A | **1 Reset je Lauf** = frischer, erfasster Testboot | getrennt von P1–P3 |
+
+Keine weiteren Resets, Flashvorgänge, Touch-Sequenzen oder Abfragen. Reihenfolge: P1→P2→P3, dann
+R1, (R2, R3 nur wenn der Owner nach Sichtung des vorherigen Laufs fortsetzt oder das Gate sie vorab
+nennt). Ist die gepinnte App **ohne** diese ausdrücklich genehmigten Aktionen nicht verifizierbar
+(Gate nennt P1–P3 nicht, Reset-Verhalten abweichend, Hash ≠ Abschnitt 1, MAC ≠ erwartet, Lesefehler):
+**HOLD**, kein Lauf. Eine Prüfung allein über die UART-Zeile der Quellversion beim Testboot ersetzt
+P2 nicht (sie beweist die Quelle, nicht den App-Inhalt).
+
+1. **H0** Skriptidentität (Abschnitt 2); keine Gerätekontakte.
+2. **Host-Voraussetzungen (F2-D6):** Paketmitschnitt-Berechtigung für tcpdump (Owner richtet sie ein,
+   z. B. Capabilities am Binary; keine Passwortweitergabe an den Agenten); Interface `enp2s0`;
+   Zielverzeichnis privat (`chmod 700`, ausserhalb jedes Git-Worktrees). Trockentest auf `lo` mit lokalem
+   HTTP-Server vor P1: `capture`→`verify`→`analyze` PASS; Dateigrösse = 24 + 16·N + Σ gespeicherte Längen;
+   `pcap_result.json` zeigt `PASS`.
+3. **P1–P3** wie oben (nur mit Freigabe).
+4. **Lauf R1 (…R3):** `g1_pcap.py capture … --stop-file <Lauf>/candidate_capture/ABORT --stop-file
+   <Lauf>/candidate_capture/STOP --max-seconds 1800` parallel zu `g1_capture.py`, P-A wie G1 (vier
+   Sessions, 60 s Idle, 1200 s Last, 300 s Recovery), Stopp bei erster Anomalie wie G1 (harter
+   Lastabbruch, kein Logout, kein Retry). Der Mitschnitt endet mit dem Abbruch- oder Laufende-Signal.
+5. **Nach jedem Lauf:** `pcap_result.json` prüfen (nur `PASS` zählt); `analyze` nur über verifizierte
+   Dateien; veröffentlicht werden nur `analyze`-Zähler, `uart_tail.log` (ohne Netzwerk-
+   Initialisierungszeilen), `uart_chunks.jsonl`, `load.json`-Auszüge, Fehlerfenster-Bytebereiche und die
+   Tool-Hashes, jeweils mit Quellhash.
+6. **Stopp/HOLD:** unerwarteter Reset ausserhalb der erwarteten Bootresets, Stack unter den G1-Stopgrenzen
+   (Main 11 160 B, HTTPD 2 080 B), Identitätsabweichung, Skripthash-Abweichung, Host-Capture-Fehler.
 
 ## 4. Entscheidungsregel nach dem Lauf
 
@@ -74,34 +103,54 @@ Dekodierung der `diag_alloc_fail`-Zeile gegen den **gepinnten ELF** (`addr2line`
 Task nicht rekonstruiert), Drahtzähler in den 10-s-Bins um die Anomalie, Verlauf des Heaps nach der
 Anomalie (selbstverstärkend ja/nein, 5-s-Tail), `abort_induced`-getrennte Fehlerzahlen.
 
-## 5. Vergleichsdefinition für die spätere Stufe E (F2-D4, vorab festgelegt)
+## 5. Vergleichsdefinition für die spätere Stufe E (F2-D4; Ownerbestätigung vor dem Gate offen)
 
-*Vorbehaltlich der Ownerbestätigung dieses Blatts; sie wird vor dem ersten Hardwaregate gebunden.*
+`OWNER_CONFIRMATION_F2_D4=PENDING` – dieses Blatt wird erst mit der Bestätigung dieses Abschnitts
+gebunden. Stufe D und Stufe E sind zeitlich und durch eigene Gates getrennt.
 
-- **Referenzläufe A:** genau die in Stufe D gefahrenen Läufe mit diesem Image (bis zu 3). Der
-  historische Lauf G1 IMAGE01 gilt nur als Kontext (anderer Tag, andere Capture-Fassung).
-- **Arm B:** dieselbe Konfiguration mit der **einen** Änderung O1; B-Läufe nur nach Ownerfreigabe
-  der Implementierung und in wechselnder Reihenfolge mit A am selben Tag, soweit praktikabel.
+- **Zulässige A-Referenzen:**
+  1. *Vollständige Referenz:* ein A-Lauf, der Last (1200 s) und Recovery (300 s) ohne harten Fail
+     durchläuft. Nur solche Läufe dienen dem Vergleich über den vollständigen Lauf.
+  2. *Frühe-FAIL-Referenz:* ein A-Lauf, der früh endet (z. B. bei 312 s), ist **nur** für das begrenzte
+     Vergleichsfenster unten zulässig und wird ausdrücklich als solcher ausgewiesen.
+  3. Der historische Lauf G1 IMAGE01 ist Kontext, keine Referenz (anderer Tag, andere Capture-Fassung).
+- **Stufe-D-A-Läufe sind keine Referenzen für Stufe E am selben Tag.** Das Stufe-E-Gate legt eigene
+  A'-Vergleichsläufe fest: dasselbe unveränderte Image (Hashes aus Abschnitt 1) und dieselben
+  Host-Skripte (H0), je Lauf mit eigenem Unter-Gate, am selben Tag und in wechselnder Reihenfolge mit B
+  (z. B. A'–B–B–A'), Anzahl und Reihenfolge im Gate. Stufe-D-Läufe liefern Fehlerrate, Aufrufer, Fenstergrösse
+  und Erwartungswerte, nicht die Tagesreferenz.
+- **Arm B:** dieselbe Konfiguration mit der **einen** Änderung O1; nur nach Ownerfreigabe der
+  Implementierung (noch nicht erteilt).
 - **Gleiche Bedingungen:** Board, AP/Kanal (UART-Beleg), Treiber-/Capture-/Pcap-Hashes, vier frische
   Sessions mit dokumentiertem Alter, Idle-Referenz je Boot, Uhrzeitfenster dokumentiert.
-- **Vergleichsfenster (fest):** Lastsekunden `[0, T]` mit `T = min(1200 s, kürzeste beobachtete
-  Lastdauer über alle für den Vergleich verwendeten A- und B-Läufe)`. Kennzahlen im Fenster und
-  getrennt über den vollständigen Lauf. Es wird kein anderes Fenster nachträglich gewählt.
-- **Kennzahlen:** freier interner 8-Bit-Heap und grösster Block (`pre/built/sent`, `diag_30s`),
-  Allokationsfehler, Abfall `built→sent`, HTTP-Erfolgsquote und Socketfehler (mit
-  `abort_induced` getrennt), API- und Shell-Latenz mit p50/p95/p99/max je Minute und Anzahl > 3 s,
-  Shell-Gesamtdauer, Stackreserven, Recovery, Drahtzähler.
-- **Toleranz (Ownervorschlag 1,25×):** p95 je Pfad und Shell-Gesamtdauer von B ≤ 1,25 × Maximum der
-  p95-Werte der verwendeten A-Läufe im Vergleichsfenster; Überschreitung ist Befund für den Owner,
-  kein automatischer Fail. **Harte Fails** (unabhängig von der Toleranz): jedes
-  `heap_alloc_failed`, Panic/Watchdog/Brownout/Reset, HTTP-Nicht-2xx, jeder nicht
-  abbruchbedingte Timeout oder Verbindungsfehler.
-- **Aussagegrenze:** Bei n ≤ 3 je Arm keine statistische Abnahme; die gemessene A-Fehlerrate wird
-  neben B ausgewiesen. Eine Restgefahrakzeptanz (F2-D5) ist **nicht** erteilt und wird erst bei
-  der Produktabnahme verlangt.
+- **Vergleichsfenster (fest, nur für relative Kennzahlen):** Lastsekunden `[0, T]`, `T = min(1200 s,
+  kürzeste beobachtete Lastdauer der für den Vergleich verwendeten Läufe)`. Relative Kennzahlen
+  (Latenz-Perzentile, Heap-/Blockverteilung, Abfall `built→sent`, Shell-Dauer, Drahtzähler) werden im
+  Fenster und getrennt über den vollständigen Lauf berichtet; kein anderes Fenster nachträglich.
+- **Harte B-Kriterien werden durch das Fenster nie relativiert:** Sie gelten für den **gesamten** B-Lauf
+  (volle Last und Recovery gemäss Plan F1/F4 Abschnitt 7): jedes `heap_alloc_failed`, Panic/Watchdog/
+  Brownout/Reset, HTTP-Nicht-2xx, jeder nicht abort-assoziierte Timeout oder Verbindungsfehler,
+  fehlende Erholung, Stack unter Grenze. Ein B-Lauf, der früher endet als ein A'-Lauf, wird nicht
+  mit einem verkürzten Fenster „gerettet“.
+- **Bewertungsgrösse 1,25×:** p95 je Pfad und Shell-Gesamtdauer von B ≤ 1,25 × grösster p95 der
+  zulässigen A'-Läufe im Fenster ist **Bewertungsgrösse, keine automatische FAIL-Grenze**; eine
+  Überschreitung ist Befund für den Owner.
+- **Aussagegrenze:** n ≤ 3 je Arm ist kein statistischer Nachweis; die A-Fehlerrate wird neben B
+  ausgewiesen. F2-D5 (Restgefahrakzeptanz) ist **nicht** erteilt.
+
+## 5a. Instrumentierung und Vergleichsgrenzen (Evidence-Grenze)
+
+G1 IMAGE01 zeigte gegenüber C0-R3 im Idle ≈ 1,4 KB weniger freien Heap (41 132 B gegenüber 42 532 B bei gleichem
+grösstem Block) und +1 452 B statisches DRAM gegenüber dem Produktbuild `d35ee85`. G1b nutzt **dieselbe
+Firmware** wie G1; es entsteht **kein weiterer Firmware-Overhead**, und der Hook (+832 B Image, ≈ +112 B Stack
+in der fehlschlagenden Task, +10,5 ms je Ereignis) ist darin bereits enthalten. Weder ein A/B-Vergleich
+noch C0-R3 begründen ohne gleichartigen Vergleich eine **monokausale** Zuordnung des G1-Ausfalls zu
+Instrumentierung, F4 oder Last. C0-R3 gilt in der Evidence **ausschliesslich als Vergleichsgrenze**
+(anderes Image, anderer Tag); Aussagen über Ursachen stützen sich nur auf gleichartige Läufe desselben
+Images.
 
 ## 6. Nicht Teil dieses Gates
 
-Kein Flash, kein Reset ausser dem bekannten Port-Öffnungsreset, keine Touch-/Hold-Sequenz, keine
+Kein Flash, kein Reset ausser P1, P3 und den Port-Öffnungsresets R1–R3 (Abschnitt 3), keine Touch-/Hold-Sequenz, keine
 Konfigurationsänderung (O1), kein P-A2/P-B/G2, kein Task-Tracking, keine lwIP-Statistik, kein
 `CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS`. Jede dieser Handlungen braucht ein eigenes Gate.

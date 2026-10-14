@@ -2,6 +2,7 @@
 Importing this module never opens UART or starts requests.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -50,7 +51,9 @@ def capture(args):
     args.output.mkdir(parents=True,exist_ok=False)
     uart=args.output/'uart.log'
     abort_file=args.output/'ABORT'
-    result={'start_epoch':time.time(),'start_monotonic':time.monotonic()}
+    result={'start_epoch':time.time(),'start_monotonic':time.monotonic(),
+            'tool_sha256':{n:hashlib.sha256((Path(__file__).parent/n).read_bytes()).hexdigest()
+                           for n in ('g1_capture.py','c0_load.py')}}
     ready=actors=profile=network=source=False
     last_heartbeat=started=time.monotonic()
     resets=0
