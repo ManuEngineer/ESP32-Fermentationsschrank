@@ -24,11 +24,16 @@ class Guard:
         self.stopped = threading.Event()
         self.lock = threading.Lock()
         self.connections = set()
+        self.shut_down = set()
         self.reason = None
+        self.abort_epoch = None
+        self.abort_monotonic = None
 
     def close_sockets(self):
         with self.lock:
             connections = list(self.connections)
+        with self.lock:
+            self.shut_down.update(connections)
         for connection in connections:
             try:
                 active_socket = connection.sock
@@ -42,6 +47,8 @@ class Guard:
         with self.lock:
             if self.reason is None:
                 self.reason = reason
+                self.abort_epoch = time.time()
+                self.abort_monotonic = time.monotonic()
             self.stopped.set()
         self.close_sockets()
 
@@ -52,8 +59,11 @@ class Guard:
                    else REQUEST_TIMEOUT_SECONDS)
         connection = http.client.HTTPConnection(host, timeout=timeout)
         started = time.monotonic()
+        started_epoch = time.time()
+        phase = "connect"
         try:
             connection.connect()
+            phase = "io"
             with self.lock:
                 self.connections.add(connection)
             if self.stopped.is_set():
@@ -68,14 +78,20 @@ class Guard:
             payload = response.read()
             return (response.status, payload, response.getheader("Set-Cookie"),
                     (time.monotonic() - started) * 1000,
-                    None if response.status == 200 else "http-status-error")
+                    None if response.status == 200 else "http-status-error",
+                    started_epoch, phase, False)
         except (OSError, http.client.HTTPException) as error:
             # Fixed classes only: never serialize the exception or its message.
             error_class = ("timeout" if isinstance(error, TimeoutError) else
                            "http-protocol-error" if isinstance(error, http.client.HTTPException)
                            else "connection-error")
+            # Only a connection that close_sockets() shut down fails *because of*
+            # an abort; a connect()-phase failure is a client finding of its own.
+            with self.lock:
+                abort_induced = connection in self.shut_down
             self.abort("request-failure")
-            return -1, b"", None, (time.monotonic() - started) * 1000, error_class
+            return (-1, b"", None, (time.monotonic() - started) * 1000, error_class,
+                    started_epoch, phase, abort_induced)
         finally:
             with self.lock:
                 self.connections.discard(connection)
@@ -133,11 +149,16 @@ def run(args):
         result = guard.request(args.host, method, path, body, cookie)
         if result is None:
             return None
-        status, payload, set_cookie, milliseconds, error_class = result
+        (status, payload, set_cookie, milliseconds, error_class,
+         started_epoch, error_phase, abort_induced) = result
         with samples_lock:
-            samples.append({"epoch": time.time(), "kind": kind, "session": index,
+            # "epoch" stays the request END (compatible with earlier evidence).
+            samples.append({"epoch": time.time(), "start_epoch": started_epoch,
+                            "kind": kind, "session": index,
                             "status": status, "milliseconds": milliseconds,
-                            "error_class": error_class})
+                            "error_class": error_class,
+                            "error_phase": error_phase if error_class else None,
+                            "abort_induced": abort_induced})
         if status != 200:
             guard.abort("http-status-failure")
         return status, payload, set_cookie
@@ -227,7 +248,9 @@ def run(args):
                     "monitoring_policy": "fresh heartbeat before login; max 5 s gap throughout all phases",
                     "status": "FAIL" if guard.stopped.is_set() else "COMPLETED_PENDING_REVIEW",
                     "evidence_gate": "HOLD" if guard.stopped.is_set() else "NOT_EVALUATED",
-                    "abort": guard.reason, "marks": marks, "samples": samples}
+                    "abort": guard.reason, "abort_epoch": guard.abort_epoch,
+                    "abort_monotonic": guard.abort_monotonic,
+                    "marks": marks, "samples": samples}
         (args.output / "load.json").write_text(json.dumps(document, indent=2))
         sessions.clear()
     return 1 if guard.stopped.is_set() else 0

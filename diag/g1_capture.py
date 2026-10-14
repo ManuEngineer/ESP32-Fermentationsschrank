@@ -11,6 +11,37 @@ import time
 from types import SimpleNamespace
 from c0_load import BAD, HEARTBEAT, run as load_run
 
+# Read-only host behaviour after a supervised anomaly: keep the port open for a
+# bounded time so the follow-up (further events, backtrace, panic, reset or
+# recovery) is recorded. The load has already been stopped via ABORT.
+POST_ANOMALY_TAIL_SECONDS = 5.0
+POST_ANOMALY_TAIL_MAX_READS = 120  # bounds the tail even if the clock is frozen
+NO_TAIL = {'host-interrupt', 'capture-failure'}
+
+
+def post_anomaly_tail(board,raw,chunks,tail_log,pending,result):
+    """Read-only, bounded. `pending` is the unterminated frame seen at detection time."""
+    end=time.monotonic()+POST_ANOMALY_TAIL_SECONDS
+    began=time.monotonic()
+    total=0
+    with tail_log.open('wb',buffering=0) as sink:
+        for _ in range(POST_ANOMALY_TAIL_MAX_READS):
+            if time.monotonic()>=end:break
+            try:data=board.read(4096)
+            except Exception:break
+            if not data:continue
+            raw.write(data)
+            chunks.write(json.dumps({'epoch':time.time(),'monotonic':time.monotonic(),
+                                     'bytes':len(data),'tail':True})+'\n')
+            total+=len(data)
+            pending+=data
+            while b'\n' in pending:
+                line,pending=pending.split(b'\n',1)
+                sink.write(('[tail host_mono=%.6f] '%time.monotonic()).encode()+line+b'\n')
+        if pending:
+            sink.write(b'[tail-unterminated] '+pending+b'\n')
+    return {'post_anomaly_tail_seconds':round(time.monotonic()-began,3),'post_anomaly_tail_bytes':total}
+
 
 def capture(args):
     if not args.run or not args.gate_id or not args.allow_port_open_boot:
@@ -39,7 +70,8 @@ def capture(args):
     board=serial.Serial(port=None,baudrate=115200,timeout=0.05)
     board.port=args.port;board.dtr=False;board.rts=False
     try:
-        with uart.open('wb',buffering=0) as log, (args.output/'uart_raw.bin').open('wb',buffering=0) as raw:
+        with uart.open('wb',buffering=0) as log, (args.output/'uart_raw.bin').open('wb',buffering=0) as raw, \
+                (args.output/'uart_chunks.jsonl').open('w') as chunks:
             board.open()  # explicitly gated; this FT232R is known to reset on open
             while True:
                 now=time.monotonic()
@@ -50,6 +82,9 @@ def capture(args):
                     next_socket_snapshot=now+30
                 data=board.read(4096)
                 raw.write(data)
+                if data:
+                    chunks.write(json.dumps({'epoch':time.time(),'monotonic':time.monotonic(),
+                                             'bytes':len(data)})+'\n')
                 offset+=data
                 while b'\n' in offset:
                     line,offset=offset.split(b'\n',1)
@@ -84,7 +119,11 @@ def capture(args):
                     if http and int(http[1])<2080:failure='httpd-stack-reserve';break
                 if not failure and BAD.search(offset.decode(errors='replace')):
                     failure='uart-anomaly'
-                if failure:break
+                if failure:
+                    if failure not in NO_TAIL:
+                        abort_file.write_text(failure+'\n')  # stop the load first
+                        result.update(post_anomaly_tail(board,raw,chunks,args.output/'uart_tail.log',offset,result))
+                    break
                 if now-started>30 and not all((source,ready,actors,profile,network)):
                     failure='boot-identity-state-not-proven';break
                 if args.load and loader is None and (args.output/'START_LOAD').exists() and all((source,ready,actors,profile,network)) and last_uptime is not None and last_uptime>=180000:

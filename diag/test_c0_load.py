@@ -334,6 +334,58 @@ class C0LoginBudgetTests(unittest.TestCase):
                 self.assertEqual(evidence["samples"][0]["error_class"], expected)
                 self.assertEqual(len(connections), 1)
 
+    def test_connect_timeout_is_distinguished_from_read_timeout_and_not_abort_induced(self):
+        connect_stall = Mock(sock=None)
+        connect_stall.connect.side_effect = TimeoutError(self.SENSITIVE_MARKER)
+        read_stall = Mock(sock=None)
+        read_stall.getresponse.side_effect = TimeoutError(self.SENSITIVE_MARKER)
+        for connection, phase in ((connect_stall, "connect"), (read_stall, "io")):
+            with self.subTest(phase=phase), \
+                 patch("c0_load.http.client.HTTPConnection", return_value=connection):
+                guard = Guard()
+                result = guard.request("unused.invalid", "GET", "/api/v1/status")
+                self.assertEqual(result[4], "timeout")
+                self.assertEqual(result[6], phase)
+                self.assertFalse(result[7])  # own finding, no abort had shut it down
+                self.assertIsInstance(result[5], float)  # start epoch
+
+    def test_connection_shut_down_by_abort_is_marked_abort_induced(self):
+        guard = Guard()
+        connection = Mock(sock=Mock())
+        started = threading.Event()
+
+        def stall():
+            started.set()
+            guard.stopped.wait(5.0)
+            raise http.client.RemoteDisconnected(self.SENSITIVE_MARKER)
+        connection.getresponse.side_effect = stall
+        results = []
+        with patch("c0_load.http.client.HTTPConnection", return_value=connection):
+            worker = threading.Thread(
+                target=lambda: results.append(guard.request("unused.invalid", "GET", "/")))
+            worker.start()
+            self.assertTrue(started.wait(5.0))
+            guard.abort("g1-supervisor-stop")
+            worker.join(5.0)
+        self.assertEqual(guard.reason, "g1-supervisor-stop")
+        self.assertIsNotNone(guard.abort_epoch)
+        self.assertIsNotNone(guard.abort_monotonic)
+        self.assertEqual(results[0][4], "http-protocol-error")
+        self.assertTrue(results[0][7])
+        # the first reason stays: the request's own failure must not replace it
+        self.assertEqual(guard.reason, "g1-supervisor-stop")
+
+    def test_load_json_records_abort_time_and_sample_start(self):
+        exit_code, evidence, _ = self.run_script([(8.001, 200)])
+        self.assertEqual(exit_code, 1)
+        self.assertIsNotNone(evidence["abort_epoch"])
+        self.assertIsNotNone(evidence["abort_monotonic"])
+        sample = evidence["samples"][0]
+        self.assertIn("start_epoch", sample)
+        self.assertLessEqual(sample["start_epoch"], sample["epoch"])
+        self.assertIn(sample["error_phase"], ("connect", "io"))
+        self.assertFalse(sample["abort_induced"])
+
     def test_real_http_503_stops_without_retry_or_secret_evidence(self):
         requests = []
         secret = self.SENSITIVE_MARKER
