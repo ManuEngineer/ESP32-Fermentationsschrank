@@ -1,0 +1,7 @@
+ELF g1_bb4f43a.elf (SHA-256 24d8557f965053d566ba6ef3c4bfe745044a505994835e5831b85ff0dbe8c369)
+closure (7): ['_ZN12_GLOBAL__N_1L23logFailedHeapAllocationEjmPKc', 'cache_hal_is_cache_enabled', 'esp_backtrace_get_next_frame', 'esp_dport_access_reg_read', 'esp_ptr_executable', 'spi_flash_cache_enabled', 'xPortInIsrContext']
+  calls from 23logFailedHeapAllocationEjmPK -> [('esp_backtrace_get_next_frame', 'IRAM'), ('esp_backtrace_get_start', 'IRAM'), ('spi_flash_cache_enabled', 'IRAM'), ('xPortInIsrContext', 'IRAM')]
+  calls from cache_hal_is_cache_enabled -> [('esp_dport_access_reg_read', 'IRAM')]
+  calls from esp_backtrace_get_next_frame -> [('esp_ptr_executable', 'IRAM')]
+  calls from spi_flash_cache_enabled -> [('cache_hal_is_cache_enabled', 'IRAM')]
+FLASH_REFS=0
