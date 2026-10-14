@@ -1,0 +1,283 @@
+{
+  "gate_id": "PR203_RES01_G1_20261014_IMAGE01",
+  "created_utc": "2026-10-14T11:22:13.672644+00:00",
+  "OWNER_G1_IMAGE_AUTHORIZATION": "PENDING",
+  "status": "PREPARED_NOT_FLASHED",
+  "product_commit": "d35ee85edf4f93f20e9edbe13f8851e406d1b82b",
+  "independent_software_review": "PASS_GO_OWNER_REPORTED_ON_PRODUCT_BASE",
+  "plan_commit": "6222efce976dc3bea3cf397c2dca56a5fb21859d",
+  "diagnostic_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+  "diagnostic_branch": "agent/pr203-res01-g1-diag-local",
+  "source_tree_clean": true,
+  "overlay_merge_base": "d35ee85edf4f93f20e9edbe13f8851e406d1b82b",
+  "artifacts": {
+    "app": {
+      "file": "artifacts/g1_app_bb4f43a.bin",
+      "bytes": 1760560,
+      "sha256": "da9e868874649bd274d21a4f1c5715afd9293288497027004c460efc46df8cf0"
+    },
+    "elf": {
+      "file": "artifacts/g1_bb4f43a.elf",
+      "bytes": 36281568,
+      "sha256": "24d8557f965053d566ba6ef3c4bfe745044a505994835e5831b85ff0dbe8c369"
+    },
+    "partition": {
+      "file": "artifacts/partition-table.bin",
+      "bytes": 3072,
+      "sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d"
+    },
+    "sdkconfig": {
+      "file": "artifacts/sdkconfig",
+      "bytes": 95147,
+      "sha256": "9ab3490da37da6bd5a9689eb067c9739276974c0b3cfe20d8c40def2d925c3ea"
+    },
+    "bootloader_NOT_FOR_FLASH": {
+      "file": "artifacts/bootloader_NOT_FOR_FLASH.bin",
+      "bytes": 26176,
+      "sha256": "e5a16dcc941d80b0eb475aecc52fea7c81f4e2e2d7406c61e18704953b0d207c"
+    }
+  },
+  "rollback_and_historical_artifacts": [
+    {
+      "path": "diag/image_diag_v3_3e94cea_release_app.bin",
+      "sha256": "e2a57763bb402256b85c5692ecfd2552d4042cc220272e0cc1c1c21714cb12a8",
+      "bytes": 1755824,
+      "actual_sha256": "e2a57763bb402256b85c5692ecfd2552d4042cc220272e0cc1c1c21714cb12a8",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "diag/elf_diag_v3_3e94cea.elf",
+      "sha256": "3ab98630368d48a6153ed103b4c87b83bb45e3c8a16ec2c44b4ff987776e1238",
+      "bytes": 36221684,
+      "actual_sha256": "3ab98630368d48a6153ed103b4c87b83bb45e3c8a16ec2c44b4ff987776e1238",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "diag/c0/image_c0_9a9a8bd_release_app.bin",
+      "sha256": "334623253a70eb6fe11d0be93e6ee0897775ae53773291c2616679cb38b33806",
+      "bytes": 1756624,
+      "actual_sha256": "334623253a70eb6fe11d0be93e6ee0897775ae53773291c2616679cb38b33806",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "diag/c0/elf_c0_9a9a8bd_release.elf",
+      "sha256": "5cd325c3772c566e559cc18c0dd45e08db1823962a39be05de042cdc6299d18e",
+      "bytes": 36226780,
+      "actual_sha256": "5cd325c3772c566e559cc18c0dd45e08db1823962a39be05de042cdc6299d18e",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "diag/c0/partition-table_c0.bin",
+      "sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d",
+      "bytes": 3072,
+      "actual_sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "image_ed29c9c_release_app.bin",
+      "sha256": "c0757d83f9c15940723b4d65a48282cd41db7defa492784cfa0603a438221e0d",
+      "bytes": 1754992,
+      "actual_sha256": "c0757d83f9c15940723b4d65a48282cd41db7defa492784cfa0603a438221e0d",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    },
+    {
+      "path": "flash_factory_app_backup_b9564e6.bin",
+      "sha256": "4708f474a97f9a37edecea2d07b0a74890e0597f87b45fe3bffba3b95857d4da",
+      "bytes": 3080192,
+      "actual_sha256": "4708f474a97f9a37edecea2d07b0a74890e0597f87b45fe3bffba3b95857d4da",
+      "verified": true,
+      "content_publication": "NOT_PUBLISHED; protected offline availability only"
+    }
+  ],
+  "source_and_runner_pins": [
+    {
+      "file": "diag/G1_TEST_SHEET.md",
+      "bytes": 12722,
+      "sha256": "18bb0102c55e565acab3bbc8246763759357a810bed886bd67b829a41b7193cb",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/G1_TEST_SHEET.md"
+    },
+    {
+      "file": "diag/RES01_G1.md",
+      "bytes": 2275,
+      "sha256": "96dbe340e3bbcb86ec411498091fcde8b1a1ad73bb75bc0821e01d92ea41c716",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/RES01_G1.md"
+    },
+    {
+      "file": "diag/c0_load.py",
+      "bytes": 10967,
+      "sha256": "8c4db4272e9e3a49bac8fadfef2a0e05bb4ec6b151ef8914d7dce5312b6767a5",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/c0_load.py"
+    },
+    {
+      "file": "diag/g1_capture.py",
+      "bytes": 6848,
+      "sha256": "ce459258e0b08f72e2b5b608a01f64d2c7663d092fabc597cc312f0c2f4c4de9",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/g1_capture.py"
+    },
+    {
+      "file": "diag/g1_analyze.py",
+      "bytes": 3126,
+      "sha256": "9dda30959db6dfc5a0eecc5368c5898f096daa6c32e1cdac4100806e19747c72",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/g1_analyze.py"
+    },
+    {
+      "file": "diag/test_c0_load.py",
+      "bytes": 18716,
+      "sha256": "de87f29fae6482fda6e748a213653e2b676a650a27b7d7037e91e4d969b1e7e2",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/test_c0_load.py"
+    },
+    {
+      "file": "diag/test_g1_capture.py",
+      "bytes": 3266,
+      "sha256": "1ca38e3a7b2169bfb1061cba5fe407642c6aa7fad13ced39b50e8a8351d2bcd3",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/test_g1_capture.py"
+    },
+    {
+      "file": "diag/test_g1_analyze.py",
+      "bytes": 1629,
+      "sha256": "13baff9211d9a22428e327a5151f8ad9b4ec28fd5d98d2945bc2378ca1496e55",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/test_g1_analyze.py"
+    },
+    {
+      "file": "diag/test_g1_probe.cpp",
+      "bytes": 2385,
+      "sha256": "1dfcbf566ac5b53a489f4ecedba038196b728e0f41bf2f88f064d673d38ca992",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/diag/test_g1_probe.cpp"
+    },
+    {
+      "file": "main/g1_ui_probe.hpp",
+      "bytes": 8685,
+      "sha256": "34a64108e3d19357985c60155f33c303d32f04d8d7bae61f279644e499fa20ee",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/main/g1_ui_probe.hpp"
+    },
+    {
+      "file": "main/app_main.cpp",
+      "bytes": 45591,
+      "sha256": "d927e658e2609660498dc61fc0cc9daebdb37d6f4b298fb3a1226b139271a2bd",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/main/app_main.cpp"
+    },
+    {
+      "file": "main/fermentation_ui_renderer.cpp",
+      "bytes": 94193,
+      "sha256": "45adcb18f917de02f588639f37e08b1f9cc420c97fc6dec2baa58bbe4db80323",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/main/fermentation_ui_renderer.cpp"
+    },
+    {
+      "file": "main/fermentation_ui_lvgl_renderer.cpp",
+      "bytes": 19917,
+      "sha256": "575e51aac7b97900a63bb55d3fe4a84e1ae3788b7425e8703a1971aac44d4d80",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/main/fermentation_ui_lvgl_renderer.cpp"
+    },
+    {
+      "file": "lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp",
+      "bytes": 13457,
+      "sha256": "c8180b525a207e43cb722852b92e41bb6fc6a2744f2526acde832440e89e696f",
+      "source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+      "source_url": "https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/bb4f43a69740f234d26a951707991f792cc3ffde/lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp"
+    }
+  ],
+  "toolchain": {
+    "idf": "v6.1",
+    "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+    "compiler": "xtensa-esp-elf esp-15.2.0_20251204 GCC15.2.0",
+    "clang": "esp-clang21.1.3_20260408",
+    "esptool": "5.3.1",
+    "ss": "iproute2-6.15.0",
+    "serial_python_requirement": "Existing isolated esptool/pyserial environment; private host path omitted"
+  },
+  "board": {
+    "port": "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A5069RR4-if00-port0",
+    "expected_mac": "20:50:0d:1b:2f:34",
+    "identity_partition_current_app": "HISTORICAL_ONLY_REVERIFY_UNDER_GATE",
+    "expected_current_app_sha256": "334623253a70eb6fe11d0be93e6ee0897775ae53773291c2616679cb38b33806",
+    "expected_partition_sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d",
+    "actor_free": "OWNER_CONFIRMED; reaffirm before write; UART actuators disabled mandatory",
+    "touch_calibration": "UNKNOWN_NOT_QUERIED; never repair or overwrite",
+    "expected_host": "192.168.1.68",
+    "os_enumeration_at_preparation": "symlink -> ../../ttyUSB0; port NOT opened"
+  },
+  "hardware_scope": {
+    "app_only_offset": "0x10000",
+    "app_flash_count": 1,
+    "no_extra_image_or_automatic_rollback": true,
+    "preflight": "controlled boot/ROM identity, current-app verification, private full non-app readback; mismatch/anomaly HOLD before write",
+    "non_app_before_after_flash": "0..0xffff and state_store0x300000..0x3fffff; compare before candidate normal boot; no explicit erase, bootloader/partition/NVS/PHY/calibration changes",
+    "candidate_boot": "necessary one candidate boot/known port-open reset, then fresh heartbeat monitor; no additional boot after anomaly"
+  },
+  "run": {
+    "profile": "P-A first diagnostic run; remaining diagnostic acceptance OPEN_G1",
+    "sessions": 4,
+    "idle_seconds": 60,
+    "load_seconds": 1200,
+    "recovery_seconds": 300,
+    "API_GETs_per_session_every_5s": 3,
+    "session_offset_seconds": 1.2,
+    "shell_every_seconds": 30,
+    "connections": "new request connection, Connection close, no retry/logout",
+    "login_socket_timeout_seconds": 8,
+    "other_socket_timeout_seconds": 3,
+    "heartbeat_max_gap_seconds": 5,
+    "earliest_load_board_uptime_ms": 180000,
+    "host_START_LOAD_required": true,
+    "physical_sequences": "concrete instructions and each Owner confirmation required; no actual reset/NVS/calibration"
+  },
+  "recovery_reference": "median current internal8-bit free/largest diag_30s samples in final30s of60s four-session idle; >=1 sample; HomeConnected, same four sessions and no active client connections. Recovery first comparable diag_30s pair >=90% both within120s after last response/client close. Missing/comparability absent => NOT_PROVEN/HOLD. Boot minimum never reference.",
+  "latency_acceptance": "report per profile/kind/minute p50 p95 p99 max; no arbitrary retrospective bound; errors/timeouts fail, >3s totals as findings with fixed per-operation3s budget",
+  "stack_min_bytes": {
+    "main": 11160,
+    "httpd": 2080
+  },
+  "first_anomaly": "FAIL/HOLD, stop new requests and close sockets; retain evidence; no further device queries/reset/flash/erase/rollback/next run",
+  "checks": {
+    "offline_tests": "29/29 PASS",
+    "native_probe": "PASS",
+    "architecture": "PASS",
+    "release_build_and_profile": "PASS on exact clean diagnostic commit",
+    "builder_static_self_check": "PASS on exact diagnostic commit; NOT full Pre-Ready",
+    "secrets": "PASS",
+    "product_config_and_dependencies": "IDENTICAL",
+    "partition": "BYTE_IDENTICAL_TO_PINNED_G0",
+    "G1_hardware": "NOT_RUN",
+    "Pre_Ready": "NOT_RUN"
+  },
+  "gates": {
+    "C0": "GO",
+    "F4_THRESHOLD_STATUS": "PROVISIONAL_PENDING_G1",
+    "RES_01": "BLOCKER",
+    "PR203_FINAL_GO": "HOLD",
+    "G2": "NOT_AUTHORIZED",
+    "ACTUATOR_RELEASE": "NO"
+  },
+  "publication": {
+    "purpose": "INDEPENDENT_REVIEW_ONLY_NOT_FOR_MERGE",
+    "review_branch": "agent/pr203-res01-g1-review-nonmerge",
+    "firmware_source_commit": "bb4f43a69740f234d26a951707991f792cc3ffde",
+    "document_commit_semantics": "Documentation-only descendant of firmware source; no rebuild, no new image, no hardware authorization",
+    "private_artifact_contents": "NOT_PUBLISHED: all images/ELFs/config binaries/readbacks/raw logs remain protected locally",
+    "omitted_fields": "Private absolute host paths and local binary-copy locations; no measurement or acceptance rule changed",
+    "original_local_gate_md_sha256": "1b7cf9cccdc7dc79acb4556a93145c0628f0c856648fbfb0203282c3d2aa4709",
+    "original_local_gate_json_sha256": "21b3ce3732ed41b84509d637003247cfcba357a14d95d18bd2413e49e0b2c7a5",
+    "original_local_SHA256SUMS_sha256": "84242cc07a81d274616c910a2b346f6ad46424a70953359692096fb7c312224e",
+    "no_new_hardware_actions": true,
+    "owner_next_step": "Independent review of exact overlay and concrete Gate before any flash decision"
+  }
+}
