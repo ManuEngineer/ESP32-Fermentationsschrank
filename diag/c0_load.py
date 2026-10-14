@@ -15,6 +15,8 @@ import time
 
 BAD = re.compile(r"heap_alloc_failed|abort\(\)|panic|Guru Meditation|task_wdt|Brownout|stack overflow|rst:0x", re.I)
 HEARTBEAT = re.compile(r"heartbeat: safe test mode, uptime_ms=\d+\b")
+LOGIN_TIMEOUT_SECONDS = 8.0
+REQUEST_TIMEOUT_SECONDS = 3.0
 
 
 class Guard:
@@ -46,7 +48,9 @@ class Guard:
     def request(self, host, method, path, body=None, cookie=None):
         if self.stopped.is_set():
             return None
-        connection = http.client.HTTPConnection(host, timeout=3.0)
+        timeout = (LOGIN_TIMEOUT_SECONDS if method == "POST" and path == "/api/v1/login"
+                   else REQUEST_TIMEOUT_SECONDS)
+        connection = http.client.HTTPConnection(host, timeout=timeout)
         started = time.monotonic()
         try:
             connection.connect()
@@ -62,10 +66,16 @@ class Guard:
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
             payload = response.read()
-            return response.status, payload, response.getheader("Set-Cookie"), (time.monotonic() - started) * 1000
-        except (OSError, http.client.HTTPException):
+            return (response.status, payload, response.getheader("Set-Cookie"),
+                    (time.monotonic() - started) * 1000,
+                    None if response.status == 200 else "http-status-error")
+        except (OSError, http.client.HTTPException) as error:
+            # Fixed classes only: never serialize the exception or its message.
+            error_class = ("timeout" if isinstance(error, TimeoutError) else
+                           "http-protocol-error" if isinstance(error, http.client.HTTPException)
+                           else "connection-error")
             self.abort("request-failure")
-            return -1, b"", None, (time.monotonic() - started) * 1000
+            return -1, b"", None, (time.monotonic() - started) * 1000, error_class
         finally:
             with self.lock:
                 self.connections.discard(connection)
@@ -120,10 +130,11 @@ def run(args):
         result = guard.request(args.host, method, path, body, cookie)
         if result is None:
             return None
-        status, payload, set_cookie, milliseconds = result
+        status, payload, set_cookie, milliseconds, error_class = result
         with samples_lock:
             samples.append({"epoch": time.time(), "kind": kind, "session": index,
-                            "status": status, "milliseconds": milliseconds})
+                            "status": status, "milliseconds": milliseconds,
+                            "error_class": error_class})
         if status != 200:
             guard.abort("http-status-failure")
         return status, payload, set_cookie
@@ -205,7 +216,10 @@ def run(args):
                     "sessions_created": len(sessions), "duration_load_seconds": 1200,
                     "idle_reference_seconds": 60, "recovery_seconds": 300,
                     "session_policy": "no logout; no re-login; same four sessions",
-                    "connection_policy": "new per request; Connection close; 3 s timeout",
+                    "connection_policy": "new per request; Connection close; no retry",
+                    "client_socket_timeout_seconds": {
+                        "POST /api/v1/login": LOGIN_TIMEOUT_SECONDS,
+                        "other requests (including API/shell GETs)": REQUEST_TIMEOUT_SECONDS},
                     "monitoring_policy": "fresh heartbeat before login; max 5 s gap throughout all phases",
                     "status": "FAIL" if guard.stopped.is_set() else "COMPLETED_PENDING_REVIEW",
                     "evidence_gate": "HOLD" if guard.stopped.is_set() else "NOT_EVALUATED",

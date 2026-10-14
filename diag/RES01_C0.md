@@ -41,60 +41,43 @@ idf.py -C test/esp_idf_http_server_adapter_host -B /tmp/pr203-c0-http-host-build
 python3 scripts/build_esp_idf_profiles.py release --require-clean-source-tree
 ```
 
-## Prepared G0 test sheet (no hardware run yet)
+## Login driver correction after G0 STOP (2026-10-14)
 
-- P-A: four fresh sessions, three concurrent API GETs per session every 5 s,
-  sessions offset by 1.2 s; a shell GET every 30 s per session, first at its
-  second tick. 1200 s load. New connection per request, explicit client close,
-  3-s timeout. No re-login, no logout on any outcome.
-- Monitoring prerequisite (C0-1): from the capture's current end offset, observe
-  a fresh `heartbeat: safe test mode, uptime_ms=` board line before the first
-  device request/login. Existing old lines cannot satisfy readiness. The board
-  emits a heartbeat every 1 s; require the first one within 5 s and keep watching
-  with monotonic host time throughout login, idle reference, load and recovery.
-  A gap exceeding 5 s aborts with `uart-heartbeat-timeout`, closes connections,
-  prevents further requests and records FAIL/HOLD. Other UART lines do not extend
-  the deadline. Use this same corrected runner/hash for baseline and candidate.
-- Before load: 60 s idle with those same four sessions, all runner sockets
-  closed. Use current free heap/largest block in the v3 `diag_30s` UART samples,
-  not boot minima. Record actual session validity/network/connection state.
-- After load: stop all requests, close sockets, retain four sessions, observe
-  300 s recovery. The 90%/120-s recovery comparison needs a comparable server
-  socket/network state as well as client closure. A client-side close alone
-  does not prove the server has reclaimed resources: document the server's
-  cleanup and matching idle state; if comparability cannot be established,
-  mark recovery NOT_PROVEN/HOLD rather than assuming 42.3 KB is the reference.
-- UART anomalies are watched every 50 ms independently of request ticks;
-  close active sockets on the first anomaly/non-200/request failure. Do not
-  perform logout, re-login, reset, next phase or fallback flash after an anomaly.
-  Bounded in-progress connect attempts have the same 3-s timeout.
-- Use the same runner hash, image profile, AP/client placement, boot/session
-  age, request schedule and measurements for v3 baseline and chunk candidate.
-  Historical D1 API-only data are context; historical short D2/D3 runs are
-  not an automatic same-load reference for the entire 20-min campaign.
-  Any baseline anomaly also stops work; do not automatically continue with
-  the next image. Go needs an established comparable resource reference.
-- Latency decision fixed before test: HTTP must be 200, no failed connections
-  or 3-s timeouts. API/Shell p50/p95/p99/max are separate per minute/profile;
-  latency distributions/trends are findings, not a hard D1 p99 gate. No extra
-  p99 threshold is invented after the run. If the Owner chooses a stricter
-  same-load bound, record it in the test sheet before starting either run.
-- Go: measurable shell peak reduction, no worse heap/block reserve under
-  identical comparable load, candidate without allocation failure/reset or
-  HTTP/timeout failure. TX-buffer counts are NOT_INSTRUMENTED, hypothesis
-  only; no claim about unchanged counts. G0 does not satisfy G1/G2.
-- Exact candidate commit/image/ELF hashes, immutable image paths, rollback
-  image/partition hashes, stop conditions and local results are recorded in
-  `hw-evidence-pr203/diag/c0/REVIEW_PACKAGE.md` before requesting G0.
+The Owner's bounded correction instruction uses product PR HEAD
+`8f32c97a688b26b121cf3c14405717ef2a8de493`, driver baseline
+`70b3059ad5f429ff483d8e8aefab8300e6054dc4` and the same approved plan.
+Only `POST /api/v1/login` now has an 8-s client socket timeout. API/shell
+GETs and all other requests retain 3 s; no product timeout/KDF/session/HTTPD
+configuration changes. These are `HTTPConnection` socket timeouts, not a new
+wall-clock deadline implementation. HTTP errors and transport failures still
+stop immediately, without retries. Evidence stores only the fixed classes
+`timeout`, `connection-error`, `http-protocol-error`, `http-status-error`
+(or null on HTTP 200), never exception messages, passwords, cookies, CSRF or bodies.
 
-The prepared runner never captures UART or flashes by itself. The actual
-run requires separate Owner G0 approval and a pre-existing live UART capture.
-Opening FT232 can reset the board and is itself hardware-gated. Example only:
+Rationale: [PR-170 hardware evidence](../docs/audits/PR170_HW_TOUCH_PATH_FINDING.md)
+records regular login durations of 3.03–3.08 s. The Owner also cites roughly
+3.2 s in earlier PR-203 runs. Additional preserved v3 `diag/run/load_D1..D3.json`
+logs show eleven successful logins at 3445.9–3575.1 ms and one at 8225.7 ms.
+That outlier is not a guaranteed success under the new 8-s socket budget; the
+budget stays fixed and any new timeout remains FAIL/HOLD. The first G0 login failed after 3113.678 ms with
+a 3-s socket timeout; the unrecorded exception type leaves its cause open.
+The sealed old run `hw-evidence-pr203/diag/c0/g0_20261013_run01/` and product
+[result](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/8f32c97a688b26b121cf3c14405717ef2a8de493/docs/audits/PR203_G0_20261013_RESULT.md)
+remain unchanged: `G0=STOPPED`, `BASELINE_SETUP=FAIL`, `RAM_GAIN_COMPARISON=NOT_RUN`.
 
-```sh
-python3 diag/c0_load.py --run --gate-id OWNER_APPROVED_G0 --host 192.168.1.68 --uart /approved/capture/uart.log --output /new/unique/run-directory
-```
+[The versioned G0 test sheet](G0_TEST_SHEET.md) defines the different login/load
+budgets, monitoring and unchanged P-A schedule. Its early-baseline comparison
+option is an **unapproved proposal for Owner decision**, not an active profile.
+The same exact corrected runner must be used for baseline and candidate.
+Offline regressions model elapsed socket time without real 5/8-s waits and
+exercise a real HTTP 503 on host loopback. No new device interaction is authorized.
 
-No command above has been executed against the ESP32 in C0 preparation.
-Independent review, C0 hardware Go/No-Go, final product Pre-Ready and G1/G2
-remain outstanding. C1–C3 start after the C0 decision according to the plan.
+The new review packet is `hw-evidence-pr203/diag/c0/login-fix-20261014/`.
+It contains the correction diff, source/test snapshots, logs, artifact hashes
+and verification that all existing C0/G0 evidence files stayed byte-identical.
+Frozen baseline/C0 firmware images and ELFs are unchanged; no firmware rebuild.
+
+Next: independent Fix Verification of driver/tests/test sheet/evidence, then
+Owner decision on reference comparability and a **new concrete G0 authorization**.
+No UART-port opening, reset, flash, device requests, C1–C3 or G1/G2 in this correction.
+`RES-01=BLOCKER`, `PR203_FINAL_GO=HOLD`, `G1_G2=NOT_AUTHORIZED`, `ACTUATOR_RELEASE=NO`.

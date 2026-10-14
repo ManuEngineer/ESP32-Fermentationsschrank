@@ -1,12 +1,15 @@
 """Offline runner tests; no ESP32/serial interaction."""
+import http.client
 import http.server
+import json
 from pathlib import Path
 import tempfile
 import threading
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+import c0_load
 from c0_load import Guard, monitor_uart
 
 
@@ -150,6 +153,15 @@ class C0HeartbeatTests(unittest.TestCase):
         self.assertTrue(ready.is_set())
         self.assertEqual(now, 1.1)
 
+    def test_reset_indicator_between_heartbeats_aborts_immediately(self):
+        guard, ready, now = self.check_timeline(
+            [(1.0, HEARTBEAT_LINE), (1.1, "rst:0xc (SW_CPU_RESET)\n"),
+             (2.0, HEARTBEAT_LINE)])
+        self.assertTrue(guard.stopped.is_set())
+        self.assertEqual(guard.reason, "uart-anomaly")
+        self.assertTrue(ready.is_set())
+        self.assertEqual(now, 1.1)
+
     def test_late_first_heartbeat_cannot_forgive_expired_deadline(self):
         guard, ready, _ = self.check_timeline([(5.001, HEARTBEAT_LINE)])
         self.assert_timeout(guard)
@@ -174,7 +186,7 @@ class C0HeartbeatTests(unittest.TestCase):
 
             with patch("c0_load.monitor_uart", side_effect=observe_monitor), \
                  patch("c0_load.Path.home", return_value=root), \
-                 patch.object(c0_load.Guard, "request", return_value=(503, b"", None, 0.0)) as request:
+                 patch.object(c0_load.Guard, "request", return_value=(503, b"", None, 0.0, "http-status-error")) as request:
                 running = threading.Thread(target=lambda: result.append(c0_load.run(args)))
                 running.start()
                 try:
@@ -221,6 +233,154 @@ class C0HeartbeatTests(unittest.TestCase):
             self.assertEqual(evidence["evidence_gate"], "HOLD")
             self.assertEqual(evidence["sessions_created"], 0)
             self.assertEqual(evidence["samples"], [])
+
+
+class C0LoginBudgetTests(unittest.TestCase):
+    SENSITIVE_MARKER = "offline-password-cookie-csrf-body-marker"
+
+    def run_script(self, steps):
+        """Model socket deadlines with virtual time, through the real Guard/run."""
+        clock = [0.0]
+        connections = []
+        script = iter(steps)
+
+        def connection_factory(_host, timeout):
+            duration, outcome = next(script)
+            connection = Mock(sock=None)
+            connection.timeout = timeout
+            connections.append(connection)
+
+            def getresponse():
+                clock[0] += min(duration, timeout)
+                if duration > timeout:
+                    raise TimeoutError(self.SENSITIVE_MARKER)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return SimpleNamespace(status=outcome,
+                                       read=lambda: json.dumps({"csrfToken": self.SENSITIVE_MARKER}).encode(),
+                                       getheader=lambda _name: self.SENSITIVE_MARKER + "; HttpOnly")
+            connection.getresponse.side_effect = getresponse
+            return connection
+
+        def ready_monitor(_path, _offset, _guard, finished, ready):
+            ready.set()
+            finished.wait()
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            uart = root / "uart.log"
+            uart.write_text("")
+            (root / "pw").write_text(self.SENSITIVE_MARKER)
+            args = SimpleNamespace(run=True, gate_id="OFFLINE_TEST_ONLY",
+                                   uart=uart, output=root / "run", host="unused.invalid")
+            with patch("c0_load.monitor_uart", side_effect=ready_monitor), \
+                 patch("c0_load.Path.home", return_value=root), \
+                 patch("c0_load.http.client.HTTPConnection", side_effect=connection_factory), \
+                 patch("c0_load.time.monotonic", side_effect=lambda: clock[0]):
+                exit_code = c0_load.run(args)
+            raw = (args.output / "load.json").read_text()
+            self.assertNotIn(self.SENSITIVE_MARKER, raw)
+            return exit_code, json.loads(raw), connections
+
+    def test_login_over_three_seconds_within_eight_is_accepted(self):
+        # The second login times out deliberately to stop before real idle/load waits.
+        exit_code, evidence, connections = self.run_script([(3.2, 200), (8.001, 200)])
+        self.assertEqual(evidence["sessions_created"], 1)
+        self.assertEqual(evidence["samples"][0]["status"], 200)
+        self.assertAlmostEqual(evidence["samples"][0]["milliseconds"], 3200)
+        self.assertIsNone(evidence["samples"][0]["error_class"])
+        self.assertEqual([c.timeout for c in connections], [8.0, 8.0])
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(len(evidence["samples"]), 2)  # no retry after the failure
+
+    def test_login_over_eight_seconds_records_timeout_fail_hold_without_retry(self):
+        exit_code, evidence, connections = self.run_script([(8.001, 200)])
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(evidence["status"], "FAIL")
+        self.assertEqual(evidence["evidence_gate"], "HOLD")
+        self.assertEqual(evidence["abort"], "request-failure")
+        self.assertEqual(evidence["sessions_created"], 0)
+        self.assertEqual(evidence["samples"][0]["error_class"], "timeout")
+        self.assertAlmostEqual(evidence["samples"][0]["milliseconds"], 8000)
+        self.assertEqual(len(connections), 1)
+        self.assertEqual(evidence["client_socket_timeout_seconds"], {
+            "POST /api/v1/login": 8.0,
+            "other requests (including API/shell GETs)": 3.0})
+
+    def test_only_exact_login_post_gets_eight_seconds(self):
+        for method, path in (("GET", "/api/v1/status"), ("GET", "/api/v1/temperatures"),
+                             ("GET", "/api/v1/alerts"), ("GET", "/"),
+                             ("GET", "/api/v1/login"), ("POST", "/api/v1/logout")):
+            with self.subTest(method=method, path=path):
+                connection = Mock(sock=None)
+                connection.getresponse.side_effect = TimeoutError(self.SENSITIVE_MARKER)
+                with patch("c0_load.http.client.HTTPConnection", return_value=connection) as factory:
+                    guard = Guard()
+                    result = guard.request("unused.invalid", method, path)
+                    factory.assert_called_once_with("unused.invalid", timeout=3.0)
+                    self.assertEqual(result[4], "timeout")
+                    self.assertEqual(guard.reason, "request-failure")
+                    self.assertIsNone(guard.request("unused.invalid", method, path))
+
+    def test_transport_error_classes_are_fixed_and_secret_free(self):
+        for error, expected in ((ConnectionResetError(self.SENSITIVE_MARKER), "connection-error"),
+                                (http.client.BadStatusLine(self.SENSITIVE_MARKER), "http-protocol-error")):
+            with self.subTest(error_class=expected):
+                exit_code, evidence, connections = self.run_script([(0.1, error)])
+                self.assertEqual(exit_code, 1)
+                self.assertEqual(evidence["abort"], "request-failure")
+                self.assertEqual(evidence["status"], "FAIL")
+                self.assertEqual(evidence["evidence_gate"], "HOLD")
+                self.assertEqual(evidence["samples"][0]["error_class"], expected)
+                self.assertEqual(len(connections), 1)
+
+    def test_real_http_503_stops_without_retry_or_secret_evidence(self):
+        requests = []
+        secret = self.SENSITIVE_MARKER
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                requests.append(self.path)
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(503)
+                self.send_header("Set-Cookie", secret)
+                self.end_headers()
+                self.wfile.write(secret.encode())
+            def log_message(self, *_):
+                pass
+
+        def ready_monitor(_path, _offset, _guard, finished, ready):
+            ready.set()
+            finished.wait()
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        serving = threading.Thread(target=server.serve_forever)
+        serving.start()
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                uart = root / "uart.log"
+                uart.write_text("")
+                (root / "pw").write_text(secret)
+                args = SimpleNamespace(run=True, gate_id="OFFLINE_TEST_ONLY",
+                                       uart=uart, output=root / "run",
+                                       host="127.0.0.1:" + str(server.server_port))
+                with patch("c0_load.monitor_uart", side_effect=ready_monitor), \
+                     patch("c0_load.Path.home", return_value=root):
+                    self.assertEqual(c0_load.run(args), 1)
+                raw = (args.output / "load.json").read_text()
+                self.assertNotIn(secret, raw)
+                evidence = json.loads(raw)
+                self.assertEqual(evidence["abort"], "http-status-failure")
+                self.assertEqual(evidence["status"], "FAIL")
+                self.assertEqual(evidence["evidence_gate"], "HOLD")
+                self.assertEqual(evidence["samples"][0]["status"], 503)
+                self.assertEqual(evidence["samples"][0]["error_class"], "http-status-error")
+                self.assertEqual(requests, ["/api/v1/login"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            serving.join()
 
 
 if __name__ == "__main__":
