@@ -556,8 +556,10 @@ bool updateProductUi(
     if (!fermentation::main_ui::beginProductUiStep(
             memoryGate, holdContactGate,
             [] {
-                return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
-                                                        MALLOC_CAP_8BIT);
+                const auto block = heap_caps_get_largest_free_block(
+                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                g1_ui::Probe::gateBlock(block);
+                return block;
             },
             now, application, renderGate, uiWorkspace)) {
         g1Step.skip(memoryGate.skippedSteps());

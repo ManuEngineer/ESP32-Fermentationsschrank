@@ -33,6 +33,8 @@ void g1_host_log(const char* tag, const char*, ...) {
 }
 int main() {
     const auto before = allocations;
+    g1_ui::Probe::gateBlock(12345U);
+    assert(g1_ui::measuredGateBlock == 12345U && g1_ui::gateMeasuredAt > 0U);
     {
         g1_ui::Probe step(g1_ui::Step, 0U, 1U);
         freeBytes = 9000U;

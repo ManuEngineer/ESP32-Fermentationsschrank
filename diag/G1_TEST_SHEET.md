@@ -119,7 +119,8 @@ sampled low free/block. Samples propagate to enclosing step. Integer-only
 fixed-capacity aggregates retain max observed demand and minima/count/text
 length ranges per context; bounded UART flush at most once/s **after all
 measured scopes/models are destroyed**. Aggregate overflow is explicit
-`g1_probe_error`, fail-closed. Per-page skip totals, gate count/pause/resume,
+`g1_probe_error`, fail-closed. Per-page skip totals, gate count/pause/resume, the exact largest-block value
+returned to the actual product gate (gate_block, gate_at_us),
 last actually observed calibrated contact/release/hold allowance and aging
 sample evidence are logged without resampling or inventing physical input.
 

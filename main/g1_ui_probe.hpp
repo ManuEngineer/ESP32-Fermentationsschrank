@@ -28,6 +28,8 @@ inline unsigned dropped{}, pendingCount{};
 inline std::uint64_t lastFlush{}, skips{}, resumes{}, pageSkips[32];
 inline bool paused{};
 inline unsigned held{}, released{}, allowed{};
+inline std::size_t measuredGateBlock{};
+inline std::uint64_t gateMeasuredAt{};
 inline std::uint64_t sampleAge{}, lastObservationUs{};
 inline unsigned localeCode(const char* value, std::size_t size) {
     if (size == 2U && value[0] == 'd' && value[1] == 'e') return 1U;
@@ -100,7 +102,7 @@ inline void flush(std::uint64_t now) {
     // Gate observations are diagnostics, never a release/contact substitute.
     ESP_LOGI("g1_gate",
              "skips=%llu resumes=%llu paused=%u held=%u release=%u allowed=%u "
-             "sample_age_ms=%llu dropped=%u",
+             "sample_age_ms=%llu dropped=%u gate_block=%u gate_at_us=%llu",
              static_cast<unsigned long long>(skips),
              static_cast<unsigned long long>(resumes), paused ? 1U : 0U, held,
              released, allowed,
@@ -108,7 +110,8 @@ inline void flush(std::uint64_t now) {
                  sampleAge == UINT64_MAX || !lastObservationUs
                      ? UINT64_MAX
                      : sampleAge + (now - lastObservationUs) / 1000U),
-             dropped);
+             dropped, static_cast<unsigned>(measuredGateBlock),
+             static_cast<unsigned long long>(gateMeasuredAt));
     for (unsigned p = 0; p < 32; ++p)
         if (pageSkips[p])
             ESP_LOGI("g1_skip", "page=%u total=%llu", p,
@@ -169,6 +172,10 @@ class Probe {
         paused = true;
         skips = count;
         if (r_.page < 32U) ++pageSkips[r_.page];
+    }
+    static void gateBlock(std::size_t block) {
+        measuredGateBlock = block;
+        gateMeasuredAt = static_cast<std::uint64_t>(esp_timer_get_time());
     }
     static void resumed() {
         if (paused) ++resumes;
