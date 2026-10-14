@@ -105,7 +105,7 @@ Wi-Fi-Powersave-Aenderung (kein Beleg), F4-Schwellenaenderung (Abschnitt 1).
 2. **Stufe E (O1):** Nur wenn Stufe D die sendebezogene Deutung stuetzt: **O1 als
    einzige Aenderung** (konfigurationsbasiert, kein Code, blast radius = TCP-Sockets
    des HTTP-Servers), vergleichend gemessen nach Abschnitt 5.
-3. O2 nur, wenn O1 laut Abschnitt 5 nicht wirkt oder harte Kriterien reissst; O3
+3. O2 nur, wenn O1 laut Abschnitt 5 nicht wirkt oder harte Kriterien verletzt; O3
    nur auf ausdruecklichen Ownerentscheid. Nie gleichzeitig mit O1.
 
 Begruendung: O1 ist reversibel, hat keinen Codeanteil, ist im freigegebenen Plan
