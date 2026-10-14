@@ -1,20 +1,28 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `G0_BASELINE_LOGIN_FAILED_AWAITING_OWNER_DECISION`.
+Status: `G0_R2_BASELINE_FAILED_BOUNDED_REFERENCE_AWAITING_REVIEW_OWNER_CONTINUATION`.
 Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
 `6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
 TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
-Softwarevorbereitung ist erlaubt; Flash/Hardwaretests bleiben an G0/G1/G2 gebunden.
-C0-Spike ausschliesslich auf Diagnosebranch `agent/pr203-res01-diag-local`
-@ `9a9a8bd`; C0-Go/No-Go noch nicht gemessen, C1–C3 noch nicht begonnen.
-[Diagnose-Vorbereitung/Testblatt](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/9a9a8bd/diag/RES01_C0.md),
-Build-/Hash-/Review-Paket: `hw-evidence-pr203/diag/c0/REVIEW_PACKAGE.md`.
-Owner-G0 am 2026-10-13 freigegeben (`C0_SOFTWARE_REVIEW=PASS`); Baselineversuch
-bei erster Login-Anforderung mit `request-failure` nach 3113.678 ms gestoppt.
-Keine Vier-Session-Last, kein Kandidatenflash, kein RAM-Vergleich; kein Retry/Reset/Rollback.
-[Ergebnis/Evidence](../audits/PR203_G0_20261013_RESULT.md). Fortsetzung nur nach
-Ownerentscheid; `G1_G2=NOT_AUTHORIZED`. Der freigegebene Treiber bleibt `70b3059`.
-Diese Fortschreibung aendert nur den Status, nicht den freigegebenen Planvertrag.
+C0-Firmware ausschliesslich auf Diagnosebranch `agent/pr203-res01-diag-local`
+@ `9a9a8bd`, gepinnter Treiber `cfcf282`; RES-01-C1–C3 noch nicht begonnen.
+Owner hat am 2026-10-14 den Loginfix (8-s-Sockettimeout nur Login-POST), das
+feste 120-s-Referenzfenster und G0-R2 ausdruecklich freigegeben; maßgeblich
+[gepinntes G0-Testblatt](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/blob/cfcf2826027d0e39fec5f0036bfefb30eec42b3f/diag/G0_TEST_SHEET.md)
+plus Ownerauftrag im neuen Evidence-Paket.
+**G0-R2 STOP:** erste Baseline-Allokationsfehler nach 126,847 s P-A; Baseline
+bleibt FAIL. Begrenzte 120-s-Referenz (304 GETs HTTP 200, 16 erfolgreiche
+Shell-Tripel) auswertbar als Builder-Befund; voller Baseline-Lauf/Erholung nicht
+abgeschlossen. Kandidatenflash/-lauf, RAM-Gewinn und C0-Entscheid nicht belegt.
+[Ergebnis/Evidence R2](../audits/PR203_G0_R2_20261014_RESULT.md), Paket
+`hw-evidence-pr203/diag/c0/g0_r2_20261014_run01/`. Kein Flash erforderlich,
+0 Flash-Writes; nach Fehler keine weitere Geräteanfrage, kein Reset/Rollback.
+[Alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
+Nächster Schritt: unabhängiger Ergebnisreview und separate konkrete
+Ownerfreigabe fuer eine Kandidatenfortsetzung. `C0=UNDECIDED/HOLD`,
+`RAM_GAIN_COMPARISON=NOT_RUN`, `G1_G2=NOT_AUTHORIZED`.
+Diese Fortschreibung aktualisiert den Status und dokumentiert die ausdrücklich
+ownerfreigegebene G0-Testprofilergänzung; Produktplan/Implementierungsumfang unverändert.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
