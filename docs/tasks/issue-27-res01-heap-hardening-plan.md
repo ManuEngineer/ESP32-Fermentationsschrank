@@ -33,8 +33,9 @@ Builder-Self-Check und unabhängiger Software-Review. Kein G1/G2/Ready/Merge.
 `C0=GO`, `C0_OWNER_DECISION=GO`, `INDEPENDENT_G0_R3_RESULT_REVIEW=OWNER_ACCEPTED`,
 `G1_G2=NOT_AUTHORIZED`.
 Diese Fortschreibung aktualisiert den Owner-/Softwarestatus; die
-freigegebenen Abschnitte 1–10 bleiben unverändert. Die Schwellenalternative
-ist ein vorgelegter Vorschlag, keine stillschweigende Planänderung.
+übrigen freigegebenen Abschnitte bleiben unverändert. Abschnitt 4/2
+enthält jetzt das konkrete Korrekturdelta zur Schwellenalternative,
+ausdrücklich zur Ownerentscheidung und noch nicht aktiviert.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
@@ -160,6 +161,19 @@ Entwurf (kleinster wirksamer Schnitt):
    andere Einzelallokationen noch den kumulativen Bedarf von Vektor, Strings und
    LVGL. Heap-vor/nach-Messungen koennen transiente Spitzen verfehlen; Schwelle
    und Faktor 2 sind keine Garantie fuer den gesamten Render-/Touch-Pfad.
+   **Vorgelegtes Korrekturdelta vom 2026-10-14, noch Owner-HOLD:** Die
+   Render-/Touch-Messung (b) liegt vor Software-C1–C3 nicht vor; G0 hat
+   Shell-Phasen gemessen. Als ausdrücklich vorläufige Softwareanbindung
+   wird vorgeschlagen: zunächst nur (a) × 2. Der geprüfte strukturelle
+   ESP32-Vektorblock ist 104 × 64 = 6656 B; vorläufige Skip-Schwelle
+   **13312 B**, Resume ab **16640 B** (Schwelle + halber Vektorblock, 25%).
+   Nach separat ownerfreigegebener G1-Messung muss weiterhin die oben
+   festgelegte Formel max(a, b) × 2 verwendet/überprüft werden. Kein
+   Hardwarelauf und keine endgültige Schwellen-/OOM-Qualifikation folgt
+   aus diesem Softwarevorschlag. Diese befristete Abweichung benötigt
+   eine ausdrückliche Ownerfreigabe der korrigierten Planfassung; bis
+   dahin bleibt die produktive Gate-Anbindung HOLD. Mechanismus, native
+   Tests und F1 können ohne Aktivierung dieser Schwelle vorbereitet werden.
 3. **Reserve statt Wachstum:** `makeRepresentativeScreen` reserviert die geprueft
    begrenzte Befehlsanzahl **einmal** fuer alle Seiten (Test erzwingt, dass keine Seite
    die Schranke ueberschreitet), damit Vektorwachstum (Verdopplung, zwei Puffer
