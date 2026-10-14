@@ -1,0 +1,7 @@
+# Original UART failure window
+
+`FAILURE_WINDOW_UART.bin` is a byte-for-byte suffix copied from the local original `candidate_capture/uart_raw.bin`; no bytes inside the excerpt were edited. The excerpt begins at source byte offset **211723**, ends at byte offset **213107** (exclusive), and contains the original `heap_alloc_failed` marker at excerpt offset **1316**. The source capture SHA-256 is `86e8c5ba5514def89894305bfab05016fc4d877d5bc60abe5514914104031dad`; the excerpt SHA-256 is `a5267d95b25122b917664aa09074bd2916647f531badec91d3b66afb75e5409f`.
+
+The frame is incomplete at end-of-capture (`function=heap_caps_mall...`); no per-chunk host timestamp was recorded for that unterminated frame. The last complete host-stamped UART record is at UTC **2026-10-14T14:12:12.516011Z** / monotonic **178337.477982 s**. Capture stop is UTC **2026-10-14T14:12:14.453243Z** / monotonic **178339.415215 s**. The HTTP failures begin UTC **14:12:12.552163Z**; their monotonic values are reconstructed from the capture anchor. The evidence therefore brackets the heap marker in the final capture window but does **not** establish ordering versus the HTTP failures.
+
+The public `UART_RESOURCE_RECORDS.csv` contains selected timestamped lines from the text UART capture (gate/UI/resource records only); Wi-Fi/security initialization lines and unrelated UART output are omitted. The complete source logs remain local and unchanged.

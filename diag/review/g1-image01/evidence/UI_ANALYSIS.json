@@ -1,0 +1,50 @@
+{
+  "arithmetic_candidate_bytes_NOT_QUALIFIED": 17376,
+  "invalid_ui_lines": 0,
+  "limits": [
+    "checkpoints miss between-sample transients; not exact peak",
+    "parallel WLAN/HTTP/diagnostic activity contributes",
+    "free and largest-block queries are not atomic together",
+    "boot/per-region low watermarks are not window minima",
+    "render argument allocations precede render scope; step includes them",
+    "skip context is cached, not a fresh snapshot; never demand=0 evidence",
+    "in-flight measurements on abort/reset may never flush",
+    "board/source/load/idle/stack/recovery and manual coverage reviewed separately"
+  ],
+  "measured_phase_page_locale_home_hold_kind": [
+    [
+      0,
+      0,
+      1,
+      0,
+      0,
+      1
+    ],
+    [
+      0,
+      0,
+      2,
+      0,
+      0,
+      1
+    ],
+    [
+      2,
+      0,
+      1,
+      0,
+      0,
+      1
+    ]
+  ],
+  "observed_max_checkpoint_demand_bytes": 8688,
+  "physical_hold_skip_release_new_contact": "NOT_PROVEN_REQUIRES_REAL_SEQUENCE",
+  "probe_overflow": false,
+  "skipped_page_locale_without_measured_render": [],
+  "status": "HOLD_PENDING_INDEPENDENT_RESULT_REVIEW_AND_COVERAGE",
+  "threshold_status": "NOT_QUALIFIED",
+  "touch_contact_evidence": "NOT_PROVEN",
+  "valid_aggregates": 41,
+  "variant_coverage": "NOT_PROVEN_REQUIRES_MANUAL_CASE_CORRELATION",
+  "vector_bound_bytes": 6656
+}

@@ -1,0 +1,17 @@
+{
+  "actors_disabled": true,
+  "end_epoch": 1791987134.4532425,
+  "end_monotonic": 178339.415214607,
+  "expected_initial_reset_lines": 1,
+  "failure": "uart-anomaly",
+  "gate": "PR203_RES01_G1_20261014_IMAGE01",
+  "load_exit": 1,
+  "max_heartbeat_gap_seconds": 3.4526959609938785,
+  "network_home_connected": true,
+  "ready": true,
+  "release_profile": true,
+  "source_proven": true,
+  "start_epoch": 1791986392.0495348,
+  "start_monotonic": 177597.01150547,
+  "status": "FAIL/HOLD"
+}

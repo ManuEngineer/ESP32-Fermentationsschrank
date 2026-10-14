@@ -1,0 +1,15 @@
+I (737562) g1_skip: page=0 total=396
+I (737622) app_main: heartbeat: safe test mode, uptime_ms=736378
+I (737692) res01_http: phase=pre body=0 result=0 free=35556 min=13048 largest8=32768 internal_largest=32768 httpd_stack_hwm=2304
+I (737702) res01_http: phase=built body=8048 result=0 free=33952 min=13048 largest8=31744 internal_largest=31744 httpd_stack_hwm=2304
+I (738572) g1_gate: skips=396 resumes=7 paused=0 held=0 release=1 allowed=0 sample_age_ms=12 dropped=0 gate_block=13824 gate_at_us=737739460
+I (738572) g1_skip: page=0 total=396
+I (738632) app_main: heartbeat: safe test mode, uptime_ms=737382
+I (739582) g1_gate: skips=396 resumes=7 paused=0 held=0 release=1 allowed=0 sample_age_ms=24 dropped=0 gate_block=13824 gate_at_us=738751115
+I (739582) g1_skip: page=0 total=396
+I (739632) app_main: heartbeat: safe test mode, uptime_ms=738382
+W (740082) app_main: ui_skipped_low_memory count=397
+I (740342) res01_http: phase=sent body=8048 result=0 free=17900 min=13048 largest8=12288 internal_largest=12288 httpd_stack_hwm=2304
+I (740432) res01_http: phase=pre body=0 result=0 free=16212 min=13048 largest8=10752 internal_largest=10752 httpd_stack_hwm=2304
+I (740442) res01_http: phase=built body=8048 result=0 free=14608 min=13048 largest8=10752 internal_largest=10752 httpd_stack_hwm=2304
+E heap_alloc_failed: size=1626 caps=0x0000080c function=heap_caps_mall

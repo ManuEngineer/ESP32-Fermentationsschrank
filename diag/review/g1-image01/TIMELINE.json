@@ -1,0 +1,197 @@
+{
+  "timezone": "UTC unless explicitly shown; host timezone Europe/Zurich",
+  "mapping_method": {
+    "candidate_capture_anchor": {
+      "utc": "2026-10-14T13:59:52.049535+00:00",
+      "epoch": 1791986392.0495348,
+      "monotonic_seconds": 177597.01150547
+    },
+    "formula": "host_monotonic = capture_start_monotonic + (event_utc_epoch - capture_start_utc_epoch); used as reconstructed estimate only for UTC-only client samples",
+    "uart_host_mono_to_utc": "capture_start_utc + (uart_host_mono - capture_start_monotonic)"
+  },
+  "events": [
+    {
+      "event": "preflight_normal_boot_monitor",
+      "status": "PASS",
+      "start_utc": "2026-10-14T13:56:08.657347+00:00",
+      "end_utc": "2026-10-14T13:56:40.273994+00:00",
+      "first_logged_pair": {
+        "monotonic_seconds": 177373.670768,
+        "utc": "2026-10-14T13:56:08.708800+00:00"
+      },
+      "last_logged_pair": {
+        "monotonic_seconds": 177405.235385,
+        "utc": "2026-10-14T13:56:40.273418+00:00"
+      },
+      "max_heartbeat_gap_seconds": 3.51740096998401
+    },
+    {
+      "event": "preflash_full_readback",
+      "status": "PASS",
+      "elapsed_seconds_reported_by_esptool": 102.2,
+      "utc_monotonic": "NOT_RECORDED_IN_TOOL_LOG",
+      "ordering": "before app-only flash"
+    },
+    {
+      "event": "app_only_flash_offset_0x10000",
+      "status": "PASS_HASH_VERIFIED",
+      "elapsed_seconds_reported_by_esptool": 26.8,
+      "utc_monotonic": "NOT_RECORDED_IN_TOOL_LOG",
+      "ordering": "after preflash readback and before postflash readback"
+    },
+    {
+      "event": "postflash_full_readback",
+      "status": "PASS",
+      "elapsed_seconds_reported_by_esptool": 102.7,
+      "utc_monotonic": "NOT_RECORDED_IN_TOOL_LOG",
+      "ordering": "after app-only flash and before candidate boot"
+    },
+    {
+      "event": "candidate_capture_and_uart_supervision",
+      "start_utc": "2026-10-14T13:59:52.049535+00:00",
+      "start_monotonic_seconds": 177597.01150547,
+      "stop_utc": "2026-10-14T14:12:14.453243+00:00",
+      "stop_monotonic_seconds": 178339.415214607,
+      "status": "STOPPED_FAIL_HOLD",
+      "max_heartbeat_gap_seconds": 3.4526959609938785
+    },
+    {
+      "event": "P-A_login_and_four_session_idle",
+      "start_utc": "2026-10-14T14:05:46.295855+00:00",
+      "start_monotonic_seconds": 177951.25782623,
+      "idle_start_utc": "2026-10-14T14:06:02.569074+00:00",
+      "idle_end_load_start_utc": "2026-10-14T14:07:02.569262+00:00",
+      "duration_seconds": 60,
+      "status": "PASS_REFERENCE_CAPTURED"
+    },
+    {
+      "event": "P-A_load",
+      "start_utc": "2026-10-14T14:07:02.569262+00:00",
+      "start_monotonic_seconds": 178027.531234034,
+      "end_utc": "2026-10-14T14:12:14.448369+00:00",
+      "end_monotonic_seconds": 178339.410340904,
+      "observed_seconds": 311.879,
+      "planned_seconds": 1200,
+      "status": "FAIL_INCOMPLETE_STOPPED"
+    },
+    {
+      "event": "last_complete_UART_line_before_unterminated_raw_tail",
+      "utc_estimated_from_capture_anchor": "2026-10-14T14:12:12.516011+00:00",
+      "monotonic_seconds": 178337.477982,
+      "raw_tail_contains_heap_alloc_failed": true,
+      "exact_heap_marker_time": "NOT_PROVEN; raw UART frame is unterminated and has no per-chunk timestamp"
+    },
+    {
+      "event": "request_errors",
+      "records": [
+        {
+          "kind": "alerts",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552163+00:00",
+          "epoch": 1791987132.5521626,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514133
+        },
+        {
+          "kind": "status",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552393+00:00",
+          "epoch": 1791987132.552393,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514364
+        },
+        {
+          "kind": "shell",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552473+00:00",
+          "epoch": 1791987132.5524728,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514443
+        },
+        {
+          "kind": "alerts",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552584+00:00",
+          "epoch": 1791987132.5525844,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514555
+        },
+        {
+          "kind": "shell",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552748+00:00",
+          "epoch": 1791987132.552748,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514719
+        },
+        {
+          "kind": "temperatures",
+          "status": -1,
+          "error_class": "http-protocol-error",
+          "utc": "2026-10-14T14:12:12.552894+00:00",
+          "epoch": 1791987132.5528939,
+          "monotonic_reconstructed_from_capture_anchor": 178337.514864
+        },
+        {
+          "kind": "temperatures",
+          "status": -1,
+          "error_class": "timeout",
+          "utc": "2026-10-14T14:12:13.770752+00:00",
+          "epoch": 1791987133.770752,
+          "monotonic_reconstructed_from_capture_anchor": 178338.732723
+        }
+      ],
+      "status": "FAIL",
+      "ordering_vs_unterminated_heap_marker": "NOT_PROVEN; events overlap the final UART observation window"
+    },
+    {
+      "event": "recovery_300_seconds",
+      "status": "NOT_RUN_AFTER_STOP"
+    },
+    {
+      "event": "owner_manual_UI_smoke_post_run",
+      "owner_reported_local": "2026-10-14 approx 18:06 Europe/Zurich",
+      "owner_reported_utc": "2026-10-14 approx 16:06 UTC",
+      "monotonic": "NOT_AVAILABLE",
+      "observations": [
+        "Home visible",
+        "menu touch navigation works"
+      ],
+      "status": "PASS_OWNER_OBSERVED_SEPARATE_FROM_G1"
+    }
+  ],
+  "resource_low_samples": {
+    "free": {
+      "value": 35368,
+      "utc_estimated_from_capture_anchor": "2026-10-14T14:11:54.554056+00:00",
+      "monotonic_seconds": 178319.516027
+    },
+    "block": {
+      "value": 27648,
+      "utc_estimated_from_capture_anchor": "2026-10-14T14:11:54.554056+00:00",
+      "monotonic_seconds": 178319.516027
+    },
+    "main_stack": {
+      "value": 11688,
+      "utc_estimated_from_capture_anchor": "2026-10-14T13:59:53.938196+00:00",
+      "monotonic_seconds": 177598.900167
+    },
+    "httpd_stack": {
+      "value": 2304,
+      "utc_estimated_from_capture_anchor": "2026-10-14T14:08:09.796802+00:00",
+      "monotonic_seconds": 178094.758773
+    }
+  },
+  "idle_reference": {
+    "sample_count_final_30s": 1,
+    "internal_8bit_free_bytes": 41132,
+    "internal_8bit_largest_block_bytes": 38912,
+    "sample_monotonic_seconds": 178019.530967,
+    "sample_utc_estimated_from_capture_anchor": "2026-10-14T14:06:54.568996+00:00"
+  },
+  "status_notes": {
+    "boot_minimum_watermark_bytes": 13048,
+    "boot_minimum_watermark_is_not_current_recovery_measurement": true,
+    "recovery_claim": "NOT_PROVEN"
+  }
+}
