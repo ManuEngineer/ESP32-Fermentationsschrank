@@ -6,6 +6,11 @@
 #include <string>
 
 #include "esp_http_server.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace device_platform_esp_idf {
 namespace {
@@ -237,6 +242,25 @@ bool EspIdfHttpServerLifecycle::running() const {
     return impl_->server != nullptr;
 }
 
+namespace {
+// PR203 RES-01 diagnostic candidate (temporary): one compact resource line per
+// phase of a large response (the web shell), taken in the httpd task.
+void logHttpResources(const char* phase, std::size_t bodyBytes, int result) {
+    ESP_LOGI("res01_http",
+             "phase=%s body=%u result=%d free=%u min=%u largest8=%u "
+             "internal_largest=%u httpd_stack_hwm=%u",
+             phase, static_cast<unsigned>(bodyBytes), result,
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL |
+                                                           MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(esp_get_minimum_free_heap_size()),
+             static_cast<unsigned>(
+                 heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(
+                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
+}
+}  // namespace
+
 esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
     if (request == nullptr || request->user_ctx == nullptr) {
         return ESP_FAIL;
@@ -273,6 +297,8 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         received += static_cast<std::size_t>(count);
     }
     device_platform::HttpResponse response;
+    const bool shellPath = request->uri[0] == '/' && request->uri[1] == '\0';
+    if (shellPath) logHttpResources("pre", 0U, 0);
     const device_platform::HttpRequest input{
         methodName(static_cast<http_method>(request->method)), request->uri,
         std::move(body), std::move(metadata)};
@@ -299,21 +325,30 @@ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
                                    "response metadata unavailable");
     }
-    if (response.staticBodySuffix.empty()) {
-        return httpd_resp_send(request, response.body.data(),
-                               response.body.size());
-    }
-    // A zero-length data chunk would terminate the response prematurely.
-    if (!response.body.empty()) {
-        const auto error = httpd_resp_send_chunk(request, response.body.data(),
-                                                 response.body.size());
+    const auto totalBytes =
+        response.body.size() + response.staticBodySuffix.size();
+    if (shellPath) logHttpResources("built", totalBytes, 0);
+    const auto sendResponse = [&]() -> esp_err_t {
+        if (response.staticBodySuffix.empty()) {
+            return httpd_resp_send(request, response.body.data(),
+                                   response.body.size());
+        }
+        // A zero-length data chunk would terminate the response prematurely.
+        if (!response.body.empty()) {
+            const auto error = httpd_resp_send_chunk(
+                request, response.body.data(), response.body.size());
+            if (error != ESP_OK) return error;
+        }
+        const auto error =
+            httpd_resp_send_chunk(request, response.staticBodySuffix.data(),
+                                  response.staticBodySuffix.size());
         if (error != ESP_OK) return error;
-    }
-    const auto error =
-        httpd_resp_send_chunk(request, response.staticBodySuffix.data(),
-                              response.staticBodySuffix.size());
-    if (error != ESP_OK) return error;
-    return httpd_resp_send_chunk(request, nullptr, 0U);
+        return httpd_resp_send_chunk(request, nullptr, 0U);
+    };
+    const auto result = sendResponse();
+    if (shellPath)
+        logHttpResources("sent", totalBytes, static_cast<int>(result));
+    return result;
 }
 
 }  // namespace device_platform_esp_idf

@@ -1,4 +1,5 @@
 #include "fermentation_ui_renderer.hpp"
+#include "g1_ui_probe.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -148,6 +149,7 @@ void addFill(std::vector<ScreenDrawCommand>& commands,
              device_platform::ThemeToken token) {
     commands.push_back(
         {ScreenDrawKind::Fill, rect, token, token, std::string{}, {}});
+    g1_ui::Probe::checkpoint();
 }
 
 void addText(std::vector<ScreenDrawCommand>& commands,
@@ -164,6 +166,7 @@ void addText(std::vector<ScreenDrawCommand>& commands,
                         background,
                         resolve(packs, locale, key).value,
                         {}});
+    g1_ui::Probe::checkpoint();
 }
 
 void addRawText(std::vector<ScreenDrawCommand>& commands,
@@ -177,6 +180,7 @@ void addRawText(std::vector<ScreenDrawCommand>& commands,
                         std::move(text),
                         {},
                         wrapText});
+    g1_ui::Probe::checkpoint();
 }
 
 // "<label><value>" in one line; both parts come from the text packs or from
@@ -210,6 +214,7 @@ void addNetworkStatusIcon(std::vector<ScreenDrawCommand>& commands,
                           device_platform::ThemeToken background) {
     commands.push_back(
         {ScreenDrawKind::NetworkStatusIcon, rect, token, background, {}, {}});
+    g1_ui::Probe::checkpoint();
 }
 
 void addLogo(std::vector<ScreenDrawCommand>& commands,
@@ -217,6 +222,7 @@ void addLogo(std::vector<ScreenDrawCommand>& commands,
     commands.push_back(
         {ScreenDrawKind::Logo, rect, device_platform::ThemeToken::TextPrimary,
          device_platform::ThemeToken::Surface, "ManuEngineer", kLogoAssetPath});
+    g1_ui::Probe::checkpoint();
 }
 
 device_platform::TextKey appKey(std::string_view value) {
@@ -416,6 +422,7 @@ RepresentativeScreen makeRepresentativeScreen(
     }
     auto& commands = screen.commands;
     commands.reserve(kMaximumDrawCommands);
+    g1_ui::Probe::checkpoint();
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
             device_platform::ThemeToken::Canvas);
     addFill(commands, {0U, 0U, screen.kWidth, kHeaderHeight},
@@ -632,6 +639,7 @@ RepresentativeScreen makeRepresentativeScreen(
                                 device_platform::ThemeToken::Surface,
                                 temperatureText(snapshot.temperatures[index]),
                                 {}});
+            g1_ui::Probe::checkpoint();
         }
         addText(commands, textPacks, locale, appKey("messages"),
                 {8U, 128U, 88U, RepresentativeScreen::kTextLineHeight},
@@ -720,6 +728,7 @@ RepresentativeScreen makeRepresentativeScreen(
                                     std::move(*payload),
                                     {},
                                     false});
+                g1_ui::Probe::checkpoint();
             }
         } else {
             addText(commands, textPacks, locale,
@@ -1245,6 +1254,7 @@ RepresentativeScreen makeRepresentativeScreen(
                      device_platform::ThemeToken::Surface,
                      temperatureText(temperature),
                      {}});
+                g1_ui::Probe::checkpoint();
                 addText(commands, textPacks, locale,
                         sensorQualityTextKey(temperature.quality.quality),
                         {204U, textTop, 104U,
@@ -1556,6 +1566,7 @@ RepresentativeScreen makeRepresentativeScreen(
                                 device_platform::ThemeToken::PrimaryAction,
                                 {},
                                 {}});
+            g1_ui::Probe::checkpoint();
         }
     }
     if (pressedTarget.has_value() &&
@@ -1570,7 +1581,16 @@ RepresentativeScreen makeRepresentativeScreen(
                             device_platform::ThemeToken::PrimaryAction,
                             {},
                             {}});
+        g1_ui::Probe::checkpoint();
     }
+    unsigned g1TextBytes = 0U, g1MaxText = 0U;
+    for (const auto& cmd : screen.commands) {
+        const auto bytes = static_cast<unsigned>(cmd.text.size());
+        g1TextBytes += bytes;
+        if (bytes > g1MaxText) g1MaxText = bytes;
+    }
+    g1_ui::Probe::model(static_cast<unsigned>(screen.commands.size()),
+                        g1TextBytes, g1MaxText);
     return screen;
 }
 

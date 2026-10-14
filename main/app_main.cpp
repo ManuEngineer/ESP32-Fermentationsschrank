@@ -1,3 +1,7 @@
+#include "esp_debug_helpers.h"
+#include "esp_cpu.h"
+#include "esp_rom_sys.h"
+#include "freertos/FreeRTOS.h"
 #include <cinttypes>
 #include <memory>
 #include <new>
@@ -26,6 +30,7 @@
 #include "fermentation_application.hpp"
 #include "fermentation_ui_lvgl_renderer.hpp"
 #include "fermentation_ui_press_dispatcher.hpp"
+#include "g1_ui_probe.hpp"
 #include "sensor_commissioning.hpp"
 #include "fermentation_ui_text.hpp"
 #include "generated/board_profile_r1.hpp"
@@ -82,6 +87,10 @@ const char* binaryOutputBeginResultName(
 
 // Tag fuer den Failed-Allocation-Hook; muss in DRAM liegen (ESP_DRAM_LOGE).
 DRAM_ATTR const char kHeapAllocFailedTag[] = "heap_alloc_failed";
+// Ersatztexte fuer den Hook: nie aus dem Flash lesen (Flash-Cache kann aus
+// sein).
+DRAM_ATTR const char kHeapAllocFailedUnknown[] = "?";
+DRAM_ATTR const char kHeapAllocFailedCacheOff[] = "<cache-off>";
 #ifdef APP_ISSUE_90_SLICE7_HARNESS
 constexpr char kStateStorePartitionLabel[] = "state_store_test";
 #else
@@ -276,11 +285,64 @@ void logHeartbeat(uint64_t uptimeMs) {
 // noch ESP_LOGx verwenden; nur ROM-Ausgabe mit DRAM-Formatstrings. Auch
 // erwartete Fehlschlaege (nothrow-new, Capability-Fallbacks in ESP-IDF)
 // loesen ihn aus. Reine Diagnose: der Hook aendert kein Verhalten.
+// IRAM-resident IDF query (components/spi_flash/cache_utils.c, declared in the
+// private header esp_private/cache_utils.h which is not on main's include
+// path). Declared here with the identical signature for this temporary patch.
+extern "C" bool spi_flash_cache_enabled(void);
+
+// Same mapping as ESP-IDF esp_cpu_process_stack_pc() (xtensa/esp_cpu_utils.h,
+// not exported to main): window-increment bits to address space, minus the
+// call instruction length. Forced inline so no out-of-line (flash) copy exists.
+[[gnu::always_inline]] inline uint32_t diagStackPc(uint32_t pc) {
+    if ((pc & 0x80000000U) != 0U) {
+        pc = (pc & 0x3fffffffU) | 0x40000000U;
+    }
+    return pc - 3U;
+}
+
 void IRAM_ATTR logFailedHeapAllocation(size_t size, uint32_t caps,
                                        const char* functionName) {
+    // IDF passes __func__ strings that live in flash rodata; dereference them
+    // only while the flash cache is enabled (IRAM-safe query).
+    const char* shownName = kHeapAllocFailedCacheOff;
+    if (spi_flash_cache_enabled()) {
+        shownName =
+            functionName != nullptr ? functionName : kHeapAllocFailedUnknown;
+    }
     ESP_DRAM_LOGE(kHeapAllocFailedTag, "size=%u caps=0x%08x function=%s",
                   static_cast<unsigned>(size), static_cast<unsigned>(caps),
-                  functionName != nullptr ? functionName : "?");
+                  shownName);
+    // PR203 RES-01 diagnostic candidate v2 (temporary): who allocates. Bounded
+    // (first 4 events), allocation free, ROM output only, DRAM format strings.
+    // It reads no flash-resident code or data beyond what the hook above
+    // already reads (the IDF-provided function name): only IRAM functions
+    // (esp_backtrace_get_start/next_frame, xPortInIsrContext) and the ROM
+    // printf are used; no heap query, no lock, no ESP_LOGx, no task-name call.
+    static uint32_t diagEvents = 0U;
+    // Atomic (inline s32c1i, no libatomic call): at most 4 events in total,
+    // even with two cores or an ISR racing; n is unique per printed event.
+    if (__atomic_load_n(&diagEvents, __ATOMIC_RELAXED) < 4U) {
+        const uint32_t eventNo =
+            __atomic_fetch_add(&diagEvents, 1U, __ATOMIC_RELAXED) + 1U;
+        if (eventNo > 4U) return;
+        esp_backtrace_frame_t frame = {};
+        esp_backtrace_get_start(&frame.pc, &frame.sp, &frame.next_pc);
+        esp_rom_printf(DRAM_STR("diag_alloc_fail: n=%u isr=%d core=%d pc:"),
+                       static_cast<unsigned>(eventNo),
+                       xPortInIsrContext() != 0 ? 1 : 0,
+                       static_cast<int>(esp_cpu_get_core_id()));
+        esp_rom_printf(DRAM_STR(" %08x"),
+                       static_cast<unsigned>(diagStackPc(frame.pc)));
+        for (int depth = 0; depth < 8 && frame.next_pc != 0; ++depth) {
+            if (!esp_backtrace_get_next_frame(&frame)) {
+                esp_rom_printf(DRAM_STR(" !"));
+                break;
+            }
+            esp_rom_printf(DRAM_STR(" %08x"),
+                           static_cast<unsigned>(diagStackPc(frame.pc)));
+        }
+        esp_rom_printf(DRAM_STR("\n"));
+    }
 }
 
 void logResources(const char* samplePoint,
@@ -476,6 +538,13 @@ bool updateProductUi(
         return false;
     }
 
+    const auto& g1Locale = renderGate.presentation().displayLocale().value();
+    g1_ui::Probe g1Step(g1_ui::Step, static_cast<unsigned>(uiWorkspace.page()),
+                        g1_ui::localeCode(g1Locale.c_str(), g1Locale.size()));
+    g1Step.context(
+        static_cast<unsigned>(renderGate.snapshot().home.mode),
+        static_cast<unsigned>(renderGate.snapshot().factoryReset.stage),
+        static_cast<unsigned>(renderGate.snapshot().factoryReset.kind), false);
     // Allocation-free steady state (R1 RAM plan, S4): the recycled snapshot,
     // the one presentation copy (S3) and the pre-built render key come from
     // the shared UiRenderGate. HeaderNetwork does not consume ProgramCatalog:
@@ -491,13 +560,19 @@ bool updateProductUi(
                                                         MALLOC_CAP_8BIT);
             },
             now, application, renderGate, uiWorkspace)) {
+        g1Step.skip(memoryGate.skippedSteps());
         if (memoryGate.logSkip()) {
             ESP_LOGW(kTag, "ui_skipped_low_memory count=%" PRIu64,
                      memoryGate.skippedSteps());
         }
         return false;
     }
+    g1_ui::Probe::checkpoint();
+    g1_ui::Probe::resumed();
     const auto& loopSnapshot = renderGate.snapshot();
+    g1Step.context(static_cast<unsigned>(loopSnapshot.home.mode),
+                   static_cast<unsigned>(loopSnapshot.factoryReset.stage),
+                   static_cast<unsigned>(loopSnapshot.factoryReset.kind), true);
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
 
@@ -511,6 +586,11 @@ bool updateProductUi(
     const bool holdAllowed = holdContactGate.observe(touchPoll.physicalRelease,
                                                      touchPoll.contactHeld,
                                                      touchPoll.sampledAtMillis);
+    g1_ui::Probe::touch(
+        touchPoll.contactHeld, touchPoll.physicalRelease, holdAllowed,
+        touchPoll.sampledAtMillis.has_value()
+            ? timeSource.monotonicMillis() - *touchPoll.sampledAtMillis
+            : UINT64_MAX);
     const bool sampleNetworkPagePress =
         touchPoll.freshPressEdge &&
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
@@ -530,6 +610,11 @@ bool updateProductUi(
             application, timeSource.monotonicMillis());
     }
     if (touchAction == fermentation::main_ui::TouchLoopAction::ProcessContact) {
+        const auto& g1TouchLocale =
+            renderGate.presentation().displayLocale().value();
+        g1_ui::Probe g1Touch(
+            g1_ui::Touch, static_cast<unsigned>(uiWorkspace.page()),
+            g1_ui::localeCode(g1TouchLocale.c_str(), g1TouchLocale.size()));
         // Locale, time zone and catalog for the touch path; the clock input
         // (which copies the time zone id) is only built while a contact is
         // held, so the idle loop does not allocate for it.
@@ -862,6 +947,14 @@ extern "C" void app_main(void) {
         if (nowMs - lastHeartbeatMs >= kHeartbeatIntervalMs) {
             lastHeartbeatMs = nowMs;
             logHeartbeat(nowMs);
+        }
+
+        static uint64_t nextDiagResourceMs = 60000U;
+        if (nowMs - startMs >= nextDiagResourceMs) {
+            nextDiagResourceMs += 30000U;
+            logResources("diag_30s", application.networkMode(),
+                         networkLifecycle.status().state,
+                         displayRenderer.get());
         }
 
         if (!secondResourceLogDone &&

@@ -1,4 +1,5 @@
 #include "fermentation_ui_lvgl_renderer.hpp"
+#include "g1_ui_probe.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -334,6 +335,12 @@ bool ProductiveLvglRenderer::render(
     if (!state.initialized || state.display == nullptr || state.root == nullptr)
         return false;
 
+    g1_ui::Probe g1Render(
+        g1_ui::Render, static_cast<unsigned>(workspace.page()),
+        g1_ui::localeCode(locale.value().c_str(), locale.value().size()));
+    g1Render.context(static_cast<unsigned>(snapshot.home.mode),
+                     static_cast<unsigned>(snapshot.factoryReset.stage),
+                     static_cast<unsigned>(snapshot.factoryReset.kind), true);
     // The caller decides whether anything visible changed (allocation-free
     // ScreenRenderKey, see fermentation_ui_renderer.hpp); this method always
     // builds the screen model and rebuilds the widgets, so it is only called
@@ -351,6 +358,7 @@ bool ProductiveLvglRenderer::render(
     lv_obj_set_style_bg_opa(state.root, LV_OPA_COVER, 0U);
 
     for (const auto& command : screen.commands) {
+        g1_ui::Probe::checkpoint();
         if (command.kind == ScreenDrawKind::Logo) {
             // The generated asset (scripts/generate_branding_asset.py,
             // main/generated/manuengineer_logo_168x24.{c,h}) is exactly
@@ -403,6 +411,7 @@ bool ProductiveLvglRenderer::render(
             styleObject(fill, command.token, command.token);
         }
     }
+    g1_ui::Probe::checkpoint();
     lv_obj_invalidate(state.root);
     lvgl_port_unlock();
     return true;
