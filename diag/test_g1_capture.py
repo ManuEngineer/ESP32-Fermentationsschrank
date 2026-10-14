@@ -105,6 +105,7 @@ class G1CaptureTailTest(unittest.TestCase):
         for c in chunks:
             self.assertIn('epoch',c);self.assertIn('monotonic',c)
         summary=json.loads(files['capture.json'])
+        self.assertEqual({'g1_capture.py','c0_load.py'},set(summary['tool_sha256']))
         self.assertGreater(summary['post_anomaly_tail_bytes'],0)
         self.assertFalse(serial.is_open)
 

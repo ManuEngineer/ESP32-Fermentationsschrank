@@ -10,9 +10,11 @@ deletes a file that fails it. The pcap itself stays private; only derived counte
 and they contain neither addresses nor ports.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import signal
+import re
 import statistics
 import struct
 import subprocess
@@ -30,47 +32,64 @@ class NotPayloadFree(Exception):
 
 
 def packets(path):
-    """Yield (timestamp, captured_bytes, original_length); fail closed on unknown formats."""
+    """Yield (timestamp, captured_bytes, original_length). Fail closed on every irregularity:
+    unknown format or link type, truncated or trailing bytes, a record whose captured length is
+    not exactly min(original, snaplen)."""
     data = Path(path).read_bytes()
-    if data[:4] not in MAGICS:
+    if len(data) < 24 or data[:4] not in MAGICS:
         raise NotPayloadFree('not a classic pcap file')
     order, scale = MAGICS[data[:4]]
     if struct.unpack(order + 'I', data[20:24])[0] != ETHERNET:
         raise NotPayloadFree('link type is not Ethernet')
     position = 24
-    while position + 16 <= len(data):
+    while position < len(data):
+        if position + 16 > len(data):
+            raise NotPayloadFree('trailing bytes after the last complete record')
         seconds, fraction, captured, original = struct.unpack(order + 'IIII', data[position:position + 16])
         position += 16
-        if captured > SNAPLEN:
-            raise NotPayloadFree('captured length above snaplen')
+        if captured != min(original, SNAPLEN):
+            raise NotPayloadFree('captured length is not min(original, snaplen)')
+        if position + captured > len(data):
+            raise NotPayloadFree('record data truncated')
         yield seconds + fraction * scale, data[position:position + captured], original
         position += captured
 
 
 def parse(timestamp, frame, original):
-    if len(frame) < SNAPLEN or struct.unpack('!H', frame[12:14])[0] != 0x0800:
+    """Only untagged Ethernet / IPv4 (IHL 5, unfragmented) / TCP with a consistent header set."""
+    if len(frame) != SNAPLEN or struct.unpack('!H', frame[12:14])[0] != 0x0800:
         raise NotPayloadFree('packet is not untagged Ethernet/IPv4 with full headers')
     ip = frame[14:]
     if ip[0] >> 4 != 4 or ip[9] != 6:
         raise NotPayloadFree('packet is not IPv4/TCP')
-    ihl = (ip[0] & 0x0F) * 4
+    if ip[0] & 0x0F != 5:
+        raise NotPayloadFree('IP options present or invalid IHL')
     total = struct.unpack('!H', ip[2:4])[0]
+    if struct.unpack('!H', ip[6:8])[0] & 0x3FFF:
+        raise NotPayloadFree('fragmented IPv4 (MF or fragment offset set)')
     source, destination = ip[12:16], ip[16:20]
-    tcp = ip[20:40]  # fixed header; IP options would shift it, which the capture filter excludes
-    if ihl != 20:
-        raise NotPayloadFree('IP options present')
-    sport, dport, seq, ack, offset_flags, window = struct.unpack('!HHIIHH', tcp[:16])
-    header = (offset_flags >> 12) * 4
+    sport, dport, seq, ack, offset_flags, window = struct.unpack('!HHIIHH', ip[20:36])
+    words = offset_flags >> 12
+    if words < 5:
+        raise NotPayloadFree('invalid TCP header length')
+    header = words * 4
+    if total < 20 + header or total > original - 14:
+        raise NotPayloadFree('IP total length inconsistent with the TCP header or the wire length')
+    if len(frame) > 14 + 20 + header:
+        raise NotPayloadFree('stored bytes extend past the TCP header')
     return {'t': timestamp, 'src': source, 'dst': destination, 'sport': sport, 'dport': dport,
             'seq': seq, 'ack': ack, 'flags': offset_flags & 0x3F, 'window': window,
-            'length': max(0, total - ihl - header)}
+            'length': total - 20 - header}
 
 
 def verify(path):
+    """Number of verified packets; an empty capture is invalid, never a PASS."""
     count = 0
     for timestamp, frame, original in packets(path):
         parse(timestamp, frame, original)
         count += 1
+    if count == 0:
+        raise NotPayloadFree('capture holds no packets')
     return count
 
 
@@ -149,27 +168,111 @@ def analyze(path, device_ip, bin_seconds=10.0):
             'bin_seconds': bin_seconds, 'bins': {str(k): v for k, v in sorted(bins.items())}}
 
 
+def inside_git_worktree(path):
+    return any((parent / '.git').exists() for parent in [Path(path).resolve(), *Path(path).resolve().parents])
+
+
 def capture(args):
+    """Exit codes: 0 verified capture; 2 not payload-free (file deleted); 3 tcpdump failed
+    (start, permission, exit code, kill); 4 file missing/empty/incomplete; 5 interrupted;
+    6 hard time limit reached without a stop signal (the run did not end). Anything but 0 is a
+    HOLD for this run's wire evidence; a valid payload-free file of a non-zero run is kept."""
     if not args.run or not args.gate_id:
         raise SystemExit('No capture without --run and an approved --gate-id')
+    if inside_git_worktree(args.output):
+        raise SystemExit('Refusing to store a private capture inside a git work tree')
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    result = {'tool_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              'snaplen': SNAPLEN, 'max_seconds': args.max_seconds}
+    stops = [args.output.parent / 'PCAP_STOP', *args.stop_file]
     command = ['tcpdump', '-i', args.interface, '-n', '-U', '-s', str(SNAPLEN), '-w', str(args.output),
                'tcp and port 80 and host ' + args.device_ip]
-    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
-        while process.poll() is None and not (args.output.parent / 'PCAP_STOP').exists():
-            time.sleep(0.2)
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except OSError:
+        return finish(args, result, 3, 'tcpdump-not-startable')
+    code, reason = None, 'stop-signal'
+    began = time.monotonic()
+    try:
+        time.sleep(1.0)
+        if process.poll() is not None:
+            code, reason = 3, 'tcpdump-exited-at-start'  # typically a missing capture permission
+        else:
+            while True:
+                if process.poll() is not None:
+                    code, reason = 3, 'tcpdump-exited-during-run'
+                    break
+                if any(path.exists() for path in stops):
+                    break
+                if time.monotonic() - began >= args.max_seconds:
+                    code, reason = 6, 'hard-time-limit'
+                    break
+                time.sleep(0.2)
+    except KeyboardInterrupt:
+        code, reason = 5, 'interrupted'
     finally:
-        if process.poll() is None:
-            process.send_signal(signal.SIGINT)
-        process.wait(timeout=10)
+        stderr = stop_process(process, result)
+    result['tcpdump_returncode'] = process.returncode
+    if code is None and (result.get('kill_needed') or result.get('wait_failed')):
+        code, reason = 3, 'tcpdump-not-terminating'
+    elif code is None and process.returncode != 0:
+        code, reason = 3, 'tcpdump-nonzero-exit'
+    def hold(default_code, why):
+        # The first failure stays the reason; a later finding is recorded beside it.
+        if code:
+            result['also'] = why
+        return finish(args, result, code or default_code, reason if code else why)
     try:
-        verify(args.output)
+        packets_verified = verify(args.output)
+    except FileNotFoundError:
+        return hold(4, 'capture-file-missing')
     except NotPayloadFree as error:
+        if 'no packets' in str(error):
+            return hold(4, 'capture-empty')
         args.output.unlink(missing_ok=True)
-        print('FAIL: capture deleted, not payload-free:', error)
-        return 2
-    return 0
+        result['also'] = 'not-payload-free: ' + str(error)
+        return finish(args, result, 2, result['also'])
+    result['packets_verified'] = packets_verified
+    reported = re.search(r'(\d+) packets? captured', stderr)
+    result['packets_reported_by_tcpdump'] = int(reported[1]) if reported else None
+    if not reported or int(reported[1]) != packets_verified:
+        return hold(4, 'capture-incomplete-or-unreported')
+    return finish(args, result, code or 0, reason)
+
+
+def stop_process(process, result):
+    """Always ends tcpdump: SIGINT, then terminate, then kill; returns its stderr text."""
+    if process.poll() is None:
+        try:
+            process.send_signal(signal.SIGINT)
+        except OSError:
+            pass
+    for step in ('interrupt', 'terminate', 'kill'):
+        try:
+            process.wait(timeout=10 if step == 'interrupt' else 5)
+            break
+        except subprocess.TimeoutExpired:
+            result['kill_needed'] = True
+            (process.terminate if step == 'interrupt' else process.kill)()
+        except Exception:
+            result['wait_failed'] = True
+            try:
+                process.kill()
+            except OSError:
+                pass
+            break
+    try:
+        return (process.stderr.read() or b'').decode(errors='replace') if process.stderr else ''
+    except Exception:
+        return ''
+
+
+def finish(args, result, code, reason):
+    result.update(status='PASS' if code == 0 else 'HOLD', exit_code=code, reason=reason)
+    (args.output.parent / 'pcap_result.json').write_text(json.dumps(result, indent=2) + '\n')
+    if code:
+        print('HOLD:', reason)
+    return code
 
 
 if __name__ == '__main__':
@@ -181,6 +284,9 @@ if __name__ == '__main__':
     cap.add_argument('--interface', required=True)
     cap.add_argument('--device-ip', required=True)
     cap.add_argument('--output', type=Path, required=True)
+    cap.add_argument('--stop-file', type=Path, action='append', default=[],
+                     help='ends the capture when it appears (pass the run ABORT/STOP files)')
+    cap.add_argument('--max-seconds', type=float, default=1800.0, help='hard upper limit')
     ver = sub.add_parser('verify')
     ver.add_argument('pcap', type=Path)
     ana = sub.add_parser('analyze')
