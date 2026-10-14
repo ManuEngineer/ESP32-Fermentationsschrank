@@ -21,6 +21,14 @@ import subprocess
 import time
 
 SNAPLEN = 54
+# Worst-case duration of one G1b run counted from the ACTUAL tcpdump start (the capture is started
+# only after the UART is ready, and START_LOAD is created only after PCAP_RUNNING exists):
+# wait for START_LOAD, uptime gate of g1_capture (load starts at >= 180 s uptime), first heartbeat,
+# four logins (8 s timeout + 1 s pause each), idle, load, recovery, creating STOP, margin.
+RUN_BUDGET_SECONDS = {'start_load_wait': 60, 'uptime_gate': 180, 'heartbeat_wait': 5,
+                      'logins': 4 * (8 + 1), 'idle': 60, 'load': 1200, 'recovery': 300,
+                      'stop_signal': 60, 'margin': 60}
+DEFAULT_MAX_SECONDS = float(sum(RUN_BUDGET_SECONDS.values()))
 ETHERNET = 1
 MAGICS = {b'\xd4\xc3\xb2\xa1': ('<', 1e-6), b'\xa1\xb2\xc3\xd4': ('>', 1e-6),
           b'\x4d\x3c\xb2\xa1': ('<', 1e-9), b'\xa1\xb2\x3c\x4d': ('>', 1e-9)}
@@ -93,10 +101,19 @@ def verify(path):
     return count
 
 
-def analyze(path, device_ip, bin_seconds=10.0):
+COUNTER_KEYS = ('device_retransmitted_segments', 'host_pure_dupacks', 'zero_window_from_device',
+                'syn_retransmits')
+
+
+def utc(epoch):
+    micro = int(round(epoch * 1e6))
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(micro // 1000000)) + '.%06dZ' % (micro % 1000000)
+
+
+def analyze(path, device_ip, bin_seconds=10.0, event_epoch=None):
     device = bytes(int(part) for part in device_ip.split('.'))
     flows = {}
-    first = None
+    first = last = None
     totals = dict(packets=0, device_data_segments=0, device_retransmitted_segments=0,
                   host_pure_dupacks=0, zero_window_from_device=0, zero_window_from_host=0,
                   syn_retransmits=0, device_rst=0, host_rst=0)
@@ -104,15 +121,14 @@ def analyze(path, device_ip, bin_seconds=10.0):
 
     def bump(t, key):
         index = int((t - first) // bin_seconds)
-        bins.setdefault(index, dict.fromkeys(
-            ('device_retransmitted_segments', 'host_pure_dupacks', 'zero_window_from_device',
-             'syn_retransmits'), 0))[key] += 1
+        bins.setdefault(index, dict.fromkeys(COUNTER_KEYS, 0))[key] += 1
 
     for timestamp, frame, original in packets(path):
         p = parse(timestamp, frame, original)
         if device not in (p['src'], p['dst']):
             continue
         first = timestamp if first is None else first
+        last = timestamp
         totals['packets'] += 1
         from_device = p['src'] == device
         port = p['dport'] if from_device else p['sport']
@@ -157,7 +173,18 @@ def analyze(path, device_ip, bin_seconds=10.0):
             return None
         return {'n': len(values), 'median': round(statistics.median(values), 1),
                 'max': round(values[-1], 1)}
-    return {'format': 'g1b-pcap-derived-v1', 'payload_free_verified': True, **totals,
+    binned = {str(k): {'start_epoch': round(first + k * bin_seconds, 6),
+                       'end_epoch': round(first + (k + 1) * bin_seconds, 6), **v}
+              for k, v in sorted(bins.items())} if first is not None else {}
+    result = {
+        **{'time_base': 'host wall clock as UTC epoch seconds (tcpdump pcap timestamps); the UART/load '
+                        'host epochs use the same clock, a clock offset is not corrected',
+           'first_packet_epoch': first, 'first_packet_utc': utc(first) if first else None,
+           'last_packet_epoch': last, 'last_packet_utc': utc(last) if last else None,
+           'bin_definition': 'bin k covers [first_packet_epoch + k*bin_seconds, '
+                             'first_packet_epoch + (k+1)*bin_seconds); a bin missing from `bins` '
+                             'holds zero counted events inside [first_packet_epoch, last_packet_epoch]'}}
+    result.update({'format': 'g1b-pcap-derived-v1', 'payload_free_verified': True, **totals,
             'connections': len(flows),
             'connections_without_synack': sum(1 for f in flows.values() if f['syn'] and f['synack'] is None),
             'connections_without_reply': sum(1 for f in flows.values() if f['request'] and f['reply'] is None),
@@ -165,7 +192,34 @@ def analyze(path, device_ip, bin_seconds=10.0):
                                              if f['syn'] and f['synack']]),
             'time_to_first_reply_ms': milliseconds([(f['request'], f['reply']) for f in flows.values()
                                                     if f['request'] and f['reply']]),
-            'bin_seconds': bin_seconds, 'bins': {str(k): v for k, v in sorted(bins.items())}}
+            'bin_seconds': bin_seconds, 'bins': binned})
+    if event_epoch is not None:
+        result['event_window'] = event_window(result, event_epoch)
+    return result
+
+
+def event_window(result, event_epoch, before_seconds=30.0, after_seconds=30.0):
+    """Counters of the bins before, around and after an event (e.g. the UART heap_alloc_failed
+    time). A bin that contains the event is `straddling`: its counts cannot be attributed to
+    either side. `covered` is false when the event lies outside the observed packet span."""
+    first, last = result['first_packet_epoch'], result['last_packet_epoch']
+    covered = first is not None and first <= event_epoch <= last
+    groups = {'before': dict.fromkeys(COUNTER_KEYS, 0), 'straddling': dict.fromkeys(COUNTER_KEYS, 0),
+              'after': dict.fromkeys(COUNTER_KEYS, 0)}
+    for item in result['bins'].values():
+        start, end = item['start_epoch'], item['end_epoch']
+        if start < event_epoch < end:
+            name = 'straddling'
+        elif end <= event_epoch and start >= event_epoch - before_seconds:
+            name = 'before'
+        elif start >= event_epoch and end <= event_epoch + after_seconds:
+            name = 'after'
+        else:
+            continue
+        for key in COUNTER_KEYS:
+            groups[name][key] += item[key]
+    return {'event_epoch': event_epoch, 'covered': covered, 'before_seconds': before_seconds,
+            'after_seconds': after_seconds, **groups}
 
 
 def inside_git_worktree(path):
@@ -193,11 +247,15 @@ def capture(args):
         return finish(args, result, 3, 'tcpdump-not-startable')
     code, reason = None, 'stop-signal'
     began = time.monotonic()
+    running = args.output.parent / 'PCAP_RUNNING'
+    running.unlink(missing_ok=True)
     try:
         time.sleep(1.0)
         if process.poll() is not None:
             code, reason = 3, 'tcpdump-exited-at-start'  # typically a missing capture permission
         else:
+            # START_LOAD may be created only after this marker exists.
+            running.write_text('tcpdump running\n')
             while True:
                 if process.poll() is not None:
                     code, reason = 3, 'tcpdump-exited-during-run'
@@ -286,12 +344,15 @@ if __name__ == '__main__':
     cap.add_argument('--output', type=Path, required=True)
     cap.add_argument('--stop-file', type=Path, action='append', default=[],
                      help='ends the capture when it appears (pass the run ABORT/STOP files)')
-    cap.add_argument('--max-seconds', type=float, default=1800.0, help='hard upper limit')
+    cap.add_argument('--max-seconds', type=float, default=DEFAULT_MAX_SECONDS,
+                     help='hard upper limit counted from the tcpdump start (default: whole run budget)')
     ver = sub.add_parser('verify')
     ver.add_argument('pcap', type=Path)
     ana = sub.add_parser('analyze')
     ana.add_argument('pcap', type=Path)
     ana.add_argument('--device-ip', required=True)
+    ana.add_argument('--bin-seconds', type=float, default=10.0)
+    ana.add_argument('--event-epoch', type=float, help='UART event time (host epoch) for the before/after window')
     options = parser.parse_args()
     if options.command == 'capture':
         raise SystemExit(capture(options))
@@ -299,4 +360,4 @@ if __name__ == '__main__':
         print(verify(options.pcap), 'packets, payload-free')
     else:
         verify(options.pcap)
-        print(json.dumps(analyze(options.pcap, options.device_ip), indent=2))
+        print(json.dumps(analyze(options.pcap, options.device_ip, options.bin_seconds, options.event_epoch), indent=2))

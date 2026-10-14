@@ -17,3 +17,19 @@ Nur Host-/Testpaket; keine Firmware-, Image- oder Hardwareänderung. Originale G
 **Regression:** `cd diag && python3 -m unittest discover -p "test_*.py"` → 54 Tests OK (zuvor 40; alle 29 ursprünglichen Tests unverändert grün). `python3 scripts/check_secrets.py` PASS. `sha256sum -c diag/review/g1b/HOST_TOOLS_SHA256SUMS` OK.
 
 **Grenzen:** Der Mitschnitt wurde nie mit echtem tcpdump ausgeführt (keine Berechtigung, kein Geräteaufbau); das Verhalten gegenüber echtem tcpdump/pcap-Ausgaben ist durch Offline-Tests mit synthetischen Dateien belegt und vor dem Gate durch den `lo`-Trockentest (Testblatt Abschnitt 3, Schritt 2) zu bestätigen. Keine Hardwarefreigabe, kein G1b-Lauf, kein O1, kein G2.
+
+
+---
+
+# Zweite Fix Verification (gegen Delta zu `a818e1c7ea8bcfb8124ebccded547a1a020fd2be`)
+
+Nur Host-Werkzeug und Testblatt; keine Firmware-/Produktänderung. Nicht erneut umgebaut: Backtrace-Hook, strenge PCAP-Validierung, P1–P3, `abort_induced`, A/B-Referenzen, Instrumentierungsgrenzen.
+
+| Blocker | Änderung | Nachweis (`diag/test_g1_pcap.py`) |
+|---|---|---|
+| 1: Start und 1 800-s-Limit | Testblatt Abschnitt 3 Schritt 4: feste Reihenfolge `g1_capture` (Bereit ≤ 120 s) → `g1_pcap capture` → `PCAP_RUNNING` (≤ 30 s) → **erst dann** `START_LOAD` → Endsignal (`ABORT` bei Anomalie, `STOP` ≤ 60 s nach Recovery-Ende). `g1_pcap.py`: `RUN_BUDGET_SECONDS` (60+180+5+36+60+1200+300+60+60) ⇒ `DEFAULT_MAX_SECONDS` **1961 s ab tatsächlichem tcpdump-Start**; `PCAP_RUNNING` erst nach bestandener 1-s-Lebendprüfung (veralteter Marker wird entfernt). Verworfen: Start mit dem Capture (≈ 431 s Vorlauf). | `test_the_run_budget_covers_a_full_run_and_still_holds_an_orphaned_capture` (virtuelle Uhr): regulärer Lauf mit spätestem Stopp bei 60+180+1575+60 s ⇒ Exitcode 0 `stop-signal`; verwaister Mitschnitt ⇒ Exitcode 6 `hard-time-limit`; der alte 1 800-s-Wert hätte einen 1 931-s-Lauf abgebrochen (Exitcode 6); Budget gegen `c0_load`-Konstanten (Login-Timeout, 60/1200/300 s) abgeglichen. `test_running_marker_exists_only_while_tcpdump_really_runs` (abwesend bei der Startprüfung, danach gesetzt; nie bei sofort beendetem tcpdump) |
+| 2: UTC-Anker der Bins | `analyze`: `time_base`, `first_packet_epoch`/`_utc`, `last_packet_epoch`/`_utc`, `bin_definition`, je Bin `start_epoch`/`end_epoch`; `event_window(result, event_epoch)` / `analyze --event-epoch` trennt `before`/`straddling`/`after`, `covered` für Ereignisse ausserhalb der Spanne. Keine Adressen, Ports oder Payload im Ergebnis; Validierung und alle bisherigen Zähler unverändert. | `TimeAnchorTests`: synthetische Pakete ab bekannter Epoch, UTC-Strings und Bin-Grenzen exakt; bekannter UART-Fehlerzeitpunkt mitten im Bin ⇒ eindeutige Vor-/Nachgruppen und `straddling`; Zeitpunkt auf der Bin-Grenze ⇒ kein `straddling`; Zeitpunkt ausserhalb ⇒ `covered=false`; Ergebnis ohne Host-/Geräteadresse und Port |
+
+**Regression:** `cd diag && python3 -m unittest discover -p "test_*.py"` → 58 Tests OK (zuvor 54). `python3 scripts/check_secrets.py` PASS. `sha256sum -c diag/review/g1b/HOST_TOOLS_SHA256SUMS` OK (Manifest aktualisiert).
+
+**Grenzen:** wie zuvor (kein echter tcpdump-Lauf; `lo`-Trockentest vor dem Gate). `G1B_AUTHORIZATION=PENDING`; keine Portöffnung, kein Reset, kein Flash, keine Last, keine Einrichtung erhöhter Hostrechte.

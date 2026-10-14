@@ -36,13 +36,13 @@ läuft, wird vor dem ersten Lauf ohne Schreibzugriff, aber mit den in Abschnitt 
 geprüft. Bei Abweichung: HOLD,
 kein Reparaturflash ohne neue konkrete Freigabe.
 
-## 2. Host-Werkzeuge (Hosttests grün, 54 Tests)
+## 2. Host-Werkzeuge (Hosttests grün)
 
 | Werkzeug | Verhalten | Zweck (Plan) |
 |---|---|---|
 | `diag/g1_capture.py` | Nach einer Anomalie bleibt der Port **≤ 5 s** (höchstens 120 Reads) offen, die Last ist zuvor über `ABORT` gestoppt; Nachlauf in `uart_tail.log` und Rohstrom; jeder Rohchunk mit Hostzeit in `uart_chunks.jsonl`; Tail-Dauer/Bytes und die SHA-256 von `g1_capture.py`/`c0_load.py` in `capture.json`. Kein Nachlauf bei Ctrl-C und Capture-Fehler. | D3, Q3 |
 | `diag/c0_load.py` | Je Sample zusätzlich `start_epoch`, `error_phase` (`connect`/`io`), `abort_induced`; `load.json` zusätzlich `abort_epoch`/`abort_monotonic` des ersten Abbruchs. `epoch` bleibt das Request-**Ende**. Fehlerklassen unverändert. **`abort_induced` ist abort-assoziiert, nicht beweisend kausal:** wahr nur, wenn der Guard auf genau dieser Verbindung ein aktives Socket erfolgreich per `shutdown` beendet hat (inaktive Verbindung oder fehlgeschlagenes `shutdown` ⇒ falsch). Ein Fehler ohne dieses Merkmal ist ein eigener Clientbefund. | D3 |
-| `diag/g1_pcap.py` | `capture`: tcpdump mit `-s 54`, Filter `tcp and port 80 and host <Gerät>`; endet bei einem der `--stop-file`-Pfade (für G1b: `<Lauf>/candidate_capture/ABORT` **und** `STOP`) oder `PCAP_STOP`, bei hartem Limit (`--max-seconds`, Vorgabe 1800 s), bei Interrupt, und beendet tcpdump immer (SIGINT → terminate → kill). Ergebnis in `pcap_result.json` (Status, Exitcode, Grund, Paketzahl, Tool-Hash); Exitcodes: 0 PASS, 2 nicht payloadfrei (Datei gelöscht), 3 tcpdump-Fehler (Start, Berechtigung, Exitcode, Beenden), 4 Datei fehlt/leer/unvollständig/Paketzahl ≠ tcpdump-Meldung, 5 Interrupt, 6 hartes Limit. **Nur Exitcode 0 ist ein PASS**; sonst HOLD für die Drahtevidence des Laufs (eine gültige, payloadfreie Datei bleibt privat erhalten). Verweigert Speicherorte innerhalb eines Git-Worktrees. `verify`: streng (siehe unten). `analyze`: Zähler ohne Adressen/Ports. | D2, Q2 |
+| `diag/g1_pcap.py` | `capture`: tcpdump mit `-s 54`, Filter `tcp and port 80 and host <Gerät>`; endet bei einem der `--stop-file`-Pfade (für G1b: `<Lauf>/candidate_capture/ABORT` **und** `STOP`) oder `PCAP_STOP`, bei hartem Limit (`--max-seconds`, Vorgabe 1961 s, gezählt ab dem tatsächlichen tcpdump-Start, Herleitung in Abschnitt 3), bei Interrupt, und beendet tcpdump immer (SIGINT → terminate → kill). Ergebnis in `pcap_result.json` (Status, Exitcode, Grund, Paketzahl, Tool-Hash); Exitcodes: 0 PASS, 2 nicht payloadfrei (Datei gelöscht), 3 tcpdump-Fehler (Start, Berechtigung, Exitcode, Beenden), 4 Datei fehlt/leer/unvollständig/Paketzahl ≠ tcpdump-Meldung, 5 Interrupt, 6 hartes Limit. **Nur Exitcode 0 ist ein PASS**; sonst HOLD für die Drahtevidence des Laufs (eine gültige, payloadfreie Datei bleibt privat erhalten). Verweigert Speicherorte innerhalb eines Git-Worktrees. `verify`: streng (siehe unten). `capture` legt `PCAP_RUNNING` erst an, wenn tcpdump nach der 1-s-Prüfung läuft. `analyze`: Zähler ohne Adressen/Ports, mit UTC-Anker (Abschnitt 4). | D2, Q2 |
 
 **Payloadfreier Nachweis (`verify`, fail-closed):** `-s 54` ist nur eine Obergrenze; der Beweis ist die
 Prüfung jedes Records: klassisches pcap, Linktyp Ethernet, keine Restbytes, keine abgeschnittenen oder
@@ -85,10 +85,25 @@ P2 nicht (sie beweist die Quelle, nicht den App-Inhalt).
    HTTP-Server vor P1: `capture`→`verify`→`analyze` PASS; Dateigrösse = 24 + 16·N + Σ gespeicherte Längen;
    `pcap_result.json` zeigt `PASS`.
 3. **P1–P3** wie oben (nur mit Freigabe).
-4. **Lauf R1 (…R3):** `g1_pcap.py capture … --stop-file <Lauf>/candidate_capture/ABORT --stop-file
-   <Lauf>/candidate_capture/STOP --max-seconds 1800` parallel zu `g1_capture.py`, P-A wie G1 (vier
-   Sessions, 60 s Idle, 1200 s Last, 300 s Recovery), Stopp bei erster Anomalie wie G1 (harter
-   Lastabbruch, kein Logout, kein Retry). Der Mitschnitt endet mit dem Abbruch- oder Laufende-Signal.
+4. **Lauf R1 (…R3) – feste Reihenfolge (Mitschnitt vor der Last):**
+   1. `g1_capture.py` starten (**ohne** `START_LOAD`); Port-Öffnungsreset = Testboot.
+   2. **Bereit** = in `uart.log` sind Quelle, `application: ready`, `real actuators: disabled`, Release-Profil,
+      `HomeConnected` und ein frischer Heartbeat belegt. Maximal **120 s** warten; sonst `STOP` setzen und HOLD.
+   3. `g1_pcap.py capture … --stop-file <Lauf>/candidate_capture/ABORT --stop-file <Lauf>/candidate_capture/STOP`
+      starten (`--max-seconds` Vorgabe 1961). Auf `<Ausgabeordner>/PCAP_RUNNING` warten, **maximal 30 s**; sonst
+      `STOP` setzen und HOLD (kein Lastlauf ohne laufenden Mitschnitt).
+   4. **Erst bei vorhandenem `PCAP_RUNNING`** `START_LOAD` anlegen. `g1_capture.py` startet die Last, sobald
+      zusätzlich die Uptime ≥ 180 s erreicht ist (bestehende Bedingung); Login, 60 s Idle, 1200 s Last,
+      300 s Recovery wie G1. Stopp bei erster Anomalie wie G1 (harter Lastabbruch, kein Logout, kein Retry).
+   5. **Endsignal:** Bei Anomalie schreibt der Supervisor `ABORT`. Bei regulärem Ende (Recovery abgeschlossen,
+      `load.json` mit `status = COMPLETED_PENDING_REVIEW`) legt der Operator **spätestens 60 s danach** `STOP`
+      an; beide beenden Capture und Mitschnitt über `--stop-file`. Ohne Signal endet der Mitschnitt am harten
+      Limit mit HOLD (Exitcode 6).
+   6. **Zeitbudget ab tcpdump-Start (Vorgabe `RUN_BUDGET_SECONDS`, in `g1_pcap.py`):** START_LOAD-Wartezeit 60 s +
+      Uptime-Gate ≤ 180 s + erster Heartbeat 5 s + 4 Logins × (8 s Timeout + 1 s Pause) = 36 s + Idle 60 s +
+      Last 1200 s + Recovery 300 s + Endsignal 60 s + Aufschlag 60 s = **1961 s**. Der veröffentlichte G1-Verlauf
+      (Login bis Lastende 1575 s) plus Wartezeiten bleibt darunter; ein früherer Start des Mitschnitts mit dem
+      Capture (≈ 431 s Vorlauf) wäre mit 1800 s abgebrochen und ist **nicht zulässig**. Überschreitung = HOLD.
 5. **Nach jedem Lauf:** `pcap_result.json` prüfen (nur `PASS` zählt); `analyze` nur über verifizierte
    Dateien; veröffentlicht werden nur `analyze`-Zähler, `uart_tail.log` (ohne Netzwerk-
    Initialisierungszeilen), `uart_chunks.jsonl`, `load.json`-Auszüge, Fehlerfenster-Bytebereiche und die
@@ -102,6 +117,15 @@ Mechanisch nach Plan Abschnitt 4 (Tabelle „Entscheidungsregel“). Der Bericht
 Dekodierung der `diag_alloc_fail`-Zeile gegen den **gepinnten ELF** (`addr2line`; Symbol,
 Task nicht rekonstruiert), Drahtzähler in den 10-s-Bins um die Anomalie, Verlauf des Heaps nach der
 Anomalie (selbstverstärkend ja/nein, 5-s-Tail), `abort_induced`-getrennte Fehlerzahlen.
+
+**Zeitverknüpfung Draht ↔ UART:** `analyze` gibt `first_packet_epoch`/`first_packet_utc`,
+`last_packet_epoch`/`last_packet_utc`, die Bin-Definition (Bin k = `[first + k·10 s, first + (k+1)·10 s)`, ein
+fehlendes Bin = 0 Ereignisse innerhalb der erfassten Spanne) sowie je Bin `start_epoch`/`end_epoch` aus. Mit
+`g1_pcap.py analyze … --event-epoch <Host-Epoch des heap_alloc_failed>` trennt `event_window` die Bins in
+`before` (Ende ≤ Ereignis, ≤ 30 s davor), `straddling` (enthält das Ereignis, nicht zuordenbar) und `after`;
+`covered=false` heisst: Ereignis ausserhalb der erfassten Spanne. Ereigniszeit = Host-Epoch des Rohchunks, der die
+`heap_alloc_failed`-Zeile enthält (`uart_chunks.jsonl`, Unsicherheit ≤ 50 ms Lesefenster). Pcap- und UART-Zeiten
+stammen von derselben Hostuhr; der Uhrzustand (NTP-Synchronisation) wird im Lauf dokumentiert, ein Versatz wird nicht korrigiert.
 
 ## 5. Vergleichsdefinition für die spätere Stufe E (F2-D4; Ownerbestätigung vor dem Gate offen)
 
