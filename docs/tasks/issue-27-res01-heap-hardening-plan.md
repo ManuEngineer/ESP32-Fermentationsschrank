@@ -1,6 +1,6 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `C0_OWNER_GO_SOFTWARE_PREPARATION_F4_THRESHOLD_DECISION_PENDING`.
+Status: `C0_GO_C1_C3_SOFTWARE_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`.
 Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
 `6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
 TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
@@ -9,13 +9,18 @@ Owner akzeptiert am 2026-10-14 den unabhängigen R3-Ergebnisreview auf
 `ab0ae55e78fbd1f27825338cf5913b0648b59c19`, entscheidet **C0=GO** und
 genehmigt produktive Software-C1–C3 gemäß dieser freigegebenen Planbasis.
 F2 bleibt außerhalb; keine weiteren Hardwarehandlungen, G1/G2 separat.
-Softwarevorbereitung und gezielte Tests laufen; die konkrete produktive
-F4-Schwellenanbindung wartet auf die fehlende Messbasis aus Abschnitt 4/2
-beziehungsweise eine ausdrückliche Ownerentscheidung zum dokumentierten
-vorläufigen Vektorwert. [Softwarestand/Entscheidung](../audits/PR203_RES01_SOFTWARE_20261014.md). Owner akzeptiert nach unabhängigem
-Review die begrenzte R2-Referenz (Baseline bleibt FAIL) und genehmigt am
+Owner genehmigt zusätzlich Option 1 des Schwellen-Korrekturdeltas auf dem
+Software-/Planstand `7b229be806f5fd7d2978a4f55bcbbb42797c71ad`: vorläufig
+Vektorblock × 2, `F4_PROVISIONAL_THRESHOLD=APPROVED`. Die Schwelle bleibt
+**`PROVISIONAL_PENDING_G1`**; Software-C1–C3 einschließlich produktiver
+Gate-Anbindung ist umgesetzt. G1 muss den wirklichen Render-/Touch-Bedarf
+auch für vom Gate unter Speicherlast übersprungene Pfade messen und die
+Schwelle nach Abschnitt 4/2 abschließend bestimmen. Keine Hardwarefreigabe,
+keine finale RES-01-/PR-Freigabe.
+[Softwarestand/Ownerentscheidung](../audits/PR203_RES01_SOFTWARE_20261014.md).
+Owner akzeptiert nach unabhängigem Review die begrenzte R2-Referenz (Baseline bleibt FAIL) und genehmigt am
 2026-10-14 separat G0-R3: Preflight, ein gepinnter C0-App-only-Flash, P-A/Recovery.
-**G0-R3 Builder empfiehlt C0-GO:** 120-s-Phasenvergleich zeigt medianes
+**G0-R3-Ergebnis, C0-GO Owner-akzeptiert:** 120-s-Phasenvergleich zeigt medianes
 Build-Delta −7104 B, bessere minimale/mediane Heap-/Blockreserven; alle geplanten
 240 API-/40 Shell-Ticks je Session (3044 Antworten HTTP 200) und 300-s-Recovery
 ohne Anomalie. ≥90% des vergleichbaren Vier-Session-Idle nach 73,823 s,
@@ -28,14 +33,14 @@ unveränderten Sockettimeouts ohne Timeout-Exception; kein allgemeiner OOM-/F4-N
 oder Nicht-App-Änderung. Nach Messung keine weitere Hardwarehandlung.
 [Akzeptierte R2-Referenz](../audits/PR203_G0_R2_20261014_RESULT.md) und
 [alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
-Nächster Schritt: F4-Schwellenentscheidung, Software-C1–C3 abschließen,
-Builder-Self-Check und unabhängiger Software-Review. Kein G1/G2/Ready/Merge.
+Nächster Schritt: Builder-Self-Check auf Implementierungs-HEAD, danach
+unabhängiger Software-Review. Kein G1/G2/Ready/Merge.
 `C0=GO`, `C0_OWNER_DECISION=GO`, `INDEPENDENT_G0_R3_RESULT_REVIEW=OWNER_ACCEPTED`,
 `G1_G2=NOT_AUTHORIZED`.
 Diese Fortschreibung aktualisiert den Owner-/Softwarestatus; die
 übrigen freigegebenen Abschnitte bleiben unverändert. Abschnitt 4/2
-enthält jetzt das konkrete Korrekturdelta zur Schwellenalternative,
-ausdrücklich zur Ownerentscheidung und noch nicht aktiviert.
+enthält die ausdrücklich freigegebene vorläufige Schwellenanbindung;
+die abschließende Messbasis und Hardwarefreigabe bleiben offen.
 Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
 (`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
 `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
@@ -161,19 +166,26 @@ Entwurf (kleinster wirksamer Schnitt):
    andere Einzelallokationen noch den kumulativen Bedarf von Vektor, Strings und
    LVGL. Heap-vor/nach-Messungen koennen transiente Spitzen verfehlen; Schwelle
    und Faktor 2 sind keine Garantie fuer den gesamten Render-/Touch-Pfad.
-   **Vorgelegtes Korrekturdelta vom 2026-10-14, noch Owner-HOLD:** Die
+   **Ownerfreigegebenes Korrekturdelta vom 2026-10-14 (Option 1):** Die
    Render-/Touch-Messung (b) liegt vor Software-C1–C3 nicht vor; G0 hat
-   Shell-Phasen gemessen. Als ausdrücklich vorläufige Softwareanbindung
-   wird vorgeschlagen: zunächst nur (a) × 2. Der geprüfte strukturelle
-   ESP32-Vektorblock ist 104 × 64 = 6656 B; vorläufige Skip-Schwelle
-   **13312 B**, Resume ab **16640 B** (Schwelle + halber Vektorblock, 25%).
-   Nach separat ownerfreigegebener G1-Messung muss weiterhin die oben
-   festgelegte Formel max(a, b) × 2 verwendet/überprüft werden. Kein
-   Hardwarelauf und keine endgültige Schwellen-/OOM-Qualifikation folgt
-   aus diesem Softwarevorschlag. Diese befristete Abweichung benötigt
-   eine ausdrückliche Ownerfreigabe der korrigierten Planfassung; bis
-   dahin bleibt die produktive Gate-Anbindung HOLD. Mechanismus, native
-   Tests und F1 können ohne Aktivierung dieser Schwelle vorbereitet werden.
+   Shell-Phasen gemessen. Die ausdrücklich vorläufige Softwareanbindung
+   nutzt zunächst (a) × 2, Status **`PROVISIONAL_PENDING_G1`**. Der geprüfte
+   strukturelle ESP32-Vektorblock ist 104 × 64 = 6656 B; vorläufige
+   Skip-Schwelle **13312 B**, Resume ab **16640 B** (Schwelle + halber
+   Vektorblock, 25%). Die Werte sind aus der jeweiligen ABI abgeleitet,
+   nicht als gesamte Renderpfad-Garantie zu verstehen.
+   Nach separat ownerfreigegebener G1-Messung wird die oben festgelegte
+   Formel max(a, b) × 2 abschließend bestimmt. Die Diagnose muss auch
+   Render-/Touch-Pfade erfassen, die das vorläufige Gate unter Speicherlast
+   überspringt: allokationsfreie Skip-/Pfad-Coverage im Overlay; ein Skip
+   ist keine Null-Bedarfsmessung. Die betreffenden Pfade werden gezielt
+   bei ausreichender Reserve mit repräsentativen Seiten-/Zustands-/Text-/
+   Kontaktfällen ausgeführt und tatsächlich gemessen, etwa in separaten
+   kontrollierten Referenz-/Recoveryphasen des G1-Testblatts. Fehlende
+   Coverage hält die Schwellenqualifikation HOLD. Kein stilles Umgehen
+   des Produktgates unter OOM-Last, keine Diagnoseänderung im Produkt.
+   Diese begrenzte Softwarefreigabe erlaubt keine Hardwarehandlungen
+   und keine finale RES-01-/PR-Freigabe vor G1/G2.
 3. **Reserve statt Wachstum:** `makeRepresentativeScreen` reserviert die geprueft
    begrenzte Befehlsanzahl **einmal** fuer alle Seiten (Test erzwingt, dass keine Seite
    die Schranke ueberschreitet), damit Vektorwachstum (Verdopplung, zwei Puffer

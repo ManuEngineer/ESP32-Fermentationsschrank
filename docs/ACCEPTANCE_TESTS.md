@@ -900,9 +900,9 @@ RES-01-Softwarebericht; ein PASS dieser Tests ist keine OOM-/Hardwarefreigabe.
 
 | ID | Nachweis |
 |---|---|
-| SIM-27-H-01 | Fake-Größter-Block: unter/exakt über Schwelle, Hysterese mit Resume-Marge, Wiederaufnahme, Skipzähler und höchstens eine Logfreigabe je 10 s. |
+| SIM-27-H-01 | Fake-Größter-Block und ABI-abgeleitete vorläufige Schwelle (`PROVISIONAL_PENDING_G1`): unter/exakt auf Schwelle, Hysterese mit Resume-Marge, Wiederaufnahme, Skipzähler und höchstens eine Logfreigabe je 10 s. |
 | SIM-27-H-02 | Alle UI-Seiten/de-en-es/Zustände sowie sämtliche bestehenden Rendererfälle (Keyboards, lange Inhalte, Dialoge, Pager, QR, Pressfeedback) überschreiten die strukturelle DrawCommand-Schranke nicht und behalten die einmal reservierte Kapazität. |
-| SIM-27-H-03 | Echte gemeinsame Pre-Snapshot-/Touch-Entscheidung A/B: Hold beginnen, Low-Memory-Skip bei gehaltenem Finger, >5 s nach Resume kein Reset/Epochenwechsel/Netzwerk-/HTTP-Stopp; erst frisches NoContact nach Skip plus neuer Kontakt, <5 s kein Reset, bei 5 s genau ein Reset. Fehlende/fehlerhafte/veraltete Release-Evidence entsperrt nicht. SIM-19-R08 einschließlich Verschieben/Loslassen/Abbruch bleibt grün. |
+| SIM-27-H-03 | Echte gemeinsame Pre-Snapshot-/Touch-Entscheidung A/B: Hold beginnen, Low-Memory-Skip bei gehaltenem Finger, >5 s nach Resume kein Reset/Epochenwechsel/Netzwerk-/HTTP-Stopp; erst frisches NoContact nach Skip plus neuer Kontakt, <5 s kein Reset, bei 5 s genau ein Reset. Fehlende/fehlerhafte/veraltete Release-Evidence entsperrt nicht; wiederholter Skip invalidiert eine zuvor beobachtete Release. SIM-19-R08 einschließlich Verschieben/Loslassen/Abbruch bleibt grün. |
 | SIM-27-H-04 | Allokationsgezählter Skip verändert Snapshot/Präsentationskopie/Renderkey nicht, auch bei HeaderNetwork; Resume übernimmt aktuellen Zustand und fordert genau den notwendigen Redraw an. |
 | SIM-27-H-05 | Zusammengesetzte Shell/Provisioning-Shell stimmt byteweise mit eingefrorenem vorherigem Generator überein; alle Authzustände, Anmeldung und de/en/es-Script bleiben erhalten, Gesamtgrenze 8192 B. |
 | SIM-27-H-06 | Native Längenfehlerinjektion durch echten handleShell: bereits gesetzter Anhang plus Überlänge -> vollständiger 503-JSON-Body/Content-Type/Status ohne Anhang. Wiederverwendete Antwort mit Anhang -> JSON/Fehler ohne Suffix. Produktgrenze unverändert. |
@@ -912,7 +912,14 @@ Hardware: Profile P-A (3×20 min), P-A2, P-B und P-R sowie aktuelle Heap-/Block-
 Erholung gegen denselben Vier-Session-Idle und Stackreserve gelten gemäß dem
 freigegebenen [RES-01-Plan](tasks/issue-27-res01-heap-hardening-plan.md).
 Loginbudget und GET-Timeouts, Verbindungsmodell und Latenzbewertung werden im
-konkreten G1/G2-Testblatt vor Beginn festgelegt. G0-R3-Heapminimum und lange GETs
+konkreten G1/G2-Testblatt vor Beginn festgelegt. Die vorläufige F4-Schwelle
+(ESP32 13312 B Skip/16640 B Resume) ist vor Hardwarefreigabe ausdrücklich
+als `PROVISIONAL_PENDING_G1` zu führen. In G1 Render-/Touch-Bedarf wirklich
+messen und max(Vektorblock, Bedarf) × 2 abschließend bestimmen; im Overlay
+Skip-/Pfad-Coverage erfassen und auch unter Last übersprungene Pfade gezielt
+bei genügend Reserve messen. Skip ist kein Bedarfswert 0; fehlende
+Pfad-/Zustands-Coverage hält die Schwellenqualifikation HOLD.
+G0-R3-Heapminimum und lange GETs
 sind dabei sichtbar zu berücksichtigen. Kein nachträglich erfundener Grenzwert.
 Jede erste Allokations-/Reset-/UART-/HTTP-Anomalie beendet den Hardwarelauf;
 keine automatische Folgeaktion. `G1_G2=NOT_AUTHORIZED`, `ACTUATOR_RELEASE=NO`.

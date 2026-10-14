@@ -2998,6 +2998,31 @@ void test_touch_expired_lease_locks_the_open_service_page() {
     TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
 }
 
+void test_provisional_vector_threshold_and_repeated_skip_release_evidence() {
+    UiMemoryGate gate(kUiMinimumLargestBlockBytes,
+                      kUiLargestBlockResumeMarginBytes);
+    auto block = kUiMinimumLargestBlockBytes - 1U;
+    const auto measure = [&] { return block; };
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 0U));
+    block = kUiMinimumLargestBlockBytes;
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 1U));
+    block += kUiLargestBlockResumeMarginBytes;
+    TEST_ASSERT_TRUE(gate.allowStep(measure, 2U));
+
+    UiResetHoldContactGate contact;
+    contact.skipped(100U);
+    TEST_ASSERT_FALSE(contact.observe(true, false, 101U));
+    // A further skip invalidates even an already observed release.
+    contact.skipped(102U);
+    TEST_ASSERT_FALSE(contact.observe(false, true, 103U));
+    TEST_ASSERT_FALSE(contact.observe(true, false, 101U));
+    TEST_ASSERT_FALSE(contact.observe(true, false, std::nullopt));
+    TEST_ASSERT_FALSE(contact.observe(true, false, 104U));
+    // A contact from the same/older sample cannot reuse that release.
+    TEST_ASSERT_FALSE(contact.observe(false, true, 104U));
+    TEST_ASSERT_TRUE(contact.observe(false, true, 105U));
+}
+
 void test_memory_gate_hysteresis_and_skip_log_interval() {
     UiMemoryGate gate(100U, 20U);
     std::size_t block = 100U;
@@ -3093,6 +3118,8 @@ void test_memory_skip_requires_observed_release_and_new_hold_for_a_and_b() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_provisional_vector_threshold_and_repeated_skip_release_evidence);
     RUN_TEST(test_memory_gate_hysteresis_and_skip_log_interval);
     RUN_TEST(
         test_memory_skip_requires_observed_release_and_new_hold_for_a_and_b);

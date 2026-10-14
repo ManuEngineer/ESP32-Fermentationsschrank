@@ -370,11 +370,9 @@ ein ausfuehrender Browsertest ist `NOT_RUN`.
 
 ## Shell-Transport und UI-Speicherreserve (RES-01)
 
-Umsetzungsstand: statischer Shell-Anhang und native Gate-/Hold-Logik vorbereitet.
-Die produktive F4-Anbindung wartet auf die Schwellenentscheidung gemäß
-[Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md); F4 ist noch nicht
-als vollständiger produktiver Fix verifiziert. Der folgende F4-Abschnitt
-beschreibt den freigegebenen Zielvertrag.
+Umsetzungsstand: statischer Shell-Anhang und produktive Gate-/Hold-Anbindung
+sind softwareseitig umgesetzt ([Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md));
+unabhängiger Software-Review und Hardware-G1/G2 bleiben offen.
 
 `HttpResponse::staticBodySuffix` bezeichnet optionale, unveränderliche Bytes mit
 Prozesslebensdauer. Der Adapter sendet den besessenen `body` zuerst und danach
@@ -401,6 +399,18 @@ letzten Skip und einem danach beobachteten neuen kalibrierten Kontakt. Alte
 NoContact-Zustände, Lock-Timeouts, Controllerfehler und fehlende Kalibrierung
 lösen diese Sperre nicht. Der vorhandene Factory-Reset-Flow bleibt alleiniger
 Owner der Stufen, der fünf Sekunden und des Resets, für Variante A und B.
+
+Die Owner-freigegebene Schwelle bleibt **`PROVISIONAL_PENDING_G1`**:
+104 Befehle × 64 B = 6656 B als struktureller ESP32-Vektorblock, Faktor 2
+ergibt 13312 B Skip-Schwelle, Wiederaufnahme ab 16640 B (25% Hysterese).
+`updateProductUi` prüft vor Snapshot/Touch/Renderkey; beim Skip verändert es
+weder Präsentationskopie noch zuletzt gerenderten Schlüssel. Eine Warnzeile
+`ui_skipped_low_memory` mit kumuliertem Zähler erscheint höchstens alle 10 s.
+G1 bestimmt den tatsächlichen Render-/Touch-Heapbedarf und kalibriert
+max(Vektorblock, beobachteter Bedarf) × 2 abschließend. Auch unter Speicherlast
+ausgelassene Pfade benötigen echte Messungen bei ausreichend Reserve und
+belegte Pfad-/Zustands-Coverage im separat freigegebenen Diagnose-Testblatt;
+Skip ist keine Null-Bedarfsmessung. Fehlende Coverage bleibt HOLD.
 
 Die einmalige Vektorreserve ist durch eine nativ geprüfte strukturelle
 Befehlsobergrenze begrenzt. Sie begrenzt weder Strings/LVGL noch den gesamten

@@ -49,6 +49,15 @@ inline constexpr std::size_t kMaximumDrawCommands =
 inline constexpr std::size_t kMaximumDrawCommandBlockBytes =
     kMaximumDrawCommands * sizeof(ScreenDrawCommand);
 
+// PROVISIONAL_PENDING_G1: Owner-approved software threshold derived only from
+// the vector bound. G1 must measure render/touch demand, including paths this
+// gate skips under load, then determine max(vector bound, measured demand) * 2.
+// Neither this bound nor the margin guarantees subsequent allocations.
+inline constexpr std::size_t kUiMinimumLargestBlockBytes =
+    2U * kMaximumDrawCommandBlockBytes;
+inline constexpr std::size_t kUiLargestBlockResumeMarginBytes =
+    kMaximumDrawCommandBlockBytes / 2U;
+
 struct RepresentativeScreen {
     static constexpr std::uint16_t kWidth = 320U;
     static constexpr std::uint16_t kHeight = 240U;
