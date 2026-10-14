@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+import re
 import signal
 from types import SimpleNamespace
 import struct
 import tempfile
 import unittest
 from unittest.mock import patch
+import c0_load
 import g1_pcap
 
 DEVICE = '10.0.0.2'
@@ -236,6 +238,77 @@ class CaptureLifecycleTests(unittest.TestCase):
                 code, result, _, _ = self.run_capture(lambda out: Process(None, stderr=err), stop=stop, create=blob)
                 self.assertEqual((4, 'HOLD', reason), (code, result['status'], result['reason']))
 
+    def run_on_virtual_clock(self, stop_at, max_seconds):
+        """Whole run on a virtual clock: sleep() advances it, the stop file appears at `stop_at`."""
+        clock = [0.0]
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d)
+            output = folder / 'cap.pcap'
+            output.write_bytes(self.GOOD)
+            stop = folder / 'STOP'
+
+            def sleep(seconds):
+                clock[0] += seconds
+                if clock[0] >= stop_at:
+                    stop.write_text('x')
+            process = Process(None, stderr=b'2 packets captured\n')
+            args = SimpleNamespace(run=True, gate_id='OFFLINE_TEST_ONLY', output=output, interface='lo',
+                                   device_ip=DEVICE, stop_file=[stop], max_seconds=max_seconds)
+            with patch.object(g1_pcap.subprocess, 'Popen', return_value=process), \
+                 patch.object(g1_pcap.time, 'sleep', side_effect=sleep), \
+                 patch.object(g1_pcap.time, 'monotonic', side_effect=lambda: clock[0]), \
+                 patch.object(g1_pcap, 'inside_git_worktree', return_value=False):
+                code = g1_pcap.capture(args)
+            return code, json.loads((folder / 'pcap_result.json').read_text())
+
+    def test_the_run_budget_covers_a_full_run_and_still_holds_an_orphaned_capture(self):
+        budget = g1_pcap.RUN_BUDGET_SECONDS
+        driver = Path(c0_load.__file__).read_text()
+        # the budget phases must match the load driver (drift would silently shorten the window)
+        self.assertGreaterEqual(budget['logins'], 4 * (c0_load.LOGIN_TIMEOUT_SECONDS + 1))
+        for literal, phase in (('wait(60.0)', 'idle'), ('1200.0', 'load'), ('wait(300.0)', 'recovery')):
+            self.assertIn(literal, driver)
+            self.assertGreaterEqual(budget[phase], float(re.search(r'(\d+)', literal)[1]))
+        self.assertEqual(1961.0, g1_pcap.DEFAULT_MAX_SECONDS)
+        # Published G1 IMAGE01 timeline counted from the START_LOAD side: login to load end 1 575 s
+        # (76 s login+idle, 1 199 s load, 300 s recovery). Worst case adds the START_LOAD wait and the
+        # uptime gate; STOP is created at the latest 60 s after the recovery end.
+        worst_regular_stop = (budget['start_load_wait'] + budget['uptime_gate'] + 1575 + budget['stop_signal'])
+        self.assertLess(worst_regular_stop, g1_pcap.DEFAULT_MAX_SECONDS)
+        code, result = self.run_on_virtual_clock(stop_at=worst_regular_stop, max_seconds=g1_pcap.DEFAULT_MAX_SECONDS)
+        self.assertEqual((0, 'stop-signal'), (code, result['reason']))
+        # an orphaned or over-long capture never gets a stop signal and is a HOLD at the limit
+        code, result = self.run_on_virtual_clock(stop_at=10 ** 9, max_seconds=g1_pcap.DEFAULT_MAX_SECONDS)
+        self.assertEqual((6, 'hard-time-limit'), (code, result['reason']))
+        # the old 1 800 s limit measured from the capture start would have cut the G1 run (~1 931 s)
+        code, _ = self.run_on_virtual_clock(stop_at=1931, max_seconds=1800.0)
+        self.assertEqual(6, code)
+
+    def test_running_marker_exists_only_while_tcpdump_really_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d)
+            (folder / 'PCAP_RUNNING').write_text('stale')  # stale marker from an earlier run
+            output = folder / 'cap.pcap'
+            args = SimpleNamespace(run=True, gate_id='X', output=output, interface='lo', device_ip=DEVICE,
+                                   stop_file=[], max_seconds=1.0)
+            dead = Process(None, alive_polls=0, returncode=1)
+            with patch.object(g1_pcap.subprocess, 'Popen', return_value=dead), \
+                 patch.object(g1_pcap.time, 'sleep'), patch.object(g1_pcap, 'inside_git_worktree', return_value=False):
+                self.assertEqual(3, g1_pcap.capture(args))
+            self.assertFalse((folder / 'PCAP_RUNNING').exists())
+            seen = []
+            alive = Process(None, stderr=b'')
+
+            def sleep(_seconds):
+                seen.append((folder / 'PCAP_RUNNING').exists())
+                if len(seen) >= 2:
+                    (folder / 'PCAP_STOP').write_text('x')
+            with patch.object(g1_pcap.subprocess, 'Popen', return_value=alive), \
+                 patch.object(g1_pcap.time, 'sleep', side_effect=sleep), \
+                 patch.object(g1_pcap, 'inside_git_worktree', return_value=False):
+                g1_pcap.capture(args)
+            self.assertEqual([False, True], seen[:2])  # absent at the 1 s start check, set right after it
+
     def test_a_file_that_is_not_payload_free_is_deleted(self):
         bad = pcap([(1.0, frame(HOST, DEVICE, 4000, 80, ACK, length=300, snap=70) + b'GET /')])
         code, result, _, exists = self.run_capture(
@@ -292,6 +365,59 @@ class AnalyzeTests(unittest.TestCase):
         self.assertNotIn(HOST, text)
         self.assertNotIn(DEVICE, text)
         self.assertNotIn('4001', text)
+
+
+class TimeAnchorTests(unittest.TestCase):
+    BASE = 1791987123.25  # synthetic host epoch of the first packet (14:12:03.25 UTC)
+
+    def packets(self):
+        h = lambda *a, **k: frame(HOST, DEVICE, 4000, 80, *a, **k)
+        d = lambda *a, **k: frame(DEVICE, HOST, 80, 4000, *a, **k)
+        at = lambda offset, data: (self.BASE + offset, data)
+        return [at(0.0, h(SYN)), at(0.2, d(SYN | ACK, seq=100, ack=1)),
+                at(2.0, h(SYN)),                              # SYN repeat   -> bin 0 (0-10 s)
+                at(12.0, h(ACK, seq=1, ack=101)), at(12.5, h(ACK, seq=1, ack=101)),  # dup ack bin 1
+                at(17.0, d(ACK, seq=101, ack=1, length=1000)),
+                at(18.0, d(ACK, seq=101, ack=1, length=1000)),   # retransmission bin 1
+                at(24.0, d(ACK, seq=1101, ack=1, window=0)),     # zero window bin 2
+                at(31.0, h(SYN)), at(31.5, h(SYN)),               # SYN repeats bin 3
+                at(44.0, h(ACK, seq=1, ack=101))]                # last packet
+
+    def analyze(self, event=None):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'x.pcap'
+            path.write_bytes(pcap(self.packets()))
+            return g1_pcap.analyze(path, DEVICE, event_epoch=event)
+
+    def test_the_result_carries_the_utc_anchor_the_span_and_the_bin_definition(self):
+        result = self.analyze()
+        self.assertEqual(self.BASE, result['first_packet_epoch'])
+        self.assertEqual('2026-10-14T14:12:03.250000Z', result['first_packet_utc'])
+        self.assertEqual(self.BASE + 44.0, result['last_packet_epoch'])
+        self.assertEqual('2026-10-14T14:12:47.250000Z', result['last_packet_utc'])
+        self.assertIn('host wall clock', result['time_base'])
+        self.assertIn('first_packet_epoch + k*bin_seconds', result['bin_definition'])
+        bin1 = result['bins']['1']
+        self.assertEqual(self.BASE + 10.0, bin1['start_epoch'])
+        self.assertEqual(self.BASE + 20.0, bin1['end_epoch'])
+        self.assertEqual((1, 1), (bin1['host_pure_dupacks'], bin1['device_retransmitted_segments']))
+        text = repr(result)
+        for forbidden in (HOST, DEVICE, '4000'):
+            self.assertNotIn(forbidden, text)
+
+    def test_a_known_uart_error_time_separates_the_wire_before_from_after(self):
+        # UART heap_alloc_failed at BASE+21 s: bins 0 and 1 end before it, bin 2 (20-30 s) contains it
+        result = self.analyze(event=self.BASE + 21.0)['event_window']
+        self.assertTrue(result['covered'])
+        self.assertEqual({'device_retransmitted_segments': 1, 'host_pure_dupacks': 1,
+                          'zero_window_from_device': 0, 'syn_retransmits': 1}, result['before'])
+        self.assertEqual(1, result['straddling']['zero_window_from_device'])
+        self.assertEqual(2, result['after']['syn_retransmits'])  # bin 3 (30-40 s)
+        # an event on a bin boundary has no straddling bin, and one outside the span is not covered
+        edge = self.analyze(event=self.BASE + 20.0)['event_window']
+        self.assertEqual(0, sum(edge['straddling'].values()))
+        self.assertEqual(1, edge['after']['zero_window_from_device'])
+        self.assertFalse(self.analyze(event=self.BASE + 500.0)['event_window']['covered'])
 
 
 if __name__ == '__main__':
