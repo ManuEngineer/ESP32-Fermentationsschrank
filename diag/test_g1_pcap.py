@@ -143,7 +143,8 @@ class CaptureLifecycleTests(unittest.TestCase):
             args = SimpleNamespace(run=True, gate_id='OFFLINE_TEST_ONLY', output=output, interface='lo',
                                    device_ip=DEVICE, stop_file=[abort], max_seconds=max_seconds)
             clock = iter(ticks) if ticks else None
-            patches = [patch.object(g1_pcap.subprocess, 'Popen', return_value=process),
+            patches = [patch.object(g1_pcap.subprocess, 'Popen',
+                                   side_effect=lambda command, **_kw: setattr(self, 'last_command', command) or process),
                        patch.object(g1_pcap.time, 'sleep', side_effect=lambda _s: stop and stop(abort)),
                        patch.object(g1_pcap, 'inside_git_worktree', return_value=False)]
             if clock:
@@ -308,6 +309,13 @@ class CaptureLifecycleTests(unittest.TestCase):
                  patch.object(g1_pcap, 'inside_git_worktree', return_value=False):
                 g1_pcap.capture(args)
             self.assertEqual([False, True], seen[:2])  # absent at the 1 s start check, set right after it
+
+    def test_tcpdump_runs_non_promiscuous_with_the_header_only_snaplen(self):
+        self.run_capture(lambda out: Process(None, stderr=b'2 packets captured\n'),
+                         stop=lambda abort: abort.write_text('x'), create=self.GOOD)
+        command = self.last_command
+        self.assertIn('-p', command)  # CAP_NET_ADMIN (promiscuous mode) is not available or wanted
+        self.assertEqual(str(g1_pcap.SNAPLEN), command[command.index('-s') + 1])
 
     def test_a_file_that_is_not_payload_free_is_deleted(self):
         bad = pcap([(1.0, frame(HOST, DEVICE, 4000, 80, ACK, length=300, snap=70) + b'GET /')])
