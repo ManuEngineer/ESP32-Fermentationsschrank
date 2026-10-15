@@ -11,7 +11,7 @@ Freigabe: Owner, genau ein Lauf B2 (`G1B_B2_GATE.md` @ `f69ae0891728e26def31b1c1
 | Testboot | `POWERON_RESET`; UART: Quelle `31c3ee4…`, `tcp tx win: 2880`, Release-Profil, Aktoren aus, `HomeConnected`; bereit nach 5 s |
 | Reihenfolge | `PCAP_RUNNING` vorhanden (08:59:59 UTC), dann `START_LOAD`; Last ab Uptime ≥ 180 s |
 | Login | 4 × HTTP 200 (3 110 / 3 080 / 3 085 / 3 116 ms) |
-| Last | **100,7 s von 1200 s**; 245 Lastanfragen HTTP 200 bis zum Fehler; Recovery nicht ausgeführt |
+| Last | **100,7 s von 1200 s**; 246 Lastanfragen HTTP 200 (plus 4 Logins) bis zum Fehler; Recovery nicht ausgeführt |
 | Abbruch | `load.json`: `abort = request-failure`, `capture.json`: `failure = load-failure`, `FAIL/HOLD` (Lasttreiber, nicht UART-Anomalie) |
 | UART | **kein** `heap_alloc_failed`/`diag_alloc_fail`, kein Panic/Watchdog/Brownout, kein weiterer Reset; keine Heartbeat-Lücke > 1,3 s; HTTPD-Stack min 2 392 B, Main-Stack 11 688 B (Grenzen eingehalten) |
 | Pcap | `PASS`, 3 392 Pakete = tcpdump-Meldung, payloadfrei verifiziert, bis Lastsekunde 101,1 vollständig |
