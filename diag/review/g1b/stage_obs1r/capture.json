@@ -1,0 +1,29 @@
+{
+  "start_epoch": 1792059588.2325969,
+  "start_monotonic": 250793.194567591,
+  "observation_mode": true,
+  "tool_sha256": {
+    "g1_capture.py": "7283de03eff1d154e9d779b44b8f7c4a1fa5e31dfdde60a8bd705e92208b733f",
+    "c0_load.py": "57eeb1f125dde1aece539b8990fdc6d260f4a8ec51174676d7862f69b4d502e4"
+  },
+  "load_exit": 1,
+  "end_epoch": 1792059980.6923637,
+  "end_monotonic": 251185.654334972,
+  "max_heartbeat_gap_seconds": 3.4271645930130035,
+  "gate": "PR203_RES01_G1B_OBS1_RETRY",
+  "source_proven": true,
+  "ready": true,
+  "actors_disabled": true,
+  "release_profile": true,
+  "network_home_connected": true,
+  "expected_initial_reset_lines": 1,
+  "boot_marker": {
+    "accepted": true,
+    "cause": "POWERON_RESET",
+    "seconds_after_open": 0.071,
+    "lines_before_marker": 2
+  },
+  "lines_before_marker": 2,
+  "failure": "load-failure",
+  "status": "FAIL/HOLD"
+}

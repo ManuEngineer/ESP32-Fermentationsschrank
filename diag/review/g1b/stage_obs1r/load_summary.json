@@ -1,0 +1,377 @@
+{
+  "abort": "observation-timeout-limit",
+  "load_start_epoch": 1792059847.0521524,
+  "load_seconds_to_abort": 130.8,
+  "samples_total": 336,
+  "http200": 313,
+  "login_ms": [
+    3137,
+    3098,
+    3057,
+    3110
+  ],
+  "observation": {
+    "enabled": true,
+    "window_seconds": 20.0,
+    "max_network_timeouts": 8,
+    "first_network_timeout": {
+      "phase": "connect",
+      "after_stop": false,
+      "start_load_s": 117.0,
+      "end_load_s": 120.0
+    },
+    "network_timeouts": [
+      {
+        "phase": "connect",
+        "after_stop": false,
+        "start_load_s": 117.0,
+        "end_load_s": 120.0
+      },
+      {
+        "phase": "io",
+        "after_stop": false,
+        "start_load_s": 117.0,
+        "end_load_s": 120.75
+      },
+      {
+        "phase": "connect",
+        "after_stop": false,
+        "start_load_s": 119.4,
+        "end_load_s": 122.4
+      },
+      {
+        "phase": "io",
+        "after_stop": false,
+        "start_load_s": 117.0,
+        "end_load_s": 122.48
+      },
+      {
+        "phase": "connect",
+        "after_stop": false,
+        "start_load_s": 120.6,
+        "end_load_s": 123.6
+      },
+      {
+        "phase": "io",
+        "after_stop": false,
+        "start_load_s": 118.2,
+        "end_load_s": 123.94
+      },
+      {
+        "phase": "connect",
+        "after_stop": false,
+        "start_load_s": 122.48,
+        "end_load_s": 125.49
+      },
+      {
+        "phase": "io",
+        "after_stop": false,
+        "start_load_s": 127.0,
+        "end_load_s": 130.82
+      },
+      {
+        "phase": "io",
+        "after_stop": true,
+        "start_load_s": 127.0,
+        "end_load_s": 130.82
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 128.2,
+        "end_load_s": 131.2
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 128.2,
+        "end_load_s": 131.2
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 129.4,
+        "end_load_s": 132.4
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 129.4,
+        "end_load_s": 132.4
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 129.4,
+        "end_load_s": 132.4
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 129.4,
+        "end_load_s": 132.4
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 130.6,
+        "end_load_s": 133.6
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 130.6,
+        "end_load_s": 133.6
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 130.6,
+        "end_load_s": 133.6
+      },
+      {
+        "phase": "connect",
+        "after_stop": true,
+        "start_load_s": 130.6,
+        "end_load_s": 133.6
+      }
+    ],
+    "network_timeout_count_before_stop": 8,
+    "stop_reason": "observation-timeout-limit",
+    "observation_seconds": 10.82,
+    "final_state": "FAIL/HOLD",
+    "note": "diagnosis window only; no acceptance or recovery claim after a first failure"
+  },
+  "errors": [
+    {
+      "start_load_s": 117.0,
+      "end_load_s": 122.48,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 117.0,
+      "end_load_s": 120.0,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 117.0,
+      "end_load_s": 120.75,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 118.2,
+      "end_load_s": 123.94,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 119.4,
+      "end_load_s": 122.4,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 120.6,
+      "end_load_s": 123.6,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 122.48,
+      "end_load_s": 125.49,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 127.0,
+      "end_load_s": 130.82,
+      "kind": "alerts",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 127.0,
+      "end_load_s": 130.82,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false,
+      "observed_network_timeout": true
+    },
+    {
+      "start_load_s": 127.0,
+      "end_load_s": 130.82,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 127.0,
+      "end_load_s": 130.82,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 128.2,
+      "end_load_s": 130.82,
+      "kind": "status",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 128.2,
+      "end_load_s": 130.82,
+      "kind": "temperatures",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 128.2,
+      "end_load_s": 131.2,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 128.2,
+      "end_load_s": 131.2,
+      "kind": "shell",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 129.4,
+      "end_load_s": 132.4,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 129.4,
+      "end_load_s": 132.4,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 129.4,
+      "end_load_s": 132.4,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 129.4,
+      "end_load_s": 132.4,
+      "kind": "shell",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 130.6,
+      "end_load_s": 133.6,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 130.6,
+      "end_load_s": 133.6,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 130.6,
+      "end_load_s": 133.6,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    },
+    {
+      "start_load_s": 130.6,
+      "end_load_s": 133.6,
+      "kind": "shell",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false,
+      "observed_network_timeout": false
+    }
+  ],
+  "per_minute_latency_ms": {
+    "0": {
+      "n": 149,
+      "p50": 156,
+      "p95": 231,
+      "max": 289,
+      "over_3s": 0
+    },
+    "1": {
+      "n": 143,
+      "p50": 295,
+      "p95": 2195,
+      "max": 3270,
+      "over_3s": 1
+    },
+    "2": {
+      "n": 40,
+      "p50": 3003,
+      "p95": 5746,
+      "max": 6093,
+      "over_3s": 31
+    }
+  }
+}
