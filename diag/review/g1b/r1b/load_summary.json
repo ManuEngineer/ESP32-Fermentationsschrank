@@ -1,0 +1,92 @@
+{
+  "abort": "g1-supervisor-stop",
+  "abort_epoch": 1792039779.1529481,
+  "load_start_epoch": 1792039439.2935796,
+  "load_seconds_to_abort": 339.9,
+  "samples_total": 863,
+  "login_ms": [
+    3108,
+    4192,
+    3143,
+    3047
+  ],
+  "http200": 859,
+  "errors": [
+    {
+      "end_load_s": 339.86,
+      "start_load_s": 338.2,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "end_load_s": 339.86,
+      "start_load_s": 339.4,
+      "kind": "status",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "end_load_s": 339.86,
+      "start_load_s": 339.4,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "end_load_s": 339.86,
+      "start_load_s": 339.4,
+      "kind": "alerts",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    }
+  ],
+  "per_minute_latency_ms": {
+    "0": {
+      "n": 149,
+      "p50": 175,
+      "p95": 375,
+      "max": 910,
+      "over_3s": 0
+    },
+    "1": {
+      "n": 152,
+      "p50": 390,
+      "p95": 1368,
+      "max": 2215,
+      "over_3s": 0
+    },
+    "2": {
+      "n": 151,
+      "p50": 360,
+      "p95": 958,
+      "max": 1862,
+      "over_3s": 0
+    },
+    "3": {
+      "n": 153,
+      "p50": 400,
+      "p95": 1017,
+      "max": 2142,
+      "over_3s": 0
+    },
+    "4": {
+      "n": 152,
+      "p50": 399,
+      "p95": 997,
+      "max": 2425,
+      "over_3s": 0
+    },
+    "5": {
+      "n": 102,
+      "p50": 377,
+      "p95": 980,
+      "max": 2715,
+      "over_3s": 0
+    }
+  }
+}

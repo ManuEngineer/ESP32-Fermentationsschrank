@@ -1,0 +1,163 @@
+{
+  "time_base": "host wall clock as UTC epoch seconds (tcpdump pcap timestamps); the UART/load host epochs use the same clock, a clock offset is not corrected",
+  "first_packet_epoch": 1792039361.80372,
+  "first_packet_utc": "2026-10-15T04:42:41.803720Z",
+  "last_packet_epoch": 1792039778.514084,
+  "last_packet_utc": "2026-10-15T04:49:38.514084Z",
+  "bin_definition": "bin k covers [first_packet_epoch + k*bin_seconds, first_packet_epoch + (k+1)*bin_seconds); a bin missing from `bins` holds zero counted events inside [first_packet_epoch, last_packet_epoch]",
+  "format": "g1b-pcap-derived-v1",
+  "payload_free_verified": true,
+  "packets": 10922,
+  "device_data_segments": 1941,
+  "device_retransmitted_segments": 4,
+  "host_pure_dupacks": 10,
+  "zero_window_from_device": 0,
+  "zero_window_from_host": 0,
+  "syn_retransmits": 20,
+  "device_rst": 0,
+  "host_rst": 0,
+  "connections": 853,
+  "connections_without_synack": 0,
+  "connections_without_reply": 0,
+  "synack_delay_ms": {
+    "n": 853,
+    "median": 138.7,
+    "max": 1598.5
+  },
+  "time_to_first_reply_ms": {
+    "n": 853,
+    "median": 107.7,
+    "max": 3004.1
+  },
+  "bin_seconds": 10.0,
+  "bins": {
+    "14": {
+      "start_epoch": 1792039501.80372,
+      "end_epoch": 1792039511.80372,
+      "device_retransmitted_segments": 1,
+      "host_pure_dupacks": 1,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 0
+    },
+    "19": {
+      "start_epoch": 1792039551.80372,
+      "end_epoch": 1792039561.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 1,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 3
+    },
+    "22": {
+      "start_epoch": 1792039581.80372,
+      "end_epoch": 1792039591.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 5
+    },
+    "27": {
+      "start_epoch": 1792039631.80372,
+      "end_epoch": 1792039641.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 1
+    },
+    "28": {
+      "start_epoch": 1792039641.80372,
+      "end_epoch": 1792039651.80372,
+      "device_retransmitted_segments": 2,
+      "host_pure_dupacks": 2,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 3
+    },
+    "29": {
+      "start_epoch": 1792039651.80372,
+      "end_epoch": 1792039661.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 1
+    },
+    "32": {
+      "start_epoch": 1792039681.80372,
+      "end_epoch": 1792039691.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 2,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 1
+    },
+    "33": {
+      "start_epoch": 1792039691.80372,
+      "end_epoch": 1792039701.80372,
+      "device_retransmitted_segments": 1,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 0
+    },
+    "35": {
+      "start_epoch": 1792039711.80372,
+      "end_epoch": 1792039721.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 2
+    },
+    "37": {
+      "start_epoch": 1792039731.80372,
+      "end_epoch": 1792039741.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 1,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 0
+    },
+    "39": {
+      "start_epoch": 1792039751.80372,
+      "end_epoch": 1792039761.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 1
+    },
+    "40": {
+      "start_epoch": 1792039761.80372,
+      "end_epoch": 1792039771.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 1,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 0
+    },
+    "41": {
+      "start_epoch": 1792039771.80372,
+      "end_epoch": 1792039781.80372,
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 2,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 3
+    }
+  },
+  "event_window": {
+    "event_epoch": 1792039779.1141,
+    "covered": false,
+    "before_seconds": 30.0,
+    "after_seconds": 30.0,
+    "before": {
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 1,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 1
+    },
+    "straddling": {
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 2,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 3
+    },
+    "after": {
+      "device_retransmitted_segments": 0,
+      "host_pure_dupacks": 0,
+      "zero_window_from_device": 0,
+      "syn_retransmits": 0
+    }
+  }
+}

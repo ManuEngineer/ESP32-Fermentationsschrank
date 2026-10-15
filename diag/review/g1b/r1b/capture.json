@@ -1,0 +1,23 @@
+{
+  "start_epoch": 1792039179.4142563,
+  "start_monotonic": 230384.376226677,
+  "tool_sha256": {
+    "g1_capture.py": "89212d6ace0fb77b8a0230df87900175be3952153db38a78f57f70c332573d36",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "load_exit": 1,
+  "post_anomaly_tail_seconds": 5.019,
+  "post_anomaly_tail_bytes": 3969,
+  "end_epoch": 1792039784.133976,
+  "end_monotonic": 230989.095946455,
+  "max_heartbeat_gap_seconds": 3.495859807007946,
+  "gate": "PR203_RES01_G1B_R1B_20261015",
+  "source_proven": true,
+  "ready": true,
+  "actors_disabled": true,
+  "release_profile": true,
+  "network_home_connected": true,
+  "expected_initial_reset_lines": 1,
+  "failure": "uart-anomaly",
+  "status": "FAIL/HOLD"
+}
