@@ -239,8 +239,8 @@ def capture(args):
     result = {'tool_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'snaplen': SNAPLEN, 'max_seconds': args.max_seconds}
     stops = [args.output.parent / 'PCAP_STOP', *args.stop_file]
-    command = ['tcpdump', '-i', args.interface, '-n', '-U', '-s', str(SNAPLEN), '-w', str(args.output),
-               'tcp and port 80 and host ' + args.device_ip]
+    command = ['tcpdump', '-i', args.interface, '-p', '-n', '-U', '-s', str(SNAPLEN), '-w', str(args.output),
+               'tcp and port %d and host %s' % (getattr(args, 'port', 80), args.device_ip)]
     try:
         process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except OSError:
@@ -341,6 +341,7 @@ if __name__ == '__main__':
     cap.add_argument('--gate-id')
     cap.add_argument('--interface', required=True)
     cap.add_argument('--device-ip', required=True)
+    cap.add_argument('--port', type=int, default=80, help='device HTTP port (80); other values only for the loopback dry run')
     cap.add_argument('--output', type=Path, required=True)
     cap.add_argument('--stop-file', type=Path, action='append', default=[],
                      help='ends the capture when it appears (pass the run ABORT/STOP files)')
