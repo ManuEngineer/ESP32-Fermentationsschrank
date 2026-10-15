@@ -1,0 +1,355 @@
+{
+ "time_base": "host wall clock as UTC epoch seconds (tcpdump pcap timestamps); the UART/load host epochs use the same clock, a clock offset is not corrected",
+ "first_packet_epoch": 1792051034.768882,
+ "first_packet_utc": "2026-10-15T07:57:14.768882Z",
+ "last_packet_epoch": 1792051873.897717,
+ "last_packet_utc": "2026-10-15T08:11:13.897717Z",
+ "bin_definition": "bin k covers [first_packet_epoch + k*bin_seconds, first_packet_epoch + (k+1)*bin_seconds); a bin missing from `bins` holds zero counted events inside [first_packet_epoch, last_packet_epoch]",
+ "format": "g1b-pcap-derived-v1",
+ "payload_free_verified": true,
+ "packets": 24860,
+ "device_data_segments": 4576,
+ "device_retransmitted_segments": 11,
+ "host_pure_dupacks": 18,
+ "zero_window_from_device": 0,
+ "zero_window_from_host": 0,
+ "syn_retransmits": 142,
+ "device_rst": 0,
+ "host_rst": 12,
+ "connections": 1820,
+ "connections_without_synack": 3,
+ "connections_without_reply": 3,
+ "synack_delay_ms": {
+  "n": 1817,
+  "median": 115.9,
+  "max": 3183.0
+ },
+ "time_to_first_reply_ms": {
+  "n": 1811,
+  "median": 89.6,
+  "max": 3000.6
+ },
+ "bin_seconds": 10.0,
+ "bins": {
+  "20": {
+   "start_epoch": 1792051234.768882,
+   "end_epoch": 1792051244.768882,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 1,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "21": {
+   "start_epoch": 1792051244.768882,
+   "end_epoch": 1792051254.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "22": {
+   "start_epoch": 1792051254.768882,
+   "end_epoch": 1792051264.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "23": {
+   "start_epoch": 1792051264.768882,
+   "end_epoch": 1792051274.768882,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 2,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 0
+  },
+  "29": {
+   "start_epoch": 1792051324.768882,
+   "end_epoch": 1792051334.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "37": {
+   "start_epoch": 1792051404.768882,
+   "end_epoch": 1792051414.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "39": {
+   "start_epoch": 1792051424.768882,
+   "end_epoch": 1792051434.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "40": {
+   "start_epoch": 1792051434.768882,
+   "end_epoch": 1792051444.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "44": {
+   "start_epoch": 1792051474.768882,
+   "end_epoch": 1792051484.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 5
+  },
+  "45": {
+   "start_epoch": 1792051484.768882,
+   "end_epoch": 1792051494.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "47": {
+   "start_epoch": 1792051504.768882,
+   "end_epoch": 1792051514.768882,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 2,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "51": {
+   "start_epoch": 1792051544.768882,
+   "end_epoch": 1792051554.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 7
+  },
+  "52": {
+   "start_epoch": 1792051554.768882,
+   "end_epoch": 1792051564.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 4
+  },
+  "55": {
+   "start_epoch": 1792051584.768882,
+   "end_epoch": 1792051594.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "56": {
+   "start_epoch": 1792051594.768882,
+   "end_epoch": 1792051604.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 6
+  },
+  "58": {
+   "start_epoch": 1792051614.768882,
+   "end_epoch": 1792051624.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 4
+  },
+  "60": {
+   "start_epoch": 1792051634.768882,
+   "end_epoch": 1792051644.768882,
+   "device_retransmitted_segments": 2,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 11
+  },
+  "61": {
+   "start_epoch": 1792051644.768882,
+   "end_epoch": 1792051654.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "63": {
+   "start_epoch": 1792051664.768882,
+   "end_epoch": 1792051674.768882,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 1,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "64": {
+   "start_epoch": 1792051674.768882,
+   "end_epoch": 1792051684.768882,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 2,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 7
+  },
+  "65": {
+   "start_epoch": 1792051684.768882,
+   "end_epoch": 1792051694.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 7
+  },
+  "66": {
+   "start_epoch": 1792051694.768882,
+   "end_epoch": 1792051704.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 4
+  },
+  "67": {
+   "start_epoch": 1792051704.768882,
+   "end_epoch": 1792051714.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "68": {
+   "start_epoch": 1792051714.768882,
+   "end_epoch": 1792051724.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "69": {
+   "start_epoch": 1792051724.768882,
+   "end_epoch": 1792051734.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 4
+  },
+  "70": {
+   "start_epoch": 1792051734.768882,
+   "end_epoch": 1792051744.768882,
+   "device_retransmitted_segments": 2,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 5
+  },
+  "71": {
+   "start_epoch": 1792051744.768882,
+   "end_epoch": 1792051754.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "72": {
+   "start_epoch": 1792051754.768882,
+   "end_epoch": 1792051764.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 1,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 8
+  },
+  "74": {
+   "start_epoch": 1792051774.768882,
+   "end_epoch": 1792051784.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "75": {
+   "start_epoch": 1792051784.768882,
+   "end_epoch": 1792051794.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 6
+  },
+  "76": {
+   "start_epoch": 1792051794.768882,
+   "end_epoch": 1792051804.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "78": {
+   "start_epoch": 1792051814.768882,
+   "end_epoch": 1792051824.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 4
+  },
+  "79": {
+   "start_epoch": 1792051824.768882,
+   "end_epoch": 1792051834.768882,
+   "device_retransmitted_segments": 2,
+   "host_pure_dupacks": 4,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 7
+  },
+  "80": {
+   "start_epoch": 1792051834.768882,
+   "end_epoch": 1792051844.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "81": {
+   "start_epoch": 1792051844.768882,
+   "end_epoch": 1792051854.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "82": {
+   "start_epoch": 1792051854.768882,
+   "end_epoch": 1792051864.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 1,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 2
+  },
+  "83": {
+   "start_epoch": 1792051864.768882,
+   "end_epoch": 1792051874.768882,
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 4,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 15
+  }
+ },
+ "event_window": {
+  "event_epoch": 1792051869.3081496,
+  "covered": true,
+  "before_seconds": 30.0,
+  "after_seconds": 30.0,
+  "before": {
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 1,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 3
+  },
+  "straddling": {
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 4,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 15
+  },
+  "after": {
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 0
+  }
+ }
+}

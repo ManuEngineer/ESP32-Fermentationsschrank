@@ -1,0 +1,188 @@
+{
+  "abort": "request-failure",
+  "load_start_epoch": 1792051111.1081495,
+  "load_seconds_to_abort": 761.2,
+  "samples_total": 1929,
+  "http200": 1919,
+  "login_ms": [
+    3035,
+    3103,
+    3123,
+    3079
+  ],
+  "errors": [
+    {
+      "start_load_s": 758.2,
+      "end_load_s": 761.2,
+      "kind": "alerts",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false
+    },
+    {
+      "start_load_s": 758.2,
+      "end_load_s": 761.2,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 758.2,
+      "end_load_s": 761.2,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false
+    },
+    {
+      "start_load_s": 758.2,
+      "end_load_s": 761.2,
+      "kind": "temperatures",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 759.4,
+      "end_load_s": 761.2,
+      "kind": "status",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 759.4,
+      "end_load_s": 761.2,
+      "kind": "temperatures",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 759.4,
+      "end_load_s": 761.2,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 759.4,
+      "end_load_s": 761.2,
+      "kind": "alerts",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 760.6,
+      "end_load_s": 763.6,
+      "kind": "status",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false
+    },
+    {
+      "start_load_s": 760.6,
+      "end_load_s": 763.6,
+      "kind": "temperatures",
+      "error_class": "timeout",
+      "error_phase": "connect",
+      "abort_induced": false
+    }
+  ],
+  "per_minute_latency_ms": {
+    "0": {
+      "n": 149,
+      "p50": 166,
+      "p95": 244,
+      "max": 322,
+      "over_3s": 0
+    },
+    "1": {
+      "n": 152,
+      "p50": 222,
+      "p95": 593,
+      "max": 1155,
+      "over_3s": 0
+    },
+    "2": {
+      "n": 152,
+      "p50": 325,
+      "p95": 1204,
+      "max": 2189,
+      "over_3s": 0
+    },
+    "3": {
+      "n": 152,
+      "p50": 305,
+      "p95": 655,
+      "max": 1512,
+      "over_3s": 0
+    },
+    "4": {
+      "n": 152,
+      "p50": 264,
+      "p95": 638,
+      "max": 1674,
+      "over_3s": 0
+    },
+    "5": {
+      "n": 152,
+      "p50": 258,
+      "p95": 647,
+      "max": 1769,
+      "over_3s": 0
+    },
+    "6": {
+      "n": 152,
+      "p50": 266,
+      "p95": 677,
+      "max": 2789,
+      "over_3s": 0
+    },
+    "7": {
+      "n": 152,
+      "p50": 252,
+      "p95": 749,
+      "max": 1690,
+      "over_3s": 0
+    },
+    "8": {
+      "n": 152,
+      "p50": 261,
+      "p95": 571,
+      "max": 1707,
+      "over_3s": 0
+    },
+    "9": {
+      "n": 152,
+      "p50": 279,
+      "p95": 584,
+      "max": 1996,
+      "over_3s": 0
+    },
+    "10": {
+      "n": 152,
+      "p50": 278,
+      "p95": 640,
+      "max": 1762,
+      "over_3s": 0
+    },
+    "11": {
+      "n": 149,
+      "p50": 263,
+      "p95": 612,
+      "max": 1313,
+      "over_3s": 0
+    },
+    "12": {
+      "n": 107,
+      "p50": 369,
+      "p95": 3003,
+      "max": 4436,
+      "over_3s": 11
+    }
+  }
+}
