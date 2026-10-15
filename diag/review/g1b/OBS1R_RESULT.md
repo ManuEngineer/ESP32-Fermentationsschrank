@@ -10,7 +10,7 @@ Freigabe: Owner, genau ein OBS1R-Lauf (`G1B_OBS1_RETRY_GATE.md` @ `6740085a6cdb1
 | Reihenfolge | `PCAP_RUNNING` vorhanden, dann `START_LOAD` (10:20:02 UTC); Last ab Uptime ≥ 180 s |
 | Login | 4 × HTTP 200 (3 137 / 3 098 / 3 057 / 3 110 ms) |
 | Last bis zum ersten Fehler | **117,0 s fehlerfrei**; Latenz Minute 0: p50 156 ms, p95 231 ms, max 289 ms; Minute 1 (60–120 s): p50 295 ms, p95 2 195 ms, max 3 270 ms |
-| **Beobachtung** | erster echter Last-Timeout: Start **117,00 s**, Ende 120,00 s, Phase `connect`; **acht echte Timeouts** (6 `connect`/`io`-Mischung, siehe `load_summary.json`) erreicht bei **130,82 s** ⇒ Stopp `observation-timeout-limit` nach **10,82 s** Beobachtung (innerhalb des 20-s-Fensters); danach 11 weitere in-flight-Timeouts als `after_stop` nur protokolliert; Endzustand `FAIL/HOLD` |
+| **Beobachtung** | erster echter Last-Timeout: Start **117,00 s**, Ende 120,00 s, Phase `connect`; **acht echte Timeouts** (4 × `connect`, 4 × `io`, siehe `load_summary.json`) erreicht bei **130,82 s** ⇒ Stopp `observation-timeout-limit` nach **10,82 s** Beobachtung (innerhalb des 20-s-Fensters); danach 11 weitere in-flight-Timeouts als `after_stop` nur protokolliert; Endzustand `FAIL/HOLD` |
 | UART | **kein** `heap_alloc_failed`, kein Panic/Watchdog/Brownout, nur der eine erwartete Resetmarker, Heartbeats ohne Lücke > 1,3 s bis 133,3 s; HTTPD-/Main-Stack in Grenzen |
 | Pcap | `PASS`, 4 281 Pakete = tcpdump-Meldung, payloadfrei verifiziert, **bis Lastsekunde 133,4 vollständig** (auch über das Stoppsignal hinaus) |
 
