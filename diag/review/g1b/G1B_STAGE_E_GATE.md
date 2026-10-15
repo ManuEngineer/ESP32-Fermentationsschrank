@@ -2,7 +2,7 @@
 
 `F2_S3_REVIEW=PASS` · `F2_HARDWARE=PENDING` · `G1B_STAGE_E_AUTHORIZATION=PENDING` · `RES-01=BLOCKER` · `PR203_FINAL_GO=HOLD` · `ACTUATOR_RELEASE=NO`
 
-Dieses Dokument gewährt keine Freigabe. Jede Teilfreigabe (Abschnitt 6) gilt einzeln; ein Flash, Reset oder Lauf ohne die jeweilige ausdrückliche Ownerbestätigung ist ausgeschlossen. Es gibt keine automatische Folgeaktion zwischen den Teilgates. Umfang: **P-A-Vergleich A gegenüber B** (Teil 1 von S4). P-A2, P-B (echte Browser), vollständige Abnahme nach Plan F1/F4 Abschnitt 7 und G2 (reines Produktimage) sind **nicht** Teil dieses Gates und bleiben ausstehend; aus diesem Gate folgt **kein Abnahmeanspruch**, keine Erfolgsbehauptung, keine F2-D5-Restgefahrakzeptanz. Plan: `docs/tasks/issue-27-res01-f2-escalation-plan.md` @ `3bb29481495c4baca540ada1f3ae5433a5b46a34`; O1-Umsetzung `ba32717dae4dcd35d57fd688b3fa2cc21966bc7e` (Independent Review PASS).
+Dieses Dokument gewährt keine Freigabe. Jede Teilfreigabe (Abschnitt 3 und 6) gilt einzeln; ein Flash, Reset oder Lauf ohne die jeweilige ausdrückliche Ownerbestätigung ist ausgeschlossen. **Es gibt keine automatische Folgeaktion** von einem Teilgate zum nächsten. Umfang dieses Gates: **Baseline-/Identitäts-Preflight ohne Last** und ein **B-Pilot** (ein App-only-Flash von B, genau ein P-A-Lauf B1). Der **B-Pilot ersetzt nicht** den im F2-Plan verlangten gleichtägigen A/B-Vergleich, die B-Serie (P-A 3×), P-A2, P-B, G2 oder die Restgefahrentscheidung; ein fehlerfreies B1 ist nur ein ermutigender Befund, **kein O1-GO und kein Produkt-GO**. Der vollständige Vergleich bleibt als **spätere**, nach Sichtung von B1 einzeln zu entscheidende Option erhalten (Abschnitt 3.2). Aus diesem Gate folgt kein Abnahmeanspruch, keine Erfolgsbehauptung und keine F2-D5-Restgefahrakzeptanz. Plan: `docs/tasks/issue-27-res01-f2-escalation-plan.md` @ `3bb29481495c4baca540ada1f3ae5433a5b46a34`; O1-Umsetzung `ba32717dae4dcd35d57fd688b3fa2cc21966bc7e` (Independent Review PASS).
 
 ## 1. A und B – gepinnte Images (einziger funktionaler Unterschied: O1)
 
@@ -31,42 +31,52 @@ Private Artefaktablage (0700): `/var/lib/docker/data/ESP32-Projekte/hw-evidence-
 
 Werkzeugcommit `07d1526678c171cf4e51a37650c221922d842f32` (Review-Branch; Manifest `HOST_TOOLS_SHA256SUMS`, H0 vor jedem Lauf wie `G1B_R1_GATE.md`), Lastprofil P-A unverändert (vier Sessions, 60 s Idle, 1200 s Last, 300 s Recovery, Login-Timeout 8 s, übrige 3 s, kein Logout/Retry), Treiber `c0_load.py`/`g1_capture.py`/`g1_pcap.py` identisch, private tcpdump-Kopie (`cap_net_raw=ep`, nur über `PATH`), Interface `enp2s0`, dasselbe Board (MAC `20:50:0d:1b:2f:34`), derselbe AP (UART-Beleg), Hostuhr NTP-synchron, **ein Kalendertag**, Reihenfolge und Tageszeit je Lauf dokumentiert. Keine neuen Diagnosefunktionen, keine weiteren Konfigurationsänderungen, keine Werkzeugänderung (bekannte Lücken bleiben: UART-Nachlauf bei `load-failure`, Pcap-Endverlust nicht erkannt; beides ist als Bewertungsgrenze zu führen).
 
-## 3. Vorgeschlagene Folge (jedes Glied ein eigenes Teilgate; Owner darf an jeder Stelle stoppen)
+## 3. Teilgates
+
+Hintergrund der Trennung: A ist unter P-A bereits zweimal nach einer Heap-Allokationsstörung abgebrochen (G1, R1b). Ein A'-Lauf als Pflichtvorstufe könnte einen kontrollierten Abbruch **vor** dem ersten O1-Test erzwingen. Deshalb ist der erste Lauf der Folge **B1**, und A'-Läufe sind keine Vorbedingung.
+
+### 3.1 B-Pilot (jedes Glied einzeln und nacheinander ausdrücklich freizugeben)
 
 | Teilgate | Inhalt | Geräteaktionen |
 |---|---|---|
-| **E-A1** | Baseline lesen (Variante *voll*, 4 MiB, privat) und Lauf **A'1** auf dem derzeit installierten Image A | 2 Resets Baselinesitzung + 1 Reset Testboot |
-| **E-FB** | **Flash B**: App-only auf `0x10000` | 2 Resets Schreibsitzung + 2 Resets Verifikationssitzung |
-| **E-B1, E-B2, E-B3** | je ein Lauf **B1/B2/B3** (Plan F1/F4 Abschnitt 7: P-A 3×) | je 1 Reset Testboot |
-| **E-FA** | **Flash A** zurück (Rückfall und Bracket) | 2 + 2 Resets |
-| **E-A2** | Lauf **A'2** | 1 Reset Testboot |
+| **E-P0** | **Baseline-/Identitäts-Preflight ohne Last**: 4-MiB-Lesen (Variante *voll*, privat) auf dem installierten Image A; MAC/Chip, Partitionstabelle- und App-Hash gegen A prüfen; Baseline für die Nicht-App-Byteprüfung sichern | 2 Resets (eine esptool-Sitzung); danach **keine** Last, kein Testboot |
+| **E-FB** | **App-only-Flash B** auf `0x10000` mit esptool-Hashprüfung und anschliessender Verifikationssitzung (Nicht-App-Bereiche byteidentisch zur Baseline, App-Hash = B) | 2 Resets Schreibsitzung + 2 Resets Verifikationssitzung |
+| **E-B1** | **genau ein** P-A-Lauf **B1** unter den bestehenden Stopbedingungen | 1 Reset (erfasster Testboot) |
 
-Gesamt bei vollständiger Folge: 15 Resets, 2 App-only-Flashvorgänge, 5 erfasste Läufe. **Alternativen zur Ownerwahl:** (i) vollständige Folge A'1–B1–B2–B3–A'2; (ii) ohne Rückflash: A'1–B1–B2–B3 (ein Flash; die A'-Klammer um B fehlt, Tagesdrift nicht bewertbar); (iii) Pilot: nur A'1–B1 (ein Flash, n = 1 je Arm). Ohne Wahl gilt keine Freigabe.
+Gesamt: 7 Resets, 1 App-only-Flash, 1 erfasster Lauf. Zwischen den Teilgates keine Aktion. Die **Daten der Baseline** (privat, 0700, enthalten NVS/PHY/State-Store) bleiben bis zur Ownerentscheidung nach B1 erhalten und werden danach gelöscht, sofern kein späterer Vergleich sie braucht; nie veröffentlicht.
+
+**Bei Anomalie (in jedem Teilgate): STOP/HOLD** ohne weiteren Reset, Flash, Retry, automatischen Rückflash oder Folgelauf. Ein eventuell installiertes B-Image bleibt bis zu einer nächsten ausdrücklichen Ownerentscheidung **unangetastet**; ein Rückflash von A ist ein eigenes, später freizugebendes Teilgate.
+
+### 3.2 Spätere Option: vollständiger A/B-Vergleich (nicht zwingende Vorstufe, erst nach Sichtung von B1 einzeln entschieden)
+
+Falls der Owner nach B1 den Vergleich wünscht, gilt die bestehende Vergleichslogik (Abschnitt 5, Testblatt Abschnitt 5) unverändert: gleichtägige A'-Referenzläufe mit demselben Image A und denselben Werkzeugen, B-Serie bis zu 3× P-A, Rückflash von A als eigenes Teilgate. Mögliche Zuschnitte (Auswahl erst nach B1, je Glied eigenes Teilgate): **(a)** A'-Klammer um die B-Serie (z. B. Rückflash A, A'1; B-Serie; A'2), **(b)** nur B-Serie ohne A'-Klammer (Tagesdrift nicht bewertbar), **(c)** nur weiterer Einzellauf. Die frühere Reihenfolge „A'1 zuerst“ ist **gestrichen**. Ohne diese spätere Entscheidung gibt es keine A'-Läufe, keinen Rückflash und keine B-Serie.
 
 ## 4. Geräteaktionen im Detail (nur unter der jeweiligen Teilfreigabe)
 
-**Baseline (E-A1):** `esptool --chip esp32 --port /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A5069RR4-if00-port0 --before default-reset --after hard-reset read-flash 0x0 0x400000 <privat>/baseline_4MiB.bin` (≈ 100 s; enthält NVS/PHY und State-Store, bleibt privat, wird nach der letzten Verifikation gelöscht). Prüfung: Partitionstabelle- und App-Hash gegen A, MAC/Chip; Abweichung ⇒ HOLD.
+**Baseline (E-P0):** `esptool --chip esp32 --port /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A5069RR4-if00-port0 --before default-reset --after hard-reset read-flash 0x0 0x400000 <privat>/baseline_4MiB.bin` (≈ 100 s; enthält NVS/PHY und State-Store, bleibt privat, wird nach der letzten Verifikation gelöscht). Prüfung: Partitionstabelle- und App-Hash gegen A, MAC/Chip; Abweichung ⇒ HOLD.
 
-**Flash (E-FB bzw. E-FA):** genau **ein** App-only-Schreibvorgang: `esptool … --before default-reset --after hard-reset write-flash --flash-mode keep --flash-freq keep --flash-size keep 0x10000 <B- bzw. A-App>` (esptool prüft den geschriebenen Bereich per Hash). Danach **eine** Verifikationssitzung: `read-flash 0x0 0x400000 <privat>/post_<arm>.bin`; **Pflichtprüfung:** Bereich `0x000000–0x00FFFF` und `0x300000–0x3FFFFF` byteidentisch zur Baseline; Bereich `0x10000` + App-Länge hashgleich zum geschriebenen Image; Rest des Flashs unverändert. Abweichung oder Schreibfehler ⇒ **HOLD, kein Reparaturflash, kein Erase-all, kein Schreiben von Bootloader/Partition/NVS/PHY/State-Store, keine Kalibrierung, kein Werksreset**. Der Bootloader (`bootloader_NOT_FOR_FLASH.bin`) wird nie geflasht. Rückfall nur Flash von A (Bestandteil der Folge) oder, ausschliesslich mit neuer Zustimmung, die gepinnten Rückfallartefakte aus dem G1-Gate (C0 `9a9a8bd`, `ed29c9c`, Factory-Backup `b9564e6`).
+**Flash (E-FB; ein späterer Rückflash von A ist ein eigenes Teilgate nach 3.2):** genau **ein** App-only-Schreibvorgang: `esptool … --before default-reset --after hard-reset write-flash --flash-mode keep --flash-freq keep --flash-size keep 0x10000 <B- bzw. A-App>` (esptool prüft den geschriebenen Bereich per Hash). Danach **eine** Verifikationssitzung: `read-flash 0x0 0x400000 <privat>/post_<arm>.bin`; **Pflichtprüfung:** Bereich `0x000000–0x00FFFF` und `0x300000–0x3FFFFF` byteidentisch zur Baseline; Bereich `0x10000` + App-Länge hashgleich zum geschriebenen Image; Rest des Flashs unverändert. Abweichung oder Schreibfehler ⇒ **HOLD, kein Reparaturflash, kein Erase-all, kein Schreiben von Bootloader/Partition/NVS/PHY/State-Store, keine Kalibrierung, kein Werksreset**. Der Bootloader (`bootloader_NOT_FOR_FLASH.bin`) wird nie geflasht. Rückfall nur Flash von A (Bestandteil der Folge) oder, ausschliesslich mit neuer Zustimmung, die gepinnten Rückfallartefakte aus dem G1-Gate (C0 `9a9a8bd`, `ed29c9c`, Factory-Backup `b9564e6`).
 
-**Läufe (E-A1, E-B*, E-A2):** je Lauf genau Ablauf, Reihenfolge, Zeitgrenzen und Befehle aus `G1B_R1_GATE.md` Abschnitt 4 (Bereit ≤ 120 s, `PCAP_RUNNING` ≤ 30 s, dann `START_LOAD`, Endsignal ≤ 60 s nach Recovery, Budget 1 961 s) mit `--expected-source` = Quellcommit des jeweiligen Arms, Gate-ID `PR203_RES01_G1B_STAGE_E_<LAUF>_20261015` und eigenem Ausgabeordner `…/diag/g1b/stage_e_20261015/run_<lauf>/`. Port-Öffnungsreset = erfasster Testboot. Keine P1–P3-Wiederholung vor Läufen derselben Image-Identität, solange seit der letzten Verifikation kein Flash/esptool stattfand; der Operator bestätigt dies vor jedem Lauf schriftlich, **bei Zweifel HOLD**.
+**Lauf (E-B1; spätere Läufe nur nach 3.2):** je Lauf genau Ablauf, Reihenfolge, Zeitgrenzen und Befehle aus `G1B_R1_GATE.md` Abschnitt 4 (Bereit ≤ 120 s, `PCAP_RUNNING` ≤ 30 s, dann `START_LOAD`, Endsignal ≤ 60 s nach Recovery, Budget 1 961 s) mit `--expected-source` = Quellcommit des jeweiligen Arms, Gate-ID `PR203_RES01_G1B_STAGE_E_B1_20261015` und eigenem Ausgabeordner `…/diag/g1b/stage_e_20261015/run_b1/`. Port-Öffnungsreset = erfasster Testboot. Vor B1 gilt die Identität durch die Verifikationssitzung von E-FB; der Operator bestätigt vor dem Lauf schriftlich, dass seither kein Flash/esptool stattfand, **bei Zweifel HOLD**.
 
 ## 5. Stopbedingungen, Abnahme, Vergleich (unverändert)
 
-- **Stop/HOLD** je Lauf und **beim ersten Anomalieereignis ohne Retry, weiteren Reset oder Folgeaktion**: wie `G1B_R1_GATE.md` Abschnitt 4 (u. a. `heap_alloc_failed`, Panic/Watchdog/Brownout, unerwarteter Reset, Heartbeat-Lücke > 5 s, Quellabweichung, Main-Stack < 11 160 B, HTTPD-Stack < 2 080 B, Login-/Request-Fehler, Capture-/Pcap-Fehler, Skripthash ≠ Manifest, Ownerstopp). Ein HOLD stoppt die **gesamte** Folge; die Fortsetzung verlangt eine neue Entscheidung.
+- **Stop/HOLD** je Lauf und **beim ersten Anomalieereignis ohne Retry, weiteren Reset oder Folgeaktion**: wie `G1B_R1_GATE.md` Abschnitt 4 (u. a. `heap_alloc_failed`, Panic/Watchdog/Brownout, unerwarteter Reset, Heartbeat-Lücke > 5 s, Quellabweichung, Main-Stack < 11 160 B, HTTPD-Stack < 2 080 B, Login-/Request-Fehler, Capture-/Pcap-Fehler, Skripthash ≠ Manifest, Ownerstopp). Ein HOLD stoppt alle Teilgates; die Fortsetzung verlangt eine neue ausdrückliche Entscheidung, auch ein Rückflash.
 - **Harte Kriterien für B** (Plan F1/F4 Abschnitt 7, über den **gesamten** B-Lauf, nie durch ein Vergleichsfenster relativiert): kein `heap_alloc_failed`, kein Abort/Panic/Watchdog/Brownout/unerwarteter Reset, HTTP 100 % 2xx, keine nicht abort-assoziierten Timeouts/Verbindungsfehler, Erholung ≥ 90 % des Vier-Session-Idle innerhalb 120 s, Stack-HWM nicht schlechter als Baseline um > 256 B, F4-Verhalten gemäss Kriterium 6.
-- **Vergleich** nach `G1B_TEST_SHEET.md` Abschnitt 5 (zulässige A-Referenzen: vollständige Referenz bzw. früh endende nur im Fenster; Vergleichsfenster `[0, T]` mit `T = min(1200 s, kürzeste beobachtete Lastdauer der verwendeten Läufe)`; Kennzahlen, Drahtzähler mit `event_window`). **1,25× p95 ist Bewertungsgrösse, nicht automatische FAIL-Grenze** (Owner bestätigt); Überschreitung = Befund. n ≤ 3 je Arm ist kein statistischer Nachweis, die A-Fehlerrate wird neben B ausgewiesen.
-- **Ausgang:** Bei hartem Fail von B kein automatischer Wechsel auf O2/O3, Rückfall in den Plan. Bei fehlerfreien B-Läufen **keine** Wirksamkeits- oder OOM-Sicherheitsaussage; es folgen die ausstehenden Teile von S4 und G2 unter eigenen Gates.
+- **Vergleich** (nur bei später freigegebenem Vergleich nach 3.2; für B1 allein gelten die harten Kriterien und die Berichtspflichten) nach `G1B_TEST_SHEET.md` Abschnitt 5 (zulässige A-Referenzen: vollständige Referenz bzw. früh endende nur im Fenster; Vergleichsfenster `[0, T]` mit `T = min(1200 s, kürzeste beobachtete Lastdauer der verwendeten Läufe)`; Kennzahlen, Drahtzähler mit `event_window`). **1,25× p95 ist Bewertungsgrösse, nicht automatische FAIL-Grenze** (Owner bestätigt); Überschreitung = Befund. n ≤ 3 je Arm ist kein statistischer Nachweis, die A-Fehlerrate wird neben B ausgewiesen.
+- **Ausgang:** Bei hartem Fail von B1 kein automatischer Wechsel auf O2/O3 und kein Rückflash, Rückfall in den Plan. Ein fehlerfreies B1 ist nur ein ermutigender Befund (n = 1, ohne gleichtägige A-Referenz), **keine** Wirksamkeits- oder OOM-Sicherheitsaussage, kein O1-GO; es folgen die ausstehenden Teile von S4 und G2 unter eigenen Gates.
 
 ## 6. Ownerbestätigungen (einzeln, vor dem jeweiligen Teilgate; alle `PENDING`)
 
 | # | Bestätigung | Wert |
 |---|---|---|
-| 1 | Gesamtfolge wählen: (i), (ii) oder (iii); jedes Teilgate einzeln freigeben | `PENDING` |
-| 2 | Aktorfreier Devboard-Aufbau vor Ort bestätigt; Owner anwesend (je Teilgate) | `PENDING` |
-| 3 | Baseline: Variante *voll* (4 MiB, enthält NVS/State-Store privat, Löschung nach der Folge) **oder** nur App + Partitionstabelle (dann **keine** Nicht-App-Vergleichsprüfung beim Flash: schwächerer Nachweis) | `PENDING` |
-| 4 | Zwei App-only-Flashvorgänge (B, dann A zurück) bzw. einer bei (ii)/(iii) und die genannten Resets sind akzeptiert | `PENDING` |
-| 5 | F2-D4: 1,25× p95 nur Bewertungsgrösse; F2-D5 bleibt offen | `PENDING` |
-| 6 | Kein automatischer Folgelauf; R2/R3 und alle anderen Läufe ausserhalb der Folge gesperrt | `PENDING` |
+| 1 | E-P0 (Baseline-/Identitäts-Preflight ohne Last) freigeben | `PENDING` |
+| 2 | E-FB (App-only-Flash B + Verifikation) freigeben (nach Sichtung von E-P0) | `PENDING` |
+| 3 | E-B1 (genau ein P-A-Lauf B1) freigeben (nach Sichtung von E-FB) | `PENDING` |
+| 4 | Aktorfreier Devboard-Aufbau vor Ort bestätigt; Owner anwesend (je Teilgate) | `PENDING` |
+| 5 | Baseline-Variante *voll* (4 MiB privat, Datenumgang wie oben) **oder** nur App und Partitionstabelle (dann keine Nicht-App-Vergleichsprüfung: schwächerer Nachweis) | `PENDING` |
+| 6 | Resets (7) und der eine App-only-Flash sind akzeptiert | `PENDING` |
+| 7 | F2-D4: 1,25× p95 nur Bewertungsgrösse; F2-D5 bleibt offen | `PENDING` |
+| 8 | Kein automatisches Weiterlaufen; vollständiger Vergleich, B-Serie, A'-Läufe, Rückflash A, P-A2, P-B, G2 nur nach späterer ausdrücklicher Entscheidung; R2/R3 gesperrt | `PENDING` |
 
-Nicht Teil dieses Gates: Produkt-/G2-Image, P-A2, P-B, Touch-/Hold-Sequenzen, O2/O3, weitere Konfigurations- oder Werkzeugänderungen, Rollback ohne neue Zustimmung.
+Nicht Teil dieses Gates: A'-Läufe, B-Serie, Rückflash von A, Produkt-/G2-Image, P-A2, P-B, Touch-/Hold-Sequenzen, O2/O3, weitere Konfigurations- oder Werkzeugänderungen, Rollback ohne neue Zustimmung.
