@@ -9,9 +9,9 @@ Freigabe: Owner, ausschliesslich E-B1 (genau ein P-A-Pilotlauf mit dem installie
 | Testboot | 07:54:12 UTC, `POWERON_RESET`; UART: Quelle `31c3ee4…`, `tcp tx win: 2880` (O1 auf dem Gerät wirksam), Release-Profil, Aktoren aus, `HomeConnected`; bereit nach 5 s |
 | Reihenfolge | `PCAP_RUNNING` vorhanden, dann `START_LOAD` (07:54:24 UTC); Last ab Uptime ≥ 180 s |
 | Login | 4 × HTTP 200 (3 035 / 3 103 / 3 123 / 3 079 ms) |
-| Last | **761,2 s von 1200 s**, 1 919 Anfragen **ohne** Fehler bis Lastsekunde ≈ 758; Recovery nicht ausgeführt |
+| Last | **761,2 s von 1200 s**, 1 915 Lastanfragen HTTP 200 (plus 4 Logins) **ohne** Fehler bis Lastsekunde ≈ 758; Recovery nicht ausgeführt |
 | Abbruch | `load.json`: `abort = request-failure`, `capture.json`: `failure = load-failure`, `FAIL/HOLD`; Stopp durch den Lasttreiber, nicht durch eine UART-Anomalie |
-| UART | **kein** `heap_alloc_failed`, kein `diag_alloc_fail`, kein Panic/Watchdog/Brownout, kein weiterer Reset; Heartbeat-Lücke max. 3,55 s (beim Boot/Anlauf), **keine Lücke > 1,6 s** im ganzen Lauf; Main-Stack min 11 688 B, HTTPD-Stack min 2 304 B (Grenzen 11 160 / 2 080 B eingehalten) |
+| UART | **kein** `heap_alloc_failed`, kein `diag_alloc_fail`, kein Panic/Watchdog/Brownout, kein weiterer Reset; Heartbeat-Lücke max. 3,55 s (Zeit bis zum ersten Heartbeat nach dem Boot), **keine Lücke > 1,6 s** im ganzen Lauf; Main-Stack min 11 688 B, HTTPD-Stack min 2 304 B (Grenzen 11 160 / 2 080 B eingehalten) |
 | Pcap | `PASS`, 24 860 Pakete = tcpdump-Meldung, payloadfrei verifiziert; letztes Paket bei Lastsekunde 762,8 (**Abdeckung bis zum Abbruch vollständig**) |
 
 ## Der Fehler (erste Auffälligkeit)
