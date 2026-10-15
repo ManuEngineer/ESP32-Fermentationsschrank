@@ -18,6 +18,11 @@ from c0_load import BAD, HEARTBEAT, run as load_run
 POST_ANOMALY_TAIL_SECONDS = 5.0
 POST_ANOMALY_TAIL_MAX_READS = 120  # bounds the tail even if the clock is frozen
 NO_TAIL = {'host-interrupt', 'capture-failure'}
+# The expected, single reset caused by opening the port (known FT232R behaviour): only this cause, only the
+# first marker and only within this window after the real port open is accepted as the test boot.
+BOOT_MARKER = re.compile(r'rst:0x1 \(POWERON_RESET\)')
+BOOT_MARKER_WINDOW_SECONDS = 10.0
+BAD_WITHOUT_RESET = re.compile(BAD.pattern.replace('|rst:0x', ''), re.I)  # an unterminated 'rst:0x' waits for its line end
 MAX_RAW_BYTES = 256 * 1024 * 1024  # fail-closed volume limit; safety-relevant UART lines are never dropped
 
 
@@ -59,6 +64,9 @@ def capture(args):
     ready=actors=profile=network=source=False
     last_heartbeat=started=time.monotonic()
     resets=0
+    boot_marker=None   # evidence of the accepted fresh test boot
+    pre_marker_lines=0
+    opened=None
     last_uptime=None
     offset=b''
     raw_total=0
@@ -79,6 +87,7 @@ def capture(args):
         with uart.open('wb',buffering=0) as log, (args.output/'uart_raw.bin').open('wb',buffering=0) as raw, \
                 (args.output/'uart_chunks.jsonl').open('w') as chunks:
             board.open()  # explicitly gated; this FT232R is known to reset on open
+            opened=time.monotonic()
             while True:
                 now=time.monotonic()
                 if now-last_heartbeat>5:
@@ -101,10 +110,28 @@ def capture(args):
                     log.write(('[host_mono=%.6f] '%time.monotonic()).encode()+line+b'\n')
                     if 'rst:0x' in text:
                         resets+=1
-                        if resets>1 or last_uptime is not None:
+                        accepted=(boot_marker is None and BOOT_MARKER.search(text)
+                                  and time.monotonic()-opened<=BOOT_MARKER_WINDOW_SECONDS)
+                        if not accepted:
                             failure='uart-unexpected-reset';break
-                    elif BAD.search(text):
+                        # Everything collected before the marker is buffered old data (kept in the log, never
+                        # evidence of this boot): drop all boot/identity/liveness state.
+                        boot_marker={'accepted':True,'cause':'POWERON_RESET',
+                                     'seconds_after_open':round(time.monotonic()-opened,3),
+                                     'lines_before_marker':pre_marker_lines}
+                        last_uptime=None;last_heartbeat=time.monotonic()
+                        source=ready=actors=profile=network=False
+                        continue
+                    if boot_marker is None:
+                        pre_marker_lines+=1
+                    if BAD.search(text):
                         failure='uart-anomaly';break
+                    main=re.search(r'(?<!httpd_)stack_hwm_bytes=(\d+)',text)
+                    http=re.search(r'httpd_stack_hwm=(\d+)',text)
+                    if main and int(main[1])<11160:failure='main-stack-reserve';break
+                    if http and int(http[1])<2080:failure='httpd-stack-reserve';break
+                    if boot_marker is None:
+                        continue  # old buffered line: logged and safety-checked only
                     if HEARTBEAT.search(text):
                         stamp=time.monotonic()
                         if stamp-last_heartbeat>5:
@@ -122,20 +149,16 @@ def capture(args):
                     actors|='real actuators: disabled' in text
                     profile|='profile: esp32_release' in text
                     network|='network_mode=HOME_WIFI network_state=HomeConnected' in text
-                    main=re.search(r'(?<!httpd_)stack_hwm_bytes=(\d+)',text)
-                    http=re.search(r'httpd_stack_hwm=(\d+)',text)
-                    if main and int(main[1])<11160:failure='main-stack-reserve';break
-                    if http and int(http[1])<2080:failure='httpd-stack-reserve';break
-                if not failure and BAD.search(offset.decode(errors='replace')):
+                if not failure and BAD_WITHOUT_RESET.search(offset.decode(errors='replace')):
                     failure='uart-anomaly'
                 if failure:
                     if failure not in NO_TAIL:
                         abort_file.write_text(failure+'\n')  # stop the load first
                         result.update(post_anomaly_tail(board,raw,chunks,args.output/'uart_tail.log',offset,result))
                     break
-                if now-started>30 and not all((source,ready,actors,profile,network)):
+                if now-started>30 and not all((boot_marker,source,ready,actors,profile,network)):
                     failure='boot-identity-state-not-proven';break
-                if args.load and loader is None and (args.output/'START_LOAD').exists() and all((source,ready,actors,profile,network)) and last_uptime is not None and last_uptime>=180000:
+                if args.load and loader is None and (args.output/'START_LOAD').exists() and all((boot_marker,source,ready,actors,profile,network)) and last_uptime is not None and last_uptime>=180000:
                     def load():
                         result['load_exit']=load_run(SimpleNamespace(run=True,gate_id=args.gate_id,
                             host=args.host,uart=uart,output=args.output/'load',abort_file=abort_file,
@@ -162,6 +185,7 @@ def capture(args):
             result['runner_not_joined']=True
         result.update(end_epoch=time.time(),end_monotonic=time.monotonic(),max_heartbeat_gap_seconds=max_gap,gate=args.gate_id,source_proven=source,ready=ready,actors_disabled=actors,
                       release_profile=profile,network_home_connected=network,expected_initial_reset_lines=resets,
+                      boot_marker=boot_marker,lines_before_marker=pre_marker_lines,
                       failure=failure,status='FAIL/HOLD' if failure else 'CAPTURE_COMPLETE_PENDING_REVIEW')
         (args.output/'capture.json').write_text(json.dumps(result,indent=2)+'\n')
     return 1 if failure else 0
