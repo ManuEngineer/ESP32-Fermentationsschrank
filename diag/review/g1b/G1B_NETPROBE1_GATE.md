@@ -2,7 +2,7 @@
 
 `NETPROBE1_GATE=PREPARED` · `NETPROBE1_AUTHORIZATION=PENDING` · `O1_QUALIFICATION=NOT_PROVEN` · `RES-01=BLOCKER` · `PR203_FINAL_GO=HOLD` · `ACTUATOR_RELEASE=NO`
 
-Dieses Dokument gewährt **keine** Freigabe; ICMP-Probe, Netzwerkverkehr zum Gerät und jede andere Hardwareaktion sind **nicht** erlaubt, bevor der Owner dieses Gate ausdrücklich bestätigt (Abschnitt 8). Grundlage: `OBS1R_NETPATH_ASSESSMENT.md` @ `1388ccfc9799f1c915b9d1112020497287ab5984` (Independent Fix Verification PASS). Das Gate deckt **genau eine** hostseitige Probe NETPROBE1 ab. Ausgeschlossen: Portöffnung (UART), Reset, Flash, esptool, HTTP, Last, Pcap, jede Werkzeug-, Firmware-, Konfigurations-, O1/O2/O3-Änderung, jede Folgeaktion. Die Auswertung bleibt **bedingte Hinweise ohne Kausalüberdehnung** (Abschnitt 6). F2-D4: 1,25× p95 Bewertungsgrösse; F2-D5 offen.
+Dieses Dokument gewährt **keine** Freigabe; ICMP-Probe, Netzwerkverkehr zum Gerät und jede andere Hardwareaktion sind **nicht** erlaubt, bevor der Owner dieses Gate ausdrücklich bestätigt (Abschnitt 8). Grundlage: `OBS1R_NETPATH_ASSESSMENT.md` @ `1388ccfc9799f1c915b9d1112020497287ab5984` (Independent Fix Verification PASS). Das Gate deckt **genau eine** hostseitige Probe NETPROBE1 ab (Fassung nach Korrekturdelta: technische Laufzeitgrenze der dichten Phase und Konditionierung der Erstkontakt-Auswertung auf den Neighbor-Zustand). Ausgeschlossen: Portöffnung (UART), Reset, Flash, esptool, HTTP, Last, Pcap, jede Werkzeug-, Firmware-, Konfigurations-, O1/O2/O3-Änderung, jede Folgeaktion. Die Auswertung bleibt **bedingte Hinweise ohne Kausalüberdehnung** (Abschnitt 6). F2-D4: 1,25× p95 Bewertungsgrösse; F2-D5 offen.
 
 ## 1. Zweck
 
@@ -38,28 +38,38 @@ Prüfen, ob die Stillstandsphase (verzögerte oder ausbleibende Zustellung zum G
 
 **Nicht Teil:** UART-Portöffnung (würde das Board zurücksetzen), HTTP, Last, Reset, Flash, esptool, Pcap, Aktoren.
 
-## 5. Ablauf (host-only, zwei Phasen, 90 min)
+## 5. Ablauf (host-only, zwei Phasen, höchstens 90 min; technisch begrenzt)
 
-Parameter: Antwort-Timeout `-W 2`, Zeitstempel `-D` (Host-Epoch, UTC-Auswertung), Zieladresse = Geräte-IP (Standard `g1_capture.py`-Host), alle Ausgaben in eine private Datei (Befehlstext und Ausgabehash werden notiert).
+Gemeinsame Parameter: IPv4 (`-4`), numerisch (`-n`), Host-Epoch-Zeitstempel (`-D`), Echo-Abstand `-i 0.2`, Antwort-Timeout `-W 2` (**nur** der Timeout je Paket, **keine** Laufzeitgrenze), Zieladresse = Geräte-IP. Alle Ausgaben in eine private Datei; je Aufruf werden **Befehlstext, Hostzeit von Start und Ende, Exitstatus (iputils: 0 = Antworten erhalten, 1 = keine Antwort, 2 = Fehler; nur protokolliert, nicht gedeutet) und der Hash der Ausgabe** notiert. Alle Zeitpunkte beziehen sich auf eine feste Startzeit `t_start` (Hostuhr, NTP-synchron).
 
-0. **Vorab (ohne Gerätekontakt):** NTP-Synchronisation prüfen, `ip route get <Gerät>` und `ip neigh show <Gerät>` notieren (erwartet: on-link, Geräte-MAC), Ausgabeverzeichnis anlegen.
-1. **Phase 1 – Erstkontakt nach Leerlauf (60 min):** Zyklus alle **180 s**, 20 Zyklen: Neighbor-Zustand notieren → `ping -D -c 3 -i 0.2 -W 2 <Gerät>` → Neighbor-Zustand notieren. Zwischen den Zyklen **kein** Verkehr zum Gerät (kein Hintergrundping).
-2. **Phase 2 – dichte Probe (30 min):** `ping -D -i 0.2 -W 2 <Gerät>` fortlaufend über 1 800 s (≈ 9 000 Echos).
-3. **Ende:** Neighbor-Zustand und `ip -s link show enp2s0` (Zähler) notieren; keine weiteren Pakete.
+0. **Vorab (ohne Gerätekontakt):** NTP-Synchronisation prüfen; `ip route get <Gerät>` und `ip neigh show <Gerät>` notieren (erwartet: on-link, Geräte-MAC); Ausgabeverzeichnis anlegen; **Loopback-Trockenlauf der Laufzeitgrenzen** (nur `127.0.0.1`, kein Paket ans Gerät): `ping -4 -n -D -i 0.2 -W 2 -w 3 127.0.0.1` muss nach **3 s** mit Exitstatus 0 enden (bei der Gate-Vorbereitung verifiziert: Laufzeit 3,00 s, Exitstatus 0, 15 von 15 Antworten); `ping -4 -n -D -c 3 -i 0.2 -W 2 127.0.0.1` endet nach etwa 0,4 s mit Exitstatus 0 (verifiziert). Der Trockenlauf wird **unmittelbar vor dem Gerätekontakt wiederholt**; bei Abweichung HOLD.
+1. **Phase 1 – Erstkontakt nach Leerlauf (genau 20 Bursts, 60 min):** Die Bursts starten im **180-s-Raster auf absoluten Zeitpunkten** `t_start + 0, 180, 360, …, 3420 s` (20 Startzeiten; die Zeitpunkte werden aus `t_start` berechnet, Verzögerungen akkumulieren sich nicht). Je Burst: Neighbor-Zustand notieren (`ip neigh show <Gerät>`) → `ping -4 -n -D -c 3 -i 0.2 -W 2 <Gerät>` → Neighbor-Zustand notieren. Zwischen den Bursts **kein** Verkehr zum Gerät.
+2. **Phase 2 – dichte Probe (genau 1 800 s):** **Frühestens bei `t_start + 3600 s`**, also nach dem letzten Burst (Ende ≤ `t_start + 3423 s`) und nach Ablauf der 3 600 s von Phase 1. Befehl: `timeout -k 5 1830 ping -4 -n -D -i 0.2 -W 2 -w 1800 <Gerät>`. Dabei ist **`-w 1800` die technische Deadline** (iputils beendet den Lauf selbst nach 1 800 s); `timeout 1830` ist nur die äussere Absicherung. Geordnetes Ende, Exitstatus und Hostzeit werden protokolliert; ein vorzeitiges oder verspätetes Ende wird ausgewiesen.
+3. **Ende:** Neighbor-Zustand und `ip -s link show enp2s0` (Zähler) notieren; keine weiteren Pakete. **Gesamtdauer höchstens 5 400 s (90 min)** ab `t_start`.
 
 **Stopp/HOLD:** Ownerabbruch; Antwort-TTL ≠ 64 oder Antwortquelle ≠ Geräte-IP; Neighbor-Eintrag zeigt eine **andere** MAC; anhaltender Totalverlust (drei aufeinanderfolgende Bursts in Phase 1 ohne jede Antwort oder 60 s ohne Antwort in Phase 2) wird als **Verbindungsverlust protokolliert, Ursache `UNKNOWN`** (ein Geräte-Reset, ein Funkproblem und ein AP-Zustand sind hostseitig nicht unterscheidbar); danach Abbruch der Probe, **keine** Wiederholung, **keine** UART-/Reset-/Flash-Aktion.
 
-## 6. Auswertung (bedingte Hinweise; verbindliche Grenzen)
+## 6. Auswertung (bedingte Hinweise; verbindliche Grenzen; Neighbor-Konditionierung)
 
-Offline, nur aus den privaten Logs; abgeleitete Zähler und UTC-Zeiten, **keine** Adressen im Bericht. Berichtet werden: Antwortzeitverteilung (p50/p95/p99/Max) je Phase, Verlust, Stösse mit Antwortzeit ≥ 1 s oder Verlustserien, Erstkontakt-Tabelle (je Zyklus: erste Antwortzeit, Verluste, Neighbor-Zustände vorher/nachher), TTL/Quelle der Antworten, Host-Zähler.
+Offline, nur aus den privaten Logs; abgeleitete Zähler und UTC-Zeiten, **keine** Adressen im Bericht. Berichtet werden: Antwortzeitverteilung (p50/p95/p99/Max) je Phase, Verlust, Stösse mit Antwortzeit ≥ 1 s oder Verlustserien, Erstkontakt-Tabelle (je Burst: erste Antwortzeit, Verluste, Neighbor-Zustände vorher/nachher, Klassifikation), TTL/Quelle der Antworten, Host-Zähler, Deadline-/Exit-Protokoll.
+
+**Konditionierung auf den Neighbor-Zustand (verbindlich).** Jeder Burst wird anhand des **protokollierten Neighbor-Zustands unmittelbar davor und danach** klassifiziert:
+
+| Klasse | Kriterium | Verwendung |
+|---|---|---|
+| **auswertbar** | Neighbor-Eintrag vorhanden und aufgelöst (`REACHABLE`, `STALE`, `DELAY` oder `PROBE`) vor **und** nach dem Burst, MAC unverändert gleich der Geräte-MAC | zählt für die Hypothesen, mit der Restunsicherheit unten |
+| **ARP-/Host-Nachbarschaft-konfundiert (`INDETERMINATE`)** | Eintrag **fehlt**, `INCOMPLETE` oder `FAILED`, oder die Auflösung ist unklar (Zustandswechsel mit unbekanntem Verlauf, MAC-Wechsel) | bleibt **vollständig protokolliert**, wird aber für die Geräte-/Netzpfadhypothese **nicht** gewertet, sondern als `INDETERMINATE` ausgewiesen; bei fehlender oder fehlgeschlagener Auflösung kann bereits die hostseitige Adressauflösung den ersten ICMP-Kontakt verzögern, das ist mit reinem `ping` **nicht** von Gerät oder Netz zu unterscheiden |
+
+**Restunsicherheit auch bei `STALE`/`REACHABLE`:** Eine hostseitig ausgelöste ARP-/Neighbor-Wechselwirkung (z. B. Unicast-Probe nach `DELAY`) wird **nicht beobachtet** (kein Pcap, keine ARP-Sicht); deshalb beweist ein ≥ 1-s-ICMP-Ausreisser **allein weder** eine Geräte- **noch** eine WLAN-Verzögerung.
 
 **Auswertungsgrenzen:** ICMP-Echo-Antworten entstehen auf dem ESP32 über den IP-/lwIP-Pfad. Verzögerungen im Leerlauf belegen ein Problem **ohne HTTP-Last**, nicht „vor lwIP“ und nicht AP gegenüber WLAN-Treiber. Ausreisser nur in der dichten Phase belegen keinen AP-/Funkfehler. **Zwei unauffällige Phasen widerlegen seltene Leerlaufereignisse nicht und beweisen keine ausschliesslich lastgebundene Ursache.** Keine erwartete Ereigniszahl wird behauptet.
 
 | Befund | Bedingter Hinweis | Nächster Entscheidungsschritt (Owner; keine Automatik) |
 |---|---|---|
-| Phase 1: Verzögerungen/Verluste ≥ 1 s beim Erstkontakt | Zustellungs-/Verarbeitungsproblem **ohne HTTP-Last** (kompatibel mit AP/Funk, Geräte-Wi-Fi/PS und Geräte-lwIP; nicht trennbar) | AP-/Controller-Daten zu diesen Zeitpunkten einholen; danach **eine** Einflussgrösse am Gerät prüfen: `WIFI_PS_NONE` (`esp_wifi_set_ps`) |
+| Phase 1: **auswertbare** Bursts mit Verzögerungen/Verlusten ≥ 1 s beim Erstkontakt (Restunsicherheit der ARP-Wechselwirkung offengelegt) | Hinweis auf ein Zustellungs-/Verarbeitungsproblem **ohne HTTP-Last**, **nicht** gesichert (kompatibel mit AP/Funk, Geräte-Wi-Fi/PS, Geräte-lwIP und einer unbeobachteten ARP-Wechselwirkung; nicht trennbar) | AP-/Controller-Daten zu den Zeitpunkten einholen; **erst danach** entscheidet der Owner, ob eine Einflussgrösse am Gerät geprüft wird (mögliche Kandidatin: `WIFI_PS_NONE`, `esp_wifi_set_ps`) |
+| Phase 1: **nur** ARP-/Host-konfundierte (`INDETERMINATE`) Erstkontakt-Ereignisse mit Verzögerung | **kein** Hinweis auf Gerät oder Netzpfad | **kein** automatischer `WIFI_PS_NONE`-Schritt; Owner entscheidet über eine Wiederholung mit kontrolliertem Neighbor-Zustand (dafür wäre eine ARP-sichtbare Aufzeichnung nötig, **nicht** Teil dieses Gates) oder über AP-Daten |
 | Nur Phase 2: Stösse | Stösse unter dichtem Verkehr; **kein** Beleg für AP/Funk allein | AP-/Controller-Daten und Kanalauslastung prüfen; Reproduzierbarkeit bewerten, bevor Firmware angefasst wird |
-| Beide Phasen unauffällig | **kein Nachweis** der Abwesenheit seltener Leerlaufereignisse, **kein** Nachweis einer rein lastgebundenen Ursache | Owner entscheidet über eine längere Probe oder einen einzigen Beobachtungslauf mit paralleler ICMP-Probe |
+| Alles unauffällig | **kein Nachweis** der Abwesenheit seltener Leerlaufereignisse, **kein** Nachweis einer rein lastgebundenen Ursache | Owner entscheidet über eine längere Probe oder einen einzigen Beobachtungslauf mit paralleler ICMP-Probe |
 
 ## 7. Veröffentlichung
 
@@ -72,6 +82,6 @@ Nur abgeleitete Statistik und Zeitpunkte (UTC) mit Hashes der privaten Logs auf 
 | 1 | NETPROBE1 (genau eine hostseitige ICMP-Probe nach Abschnitt 5, 90 min) freigeben | `PENDING` |
 | 2 | Aktorfreier Devboard-Aufbau vor Ort bestätigt; Owner anwesend | `PENDING` |
 | 3 | Das Gerät ist unverändert (Image B, kein Flash/Eingriff seit E-FB und seit OBS1R); Netzwerkverkehr (ICMP, bis 5 Echo/s) zum Gerät ist akzeptiert | `PENDING` |
-| 4 | **Kein** UART-Zugriff, Reset, Flash, HTTP, Last oder Pcap; Verbindungsverlust nur protokolliert (Ursache `UNKNOWN`), kein Reset-Kriterium | `PENDING` |
-| 5 | Auswertungsgrenzen und bedingte Hinweise (Abschnitt 6) akzeptiert; keine Folgeaktion ohne neue Ownerentscheidung | `PENDING` |
+| 4 | **Kein** UART-Zugriff, Reset, Flash, HTTP, Last oder Pcap; Verbindungsverlust nur protokolliert (Ursache `UNKNOWN`), kein Reset-Kriterium; Laufzeitgrenzen (`-w 1800`, 20 Bursts im 180-s-Raster, Phase 2 frühestens bei 3 600 s, Gesamtdauer ≤ 90 min) und Loopback-Trockenlauf unmittelbar vor dem Start | `PENDING` |
+| 5 | Auswertungsgrenzen, Neighbor-Konditionierung (`INDETERMINATE`) und bedingte Hinweise (Abschnitt 6) akzeptiert; keine Folgeaktion ohne neue Ownerentscheidung | `PENDING` |
 | 6 | Optional: AP-/Controller-Export (nur lesend) für die Probenfenster bereitgestellt; F2-D4 Bewertungsgrösse, F2-D5 offen | `PENDING` |
