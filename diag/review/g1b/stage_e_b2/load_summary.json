@@ -1,0 +1,79 @@
+{
+  "abort": "request-failure",
+  "load_start_epoch": 1792055044.9316375,
+  "load_seconds_to_abort": 100.7,
+  "samples_total": 256,
+  "http200": 250,
+  "login_ms": [
+    3110,
+    3080,
+    3085,
+    3116
+  ],
+  "errors": [
+    {
+      "start_load_s": 97.0,
+      "end_load_s": 100.69,
+      "kind": "alerts",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 97.0,
+      "end_load_s": 100.7,
+      "kind": "shell",
+      "error_class": "timeout",
+      "error_phase": "io",
+      "abort_induced": false
+    },
+    {
+      "start_load_s": 99.4,
+      "end_load_s": 100.7,
+      "kind": "temperatures",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 99.4,
+      "end_load_s": 100.7,
+      "kind": "alerts",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 99.4,
+      "end_load_s": 100.69,
+      "kind": "shell",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    },
+    {
+      "start_load_s": 99.4,
+      "end_load_s": 100.7,
+      "kind": "status",
+      "error_class": "http-protocol-error",
+      "error_phase": "io",
+      "abort_induced": true
+    }
+  ],
+  "per_minute_latency_ms": {
+    "0": {
+      "n": 149,
+      "p50": 156,
+      "p95": 248,
+      "max": 322,
+      "over_3s": 0
+    },
+    "1": {
+      "n": 103,
+      "p50": 200,
+      "p95": 1295,
+      "max": 3695,
+      "over_3s": 2
+    }
+  }
+}

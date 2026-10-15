@@ -1,0 +1,11 @@
+{
+  "tool_sha256": "64aa5ee8a12ddf59fb7cf6b6b73db7cbf1a08d19061979f78381d5cd5584df4d",
+  "snaplen": 54,
+  "max_seconds": 1961.0,
+  "tcpdump_returncode": 0,
+  "packets_verified": 3392,
+  "packets_reported_by_tcpdump": 3392,
+  "status": "PASS",
+  "exit_code": 0,
+  "reason": "stop-signal"
+}

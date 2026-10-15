@@ -1,0 +1,67 @@
+{
+ "time_base": "host wall clock as UTC epoch seconds (tcpdump pcap timestamps); the UART/load host epochs use the same clock, a clock offset is not corrected",
+ "first_packet_epoch": 1792054968.540329,
+ "first_packet_utc": "2026-10-15T09:02:48.540329Z",
+ "last_packet_epoch": 1792055146.033303,
+ "last_packet_utc": "2026-10-15T09:05:46.033303Z",
+ "bin_definition": "bin k covers [first_packet_epoch + k*bin_seconds, first_packet_epoch + (k+1)*bin_seconds); a bin missing from `bins` holds zero counted events inside [first_packet_epoch, last_packet_epoch]",
+ "format": "g1b-pcap-derived-v1",
+ "payload_free_verified": true,
+ "packets": 3392,
+ "device_data_segments": 634,
+ "device_retransmitted_segments": 1,
+ "host_pure_dupacks": 2,
+ "zero_window_from_device": 0,
+ "zero_window_from_host": 0,
+ "syn_retransmits": 1,
+ "device_rst": 0,
+ "host_rst": 5,
+ "connections": 260,
+ "connections_without_synack": 2,
+ "connections_without_reply": 1,
+ "synack_delay_ms": {
+  "n": 258,
+  "median": 83.5,
+  "max": 1146.7
+ },
+ "time_to_first_reply_ms": {
+  "n": 255,
+  "median": 73.8,
+  "max": 2994.0
+ },
+ "bin_seconds": 10.0,
+ "bins": {
+  "17": {
+   "start_epoch": 1792055138.540329,
+   "end_epoch": 1792055148.540329,
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 2,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  }
+ },
+ "event_window": {
+  "event_epoch": 1792055141.9316375,
+  "covered": true,
+  "before_seconds": 30.0,
+  "after_seconds": 30.0,
+  "before": {
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 0
+  },
+  "straddling": {
+   "device_retransmitted_segments": 1,
+   "host_pure_dupacks": 2,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 1
+  },
+  "after": {
+   "device_retransmitted_segments": 0,
+   "host_pure_dupacks": 0,
+   "zero_window_from_device": 0,
+   "syn_retransmits": 0
+  }
+ }
+}
