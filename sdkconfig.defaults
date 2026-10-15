@@ -39,12 +39,3 @@ CONFIG_LV_USE_QRCODE=y
 # 63384 B usable pool). Shared by esp32_release and esp32_bringup. The free-heap
 # gain is only claimed after the hardware re-measurement.
 CONFIG_LV_MEM_SIZE=49152
-
-# PR #203 / RES-01 F2 stage E (S3): one bounded attempt to reduce the heap bound
-# by TCP send queues during HTTP send phases (default 5760 B = 4 x MSS 1440).
-# Owner decision after G1b R1b: the decoded 1696 B Wi-Fi RX allocation failure
-# under HTTP send load justifies the attempt; no success claim until the A/B
-# hardware comparison. Shared by esp32_release and esp32_bringup. Valid range
-# in ESP-IDF 6.1 Kconfig: >= 2440 B. Plan:
-# docs/tasks/issue-27-res01-f2-escalation-plan.md (O1, stage E).
-CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
