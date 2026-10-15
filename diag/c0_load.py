@@ -17,10 +17,22 @@ BAD = re.compile(r"heap_alloc_failed|abort\(\)|panic|Guru Meditation|task_wdt|Br
 HEARTBEAT = re.compile(r"heartbeat: safe test mode, uptime_ms=\d+\b")
 LOGIN_TIMEOUT_SECONDS = 8.0
 REQUEST_TIMEOUT_SECONDS = 3.0
+# Explicitly enabled observation mode (diagnosis only, not a product safety or acceptance threshold):
+# after the first genuine network timeout during the load the run is irreversibly FAIL/HOLD but keeps
+# observing for at most OBSERVE_WINDOW_SECONDS, and stops hard at the OBSERVE_MAX_TIMEOUTS-th genuine
+# timeout. The default hard-stop behaviour is unchanged.
+OBSERVE_WINDOW_SECONDS = 20.0
+OBSERVE_MAX_TIMEOUTS = 8
+MAX_SAMPLES = 20000  # fail-closed volume limit for the evidence file
 
 
 class Guard:
-    def __init__(self):
+    def __init__(self, observe_window_seconds=None, observe_max_timeouts=OBSERVE_MAX_TIMEOUTS):
+        self.observe_window = observe_window_seconds  # None = default hard-stop mode
+        self.observe_max = observe_max_timeouts
+        self.first_failure = None
+        self.network_timeouts = []
+        self._timer = None
         self.stopped = threading.Event()
         self.lock = threading.Lock()
         self.connections = set()
@@ -57,7 +69,48 @@ class Guard:
                 self.abort_epoch = time.time()
                 self.abort_monotonic = time.monotonic()
             self.stopped.set()
+            timer = self._timer
+        if timer is not None:
+            timer.cancel()
         self.close_sockets()
+
+    def observe_timeout(self, started_epoch, phase):
+        """Record a genuine (not abort-induced) network timeout of a load request.
+        Returns True while the run is still being observed, False when it is stopped."""
+        event = {"epoch": time.time(), "start_epoch": started_epoch, "phase": phase,
+                 "after_stop": self.stopped.is_set()}
+        with self.lock:
+            self.network_timeouts.append(event)
+            if event["after_stop"]:
+                return False
+            if self.first_failure is None:
+                self.first_failure = dict(event)
+                self._timer = threading.Timer(self.observe_window,
+                                              lambda: self.abort("observation-window-end"))
+                self._timer.daemon = True
+                self._timer.start()
+            count = sum(1 for item in self.network_timeouts if not item["after_stop"])
+        if count >= self.observe_max:
+            self.abort("observation-timeout-limit")
+        return True
+
+    def finish_observation(self):
+        """The planned load ended after an observed failure: no recovery claim, stop."""
+        if self.first_failure is not None and not self.stopped.is_set():
+            self.abort("observation-load-end")
+
+    def observation_summary(self):
+        first = self.first_failure
+        return {"enabled": self.observe_window is not None,
+                "window_seconds": self.observe_window, "max_network_timeouts": self.observe_max,
+                "first_network_timeout": first,
+                "network_timeouts": self.network_timeouts,
+                "network_timeout_count_before_stop": sum(1 for e in self.network_timeouts if not e["after_stop"]),
+                "stop_reason": self.reason,
+                "observation_seconds": (round(self.abort_epoch - first["epoch"], 3)
+                                        if first and self.abort_epoch else None),
+                "final_state": "FAIL/HOLD" if first or self.stopped.is_set() else None,
+                "note": "diagnosis window only; no acceptance or recovery claim after a first failure"}
 
     def request(self, host, method, path, body=None, cookie=None):
         if self.stopped.is_set():
@@ -86,7 +139,7 @@ class Guard:
             return (response.status, payload, response.getheader("Set-Cookie"),
                     (time.monotonic() - started) * 1000,
                     None if response.status == 200 else "http-status-error",
-                    started_epoch, phase, False)
+                    started_epoch, phase, False, False)
         except (OSError, http.client.HTTPException) as error:
             # Fixed classes only: never serialize the exception or its message.
             error_class = ("timeout" if isinstance(error, TimeoutError) else
@@ -96,9 +149,14 @@ class Guard:
             # an abort; a connect()-phase failure is a client finding of its own.
             with self.lock:
                 abort_induced = connection in self.shut_down
-            self.abort("request-failure")
+            observed = False
+            if (self.observe_window is not None and error_class == "timeout" and not abort_induced
+                    and not (method == "POST" and path == "/api/v1/login")):
+                observed = self.observe_timeout(started_epoch, phase)
+            if not observed:
+                self.abort("request-failure")
             return (-1, b"", None, (time.monotonic() - started) * 1000, error_class,
-                    started_epoch, phase, abort_induced)
+                    started_epoch, phase, abort_induced, observed)
         finally:
             with self.lock:
                 self.connections.discard(connection)
@@ -142,7 +200,9 @@ def run(args):
     if not args.uart.is_file():
         raise SystemExit("Existing live UART log required; this driver never opens a serial port.")
     args.output.mkdir(parents=True, exist_ok=False)
-    guard = Guard()
+    observe = bool(getattr(args, "observe", False))
+    guard = Guard(observe_window_seconds=getattr(args, "observe_window_seconds", OBSERVE_WINDOW_SECONDS) if observe else None,
+                  observe_max_timeouts=getattr(args, "observe_max_timeouts", OBSERVE_MAX_TIMEOUTS))
     finished = threading.Event()
     heartbeat_ready = threading.Event()
     samples = []
@@ -157,7 +217,7 @@ def run(args):
         if result is None:
             return None
         (status, payload, set_cookie, milliseconds, error_class,
-         started_epoch, error_phase, abort_induced) = result
+         started_epoch, error_phase, abort_induced, observed) = result
         with samples_lock:
             # "epoch" stays the request END (compatible with earlier evidence).
             samples.append({"epoch": time.time(), "start_epoch": started_epoch,
@@ -165,8 +225,12 @@ def run(args):
                             "status": status, "milliseconds": milliseconds,
                             "error_class": error_class,
                             "error_phase": error_phase if error_class else None,
-                            "abort_induced": abort_induced})
-        if status != 200:
+                            "abort_induced": abort_induced,
+                            "observed_network_timeout": observed})
+            too_many = len(samples) > MAX_SAMPLES
+        if too_many:
+            guard.abort("sample-volume-limit")  # fail closed instead of dropping evidence
+        if status != 200 and not observed:
             guard.abort("http-status-failure")
         return status, payload, set_cookie
 
@@ -232,6 +296,7 @@ def run(args):
                 futures = [workers.submit(poll, index, cookie) for index, cookie in enumerate(sessions)]
                 for future in futures:
                     future.result()
+            guard.finish_observation()
             guard.close_sockets()
             mark("load-ended-client-sockets-closed-no-logout")
             if not guard.stopped.is_set():
@@ -244,6 +309,7 @@ def run(args):
         guard.close_sockets()
         finished.set()
         monitor.join(timeout=1.0)
+        failed = guard.stopped.is_set() or guard.first_failure is not None
         document = {"profile": "P-A", "gate": args.gate_id,
                     "sessions_created": len(sessions), "duration_load_seconds": 1200,
                     "idle_reference_seconds": 60, "recovery_seconds": 300,
@@ -253,14 +319,15 @@ def run(args):
                         "POST /api/v1/login": LOGIN_TIMEOUT_SECONDS,
                         "other requests (including API/shell GETs)": REQUEST_TIMEOUT_SECONDS},
                     "monitoring_policy": "fresh heartbeat before login; max 5 s gap throughout all phases",
-                    "status": "FAIL" if guard.stopped.is_set() else "COMPLETED_PENDING_REVIEW",
-                    "evidence_gate": "HOLD" if guard.stopped.is_set() else "NOT_EVALUATED",
+                    "status": "FAIL" if failed else "COMPLETED_PENDING_REVIEW",
+                    "evidence_gate": "HOLD" if failed else "NOT_EVALUATED",
+                    "observation": guard.observation_summary(),
                     "abort": guard.reason, "abort_epoch": guard.abort_epoch,
                     "abort_monotonic": guard.abort_monotonic,
                     "marks": marks, "samples": samples}
         (args.output / "load.json").write_text(json.dumps(document, indent=2))
         sessions.clear()
-    return 1 if guard.stopped.is_set() else 0
+    return 1 if (guard.stopped.is_set() or guard.first_failure is not None) else 0
 
 
 def parse_args():
@@ -271,6 +338,9 @@ def parse_args():
     parser.add_argument("--uart", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--abort-file",type=Path)
+    parser.add_argument("--observe-network-timeouts", dest="observe", action="store_true",
+                        help="diagnosis only: keep observing at most 20 s after the first genuine network timeout "
+                             "(hard stop at the 8th); default is the unchanged hard stop")
     return parser.parse_args()
 
 

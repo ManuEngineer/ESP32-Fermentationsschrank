@@ -18,6 +18,7 @@ from c0_load import BAD, HEARTBEAT, run as load_run
 POST_ANOMALY_TAIL_SECONDS = 5.0
 POST_ANOMALY_TAIL_MAX_READS = 120  # bounds the tail even if the clock is frozen
 NO_TAIL = {'host-interrupt', 'capture-failure'}
+MAX_RAW_BYTES = 256 * 1024 * 1024  # fail-closed volume limit; safety-relevant UART lines are never dropped
 
 
 def post_anomaly_tail(board,raw,chunks,tail_log,pending,result):
@@ -52,6 +53,7 @@ def capture(args):
     uart=args.output/'uart.log'
     abort_file=args.output/'ABORT'
     result={'start_epoch':time.time(),'start_monotonic':time.monotonic(),
+            'observation_mode':bool(getattr(args,'observe_network_timeouts',False)),
             'tool_sha256':{n:hashlib.sha256((Path(__file__).parent/n).read_bytes()).hexdigest()
                            for n in ('g1_capture.py','c0_load.py')}}
     ready=actors=profile=network=source=False
@@ -59,6 +61,7 @@ def capture(args):
     resets=0
     last_uptime=None
     offset=b''
+    raw_total=0
     failure=None
     loader=None
     next_socket_snapshot=0.0
@@ -89,6 +92,9 @@ def capture(args):
                     chunks.write(json.dumps({'epoch':time.time(),'monotonic':time.monotonic(),
                                              'bytes':len(data)})+'\n')
                 offset+=data
+                raw_total+=len(data)
+                if raw_total>MAX_RAW_BYTES:
+                    failure='log-volume-limit';break
                 while b'\n' in offset:
                     line,offset=offset.split(b'\n',1)
                     text=line.decode(errors='replace')
@@ -132,7 +138,8 @@ def capture(args):
                 if args.load and loader is None and (args.output/'START_LOAD').exists() and all((source,ready,actors,profile,network)) and last_uptime is not None and last_uptime>=180000:
                     def load():
                         result['load_exit']=load_run(SimpleNamespace(run=True,gate_id=args.gate_id,
-                            host=args.host,uart=uart,output=args.output/'load',abort_file=abort_file))
+                            host=args.host,uart=uart,output=args.output/'load',abort_file=abort_file,
+                            observe=bool(getattr(args,'observe_network_timeouts',False))))
                     loader=threading.Thread(target=load)
                     loader.start()
                 if loader is not None and not loader.is_alive():
@@ -170,4 +177,6 @@ if __name__=='__main__':
     p.add_argument('--host',default='192.168.1.68')
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--load',action='store_true')
+    p.add_argument('--observe-network-timeouts',action='store_true',
+                   help='diagnosis only: forwarded to the load driver (<= 20 s observation after the first genuine network timeout, hard stop at the 8th); heap_alloc_failed, panic, watchdog, brownout, reset, heartbeat gap and stack limits stay immediate hard stops')
     raise SystemExit(capture(p.parse_args()))

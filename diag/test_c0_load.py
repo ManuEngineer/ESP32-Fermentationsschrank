@@ -471,3 +471,127 @@ class G1SupervisorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ObservationModeTests(unittest.TestCase):
+    """Explicitly enabled diagnosis mode: default hard stop stays unchanged (see the tests above)."""
+    SECRET = "offline-secret-marker"
+
+    def timeout_request(self, guard, phase="io", method="GET", path="/api/v1/status"):
+        connection = Mock(sock=None)
+        if phase == "connect":
+            connection.connect.side_effect = TimeoutError(self.SECRET)
+        else:
+            connection.getresponse.side_effect = TimeoutError(self.SECRET)
+        with patch("c0_load.http.client.HTTPConnection", return_value=connection):
+            return guard.request("unused.invalid", method, path)
+
+    def assert_no_timer_threads(self):
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and any(
+                isinstance(t, threading.Timer) and t.is_alive() for t in threading.enumerate()):
+            time.sleep(0.01)
+        self.assertEqual([], [t for t in threading.enumerate() if isinstance(t, threading.Timer) and t.is_alive()])
+
+    def test_default_mode_is_the_unchanged_hard_stop(self):
+        guard = Guard()
+        result = self.timeout_request(guard)
+        self.assertIsNone(guard.observe_window)
+        self.assertEqual((-1, "timeout", False), (result[0], result[4], result[8]))
+        self.assertTrue(guard.stopped.is_set())
+        self.assertEqual("request-failure", guard.reason)
+        self.assertIsNone(guard.first_failure)
+
+    def test_single_timeout_is_observed_for_the_window_then_fail_hold(self):
+        for phase in ("io", "connect"):
+            with self.subTest(phase=phase):
+                guard = Guard(observe_window_seconds=0.2)
+                result = self.timeout_request(guard, phase)
+                self.assertTrue(result[8])  # observed, not aborted
+                self.assertFalse(result[7])
+                self.assertFalse(guard.stopped.is_set())
+                self.assertEqual(phase, guard.first_failure["phase"])
+                self.assertTrue(guard.stopped.wait(2.0))
+                self.assertEqual("observation-window-end", guard.reason)
+                summary = guard.observation_summary()
+                self.assertEqual("FAIL/HOLD", summary["final_state"])
+                self.assertTrue(0.15 <= summary["observation_seconds"] < 1.5)
+                self.assertEqual(1, summary["network_timeout_count_before_stop"])
+                self.assertNotIn(self.SECRET, json.dumps(summary))
+        self.assert_no_timer_threads()
+
+    def test_timeout_storm_stops_hard_at_the_eighth_genuine_timeout(self):
+        guard = Guard(observe_window_seconds=60.0)
+        for count in range(1, 8):
+            self.timeout_request(guard, "connect")
+            self.assertFalse(guard.stopped.is_set(), count)
+        self.timeout_request(guard, "io")
+        self.assertTrue(guard.stopped.is_set())
+        self.assertEqual("observation-timeout-limit", guard.reason)
+        self.assertEqual(8, guard.observation_summary()["network_timeout_count_before_stop"])
+        self.assert_no_timer_threads()  # the 60 s timer was cancelled by the abort
+
+    def test_everything_but_a_genuine_load_timeout_still_stops_immediately(self):
+        cases = ((ConnectionResetError(self.SECRET), "GET", "/api/v1/status"),
+                 (http.client.BadStatusLine(self.SECRET), "GET", "/"),
+                 (TimeoutError(self.SECRET), "POST", "/api/v1/login"))  # login/auth is never observed
+        for error, method, path in cases:
+            with self.subTest(error=type(error).__name__, path=path):
+                guard = Guard(observe_window_seconds=60.0)
+                connection = Mock(sock=None)
+                connection.getresponse.side_effect = error
+                with patch("c0_load.http.client.HTTPConnection", return_value=connection):
+                    result = guard.request("unused.invalid", method, path)
+                self.assertFalse(result[8])
+                self.assertTrue(guard.stopped.is_set())
+                self.assertEqual("request-failure", guard.reason)
+                self.assertIsNone(guard.first_failure)
+        self.assert_no_timer_threads()
+
+    def test_uart_or_supervisor_stop_during_the_window_wins_and_cancels_the_timer(self):
+        guard = Guard(observe_window_seconds=0.3)
+        self.timeout_request(guard)
+        guard.abort("uart-anomaly")  # heap_alloc_failed, panic, watchdog, ... from the monitor
+        self.assertEqual("uart-anomaly", guard.reason)
+        time.sleep(0.5)
+        self.assertEqual("uart-anomaly", guard.reason)  # the window end did not overwrite it
+        self.assertEqual("FAIL/HOLD", guard.observation_summary()["final_state"])
+        self.assert_no_timer_threads()
+
+    def test_abort_induced_errors_are_not_counted_as_network_timeouts(self):
+        guard = Guard(observe_window_seconds=60.0)
+        self.timeout_request(guard)
+        victim = Mock(sock=Mock())
+        guard.connections.add(victim)
+        victim.getresponse.side_effect = TimeoutError(self.SECRET)
+        guard.close_sockets()  # marks the connection as shut down by the guard
+        with patch("c0_load.http.client.HTTPConnection", return_value=victim):
+            result = guard.request("unused.invalid", "GET", "/")
+        self.assertTrue(result[7])  # abort-induced
+        self.assertFalse(result[8])
+        self.assertEqual(1, len(guard.network_timeouts))
+        guard.abort("observation-window-end")
+        self.assert_no_timer_threads()
+
+    def test_timeouts_after_the_stop_are_recorded_but_do_not_count(self):
+        guard = Guard(observe_window_seconds=60.0)
+        self.timeout_request(guard)
+        guard.abort("g1-supervisor-stop")
+        result = self.timeout_request(guard, "connect")
+        self.assertIsNone(result)  # stopped guards issue no further request
+        guard.observe_timeout(time.time(), "connect")
+        summary = guard.observation_summary()
+        self.assertEqual(1, summary["network_timeout_count_before_stop"])
+        self.assertEqual(2, len(summary["network_timeouts"]))
+        self.assertTrue(summary["network_timeouts"][1]["after_stop"])
+
+    def test_load_end_after_an_observed_failure_stops_without_a_recovery_claim(self):
+        quiet = Guard(observe_window_seconds=60.0)
+        quiet.finish_observation()
+        self.assertFalse(quiet.stopped.is_set())
+        guard = Guard(observe_window_seconds=60.0)
+        self.timeout_request(guard)
+        guard.finish_observation()
+        self.assertTrue(guard.stopped.is_set())
+        self.assertEqual("observation-load-end", guard.reason)
+        self.assert_no_timer_threads()
