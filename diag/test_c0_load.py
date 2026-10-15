@@ -475,14 +475,14 @@ if __name__ == "__main__":
 
 class ObservationModeTests(unittest.TestCase):
     """Explicitly enabled diagnosis mode: default hard stop stays unchanged (see the tests above)."""
-    SECRET = "offline-secret-marker"
+    SENSITIVE_MARKER = "offline-password-cookie-csrf-body-marker"
 
     def timeout_request(self, guard, phase="io", method="GET", path="/api/v1/status"):
         connection = Mock(sock=None)
         if phase == "connect":
-            connection.connect.side_effect = TimeoutError(self.SECRET)
+            connection.connect.side_effect = TimeoutError(self.SENSITIVE_MARKER)
         else:
-            connection.getresponse.side_effect = TimeoutError(self.SECRET)
+            connection.getresponse.side_effect = TimeoutError(self.SENSITIVE_MARKER)
         with patch("c0_load.http.client.HTTPConnection", return_value=connection):
             return guard.request("unused.invalid", method, path)
 
@@ -517,7 +517,7 @@ class ObservationModeTests(unittest.TestCase):
                 self.assertEqual("FAIL/HOLD", summary["final_state"])
                 self.assertTrue(0.15 <= summary["observation_seconds"] < 1.5)
                 self.assertEqual(1, summary["network_timeout_count_before_stop"])
-                self.assertNotIn(self.SECRET, json.dumps(summary))
+                self.assertNotIn(self.SENSITIVE_MARKER, json.dumps(summary))
         self.assert_no_timer_threads()
 
     def test_timeout_storm_stops_hard_at_the_eighth_genuine_timeout(self):
@@ -532,9 +532,9 @@ class ObservationModeTests(unittest.TestCase):
         self.assert_no_timer_threads()  # the 60 s timer was cancelled by the abort
 
     def test_everything_but_a_genuine_load_timeout_still_stops_immediately(self):
-        cases = ((ConnectionResetError(self.SECRET), "GET", "/api/v1/status"),
-                 (http.client.BadStatusLine(self.SECRET), "GET", "/"),
-                 (TimeoutError(self.SECRET), "POST", "/api/v1/login"))  # login/auth is never observed
+        cases = ((ConnectionResetError(self.SENSITIVE_MARKER), "GET", "/api/v1/status"),
+                 (http.client.BadStatusLine(self.SENSITIVE_MARKER), "GET", "/"),
+                 (TimeoutError(self.SENSITIVE_MARKER), "POST", "/api/v1/login"))  # login/auth is never observed
         for error, method, path in cases:
             with self.subTest(error=type(error).__name__, path=path):
                 guard = Guard(observe_window_seconds=60.0)
@@ -563,7 +563,7 @@ class ObservationModeTests(unittest.TestCase):
         self.timeout_request(guard)
         victim = Mock(sock=Mock())
         guard.connections.add(victim)
-        victim.getresponse.side_effect = TimeoutError(self.SECRET)
+        victim.getresponse.side_effect = TimeoutError(self.SENSITIVE_MARKER)
         guard.close_sockets()  # marks the connection as shut down by the guard
         with patch("c0_load.http.client.HTTPConnection", return_value=victim):
             result = guard.request("unused.invalid", "GET", "/")
