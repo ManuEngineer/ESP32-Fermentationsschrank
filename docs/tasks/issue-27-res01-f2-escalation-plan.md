@@ -31,8 +31,10 @@ Stufe D (S0–S2, freigegebene SHA `3bb29481495c4baca540ada1f3ae5433a5b46a34`): 
 R1b `FAIL/HOLD` (dekodierte 1 696-B-WLAN-RX-Allokation, `caps=0x1800`); Stufe E mit O1 (S3):
 B1 761 s, B2 101 s, OBS1R erster Netzwerk-Timeout nach 117 s (jeweils `FAIL/HOLD`),
 Stillstandsbeginn bei gesundem Heap (groesster Block 38 912 B) ohne Shell-Handler;
-NETPROBE1 vom Owner nach 12 von 20 Bursts abgebrochen (Teilergebnis, teils
-`INDETERMINATE` wegen Neighbor-Zustand). Die Ursache (AP, Funkweg, WLAN-Treiber, lwIP)
+NETPROBE1 vom Owner nach 12 von 20 Bursts abgebrochen (Phase 2 nicht ausgefuehrt; 15 von 36
+Echos beantwortet, 4 Bursts ohne Antwort, 3 von 12 Bursts wegen Neighbor-/ARP-Zustand
+`INDETERMINATE`, davon 2 ohne Antwort). Neue Funkbeobachtung des Owners (UniFi): −86 dBm, danach
+−69 dBm; kein Kausalnachweis, keine RSSI-Schranke (Plan F1/F4 Status/§7.2). Die Ursache (AP, Funkweg, WLAN-Treiber, lwIP)
 ist **nicht belegt**; O1 ist weder als Wirkung noch als Schaden belegt.
 
 ## 1. Ziel und Nicht-Ziele

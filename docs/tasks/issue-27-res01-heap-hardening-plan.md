@@ -27,10 +27,16 @@ beschreibt Abschnitt 7.2 (ein realer Browser mit dem vorhandenen 5-s-Polling).
 - G1 IMAGE01 (P-A, F4-/Diagnose-Overlay): `FAIL/HOLD` (`heap_alloc_failed`, 311,9 s).
 - G1b/F2-Diagnose: R1 `HOLD`, R1b `FAIL/HOLD` (1 696-B-WLAN-RX-Allokation, dekodiert),
   Stufe E: B1/B2 `FAIL/HOLD`, OBS1R `FAIL/HOLD` (Klasse O-B), NETPROBE1 vom Owner nach 12 von
-  20 Bursts abgebrochen (Teilergebnis). Details: Review-Branch `agent/pr203-res01-g1-review-nonmerge`.
+  20 Bursts abgebrochen (Phase 2 nicht ausgefuehrt; 15 von 36 ICMP-Antworten, 4 Bursts ohne
+  Antwort, 3 von 12 Bursts wegen Neighbor-/ARP-Zustand `INDETERMINATE`, davon 2 ohne Antwort;
+  Teilergebnis, kein bewiesener Fehler in ESP-IDF/lwIP oder Funk). Details: Review-Branch `agent/pr203-res01-g1-review-nonmerge`.
 - Die dabei beobachteten **WLAN-/TCP-Stillstaende** (verzoegerte Quittungen/SYN-ACKs,
   teils auch im Leerlauf, bei gesundem Heap) bleiben als **offene historische Evidence**
   erhalten; ihre Ursache ist **nicht** belegt (AP, Funkweg, WLAN-Treiber, lwIP offen).
+- **Neue Funkbeobachtung (Owner, UniFi-Controller):** am ESP32-Client zunaechst **−86 dBm**, danach
+  **−69 dBm**. Messzeitpunkt, AP-Zuordnung und Messrichtung sind nur soweit gesichert, wie vorhandene
+  Controller-Daten sie belegen; der bessere Wert ist **kein Kausalnachweis** und keine Garantie
+  langfristiger WLAN-Stabilitaet. Es wird keine feste RSSI-Grenze festgelegt.
 - Der nicht qualifizierte F2-Kandidat O1 (`CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880`) wird
   kontrolliert zurueckgebaut (Abschnitt 5 C5; [F2-Plan](issue-27-res01-f2-escalation-plan.md)).
 
@@ -362,7 +368,11 @@ Boot des **reinen Produktimages**; ein Wiederholungsprogramm ist nicht vorgesehe
 | U4 | Browser **schliessen** (Tab bzw. Browserprozess beenden), kein Client verbunden: autonome Regelung weiter, keine Webaktivitaet | 20 min |
 | U5 | Browser erneut oeffnen, **wieder verbinden** (Login, falls die Session abgelaufen ist), aktuellen Zustand pruefen (Programmstatus, Temperaturen, Alarme konsistent mit dem Geraet) | ≤ 10 min Beobachtung |
 
-Gesamt etwa 55–60 min. **Notwendige Evidence:** UART-Mitschnitt des gesamten Laufs
+Gesamt etwa 55–60 min. **Umgebungsnachweis (vorhandene Daten, kein zusaetzlicher Geraetezugriff):** vor und
+waehrend U0–U5 werden, soweit im UniFi-Controller verfuegbar, AP/BSSID, Signal, Verbindungs-/Retry-Ereignisse und
+das Zeitfenster festgehalten (Export oder Screenshot); fehlende Daten werden als `NOT_AVAILABLE` ausgewiesen, nichts
+nachtraeglich erfunden. Eine RSSI-Schranke wird nicht definiert. U4/U5 werden gezielt bewertet: Wiederverbinden
+nach 20 min Standalone-Betrieb und aktueller Zustand. **Notwendige Evidence:** UART-Mitschnitt des gesamten Laufs
 (Heap-/Blockverlauf, `heap_alloc_failed`, Reset-/Panic-Freiheit, Heartbeats, Regelzyklus-Lebenszeichen,
 Stack-HWM, `ui_skipped_low_memory`); Browser-Netzwerk-/Konsolenprotokoll (Statuscodes, fehlgeschlagene
 Anfragen, Timeouts) und Screenshots der Zustaende U1/U3/U5; Zustandsvergleich Geraet/Web vor und nach U4;
@@ -398,6 +408,14 @@ ein Fehler im realen R1-Nutzungsprofil (R1-U) konkret nachgewiesen wird**.
    um mehr als 256 B; sonst Stopp und Befund. `min_free` wird berichtet (Befund, kein automatischer Fail).
 6. F4: Falls das Gate ausloest, ist es geloggt, bei ausreichender Reserve erholt sich die Anzeige, ein
    gesperrter Reset-Hold bleibt bis Loslassen + neuem Kontakt wirkungslos; Gate-Ausloesen ist ein Befund.
+
+**Erreichbarkeitsproblem im Lauf:** Tritt beim Browserzugriff (insbesondere U1 oder U5) erneut ein
+Erreichbarkeitsproblem auf, wird der konkrete Browserfehler dokumentiert und das Ergebnis ist **HOLD**, nicht PASS;
+die Ursache (Funk/AP gegenueber Geraet) bleibt offen. Weist der Umgebungsnachweis eine gestoerte Testumgebung nach,
+wird keine fehlerfreie Produktabnahme behauptet; der Owner entscheidet getrennt ueber den Testumgebungsbefund. Einzelne
+alte ICMP-Verluste (NETPROBE1) sind **kein** automatischer R1-U-FAIL. Bei reproduzierbarer Stoerung im normalen
+Browserablauf wird ein offener Abnahmebefund `HOLD` vorgelegt und mit vorhandenen Daten eingegrenzt; O2, O3 oder
+`WIFI_PS_NONE` werden nicht eigenmaechtig umgesetzt.
 
 **Reale Fehler oder Resets unter diesem Profil bleiben Blocker.** Ein fehlerfreier R1-U-Lauf belegt nur
 das getestete Profil, den Zeitraum und das Image; er beweist weder allgemeine OOM-Sicherheit noch
