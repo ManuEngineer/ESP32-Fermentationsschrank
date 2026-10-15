@@ -473,6 +473,9 @@ vorgesehen**, ausser ein Fehler im R1-Nutzungsprofil wird konkret nachgewiesen (
 | **D8** | **O1-Rueckbau** (C5): Entfernen des 2880-Blocks, Rueckkehr zu 5760, Tests nach Abschnitt 5 C5; keine Netzwerkdiagnostik/A-B in diesem PR | **offen**, Empfehlung Ja |
 | **D9** | Testaufbau fuer R1-U-Schritt U2: Bereitstellung gueltiger Commissioning-/Sensorwerte (oder alternative Programm-Startbarkeit am Devboard); G1' (F4-Qualifikation, Abschnitt 7.5) als Diagnose-Overlay-Messung | **offen** |
 
+**Ownerentscheide vom 2026-10-15 (nach G1P-2-Retest, `FAIL/HOLD` historisch, nicht umgewertet):**
+D6–D8 = JA; Stack = **A**: Der Hard-Stop `main-stack-reserve` (kleinster HWM 10 984 B frei von 24 576 B, Offline-Eingrenzung im Review-Branch `diag/review/g1p/G1P2_OFFLINE_EINGRENZUNG.md`) wird als akzeptierter Befund der erweiterten Touch-Navigation erfasst; die relative Grenze 11 160 B (D3-Baseline, nicht gleichwertige Abdeckung) gilt im G2-Web-Teiltest nur als Trend-/Reservebericht, nicht als Abbruchgrenze; Stacküberlauf, Panic, Watchdog, Reset oder sonstiger konkreter Fehler bleiben Hard-Stop. F4 = **A**: Skip 13 312 B / Resume 16 640 B unveraendert, `F4_THRESHOLD=PROVISIONAL_PENDING_G1`, `G1_QUALIFICATION=NOT_PROVEN`; die beobachteten 16 768 B sind gemeinsame Heap-Schwankung, keine belastbare Formelbasis. G2-Web = **JA, einmalig, `PARTIAL`**: ein App-only-Flash des C5-Produktimages `esp32_release` (App `ebb296c0…6633`, Commit `162a667`) auf dem sensor- und aktorlosen Devboard mit Display/Touch; ein Browser, 15 min 5-s-Polling, 20 min ohne Client, Wiederverbinden; Ergebnis hoechstens `PASS_PARTIAL` (kein U2/U2R/`R_ref`, kein `G2=PASS`, kein `PR203_FINAL_GO=GO`).
+
 ## 10. Risiken
 
 - Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung); C0 hat anhand
