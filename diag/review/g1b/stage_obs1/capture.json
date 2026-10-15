@@ -1,0 +1,23 @@
+{
+  "start_epoch": 1792057997.6168854,
+  "start_monotonic": 249202.578856666,
+  "observation_mode": true,
+  "tool_sha256": {
+    "g1_capture.py": "c2683f0e1f5865a72e13385d58916e73b201da10528b808f98c15e01614b0838",
+    "c0_load.py": "57eeb1f125dde1aece539b8990fdc6d260f4a8ec51174676d7862f69b4d502e4"
+  },
+  "post_anomaly_tail_seconds": 5.02,
+  "post_anomaly_tail_bytes": 9386,
+  "end_epoch": 1792058002.713596,
+  "end_monotonic": 249207.675566266,
+  "max_heartbeat_gap_seconds": 0.050292968982830644,
+  "gate": "PR203_RES01_G1B_OBS1",
+  "source_proven": false,
+  "ready": false,
+  "actors_disabled": false,
+  "release_profile": false,
+  "network_home_connected": false,
+  "expected_initial_reset_lines": 1,
+  "failure": "uart-unexpected-reset",
+  "status": "FAIL/HOLD"
+}
