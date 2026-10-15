@@ -16,9 +16,9 @@ Eine esptool-v5.3.1-Sitzung 04:08:37–04:11:22 UTC (Reset in den Bootloader, `r
 | UART/Heap | keine `heap_alloc_failed`-, `diag_alloc_fail`-, Panic-, Watchdog-Zeile; `diag_30s` bei Uptime 182 s: frei 41 264 B, Minimum 32 420 B, grösster Block 38 912 B, Main-Stack 11 688 B |
 | Mitschnitt | `pcap_result.json`: **PASS**, Exitcode 0, 9 Pakete = tcpdump-Meldung, payloadfrei verifiziert, tcpdump beendet; Tool-Hash = Manifest |
 
-## Drahtbefund (Q2, abgeleitet aus `analyze`, relative Zeiten)
+## Drahtbefund (Q2, abgeleitet aus `analyze`, relative Zeiten; nur bis zur Host-Schnittstelle)
 
-Eine Verbindung: SYN, **SYN/ACK nach 55,6 ms**, Handshake-ACK, danach zwei Datensegmente des Hosts (178 B + 31 B = Login-POST) bei 0,056 s. **Das Gerät sendet danach kein einziges Paket mehr** (keine ACKs, keine Antwort, kein RST, Zero-Window 0). Der Host wiederholt das 209-B-Segment bei 0,32 / 0,86 / 1,92 / 4,10 s, dann Abbruch durch den 8-s-Timeout. Es gibt damit **kein Anwendungs-, sondern ein TCP-Stillstandsbild**: Verbindung bei lwIP aufgebaut, eingehende Daten bleiben ≥ 4 s unbestätigt, obwohl Heap und Heartbeat normal sind. Ursache `NOT_PROVEN` (z. B. Wi-Fi-Empfang, `tcpip`-Task, Annahmewarteschlange, Funk).
+Eine Verbindung: SYN, **SYN/ACK nach 55,6 ms**, Handshake-ACK, danach zwei Datensegmente des Hosts (178 B + 31 B = Login-POST) bei 0,056 s. **Der Host beobachtet danach kein einziges Paket vom Gerät mehr** (keine ACKs, keine Antwort, kein RST, kein Zero-Window). Der Host wiederholt das 209-B-Segment bei 0,32 / 0,86 / 1,92 / 4,10 s, dann bricht der 8-s-Timeout ab. Das Host-Pcap zeigt nur den Weg **bis zur Host-Schnittstelle**: Ob das AP/WLAN die Daten ans Gerät lieferte, ob das Gerät sie empfing oder ob dessen ACKs den Host nicht erreichten, ist **nicht belegt**. Ein geräteseitiger TCP-Stillstand ist **keine** bewiesene Ursache; Ursache `NOT_PROVEN`.
 
 ## Befunde zu den Werkzeugen (nicht verändert)
 
