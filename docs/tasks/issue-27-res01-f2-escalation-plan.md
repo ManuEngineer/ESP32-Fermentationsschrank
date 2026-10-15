@@ -1,19 +1,43 @@
 # Issue #27 / PR #203 – RES-01 F2-Eskalation: Heap-Reserve in der HTTP-Sendephase (Plan)
 
-Status: `PLAN_ONLY_PENDING_INDEPENDENT_PLAN_REVIEW`. Keine Umsetzung, kein Build,
-kein Flash, kein Reset, keine Last, kein Touch, kein G2, kein Merge.
+Status: `PLAN_REVISION_R1_ABNAHME_PENDING_OWNER_APPROVAL` (Revision vom 2026-10-15).
+Diese Revision ist nur Dokumentation: keine Firmware-, Werkzeug- oder Hardwareaktion.
 `G1_IMAGE01=FAIL/HOLD`, `RES-01=BLOCKER`, `F4_THRESHOLD=PROVISIONAL_PENDING_G1`,
-`PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO` bleiben unveraendert.
+`O1_QUALIFICATION=NOT_PROVEN`, `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`
+bleiben unveraendert.
+
+**Aenderung durch Ownerentscheid (2026-10-15):** Die Weboberflaeche dient dem
+Einstellen und gelegentlichen Kontrollieren; vier gleichzeitig intensiv pollende
+Sessions mit vielen neuen TCP-Verbindungen sind keine R1-Pflichtanforderung. Damit
+ist F2 **nicht mehr Teil des Abnahmepfads**. Der erprobte Kandidat O1
+(`CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880`, Commit `ba32717`) ist nicht qualifiziert
+(kein stabiler Nutzen, kein Schaden belegt, n klein) und wird nach Schnitt **S5**
+auf den vorherigen Wert 5760 zurueckgebaut. Stufe D/E, NETPROBE1 und alle
+bisherigen Diagnoseergebnisse bleiben als **historische Evidence** (siehe
+Review-Branch `agent/pr203-res01-g1-review-nonmerge`); die dabei beobachteten
+WLAN-/TCP-Stillstaende bleiben **offen** (Ursache nicht belegt). **Weitere NETPROBE1-,
+A/B- oder Netzwerkdiagnostik ist in diesem PR nicht vorgesehen**, es sei denn, ein
+Fehler im realen R1-Nutzungsprofil (R1-U, Plan F1/F4 Abschnitt 7.2) wird konkret
+nachgewiesen; dann folgt ein neuer Plan.
 
 Dieser Plan ist der "eigene Plan" nach Abschnitt 8 von
 `docs/tasks/issue-27-res01-heap-hardening-plan.md` (im Folgenden **Plan F1/F4**).
-Er ist eigenstaendig lesbar; die dort freigegebenen Abschnitte 7 (Hardwareverifikation,
-Lastprofile, Abnahmekriterien) und 9 (D1–D5) gelten unveraendert und werden hier
-nur referenziert, nicht kopiert und nicht reduziert.
+Er ist eigenstaendig lesbar. Die Abnahme richtet sich nach Plan F1/F4 Abschnitt 7
+(R1-U, Revision 2026-10-15); die dort frueher geforderten Profile P-A/P-A2/P-B sind
+nur noch diagnostisch. Historische `FAIL`-Ergebnisse werden **nicht** umgewertet.
+
+**Bisherige Ergebnisse dieses F2-Plans (Stand Revision, unveraendert berichtet):**
+Stufe D (S0–S2, freigegebene SHA `3bb29481495c4baca540ada1f3ae5433a5b46a34`): R1 `HOLD`,
+R1b `FAIL/HOLD` (dekodierte 1 696-B-WLAN-RX-Allokation, `caps=0x1800`); Stufe E mit O1 (S3):
+B1 761 s, B2 101 s, OBS1R erster Netzwerk-Timeout nach 117 s (jeweils `FAIL/HOLD`),
+Stillstandsbeginn bei gesundem Heap (groesster Block 38 912 B) ohne Shell-Handler;
+NETPROBE1 vom Owner nach 12 von 20 Bursts abgebrochen (Teilergebnis, teils
+`INDETERMINATE` wegen Neighbor-Zustand). Die Ursache (AP, Funkweg, WLAN-Treiber, lwIP)
+ist **nicht belegt**; O1 ist weder als Wirkung noch als Schaden belegt.
 
 ## 1. Ziel und Nicht-Ziele
 
-**Ziel:** Mit dem kleinsten wirksamen Eingriff klaeren und, falls belegt, beheben,
+**Ziel:** Historisches Ziel der Eskalation (jetzt nicht mehr Abnahmepfad): mit dem kleinsten wirksamen Eingriff klaeren und, falls belegt, beheben,
 dass waehrend HTTP-Sendephasen (insbesondere der Shell-Antwort) der freie interne
 Heap so weit sinkt, dass der WLAN-Treiber eine Allokation (`size=1626 caps=0x80c`)
 nicht mehr erhaelt. Die Wahl des Hebels wird erst nach einem engen
@@ -27,8 +51,9 @@ Mess-/Entscheidungsgate getroffen.
   oder Sessionlimit;
 - WLAN-RX-/TX-Puffergrenzen nur als ausdruecklich ownerpflichtige Option O3
   (Abschnitt 3), nicht Teil der bevorzugten Option;
-- kein Testumfang-Abbau: P-A/P-A2/P-B/P-R, G1 und G2 aus Plan F1/F4 Abschnitt 7
-  bleiben massgeblich.
+- keine weitere Netzwerkdiagnostik, keine neuen A/B-Programme in diesem PR (siehe Status);
+- kein Testumfang-Abbau gegenueber Plan F1/F4 Abschnitt 7 in der Fassung vom 2026-10-15
+  (R1-U); P-A/P-A2/P-B sind dort als diagnostische Stresstests geführt.
 
 ## 2. Verifizierte Ausgangslage
 
@@ -79,9 +104,9 @@ erfuellt.
   editiert; die Praezisierung steht in Befund a. Eine Korrektur dort ist Teil der
   Dokumentationswirkung (Abschnitt 8) und braucht keine Ownerentscheidung.
 
-## 3. Optionen (einfachste zuerst) und Bewertung
+## 3. Optionen (einfachste zuerst) und Bewertung (historisch; O1 zurueckzubauen, O2/O3 nicht verfolgt)
 
-Alle Optionen sind Kandidaten; keine ist freigegeben. Savings sind rechnerische
+Alle Optionen waren Kandidaten. O1 wurde erprobt, ist nicht qualifiziert und wird zurueckgebaut (S5); O2/O3 wurden nie umgesetzt und sind in diesem PR nicht vorgesehen. Savings sind rechnerische
 Obergrenzen je gleichzeitig volle Sendewarteschlange, **keine Erfolgsbehauptung**
 (ungleichzeitige Peaks werden nicht gemittelt).
 
@@ -95,7 +120,7 @@ Obergrenzen je gleichzeitig volle Sendewarteschlange, **keine Erfolgsbehauptung*
 Nicht vorgeschlagen: Eigenentwicklung (Drossel, Pool, Antwortscheduler),
 Wi-Fi-Powersave-Aenderung (kein Beleg), F4-Schwellenaenderung (Abschnitt 1).
 
-### 3.1 Bevorzugte kleinste Option
+### 3.1 Bevorzugte kleinste Option (historischer Stand der Planung)
 
 **Gestufte Reihenfolge, je Stufe eigenes Owner-Gate:**
 
@@ -115,7 +140,7 @@ Keep-Alive/Backlog neue Fehlerklassen erzeugen. Die offene Unsicherheit von O1
 (Retransmit-Verhalten bei 2 Segmenten) wird durch das Gate gemessen, nicht
 angenommen.
 
-## 4. Mess- und Entscheidungsgate (Stufe D, schlank)
+## 4. Mess- und Entscheidungsgate (Stufe D, schlank; ausgefuehrt, historisch)
 
 **Zielfragen, die die Stufe entscheiden muss:** (Q1) Wer fordert 1626 B/`0x80c` an?
 (Q2) Gehen der Anomalie Retransmits/Zero-Window/Verlust am Draht voraus oder bleibt
@@ -149,11 +174,12 @@ aktorfrei, P-A bis zur ersten Anomalie oder 1200 s + 300 s P-R, bis zu 3 frische
 erste Fehlerrate dieses Images). Concrete Gate-Angaben (Commit, Hashes, Stopp) legt
 der Owner-Gate-Auftrag fest.
 
-## 5. Vergleichs- und Erfolgskriterien (vorab, nicht nachtraeglich waehlbar)
+## 5. Vergleichs- und Erfolgskriterien Stufe E (historisch; nicht mehr Abnahmepfad)
 
-**Rahmen:** Plan F1/F4 Abschnitt 7 bleibt massgeblich (P-A 3 ×, P-A2, P-B, P-R, G1,
-G2; harte Kriterien 1–6). Dieser Abschnitt ergaenzt nur die Vergleichslogik fuer
-Stufe E und verkuerzt nichts.
+**Rahmen:** Dieser Abschnitt beschreibt die fuer die erfolgte Stufe E vorab festgelegte
+Vergleichslogik (P-A-basierter A/B-Vergleich). Er ist **nicht** mehr Abnahmepfad; die
+R1-Abnahme steht in Plan F1/F4 Abschnitt 7 (R1-U). Die A/B-Ergebnisse bleiben
+historische Evidence und werden nicht umgewertet. Ein O1-Nutzen ist nicht belegt.
 
 **Arme und Bedingungen:**
 
@@ -214,7 +240,8 @@ Hardware-Handlungen sind je eigene Owner-Gates (Commit, Image-/ELF-Hash, App-onl
 | **S1** | Stufe-D-Hardwarelauf (G1b) | – | eigenes Owner-Gate G1b |
 | **S2** | Bericht Stufe D (BLOCKER/FOLLOW-UP/NO-ACTION, Hypothesenmatrix) und Entscheidungsregel Abschnitt 4 | Review-/Nicht-Merge-Branch | unabhaengiger Ergebnisreview; Owner entscheidet Stufe E |
 | **S3** | Nur bei Freigabe: `sdkconfig.defaults` um `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880` (produktiver Branch #203); Build beider ESP-IDF-Profile, Konfigurationsvertrags-/Architekturpruefung | `agent/issue-27-r1-web-dashboard-plan` | Planfreigabe + Owner-Gate Stufe E |
-| **S4** | A/B-Hardwarearme (Abschnitt 5), P-A 3 ×, P-A2, P-B, P-R | – | eigenes Owner-Gate je Arm; danach G2 gemaess Plan F1/F4 |
+| **S4** | A/B-Hardwarearme (Abschnitt 5), P-A 3 ×, P-A2, P-B, P-R | – | **entfaellt** (Ownerentscheid 2026-10-15); ausgefuehrte Teile (B1, B2, OBS1R, NETPROBE1) bleiben historische Evidence |
+| **S5** | **O1-Rueckbau (Produktcommit, nur Konfiguration):** den Block `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880` samt Kommentar aus `sdkconfig.defaults` entfernen (Rueckkehr zum Default 5760). Gezielte Tests: Build beider ESP-IDF-Profile (`scripts/build_esp_idf_profiles.py all`, zuvor die generierten, ignorierten `build/<profil>/sdkconfig` entfernen, da sie Vorrang vor den Defaults haben); aufgeloeste Werte `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5760` und `CONFIG_TCP_SND_BUF_DEFAULT=5760` in beiden `sdkconfig` und `config/sdkconfig.h`; Vergleich der aufgeloesten Konfiguration gegen den Stand vor O1 (Unterschied nur diese Zeilen); Architekturgrenzen, Build-Profil-/Quality-Gate-Selbsttests, Secretscan; native Tests unberuehrt. `test/esp_idf_http_server_adapter_host/sdkconfig` hat einen eigenen festen 5760-Wert und bleibt unveraendert. | `agent/issue-27-r1-web-dashboard-plan` | Freigabe der exakten Plan-SHA dieser Revision (Ownerentscheidung F2-D7); keine Aenderung vorher |
 
 ## 7. Offene Entscheidungen (Owner)
 
@@ -223,16 +250,17 @@ Hardware-Handlungen sind je eigene Owner-Gates (Commit, Image-/ELF-Hash, App-onl
 | F2-D1 | Freigabe dieses Plans (exakte SHA) | Ja |
 | F2-D2 | Stufe D (D1 + D2 + D3, nicht gleichzeitig mit Zusatzmassnahmen) als verbindliches Gate vor jeder Konfigurationsaenderung | Ja; `HEAP_TASK_TRACKING` zurueckgestellt |
 | F2-D3 | O1 als einziger Stufe-E-Kandidat; O2 nur nach negativem O1-Ergebnis; O3 nur nach ausdruecklichem Ownerentscheid | Ja |
-| F2-D4 | Latenz-/Durchsatztoleranz von B gegenueber A (Abschnitt 5, Vorschlag 1,25×) | Wert vor dem ersten Flash festlegen |
-| F2-D5 | Umgang mit der Restgefahr/Statistik (Abschnitt 5, Aussagegrenzen) | Abnahme nur mit ausdruecklicher Ownerakzeptanz |
-| F2-D6 | Hostprivileg fuer Header-Mitschnitt (D2) und Aufbewahrung der privaten Pcap-Dateien (nicht veroeffentlichen) | Ja, nur abgeleitete Zaehler publizieren |
+| F2-D4 | Latenz-/Durchsatztoleranz von B gegenueber A (1,25×, nur Bewertungsgroesse, kein Fail-Limit) | historisch, erledigt; keine weitere Verwendung |
+| F2-D5 | Restgefahr-/Statistikakzeptanz fuer eine B-Serie | **entfaellt** mit S4; ersetzt durch Plan F1/F4 D6/D7 (R1-U) |
+| F2-D6 | (historisch) Hostprivileg fuer Header-Mitschnitt (D2) und Aufbewahrung der privaten Pcap-Dateien (nicht veroeffentlichen) | Ja, nur abgeleitete Zaehler publizieren |
+| **F2-D7** | **O1-Rueckbau (S5)** auf 5760 mit den genannten Tests; keine Netzwerkdiagnostik/A-B/O2/O3 in diesem PR ohne konkret nachgewiesenen Fehler im R1-Nutzungsprofil. Entspricht Plan F1/F4 D8 | **offen**, Empfehlung Ja |
 
 ## 8. Dokumentationswirkung und Risiken
 
 - Nach Planfreigabe: `docs/ROADMAP.md` (RES-01-Zeile) um Verweis auf diesen Plan und
   Status ergaenzen; Plan F1/F4 Abschnitt 2 (1626-B-Zeile) um die Praezisierung aus
   Befund a korrigieren. Beides gehoert nicht zu diesem Plan-only-Commit.
-- Risiken: (1) O1 verlaengert Shell-Dauer/Latenztail (Abschnitt 3); (2) die
+- Risiken: (0) der Rueckbau (S5) aendert eine gemeinsame Konfiguration beider Profile; Abdeckung ueber Build-/Konfigurationstests, keine Hardwarewirkung behauptet; die WLAN-/TCP-Stillstaende bleiben offen; (1) (historisch) O1 verlaengert Shell-Dauer/Latenztail (Abschnitt 3); (2) die
   Stichprobe n ≤ 3 bleibt statistisch schwach (Abschnitt 5); (3) D1 laeuft auf dem
   Stack der fehlschlagenden Task (+ ≈ 112 B, Abbruchkriterium Abschnitt 4);
   (4) Funkbedingungen sind nicht instrumentiert; (5) das Ergebnis kann zeigen, dass F2

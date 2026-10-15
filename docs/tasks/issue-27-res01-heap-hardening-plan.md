@@ -1,49 +1,55 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `C0_GO_C1_C3_SOFTWARE_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`.
-Ownerfreigabe vom 2026-10-13 fuer die exakte Plan-SHA
-`6222efce976dc3bea3cf397c2dca56a5fb21859d`: D1–D5 = JA, einschliesslich
-TOCTOU-/OOM-Restgefahr mit moeglichem Reset (beobachteter Reset bleibt Testfehler).
-C0-Firmware ausschliesslich Diagnosebranch @ `9a9a8bd`, Treiber `cfcf282`;
-Owner akzeptiert am 2026-10-14 den unabhängigen R3-Ergebnisreview auf
-`ab0ae55e78fbd1f27825338cf5913b0648b59c19`, entscheidet **C0=GO** und
-genehmigt produktive Software-C1–C3 gemäß dieser freigegebenen Planbasis.
-F2 bleibt außerhalb; keine weiteren Hardwarehandlungen, G1/G2 separat.
-Owner genehmigt zusätzlich Option 1 des Schwellen-Korrekturdeltas auf dem
-Software-/Planstand `7b229be806f5fd7d2978a4f55bcbbb42797c71ad`: vorläufig
-Vektorblock × 2, `F4_PROVISIONAL_THRESHOLD=APPROVED`. Die Schwelle bleibt
-**`PROVISIONAL_PENDING_G1`**; Software-C1–C3 einschließlich produktiver
-Gate-Anbindung ist umgesetzt. G1 muss den wirklichen Render-/Touch-Bedarf
-auch für vom Gate unter Speicherlast übersprungene Pfade messen und die
-Schwelle nach Abschnitt 4/2 abschließend bestimmen. Keine Hardwarefreigabe,
-keine finale RES-01-/PR-Freigabe.
-[Softwarestand/Ownerentscheidung](../audits/PR203_RES01_SOFTWARE_20261014.md).
-Owner akzeptiert nach unabhängigem Review die begrenzte R2-Referenz (Baseline bleibt FAIL) und genehmigt am
-2026-10-14 separat G0-R3: Preflight, ein gepinnter C0-App-only-Flash, P-A/Recovery.
-**G0-R3-Ergebnis, C0-GO Owner-akzeptiert:** 120-s-Phasenvergleich zeigt medianes
-Build-Delta −7104 B, bessere minimale/mediane Heap-/Blockreserven; alle geplanten
-240 API-/40 Shell-Ticks je Session (3044 Antworten HTTP 200) und 300-s-Recovery
-ohne Anomalie. ≥90% des vergleichbaren Vier-Session-Idle nach 73,823 s,
-Stackgrenzen erfüllt. Aktive Antworten enden im unveränderten 1200-s-Schedule
-bei 1198,820 s; diese Ausführungsgrenze ist explizit dokumentiert.
-Befunde: Boot-Heapminimum 5228 B, fünf GET-Gesamtdauern >3 s bei
-unveränderten Sockettimeouts ohne Timeout-Exception; kein allgemeiner OOM-/F4-Nachweis.
-[Ergebnis/Evidence R3](../audits/PR203_G0_R3_20261014_RESULT.md), versiegeltes Paket
-`hw-evidence-pr203/diag/c0/g0_r3_20261014_run01/`. Ein App-Flash, keine Erase-all-
-oder Nicht-App-Änderung. Nach Messung keine weitere Hardwarehandlung.
-[Akzeptierte R2-Referenz](../audits/PR203_G0_R2_20261014_RESULT.md) und
-[alter G0-Login-STOP](../audits/PR203_G0_20261013_RESULT.md) unverändert.
-Nächster Schritt: Builder-Self-Check auf Implementierungs-HEAD, danach
-unabhängiger Software-Review. Kein G1/G2/Ready/Merge.
-`C0=GO`, `C0_OWNER_DECISION=GO`, `INDEPENDENT_G0_R3_RESULT_REVIEW=OWNER_ACCEPTED`,
-`G1_G2=NOT_AUTHORIZED`.
-Diese Fortschreibung aktualisiert den Owner-/Softwarestatus; die
-übrigen freigegebenen Abschnitte bleiben unverändert. Abschnitt 4/2
-enthält die ausdrücklich freigegebene vorläufige Schwellenanbindung;
-die abschließende Messbasis und Hardwarefreigabe bleiben offen.
-Basis: PR #203 (`ed29c9c`), Diagnose-Evidence D3
-(`hw-evidence-pr203/diag/run/`). `RES-01=BLOCKER` (Ownerentscheid),
-`PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
+Status: `PLAN_REVISION_R1_ABNAHME_PENDING_OWNER_APPROVAL` (Planrevision vom
+2026-10-15 auf Ownerentscheid; ersetzt keine historischen Ergebnisse). Diese Datei ist
+die vollstaendige, eigenstaendige Fassung; fuer die Umsetzung ist nur sie massgeblich.
+
+**Ownerentscheid zum Abnahmescope (2026-10-15):** Die Weboberflaeche dient zum
+Einstellen und gelegentlichen Kontrollieren; danach arbeitet der Fermenter weitgehend
+standalone. Vier gleichzeitig intensiv pollende Sessions mit vielen neuen
+TCP-Verbindungen sind **keine** R1-Pflichtanforderung. P-A/P-A2 und vier reale Browser
+sind **diagnostische Stresstests**, nicht zwingende R1-Abnahme. Die R1-Abnahme
+beschreibt Abschnitt 7.2 (ein realer Browser mit dem vorhandenen 5-s-Polling).
+
+**Bestaetigte Stuetzpunkte (unveraendert gueltig):**
+- Plan `6222efce976dc3bea3cf397c2dca56a5fb21859d` ownerfreigegeben (2026-10-13, D1–D5 = JA
+  fuer die damalige Fassung), C0 = GO nach unabhaengigem R3-Ergebnisreview (2026-10-14,
+  [R3-Evidence](../audits/PR203_G0_R3_20261014_RESULT.md), [akzeptierte R2-Referenz](../audits/PR203_G0_R2_20261014_RESULT.md)).
+- F1 (statischer Shell-Anhang per `httpd_resp_send_chunk`) und der gemessene Heapgewinn
+  bleiben erhalten: medianes Build-Phasendelta −7 104 B, bessere minimale/mediane
+  Heap-/Blockreserven (G0-R3).
+- Software-C1–C3 sind umgesetzt (Produktstand `d35ee85`, [Softwarestand](../audits/PR203_RES01_SOFTWARE_20261014.md));
+  F4-Schwelle ownerfreigegeben **vorlaeufig** (Skip 13 312 B / Resume 16 640 B,
+  `PROVISIONAL_PENDING_G1`); sie wird nach Abschnitt 4/2 und 7.5 nur in den relevanten
+  Pfaden qualifiziert.
+
+**Historische Ergebnisse (unveraendert, keine nachtraegliche Umwertung):**
+- G1 IMAGE01 (P-A, F4-/Diagnose-Overlay): `FAIL/HOLD` (`heap_alloc_failed`, 311,9 s).
+- G1b/F2-Diagnose: R1 `HOLD`, R1b `FAIL/HOLD` (1 696-B-WLAN-RX-Allokation, dekodiert),
+  Stufe E: B1/B2 `FAIL/HOLD`, OBS1R `FAIL/HOLD` (Klasse O-B), NETPROBE1 vom Owner nach 12 von
+  20 Bursts abgebrochen (Teilergebnis). Details: Review-Branch `agent/pr203-res01-g1-review-nonmerge`.
+- Die dabei beobachteten **WLAN-/TCP-Stillstaende** (verzoegerte Quittungen/SYN-ACKs,
+  teils auch im Leerlauf, bei gesundem Heap) bleiben als **offene historische Evidence**
+  erhalten; ihre Ursache ist **nicht** belegt (AP, Funkweg, WLAN-Treiber, lwIP offen).
+- Der nicht qualifizierte F2-Kandidat O1 (`CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880`) wird
+  kontrolliert zurueckgebaut (Abschnitt 5 C5; [F2-Plan](issue-27-res01-f2-escalation-plan.md)).
+
+Basis: PR #203, Diagnose-Evidence D3 (`hw-evidence-pr203/diag/run/`).
+`RES-01=BLOCKER` (Ownerentscheid), `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`,
+`G1_G2=NOT_AUTHORIZED`. Es gibt keine Hardwarefreigabe aus diesem Plan.
+
+## 0. Revisionsuebersicht der Akzeptanzkriterien (transparent)
+
+| Gegenstand | Bisher (Plan `6222efc`, Abschnitt 7/9) | Neu (diese Revision) |
+|---|---|---|
+| P-A 3 × 20 min (4 Sessions, neue Verbindung je Request) | Pflicht-Abnahme | **diagnostischer Stresstest**, nicht Pflicht; historische `FAIL`-Laeufe bleiben `FAIL` |
+| P-A2, P-B (4 reale Browser) | Pflicht-Abnahme | **diagnostisch**; Ersatz fuer die Abnahme: R1-U (ein Browser) |
+| Erholung P-R | nach jedem P-A | **U4/U5** im R1-Nutzungsprofil (Heap-Erholung nach Schliessen des Browsers) |
+| Abnahmekriterien 1–6 | ueber alle Stresslaeufe | gelten **unveraendert in der Sache** fuer **R1-U**; reale Fehler/Resets sind weiter Blocker |
+| G1 (Diagnose-Overlay) | Messung unter P-A-Last | **G1'**: F4-Qualifikation in den relevanten UI-/Touch-/Hold-Pfaden mit R1-Nutzung, keine Stresslast |
+| G2 (reines Produktimage) | P-A/P-A2/P-B-Bestaetigung | **R1-U-Abnahme** auf dem reinen Produktimage |
+| F2 (O1, Sendepuffer 2880) | Eskalation, Kandidat | nicht qualifiziert; **Rueckbau auf 5760** (C5); keine weitere Netzwerkdiagnostik in diesem PR |
+| Restgefahrakzeptanz F4 (D3) | akzeptiert | unveraendert; kein allgemeiner OOM-Schutz behauptet |
 
 ## 1. Ziel und Nicht-Ziele
 
@@ -58,10 +64,11 @@ Fehlerfreiheit unter den definierten Lastprofilen nachweisen:
   laeuft weiter. Nach bestandenem Gate bleibt ein OOM mit `abort()`/Reset moeglich;
   keine allgemeine OOM-Sicherheitszusage. Diese Restgefahr benoetigt ausdrueckliche
   Ownerakzeptanz (D3); Regelung/Safety bleiben architektonisch UI-unabhaengig.
-- **F2** (TCP-Sendepuffer / lwIP-Konfiguration) nur als dokumentierte
-  Eskalation (Abschnitt 8), nicht vorsorglich.
+- **F2** (TCP-Sendepuffer / lwIP-Konfiguration) ist **nicht** Teil der R1-Abnahme;
+  der erprobte, nicht qualifizierte Kandidat O1 wird zurueckgebaut (Abschnitt 8).
 
-Nicht-Ziele: Aenderung von Authentifizierung, CSRF, Session, Replay, Revisionsschutz,
+Nicht-Ziele: Nachweis der Robustheit gegenueber mehreren gleichzeitig intensiv pollenden
+Sessions oder vielen neuen TCP-Verbindungen (kein R1-Pflichtprofil, Abschnitt 7.3); Aenderung von Authentifizierung, CSRF, Session, Replay, Revisionsschutz,
 Web-/JSON-Vertraegen oder Polling; Sessionlimit; WLAN-/lwIP-/sdkconfig-Werte (ausser
 F2-Eskalation mit eigener Freigabe); Aktorfreigabe; Merge von Diagnosecode; weitere
 Funktionen. Diagnosecode bleibt vom Produktcode getrennt (Abschnitt 6).
@@ -264,7 +271,7 @@ Befehls-Obergrenze ueber alle Seiten, `updateProductUi`-Verzweigung (soweit nati
 testbar; sonst Hardwareverifikation), keine Verhaltensaenderung bei ausreichendem
 Speicher (bestehende UI-Tests bleiben unveraendert gruen).
 
-## 5. Umsetzungsschnitte (eine Planfreigabe vor C0–C4; Hardware-Gates getrennt)
+## 5. Umsetzungsschnitte (eine Planfreigabe vor C5 und der Hardwareabnahme; Hardware-Gates getrennt)
 
 - **C0 – Spike (nur Diagnosebranch, kein Produktcode, eigenes Hardware-Gate G0):**
   Auf `agent/pr203-res01-diag-local` (Basis v3) die Chunk-Variante von F1-4 als
@@ -294,8 +301,20 @@ Speicher (bestehende UI-Tests bleiben unveraendert gruen).
   bisherigen Sendezweig.
 - **C3 – Dokumentation:** `WEB_UI.md` (Antwortvertrag "statischer Anhang", Ressourcen-
   vertrag), `ACCEPTANCE_TESTS.md` (neue IDs, Abschnitt 7), `ROADMAP.md`, Evidence-Verweise.
-- **C4 – Hardwareverifikation (Abschnitt 7)** mit zwei Gates G1/G2; Evidence als
-  PR-Kommentar und Rohartefakte, kein Produktcode.
+- **C4 – Hardwareverifikation (Abschnitt 7):** G1' (F4-Qualifikation, Diagnose-Overlay)
+  und G2 (R1-U-Abnahme auf dem reinen Produktimage); Evidence als PR-Kommentar und
+  Rohartefakte, kein Produktcode. P-A/P-A2/P-B sind **kein** Teil von C4.
+- **C5 – O1-Rueckbau (Produktcommit, nur Konfiguration):** den Block
+  `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880` samt Kommentar aus `sdkconfig.defaults` entfernen
+  (Rueckkehr zum ESP-IDF-Default **5760**, dem Wert vor O1). Gezielte Tests: Build **beider**
+  ESP-IDF-Profile ueber `scripts/build_esp_idf_profiles.py all` mit Profil-/Herkunftspruefung;
+  aufgeloeste Einstellung `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5760` (und Alias
+  `CONFIG_TCP_SND_BUF_DEFAULT=5760`) in beiden `build/<profil>/sdkconfig` und
+  `config/sdkconfig.h`; Vergleich der aufgeloesten Konfiguration gegen den Stand vor O1
+  (Unterschied ausschliesslich diese zwei Zeilen); vorhandene generierte
+  `build/<profil>/sdkconfig` haben Vorrang vor den Defaults und werden vor dem Build entfernt;
+  Architekturgrenzen, Build-Profil-Selbsttest, Quality-Gate-Selbsttest, Secretscan.
+  Keine Aenderung vor ausdruecklicher Freigabe der Plan-SHA dieser Revision.
 Reihenfolge: C1 vor C2 (F4 senkt das Risiko des fatalen Effekts unabhaengig von F1).
 Materielle Abweichung (z. B. C0 No-Go) -> Plan aktualisieren und neu freigeben lassen.
 
@@ -307,103 +326,142 @@ Materielle Abweichung (z. B. C0 No-Go) -> Plan aktualisieren und neu freigeben l
   (aus `diag/pr203_res01_diag_v3_delta_*.patch`) auf den jeweiligen Produktcommit
   gelegt, eigener lokaler Branch, eigene Image-/ELF-Hashes, eigenes Hardware-Gate.
   Der Overlay wird nie in PR #203 oder `main` uebernommen.
-- Die abschliessende Bestaetigung laeuft zusaetzlich auf dem **reinen Produktimage**
+- Die R1-Abnahme (R1-U, Abschnitt 7.2) laeuft auf dem **reinen Produktimage**
   (nur vorhandene Boot-/30-s-/120-s-Zeilen, Fehler-/Reset-Freiheit, HTTP-Verhalten).
 
 ## 7. Hardwareverifikation (Definition, nicht ausgefuehrt)
 
-Voraussetzungen je Lauf: frischer dokumentierter App-Boot (RTS-Reset), UART-Mitschnitt,
-frische Sessions (< 30 min Inaktivitaetsablauf), kein erneutes Login waehrend der Phase,
-harter Lastabbruch bei jeder Anomalie (alle Sockets schliessen, kein Logout, 3-s-Timeouts;
-Korrektur gegenueber D3), Passwort nur aus `~/pw`.
+### 7.1 Voraussetzungen je Lauf
 
-Vor Teststart im freizugebenden Testblatt (D4/D5) je Profil festhalten:
-Lasttreiber-/Browserversion, Verbindungsmodell, Session-/Socketzustand,
-Netzwerkbedingungen, Latenzbewertung und Idle-Referenz. Fuer API-Latenzen eine
-begruendete Fehlerschranke oder eine Referenz **unter gleicher Last** samt
-zulaessiger Abweichung vorab bestimmen; keine nachtraeglich an Messwerte
-angepasste Schwelle. Sind Altlaeufe nicht vergleichbar und fehlt eine solche
-vorab festgelegte Schranke, bleiben Latenzen/Trend Befunde fuer den Owner,
-keine automatische Abnahmebedingung. Die festgelegten 3-s-Timeouts und
-HTTP-Fehlerkriterien gelten weiterhin.
+Frischer dokumentierter App-Boot (RTS-Reset), UART-Mitschnitt, frische Session (< 30 min
+Inaktivitaetsablauf), Passwort nur aus `~/pw`, aktorfreies Devboard (kein Aktor angeschlossen
+oder ausdruecklich getrennt), Owner anwesend, harter Abbruch bei jeder Anomalie. Vor dem
+Teststart im freizugebenden Testblatt je Lauf festhalten: Browserversion, Verbindungsmodell
+(Keep-Alive), Session-/Socketzustand, Netzwerkbedingungen, Idle-Referenz. Latenzen sind Befunde
+fuer den Owner, keine automatische Abnahmebedingung, solange keine vorab festgelegte Schranke
+existiert; die 3-s-Timeouts und die HTTP-Fehlerkriterien gelten weiterhin.
 
-**Lastprofile (reproduzierbar, Skripte in `hw-evidence-pr203/`, Version und Hash in der Evidence):**
+Messgroessen je Phase: `free`, `min`, groesster 8-Bit-Block (`diag_30s`, `res01_http`
+`pre/built/sent` im Diagnose-Overlay), HTTPD- und Main-Stack-HWM, `heap_alloc_failed`/
+Backtraces, Resetursache, Heartbeat-Luecken, HTTP-Statusklassen, Latenz je Minute, Timeouts,
+Zaehler `ui_skipped_low_memory`.
 
-| ID | Beschreibung | Dauer | Wiederholungen |
-|---|---|---|---|
-| **P-A** | 4 Sessions, 3 parallele API-GETs je 5 s und Session, gestaffelt (1,2 s), Shell-GET je Session alle 30 s (Profil D2/D3; reproduzierte den Fehler in 2 von 4 Altlaeufen innerhalb 4 min) | **20 min** | **3** frische Boots |
-| **P-A2** | wie P-A, Shell-GETs aller 4 Sessions zeitgleich (Worst-Case-Ueberlappung, kein Flooding) | **20 min** | 1 |
-| **P-B** | **4 echte Chromium-Kontexte** (CDP-Treiber, Keep-Alive, Seiten-JS pollt wie ausgeliefert), Shell einmal je Anmeldung plus Reload zweier Sessions alle 60 s | **20 min** | 1 |
-| P-R | Erholung: 5 min ohne Last nach P-A (ohne Reset) | 5 min | nach jedem P-A |
+### 7.2 R1-Nutzungsprofil R1-U (Abnahme, ein realer Browser)
 
-**Messgroessen je Phase (Diagnose-Overlay):** `free`, `min`, groesster 8-Bit-Block
-(`diag_30s`, `res01_http` je Shell-Antwort `pre/built/sent`), HTTPD- und Main-Stack-HWM,
-`heap_alloc_failed`/Backtraces, Resetursache, Heartbeat-Luecken, HTTP-Statusklassen,
-p50/p95/p99/max-Latenz je Minute, Timeouts, Zaehler `ui_skipped_low_memory`.
-API- und Shell-Latenzen jeweils getrennt fuer P-A, P-A2 und P-B ausweisen;
-API-only-D1 ist Kontext, kein harter Leistungsvergleich mit zusaetzlicher
-Shell-Last oder anderem Verbindungsmodell.
+Ziel: die realistische Nutzung — einstellen, kontrollieren, schliessen, autonom weiterlaufen,
+spaeter wieder verbinden — mit **einem** realen Browser und dem in der Shell vorhandenen
+5-s-Polling (drei Read-only-Abrufe je Takt, `docs/WEB_UI.md`). Einmaliger Lauf auf einem frischen
+Boot des **reinen Produktimages**; ein Wiederholungsprogramm ist nicht vorgesehen.
 
-**C0-Go/No-Go unter identischer Last:** Diagnose-Baseline und Chunk-Kandidat
-mit gleichem P-A-Profil, Messaufbau und vergleichbarem Session-/Socket-/
-Netzwerkzustand vergleichen; Referenz und Bewertung vor dem Lauf dokumentieren.
-Go erfordert messbar geringeren Shell-Spitzenbedarf (Erwartung ≈ −6,6 bis −8,7 KB,
-keine harte Schranke), keine schlechtere gemessene Heap-/Blockreserve, keine
-Allokationsfehler/Resets und erfuellte HTTP-/Timeout-Kriterien; Latenzen gemaess
-vorab festgelegter Bewertung (Schranke/gleiche Last oder Befundstatus) behandeln.
-Ohne vergleichbare Ressourcenreferenz ist C0-Go nicht belegt.
-"Es entstehen nicht mehr WLAN-TX-Puffer" ist mit der vorhandenen Heap-
-Instrumentierung nur eine **Hypothese**. Als hartes Kriterium darf die Aussage
-nur verwendet werden, wenn eine tatsaechliche Pufferzaehlung (gleiche Messpunkte,
-Definition der gleichzeitig belegten Puffer, Referenz) instrumentiert und im
-Diagnose-Overlay/G0 freigegeben ist. Sonst entscheiden die genannten messbaren
-Werte; Heap-/Blockmessungen sind kein Nachweis der Pufferanzahl. Bei No-Go
-zurueck zum Plan, keine automatische F2-Umsetzung.
-
-**Abnahmekriterien (Fehlerfreiheit, keine willkuerlichen Heap-Grenzwerte):**
-1. **Kein** `heap_alloc_failed`, **kein** `abort`/Panic/Watchdog/Brownout, **kein** unerwarteter Reset in allen Laeufen (P-A 3×, P-A2, P-B).
-2. HTTP: 100 % 2xx fuer alle Read-/Shell-Requests, **keine** Timeouts, keine Verbindungsabbrueche waehrend der Last. API-Latenzen je Profil und Minute gegen die vorab bestimmte Fehlerschranke oder vergleichbare Referenz unter gleicher Last bewerten; Shell-Latenzen getrennt berichten. D1 ohne Shell-Last ist keine harte Referenz. Bei unvergleichbaren Altlaeufen ohne vorab festgelegte Schranke Latenzen und 20-min-Trend als Befund fuehren.
-3. **Heap-Erholung bei vergleichbarem Idle-Zustand:** Vor Last einen Idle-Referenzwert desselben Images **mit denselben vier Sessions** und beruhigtem Netzwerk erfassen. Nach Lastende Polling/Reloads beenden, offene Keep-Alive-/sonstige Clientverbindungen kontrolliert schliessen und das Abklingen der Server-Sockets dokumentieren; Sessions ohne Logout erhalten (Anzahl, Gueltigkeit und Ablaufzustand dokumentieren), WLAN-Modus/-Verbindung vergleichbar halten. P-R beginnt beim dokumentierten Last-/Clientverbindungsende; fehlen vergleichbare Zustaende innerhalb von 120 s, ist die Erholung nicht belegt. Aktueller freier Heap und aktueller groesster Block muessen innerhalb dieser 120 s jeweils ≥ 90 % ihrer passenden Referenz erreichen. Alternativ ist eine andere Idle-Referenz nur bei belegbar gleichem Session-, Socket- und Netzwerkzustand zulaessig. Die alten ≈ 42,3–42,6 KB frei / ≈ 40,9 KB Block sind Kontext, keine automatische Vier-Session-Referenz. Das monotone Boot-Minimum `min_free` dient nie als Erholungsmessung. Vergleichbare aktuelle Heap-/Blockwerte ueber den Lauf auf fortschreitende Abnahme pruefen und dokumentieren.
-4. **Stackreserve:** HTTPD- und Main-Stack-HWM nicht schlechter als die Baseline-Werte (2 336 B bzw. 11 416 B frei) um mehr als 256 B; sonst Stopp und Befund.
-5. `min_free` unter P-A/P-A2/P-B wird berichtet und gegen den Altwert (6,6–7,9 KB) und die Erwartung (≈ 14 KB) verglichen; eine Unterschreitung der Erwartung bei fehlerfreiem Lauf ist **kein** automatischer Fail, sondern ein Befund fuer den Owner. Ein einzelnes `heap_alloc_failed` ist Fail und loest die F2-Eskalationsbewertung aus.
-6. F4: Falls das Gate ausloest, ist es geloggt, bei ausreichender Reserve erholt sich die Anzeige, ein gesperrter Reset-Hold bleibt bis Loslassen + neuem Kontakt wirkungslos. Gate-Ausloesen in P-A/P-A2/P-B ist ein Befund (F1-Reserve zu gering), kein Fail. Jeder beobachtete Abort/Reset bleibt Fail nach Kriterium 1, auch bei akzeptiertem TOCTOU-Restrisiko; ein fehlerfreier Lauf beweist keine allgemeine Renderer-Absturzfreiheit.
-
-**Hardware-Gates (je eigene Ownerfreigabe, konkret mit Commit, Image-/ELF-Hash, App-only `0x10000`,
-Rueckfall, Stoppbedingungen):** G0 (C0 Spike, Diagnosebranch), G1 (Diagnose-Overlay auf Fixcommit,
-Messung), G2 (reines Produktimage, Bestaetigung). Keine Flash-/Resetvorgaenge ohne Freigabe.
-
-**Native/Build-Nachweise:** neue IDs `SIM-27-H-01..` (Gate-Logik, Befehlsobergrenze,
-Reset-Hold-Sperre fuer A/B durch die echte Schleifenentscheidung inkl. > 5 s
-weiter gehaltenem Finger und fehlendem Loslass-Nachweis, Regression `SIM-19-R08`,
-byteweise Gleichheit der Shell, Shell-zu-503-Wechsel/Anhangsloeschung,
-Adapter-Bytes/Status/Content-Type, Chunk-Terminierung/Fehlerpropagation,
-Provisioning-Shell unveraendert),
-bestehende Web-/Session-/Codec-/UI-Tests gruen, Architekturcheck, beide ESP-IDF-Profile,
-`self-check`, spaeter Pre-Ready nach unabhaengigem Review.
-
-## 8. F2 – nur Eskalation (nicht vorgesehen)
-
-Auslöser: `heap_alloc_failed` oder fehlende Heap-Erholung in den Laeufen von Abschnitt 7
-trotz F1+F4. Dann eigener Plan: `CONFIG_LWIP_TCP_SND_BUF_DEFAULT` 5760 -> 2880 (Ersparnis
-≈ 3 KB je gleichzeitiger Antwort laut Rechnung), Hardwaremessung von Latenz und
-Durchsatz; ggf. Begrenzung der Verbindungsparallelitaet im Adapter. Nicht Teil dieses Plans.
-
-## 9. Ownerentscheidungen (D1–D5 freigegeben; Hardware-Gates separat)
-
-| ID | Frage | Empfehlung |
+| Schritt | Inhalt | Zeitfenster |
 |---|---|---|
-| D1 | F1-Form: **F1-4** (nicht besitzender statischer Anhang + `httpd_resp_send_chunk`) | Ja, mit C0-Spike als Go/No-Go |
-| D2 | C0-Spike (Hardware-Gate G0) vor dem Produktvertrag | Ja (Kosten ≈ 1 Flash/Messlauf, verhindert einen unnoetigen Vertragswechsel) |
-| D3 | F4 als **begrenzte Risikominderung**: UI-Skip inkl. Touch, Hold-Timer freigeben und bis beobachtetem physischem Loslassen + neuem Kontakt sperren; ausdrueckliche Akzeptanz des in Abschnitt 4/6 beschriebenen TOCTOU-/kumulativen OOM-Risikos mit weiterhin moeglichem Geraetereset; F4-B nicht geplant | Ja, nur mit ausdruecklicher Restgefahrakzeptanz; beobachteter Reset bleibt Fail/HOLD |
-| D4 | Verifikationsprofile P-A (3×20 min), P-A2, P-B, Erholung P-R und C0-/Abnahmekriterien; Latenzbewertung je Profil vor Teststart festlegen (gleiche Last oder begruendete Schranke, sonst Befund); TX-Pufferanzahl ohne Zaehlinstrumentierung nur Hypothese | Ja, Testblatt vor Lauf freigeben |
-| D5 | Messbasis 90 % des passenden Idle-Referenzwerts fuer aktuellen Heap und groessten Block; bevorzugt dieselben vier Sessions vor Last, kontrollierter Socketabbau und vergleichbarer Netzwerkzustand | Ja, Referenz/Zustandsvergleich vor Lauf festlegen |
+| U0 | frischer Boot, 120 s Idle, Heap-Idle-Referenz (aktueller freier Heap und groesster Block, zweimal im Abstand von 30 s) | ≈ 3 min |
+| U1 | Browser oeffnen, Login, Shell laedt, Status/Temperaturen sichtbar | ≤ 2 min |
+| U2 | Programm einstellen und starten (soweit in R1 vorhanden, `docs/WEB_UI.md`/PR #201) und am Geraet bestaetigt sehen | ≤ 5 min |
+| U3 | Browser **offen** lassen, Status/Temperaturen mit 5-s-Polling pruefen, gelegentliche Bedienung am Geraet (Touch: Home/Uhr/Menues) | 15 min |
+| U4 | Browser **schliessen** (Tab bzw. Browserprozess beenden), kein Client verbunden: autonome Regelung weiter, keine Webaktivitaet | 20 min |
+| U5 | Browser erneut oeffnen, **wieder verbinden** (Login, falls die Session abgelaufen ist), aktuellen Zustand pruefen (Programmstatus, Temperaturen, Alarme konsistent mit dem Geraet) | ≤ 10 min Beobachtung |
+
+Gesamt etwa 55–60 min. **Notwendige Evidence:** UART-Mitschnitt des gesamten Laufs
+(Heap-/Blockverlauf, `heap_alloc_failed`, Reset-/Panic-Freiheit, Heartbeats, Regelzyklus-Lebenszeichen,
+Stack-HWM, `ui_skipped_low_memory`); Browser-Netzwerk-/Konsolenprotokoll (Statuscodes, fehlgeschlagene
+Anfragen, Timeouts) und Screenshots der Zustaende U1/U3/U5; Zustandsvergleich Geraet/Web vor und nach U4;
+Heap-Erholung: nach U4-Beginn kehren aktueller Heap und groesster Block innerhalb 120 s auf **≥ 90 %** der
+Idle-Referenz zurueck (Messbasis vorab im Testblatt). **Voraussetzung:** Fuer den Programmstart sind
+gueltige Commissioning-/Sensorwerte noetig (siehe `SIM-27-W-04`: im Fixture ohne diese nicht
+startbar); der Testaufbau dafuer ist eine **offene Ownerentscheidung** (Abschnitt 9, D9). Ohne startbares
+Programm wird U2 als nicht ausfuehrbar ausgewiesen und die Abnahme bleibt offen, nicht bestanden.
+
+### 7.3 Diagnostische Stresstests (nicht Pflicht der R1-Abnahme)
+
+| ID | Beschreibung | Status |
+|---|---|---|
+| P-A | 4 Sessions, 3 parallele API-GETs je 5 s und Session (gestaffelt 1,2 s), Shell-GET je Session alle 30 s, neue Verbindung je Request | diagnostisch; historische Ergebnisse (G1, G1b, Stufe E) bleiben `FAIL` bzw. `FAIL/HOLD` |
+| P-A2 | wie P-A, Shell-GETs aller 4 Sessions zeitgleich | diagnostisch, nicht geplant |
+| P-B | 4 echte Browserkontexte mit Keep-Alive | diagnostisch, nicht geplant |
+
+Diese Profile bleiben als Werkzeug zur Untersuchung von Randverhalten erhalten; sie werden
+**nicht** durch diese Revision zu bestandenen Laeufen umgewertet, und es werden in diesem PR **keine**
+weiteren P-A-/A-B-Laeufe, NETPROBE1-Proben oder sonstige Netzwerkdiagnostik eingeplant, **sofern nicht
+ein Fehler im realen R1-Nutzungsprofil (R1-U) konkret nachgewiesen wird**.
+
+### 7.4 Abnahmekriterien R1-U (Fehlerfreiheit, keine willkuerlichen Heap-Grenzwerte)
+
+1. **Kein** `heap_alloc_failed`, **kein** `abort`/Panic/Watchdog/Brownout, **kein** unerwarteter Reset im
+   gesamten R1-U-Lauf.
+2. HTTP: 100 % 2xx fuer alle Anfragen des Browsers im Lauf, **keine** Timeouts, keine fehlgeschlagenen
+   Anfragen (Browser-Netzwerkprotokoll); Latenzen berichtet, Befund fuer den Owner.
+3. **Autonome Regelung** laeuft in U4 ohne Browser unveraendert weiter (Lebenszeichen, kein Reset); der
+   Zustand nach dem Wiederverbinden (U5) ist konsistent.
+4. **Heap-Erholung** nach U4 ≥ 90 % der Idle-Referenz innerhalb 120 s (Aktueller Heap und groesster Block).
+5. **Stackreserve:** HTTPD- und Main-Stack-HWM nicht schlechter als die Baseline (2 336 B bzw. 11 416 B frei)
+   um mehr als 256 B; sonst Stopp und Befund. `min_free` wird berichtet (Befund, kein automatischer Fail).
+6. F4: Falls das Gate ausloest, ist es geloggt, bei ausreichender Reserve erholt sich die Anzeige, ein
+   gesperrter Reset-Hold bleibt bis Loslassen + neuem Kontakt wirkungslos; Gate-Ausloesen ist ein Befund.
+
+**Reale Fehler oder Resets unter diesem Profil bleiben Blocker.** Ein fehlerfreier R1-U-Lauf belegt nur
+das getestete Profil, den Zeitraum und das Image; er beweist weder allgemeine OOM-Sicherheit noch
+Renderer-Absturzfreiheit (Restgefahr D3 unveraendert) noch Robustheit gegenueber intensiven
+Mehrfach-Clients.
+
+### 7.5 Hardware-Gates (je eigene Ownerfreigabe, konkret mit Commit, Image-/ELF-Hash, App-only `0x10000`, Rueckfall, Stoppbedingungen)
+
+- **G0** (C0-Spike, Diagnosebranch): ausgefuehrt, C0 = GO.
+- **G1'** (Diagnose-Overlay auf dem F4-Fixcommit): **F4-Schwelle und Reset-Hold nur in den relevanten Pfaden
+  qualifizieren**: Home, Menues, Uhr/Zurueck, Programm-/Statusseiten, Locale-Varianten, Skip→Resume mit
+  gehaltenem Finger und neuer Kontakt (Hold A/B), jeweils mit repraesentativen Seiten-/Zustands-/Text-/
+  Kontaktfaellen und gemessenem Render-/Touch-Heapbedarf; ein **Browser mit 5-s-Polling parallel** ist die
+  einzige Netzwerklast. Keine Stresslast, kein Werksreset. Ergebnis: abschliessende Bestimmung der Schwelle nach
+  Abschnitt 4/2 (`max(a, b) × 2`) **nur fuer diese Pfade**; fehlende Coverage haelt die Schwellenqualifikation
+  `HOLD`; **kein** allgemeiner OOM-Schutz wird behauptet.
+- **G2** (reines Produktimage): R1-U-Abnahme nach Abschnitt 7.2/7.4.
+Keine Flash-/Resetvorgaenge ohne Freigabe.
+
+### 7.6 Native/Build-Nachweise
+
+Neue IDs `SIM-27-H-01..` (Gate-Logik, Befehlsobergrenze, Reset-Hold-Sperre fuer A/B durch die echte
+Schleifenentscheidung inkl. > 5 s weiter gehaltenem Finger und fehlendem Loslass-Nachweis, Regression
+`SIM-19-R08`, byteweise Gleichheit der Shell, Shell-zu-503-Wechsel/Anhangsloeschung,
+Adapter-Bytes/Status/Content-Type, Chunk-Terminierung/Fehlerpropagation, Provisioning-Shell
+unveraendert), bestehende Web-/Session-/Codec-/UI-Tests gruen, Architekturcheck, beide ESP-IDF-Profile,
+`self-check`, spaeter Pre-Ready nach unabhaengigem Review. Unveraendert respektiert werden Safety-,
+Auth-, Session- und Aktorvertraege.
+
+## 8. F2 – nicht Teil der R1-Abnahme; O1 wird zurueckgebaut
+
+F2 (Sendepuffer) wurde als Kandidat O1 (`CONFIG_LWIP_TCP_SND_BUF_DEFAULT` 5760 → 2880) erprobt, ist
+**nicht qualifiziert** (kein stabiler Nutzen, kein Schaden belegt, n klein, verschiedene Tage) und wird
+nach Schnitt C5 auf den ESP-IDF-Default 5760 zurueckgebaut. Die beobachteten WLAN-/TCP-Stillstaende bleiben
+offene historische Evidence; **weitere Netzwerkdiagnostik, O2/O3 und A/B-Programme sind in diesem PR nicht
+vorgesehen**, ausser ein Fehler im R1-Nutzungsprofil wird konkret nachgewiesen (dann neuer Plan). Details im
+[F2-Plan](issue-27-res01-f2-escalation-plan.md).
+
+## 9. Ownerentscheidungen (D1–D3 freigegeben; D4/D5 ersetzt; D6–D9 offen)
+
+| ID | Frage | Stand / Empfehlung |
+|---|---|---|
+| D1 | F1-Form: **F1-4** (nicht besitzender statischer Anhang + `httpd_resp_send_chunk`) | freigegeben, umgesetzt |
+| D2 | C0-Spike (Hardware-Gate G0) vor dem Produktvertrag | freigegeben, ausgefuehrt (C0 = GO) |
+| D3 | F4 als **begrenzte Risikominderung** mit ausdruecklicher Akzeptanz des TOCTOU-/kumulativen OOM-Risikos (weiterhin moeglicher Geraetereset); F4-B nicht geplant | freigegeben, unveraendert; beobachteter Reset bleibt Fail/HOLD |
+| D4 | *ersetzt* (frueher: P-A 3×, P-A2, P-B als Pflicht) | durch D6 ersetzt |
+| D5 | *ersetzt* (frueher: 90-%-Messbasis fuer vier Sessions) | durch D7 ersetzt |
+| **D6** | **R1-Abnahmeprofil R1-U** (Abschnitt 7.2) mit den Abnahmekriterien 7.4 an Stelle von P-A/P-A2/P-B; P-A/P-A2/P-B nur diagnostisch, historische `FAIL` bleiben | **offen**, Empfehlung Ja |
+| **D7** | Messbasis: Heap-Erholung ≥ 90 % der Idle-Referenz innerhalb 120 s auf R1-U (U4); Idle-Referenz im Testblatt vorab | **offen**, Empfehlung Ja |
+| **D8** | **O1-Rueckbau** (C5): Entfernen des 2880-Blocks, Rueckkehr zu 5760, Tests nach Abschnitt 5 C5; keine Netzwerkdiagnostik/A-B in diesem PR | **offen**, Empfehlung Ja |
+| **D9** | Testaufbau fuer R1-U-Schritt U2: Bereitstellung gueltiger Commissioning-/Sensorwerte (oder alternative Programm-Startbarkeit am Devboard); G1' (F4-Qualifikation, Abschnitt 7.5) als Diagnose-Overlay-Messung | **offen** |
 
 ## 10. Risiken
 
-- Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung;
-  C0 entscheidet anhand messbarer Ressourcen-/HTTP-/Latenzwerte; No-Go moeglich).
-- F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren;
-  nach bestandenem Gate bleiben OOM/Abort/Reset moeglich (D3 ownerakzeptiert, Testgrenze Abschnitt 4/6).
-- Der Lastprofil-Vergleich ist durch das Verbindungsmodell des Treibers beeinflusst (P-B mit echten
-  Browsern ergaenzt das); keine Aussage ueber beliebige LAN-Clients.
-- Die Erwartung (≈ 14 KB) ist Rechnung, nicht Messung.
+- Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung); C0 hat anhand
+  messbarer Ressourcenwerte GO ergeben.
+- F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren; nach bestandenem Gate bleiben
+  OOM/Abort/Reset moeglich (D3 ownerakzeptiert, Testgrenze Abschnitt 4/6). Die F4-Qualifikation gilt nur fuer die
+  getesteten Pfade.
+- **R1-U belegt nicht** die Robustheit gegenueber mehreren intensiv pollenden Sessions, vielen neuen
+  TCP-Verbindungen oder dem beobachteten WLAN-/TCP-Stillstand; ein solcher Stillstand im realen
+  Nutzungsprofil bleibt Blocker, seine Ursache ist offen (AP, Funkweg, WLAN-Treiber, lwIP).
+- Ein einzelner R1-U-Lauf ist keine Fehlerrate; sporadische Ereignisse koennen unentdeckt bleiben. Ein
+  Wiederholungsprogramm ist bewusst nicht vorgesehen (Ownerentscheid), der Owner trifft die Abnahmeentscheidung.
+- Der O1-Rueckbau aendert eine gemeinsame Konfiguration beider Profile; Abdeckung ueber Build-/Konfigurationstests
+  (C5), keine Hardwarewirkung behauptet.
+- Die Erwartung (≈ 14 KB) war Rechnung, nicht Messung.
