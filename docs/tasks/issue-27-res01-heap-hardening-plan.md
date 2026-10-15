@@ -343,7 +343,7 @@ Frischer dokumentierter App-Boot (RTS-Reset), UART-Mitschnitt, frische Session (
 Inaktivitaetsablauf), Passwort nur aus `~/pw`, aktorfreies Devboard (kein Aktor angeschlossen
 oder ausdruecklich getrennt), Owner anwesend, harter Abbruch bei jeder Anomalie. Vor dem
 Teststart im freizugebenden Testblatt je Lauf festhalten: Browserversion, Verbindungsmodell
-(Keep-Alive), Session-/Socketzustand, Netzwerkbedingungen, Idle-Referenz. Latenzen sind Befunde
+(Keep-Alive), Session-/Socketzustand, Netzwerkbedingungen, Referenzphasen nach 7.2. Latenzen sind Befunde
 fuer den Owner, keine automatische Abnahmebedingung, solange keine vorab festgelegte Schranke
 existiert; die 3-s-Timeouts und die HTTP-Fehlerkriterien gelten weiterhin.
 
@@ -361,14 +361,15 @@ Boot des **reinen Produktimages**; ein Wiederholungsprogramm ist nicht vorgesehe
 
 | Schritt | Inhalt | Zeitfenster |
 |---|---|---|
-| U0 | frischer Boot, 120 s Idle, Heap-Idle-Referenz (aktueller freier Heap und groesster Block, zweimal im Abstand von 30 s) | ≈ 3 min |
+| U0 | frischer Boot, 120 s Idle; liefert nur **Boot-/Leerlaufkontext** (freier Heap, groesster Block, zweimal im Abstand von 30 s), **keine** Erholungsbasis | ≈ 3 min |
 | U1 | Browser oeffnen, Login, Shell laedt, Status/Temperaturen sichtbar | ≤ 2 min |
 | U2 | Programm einstellen und starten (soweit in R1 vorhanden, `docs/WEB_UI.md`/PR #201) und am Geraet bestaetigt sehen | ≤ 5 min |
-| U3 | Browser **offen** lassen, Status/Temperaturen mit 5-s-Polling pruefen, gelegentliche Bedienung am Geraet (Touch: Home/Uhr/Menues) | 15 min |
+| U2R | **Referenzphase:** Browser **schliessen**, Programm laeuft, kein Client verbunden; 120 s Einschwingzeit, dann zwei Messungen im Abstand von 30 s (freier Heap und groesster Block) = **Erholungsreferenz R_ref** | ≈ 3 min |
+| U3 | Browser **erneut oeffnen** (bestehende Session weiterverwenden, sonst Login; Zustand im Testblatt vermerken), offen lassen, Status/Temperaturen mit 5-s-Polling pruefen, gelegentliche Bedienung am Geraet (Touch: Home/Uhr/Menues) | 15 min |
 | U4 | Browser **schliessen** (Tab bzw. Browserprozess beenden), kein Client verbunden: autonome Regelung weiter, keine Webaktivitaet | 20 min |
 | U5 | Browser erneut oeffnen, **wieder verbinden** (Login, falls die Session abgelaufen ist), aktuellen Zustand pruefen (Programmstatus, Temperaturen, Alarme konsistent mit dem Geraet) | ≤ 10 min Beobachtung |
 
-Gesamt etwa 55–60 min. **Umgebungsnachweis (vorhandene Daten, kein zusaetzlicher Geraetezugriff):** vor und
+Gesamt etwa 60–65 min. **Umgebungsnachweis (vorhandene Daten, kein zusaetzlicher Geraetezugriff):** vor und
 waehrend U0–U5 werden, soweit im UniFi-Controller verfuegbar, AP/BSSID, Signal, Verbindungs-/Retry-Ereignisse und
 das Zeitfenster festgehalten (Export oder Screenshot); fehlende Daten werden als `NOT_AVAILABLE` ausgewiesen, nichts
 nachtraeglich erfunden. Eine RSSI-Schranke wird nicht definiert. U4/U5 werden gezielt bewertet: Wiederverbinden
@@ -376,8 +377,12 @@ nach 20 min Standalone-Betrieb und aktueller Zustand. **Notwendige Evidence:** U
 (Heap-/Blockverlauf, `heap_alloc_failed`, Reset-/Panic-Freiheit, Heartbeats, Regelzyklus-Lebenszeichen,
 Stack-HWM, `ui_skipped_low_memory`); Browser-Netzwerk-/Konsolenprotokoll (Statuscodes, fehlgeschlagene
 Anfragen, Timeouts) und Screenshots der Zustaende U1/U3/U5; Zustandsvergleich Geraet/Web vor und nach U4;
-Heap-Erholung: nach U4-Beginn kehren aktueller Heap und groesster Block innerhalb 120 s auf **≥ 90 %** der
-Idle-Referenz zurueck (Messbasis vorab im Testblatt). **Voraussetzung:** Fuer den Programmstart sind
+Heap-Erholung: nach Beginn von U4 kehren aktueller Heap und groesster Block innerhalb 120 s auf **≥ 90 %** von
+**R_ref** zurueck (Messung wie in U2R: zwei Werte im Abstand von 30 s; Bewertung am schlechteren der beiden).
+R_ref ist **vergleichbar** mit dem U4-Zustand: gleiches Programm aktiv, gleicher Boot, gleiche Session, alle
+Client-/Socketverbindungen abgebaut. Die Abweichung zwischen R_ref und U4 (Session-Alter, Zahl der seither
+gelaufenen Requests) wird im Testblatt festgehalten. U0 ist wegen anderem Zustand (kein Programm, keine
+Session, Boot-Leerlauf) **nicht** die Erholungsbasis; es wird nur berichtet. **Voraussetzung:** Fuer den Programmstart sind
 gueltige Commissioning-/Sensorwerte noetig (siehe `SIM-27-W-04`: im Fixture ohne diese nicht
 startbar); der Testaufbau dafuer ist eine **offene Ownerentscheidung** (Abschnitt 9, D9). Ohne startbares
 Programm wird U2 als nicht ausfuehrbar ausgewiesen und die Abnahme bleibt offen, nicht bestanden.
@@ -403,7 +408,7 @@ ein Fehler im realen R1-Nutzungsprofil (R1-U) konkret nachgewiesen wird**.
    Anfragen (Browser-Netzwerkprotokoll); Latenzen berichtet, Befund fuer den Owner.
 3. **Autonome Regelung** laeuft in U4 ohne Browser unveraendert weiter (Lebenszeichen, kein Reset); der
    Zustand nach dem Wiederverbinden (U5) ist konsistent.
-4. **Heap-Erholung** nach U4 ≥ 90 % der Idle-Referenz innerhalb 120 s (Aktueller Heap und groesster Block).
+4. **Heap-Erholung** nach Beginn von U4 ≥ 90 % von R_ref (Referenzphase U2R, vergleichbarer Zustand) innerhalb 120 s (aktueller Heap und groesster Block). Eine Unterschreitung ist ein Befund mit Stopp und Ownerbewertung (Hinweis auf, aber kein Beweis fuer ein Leck); ein spaeterer Wert unterhalb 90 % nach weiterer Zeit wird berichtet, nicht still neu bewertet.
 5. **Stackreserve:** HTTPD- und Main-Stack-HWM nicht schlechter als die Baseline (2 336 B bzw. 11 416 B frei)
    um mehr als 256 B; sonst Stopp und Befund. `min_free` wird berichtet (Befund, kein automatischer Fail).
 6. F4: Falls das Gate ausloest, ist es geloggt, bei ausreichender Reserve erholt sich die Anzeige, ein
@@ -464,7 +469,7 @@ vorgesehen**, ausser ein Fehler im R1-Nutzungsprofil wird konkret nachgewiesen (
 | D4 | *ersetzt* (frueher: P-A 3×, P-A2, P-B als Pflicht) | durch D6 ersetzt |
 | D5 | *ersetzt* (frueher: 90-%-Messbasis fuer vier Sessions) | durch D7 ersetzt |
 | **D6** | **R1-Abnahmeprofil R1-U** (Abschnitt 7.2) mit den Abnahmekriterien 7.4 an Stelle von P-A/P-A2/P-B; P-A/P-A2/P-B nur diagnostisch, historische `FAIL` bleiben | **offen**, Empfehlung Ja |
-| **D7** | Messbasis: Heap-Erholung ≥ 90 % der Idle-Referenz innerhalb 120 s auf R1-U (U4); Idle-Referenz im Testblatt vorab | **offen**, Empfehlung Ja |
+| **D7** | Messbasis: Heap-Erholung ≥ 90 % von **R_ref** (Referenzphase U2R: Programm aktiv, Browser geschlossen, gleiche Session) innerhalb 120 s nach Beginn U4; U0 nur Kontext. Alternative zur Entscheidung: nur Trend/Plateau-Bericht ohne 90-%-Schwelle | **offen**, Empfehlung Ja |
 | **D8** | **O1-Rueckbau** (C5): Entfernen des 2880-Blocks, Rueckkehr zu 5760, Tests nach Abschnitt 5 C5; keine Netzwerkdiagnostik/A-B in diesem PR | **offen**, Empfehlung Ja |
 | **D9** | Testaufbau fuer R1-U-Schritt U2: Bereitstellung gueltiger Commissioning-/Sensorwerte (oder alternative Programm-Startbarkeit am Devboard); G1' (F4-Qualifikation, Abschnitt 7.5) als Diagnose-Overlay-Messung | **offen** |
 
