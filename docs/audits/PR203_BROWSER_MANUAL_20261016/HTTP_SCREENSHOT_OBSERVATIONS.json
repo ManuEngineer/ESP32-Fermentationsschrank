@@ -1,0 +1,229 @@
+{
+  "scope": "Transcribed screenshot observations, not raw DevTools/HAR and not a complete per-request series",
+  "observations": [
+    {
+      "event": "B1A_ANONYMOUS_SCREENSHOT",
+      "received_utc": "2026-10-16T12:07:35.990338+00:00",
+      "received_host_monotonic": 343660.95235854,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOT",
+      "observations": {
+        "login_page_visible": true,
+        "language_visible": "English",
+        "password_field_empty": true,
+        "root_http_status": 200,
+        "root_duration_display_s": 1.63,
+        "visible_api_status": 401,
+        "visible_api_duration_range_ms": [
+          182,
+          531
+        ],
+        "network_total_requests_display": 34,
+        "console_error_counter_display": 33,
+        "keep_log_enabled_network_and_console": true,
+        "disable_cache_unchecked": true,
+        "network_throttling": "No throttling",
+        "connection_label_before_login": "Offline"
+      },
+      "limits": [
+        "Only visible rows reviewed; all 34 records not individually available",
+        "Console error counter alone does not classify every entry",
+        "No absolute screenshot time",
+        "No login submitted or authenticated state proven yet"
+      ],
+      "client_clock_display": "NOT_SUPPLIED"
+    },
+    {
+      "event": "B1B_AUTHENTICATED_SCREENSHOT",
+      "received_utc": "2026-10-16T12:11:42.875720+00:00",
+      "received_host_monotonic": 343907.837702083,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "observations": {
+        "login_http_status": 200,
+        "login_duration_display_s": 2.82,
+        "reloaded_shell_status": 200,
+        "reloaded_shell_duration_display_s": 1.53,
+        "visible_post_login_api_status": 200,
+        "visible_post_login_api_duration_range_ms": [
+          233,
+          523
+        ],
+        "programs_http_status": 200,
+        "programs_duration_display_ms": 154,
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "network_request_counter_display": 164,
+        "console_error_counter_display": 150,
+        "pre_login_401_rows_preserved": true
+      },
+      "limits": [
+        "Visible rows do not constitute complete request history",
+        "Console counter cannot classify all entries",
+        "No screenshot timestamp with timezone/seconds",
+        "Original inline images remain in chat; no local image hash asserted"
+      ],
+      "client_clock_display": "2026-10-16 14:09; timezone/seconds not visible"
+    },
+    {
+      "event": "B2_FIRST_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:18:20.050556+00:00",
+      "received_host_monotonic": 344305.012537467,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "all_visible_http_statuses": 200,
+        "long_successful_responses_display_s": {
+          "status": 8.23,
+          "temperatures": 10.99,
+          "alerts": 12.44
+        },
+        "other_visible_duration_range_ms": [
+          279,
+          1690
+        ],
+        "network_request_counter_display": 332,
+        "console_error_counter_display": 150,
+        "console_counter_change_since_prior_screenshot": 0
+      },
+      "limits": [
+        "No complete HTTP log or all-request success claim",
+        "Long durations are displayed browser timings, not proven socket timeout exceptions",
+        "No new latency acceptance threshold",
+        "Screenshot action time is not host receipt time"
+      ],
+      "client_clock_display": "14:16; seconds/timezone not visible"
+    },
+    {
+      "event": "B2_SECOND_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:27:02.476874+00:00",
+      "received_host_monotonic": 344827.438854442,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "all_visible_http_statuses": 200,
+        "visible_duration_range_ms": [
+          234,
+          609
+        ],
+        "network_request_counter_display": 575,
+        "console_error_counter_display": 150,
+        "console_counter_change_since_prior_screenshot": 0
+      },
+      "limits": [
+        "Visible rows only; no full all-request success proof",
+        "Screenshots do not provide exact capture seconds or a full HTTP timing series"
+      ],
+      "client_clock_display": "2026-10-16 14:24; seconds/timezone not visible"
+    },
+    {
+      "event": "B2_FINAL_SCREENSHOT_AND_OWNER_B3_START",
+      "received_utc": "2026-10-16T12:37:53.037866+00:00",
+      "received_host_monotonic": 345477.999861564,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS_AND_START_DECLARATION",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "completed_visible_http_statuses": 200,
+        "pending_visible_requests": [
+          "temperatures",
+          "alerts"
+        ],
+        "long_successful_durations_display_s": [
+          23.99,
+          22.51,
+          12.06,
+          9.09,
+          6.49,
+          4.69,
+          4.54,
+          4.39,
+          4.31,
+          4.3,
+          4.25,
+          3.98
+        ],
+        "network_request_counter_display": 773,
+        "console_error_counter_display": 150
+      },
+      "limits": [
+        "Pending is not proof of timeout",
+        "Intentional tab closure may cancel pending requests; distinguish from unexpected transport failures",
+        "No complete all-request success evidence",
+        "Screenshot shows pre-close tab; exact physical closure time not supplied"
+      ],
+      "client_clock_display": "2026-10-16 14:35; seconds/timezone not visible"
+    },
+    {
+      "event": "B4_REACHABILITY_FAILURE_OWNER_REPORT_AND_SCREENSHOTS",
+      "received_utc": "2026-10-16T13:08:13.887677+00:00",
+      "received_host_monotonic": 347298.849659087,
+      "evidence_grade": "OWNER_REPORT_AND_SCREENSHOTS",
+      "observations": {
+        "login_page_eventually_visible": true,
+        "connection_before_login": "Offline",
+        "password_field_empty": true,
+        "visible_document_requests": [
+          {
+            "status": "canceled",
+            "duration_display_s": 2.04
+          },
+          {
+            "status": "failed",
+            "error_text_visible": "net::ERR_AD...",
+            "duration_display_s": 3.08
+          },
+          {
+            "status": "canceled",
+            "duration_display_s": 2.03
+          },
+          {
+            "status": "canceled",
+            "duration_display_s": 3.08
+          },
+          {
+            "status": 200,
+            "duration_display_s": 4.53
+          }
+        ],
+        "post_shell_anonymous_api_statuses_visible": 401,
+        "pending_status_request_visible": true,
+        "request_count_display": 31,
+        "console_error_counter_display": 11
+      },
+      "limits": [
+        "Exact first error screen not photographed; network screenshot still shows failed request",
+        "Full net::ERR_AD... text not visible; do not expand error class",
+        "Multiple document records visible; manual versus browser-generated cancellation/navigation is NOT_PROVEN",
+        "Later 200 does not erase initial reachability failure",
+        "No login during B4 reported or demonstrated"
+      ],
+      "client_clock_display": "2026-10-16 15:06; screenshot seconds/timezone not shown"
+    }
+  ],
+  "error_class_rule": "The B4 failure string is only visible as net::ERR_AD...; exact class remains NOT_PROVEN. Chrome error-page cached data:image PNG rows are browser-local assets, not successful ESP32 responses."
+}
