@@ -72,7 +72,15 @@ eingebettetes Browser-JavaScript und unmittelbar erforderliche lokale Bezeichner
    freigeben und damit unkontrolliert weiterlaufende Requests ueberlappen lassen.
 3. **Snapshot nach Mutation:** Der bisherige explizite Refresh nach dem
    abgeschlossenen, akzeptierten Mutationsantwortpfad bleibt ein abgewarteter
-   frischer Abruf, mit einem kleinen lokalen Parameter am bestehenden `rf()`
+   frischer Abruf. Sobald eine verwertbare Mutationsantwort vorliegt, `P` vor
+   Freigabe von `B` invalidieren und `ui()`/`draw()` aktualisieren; `LP` fuer
+   die gedimmte Anzeige behalten. Alle Run-Aktionsbuttons bleiben gesperrt,
+   bis ein nach dieser Mutation gestarteter Snapshot vollstaendig und frisch
+   abgeschlossen ist; erst dann zustandsabhaengig freigeben. Ein fehlgeschlagener,
+   zu alter oder abgebrochener Refresh darf keine alte Aktionsgrundlage
+   reaktivieren. Das gilt fuer alle verwertbaren Outcomes, auch `stale`, `busy`
+   und `confirmation-required`. Keine zweite Aktions-/Queue-Abstraktion.
+   Der frische Abruf wird mit einem kleinen lokalen Parameter am bestehenden `rf()`
    von Timer-Ticks unterschieden. Er invalidiert gegebenenfalls die vor der
    Mutation gestartete Gruppe, bricht sie kontrolliert ab und wartet deren
    vollstaendige Bereinigung ab. Anschliessend startet er eine neue Gruppe.
@@ -131,6 +139,7 @@ setzen statt reale 5-/30-s-Wartezyklen. Folgende unabhaengige Assertions:
 | Frueher Teilfehler | Transport-, HTTP- und JSON-Fehler jeweils: Geschwister abgebrochen, Fehleranzeige, vollstaendiger Cleanup; verzoegertes Abort-Settlement haelt Sperre |
 | Erholung | Mehrere ausgelassene Ticks erzeugen nach Erfolg/Abbruch keinen kumulierten Stau; erst naechster normaler Tick startet drei GETs |
 | Mutation | Echten `send()`-Antwortpfad mit Fake-POST ausfuehren: alte Gruppe invalidieren/abbrechen/abwickeln, neuer Snapshotstart strikt nach Mutationsabschluss; Refresh wird abgewartet, nie zwei Gruppen |
+| Aktionssperre nach Mutation | Echten `send()`-Pfad mit zuvor gueltigem `P` und erfolgreicher POST-Antwort ausfuehren, fuer alle verwertbaren Outcomes einschliesslich `stale`, `busy`, `confirmation-required`: anschliessenden Refresh verzoegern/abbrechen/fehlschlagen/zu alt abschliessen lassen. Waehrend des gesamten Fensters alle Run-Aktionsbuttons deaktiviert, `LP` gedimmt erhalten; alte Antworten reaktivieren `P` nicht. Erst nach vollstaendigem frischem, nach der Mutation gestartetem Snapshot Buttons zustandsabhaengig freigeben |
 | Abschlussrennen | Mutation waehrend Header-/Bodyphase sowie am Gruppenende, Tick waehrend Cleanup; spaete alte Erfolge/Fehler aendern Anzeige/Aktionsgrundlage nicht |
 
 Direkt betroffene native Konsumenten seriell ausfuehren:
