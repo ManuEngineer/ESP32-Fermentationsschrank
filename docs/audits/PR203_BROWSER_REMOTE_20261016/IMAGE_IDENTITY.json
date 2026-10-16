@@ -1,0 +1,24 @@
+{
+  "method": "Offline existing artifact verification only; no device request",
+  "app_prefix_start_hex": "0x10000",
+  "app_prefix_bytes": 1756528,
+  "computed_app_prefix_sha256": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633",
+  "partition_table_sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d",
+  "write_exit": 0,
+  "verify_exit": 0,
+  "write_start_utc": "2026-10-15T20:15:20Z",
+  "write_end_utc": "2026-10-15T20:17:01Z",
+  "write_log_sha256": "6db7b4446b973e2bd1bee35ebf84c102eaa26ac4c6c41154f85a04c7252f1e8e",
+  "write_verification_original_lines": [
+    "Wrote 1756528 bytes (1100516 compressed) at 0x00010000 in 98.1 seconds (143.2 kbit/s).",
+    "Verifying written data...",
+    "Hash of data verified."
+  ],
+  "existing_boot_identity_original_lines": [
+    "[host_mono=287034.503058] I (771) app_init: App version:      162a667",
+    "[host_mono=287035.562020] I (1851) app_main: source git sha: 162a6670526a10b2fd957fe90ab665a1fae837b7",
+    "[host_mono=287035.612492] I (1881) app_main: real actuators: disabled",
+    "[host_mono=287035.612531] I (1881) app_main: application: ready"
+  ],
+  "current_identity_limit": "Existing write/readback and continuously running UART source/heartbeat evidence; not a fresh readback from this remote task. No complete private readback is published."
+}
