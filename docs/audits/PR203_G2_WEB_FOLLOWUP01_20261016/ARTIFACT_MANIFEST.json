@@ -20,7 +20,8 @@
     "UART_CHUNKS.jsonl": "byte-exact host time/length/tail metadata; no UART payload",
     "UART_PRESTOP.sanitized.log": {
       "selection": "All parsed pre-STOP lines subject to heartbeat/ROM/reset allowlist; host timestamps preserved",
-      "omitted_lines": 0
+      "omitted_lines": 0,
+      "normalization": "LF line endings; trailing separator space on empty UART line removed; no event payload changed"
     },
     "UART_TAIL_SELECTED.sanitized.log": "Selected source/profile/actor/ready/heartbeat/resource lines only; all other boot/network payload omitted. These are observations after STOP, not qualified boot PASS.",
     "excluded": "Full raw UART, complete tail, host socket addresses, private artifact paths/readbacks, MAC and network configuration; no HAR created."
