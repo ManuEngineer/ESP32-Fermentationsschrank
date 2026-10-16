@@ -12,6 +12,14 @@ import time
 from types import SimpleNamespace
 from c0_load import BAD, HEARTBEAT, run as load_run
 
+# Partial frames cannot distinguish a reset banner from a real completed reset
+# event. Keep every other fail-closed marker active until the line is complete.
+BAD_PARTIAL = re.compile('|'.join(term for term in BAD.pattern.split('|')
+                                 if term.lower() != 'rst:0x'), BAD.flags)
+G2_WEB_GATE_ID = 'PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01'
+MAIN_STACK_HWM_THRESHOLD_BYTES = 11160
+HTTPD_STACK_HWM_THRESHOLD_BYTES = 2080
+
 # Read-only host behaviour after a supervised anomaly: keep the port open for a
 # bounded time so the follow-up (further events, backtrace, panic, reset or
 # recovery) is recorded. The load has already been stopped via ABORT.
@@ -47,17 +55,27 @@ def post_anomaly_tail(board,raw,chunks,tail_log,pending,result):
 def capture(args):
     if not args.run or not args.gate_id or not args.allow_port_open_boot:
         raise SystemExit('No UART action without --run, approved --gate-id and --allow-port-open-boot')
+    main_stack_policy=getattr(args,'main_stack_policy','strict')
+    if main_stack_policy not in ('strict','g2-trend'):
+        raise SystemExit('Unsupported main stack policy')
+    if main_stack_policy=='g2-trend' and args.gate_id!=G2_WEB_GATE_ID:
+        raise SystemExit('g2-trend stack policy is restricted to the approved G2-Web gate')
     import serial
     args.output.mkdir(parents=True,exist_ok=False)
     uart=args.output/'uart.log'
     abort_file=args.output/'ABORT'
     result={'start_epoch':time.time(),'start_monotonic':time.monotonic(),
+            'main_stack_policy':main_stack_policy,
+            'main_stack_hwm_threshold_bytes':MAIN_STACK_HWM_THRESHOLD_BYTES,
+            'main_stack_action':'record-only' if main_stack_policy=='g2-trend' else 'hard-stop',
             'tool_sha256':{n:hashlib.sha256((Path(__file__).parent/n).read_bytes()).hexdigest()
                            for n in ('g1_capture.py','c0_load.py')}}
     ready=actors=profile=network=source=False
     last_heartbeat=started=time.monotonic()
     resets=0
     last_uptime=None
+    main_stack_hwm_min=None
+    main_stack_below_threshold=False
     offset=b''
     failure=None
     loader=None
@@ -118,9 +136,17 @@ def capture(args):
                     network|='network_mode=HOME_WIFI network_state=HomeConnected' in text
                     main=re.search(r'(?<!httpd_)stack_hwm_bytes=(\d+)',text)
                     http=re.search(r'httpd_stack_hwm=(\d+)',text)
-                    if main and int(main[1])<11160:failure='main-stack-reserve';break
-                    if http and int(http[1])<2080:failure='httpd-stack-reserve';break
-                if not failure and BAD.search(offset.decode(errors='replace')):
+                    if main:
+                        hwm=int(main[1])
+                        main_stack_hwm_min=hwm if main_stack_hwm_min is None else min(main_stack_hwm_min,hwm)
+                        if hwm<MAIN_STACK_HWM_THRESHOLD_BYTES:
+                            main_stack_below_threshold=True
+                            if main_stack_policy=='strict':failure='main-stack-reserve';break
+                    if http and int(http[1])<HTTPD_STACK_HWM_THRESHOLD_BYTES:failure='httpd-stack-reserve';break
+                # The first reset marker is classified only after its complete
+                # line reaches the reset-count logic above. Other markers remain
+                # fail-closed even when their UART line is incomplete.
+                if not failure and BAD_PARTIAL.search(offset.decode(errors='replace')):
                     failure='uart-anomaly'
                 if failure:
                     if failure not in NO_TAIL:
@@ -155,6 +181,7 @@ def capture(args):
             result['runner_not_joined']=True
         result.update(end_epoch=time.time(),end_monotonic=time.monotonic(),max_heartbeat_gap_seconds=max_gap,gate=args.gate_id,source_proven=source,ready=ready,actors_disabled=actors,
                       release_profile=profile,network_home_connected=network,expected_initial_reset_lines=resets,
+                      main_stack_hwm_min_bytes=main_stack_hwm_min,main_stack_below_threshold=main_stack_below_threshold,
                       failure=failure,status='FAIL/HOLD' if failure else 'CAPTURE_COMPLETE_PENDING_REVIEW')
         (args.output/'capture.json').write_text(json.dumps(result,indent=2)+'\n')
     return 1 if failure else 0
@@ -170,4 +197,6 @@ if __name__=='__main__':
     p.add_argument('--host',default='192.168.1.68')
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--load',action='store_true')
+    p.add_argument('--main-stack-policy',choices=('strict','g2-trend'),default='strict',
+                   help='strict hard-stop for G1/default; g2-trend records the main HWM below 11160 B only for the exact G2-Web gate')
     raise SystemExit(capture(p.parse_args()))

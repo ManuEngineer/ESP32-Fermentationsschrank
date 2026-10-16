@@ -59,11 +59,102 @@ class G1CaptureFaultTest(unittest.TestCase):
     def test_reset_between_heartbeats_stops(self):
         self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'rst:0x1\n'], 'uart-unexpected-reset')
 
+    def test_second_reset_stops(self):
+        self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
+
+    def test_partial_panic_stops_without_waiting_for_newline(self):
+        self.check_frames([b"Guru Meditation: Core 1 panic'ed"], 'uart-anomaly')
+
+    def test_all_other_partial_hard_stop_markers_remain_active(self):
+        for marker in (b'heap_alloc_failed',b'abort()',b'task_wdt',b'Brownout',
+                       b'stack overflow',b'wdt timeout',b'g1_probe_error'):
+            with self.subTest(marker=marker):self.check_frames([marker], 'uart-anomaly')
+
     def test_uptime_regression_detects_reset_even_without_rom_line(self):
         self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'heartbeat: safe test mode, uptime_ms=10\n'], 'uart-uptime-regression')
 
     def test_host_interrupt_is_fail_hold(self):
         self.check_frames([KeyboardInterrupt()], 'host-interrupt')
+
+    def run_complete_boot(self,frames,main_stack_policy='strict'):
+        class Serial:
+            is_open=False
+            def open(self): self.is_open=True
+            def read(self,n):
+                item=frames.pop(0) if frames else b''
+                if not frames:(output/'STOP').touch(exist_ok=True)
+                return item
+            def close(self): self.is_open=False
+        serial=Serial()
+        with tempfile.TemporaryDirectory() as d:
+            output=Path(d)/'run'
+            args=SimpleNamespace(run=True,gate_id=g1_capture.G2_WEB_GATE_ID if main_stack_policy=='g2-trend' else 'OFFLINE_TEST_ONLY',
+                allow_port_open_boot=True,port='OFFLINE_FAKE',output=output,load=False,
+                expected_source='f'*40,host='OFFLINE_FAKE',main_stack_policy=main_stack_policy)
+            with patch.dict('sys.modules',{'serial':SimpleNamespace(Serial=lambda **kw:serial)}), \
+                    patch.object(g1_capture.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='OFFLINE_EMPTY')), \
+                    patch.object(g1_capture.time,'monotonic',return_value=1):
+                code=g1_capture.capture(args)
+            summary=json.loads((output/'capture.json').read_text())
+            return code,summary,(output/'ABORT').read_text() if (output/'ABORT').exists() else None,serial
+
+    def boot_lines(self,reset):
+        return [reset,
+            b'app_main: source git sha: '+b'f'*40+b'\n',
+            b'app_main: profile: esp32_release\n',
+            b'app_main: real actuators: disabled\n',
+            b'app_main: application: ready\n',
+            b'app_main: network_mode=HOME_WIFI network_state=HomeConnected\n',
+            b'app_main: heartbeat: safe test mode, uptime_ms=1000\n']
+
+    def test_split_initial_poweron_reset_line_is_accepted(self):
+        frames=[b'rst:0x',b'1 (POWERON_RESET),boot:0x13\n']+self.boot_lines(b'')[1:]
+        # The reset banner is split across reads; all subsequent boot evidence is complete.
+        code,summary,abort,serial=self.run_complete_boot(frames)
+        self.assertEqual(0,code)
+        self.assertIsNone(abort)
+        self.assertEqual(1,summary['expected_initial_reset_lines'])
+        self.assertEqual('CAPTURE_COMPLETE_PENDING_REVIEW',summary['status'])
+        self.assertFalse(serial.is_open)
+
+    def test_complete_initial_poweron_reset_line_is_accepted(self):
+        code,summary,abort,_=self.run_complete_boot(self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13\n'))
+        self.assertEqual(0,code)
+        self.assertIsNone(abort)
+        self.assertEqual(1,summary['expected_initial_reset_lines'])
+
+    def test_g2_main_stack_hwm_is_recorded_as_trend_only(self):
+        frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13\n')
+        frames.insert(1,b'app_main: stack_hwm_bytes=10000\n')
+        code,summary,abort,_=self.run_complete_boot(frames,'g2-trend')
+        self.assertEqual(0,code)
+        self.assertIsNone(abort)
+        self.assertEqual('g2-trend',summary['main_stack_policy'])
+        self.assertEqual('record-only',summary['main_stack_action'])
+        self.assertEqual(11160,summary['main_stack_hwm_threshold_bytes'])
+        self.assertEqual(10000,summary['main_stack_hwm_min_bytes'])
+        self.assertTrue(summary['main_stack_below_threshold'])
+
+    def test_g1_main_stack_hwm_remains_hard_stop(self):
+        frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13\n')
+        frames.insert(1,b'app_main: stack_hwm_bytes=10000\n')
+        code,summary,abort,_=self.run_complete_boot(frames)
+        self.assertEqual(1,code)
+        self.assertEqual('main-stack-reserve',summary['failure'])
+        self.assertEqual(10000,summary['main_stack_hwm_min_bytes'])
+        self.assertTrue(summary['main_stack_below_threshold'])
+        self.assertEqual('strict',summary['main_stack_policy'])
+
+    def test_httpd_stack_hwm_remains_hard_stop_in_g2_trend_mode(self):
+        frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13\n')
+        frames.insert(1,b'httpd_stack_hwm=2000\n')
+        code,summary,abort,_=self.run_complete_boot(frames,'g2-trend')
+        self.assertEqual(1,code)
+        self.assertEqual('httpd-stack-reserve',summary['failure'])
+
+    def test_g2_stack_trend_policy_is_restricted_to_exact_gate(self):
+        args=SimpleNamespace(run=True,gate_id='OTHER_GATE',allow_port_open_boot=True,main_stack_policy='g2-trend')
+        with self.assertRaises(SystemExit):g1_capture.capture(args)
 
 
 class G1CaptureTailTest(unittest.TestCase):
