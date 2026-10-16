@@ -1,0 +1,7 @@
+Implementation HEAD: a9a1156a1d44d4679957526bbc34a30be6422e4e
+Canonical runner: scripts/run_pre_ready_gates.sh self-check
+BOARD_PROFILE_SINGLE_SOURCE=PASS
+CLANG_FORMAT=PASS
+CLANG_TIDY=PASS
+BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
+Full Pre-Ready: NOT_RUN

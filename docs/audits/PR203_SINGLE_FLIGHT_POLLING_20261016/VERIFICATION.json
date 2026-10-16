@@ -1,0 +1,79 @@
+{
+  "created_utc": "2026-10-16T14:44:02.316385+00:00",
+  "approved_plan_sha": "8094b7f1a149269b0ad3e1c49cf4366bdfc40e7c",
+  "implementation_sha": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "files_sha256": {
+    "lib/fermentation_app/src/web_application_routes.cpp": "a54d743d2f44c9b530063bf3d2b67d14784bbf312adfe2963fb17a29d096778a",
+    "scripts/test_web_shell_polling.mjs": "0a391d9eb901413e7899d5099658eacf96a8516a7854b7f02c38b2a98b3f397c",
+    "test/test_web_application_routes/test_main.cpp": "99e0a1c5cd393deb2c9fb1b958095d59b22485d30e7ae1b74f644c6b062b368f",
+    "test/test_web_application_routes/shell_golden.hpp": "287050591ba42d62283d5bc512758079bf9ee877e5cd02f2235348afc5650f21",
+    "test/esp_idf_http_server_adapter_host/main/test_main.cpp": "090520071e2742bdfb288e07be1f318b3cd21c17b8c1756c5f3e8b7d2f95621b",
+    "lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp": "5e27a8e2d02fdc4bfe115ee970abe3e7e166deb9de121f871c5c4b8e7f03a418"
+  },
+  "node_cases": 40,
+  "native_suites": {
+    "test_web_application_routes": 100,
+    "test_authentication_records": 15,
+    "test_web_browser_policy": 4,
+    "test_web_session": 20,
+    "test_http_server_lifecycle": 5
+  },
+  "http_adapter_pass_markers": 25,
+  "self_check": "PASS",
+  "profiles": [
+    {
+      "profile": "esp32_bringup",
+      "source_git_sha": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+      "clean_source_tree": true,
+      "project_version": "a9a1156",
+      "compiled_source_sha_verified": true,
+      "app": {
+        "path": "build/esp32_bringup/esp32_fermentationsschrank.bin",
+        "bytes": 1768288,
+        "sha256": "794a33b92452656aaf8b3b646b757d9aa7ad6845a2c0ef3e987b3d5b2a8e3cff"
+      },
+      "elf": {
+        "path": "build/esp32_bringup/esp32_fermentationsschrank.elf",
+        "bytes": 37260800,
+        "sha256": "3e415854134d05c7e55f0c307930b30cbadb6731bdf20284ecf2f557ab57f85c"
+      },
+      "offline_image_info": "PASS"
+    },
+    {
+      "profile": "esp32_release",
+      "source_git_sha": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+      "clean_source_tree": true,
+      "project_version": "a9a1156",
+      "compiled_source_sha_verified": true,
+      "app": {
+        "path": "build/esp32_release/esp32_fermentationsschrank.bin",
+        "bytes": 1756544,
+        "sha256": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305"
+      },
+      "elf": {
+        "path": "build/esp32_release/esp32_fermentationsschrank.elf",
+        "bytes": 36246576,
+        "sha256": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601"
+      },
+      "offline_image_info": "PASS"
+    }
+  ],
+  "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+  "esp_clang": "21.1.3",
+  "unchanged_suffix_contract_check": {
+    "baseline": "8094b7f1a149269b0ad3e1c49cf4366bdfc40e7c",
+    "result": "PASS",
+    "check": "decoded suffix outside refresh and explicit post-mutation delta is byte-identical after reversing documented spelling aliases"
+  },
+  "gates": {
+    "INDEPENDENT_SOFTWARE_REVIEW": "PENDING",
+    "B4_RECONNECT": "FAIL_OBSERVED",
+    "RES-01": "BLOCKER",
+    "PR203_FINAL_GO": "HOLD",
+    "G1_QUALIFICATION": "NOT_PROVEN",
+    "ACTUATOR_RELEASE": "NO",
+    "HARDWARE_ACTIONS": "NOT_RUN",
+    "PRE_READY": "NOT_RUN"
+  },
+  "omissions": "Build stdout, compiler/header diagnostics, local absolute tool paths and unrelated existing artifact-manifest.json files omitted. No request headers/bodies or credentials included. Raw local execution logs retained in ignored build/pr203_polling_validation_a9a1156."
+}
