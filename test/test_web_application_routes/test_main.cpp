@@ -1918,7 +1918,7 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_TRUE(completeBody(response).find("const U=true") !=
                      std::string::npos);
     TEST_ASSERT_TRUE(
-        completeBody(response).find("document.documentElement.lang=locale") !=
+        completeBody(response).find("document.documentElement.lang=lc") !=
         std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
     TEST_ASSERT_TRUE(completeBody(response).find("id=\"board\"") !=
@@ -3504,18 +3504,19 @@ void test_shell_action_availability_and_confirmation_binding_contract() {
     // valid snapshot. Unchanged polls keep it.
     TEST_ASSERT_TRUE(contains(body,
                               "c=P?[h,P[0].revisions.run,P[0]."
-                              "revisions.programCatalog,PC,pg.value]"
+                              "revisions[Z],PC,pg.value]"
                               ".join():''"));
     TEST_ASSERT_TRUE(contains(body, "if(!P||KC&&c!==KC)K='';KC=K?KC||c:'';"));
     TEST_ASSERT_TRUE(contains(body, "pg.onchange=()=>ui();"));
     TEST_ASSERT_TRUE(contains(body, "send(i){K='';B=true;"));
     // A failed refresh makes the snapshot unusable until a fresh one arrives.
-    // The older-generation guard comes first (Issue #27 dashboard slice); an
-    // applied failure then clears P, updates the action lock and the display.
+    // Abort the siblings, then check the generation before display effects
+    // (Issue #27 dashboard slice); an applied failure then clears P, updates
+    // the action lock and the display.
     {
-        const auto handler = body.find("catch(e){");
+        const auto handler = body.find("const e=()=>{c.abort();");
         TEST_ASSERT_TRUE(handler != std::string::npos);
-        const auto guard = body.find("if(my<H)return;H=my;", handler);
+        const auto guard = body.find("if(my===G){", handler);
         const auto clear = body.find("P=null;", handler);
         const auto lock = body.find("ui();", clear);
         TEST_ASSERT_TRUE(guard != std::string::npos);
@@ -3561,8 +3562,7 @@ void test_shell_login_reload_bootstrap_for_protected_and_disabled() {
         const auto session = loginComposed(fixture);
         TEST_ASSERT_TRUE(contains(authenticatedShell(fixture, session.cookie),
                                   "const U=true;let Q=1;"));
-        TEST_ASSERT_TRUE(
-            contains(shellBody(fixture), "login.addEventListener"));
+        TEST_ASSERT_TRUE(contains(shellBody(fixture), "lg.addEventListener"));
         TEST_ASSERT_TRUE(
             contains(shellBody(fixture), "if(r.ok)location.reload();"));
     }
@@ -3598,6 +3598,10 @@ void test_shell_stays_within_the_limit_in_all_states() {
             fixture.application, passwordUnderTest(), kPinUnderTest));
         TEST_ASSERT_TRUE(shellBody(fixture).size() <= kLimit);
         const auto session = loginComposed(fixture);
+        const auto measuredBytes =
+            authenticatedShell(fixture, session.cookie).size();
+        std::printf("WEB_SHELL_AUTH_BYTES=%zu RESERVE=%zu\n", measuredBytes,
+                    kLimit - measuredBytes);
         TEST_ASSERT_TRUE(authenticatedShell(fixture, session.cookie).size() +
                              kSequenceHeadroom <=
                          kLimit);
@@ -3618,6 +3622,9 @@ void test_shell_stays_within_the_limit_in_all_states() {
         device_platform::HttpResponse response;
         TEST_ASSERT_TRUE(fixture.http.routes()->handle(request, response));
         TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        std::printf("WEB_SHELL_DISABLED_BYTES=%zu RESERVE=%zu\n",
+                    completeBody(response).size(),
+                    kLimit - completeBody(response).size());
         TEST_ASSERT_TRUE(completeBody(response).size() + kSequenceHeadroom <=
                          kLimit);
         TEST_ASSERT_TRUE(completeBody(response).size() + kShellMinimumReserve <=
@@ -3633,10 +3640,10 @@ void test_shell_stays_within_the_limit_in_all_states() {
 
 // ---- Issue #27 dashboard slice: SIM-27-W-01..06
 // ------------------------------ String/state contract only: the native tools
-// cannot execute the shell script. Dynamic browser behaviour (layout,
-// overlapping fetches, hanging requests) is NOT_RUN; the structural position
-// checks below only prove that the ordering guard exists and is placed before
-// every effect.
+// cannot execute the shell script. Dynamic browser behaviour (layout) is
+// NOT_RUN. scripts/test_web_shell_polling.mjs executes the actual JS with fake
+// fetch/DOM/time for serialisation, abort and post-mutation locks; the native
+// checks below retain the string/state contract.
 
 std::string loggedInShell(ComposedFixture& fixture) {
     TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
@@ -3648,9 +3655,9 @@ std::string loggedInShell(ComposedFixture& fixture) {
 // Text of the refresh function (from its declaration to the next top-level
 // function) so position checks cannot match other code.
 std::string refreshFunction(const std::string& body) {
-    const auto begin = body.find("async function rf(){");
+    const auto begin = body.find("function rf(f=0){");
     TEST_ASSERT_TRUE(begin != std::string::npos);
-    const auto end = body.find("login.addEventListener", begin);
+    const auto end = body.find("lg.addEventListener", begin);
     TEST_ASSERT_TRUE(end != std::string::npos);
     return body.substr(begin, end - begin);
 }
@@ -3697,7 +3704,8 @@ void test_dashboard_shell_structure_and_responsive_contract() {
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "@media(min-width:40rem)"));
     TEST_ASSERT_TRUE(contains(body, "min-height:2.75rem"));
     // API strings reach the DOM only through textContent/className.
-    TEST_ASSERT_TRUE(contains(body, "e.textContent=x;"));
+    TEST_ASSERT_TRUE(contains(body, "X='textContent'"));
+    TEST_ASSERT_TRUE(contains(body, "e[X]=x;"));
     // The existing controls, session embedding and polling are unchanged.
     for (const char* action : {"ack", "mute", "stop", "done", "start"}) {
         TEST_ASSERT_EQUAL_UINT32(
@@ -3708,8 +3716,9 @@ void test_dashboard_shell_structure_and_responsive_contract() {
     // SIM-27-W-06: no new endpoint, three read-only requests, 5 s polling.
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "setInterval("));
     TEST_ASSERT_TRUE(contains(body, "setInterval(rf,5000)"));
-    TEST_ASSERT_TRUE(contains(
-        body, "['status','temperatures','alerts'].map(x=>fetch('/api/v1/'+x,"));
+    TEST_ASSERT_TRUE(contains(body,
+                              "['status','temperatures','alerts'].map(async "
+                              "x=>{const a=await fetch('/api/v1/'+x,"));
     TEST_ASSERT_EQUAL_UINT32(5U, occurrences(body, "fetch('"));
 }
 
@@ -3732,8 +3741,8 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     TEST_ASSERT_TRUE(contains(body, "de:{"));
     TEST_ASSERT_TRUE(contains(body, ",en:{"));
     TEST_ASSERT_TRUE(contains(body, ",es:{"));
-    // English fallback is kept (T=L[locale], locale falls back to 'en').
-    TEST_ASSERT_TRUE(contains(body, "locale=L[g]?g:'en'"));
+    // English fallback is kept (T=L[lc], lc falls back to 'en').
+    TEST_ASSERT_TRUE(contains(body, "lc=L[g]?g:'en'"));
     // The warning text of the disabled mode stays as before.
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
 }
@@ -3885,22 +3894,24 @@ void test_dashboard_ordering_guard_and_age_contract_in_the_shell_text() {
     const auto rf = refreshFunction(body);
     // SIM-27-W-05, structure: generation and start time before the first fetch.
     const auto generation = rf.find("my=++G");
-    const auto started = rf.find("t0=Date.now()");
+    TEST_ASSERT_TRUE(contains(body, "N=Date.now"));
+    const auto started = rf.find("t0=N()");
     const auto firstFetch = rf.find("fetch(");
     TEST_ASSERT_TRUE(generation != std::string::npos);
     TEST_ASSERT_TRUE(started != std::string::npos);
     TEST_ASSERT_TRUE(firstFetch != std::string::npos);
     TEST_ASSERT_TRUE(generation < firstFetch);
     TEST_ASSERT_TRUE(started < firstFetch);
-    // `A` stays the authentication state; the generation uses G/H.
-    TEST_ASSERT_TRUE(contains(body, "G=0,H=0"));
+    // `A` stays the authentication state; G also invalidates pre-mutation
+    // groups.
+    TEST_ASSERT_TRUE(contains(body, "G=0,F=0,C=0,W=0"));
     TEST_ASSERT_FALSE(contains(body, "my<A"));
     TEST_ASSERT_FALSE(contains(body, "A=my"));
     // Success path: guard after the awaited responses, before any effect.
-    const auto awaited = rf.find("await Promise.all(r.map");
-    const auto guard = rf.find("if(my<H)return;H=my;", awaited);
+    const auto awaited = rf.find("await Promise.all(r)");
+    const auto guard = rf.find("if(my!==G||c.signal.aborted)return;", awaited);
     const auto displayCopy = rf.find("LP=p", guard);
-    const auto gating = rf.find("P=Date.now()-t0<=15000", guard);
+    const auto gating = rf.find("P=N()-t0<=15000", guard);
     TEST_ASSERT_TRUE(awaited != std::string::npos);
     TEST_ASSERT_TRUE(guard != std::string::npos);
     TEST_ASSERT_TRUE(displayCopy != std::string::npos);
@@ -3908,10 +3919,10 @@ void test_dashboard_ordering_guard_and_age_contract_in_the_shell_text() {
     TEST_ASSERT_TRUE(awaited < guard);
     // Age is the start of the request, never the arrival time.
     TEST_ASSERT_TRUE(contains(rf, "LT=t0"));
-    TEST_ASSERT_FALSE(contains(rf, "LT=Date.now()"));
-    // Failure path: guard first, then P=null, then the action lock.
-    const auto handler = rf.find("catch(e){");
-    const auto failGuard = rf.find("if(my<H)return;H=my;", handler);
+    TEST_ASSERT_FALSE(contains(rf, "LT=N()"));
+    // Shared timeout/error callback: generation guard, P=null, action lock.
+    const auto handler = rf.find("const e=()=>{c.abort();");
+    const auto failGuard = rf.find("if(my===G){", handler);
     const auto failClear = rf.find("P=null;", handler);
     const auto failLock = rf.find("ui();", failClear);
     TEST_ASSERT_TRUE(handler != std::string::npos);
@@ -4064,12 +4075,12 @@ void test_shell_start_flow_text_contract() {
     // enabled only while list and status revision agree, a mismatch or failed
     // load clears the selection and reloads, and the intent carries the
     // list revision instead of the latest status revision.
-    TEST_ASSERT_TRUE(contains(body, "!PC||P[0].revisions.programCatalog!==PC"));
-    TEST_ASSERT_TRUE(contains(body, "programCatalog!==PC)lp();"));
-    TEST_ASSERT_TRUE(contains(body, "PC='';pg.replaceChildren();"));
+    TEST_ASSERT_TRUE(contains(body, "!PC||P[0].revisions[Z]!==PC"));
+    TEST_ASSERT_TRUE(contains(body, "v&&v!==PC)lp();"));
+    TEST_ASSERT_TRUE(contains(body, "PC='';pg[Y]();"));
     TEST_ASSERT_TRUE(contains(body, "PC=j.catalogRevision;"));
     TEST_ASSERT_TRUE(contains(body, "if(i.t==='start-program')o.c=PC;"));
-    TEST_ASSERT_TRUE(contains(body, "revisions.programCatalog,PC,pg.value]"));
+    TEST_ASSERT_TRUE(contains(body, "revisions[Z],PC,pg.value]"));
 }
 
 void test_other_states_get_no_provisioning_form_or_bypass() {
