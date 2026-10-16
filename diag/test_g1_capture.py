@@ -28,7 +28,7 @@ class G1CaptureTest(unittest.TestCase):
             with patch.dict('sys.modules',{'serial':SimpleNamespace(Serial=lambda **kw:serial)}), patch.object(g1_capture.time,'monotonic',side_effect=lambda:next(clock,6)):
                 result=g1_capture.capture(args)
             self.assertEqual(1,result)
-            self.assertEqual('uart-heartbeat-timeout\n',(output/'ABORT').read_text())
+            self.assertEqual('uart-initial-reset-timeout\n',(output/'ABORT').read_text())
             self.assertFalse(serial.is_open)
 
 
@@ -57,7 +57,7 @@ class G1CaptureFaultTest(unittest.TestCase):
         self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'heap_alloc_failed'], 'uart-anomaly')
 
     def test_reset_between_heartbeats_stops(self):
-        self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
+        self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'heartbeat: safe test mode, uptime_ms=1000\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
 
     def test_second_reset_stops(self):
         self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
@@ -80,7 +80,7 @@ class G1CaptureFaultTest(unittest.TestCase):
             with self.subTest(marker=marker):self.check_frames([marker], 'uart-anomaly')
 
     def test_uptime_regression_detects_reset_even_without_rom_line(self):
-        self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'heartbeat: safe test mode, uptime_ms=10\n'], 'uart-uptime-regression')
+        self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'heartbeat: safe test mode, uptime_ms=1000\n',b'heartbeat: safe test mode, uptime_ms=10\n'], 'uart-uptime-regression')
 
     def test_host_interrupt_is_fail_hold(self):
         self.check_frames([KeyboardInterrupt()], 'host-interrupt')
@@ -95,6 +95,9 @@ class G1CaptureFaultTest(unittest.TestCase):
                 if self.reads==0:clock[0]+=first_frame_delay
                 self.reads+=1
                 item=frames.pop(0) if frames else b''
+                if isinstance(item,tuple):
+                    delay,item=item
+                    clock[0]+=delay
                 if not frames:(output/'STOP').touch(exist_ok=True)
                 return item
             def close(self): self.is_open=False
@@ -109,6 +112,8 @@ class G1CaptureFaultTest(unittest.TestCase):
                     patch.object(g1_capture.time,'monotonic',side_effect=lambda:clock[0]):
                 code=g1_capture.capture(args)
             summary=json.loads((output/'capture.json').read_text())
+            serial.recorded_raw=(output/'uart_raw.bin').read_bytes()
+            serial.recorded_log=(output/'uart.log').read_bytes()
             return code,summary,(output/'ABORT').read_text() if (output/'ABORT').exists() else None,serial
 
     def boot_lines(self,reset):
@@ -135,6 +140,89 @@ class G1CaptureFaultTest(unittest.TestCase):
         self.assertEqual(0,code)
         self.assertIsNone(abort)
         self.assertEqual(1,summary['expected_initial_reset_lines'])
+
+    def test_88_buffered_heartbeats_then_reset_and_new_boot(self):
+        buffered=b'5281) app_main: heartbeat: safe test mode, uptime_ms=3594033\r\n'*88
+        for reset in ([b'rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n'],
+                      [b'rst:0x',b'1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n']):
+            with self.subTest(reset=reset):
+                frames=[buffered]+reset+self.boot_lines(b'')[1:]+[b'heartbeat: safe test mode, uptime_ms=2000\n']
+                code,summary,abort,serial=self.run_complete_boot(frames)
+                self.assertEqual(0,code)
+                self.assertIsNone(abort)
+                self.assertTrue(summary['boot_synchronized'])
+                self.assertEqual(1,summary['expected_initial_reset_lines'])
+                self.assertEqual(88,summary['pre_boot_lines_ignored'])
+                self.assertEqual(2,summary['qualified_heartbeats'])
+                self.assertTrue(all(summary[k] for k in ('source_proven','ready','actors_disabled','release_profile','network_home_connected')))
+                self.assertTrue(serial.recorded_raw.startswith(buffered))
+                self.assertEqual(88,serial.recorded_log.count(b'uptime_ms=3594033'))
+
+    def test_buffered_heartbeats_cannot_extend_missing_reset_deadline(self):
+        old=b'heartbeat: safe test mode, uptime_ms=3594033\n'
+        code,summary,abort,_=self.run_complete_boot([(1,old)]*6+[b''])
+        self.assertEqual(1,code)
+        self.assertEqual('uart-initial-reset-timeout',summary['failure'])
+        self.assertFalse(summary['boot_synchronized'])
+        self.assertEqual(0,summary['qualified_heartbeats'])
+        self.assertEqual(0,summary['max_heartbeat_gap_seconds'])
+
+    def test_buffered_heartbeats_cannot_replace_new_boot_liveness(self):
+        frames=[b'heartbeat: safe test mode, uptime_ms=3594033\n'*88]
+        frames+=self.boot_lines(b'rst:0x1 (POWERON_RESET)\n')[:-1]
+        frames+=[(5.001,b''),b'']
+        code,summary,abort,_=self.run_complete_boot(frames)
+        self.assertEqual(1,code)
+        self.assertEqual('uart-heartbeat-timeout',summary['failure'])
+        self.assertTrue(summary['boot_synchronized'])
+        self.assertEqual(0,summary['qualified_heartbeats'])
+
+    def test_pre_reset_identity_cannot_replace_missing_new_identity(self):
+        # Each early fact must be observed again after the marker. Early STOP
+        # cannot turn incomplete boot evidence into capture-complete either.
+        fields=('source_proven','release_profile','actors_disabled','ready','network_home_connected')
+        boot=self.boot_lines(b'rst:0x1 (POWERON_RESET)\n')
+        for index,field in enumerate(fields,1):
+            with self.subTest(field=field):
+                frames=[boot[index]]+boot[:index]+boot[index+1:]
+                code,summary,abort,_=self.run_complete_boot(frames)
+                self.assertEqual(1,code)
+                self.assertEqual('boot-identity-state-not-proven',summary['failure'])
+                self.assertFalse(summary[field])
+                self.assertTrue(summary['boot_synchronized'])
+                self.assertEqual(1,summary['pre_boot_lines_ignored'])
+
+    def test_old_identity_and_heartbeat_without_reset_are_not_qualified(self):
+        code,summary,abort,_=self.run_complete_boot(self.boot_lines(b'')[1:])
+        self.assertEqual(1,code)
+        self.assertEqual('boot-identity-state-not-proven',summary['failure'])
+        self.assertFalse(summary['boot_synchronized'])
+        self.assertEqual(0,summary['qualified_heartbeats'])
+        self.assertTrue(all(not summary[k] for k in ('source_proven','ready','actors_disabled','release_profile','network_home_connected')))
+
+    def test_wrong_old_source_is_ignored_but_wrong_new_source_stops(self):
+        code,summary,abort,_=self.run_complete_boot(
+            [b'app_main: source git sha: '+b'0'*40+b'\n']+self.boot_lines(b'rst:0x1 (POWERON_RESET)\n'))
+        self.assertEqual(0,code)
+        self.assertTrue(summary['source_proven'])
+        self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'app_main: source git sha: '+b'f'*40+b'\n'], 'source-mismatch')
+
+    def test_missing_ready_hits_identity_deadline_despite_new_heartbeats(self):
+        boot=self.boot_lines(b'rst:0x1 (POWERON_RESET)\n')
+        frames=[line for line in boot if b'application: ready' not in line]
+        frames+=[(1,b'heartbeat: safe test mode, uptime_ms='+str(2000+i*1000).encode()+b'\n') for i in range(35)]
+        code,summary,abort,_=self.run_complete_boot(frames)
+        self.assertEqual(1,code)
+        self.assertEqual('boot-identity-state-not-proven',summary['failure'])
+        self.assertFalse(summary['ready'])
+        self.assertGreater(summary['qualified_heartbeats'],30)
+
+    def test_fatal_markers_before_and_after_reset_remain_fail_closed(self):
+        for marker in (b'panic',b'heap_alloc_failed',b'task_wdt',b'Brownout',b'stack overflow'):
+            for prefix in ([],[b'rst:0x1 (POWERON_RESET)\n']):
+                for ending in (b'',b'\n'):
+                    with self.subTest(marker=marker,prefix=prefix,ending=ending):
+                        self.check_frames(prefix+[marker+ending], 'uart-anomaly')
 
     def test_initial_poweron_reset_at_first_heartbeat_deadline_is_accepted(self):
         frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n')

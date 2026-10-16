@@ -1,0 +1,66 @@
+{
+  "mode": "OFFLINE_REPLAY_ONLY",
+  "live_hardware_qualification": "NOT_PROVEN",
+  "historical_stops": "UNCHANGED_FAIL/HOLD",
+  "clock_model": "Original chunk arrival times assigned to fake reads; original inter-line CPU/parse delays are not reproduced. Original post-STOP tails are included.",
+  "cases": [
+    {
+      "case": "followup01_30_chunks",
+      "mode": "OFFLINE_REPLAY_ONLY",
+      "no_hardware_or_http_access": true,
+      "original_capture_status": "FAIL/HOLD",
+      "original_failure": "uart-unexpected-reset",
+      "input_raw_sha256": "afbe144c20838b5120cdbe5b85566754ccf921e644df216a2e403ab88781f3b1",
+      "input_chunks_sha256": "298e46f5ec228b02ec0d8a62b3511c1ae6e064d98541dbb54bf3a6c4d0e32911",
+      "input_capture_sha256": "7790f37a2ca52bff00b428c10b58253814caa7f3332aa9affff0dc8e0ef26de7",
+      "input_bytes": 13393,
+      "input_chunks": 30,
+      "replay_exit_code": 0,
+      "replay_status": "CAPTURE_COMPLETE_PENDING_REVIEW",
+      "replay_failure": null,
+      "boot_synchronized": true,
+      "initial_reset_seconds_from_original_capture_start": 0.07614985801046714,
+      "pre_boot_lines_ignored": 90,
+      "qualified_heartbeats": 2,
+      "replay_identity": {
+        "source_proven": true,
+        "ready": true,
+        "actors_disabled": true,
+        "release_profile": true,
+        "network_home_connected": true
+      },
+      "parser_sha256": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+      "expected_outcome_assertions": "PASS",
+      "limit": "Counterfactual parser replay including original passive tail. No retroactive hardware qualification, no browser evidence."
+    },
+    {
+      "case": "original_27_chunks",
+      "mode": "OFFLINE_REPLAY_ONLY",
+      "no_hardware_or_http_access": true,
+      "original_capture_status": "FAIL/HOLD",
+      "original_failure": "uart-anomaly",
+      "input_raw_sha256": "2394e493d7fff4d01a34f99b7dfb4cfa005237f71b15ea0f8601ca7edb3a5db3",
+      "input_chunks_sha256": "21d83781162e58fe0004231da10c9cb48eb068ccbfa2aefde54544dde487f18a",
+      "input_capture_sha256": "9ee9676e3295de2ea8590839b0ae211e95d234f6bdeb3b549634a6188405a73d",
+      "input_bytes": 11796,
+      "input_chunks": 27,
+      "replay_exit_code": 1,
+      "replay_status": "FAIL/HOLD",
+      "replay_failure": "boot-identity-state-not-proven",
+      "boot_synchronized": true,
+      "initial_reset_seconds_from_original_capture_start": 0.07897079800022766,
+      "pre_boot_lines_ignored": 101,
+      "qualified_heartbeats": 2,
+      "replay_identity": {
+        "source_proven": true,
+        "ready": false,
+        "actors_disabled": true,
+        "release_profile": true,
+        "network_home_connected": true
+      },
+      "parser_sha256": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+      "expected_outcome_assertions": "PASS",
+      "limit": "Counterfactual parser replay including original passive tail. No retroactive hardware qualification, no browser evidence."
+    }
+  ]
+}

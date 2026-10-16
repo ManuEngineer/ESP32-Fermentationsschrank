@@ -1,5 +1,7 @@
 # PR #203: Offline-Fix des G2-UART-Monitors
 
+Historischer M1-Stand auf `a5afe56104a9f5a8a5d673b23f5ba9cd68d54096`. Die anschliessende Boot-Synchronisierung ist separat im [Folgedelta](PR203_G2_UART_BOOT_SYNC_FIX_20261016.md) dokumentiert; die nachstehenden Test-/Quellhashes gehören zum M1-Stand.
+
 Stand: Diagnosebranch `agent/pr203-res01-g1-diag-local`, Basis `6abd685f51ca69f5e6a5b10a332ed014351d8e43`.
 
 ## Korrektur

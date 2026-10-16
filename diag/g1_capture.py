@@ -78,6 +78,9 @@ def capture(args):
     ready=actors=profile=network=source=False
     last_heartbeat=started=time.monotonic()
     resets=0
+    boot_synchronized=False
+    initial_reset_monotonic=None
+    pre_boot_lines_ignored=qualified_heartbeats=0
     last_uptime=None
     main_stack_hwm_min=None
     main_stack_below_threshold=False
@@ -101,6 +104,8 @@ def capture(args):
             board.open()  # explicitly gated; this FT232R is known to reset on open
             while True:
                 now=time.monotonic()
+                if not boot_synchronized and now-started>INITIAL_RESET_WINDOW_SECONDS:
+                    failure='uart-initial-reset-timeout';break
                 if now-last_heartbeat>5:
                     failure='uart-heartbeat-timeout';break
                 if now>=next_socket_snapshot:
@@ -123,8 +128,16 @@ def capture(args):
                                 or line_monotonic-started>INITIAL_RESET_WINDOW_SECONDS
                                 or EXPECTED_PORT_OPEN_RESET.fullmatch(text) is None):
                             failure='uart-unexpected-reset';break
+                        boot_synchronized=True
+                        initial_reset_monotonic=line_monotonic
                     elif BAD.search(text):
                         failure='uart-anomaly';break
+                    # Preserve pre-reset data in both logs, but qualify only
+                    # evidence belonging to the newly synchronized boot. BAD
+                    # markers above (and in partial frames below) stay active.
+                    if not boot_synchronized:
+                        pre_boot_lines_ignored+=1
+                        continue
                     if HEARTBEAT.search(text):
                         stamp=time.monotonic()
                         if stamp-last_heartbeat>5:
@@ -135,6 +148,7 @@ def capture(args):
                             failure='uart-uptime-regression';break
                         last_heartbeat=stamp
                         last_uptime=uptime
+                        qualified_heartbeats+=1
                     if 'source git sha:' in text:
                         source=args.expected_source in text
                         if not source:failure='source-mismatch';break
@@ -176,6 +190,8 @@ def capture(args):
                     # the host STOP marker. Never restart the load or reset.
                 if (args.output/'STOP').exists():
                     if loader is not None and loader.is_alive():failure='owner-stop'
+                    elif not boot_synchronized or not all((source,ready,actors,profile,network)) or last_uptime is None:
+                        failure='boot-identity-state-not-proven'
                     break
     except KeyboardInterrupt:
         failure='host-interrupt'
@@ -189,6 +205,8 @@ def capture(args):
             result['runner_not_joined']=True
         result.update(end_epoch=time.time(),end_monotonic=time.monotonic(),max_heartbeat_gap_seconds=max_gap,gate=args.gate_id,source_proven=source,ready=ready,actors_disabled=actors,
                       release_profile=profile,network_home_connected=network,expected_initial_reset_lines=resets,
+                      boot_synchronized=boot_synchronized,initial_reset_monotonic=initial_reset_monotonic,
+                      pre_boot_lines_ignored=pre_boot_lines_ignored,qualified_heartbeats=qualified_heartbeats,
                       main_stack_hwm_min_bytes=main_stack_hwm_min,main_stack_below_threshold=main_stack_below_threshold,
                       failure=failure,status='FAIL/HOLD' if failure else 'CAPTURE_COMPLETE_PENDING_REVIEW')
         (args.output/'capture.json').write_text(json.dumps(result,indent=2)+'\n')
