@@ -1,0 +1,28 @@
+{
+  "diagnostic_commit": "a5afe56104a9f5a8a5d673b23f5ba9cd68d54096",
+  "product_source": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "product_pr_head_at_start": "0a665bbe659841883733a6c10b69f12c1462b543",
+  "gate_id": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "main_stack_policy": "g2-trend",
+  "app_sha256": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+  "fallback_sha256": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633",
+  "monitor_sha256": {
+    "g1_capture.py": "3af98e77234efb90f7fafa1e9488702a65851efabf55055b7ddf44014fbd32d9",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "raw_uart": {
+    "private": true,
+    "bytes": 13393,
+    "sha256": "afbe144c20838b5120cdbe5b85566754ccf921e644df216a2e403ab88781f3b1"
+  },
+  "publication": {
+    "CAPTURE.json": "byte-exact capture summary; contains no credentials or private network fields",
+    "UART_CHUNKS.jsonl": "byte-exact host time/length/tail metadata; no UART payload",
+    "UART_PRESTOP.sanitized.log": {
+      "selection": "All parsed pre-STOP lines subject to heartbeat/ROM/reset allowlist; host timestamps preserved",
+      "omitted_lines": 0
+    },
+    "UART_TAIL_SELECTED.sanitized.log": "Selected source/profile/actor/ready/heartbeat/resource lines only; all other boot/network payload omitted. These are observations after STOP, not qualified boot PASS.",
+    "excluded": "Full raw UART, complete tail, host socket addresses, private artifact paths/readbacks, MAC and network configuration; no HAR created."
+  }
+}
