@@ -57,10 +57,19 @@ class G1CaptureFaultTest(unittest.TestCase):
         self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'heap_alloc_failed'], 'uart-anomaly')
 
     def test_reset_between_heartbeats_stops(self):
-        self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'rst:0x1\n'], 'uart-unexpected-reset')
+        self.check_frames([b'heartbeat: safe test mode, uptime_ms=1000\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
 
     def test_second_reset_stops(self):
         self.check_frames([b'rst:0x1 (POWERON_RESET)\n',b'rst:0x1 (POWERON_RESET)\n'], 'uart-unexpected-reset')
+
+    def test_initial_other_or_malformed_reset_cause_stops(self):
+        for reset in (b'rst:0xc (SW_CPU_RESET)\n',
+                      b'rst:0x10 (RTCWDT_RTC_RESET)\n',
+                      b'rst:0x1 (SW_CPU_RESET)\n',
+                      b'rst:0xc (POWERON_RESET)\n',
+                      b'rst:0x1\n'):
+            with self.subTest(reset=reset):
+                self.check_frames([reset], 'uart-unexpected-reset')
 
     def test_partial_panic_stops_without_waiting_for_newline(self):
         self.check_frames([b"Guru Meditation: Core 1 panic'ed"], 'uart-anomaly')
@@ -76,11 +85,15 @@ class G1CaptureFaultTest(unittest.TestCase):
     def test_host_interrupt_is_fail_hold(self):
         self.check_frames([KeyboardInterrupt()], 'host-interrupt')
 
-    def run_complete_boot(self,frames,main_stack_policy='strict'):
+    def run_complete_boot(self,frames,main_stack_policy='strict',first_frame_delay=0):
+        clock=[1.0]
         class Serial:
             is_open=False
+            reads=0
             def open(self): self.is_open=True
             def read(self,n):
+                if self.reads==0:clock[0]+=first_frame_delay
+                self.reads+=1
                 item=frames.pop(0) if frames else b''
                 if not frames:(output/'STOP').touch(exist_ok=True)
                 return item
@@ -93,7 +106,7 @@ class G1CaptureFaultTest(unittest.TestCase):
                 expected_source='f'*40,host='OFFLINE_FAKE',main_stack_policy=main_stack_policy)
             with patch.dict('sys.modules',{'serial':SimpleNamespace(Serial=lambda **kw:serial)}), \
                     patch.object(g1_capture.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='OFFLINE_EMPTY')), \
-                    patch.object(g1_capture.time,'monotonic',return_value=1):
+                    patch.object(g1_capture.time,'monotonic',side_effect=lambda:clock[0]):
                 code=g1_capture.capture(args)
             summary=json.loads((output/'capture.json').read_text())
             return code,summary,(output/'ABORT').read_text() if (output/'ABORT').exists() else None,serial
@@ -122,6 +135,22 @@ class G1CaptureFaultTest(unittest.TestCase):
         self.assertEqual(0,code)
         self.assertIsNone(abort)
         self.assertEqual(1,summary['expected_initial_reset_lines'])
+
+    def test_initial_poweron_reset_at_first_heartbeat_deadline_is_accepted(self):
+        frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n')
+        code,summary,abort,_=self.run_complete_boot(frames,first_frame_delay=5)
+        self.assertEqual(0,code)
+        self.assertIsNone(abort)
+        self.assertEqual(1,summary['expected_initial_reset_lines'])
+
+    def test_initial_poweron_reset_after_first_heartbeat_deadline_stops(self):
+        frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n')
+        # The read starts in time but the full reset line arrives outside the
+        # window; classify the received reset itself as unexpected.
+        code,summary,abort,_=self.run_complete_boot(frames,first_frame_delay=5.001)
+        self.assertEqual(1,code)
+        self.assertEqual('uart-unexpected-reset',summary['failure'])
+        self.assertEqual('uart-unexpected-reset\n',abort)
 
     def test_g2_main_stack_hwm_is_recorded_as_trend_only(self):
         frames=self.boot_lines(b'rst:0x1 (POWERON_RESET),boot:0x13\n')

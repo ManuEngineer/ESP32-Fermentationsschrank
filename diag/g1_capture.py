@@ -17,6 +17,11 @@ from c0_load import BAD, HEARTBEAT, run as load_run
 BAD_PARTIAL = re.compile('|'.join(term for term in BAD.pattern.split('|')
                                  if term.lower() != 'rst:0x'), BAD.flags)
 G2_WEB_GATE_ID = 'PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01'
+# The expected port-open reset must complete within the existing first-heartbeat
+# deadline. The separate 30-s boot-identity deadline does not extend this window.
+INITIAL_RESET_WINDOW_SECONDS = 5.0
+EXPECTED_PORT_OPEN_RESET = re.compile(
+    r'rst:0x1 \(POWERON_RESET\)(?:,boot:0x[0-9a-fA-F]+(?: \([A-Z0-9_]+\))?)?\r?')
 MAIN_STACK_HWM_THRESHOLD_BYTES = 11160
 HTTPD_STACK_HWM_THRESHOLD_BYTES = 2080
 
@@ -110,10 +115,13 @@ def capture(args):
                 while b'\n' in offset:
                     line,offset=offset.split(b'\n',1)
                     text=line.decode(errors='replace')
-                    log.write(('[host_mono=%.6f] '%time.monotonic()).encode()+line+b'\n')
+                    line_monotonic=time.monotonic()
+                    log.write(('[host_mono=%.6f] '%line_monotonic).encode()+line+b'\n')
                     if 'rst:0x' in text:
                         resets+=1
-                        if resets>1 or last_uptime is not None:
+                        if (resets>1 or last_uptime is not None
+                                or line_monotonic-started>INITIAL_RESET_WINDOW_SECONDS
+                                or EXPECTED_PORT_OPEN_RESET.fullmatch(text) is None):
                             failure='uart-unexpected-reset';break
                     elif BAD.search(text):
                         failure='uart-anomaly';break
