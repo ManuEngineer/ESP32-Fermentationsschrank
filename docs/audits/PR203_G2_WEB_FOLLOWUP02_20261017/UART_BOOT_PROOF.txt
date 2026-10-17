@@ -1,0 +1,7 @@
+[host_mono=410501.381699] rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+[host_mono=410503.195380] I (1851) app_main: profile: esp32_release
+[host_mono=410503.195393] I (1851) app_main: source git sha: a9a1156a1d44d4679957526bbc34a30be6422e4e
+[host_mono=410503.245742] I (1871) app_main: real actuators: disabled
+[host_mono=410503.245864] I (1901) app_main: application: ready
+[host_mono=410504.807850] I (3461) app_main: heartbeat: safe test mode, uptime_ms=2213
+[host_mono=410505.814352] I (4461) app_main: heartbeat: safe test mode, uptime_ms=3216
