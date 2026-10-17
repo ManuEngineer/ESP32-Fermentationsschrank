@@ -1,0 +1,30 @@
+Existing unchanged adapter/host test; relevant input files match implementation commit.
+Initial host run could not bind occupied port 8080 (bind errno 98). No listener stopped.
+Execution in fresh user/network namespace, only loopback enabled:
+unshare --user --map-root-user --net bash -c 'ip link set lo up && exec /tmp/pr203_polling_http_adapter/issue27_http_server_adapter_host.elf'
+HTTP_ADAPTER_CASE=server-start=PASS
+HTTP_ADAPTER_CASE=get-root-reaches-route-sink=PASS
+HTTP_ADAPTER_CASE=allowed-get-metadata-extracted=PASS
+HTTP_ADAPTER_CASE=post-reaches-route-sink=PASS
+HTTP_ADAPTER_CASE=allowed-post-metadata-extracted=PASS
+HTTP_ADAPTER_CASE=duplicate-security-header-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=oversized-metadata-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=empty-security-metadata-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=invalid-control-metadata-fails-closed=PASS
+HTTP_ADAPTER_CASE=public-api-observed-each-dispatch=PASS
+HTTP_ADAPTER_CASE=public-raw-api-handler-data-is-header-only=PASS
+HTTP_ADAPTER_CASE=public-raw-api-preserves-duplicates-single-value-api-returns-first=PASS
+HTTP_ADAPTER_CASE=public-value-api-distinguishes-absent-from-empty-header=PASS
+HTTP_ADAPTER_CASE=server-stop=PASS
+HTTP_ADAPTER_CASE=suffix-server-start=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-chunk-bytes-and-single-terminator=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-chunk-bytes-and-single-terminator=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-json-503-no-suffix=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-server-stop=PASS
+ESP_IDF_HTTP_ADAPTER_DISPATCH=PASS

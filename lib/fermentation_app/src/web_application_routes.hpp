@@ -76,6 +76,10 @@ class WebRouteDispatcher final : public device_platform::IHttpRouteSink {
                               device_platform::HttpResponse& response) override;
 
    private:
+#ifdef APP_PROFILE_NATIVE
+    friend struct WebRouteDispatcherTestAccess;
+    inline static std::size_t extraShellBytesForTest_{0U};
+#endif
     [[nodiscard]] bool handleShell(const device_platform::HttpRequest& request,
                                    device_platform::HttpResponse& response);
     [[nodiscard]] bool handleLogin(const device_platform::HttpRequest& request,

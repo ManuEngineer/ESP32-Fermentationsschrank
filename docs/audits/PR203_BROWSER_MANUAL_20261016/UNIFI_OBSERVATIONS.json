@@ -1,0 +1,116 @@
+{
+  "initial": {
+    "evidence": "OWNER_SUPPLIED_INLINE_SCREENSHOT",
+    "received_utc": "2026-10-16T12:05:46.837248+00:00",
+    "received_host_monotonic": 343551.799276164,
+    "screenshot_capture_utc": "NOT_SUPPLIED",
+    "screenshot_capture_timezone": "NOT_SUPPLIED",
+    "original_image_location": "Chat attachment; no local file/hash asserted",
+    "client": {
+      "ip": "192.168.1.68",
+      "ap_name": "AC Pro Wohnzimmer",
+      "channel": 1,
+      "band_GHz": 2.4,
+      "bandwidth_MHz": 20,
+      "mimo": "1x1",
+      "signal_dBm": -86,
+      "tx_retries_percent": 0,
+      "activity_display": "24.3 KB"
+    },
+    "ap_health": {
+      "airtime_percent": 31,
+      "external_interference_percent": 0,
+      "tx_retries_percent": 27
+    },
+    "site_health_display": {
+      "average_latency_ms": 0,
+      "packet_loss_percent": 0,
+      "scope": "Controller aggregate; does not establish device HTTP latency or request success"
+    },
+    "visible_event_dates": "Oct 15; year/timezone not displayed in screenshot; historical connect/disconnect entries",
+    "limits": [
+      "No predeclared RSSI acceptance threshold",
+      "Client and AP retry percentages have different scopes",
+      "No causal inference or browser result from this screenshot",
+      "Capture time not established from receipt time"
+    ]
+  },
+  "later": [
+    {
+      "received_utc": "2026-10-16T12:11:42.875720+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -86,
+      "client_tx_retries_percent": 44,
+      "ap_tx_retries_percent": 36,
+      "ap_airtime_percent": 31,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; year/timezone not shown",
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:18:20.050556+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 30,
+      "ap_airtime_percent": 32,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:27:02.476874+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 42,
+      "ap_airtime_percent": 34,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:37:53.037866+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 42,
+      "ap_airtime_percent": 34,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T13:02:48.325317+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 13,
+      "ap_airtime_percent": 32,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; no newer event visible in screenshot",
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T13:08:13.887677+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -84,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 11,
+      "ap_airtime_percent": 31,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; no newer event visible",
+      "causality": "NOT_PROVEN; controller screenshot does not establish transport failure cause"
+    }
+  ],
+  "limits": "Owner screenshots only; capture time often not supplied. AP and client retries have different scopes. No RSSI threshold or causal conclusion."
+}

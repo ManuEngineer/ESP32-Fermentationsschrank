@@ -78,7 +78,6 @@ constexpr std::uint16_t kKeyboardPitchX = 30U;
 constexpr std::uint16_t kKeyboardPitchY = 34U;
 constexpr std::uint16_t kKeyboardFaceWidth = 28U;
 constexpr std::uint16_t kKeyboardFaceHeight = 32U;
-constexpr std::size_t kNetworkScreenDrawCommandCapacity = 21U;
 constexpr device_platform::DisplayRect kNetworkPageTitleRect{
     8U, 34U, 140U, RepresentativeScreen::kTextLineHeight};
 constexpr device_platform::DisplayRect kNetworkCurrentModeRect{
@@ -416,12 +415,7 @@ RepresentativeScreen makeRepresentativeScreen(
             networkInfoFingerprint(*networkAccessPointInfo);
     }
     auto& commands = screen.commands;
-    if (screen.workspace.page == FermentationUiPage::HeaderNetwork) {
-        // The network projection emits at most 21 commands, including
-        // press feedback. Allocate that bounded capacity once so repeated
-        // network redraws do not grow and replace the vector buffer twice.
-        commands.reserve(kNetworkScreenDrawCommandCapacity);
-    }
+    commands.reserve(kMaximumDrawCommands);
     addFill(commands, {0U, 0U, screen.kWidth, screen.kHeight},
             device_platform::ThemeToken::Canvas);
     addFill(commands, {0U, 0U, screen.kWidth, kHeaderHeight},

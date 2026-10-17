@@ -1,0 +1,8 @@
+[host_mono=413266.966313] rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+[host_mono=413268.479901] I (1561) app_main: profile: esp32_release
+[host_mono=413268.530233] I (1561) app_main: source git sha: a9a1156a1d44d4679957526bbc34a30be6422e4e
+[host_mono=413268.530311] I (1581) app_main: real actuators: disabled
+[host_mono=413268.530324] I (1591) app_main: application: ready
+[host_mono=413270.347132] I (3421) app_main: heartbeat: safe test mode, uptime_ms=2173
+[host_mono=413271.354587] I (4421) app_main: heartbeat: safe test mode, uptime_ms=3173
+[host_mono=413272.210473] I (5231) app_main: resources: point=stable_home_wifi network_mode=HOME_WIFI network_state=HomeConnected free_heap_bytes=42568 minimum_free_heap_bytes=32592 largest_free_block_8bit_bytes=32768 stack_hwm_bytes=11704 internal_8bit_free_bytes=42568 internal_8bit_minimum_free_bytes=32592 internal_8bit_largest_free_block_bytes=32768 dma_free_bytes=42568 dma_minimum_free_bytes=32592 dma_largest_free_block_bytes=32768

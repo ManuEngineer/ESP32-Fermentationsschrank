@@ -14,3 +14,8 @@ idf.py -C test/esp_idf_http_server_adapter_host \
   -B /tmp/build_issue27_http_server_adapter_host build
 /tmp/build_issue27_http_server_adapter_host/issue27_http_server_adapter_host.elf
 ```
+
+RES-01 extends this test with complete chunk framing (including an empty head),
+503 JSON bytes/status/type without a suffix, and test-only public API wrappers
+that inject head/suffix/terminator errors and observe the adapter return value.
+The wrappers forward normal calls to the real pinned IDF implementation.

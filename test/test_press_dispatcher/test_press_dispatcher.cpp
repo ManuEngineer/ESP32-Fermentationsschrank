@@ -2998,8 +2998,131 @@ void test_touch_expired_lease_locks_the_open_service_page() {
     TEST_ASSERT_FALSE(view.bottomSlots[3].enabled);
 }
 
+void test_provisional_vector_threshold_and_repeated_skip_release_evidence() {
+    UiMemoryGate gate(kUiMinimumLargestBlockBytes,
+                      kUiLargestBlockResumeMarginBytes);
+    auto block = kUiMinimumLargestBlockBytes - 1U;
+    const auto measure = [&] { return block; };
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 0U));
+    block = kUiMinimumLargestBlockBytes;
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 1U));
+    block += kUiLargestBlockResumeMarginBytes;
+    TEST_ASSERT_TRUE(gate.allowStep(measure, 2U));
+
+    UiResetHoldContactGate contact;
+    contact.skipped(100U);
+    TEST_ASSERT_FALSE(contact.observe(true, false, 101U));
+    // A further skip invalidates even an already observed release.
+    contact.skipped(102U);
+    TEST_ASSERT_FALSE(contact.observe(false, true, 103U));
+    TEST_ASSERT_FALSE(contact.observe(true, false, 101U));
+    TEST_ASSERT_FALSE(contact.observe(true, false, std::nullopt));
+    TEST_ASSERT_FALSE(contact.observe(true, false, 104U));
+    // A contact from the same/older sample cannot reuse that release.
+    TEST_ASSERT_FALSE(contact.observe(false, true, 104U));
+    TEST_ASSERT_TRUE(contact.observe(false, true, 105U));
+}
+
+void test_memory_gate_hysteresis_and_skip_log_interval() {
+    UiMemoryGate gate(100U, 20U);
+    std::size_t block = 100U;
+    const auto measure = [&] { return block; };
+    TEST_ASSERT_TRUE(gate.allowStep(measure, 0U));
+    block = 99U;
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 1U));
+    TEST_ASSERT_TRUE(gate.logSkip());
+    block = 119U;
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 10000U));
+    TEST_ASSERT_FALSE(gate.logSkip());
+    TEST_ASSERT_FALSE(gate.allowStep(measure, 10001U));
+    TEST_ASSERT_TRUE(gate.logSkip());
+    block = 120U;
+    TEST_ASSERT_TRUE(gate.allowStep(measure, 10002U));
+    TEST_ASSERT_FALSE(gate.logSkip());
+    block = 100U;
+    TEST_ASSERT_TRUE(gate.allowStep(measure, 10003U));
+    TEST_ASSERT_EQUAL_UINT64(3U, gate.skippedSteps());
+}
+
+void test_memory_skip_requires_observed_release_and_new_hold_for_a_and_b() {
+    for (const bool variantA : {false, true}) {
+        LocalServiceFixture fixture;
+        FermentationTouchWorkspace workspace;
+        if (variantA) {
+            openUnlockedServicePage(fixture, workspace);
+            fixture.app().setFactoryResetHoldMillis(5000U);
+            static_cast<void>(
+                touchUi(fixture.app(), workspace, bottomSlot(2U), 500U));
+        } else {
+            fixture.app().setFactoryResetHoldMillis(5000U);
+            workspace.setPage(FermentationUiPage::Pin);
+            static_cast<void>(factoryResetTouch(fixture.app(), workspace, true,
+                                                3U, true, 500U));
+        }
+        fixture.app().setFactoryResetHoldMillis(5000U);
+        static_cast<void>(
+            touchUi(fixture.app(), workspace, bottomSlot(2U), 600U));
+        static_cast<void>(
+            touchUi(fixture.app(), workspace, bottomSlot(2U), 700U));
+        TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                         FactoryResetStage::Hold);
+        const auto epochBefore = currentEpoch(fixture);
+        const auto networkStops = fixture.network.stopCallCount();
+        const auto httpStops = fixture.http.stopCalls;
+        UiMemoryGate memory(100U, 20U);
+        UiResetHoldContactGate contact;
+        UiRenderGate render;
+        std::size_t block = 120U;
+        const auto packs = makeFermentationUiTextPacks();
+        const auto step = [&](std::uint64_t now, bool held, bool release,
+                              std::optional<std::uint64_t> sampledAt) {
+            if (!beginProductUiStep(
+                    memory, contact, [&] { return block; }, now, fixture.app(),
+                    render, workspace))
+                return;
+            const bool allowed = contact.observe(release, held, sampledAt);
+            static_cast<void>(processWorkspaceTouch(
+                fixture.app(), workspace, render.snapshot(), packs,
+                device_platform::LocaleId{"en"}, nullptr,
+                device_platform::DeviceUiNetworkStatus::Unavailable, {}, held,
+                bottomX(1U), kBottomY, false, now, allowed));
+        };
+        step(10000U, true, false, 10000U);
+        step(12000U, true, false, 12000U);
+        block = 99U;
+        step(13000U, true, false, 13000U);
+        block = 120U;
+        step(20000U, true, false, 20000U);
+        step(26000U, true, false, 26000U);         // >5 s resumed, same finger
+        step(27000U, false, false, std::nullopt);  // error/timeout/uncalibrated
+        step(28000U, false, true, 12999U);         // cached pre-skip NoContact
+        step(34000U, true, false, 34000U);
+        TEST_ASSERT_TRUE(epochBefore == currentEpoch(fixture));
+        TEST_ASSERT_EQUAL_UINT32(networkStops, fixture.network.stopCallCount());
+        TEST_ASSERT_EQUAL_UINT32(httpStops, fixture.http.stopCalls);
+        TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                         FactoryResetStage::Hold);
+        step(35000U, false, true, 35000U);
+        step(36000U, true, false, 36000U);
+        step(40999U, true, false, 40999U);
+        TEST_ASSERT_TRUE(epochBefore == currentEpoch(fixture));
+        step(41000U, true, false, 41000U);
+        const auto epochAfter = currentEpoch(fixture);
+        TEST_ASSERT_TRUE(epochAfter != epochBefore);
+        TEST_ASSERT_TRUE(fixture.app().uiSnapshot().factoryReset.stage ==
+                         FactoryResetStage::Finished);
+        step(47000U, true, false, 47000U);
+        TEST_ASSERT_TRUE(epochAfter == currentEpoch(fixture));
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(
+        test_provisional_vector_threshold_and_repeated_skip_release_evidence);
+    RUN_TEST(test_memory_gate_hysteresis_and_skip_log_interval);
+    RUN_TEST(
+        test_memory_skip_requires_observed_release_and_new_hold_for_a_and_b);
     RUN_TEST(test_restricted_no_runtime_home_adds_only_the_reset_entry);
     RUN_TEST(
         test_interrupted_hold_never_survives_a_pause_in_the_real_loop_decision);

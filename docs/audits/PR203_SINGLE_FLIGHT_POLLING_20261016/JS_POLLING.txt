@@ -1,0 +1,41 @@
+PASS initial fetch, normal five-second ticks and fresh Online
+PASS headers do not release the lock; skipped ticks keep stale age current
+PASS 24-second success is not timed out, but remains stale; next group recovers
+PASS 30-second headers deadline aborts all siblings; no immediate retry or backlog
+PASS 30-second body deadline aborts all siblings; no immediate retry or backlog
+PASS early transport failure aborts siblings and waits for delayed abort settlement
+PASS early http failure aborts siblings and waits for delayed abort settlement
+PASS early json failure aborts siblings and waits for delayed abort settlement
+PASS real send(): applied, refresh fresh, no old action basis
+PASS real send(): applied, refresh aborted, no old action basis
+PASS real send(): applied, refresh failed, no old action basis
+PASS real send(): applied, refresh old, no old action basis
+PASS real send(): stale, refresh fresh, no old action basis
+PASS real send(): stale, refresh aborted, no old action basis
+PASS real send(): stale, refresh failed, no old action basis
+PASS real send(): stale, refresh old, no old action basis
+PASS real send(): busy, refresh fresh, no old action basis
+PASS real send(): busy, refresh aborted, no old action basis
+PASS real send(): busy, refresh failed, no old action basis
+PASS real send(): busy, refresh old, no old action basis
+PASS real send(): confirmation-required, refresh fresh, no old action basis
+PASS real send(): confirmation-required, refresh aborted, no old action basis
+PASS real send(): confirmation-required, refresh failed, no old action basis
+PASS real send(): confirmation-required, refresh old, no old action basis
+PASS real send(): rejected, refresh fresh, no old action basis
+PASS real send(): rejected, refresh aborted, no old action basis
+PASS real send(): rejected, refresh failed, no old action basis
+PASS real send(): rejected, refresh old, no old action basis
+PASS real send(): too-large, refresh fresh, no old action basis
+PASS real send(): too-large, refresh aborted, no old action basis
+PASS real send(): too-large, refresh failed, no old action basis
+PASS real send(): too-large, refresh old, no old action basis
+PASS real send(): write-failed, refresh fresh, no old action basis
+PASS real send(): write-failed, refresh aborted, no old action basis
+PASS real send(): write-failed, refresh failed, no old action basis
+PASS real send(): write-failed, refresh old, no old action basis
+PASS mutation at group completion and one coalesced refresh reservation
+PASS real send(): no-active-group, fresh snapshot even within the same clock millisecond
+PASS real send(): pending-headers, fresh snapshot even within the same clock millisecond
+PASS an unacknowledged abort keeps the lock across deadline and further ticks
+{"result":"PASS","cases":40,"node":"v20.19.2","network":"FAKE_ONLY","browser_hardware":"NOT_PROVEN"}

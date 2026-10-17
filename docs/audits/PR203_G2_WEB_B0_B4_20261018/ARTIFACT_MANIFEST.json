@@ -1,0 +1,30 @@
+{
+  "product_head_at_owner_order": "0049af07db2d7287955842ef70936fb70eac6862",
+  "product_source": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "monitor_source_commit": "893f3bb73a50b484ce79b3b80722873452d998fc",
+  "monitor_hashes": {
+    "g1_capture.py": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "artifact_hashes": {
+    "APP": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+    "ELF": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601",
+    "C5_FALLBACK": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633"
+  },
+  "gate_id": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "main_stack_policy": "g2-trend",
+  "private_initial_raw_prefix": {
+    "bytes": 20623,
+    "sha256": "2212d131d5f18315b3965758ad7ab3e36360d6fb11a2e62b1e95b58d0c84d73b",
+    "qualification": "Initial prefix snapshot only; ongoing raw capture is not sealed or complete"
+  },
+  "owner_task_sha256": "791e7ba373630c6799b8e06c3c8c5ec9201b0dc959872ec438399d4a01250326",
+  "owner_preparation_delta_sha256": "be7eed4d1480633c7621c358b4e97924c360d37ba5d385f08fbd2564de955660",
+  "host_session_policy_observed": {
+    "kill_user_processes": false,
+    "linger": false,
+    "configuration_changed": false
+  },
+  "detachment": "nohup, new session/process group, stdin closed, private stdout, parent PID 1; no restart mechanism",
+  "privacy": "No raw UART, private paths, host UUID, MAC, SSID, credentials or readbacks published"
+}

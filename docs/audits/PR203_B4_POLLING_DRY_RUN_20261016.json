@@ -1,0 +1,37 @@
+{
+  "kind": "offline_vm_only_no_real_fetch",
+  "ticks": [
+    0,
+    5000
+  ],
+  "calls": [
+    {
+      "at": 0,
+      "url": "/api/v1/status"
+    },
+    {
+      "at": 0,
+      "url": "/api/v1/temperatures"
+    },
+    {
+      "at": 0,
+      "url": "/api/v1/alerts"
+    },
+    {
+      "at": 5000,
+      "url": "/api/v1/status"
+    },
+    {
+      "at": 5000,
+      "url": "/api/v1/temperatures"
+    },
+    {
+      "at": 5000,
+      "url": "/api/v1/alerts"
+    }
+  ],
+  "groups_started": 2,
+  "all_fetch_promises_unsettled": true,
+  "source_sha256": "959f12d0212930ee5ef54a30c288b5ba44fe3f084bd8f5b8e22120dbaa66f030",
+  "rf_extracted_sha256": "baedf0d0df27a62713fc953de27098ff77a96bbc0ebc5385c9e5a9321e47b4d5"
+}

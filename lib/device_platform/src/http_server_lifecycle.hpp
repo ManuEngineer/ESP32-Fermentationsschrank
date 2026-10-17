@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace device_platform {
 
@@ -69,6 +70,9 @@ struct HttpResponse {
     std::string contentType{"text/plain; charset=utf-8"};
     std::string body;
     HttpResponseMetadata metadata{};
+    // Optional immutable process-lifetime bytes, sent after the owned body.
+    // Response replacements (especially JSON/errors) must clear this view.
+    std::string_view staticBodySuffix;
 };
 
 class IHttpRouteSink {

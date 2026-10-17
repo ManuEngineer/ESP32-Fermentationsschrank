@@ -1,0 +1,60 @@
+{
+  "product_pr_head_before_evidence": "2443dc96e40cc056bd38e7a932563b106ba5ca9d",
+  "product_source": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "monitor_commit": "893f3bb73a50b484ce79b3b80722873452d998fc",
+  "app_sha256": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+  "elf_sha256": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601",
+  "c5_fallback_sha256": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633",
+  "private_inputs": {
+    "HAR_INITIAL": {
+      "bytes": 62974,
+      "sha256": "15250f81d75d2ce81cb8b950abb2630671a0ce4248c32ad170b533475b124567"
+    },
+    "HAR_EXTENDED": {
+      "bytes": 715837,
+      "sha256": "0a4f12079af575376496b533382ccdac533da780e74cbc5605b877113c3ace80"
+    },
+    "NETLOG": {
+      "bytes": 10150951,
+      "sha256": "ce46a9fec625762b49e9ce20af1a12aae754f7350fa20e0700e200600a11d1ca"
+    },
+    "UART_RAW": {
+      "bytes": 159475,
+      "sha256": "6d7097fa78e1e64acde739386c282d6f443f30d30bdcf5b8c15417690702b8a9"
+    },
+    "UART_LOG": {
+      "bytes": 222837,
+      "sha256": "a45e86ed5e1df309c29b1ca367a2bc450711be60a4a884a6dac2c2dfb9fa1ee4"
+    },
+    "UART_CHUNKS": {
+      "bytes": 180875,
+      "sha256": "a20d347406f35ddaf7a8908433e583513a0fee711002d231714ec4d6c11d3115"
+    },
+    "CAPTURE": {
+      "bytes": 1021,
+      "sha256": "57c0ca88521720b7bca30d87989ba10634d4a11c6057161cc47e31800229681a"
+    },
+    "MONITOR_SOURCE": {
+      "bytes": 12788,
+      "sha256": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5"
+    },
+    "LOAD_SOURCE_NOT_RUN": {
+      "bytes": 12515,
+      "sha256": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+    },
+    "UNIFI_IDLE_ORIGINAL": {
+      "bytes": 114748,
+      "sha256": "b8f04ae2625164bd311567d50cc38fc0b70d66fe74288ccd6758056cb32083a8"
+    },
+    "UNIFI_PRE_GET_ORIGINAL": {
+      "bytes": 114088,
+      "sha256": "16c2764011b0e8c3731719c3e2012ef70873228738a67a0785f8570d2a2683f3"
+    }
+  },
+  "derivation_script": {
+    "bytes": 16115,
+    "sha256": "0cbf569f4a621b32af7543657aafb7c08d917fb0c9aa7521a22ef2be67c2e7c9"
+  },
+  "sanitization": "Allowlisted paths, timing, status/error codes, numeric source IDs, byte counts, safe content/connection headers and fixed safe event text. No credential headers, HTTP bodies, network identities, private paths or unrelated NetLog traffic. Selected UART lines LF-normalized; omissions marked. CAPTURE and chunk metadata byte-exact.",
+  "limitations": "Raw inputs private; public extracts cannot replace independent private raw-data access. No raw chunk terminator bytes in Default NetLog."
+}

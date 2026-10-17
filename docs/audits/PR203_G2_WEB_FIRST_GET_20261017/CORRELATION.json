@@ -1,0 +1,187 @@
+[
+  {
+    "uart_line": "[host_mono=414616.146833] W (1349251) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:50:11.184862+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844024789.0,
+        "utc_client": "2026-10-17T07:50:11.175000+00:00",
+        "source_id": 227528,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844024789.0,
+        "utc_client": "2026-10-17T07:50:11.175000+00:00",
+        "source_id": 227528,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 9.861946105957031,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  },
+  {
+    "uart_line": "[host_mono=414716.176533] W (1449241) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:51:51.214562+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844124789.0,
+        "utc_client": "2026-10-17T07:51:51.175000+00:00",
+        "source_id": 228222,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      },
+      {
+        "time_ticks_ms": 1844124789.0,
+        "utc_client": "2026-10-17T07:51:51.175000+00:00",
+        "source_id": 228227,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844124789.0,
+        "utc_client": "2026-10-17T07:51:51.175000+00:00",
+        "source_id": 228227,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 39.56198692321777,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  },
+  {
+    "uart_line": "[host_mono=414741.227535] W (1474301) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:52:16.265564+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844149844.0,
+        "utc_client": "2026-10-17T07:52:16.230000+00:00",
+        "source_id": 228395,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844149844.0,
+        "utc_client": "2026-10-17T07:52:16.230000+00:00",
+        "source_id": 228395,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 35.56394577026367,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  },
+  {
+    "uart_line": "[host_mono=414801.174506] W (1534271) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:53:16.212535+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844209812.0,
+        "utc_client": "2026-10-17T07:53:16.198000+00:00",
+        "source_id": 228777,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 14.534950256347656,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  },
+  {
+    "uart_line": "[host_mono=414886.294486] W (1619381) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:54:41.332515+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229375,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229375,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229380,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229380,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 29.51502799987793,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  },
+  {
+    "uart_line": "[host_mono=414886.294556] W (1619391) httpd_txrx: httpd_sock_err: error in recv : 104",
+    "host_utc_nominal": "2026-10-17T07:54:41.332585+00:00",
+    "nearest_nominal_browser_socket_events": [
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229375,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229375,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229380,
+        "source_type": "SOCKET",
+        "event": "SOCKET_CLOSED",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1844294917.0,
+        "utc_client": "2026-10-17T07:54:41.303000+00:00",
+        "source_id": 229380,
+        "source_type": "SOCKET",
+        "event": "SOCKET_POOL_CLOSING_SOCKET",
+        "phase": "PHASE_NONE",
+        "reason": "Connection was closed when it was returned to the pool"
+      }
+    ],
+    "nearest_absolute_nominal_distance_ms": 29.584884643554688,
+    "qualification": "Clock offset unmeasured; nearest-time association is not socket identity or causality"
+  }
+]

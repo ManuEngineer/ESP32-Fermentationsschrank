@@ -1,0 +1,1876 @@
+{
+  "initial_entries": 16,
+  "extended_entries": 202,
+  "initial_is_byte_value_identical_entry_prefix": true,
+  "document_navigations": 1,
+  "post_requests": 0,
+  "root": {
+    "start_utc_client": "2026-10-17T07:49:30.648Z",
+    "duration_ms": 336.19599998928607,
+    "status": 200,
+    "error": null,
+    "http_version": "HTTP/1.1",
+    "timings_ms": {
+      "blocked": 1.2650000862777233,
+      "dns": 0,
+      "ssl": -1,
+      "connect": 116.945,
+      "send": 0.3640000000000043,
+      "wait": 94.9410000987202,
+      "receive": 122.68099980428815,
+      "_blocked_queueing": 1.2650000862777233,
+      "_workerStart": -1,
+      "_workerReady": -1,
+      "_workerFetchStart": -1,
+      "_workerRespondWithSettled": -1
+    },
+    "headers": [
+      {
+        "name": "Content-Type",
+        "value": "text/html; charset=utf-8"
+      },
+      {
+        "name": "Transfer-Encoding",
+        "value": "chunked"
+      }
+    ],
+    "headers_bytes": 87,
+    "encoded_body_bytes": 8045,
+    "transfer_bytes": 8132,
+    "decoded_html_bytes": 8025,
+    "html_sha256": "d811b259a8b42990805a5f38c872e718db5932f85fafb766e9e60d8c04170f0f",
+    "ends_html": true
+  },
+  "anonymous_groups": {
+    "count": 67,
+    "maximum_duration_ms": 335.82282066345215,
+    "minimum_intergroup_gap_ms": 4662.177085876465,
+    "overlap_count": 0,
+    "qualification_limit": "Anonymous 401/abort groups only; no authenticated JSON snapshot qualification"
+  },
+  "status_counts": {
+    "200": 1,
+    "401": 93,
+    "0": 108
+  },
+  "entries": [
+    {
+      "index": 0,
+      "path": "/",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.648Z",
+      "duration_ms": 336.19599998928607,
+      "status": 200,
+      "error": null
+    },
+    {
+      "index": 1,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.991Z",
+      "duration_ms": 167.2189999371767,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 2,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.992Z",
+      "duration_ms": 166.86400002799928,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 3,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.992Z",
+      "duration_ms": 166.6490000206977,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 4,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.995Z",
+      "duration_ms": 184.8549998831004,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 5,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.995Z",
+      "duration_ms": 184.96199999935925,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 6,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.996Z",
+      "duration_ms": 184.806999983266,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 7,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.004Z",
+      "duration_ms": 193.74900008551776,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 8,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.004Z",
+      "duration_ms": 193.4749999086559,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 9,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.005Z",
+      "duration_ms": 193.14700015820563,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 10,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.002Z",
+      "duration_ms": 190.14399987645447,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 11,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.002Z",
+      "duration_ms": 190.22800005041063,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 12,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.003Z",
+      "duration_ms": 189.96400013566017,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 13,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:50.997Z",
+      "duration_ms": 236.30099999718368,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 14,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:50.997Z",
+      "duration_ms": 235.9940002206713,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 15,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:50.998Z",
+      "duration_ms": 235.56199995800853,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 16,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:55.999Z",
+      "duration_ms": 273.6109998077154,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 17,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:56.000Z",
+      "duration_ms": 274.0749998483807,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 18,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:56.000Z",
+      "duration_ms": 273.85799982585013,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 19,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.004Z",
+      "duration_ms": 258.17400007508695,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 20,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.004Z",
+      "duration_ms": 258.0960001796484,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 21,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.004Z",
+      "duration_ms": 257.9560000449419,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 22,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:05.995Z",
+      "duration_ms": 196.65300007909536,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 23,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:05.996Z",
+      "duration_ms": 196.63000003898142,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 24,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:05.997Z",
+      "duration_ms": 196.1660000668466,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 25,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.003Z",
+      "duration_ms": 168.9710000064224,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 26,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.003Z",
+      "duration_ms": 168.81199995987117,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 27,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.003Z",
+      "duration_ms": 168.74299990013242,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 28,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.995Z",
+      "duration_ms": 172.74999991059303,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 29,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.995Z",
+      "duration_ms": 173.01100003533065,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 30,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.996Z",
+      "duration_ms": 172.82600002363324,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 31,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.005Z",
+      "duration_ms": 196.84499991126359,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 32,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.006Z",
+      "duration_ms": 196.58300014676155,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 33,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.006Z",
+      "duration_ms": 196.21399999596179,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 34,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.008Z",
+      "duration_ms": 223.6379999667406,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 35,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.008Z",
+      "duration_ms": 223.43499981798232,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 36,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.009Z",
+      "duration_ms": 223.31799985840917,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 37,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:30.997Z",
+      "duration_ms": 334.98999988660216,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 38,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:30.997Z",
+      "duration_ms": 334.9339999258518,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 39,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:30.998Z",
+      "duration_ms": 334.82300000113247,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 40,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:35.995Z",
+      "duration_ms": 142.9299998562783,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 41,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:35.995Z",
+      "duration_ms": 143.43599998392165,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 42,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:35.996Z",
+      "duration_ms": 143.0230000987649,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 43,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:40.994Z",
+      "duration_ms": 215.97700007259846,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 44,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:40.995Z",
+      "duration_ms": 215.4729999601841,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 45,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:40.995Z",
+      "duration_ms": 214.76200013421476,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 46,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.001Z",
+      "duration_ms": 149.74300004541874,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 47,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.001Z",
+      "duration_ms": 149.97999998740852,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 48,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.002Z",
+      "duration_ms": 149.60500015877187,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 49,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.006Z",
+      "duration_ms": 172.77800012379885,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 50,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.007Z",
+      "duration_ms": 172.35600017011166,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 51,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.007Z",
+      "duration_ms": 171.84099997393787,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 52,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.994Z",
+      "duration_ms": 223.0690000578761,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 53,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.994Z",
+      "duration_ms": 222.986000052616,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 54,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.995Z",
+      "duration_ms": 222.7459999267012,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 55,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.995Z",
+      "duration_ms": 213.13499985262752,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 56,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.996Z",
+      "duration_ms": 213.27199996449053,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 57,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.996Z",
+      "duration_ms": 213.11799995601177,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 58,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.001Z",
+      "duration_ms": 211.8979999795556,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 59,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.002Z",
+      "duration_ms": 212.01399993151426,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 60,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.002Z",
+      "duration_ms": 211.72200003638864,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 61,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:10.997Z",
+      "duration_ms": 232.14800003916025,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 62,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:10.997Z",
+      "duration_ms": 231.92399996332824,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 63,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:10.998Z",
+      "duration_ms": 231.75999987870455,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 64,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:15.996Z",
+      "duration_ms": 144.13500018417835,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 65,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:15.997Z",
+      "duration_ms": 144.75500001572073,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 66,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:15.997Z",
+      "duration_ms": 144.44199996069074,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 67,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:20.994Z",
+      "duration_ms": 165.32399994321167,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 68,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:20.994Z",
+      "duration_ms": 164.983999915421,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 69,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:20.995Z",
+      "duration_ms": 164.60100002586842,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 70,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:25.994Z",
+      "duration_ms": 187.06600018776953,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 71,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:25.995Z",
+      "duration_ms": 186.82100012512504,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 72,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:25.995Z",
+      "duration_ms": 186.30300019867718,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 73,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:30.999Z",
+      "duration_ms": 224.72699987702072,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 74,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:31.000Z",
+      "duration_ms": 224.00199994444847,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 75,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:31.000Z",
+      "duration_ms": 223.62400010497868,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 76,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.994Z",
+      "duration_ms": 206.37999987229705,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 77,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.994Z",
+      "duration_ms": 206.836000084877,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 78,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.995Z",
+      "duration_ms": 206.47100009955466,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 79,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.008Z",
+      "duration_ms": 233.96200011484325,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 80,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.008Z",
+      "duration_ms": 233.45400020480156,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 81,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.009Z",
+      "duration_ms": 233.08999999426305,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 82,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.008Z",
+      "duration_ms": 242.34599992632866,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 83,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.009Z",
+      "duration_ms": 241.93499982357025,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 84,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.009Z",
+      "duration_ms": 241.488000145182,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 85,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.003Z",
+      "duration_ms": 167.73699992336333,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 86,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.004Z",
+      "duration_ms": 168.19099988788366,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 87,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.004Z",
+      "duration_ms": 167.8289999254048,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 88,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:55.996Z",
+      "duration_ms": 158.24099979363382,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 89,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:55.996Z",
+      "duration_ms": 158.99799996986985,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 90,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:55.997Z",
+      "duration_ms": 158.8029998820275,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 91,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.006Z",
+      "duration_ms": 207.7649999409914,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 92,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.006Z",
+      "duration_ms": 207.73200007601082,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 93,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.006Z",
+      "duration_ms": 207.55500020459294,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 94,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.005Z",
+      "duration_ms": 186.18900002911687,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 95,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.005Z",
+      "duration_ms": 186.91299995407462,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 96,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.006Z",
+      "duration_ms": 186.54599995352328,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 97,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:10.999Z",
+      "duration_ms": 202.45800004340708,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 98,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:11.000Z",
+      "duration_ms": 202.14899995470046,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 99,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:11.000Z",
+      "duration_ms": 201.81299978867173,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 100,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.004Z",
+      "duration_ms": 223.04799989797175,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 101,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.004Z",
+      "duration_ms": 222.74699993431568,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 102,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.005Z",
+      "duration_ms": 222.3449999000877,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 103,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.002Z",
+      "duration_ms": 220.59200005605817,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 104,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.002Z",
+      "duration_ms": 220.1260000001639,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 105,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.003Z",
+      "duration_ms": 219.77499988861382,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 106,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.005Z",
+      "duration_ms": 127.66100000590086,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 107,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.006Z",
+      "duration_ms": 128.12100001610816,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 108,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.006Z",
+      "duration_ms": 127.89000011980534,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 109,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:30.997Z",
+      "duration_ms": 266.09899988397956,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 110,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:30.997Z",
+      "duration_ms": 266.08699989716706,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 111,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:30.997Z",
+      "duration_ms": 266.0379999548644,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 112,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.005Z",
+      "duration_ms": 136.7810000665486,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 113,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.006Z",
+      "duration_ms": 136.6779999807477,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 114,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.006Z",
+      "duration_ms": 136.7310001514852,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 115,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.008Z",
+      "duration_ms": 241.03199993260205,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 116,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.008Z",
+      "duration_ms": 240.77600004509088,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 117,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.009Z",
+      "duration_ms": 240.6079999680817,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 118,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.007Z",
+      "duration_ms": 217.65999984927475,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 119,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.007Z",
+      "duration_ms": 217.34400000423193,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 120,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.008Z",
+      "duration_ms": 217.11799991317093,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 121,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.002Z",
+      "duration_ms": 227.24800021387637,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 122,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.002Z",
+      "duration_ms": 227.10100002586842,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 123,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.002Z",
+      "duration_ms": 226.92799987271428,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 124,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.002Z",
+      "duration_ms": 198.67800013162196,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 125,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.003Z",
+      "duration_ms": 199.53400013037026,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 126,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.003Z",
+      "duration_ms": 199.3089998140931,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 127,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.003Z",
+      "duration_ms": 108.26499992981553,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 128,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.003Z",
+      "duration_ms": 109.09700021147728,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 129,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.004Z",
+      "duration_ms": 108.86200005188584,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 130,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.993Z",
+      "duration_ms": 161.02200001478195,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 131,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.994Z",
+      "duration_ms": 161.83699993416667,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 132,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.994Z",
+      "duration_ms": 161.56200016848743,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 133,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.004Z",
+      "duration_ms": 218.02199981175363,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 134,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.005Z",
+      "duration_ms": 217.7900000308454,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 135,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.005Z",
+      "duration_ms": 217.49499999426308,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 136,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.993Z",
+      "duration_ms": 199.75000014528632,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 137,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.994Z",
+      "duration_ms": 200.51199989393353,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 138,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.994Z",
+      "duration_ms": 200.13100001960993,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 139,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.993Z",
+      "duration_ms": 249.46500011719763,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 140,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.994Z",
+      "duration_ms": 249.1680001318753,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 141,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.994Z",
+      "duration_ms": 248.72600007802248,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 142,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.000Z",
+      "duration_ms": 230.48199992626905,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 143,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.000Z",
+      "duration_ms": 230.0950000062585,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 144,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.001Z",
+      "duration_ms": 229.85100001096725,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 145,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:30.996Z",
+      "duration_ms": 248.55699995532632,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 146,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:30.996Z",
+      "duration_ms": 248.30399989150465,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 147,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:30.996Z",
+      "duration_ms": 247.96100007370114,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 148,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.001Z",
+      "duration_ms": 139.39000014215708,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 149,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.001Z",
+      "duration_ms": 140.17300005070865,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 150,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.001Z",
+      "duration_ms": 139.98999982140958,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 151,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.004Z",
+      "duration_ms": 145.4190001823008,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 152,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.005Z",
+      "duration_ms": 145.93099988996983,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 153,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.005Z",
+      "duration_ms": 145.58700006455183,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 154,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:45.995Z",
+      "duration_ms": 172.3110000602901,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 155,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:45.995Z",
+      "duration_ms": 172.76300000958145,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 156,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:45.996Z",
+      "duration_ms": 172.4350000731647,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 157,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.002Z",
+      "duration_ms": 200.2069998998195,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 158,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.002Z",
+      "duration_ms": 200.73099993169308,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 159,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.002Z",
+      "duration_ms": 200.5539999809116,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 160,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:55.995Z",
+      "duration_ms": 247.6259998511523,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 161,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:55.995Z",
+      "duration_ms": 247.2049999050796,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 162,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:55.996Z",
+      "duration_ms": 246.8230000231415,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 163,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:00.996Z",
+      "duration_ms": 241.0540001001209,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 164,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:00.996Z",
+      "duration_ms": 240.87500013411045,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 165,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:00.996Z",
+      "duration_ms": 240.71600008755922,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 166,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.002Z",
+      "duration_ms": 223.64500002004206,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 167,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.002Z",
+      "duration_ms": 223.79800002090633,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 168,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.003Z",
+      "duration_ms": 223.46300003118813,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 169,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:10.995Z",
+      "duration_ms": 154.4770000036806,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 170,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:10.996Z",
+      "duration_ms": 155.15699982643127,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 171,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:10.996Z",
+      "duration_ms": 154.8380001913756,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 172,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.004Z",
+      "duration_ms": 157.14100003242493,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 173,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.004Z",
+      "duration_ms": 157.57500007748604,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 174,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.004Z",
+      "duration_ms": 157.49999997206032,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 175,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.001Z",
+      "duration_ms": 180.19500002264977,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 176,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.001Z",
+      "duration_ms": 180.87900010868907,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 177,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.002Z",
+      "duration_ms": 180.53300003521144,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 178,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.994Z",
+      "duration_ms": 284.86199979670346,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 179,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.994Z",
+      "duration_ms": 285.3419999592006,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 180,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.994Z",
+      "duration_ms": 285.272000124678,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 181,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.006Z",
+      "duration_ms": 208.85300007648766,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 182,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.007Z",
+      "duration_ms": 208.7459999602288,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 183,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.007Z",
+      "duration_ms": 208.4490000270307,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 184,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:35.995Z",
+      "duration_ms": 201.97599986568093,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 185,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:35.996Z",
+      "duration_ms": 201.4969999436289,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 186,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:35.996Z",
+      "duration_ms": 200.77100000344217,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 187,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.003Z",
+      "duration_ms": 296.51699983514845,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 188,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.004Z",
+      "duration_ms": 296.22399993240833,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 189,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.004Z",
+      "duration_ms": 295.7059999462217,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 190,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.008Z",
+      "duration_ms": 238.0819998215884,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 191,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.009Z",
+      "duration_ms": 237.50100005418062,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 192,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.009Z",
+      "duration_ms": 237.14699991978705,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 193,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.000Z",
+      "duration_ms": 159.82699999585748,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 194,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.001Z",
+      "duration_ms": 160.24099988862872,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 195,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.001Z",
+      "duration_ms": 159.9479999858886,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 196,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:55.995Z",
+      "duration_ms": 171.86899995431304,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 197,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:55.996Z",
+      "duration_ms": 172.57299995981157,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 198,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:55.996Z",
+      "duration_ms": 172.29999997653067,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 199,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:00.997Z",
+      "duration_ms": 183.2340001128614,
+      "status": 401,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 200,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:00.998Z",
+      "duration_ms": 183.72200010344386,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "index": 201,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:00.998Z",
+      "duration_ms": 183.6639998946339,
+      "status": 0,
+      "error": "net::ERR_ABORTED"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "start_epoch": 1792219296.3432102,
+  "start_monotonic": 410501.305181144,
+  "main_stack_policy": "g2-trend",
+  "main_stack_hwm_threshold_bytes": 11160,
+  "main_stack_action": "record-only",
+  "tool_sha256": {
+    "g1_capture.py": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "end_epoch": 1792219932.5061765,
+  "end_monotonic": 411137.468147846,
+  "max_heartbeat_gap_seconds": 3.502251038036775,
+  "gate": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "source_proven": true,
+  "ready": true,
+  "actors_disabled": true,
+  "release_profile": true,
+  "network_home_connected": true,
+  "expected_initial_reset_lines": 1,
+  "boot_synchronized": true,
+  "initial_reset_monotonic": 410501.381699186,
+  "pre_boot_lines_ignored": 2,
+  "qualified_heartbeats": 632,
+  "main_stack_hwm_min_bytes": 11704,
+  "main_stack_below_threshold": false,
+  "failure": null,
+  "status": "CAPTURE_COMPLETE_PENDING_REVIEW"
+}

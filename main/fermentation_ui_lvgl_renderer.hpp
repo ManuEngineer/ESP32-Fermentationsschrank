@@ -9,13 +9,15 @@
 #include "esp_idf_display_touch_adapter.hpp"
 #include "fermentation_ui_models.hpp"
 #include "fermentation_ui_renderer.hpp"
+#include "time_source.hpp"
 #include "touch_calibration.hpp"
 
 namespace fermentation::main_ui {
 
 [[nodiscard]] std::unique_ptr<class ProductiveLvglRenderer>
 makeProductiveUiRenderer(
-    device_platform_esp_idf::EspIdfDisplayTouchConfig config);
+    device_platform_esp_idf::EspIdfDisplayTouchConfig config,
+    const device_platform::ITimeSource& timeSource);
 
 // The only concrete renderer lifecycle in R1. It owns the LVGL projection and
 // the selected ESP-IDF display/touch adapter, while the application continues
@@ -23,7 +25,8 @@ makeProductiveUiRenderer(
 class ProductiveLvglRenderer final {
    public:
     explicit ProductiveLvglRenderer(
-        device_platform_esp_idf::EspIdfDisplayTouchConfig config);
+        device_platform_esp_idf::EspIdfDisplayTouchConfig config,
+        const device_platform::ITimeSource& timeSource);
     ~ProductiveLvglRenderer();
 
     ProductiveLvglRenderer(const ProductiveLvglRenderer&) = delete;
@@ -69,6 +72,11 @@ class ProductiveLvglRenderer final {
         // consumed by this call. A caller uses this to call routePress()
         // exactly once per press, not on every tick a contact is held.
         bool freshPressEdge{false};
+        // Only real raw samples under an available calibration publish
+        // evidence. Default/lock-timeout/error results carry no release
+        // evidence.
+        bool physicalRelease{false};
+        std::optional<std::uint64_t> sampledAtMillis;
     };
 
     // Reads and consumes the touch state the LVGL callback observed since

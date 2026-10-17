@@ -1,0 +1,39 @@
+{
+  "source": "Frozen selection from already-existing UART file, captured through Owner stop-confirmation receipt; no new serial/device action",
+  "start_reference_utc": "2026-10-16T11:57:53.881741+00:00",
+  "start_reference_host_monotonic": 343078.844061511,
+  "end_reference_utc": "2026-10-16T13:09:38.627236+00:00",
+  "end_reference_host_monotonic": 347383.589257104,
+  "sha256": "6cdf11c392886732cba38ac5aa25a6cfd413db44d518ffa894fe1e38edb45be9",
+  "original_rows_including_precontext": 4309,
+  "precontext_seconds": 2,
+  "heartbeat_rows_within_window": 4294,
+  "first_heartbeat_mono": 343078.976602,
+  "last_heartbeat_mono": 347382.660842,
+  "maximum_heartbeat_gap_seconds": 1.3574360000202432,
+  "device_uptime_regressions": 0,
+  "anomaly_marker_rows": [],
+  "resource_record_rows": [],
+  "other_rows": [
+    "[host_mono=343099.255655] I (56065921) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343159.297657] I (56125991) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343189.421377] I (56156081) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343234.401542] I (56201101) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343279.535067] I (56246231) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343324.761669] I (56291461) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343384.949524] I (56351641) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343429.963199] I (56396661) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=343475.187134] I (56441901) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=344001.596485] I (56968311) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=344091.781029] I (57058461) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=344121.849564] I (57088551) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)",
+    "[host_mono=344182.140105] I (57148831) wifi:[ADDBA]RX DELBA, reason:39, delete tid:0, initiator:0(recipient)"
+  ],
+  "limitations": [
+    "No fresh boot",
+    "No comparable R_ref",
+    "No current heap/largest-block or stack samples",
+    "No independent proof of browser closure instant or no HTTP clients",
+    "Absence of markers is bounded to captured UART interval"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "during_idle": {
+    "connected_since_displayed": "Today 09:01:40",
+    "current_connected": true,
+    "screenshot_received": true,
+    "channel": 6,
+    "band": "2.4 GHz",
+    "channel_width_mhz": 20,
+    "mimo": "1x1",
+    "client_signal_dbm": -72,
+    "client_tx_retries_percent": 0,
+    "ap_tx_retries_percent": 16,
+    "ap_airtime_percent": 27,
+    "external_interference_percent": 0,
+    "screenshot_time_exact": "NOT_PROVEN",
+    "display_timezone": "NOT_PROVEN",
+    "historical_ap_channel_event_displayed": "Today 09:01:23: moved to channel 6 from 1",
+    "historical_disconnect_displayed": "Today 09:01:24",
+    "historical_reconnect_displayed": "Today 09:01:40"
+  },
+  "before_get": {
+    "connected_since_displayed": "Today 09:01:40",
+    "signal_dbm": -71,
+    "client_tx_retries_percent": 0,
+    "ap_tx_retries_percent": 10,
+    "channel": 6,
+    "timezone": "NOT_PROVEN",
+    "screen_event_time_not_current_clock": true
+  },
+  "interpretation": "Owner screenshots, private originals retained; no RF cause established; connected-since is not current time or proof across boot"
+}

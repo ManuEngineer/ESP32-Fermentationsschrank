@@ -1,0 +1,1872 @@
+[
+  {
+    "time_ticks_ms": 1843984775.0,
+    "utc_client": "2026-10-17T07:49:31.161000+00:00",
+    "source_id": 227278,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843984776.0,
+    "utc_client": "2026-10-17T07:49:31.162000+00:00",
+    "source_id": 227278,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843984776.0,
+    "utc_client": "2026-10-17T07:49:31.162000+00:00",
+    "source_id": 227293,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843984776.0,
+    "utc_client": "2026-10-17T07:49:31.162000+00:00",
+    "source_id": 227293,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843989796.0,
+    "utc_client": "2026-10-17T07:49:36.182000+00:00",
+    "source_id": 227329,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843989797.0,
+    "utc_client": "2026-10-17T07:49:36.183000+00:00",
+    "source_id": 227324,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843989797.0,
+    "utc_client": "2026-10-17T07:49:36.183000+00:00",
+    "source_id": 227324,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843989797.0,
+    "utc_client": "2026-10-17T07:49:36.183000+00:00",
+    "source_id": 227329,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843994813.0,
+    "utc_client": "2026-10-17T07:49:41.199000+00:00",
+    "source_id": 227363,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843994813.0,
+    "utc_client": "2026-10-17T07:49:41.199000+00:00",
+    "source_id": 227363,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843999808.0,
+    "utc_client": "2026-10-17T07:49:46.194000+00:00",
+    "source_id": 227358,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843999809.0,
+    "utc_client": "2026-10-17T07:49:46.195000+00:00",
+    "source_id": 227358,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1843999809.0,
+    "utc_client": "2026-10-17T07:49:46.195000+00:00",
+    "source_id": 227396,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1843999809.0,
+    "utc_client": "2026-10-17T07:49:46.195000+00:00",
+    "source_id": 227396,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844004849.0,
+    "utc_client": "2026-10-17T07:49:51.235000+00:00",
+    "source_id": 227425,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844004849.0,
+    "utc_client": "2026-10-17T07:49:51.235000+00:00",
+    "source_id": 227425,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844004849.0,
+    "utc_client": "2026-10-17T07:49:51.235000+00:00",
+    "source_id": 227430,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844004849.0,
+    "utc_client": "2026-10-17T07:49:51.235000+00:00",
+    "source_id": 227430,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844009890.0,
+    "utc_client": "2026-10-17T07:49:56.276000+00:00",
+    "source_id": 227459,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844009890.0,
+    "utc_client": "2026-10-17T07:49:56.276000+00:00",
+    "source_id": 227459,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844009890.0,
+    "utc_client": "2026-10-17T07:49:56.276000+00:00",
+    "source_id": 227464,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844009890.0,
+    "utc_client": "2026-10-17T07:49:56.276000+00:00",
+    "source_id": 227464,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844014878.0,
+    "utc_client": "2026-10-17T07:50:01.264000+00:00",
+    "source_id": 227489,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844014878.0,
+    "utc_client": "2026-10-17T07:50:01.264000+00:00",
+    "source_id": 227489,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844014878.0,
+    "utc_client": "2026-10-17T07:50:01.264000+00:00",
+    "source_id": 227494,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844014878.0,
+    "utc_client": "2026-10-17T07:50:01.264000+00:00",
+    "source_id": 227494,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844024788.0,
+    "utc_client": "2026-10-17T07:50:11.174000+00:00",
+    "source_id": 227523,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844024788.0,
+    "utc_client": "2026-10-17T07:50:11.174000+00:00",
+    "source_id": 227523,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844024789.0,
+    "utc_client": "2026-10-17T07:50:11.175000+00:00",
+    "source_id": 227528,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844024789.0,
+    "utc_client": "2026-10-17T07:50:11.175000+00:00",
+    "source_id": 227528,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844029784.0,
+    "utc_client": "2026-10-17T07:50:16.170000+00:00",
+    "source_id": 227589,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844029784.0,
+    "utc_client": "2026-10-17T07:50:16.170000+00:00",
+    "source_id": 227594,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844029784.0,
+    "utc_client": "2026-10-17T07:50:16.170000+00:00",
+    "source_id": 227594,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844029785.0,
+    "utc_client": "2026-10-17T07:50:16.171000+00:00",
+    "source_id": 227589,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844034819.0,
+    "utc_client": "2026-10-17T07:50:21.205000+00:00",
+    "source_id": 227628,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844034819.0,
+    "utc_client": "2026-10-17T07:50:21.205000+00:00",
+    "source_id": 227628,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844039848.0,
+    "utc_client": "2026-10-17T07:50:26.234000+00:00",
+    "source_id": 227661,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844039848.0,
+    "utc_client": "2026-10-17T07:50:26.234000+00:00",
+    "source_id": 227661,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844049755.0,
+    "utc_client": "2026-10-17T07:50:36.141000+00:00",
+    "source_id": 227694,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844049755.0,
+    "utc_client": "2026-10-17T07:50:36.141000+00:00",
+    "source_id": 227694,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844049756.0,
+    "utc_client": "2026-10-17T07:50:36.142000+00:00",
+    "source_id": 227267,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844049756.0,
+    "utc_client": "2026-10-17T07:50:36.142000+00:00",
+    "source_id": 227267,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844054826.0,
+    "utc_client": "2026-10-17T07:50:41.212000+00:00",
+    "source_id": 227755,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844054827.0,
+    "utc_client": "2026-10-17T07:50:41.213000+00:00",
+    "source_id": 227755,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844054827.0,
+    "utc_client": "2026-10-17T07:50:41.213000+00:00",
+    "source_id": 227760,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844054827.0,
+    "utc_client": "2026-10-17T07:50:41.213000+00:00",
+    "source_id": 227760,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844059767.0,
+    "utc_client": "2026-10-17T07:50:46.153000+00:00",
+    "source_id": 227794,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844059768.0,
+    "utc_client": "2026-10-17T07:50:46.154000+00:00",
+    "source_id": 227789,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844059768.0,
+    "utc_client": "2026-10-17T07:50:46.154000+00:00",
+    "source_id": 227789,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844059768.0,
+    "utc_client": "2026-10-17T07:50:46.154000+00:00",
+    "source_id": 227794,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844064795.0,
+    "utc_client": "2026-10-17T07:50:51.181000+00:00",
+    "source_id": 227823,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844064796.0,
+    "utc_client": "2026-10-17T07:50:51.182000+00:00",
+    "source_id": 227823,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844064796.0,
+    "utc_client": "2026-10-17T07:50:51.182000+00:00",
+    "source_id": 227828,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844064796.0,
+    "utc_client": "2026-10-17T07:50:51.182000+00:00",
+    "source_id": 227828,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844069833.0,
+    "utc_client": "2026-10-17T07:50:56.219000+00:00",
+    "source_id": 227862,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844069833.0,
+    "utc_client": "2026-10-17T07:50:56.219000+00:00",
+    "source_id": 227862,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844074825.0,
+    "utc_client": "2026-10-17T07:51:01.211000+00:00",
+    "source_id": 227895,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844074826.0,
+    "utc_client": "2026-10-17T07:51:01.212000+00:00",
+    "source_id": 227895,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844079830.0,
+    "utc_client": "2026-10-17T07:51:06.216000+00:00",
+    "source_id": 227623,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844079830.0,
+    "utc_client": "2026-10-17T07:51:06.216000+00:00",
+    "source_id": 227623,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844079830.0,
+    "utc_client": "2026-10-17T07:51:06.216000+00:00",
+    "source_id": 227928,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844079830.0,
+    "utc_client": "2026-10-17T07:51:06.216000+00:00",
+    "source_id": 227928,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844084845.0,
+    "utc_client": "2026-10-17T07:51:11.231000+00:00",
+    "source_id": 227957,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844084845.0,
+    "utc_client": "2026-10-17T07:51:11.231000+00:00",
+    "source_id": 227962,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844084845.0,
+    "utc_client": "2026-10-17T07:51:11.231000+00:00",
+    "source_id": 227962,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844084846.0,
+    "utc_client": "2026-10-17T07:51:11.232000+00:00",
+    "source_id": 227957,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844089757.0,
+    "utc_client": "2026-10-17T07:51:16.143000+00:00",
+    "source_id": 227991,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844089758.0,
+    "utc_client": "2026-10-17T07:51:16.144000+00:00",
+    "source_id": 227991,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844089758.0,
+    "utc_client": "2026-10-17T07:51:16.144000+00:00",
+    "source_id": 227996,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844089758.0,
+    "utc_client": "2026-10-17T07:51:16.144000+00:00",
+    "source_id": 227996,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844094775.0,
+    "utc_client": "2026-10-17T07:51:21.161000+00:00",
+    "source_id": 228026,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844094775.0,
+    "utc_client": "2026-10-17T07:51:21.161000+00:00",
+    "source_id": 228026,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844094776.0,
+    "utc_client": "2026-10-17T07:51:21.162000+00:00",
+    "source_id": 228021,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844094776.0,
+    "utc_client": "2026-10-17T07:51:21.162000+00:00",
+    "source_id": 228021,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844099798.0,
+    "utc_client": "2026-10-17T07:51:26.184000+00:00",
+    "source_id": 228060,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844099798.0,
+    "utc_client": "2026-10-17T07:51:26.184000+00:00",
+    "source_id": 228060,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844109817.0,
+    "utc_client": "2026-10-17T07:51:36.203000+00:00",
+    "source_id": 228055,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844109818.0,
+    "utc_client": "2026-10-17T07:51:36.204000+00:00",
+    "source_id": 227857,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844109818.0,
+    "utc_client": "2026-10-17T07:51:36.204000+00:00",
+    "source_id": 227857,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844109818.0,
+    "utc_client": "2026-10-17T07:51:36.204000+00:00",
+    "source_id": 228055,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844114858.0,
+    "utc_client": "2026-10-17T07:51:41.244000+00:00",
+    "source_id": 228154,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844114858.0,
+    "utc_client": "2026-10-17T07:51:41.244000+00:00",
+    "source_id": 228154,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844114858.0,
+    "utc_client": "2026-10-17T07:51:41.244000+00:00",
+    "source_id": 228159,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844114858.0,
+    "utc_client": "2026-10-17T07:51:41.244000+00:00",
+    "source_id": 228159,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844119867.0,
+    "utc_client": "2026-10-17T07:51:46.253000+00:00",
+    "source_id": 228188,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844119867.0,
+    "utc_client": "2026-10-17T07:51:46.253000+00:00",
+    "source_id": 228188,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844119867.0,
+    "utc_client": "2026-10-17T07:51:46.253000+00:00",
+    "source_id": 228193,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844119867.0,
+    "utc_client": "2026-10-17T07:51:46.253000+00:00",
+    "source_id": 228193,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844124788.0,
+    "utc_client": "2026-10-17T07:51:51.174000+00:00",
+    "source_id": 228222,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844124789.0,
+    "utc_client": "2026-10-17T07:51:51.175000+00:00",
+    "source_id": 228222,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844124789.0,
+    "utc_client": "2026-10-17T07:51:51.175000+00:00",
+    "source_id": 228227,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844124789.0,
+    "utc_client": "2026-10-17T07:51:51.175000+00:00",
+    "source_id": 228227,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844129772.0,
+    "utc_client": "2026-10-17T07:51:56.158000+00:00",
+    "source_id": 228256,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844129772.0,
+    "utc_client": "2026-10-17T07:51:56.158000+00:00",
+    "source_id": 228256,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844129773.0,
+    "utc_client": "2026-10-17T07:51:56.159000+00:00",
+    "source_id": 228261,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844129774.0,
+    "utc_client": "2026-10-17T07:51:56.160000+00:00",
+    "source_id": 228261,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844134830.0,
+    "utc_client": "2026-10-17T07:52:01.216000+00:00",
+    "source_id": 228295,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844134830.0,
+    "utc_client": "2026-10-17T07:52:01.216000+00:00",
+    "source_id": 228295,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844139809.0,
+    "utc_client": "2026-10-17T07:52:06.195000+00:00",
+    "source_id": 228290,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844139809.0,
+    "utc_client": "2026-10-17T07:52:06.195000+00:00",
+    "source_id": 228290,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844139809.0,
+    "utc_client": "2026-10-17T07:52:06.195000+00:00",
+    "source_id": 228328,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844139810.0,
+    "utc_client": "2026-10-17T07:52:06.196000+00:00",
+    "source_id": 228328,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844144818.0,
+    "utc_client": "2026-10-17T07:52:11.204000+00:00",
+    "source_id": 228362,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844144818.0,
+    "utc_client": "2026-10-17T07:52:11.204000+00:00",
+    "source_id": 228362,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844149844.0,
+    "utc_client": "2026-10-17T07:52:16.230000+00:00",
+    "source_id": 228395,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844149844.0,
+    "utc_client": "2026-10-17T07:52:16.230000+00:00",
+    "source_id": 228395,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844154839.0,
+    "utc_client": "2026-10-17T07:52:21.225000+00:00",
+    "source_id": 228357,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844154839.0,
+    "utc_client": "2026-10-17T07:52:21.225000+00:00",
+    "source_id": 228357,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844154839.0,
+    "utc_client": "2026-10-17T07:52:21.225000+00:00",
+    "source_id": 228428,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844154840.0,
+    "utc_client": "2026-10-17T07:52:21.226000+00:00",
+    "source_id": 228428,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844159750.0,
+    "utc_client": "2026-10-17T07:52:26.136000+00:00",
+    "source_id": 228457,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844159750.0,
+    "utc_client": "2026-10-17T07:52:26.136000+00:00",
+    "source_id": 228457,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844159751.0,
+    "utc_client": "2026-10-17T07:52:26.137000+00:00",
+    "source_id": 228462,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844159751.0,
+    "utc_client": "2026-10-17T07:52:26.137000+00:00",
+    "source_id": 228462,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844169759.0,
+    "utc_client": "2026-10-17T07:52:36.145000+00:00",
+    "source_id": 228093,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844169759.0,
+    "utc_client": "2026-10-17T07:52:36.145000+00:00",
+    "source_id": 228093,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844169760.0,
+    "utc_client": "2026-10-17T07:52:36.146000+00:00",
+    "source_id": 228496,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844169760.0,
+    "utc_client": "2026-10-17T07:52:36.146000+00:00",
+    "source_id": 228496,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844179842.0,
+    "utc_client": "2026-10-17T07:52:46.228000+00:00",
+    "source_id": 228558,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844179842.0,
+    "utc_client": "2026-10-17T07:52:46.228000+00:00",
+    "source_id": 228558,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844184845.0,
+    "utc_client": "2026-10-17T07:52:51.231000+00:00",
+    "source_id": 228623,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844184845.0,
+    "utc_client": "2026-10-17T07:52:51.231000+00:00",
+    "source_id": 228623,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844189817.0,
+    "utc_client": "2026-10-17T07:52:56.203000+00:00",
+    "source_id": 228553,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844189818.0,
+    "utc_client": "2026-10-17T07:52:56.204000+00:00",
+    "source_id": 228553,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844189819.0,
+    "utc_client": "2026-10-17T07:52:56.205000+00:00",
+    "source_id": 228656,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844189819.0,
+    "utc_client": "2026-10-17T07:52:56.205000+00:00",
+    "source_id": 228656,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844194729.0,
+    "utc_client": "2026-10-17T07:53:01.115000+00:00",
+    "source_id": 228685,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844194729.0,
+    "utc_client": "2026-10-17T07:53:01.115000+00:00",
+    "source_id": 228685,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844194730.0,
+    "utc_client": "2026-10-17T07:53:01.116000+00:00",
+    "source_id": 228690,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844194730.0,
+    "utc_client": "2026-10-17T07:53:01.116000+00:00",
+    "source_id": 228690,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844199772.0,
+    "utc_client": "2026-10-17T07:53:06.158000+00:00",
+    "source_id": 228719,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844199773.0,
+    "utc_client": "2026-10-17T07:53:06.159000+00:00",
+    "source_id": 228719,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844199773.0,
+    "utc_client": "2026-10-17T07:53:06.159000+00:00",
+    "source_id": 228724,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844199774.0,
+    "utc_client": "2026-10-17T07:53:06.160000+00:00",
+    "source_id": 228724,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844209811.0,
+    "utc_client": "2026-10-17T07:53:16.197000+00:00",
+    "source_id": 228772,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844209811.0,
+    "utc_client": "2026-10-17T07:53:16.197000+00:00",
+    "source_id": 228772,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844209811.0,
+    "utc_client": "2026-10-17T07:53:16.197000+00:00",
+    "source_id": 228777,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844209812.0,
+    "utc_client": "2026-10-17T07:53:16.198000+00:00",
+    "source_id": 228777,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844214859.0,
+    "utc_client": "2026-10-17T07:53:21.245000+00:00",
+    "source_id": 228843,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844214860.0,
+    "utc_client": "2026-10-17T07:53:21.246000+00:00",
+    "source_id": 228843,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844219847.0,
+    "utc_client": "2026-10-17T07:53:26.233000+00:00",
+    "source_id": 228876,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844219847.0,
+    "utc_client": "2026-10-17T07:53:26.233000+00:00",
+    "source_id": 228876,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844224861.0,
+    "utc_client": "2026-10-17T07:53:31.247000+00:00",
+    "source_id": 228909,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844224861.0,
+    "utc_client": "2026-10-17T07:53:31.247000+00:00",
+    "source_id": 228909,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844229758.0,
+    "utc_client": "2026-10-17T07:53:36.144000+00:00",
+    "source_id": 228491,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844229758.0,
+    "utc_client": "2026-10-17T07:53:36.144000+00:00",
+    "source_id": 228491,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844229758.0,
+    "utc_client": "2026-10-17T07:53:36.144000+00:00",
+    "source_id": 228942,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844229758.0,
+    "utc_client": "2026-10-17T07:53:36.144000+00:00",
+    "source_id": 228942,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844234767.0,
+    "utc_client": "2026-10-17T07:53:41.153000+00:00",
+    "source_id": 228971,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844234767.0,
+    "utc_client": "2026-10-17T07:53:41.153000+00:00",
+    "source_id": 228971,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844234768.0,
+    "utc_client": "2026-10-17T07:53:41.154000+00:00",
+    "source_id": 228976,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844234768.0,
+    "utc_client": "2026-10-17T07:53:41.154000+00:00",
+    "source_id": 228976,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844239784.0,
+    "utc_client": "2026-10-17T07:53:46.170000+00:00",
+    "source_id": 229010,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844239785.0,
+    "utc_client": "2026-10-17T07:53:46.171000+00:00",
+    "source_id": 229005,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844239785.0,
+    "utc_client": "2026-10-17T07:53:46.171000+00:00",
+    "source_id": 229005,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844239785.0,
+    "utc_client": "2026-10-17T07:53:46.171000+00:00",
+    "source_id": 229010,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844244819.0,
+    "utc_client": "2026-10-17T07:53:51.205000+00:00",
+    "source_id": 229039,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844244820.0,
+    "utc_client": "2026-10-17T07:53:51.206000+00:00",
+    "source_id": 229039,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844244820.0,
+    "utc_client": "2026-10-17T07:53:51.206000+00:00",
+    "source_id": 229044,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844244820.0,
+    "utc_client": "2026-10-17T07:53:51.206000+00:00",
+    "source_id": 229044,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844249859.0,
+    "utc_client": "2026-10-17T07:53:56.245000+00:00",
+    "source_id": 229074,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844249860.0,
+    "utc_client": "2026-10-17T07:53:56.246000+00:00",
+    "source_id": 229069,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844249860.0,
+    "utc_client": "2026-10-17T07:53:56.246000+00:00",
+    "source_id": 229069,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844249860.0,
+    "utc_client": "2026-10-17T07:53:56.246000+00:00",
+    "source_id": 229074,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844254854.0,
+    "utc_client": "2026-10-17T07:54:01.240000+00:00",
+    "source_id": 229103,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844254854.0,
+    "utc_client": "2026-10-17T07:54:01.240000+00:00",
+    "source_id": 229103,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844254854.0,
+    "utc_client": "2026-10-17T07:54:01.240000+00:00",
+    "source_id": 229108,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844254854.0,
+    "utc_client": "2026-10-17T07:54:01.240000+00:00",
+    "source_id": 229108,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844259842.0,
+    "utc_client": "2026-10-17T07:54:06.228000+00:00",
+    "source_id": 229137,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844259843.0,
+    "utc_client": "2026-10-17T07:54:06.229000+00:00",
+    "source_id": 229137,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844259843.0,
+    "utc_client": "2026-10-17T07:54:06.229000+00:00",
+    "source_id": 229142,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844259843.0,
+    "utc_client": "2026-10-17T07:54:06.229000+00:00",
+    "source_id": 229142,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844264767.0,
+    "utc_client": "2026-10-17T07:54:11.153000+00:00",
+    "source_id": 229171,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844264768.0,
+    "utc_client": "2026-10-17T07:54:11.154000+00:00",
+    "source_id": 229171,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844264768.0,
+    "utc_client": "2026-10-17T07:54:11.154000+00:00",
+    "source_id": 229176,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844264768.0,
+    "utc_client": "2026-10-17T07:54:11.154000+00:00",
+    "source_id": 229176,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844269778.0,
+    "utc_client": "2026-10-17T07:54:16.164000+00:00",
+    "source_id": 229205,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844269778.0,
+    "utc_client": "2026-10-17T07:54:16.164000+00:00",
+    "source_id": 229205,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844269778.0,
+    "utc_client": "2026-10-17T07:54:16.164000+00:00",
+    "source_id": 229210,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844269778.0,
+    "utc_client": "2026-10-17T07:54:16.164000+00:00",
+    "source_id": 229210,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844274799.0,
+    "utc_client": "2026-10-17T07:54:21.185000+00:00",
+    "source_id": 229239,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844274799.0,
+    "utc_client": "2026-10-17T07:54:21.185000+00:00",
+    "source_id": 229239,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844274799.0,
+    "utc_client": "2026-10-17T07:54:21.185000+00:00",
+    "source_id": 229244,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844274800.0,
+    "utc_client": "2026-10-17T07:54:21.186000+00:00",
+    "source_id": 229244,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844279896.0,
+    "utc_client": "2026-10-17T07:54:26.282000+00:00",
+    "source_id": 229278,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844279896.0,
+    "utc_client": "2026-10-17T07:54:26.282000+00:00",
+    "source_id": 229278,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844279897.0,
+    "utc_client": "2026-10-17T07:54:26.283000+00:00",
+    "source_id": 229273,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844279897.0,
+    "utc_client": "2026-10-17T07:54:26.283000+00:00",
+    "source_id": 229273,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844284832.0,
+    "utc_client": "2026-10-17T07:54:31.218000+00:00",
+    "source_id": 229307,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844284832.0,
+    "utc_client": "2026-10-17T07:54:31.218000+00:00",
+    "source_id": 229307,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844284832.0,
+    "utc_client": "2026-10-17T07:54:31.218000+00:00",
+    "source_id": 229312,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844284833.0,
+    "utc_client": "2026-10-17T07:54:31.219000+00:00",
+    "source_id": 229312,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844289814.0,
+    "utc_client": "2026-10-17T07:54:36.200000+00:00",
+    "source_id": 229346,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844289814.0,
+    "utc_client": "2026-10-17T07:54:36.200000+00:00",
+    "source_id": 229346,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844289815.0,
+    "utc_client": "2026-10-17T07:54:36.201000+00:00",
+    "source_id": 229341,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844289815.0,
+    "utc_client": "2026-10-17T07:54:36.201000+00:00",
+    "source_id": 229341,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844294917.0,
+    "utc_client": "2026-10-17T07:54:41.303000+00:00",
+    "source_id": 229375,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844294917.0,
+    "utc_client": "2026-10-17T07:54:41.303000+00:00",
+    "source_id": 229375,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844294917.0,
+    "utc_client": "2026-10-17T07:54:41.303000+00:00",
+    "source_id": 229380,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844294917.0,
+    "utc_client": "2026-10-17T07:54:41.303000+00:00",
+    "source_id": 229380,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844299863.0,
+    "utc_client": "2026-10-17T07:54:46.249000+00:00",
+    "source_id": 229409,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844299863.0,
+    "utc_client": "2026-10-17T07:54:46.249000+00:00",
+    "source_id": 229409,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844299863.0,
+    "utc_client": "2026-10-17T07:54:46.249000+00:00",
+    "source_id": 229414,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844299863.0,
+    "utc_client": "2026-10-17T07:54:46.249000+00:00",
+    "source_id": 229414,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844304778.0,
+    "utc_client": "2026-10-17T07:54:51.164000+00:00",
+    "source_id": 229443,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844304778.0,
+    "utc_client": "2026-10-17T07:54:51.164000+00:00",
+    "source_id": 229443,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844304778.0,
+    "utc_client": "2026-10-17T07:54:51.164000+00:00",
+    "source_id": 229448,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844304778.0,
+    "utc_client": "2026-10-17T07:54:51.164000+00:00",
+    "source_id": 229448,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844309785.0,
+    "utc_client": "2026-10-17T07:54:56.171000+00:00",
+    "source_id": 229477,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844309786.0,
+    "utc_client": "2026-10-17T07:54:56.172000+00:00",
+    "source_id": 229477,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844309786.0,
+    "utc_client": "2026-10-17T07:54:56.172000+00:00",
+    "source_id": 229482,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844309786.0,
+    "utc_client": "2026-10-17T07:54:56.172000+00:00",
+    "source_id": 229482,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844314798.0,
+    "utc_client": "2026-10-17T07:55:01.184000+00:00",
+    "source_id": 229511,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844314798.0,
+    "utc_client": "2026-10-17T07:55:01.184000+00:00",
+    "source_id": 229511,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844314798.0,
+    "utc_client": "2026-10-17T07:55:01.184000+00:00",
+    "source_id": 229516,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844314798.0,
+    "utc_client": "2026-10-17T07:55:01.184000+00:00",
+    "source_id": 229516,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844319806.0,
+    "utc_client": "2026-10-17T07:55:06.192000+00:00",
+    "source_id": 229545,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844319807.0,
+    "utc_client": "2026-10-17T07:55:06.193000+00:00",
+    "source_id": 229545,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  },
+  {
+    "time_ticks_ms": 1844319807.0,
+    "utc_client": "2026-10-17T07:55:06.193000+00:00",
+    "source_id": 229550,
+    "source_type": "SOCKET",
+    "event": "SOCKET_CLOSED",
+    "phase": "PHASE_NONE"
+  },
+  {
+    "time_ticks_ms": 1844319808.0,
+    "utc_client": "2026-10-17T07:55:06.194000+00:00",
+    "source_id": 229550,
+    "source_type": "SOCKET",
+    "event": "SOCKET_POOL_CLOSING_SOCKET",
+    "phase": "PHASE_NONE",
+    "reason": "Connection was closed when it was returned to the pool"
+  }
+]

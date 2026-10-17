@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "fermentation_application.hpp"
+#include "fermentation_ui_memory_gate.hpp"
 #include "fermentation_touch_workspace.hpp"
 #include "fermentation_ui_renderer.hpp"
 
@@ -108,7 +109,7 @@ struct WorkspaceTouchTickResult {
     device_platform::DeviceUiNetworkStatus networkStatus,
     device_platform::ClockViewInput clock, bool contactHeld,
     std::uint16_t touchX, std::uint16_t touchY, bool freshPressEdge,
-    std::uint64_t monotonicMillis);
+    std::uint64_t monotonicMillis, bool factoryResetHoldAllowed = true);
 
 // The UI loop's allocation-free steady-state gate (R1 RAM plan, S4). It is the
 // part of updateProductUi() that precedes the renderer and is shared by the
@@ -187,5 +188,26 @@ class UiRenderGate {
     std::optional<ScreenRenderKey> renderedKey_;
     std::optional<ScreenRenderKey> pendingKey_;
 };
+
+// The actual pre-snapshot branch shared by firmware and native regressions.
+// A skip never touches the presentation cache, render key or network sampling.
+template <typename LargestFreeBlock>
+[[nodiscard]] bool beginProductUiStep(UiMemoryGate& memory,
+                                      UiResetHoldContactGate& contact,
+                                      LargestFreeBlock&& measure,
+                                      std::uint64_t now,
+                                      FermentationApplication& application,
+                                      UiRenderGate& render,
+                                      FermentationTouchWorkspace& workspace) {
+    if (!memory.allowStep(measure, now)) {
+        contact.skipped(now);
+        releaseFactoryResetHold(application, now);
+        return false;
+    }
+    render.beginStep(application,
+                     workspace.page() == FermentationUiPage::HeaderNetwork,
+                     workspace);
+    return true;
+}
 
 }  // namespace fermentation::main_ui

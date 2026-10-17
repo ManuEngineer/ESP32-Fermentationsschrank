@@ -1,0 +1,2868 @@
+{
+  "capture_mode": "Default",
+  "browser": {
+    "name": "Google Chrome",
+    "version": "155.0.8059.85",
+    "official": "official"
+  },
+  "time_tick_offset_ms": 1790379386386,
+  "requests": [
+    {
+      "source_id": 227268,
+      "path": "/",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:30.986000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227283,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.994000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:31.153000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227286,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.995000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:31.162000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227278
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227289,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:30.995000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:31.162000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227293
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227317,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:36.178000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227320,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:36.183000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227329
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227325,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:35.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:36.183000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227324
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227351,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:41.197000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227354,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:41.197000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227358
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227359,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:41.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:41.199000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227363
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227386,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:46.192000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227389,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:46.195000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227358
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227392,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:46.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:46.195000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227396
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227418,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:50.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:51.232000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227421,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:51+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:51.235000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227425
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227426,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:51.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:51.235000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227430
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227452,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:56.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:56.273000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227455,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:56.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:56.276000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227459
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227460,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:49:56.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:49:56.276000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227464
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227482,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:01.261000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227485,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:01.264000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227489
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227490,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:01.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:01.265000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227494
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227516,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:05.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:06.190000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227519,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:06+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:06.190000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227523
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227524,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:06.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:06.189000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227528
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227552,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:11.170000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227555,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:11.174000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227523
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227558,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:11.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:11.175000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227528
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227582,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:16.168000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227585,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:16.170000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227594
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227590,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:15.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:16.171000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227589
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227616,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:21.200000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227619,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:21.199000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227624,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:21.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:21.205000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227628
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227651,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:26.231000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227654,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:26.231000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227657,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:26.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:26.234000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227661
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227684,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:30.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:31.330000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227687,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:31+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:31.331000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227690,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:31.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:31.330000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227694
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227718,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:35.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:36.138000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227721,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:36+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:36.141000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227694
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227724,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:36.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:36.142000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227267
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227748,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:40.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:41.208000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227751,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:40.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:41.213000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227755
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227756,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:41+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:41.213000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227760
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227782,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:46.151000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227785,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:46.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227794
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227790,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:46.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:46.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227789
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227816,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:51.177000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227819,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:51.182000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227823
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227824,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:51.013000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:51.182000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227828
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227850,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:56.215000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227853,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:56.216000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227858,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:50:55.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:50:56.220000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227862
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227885,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:01.205000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227888,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:01.205000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227891,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:00.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:01.212000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227895
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227918,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:06.214000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227921,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:06.216000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227623
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227924,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:06.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:06.217000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227928
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227950,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:10.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:11.229000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227953,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:11.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:11.231000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227962
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227958,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:11.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:11.232000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227957
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227984,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:15.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:16.140000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 227987,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:16.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:16.144000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227991
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 227992,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:16.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:16.145000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227996
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228014,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:20.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:21.158000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228017,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:20.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:21.161000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228026
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228022,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:21+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:21.162000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228021
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228048,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:25.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:26.180000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228051,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:25.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:26.181000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228055
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228056,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:26+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:26.184000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228060
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228083,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:31.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:31.223000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228055
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228086,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:31.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:31.223000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228089,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:31.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:31.223000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228117,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:36.200000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228120,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:36.204000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228055
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228123,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:35.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:36.204000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        227857
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228147,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:41.241000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228150,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:41.244000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228154
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228155,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:41.013000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:41.244000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228159
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228181,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:46.251000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228184,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.013000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:46.253000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228193
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228189,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:46.015000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:46.254000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228188
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228215,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:51.171000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228218,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:51.175000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228222
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228223,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:51.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:51.175000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228227
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228249,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:55.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:56.154000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228252,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:56+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:56.158000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228256
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228257,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:51:56.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:51:56.160000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228261
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228283,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:01.213000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228286,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:01.212000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228290
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228291,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:01.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:01.216000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228295
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228318,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:06.191000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228321,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:06.195000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228290
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228324,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:06.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:06.196000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228328
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228350,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:11.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:11.200000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228353,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:11.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:11.200000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228357
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228358,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:11.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:11.204000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228362
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228385,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:16.225000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228388,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:16.225000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228357
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228391,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:16.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:16.230000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228395
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228418,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:21.222000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228421,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:21.225000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228357
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228424,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:21.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:21.226000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228428
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228450,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:26.133000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228453,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:26.136000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228457
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228458,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:26.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:26.137000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228462
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228484,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:31+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:31.262000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228487,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:31.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:31.262000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228492,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:31.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:31.262000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228496
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228516,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:36.145000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228093
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228519,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:36.141000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228522,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:36.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:36.146000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228496
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228546,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:41.249000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228549,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.013000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:41.248000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228553
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228554,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:41.014000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:41.249000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228558
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228582,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:46.228000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228558
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228585,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:46.223000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228588,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:46.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:46.228000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228553
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228613,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:51.229000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228553
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228616,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:51.228000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228619,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:51.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:51.232000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228623
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228646,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:56.204000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228553
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228649,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:56.201000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228652,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:52:56.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:52:56.205000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228656
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228678,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:01.111000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228681,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:01.115000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228685
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228686,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:01.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:01.116000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228690
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228712,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.996000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:06.154000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228715,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:06.159000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228719
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228720,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:05.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:06.160000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228724
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228765,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:11.222000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228768,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:11.221000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228772
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228773,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:11.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:11.221000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228777
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228801,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.996000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:16.193000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228804,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:16.197000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228772
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228807,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:15.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:16.198000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228777
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228831,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:21.242000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228834,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:21.242000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228839,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:20.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:21.246000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228843
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228866,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:26.230000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228869,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:26.230000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228872,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:26.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:26.233000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228876
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228899,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:30.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:31.244000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228902,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:31+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:31.244000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228905,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:31.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:31.247000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228909
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228932,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:36.140000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228935,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:36.144000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228491
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228938,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:36.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:36.144000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228942
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228964,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:41.150000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 228967,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:41.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228971
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228972,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:41.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:41.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        228976
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 228998,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:45.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:46.167000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229001,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:46+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:46.171000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229010
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229006,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:46.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:46.171000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229005
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229032,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:51.202000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229035,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:51.206000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229039
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229040,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:51.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:51.206000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229044
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229062,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:55.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:56.242000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229065,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:56+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:56.246000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229074
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229070,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:53:56.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:53:56.246000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229069
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229096,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:00.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:01.237000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229099,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:01+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:01.240000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229108
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229104,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:01+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:01.240000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229103
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229130,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:06.226000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229133,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:06.229000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229137
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229138,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:06.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:06.229000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229142
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229164,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:10.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:11.150000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229167,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:11+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:11.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229171
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229172,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:11.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:11.154000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229176
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229198,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.006000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:16.162000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229201,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:16.164000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229210
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229206,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:16.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:16.164000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229205
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229232,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:21.182000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229235,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:21.185000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229239
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229240,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:21.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:21.186000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229244
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229266,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.997000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:26.280000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229269,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:26.282000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229278
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229274,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:25.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:26.283000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229273
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229300,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.010000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:31.216000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229303,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.012000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:31.218000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229307
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229308,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:31.014000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:31.219000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229312
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229334,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:35.998000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:36.197000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229337,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:36+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:36.200000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229346
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229342,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:36.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:36.201000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229341
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229368,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.007000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:41.300000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229371,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.008000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:41.303000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229380
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229376,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:41.009000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:41.303000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229375
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229402,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.011000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:46.246000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229405,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.013000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:46.249000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229414
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229410,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:46.014000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:46.249000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229409
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229436,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:51.161000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229439,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.004000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:51.164000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229443
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229444,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:51.005000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:51.164000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229448
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229470,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:55.999000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:56.167000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229473,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:56.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:56.172000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229477
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229478,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:54:56.003000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:54:56.173000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229482
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229504,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:01+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:01.182000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229507,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:01.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:01.184000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229511
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229512,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:01.002000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:01.184000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229516
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229538,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:06+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:06.189000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        228838
+      ],
+      "cancelled_event": false,
+      "net_errors": []
+    },
+    {
+      "source_id": 229541,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:06+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:06.193000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229545
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    },
+    {
+      "source_id": 229546,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_utc_client": "2026-10-17T07:55:06.001000+00:00",
+      "last_source_event_utc_client": "2026-10-17T07:55:06.194000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        229550
+      ],
+      "cancelled_event": true,
+      "net_errors": []
+    }
+  ],
+  "distinct_socket_ids_over_entire_trace": 111,
+  "socket_count_limit": "Lifetime IDs, not simultaneous server sockets or TX buffer count"
+}

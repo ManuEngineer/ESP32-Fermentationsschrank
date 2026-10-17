@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -37,6 +38,25 @@ struct ScreenDrawCommand {
     std::string assetPath;
     bool wrapText{false};
 };
+
+// Conservative structural bound: header/title (8), page extras (3),
+// largest grid (40 fill/label pairs), dialog (4), bottom slots (8), feedback
+// (1). Bounds only this vector, never the strings, LVGL or the entire UI step.
+inline constexpr std::size_t kMaximumDrawCommands =
+    8U + 3U +
+    2U * kFermentationUiKeyboardRows * kFermentationUiKeyboardColumns + 4U +
+    8U + 1U;
+inline constexpr std::size_t kMaximumDrawCommandBlockBytes =
+    kMaximumDrawCommands * sizeof(ScreenDrawCommand);
+
+// PROVISIONAL_PENDING_G1: Owner-approved software threshold derived only from
+// the vector bound. G1 must measure render/touch demand, including paths this
+// gate skips under load, then determine max(vector bound, measured demand) * 2.
+// Neither this bound nor the margin guarantees subsequent allocations.
+inline constexpr std::size_t kUiMinimumLargestBlockBytes =
+    2U * kMaximumDrawCommandBlockBytes;
+inline constexpr std::size_t kUiLargestBlockResumeMarginBytes =
+    kMaximumDrawCommandBlockBytes / 2U;
 
 struct RepresentativeScreen {
     static constexpr std::uint16_t kWidth = 320U;

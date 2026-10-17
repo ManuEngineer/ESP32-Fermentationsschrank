@@ -1,0 +1,22 @@
+{
+  "sanitization": "Allowlisted CDP fields only. No headers, bodies, cookies, credential values, CSRF values, storage exports or HAR. Screenshot is pre-login with an empty password field. Private originals are unchanged.",
+  "source_hashes": {
+    "run_browser.py": "e34765b2140305621488c4c54360d52a9c68317bc29017bef70e3cea20740a50",
+    "BROWSER_RESULT.json": "25ec17de31a18760ec9ce9d453ee48f76d769af8d697250c4d97e0dd086227c0",
+    "HTTP.json": "a2c7864bb9a310c1dd96e33dabff6854c34bfd888f3c8ceed05bb13f2484c739",
+    "CONSOLE.json": "cfc24115dbd08d361622067599dd014d3a2d1ad8ce60f56d9a7aaa8ea4b9f416",
+    "UART_WINDOW.log": "4c870f77219f2c0e2b2fc246f26ad788d88359a4dd4aa643f1f5bd3dec283e3f",
+    "STOP_browser_state.png": "d63ab8349f3414d4513ce9593b78f56503ca4a51d036f8352280a99104cac1ac"
+  },
+  "existing_cdp_helper_sha256": "c6ad36c6066d54dffb578f3b2160f9118521d89e0980664af94dda6480a74670",
+  "tooling": "Existing standard-library CDP helper and cached Chromium 149.0.7827.55. Local one-shot runner only; no product source, configuration or dependencies changed.",
+  "utc_monotonic_mapping": "Marks contain host UTC and time.monotonic. Network records have host request-event receipt time and Chrome CDP timestamps; utc_observed is not the response time. Response header elapsed time is computed within the CDP clock; total_ms exists only where Network.loadingFinished was processed.",
+  "uart_window": "Byte-preserving selection of complete lines by original host_mono, from 2 s before browser start to 2 s after browser end. Existing UART file remained owned by its already running capture process. No new serial action.",
+  "omissions": [
+    "CDP request ids omitted; unrelated private device UART and all readbacks omitted",
+    "No post-quiet screenshot because B3/B4 did not occur",
+    "No 404 console record in CONSOLE.json: processing stopped at Network.responseReceived 404; HTTP.json and original UART warning corroborate it",
+    "After stop, later CDP loadingFinished events were not drained. Missing request completion durations are unknown, not zero."
+  ],
+  "local_capture_still_running": "The pre-existing G2-Web serial capture was not modified or terminated by this task."
+}
