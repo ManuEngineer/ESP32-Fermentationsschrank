@@ -1,0 +1,697 @@
+{
+  "filtered_html_bytes": 8025,
+  "events": [
+    {
+      "time_ticks_ms": 1843984264.0,
+      "utc_client": "2026-10-17T07:49:30.650000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "CORS_REQUEST",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "CHECK_CORS_PREFLIGHT_REQUIRED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "REQUEST_ALIVE",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "TRANSPORT_SECURITY_STATE_SHOULD_UPGRADE_TO_SSL",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_START_JOB",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "FIRST_PARTY_SETS_METADATA",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "FIRST_PARTY_SETS_METADATA",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "COMPUTED_PRIVACY_MODE",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_GET_BACKEND",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_GET_BACKEND",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_ADD_TO_ENTRY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_ADD_TO_ENTRY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_READ_INFO",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_READ_INFO",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_REQUEST",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984265.0,
+      "utc_client": "2026-10-17T07:49:30.651000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_JOB_CONTROLLER_BOUND",
+      "phase": "PHASE_NONE",
+      "source_dependency": {
+        "id": 227270,
+        "type": 32
+      }
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_REQUEST_BOUND_TO_JOB",
+      "phase": "PHASE_NONE",
+      "source_dependency": {
+        "id": 227271,
+        "type": 17
+      }
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_REQUEST",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_DELEGATE_CONNECTED",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "LOCAL_NETWORK_ACCESS_CHECK",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_DELEGATE_CONNECTED",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_SEND_REQUEST",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_SEND_REQUEST_HEADERS",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_SEND_REQUEST",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_HEADERS",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984382.0,
+      "utc_client": "2026-10-17T07:49:30.768000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984476.0,
+      "utc_client": "2026-10-17T07:49:30.862000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984476.0,
+      "utc_client": "2026-10-17T07:49:30.862000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_RESPONSE_HEADERS",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "time_ticks_ms": 1843984476.0,
+      "utc_client": "2026-10-17T07:49:30.862000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_HEADERS",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984476.0,
+      "utc_client": "2026-10-17T07:49:30.862000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_WRITE_INFO",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_WRITE_INFO",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_WRITE_DATA",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_CACHE_WRITE_DATA",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_START_JOB",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984477.0,
+      "utc_client": "2026-10-17T07:49:30.863000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984478.0,
+      "utc_client": "2026-10-17T07:49:30.864000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984478.0,
+      "utc_client": "2026-10-17T07:49:30.864000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984478.0,
+      "utc_client": "2026-10-17T07:49:30.864000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984478.0,
+      "utc_client": "2026-10-17T07:49:30.864000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+      "phase": "PHASE_NONE",
+      "byte_count": 2865
+    },
+    {
+      "time_ticks_ms": 1843984478.0,
+      "utc_client": "2026-10-17T07:49:30.864000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984553.0,
+      "utc_client": "2026-10-17T07:49:30.939000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984553.0,
+      "utc_client": "2026-10-17T07:49:30.939000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+      "phase": "PHASE_NONE",
+      "byte_count": 4320
+    },
+    {
+      "time_ticks_ms": 1843984553.0,
+      "utc_client": "2026-10-17T07:49:30.939000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984599.0,
+      "utc_client": "2026-10-17T07:49:30.985000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984599.0,
+      "utc_client": "2026-10-17T07:49:30.985000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+      "phase": "PHASE_NONE",
+      "byte_count": 840
+    },
+    {
+      "time_ticks_ms": 1843984599.0,
+      "utc_client": "2026-10-17T07:49:30.985000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_BEGIN"
+    },
+    {
+      "time_ticks_ms": 1843984599.0,
+      "utc_client": "2026-10-17T07:49:30.985000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "HTTP_TRANSACTION_READ_BODY",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984600.0,
+      "utc_client": "2026-10-17T07:49:30.986000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "CORS_REQUEST",
+      "phase": "PHASE_END"
+    },
+    {
+      "time_ticks_ms": 1843984600.0,
+      "utc_client": "2026-10-17T07:49:30.986000+00:00",
+      "source_id": 227268,
+      "source_type": "URL_REQUEST",
+      "event": "REQUEST_ALIVE",
+      "phase": "PHASE_END"
+    }
+  ],
+  "jobs": [
+    [
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB",
+        "phase": "PHASE_BEGIN",
+        "source_dependency": {
+          "id": 227270,
+          "type": 32
+        }
+      },
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB_WAITING",
+        "phase": "PHASE_BEGIN"
+      },
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB_WAITING",
+        "phase": "PHASE_END"
+      },
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+        "phase": "PHASE_BEGIN"
+      },
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKET",
+        "phase": "PHASE_NONE"
+      },
+      {
+        "time_ticks_ms": 1843984265.0,
+        "utc_client": "2026-10-17T07:49:30.651000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "SOCKET_POOL",
+        "phase": "PHASE_BEGIN"
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "SOCKET_POOL_BOUND_TO_CONNECT_JOB",
+        "phase": "PHASE_NONE",
+        "source_dependency": {
+          "id": 227266,
+          "type": 7
+        }
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "SOCKET_POOL_BOUND_TO_SOCKET",
+        "phase": "PHASE_NONE",
+        "source_dependency": {
+          "id": 227267,
+          "type": 10
+        }
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "SOCKET_POOL",
+        "phase": "PHASE_END"
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+        "phase": "PHASE_END"
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB_BOUND_TO_REQUEST",
+        "phase": "PHASE_NONE",
+        "source_dependency": {
+          "id": 227268,
+          "type": 1
+        }
+      },
+      {
+        "time_ticks_ms": 1843984382.0,
+        "utc_client": "2026-10-17T07:49:30.768000+00:00",
+        "source_id": 227271,
+        "source_type": "HTTP_STREAM_JOB",
+        "event": "HTTP_STREAM_JOB",
+        "phase": "PHASE_END"
+      }
+    ]
+  ],
+  "sockets_through_root_completion": [
+    {
+      "id": 227267,
+      "events": [
+        {
+          "time_ticks_ms": 1843984254.0,
+          "utc_client": "2026-10-17T07:49:30.640000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_ALIVE",
+          "phase": "PHASE_BEGIN",
+          "source_dependency": {
+            "id": 227266,
+            "type": 7
+          }
+        },
+        {
+          "time_ticks_ms": 1843984256.0,
+          "utc_client": "2026-10-17T07:49:30.642000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "TCP_CONNECT",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "time_ticks_ms": 1843984256.0,
+          "utc_client": "2026-10-17T07:49:30.642000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "TCP_CONNECT_ATTEMPT",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "time_ticks_ms": 1843984381.0,
+          "utc_client": "2026-10-17T07:49:30.767000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "TCP_CONNECT_ATTEMPT",
+          "phase": "PHASE_END"
+        },
+        {
+          "time_ticks_ms": 1843984382.0,
+          "utc_client": "2026-10-17T07:49:30.768000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "TCP_CONNECT",
+          "phase": "PHASE_END"
+        },
+        {
+          "time_ticks_ms": 1843984382.0,
+          "utc_client": "2026-10-17T07:49:30.768000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_IN_USE",
+          "phase": "PHASE_BEGIN",
+          "source_dependency": {
+            "id": 227271,
+            "type": 17
+          }
+        },
+        {
+          "time_ticks_ms": 1843984382.0,
+          "utc_client": "2026-10-17T07:49:30.768000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_BYTES_SENT",
+          "phase": "PHASE_NONE",
+          "byte_count": 458
+        },
+        {
+          "time_ticks_ms": 1843984476.0,
+          "utc_client": "2026-10-17T07:49:30.862000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_BYTES_RECEIVED",
+          "phase": "PHASE_NONE",
+          "byte_count": 2965
+        },
+        {
+          "time_ticks_ms": 1843984553.0,
+          "utc_client": "2026-10-17T07:49:30.939000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_BYTES_RECEIVED",
+          "phase": "PHASE_NONE",
+          "byte_count": 4320
+        },
+        {
+          "time_ticks_ms": 1843984599.0,
+          "utc_client": "2026-10-17T07:49:30.985000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_BYTES_RECEIVED",
+          "phase": "PHASE_NONE",
+          "byte_count": 847
+        },
+        {
+          "time_ticks_ms": 1843984599.0,
+          "utc_client": "2026-10-17T07:49:30.985000+00:00",
+          "source_id": 227267,
+          "source_type": "SOCKET",
+          "event": "SOCKET_IN_USE",
+          "phase": "PHASE_END"
+        }
+      ]
+    }
+  ],
+  "raw_wire_bytes_available": false,
+  "limit": "Default NetLog records byte counts; no literal chunk framing dump"
+}

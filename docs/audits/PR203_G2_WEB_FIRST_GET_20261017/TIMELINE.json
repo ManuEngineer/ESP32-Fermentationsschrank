@@ -1,0 +1,23 @@
+{
+  "host_capture_start_utc": "2026-10-17T07:27:41.930685+00:00",
+  "host_capture_end_utc": "2026-10-17T08:03:52.841528+00:00",
+  "host_capture_start_monotonic": 413266.892655721,
+  "host_capture_end_monotonic": 415437.803499615,
+  "capture_duration_s": 2170.910843894002,
+  "host_epoch_minus_monotonic_start": 1791808795.038029,
+  "host_mapping_drift_s": -2.384185791015625e-07,
+  "idle_start_utc": "2026-10-17T07:28:07.233562+00:00",
+  "idle_start_monotonic": 413292.195532104,
+  "idle_minimum_s": 1200,
+  "measured_idle_before_go_s": 1216.4230005069985,
+  "go_epoch_host": 1792223303.6597543,
+  "go_monotonic_host": 414508.618532611,
+  "first_get_utc_client": "2026-10-17T07:49:30.648Z",
+  "netlog_first_event_utc_client": "2026-10-17T07:23:47.383000+00:00",
+  "netlog_last_event_utc_client": "2026-10-17T07:55:20.072000+00:00",
+  "windows_manual_utc_report": "2026-10-17T07:26:05.3613506Z",
+  "host_ntp_synchronized_reported": true,
+  "windows_host_clock_offset": "NOT_MEASURED; message latency is not clock offset",
+  "unifi_timezone_and_clock_offset": "NOT_PROVEN",
+  "qualification": "Browser UTC uses client clock. Host UART times are host receipt/parse times. No sub-second cross-device causality assertion."
+}
