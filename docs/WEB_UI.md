@@ -371,8 +371,13 @@ ein ausfuehrender Browsertest ist `NOT_RUN`.
 ## Shell-Transport und UI-Speicherreserve (RES-01)
 
 Umsetzungsstand: statischer Shell-Anhang und produktive Gate-/Hold-Anbindung
-sind softwareseitig umgesetzt ([Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md));
-unabhängiger Software-Review und Hardware-G1/G2 bleiben offen.
+sind softwareseitig umgesetzt ([Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md)).
+Vorhandene F1-/Software- und native F4-Nachweise werden wiederverwendet.
+Ownerentscheid 18.10.2026: eine Person bedient lokal oder über einen Webclient;
+keine systematische gleichzeitige Web-/Touchkampagne. Anzeige, WLAN und HTTPD
+können intern dennoch gleichzeitig Heap beanspruchen. G1′ ist keine Pflicht
+von PR #203; die vorbereitete Kampagne wurde vor Ausführung storniert.
+Vollständige R1-Inbetriebnahme und Aktorqualifikation bleiben separat offen.
 
 `HttpResponse::staticBodySuffix` bezeichnet optionale, unveränderliche Bytes mit
 Prozesslebensdauer. Der Adapter sendet den besessenen `body` zuerst und danach
@@ -400,26 +405,31 @@ NoContact-Zustände, Lock-Timeouts, Controllerfehler und fehlende Kalibrierung
 lösen diese Sperre nicht. Der vorhandene Factory-Reset-Flow bleibt alleiniger
 Owner der Stufen, der fünf Sekunden und des Resets, für Variante A und B.
 
-Die Owner-freigegebene Schwelle bleibt **`PROVISIONAL_PENDING_G1`**:
+Die Owner-freigegebene Schwelle bleibt **vorläufig (`F4_THRESHOLD=PROVISIONAL`)**:
 104 Befehle × 64 B = 6656 B als struktureller ESP32-Vektorblock, Faktor 2
 ergibt 13312 B Skip-Schwelle, Wiederaufnahme ab 16640 B (25% Hysterese).
 `updateProductUi` prüft vor Snapshot/Touch/Renderkey; beim Skip verändert es
 weder Präsentationskopie noch zuletzt gerenderten Schlüssel. Eine Warnzeile
 `ui_skipped_low_memory` mit kumuliertem Zähler erscheint höchstens alle 10 s.
-G1 bestimmt den tatsächlichen Render-/Touch-Heapbedarf und kalibriert
-max(Vektorblock, beobachteter Bedarf) × 2 abschließend. Auch unter Speicherlast
-ausgelassene Pfade benötigen echte Messungen bei ausreichend Reserve und
-belegte Pfad-/Zustands-Coverage im separat freigegebenen Diagnose-Testblatt;
-Skip ist keine Null-Bedarfsmessung. Fehlende Coverage bleibt HOLD.
+Ein kausal isolierter Render-/Touch-Bedarf b und vollständige transiente Peaks
+sind nicht belegt; keine abschließende empirische Kalibrierung nach
+max(Vektorblock, b) × 2 und keine neue Schwelle aus gemeinsamen Heap-Schwankungen.
+`PROVISIONAL_PENDING_G1` bleibt nur als historischer Bezeichner im unveränderten
+Produktcode/alten Belegen erhalten; keine ausstehende PR-G1′-Pflicht daraus.
+Skip ist kein Bedarf 0 B. Hardware-Skip→Hold-/Pfad-Coverage bleibt NOT_PROVEN,
+allein deren Fehlen ist laut Ownerentscheid kein Mergeblocker dieses PRs.
 
 Die einmalige Vektorreserve ist durch eine nativ geprüfte strukturelle
 Befehlsobergrenze begrenzt. Sie begrenzt weder Strings/LVGL noch den gesamten
 Render-/Touch-Heapbedarf. Größter-Block-Prüfung und Hysterese reservieren keinen
 Speicher: konkurrierende WLAN-/HTTP-Allokationen können nach bestandenem Gate
 weiterhin OOM/Abort/Reset verursachen. Der Owner akzeptiert diese Restgefahr;
-jeder beobachtete Reset bleibt ein Testfehler. Hardwarequalifikation und konkrete
-Schwellenkalibrierung gehören zu separat freigegebenem G1/G2, nicht zum nativen
-Logiknachweis. C0=GO ist seit dem Ownerentscheid vom 2026-10-14 akzeptiert;
+jeder beobachtete Reset bleibt ein Testfehler. Native Logiknachweise sind keine
+Hardware-/OOM-Qualifikation. G1′ wird nicht ausgeführt; spätere freiwillige Diagnose
+oder vollständige R1-Inbetriebnahme erfordern eine eigene Ownerfreigabe. Der
+[RES-01-Plan §9](tasks/issue-27-res01-heap-hardening-plan.md)
+trennt die aktuelle PR-Einordnung von diesen offenen Nachweisen.
+C0=GO ist seit dem Ownerentscheid vom 2026-10-14 akzeptiert;
 Bootminimum 5228 B und lange GET-Gesamtdauern aus G0-R3 bleiben Hardwarebefunde.
 F2 ist nicht Teil dieses Umfangs. `ACTUATOR_RELEASE=NO`.
 

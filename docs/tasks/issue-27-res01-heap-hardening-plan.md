@@ -1,8 +1,21 @@
 # Issue #27 / PR #203 – RES-01: Heap-Erschoepfung der Web-Shell-Auslieferung beheben (F1 + F4) (Plan)
 
-Status: `PLAN_REVISION_R1_ABNAHME_PENDING_OWNER_APPROVAL` (Planrevision vom
-2026-10-15 auf Ownerentscheid; ersetzt keine historischen Ergebnisse). Diese Datei ist
-die vollstaendige, eigenstaendige Fassung; fuer die Umsetzung ist nur sie massgeblich.
+Status: Plan-/Statusrevision zum **Ownerentscheid vom 2026-10-18**, unabhaengige
+Plan-/Fix-Verification ausstehend. Diese Datei ist die vollstaendige, eigenstaendige
+Fassung; historische Ergebnisse werden nicht ersetzt.
+
+**Aktueller Ownerentscheid (2026-10-18, ersetzt die G1′-Pflicht):** Eine Person
+bedient R1 jeweils lokal **oder** ueber einen realen Webclient. Systematische
+Gleichzeitbedienung, Mehrclient-Stress und die zusaetzliche G1′-Touch-/Locale-/
+F4-Schwellenkampagne sind keine Abnahmebedingung von PR #203. Hintergrundbetrieb
+und interne Konkurrenz von WLAN, HTTPD, Anzeige und Touch um Heap bestehen weiter;
+die urspruengliche reale Heap-/Abort-Evidence bleibt gueltig. Vorhandene positive
+F1-Evidence, F4-Implementierung/native Skip-/Hold-Regressionen und der einmalige
+B0–B4-Funktionsnachweis werden wiederverwendet, keine neuen Tests abgeleitet.
+G1′ IMAGE01 ist vor Ausfuehrung **storniert, nicht freigegeben** (Abschnitt 7.5).
+D9 und vollstaendige R1-Inbetriebnahme bleiben separat offen; aktuelle
+PR-Slice-/Blockereinordnung in Abschnitt 9. Fehlende G1′-Coverage allein ist
+kein Mergeblocker. Keine Produkt-/Hardwarefreigabe durch diese Revision.
 
 **Ownerentscheid zum Abnahmescope (2026-10-15):** Die Weboberflaeche dient zum
 Einstellen und gelegentlichen Kontrollieren; danach arbeitet der Fermenter weitgehend
@@ -20,8 +33,9 @@ beschreibt Abschnitt 7.2 (ein realer Browser mit dem vorhandenen 5-s-Polling).
   Heap-/Blockreserven (G0-R3).
 - Software-C1–C3 sind umgesetzt (Produktstand `d35ee85`, [Softwarestand](../audits/PR203_RES01_SOFTWARE_20261014.md));
   F4-Schwelle ownerfreigegeben **vorlaeufig** (Skip 13 312 B / Resume 16 640 B,
-  `PROVISIONAL_PENDING_G1`); sie wird nach Abschnitt 4/2 und 7.5 nur in den relevanten
-  Pfaden qualifiziert.
+  damals `PROVISIONAL_PENDING_G1`); weiterhin vorlaeufig, empirisch nicht abschliessend
+  qualifiziert. Die damalige G1′-Pflicht entfaellt gemaess Ownerentscheid 18.10.;
+  keine neue Schwelle oder Hardwarequalifikation.
 
 **Historische Ergebnisse (unveraendert, keine nachtraegliche Umwertung):**
 - G1 IMAGE01 (P-A, F4-/Diagnose-Overlay): `FAIL/HOLD` (`heap_alloc_failed`, 311,9 s).
@@ -41,19 +55,21 @@ beschreibt Abschnitt 7.2 (ein realer Browser mit dem vorhandenen 5-s-Polling).
   kontrolliert zurueckgebaut (Abschnitt 5 C5; [F2-Plan](issue-27-res01-f2-escalation-plan.md)).
 
 Basis: PR #203, Diagnose-Evidence D3 (`hw-evidence-pr203/diag/run/`).
-`RES-01=BLOCKER` (Ownerentscheid), `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`,
-`G1_G2=NOT_AUTHORIZED`. Es gibt keine Hardwarefreigabe aus diesem Plan.
+`RES-01=REVIEW_PENDING`: Empfehlung fuer diesen PR-Slice ist akzeptiertes begrenztes
+Restrisiko nach D3, kein allein aus fehlendem G1′ abgeleiteter Produktblocker
+(Abschnitt 9). `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`. G1′ nicht freigegeben;
+keine weitere Hardwareaktion aus diesem Plan.
 
 ## 0. Revisionsuebersicht der Akzeptanzkriterien (transparent)
 
 | Gegenstand | Bisher (Plan `6222efc`, Abschnitt 7/9) | Neu (diese Revision) |
 |---|---|---|
 | P-A 3 × 20 min (4 Sessions, neue Verbindung je Request) | Pflicht-Abnahme | **diagnostischer Stresstest**, nicht Pflicht; historische `FAIL`-Laeufe bleiben `FAIL` |
-| P-A2, P-B (4 reale Browser) | Pflicht-Abnahme | **diagnostisch**; Ersatz fuer die Abnahme: R1-U (ein Browser) |
-| Erholung P-R | nach jedem P-A | **U4/U5** im R1-Nutzungsprofil (Heap-Erholung nach Schliessen des Browsers) |
-| Abnahmekriterien 1–6 | ueber alle Stresslaeufe | gelten **unveraendert in der Sache** fuer **R1-U**; reale Fehler/Resets sind weiter Blocker |
-| G1 (Diagnose-Overlay) | Messung unter P-A-Last | **G1'**: F4-Qualifikation in den relevanten UI-/Touch-/Hold-Pfaden mit R1-Nutzung, keine Stresslast |
-| G2 (reines Produktimage) | P-A/P-A2/P-B-Bestaetigung | **R1-U-Abnahme** auf dem reinen Produktimage |
+| P-A2, P-B (4 reale Browser) | Pflicht-Abnahme | **diagnostisch**, nicht PR-Pflicht; reale Nutzung durch eine Person, lokal oder ein Webclient |
+| Erholung P-R | nach jedem P-A | **U4/U5** der spaeteren vollstaendigen R1-Inbetriebnahme; kein neuer Lauf fuer diesen PR-Slice |
+| Abnahmekriterien 1–6 | ueber alle Stresslaeufe | fuer spaetere vollstaendige **R1-U**-Abnahme; aktuelle Slice-Evidence/Restbefunde separat in §9, reale Fehler nicht umgewertet |
+| G1 / G1′ (Diagnose-Overlay) | verpflichtende F4-Qualifikation | **keine Pflicht fuer PR #203**; G1′-Vorbereitung storniert, NOT_RUN / NOT_PROVEN, historische G1-FAILs unveraendert |
+| G2 (reines Produktimage) | P-A/P-A2/P-B-Bestaetigung | vollstaendige **R1-U-Inbetriebnahme separat offen**; vorhandenes B0–B4 nur funktionaler Teilnachweis, keine neue PR-Testkampagne |
 | F2 (O1, Sendepuffer 2880) | Eskalation, Kandidat | nicht qualifiziert; **Rueckbau auf 5760** (C5); keine weitere Netzwerkdiagnostik in diesem PR |
 | Restgefahrakzeptanz F4 (D3) | akzeptiert | unveraendert; kein allgemeiner OOM-Schutz behauptet |
 
@@ -168,8 +184,9 @@ Entwurf (kleinster wirksamer Schnitt):
    Main-Loops laufen weiter. Hysterese: Wiederaufnahme erst bei `Schwelle + Marge`,
    damit kein Flattern. Ratenbegrenzte Protokollzeile (`ui_skipped_low_memory`,
    Zaehler, hoechstens 1 pro 10 s) und ein Zaehler fuer die Evidence.
-2. **Schwelle nicht raten:** `kUiMinimumLargestBlockBytes` wird als empirische
-   Risikominderung aus dem beobachteten Bedarf des UI-Schritts abgeleitet:
+2. **Schwelle nicht raten:** Urspruenglicher Messentwurf fuer eine empirische
+   Nachqualifikation von `kUiMinimumLargestBlockBytes` (seit Ownerentscheid
+   18.10. keine PR-Pflicht; aktueller vorlaeufiger Stand unten):
    (a) obere Schranke fuer den reservierten Vektorblock = `kMaximumDrawCommands ×
    sizeof(ScreenDrawCommand)` mit einem nativen Test, der ueber alle Seiten die
    maximale Befehlsanzahl prueft; (b) Messung des Heapbedarfs je Render/Touch-Screen
@@ -182,23 +199,26 @@ Entwurf (kleinster wirksamer Schnitt):
    **Ownerfreigegebenes Korrekturdelta vom 2026-10-14 (Option 1):** Die
    Render-/Touch-Messung (b) liegt vor Software-C1–C3 nicht vor; G0 hat
    Shell-Phasen gemessen. Die ausdrücklich vorläufige Softwareanbindung
-   nutzt zunächst (a) × 2, Status **`PROVISIONAL_PENDING_G1`**. Der geprüfte
+   nutzte zunächst (a) × 2, damaliger Status **`PROVISIONAL_PENDING_G1`**. Der geprüfte
    strukturelle ESP32-Vektorblock ist 104 × 64 = 6656 B; vorläufige
    Skip-Schwelle **13312 B**, Resume ab **16640 B** (Schwelle + halber
    Vektorblock, 25%). Die Werte sind aus der jeweiligen ABI abgeleitet,
    nicht als gesamte Renderpfad-Garantie zu verstehen.
-   Nach separat ownerfreigegebener G1-Messung wird die oben festgelegte
-   Formel max(a, b) × 2 abschließend bestimmt. Die Diagnose muss auch
-   Render-/Touch-Pfade erfassen, die das vorläufige Gate unter Speicherlast
-   überspringt: allokationsfreie Skip-/Pfad-Coverage im Overlay; ein Skip
-   ist keine Null-Bedarfsmessung. Die betreffenden Pfade werden gezielt
-   bei ausreichender Reserve mit repräsentativen Seiten-/Zustands-/Text-/
-   Kontaktfällen ausgeführt und tatsächlich gemessen, etwa in separaten
-   kontrollierten Referenz-/Recoveryphasen des G1-Testblatts. Fehlende
-   Coverage hält die Schwellenqualifikation HOLD. Kein stilles Umgehen
-   des Produktgates unter OOM-Last, keine Diagnoseänderung im Produkt.
-   Diese begrenzte Softwarefreigabe erlaubt keine Hardwarehandlungen
-   und keine finale RES-01-/PR-Freigabe vor G1/G2.
+   **Ownerentscheid 2026-10-18:** Skip **13312 B** / Resume **16640 B**
+   bleiben unveraendert vorlaeufig, Status **`F4_THRESHOLD=PROVISIONAL`**.
+   Der bisherige Bezeichner `PROVISIONAL_PENDING_G1` in unveraendertem
+   Produktcode/alten Belegen bezeichnet keine fortbestehende PR-Gatepflicht.
+   Es liegen weder ein kausal isolierter UI-Bedarf (b) noch vollstaendige
+   transiente Peak-/Skip→Hold-Hardwarebelege vor; `G1_QUALIFICATION=NOT_PROVEN`.
+   Die 16768 B aus G1P-2 sind gemeinsame Heap-Schwankung, keine Formelbasis
+   und keine Begruendung fuer 33536 B. Keine abschliessende Anwendung von
+   max(a, b) × 2 ohne ausreichende Messbasis. Eine spaetere freiwillige
+   Messung braeuchte eine eigene Freigabe, echte Pfad-/Zustands-Coverage und
+   ausreichende Reserve; Skip waere kein Bedarf 0 B, kein Gate-Bypass unter OOM.
+   Die zusaetzliche G1′-Kampagne entfaellt fuer diesen PR; fehlende Coverage
+   allein blockiert seinen Merge nicht. D3-/TOCTOU-/kumulatives OOM-/Reset-
+   Restrisiko bleibt akzeptiert, keine OOM-Sicherheitszusage oder automatische
+   RES-01-/PR-Finalfreigabe.
 3. **Reserve statt Wachstum:** `makeRepresentativeScreen` reserviert die geprueft
    begrenzte Befehlsanzahl **einmal** fuer alle Seiten (Test erzwingt, dass keine Seite
    die Schranke ueberschreitet), damit Vektorwachstum (Verdopplung, zwei Puffer
@@ -307,9 +327,12 @@ Speicher (bestehende UI-Tests bleiben unveraendert gruen).
   bisherigen Sendezweig.
 - **C3 – Dokumentation:** `WEB_UI.md` (Antwortvertrag "statischer Anhang", Ressourcen-
   vertrag), `ACCEPTANCE_TESTS.md` (neue IDs, Abschnitt 7), `ROADMAP.md`, Evidence-Verweise.
-- **C4 – Hardwareverifikation (Abschnitt 7):** G1' (F4-Qualifikation, Diagnose-Overlay)
-  und G2 (R1-U-Abnahme auf dem reinen Produktimage); Evidence als PR-Kommentar und
-  Rohartefakte, kein Produktcode. P-A/P-A2/P-B sind **kein** Teil von C4.
+- **C4 – vorhandene Evidence / Abnahmescope (Owner 18.10.):** F1/C0-GO,
+  native F4-/Skip-/Hold-Nachweise und einmaliges B0–B4 wiederverwenden.
+  G1′ entfaellt als PR-Pflicht, Vorbereitung storniert; kein neuer Hardwarelauf.
+  B0–B4 bleibt funktional PASS_PARTIAL, formal HOLD, G2_WEB=HOLD.
+  Vollstaendige R1-Inbetriebnahme/G2 mit D9 separat offen (Abschnitt 7/9);
+  P-A/P-A2/P-B und flaechendeckende Touchdiagnose nicht Teil des PR-Slices.
 - **C5 – O1-Rueckbau (Produktcommit, nur Konfiguration):** den Block
   `CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880` samt Kommentar aus `sdkconfig.defaults` entfernen
   (Rueckkehr zum ESP-IDF-Default **5760**, dem Wert vor O1). Gezielte Tests: Build **beider**
@@ -335,7 +358,14 @@ Materielle Abweichung (z. B. C0 No-Go) -> Plan aktualisieren und neu freigeben l
 - Die R1-Abnahme (R1-U, Abschnitt 7.2) laeuft auf dem **reinen Produktimage**
   (nur vorhandene Boot-/30-s-/120-s-Zeilen, Fehler-/Reset-Freiheit, HTTP-Verhalten).
 
-## 7. Hardwareverifikation (Definition, nicht ausgefuehrt)
+## 7. Vorhandene Evidence und spaetere Hardwareverifikation
+
+**Geltung nach Ownerentscheid 18.10.:** Fuer diesen PR-Slice werden die vorhandenen
+Nachweise wiederverwendet; kein neuer Lauf. B0–B4 funktional PASS_PARTIAL, formal
+HOLD / G2_WEB=HOLD; keine vollstaendige R1-U-Abnahme behauptet. Die folgenden
+U0–U5-/R_ref-Definitionen betreffen die spaetere vollstaendige R1-Inbetriebnahme,
+nicht nachzuholende Tests als Voraussetzung dieses Dokumentationsdeltas.
+Ein neuer Hardwarelauf benoetigt eine eigene ausdrueckliche Ownerfreigabe.
 
 ### 7.1 Voraussetzungen je Lauf
 
@@ -352,12 +382,15 @@ Messgroessen je Phase: `free`, `min`, groesster 8-Bit-Block (`diag_30s`, `res01_
 Backtraces, Resetursache, Heartbeat-Luecken, HTTP-Statusklassen, Latenz je Minute, Timeouts,
 Zaehler `ui_skipped_low_memory`.
 
-### 7.2 R1-Nutzungsprofil R1-U (Abnahme, ein realer Browser)
+### 7.2 R1-Nutzungsprofil R1-U (spaetere vollstaendige Inbetriebnahme, eine Person)
 
-Ziel: die realistische Nutzung — einstellen, kontrollieren, schliessen, autonom weiterlaufen,
-spaeter wieder verbinden — mit **einem** realen Browser und dem in der Shell vorhandenen
-5-s-Polling (drei Read-only-Abrufe je Takt, `docs/WEB_UI.md`). Einmaliger Lauf auf einem frischen
-Boot des **reinen Produktimages**; ein Wiederholungsprogramm ist nicht vorgesehen.
+Ziel: eine Person stellt ein/kontrolliert **lokal oder ueber einen Webclient**,
+beendet die Bedienung, laesst das Geraet autonom weiterlaufen und verbindet spaeter
+wieder. Keine systematische Gleichzeitbedienung von Web und Touch, kein Mehrclient-
+Stress. Ein offener Webclient nutzt das vorhandene 5-s-Polling (drei Read-only-Abrufe
+je Takt, `docs/WEB_UI.md`); WLAN/HTTPD und lokale Anzeige koennen dennoch intern
+parallel Heap beanspruchen. Der vollstaendige Ablauf auf reinem Produktimage bleibt
+spaeterer Inbetriebnahmenachweis, kein jetzt autorisierter/neuer PR-Lauf.
 
 | Schritt | Inhalt | Zeitfenster |
 |---|---|---|
@@ -365,7 +398,7 @@ Boot des **reinen Produktimages**; ein Wiederholungsprogramm ist nicht vorgesehe
 | U1 | Browser oeffnen, Login, Shell laedt, Status/Temperaturen sichtbar | ≤ 2 min |
 | U2 | Programm einstellen und starten (soweit in R1 vorhanden, `docs/WEB_UI.md`/PR #201) und am Geraet bestaetigt sehen | ≤ 5 min |
 | U2R | **Referenzphase:** Browser **schliessen**, Programm laeuft, kein Client verbunden; 120 s Einschwingzeit, dann zwei Messungen im Abstand von 30 s (freier Heap und groesster Block) = **Erholungsreferenz R_ref** | ≈ 3 min |
-| U3 | Browser **erneut oeffnen** (bestehende Session weiterverwenden, sonst Login; Zustand im Testblatt vermerken), offen lassen, Status/Temperaturen mit 5-s-Polling pruefen, gelegentliche Bedienung am Geraet (Touch: Home/Uhr/Menues) | 15 min |
+| U3 | Browser **erneut oeffnen** (bestehende Session weiterverwenden, sonst Login; Zustand im Testblatt vermerken), offen lassen, Status/Temperaturen mit 5-s-Polling pruefen; keine systematische gleichzeitige Touch-/Menuekampagne | 15 min |
 | U4 | Browser **schliessen** (Tab bzw. Browserprozess beenden), kein Client verbunden: autonome Regelung weiter, keine Webaktivitaet | 20 min |
 | U5 | Browser erneut oeffnen, **wieder verbinden** (Login, falls die Session abgelaufen ist), aktuellen Zustand pruefen (Programmstatus, Temperaturen, Alarme konsistent mit dem Geraet) | ≤ 10 min Beobachtung |
 
@@ -430,15 +463,18 @@ Mehrfach-Clients.
 ### 7.5 Hardware-Gates (je eigene Ownerfreigabe, konkret mit Commit, Image-/ELF-Hash, App-only `0x10000`, Rueckfall, Stoppbedingungen)
 
 - **G0** (C0-Spike, Diagnosebranch): ausgefuehrt, C0 = GO.
-- **G1'** (Diagnose-Overlay auf dem F4-Fixcommit): **F4-Schwelle und Reset-Hold nur in den relevanten Pfaden
-  qualifizieren**: Home, Menues, Uhr/Zurueck, Programm-/Statusseiten, Locale-Varianten, Skip→Resume mit
-  gehaltenem Finger und neuer Kontakt (Hold A/B), jeweils mit repraesentativen Seiten-/Zustands-/Text-/
-  Kontaktfaellen und gemessenem Render-/Touch-Heapbedarf; ein **Browser mit 5-s-Polling parallel** ist die
-  einzige Netzwerklast. Keine Stresslast, kein Werksreset. Ergebnis: abschliessende Bestimmung der Schwelle nach
-  Abschnitt 4/2 (`max(a, b) × 2`) **nur fuer diese Pfade**; fehlende Coverage haelt die Schwellenqualifikation
-  `HOLD`; **kein** allgemeiner OOM-Schutz wird behauptet.
-- **G2** (reines Produktimage): R1-U-Abnahme nach Abschnitt 7.2/7.4.
-Keine Flash-/Resetvorgaenge ohne Freigabe.
+- **G1′:** kein verpflichtendes Gate von PR #203. Vorbereitung
+  `PR203_RES01_G1PRIME_A9_20261018_IMAGE01` vor Ausfuehrung **storniert**,
+  etwaige Chatfreigabe vom Owner zurueckgezogen, **NOT_RUN / NOT_PROVEN**.
+  Keine 18-Minuten-Touch-/Locale-/Werksreset-Navigation; Image, separate Branches,
+  Manifeste und Originale nur historisch bewahren, weder ausfuehren noch loeschen.
+  Fehlende isolierte b-/Peak-/Skip-/Hold-Coverage allein ist kein Mergeblocker;
+  keine empirisch qualifizierte Schwelle oder allgemeine OOM-Sicherheit.
+- **G2:** vollstaendige R1-U-Inbetriebnahme auf reinem Produktimage nach 7.2/7.4
+  bleibt separat offen. Einmaliges vorhandenes B0–B4 nur funktionaler Teilnachweis;
+  formale Grenzen/G2_WEB=HOLD unveraendert. Kein neuer G2-Lauf aus diesem Auftrag.
+Keine Hardwareaktion: Flash, Erase, Reset, Portoeffnung, Readback, Browser-/Touchlauf
+oder Rueckflash weder jetzt noch automatisch danach.
 
 ### 7.6 Native/Build-Nachweise
 
@@ -459,7 +495,7 @@ offene historische Evidence; **weitere Netzwerkdiagnostik, O2/O3 und A/B-Program
 vorgesehen**, ausser ein Fehler im R1-Nutzungsprofil wird konkret nachgewiesen (dann neuer Plan). Details im
 [F2-Plan](issue-27-res01-f2-escalation-plan.md).
 
-## 9. Ownerentscheidungen (D1–D3 freigegeben; D4/D5 ersetzt; D6–D9 offen)
+## 9. Ownerentscheidungen (D1–D3/D6–D8 freigegeben; D4/D5 ersetzt; D9 separat offen)
 
 | ID | Frage | Stand / Empfehlung |
 |---|---|---|
@@ -468,21 +504,53 @@ vorgesehen**, ausser ein Fehler im R1-Nutzungsprofil wird konkret nachgewiesen (
 | D3 | F4 als **begrenzte Risikominderung** mit ausdruecklicher Akzeptanz des TOCTOU-/kumulativen OOM-Risikos (weiterhin moeglicher Geraetereset); F4-B nicht geplant | freigegeben, unveraendert; beobachteter Reset bleibt Fail/HOLD |
 | D4 | *ersetzt* (frueher: P-A 3×, P-A2, P-B als Pflicht) | durch D6 ersetzt |
 | D5 | *ersetzt* (frueher: 90-%-Messbasis fuer vier Sessions) | durch D7 ersetzt |
-| **D6** | **R1-Abnahmeprofil R1-U** (Abschnitt 7.2) mit den Abnahmekriterien 7.4 an Stelle von P-A/P-A2/P-B; P-A/P-A2/P-B nur diagnostisch, historische `FAIL` bleiben | **offen**, Empfehlung Ja |
-| **D7** | Messbasis: Heap-Erholung ≥ 90 % von **R_ref** (Referenzphase U2R: Programm aktiv, Browser geschlossen, gleiche Session) innerhalb 120 s nach Beginn U4; U0 nur Kontext. Alternative zur Entscheidung: nur Trend/Plateau-Bericht ohne 90-%-Schwelle | **offen**, Empfehlung Ja |
-| **D8** | **O1-Rueckbau** (C5): Entfernen des 2880-Blocks, Rueckkehr zu 5760, Tests nach Abschnitt 5 C5; keine Netzwerkdiagnostik/A-B in diesem PR | **offen**, Empfehlung Ja |
-| **D9** | Testaufbau fuer R1-U-Schritt U2: Bereitstellung gueltiger Commissioning-/Sensorwerte (oder alternative Programm-Startbarkeit am Devboard); G1' (F4-Qualifikation, Abschnitt 7.5) als Diagnose-Overlay-Messung | **offen** |
+| **D6** | **R1-Abnahmeprofil R1-U** statt P-A/P-A2/P-B; historische `FAIL` bleiben | JA (15.10.); 18.10. praezisiert: eine Person lokal oder ein Webclient, vollstaendige Inbetriebnahme separat |
+| **D7** | Heap-Erholung ≥ 90 % von **R_ref** (U2R: Programm aktiv, Browser geschlossen, gleiche Session), U0 nur Kontext | JA (15.10.), spaetere vollstaendige Inbetriebnahme; durch B0–B4 nicht belegt |
+| **D8** | **O1-Rueckbau** (C5), Rueckkehr zu 5760; keine Netzwerkdiagnostik/A-B | JA (15.10.), umgesetzt; vorhandene Build-/Konfigurationsnachweise wiederverwenden |
+| **D9** | Testaufbau fuer spaeteren R1-U-Schritt U2 mit gueltigen Commissioning-/Sensorwerten | **separat offen**, keine Simulation/Programmstart am sensor-/aktorlosen Board; G1′-Pflicht am 18.10. gestrichen |
 
 **Ownerentscheide vom 2026-10-15 (nach G1P-2-Retest, `FAIL/HOLD` historisch, nicht umgewertet):**
 D6–D8 = JA; Stack = **A**: Der Hard-Stop `main-stack-reserve` (kleinster HWM 10 984 B frei von 24 576 B, Offline-Eingrenzung im Review-Branch `diag/review/g1p/G1P2_OFFLINE_EINGRENZUNG.md`) wird als akzeptierter Befund der erweiterten Touch-Navigation erfasst; die relative Grenze 11 160 B (D3-Baseline, nicht gleichwertige Abdeckung) gilt im G2-Web-Teiltest nur als Trend-/Reservebericht, nicht als Abbruchgrenze; Stacküberlauf, Panic, Watchdog, Reset oder sonstiger konkreter Fehler bleiben Hard-Stop. F4 = **A**: Skip 13 312 B / Resume 16 640 B unveraendert, `F4_THRESHOLD=PROVISIONAL_PENDING_G1`, `G1_QUALIFICATION=NOT_PROVEN`; die beobachteten 16 768 B sind gemeinsame Heap-Schwankung, keine belastbare Formelbasis. G2-Web = **JA, einmalig, `PARTIAL`**: ein App-only-Flash des C5-Produktimages `esp32_release` (App `ebb296c0…6633`, Commit `162a667`) auf dem sensor- und aktorlosen Devboard mit Display/Touch; ein Browser, 15 min 5-s-Polling, 20 min ohne Client, Wiederverbinden; Ergebnis hoechstens `PASS_PARTIAL` (kein U2/U2R/`R_ref`, kein `G2=PASS`, kein `PR203_FINAL_GO=GO`).
+
+**Ownerentscheid 2026-10-18 (aktuell):** G1′-Kampagne und etwaige Chatfreigabe
+fuer IMAGE01 vor Ausfuehrung zurueckgezogen, NOT_RUN / NOT_PROVEN; vorhandene
+Touchfunktion laut Owner bereits geprueft, kein neuer konkreter Touchdefekt.
+Daraus wird kein G1′-PASS. F4 bleibt unveraendert vorlaeufig und D3 akzeptiert;
+fehlende G1′-Coverage allein ist kein PR-Mergeblocker. Kein Hardwareauftrag.
+
+### Aktuelle PR-Blocker und getrennte Restnachweise (18.10.)
+
+Builder-Einordnung anhand bestehender Evidence, **zur unabhaengigen Plan-/Fix-Verification**;
+keine eigene Finalfreigabe und kein automatisches OPEN_BLOCKERS=0/Pre-Ready.
+
+| Befund / offener Nachweis | Einordnung / Bereich | Echter verbleibender PR-Blocker? |
+|---|---|---|
+| Konkreter nicht akzeptierter Correctness-/Safetyfehler im aktuellen F1/F4-/Single-Flight-Slice | Aus vorliegender Evidence kein weiterer solcher Produktfehler nachgewiesen. Originaler Heap-/Abort-Befund bleibt real; F1-Gewinn/C0-GO und native F4-/Hold-Nachweise vorhanden | **Keiner zusaetzlich nachgewiesen**; Empfehlung RES-01 als akzeptiertes begrenztes D3-Restrisiko, nicht wegen gestrichenem G1′ BLOCKER fortschreiben |
+| G1′, isoliertes b, Peaks und Hardware-Skip→Hold | Freiwillige Diagnose; G1′ storniert, NOT_RUN / NOT_PROVEN, F4 vorlaeufig 13312/16640 B | **Nein**, allein fehlende Coverage laut Owner kein Mergeblocker; keine Qualifikationsbehauptung |
+| B0–B4-Funktionsnachweis / formale Recorder-/Timinggrenzen | Aktueller PR: [Ergebnis-Addendum](../audits/PR203_G2_WEB_B0_B4_20261018/REVIEW_ADDENDUM.md), funktional PASS_PARTIAL, formal HOLD, G2_WEB=HOLD. NetLog-Luecke/Profilabweichung, lange Gruppenstartluecken und fehlende zeitgenaue Frische-/Settlementbelege bleiben | **Kein daraus nachgewiesener neuer Produktblocker**; formale Gesamt-Abnahme nicht erteilt und nicht in PASS umgewertet |
+| Historische Nichterreichbarkeit/Chunkfehler, interne Chrome-Resets, WLAN-/TCP-Befunde | Historische Fehler bleiben; erfolgreiche Erstabrufe/Wiederverbindung belegen keine behobene Root Cause. Transport-/Latenz-FOLLOW-UP, Ursache NOT_PROVEN | **Kein zusaetzlicher aktueller Correctness-/Safetyblocker belegt**; nicht als behoben/fehlerfrei ausgeben, reale neue Fehler bleiben bewertungspflichtig |
+| Web-Mutationsheader X-Mutation-Seq vs. X-UI-Mutation-Seq | Vorbestehender separater FOLLOW-UP in Issue #27 gemaess Ergebnisreview; 400/sequence-required wendet nichts an | **Nein fuer diesen Slice**; weder hier fixen noch als erfolgreiche Webmutation ausgeben |
+| D9, Programmstart, U2/U2R/R_ref, autonome reale Regelung und Aktoren | Spaetere vollstaendige R1-Inbetriebnahme/Safety-/Aktorqualifikation **offen / NOT_PROVEN** | **Kein Testauftrag/Blocker fuer diesen begrenzten PR-Slice**; keine Freigabe realer Inbetriebnahme oder Aktoren |
+| Unabhaengige Plan-/Fix-Verification dieses Scope-/Statusdeltas und bestehende finale Review-/Owner-Gates | Aktueller PR, noch ausstehend | **Ja, Verfahrens-/Freigabesperre:** PR203_FINAL_GO=HOLD, kein Pre-Ready/Ready/Merge aus diesem Auftrag |
+
+`RES-01=REVIEW_PENDING` bezeichnet die noch unabhaengig zu pruefende Empfehlung
+zum akzeptierten begrenzten Restrisiko, nicht einen neu behaupteten Produktfehler.
+Originale/Audit-Ergebnisse und separate Diagnose-/Reviewbranches bleiben unveraendert.
+
+Builder-Konsistenznachweis dieses Deltas: nur fuenf vorhandene Markdown-Dateien;
+F1-Transportvertrag, F4-Reserve-/Hold-Sperrvertrag und SIM-27-H-01..07 bytegleich
+zur Reviewbasis 523f0d4. Historische Ergebnisdateien und separate Diagnosebranches
+unveraendert; Vorbereitung nur um den Stornovermerk ergaenzt. Elf neue lokale
+Verweisziele, Statuskonsistenz, gezielte Privacy-Pruefung und `git diff --check`
+PASS. Kein Code-/Build-/Hardwaretest oder Pre-Ready ausgefuehrt.
 
 ## 10. Risiken
 
 - Chunked-Transfer kann Segmentierung/TX-Puffer erhoehen (Hypothese ohne Pufferzaehlung); C0 hat anhand
   messbarer Ressourcenwerte GO ergeben.
 - F4-Gate kann bei knappem Speicher die Anzeige voruebergehend einfrieren; nach bestandenem Gate bleiben
-  OOM/Abort/Reset moeglich (D3 ownerakzeptiert, Testgrenze Abschnitt 4/6). Die F4-Qualifikation gilt nur fuer die
-  getesteten Pfade.
+  OOM/Abort/Reset moeglich (D3 ownerakzeptiert, Abschnitt 4/6). Keine empirische F4-Gesamtqualifikation;
+  fehlende G1′-Coverage allein ist keine PR-Mergebedingung (Owner 18.10.).
 - **R1-U belegt nicht** die Robustheit gegenueber mehreren intensiv pollenden Sessions, vielen neuen
   TCP-Verbindungen oder dem beobachteten WLAN-/TCP-Stillstand; ein solcher Stillstand im realen
   Nutzungsprofil bleibt Blocker, seine Ursache ist offen (AP, Funkweg, WLAN-Treiber, lwIP).

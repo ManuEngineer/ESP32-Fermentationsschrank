@@ -894,9 +894,12 @@ formellen Gate aber kein `PASS`, wenn die Warnung eine Gate-Anforderung betrifft
 
 ## RES-01: Shell-Heap und UI-Unterbrechung (PR #203)
 
-Native Nachweise und reale ESP-IDF-Linux-Adaptertests bleiben von Hardware-G1/G2
+Native Nachweise und reale ESP-IDF-Linux-Adaptertests bleiben von Hardwarebeweisen
 getrennt. Die geprüfte Softwarebasis und vollständige Befehle stehen im
 RES-01-Softwarebericht; ein PASS dieser Tests ist keine OOM-/Hardwarefreigabe.
+Ownerentscheid 18.10.2026: G1′ ist keine verpflichtende PR-#203-Abnahme mehr,
+Vorbereitung vor Ausführung storniert. Der historische Quell-/Testbezeichner
+`PROVISIONAL_PENDING_G1` begründet keine fortbestehende Hardware-Gatepflicht.
 
 | ID | Nachweis |
 |---|---|
@@ -908,21 +911,29 @@ RES-01-Softwarebericht; ein PASS dieser Tests ist keine OOM-/Hardwarefreigabe.
 | SIM-27-H-06 | Native Längenfehlerinjektion durch echten handleShell: bereits gesetzter Anhang plus Überlänge -> vollständiger 503-JSON-Body/Content-Type/Status ohne Anhang. Wiederverwendete Antwort mit Anhang -> JSON/Fehler ohne Suffix. Produktgrenze unverändert. |
 | SIM-27-H-07 | Realer gepinnter IDF-Adapter auf Linux/Loopback: Kopf/Anhang-Reihenfolge, leerer Kopf, genau ein Terminator, suffixlose Antwort unverändert; injizierter Fehler in Kopf/Anhang/Terminator wird als erster Fehler zurückgegeben, keine weiteren Sendeschritte. Vollständige 503-Bytes/Status/Content-Type ohne HTML/JS. |
 
-Hardware: Profile P-A (3×20 min), P-A2, P-B und P-R sowie aktuelle Heap-/Block-
-Erholung gegen denselben Vier-Session-Idle und Stackreserve gelten gemäß dem
-freigegebenen [RES-01-Plan](tasks/issue-27-res01-heap-hardening-plan.md).
-Loginbudget und GET-Timeouts, Verbindungsmodell und Latenzbewertung werden im
-konkreten G1/G2-Testblatt vor Beginn festgelegt. Die vorläufige F4-Schwelle
-(ESP32 13312 B Skip/16640 B Resume) ist vor Hardwarefreigabe ausdrücklich
-als `PROVISIONAL_PENDING_G1` zu führen. In G1 Render-/Touch-Bedarf wirklich
-messen und max(Vektorblock, Bedarf) × 2 abschließend bestimmen; im Overlay
-Skip-/Pfad-Coverage erfassen und auch unter Last übersprungene Pfade gezielt
-bei genügend Reserve messen. Skip ist kein Bedarfswert 0; fehlende
-Pfad-/Zustands-Coverage hält die Schwellenqualifikation HOLD.
-G0-R3-Heapminimum und lange GETs
-sind dabei sichtbar zu berücksichtigen. Kein nachträglich erfundener Grenzwert.
-Jede erste Allokations-/Reset-/UART-/HTTP-Anomalie beendet den Hardwarelauf;
-keine automatische Folgeaktion. `G1_G2=NOT_AUTHORIZED`, `ACTUATOR_RELEASE=NO`.
+Aktueller PR-Slice gemäß [RES-01-Plan](tasks/issue-27-res01-heap-hardening-plan.md):
+vorhandene positive F1-/C0-Evidence, F4-Implementierung/native Skip-/Hold-Regressionen
+und einmaligen B0–B4-Funktionsnachweis wiederverwenden. Eine Person bedient lokal
+oder über einen Webclient; keine Pflicht zu Mehrclient-Stress oder systematischer
+Gleichzeitbedienung. Interne Speicher-Konkurrenz bleibt möglich.
+
+F4 unverändert vorläufig: **13312 B Skip / 16640 B Resume**, aktueller Status
+`F4_THRESHOLD=PROVISIONAL`. Isoliertes b, vollständige transiente Peaks sowie
+Hardware-Skip→Hold/Pfad-Coverage **NOT_PROVEN**; kein empirischer Endwert,
+kein allgemeiner OOM-Schutz. Fehlende G1′-Coverage allein ist kein PR-Mergeblocker.
+D3 akzeptiert die begrenzte TOCTOU-/kumulative OOM-/Reset-Restgefahr; reale Fehler
+werden nicht nachträglich zu PASS erklärt. Historische G1-/G1P-FAILs bleiben FAIL,
+G1′ bleibt NOT_RUN / NOT_PROVEN. G0-R3-Heapminimum und lange GETs bleiben Befunde,
+keine neuen nachträglichen Grenzwerte.
+
+B0–B4 bleibt **funktional PASS_PARTIAL / formal HOLD**, `G2_WEB=HOLD`, mit seinen
+Recorder-/Timinggrenzen. Vollständiges R1-U mit D9/Programmstart, U2R/R_ref,
+Regelungs-/Sensor-/Aktorqualifikation bleibt **separate spätere Inbetriebnahme**,
+nicht durch diesen PR als bestanden erklärt. P-A/P-A2/P-B und weitere F4-Messungen
+nur freiwillige Diagnose mit eigener Freigabe; kein neuer Test aus diesem Entscheid.
+Konkrete verbleibende PR-Blocker und FOLLOW-UPs stehen in Plan §9, keine parallele
+Gate-Liste hier. `PR203_FINAL_GO=HOLD` bis unabhängiger Plan-/Fix-Verification,
+`ACTUATOR_RELEASE=NO`; keine Hardwareaktion oder automatische Folgephase.
 
 ## Akzeptierte Entscheidungen
 

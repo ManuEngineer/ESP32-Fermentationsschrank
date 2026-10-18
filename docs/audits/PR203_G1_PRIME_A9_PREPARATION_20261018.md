@@ -1,5 +1,25 @@
 # PR #203 – G1′/F4 auf a9: Offline-Vorbereitung
 
+**Aktueller Status – Ownerentscheid 18.10.2026: VORBEREITUNG STORNIERT, NICHT
+ZUR AUSFÜHRUNG FREIGEGEBEN.** Etwaige zuvor im Chat erteilte Freigabe für
+`PR203_RES01_G1PRIME_A9_20261018_IMAGE01` ist vor Ausführung zurückgezogen.
+G1′ ist keine PR-#203-Abnahmebedingung mehr und bleibt **NOT_RUN / NOT_PROVEN**.
+Kein Flash, Reset, Portöffnen, Readback, Browser-/Touchlauf oder Rückflash,
+weder jetzt noch automatisch danach. Diagnoseimage, Branches, Reviewmaterial,
+Artefakte und Originale bleiben unangetastet historisch erhalten.
+
+Die folgenden Vorbereitungsangaben/Hashes und damaligen Empfehlungen sind
+**historisch**, keine aktuelle Ausführungsplanung. Maßgebend ist der
+[revidierte RES-01-Plan](../tasks/issue-27-res01-heap-hardening-plan.md),
+insbesondere §9: F4 unverändert vorläufig 13312/16640 B, fehlende G1′-Coverage
+allein kein Mergeblocker, Empfehlung akzeptiertes begrenztes D3-Restrisiko.
+`RES-01=REVIEW_PENDING`, `PR203_FINAL_GO=HOLD`, `ACTUATOR_RELEASE=NO`.
+Nächster Schritt ausschließlich unabhängige Plan-/Fix-Verification.
+
+---
+
+## Historischer Vorbereitungsstand (unverändert)
+
 **G1_PRIME_GATE_READY_FOR_OWNER_APPROVAL**. Keine Hardwareaktion ausgeführt.
 Der Owner hat die abgeschlossene B0–B4-Ergebnis-Fix-Verification als
 Ausgangspunkt dieses Auftrags benannt; deren Ergebnis-/Nachweisgrenzen
