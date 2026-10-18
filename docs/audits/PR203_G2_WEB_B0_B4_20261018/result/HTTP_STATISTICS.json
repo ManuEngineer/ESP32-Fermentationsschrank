@@ -1,0 +1,113 @@
+{
+  "B2_FULL": {
+    "scope": "whole supplied HAR export including pre-login and post-window/export time; not strictly host-defined900/600s",
+    "requests": 554,
+    "statuses": {
+      "200": 489,
+      "401": 29,
+      "0": 34,
+      "404": 1,
+      "400": 1
+    },
+    "poll_groups": 182,
+    "authenticated_complete_triples": 161,
+    "all_authenticated_triples_valid_json": true,
+    "transport_overlap_count": 0,
+    "unmatched_poll_indices": [],
+    "maximum_group_transport_duration_ms": 16901.150941848755,
+    "groups_above15000ms": 1,
+    "authenticated_start_interval_s": {
+      "min": 2.794999837875366,
+      "median": 5.0015000104904175,
+      "max": 64.0019998550415
+    },
+    "latency": {
+      "/": {
+        "n": 3,
+        "p50_ms": 282.16600000179,
+        "p99_nearest_rank_ms": 450.40700000390643,
+        "max_ms": 450.40700000390643
+      },
+      "/api/v1/login": {
+        "n": 1,
+        "p50_ms": 2919.845999997051,
+        "p99_nearest_rank_ms": 2919.845999997051,
+        "max_ms": 2919.845999997051
+      },
+      "/api/v1/status": {
+        "n": 161,
+        "p50_ms": 394.15899999585235,
+        "p99_nearest_rank_ms": 6749.866999998625,
+        "max_ms": 16901.150999997015
+      },
+      "/api/v1/temperatures": {
+        "n": 161,
+        "p50_ms": 434.7070000003441,
+        "p99_nearest_rank_ms": 8462.566999995033,
+        "max_ms": 12372.294000000693
+      },
+      "/api/v1/alerts": {
+        "n": 161,
+        "p50_ms": 448.711999997613,
+        "p99_nearest_rank_ms": 6175.924000002851,
+        "max_ms": 6424.255000000953
+      }
+    }
+  },
+  "B4_FULL": {
+    "scope": "whole supplied HAR export including pre-login and post-window/export time; not strictly host-defined900/600s",
+    "requests": 201,
+    "statuses": {
+      "200": 126,
+      "401": 29,
+      "0": 46
+    },
+    "poll_groups": 65,
+    "authenticated_complete_triples": 40,
+    "all_authenticated_triples_valid_json": true,
+    "transport_overlap_count": 0,
+    "unmatched_poll_indices": [
+      199,
+      200
+    ],
+    "maximum_group_transport_duration_ms": 18549.541234970093,
+    "groups_above15000ms": 1,
+    "authenticated_start_interval_s": {
+      "min": 4.539000034332275,
+      "median": 5.006999969482422,
+      "max": 60.01400017738342
+    },
+    "latency": {
+      "/": {
+        "n": 2,
+        "p50_ms": 7565.22749999931,
+        "p99_nearest_rank_ms": 10262.213000001793,
+        "max_ms": 10262.213000001793
+      },
+      "/api/v1/login": {
+        "n": 1,
+        "p50_ms": 6808.716999995143,
+        "p99_nearest_rank_ms": 6808.716999995143,
+        "max_ms": 6808.716999995143
+      },
+      "/api/v1/status": {
+        "n": 41,
+        "p50_ms": 477.5470000022324,
+        "p99_nearest_rank_ms": 11471.39099999913,
+        "max_ms": 11471.39099999913
+      },
+      "/api/v1/temperatures": {
+        "n": 41,
+        "p50_ms": 543.033000001742,
+        "p99_nearest_rank_ms": 18548.540999996476,
+        "max_ms": 18548.540999996476
+      },
+      "/api/v1/alerts": {
+        "n": 40,
+        "p50_ms": 555.6524999992689,
+        "p99_nearest_rank_ms": 4535.855999994965,
+        "max_ms": 4535.855999994965
+      }
+    }
+  }
+}

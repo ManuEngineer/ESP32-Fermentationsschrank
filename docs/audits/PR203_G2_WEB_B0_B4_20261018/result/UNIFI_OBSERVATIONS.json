@@ -1,0 +1,70 @@
+{
+  "source": "private screenshots, owner reports; filenames/taskbar give nominal local times, exact UTC/UniFi clock offset NOT_PROVEN",
+  "displayed_local_zone": "presumed Europe/Zurich from owner environment; not independently measured",
+  "target_identity_matched_privately": true,
+  "band_ghz": 2.4,
+  "channel": 6,
+  "width_mhz": 20,
+  "samples": [
+    {
+      "nominal_local": "15:56:17",
+      "signal_dbm": -73,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 27,
+      "ap_airtime_percent": 26
+    },
+    {
+      "nominal_local": "16:03:34",
+      "signal_dbm": -81,
+      "client_tx_retries_percent": 36,
+      "ap_tx_retries_percent": 13,
+      "ap_airtime_percent": 25
+    },
+    {
+      "nominal_local": "16:12:57",
+      "signal_dbm": -85,
+      "client_tx_retries_percent": 40,
+      "ap_tx_retries_percent": 9.2,
+      "ap_airtime_percent": 33
+    },
+    {
+      "nominal_local": "16:25:30",
+      "signal_dbm": -85,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 2.6,
+      "ap_airtime_percent": 35
+    },
+    {
+      "nominal_local": "16:34:23",
+      "signal_dbm": -84,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 13,
+      "ap_airtime_percent": 28
+    },
+    {
+      "nominal_local": "16:46:40",
+      "signal_dbm": -85,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 1.1,
+      "ap_airtime_percent": 31
+    },
+    {
+      "nominal_local": "17:01:47",
+      "signal_dbm": -85,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 26,
+      "ap_airtime_percent": 28
+    }
+  ],
+  "excluded": [
+    {
+      "nominal_local": "16:18:54",
+      "reason": "different private client identity, 5GHz channel64; not ESP32 connectivity evidence"
+    },
+    {
+      "nominal_local": "16:45:31",
+      "reason": "browser login/document screenshot, not UniFi measurement"
+    }
+  ],
+  "limit": "No causality inferred for latency or historical B4 failures; absence of listed connectivity events is not a continuous WLAN proof."
+}

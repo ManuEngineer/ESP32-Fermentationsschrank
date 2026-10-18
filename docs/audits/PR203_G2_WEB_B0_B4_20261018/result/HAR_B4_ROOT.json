@@ -1,0 +1,921 @@
+{
+  "input_sha256": "a4f2c712ed9534e4914dd2a895fb8b703f108ab183d5e7308980ab34ee675a3a",
+  "input_bytes": 94115,
+  "input_entries": 25,
+  "unrelated_or_nonallowlisted_entries_omitted": 0,
+  "status_counts": {
+    "200": 1,
+    "401": 10,
+    "0": 14
+  },
+  "requests": [
+    {
+      "index": 0,
+      "path": "/",
+      "method": "GET",
+      "type": "document",
+      "start_utc_client": "2026-10-18T14:45:06.077Z",
+      "duration_ms": 10262.213000001793,
+      "status": 200,
+      "error": null,
+      "body_in_export": true,
+      "decoded_body_bytes": 8025,
+      "timings_ms": {
+        "blocked": 22.637000001850538,
+        "dns": 0,
+        "ssl": -1,
+        "connect": 1180.35,
+        "send": 0.7989999999999782,
+        "wait": 8497.437000001815,
+        "receive": 560.989999998128
+      },
+      "response_headers": {
+        "content-type": "text/html; charset=utf-8",
+        "transfer-encoding": "chunked"
+      },
+      "initiator_type": "other",
+      "initiator_function_names": [],
+      "html_ends_correctly": true,
+      "html_sha256": "d811b259a8b42990805a5f38c872e718db5932f85fafb766e9e60d8c04170f0f"
+    },
+    {
+      "index": 1,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:16.350Z",
+      "duration_ms": 453.37799999833805,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 5.614999997352715,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.41500000000000004,
+        "wait": 435.85799999657087,
+        "receive": 11.490000004414469
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf",
+        ""
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 2,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:16.352Z",
+      "duration_ms": 452.0639999973355,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 7.219999994823709,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.46099999999999985,
+        "wait": 436.1090000027106,
+        "receive": 8.273999999801163
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf",
+        ""
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 3,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:16.352Z",
+      "duration_ms": 451.88799999596085,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 451.88799999596085,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf",
+        ""
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 4,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:21.360Z",
+      "duration_ms": 679.4749999971827,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 3.537999998073559,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.43300000000000005,
+        "wait": 669.0420000015544,
+        "receive": 6.461999997554813
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 5,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:21.360Z",
+      "duration_ms": 679.1149999990012,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 679.1149999990012,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 6,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:21.361Z",
+      "duration_ms": 678.3649999997579,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 678.3649999997579,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 7,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:26.363Z",
+      "duration_ms": 410.5610000042361,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 2.835000004080124,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.8199999999999998,
+        "wait": 401.44800000052106,
+        "receive": 5.4579999996349216
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 8,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:26.363Z",
+      "duration_ms": 410.06100000231527,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 410.06100000231527,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 9,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:26.365Z",
+      "duration_ms": 409.4189999959781,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 409.4189999959781,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 10,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:31.365Z",
+      "duration_ms": 2541.7579999993904,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 3.003999996965751,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.3659999999999999,
+        "wait": 2534.631999996901,
+        "receive": 3.756000005523674
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 11,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:31.366Z",
+      "duration_ms": 2541.140000001178,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 2541.140000001178,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 12,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:31.366Z",
+      "duration_ms": 2541.907999999239,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 2541.907999999239,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 13,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:36.357Z",
+      "duration_ms": 736.3829999958398,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 2.7669999966067262,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.30699999999999994,
+        "wait": 725.248999999119,
+        "receive": 8.060000000114087
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 14,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:36.357Z",
+      "duration_ms": 736.0009999974864,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 736.0009999974864,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 15,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:36.358Z",
+      "duration_ms": 735.2689999970607,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 735.2689999970607,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 16,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:41.362Z",
+      "duration_ms": 674.3160000062087,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 4.42600000087684,
+        "dns": 0.03699999999999992,
+        "ssl": -1,
+        "connect": 199.461,
+        "send": 0.7199999999999989,
+        "wait": 467.3749999989667,
+        "receive": 2.297000006365124
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 17,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:41.362Z",
+      "duration_ms": 674.9689999996917,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 674.9689999996917,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 18,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:41.363Z",
+      "duration_ms": 674.8650000008638,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 674.8650000008638,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 19,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:46.355Z",
+      "duration_ms": 535.3820000018459,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 1.5660000050035305,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.2589999999999999,
+        "wait": 530.3910000018799,
+        "receive": 3.165999994962476
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 20,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:46.355Z",
+      "duration_ms": 535.2119999952265,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 535.2119999952265,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 21,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:46.355Z",
+      "duration_ms": 534.8000000012689,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 534.8000000012689,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 22,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:51.361Z",
+      "duration_ms": 481.6519999949378,
+      "status": 401,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": true,
+      "decoded_body_bytes": 28,
+      "timings_ms": {
+        "blocked": 2.949999997688923,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0.35399999999999987,
+        "wait": 472.0149999997094,
+        "receive": 6.332999997539446
+      },
+      "response_headers": {
+        "content-length": "28",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": true,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 23,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:51.362Z",
+      "duration_ms": 483.4180000034394,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 483.4180000034394,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    },
+    {
+      "index": 24,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "type": "fetch",
+      "start_utc_client": "2026-10-18T14:45:51.363Z",
+      "duration_ms": 483.1650000051013,
+      "status": 0,
+      "error": "net::ERR_ABORTED",
+      "body_in_export": false,
+      "decoded_body_bytes": null,
+      "timings_ms": {
+        "blocked": 483.1650000051013,
+        "dns": -1,
+        "ssl": -1,
+        "connect": -1,
+        "send": 0,
+        "wait": 0,
+        "receive": 0
+      },
+      "response_headers": {},
+      "initiator_type": "script",
+      "initiator_function_names": [
+        "",
+        "rf"
+      ],
+      "json_parse_valid": false,
+      "expected_snapshot_shape": false
+    }
+  ],
+  "poll_transport_groups": [
+    {
+      "indices": [
+        1,
+        2,
+        3
+      ],
+      "start_epoch_client": 1792334716.35,
+      "last_transport_end_epoch_client": 1792334716.804064,
+      "duration_ms": 454.06413078308105,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        4,
+        5,
+        6
+      ],
+      "start_epoch_client": 1792334721.36,
+      "last_transport_end_epoch_client": 1792334722.039475,
+      "duration_ms": 679.4750690460205,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        7,
+        8,
+        9
+      ],
+      "start_epoch_client": 1792334726.363,
+      "last_transport_end_epoch_client": 1792334726.774419,
+      "duration_ms": 411.419153213501,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        10,
+        11,
+        12
+      ],
+      "start_epoch_client": 1792334731.365,
+      "last_transport_end_epoch_client": 1792334733.907908,
+      "duration_ms": 2542.907953262329,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        13,
+        14,
+        15
+      ],
+      "start_epoch_client": 1792334736.357,
+      "last_transport_end_epoch_client": 1792334737.093383,
+      "duration_ms": 736.3829612731934,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        16,
+        17,
+        18
+      ],
+      "start_epoch_client": 1792334741.362,
+      "last_transport_end_epoch_client": 1792334742.037865,
+      "duration_ms": 675.8649349212646,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        19,
+        20,
+        21
+      ],
+      "start_epoch_client": 1792334746.355,
+      "last_transport_end_epoch_client": 1792334746.890382,
+      "duration_ms": 535.3820323944092,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    },
+    {
+      "indices": [
+        22,
+        23,
+        24
+      ],
+      "start_epoch_client": 1792334751.361,
+      "last_transport_end_epoch_client": 1792334751.846165,
+      "duration_ms": 485.1648807525635,
+      "all_200": false,
+      "all_bodies_valid_json": false,
+      "all_snapshot_shapes_valid": false,
+      "errors": [
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED",
+        "net::ERR_ABORTED"
+      ]
+    }
+  ],
+  "unmatched_poll_indices": [],
+  "transport_overlap_count": 0,
+  "minimum_intergroup_transport_gap_ms": 2449.092149734497,
+  "limit": "HAR transport end/body availability is not an instrumented timestamp of browser JSON promise settlement. Grouping uses consecutive allowlisted triads within250ms; unmatched entries remain unqualified. Private auth payloads and all response bodies omitted."
+}

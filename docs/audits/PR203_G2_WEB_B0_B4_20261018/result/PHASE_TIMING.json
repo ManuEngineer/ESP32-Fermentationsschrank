@@ -1,0 +1,81 @@
+{
+  "B2": {
+    "utc": "2026-10-18T14:01:35.644344+00:00",
+    "epoch": 1792332095.644344,
+    "monotonic": 523300.606326524,
+    "source": "host starts conservative 900-second interval after owner reports online/authenticated/HAR saved",
+    "windows_exact_start": "NOT_PROVEN_PENDING_HAR",
+    "checkpoints": [
+      {
+        "seconds": 0,
+        "due_monotonic": 523300.606326524,
+        "due_utc": "2026-10-18T14:01:35.644344+00:00"
+      },
+      {
+        "seconds": 300,
+        "due_monotonic": 523600.606326524,
+        "due_utc": "2026-10-18T14:06:35.644344+00:00"
+      },
+      {
+        "seconds": 600,
+        "due_monotonic": 523900.606326524,
+        "due_utc": "2026-10-18T14:11:35.644344+00:00"
+      },
+      {
+        "seconds": 900,
+        "due_monotonic": 524200.606326524,
+        "due_utc": "2026-10-18T14:16:35.644344+00:00"
+      }
+    ],
+    "no_hardware_action": true
+  },
+  "B3": {
+    "utc": "2026-10-18T14:23:18.668454+00:00",
+    "epoch": 1792333398.668454,
+    "monotonic": 524603.630444759,
+    "source": "host conservative start after owner HAR checked/device tab closed/NetLog active confirmation",
+    "checkpoints": [
+      {
+        "seconds": 0,
+        "due_monotonic": 524603.630444759,
+        "due_utc": "2026-10-18T14:23:18.668454+00:00"
+      },
+      {
+        "seconds": 600,
+        "due_monotonic": 525203.630444759,
+        "due_utc": "2026-10-18T14:33:18.668454+00:00"
+      },
+      {
+        "seconds": 1200,
+        "due_monotonic": 525803.630444759,
+        "due_utc": "2026-10-18T14:43:18.668454+00:00"
+      }
+    ],
+    "no_device_http": true,
+    "actual_tab_close_utc": "PENDING_NETLOG"
+  },
+  "B4": {
+    "utc": "2026-10-18T14:49:11.506950+00:00",
+    "epoch": 1792334951.50695,
+    "monotonic": 526156.468944738,
+    "source": "conservative host start after owner confirms authenticated Online/Ready and three HTTP200 API responses",
+    "checkpoints": [
+      {
+        "seconds": 0,
+        "due_monotonic": 526156.468944738,
+        "due_utc": "2026-10-18T14:49:11.506950+00:00"
+      },
+      {
+        "seconds": 300,
+        "due_monotonic": 526456.468944738,
+        "due_utc": "2026-10-18T14:54:11.506950+00:00"
+      },
+      {
+        "seconds": 600,
+        "due_monotonic": 526756.468944738,
+        "due_utc": "2026-10-18T14:59:11.506950+00:00"
+      }
+    ],
+    "browser_JSON_settlement_timestamp": "NOT_INSTRUMENTED_HAR_VALIDATION_PENDING"
+  }
+}

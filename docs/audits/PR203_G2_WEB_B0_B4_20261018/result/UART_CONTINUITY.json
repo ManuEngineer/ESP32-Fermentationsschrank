@@ -1,0 +1,37 @@
+{
+  "capture_start_utc": "2026-10-17T09:58:10.482411+00:00",
+  "capture_end_utc": "2026-10-18T15:03:02.792519+00:00",
+  "capture_duration_monotonic_s": 104692.31011295202,
+  "epoch_minus_monotonic_at_start_s": 1791808795.0380292,
+  "expected_initial_reset_count": 1,
+  "qualified_heartbeat_count": 104446,
+  "pre_boot_lines_ignored": 55,
+  "strictly_increasing_uptime": true,
+  "max_post_boot_heartbeat_gap_s": 1.3603219999931753,
+  "post_boot_gaps_above5s": 0,
+  "max_uptime_step_ms": 1351,
+  "chunk_monotonic_max_gap_s": 1.3603504450293258,
+  "chunk_epoch_max_gap_s": 1.3603520393371582,
+  "chunk_epoch_minus_monotonic_range_s": 0.00012302398681640625,
+  "chunk_byte_count_matches_raw_bytes": true,
+  "guard_failure": null,
+  "compressed_numeric_evidence": {
+    "HEARTBEATS.csv.gz": {
+      "rows": 104446,
+      "uncompressed_bytes": 2384304,
+      "uncompressed_sha256": "1bb43c2831c4eaf27473a06649d38be3de847b85c954efe33b55bf0776463aee",
+      "compressed_bytes": 911011,
+      "compressed_sha256": "5de0ed55382c4a930b5fb35dd8f31f5d4cfcc012f96d10d7a8764bb1f4308704",
+      "transformation": "CSV selected numeric fields; gzip mtime0; no raw bytes"
+    },
+    "UART_CHUNKS.csv.gz": {
+      "rows": 116948,
+      "uncompressed_bytes": 4513812,
+      "uncompressed_sha256": "81011aede81d437cef286cf2c95e32453a88a536f466e4432c333baa90f42e2c",
+      "compressed_bytes": 1680234,
+      "compressed_sha256": "90e5606ec43aabbca6f3f124a577c555132c1e8eba05c3ed487e135d2d8d70c7",
+      "transformation": "CSV selected numeric fields; gzip mtime0; no raw bytes"
+    }
+  },
+  "limit": "UTC is host receipt/parsing time; no assertion of exact browser or UniFi clock offset. Capture max gap also includes initial boot."
+}

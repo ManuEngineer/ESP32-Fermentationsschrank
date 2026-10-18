@@ -1,0 +1,66 @@
+{
+  "B2": {
+    "selection": "client UTC group start compared with host window nominally; exact cross-clock offset NOT_PROVEN",
+    "host_window_start_utc": "2026-10-18T14:01:35.644344+00:00",
+    "duration_s": 900,
+    "groups_started_in_window": 113,
+    "authenticated_complete_groups": 113,
+    "valid_json_snapshot_groups": 113,
+    "max_group_transport_ms": 16901.150941848755,
+    "carry_in_groups": 1,
+    "carry_out_groups": 0,
+    "qualification": "FAIL/HOLD (B2 HTTP400; later observations after required stop)",
+    "latency": {
+      "/api/v1/status": {
+        "n": 113,
+        "p50_ms": 427.7060000022175,
+        "p99_nearest_rank_ms": 2813.2239999977173,
+        "max_ms": 16901.150999997015
+      },
+      "/api/v1/temperatures": {
+        "n": 113,
+        "p50_ms": 461.3729999982752,
+        "p99_nearest_rank_ms": 8462.566999995033,
+        "max_ms": 12372.294000000693
+      },
+      "/api/v1/alerts": {
+        "n": 113,
+        "p50_ms": 482.69799999980023,
+        "p99_nearest_rank_ms": 5639.601000000862,
+        "max_ms": 6175.924000002851
+      }
+    }
+  },
+  "B4": {
+    "selection": "client UTC group start compared with host window nominally; exact cross-clock offset NOT_PROVEN",
+    "host_window_start_utc": "2026-10-18T14:49:11.506950+00:00",
+    "duration_s": 600,
+    "groups_started_in_window": 28,
+    "authenticated_complete_groups": 28,
+    "valid_json_snapshot_groups": 28,
+    "max_group_transport_ms": 18549.541234970093,
+    "carry_in_groups": 0,
+    "carry_out_groups": 0,
+    "qualification": "FAIL/HOLD (B2 HTTP400; later observations after required stop)",
+    "latency": {
+      "/api/v1/status": {
+        "n": 28,
+        "p50_ms": 504.50500000442844,
+        "p99_nearest_rank_ms": 11471.39099999913,
+        "max_ms": 11471.39099999913
+      },
+      "/api/v1/temperatures": {
+        "n": 28,
+        "p50_ms": 577.6839999998629,
+        "p99_nearest_rank_ms": 18548.540999996476,
+        "max_ms": 18548.540999996476
+      },
+      "/api/v1/alerts": {
+        "n": 28,
+        "p50_ms": 618.2275000028312,
+        "p99_nearest_rank_ms": 4535.855999994965,
+        "max_ms": 4535.855999994965
+      }
+    }
+  }
+}
