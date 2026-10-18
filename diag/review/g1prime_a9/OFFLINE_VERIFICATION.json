@@ -1,0 +1,46 @@
+{
+  "source": "203d4d6ad45feb0081110d8e98bec48577da14bc",
+  "product_base": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "pr_review_head": "2e37b0e3deee3f5770e3f0df3e174074c78711d6",
+  "firmware_files_byte_identical_to_bb4": [
+    "main/app_main.cpp",
+    "main/fermentation_ui_lvgl_renderer.cpp",
+    "main/fermentation_ui_renderer.cpp",
+    "main/g1_ui_probe.hpp",
+    "lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp"
+  ],
+  "f4_touch_render_config_product_diff_since_d35": "NONE",
+  "product_runtime_diff_a9_to_pr_head": "NONE",
+  "host_helpers_byte_identical_to_893f3bb": true,
+  "python_tests": {
+    "count": 55,
+    "status": "PASS"
+  },
+  "native_probe": "PASS (g++ C++17 Wall Wextra Werror, zero C++ heap allocations, nested minima, deferred logging, overflow)",
+  "hardware_actions": "NONE",
+  "pre_ready": "NOT_RUN_NOT_AUTHORIZED",
+  "build": {
+    "status": "PASS",
+    "command": "python3 scripts/build_esp_idf_profiles.py release --require-clean-source-tree",
+    "profile": "esp32_release",
+    "source_tree_clean": true,
+    "idf_tag": "v6.1",
+    "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+    "build_log_sha256": "199ff4d6ec847e4bf296e41e7441c76a24b07bf815416cb901d14015c6467fc2",
+    "initial_cli_rejection": "esp32_release was not a CLI choice; rejected before build; corrected to release; no source change"
+  },
+  "tests": {
+    "python_log_sha256": "c2501df61bb0b32ee84eaef2f0d969002d8f938119be897c6c8bae095f4dd275",
+    "native_probe_binary_sha256": "a49e6c6dce25ed03df085bc818a68e07202815445f799c54d1dc2870c8be52bf"
+  },
+  "resolved_sdkconfig_byte_identical_to_existing_a9_build": true,
+  "image_info": {
+    "status": "PASS",
+    "tool": "esptool 5.4.0 image-info (offline)",
+    "log_sha256": "5698a9fde49b3b963c692b9d735148f7fa5bb44e7bbe80c72d5c88b46c3e025b",
+    "embedded_app_version": "203d4d6",
+    "elf_sha256_matches": true,
+    "image_checksum": "VALID",
+    "image_validation_hash": "VALID"
+  }
+}

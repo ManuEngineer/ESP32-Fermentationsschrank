@@ -1,0 +1,94 @@
+{
+  "gate": "PR203_RES01_G1PRIME_A9_20261018_IMAGE01",
+  "state": "PREPARED_NOT_AUTHORIZED_NOT_RUN",
+  "product_pr_review_head": "2e37b0e3deee3f5770e3f0df3e174074c78711d6",
+  "product_base": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "diagnostic_source": "203d4d6ad45feb0081110d8e98bec48577da14bc",
+  "diagnostic_branch": "agent/pr203-res01-g1prime-a9-nonmerge",
+  "firmware_overlay_origin": "bb4f43a69740f234d26a951707991f792cc3ffde",
+  "host_tool_origin": "893f3bb73a50b484ce79b3b80722873452d998fc",
+  "profile": "esp32_release",
+  "app_offset": "0x10000",
+  "partition": {
+    "name": "factory",
+    "size": "0x2f0000",
+    "state_store_offset": "0x300000",
+    "flash_bytes": 4194304
+  },
+  "artifacts": {
+    "g1prime_a9_app.bin": {
+      "sha256": "69575dd82e4eda123d90e0b873eeec68ed48a29815e94de341c38c6a2268eaa1",
+      "bytes": 1760576
+    },
+    "g1prime_a9.elf": {
+      "sha256": "6a336ef8da29a9f11ab880d96187d9683d2ea870bde02463fc235670f49ff16a",
+      "bytes": 36288496
+    },
+    "partition-table.bin": {
+      "sha256": "d7f180e4ea98d457222bf134454694937dc7d3ca31a80623765ad5d18d7ccd9d",
+      "bytes": 3072
+    },
+    "resolved_sdkconfig": {
+      "sha256": "9ab3490da37da6bd5a9689eb067c9739276974c0b3cfe20d8c40def2d925c3ea",
+      "bytes": 95147
+    },
+    "rollback_a9_release_app.bin": {
+      "sha256": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+      "bytes": 1756544
+    },
+    "rollback_a9_release.elf": {
+      "sha256": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601",
+      "bytes": 36246576
+    }
+  },
+  "tools": {
+    "diag/g1_capture.py": {
+      "sha256": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+      "bytes": 12788
+    },
+    "diag/c0_load.py": {
+      "sha256": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca",
+      "bytes": 12515
+    },
+    "diag/g1_analyze.py": {
+      "sha256": "9dda30959db6dfc5a0eecc5368c5898f096daa6c32e1cdac4100806e19747c72",
+      "bytes": 3126
+    },
+    "main/g1_ui_probe.hpp": {
+      "sha256": "34a64108e3d19357985c60155f33c303d32f04d8d7bae61f279644e499fa20ee",
+      "bytes": 8685
+    }
+  },
+  "main_stack_policy": "strict",
+  "main_stack_stop_below_bytes": 11160,
+  "httpd_stack_stop_below_bytes": 2080,
+  "initial_poweron_reset_window_seconds": 5,
+  "heartbeat_gap_stop_above_seconds": 5,
+  "firmware_gate_bytes": {
+    "skip": 13312,
+    "resume": 16640,
+    "resume_margin": 3328,
+    "vector_a": 6656
+  },
+  "hardware_actions_this_preparation": 0,
+  "threshold_status": "PROVISIONAL_PENDING_G1",
+  "threshold_qualification": "HOLD_NOT_PROVEN_SHARED_HEAP_AND_TRANSIENTS",
+  "privacy": "No raw logs, credentials, MAC, readbacks, HAR, binary firmware or tokens included. Private originals/artifacts retained locally.",
+  "historical_board_identity_reference": {
+    "read_mac.log": {
+      "sha256": "b438f6d3d6796d4bbd285c1953782c265288ff912b0c317779ff9d45ee359cef",
+      "bytes": 695,
+      "visibility": "PRIVATE_NOT_PUBLISHED"
+    },
+    "preflight_comparison.private.json": {
+      "sha256": "db758ec1eaffe3bf93d2b0443b582c7e4a30de562e6d0d83b6a5736806e6f2dd",
+      "bytes": 679,
+      "visibility": "PRIVATE_NOT_PUBLISHED"
+    },
+    "nonapp_comparison.private.json": {
+      "sha256": "4e607078f1e41c680ef1ba7b1d42bd03506ea5d68613e5520652230f7ae65336",
+      "bytes": 520,
+      "visibility": "PRIVATE_NOT_PUBLISHED"
+    }
+  }
+}

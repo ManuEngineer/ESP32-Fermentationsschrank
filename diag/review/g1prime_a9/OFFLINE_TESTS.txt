@@ -1,0 +1,20 @@
+Offline only; source 203d4d6ad45feb0081110d8e98bec48577da14bc
+
+python3 -m unittest discover -s diag -p test_*.py
+.......................................................
+----------------------------------------------------------------------
+Ran 55 tests in 2.040s
+
+OK
+
+g++ -std=c++17 -Wall -Wextra -Werror -Idiag/host_stubs -Imain diag/test_g1_probe.cpp -o <private-checks>/test_g1_probe
+<private-checks>/test_g1_probe: exit 0
+
+python3 scripts/build_esp_idf_profiles.py release --require-clean-source-tree
+PASS: esp32_release und der finale PlatformIO-Vertrag sind korrekt.
+SOURCE_TREE_CLEAN=YES
+PASS: angeforderte ESP-IDF-Profile wurden gebaut und validiert.
+
+python3 -m esptool image-info <private-artifacts>/g1prime_a9_app.bin
+esptool v5.4.0; image checksum VALID; image validation hash VALID; embedded ELF SHA matches manifest.
+No hardware commands executed.
