@@ -1,0 +1,48 @@
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=410779.560626] I (278241) app_main: heartbeat: safe test mode, uptime_ms=276994
+[host_mono=410780.568786] I (279241) app_main: heartbeat: safe test mode, uptime_ms=277997
+[host_mono=410781.575767] I (280251) app_main: heartbeat: safe test mode, uptime_ms=279003
+[host_mono=410782.230651] W (280901) httpd_txrx: httpd_sock_err: error in send : 11
+[OMITTED non-allowlisted UART line]
+[host_mono=410782.582997] I (281251) app_main: heartbeat: safe test mode, uptime_ms=280003
+[host_mono=410783.591077] I (282251) app_main: heartbeat: safe test mode, uptime_ms=281003
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=411015.995264] I (514671) app_main: heartbeat: safe test mode, uptime_ms=513424
+[host_mono=411017.001819] I (515671) app_main: heartbeat: safe test mode, uptime_ms=514424
+[host_mono=411018.007377] I (516681) app_main: heartbeat: safe test mode, uptime_ms=515436
+[host_mono=411018.007434] W (516681) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=411018.057699] W (516741) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=411019.013622] I (517681) app_main: heartbeat: safe test mode, uptime_ms=516437
+[host_mono=411020.020232] I (518691) app_main: heartbeat: safe test mode, uptime_ms=517443
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=411017.001819] I (515671) app_main: heartbeat: safe test mode, uptime_ms=514424
+[host_mono=411018.007377] I (516681) app_main: heartbeat: safe test mode, uptime_ms=515436
+[host_mono=411018.007434] W (516681) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=411018.057699] W (516741) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=411019.013622] I (517681) app_main: heartbeat: safe test mode, uptime_ms=516437
+[host_mono=411020.020232] I (518691) app_main: heartbeat: safe test mode, uptime_ms=517443
+[host_mono=411021.027307] I (519691) app_main: heartbeat: safe test mode, uptime_ms=518443
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=411026.059949] I (524711) app_main: heartbeat: safe test mode, uptime_ms=523464
+[host_mono=411027.066237] I (525711) app_main: heartbeat: safe test mode, uptime_ms=524464
+[host_mono=411028.024755] I (526711) app_main: heartbeat: safe test mode, uptime_ms=525464
+[host_mono=411028.226221] W (526881) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=411029.032238] I (527711) app_main: heartbeat: safe test mode, uptime_ms=526466
+[host_mono=411030.040284] I (528721) app_main: heartbeat: safe test mode, uptime_ms=527473
+[host_mono=411031.046444] I (529721) app_main: heartbeat: safe test mode, uptime_ms=528473
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=411033.058629] I (531721) app_main: heartbeat: safe test mode, uptime_ms=530473
+[host_mono=411034.165904] I (532821) app_main: heartbeat: safe test mode, uptime_ms=531576
+[host_mono=411035.171823] I (533831) app_main: heartbeat: safe test mode, uptime_ms=532590
+[host_mono=411035.272988] W (533951) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=411035.273068] W (533951) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=411036.178645] I (534841) app_main: heartbeat: safe test mode, uptime_ms=533593
+[host_mono=411037.184479] I (535841) app_main: heartbeat: safe test mode, uptime_ms=534593
+--- HTTPD event with selected surrounding UART lines ---
+[host_mono=411034.165904] I (532821) app_main: heartbeat: safe test mode, uptime_ms=531576
+[host_mono=411035.171823] I (533831) app_main: heartbeat: safe test mode, uptime_ms=532590
+[host_mono=411035.272988] W (533951) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=411035.273068] W (533951) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=411036.178645] I (534841) app_main: heartbeat: safe test mode, uptime_ms=533593
+[host_mono=411037.184479] I (535841) app_main: heartbeat: safe test mode, uptime_ms=534593
+[host_mono=411038.191662] I (536841) app_main: heartbeat: safe test mode, uptime_ms=535593

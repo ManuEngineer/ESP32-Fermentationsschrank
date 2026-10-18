@@ -1,0 +1,112 @@
+{
+  "run": "G2_WEB_FOLLOWUP02",
+  "overall": "FAIL/HOLD",
+  "reference": {
+    "start_epoch": 1792219296.3432102,
+    "start_monotonic": 410501.305181144,
+    "end_epoch": 1792219932.5061765,
+    "end_monotonic": 411137.468147846
+  },
+  "capture_start_utc": "2026-10-17T06:41:36.343210+00:00",
+  "capture_end_utc": "2026-10-17T06:52:12.506176+00:00",
+  "capture_start_europe_zurich": "2026-10-17T08:41:36.343210+02:00",
+  "capture_end_europe_zurich": "2026-10-17T08:52:12.506176+02:00",
+  "capture_seconds": 636.162966702017,
+  "initial_reset_seconds_from_capture_reference": 0.07651804201304913,
+  "host_event_receipt_markers": [
+    {
+      "event": "OWNER_REVIEW_PASS_AND_READY_CONFIRMED",
+      "epoch": 1792219289.602959,
+      "monotonic": 410494.564930813,
+      "utc": "2026-10-17T06:41:29.602971+00:00",
+      "utc_derived": "2026-10-17T06:41:29.602959+00:00"
+    },
+    {
+      "event": "LIVE_BOOT_PROOF_PASS_BROWSER_PREPARATION_B0",
+      "epoch": 1792219312.6811779,
+      "monotonic": 410517.643147809,
+      "utc_derived": "2026-10-17T06:41:52.681178+00:00"
+    },
+    {
+      "event": "OWNER_CONFIRMS_NETLOG_RUNNING_B1_SINGLE_NAVIGATION_INSTRUCTED",
+      "epoch": 1792219540.5918508,
+      "monotonic": 410745.553821274,
+      "utc_derived": "2026-10-17T06:45:40.591851+00:00"
+    },
+    {
+      "event": "BROWSER_FAILURE_OWNER_SCREENSHOT_RECEIVED_STOP_REQUESTED",
+      "epoch": 1792219932.5038493,
+      "monotonic": 411137.465819995,
+      "utc": "2026-10-17T06:52:12.503856+00:00",
+      "utc_derived": "2026-10-17T06:52:12.503849+00:00"
+    },
+    {
+      "event": "OWNER_CONFIRMS_TAB_CLOSED_AND_TRACE_ENV_CORRECTION",
+      "epoch": 1792220081.3449974,
+      "monotonic": 411286.306967951,
+      "utc": "2026-10-17T06:54:41.345002+00:00",
+      "utc_derived": "2026-10-17T06:54:41.344997+00:00"
+    },
+    {
+      "event": "OWNER_CONFIRMS_NO_TRACE_FILE_AND_DEVTOOLS_LIST_CLOSED",
+      "epoch": 1792220329.8726306,
+      "monotonic": 411534.834601654,
+      "utc_derived": "2026-10-17T06:58:49.872631+00:00"
+    }
+  ],
+  "httpd_events": [
+    {
+      "host_monotonic": 410782.230651,
+      "seconds_after_capture_start": 280.92546985601075,
+      "epoch_derived": 1792219577.26868,
+      "utc_derived": "2026-10-17T06:46:17.268680+00:00",
+      "message": "W (280901) httpd_txrx: httpd_sock_err: error in send : 11",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    },
+    {
+      "host_monotonic": 411018.007434,
+      "seconds_after_capture_start": 516.7022528560483,
+      "epoch_derived": 1792219813.045463,
+      "utc_derived": "2026-10-17T06:50:13.045463+00:00",
+      "message": "W (516681) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    },
+    {
+      "host_monotonic": 411018.057699,
+      "seconds_after_capture_start": 516.7525178560172,
+      "epoch_derived": 1792219813.0957282,
+      "utc_derived": "2026-10-17T06:50:13.095728+00:00",
+      "message": "W (516741) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    },
+    {
+      "host_monotonic": 411028.226221,
+      "seconds_after_capture_start": 526.921039856039,
+      "epoch_derived": 1792219823.2642503,
+      "utc_derived": "2026-10-17T06:50:23.264250+00:00",
+      "message": "W (526881) httpd_txrx: httpd_sock_err: error in recv : 104",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    },
+    {
+      "host_monotonic": 411035.272988,
+      "seconds_after_capture_start": 533.9678068560315,
+      "epoch_derived": 1792219830.3110173,
+      "utc_derived": "2026-10-17T06:50:30.311017+00:00",
+      "message": "W (533951) httpd_txrx: httpd_sock_err: error in recv : 104",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    },
+    {
+      "host_monotonic": 411035.273068,
+      "seconds_after_capture_start": 533.9678868560004,
+      "epoch_derived": 1792219830.3110971,
+      "utc_derived": "2026-10-17T06:50:30.311097+00:00",
+      "message": "W (533951) httpd_txrx: httpd_sock_err: error in recv : 104",
+      "request_correlation": "NOT_PROVEN_NO_BROWSER_TRACE"
+    }
+  ],
+  "browser_absolute_time_alignment": "NOT_PROVEN; screenshots have relative DevTools times, no saved HAR/NetLog",
+  "first_browser_failure_exact_time": "UNKNOWN",
+  "browser_close_exact_time": "UNKNOWN; owner confirmation receipt is recorded",
+  "limits": "Host receipt/parsing and sequential clock reads; clock uncertainty not independently measured. HTTPD event/request matching and cross-client clock alignment are not proven.",
+  "coverage_after_capture_end": "NOT_PROVEN; browser closing time unknown, owner confirmation was later received. UART only covers its recorded capture window."
+}

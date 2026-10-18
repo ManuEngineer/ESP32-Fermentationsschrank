@@ -1,0 +1,6454 @@
+{
+  "input_bytes": 7386393,
+  "input_sha256": "9614c2f2a85a392182f5e5ca48ddf2de599fd406e1cc03700bac645c1eae82a4",
+  "capture_mode": "Default",
+  "time_tick_offset_ms": 1792277860778,
+  "browser": {
+    "name": "Google Chrome",
+    "version": "155.0.8059.85",
+    "official": "official"
+  },
+  "unapproved_device_paths_omitted": 0,
+  "requests": [
+    {
+      "source_id": 12139,
+      "path": "/",
+      "method": "GET",
+      "start_ticks_ms": 56845320.0,
+      "start_utc_client": "2026-10-18T14:45:06.098000+00:00",
+      "last_source_ticks_ms": 56855560.0,
+      "last_source_utc_client": "2026-10-18T14:45:16.338000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 8025,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12196,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56855574.0,
+      "start_utc_client": "2026-10-18T14:45:16.352000+00:00",
+      "last_source_ticks_ms": 56856015.0,
+      "last_source_utc_client": "2026-10-18T14:45:16.793000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12199,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56855578.0,
+      "start_utc_client": "2026-10-18T14:45:16.356000+00:00",
+      "last_source_ticks_ms": 56856017.0,
+      "last_source_utc_client": "2026-10-18T14:45:16.795000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12151
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12202,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56855579.0,
+      "start_utc_client": "2026-10-18T14:45:16.357000+00:00",
+      "last_source_ticks_ms": 56856027.0,
+      "last_source_utc_client": "2026-10-18T14:45:16.805000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12149
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12231,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56860583.0,
+      "start_utc_client": "2026-10-18T14:45:21.361000+00:00",
+      "last_source_ticks_ms": 56861256.0,
+      "last_source_utc_client": "2026-10-18T14:45:22.034000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12151
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12234,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56860585.0,
+      "start_utc_client": "2026-10-18T14:45:21.363000+00:00",
+      "last_source_ticks_ms": 56861263.0,
+      "last_source_utc_client": "2026-10-18T14:45:22.041000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12237,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56860586.0,
+      "start_utc_client": "2026-10-18T14:45:21.364000+00:00",
+      "last_source_ticks_ms": 56861265.0,
+      "last_source_utc_client": "2026-10-18T14:45:22.043000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12241
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12264,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56865585.0,
+      "start_utc_client": "2026-10-18T14:45:26.363000+00:00",
+      "last_source_ticks_ms": 56865991.0,
+      "last_source_utc_client": "2026-10-18T14:45:26.769000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12267,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56865588.0,
+      "start_utc_client": "2026-10-18T14:45:26.366000+00:00",
+      "last_source_ticks_ms": 56865998.0,
+      "last_source_utc_client": "2026-10-18T14:45:26.776000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12151
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12270,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56865589.0,
+      "start_utc_client": "2026-10-18T14:45:26.367000+00:00",
+      "last_source_ticks_ms": 56865999.0,
+      "last_source_utc_client": "2026-10-18T14:45:26.777000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12274
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12296,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56870587.0,
+      "start_utc_client": "2026-10-18T14:45:31.365000+00:00",
+      "last_source_ticks_ms": 56873125.0,
+      "last_source_utc_client": "2026-10-18T14:45:33.903000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12299,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56870590.0,
+      "start_utc_client": "2026-10-18T14:45:31.368000+00:00",
+      "last_source_ticks_ms": 56873130.0,
+      "last_source_utc_client": "2026-10-18T14:45:33.908000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12308
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12304,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56870592.0,
+      "start_utc_client": "2026-10-18T14:45:31.370000+00:00",
+      "last_source_ticks_ms": 56873130.0,
+      "last_source_utc_client": "2026-10-18T14:45:33.908000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12303
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12330,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56875579.0,
+      "start_utc_client": "2026-10-18T14:45:36.357000+00:00",
+      "last_source_ticks_ms": 56876308.0,
+      "last_source_utc_client": "2026-10-18T14:45:37.086000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12138
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12333,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56875581.0,
+      "start_utc_client": "2026-10-18T14:45:36.359000+00:00",
+      "last_source_ticks_ms": 56876316.0,
+      "last_source_utc_client": "2026-10-18T14:45:37.094000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12337
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12338,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56875583.0,
+      "start_utc_client": "2026-10-18T14:45:36.361000+00:00",
+      "last_source_ticks_ms": 56876317.0,
+      "last_source_utc_client": "2026-10-18T14:45:37.095000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12342
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12383,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56880585.0,
+      "start_utc_client": "2026-10-18T14:45:41.363000+00:00",
+      "last_source_ticks_ms": 56881256.0,
+      "last_source_utc_client": "2026-10-18T14:45:42.034000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12388,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56880587.0,
+      "start_utc_client": "2026-10-18T14:45:41.365000+00:00",
+      "last_source_ticks_ms": 56881260.0,
+      "last_source_utc_client": "2026-10-18T14:45:42.038000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12387
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12393,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56880588.0,
+      "start_utc_client": "2026-10-18T14:45:41.366000+00:00",
+      "last_source_ticks_ms": 56881261.0,
+      "last_source_utc_client": "2026-10-18T14:45:42.039000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12397
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12421,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56885576.0,
+      "start_utc_client": "2026-10-18T14:45:46.354000+00:00",
+      "last_source_ticks_ms": 56886109.0,
+      "last_source_utc_client": "2026-10-18T14:45:46.887000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12424,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56885578.0,
+      "start_utc_client": "2026-10-18T14:45:46.356000+00:00",
+      "last_source_ticks_ms": 56886114.0,
+      "last_source_utc_client": "2026-10-18T14:45:46.892000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12399
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12427,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56885578.0,
+      "start_utc_client": "2026-10-18T14:45:46.356000+00:00",
+      "last_source_ticks_ms": 56886115.0,
+      "last_source_utc_client": "2026-10-18T14:45:46.893000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12431
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12453,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56890584.0,
+      "start_utc_client": "2026-10-18T14:45:51.362000+00:00",
+      "last_source_ticks_ms": 56891061.0,
+      "last_source_utc_client": "2026-10-18T14:45:51.839000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12456,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56890586.0,
+      "start_utc_client": "2026-10-18T14:45:51.364000+00:00",
+      "last_source_ticks_ms": 56891069.0,
+      "last_source_utc_client": "2026-10-18T14:45:51.847000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12460
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12461,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56890588.0,
+      "start_utc_client": "2026-10-18T14:45:51.366000+00:00",
+      "last_source_ticks_ms": 56891071.0,
+      "last_source_utc_client": "2026-10-18T14:45:51.849000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12465
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12488,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56895579.0,
+      "start_utc_client": "2026-10-18T14:45:56.357000+00:00",
+      "last_source_ticks_ms": 56896131.0,
+      "last_source_utc_client": "2026-10-18T14:45:56.909000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12491,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56895582.0,
+      "start_utc_client": "2026-10-18T14:45:56.360000+00:00",
+      "last_source_ticks_ms": 56896134.0,
+      "last_source_utc_client": "2026-10-18T14:45:56.912000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12495
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12496,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56895583.0,
+      "start_utc_client": "2026-10-18T14:45:56.361000+00:00",
+      "last_source_ticks_ms": 56896134.0,
+      "last_source_utc_client": "2026-10-18T14:45:56.912000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12500
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12541,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56901005.0,
+      "start_utc_client": "2026-10-18T14:46:01.783000+00:00",
+      "last_source_ticks_ms": 56901828.0,
+      "last_source_utc_client": "2026-10-18T14:46:02.606000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12544,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56901007.0,
+      "start_utc_client": "2026-10-18T14:46:01.785000+00:00",
+      "last_source_ticks_ms": 56901833.0,
+      "last_source_utc_client": "2026-10-18T14:46:02.611000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12548
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12549,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56901009.0,
+      "start_utc_client": "2026-10-18T14:46:01.787000+00:00",
+      "last_source_ticks_ms": 56901835.0,
+      "last_source_utc_client": "2026-10-18T14:46:02.613000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12553
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12575,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56906008.0,
+      "start_utc_client": "2026-10-18T14:46:06.786000+00:00",
+      "last_source_ticks_ms": 56906430.0,
+      "last_source_utc_client": "2026-10-18T14:46:07.208000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12578,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56906010.0,
+      "start_utc_client": "2026-10-18T14:46:06.788000+00:00",
+      "last_source_ticks_ms": 56906430.0,
+      "last_source_utc_client": "2026-10-18T14:46:07.208000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12583,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56906013.0,
+      "start_utc_client": "2026-10-18T14:46:06.791000+00:00",
+      "last_source_ticks_ms": 56906436.0,
+      "last_source_utc_client": "2026-10-18T14:46:07.214000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12587
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12610,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56911007.0,
+      "start_utc_client": "2026-10-18T14:46:11.785000+00:00",
+      "last_source_ticks_ms": 56911311.0,
+      "last_source_utc_client": "2026-10-18T14:46:12.089000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12613,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56911010.0,
+      "start_utc_client": "2026-10-18T14:46:11.788000+00:00",
+      "last_source_ticks_ms": 56911316.0,
+      "last_source_utc_client": "2026-10-18T14:46:12.094000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12616,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56911011.0,
+      "start_utc_client": "2026-10-18T14:46:11.789000+00:00",
+      "last_source_ticks_ms": 56911318.0,
+      "last_source_utc_client": "2026-10-18T14:46:12.096000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12620
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12643,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56916011.0,
+      "start_utc_client": "2026-10-18T14:46:16.789000+00:00",
+      "last_source_ticks_ms": 56916467.0,
+      "last_source_utc_client": "2026-10-18T14:46:17.245000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12392
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12646,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56916014.0,
+      "start_utc_client": "2026-10-18T14:46:16.792000+00:00",
+      "last_source_ticks_ms": 56916462.0,
+      "last_source_utc_client": "2026-10-18T14:46:17.240000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12649,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56916017.0,
+      "start_utc_client": "2026-10-18T14:46:16.795000+00:00",
+      "last_source_ticks_ms": 56916468.0,
+      "last_source_utc_client": "2026-10-18T14:46:17.246000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12653
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12675,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56921013.0,
+      "start_utc_client": "2026-10-18T14:46:21.791000+00:00",
+      "last_source_ticks_ms": 56921810.0,
+      "last_source_utc_client": "2026-10-18T14:46:22.588000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12678,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56921016.0,
+      "start_utc_client": "2026-10-18T14:46:21.794000+00:00",
+      "last_source_ticks_ms": 56921815.0,
+      "last_source_utc_client": "2026-10-18T14:46:22.593000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12682
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12683,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56921019.0,
+      "start_utc_client": "2026-10-18T14:46:21.797000+00:00",
+      "last_source_ticks_ms": 56921816.0,
+      "last_source_utc_client": "2026-10-18T14:46:22.594000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12687
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12708,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56926005.0,
+      "start_utc_client": "2026-10-18T14:46:26.783000+00:00",
+      "last_source_ticks_ms": 56927073.0,
+      "last_source_utc_client": "2026-10-18T14:46:27.851000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12711,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56926008.0,
+      "start_utc_client": "2026-10-18T14:46:26.786000+00:00",
+      "last_source_ticks_ms": 56927084.0,
+      "last_source_utc_client": "2026-10-18T14:46:27.862000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12715
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12717,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56926011.0,
+      "start_utc_client": "2026-10-18T14:46:26.789000+00:00",
+      "last_source_ticks_ms": 56927091.0,
+      "last_source_utc_client": "2026-10-18T14:46:27.869000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12721
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12739,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56931017.0,
+      "start_utc_client": "2026-10-18T14:46:31.795000+00:00",
+      "last_source_ticks_ms": 56931934.0,
+      "last_source_utc_client": "2026-10-18T14:46:32.712000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12742,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56931019.0,
+      "start_utc_client": "2026-10-18T14:46:31.797000+00:00",
+      "last_source_ticks_ms": 56931940.0,
+      "last_source_utc_client": "2026-10-18T14:46:32.718000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12582
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12747,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56931021.0,
+      "start_utc_client": "2026-10-18T14:46:31.799000+00:00",
+      "last_source_ticks_ms": 56931940.0,
+      "last_source_utc_client": "2026-10-18T14:46:32.718000+00:00",
+      "statuses_received": [],
+      "socket_ids": [],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12773,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56936015.0,
+      "start_utc_client": "2026-10-18T14:46:36.793000+00:00",
+      "last_source_ticks_ms": 56936598.0,
+      "last_source_utc_client": "2026-10-18T14:46:37.376000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12746
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12776,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56936017.0,
+      "start_utc_client": "2026-10-18T14:46:36.795000+00:00",
+      "last_source_ticks_ms": 56936603.0,
+      "last_source_utc_client": "2026-10-18T14:46:37.381000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12751
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12779,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56936018.0,
+      "start_utc_client": "2026-10-18T14:46:36.796000+00:00",
+      "last_source_ticks_ms": 56936604.0,
+      "last_source_utc_client": "2026-10-18T14:46:37.382000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12783
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12825,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56941010.0,
+      "start_utc_client": "2026-10-18T14:46:41.788000+00:00",
+      "last_source_ticks_ms": 56941625.0,
+      "last_source_utc_client": "2026-10-18T14:46:42.403000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12746
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12828,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56941013.0,
+      "start_utc_client": "2026-10-18T14:46:41.791000+00:00",
+      "last_source_ticks_ms": 56941630.0,
+      "last_source_utc_client": "2026-10-18T14:46:42.408000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12832
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12833,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56941015.0,
+      "start_utc_client": "2026-10-18T14:46:41.793000+00:00",
+      "last_source_ticks_ms": 56941631.0,
+      "last_source_utc_client": "2026-10-18T14:46:42.409000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12837
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12859,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56946017.0,
+      "start_utc_client": "2026-10-18T14:46:46.795000+00:00",
+      "last_source_ticks_ms": 56946444.0,
+      "last_source_utc_client": "2026-10-18T14:46:47.222000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12746
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12862,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56946019.0,
+      "start_utc_client": "2026-10-18T14:46:46.797000+00:00",
+      "last_source_ticks_ms": 56946447.0,
+      "last_source_utc_client": "2026-10-18T14:46:47.225000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12866
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12867,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56946021.0,
+      "start_utc_client": "2026-10-18T14:46:46.799000+00:00",
+      "last_source_ticks_ms": 56946448.0,
+      "last_source_utc_client": "2026-10-18T14:46:47.226000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12871
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12893,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56951007.0,
+      "start_utc_client": "2026-10-18T14:46:51.785000+00:00",
+      "last_source_ticks_ms": 56952994.0,
+      "last_source_utc_client": "2026-10-18T14:46:53.772000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12746
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12896,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56951010.0,
+      "start_utc_client": "2026-10-18T14:46:51.788000+00:00",
+      "last_source_ticks_ms": 56952995.0,
+      "last_source_utc_client": "2026-10-18T14:46:53.773000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12900
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12901,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56951013.0,
+      "start_utc_client": "2026-10-18T14:46:51.791000+00:00",
+      "last_source_ticks_ms": 56952989.0,
+      "last_source_utc_client": "2026-10-18T14:46:53.767000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12905
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12927,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 56956010.0,
+      "start_utc_client": "2026-10-18T14:46:56.788000+00:00",
+      "last_source_ticks_ms": 56956960.0,
+      "last_source_utc_client": "2026-10-18T14:46:57.738000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        12905
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 12930,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 56956012.0,
+      "start_utc_client": "2026-10-18T14:46:56.790000+00:00",
+      "last_source_ticks_ms": 56956966.0,
+      "last_source_utc_client": "2026-10-18T14:46:57.744000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12934
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 12935,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 56956014.0,
+      "start_utc_client": "2026-10-18T14:46:56.792000+00:00",
+      "last_source_ticks_ms": 56956967.0,
+      "last_source_utc_client": "2026-10-18T14:46:57.745000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12905
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13118,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57000008.0,
+      "start_utc_client": "2026-10-18T14:47:40.786000+00:00",
+      "last_source_ticks_ms": 57005131.0,
+      "last_source_utc_client": "2026-10-18T14:47:45.909000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        12939
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13121,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57000011.0,
+      "start_utc_client": "2026-10-18T14:47:40.789000+00:00",
+      "last_source_ticks_ms": 57005132.0,
+      "last_source_utc_client": "2026-10-18T14:47:45.910000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13125
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13126,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57000014.0,
+      "start_utc_client": "2026-10-18T14:47:40.792000+00:00",
+      "last_source_ticks_ms": 57005124.0,
+      "last_source_utc_client": "2026-10-18T14:47:45.902000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13240,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57027264.0,
+      "start_utc_client": "2026-10-18T14:48:08.042000+00:00",
+      "last_source_ticks_ms": 57027750.0,
+      "last_source_utc_client": "2026-10-18T14:48:08.528000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13243,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57027266.0,
+      "start_utc_client": "2026-10-18T14:48:08.044000+00:00",
+      "last_source_ticks_ms": 57027759.0,
+      "last_source_utc_client": "2026-10-18T14:48:08.537000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13247
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13248,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57027270.0,
+      "start_utc_client": "2026-10-18T14:48:08.048000+00:00",
+      "last_source_ticks_ms": 57027760.0,
+      "last_source_utc_client": "2026-10-18T14:48:08.538000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13252
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13280,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57030579.0,
+      "start_utc_client": "2026-10-18T14:48:11.357000+00:00",
+      "last_source_ticks_ms": 57034721.0,
+      "last_source_utc_client": "2026-10-18T14:48:15.499000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13283,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57030581.0,
+      "start_utc_client": "2026-10-18T14:48:11.359000+00:00",
+      "last_source_ticks_ms": 57034726.0,
+      "last_source_utc_client": "2026-10-18T14:48:15.504000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13287
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13288,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57030584.0,
+      "start_utc_client": "2026-10-18T14:48:11.362000+00:00",
+      "last_source_ticks_ms": 57034727.0,
+      "last_source_utc_client": "2026-10-18T14:48:15.505000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13292
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13305,
+      "path": "/api/v1/login",
+      "method": "POST",
+      "start_ticks_ms": 57032829.0,
+      "start_utc_client": "2026-10-18T14:48:13.607000+00:00",
+      "last_source_ticks_ms": 57039637.0,
+      "last_source_utc_client": "2026-10-18T14:48:20.415000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [
+        0
+      ],
+      "net_error_classes": [
+        "net::OK"
+      ],
+      "filtered_response_bytes": 100,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13319,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57035585.0,
+      "start_utc_client": "2026-10-18T14:48:16.363000+00:00",
+      "last_source_ticks_ms": 57039379.0,
+      "last_source_utc_client": "2026-10-18T14:48:20.157000+00:00",
+      "statuses_received": [
+        401
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 28,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13322,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57035587.0,
+      "start_utc_client": "2026-10-18T14:48:16.365000+00:00",
+      "last_source_ticks_ms": 57039385.0,
+      "last_source_utc_client": "2026-10-18T14:48:20.163000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13331
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13327,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57035589.0,
+      "start_utc_client": "2026-10-18T14:48:16.367000+00:00",
+      "last_source_ticks_ms": 57039386.0,
+      "last_source_utc_client": "2026-10-18T14:48:20.164000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13326
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13351,
+      "path": "/",
+      "method": "GET",
+      "start_ticks_ms": 57039667.0,
+      "start_utc_client": "2026-10-18T14:48:20.445000+00:00",
+      "last_source_ticks_ms": 57044533.0,
+      "last_source_utc_client": "2026-10-18T14:48:25.311000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 8056,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13384,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57044546.0,
+      "start_utc_client": "2026-10-18T14:48:25.324000+00:00",
+      "last_source_ticks_ms": 57044907.0,
+      "last_source_utc_client": "2026-10-18T14:48:25.685000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13387,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57044549.0,
+      "start_utc_client": "2026-10-18T14:48:25.327000+00:00",
+      "last_source_ticks_ms": 57044929.0,
+      "last_source_utc_client": "2026-10-18T14:48:25.707000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13390,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57044552.0,
+      "start_utc_client": "2026-10-18T14:48:25.330000+00:00",
+      "last_source_ticks_ms": 57045036.0,
+      "last_source_utc_client": "2026-10-18T14:48:25.814000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": false
+    },
+    {
+      "source_id": 13424,
+      "path": "/api/v1/programs",
+      "method": "GET",
+      "start_ticks_ms": 57045041.0,
+      "start_utc_client": "2026-10-18T14:48:25.819000+00:00",
+      "last_source_ticks_ms": 57045289.0,
+      "last_source_utc_client": "2026-10-18T14:48:26.067000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 221,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13443,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57049551.0,
+      "start_utc_client": "2026-10-18T14:48:30.329000+00:00",
+      "last_source_ticks_ms": 57050012.0,
+      "last_source_utc_client": "2026-10-18T14:48:30.790000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13446,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57049553.0,
+      "start_utc_client": "2026-10-18T14:48:30.331000+00:00",
+      "last_source_ticks_ms": 57050034.0,
+      "last_source_utc_client": "2026-10-18T14:48:30.812000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13449,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57049555.0,
+      "start_utc_client": "2026-10-18T14:48:30.333000+00:00",
+      "last_source_ticks_ms": 57050050.0,
+      "last_source_utc_client": "2026-10-18T14:48:30.828000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13472,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57054555.0,
+      "start_utc_client": "2026-10-18T14:48:35.333000+00:00",
+      "last_source_ticks_ms": 57054859.0,
+      "last_source_utc_client": "2026-10-18T14:48:35.637000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13475,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57054557.0,
+      "start_utc_client": "2026-10-18T14:48:35.335000+00:00",
+      "last_source_ticks_ms": 57054875.0,
+      "last_source_utc_client": "2026-10-18T14:48:35.653000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13478,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57054564.0,
+      "start_utc_client": "2026-10-18T14:48:35.342000+00:00",
+      "last_source_ticks_ms": 57054882.0,
+      "last_source_utc_client": "2026-10-18T14:48:35.660000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13501,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57059555.0,
+      "start_utc_client": "2026-10-18T14:48:40.333000+00:00",
+      "last_source_ticks_ms": 57060259.0,
+      "last_source_utc_client": "2026-10-18T14:48:41.037000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13504,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57059558.0,
+      "start_utc_client": "2026-10-18T14:48:40.336000+00:00",
+      "last_source_ticks_ms": 57060266.0,
+      "last_source_utc_client": "2026-10-18T14:48:41.044000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13507,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57059559.0,
+      "start_utc_client": "2026-10-18T14:48:40.337000+00:00",
+      "last_source_ticks_ms": 57060338.0,
+      "last_source_utc_client": "2026-10-18T14:48:41.116000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13530,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57064561.0,
+      "start_utc_client": "2026-10-18T14:48:45.339000+00:00",
+      "last_source_ticks_ms": 57064995.0,
+      "last_source_utc_client": "2026-10-18T14:48:45.773000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13533,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57064564.0,
+      "start_utc_client": "2026-10-18T14:48:45.342000+00:00",
+      "last_source_ticks_ms": 57065141.0,
+      "last_source_utc_client": "2026-10-18T14:48:45.919000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13536,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57064566.0,
+      "start_utc_client": "2026-10-18T14:48:45.344000+00:00",
+      "last_source_ticks_ms": 57065013.0,
+      "last_source_utc_client": "2026-10-18T14:48:45.791000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13559,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57069549.0,
+      "start_utc_client": "2026-10-18T14:48:50.327000+00:00",
+      "last_source_ticks_ms": 57070032.0,
+      "last_source_utc_client": "2026-10-18T14:48:50.810000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13562,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57069552.0,
+      "start_utc_client": "2026-10-18T14:48:50.330000+00:00",
+      "last_source_ticks_ms": 57070050.0,
+      "last_source_utc_client": "2026-10-18T14:48:50.828000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13565,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57069553.0,
+      "start_utc_client": "2026-10-18T14:48:50.331000+00:00",
+      "last_source_ticks_ms": 57070059.0,
+      "last_source_utc_client": "2026-10-18T14:48:50.837000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13596,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57075006.0,
+      "start_utc_client": "2026-10-18T14:48:55.784000+00:00",
+      "last_source_ticks_ms": 57075447.0,
+      "last_source_utc_client": "2026-10-18T14:48:56.225000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13599,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57075009.0,
+      "start_utc_client": "2026-10-18T14:48:55.787000+00:00",
+      "last_source_ticks_ms": 57075462.0,
+      "last_source_utc_client": "2026-10-18T14:48:56.240000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13602,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57075010.0,
+      "start_utc_client": "2026-10-18T14:48:55.788000+00:00",
+      "last_source_ticks_ms": 57075467.0,
+      "last_source_utc_client": "2026-10-18T14:48:56.245000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13625,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57080013.0,
+      "start_utc_client": "2026-10-18T14:49:00.791000+00:00",
+      "last_source_ticks_ms": 57080383.0,
+      "last_source_utc_client": "2026-10-18T14:49:01.161000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13628,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57080014.0,
+      "start_utc_client": "2026-10-18T14:49:00.792000+00:00",
+      "last_source_ticks_ms": 57080389.0,
+      "last_source_utc_client": "2026-10-18T14:49:01.167000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13631,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57080017.0,
+      "start_utc_client": "2026-10-18T14:49:00.795000+00:00",
+      "last_source_ticks_ms": 57080422.0,
+      "last_source_utc_client": "2026-10-18T14:49:01.200000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13658,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57084552.0,
+      "start_utc_client": "2026-10-18T14:49:05.330000+00:00",
+      "last_source_ticks_ms": 57084868.0,
+      "last_source_utc_client": "2026-10-18T14:49:05.646000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13661,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57084555.0,
+      "start_utc_client": "2026-10-18T14:49:05.333000+00:00",
+      "last_source_ticks_ms": 57085052.0,
+      "last_source_utc_client": "2026-10-18T14:49:05.830000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13664,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57084557.0,
+      "start_utc_client": "2026-10-18T14:49:05.335000+00:00",
+      "last_source_ticks_ms": 57085070.0,
+      "last_source_utc_client": "2026-10-18T14:49:05.848000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13691,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57090006.0,
+      "start_utc_client": "2026-10-18T14:49:10.784000+00:00",
+      "last_source_ticks_ms": 57090482.0,
+      "last_source_utc_client": "2026-10-18T14:49:11.260000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13694,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57090009.0,
+      "start_utc_client": "2026-10-18T14:49:10.787000+00:00",
+      "last_source_ticks_ms": 57090548.0,
+      "last_source_utc_client": "2026-10-18T14:49:11.326000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13697,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57090011.0,
+      "start_utc_client": "2026-10-18T14:49:10.789000+00:00",
+      "last_source_ticks_ms": 57090553.0,
+      "last_source_utc_client": "2026-10-18T14:49:11.331000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13720,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57095008.0,
+      "start_utc_client": "2026-10-18T14:49:15.786000+00:00",
+      "last_source_ticks_ms": 57095318.0,
+      "last_source_utc_client": "2026-10-18T14:49:16.096000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13723,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57095010.0,
+      "start_utc_client": "2026-10-18T14:49:15.788000+00:00",
+      "last_source_ticks_ms": 57095392.0,
+      "last_source_utc_client": "2026-10-18T14:49:16.170000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13726,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57095012.0,
+      "start_utc_client": "2026-10-18T14:49:15.790000+00:00",
+      "last_source_ticks_ms": 57095403.0,
+      "last_source_utc_client": "2026-10-18T14:49:16.181000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13749,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57100008.0,
+      "start_utc_client": "2026-10-18T14:49:20.786000+00:00",
+      "last_source_ticks_ms": 57100411.0,
+      "last_source_utc_client": "2026-10-18T14:49:21.189000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13752,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57100011.0,
+      "start_utc_client": "2026-10-18T14:49:20.789000+00:00",
+      "last_source_ticks_ms": 57100535.0,
+      "last_source_utc_client": "2026-10-18T14:49:21.313000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13755,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57100012.0,
+      "start_utc_client": "2026-10-18T14:49:20.790000+00:00",
+      "last_source_ticks_ms": 57100555.0,
+      "last_source_utc_client": "2026-10-18T14:49:21.333000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13778,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57105008.0,
+      "start_utc_client": "2026-10-18T14:49:25.786000+00:00",
+      "last_source_ticks_ms": 57106538.0,
+      "last_source_utc_client": "2026-10-18T14:49:27.316000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13781,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57105011.0,
+      "start_utc_client": "2026-10-18T14:49:25.789000+00:00",
+      "last_source_ticks_ms": 57111076.0,
+      "last_source_utc_client": "2026-10-18T14:49:31.854000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13784,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57105013.0,
+      "start_utc_client": "2026-10-18T14:49:25.791000+00:00",
+      "last_source_ticks_ms": 57109544.0,
+      "last_source_utc_client": "2026-10-18T14:49:30.322000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13827,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57115015.0,
+      "start_utc_client": "2026-10-18T14:49:35.793000+00:00",
+      "last_source_ticks_ms": 57126485.0,
+      "last_source_utc_client": "2026-10-18T14:49:47.263000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13830,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57115018.0,
+      "start_utc_client": "2026-10-18T14:49:35.796000+00:00",
+      "last_source_ticks_ms": 57118877.0,
+      "last_source_utc_client": "2026-10-18T14:49:39.655000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13833,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57115020.0,
+      "start_utc_client": "2026-10-18T14:49:35.798000+00:00",
+      "last_source_ticks_ms": 57118199.0,
+      "last_source_utc_client": "2026-10-18T14:49:38.977000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13912,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57130011.0,
+      "start_utc_client": "2026-10-18T14:49:50.789000+00:00",
+      "last_source_ticks_ms": 57130205.0,
+      "last_source_utc_client": "2026-10-18T14:49:50.983000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13915,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57130014.0,
+      "start_utc_client": "2026-10-18T14:49:50.792000+00:00",
+      "last_source_ticks_ms": 57130270.0,
+      "last_source_utc_client": "2026-10-18T14:49:51.048000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13918,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57130016.0,
+      "start_utc_client": "2026-10-18T14:49:50.794000+00:00",
+      "last_source_ticks_ms": 57130271.0,
+      "last_source_utc_client": "2026-10-18T14:49:51.049000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13941,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57135013.0,
+      "start_utc_client": "2026-10-18T14:49:55.791000+00:00",
+      "last_source_ticks_ms": 57144984.0,
+      "last_source_utc_client": "2026-10-18T14:50:05.762000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13944,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57135017.0,
+      "start_utc_client": "2026-10-18T14:49:55.795000+00:00",
+      "last_source_ticks_ms": 57137054.0,
+      "last_source_utc_client": "2026-10-18T14:49:57.832000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13947,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57135020.0,
+      "start_utc_client": "2026-10-18T14:49:55.798000+00:00",
+      "last_source_ticks_ms": 57137479.0,
+      "last_source_utc_client": "2026-10-18T14:49:58.257000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13990,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57145008.0,
+      "start_utc_client": "2026-10-18T14:50:05.786000+00:00",
+      "last_source_ticks_ms": 57146265.0,
+      "last_source_utc_client": "2026-10-18T14:50:07.043000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13993,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57145010.0,
+      "start_utc_client": "2026-10-18T14:50:05.788000+00:00",
+      "last_source_ticks_ms": 57157068.0,
+      "last_source_utc_client": "2026-10-18T14:50:17.846000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 13996,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57145012.0,
+      "start_utc_client": "2026-10-18T14:50:05.790000+00:00",
+      "last_source_ticks_ms": 57148496.0,
+      "last_source_utc_client": "2026-10-18T14:50:09.274000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14139,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57180017.0,
+      "start_utc_client": "2026-10-18T14:50:40.795000+00:00",
+      "last_source_ticks_ms": 57184565.0,
+      "last_source_utc_client": "2026-10-18T14:50:45.343000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14142,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57180020.0,
+      "start_utc_client": "2026-10-18T14:50:40.798000+00:00",
+      "last_source_ticks_ms": 57198565.0,
+      "last_source_utc_client": "2026-10-18T14:50:59.343000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14145,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57180022.0,
+      "start_utc_client": "2026-10-18T14:50:40.800000+00:00",
+      "last_source_ticks_ms": 57181854.0,
+      "last_source_utc_client": "2026-10-18T14:50:42.632000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14384,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57240009.0,
+      "start_utc_client": "2026-10-18T14:51:40.787000+00:00",
+      "last_source_ticks_ms": 57240511.0,
+      "last_source_utc_client": "2026-10-18T14:51:41.289000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14387,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57240011.0,
+      "start_utc_client": "2026-10-18T14:51:40.789000+00:00",
+      "last_source_ticks_ms": 57240559.0,
+      "last_source_utc_client": "2026-10-18T14:51:41.337000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14390,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57240013.0,
+      "start_utc_client": "2026-10-18T14:51:40.791000+00:00",
+      "last_source_ticks_ms": 57240628.0,
+      "last_source_utc_client": "2026-10-18T14:51:41.406000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14629,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57300005.0,
+      "start_utc_client": "2026-10-18T14:52:40.783000+00:00",
+      "last_source_ticks_ms": 57300358.0,
+      "last_source_utc_client": "2026-10-18T14:52:41.136000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14632,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57300008.0,
+      "start_utc_client": "2026-10-18T14:52:40.786000+00:00",
+      "last_source_ticks_ms": 57300437.0,
+      "last_source_utc_client": "2026-10-18T14:52:41.215000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14635,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57300009.0,
+      "start_utc_client": "2026-10-18T14:52:40.787000+00:00",
+      "last_source_ticks_ms": 57300443.0,
+      "last_source_utc_client": "2026-10-18T14:52:41.221000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14874,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57360010.0,
+      "start_utc_client": "2026-10-18T14:53:40.788000+00:00",
+      "last_source_ticks_ms": 57360588.0,
+      "last_source_utc_client": "2026-10-18T14:53:41.366000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14877,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57360013.0,
+      "start_utc_client": "2026-10-18T14:53:40.791000+00:00",
+      "last_source_ticks_ms": 57360611.0,
+      "last_source_utc_client": "2026-10-18T14:53:41.389000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 14880,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57360014.0,
+      "start_utc_client": "2026-10-18T14:53:40.792000+00:00",
+      "last_source_ticks_ms": 57360632.0,
+      "last_source_utc_client": "2026-10-18T14:53:41.410000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15095,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57413903.0,
+      "start_utc_client": "2026-10-18T14:54:34.681000+00:00",
+      "last_source_ticks_ms": 57414642.0,
+      "last_source_utc_client": "2026-10-18T14:54:35.420000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15098,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57413914.0,
+      "start_utc_client": "2026-10-18T14:54:34.692000+00:00",
+      "last_source_ticks_ms": 57414716.0,
+      "last_source_utc_client": "2026-10-18T14:54:35.494000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15101,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57413916.0,
+      "start_utc_client": "2026-10-18T14:54:34.694000+00:00",
+      "last_source_ticks_ms": 57414744.0,
+      "last_source_utc_client": "2026-10-18T14:54:35.522000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15146,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57419555.0,
+      "start_utc_client": "2026-10-18T14:54:40.333000+00:00",
+      "last_source_ticks_ms": 57421807.0,
+      "last_source_utc_client": "2026-10-18T14:54:42.585000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15149,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57419558.0,
+      "start_utc_client": "2026-10-18T14:54:40.336000+00:00",
+      "last_source_ticks_ms": 57420513.0,
+      "last_source_utc_client": "2026-10-18T14:54:41.291000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15152,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57419560.0,
+      "start_utc_client": "2026-10-18T14:54:40.338000+00:00",
+      "last_source_ticks_ms": 57420571.0,
+      "last_source_utc_client": "2026-10-18T14:54:41.349000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15179,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57425017.0,
+      "start_utc_client": "2026-10-18T14:54:45.795000+00:00",
+      "last_source_ticks_ms": 57425614.0,
+      "last_source_utc_client": "2026-10-18T14:54:46.392000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15182,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57425021.0,
+      "start_utc_client": "2026-10-18T14:54:45.799000+00:00",
+      "last_source_ticks_ms": 57425639.0,
+      "last_source_utc_client": "2026-10-18T14:54:46.417000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15185,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57425023.0,
+      "start_utc_client": "2026-10-18T14:54:45.801000+00:00",
+      "last_source_ticks_ms": 57425634.0,
+      "last_source_utc_client": "2026-10-18T14:54:46.412000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15208,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57430014.0,
+      "start_utc_client": "2026-10-18T14:54:50.792000+00:00",
+      "last_source_ticks_ms": 57430383.0,
+      "last_source_utc_client": "2026-10-18T14:54:51.161000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15211,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57430017.0,
+      "start_utc_client": "2026-10-18T14:54:50.795000+00:00",
+      "last_source_ticks_ms": 57430436.0,
+      "last_source_utc_client": "2026-10-18T14:54:51.214000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15214,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57430020.0,
+      "start_utc_client": "2026-10-18T14:54:50.798000+00:00",
+      "last_source_ticks_ms": 57430441.0,
+      "last_source_utc_client": "2026-10-18T14:54:51.219000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15237,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57435006.0,
+      "start_utc_client": "2026-10-18T14:54:55.784000+00:00",
+      "last_source_ticks_ms": 57435625.0,
+      "last_source_utc_client": "2026-10-18T14:54:56.403000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15240,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57435008.0,
+      "start_utc_client": "2026-10-18T14:54:55.786000+00:00",
+      "last_source_ticks_ms": 57435629.0,
+      "last_source_utc_client": "2026-10-18T14:54:56.407000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15243,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57435011.0,
+      "start_utc_client": "2026-10-18T14:54:55.789000+00:00",
+      "last_source_ticks_ms": 57435666.0,
+      "last_source_utc_client": "2026-10-18T14:54:56.444000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15266,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57440004.0,
+      "start_utc_client": "2026-10-18T14:55:00.782000+00:00",
+      "last_source_ticks_ms": 57440470.0,
+      "last_source_utc_client": "2026-10-18T14:55:01.248000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15269,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57440008.0,
+      "start_utc_client": "2026-10-18T14:55:00.786000+00:00",
+      "last_source_ticks_ms": 57440610.0,
+      "last_source_utc_client": "2026-10-18T14:55:01.388000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15272,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57440011.0,
+      "start_utc_client": "2026-10-18T14:55:00.789000+00:00",
+      "last_source_ticks_ms": 57440610.0,
+      "last_source_utc_client": "2026-10-18T14:55:01.388000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15295,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57445007.0,
+      "start_utc_client": "2026-10-18T14:55:05.785000+00:00",
+      "last_source_ticks_ms": 57445248.0,
+      "last_source_utc_client": "2026-10-18T14:55:06.026000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15298,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57445009.0,
+      "start_utc_client": "2026-10-18T14:55:05.787000+00:00",
+      "last_source_ticks_ms": 57445265.0,
+      "last_source_utc_client": "2026-10-18T14:55:06.043000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15301,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57445011.0,
+      "start_utc_client": "2026-10-18T14:55:05.789000+00:00",
+      "last_source_ticks_ms": 57445276.0,
+      "last_source_utc_client": "2026-10-18T14:55:06.054000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15324,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57450012.0,
+      "start_utc_client": "2026-10-18T14:55:10.790000+00:00",
+      "last_source_ticks_ms": 57450636.0,
+      "last_source_utc_client": "2026-10-18T14:55:11.414000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15327,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57450014.0,
+      "start_utc_client": "2026-10-18T14:55:10.792000+00:00",
+      "last_source_ticks_ms": 57450665.0,
+      "last_source_utc_client": "2026-10-18T14:55:11.443000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15330,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57450017.0,
+      "start_utc_client": "2026-10-18T14:55:10.795000+00:00",
+      "last_source_ticks_ms": 57450671.0,
+      "last_source_utc_client": "2026-10-18T14:55:11.449000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15353,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57455006.0,
+      "start_utc_client": "2026-10-18T14:55:15.784000+00:00",
+      "last_source_ticks_ms": 57455316.0,
+      "last_source_utc_client": "2026-10-18T14:55:16.094000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15356,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57455009.0,
+      "start_utc_client": "2026-10-18T14:55:15.787000+00:00",
+      "last_source_ticks_ms": 57455325.0,
+      "last_source_utc_client": "2026-10-18T14:55:16.103000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15359,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57455011.0,
+      "start_utc_client": "2026-10-18T14:55:15.789000+00:00",
+      "last_source_ticks_ms": 57455374.0,
+      "last_source_utc_client": "2026-10-18T14:55:16.152000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15382,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57460014.0,
+      "start_utc_client": "2026-10-18T14:55:20.792000+00:00",
+      "last_source_ticks_ms": 57460518.0,
+      "last_source_utc_client": "2026-10-18T14:55:21.296000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15385,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57460017.0,
+      "start_utc_client": "2026-10-18T14:55:20.795000+00:00",
+      "last_source_ticks_ms": 57460522.0,
+      "last_source_utc_client": "2026-10-18T14:55:21.300000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15388,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57460018.0,
+      "start_utc_client": "2026-10-18T14:55:20.796000+00:00",
+      "last_source_ticks_ms": 57460531.0,
+      "last_source_utc_client": "2026-10-18T14:55:21.309000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15411,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57465013.0,
+      "start_utc_client": "2026-10-18T14:55:25.791000+00:00",
+      "last_source_ticks_ms": 57465468.0,
+      "last_source_utc_client": "2026-10-18T14:55:26.246000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15414,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57465015.0,
+      "start_utc_client": "2026-10-18T14:55:25.793000+00:00",
+      "last_source_ticks_ms": 57465515.0,
+      "last_source_utc_client": "2026-10-18T14:55:26.293000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15417,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57465016.0,
+      "start_utc_client": "2026-10-18T14:55:25.794000+00:00",
+      "last_source_ticks_ms": 57465521.0,
+      "last_source_utc_client": "2026-10-18T14:55:26.299000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15440,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57470007.0,
+      "start_utc_client": "2026-10-18T14:55:30.785000+00:00",
+      "last_source_ticks_ms": 57470413.0,
+      "last_source_utc_client": "2026-10-18T14:55:31.191000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15443,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57470009.0,
+      "start_utc_client": "2026-10-18T14:55:30.787000+00:00",
+      "last_source_ticks_ms": 57470478.0,
+      "last_source_utc_client": "2026-10-18T14:55:31.256000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15446,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57470011.0,
+      "start_utc_client": "2026-10-18T14:55:30.789000+00:00",
+      "last_source_ticks_ms": 57470727.0,
+      "last_source_utc_client": "2026-10-18T14:55:31.505000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15465,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57475012.0,
+      "start_utc_client": "2026-10-18T14:55:35.790000+00:00",
+      "last_source_ticks_ms": 57475434.0,
+      "last_source_utc_client": "2026-10-18T14:55:36.212000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15468,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57475014.0,
+      "start_utc_client": "2026-10-18T14:55:35.792000+00:00",
+      "last_source_ticks_ms": 57475471.0,
+      "last_source_utc_client": "2026-10-18T14:55:36.249000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15471,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57475017.0,
+      "start_utc_client": "2026-10-18T14:55:35.795000+00:00",
+      "last_source_ticks_ms": 57475472.0,
+      "last_source_utc_client": "2026-10-18T14:55:36.250000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15494,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57480019.0,
+      "start_utc_client": "2026-10-18T14:55:40.797000+00:00",
+      "last_source_ticks_ms": 57480592.0,
+      "last_source_utc_client": "2026-10-18T14:55:41.370000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15497,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57480021.0,
+      "start_utc_client": "2026-10-18T14:55:40.799000+00:00",
+      "last_source_ticks_ms": 57480623.0,
+      "last_source_utc_client": "2026-10-18T14:55:41.401000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15500,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57480022.0,
+      "start_utc_client": "2026-10-18T14:55:40.800000+00:00",
+      "last_source_ticks_ms": 57480758.0,
+      "last_source_utc_client": "2026-10-18T14:55:41.536000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15743,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57540008.0,
+      "start_utc_client": "2026-10-18T14:56:40.786000+00:00",
+      "last_source_ticks_ms": 57540425.0,
+      "last_source_utc_client": "2026-10-18T14:56:41.203000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15746,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57540011.0,
+      "start_utc_client": "2026-10-18T14:56:40.789000+00:00",
+      "last_source_ticks_ms": 57540448.0,
+      "last_source_utc_client": "2026-10-18T14:56:41.226000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 15749,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57540014.0,
+      "start_utc_client": "2026-10-18T14:56:40.792000+00:00",
+      "last_source_ticks_ms": 57540476.0,
+      "last_source_utc_client": "2026-10-18T14:56:41.254000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16007,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57600021.0,
+      "start_utc_client": "2026-10-18T14:57:40.799000+00:00",
+      "last_source_ticks_ms": 57600646.0,
+      "last_source_utc_client": "2026-10-18T14:57:41.424000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16010,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57600024.0,
+      "start_utc_client": "2026-10-18T14:57:40.802000+00:00",
+      "last_source_ticks_ms": 57600797.0,
+      "last_source_utc_client": "2026-10-18T14:57:41.575000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16013,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57600026.0,
+      "start_utc_client": "2026-10-18T14:57:40.804000+00:00",
+      "last_source_ticks_ms": 57600800.0,
+      "last_source_utc_client": "2026-10-18T14:57:41.578000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16252,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57660013.0,
+      "start_utc_client": "2026-10-18T14:58:40.791000+00:00",
+      "last_source_ticks_ms": 57660468.0,
+      "last_source_utc_client": "2026-10-18T14:58:41.246000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16255,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57660016.0,
+      "start_utc_client": "2026-10-18T14:58:40.794000+00:00",
+      "last_source_ticks_ms": 57660498.0,
+      "last_source_utc_client": "2026-10-18T14:58:41.276000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16258,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57660019.0,
+      "start_utc_client": "2026-10-18T14:58:40.797000+00:00",
+      "last_source_ticks_ms": 57660575.0,
+      "last_source_utc_client": "2026-10-18T14:58:41.353000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16497,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57720012.0,
+      "start_utc_client": "2026-10-18T14:59:40.790000+00:00",
+      "last_source_ticks_ms": 57720642.0,
+      "last_source_utc_client": "2026-10-18T14:59:41.420000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16500,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57720015.0,
+      "start_utc_client": "2026-10-18T14:59:40.793000+00:00",
+      "last_source_ticks_ms": 57720631.0,
+      "last_source_utc_client": "2026-10-18T14:59:41.409000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16503,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57720017.0,
+      "start_utc_client": "2026-10-18T14:59:40.795000+00:00",
+      "last_source_ticks_ms": 57720645.0,
+      "last_source_utc_client": "2026-10-18T14:59:41.423000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16658,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57758685.0,
+      "start_utc_client": "2026-10-18T15:00:19.463000+00:00",
+      "last_source_ticks_ms": 57759900.0,
+      "last_source_utc_client": "2026-10-18T15:00:20.678000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16672,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57758706.0,
+      "start_utc_client": "2026-10-18T15:00:19.484000+00:00",
+      "last_source_ticks_ms": 57759934.0,
+      "last_source_utc_client": "2026-10-18T15:00:20.712000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16675,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57758710.0,
+      "start_utc_client": "2026-10-18T15:00:19.488000+00:00",
+      "last_source_ticks_ms": 57761477.0,
+      "last_source_utc_client": "2026-10-18T15:00:22.255000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16705,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57764560.0,
+      "start_utc_client": "2026-10-18T15:00:25.338000+00:00",
+      "last_source_ticks_ms": 57769270.0,
+      "last_source_utc_client": "2026-10-18T15:00:30.048000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 252,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16708,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57764563.0,
+      "start_utc_client": "2026-10-18T15:00:25.341000+00:00",
+      "last_source_ticks_ms": 57768035.0,
+      "last_source_utc_client": "2026-10-18T15:00:28.813000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 247,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16711,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57764565.0,
+      "start_utc_client": "2026-10-18T15:00:25.343000+00:00",
+      "last_source_ticks_ms": 57789539.0,
+      "last_source_utc_client": "2026-10-18T15:00:50.317000+00:00",
+      "statuses_received": [
+        200
+      ],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": false,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 25,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16822,
+      "path": "/api/v1/status",
+      "method": "GET",
+      "start_ticks_ms": 57789550.0,
+      "start_utc_client": "2026-10-18T15:00:50.328000+00:00",
+      "last_source_ticks_ms": 57790947.0,
+      "last_source_utc_client": "2026-10-18T15:00:51.725000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13130
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16825,
+      "path": "/api/v1/temperatures",
+      "method": "GET",
+      "start_ticks_ms": 57789551.0,
+      "start_utc_client": "2026-10-18T15:00:50.329000+00:00",
+      "last_source_ticks_ms": 57790946.0,
+      "last_source_utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13394
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    },
+    {
+      "source_id": 16828,
+      "path": "/api/v1/alerts",
+      "method": "GET",
+      "start_ticks_ms": 57789552.0,
+      "start_utc_client": "2026-10-18T15:00:50.330000+00:00",
+      "last_source_ticks_ms": 57790946.0,
+      "last_source_utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "statuses_received": [],
+      "socket_ids": [
+        13309
+      ],
+      "cancelled_event": true,
+      "net_error_codes": [],
+      "net_error_classes": [],
+      "filtered_response_bytes": 0,
+      "socket_pool_reuse_event": true
+    }
+  ],
+  "roots": [
+    {
+      "request": {
+        "source_id": 12139,
+        "path": "/",
+        "method": "GET",
+        "start_ticks_ms": 56845320.0,
+        "start_utc_client": "2026-10-18T14:45:06.098000+00:00",
+        "last_source_ticks_ms": 56855560.0,
+        "last_source_utc_client": "2026-10-18T14:45:16.338000+00:00",
+        "statuses_received": [
+          200
+        ],
+        "socket_ids": [
+          12138
+        ],
+        "cancelled_event": false,
+        "net_error_codes": [],
+        "net_error_classes": [],
+        "filtered_response_bytes": 8025,
+        "socket_pool_reuse_event": false
+      },
+      "events": [
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "CORS_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "CHECK_CORS_PREFLIGHT_REQUIRED",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "REQUEST_ALIVE",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "TRANSPORT_SECURITY_STATE_SHOULD_UPGRADE_TO_SSL",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_START_JOB",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845320.0,
+          "utc_client": "2026-10-18T14:45:06.098000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "FIRST_PARTY_SETS_METADATA",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "FIRST_PARTY_SETS_METADATA",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "COMPUTED_PRIVACY_MODE",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "COOKIE_INCLUSION_STATUS",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_GET_BACKEND",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_GET_BACKEND",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845321.0,
+          "utc_client": "2026-10-18T14:45:06.099000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_ADD_TO_ENTRY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_ADD_TO_ENTRY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_READ_INFO",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_READ_INFO",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56845322.0,
+          "utc_client": "2026-10-18T14:45:06.100000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_JOB_CONTROLLER_BOUND",
+          "phase": "PHASE_NONE",
+          "source_dependency": {
+            "id": 12141,
+            "type": 32
+          }
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST_BOUND_TO_JOB",
+          "phase": "PHASE_NONE",
+          "source_dependency": {
+            "id": 12142,
+            "type": 17
+          }
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_CONNECTED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "LOCAL_NETWORK_ACCESS_CHECK",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_CONNECTED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56846501.0,
+          "utc_client": "2026-10-18T14:45:07.279000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST_HEADERS",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 56846502.0,
+          "utc_client": "2026-10-18T14:45:07.280000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56846502.0,
+          "utc_client": "2026-10-18T14:45:07.280000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56846502.0,
+          "utc_client": "2026-10-18T14:45:07.280000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56847421.0,
+          "utc_client": "2026-10-18T14:45:08.199000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56847421.0,
+          "utc_client": "2026-10-18T14:45:08.199000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56854998.0,
+          "utc_client": "2026-10-18T14:45:15.776000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854998.0,
+          "utc_client": "2026-10-18T14:45:15.776000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_RESPONSE_HEADERS",
+          "phase": "PHASE_NONE",
+          "http_statuses": [
+            200
+          ]
+        },
+        {
+          "ticks_ms": 56854998.0,
+          "utc_client": "2026-10-18T14:45:15.776000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854998.0,
+          "utc_client": "2026-10-18T14:45:15.776000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_INFO",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_INFO",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_DATA",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_DATA",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_START_JOB",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56854999.0,
+          "utc_client": "2026-10-18T14:45:15.777000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855000.0,
+          "utc_client": "2026-10-18T14:45:15.778000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855000.0,
+          "utc_client": "2026-10-18T14:45:15.778000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855001.0,
+          "utc_client": "2026-10-18T14:45:15.779000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855002.0,
+          "utc_client": "2026-10-18T14:45:15.780000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 3996
+        },
+        {
+          "ticks_ms": 56855002.0,
+          "utc_client": "2026-10-18T14:45:15.780000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855002.0,
+          "utc_client": "2026-10-18T14:45:15.780000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855002.0,
+          "utc_client": "2026-10-18T14:45:15.780000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 309
+        },
+        {
+          "ticks_ms": 56855002.0,
+          "utc_client": "2026-10-18T14:45:15.780000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855310.0,
+          "utc_client": "2026-10-18T14:45:16.088000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855311.0,
+          "utc_client": "2026-10-18T14:45:16.089000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 2880
+        },
+        {
+          "ticks_ms": 56855311.0,
+          "utc_client": "2026-10-18T14:45:16.089000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855559.0,
+          "utc_client": "2026-10-18T14:45:16.337000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855559.0,
+          "utc_client": "2026-10-18T14:45:16.337000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 840
+        },
+        {
+          "ticks_ms": 56855560.0,
+          "utc_client": "2026-10-18T14:45:16.338000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 56855560.0,
+          "utc_client": "2026-10-18T14:45:16.338000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855560.0,
+          "utc_client": "2026-10-18T14:45:16.338000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "CORS_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 56855560.0,
+          "utc_client": "2026-10-18T14:45:16.338000+00:00",
+          "source_id": 12139,
+          "source_type": "URL_REQUEST",
+          "event": "REQUEST_ALIVE",
+          "phase": "PHASE_END"
+        }
+      ],
+      "stream_jobs": [
+        [
+          {
+            "ticks_ms": 56845322.0,
+            "utc_client": "2026-10-18T14:45:06.100000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB",
+            "phase": "PHASE_BEGIN",
+            "source_dependency": {
+              "id": 12141,
+              "type": 32
+            }
+          },
+          {
+            "ticks_ms": 56845322.0,
+            "utc_client": "2026-10-18T14:45:06.100000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_WAITING",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 56845322.0,
+            "utc_client": "2026-10-18T14:45:06.100000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_WAITING",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 56845323.0,
+            "utc_client": "2026-10-18T14:45:06.101000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 56845323.0,
+            "utc_client": "2026-10-18T14:45:06.101000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKET",
+            "phase": "PHASE_NONE"
+          },
+          {
+            "ticks_ms": 56845323.0,
+            "utc_client": "2026-10-18T14:45:06.101000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL_BOUND_TO_CONNECT_JOB",
+            "phase": "PHASE_NONE",
+            "source_dependency": {
+              "id": 12137,
+              "type": 7
+            }
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL_BOUND_TO_SOCKET",
+            "phase": "PHASE_NONE",
+            "source_dependency": {
+              "id": 12138,
+              "type": 10
+            }
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_BOUND_TO_REQUEST",
+            "phase": "PHASE_NONE",
+            "source_dependency": {
+              "id": 12139,
+              "type": 1
+            }
+          },
+          {
+            "ticks_ms": 56846501.0,
+            "utc_client": "2026-10-18T14:45:07.279000+00:00",
+            "source_id": 12142,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB",
+            "phase": "PHASE_END"
+          }
+        ]
+      ],
+      "sockets_until_request_end": [
+        {
+          "id": 12138,
+          "events": [
+            {
+              "ticks_ms": 56845281.0,
+              "utc_client": "2026-10-18T14:45:06.059000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_ALIVE",
+              "phase": "PHASE_BEGIN",
+              "source_dependency": {
+                "id": 12137,
+                "type": 7
+              }
+            },
+            {
+              "ticks_ms": 56845281.0,
+              "utc_client": "2026-10-18T14:45:06.059000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT",
+              "phase": "PHASE_BEGIN"
+            },
+            {
+              "ticks_ms": 56845281.0,
+              "utc_client": "2026-10-18T14:45:06.059000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT_ATTEMPT",
+              "phase": "PHASE_BEGIN"
+            },
+            {
+              "ticks_ms": 56846500.0,
+              "utc_client": "2026-10-18T14:45:07.278000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT_ATTEMPT",
+              "phase": "PHASE_END"
+            },
+            {
+              "ticks_ms": 56846501.0,
+              "utc_client": "2026-10-18T14:45:07.279000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT",
+              "phase": "PHASE_END"
+            },
+            {
+              "ticks_ms": 56846501.0,
+              "utc_client": "2026-10-18T14:45:07.279000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_BEGIN",
+              "source_dependency": {
+                "id": 12142,
+                "type": 17
+              }
+            },
+            {
+              "ticks_ms": 56846502.0,
+              "utc_client": "2026-10-18T14:45:07.280000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_SENT",
+              "phase": "PHASE_NONE",
+              "byte_count": 510
+            },
+            {
+              "ticks_ms": 56847421.0,
+              "utc_client": "2026-10-18T14:45:08.199000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 85
+            },
+            {
+              "ticks_ms": 56854998.0,
+              "utc_client": "2026-10-18T14:45:15.776000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 4011
+            },
+            {
+              "ticks_ms": 56855002.0,
+              "utc_client": "2026-10-18T14:45:15.780000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 309
+            },
+            {
+              "ticks_ms": 56855310.0,
+              "utc_client": "2026-10-18T14:45:16.088000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 2880
+            },
+            {
+              "ticks_ms": 56855559.0,
+              "utc_client": "2026-10-18T14:45:16.337000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 847
+            },
+            {
+              "ticks_ms": 56855560.0,
+              "utc_client": "2026-10-18T14:45:16.338000+00:00",
+              "source_id": 12138,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_END"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "request": {
+        "source_id": 13351,
+        "path": "/",
+        "method": "GET",
+        "start_ticks_ms": 57039667.0,
+        "start_utc_client": "2026-10-18T14:48:20.445000+00:00",
+        "last_source_ticks_ms": 57044533.0,
+        "last_source_utc_client": "2026-10-18T14:48:25.311000+00:00",
+        "statuses_received": [
+          200
+        ],
+        "socket_ids": [
+          13309
+        ],
+        "cancelled_event": false,
+        "net_error_codes": [],
+        "net_error_classes": [],
+        "filtered_response_bytes": 8056,
+        "socket_pool_reuse_event": true
+      },
+      "events": [
+        {
+          "ticks_ms": 57039666.0,
+          "utc_client": "2026-10-18T14:48:20.444000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "CORS_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039666.0,
+          "utc_client": "2026-10-18T14:48:20.444000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "CHECK_CORS_PREFLIGHT_REQUIRED",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "REQUEST_ALIVE",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_URL_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "TRANSPORT_SECURITY_STATE_SHOULD_UPGRADE_TO_SSL",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_START_JOB",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "FIRST_PARTY_SETS_METADATA",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "FIRST_PARTY_SETS_METADATA",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "COMPUTED_PRIVACY_MODE",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "COOKIE_INCLUSION_STATUS",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_BEFORE_START_TRANSACTION",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_GET_BACKEND",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_GET_BACKEND",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039667.0,
+          "utc_client": "2026-10-18T14:48:20.445000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039668.0,
+          "utc_client": "2026-10-18T14:48:20.446000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_OPEN_OR_CREATE_ENTRY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039668.0,
+          "utc_client": "2026-10-18T14:48:20.446000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_ADD_TO_ENTRY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039668.0,
+          "utc_client": "2026-10-18T14:48:20.446000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_ADD_TO_ENTRY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039668.0,
+          "utc_client": "2026-10-18T14:48:20.446000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_READ_INFO",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039669.0,
+          "utc_client": "2026-10-18T14:48:20.447000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_READ_INFO",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_JOB_CONTROLLER_BOUND",
+          "phase": "PHASE_NONE",
+          "source_dependency": {
+            "id": 13356,
+            "type": 32
+          }
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST_BOUND_TO_JOB",
+          "phase": "PHASE_NONE",
+          "source_dependency": {
+            "id": 13357,
+            "type": 17
+          }
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_CONNECTED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "LOCAL_NETWORK_ACCESS_CHECK",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_CONNECTED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST_HEADERS",
+          "phase": "PHASE_NONE"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_SEND_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039670.0,
+          "utc_client": "2026-10-18T14:48:20.448000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039733.0,
+          "utc_client": "2026-10-18T14:48:20.511000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039733.0,
+          "utc_client": "2026-10-18T14:48:20.511000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_STREAM_PARSER_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_RESPONSE_HEADERS",
+          "phase": "PHASE_NONE",
+          "http_statuses": [
+            200
+          ]
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_HEADERS",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_INFO",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_INFO",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_DATA",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_CACHE_WRITE_DATA",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "NETWORK_DELEGATE_HEADERS_RECEIVED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_START_JOB",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_DELEGATE_RESPONSE_STARTED",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57039763.0,
+          "utc_client": "2026-10-18T14:48:20.541000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57039764.0,
+          "utc_client": "2026-10-18T14:48:20.542000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 1425
+        },
+        {
+          "ticks_ms": 57039764.0,
+          "utc_client": "2026-10-18T14:48:20.542000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57044125.0,
+          "utc_client": "2026-10-18T14:48:24.903000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044126.0,
+          "utc_client": "2026-10-18T14:48:24.904000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 2880
+        },
+        {
+          "ticks_ms": 57044127.0,
+          "utc_client": "2026-10-18T14:48:24.905000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57044360.0,
+          "utc_client": "2026-10-18T14:48:25.138000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044360.0,
+          "utc_client": "2026-10-18T14:48:25.138000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 1440
+        },
+        {
+          "ticks_ms": 57044360.0,
+          "utc_client": "2026-10-18T14:48:25.138000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57044413.0,
+          "utc_client": "2026-10-18T14:48:25.191000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044413.0,
+          "utc_client": "2026-10-18T14:48:25.191000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 1440
+        },
+        {
+          "ticks_ms": 57044413.0,
+          "utc_client": "2026-10-18T14:48:25.191000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57044530.0,
+          "utc_client": "2026-10-18T14:48:25.308000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044531.0,
+          "utc_client": "2026-10-18T14:48:25.309000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "URL_REQUEST_JOB_FILTERED_BYTES_READ",
+          "phase": "PHASE_NONE",
+          "byte_count": 871
+        },
+        {
+          "ticks_ms": 57044532.0,
+          "utc_client": "2026-10-18T14:48:25.310000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_BEGIN"
+        },
+        {
+          "ticks_ms": 57044532.0,
+          "utc_client": "2026-10-18T14:48:25.310000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "HTTP_TRANSACTION_READ_BODY",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044532.0,
+          "utc_client": "2026-10-18T14:48:25.310000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "CORS_REQUEST",
+          "phase": "PHASE_END"
+        },
+        {
+          "ticks_ms": 57044533.0,
+          "utc_client": "2026-10-18T14:48:25.311000+00:00",
+          "source_id": 13351,
+          "source_type": "URL_REQUEST",
+          "event": "REQUEST_ALIVE",
+          "phase": "PHASE_END"
+        }
+      ],
+      "stream_jobs": [
+        [
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB",
+            "phase": "PHASE_BEGIN",
+            "source_dependency": {
+              "id": 13356,
+              "type": 32
+            }
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_WAITING",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_WAITING",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "TCP_CLIENT_SOCKET_POOL_REQUESTED_SOCKET",
+            "phase": "PHASE_NONE"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL",
+            "phase": "PHASE_BEGIN"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL_REUSED_AN_EXISTING_SOCKET",
+            "phase": "PHASE_NONE"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL_BOUND_TO_SOCKET",
+            "phase": "PHASE_NONE",
+            "source_dependency": {
+              "id": 13309,
+              "type": 10
+            }
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "SOCKET_POOL",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_INIT_CONNECTION",
+            "phase": "PHASE_END"
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB_BOUND_TO_REQUEST",
+            "phase": "PHASE_NONE",
+            "source_dependency": {
+              "id": 13351,
+              "type": 1
+            }
+          },
+          {
+            "ticks_ms": 57039670.0,
+            "utc_client": "2026-10-18T14:48:20.448000+00:00",
+            "source_id": 13357,
+            "source_type": "HTTP_STREAM_JOB",
+            "event": "HTTP_STREAM_JOB",
+            "phase": "PHASE_END"
+          }
+        ]
+      ],
+      "sockets_until_request_end": [
+        {
+          "id": 13309,
+          "events": [
+            {
+              "ticks_ms": 57032830.0,
+              "utc_client": "2026-10-18T14:48:13.608000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_ALIVE",
+              "phase": "PHASE_BEGIN",
+              "source_dependency": {
+                "id": 13308,
+                "type": 7
+              }
+            },
+            {
+              "ticks_ms": 57032830.0,
+              "utc_client": "2026-10-18T14:48:13.608000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT",
+              "phase": "PHASE_BEGIN"
+            },
+            {
+              "ticks_ms": 57032830.0,
+              "utc_client": "2026-10-18T14:48:13.608000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT_ATTEMPT",
+              "phase": "PHASE_BEGIN"
+            },
+            {
+              "ticks_ms": 57034417.0,
+              "utc_client": "2026-10-18T14:48:15.195000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT_ATTEMPT",
+              "phase": "PHASE_END"
+            },
+            {
+              "ticks_ms": 57034417.0,
+              "utc_client": "2026-10-18T14:48:15.195000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "TCP_CONNECT",
+              "phase": "PHASE_END"
+            },
+            {
+              "ticks_ms": 57034418.0,
+              "utc_client": "2026-10-18T14:48:15.196000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_BEGIN",
+              "source_dependency": {
+                "id": 13307,
+                "type": 17
+              }
+            },
+            {
+              "ticks_ms": 57034419.0,
+              "utc_client": "2026-10-18T14:48:15.197000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_SENT",
+              "phase": "PHASE_NONE",
+              "byte_count": 493
+            },
+            {
+              "ticks_ms": 57038949.0,
+              "utc_client": "2026-10-18T14:48:19.727000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 85
+            },
+            {
+              "ticks_ms": 57039635.0,
+              "utc_client": "2026-10-18T14:48:20.413000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 193
+            },
+            {
+              "ticks_ms": 57039637.0,
+              "utc_client": "2026-10-18T14:48:20.415000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_END"
+            },
+            {
+              "ticks_ms": 57039670.0,
+              "utc_client": "2026-10-18T14:48:20.448000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_BEGIN",
+              "source_dependency": {
+                "id": 13357,
+                "type": 17
+              }
+            },
+            {
+              "ticks_ms": 57039670.0,
+              "utc_client": "2026-10-18T14:48:20.448000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_SENT",
+              "phase": "PHASE_NONE",
+              "byte_count": 567
+            },
+            {
+              "ticks_ms": 57039733.0,
+              "utc_client": "2026-10-18T14:48:20.511000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 85
+            },
+            {
+              "ticks_ms": 57039763.0,
+              "utc_client": "2026-10-18T14:48:20.541000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 1440
+            },
+            {
+              "ticks_ms": 57044125.0,
+              "utc_client": "2026-10-18T14:48:24.903000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 2880
+            },
+            {
+              "ticks_ms": 57044359.0,
+              "utc_client": "2026-10-18T14:48:25.137000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 1440
+            },
+            {
+              "ticks_ms": 57044413.0,
+              "utc_client": "2026-10-18T14:48:25.191000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 1440
+            },
+            {
+              "ticks_ms": 57044530.0,
+              "utc_client": "2026-10-18T14:48:25.308000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_BYTES_RECEIVED",
+              "phase": "PHASE_NONE",
+              "byte_count": 878
+            },
+            {
+              "ticks_ms": 57044532.0,
+              "utc_client": "2026-10-18T14:48:25.310000+00:00",
+              "source_id": 13309,
+              "source_type": "SOCKET",
+              "event": "SOCKET_IN_USE",
+              "phase": "PHASE_END"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "diagnostic_requests": [],
+  "socket_events": [
+    {
+      "ticks_ms": 56856026.0,
+      "utc_client": "2026-10-18T14:45:16.804000+00:00",
+      "source_id": 12149,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56856026.0,
+      "utc_client": "2026-10-18T14:45:16.804000+00:00",
+      "source_id": 12149,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56861264.0,
+      "utc_client": "2026-10-18T14:45:22.042000+00:00",
+      "source_id": 12241,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56861265.0,
+      "utc_client": "2026-10-18T14:45:22.043000+00:00",
+      "source_id": 12241,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56865998.0,
+      "utc_client": "2026-10-18T14:45:26.776000+00:00",
+      "source_id": 12151,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56865998.0,
+      "utc_client": "2026-10-18T14:45:26.776000+00:00",
+      "source_id": 12151,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56865999.0,
+      "utc_client": "2026-10-18T14:45:26.777000+00:00",
+      "source_id": 12274,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56865999.0,
+      "utc_client": "2026-10-18T14:45:26.777000+00:00",
+      "source_id": 12274,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56873129.0,
+      "utc_client": "2026-10-18T14:45:33.907000+00:00",
+      "source_id": 12308,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56873130.0,
+      "utc_client": "2026-10-18T14:45:33.908000+00:00",
+      "source_id": 12303,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56873130.0,
+      "utc_client": "2026-10-18T14:45:33.908000+00:00",
+      "source_id": 12303,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56873130.0,
+      "utc_client": "2026-10-18T14:45:33.908000+00:00",
+      "source_id": 12308,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56876315.0,
+      "utc_client": "2026-10-18T14:45:37.093000+00:00",
+      "source_id": 12337,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56876316.0,
+      "utc_client": "2026-10-18T14:45:37.094000+00:00",
+      "source_id": 12337,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56876316.0,
+      "utc_client": "2026-10-18T14:45:37.094000+00:00",
+      "source_id": 12342,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56876317.0,
+      "utc_client": "2026-10-18T14:45:37.095000+00:00",
+      "source_id": 12342,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56877837.0,
+      "utc_client": "2026-10-18T14:45:38.615000+00:00",
+      "source_id": 12138,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56877837.0,
+      "utc_client": "2026-10-18T14:45:38.615000+00:00",
+      "source_id": 12138,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56881259.0,
+      "utc_client": "2026-10-18T14:45:42.037000+00:00",
+      "source_id": 12387,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56881260.0,
+      "utc_client": "2026-10-18T14:45:42.038000+00:00",
+      "source_id": 12387,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56881260.0,
+      "utc_client": "2026-10-18T14:45:42.038000+00:00",
+      "source_id": 12397,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56881261.0,
+      "utc_client": "2026-10-18T14:45:42.039000+00:00",
+      "source_id": 12397,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56886113.0,
+      "utc_client": "2026-10-18T14:45:46.891000+00:00",
+      "source_id": 12399,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56886114.0,
+      "utc_client": "2026-10-18T14:45:46.892000+00:00",
+      "source_id": 12399,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56886115.0,
+      "utc_client": "2026-10-18T14:45:46.893000+00:00",
+      "source_id": 12431,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56886115.0,
+      "utc_client": "2026-10-18T14:45:46.893000+00:00",
+      "source_id": 12431,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56891069.0,
+      "utc_client": "2026-10-18T14:45:51.847000+00:00",
+      "source_id": 12460,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56891069.0,
+      "utc_client": "2026-10-18T14:45:51.847000+00:00",
+      "source_id": 12460,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56891071.0,
+      "utc_client": "2026-10-18T14:45:51.849000+00:00",
+      "source_id": 12465,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56891071.0,
+      "utc_client": "2026-10-18T14:45:51.849000+00:00",
+      "source_id": 12465,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56896133.0,
+      "utc_client": "2026-10-18T14:45:56.911000+00:00",
+      "source_id": 12495,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56896134.0,
+      "utc_client": "2026-10-18T14:45:56.912000+00:00",
+      "source_id": 12495,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56896134.0,
+      "utc_client": "2026-10-18T14:45:56.912000+00:00",
+      "source_id": 12500,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56896134.0,
+      "utc_client": "2026-10-18T14:45:56.912000+00:00",
+      "source_id": 12500,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56901832.0,
+      "utc_client": "2026-10-18T14:46:02.610000+00:00",
+      "source_id": 12548,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56901833.0,
+      "utc_client": "2026-10-18T14:46:02.611000+00:00",
+      "source_id": 12548,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56901834.0,
+      "utc_client": "2026-10-18T14:46:02.612000+00:00",
+      "source_id": 12553,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56901835.0,
+      "utc_client": "2026-10-18T14:46:02.613000+00:00",
+      "source_id": 12553,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56906436.0,
+      "utc_client": "2026-10-18T14:46:07.214000+00:00",
+      "source_id": 12587,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56906436.0,
+      "utc_client": "2026-10-18T14:46:07.214000+00:00",
+      "source_id": 12587,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56911317.0,
+      "utc_client": "2026-10-18T14:46:12.095000+00:00",
+      "source_id": 12620,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56911317.0,
+      "utc_client": "2026-10-18T14:46:12.095000+00:00",
+      "source_id": 12620,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56916467.0,
+      "utc_client": "2026-10-18T14:46:17.245000+00:00",
+      "source_id": 12392,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56916467.0,
+      "utc_client": "2026-10-18T14:46:17.245000+00:00",
+      "source_id": 12392,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56916468.0,
+      "utc_client": "2026-10-18T14:46:17.246000+00:00",
+      "source_id": 12653,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56916468.0,
+      "utc_client": "2026-10-18T14:46:17.246000+00:00",
+      "source_id": 12653,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56921815.0,
+      "utc_client": "2026-10-18T14:46:22.593000+00:00",
+      "source_id": 12682,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56921815.0,
+      "utc_client": "2026-10-18T14:46:22.593000+00:00",
+      "source_id": 12682,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56921816.0,
+      "utc_client": "2026-10-18T14:46:22.594000+00:00",
+      "source_id": 12687,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56921816.0,
+      "utc_client": "2026-10-18T14:46:22.594000+00:00",
+      "source_id": 12687,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56927083.0,
+      "utc_client": "2026-10-18T14:46:27.861000+00:00",
+      "source_id": 12715,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56927083.0,
+      "utc_client": "2026-10-18T14:46:27.861000+00:00",
+      "source_id": 12715,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56927084.0,
+      "utc_client": "2026-10-18T14:46:27.862000+00:00",
+      "source_id": 12721,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56927090.0,
+      "utc_client": "2026-10-18T14:46:27.868000+00:00",
+      "source_id": 12721,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56931939.0,
+      "utc_client": "2026-10-18T14:46:32.717000+00:00",
+      "source_id": 12582,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56931939.0,
+      "utc_client": "2026-10-18T14:46:32.717000+00:00",
+      "source_id": 12582,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56936603.0,
+      "utc_client": "2026-10-18T14:46:37.381000+00:00",
+      "source_id": 12751,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56936603.0,
+      "utc_client": "2026-10-18T14:46:37.381000+00:00",
+      "source_id": 12751,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56936604.0,
+      "utc_client": "2026-10-18T14:46:37.382000+00:00",
+      "source_id": 12783,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56936604.0,
+      "utc_client": "2026-10-18T14:46:37.382000+00:00",
+      "source_id": 12783,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56941630.0,
+      "utc_client": "2026-10-18T14:46:42.408000+00:00",
+      "source_id": 12832,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56941630.0,
+      "utc_client": "2026-10-18T14:46:42.408000+00:00",
+      "source_id": 12832,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56941631.0,
+      "utc_client": "2026-10-18T14:46:42.409000+00:00",
+      "source_id": 12837,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56941631.0,
+      "utc_client": "2026-10-18T14:46:42.409000+00:00",
+      "source_id": 12837,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56946447.0,
+      "utc_client": "2026-10-18T14:46:47.225000+00:00",
+      "source_id": 12866,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56946447.0,
+      "utc_client": "2026-10-18T14:46:47.225000+00:00",
+      "source_id": 12866,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56946448.0,
+      "utc_client": "2026-10-18T14:46:47.226000+00:00",
+      "source_id": 12871,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56946448.0,
+      "utc_client": "2026-10-18T14:46:47.226000+00:00",
+      "source_id": 12871,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56952993.0,
+      "utc_client": "2026-10-18T14:46:53.771000+00:00",
+      "source_id": 12746,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56952994.0,
+      "utc_client": "2026-10-18T14:46:53.772000+00:00",
+      "source_id": 12746,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56952995.0,
+      "utc_client": "2026-10-18T14:46:53.773000+00:00",
+      "source_id": 12900,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56952995.0,
+      "utc_client": "2026-10-18T14:46:53.773000+00:00",
+      "source_id": 12900,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56956966.0,
+      "utc_client": "2026-10-18T14:46:57.744000+00:00",
+      "source_id": 12934,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56956966.0,
+      "utc_client": "2026-10-18T14:46:57.744000+00:00",
+      "source_id": 12934,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56956967.0,
+      "utc_client": "2026-10-18T14:46:57.745000+00:00",
+      "source_id": 12905,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 56956967.0,
+      "utc_client": "2026-10-18T14:46:57.745000+00:00",
+      "source_id": 12905,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57005131.0,
+      "utc_client": "2026-10-18T14:47:45.909000+00:00",
+      "source_id": 12939,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57005131.0,
+      "utc_client": "2026-10-18T14:47:45.909000+00:00",
+      "source_id": 12939,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57005132.0,
+      "utc_client": "2026-10-18T14:47:45.910000+00:00",
+      "source_id": 13125,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57005132.0,
+      "utc_client": "2026-10-18T14:47:45.910000+00:00",
+      "source_id": 13125,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57027758.0,
+      "utc_client": "2026-10-18T14:48:08.536000+00:00",
+      "source_id": 13247,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57027759.0,
+      "utc_client": "2026-10-18T14:48:08.537000+00:00",
+      "source_id": 13247,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57027759.0,
+      "utc_client": "2026-10-18T14:48:08.537000+00:00",
+      "source_id": 13252,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57027760.0,
+      "utc_client": "2026-10-18T14:48:08.538000+00:00",
+      "source_id": 13252,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57034726.0,
+      "utc_client": "2026-10-18T14:48:15.504000+00:00",
+      "source_id": 13287,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57034726.0,
+      "utc_client": "2026-10-18T14:48:15.504000+00:00",
+      "source_id": 13287,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57034727.0,
+      "utc_client": "2026-10-18T14:48:15.505000+00:00",
+      "source_id": 13292,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57034727.0,
+      "utc_client": "2026-10-18T14:48:15.505000+00:00",
+      "source_id": 13292,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57039385.0,
+      "utc_client": "2026-10-18T14:48:20.163000+00:00",
+      "source_id": 13326,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57039385.0,
+      "utc_client": "2026-10-18T14:48:20.163000+00:00",
+      "source_id": 13331,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57039385.0,
+      "utc_client": "2026-10-18T14:48:20.163000+00:00",
+      "source_id": 13331,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57039386.0,
+      "utc_client": "2026-10-18T14:48:20.164000+00:00",
+      "source_id": 13326,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790946.0,
+      "utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "source_id": 13309,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790946.0,
+      "utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "source_id": 13309,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790946.0,
+      "utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "source_id": 13394,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790946.0,
+      "utc_client": "2026-10-18T15:00:51.724000+00:00",
+      "source_id": 13394,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790947.0,
+      "utc_client": "2026-10-18T15:00:51.725000+00:00",
+      "source_id": 13130,
+      "source_type": "SOCKET",
+      "event": "SOCKET_CLOSED",
+      "phase": "PHASE_NONE"
+    },
+    {
+      "ticks_ms": 57790947.0,
+      "utc_client": "2026-10-18T15:00:51.725000+00:00",
+      "source_id": 13130,
+      "source_type": "SOCKET",
+      "event": "SOCKET_POOL_CLOSING_SOCKET",
+      "phase": "PHASE_NONE"
+    }
+  ],
+  "distinct_socket_ids_lifetime": 49,
+  "limits": "Default NetLog: byte counts, no raw chunk framing. Numeric socket IDs are browser lifetime IDs, not simultaneous server sockets/TX buffers. No private headers, payloads, endpoints, or unrelated browser traffic."
+}

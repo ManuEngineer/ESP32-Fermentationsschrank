@@ -1,0 +1,101 @@
+{
+  "clock_rule": "UTC and host monotonic are assistant receipt/reference timestamps, not measured physical browser action times. Visible client clocks have minute precision; timezone/seconds are not visible. Europe/Zurich conversion is contextual, not an image fact.",
+  "preparation_utc": "2026-10-16T11:57:53.881741+00:00",
+  "preparation_host_monotonic": 343078.844061511,
+  "events": [
+    {
+      "event": "B0_READY",
+      "received_utc": "2026-10-16T12:04:12.801207+00:00",
+      "received_host_monotonic": 343457.763257861
+    },
+    {
+      "event": "UNIFI_SCREENSHOT_RECEIVED",
+      "received_utc": "2026-10-16T12:05:46.837315+00:00"
+    },
+    {
+      "event": "B1A_ANONYMOUS_SCREENSHOT",
+      "received_utc": "2026-10-16T12:07:35.990338+00:00",
+      "received_host_monotonic": 343660.95235854
+    },
+    {
+      "event": "B1B_AUTHENTICATED_SCREENSHOT",
+      "received_utc": "2026-10-16T12:11:42.875720+00:00",
+      "received_host_monotonic": 343907.837702083,
+      "client_clock_display": "2026-10-16 14:09; timezone/seconds not visible"
+    },
+    {
+      "event": "B2_FIRST_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:18:20.050556+00:00",
+      "received_host_monotonic": 344305.012537467,
+      "client_clock_display": "14:16; seconds/timezone not visible"
+    },
+    {
+      "event": "B2_SECOND_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:27:02.476874+00:00",
+      "received_host_monotonic": 344827.438854442,
+      "client_clock_display": "2026-10-16 14:24; seconds/timezone not visible",
+      "planned_checkpoint_local": "14:21:43 Europe/Zurich",
+      "timing_classification": "Late checkpoint; do not label as exact +10 min"
+    },
+    {
+      "event": "B2_FINAL_SCREENSHOT_AND_OWNER_B3_START",
+      "received_utc": "2026-10-16T12:37:53.037866+00:00",
+      "received_host_monotonic": 345477.999861564,
+      "client_clock_display": "2026-10-16 14:35; seconds/timezone not visible"
+    },
+    {
+      "event": "B3_OWNER_DECLARED_END",
+      "received_utc": "2026-10-16T13:02:48.325317+00:00",
+      "received_host_monotonic": 346973.287296506
+    },
+    {
+      "event": "B4_REACHABILITY_FAILURE_OWNER_REPORT_AND_SCREENSHOTS",
+      "received_utc": "2026-10-16T13:08:13.887677+00:00",
+      "received_host_monotonic": 347298.849659087,
+      "client_clock_display": "2026-10-16 15:06; screenshot seconds/timezone not shown"
+    },
+    {
+      "event": "OWNER_STOP_AND_MANUAL_RELOAD_CONFIRMED",
+      "received_utc": "2026-10-16T13:09:38.627236+00:00",
+      "received_host_monotonic": 347383.589257104
+    }
+  ],
+  "B2": {
+    "start_utc": "2026-10-16T12:11:42.875720+00:00",
+    "start_host_monotonic": 343907.837702083,
+    "planned_seconds": 900,
+    "basis": "Owner screenshot establishes authenticated open tab; receipt marker begins prospective observation; no automatic browser query",
+    "end_reference_utc": "2026-10-16T12:37:53.037866+00:00",
+    "end_reference_host_monotonic": 345477.999861564,
+    "elapsed_receipt_markers_seconds": 1570.1621594810276,
+    "result": "OWNER_SCREENSHOT_PARTIAL; extended beyond planned 900s; no all-request PASS"
+  },
+  "B3": {
+    "owner_instruction": "beginne die 20 minuten jetzt",
+    "start_reference_utc": "2026-10-16T12:37:53.037866+00:00",
+    "start_reference_host_monotonic": 345477.999861564,
+    "reference_basis": "Host receipt of Owner start declaration, not measured tab-close instant",
+    "exact_tab_closed_time": "NOT_SUPPLIED",
+    "planned_seconds": 1200,
+    "earliest_reopen_reference_utc": "2026-10-16T12:57:53.037866+00:00",
+    "earliest_reopen_local": "2026-10-16T14:57:53.037866+02:00",
+    "constraints": "No ESP32 requests, probes, refresh or extra clients; UniFi observation only; no logout",
+    "end_owner_receipt_utc": "2026-10-16T13:02:48.325317+00:00",
+    "end_owner_receipt_host_monotonic": 346973.287296506,
+    "elapsed_reference_seconds": 1495.2874349419726
+  },
+  "B4": {
+    "result": "HOLD_INITIAL_REACHABILITY_FAILURE",
+    "initial_transport_outcome": "FAIL_OBSERVED",
+    "later_shell_outcome": "HTTP_200_LOGIN_PAGE_VISIBLE",
+    "full_error_class": "NOT_PROVEN_TRUNCATED_NET_ERR_AD",
+    "post_reconnect_login": "NOT_RUN_OR_PROVEN",
+    "planned_600s_polling": "NOT_RUN_AFTER_STOP",
+    "stop_instruction": "Close device tab now; no login/reload/retry/reset/flash/device query",
+    "owner_tab_closed_confirmation": "CONFIRMED_OWNER_REPORTED",
+    "manual_retry_after_initial_failure": "CONFIRMED_OWNER_REPORTED; exact count not supplied",
+    "stop_boundary_deviation": "Owner reloaded or revisited after first reachability failure; do not claim immediate stop at first failure"
+  },
+  "stop_instruction_reference_utc": "2026-10-16T13:08:13.887677+00:00",
+  "stop_instruction_reference_host_monotonic": 347298.849659087
+}

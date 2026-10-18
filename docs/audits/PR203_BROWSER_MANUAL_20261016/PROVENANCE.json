@@ -1,0 +1,22 @@
+{
+  "source_artifact_hashes": {
+    "RUN.json": "894e2a2fd37c14d0bbb8509e0fceeac4b97d3c53ceaafd1c2db017366ce25b28",
+    "B3_UART_WINDOW.log": "cdd73340f46e6b8394959123905b81d86b6b5a3be8dedb0fd3c200182c368ae8",
+    "MANUAL_UART_WINDOW.log": "ec9cc2f65aa2c641f383c41d4e43964b66de0c42e93870dced341d19dbb4c215",
+    "MANUAL_UART_THROUGH_CLOSE.log": "6cdf11c392886732cba38ac5aa25a6cfd413db44d518ffa894fe1e38edb45be9",
+    "UART_WINDOW_SUMMARY.json": "aadaef27fe8b4961107f7a7aa4a78eb5ddc5f826eb7c0a92135b34f73209f32a"
+  },
+  "host_postprocessing_python": "3.13.5",
+  "source_handling": "Frozen local UART extracts came from the already-running G2-Web capture. No serial open/close/reset or new device query by the agent; original running capture was not modified.",
+  "public_derivatives": "RUN.json copied as OWNER_LOG.json; field-selected screenshot observations/timeline; heartbeat rows parsed to CSV; non-heartbeat payloads retained with CRLF normalized to LF. No invented request rows or latency percentiles.",
+  "screenshots": "Owner supplied screenshots inline in chat. No image files were exposed in the workspace attachment directory; no local file, SHA-256, or repository screenshot publication is asserted. Public evidence contains visual transcriptions; original screenshots remain in the conversation. This limits independently hash-bound image verification.",
+  "privacy": "No passwords, cookies, tokens, HTTP headers/bodies, HAR, browser profile, complete UART history or private flash readbacks are included. Existing C5 identity is referenced from the earlier sanitized IMAGE_IDENTITY.json.",
+  "limitations": [
+    "Raw browser network archive unavailable; cannot assert 100% of all browser requests succeeded",
+    "Exact client close/reopen times and initial full transport error class unavailable",
+    "B2 and B3 exceeded planned durations; receipt-based durations do not equal exactly measured browser exposure",
+    "Owner confirmed manual reload/revisit after first B4 failure; no claim of immediate stop at that first error",
+    "Screenshot transcription is not a full network trace; exact error text is not guessed",
+    "Earlier check may show a slightly negative heartbeat age because check time preceded file scan completion; final summary uses a frozen bounded interval and does not use those ages as timing proof"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "product_pr_head_before_evidence": "55b41a5bb60f9de048f2a28e4684fa13ed438347",
+  "product_source": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "diagnostic_monitor_commit": "893f3bb73a50b484ce79b3b80722873452d998fc",
+  "monitor_hashes": {
+    "g1_capture.py": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "app_sha256": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+  "elf_sha256": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601",
+  "c5_fallback_sha256": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633",
+  "gate_id": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "main_stack_policy": "g2-trend",
+  "raw_uart": {
+    "private": true,
+    "bytes": 51368,
+    "sha256": "f56fcd65d5c90b77163728b43e74ea90f93e28f2016ef59de141a8a97ab8f1fa"
+  },
+  "publication": {
+    "CAPTURE.json": "Byte-exact monitor summary; UART-only result, not browser or overall test PASS",
+    "UART_CHUNKS.jsonl": "Byte-exact time/length metadata, no UART payload",
+    "UART_BOOT_PROOF.txt": "Selected reset/source/profile/actor/ready/first-two-heartbeat lines; LF normalization",
+    "UART_RESOURCES.txt": "All six resource lines; LF normalization; no private network names/addresses",
+    "UART_HTTP_ERROR_CONTEXT.txt": "Original HTTPD event text plus selected adjacent heartbeats; omitted other lines marked; LF normalization",
+    "OWNER_SCREENSHOT_01.png": "Original user-supplied screenshot bytes, inspected: empty password field; no credentials; PNG Software=Greenshot, no EXIF/private metadata",
+    "OWNER_SCREENSHOT_02.png": "Original user-supplied screenshot bytes, inspected: logged-in UI, no credentials; PNG Software=Greenshot, no EXIF/private metadata",
+    "excluded": "Complete raw UART, host socket details, readbacks/fallback binaries and private file paths remain local. No HAR/NetLog exists for this attempt."
+  }
+}

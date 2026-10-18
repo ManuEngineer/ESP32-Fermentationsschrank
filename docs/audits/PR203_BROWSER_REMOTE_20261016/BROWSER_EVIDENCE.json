@@ -1,0 +1,81 @@
+{
+  "result": "HOLD",
+  "stop_reason": "unexpected-http-status-404-/favicon.ico",
+  "product_pr_head_at_test": "0374797d1bd15bd72363409174487d44d8188f6b",
+  "approved_plan": "8ce57d78f1544728bf1868d965551d3de7c302f0",
+  "last_proven_image": {
+    "source": "162a6670526a10b2fd957fe90ab665a1fae837b7",
+    "profile": "esp32_release C5 pure product",
+    "app_sha256": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633",
+    "elf_sha256": "45bc809ed67b19d49f1f6bcc89386c8cfc83f3e7e103729e237293cfac5403e3",
+    "app_bytes": 1756528,
+    "evidence": "Existing 2026-10-15 app flash/readback; app prefix rehashed offline; existing UART source line matches. No new identification request."
+  },
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/149.0.7827.55",
+    "revision": "@3188f8a607ae7e067593be8aab7f02d2451fec07",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+    "jsVersion": "14.9.207.21"
+  },
+  "browser_binary_sha256": "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801",
+  "network": "same local LAN, existing route; no scan or ping",
+  "known_local_client_connections_before_start": 0,
+  "other_clients": "NOT_EXCLUDED; Owner environment information not available at stop",
+  "unifi": "NOT_AVAILABLE_FOR_TEST_WINDOW",
+  "marks": [
+    {
+      "kind": "test-start",
+      "phase": "PREPARE",
+      "utc": "2026-10-16T11:45:56.825213+00:00",
+      "epoch": 1792151156.8252356,
+      "monotonic": 342361.787205615
+    },
+    {
+      "kind": "browser-created-open-shell",
+      "phase": "B0",
+      "utc": "2026-10-16T11:45:57.720820+00:00",
+      "epoch": 1792151157.7208533,
+      "monotonic": 342362.682823699
+    },
+    {
+      "kind": "stop-no-retry",
+      "phase": "B0",
+      "utc": "2026-10-16T11:45:58.254553+00:00",
+      "epoch": 1792151158.2545726,
+      "monotonic": 342363.216542922
+    }
+  ],
+  "end_utc": "2026-10-16T11:45:58.370439+00:00",
+  "end_monotonic": 342363.332453663,
+  "elapsed_including_browser_setup_seconds": 1.5452480479725637,
+  "phase_results": {
+    "B0": "HOLD: shell 200, 3 expected anonymous 401, unexpected favicon 404",
+    "B1": "NOT_RUN: no login submitted",
+    "B2": "NOT_RUN: 0/900 s",
+    "B3": "NOT_RUN: 0/1200 s",
+    "B4": "NOT_RUN: 0/600 s"
+  },
+  "actual_requests": "5 GET requests only; no login, logout, mutation, scripted retry, new UART open, reset or flash",
+  "snapshot": {
+    "name": "STOP_browser_state",
+    "utc": "2026-10-16T11:45:58.200410+00:00",
+    "monotonic": 342363.162393363,
+    "state": {
+      "loginVisible": true,
+      "boardHidden": true,
+      "connection": "Offline",
+      "connectionState": "offline",
+      "mode": "",
+      "temperatures": [],
+      "alerts": [],
+      "lang": "de",
+      "navLanguage": "de-DE"
+    }
+  },
+  "heap_recovery": "NOT_PROVEN; no R_ref or recovery phase",
+  "heap_stack_measurements_in_browser_window": "NOT_AVAILABLE: existing UART window has heartbeats and 404 warning only",
+  "f4_qualification": "NOT_PROVEN; thresholds unchanged 13312/16640",
+  "g2_web": "HOLD_INCOMPLETE; C5 image confirmed by existing evidence; no G2_PASS or R1_U_PASS",
+  "uart_capture_handling": "Existing capture read as a file only; no port opened, closed or reset by this task."
+}

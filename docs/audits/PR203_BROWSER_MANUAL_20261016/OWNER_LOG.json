@@ -1,0 +1,527 @@
+{
+  "status": "HOLD_STOP_CONFIRMED_NO_FOLLOWUP",
+  "created_utc": "2026-10-16T11:57:53.881741+00:00",
+  "host_monotonic": 343078.844061511,
+  "authorization": "Owner explicitly approved one new manual B0-B4 run with known favicon 404 documented as an allowed ancillary-resource finding; all other unexpected failures stop.",
+  "owner_reply": "ja bestätige ich, da es so wie mir ist noch gar kein favicon gibt erstaunt der fehler nicht.",
+  "planned_browser": {
+    "source": "OWNER_REPORTED",
+    "product": "Google Chrome 154.0.8037.97 (Official Build, x86_64)",
+    "environment": "Selkies Docker on Dev host; direct home LAN, no VPN"
+  },
+  "device_host": "192.168.1.68",
+  "profile_seconds": {
+    "B2": 900,
+    "B3": 1200,
+    "B4": 600
+  },
+  "known_exceptions": [
+    "GET /favicon.ico: 404",
+    "expected anonymous or expired-session GET authentication 401 before normal login"
+  ],
+  "other_clients": "Owner confirmed B0 preparation ready; no separate inventory/details supplied",
+  "unifi": {
+    "evidence": "OWNER_SUPPLIED_INLINE_SCREENSHOT",
+    "received_utc": "2026-10-16T12:05:46.837248+00:00",
+    "received_host_monotonic": 343551.799276164,
+    "screenshot_capture_utc": "NOT_SUPPLIED",
+    "screenshot_capture_timezone": "NOT_SUPPLIED",
+    "original_image_location": "Chat attachment; no local file/hash asserted",
+    "client": {
+      "ip": "192.168.1.68",
+      "ap_name": "AC Pro Wohnzimmer",
+      "channel": 1,
+      "band_GHz": 2.4,
+      "bandwidth_MHz": 20,
+      "mimo": "1x1",
+      "signal_dBm": -86,
+      "tx_retries_percent": 0,
+      "activity_display": "24.3 KB"
+    },
+    "ap_health": {
+      "airtime_percent": 31,
+      "external_interference_percent": 0,
+      "tx_retries_percent": 27
+    },
+    "site_health_display": {
+      "average_latency_ms": 0,
+      "packet_loss_percent": 0,
+      "scope": "Controller aggregate; does not establish device HTTP latency or request success"
+    },
+    "visible_event_dates": "Oct 15; year/timezone not displayed in screenshot; historical connect/disconnect entries",
+    "limits": [
+      "No predeclared RSSI acceptance threshold",
+      "Client and AP retry percentages have different scopes",
+      "No causal inference or browser result from this screenshot",
+      "Capture time not established from receipt time"
+    ]
+  },
+  "constraints": [
+    "one manual browser and one device tab",
+    "unchanged shell polling",
+    "no scripted extra device requests",
+    "no new serial open/reset/flash",
+    "no program/service/factory reset actions"
+  ],
+  "raw_evidence_policy": "No passwords, cookies, CSRF values, authorization headers or request/response bodies in chat or public evidence.",
+  "owner_events": [
+    {
+      "event": "B0_READY",
+      "owner_reply": "B0 bereit",
+      "received_utc": "2026-10-16T12:04:12.801207+00:00",
+      "received_host_monotonic": 343457.763257861,
+      "physical_action_time": "NOT_SUPPLIED",
+      "evidence_grade": "OWNER_REPORTED",
+      "scope": "Preparation ready; no device navigation confirmed yet"
+    },
+    {
+      "event": "UNIFI_SCREENSHOT_RECEIVED",
+      "received_utc": "2026-10-16T12:05:46.837315+00:00",
+      "browser_B1a_outcome": "NOT_SUPPLIED",
+      "device_actions_by_agent": "NONE"
+    },
+    {
+      "event": "B1A_ANONYMOUS_SCREENSHOT",
+      "received_utc": "2026-10-16T12:07:35.990338+00:00",
+      "received_host_monotonic": 343660.95235854,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOT",
+      "screenshot_capture_time": "NOT_SUPPLIED",
+      "observations": {
+        "login_page_visible": true,
+        "language_visible": "English",
+        "password_field_empty": true,
+        "root_http_status": 200,
+        "root_duration_display_s": 1.63,
+        "visible_api_status": 401,
+        "visible_api_duration_range_ms": [
+          182,
+          531
+        ],
+        "network_total_requests_display": 34,
+        "console_error_counter_display": 33,
+        "keep_log_enabled_network_and_console": true,
+        "disable_cache_unchecked": true,
+        "network_throttling": "No throttling",
+        "connection_label_before_login": "Offline"
+      },
+      "limits": [
+        "Only visible rows reviewed; all 34 records not individually available",
+        "Console error counter alone does not classify every entry",
+        "No absolute screenshot time",
+        "No login submitted or authenticated state proven yet"
+      ]
+    },
+    {
+      "event": "B1B_AUTHENTICATED_SCREENSHOT",
+      "received_utc": "2026-10-16T12:11:42.875720+00:00",
+      "received_host_monotonic": 343907.837702083,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "client_clock_display": "2026-10-16 14:09; timezone/seconds not visible",
+      "observations": {
+        "login_http_status": 200,
+        "login_duration_display_s": 2.82,
+        "reloaded_shell_status": 200,
+        "reloaded_shell_duration_display_s": 1.53,
+        "visible_post_login_api_status": 200,
+        "visible_post_login_api_duration_range_ms": [
+          233,
+          523
+        ],
+        "programs_http_status": 200,
+        "programs_duration_display_ms": 154,
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "network_request_counter_display": 164,
+        "console_error_counter_display": 150,
+        "pre_login_401_rows_preserved": true
+      },
+      "limits": [
+        "Visible rows do not constitute complete request history",
+        "Console counter cannot classify all entries",
+        "No screenshot timestamp with timezone/seconds",
+        "Original inline images remain in chat; no local image hash asserted"
+      ]
+    },
+    {
+      "event": "B2_FIRST_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:18:20.050556+00:00",
+      "received_host_monotonic": 344305.012537467,
+      "elapsed_since_B2_start_at_receipt_s": 397.1748353840085,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "client_clock_display": "14:16; seconds/timezone not visible",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "all_visible_http_statuses": 200,
+        "long_successful_responses_display_s": {
+          "status": 8.23,
+          "temperatures": 10.99,
+          "alerts": 12.44
+        },
+        "other_visible_duration_range_ms": [
+          279,
+          1690
+        ],
+        "network_request_counter_display": 332,
+        "console_error_counter_display": 150,
+        "console_counter_change_since_prior_screenshot": 0
+      },
+      "classification": "PARTIAL_OBSERVATION; successful responses with latency findings, no new visible error",
+      "limits": [
+        "No complete HTTP log or all-request success claim",
+        "Long durations are displayed browser timings, not proven socket timeout exceptions",
+        "No new latency acceptance threshold",
+        "Screenshot action time is not host receipt time"
+      ]
+    },
+    {
+      "event": "B2_SECOND_CHECKPOINT_SCREENSHOTS",
+      "received_utc": "2026-10-16T12:27:02.476874+00:00",
+      "received_host_monotonic": 344827.438854442,
+      "elapsed_since_B2_start_at_receipt_s": 919.6011523589841,
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS",
+      "client_clock_display": "2026-10-16 14:24; seconds/timezone not visible",
+      "planned_checkpoint_local": "14:21:43 Europe/Zurich",
+      "timing_classification": "Late checkpoint; do not label as exact +10 min",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "all_visible_http_statuses": 200,
+        "visible_duration_range_ms": [
+          234,
+          609
+        ],
+        "network_request_counter_display": 575,
+        "console_error_counter_display": 150,
+        "console_counter_change_since_prior_screenshot": 0
+      },
+      "limits": [
+        "Visible rows only; no full all-request success proof",
+        "Screenshots do not provide exact capture seconds or a full HTTP timing series"
+      ]
+    },
+    {
+      "event": "B2_FINAL_SCREENSHOT_AND_OWNER_B3_START",
+      "owner_reply": "beginne die 20 minuten jetzt",
+      "received_utc": "2026-10-16T12:37:53.037866+00:00",
+      "received_host_monotonic": 345477.999861564,
+      "client_clock_display": "2026-10-16 14:35; seconds/timezone not visible",
+      "evidence_grade": "OWNER_SUPPLIED_SCREENSHOTS_AND_START_DECLARATION",
+      "observations": {
+        "connection": "Online",
+        "home_mode": "Ready",
+        "temperatures": [
+          "Cabinet: -- Stale",
+          "Product: -- Stale",
+          "Cooling: -- Stale"
+        ],
+        "alerts_display": 0,
+        "completed_visible_http_statuses": 200,
+        "pending_visible_requests": [
+          "temperatures",
+          "alerts"
+        ],
+        "long_successful_durations_display_s": [
+          23.99,
+          22.51,
+          12.06,
+          9.09,
+          6.49,
+          4.69,
+          4.54,
+          4.39,
+          4.31,
+          4.3,
+          4.25,
+          3.98
+        ],
+        "network_request_counter_display": 773,
+        "console_error_counter_display": 150
+      },
+      "limits": [
+        "Pending is not proof of timeout",
+        "Intentional tab closure may cancel pending requests; distinguish from unexpected transport failures",
+        "No complete all-request success evidence",
+        "Screenshot shows pre-close tab; exact physical closure time not supplied"
+      ]
+    },
+    {
+      "event": "B3_OWNER_DECLARED_END",
+      "owner_reply": "B3 beendet",
+      "received_utc": "2026-10-16T13:02:48.325317+00:00",
+      "received_host_monotonic": 346973.287296506,
+      "exact_action_time": "NOT_SUPPLIED"
+    },
+    {
+      "event": "B4_REACHABILITY_FAILURE_OWNER_REPORT_AND_SCREENSHOTS",
+      "owner_reply": "zuerst habe ich die Seite nciht erreicht, aber als ich ein screenshot machen wollte ging es. ich konnte das andere nicht abfotografieren.",
+      "received_utc": "2026-10-16T13:08:13.887677+00:00",
+      "received_host_monotonic": 347298.849659087,
+      "client_clock_display": "2026-10-16 15:06; screenshot seconds/timezone not shown",
+      "evidence_grade": "OWNER_REPORT_AND_SCREENSHOTS",
+      "observations": {
+        "login_page_eventually_visible": true,
+        "connection_before_login": "Offline",
+        "password_field_empty": true,
+        "visible_document_requests": [
+          {
+            "status": "canceled",
+            "duration_display_s": 2.04
+          },
+          {
+            "status": "failed",
+            "error_text_visible": "net::ERR_AD...",
+            "duration_display_s": 3.08
+          },
+          {
+            "status": "canceled",
+            "duration_display_s": 2.03
+          },
+          {
+            "status": "canceled",
+            "duration_display_s": 3.08
+          },
+          {
+            "status": 200,
+            "duration_display_s": 4.53
+          }
+        ],
+        "post_shell_anonymous_api_statuses_visible": 401,
+        "pending_status_request_visible": true,
+        "request_count_display": 31,
+        "console_error_counter_display": 11
+      },
+      "limits": [
+        "Exact first error screen not photographed; network screenshot still shows failed request",
+        "Full net::ERR_AD... text not visible; do not expand error class",
+        "Multiple document records visible; manual versus browser-generated cancellation/navigation is NOT_PROVEN",
+        "Later 200 does not erase initial reachability failure",
+        "No login during B4 reported or demonstrated"
+      ]
+    },
+    {
+      "event": "OWNER_STOP_AND_MANUAL_RELOAD_CONFIRMED",
+      "received_utc": "2026-10-16T13:09:38.627236+00:00",
+      "received_host_monotonic": 347383.589257104,
+      "owner_tab_state": "ESP32-Tab geschlossen; keine weiteren Geräteaktionen",
+      "owner_navigation_reconstruction": "Seite manuell neu geladen oder erneut aufgerufen",
+      "evidence_grade": "OWNER_REPORTED",
+      "limits": [
+        "Exact reload count and timing not supplied",
+        "Immediate stop at first B4 failure did not occur; manual reload/renavigation preceded reporting",
+        "No further device action authorized or executed by agent"
+      ]
+    }
+  ],
+  "unifi_observations": [
+    {
+      "received_utc": "2026-10-16T12:11:42.875720+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -86,
+      "client_tx_retries_percent": 44,
+      "ap_tx_retries_percent": 36,
+      "ap_airtime_percent": 31,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; year/timezone not shown",
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:18:20.050556+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 30,
+      "ap_airtime_percent": 32,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:27:02.476874+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 42,
+      "ap_airtime_percent": 34,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T12:37:53.037866+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 42,
+      "ap_airtime_percent": 34,
+      "external_interference_percent": 0,
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T13:02:48.325317+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -87,
+      "client_tx_retries_percent": 46,
+      "ap_tx_retries_percent": 13,
+      "ap_airtime_percent": 32,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; no newer event visible in screenshot",
+      "causality": "NOT_PROVEN"
+    },
+    {
+      "received_utc": "2026-10-16T13:08:13.887677+00:00",
+      "source": "OWNER_SUPPLIED_SCREENSHOT",
+      "capture_utc": "NOT_SUPPLIED",
+      "ap": "AC Pro Wohnzimmer",
+      "signal_dBm": -84,
+      "client_tx_retries_percent": 0,
+      "ap_tx_retries_percent": 11,
+      "ap_airtime_percent": 31,
+      "external_interference_percent": 0,
+      "event_log_latest_visible": "Oct 15 22:23:30; no newer event visible",
+      "causality": "NOT_PROVEN; controller screenshot does not establish transport failure cause"
+    }
+  ],
+  "existing_uart_check_before_B2": {
+    "read_utc": "2026-10-16T12:11:42.875720+00:00",
+    "read_host_monotonic": 343907.837702083,
+    "existing_file_records_since_manual_preparation": 836,
+    "anomaly_markers": [],
+    "last_heartbeat_host_monotonic": 343907.05598,
+    "last_heartbeat_age_s": 0.7817220829892904,
+    "max_observed_heartbeat_gap_s": 1.3574360000202432,
+    "scope": "Existing file only; no serial or device request"
+  },
+  "B2": {
+    "start_utc": "2026-10-16T12:11:42.875720+00:00",
+    "start_host_monotonic": 343907.837702083,
+    "planned_seconds": 900,
+    "basis": "Owner screenshot establishes authenticated open tab; receipt marker begins prospective observation; no automatic browser query",
+    "end_reference_utc": "2026-10-16T12:37:53.037866+00:00",
+    "end_reference_host_monotonic": 345477.999861564,
+    "elapsed_receipt_markers_seconds": 1570.1621594810276,
+    "result": "OWNER_SCREENSHOT_PARTIAL; extended beyond planned 900s; no all-request PASS"
+  },
+  "B2_existing_uart_checks": [
+    {
+      "checked_utc": "2026-10-16T12:18:20.050556+00:00",
+      "existing_file_records": 400,
+      "anomaly_markers": [],
+      "last_heartbeat_age_s": 0.6816274669836275,
+      "max_observed_heartbeat_gap_s": 1.2574500000337139,
+      "scope": "Existing UART file only; no port or device request"
+    },
+    {
+      "checked_utc": "2026-10-16T12:27:02.476874+00:00",
+      "existing_file_records": 922,
+      "anomaly_markers": [],
+      "last_heartbeat_age_s": -0.08529855799861252,
+      "max_observed_heartbeat_gap_s": 1.2574500000337139,
+      "scope": "Existing UART file only; no port or device request"
+    },
+    {
+      "checked_utc": "2026-10-16T12:37:53.135720+00:00",
+      "scope": "Already-existing UART file since B2 reference; no port or device request",
+      "anomaly_markers": [],
+      "last_heartbeat_age_at_scan_end_s": 0.16497914597857744,
+      "max_observed_heartbeat_gap_s": 1.2574500000337139
+    }
+  ],
+  "B3": {
+    "owner_instruction": "beginne die 20 minuten jetzt",
+    "start_reference_utc": "2026-10-16T12:37:53.037866+00:00",
+    "start_reference_host_monotonic": 345477.999861564,
+    "reference_basis": "Host receipt of Owner start declaration, not measured tab-close instant",
+    "exact_tab_closed_time": "NOT_SUPPLIED",
+    "planned_seconds": 1200,
+    "earliest_reopen_reference_utc": "2026-10-16T12:57:53.037866+00:00",
+    "earliest_reopen_local": "2026-10-16T14:57:53.037866+02:00",
+    "constraints": "No ESP32 requests, probes, refresh or extra clients; UniFi observation only; no logout",
+    "end_owner_receipt_utc": "2026-10-16T13:02:48.325317+00:00",
+    "end_owner_receipt_host_monotonic": 346973.287296506,
+    "elapsed_reference_seconds": 1495.2874349419726,
+    "existing_uart_check": {
+      "checked_utc": "2026-10-16T13:02:48.449304+00:00",
+      "receipt_utc": "2026-10-16T13:02:48.325317+00:00",
+      "receipt_host_monotonic": 346973.287296506,
+      "elapsed_reference_seconds": 1495.2874349419726,
+      "source": "Already-existing UART file only; no new serial or device request",
+      "records": 1493,
+      "heartbeats": 1491,
+      "first_heartbeat_host_monotonic": 345478.93094,
+      "last_heartbeat_host_monotonic": 346972.642987,
+      "last_heartbeat_age_at_scan_end_s": 0.7575441909721121,
+      "max_observed_heartbeat_gap_s": 1.3080820000031963,
+      "anomaly_markers": [],
+      "resource_records_in_window": [],
+      "limits": [
+        "Owner declared B3 ended; exact browser close instant not supplied",
+        "UART alone does not establish absence of all HTTP requests or other clients",
+        "No comparable R_ref or autonomous-program proof"
+      ],
+      "window_sha256": "cdd73340f46e6b8394959123905b81d86b6b5a3be8dedb0fd3c200182c368ae8"
+    }
+  },
+  "B4": {
+    "result": "HOLD_INITIAL_REACHABILITY_FAILURE",
+    "initial_transport_outcome": "FAIL_OBSERVED",
+    "later_shell_outcome": "HTTP_200_LOGIN_PAGE_VISIBLE",
+    "full_error_class": "NOT_PROVEN_TRUNCATED_NET_ERR_AD",
+    "post_reconnect_login": "NOT_RUN_OR_PROVEN",
+    "planned_600s_polling": "NOT_RUN_AFTER_STOP",
+    "stop_instruction": "Close device tab now; no login/reload/retry/reset/flash/device query",
+    "owner_tab_closed_confirmation": "CONFIRMED_OWNER_REPORTED",
+    "manual_retry_after_initial_failure": "CONFIRMED_OWNER_REPORTED; exact count not supplied",
+    "stop_boundary_deviation": "Owner reloaded or revisited after first reachability failure; do not claim immediate stop at first failure"
+  },
+  "stopped_reference_utc": "2026-10-16T13:08:13.887677+00:00",
+  "stopped_reference_host_monotonic": 347298.849659087,
+  "final_existing_uart_check": {
+    "scope": "Read of already-existing UART file; no port or device request",
+    "reference_window_utc": [
+      "2026-10-16T11:57:53.881741+00:00",
+      "2026-10-16T13:08:13.887677+00:00"
+    ],
+    "records": 4225,
+    "heartbeats": 4212,
+    "first_host_monotonic": 343076.963421,
+    "last_host_monotonic": 347298.548818,
+    "first_heartbeat_offset_from_start_s": -1.880640510993544,
+    "last_heartbeat_age_at_scan_end_s": 0.4753942629904486,
+    "max_observed_heartbeat_gap_s": 1.3574360000202432,
+    "anomaly_markers": [],
+    "resource_records": [],
+    "window_sha256": "ec9cc2f65aa2c641f383c41d4e43964b66de0c42e93870dced341d19dbb4c215",
+    "limits": [
+      "Absence of markers applies only to captured window",
+      "No inference of heap recovery or stack reserve without resource samples",
+      "No fresh boot or serial connection by this task"
+    ]
+  }
+}

@@ -261,7 +261,9 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-6656 Bytes (Ownerentscheid fuer #27, `html.reserve` auf diese Schranke).
+8192 Bytes (Ownerentscheid fuer #27, Gesamtlaenge aus besessenem Kopf und
+statischem Anhang; sie
+betrug bis zur Startseiten-Umsetzung 6656 Bytes, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
 (optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
@@ -365,6 +367,111 @@ verworfen und die Liste neu geladen, ohne automatische Mutation.
 
 Die Shell-JavaScript-Logik ist nativ nur als Text-/Zustandsvertrag getestet;
 ein ausfuehrender Browsertest ist `NOT_RUN`.
+
+## Shell-Transport und UI-Speicherreserve (RES-01)
+
+Umsetzungsstand: statischer Shell-Anhang und produktive Gate-/Hold-Anbindung
+sind softwareseitig umgesetzt ([Softwarebericht](audits/PR203_RES01_SOFTWARE_20261014.md)).
+Vorhandene F1-/Software- und native F4-Nachweise werden wiederverwendet.
+Ownerentscheid 18.10.2026: eine Person bedient lokal oder über einen Webclient;
+keine systematische gleichzeitige Web-/Touchkampagne. Anzeige, WLAN und HTTPD
+können intern dennoch gleichzeitig Heap beanspruchen. G1′ ist keine Pflicht
+von PR #203; die vorbereitete Kampagne wurde vor Ausführung storniert.
+Vollständige R1-Inbetriebnahme und Aktorqualifikation bleiben separat offen.
+
+`HttpResponse::staticBodySuffix` bezeichnet optionale, unveränderliche Bytes mit
+Prozesslebensdauer. Der Adapter sendet den besessenen `body` zuerst und danach
+den Anhang mit dem öffentlichen ESP-IDF-6.1-`httpd_resp_send_chunk`-API; genau ein
+leerer Chunk beendet eine erfolgreiche Antwort. Ein leerer Kopf wird ausgelassen.
+Nach dem ersten Sendefehler folgen keine weiteren Chunks, auch kein Terminator;
+der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
+`httpd_resp_send`-Pfad. Shell-Antworten verwenden damit Chunked Transfer statt
+Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
+
+Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
+6651-B-Anhang liegt im Flash. Die Provisionierungs-Shell teilt ebenfalls ihren
+konstanten Script-Anhang ab. Die 8192-B-Grenze gilt für Kopf **plus** Anhang.
+Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
+auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
+Status 503, `application/json; charset=utf-8` und
+`{"error":"web-shell-unavailable"}`. Es folgen keine HTML-/JS-Bytes.
+
+F4 ist eine begrenzte Risikominderung. Ein ausgelassener UI-Schritt friert die
+Anzeige ein und verarbeitet keinen Touch; Regelung und Safety laufen unabhängig
+weiter. Der Skip gibt den bestehenden Werksreset-Hold frei und sperrt dessen
+erneutes Starten bis zu tatsächlich beobachtetem physischem Loslassen nach dem
+letzten Skip und einem danach beobachteten neuen kalibrierten Kontakt. Alte
+NoContact-Zustände, Lock-Timeouts, Controllerfehler und fehlende Kalibrierung
+lösen diese Sperre nicht. Der vorhandene Factory-Reset-Flow bleibt alleiniger
+Owner der Stufen, der fünf Sekunden und des Resets, für Variante A und B.
+
+Die Owner-freigegebene Schwelle bleibt **vorläufig (`F4_THRESHOLD=PROVISIONAL`)**:
+104 Befehle × 64 B = 6656 B als struktureller ESP32-Vektorblock, Faktor 2
+ergibt 13312 B Skip-Schwelle, Wiederaufnahme ab 16640 B (25% Hysterese).
+`updateProductUi` prüft vor Snapshot/Touch/Renderkey; beim Skip verändert es
+weder Präsentationskopie noch zuletzt gerenderten Schlüssel. Eine Warnzeile
+`ui_skipped_low_memory` mit kumuliertem Zähler erscheint höchstens alle 10 s.
+Ein kausal isolierter Render-/Touch-Bedarf b und vollständige transiente Peaks
+sind nicht belegt; keine abschließende empirische Kalibrierung nach
+max(Vektorblock, b) × 2 und keine neue Schwelle aus gemeinsamen Heap-Schwankungen.
+`PROVISIONAL_PENDING_G1` bleibt nur als historischer Bezeichner im unveränderten
+Produktcode/alten Belegen erhalten; keine ausstehende PR-G1′-Pflicht daraus.
+Skip ist kein Bedarf 0 B. Hardware-Skip→Hold-/Pfad-Coverage bleibt NOT_PROVEN,
+allein deren Fehlen ist laut Ownerentscheid kein Mergeblocker dieses PRs.
+
+Die einmalige Vektorreserve ist durch eine nativ geprüfte strukturelle
+Befehlsobergrenze begrenzt. Sie begrenzt weder Strings/LVGL noch den gesamten
+Render-/Touch-Heapbedarf. Größter-Block-Prüfung und Hysterese reservieren keinen
+Speicher: konkurrierende WLAN-/HTTP-Allokationen können nach bestandenem Gate
+weiterhin OOM/Abort/Reset verursachen. Der Owner akzeptiert diese Restgefahr;
+jeder beobachtete Reset bleibt ein Testfehler. Native Logiknachweise sind keine
+Hardware-/OOM-Qualifikation. G1′ wird nicht ausgeführt; spätere freiwillige Diagnose
+oder vollständige R1-Inbetriebnahme erfordern eine eigene Ownerfreigabe. Der
+[RES-01-Plan §9](tasks/issue-27-res01-heap-hardening-plan.md)
+trennt die aktuelle PR-Einordnung von diesen offenen Nachweisen.
+C0=GO ist seit dem Ownerentscheid vom 2026-10-14 akzeptiert;
+Bootminimum 5228 B und lange GET-Gesamtdauern aus G0-R3 bleiben Hardwarebefunde.
+F2 ist nicht Teil dieses Umfangs. `ACTUATOR_RELEASE=NO`.
+
+## Startseite der angemeldeten Shell (R1-Slice, Issue #27)
+
+Die authentifizierte Shell zeigt statt der rohen JSON-Ausgabe eine lesbare,
+responsive Uebersicht, ausschliesslich aus den vorhandenen Read-only-APIs
+(`/api/v1/status`, `/temperatures`, `/alerts`; drei Abrufe, 5-s-Takt,
+unveraendert). Es gibt keinen neuen Endpunkt und keine Codec-Aenderung.
+
+- **Ueberschrift** nach `homeMode` (`standby`, `active-run`, `waiting`,
+  `completed`, `restricted`, `recovery`, `unavailable`) in Deutsch, Englisch
+  und Spanisch; ein unbekanntes Token wird unveraendert angezeigt.
+  `processState` wird nicht zusaetzlich lokalisiert.
+- **Temperaturen** in fester Reihenfolge Schrank, Produkt, Kuehlung: Wert mit
+  einer Nachkommastelle nur bei `valid`; sonst `--` mit Grund (`stale`,
+  `failed`); eine nicht gelieferte Rolle erscheint als nicht verfuegbar, nie
+  als `0`.
+- **Meldungen:** Zaehler und je aktiver Meldung der Code (Bindestriche zu
+  Leerzeichen) mit Schweregrad als Klasse sowie Marker quittiert/stumm; die
+  Meldungscodes selbst sind nicht lokalisiert.
+- **Verbindung und Alter:** `Offline` (nie ein gueltiger Snapshot), `Online`,
+  `Stale` mit `Stand vor N s`; die letzten Werte bleiben gedimmt sichtbar.
+  `N` ist das Alter des **Statusabrufs** seit dessen Beginn, keine Aussage ueber
+  das Alter des Sensor-Messwerts (dafuer gilt die Sensor-`quality`).
+- **Aktionssperre:** `P` (Gating) wird bei einem angewendeten Fehler und bei
+  Ueberschreiten von 15 s seit dem letzten Abrufbeginn `null`; die Anzeigekopie
+  (`LP`/`LT`) gibt nie Aktionen frei.
+- **Reihenfolge:** jeder Abruf erhaelt eine Generation (`G`); ein Ergebnis,
+  Erfolg wie Fehler, einer aelteren als der bereits angewendeten Generation
+  (`H`) wird verworfen, ohne Wirkung auf Stand, Alter oder Verbindungsstatus.
+- **Darstellung:** einspaltig mit grossen Bedienflaechen, ab 40 rem zwei
+  Spalten; dynamischer Text nur ueber `textContent`.
+- **Groessenschranke:** 8192 Bytes (Ownerentscheid D1 = A); die gemessene
+  authentifizierte Shell hat 8048 Bytes (Reserve 144 Bytes, inklusive der
+  19 Bytes fuer die breiteste Mutationssequenz).
+
+Nicht Teil dieses Slices (benoetigen neue API-Felder, eigener Slice): Geraete-
+und Programmname, Solltemperatur, verstrichene/verbleibende Zeit,
+Abschlussverhalten, Netzwerk-/Zeitstatus, Aktorstatus und die Mehrseiten-
+Navigation. Browsertests, Hardware-Heapmessung der groesseren Shell und die
+dynamischen Reihenfolge-/Stale-Szenarien sind `NOT_RUN`.
 
 ## Servicebereich in der Weboberflaeche
 

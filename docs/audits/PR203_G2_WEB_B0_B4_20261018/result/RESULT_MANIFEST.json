@@ -1,0 +1,158 @@
+{
+  "product_pr_head_before_results": "3c58352e406278dcf7b63d3fcb68f9387e77a16d",
+  "product_source": "a9a1156a1d44d4679957526bbc34a30be6422e4e",
+  "monitor_source_commit": "893f3bb73a50b484ce79b3b80722873452d998fc",
+  "artifact_hashes": {
+    "APP": "2d069d2db793359177379f492559c69fa949cb470351d57f60dd095889619305",
+    "ELF": "dca3cc664f3c143797f1caf29ca51bd3b9afe88eb081f914bec595f065523601",
+    "C5_FALLBACK": "ebb296c08b79045e6e081f328c9f5fd7e576e20722670968b131e722a8b36633"
+  },
+  "monitor_hashes": {
+    "g1_capture.py": "955f1c3b1cc12587a012b6ecae0740657cd991152090de801b0458944f9571c5",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "gate_id": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "main_stack_policy": "g2-trend",
+  "new_flash_or_build": false,
+  "new_port_open_on_18_oct": false,
+  "prior_installation_proof": "PR203_SINGLE_FLIGHT_G2_WEB_GATE_20261016.md; live identity from sole controlled boot17Oct and unchanged continuous recorder",
+  "initial_raw_prefix_matches_final_capture": true,
+  "private_originals": [
+    {
+      "artifact": "capture/uart_capture/STOP",
+      "bytes": 92,
+      "sha256": "150d099005a0eb5bfcf76687dd4b02a8388b892e19c768abb88bd1b7b8048190"
+    },
+    {
+      "artifact": "capture/uart_capture/capture.json",
+      "bytes": 1023,
+      "sha256": "5ad56648ed2ab2cfca384eb2a407e7c28b820d0358c264573bbd73ba70e7b189"
+    },
+    {
+      "artifact": "capture/uart_capture/host_sockets.jsonl",
+      "bytes": 486849,
+      "sha256": "0c8b0d5777c9043e0748a9247c665178b20b24bb4b248e6f4f839c5e0457bc12"
+    },
+    {
+      "artifact": "capture/uart_capture/uart.log",
+      "bytes": 10042078,
+      "sha256": "32a34b640d69f707be76c315dc256b84405c8f9fdd54803387432a307ba94eb1"
+    },
+    {
+      "artifact": "capture/uart_capture/uart_chunks.jsonl",
+      "bytes": 8606955,
+      "sha256": "d9260e161547e5a04754ed41c0a80cd6ee41fe92e702d168750a7d2f324ce8b1"
+    },
+    {
+      "artifact": "capture/uart_capture/uart_raw.bin",
+      "bytes": 7319020,
+      "sha256": "df8f4158006d993dfa6207e3cb16f1bd1bafdbe4e9ce1072bd3ae50160f24100"
+    },
+    {
+      "artifact": "browser/2026-10-18 15_56_17-PR203_FIRST_GET_20261017 \u2013 Datei-Explorer.png",
+      "bytes": 85513,
+      "sha256": "70ee808868a04fbf5c93f646573fc81cd73d2305aaa16b38188cb62fb0c5d972"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_03_34-PR203_FIRST_GET_20261017 \u2013 Datei-Explorer.png",
+      "bytes": 244806,
+      "sha256": "b628006d11d7255addd131d33af49ad2bacc31ff76d8bb4dd2ff163cb39bc055"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_12_57-.png",
+      "bytes": 283593,
+      "sha256": "37fc005a4d3722fc7bc9429a43c109772298aeb483ca4bd71760f2db943bc3f7"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_18_54-.png",
+      "bytes": 383171,
+      "sha256": "85d2d27dff1388fc21624a3bc2112548bd36192ed74887bfdf0175b08c93d5f6"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_25_30-.png",
+      "bytes": 280147,
+      "sha256": "5e9ff50a0c5d89025a9904a47e3a1e731e8bb0ed19df5d990a18dbfd5c203ec6"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_34_23-.png",
+      "bytes": 266015,
+      "sha256": "b13358c03d9388bf5abd773a4a00487eaba11ae40771f8d088cbf932052096bd"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_45_31-.png",
+      "bytes": 346498,
+      "sha256": "175f44fb1c202c050ffaec557e23fef167196650086553bcb1a0cb66fd9b03be"
+    },
+    {
+      "artifact": "browser/2026-10-18 16_46_40-.png",
+      "bytes": 304011,
+      "sha256": "e249e879ea4d88b8c8b5dc7a56ca99be56ec0a46621ba5d03f1591a4a52592ad"
+    },
+    {
+      "artifact": "browser/2026-10-18 17_01_47-.png",
+      "bytes": 276321,
+      "sha256": "96f98ed755bba1f967804fd2442eda499dbc544f49ff71405fbb1fb7c4056e77"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10.har",
+      "bytes": 58561,
+      "sha256": "043ab49dfe945d665d353d0848d3cd934b6fc3a039858b76885e738e1b3fda9e"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_03.har",
+      "bytes": 1410642,
+      "sha256": "1851c65874182d20a01133c526b7866c394999cf46246b7f5a8ac2f67c6ddc9a"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_04.har",
+      "bytes": 1661866,
+      "sha256": "c7ea718d5d18b5dea040cd2b60a6096c75dbbf98e50a82e7ce85f627599c00be"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_05.har",
+      "bytes": 1901143,
+      "sha256": "b2514a1894fa196d65f07873eebff0f71379c354d56b1c841b60e66e6223a441"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_06.har",
+      "bytes": 2200186,
+      "sha256": "3ca223949d041e6568bff67b785349638a5b09b6e144a1d362dcf16931662afc"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_07.har",
+      "bytes": 94115,
+      "sha256": "a4f2c712ed9534e4914dd2a895fb8b703f108ab183d5e7308980ab34ee675a3a"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_08.har",
+      "bytes": 348072,
+      "sha256": "ea5ccadb4ac4cabb5615a268aa3314a3d6a3d3c36af833a35b754bb68d059c0e"
+    },
+    {
+      "artifact": "browser/B1_ROOT_18_10_login.har",
+      "bytes": 337520,
+      "sha256": "192e8ef34367566b613c51933bd2b1c9d400d34eeb2980dc3608b54f56831073"
+    },
+    {
+      "artifact": "browser/B4_FINAL_18_10.har",
+      "bytes": 774918,
+      "sha256": "fe93b3ade6a552cb669543e2a8e057ba06ca18d860c14a8357166c74aea6dcce"
+    },
+    {
+      "artifact": "browser/chrome-net-export-log.json",
+      "bytes": 7386393,
+      "sha256": "9614c2f2a85a392182f5e5ca48ddf2de599fd406e1cc03700bac645c1eae82a4"
+    },
+    {
+      "artifact": "browser/chrome-net-export-log18.10.json",
+      "bytes": 16680261,
+      "sha256": "6c3a56c16f2bf9f59825091025e8f91a44093c18db9911f3939a0c92b8ff5df3"
+    }
+  ],
+  "offline_helpers": {
+    "inspect_har_offline.py": "b19ae2e15a3e8b53ee8fe3ff0479d42b8a015e0893e59ca4b405d65278d71aa9",
+    "inspect_netlog_offline.py": "65f156dc8ccf0c077b361ed715d98a6e760d1c3dae08a81cba2af15f981b206e",
+    "derive_uart_offline.py": "a436ba18395f73acd49de27949218acda5ff87e5b702ac203c0d7d70c5af0c05"
+  },
+  "privacy": "Raw HAR/NetLog/UART/screenshots/readbacks private and unchanged; public selected numeric/time/status/error/shape metadata only. No complete payloads, auth headers, client/network identities or private paths."
+}

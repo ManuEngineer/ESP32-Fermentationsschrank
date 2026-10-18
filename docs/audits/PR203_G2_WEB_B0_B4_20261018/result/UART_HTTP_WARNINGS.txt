@@ -1,0 +1,62 @@
+[selected context; unrelated lines omitted]
+[host_mono=523114.360183] I (100819671) app_main: heartbeat: safe test mode, uptime_ms=100818422
+[host_mono=523115.367066] I (100820681) app_main: heartbeat: safe test mode, uptime_ms=100819437
+[host_mono=523115.518487] W (100820801) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=523116.374255] I (100821691) app_main: heartbeat: safe test mode, uptime_ms=100820443
+[host_mono=523117.380638] I (100822701) app_main: heartbeat: safe test mode, uptime_ms=100821452
+
+[selected context; unrelated lines omitted]
+[host_mono=523154.462700] I (100859771) app_main: heartbeat: safe test mode, uptime_ms=100858524
+[host_mono=523155.471982] I (100860781) app_main: heartbeat: safe test mode, uptime_ms=100859532
+[host_mono=523155.622897] W (100860911) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=523156.478086] I (100861781) app_main: heartbeat: safe test mode, uptime_ms=100860532
+[host_mono=523157.486466] I (100862781) app_main: heartbeat: safe test mode, uptime_ms=100861532
+
+[selected context; unrelated lines omitted]
+[host_mono=523164.495277] I (100869791) app_main: heartbeat: safe test mode, uptime_ms=100868545
+[host_mono=523165.502851] I (100870801) app_main: heartbeat: safe test mode, uptime_ms=100869553
+[host_mono=523165.654070] W (100870961) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=523166.510082] I (100871811) app_main: heartbeat: safe test mode, uptime_ms=100870563
+[host_mono=523167.516041] I (100872811) app_main: heartbeat: safe test mode, uptime_ms=100871563
+
+[selected context; unrelated lines omitted]
+[host_mono=523164.495277] I (100869791) app_main: heartbeat: safe test mode, uptime_ms=100868545
+[host_mono=523165.502851] I (100870801) app_main: heartbeat: safe test mode, uptime_ms=100869553
+[host_mono=523165.654128] W (100870961) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=523166.510082] I (100871811) app_main: heartbeat: safe test mode, uptime_ms=100870563
+[host_mono=523167.516041] I (100872811) app_main: heartbeat: safe test mode, uptime_ms=100871563
+
+[selected context; unrelated lines omitted]
+[host_mono=523215.601035] I (100920921) app_main: heartbeat: safe test mode, uptime_ms=100919672
+[host_mono=523216.607434] I (100921921) app_main: heartbeat: safe test mode, uptime_ms=100920672
+[host_mono=523217.211052] W (100922521) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=523217.613462] I (100922921) app_main: heartbeat: safe test mode, uptime_ms=100921672
+[host_mono=523218.621932] I (100923921) app_main: heartbeat: safe test mode, uptime_ms=100922672
+
+[selected context; unrelated lines omitted]
+[host_mono=523215.601035] I (100920921) app_main: heartbeat: safe test mode, uptime_ms=100919672
+[host_mono=523216.607434] I (100921921) app_main: heartbeat: safe test mode, uptime_ms=100920672
+[host_mono=523217.211074] W (100922521) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=523217.613462] I (100922921) app_main: heartbeat: safe test mode, uptime_ms=100921672
+[host_mono=523218.621932] I (100923921) app_main: heartbeat: safe test mode, uptime_ms=100922672
+
+[selected context; unrelated lines omitted]
+[host_mono=525959.670680] I (103665001) app_main: heartbeat: safe test mode, uptime_ms=103663752
+[host_mono=525960.676201] I (103666001) app_main: heartbeat: safe test mode, uptime_ms=103664752
+[host_mono=525961.330761] W (103666641) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=525961.682890] I (103667001) app_main: heartbeat: safe test mode, uptime_ms=103665752
+[host_mono=525962.689801] I (103668001) app_main: heartbeat: safe test mode, uptime_ms=103666752
+
+[selected context; unrelated lines omitted]
+[host_mono=525979.701872] I (103685011) app_main: heartbeat: safe test mode, uptime_ms=103683763
+[host_mono=525980.709335] I (103686011) app_main: heartbeat: safe test mode, uptime_ms=103684763
+[host_mono=525981.670595] W (103686981) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=525981.670712] I (103687011) app_main: heartbeat: safe test mode, uptime_ms=103685763
+[host_mono=525982.681323] I (103688011) app_main: heartbeat: safe test mode, uptime_ms=103686763
+
+[selected context; unrelated lines omitted]
+[host_mono=525985.712723] I (103691011) app_main: heartbeat: safe test mode, uptime_ms=103689763
+[host_mono=525986.671811] I (103692011) app_main: heartbeat: safe test mode, uptime_ms=103690763
+[host_mono=525987.025056] W (103692341) httpd_txrx: httpd_sock_err: error in recv : 104
+[host_mono=525987.679902] I (103693011) app_main: heartbeat: safe test mode, uptime_ms=103691763
+[host_mono=525988.689986] I (103694011) app_main: heartbeat: safe test mode, uptime_ms=103692763

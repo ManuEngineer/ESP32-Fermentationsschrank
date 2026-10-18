@@ -1,0 +1,56 @@
+{
+  "status": "FAIL_OBSERVED",
+  "source": "Two original owner screenshots and owner statements; no HAR/NetLog file available",
+  "browser_environment": {
+    "actual": "Windows Chrome, owner confirmed",
+    "chrome_version": "NOT_PROVEN",
+    "network_path": "NOT_PROVEN",
+    "planned": "Chrome in Selkies Docker",
+    "conformance": "DEVIATION"
+  },
+  "trace": {
+    "initial_owner_report": "NetLog running",
+    "corrected_owner_report": "Only Keep log enabled; no saved file; old DevTools list closed",
+    "final": "NOT_RECORDED_NOT_AVAILABLE"
+  },
+  "first_screenshot": {
+    "request": "GET / document",
+    "http_status_displayed": 200,
+    "result": "FAILED_BODY_TRANSFER",
+    "error": "net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+    "duration_displayed_seconds": 34.88,
+    "UI": "Partial login page, Offline",
+    "absolute_time": "NOT_PROVEN"
+  },
+  "owner_sequence": [
+    "Initial response took a long time",
+    "One incorrect password entry reported",
+    "Subsequently logged in",
+    "After STOP instruction confirmed ESP32 tab closed and no further device actions"
+  ],
+  "second_screenshot": {
+    "successful_login_http_status": 200,
+    "successful_login_displayed_seconds": 2.76,
+    "later_document_http_status": 200,
+    "later_document_displayed_ms": 86,
+    "UI": "Online / Bereit",
+    "visible_following_api_statuses": 200,
+    "visible_anonymous_status_requests": 401,
+    "visible_cancelled_sibling_requests": "Observed; abort association and complete sequence NOT_PROVEN",
+    "favicon_404": "Observed permitted exception"
+  },
+  "wrong_password_http_status": "NOT_PROVEN; owner statement only",
+  "first_error_stop_conformance": "NOT_MET_OBSERVED; further login/page/API activity after first failed document; exact event sequence/delay cannot be reconstructed",
+  "B0": "DEVIATED_NO_DISK_TRACE",
+  "B1": "FAIL_DOCUMENT_TRANSFER; later login success observed",
+  "B2": "NOT_RUN_FIXED_WINDOW_NOT_STARTED",
+  "B3": "NOT_RUN",
+  "B4": "NOT_RUN",
+  "request_population": "NOT_PROVEN",
+  "p50_p95_p99": "NOT_PROVEN",
+  "single_flight_runtime_qualification": "NOT_PROVEN",
+  "JSON_body_completion": "NOT_PROVEN",
+  "unifi_for_this_run": "NOT_RECORDED",
+  "unknown_clients": "NOT_EXCLUDED",
+  "uart_browser_end_alignment": "NOT_PROVEN; UART was stopped after host detection, exact owner browser close time unavailable"
+}

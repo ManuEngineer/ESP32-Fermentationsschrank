@@ -467,6 +467,8 @@ bool updateProductUi(
     fermentation::main_ui::ProductiveLvglRenderer* displayRenderer,
     fermentation::FermentationTouchWorkspace& uiWorkspace,
     fermentation::main_ui::UiRenderGate& renderGate,
+    fermentation::main_ui::UiMemoryGate& memoryGate,
+    fermentation::main_ui::UiResetHoldContactGate& holdContactGate,
     const std::vector<device_platform::TextPackManifest>& uiTextPacks,
     device_platform::INetworkLifecycle& networkLifecycle,
     const device_platform::ITimeSource& timeSource) {
@@ -481,7 +483,20 @@ bool updateProductUi(
     // refilled after leaving the page.
     const bool networkPageBeforeTouch =
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
-    renderGate.beginStep(application, networkPageBeforeTouch, uiWorkspace);
+    const auto now = timeSource.monotonicMillis();
+    if (!fermentation::main_ui::beginProductUiStep(
+            memoryGate, holdContactGate,
+            [] {
+                return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL |
+                                                        MALLOC_CAP_8BIT);
+            },
+            now, application, renderGate, uiWorkspace)) {
+        if (memoryGate.logSkip()) {
+            ESP_LOGW(kTag, "ui_skipped_low_memory count=%" PRIu64,
+                     memoryGate.skippedSteps());
+        }
+        return false;
+    }
     const auto& loopSnapshot = renderGate.snapshot();
     const auto loopNetworkStatus =
         toDeviceUiNetworkStatus(networkLifecycle.status().state);
@@ -493,6 +508,9 @@ bool updateProductUi(
     // never builds a RepresentativeScreen or calls targetAt()/routePress()
     // itself. No second event/command state machine is introduced.
     const auto touchPoll = displayRenderer->pollTouch();
+    const bool holdAllowed = holdContactGate.observe(touchPoll.physicalRelease,
+                                                     touchPoll.contactHeld,
+                                                     touchPoll.sampledAtMillis);
     const bool sampleNetworkPagePress =
         touchPoll.freshPressEdge &&
         uiWorkspace.page() == fermentation::FermentationUiPage::HeaderNetwork;
@@ -533,7 +551,8 @@ bool updateProductUi(
             application, uiWorkspace, loopSnapshot, uiTextPacks,
             touchDisplayLocale, touchProgramCatalog, loopNetworkStatus,
             loopClock, touchPoll.contactHeld, touchPoint.x, touchPoint.y,
-            touchPoll.freshPressEdge, timeSource.monotonicMillis());
+            touchPoll.freshPressEdge, timeSource.monotonicMillis(),
+            holdAllowed);
     }
     if (sampleNetworkPagePress) {
         logResources("network_page_press_after", application.networkMode(),
@@ -741,9 +760,15 @@ extern "C" void app_main(void) {
          r1_pins::kDisplayChipSelectPin, r1_pins::kTouchChipSelectPin,
          r1_pins::kDisplayDataCommandPin, r1_pins::kBacklightPin,
          r1_pins::kTouchInterruptPin, 320U, 240U, r1_pins::kR1DisplayRotation,
-         r1_pins::kBacklightActiveHigh});
+         r1_pins::kBacklightActiveHigh},
+        timeSource);
     fermentation::FermentationTouchWorkspace uiWorkspace;
     fermentation::main_ui::UiRenderGate uiRenderGate;
+    // PROVISIONAL_PENDING_G1; never a complete render-path OOM guarantee.
+    fermentation::main_ui::UiMemoryGate uiMemoryGate{
+        fermentation::main_ui::kUiMinimumLargestBlockBytes,
+        fermentation::main_ui::kUiLargestBlockResumeMarginBytes};
+    fermentation::main_ui::UiResetHoldContactGate uiHoldContactGate;
     const auto uiTextPacks = fermentation::makeFermentationUiTextPacks();
     // The single renderer-independent source for locale, program catalog and
     // canonical prepared time zone is needed here only for initial UI setup.
@@ -812,9 +837,10 @@ extern "C" void app_main(void) {
         platform.update();
         sntp.poll();
         application.update();
-        const bool touchPressObserved = updateProductUi(
-            application, displayRenderer.get(), uiWorkspace, uiRenderGate,
-            uiTextPacks, networkLifecycle, timeSource);
+        const bool touchPressObserved =
+            updateProductUi(application, displayRenderer.get(), uiWorkspace,
+                            uiRenderGate, uiMemoryGate, uiHoldContactGate,
+                            uiTextPacks, networkLifecycle, timeSource);
 
         const auto networkStatus = networkLifecycle.status();
         const auto selectedNetworkMode = application.networkMode();

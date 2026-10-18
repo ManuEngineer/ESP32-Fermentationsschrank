@@ -1,0 +1,29 @@
+[
+  {
+    "utc": "2026-10-16T11:45:58.135968+00:00",
+    "phase": "B0",
+    "event": "Log.entryAdded",
+    "source": "network",
+    "level": "error",
+    "http_status": 401,
+    "message_omitted_for_privacy": true
+  },
+  {
+    "utc": "2026-10-16T11:45:58.160180+00:00",
+    "phase": "B0",
+    "event": "Log.entryAdded",
+    "source": "network",
+    "level": "error",
+    "http_status": 401,
+    "message_omitted_for_privacy": true
+  },
+  {
+    "utc": "2026-10-16T11:45:58.167362+00:00",
+    "phase": "B0",
+    "event": "Log.entryAdded",
+    "source": "network",
+    "level": "error",
+    "http_status": 401,
+    "message_omitted_for_privacy": true
+  }
+]

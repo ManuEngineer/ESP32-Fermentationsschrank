@@ -1,0 +1,6 @@
+[host_mono=342360.483353] I (55327191) app_main: heartbeat: safe test mode, uptime_ms=55325943
+[host_mono=342361.488764] I (55328191) app_main: heartbeat: safe test mode, uptime_ms=55326944
+[host_mono=342362.494371] I (55329191) app_main: heartbeat: safe test mode, uptime_ms=55327944
+[host_mono=342363.148333] W (55329841) httpd_txrx: httpd_resp_send_err: 404 Not Found - not found
+[host_mono=342363.500483] I (55330191) app_main: heartbeat: safe test mode, uptime_ms=55328944
+[host_mono=342364.506703] I (55331191) app_main: heartbeat: safe test mode, uptime_ms=55329944

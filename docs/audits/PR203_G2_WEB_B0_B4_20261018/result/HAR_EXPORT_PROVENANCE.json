@@ -1,0 +1,68 @@
+{
+  "exports": [
+    {
+      "filename": "B1_ROOT_18_10.har",
+      "entries": 14,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_03.har",
+      "entries": 356,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_04.har",
+      "entries": 419,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_05.har",
+      "entries": 479,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_06.har",
+      "entries": 554,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_07.har",
+      "entries": 25,
+      "request_identity_prefix_of": "B4_FINAL_18_10.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_08.har",
+      "entries": 94,
+      "request_identity_prefix_of": "B4_FINAL_18_10.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B1_ROOT_18_10_login.har",
+      "entries": 89,
+      "request_identity_prefix_of": "B1_ROOT_18_10_06.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    },
+    {
+      "filename": "B4_FINAL_18_10.har",
+      "entries": 201,
+      "request_identity_prefix_of": "B4_FINAL_18_10.har",
+      "request_identity_prefix_matches": true,
+      "whole_entry_values_equal": true
+    }
+  ],
+  "limit": "A shorter export is a snapshot, not another navigation; completed/body fields may change between exports."
+}

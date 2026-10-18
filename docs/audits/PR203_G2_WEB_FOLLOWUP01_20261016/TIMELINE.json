@@ -1,0 +1,45 @@
+{
+  "run": "G2_WEB_FOLLOWUP01",
+  "status": "FAIL/HOLD",
+  "reference": {
+    "epoch": 1792171611.8065445,
+    "monotonic": 362816.768515451,
+    "utc": "2026-10-16T17:26:51.806545+00:00",
+    "limit": "Sequential host clock samples; receipt/parse times, not device event timestamps. Clock uncertainty not independently measured."
+  },
+  "monitor_end": {
+    "epoch": 1792171616.9075952,
+    "monotonic": 362821.869567646,
+    "utc": "2026-10-16T17:26:56.907595+00:00"
+  },
+  "pre_stop": {
+    "parsed_heartbeat_lines": 88,
+    "observed_heartbeat_uptime_values_ms": [
+      3594033
+    ],
+    "first_heartbeat_parse_monotonic": 362816.791449,
+    "last_heartbeat_parse_monotonic": 362816.845833,
+    "reset_parse_monotonic": 362816.845907,
+    "reset_parse_seconds_after_capture_start": 0.07739154901355505,
+    "reset_parse_epoch_derived": 1792171611.8839362,
+    "reset_cause": "0x1 POWERON_RESET",
+    "reset_raw_offset": 5484,
+    "reset_raw_end_exclusive": 5541,
+    "reset_complete_chunk_zero_based": 1,
+    "failure": "uart-unexpected-reset",
+    "reason": "A parsed heartbeat preceded the first reset line; reset type and 5-s window alone do not satisfy the guard."
+  },
+  "post_stop_tail": {
+    "seconds": 5.022,
+    "bytes": 7118,
+    "limit": "Existing bounded passive tail only; no second port opening; unqualified observations after STOP."
+  },
+  "browser": {
+    "B0": "NOT_RUN",
+    "B1": "NOT_RUN",
+    "B2": "NOT_RUN",
+    "B3": "NOT_RUN",
+    "B4": "NOT_RUN"
+  },
+  "device_actions_after_capture_exit": "NONE"
+}

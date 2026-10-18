@@ -1,0 +1,9 @@
+{
+  "status": "NOT_RUN",
+  "reason": "UART monitor STOP before B0",
+  "owner_report": "ESP32 tab and known clients closed before monitor start",
+  "browser_requests_by_this_run": 0,
+  "latency_and_single_flight_qualification": "NOT_PROVEN",
+  "favicon_404_and_expected_401_exceptions": "AUTHORIZED_BUT_NOT_EXERCISED",
+  "unknown_clients": "NOT_EXCLUDED_BY_INDEPENDENT_SERVER_CAPTURE"
+}

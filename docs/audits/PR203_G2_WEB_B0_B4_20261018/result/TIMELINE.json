@@ -1,0 +1,224 @@
+{
+  "clock_policy": "Host UTC/monotonic receipt and browser HAR/NetLog UTC kept separate; exact cross-host/UniFi clock offset NOT_PROVEN",
+  "windows_utc_owner_report": "2026-10-18T13:57:46.1397515Z",
+  "host_ntp": "synchronized observed beforeB1",
+  "events_host": [
+    {
+      "utc": "2026-10-17T09:57:37.825162+00:00",
+      "monotonic": 422262.787171813,
+      "event": "preparation_created"
+    },
+    {
+      "utc": "2026-10-17T09:58:10.383817+00:00",
+      "monotonic": 422295.345818959,
+      "event": "one_uart_attempt_start"
+    },
+    {
+      "event": "pretest_idle_24h_started"
+    },
+    {
+      "utc": "2026-10-17T10:08:14.641543+00:00",
+      "monotonic": 422899.603088879,
+      "event": "final_preparation_live_check_recorder_left_running"
+    },
+    {
+      "utc": "2026-10-18T13:48:22.637402+00:00",
+      "monotonic": 522506.272781425,
+      "event": "pretest_24h_continuity_validation"
+    },
+    {
+      "utc": "2026-10-18T13:49:27.849459+00:00",
+      "monotonic": 522572.811458739,
+      "event": "owner_ready_for_single_b0_b4_run"
+    },
+    {
+      "monotonic": 522699.940333082,
+      "event": "owner_confirms_netlog_path_and_closed_clients"
+    },
+    {
+      "utc": "2026-10-18T13:55:28.727466+00:00",
+      "monotonic": 522933.689912618,
+      "event": "B0_HAR_EXPORT_CAPABILITY_PASS"
+    },
+    {
+      "utc": "2026-10-18T13:57:16.311267+00:00",
+      "monotonic": 523041.273247622,
+      "event": "B0_OWNER_BROWSER_VERSION_AND_UNIFI"
+    },
+    {
+      "utc": "2026-10-18T13:58:14.102494+00:00",
+      "monotonic": 523099.064479553,
+      "event": "B0_PASS_B1_ROOT_INSTRUCTION"
+    },
+    {
+      "utc": "2026-10-18T13:59:45.017703+00:00",
+      "monotonic": 523189.979680487,
+      "event": "B1_ROOT_OWNER_REPORTED_SUCCESS"
+    },
+    {
+      "utc": "2026-10-18T14:01:35.644344+00:00",
+      "monotonic": 523300.606326524,
+      "event": "B2_START_AFTER_OWNER_LOGIN_CONFIRMATION"
+    },
+    {
+      "utc": "2026-10-18T14:03:50.582207+00:00",
+      "monotonic": 523435.544202016,
+      "event": "B2_CHECKPOINT_0_OWNER_HTTP200"
+    },
+    {
+      "utc": "2026-10-18T14:06:51.926133+00:00",
+      "monotonic": 523616.888258777,
+      "event": "B2_CHECKPOINT_300_REQUESTED",
+      "elapsed_s": 316.2819336099783
+    },
+    {
+      "utc": "2026-10-18T14:08:52.698305+00:00",
+      "monotonic": 523737.660359251,
+      "event": "B2_CHECKPOINT_300_OWNER_RESPONSE"
+    },
+    {
+      "utc": "2026-10-18T14:11:50.125086+00:00",
+      "monotonic": 523915.087132264,
+      "event": "B2_CHECKPOINT_600_REQUESTED",
+      "elapsed_s": 614.4808079319773
+    },
+    {
+      "utc": "2026-10-18T14:13:57.527541+00:00",
+      "monotonic": 524042.489613741,
+      "event": "B2_CHECKPOINT_600_OWNER_RESPONSE"
+    },
+    {
+      "utc": "2026-10-18T14:17:07.230726+00:00",
+      "monotonic": 524232.192768105,
+      "event": "B2_CHECKPOINT_900_REQUESTED_EXPORT_AND_CLOSE",
+      "elapsed_s": 931.5864427569904
+    },
+    {
+      "utc": "2026-10-18T14:19:38.113042+00:00",
+      "monotonic": 524383.075049806,
+      "event": "B2_CHECKPOINT_900_OWNER_HTTP200"
+    },
+    {
+      "utc": "2026-10-18T14:23:18.668454+00:00",
+      "monotonic": 524603.630444759,
+      "event": "B3_START_OWNER_CONFIRMED_TAB_CLOSED"
+    },
+    {
+      "utc": "2026-10-18T14:26:09.099855+00:00",
+      "monotonic": 524774.06191532,
+      "event": "B3_CHECKPOINT_0_OWNER_RESPONSE"
+    },
+    {
+      "utc": "2026-10-18T14:27:09.968558+00:00",
+      "monotonic": 524834.93064446,
+      "event": "B3_EARLY_UNIFI_SCREENSHOT"
+    },
+    {
+      "utc": "2026-10-18T14:33:47.508211+00:00",
+      "monotonic": 525232.470243916,
+      "event": "B3_CHECKPOINT_600_REQUESTED",
+      "elapsed_s": 628.8398002739996
+    },
+    {
+      "utc": "2026-10-18T14:35:56.649653+00:00",
+      "monotonic": 525361.61167944,
+      "event": "B3_CHECKPOINT_600_UNIFI_SCREENSHOT"
+    },
+    {
+      "utc": "2026-10-18T14:43:40.352437+00:00",
+      "monotonic": 525825.307594791,
+      "event": "B3_1200_SECONDS_COMPLETE_B4_ROOT_INSTRUCTION",
+      "elapsed_s": 1221.6771500320174
+    },
+    {
+      "utc": "2026-10-18T14:47:44.942072+00:00",
+      "monotonic": 526069.904128259,
+      "event": "B4_ROOT_OWNER_SUCCESS_HAR_SAVED"
+    },
+    {
+      "utc": "2026-10-18T14:49:11.506950+00:00",
+      "monotonic": 526156.468944738,
+      "event": "B4_AUTHENTICATED_600S_START"
+    },
+    {
+      "utc": "2026-10-18T14:54:26.350721+00:00",
+      "monotonic": 526471.31274656,
+      "event": "B4_CHECKPOINT_300_REQUESTED",
+      "elapsed_s": 314.8438024049392
+    },
+    {
+      "utc": "2026-10-18T14:55:23.192315+00:00",
+      "monotonic": 526528.154317552,
+      "event": "B4_CHECKPOINT_300_OWNER_RESPONSE"
+    },
+    {
+      "utc": "2026-10-18T14:59:21.169296+00:00",
+      "monotonic": 526766.131343308,
+      "event": "B4_CHECKPOINT_600_REQUESTED_EXPORT_AND_CLOSE",
+      "elapsed_s": 609.6618547369726
+    },
+    {
+      "utc": "2026-10-18T15:03:02.764499+00:00",
+      "monotonic": 526987.726498617,
+      "event": "OWNER_CONFIRMED_FINAL_TAB_CLOSED_NETLOG_STOPPED_UART_STOP_REQUESTED"
+    },
+    {
+      "utc": "2026-10-18T15:12:30.394311+00:00",
+      "monotonic": 527555.356299301,
+      "event": "OFFLINE_UNEXPECTED_HTTP400_DISCOVERED"
+    },
+    {
+      "utc": "2026-10-18T15:13:15.148942+00:00",
+      "monotonic": 527600.111002088,
+      "event": "OWNER_CONFIRMS_PROTOCOL_DEVIATIONS"
+    }
+  ],
+  "browser_mutation": {
+    "start_utc_client": "2026-10-18T14:06:55.721Z",
+    "duration_ms": 223.5339999970165,
+    "method": "POST",
+    "path": "/internal/ui/run",
+    "intent_type": "start-program",
+    "status": 400,
+    "response_error_code": "sequence-required",
+    "automatic_reload_utc_client": "2026-10-18T14:06:55.960Z",
+    "initiator_function": "send",
+    "owner_confirms_start_button": true,
+    "live_stop_at_this_error": "NOT_PERFORMED; identified offline after normal completion"
+  },
+  "netlog_segments_utc_client": [
+    {
+      "label": "B0_B2",
+      "start": "2026-10-18T13:46:58.740Z",
+      "end": "2026-10-18T14:22:19.192Z"
+    },
+    {
+      "label": "B3_B4",
+      "start": "2026-10-18T14:23:46.718Z",
+      "end": "2026-10-18T15:00:53.553Z"
+    }
+  ],
+  "netlog_gap_seconds": 87.526,
+  "netlog_stop_restart_owner_confirmed": true,
+  "second_netlog_seconds_without_device_request_before_B4": 1279.38,
+  "auxiliary_file_observer_exit": {
+    "exit_code": 143,
+    "when": "after measurement windows/owner browser close; original UART recorder separately proven live before normal STOP",
+    "cause": "NOT_PROVEN",
+    "original_uart_continuity": "PASS"
+  },
+  "classification": "FAIL/HOLD; later observations retained, no retroactive acceptance PASS",
+  "earliest_unexcepted_transport_events": {
+    "utc_client": "2026-10-18T14:01:36.698Z",
+    "class": "ERR_CONNECTION_RESET",
+    "code": -101,
+    "url_request_source_ids": [
+      5096,
+      5099,
+      5102
+    ],
+    "browser_internal_restart_then_200": true,
+    "final_fetch_failure": false,
+    "live_stop": "NOT_PERFORMED; discovered offline"
+  }
+}

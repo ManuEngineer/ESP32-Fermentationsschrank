@@ -1,0 +1,27 @@
+{
+  "start_epoch": 1792171611.8065445,
+  "start_monotonic": 362816.768515451,
+  "main_stack_policy": "g2-trend",
+  "main_stack_hwm_threshold_bytes": 11160,
+  "main_stack_action": "record-only",
+  "tool_sha256": {
+    "g1_capture.py": "3af98e77234efb90f7fafa1e9488702a65851efabf55055b7ddf44014fbd32d9",
+    "c0_load.py": "caef7a34a0f2b53629adf24af197052c8cc73fc0b34d5fa716c50ce6aa8d49ca"
+  },
+  "post_anomaly_tail_seconds": 5.022,
+  "post_anomaly_tail_bytes": 7118,
+  "end_epoch": 1792171616.9075952,
+  "end_monotonic": 362821.869567646,
+  "max_heartbeat_gap_seconds": 0.05063423397950828,
+  "gate": "PR203_SINGLE_FLIGHT_G2_WEB_20261016_IMAGE01",
+  "source_proven": false,
+  "ready": false,
+  "actors_disabled": false,
+  "release_profile": false,
+  "network_home_connected": false,
+  "expected_initial_reset_lines": 1,
+  "main_stack_hwm_min_bytes": null,
+  "main_stack_below_threshold": false,
+  "failure": "uart-unexpected-reset",
+  "status": "FAIL/HOLD"
+}
