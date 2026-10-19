@@ -1,0 +1,100 @@
+diff --git a/lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp b/lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp
+index 7e9717c..b7d0033 100644
+--- a/lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp
++++ b/lib/device_platform_esp_idf/src/esp_idf_http_server_lifecycle.cpp
+@@ -2,10 +2,16 @@
+ 
+ #include <algorithm>
+ #include <cstdint>
++#include <cstring>
+ #include <mutex>
+ #include <string>
+ 
++#include "esp_heap_caps.h"
+ #include "esp_http_server.h"
++#include "esp_log.h"
++#include "esp_system.h"
++#include "freertos/FreeRTOS.h"
++#include "freertos/task.h"
+ 
+ namespace device_platform_esp_idf {
+ namespace {
+@@ -177,6 +183,7 @@ struct EspIdfHttpServerLifecycle::Impl {
+     mutable std::mutex mutex;
+ 
+     static esp_err_t handleRequest(httpd_req_t* request);
++    static esp_err_t handleRequestInner(httpd_req_t* request);
+ };
+ 
+ EspIdfHttpServerLifecycle::EspIdfHttpServerLifecycle()
+@@ -237,7 +244,48 @@ bool EspIdfHttpServerLifecycle::running() const {
+     return impl_->server != nullptr;
+ }
+ 
++namespace {
++// PR 206 H-RAM-1 measurement overlay M (non-merge): one compact resource line
++// before and after every shell and read-only status request, taken in the
++// httpd task. Only the path class is logged (never query, cookie, token or
++// body). `result` is the httpd send result; anything but 0 is an HTTP error.
++const char* hramPathClass(const char* uri) {
++    if (std::strcmp(uri, "/") == 0) return "shell";
++    if (std::strcmp(uri, "/api/v1/status") == 0) return "status";
++    if (std::strcmp(uri, "/api/v1/temperatures") == 0) return "temperatures";
++    if (std::strcmp(uri, "/api/v1/alerts") == 0) return "alerts";
++    return nullptr;
++}
++
++void logHramHttp(const char* phase, const char* pathClass, int result,
++                 std::size_t bodyBytes) {
++    ESP_LOGI("hram_http",
++             "phase=%s path=%s result=%d body=%u internal_free=%u "
++             "internal_min=%u internal_largest=%u httpd_stack_hwm=%u",
++             phase, pathClass, result, static_cast<unsigned>(bodyBytes),
++             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL |
++                                                           MALLOC_CAP_8BIT)),
++             static_cast<unsigned>(heap_caps_get_minimum_free_size(
++                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
++             static_cast<unsigned>(heap_caps_get_largest_free_block(
++                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
++             static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
++}
++}  // namespace
++
+ esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequest(httpd_req_t* request) {
++    const char* const pathClass =
++        request != nullptr ? hramPathClass(request->uri) : nullptr;
++    if (pathClass != nullptr) logHramHttp("pre", pathClass, 0, 0U);
++    const esp_err_t result = handleRequestInner(request);
++    if (pathClass != nullptr) {
++        logHramHttp("sent", pathClass, static_cast<int>(result), 0U);
++    }
++    return result;
++}
++
++esp_err_t EspIdfHttpServerLifecycle::Impl::handleRequestInner(
++    httpd_req_t* request) {
+     if (request == nullptr || request->user_ctx == nullptr) {
+         return ESP_FAIL;
+     }
+diff --git a/main/app_main.cpp b/main/app_main.cpp
+index 9e8fb87..856a2bd 100644
+--- a/main/app_main.cpp
++++ b/main/app_main.cpp
+@@ -880,6 +880,17 @@ extern "C" void app_main(void) {
+                          displayRenderer.get());
+         }
+ 
++        // PR 206 H-RAM-1 overlay M (non-merge): repeated resource samples with
++        // the existing logResources() line (heap, minimum, largest block, main
++        // stack high-water mark) every 30 s.
++        static uint64_t nextHramSampleMs = 30000U;
++        if (nowMs - startMs >= nextHramSampleMs) {
++            nextHramSampleMs += 30000U;
++            logResources("hram_30s", application.networkMode(),
++                         networkLifecycle.status().state,
++                         displayRenderer.get());
++        }
++
+         vTaskDelay(kCooperativeYieldTicks);
+     }
+ }
