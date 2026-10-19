@@ -1,0 +1,29 @@
+{
+  "approved_plan": "f013ec0c8428a204b5c53b70d7fd6fcbb088c75d",
+  "decisions": {
+    "D1": "A",
+    "D2": "A"
+  },
+  "candidate_patch_sha256": "edfebc73d23d7dab3b41d729055ee80fc193f693f53625d5ef2702cab414919a",
+  "candidate_source_sha256": {
+    "lib/fermentation_app/src/web_application_routes.cpp": "959b62f9574876df82db0e9b2fa01f7dfa8bc238800ebcd16d3da10025ab24b4",
+    "scripts/test_web_shell_polling.mjs": "c6c482019d65b2fa1cc5c791bc8b34729e9bcf16e77ed237f8b8035e3c092b73"
+  },
+  "status": "C1_FAIL_BUDGET_C2_C3_NOT_STARTED",
+  "measurement": "native baseline + compiler sizeof candidate suffix; unchanged owned head",
+  "baseline_native_cases": 100,
+  "candidate_js_cases": 48,
+  "candidate_suffix_bytes": 9013,
+  "baseline_suffix_bytes": 6662,
+  "unchanged_auth_head_bytes": 1397,
+  "candidate_auth_body_bytes": 10410,
+  "candidate_disabled_body_bytes": 10409,
+  "candidate_auth_max_sequence_bytes": 10429,
+  "hard_limit_bytes": 8192,
+  "normal_reserve_bytes": 128,
+  "normal_body_limit_bytes": 8064,
+  "normal_reserve_deficit_bytes": 2346,
+  "hard_limit_excess_bytes": 2218,
+  "candidate_not_a_shipped_http_body": true,
+  "hardware": "NOT_RUN"
+}
