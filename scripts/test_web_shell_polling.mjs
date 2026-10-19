@@ -10,6 +10,7 @@ const suffix = [...literal[1].matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.pars
 const script = "const S='local-fixture',A='password-protected',U=true;let Q=1" + suffix.split('</script>')[0];
 const paths = ['status', 'temperatures', 'alerts'];
 const actions = ['ack', 'mute', 'stop', 'done', 'start'];
+const csrfToken = 'local-fixture';
 const drain = async () => { for (let i = 0; i < 40; ++i) await Promise.resolve(); };
 
 function deferred() {
@@ -57,7 +58,7 @@ async function fixture() {
   };
   const context = vm.createContext({
     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
-    navigator: { language: 'en' }, window: {},
+    navigator: { language: 'en' }, window: { __WEB_CSRF__: csrfToken },
     location: { reload: () => { ++h.reloads; } },
     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
     Date: { now: () => h.time }, AbortController,
@@ -70,7 +71,7 @@ async function fixture() {
       }
       if (url === '/internal/ui/run') {
         const response = deferred(), body = deferred();
-        h.posts.push({ started: h.time, reply: outcome => {
+        h.posts.push({ url, options, started: h.time, reply: outcome => {
           response.resolve({ status: 200, json: () => body.promise });
           body.resolve({ outcome });
         } });
@@ -137,6 +138,25 @@ async function fixture() {
 
 const tests = [];
 function test(name, run) { tests.push({ name, run }); }
+
+test('real send(): canonical sequence and CSRF headers across successive mutations', async () => {
+  const h = await fixture(); await h.finish();
+  for (const sequence of ['1', '2']) {
+    assert.ok(h.state().P, 'valid action basis before the actual send()');
+    const command = h.command();
+    const post = h.posts.at(-1);
+    assert.equal(post.url, '/internal/ui/run');
+    assert.equal(post.options.method, 'POST');
+    assert.equal(post.options.headers['X-UI-Mutation-Seq'], sequence);
+    assert.equal(post.options.headers['X-CSRF-Token'], csrfToken);
+    assert.equal(post.options.headers['Content-Type'], 'application/json');
+    assert.equal(Object.hasOwn(post.options.headers, 'X-Mutation-Seq'), false);
+    post.reply('applied'); await drain();
+    await h.finish(); await command;
+  }
+  assert.equal(h.posts.length, 2); assert.equal(h.state().Q, 3);
+  assert.equal(h.reloads, 0); h.noDeadline();
+});
 
 test('initial fetch, normal five-second ticks and fresh Online', async () => {
   const h = await fixture();

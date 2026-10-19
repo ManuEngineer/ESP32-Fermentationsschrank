@@ -3462,7 +3462,8 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_FALSE(contains(body, "confirm("));
     TEST_ASSERT_FALSE(contains(body, "localStorage"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "/internal/ui/run"));
-    TEST_ASSERT_TRUE(contains(body, "X-Mutation-Seq"));
+    TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
+    TEST_ASSERT_FALSE(contains(body, "X-Mutation-Seq"));
     TEST_ASSERT_TRUE(contains(body, "X-CSRF-Token"));
     // Ack/Mute are sent directly; Stop, Done and Start are armed first (D1).
     TEST_ASSERT_TRUE(contains(body, "if(a==='ack'||a==='mute'){"));
