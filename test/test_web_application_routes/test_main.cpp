@@ -3344,10 +3344,10 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
-// Owner limit of the web shell (Issue #27 dashboard slice, D1 = A: at most
-// 8192 bytes) and the required reserve below it, including the 19 byte reserve
+// Owner limit of the web shell (Issue #27 dashboard slice, D1-C: at most
+// 10752 bytes) and the required reserve below it, including the 19 byte reserve
 // for the widest mutation sequence.
-constexpr size_t kShellLimit = 8192U;
+constexpr size_t kShellLimit = 10752U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3449,6 +3449,8 @@ std::string authenticatedShell(ComposedFixture& fixture,
     return completeBody(response);
 }
 
+size_t labelCount(const std::string& body, const std::string& token);
+
 void test_shell_run_controls_text_contract() {
     ComposedFixture fixture;
     TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
@@ -3482,9 +3484,9 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "r.status!==503"));
     TEST_ASSERT_TRUE(contains(body, "t<2&&!r"));
     // All locales carry the confirmation and result texts.
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "sure:'"));
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "ok:'"));
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "fail:'"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "sure"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "ok"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "fail"));
 }
 
 // String/state contract only: the native tools cannot execute the shell script
@@ -3671,11 +3673,32 @@ std::string uiFunction(const std::string& body) {
     return body.substr(begin, end - begin);
 }
 
+// C1: each dictionary key exists exactly once as a de/en/es value array
+// (key:["de","en","es"]). Returns the number of values of that unique entry,
+// 0 when the key is missing or duplicated.
 size_t labelCount(const std::string& body, const std::string& token) {
     const bool plain = token.find('-') == std::string::npos;
-    const auto key = plain ? token : "'" + token + "'";
-    return occurrences(body, "{" + key + ":'") +
-           occurrences(body, "," + key + ":'");
+    const auto key = plain ? token : "\"" + token + "\"";
+    const auto needle = key + ":[";
+    if (occurrences(body, "{" + needle) + occurrences(body, "," + needle) !=
+        1U) {
+        return 0U;
+    }
+    auto at = body.find("{" + needle);
+    if (at == std::string::npos) at = body.find("," + needle);
+    size_t values = 0U;
+    bool quoted = false;
+    for (size_t i = at + needle.size() + 1U; i < body.size(); ++i) {
+        if (body[i] == '\\' && quoted) {
+            ++i;
+        } else if (body[i] == '"') {
+            if (quoted) ++values;
+            quoted = !quoted;
+        } else if (body[i] == ']' && !quoted) {
+            break;
+        }
+    }
+    return values;
 }
 
 std::vector<std::string> jsonTokens(const std::string& json,
@@ -3739,11 +3762,9 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     for (const char* key : {"active-run", "cabinet-air"}) {
         TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, key));
     }
-    TEST_ASSERT_TRUE(contains(body, "de:{"));
-    TEST_ASSERT_TRUE(contains(body, ",en:{"));
-    TEST_ASSERT_TRUE(contains(body, ",es:{"));
-    // English fallback is kept (T=L[lc], lc falls back to 'en').
-    TEST_ASSERT_TRUE(contains(body, "lc=L[g]?g:'en'"));
+    // Value order de, en, es; English fallback is kept (lc falls back to 'en').
+    TEST_ASSERT_TRUE(contains(body, "{de:0,en:1,es:2}[lc]"));
+    TEST_ASSERT_TRUE(contains(body, "lc=/^(de|en|es)$/.test(g)?g:'en'"));
     // The warning text of the disabled mode stays as before.
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
 }
