@@ -1,0 +1,17 @@
+heartbeats 2208 max_gap_s 1.503
+hram_http lines 1422 result!=0: []
+httpd_stack_hwm min/max 2196 3540
+shell n 3 free_sent_min 29844 free_pre_min 41092 largest_min 22528 internal_min 19896
+status n 236 free_sent_min 30756 free_pre_min 34152 largest_min 28672 internal_min 19896
+temperatures n 236 free_sent_min 30464 free_pre_min 33668 largest_min 26624 internal_min 19896
+alerts n 236 free_sent_min 29840 free_pre_min 33268 largest_min 26624 internal_min 19896
+hram_30s n 73 free min/max 33388 42780 min_free_ever 19896 largest min 27648 main_hwm min 11272
+ t=   33.2 free=42760 min=33900 largest=40960 hwm=11272
+ t=   62.7 free=42760 min=33900 largest=40960 hwm=11272
+ t=   92.8 free=42760 min=33900 largest=40960 hwm=11272
+ t= 2042.9 free=42348 min=19896 largest=40960 hwm=11272
+ t= 2073.0 free=42348 min=19896 largest=40960 hwm=11272
+ t= 2103.0 free=42348 min=19896 largest=40960 hwm=11272
+ t= 2133.0 free=42348 min=19896 largest=40960 hwm=11272
+ t= 2163.1 free=42348 min=19896 largest=40960 hwm=11272
+ t= 2193.1 free=42348 min=19896 largest=40960 hwm=11272

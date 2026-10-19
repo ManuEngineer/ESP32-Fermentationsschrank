@@ -1,0 +1,16 @@
+{
+  "kind": "offline_section_probe_not_a_gate_build",
+  "repository_head": "36a5e08d9f742e61271566709625d7e68c8f482a",
+  "approved_plan": "f013ec0c8428a204b5c53b70d7fd6fcbb088c75d",
+  "profile_built": "esp32_release (bringup NOT_RUN)",
+  "build_method": "ad-hoc idf.py in two throw-away copies from git archive HEAD, each with a throw-away local git repo (embedded source SHA is a probe SHA); scripts/build_esp_idf_profiles.py and check_build_profiles.py NOT run",
+  "esp_idf": {"tag": "v6.1", "commit": "fff9895c82d744c7237be8847347bdd1b07c6643", "worktree_clean": true},
+  "toolchain": "xtensa-esp-elf crosstool-NG esp-15.2.0_20251204",
+  "diff_base_vs_cand": ["lib/fermentation_app/src/web_application_routes.cpp", "scripts/test_web_shell_polling.mjs"],
+  "candidate_patch_sha256": "1b35cf033a1f308ca82113c0d49192761b1bdfb2d3ce7d299985880bd05d3a30",
+  "elf_sha256": {"base": "105138655d1826bf54332cde9081d050858196c515e18cd36c54be39ef281895", "cand": "048cc59d836d97ed0f58fc6129c60d77edb14e7fb25182e8775489a2618d6b9b"},
+  "bin_sha256": {"base": "1fd17f7b216b2408db1a1751aa0e6d68d3ecd110f7f7e6752fd0edba7d2f8e83", "cand": "801eb0d79df23579d51fa772406f260eb5fcd6833dabb5f0f4c8ab18031d8c86"},
+  "bin_bytes": {"base": 1756544, "cand": 1758896},
+  "committed_artifacts": "tables and hashes only; ELF/BIN/map are local and not committed",
+  "device_access": "none"
+}

@@ -23,6 +23,9 @@ struct FermentationUiProjectionInput {
     std::optional<device_platform::TextKey> primaryAction;
     std::vector<device_platform::TextKey> semanticActions;
     FermentationUiRefreshRevisionTracker* refreshTracker{nullptr};
+    // Current monotonic time for the phase-scoped run time. Without a time
+    // source this stays empty and the run time is reported as unknown.
+    std::optional<std::uint64_t> monotonicMillis;
 };
 
 class FermentationUiProjector {

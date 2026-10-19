@@ -28,9 +28,12 @@
 #include "program_limits.hpp"
 #include "mock_secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 #include "virtual_time_source.hpp"
 #include "web_application_routes.hpp"
 #include "web_json_codec.hpp"
+
+#include "../common/allocation_window.hpp"
 
 namespace fermentation {
 
@@ -3344,10 +3347,10 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
-// Owner limit of the web shell (Issue #27 dashboard slice, D1 = A: at most
-// 8192 bytes) and the required reserve below it, including the 19 byte reserve
+// Owner limit of the web shell (Issue #27 dashboard slice, D1-C: at most
+// 10752 bytes) and the required reserve below it, including the 19 byte reserve
 // for the widest mutation sequence.
-constexpr size_t kShellLimit = 8192U;
+constexpr size_t kShellLimit = 10752U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3449,6 +3452,8 @@ std::string authenticatedShell(ComposedFixture& fixture,
     return completeBody(response);
 }
 
+size_t labelCount(const std::string& body, const std::string& token);
+
 void test_shell_run_controls_text_contract() {
     ComposedFixture fixture;
     TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
@@ -3482,9 +3487,9 @@ void test_shell_run_controls_text_contract() {
     TEST_ASSERT_TRUE(contains(body, "r.status!==503"));
     TEST_ASSERT_TRUE(contains(body, "t<2&&!r"));
     // All locales carry the confirmation and result texts.
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "sure:'"));
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "ok:'"));
-    TEST_ASSERT_EQUAL_UINT32(3U, occurrences(body, "fail:'"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "sure"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "ok"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "fail"));
 }
 
 // String/state contract only: the native tools cannot execute the shell script
@@ -3671,11 +3676,32 @@ std::string uiFunction(const std::string& body) {
     return body.substr(begin, end - begin);
 }
 
+// C1: each dictionary key exists exactly once as a de/en/es value array
+// (key:["de","en","es"]). Returns the number of values of that unique entry,
+// 0 when the key is missing or duplicated.
 size_t labelCount(const std::string& body, const std::string& token) {
     const bool plain = token.find('-') == std::string::npos;
-    const auto key = plain ? token : "'" + token + "'";
-    return occurrences(body, "{" + key + ":'") +
-           occurrences(body, "," + key + ":'");
+    const auto key = plain ? token : "\"" + token + "\"";
+    const auto needle = key + ":[";
+    if (occurrences(body, "{" + needle) + occurrences(body, "," + needle) !=
+        1U) {
+        return 0U;
+    }
+    auto at = body.find("{" + needle);
+    if (at == std::string::npos) at = body.find("," + needle);
+    size_t values = 0U;
+    bool quoted = false;
+    for (size_t i = at + needle.size() + 1U; i < body.size(); ++i) {
+        if (body[i] == '\\' && quoted) {
+            ++i;
+        } else if (body[i] == '"') {
+            if (quoted) ++values;
+            quoted = !quoted;
+        } else if (body[i] == ']' && !quoted) {
+            break;
+        }
+    }
+    return values;
 }
 
 std::vector<std::string> jsonTokens(const std::string& json,
@@ -3739,13 +3765,182 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     for (const char* key : {"active-run", "cabinet-air"}) {
         TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, key));
     }
-    TEST_ASSERT_TRUE(contains(body, "de:{"));
-    TEST_ASSERT_TRUE(contains(body, ",en:{"));
-    TEST_ASSERT_TRUE(contains(body, ",es:{"));
-    // English fallback is kept (T=L[lc], lc falls back to 'en').
-    TEST_ASSERT_TRUE(contains(body, "lc=L[g]?g:'en'"));
+    // Value order de, en, es; English fallback is kept (lc falls back to 'en').
+    TEST_ASSERT_TRUE(contains(body, "{de:0,en:1,es:2}[lc]"));
+    TEST_ASSERT_TRUE(contains(body, "lc=/^(de|en|es)$/.test(g)?g:'en'"));
     // The warning text of the disabled mode stays as before.
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
+}
+
+// C3: the shell reads exactly the run members the codec writes, and every
+// token the codec can emit for the run information has a label in all locales.
+void test_shell_run_information_is_bound_to_the_status_codec() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+
+    FermentationUiSnapshot snapshot;
+    snapshot.home.mode = FermentationHomeMode::ActiveRun;
+    snapshot.home.activeRunId = "run-1";
+    snapshot.home.programName = "Brot";
+    FermentationRunDetail detail;
+    detail.sourceKind = ProgramSourceKind::UserProgram;
+    detail.targetCelsius = 24.5;
+    detail.completion =
+        RunDetailCompletion{CompletionMode::CoolAndHoldForDuration, 8.0, 30U};
+    detail.time.elapsedSeconds = 61U;
+    detail.time.remainingSeconds = 7139U;
+    detail.time.remainingKind = RunDetailRemainingKind::Timed;
+    snapshot.home.runDetail = detail;
+    std::string status;
+    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+    for (const char* member :
+         {"programName", "sourceKind", "targetCelsius", "completion",
+          "coolingTargetCelsius", "holdDurationMinutes", "elapsedSeconds",
+          "remainingSeconds", "remainingKind", "scope"}) {
+        TEST_ASSERT_TRUE(
+            contains(status, (std::string("\"") + member + "\":").c_str()));
+        TEST_ASSERT_TRUE(contains(body, member));
+    }
+    TEST_ASSERT_TRUE(contains(body, "a.run"));
+
+    std::set<std::string> modes;
+    std::set<std::string> kinds;
+    std::set<std::string> states;
+    for (unsigned value = 0U; value < 4U; ++value) {
+        detail.completion->mode = static_cast<CompletionMode>(value);
+        for (unsigned kind = 0U; kind < 4U; ++kind) {
+            detail.time.remainingKind =
+                static_cast<RunDetailRemainingKind>(kind);
+            snapshot.home.runDetail = detail;
+            std::string encoded;
+            TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, encoded));
+            for (const auto& token : jsonTokens(encoded, "mode")) {
+                modes.insert(token);
+            }
+            for (const auto& token : jsonTokens(encoded, "remainingKind")) {
+                kinds.insert(token);
+            }
+        }
+    }
+    for (unsigned value = 0U; value < 32U; ++value) {
+        FermentationUiSnapshot plain;
+        plain.home.processState = static_cast<ProcessState>(value);
+        std::string encoded;
+        if (encodeWebApiStatus(plain, encoded)) {
+            for (const auto& token : jsonTokens(encoded, "processState")) {
+                states.insert(token);
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(4U, static_cast<std::uint32_t>(modes.size()));
+    TEST_ASSERT_EQUAL_UINT32(4U, static_cast<std::uint32_t>(kinds.size()));
+    TEST_ASSERT_EQUAL_UINT32(15U, static_cast<std::uint32_t>(states.size()));
+    for (const auto& token : modes) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "c-" + token));
+    }
+    for (const auto& token : states) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "p-" + token));
+    }
+    // Timed and unknown need no text of their own; the other kinds do.
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "unbounded"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "not-applicable"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "manual-timed"));
+}
+
+// Installs a state-conforming active run (frozen program with a name of the
+// 96 byte maximum, 48 byte run id, Fermenting with a consistent run snapshot)
+// through the application's own runtime state, so the status handler projects
+// it through the real application path.
+void installActiveRunForStatus(FermentationApplication& application,
+                               const std::string& name) {
+    auto document = FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    document->program.name = name;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
+    document->program.fermentationStages.front().durationMinutes = 120U;
+    document->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    document->program.targetQualification.bandCelsius = 0.5;
+    document->program.targetQualification.durationMinutes = 10U;
+    document->program.maximumTargetReachMinutes = 180U;
+    document->program.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    document->program.completion.coolingTargetCelsius = 9.0;
+    document->program.completion.holdDurationMinutes = 30U;
+    document->program.preheat = false;
+    document->program.maximumProductWaitMinutes = std::nullopt;
+    TEST_ASSERT_TRUE(validateProgram(*document).valid());
+    const auto run =
+        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog,
+                         RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(run.has_value());
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    state.processState.state = ProcessState::Fermenting;
+    state.activeProgramRun = *run;
+    state.activeRunId = std::string(48U, 'r');
+    state.activeRunSensorMode = RunSensorMode::Product;
+    state.processRunSnapshot = makeProcessRunSnapshot(*state.activeProgramRun);
+    TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
+}
+
+// Whole GET /api/v1/status path through the composed dispatcher (session
+// check, application snapshot with the UI refresh tracker, encoding, response
+// takeover), measured over operator new and cJSON. The encoder-only window is
+// in test_run_detail_projection. Host measurement, not an ESP32 heap proof.
+void test_status_handler_allocation_window_covers_snapshot_encode_and_response() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto session = loginComposed(fixture);
+    auto* routes = fixture.http.routes();
+
+    const auto handle = [&](bool expectRun, const char* label) {
+        auto request =
+            makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
+        device_platform::HttpResponse response;
+        bool handled = false;
+        const auto window = alloc_window::measure(
+            [&] { handled = routes->handle(request, response); });
+        TEST_ASSERT_TRUE(handled);
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        const auto body = completeBody(response);
+        TEST_ASSERT_TRUE(contains(body, "\"version\":1,\"ready\":"));
+        TEST_ASSERT_TRUE(contains(body, "\"revisions\":{"));
+        TEST_ASSERT_TRUE(body.size() <= kMaximumWebApiResponseBodyBytes);
+        if (expectRun) {
+            TEST_ASSERT_TRUE(contains(body, "\"run\":{\"id\":\"rrrrrrrr"));
+            TEST_ASSERT_TRUE(contains(body, "\"programName\":\"\xC3\xA4"));
+            TEST_ASSERT_TRUE(contains(body, "\"targetCelsius\":38"));
+            TEST_ASSERT_TRUE(contains(body, "\"mode\":\"cool-hold-duration\""));
+            TEST_ASSERT_TRUE(contains(body, "\"scope\":\"phase\""));
+        } else {
+            TEST_ASSERT_TRUE(contains(body, "\"run\":null"));
+        }
+        TEST_ASSERT_EQUAL_UINT32(
+            0U, static_cast<std::uint32_t>(window.cJsonLiveBytes));
+        TEST_ASSERT_TRUE(window.count > 0U);
+        TEST_ASSERT_TRUE(window.peakLiveBytes >= body.size());
+        std::printf(
+            "STATUS_HANDLER_ALLOC %s: count=%zu bytes=%zu largest=%zu "
+            "peak_live=%zu cjson_count=%zu body=%zu\n",
+            label, window.count, window.requestedBytes, window.largestBlock,
+            window.peakLiveBytes, window.cJsonCount, body.size());
+        return window;
+    };
+
+    // Standby: the first call also fills the refresh-tracker copy.
+    handle(false, "standby cold");
+    const auto standbyWarm = handle(false, "standby warm");
+
+    // 48 two byte scalars: the 96 byte maximum of a visible name.
+    std::string name;
+    for (int i = 0; i < 48; ++i) name += "\xC3\xA4";
+    installActiveRunForStatus(fixture.application, name);
+    const auto runCold = handle(true, "active run, 96 B name, cold");
+    const auto runWarm = handle(true, "active run, 96 B name, warm");
+    // The run block adds allocations over standby; a repeated request with an
+    // unchanged state never needs more than the cold one.
+    TEST_ASSERT_TRUE(runWarm.requestedBytes > standbyWarm.requestedBytes);
+    TEST_ASSERT_TRUE(runWarm.requestedBytes <= runCold.requestedBytes);
 }
 
 void test_dashboard_shell_labels_cover_every_codec_token() {
@@ -4644,6 +4839,9 @@ int main() {
     RUN_TEST(test_dashboard_shell_structure_and_responsive_contract);
     RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
+    RUN_TEST(test_shell_run_information_is_bound_to_the_status_codec);
+    RUN_TEST(
+        test_status_handler_allocation_window_covers_snapshot_encode_and_response);
     RUN_TEST(test_dashboard_feed_fields_in_standby_and_constructed_states);
     RUN_TEST(test_dashboard_missing_and_stale_data_contract);
     RUN_TEST(test_dashboard_ordering_guard_and_age_contract_in_the_shell_text);

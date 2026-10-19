@@ -38,7 +38,7 @@ function snapshot(mode = 'active-run', run = '1') {
   ];
 }
 
-async function fixture() {
+async function fixture(language = 'en') {
   const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
   let timerId = 0;
   const elements = new Map();
@@ -51,6 +51,7 @@ async function fixture() {
   h.buttons = buttons;
   h.connection = element('#connection');
   h.board = element('#board');
+  h.rows = () => element('#temps').children.map(e => e.textContent);
   const setTimer = (callback, delay, interval = false) => {
     const id = ++timerId;
     h.timers.set(id, { callback, delay, due: h.time + delay, interval });
@@ -58,7 +59,7 @@ async function fixture() {
   };
   const context = vm.createContext({
     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
-    navigator: { language: 'en' }, window: { __WEB_CSRF__: csrfToken },
+    navigator: { language }, window: { __WEB_CSRF__: csrfToken },
     location: { reload: () => { ++h.reloads; } },
     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
     Date: { now: () => h.time }, AbortController,
@@ -138,6 +139,74 @@ async function fixture() {
 
 const tests = [];
 function test(name, run) { tests.push({ name, run }); }
+
+test('C1 shared locale keys preserve every frozen label and English fallback', async () => {
+  // Labels of the previous shell (product ab0ae55 generator), frozen before C1.
+  const labels = JSON.parse(readFileSync(new URL('../test/test_web_application_routes/shell_frozen_labels.json', import.meta.url), 'utf8'));
+  for (const language of ['de', 'en', 'es', 'fr']) {
+    const h = await fixture(language); await h.finish();
+    const locale = language === 'fr' ? 'en' : language;
+    assert.equal(h.run('lc'), locale);
+    for (const [key, value] of Object.entries(labels[locale])) {
+      assert.equal(h.run('T[' + JSON.stringify(key) + ']'), value, locale + ':' + key);
+    }
+  }
+});
+
+for (const [language, phase] of [['de', 'Gaerung'], ['en', 'Fermenting'], ['es', 'Fermentando']]) {
+  test(`C1 ${language}: full run display, phase minutes and all completion modes`, async () => {
+    const h = await fixture(language);
+    const data = snapshot();
+    const name = '<script>fixture & name</script>';
+    data[0].processState = 'fermenting';
+    data[0].run = {
+      id: 'fixture-run', sourceKind: 'user-program', programName: name, targetCelsius: 42,
+      completion: { mode: 'cool-hold-duration', coolingTargetCelsius: 5, holdDurationMinutes: 90 },
+      time: { scope: 'phase', elapsedSeconds: 90061, remainingSeconds: 61, remainingKind: 'timed' },
+    };
+    await h.finish(data);
+    const rows = h.rows();
+    assert.ok(rows.some(x => x.endsWith(name)), 'name is a literal text value');
+    assert.ok(rows.some(x => x.endsWith(phase)));
+    assert.ok(rows.some(x => x.endsWith('42.0 °C')));
+    assert.ok(rows.some(x => x.endsWith('25:01')), 'elapsed hours do not wrap at 24');
+    assert.ok(rows.some(x => x.endsWith('0:02')), 'positive remaining minutes round up');
+    assert.ok(rows.some(x => x.includes('5.0 °C') && x.endsWith('1:30')));
+    for (const mode of ['finish', 'cool-finish', 'cool-hold-duration', 'cool-hold-manual']) {
+      await h.tick(); data[0].run.completion.mode = mode; await h.finish(data);
+      assert.ok(h.rows().some(x => x.includes(h.run('T[' + JSON.stringify('c-' + mode) + ']'))));
+    }
+    for (const token of ['boot', 'safe-boot', 'standby', 'preheating', 'waiting-for-product', 'reaching-target', 'qualifying-target', 'fermenting', 'cooling', 'cool-holding', 'manual-holding', 'completed', 'recovery-evaluation', 'fault', 'service-mode']) {
+      assert.equal(typeof h.run('T[' + JSON.stringify('p-' + token) + ']'), 'string');
+    }
+    const last = h.rows();
+    for (let i = 0; i < 4; ++i) await h.tick();
+    assert.deepEqual(h.rows(), last, 'LP values never count on while waiting');
+    assert.equal(h.board.className, 'x'); h.locked();
+  });
+
+  test(`C1 ${language}: missing, unknown, unbounded and cleared details`, async () => {
+    const h = await fixture(language), data = snapshot();
+    data[0].processState = 'future-phase';
+    data[0].run = {
+      sourceKind: 'manual-timed', programName: null, targetCelsius: null,
+      completion: null,
+      time: { scope: 'phase', elapsedSeconds: null, remainingSeconds: null, remainingKind: 'unknown' },
+    };
+    await h.finish(data);
+    const unavailable = h.run('T.unavailable');
+    assert.ok(h.rows().some(x => x.endsWith('future-phase')));
+    assert.equal(h.rows().slice(3).filter(x => x.endsWith(unavailable)).length, 4);
+    assert.ok(h.rows().some(x => x.endsWith(h.run("T['manual-timed']"))));
+    assert.equal(h.buttons.find(b => b.dataset.a === 'stop').disabled, false, 'display fields never create a new command gate');
+    for (const kind of ['unbounded', 'not-applicable', 'future-kind']) {
+      await h.tick(); data[0].run.time.remainingKind = kind; await h.finish(data);
+      assert.ok(h.rows().some(x => x.endsWith(kind === 'future-kind' ? kind : h.run('T[' + JSON.stringify(kind) + ']'))));
+    }
+    await h.tick(); await h.finish(snapshot('standby', '2'));
+    assert.equal(h.rows().length, 3, 'old run details disappear with the new snapshot');
+  });
+}
 
 test('real send(): canonical sequence and CSRF headers across successive mutations', async () => {
   const h = await fixture(); await h.finish();

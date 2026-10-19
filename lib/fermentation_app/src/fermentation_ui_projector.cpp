@@ -1,6 +1,11 @@
 #include "fermentation_ui_projector.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 #include "application_lifecycle.hpp"
+#include "control_context.hpp"
 
 namespace fermentation {
 
@@ -19,6 +24,129 @@ bool hasCanonicalDecisionRequiredMessage(const RunCommandState& state) {
         }
     }
     return false;
+}
+
+constexpr std::uint64_t kMaximumJsonSafeInteger = 9007199254740991ULL;
+
+bool phaseHasRunTime(ProcessState state) {
+    switch (state) {
+        case ProcessState::Preheating:
+        case ProcessState::WaitingForProduct:
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+        case ProcessState::Fermenting:
+        case ProcessState::Cooling:
+        case ProcessState::CoolHolding:
+        case ProcessState::ManualHolding:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Phase elapsed seconds: the monotonic time since the phase was entered plus
+// only an exact (lower == upper) prior value tagged for this very phase.
+// Anything else is unknown, never a guessed duration.
+std::optional<std::uint64_t> phaseElapsedSeconds(
+    const RunCommandState& state, std::optional<std::uint64_t> now) {
+    if (!phaseHasRunTime(state.processState.state) || !now.has_value() ||
+        *now < state.processState.stateEnteredAtMillis) {
+        return std::nullopt;
+    }
+    std::uint64_t prior = 0U;
+    if (state.priorBootPhaseElapsed.has_value()) {
+        const auto& tagged = *state.priorBootPhaseElapsed;
+        if (tagged.taggedState != state.processState.state ||
+            !tagged.elapsed.upperBoundSeconds.has_value() ||
+            *tagged.elapsed.upperBoundSeconds !=
+                tagged.elapsed.lowerBoundSeconds) {
+            return std::nullopt;
+        }
+        prior = tagged.elapsed.lowerBoundSeconds;
+    }
+    const auto elapsed =
+        (*now - state.processState.stateEnteredAtMillis) / 1000U + prior;
+    if (elapsed > kMaximumJsonSafeInteger) return std::nullopt;
+    return elapsed;
+}
+
+// Remaining time only where the process owner itself ends the phase by a
+// duration (Fermenting, CoolHolding for a duration); everything else is
+// unbounded, unknown or not applicable. Checked arithmetic, no ETA guesses.
+RunDetailTime projectRunTime(const RunCommandState& state,
+                             std::optional<std::uint64_t> now) {
+    RunDetailTime time;
+    const auto phase = state.processState.state;
+    if (phase == ProcessState::Completed || phase == ProcessState::Standby) {
+        time.remainingKind = RunDetailRemainingKind::NotApplicable;
+        return time;
+    }
+    time.elapsedSeconds = phaseElapsedSeconds(state, now);
+    if (phase == ProcessState::ManualHolding ||
+        (phase == ProcessState::CoolHolding &&
+         state.processRunSnapshot.has_value() &&
+         state.processRunSnapshot->completionMode ==
+             CompletionMode::CoolAndHoldUntilManualStop)) {
+        time.remainingKind = RunDetailRemainingKind::Unbounded;
+        return time;
+    }
+    std::optional<std::uint32_t> durationMinutes;
+    if (state.processRunSnapshot.has_value()) {
+        if (phase == ProcessState::Fermenting) {
+            durationMinutes =
+                state.processRunSnapshot->fermentationDurationMinutes;
+        } else if (phase == ProcessState::CoolHolding &&
+                   state.processRunSnapshot->completionMode ==
+                       CompletionMode::CoolAndHoldForDuration) {
+            durationMinutes = state.processRunSnapshot->holdDurationMinutes;
+        }
+    }
+    if (durationMinutes.has_value() && time.elapsedSeconds.has_value()) {
+        const auto total = static_cast<std::uint64_t>(*durationMinutes) * 60U;
+        time.remainingSeconds =
+            total > *time.elapsedSeconds ? total - *time.elapsedSeconds : 0U;
+        time.remainingKind = RunDetailRemainingKind::Timed;
+    }
+    return time;
+}
+
+void projectRunDetail(FermentationHomeView& home, const RunCommandState& state,
+                      std::optional<std::uint64_t> now,
+                      std::string&& nameBuffer) {
+    const ProgramCompletion* completion = nullptr;
+    FermentationRunDetail detail;
+    if (state.activeProgramRun.has_value()) {
+        const auto& source = state.activeProgramRun->snapshot().source;
+        detail.sourceKind = programSourceKind(source);
+        if (const auto* program = storedProgram(source)) {
+            nameBuffer.assign(program->program.name);
+            completion = &program->program.completion;
+        } else if (const auto* manual = manualTimedSource(source)) {
+            completion = &manual->completion;
+        }
+    } else if (!state.activeManualRun.has_value()) {
+        home.programName = std::move(nameBuffer);
+        return;
+    }
+    home.programName = std::move(nameBuffer);
+    if (completion != nullptr) {
+        RunDetailCompletion value;
+        value.mode = completion->mode;
+        if (completion->mode != CompletionMode::FinishWithoutCooling) {
+            value.coolingTargetCelsius = completion->coolingTargetCelsius;
+        }
+        if (completion->mode == CompletionMode::CoolAndHoldForDuration) {
+            value.holdDurationMinutes = completion->holdDurationMinutes;
+        }
+        detail.completion = value;
+    }
+    const auto control = resolveEffectiveControlContext(state);
+    if (control.valid && control.target.valid &&
+        std::isfinite(control.target.targetCelsius)) {
+        detail.targetCelsius = control.target.targetCelsius;
+    }
+    detail.time = projectRunTime(state, now);
+    home.runDetail = detail;
 }
 
 }  // namespace
@@ -43,7 +171,10 @@ void FermentationUiProjector::projectInto(
     // capacity is kept as well. Text keys that the application does not
     // populate in uiSnapshot() are not recycled.
     auto activeRunId = std::move(output.home.activeRunId);
+    // The frozen program name (<= 96 bytes) is recycled the same way.
+    auto programName = std::move(output.home.programName);
     output = FermentationUiSnapshot{};
+    programName.clear();
     temperatures.clear();
     messages.clear();
     semanticActions.clear();
@@ -85,6 +216,8 @@ void FermentationUiProjector::projectInto(
         const auto& state = *input.runState;
         output.home.processState = state.processState.state;
         output.home.activeRunId = state.activeRunId;
+        projectRunDetail(output.home, state, input.monotonicMillis,
+                         std::move(programName));
         if (state.activeProgramRun.has_value()) {
             output.home.effectiveValues =
                 state.activeProgramRun->effectiveValues();

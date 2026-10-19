@@ -14,6 +14,31 @@ bool equalEffectiveValues(const std::optional<EffectiveRunValues>& left,
             left->remainingDurationMinutes == right->remainingDurationMinutes);
 }
 
+// The phase seconds advance with time and are deliberately not semantic: they
+// must not raise the UI refresh revision every second. Everything else shown
+// from the run source, including the kind of the remaining time, is compared.
+bool equalRunDetail(const std::optional<FermentationRunDetail>& left,
+                    const std::optional<FermentationRunDetail>& right) {
+    if (left.has_value() != right.has_value()) return false;
+    if (!left.has_value()) return true;
+    if (left->sourceKind != right->sourceKind ||
+        left->targetCelsius != right->targetCelsius ||
+        left->completion.has_value() != right->completion.has_value() ||
+        left->time.remainingKind != right->time.remainingKind ||
+        left->time.elapsedSeconds.has_value() !=
+            right->time.elapsedSeconds.has_value() ||
+        left->time.remainingSeconds.has_value() !=
+            right->time.remainingSeconds.has_value()) {
+        return false;
+    }
+    return !left->completion.has_value() ||
+           (left->completion->mode == right->completion->mode &&
+            left->completion->coolingTargetCelsius ==
+                right->completion->coolingTargetCelsius &&
+            left->completion->holdDurationMinutes ==
+                right->completion->holdDurationMinutes);
+}
+
 bool equalRuntimeMessage(const RuntimeMessage& left,
                          const RuntimeMessage& right) {
     return left.id == right.id && left.code == right.code &&
@@ -78,6 +103,8 @@ bool equalFermentationUiSemanticSnapshot(
         left.home.mode != right.home.mode ||
         left.home.processState != right.home.processState ||
         left.home.activeRunId != right.home.activeRunId ||
+        left.home.programName != right.home.programName ||
+        !equalRunDetail(left.home.runDetail, right.home.runDetail) ||
         !equalEffectiveValues(left.home.effectiveValues,
                               right.home.effectiveValues) ||
         left.home.primaryAction != right.home.primaryAction ||

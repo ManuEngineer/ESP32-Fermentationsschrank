@@ -14,6 +14,7 @@
 #include "mock_secure_random_source.hpp"
 #include "mock_time_zone_resolver.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 
 #include "virtual_time_source.hpp"
 
@@ -785,6 +786,55 @@ void test_active_run_with_long_run_id_allocates_nothing() {
     TEST_ASSERT_TRUE(fixture.step());
 }
 
+// The run detail carries the frozen program name (up to 96 bytes, beyond the
+// small-string buffer). Like the run id, its capacity must be recycled so the
+// stationary UI step stays allocation free, and the advancing phase seconds
+// must not request a redraw.
+void test_active_run_with_long_program_name_allocates_nothing() {
+    AppFixture fixture;
+    auto& state =
+        FermentationApplicationTestAccess::runtimeState(fixture.application);
+    auto document = FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    // 48 scalars of two bytes each: the 96 byte maximum of a visible name.
+    std::string longName;
+    for (int i = 0; i < 48; ++i) longName += "\xC3\xA4";
+    document->program.name = longName;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
+    document->program.fermentationStages.front().durationMinutes = 120U;
+    document->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    document->program.targetQualification.bandCelsius = 0.5;
+    document->program.targetQualification.durationMinutes = 10U;
+    document->program.maximumTargetReachMinutes = 180U;
+    document->program.completion.mode = CompletionMode::CoolThenFinish;
+    document->program.completion.coolingTargetCelsius = 9.0;
+    document->program.preheat = false;
+    document->program.maximumProductWaitMinutes = std::nullopt;
+    TEST_ASSERT_TRUE(validateProgram(*document).valid());
+    const auto run =
+        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog,
+                         RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(run.has_value());
+    state.activeProgramRun = *run;
+    state.activeRunId = std::string(48U, 'r');
+    state.processState.state = ProcessState::Fermenting;
+    fixture.settle();
+    TEST_ASSERT_EQUAL_UINT32(
+        96U, static_cast<std::uint32_t>(
+                 fixture.gate.snapshot().home.programName.size()));
+    TEST_ASSERT_TRUE(fixture.gate.snapshot().home.runDetail.has_value());
+
+    startCounting();
+    bool redraw = false;
+    for (int loop = 0; loop < 100; ++loop) {
+        redraw = redraw || fixture.step();
+    }
+    const auto allocations = stopCounting();
+    TEST_ASSERT_FALSE(redraw);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(allocations));
+}
+
 void test_recycled_snapshot_equals_a_fresh_snapshot() {
     AppFixture fixture;
     fixture.settle();
@@ -1059,6 +1109,7 @@ int main() {
     RUN_TEST(test_access_point_changes_bump_the_revision_and_request_redraw);
     RUN_TEST(test_redraw_after_access_point_change_still_shows_the_real_data);
     RUN_TEST(test_active_run_with_long_run_id_allocates_nothing);
+    RUN_TEST(test_active_run_with_long_program_name_allocates_nothing);
     RUN_TEST(test_recycled_snapshot_equals_a_fresh_snapshot);
     RUN_TEST(test_application_state_change_requests_redraw);
     RUN_TEST(test_workspace_page_change_requests_redraw);

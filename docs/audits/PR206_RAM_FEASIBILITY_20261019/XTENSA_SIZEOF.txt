@@ -1,0 +1,12 @@
+Xtensa (32 Bit, little endian), xtensa-esp32-elf-g++ 15.2.0 (esp-15.2.0_20251204), -std=gnu++17, Stand Planbasis 36a5e08
+MEASURED (sizeof):
+  FermentationUiSnapshot                 328 B   (0x148)
+  FermentationHomeView                   104 B   (0x68)
+  FermentationUiRefreshRevisionTracker   344 B   (0x158)  [haelt optional<FermentationUiSnapshot>]
+  FermentationUiProjectionInput          256 B   (0x100)
+  TemperatureView                        168 B   (0xa8)
+  std::string                             24 B   (0x18)   [SSO-Kapazitaet 15 B]
+  cJSON-Knoten                            40 B   (0x28)
+ESTIMATED (Scratch-Struct nach Plan §3, nicht Produktcode; siehe Quelle):
+  optional<Completion>=32 B-Struct, TimeInfo 40 B, RunDetailScratch 128 B, optional<RunDetailScratch> 136 B (0x88)
+Hinweis: Host-x86-64-Werte (z. B. Snapshot 408 B, std::string 32 B) sind NICHT massgeblich und werden nicht verwendet.

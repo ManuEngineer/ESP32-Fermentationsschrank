@@ -1,0 +1,73 @@
+APPROVED_PLAN=f013ec0c8428a204b5c53b70d7fd6fcbb088c75d
+D1=A D2=A
+SCOPE=C1_ONLY; C2/C3 NOT_STARTED
+NATIVE_BASELINE
+WEB_SHELL_AUTH_BYTES=8059 RESERVE=133
+WEB_SHELL_DISABLED_BYTES=8058 RESERVE=134
+================ 100 test cases: 100 succeeded in 00:00:26.174 ================
+
+CANDIDATE_JS
+PASS C1 shared locale keys preserve every frozen label and English fallback
+PASS C1 de: full run display, phase minutes and all completion modes
+PASS C1 de: missing, unknown, unbounded and cleared details
+PASS C1 en: full run display, phase minutes and all completion modes
+PASS C1 en: missing, unknown, unbounded and cleared details
+PASS C1 es: full run display, phase minutes and all completion modes
+PASS C1 es: missing, unknown, unbounded and cleared details
+PASS real send(): canonical sequence and CSRF headers across successive mutations
+PASS initial fetch, normal five-second ticks and fresh Online
+PASS headers do not release the lock; skipped ticks keep stale age current
+PASS 24-second success is not timed out, but remains stale; next group recovers
+PASS 30-second headers deadline aborts all siblings; no immediate retry or backlog
+PASS 30-second body deadline aborts all siblings; no immediate retry or backlog
+PASS early transport failure aborts siblings and waits for delayed abort settlement
+PASS early http failure aborts siblings and waits for delayed abort settlement
+PASS early json failure aborts siblings and waits for delayed abort settlement
+PASS real send(): applied, refresh fresh, no old action basis
+PASS real send(): applied, refresh aborted, no old action basis
+PASS real send(): applied, refresh failed, no old action basis
+PASS real send(): applied, refresh old, no old action basis
+PASS real send(): stale, refresh fresh, no old action basis
+PASS real send(): stale, refresh aborted, no old action basis
+PASS real send(): stale, refresh failed, no old action basis
+PASS real send(): stale, refresh old, no old action basis
+PASS real send(): busy, refresh fresh, no old action basis
+PASS real send(): busy, refresh aborted, no old action basis
+PASS real send(): busy, refresh failed, no old action basis
+PASS real send(): busy, refresh old, no old action basis
+PASS real send(): confirmation-required, refresh fresh, no old action basis
+PASS real send(): confirmation-required, refresh aborted, no old action basis
+PASS real send(): confirmation-required, refresh failed, no old action basis
+PASS real send(): confirmation-required, refresh old, no old action basis
+PASS real send(): rejected, refresh fresh, no old action basis
+PASS real send(): rejected, refresh aborted, no old action basis
+PASS real send(): rejected, refresh failed, no old action basis
+PASS real send(): rejected, refresh old, no old action basis
+PASS real send(): too-large, refresh fresh, no old action basis
+PASS real send(): too-large, refresh aborted, no old action basis
+PASS real send(): too-large, refresh failed, no old action basis
+PASS real send(): too-large, refresh old, no old action basis
+PASS real send(): write-failed, refresh fresh, no old action basis
+PASS real send(): write-failed, refresh aborted, no old action basis
+PASS real send(): write-failed, refresh failed, no old action basis
+PASS real send(): write-failed, refresh old, no old action basis
+PASS mutation at group completion and one coalesced refresh reservation
+PASS real send(): no-active-group, fresh snapshot even within the same clock millisecond
+PASS real send(): pending-headers, fresh snapshot even within the same clock millisecond
+PASS an unacknowledged abort keeps the lock across deadline and further ticks
+{"result":"PASS","cases":48,"node":"v20.19.2","network":"FAKE_ONLY","browser_hardware":"NOT_PROVEN"}
+
+CANDIDATE_COMPILER_SIZE_PROBE
+BASELINE_SUFFIX_BYTES=6662
+CANDIDATE_SUFFIX_BYTES=9013
+UNCHANGED_AUTH_HEAD_BYTES=1397
+CANDIDATE_AUTH_BODY_BYTES=10410
+CANDIDATE_DISABLED_BODY_BYTES=10409
+CANDIDATE_AUTH_MAX_SEQUENCE_BYTES=10429
+HARD_LIMIT=8192
+NORMAL_BODY_LIMIT_WITH_128_RESERVE=8064
+HARD_LIMIT_EXCESS=2218
+NORMAL_RESERVE_DEFICIT=2346
+C1_BUDGET_GATE=FAIL
+
+OMISSIONS=compiler/build chatter and local paths; raw logs retained locally; no private device/browser data used

@@ -1,0 +1,25 @@
+{"event": "S2_anonymous_load", "auth": "password-protected", "login_visible": true, "t": 4.195, "wall": "2026-10-19T18:11:02+0200"}
+{"event": "S1_after_login", "G": 1, "LT": 1792426267800, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 12.203, "wall": "2026-10-19T18:11:10+0200"}
+{"event": "S3_sample", "G": 1, "LT": 1792426267800, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 12.204, "wall": "2026-10-19T18:11:10+0200"}
+{"event": "S3_sample", "G": 7, "LT": 1792426297802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 42.208, "wall": "2026-10-19T18:11:40+0200"}
+{"event": "S3_sample", "G": 13, "LT": 1792426327802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 72.214, "wall": "2026-10-19T18:12:10+0200"}
+{"event": "S3_sample", "G": 19, "LT": 1792426357803, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 102.219, "wall": "2026-10-19T18:12:40+0200"}
+{"event": "S3_sample", "G": 25, "LT": 1792426387803, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 132.223, "wall": "2026-10-19T18:13:10+0200"}
+{"event": "S3_sample", "G": 31, "LT": 1792426417803, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 162.228, "wall": "2026-10-19T18:13:40+0200"}
+{"event": "S3_sample", "G": 37, "LT": 1792426447802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 192.236, "wall": "2026-10-19T18:14:10+0200"}
+{"event": "S3_sample", "G": 43, "LT": 1792426477802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 222.241, "wall": "2026-10-19T18:14:40+0200"}
+{"event": "S3_sample", "G": 49, "LT": 1792426507803, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 252.246, "wall": "2026-10-19T18:15:10+0200"}
+{"event": "S3_sample", "G": 55, "LT": 1792426537802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 282.254, "wall": "2026-10-19T18:15:40+0200"}
+{"event": "S3_sample", "G": 61, "LT": 1792426567802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 312.259, "wall": "2026-10-19T18:16:10+0200"}
+{"event": "S3_sample", "G": 67, "LT": 1792426597802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 342.264, "wall": "2026-10-19T18:16:40+0200"}
+{"event": "S3_sample", "G": 71, "LT": 1792426612802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 372.269, "wall": "2026-10-19T18:17:10+0200"}
+{"event": "S3_sample", "G": 75, "LT": 1792426657802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 402.274, "wall": "2026-10-19T18:17:40+0200"}
+{"event": "S3_sample", "G": 81, "LT": 1792426687802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 432.278, "wall": "2026-10-19T18:18:10+0200"}
+{"event": "S3_sample", "G": 87, "LT": 1792426717802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 462.284, "wall": "2026-10-19T18:18:40+0200"}
+{"event": "S3_sample", "G": 93, "LT": 1792426747802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 492.288, "wall": "2026-10-19T18:19:10+0200"}
+{"event": "S3_sample", "G": 99, "LT": 1792426777802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 522.292, "wall": "2026-10-19T18:19:40+0200"}
+{"event": "S3_sample", "G": 105, "LT": 1792426807802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 552.297, "wall": "2026-10-19T18:20:10+0200"}
+{"event": "S3_sample", "G": 111, "LT": 1792426837802, "P": true, "LP": true, "st": "online", "mode": "Ready", "A": "password-protected", "U": true, "run": "null", "t": 582.302, "wall": "2026-10-19T18:20:40+0200"}
+{"event": "S3_network_summary", "responses_by_status": {"200": 355, "401": 1}, "loading_failed": ["net::ERR_ABORTED", "net::ERR_ABORTED", "net::ERR_ABORTED"], "t": 612.307, "wall": "2026-10-19T18:21:10+0200"}
+{"event": "S5_logout_sent", "t": 612.529, "wall": "2026-10-19T18:21:10+0200"}
+{"event": "S5_browser_closed", "rc": 0, "t": 612.695, "wall": "2026-10-19T18:21:11+0200"}
