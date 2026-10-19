@@ -1,0 +1,61 @@
+# Offline-Sektionsprobe, Release-Profil esp32_release, ESP-IDF v6.1, esp-15.2.0_20251204
+# BASE = Planstand f013ec0/36a5e08 (Produktquelle unveraendert), CAND = BASE + CANDIDATE.patch (C1-Messkandidat)
+
+== BASE: xtensa-esp32-elf-size -A (nur Sektionen > 0 B, ohne Debug)
+.rtc.force_slow              40   1342177280
+.rtc_slow_reserved           24   1342185448
+.iram0.vectors             1028   1074266112
+.iram0.text              100815   1074267140
+.dram0.data               18975   1073414144
+.noinit                       1   1073433119
+.dram0.bss                74488   1073433120
+.flash.appdesc              256   1061158944
+.flash.rodata            233884   1061159200
+.flash.tdata                 16   1061393084
+.flash.rodata_noload      16059   1061393100
+.flash.text             1401410   1074593824
+.iram0.text_end               1   1074367955
+Total                  35667440
+bin_bytes 1756544
+-- readelf Sektion .flash.rodata / .dram0.data / .dram0.bss (Adresse, Flags)
+[ 9] .iram0.text       PROGBITS        40080404 040404 0189cf 00  AX  0   0  4
+[10] .dram0.data       PROGBITS        3ffb0000 03b000 004a1f 00  WA  0   0 16
+[14] .dram0.bss        NOBITS          3ffb4a20 03fa1f 0122f8 00  WA  0   0  8
+[16] .flash.rodata     PROGBITS        3f400120 001120 03919c 00  WA  0   0 16
+-- Symbol kWebShellSuffix (nm -S -C)
+3f423850 00001a07 d fermentation::(anonymous namespace)::kWebShellSuffix
+
+== CAND: xtensa-esp32-elf-size -A (nur Sektionen > 0 B, ohne Debug)
+.rtc.force_slow              40   1342177280
+.rtc_slow_reserved           24   1342185448
+.iram0.vectors             1028   1074266112
+.iram0.text              100815   1074267140
+.dram0.data               18975   1073414144
+.noinit                       1   1073433119
+.dram0.bss                74488   1073433120
+.flash.appdesc              256   1061158944
+.flash.rodata            236236   1061159200
+.flash.tdata                 16   1061395436
+.flash.rodata_noload      16059   1061395452
+.flash.text             1401410   1074593824
+.iram0.text_end               1   1074367955
+Total                  35672146
+bin_bytes 1758896
+-- readelf Sektion .flash.rodata / .dram0.data / .dram0.bss (Adresse, Flags)
+[ 9] .iram0.text       PROGBITS        40080404 040404 0189cf 00  AX  0   0  4
+[10] .dram0.data       PROGBITS        3ffb0000 03b000 004a1f 00  WA  0   0 16
+[14] .dram0.bss        NOBITS          3ffb4a20 03fa1f 0122f8 00  WA  0   0  8
+[16] .flash.rodata     PROGBITS        3f400120 001120 039acc 00  WA  0   0 16
+-- Symbol kWebShellSuffix (nm -S -C)
+3f423850 00002336 d fermentation::(anonymous namespace)::kWebShellSuffix
+
+== Delta CAND-BASE (Bytes)
+.flash.rodata base=233884 cand=236236 delta=2352
+.flash.text base=1401410 cand=1401410 delta=0
+.flash.rodata_noload base=16059 cand=16059 delta=0
+.iram0.text base=100815 cand=100815 delta=0
+.iram0.vectors base=1028 cand=1028 delta=0
+.dram0.data base=18975 cand=18975 delta=0
+.dram0.bss base=74488 cand=74488 delta=0
+bin base=1756544 cand=1758896 delta=2352
+factory partition 0x2F0000 = 3080192 B; bin cand fills 57 %

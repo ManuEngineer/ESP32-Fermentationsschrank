@@ -1,10 +1,19 @@
 # Issue #27 – R1-Laufinformationen im Web-Dashboard
 
-**2026-10-19 · PLAN_ONLY / PLAN_REVIEW_PENDING.** [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
+**2026-10-19 · PLAN-REVISION 2 (vorgeschlagenes Delta) · OWNER_DECISION_PENDING.**
+[Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN; [Draft-PR #206](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/206),
 Branch `agent/issue-27-r1-run-dashboard-info-plan`. Kein Implementierungsauftrag.
-Vor Umsetzung braucht es die ausdrueckliche Freigabe der exakten Plan-SHA
-**einschliesslich D1 und D2** unten.
+
+**Freigabestand.** Zuletzt freigegeben ist Plan-Commit
+`f013ec0c8428a204b5c53b70d7fd6fcbb088c75d` mit **D1=A, D2=A**. Die darin
+vereinbarte C1-Abbruchregel ist eingetreten: **C1=FAIL_BUDGET / HOLD** bei
+unveraendert 8192 B ([Bytebefund](../audits/PR206_C1_BUDGET_20261019.md));
+**C2 und integriertes C3 NOT_STARTED.** Diese Revision ist **nicht freigegeben**:
+sie legt nach der Ressourcenpruefung ([RAM-Bilanz](../audits/PR206_RAM_FEASIBILITY_20261019.md))
+zwei neue Ownerentscheidungen vor (**D1-C** in §5, **H-RAM-1** in §7). Vor jeder
+Umsetzung braucht es die ausdrueckliche Freigabe der exakten SHA **dieser
+Revision**. D2=A bleibt bestehen.
 
 ## 1. Basis, Ziel und Schnitt
 
@@ -121,9 +130,9 @@ LP bleibt bei Fehler/Stale nur gedimmte Vergangenheit mit Abrufalter.
 DE/EN/ES-Tokens mit den bestehenden Fachtexten abgleichen; Benutzerprogrammnamen
 unuebersetzt lassen; Englisch/technischer Schluessel als sichtbarer Fallback.
 
-## 4. D2 – notwendige Zeitentscheidung
+## 4. D2 – Zeitentscheidung (A bestaetigt)
 
-**Empfehlung D2-A: ausdruecklich phasenbezogene Zeit fuer diesen kleinen Slice.**
+**D2-A (Owner bestaetigt auf `f013ec0`): ausdruecklich phasenbezogene Zeit fuer diesen kleinen Slice.**
 Beschriftung beispielsweise „Phase verstrichen“ / „Rest dieser Phase“; kein
 unbeschriftetes „Laufzeit/Rest bis Programmende“. Die vollstaendige Gesamtlaufzeit
 bleibt als offener R1-Punkt erkennbar, sofern der Owner sie nicht neu begrenzt.
@@ -147,7 +156,7 @@ bleibt als offener R1-Punkt erkennbar, sofern der Owner sie nicht neu begrenzt.
   oder bei altem Snapshot kein Browserweiterzaehlen. Minutenanzeige: elapsed
   abrunden, positive Restzeit aufrunden; Stunden nicht bei 24 umbrechen.
 
-**D2-B (hier nicht zur Umsetzung vorgeschlagen):** Soll der Slice stattdessen
+**D2-B (nicht gewaehlt, nicht Teil dieses Slices):** Soll der Slice stattdessen
 volle Run-Gesamtzeit/Programmende-ETA liefern, fehlt der gepruefte gemeinsame
 Zeitvertrag. Dann anhalten und genau diesen Domain-/Recovery-Vertrag gesondert
 entscheiden; keine Persistenzfelder/Browseruhr im vorliegenden Slice vorbauen.
@@ -155,62 +164,94 @@ D2-A ist eine begrenzte Slice-Abnahme, keine heimliche Erfuellung aller R1-Zeite
 
 ## 5. Ressourcenbefund und D1 – Budgetentscheidung
 
-#205-Nachweis: authentifiziert **8059 B**, Passwortschutz aus 8058 B, mit
-20-stelliger Sequenz 8078/8077 B; heutige harte Grenze **8192 B**. Die bestehende
-128-B-Reserve im Normalfall enthaelt 19 B Sequenzaufschlag: **nur 5 B** netto
-additiv frei. Read-only-Analyse der C++-Literale auf 79eb9b9: statischer Suffix
-**6662 UTF-8-B**, kein neuer Lauf-/Buildbeweis. Allein die bestehenden Texte der
-acht aktiven Phasen in DE/EN/ES enthalten **336 UTF-8-B** Werte, ohne Schluessel,
-HTML/JS oder die weiteren Fachlabels. Ein unveraendertes additiv vergroessertes
-Layout mit diesen Texten passt somit nicht. **Ein kompakt umgestalteter Kandidat
-ist noch nicht implementiert/gemessen: BUDGET_FIT=NOT_PROVEN.**
+**Basis (#205):** authentifiziert 8059 B, Passwortschutz aus 8058 B, mit
+20-stelliger Sequenz 8078/8077 B; harte Grenze 8192 B, Normalreserve 128 B
+(enthaelt 19 B Sequenzaufschlag). Statischer Suffix 6662 UTF-8-B, unveraenderter
+Kopf 1397 B.
 
-| Ownerentscheidung vor Umsetzung | Begrenzung / Kosten / Abbruch |
+**C1-Ergebnis (MEASURED, D1-A ausgefuehrt):** vollstaendige Anzeige DE/EN/ES im
+begrenzten Kandidaten = **10 410 B** (10 429 B mit maximaler Sequenz), Fehlbetrag
+2218 B hart / 2346 B mit Reserve. `BUDGET_FIT` fuer 8192 B ist damit
+**MEASURED_FAIL**. Kein weiterer Kompaktierungsversuch; D1-B (10 240 B) verfehlt
+den Kandidaten mit Reserve um 298 B und wird nicht vorgeschlagen.
+
+**Ressourcenpruefung ([Detailbilanz](../audits/PR206_RAM_FEASIBILITY_20261019.md)):**
+
+| Posten | Ergebnis | Status |
+|---|---|---|
+| Suffix-Zuwachs +2351 B | `.flash.rodata` +2352 B; `.dram0.data/.bss`, `.iram0.text`, `.flash.text` je 0 B; Image +2352 B (57 % der 3 080 192-B-Partition) | **MEASURED** (Offline-Sektionsprobe, `esp32_release`) |
+| Suffix-Sendepfad | Chunk ohne Heap-Kopie; Sendespitze durch `TCP_SND_BUF=5760` begrenzt, schon der heutige Body liegt darueber; laengere Sendedauer (+29 %) | ESTIMATED (Code/Konfiguration) |
+| C2/C3 dauerhaft | ca. +0,15 KB, bis ca. +0,4 KB bei langem Namen | ESTIMATED |
+| C2/C3 transient pro `/status` | Heap-Spitze +1,2 … +2,6 KB (cJSON-Baum und String, Baum vor dem Senden frei) | ESTIMATED |
+| HTTPD-Stack | +0,24 … +0,34 KB gegen zuletzt 2336 B frei (frueherer Testfloor 2080 B) | ESTIMATED / **NOT_PROVEN**, engste Grenze |
+| Main-Stack | +0,14 … 0,5 KB gegen mind. 11 752 B frei (Floor 11 160 B) | ESTIMATED |
+| Heap-/Stack-Spitzen, Erholung, F4-Skips auf aktuellem Stand | keine Messung vorhanden | **NOT_PROVEN** |
+
+`sizeof`/Bytebilanz allein ist kein `RAM_PASS`; Abschlusswertung nach C3 ist
+hoechstens `RAM_OFFLINE_ESTIMATED` bis zum Gate H-RAM-1.
+
+| Ownerentscheidung | Begrenzung / Kosten / Abbruch |
 |---|---|
-| **D1-A, empfohlen: 8192 B behalten** | Zuerst C1: nur bestehende DE/EN/ES-Tabelle durch gemeinsame Schluessel statt dreifacher Schluessel und dr()-Zeilenrendering lokal kompakter schreiben; alle Texte/Funktionen/Guards erhalten, kein Minifier/Buildframework. Den vollstaendigen geplanten Inhalt und maximale Sequenz messen. >=128 B Normalreserve beibehalten. Nicht hinreichend: STOP mit Byte-Fehlbetrag, kein halber Backend-Fix und keine breite Optimierungskampagne. Ein Fit ist nicht zugesagt. |
-| **D1-B, nur ausdruecklich alternativ freigebbar: 10240 B Gesamtbody** | Einmalige, sichtbare neue Obergrenze mit unveraenderter 128-B-Normalreserve und 19-B-Sequenztest; keine automatische zweite Erhoehung. Budgetobergrenze +2048 B; konkrete Mehruebertragung/Flashbytes gegen die gemessenen 8059 B erst messen; F1 belassen, besessener Kopf weiterhin <=1536 B auch mit maximaler Sequenz. Keine direkte Schlussfolgerung auf Peak-Heap/Sendelaufzeit. Konstanten, Golden/Budgetassertions und WEB_UI ausschliesslich fuer diesen freigegebenen Wert nachfuehren. Passt der komplette Inhalt auch dann nicht: HOLD. |
+| **D1-A (ausgefuehrt)** | 8192 B halten: C1=FAIL_BUDGET / HOLD. Bleibt der Befund, wenn der Owner weder D1-C noch einen anderen Weg entscheidet; dann kein C2/C3. |
+| **D1-C (neu, empfohlen, nicht freigegeben):** einmalige neue Obergrenze **10 752 B** fuer Kopf plus Suffix | Spielraum: 342 B Gesamtreserve zum 10 410-B-Kandidaten, davon **214 B** ueber der 128-B-Reserve (konservativ 195 B ueber 10 429 B und Reserve) fuer die C3-Bindung. Kopf bleibt <= 1536 B auch mit maximaler Sequenz, F1 unveraendert. Genau eine Erhoehung: ueberschreitet C3 den Normalbody um mehr als 214 B (konservativ 195 B) gegenueber dem C1-Messstand, folgt **HOLD**, keine zweite Erhoehung, keine Kompaktierungsrunde. Konstante `kMaximumWebShellBytes`, Budget-/Golden-Assertions und WEB_UI nur fuer diesen Wert nachfuehren; 19-B-Sequenztest bleibt. |
+| **D1-B (10 240 B)** | nicht vorgeschlagen (ungenuegend, 298 B Fehlbetrag). |
 
-Eine getrennte statische JS-Datei koennte mit dem heutigen F1-Suffix ohne
-vollstaendige Heap-Kopie ausgeliefert werden (der alte #203-Vor-F1-Befund gilt
-hier nicht mehr). Sie braeuchte aber einen zusaetzlichen GET/Route-, Fehler-,
-Caching-/Auth- und Gesamtasset-Budgetvertrag und umgeht die heutige Gesamtbody-
-Schranke nicht ohne Entscheidung. Deshalb **keine** solche Umsetzung in diesem
-Plan, keine vorsorgliche Netzwerk-/HTTPD-/Architekturaenderung.
+**Variantenwahl:** Variante A (F1-Flashsuffix, schlichte Anzeige, D1-C) ist
+bevorzugt. Ein separates cachebares Asset (B) braeuchte zusaetzliche Route-,
+Auth-, Cache- und Gesamtasset-Vertraege und bringt keinen nachgewiesenen RAM-
+Vorteil; es wird **nur** bei einem Shell-spezifischen RAM-/Uebertragungsbefund aus
+H-RAM-1 neu vorgelegt. Keine Gzip-/Socket-/WLAN-/Minifier-Massnahme vorsorglich;
+keine Architektur- oder Buildumbauten.
 
 **API/Peak:** 3072-B-Grenzen fuer status/programs/temperatures/alerts bleiben.
-Programmname maximal 96 B kann bei JSON-Escaping bis 576 B, Run-ID 48 B bis
-288 B benoetigen. Mit Enums, Zahlen und Schluesseln ist der neue Status **noch
-zu messen**, nicht aus dieser Teilrechnung als passend erklaert. Keine ganze
-Programm-/Kataloguebertragung. cJSON-Baum plus Strings, existierender 3078-B-
-Printpuffer und besessener Antwortbody existieren zeitweise gleichzeitig;
-3072 B Bodylimit begrenzen nicht allein den Peak-Heap oder Stack.
-Neue Viewstrings und Tracker-Kopien erhoehen ggf. den UI-Speicherbedarf.
-
-C2/C3 erfassen sizeof-/String-/Body-/Builddeltas und verfuegbare gezielte native
-Allokations-/Fehlernachweise. Daraus folgt **kein** realer ESP32-Peaknachweis;
-dieser bleibt NOT_PROVEN. Keine PSRAM-Annahme, F4-Schwellenaenderung oder
-allgemeine OOM-Zusage. Statische Daten bleiben im Flashsuffix, Fehler loeschen
-Suffix; keine zusammengesetzte Shellkopie oder grosser Stack-Temporary.
+Programmname maximal 96 B kann bei JSON-Escaping bis 576 B, Run-ID 48 B bis 288 B
+benoetigen; Bodygrenze 3072 B ergibt sonst 503 ohne Suffix. cJSON-Baum plus Strings
+und Ausgabestring existieren gleichzeitig, der Baum wird vor dem Senden freigegeben;
+das 3079-B-Druckarray liegt bereits heute im HTTPD-Stack. Programmname und Run-ID
+liegen in je einer Kopie im Tracker, im `UiRenderGate` (Main-Stack, lokale Variable
+in `app_main`) und im Request-Snapshot (HTTPD-Stack). Keine PSRAM-Annahme, keine
+F4-Schwellenaenderung, keine allgemeine OOM-Zusage. Statische Daten bleiben im
+Flashsuffix, Fehler loeschen den Suffix; keine zusammengesetzte Shellkopie oder
+grosser Stack-Temporary.
 
 ## 6. Umsetzungsschnitte nach exakter Freigabe
 
-1. **C1 – Budget zuerst:** freigegebene D1-Variante mit kompletter Anzeige und
-   DE/EN/ES in vorhandener Shell/Test-Fixture pruefen; Synthesedaten, keine
-   Domainnachbildung/Netzwerkaktion. Ausfuehrenden JS-Test wiederverwenden.
-   Alle bisherigen Guards/Header/Sprachen und native Budget-/Golden-Regression
-   halten. Bei Budgetfehler HOLD vor Backend-Erweiterung; Bytebefund vorlegen.
+Voraussetzung fuer jeden Schnitt: Ownerfreigabe der exakten SHA dieser Revision
+**einschliesslich D1-C**. Ohne D1-C bleibt C1 `FAIL_BUDGET / HOLD`.
+
+1. **C1 – Budget und Anzeige:** Der gesicherte Messkandidat
+   ([CANDIDATE.patch](../audits/PR206_C1_BUDGET_20261019/CANDIDATE.patch), 48/48
+   JS-Test) ist die Ausgangsbasis, kein freigegebenes Image. Limit auf den
+   freigegebenen Wert setzen, Budget-/Golden-/Overflow-Assertions und WEB_UI
+   nachfuehren, native Budget-/Golden-/Overflowregression und den ausfuehrenden
+   JS-Test auf dem Umsetzungscommit wiederholen. Alle bisherigen Guards, Header und
+   Sprachen bleiben. Synthetische Daten, keine Domainnachbildung, keine
+   Netzwerkaktion.
 2. **C2 – gemeinsame Projektion und Transport:** `fermentation_ui_models.*`,
-   `fermentation_ui_projector.*`, `fermentation_application.cpp` um begrenzte
-   Anzeigeprojektion/D2-A-Zeitinput ergaenzen; bestehende control_context-
+   `fermentation_ui_projector.*`, `fermentation_application.cpp` um die begrenzte
+   Anzeigeprojektion und den D2-A-Zeitinput ergaenzen; bestehende control_context-
    Resolver verwenden. `web_json_codec.*` um das additive run-Objekt, bestehende
    Routen unveraendert. Keine Aenderung an FSM-/Run-/Recovery-/Persistenzlogik,
-   Plattformports, Adapter, Mutations- oder Sessionvertraegen.
+   Plattformports, Adapter, Mutations- oder Sessionvertraegen. **Ressourcen-
+   nachweis in diesem Schnitt (offline, ohne Geraet):** `static_assert`/Xtensa-
+   `sizeof` fuer das reale Laufdetail gegen die Schaetzung; Allokationszaehlung im
+   nativen Codec-Test nach dem **vorhandenen** Muster von
+   `test_ui_steady_state_allocations` (ersetzte globale `operator new`; keine
+   neue Testinfrastruktur): Blockzahl, Summe, groesster Block fuer den Worst-Case-
+   Body mit 96-B-/Escape-Name, Run-ID 48 B, alle vier Abschlussmodi; zusaetzlich
+   ein 96-B-Namensfall im stationaeren 0-Allokations-Test des UI-Schritts; statische
+   Framegroesse (`-fstack-usage`) fuer Status-Handler und Codec, als Zahl berichten,
+   nicht als Geraetebeweis.
 3. **C3 – integrierte Anzeige und Nachweis:** C1-Shell an reale API-Projektion
    binden; `scripts/test_web_shell_polling.mjs`, vorhandene native UI-/Webtests
-   und Frozen-Golden gezielt ergaenzen. WEB_UI fuer gelieferte Felder, Grenzen
-   und ausdruecklich gewaehltes Budget aktualisieren, passende SIM-Akzeptanzfaelle
-   in ACCEPTANCE_TESTS/Status in ROADMAP nachfuehren. Ergebnis auf exakten
-   Quell-/Testcommit binden; Builder-Self-Check, dann Independent Review.
+   und Frozen-Golden gezielt ergaenzen. Der C1-Kandidat verwendet bereits die
+   Feldnamen aus §3; die Bindung darf den Normalbody um hoechstens 214 B
+   (konservativ 195 B) ueber den C1-Messstand vergroessern, sonst **HOLD**. WEB_UI
+   fuer gelieferte Felder, Grenzen und das gewaehlte Budget aktualisieren, passende
+   SIM-Akzeptanzfaelle in ACCEPTANCE_TESTS und Status in ROADMAP nachfuehren.
+   Ergebnis auf exakten Quell-/Testcommit binden; Builder-Self-Check, dann
+   Independent Review. Das Hardware-Gate H-RAM-1 (§7) ist ein eigener,
+   ownerautorisierter Schritt **nach** dem Builder-Self-Check und kein Teil von C1–C3.
 
 ## 7. Gezielte Verifikation und verbleibender R1-Scope
 
@@ -221,12 +262,13 @@ Suffix; keine zusammengesetzte Shellkopie oder grosser Stack-Temporary.
 | Codec/produktiver GET /status | nullable Typen, alle vier Abschlussmodi, neue Felder mit bestehenden Revisionen aus einem Snapshot; maximale Namen inkl. UTF-8/Escaping, sichere Zahlengrenzen, 3072 B und kompletter 503-Fehler ohne Suffix. Auth/Same-Origin/GET-only unveraendert |
 | Echter extrahierter JS-Shelltest | DE/EN/ES, fremder Name als Text, unbekannte Tokens/Fallback; vorhandener/neuer/fehlender run-Block; alte/verzoegerte Antworten, Mutation/Refresh, langsame Gruppe, Abort, Stale/Offline und Recovery. LP-Details allein geben niemals Aktionen frei; alle bestehenden 41 Szenarien erhalten |
 | Shell/F1/Abhaengige Konsumenten | Alle Auth-/Provisionierungs-/Recoveryzustaende plus maximale Sequenz, D1-Grenze/Reserve, kompletter Kopf+Suffix; alle bisherigen Funktionen/Texte/CSRF-/Sequenzheader erhalten; native Renderer-/UI-Revision-Regression wegen gemeinsamem Viewmodell |
+| Ressourcen offline (C2/C3) | Xtensa-`sizeof` des realen Laufdetails gegen die Schaetzung; zaehlender Allokator im nativen Codec-Worst-Case (96-B-/Escape-Name, vier Abschlussmodi, 3072 B, 503); statische Framegroessen von Status-Handler und Codec; ELF-Sektionsvergleich gegen die Basis (`.dram0.*`, `.iram0.*` unveraendert, `.flash.rodata` im erwarteten Rahmen). Ergebnis hoechstens `RAM_OFFLINE_ESTIMATED`, nie `RAM_PASS` |
 
 Geplante Befehle nach Umsetzung (nicht jetzt):
 
 ```bash
 node scripts/test_web_shell_polling.mjs
-pio test -e native -f test_fermentation_ui_models -f test_control_context -f test_process_state_machine -f test_web_application_routes -f test_renderer_boundary
+pio test -e native -f test_fermentation_ui_models -f test_control_context -f test_process_state_machine -f test_web_application_routes -f test_renderer_boundary -f test_ui_steady_state_allocations
 python3 scripts/build_esp_idf_profiles.py all --require-clean-source-tree
 export PRE_READY_EXPECTED_HEAD="$(git rev-parse HEAD)"
 bash scripts/run_pre_ready_gates.sh self-check
@@ -251,8 +293,26 @@ Lauf-/Gesamtzeit nur nach D2-Entscheidung; Commissioning/D9/Regelung/Aktoren
 separat. Issue #27 erst nach gesamtem genehmigtem R1-Umfang oder ausdruecklicher
 Owner-Neuabgrenzung schliessen.
 
-**Jetzt:** nur dieser eine Plan und Statusdokumentation; keine Produkt-/Test-/
-Build-/Toolchainaenderung, kein Testlauf/Pre-Ready oder Geraetezugriff. Exakte
-Plan-SHA zur unabhaengigen Pruefung vorlegen, danach STOP. D1 und D2 offen;
-`ACTUATOR_RELEASE=NO`, G1' storniert/NOT_RUN, F4 PROVISIONAL und saemtliche
-historischen FAIL/HOLDs unveraendert.
+**H-RAM-1 – vorgeschlagenes Hardware-Gate (nicht ausgefuehrt, nicht freigegeben):**
+aktorfreies Board mit dem vollstaendigen C1–C3-Image (ein vergroesserter Shell-
+Prototyp beweist den JSON-/Projektions-Heap nicht), ein normaler Browser/1 Client,
+Login, Shellabruf, bestehendes 5-s-Polling, Schliessen und Erholung; keine
+Vier-Client-/G1'-Kampagne. Bei Bedarf Image-Wahl M (benanntes Mess-Overlay mit
+ausgewiesenem Image-Unterschied, weil das Produktimage Spitzen und HTTPD-HWM nicht
+liefert) oder P (Produktimage, Spitzen/HTTPD-HWM bleiben NOT_PROVEN), und ein
+aktiver Lauf nur, wenn er auf dem aktorfreien Board darstellbar ist (NOT_CONFIRMED,
+Ownerklaerung). Messwerte: freier/minimaler interner 8-Bit-Heap, groesster Block
+vor/waehrend/nach Shell und Statuscodec, Main-/HTTPD-Stack-HWM,
+`ui_skipped_low_memory`, `heap_alloc_failed`, Reset/Panic/Watchdog, HTTP-Fehler und
+Erholung gegen den eigenen Idle-Bezug; Referenz G0-R3 mit benannten
+Unterschieden, keine neuen Schwellen. Flash, UART, Browserzugriff und Reset
+brauchen je eine gesonderte Ownerfreigabe. Details und Schrittprofil:
+[RAM-Bilanz §7](../audits/PR206_RAM_FEASIBILITY_20261019.md).
+
+**Jetzt:** nur dieser Planrevisions-Commit, die RAM-Bilanz und Statusdokumentation;
+keine Produkt-/Test-/Build-/Toolchainaenderung, kein Pre-Ready, kein
+Geraetezugriff. Die offline gebauten Sektionsproben (Wegwerfkopien, nur
+`esp32_release`) sind keine ESP-Gate-Builds. Exakte Plan-SHA zur unabhaengigen
+Pruefung vorlegen, danach STOP und auf den Ownerentscheid D1-C und H-RAM-1
+warten. `ACTUATOR_RELEASE=NO`, G1' storniert/NOT_RUN, F4 PROVISIONAL, offene
+R1-U/D9-Abnahme und saemtliche historischen FAIL/HOLDs unveraendert.
