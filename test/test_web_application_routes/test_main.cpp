@@ -3782,8 +3782,8 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
     FermentationRunDetail detail;
     detail.sourceKind = ProgramSourceKind::UserProgram;
     detail.targetCelsius = 24.5;
-    detail.completion = RunDetailCompletion{
-        CompletionMode::CoolAndHoldForDuration, 8.0, 30U};
+    detail.completion =
+        RunDetailCompletion{CompletionMode::CoolAndHoldForDuration, 8.0, 30U};
     detail.time.elapsedSeconds = 61U;
     detail.time.remainingSeconds = 7139U;
     detail.time.remainingKind = RunDetailRemainingKind::Timed;
@@ -3794,7 +3794,8 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
          {"programName", "sourceKind", "targetCelsius", "completion",
           "coolingTargetCelsius", "holdDurationMinutes", "elapsedSeconds",
           "remainingSeconds", "remainingKind", "scope"}) {
-        TEST_ASSERT_TRUE(contains(status, (std::string("\"") + member + "\":").c_str()));
+        TEST_ASSERT_TRUE(
+            contains(status, (std::string("\"") + member + "\":").c_str()));
         TEST_ASSERT_TRUE(contains(body, member));
     }
     TEST_ASSERT_TRUE(contains(body, "a.run"));

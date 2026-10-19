@@ -93,7 +93,8 @@ RunDetailTime projectRunTime(const RunCommandState& state,
     std::optional<std::uint32_t> durationMinutes;
     if (state.processRunSnapshot.has_value()) {
         if (phase == ProcessState::Fermenting) {
-            durationMinutes = state.processRunSnapshot->fermentationDurationMinutes;
+            durationMinutes =
+                state.processRunSnapshot->fermentationDurationMinutes;
         } else if (phase == ProcessState::CoolHolding &&
                    state.processRunSnapshot->completionMode ==
                        CompletionMode::CoolAndHoldForDuration) {

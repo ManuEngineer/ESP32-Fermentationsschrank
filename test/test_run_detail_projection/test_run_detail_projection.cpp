@@ -98,7 +98,8 @@ RunCommandState programState(ProcessState phase, CompletionMode mode,
                              const std::string& name = std::string()) {
     auto document = FactoryProgramCatalog::find("water-kefir");
     TEST_ASSERT_TRUE(document.has_value());
-    document->program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
     document->program.fermentationStages.front().durationMinutes = 120U;
     document->program.productSensorFailure.fallbackDelaySeconds = 30U;
     document->program.targetQualification.bandCelsius = 0.5;
@@ -106,8 +107,9 @@ RunCommandState programState(ProcessState phase, CompletionMode mode,
     document->program.maximumTargetReachMinutes = 180U;
     document->program.completion.mode = mode;
     document->program.completion.coolingTargetCelsius =
-        mode == CompletionMode::FinishWithoutCooling ? std::nullopt
-                                                     : std::optional<double>{9.0};
+        mode == CompletionMode::FinishWithoutCooling
+            ? std::nullopt
+            : std::optional<double>{9.0};
     document->program.completion.holdDurationMinutes =
         mode == CompletionMode::CoolAndHoldForDuration
             ? std::optional<std::uint32_t>{30U}
@@ -186,8 +188,8 @@ void test_missing_and_manual_sources_have_no_program_name() {
 }
 
 void test_target_follows_the_control_context_resolver() {
-    auto state = programState(ProcessState::Fermenting,
-                              CompletionMode::CoolThenFinish);
+    auto state =
+        programState(ProcessState::Fermenting, CompletionMode::CoolThenFinish);
     auto snapshot = project(state, 5000U);
     TEST_ASSERT_EQUAL_DOUBLE(38.0, *snapshot.home.runDetail->targetCelsius);
 
@@ -220,8 +222,8 @@ void test_all_four_completion_modes_are_projected() {
     TEST_ASSERT_FALSE(detail->completion->coolingTargetCelsius.has_value());
     TEST_ASSERT_FALSE(detail->completion->holdDurationMinutes.has_value());
 
-    state = programState(ProcessState::Fermenting,
-                         CompletionMode::CoolThenFinish);
+    state =
+        programState(ProcessState::Fermenting, CompletionMode::CoolThenFinish);
     detail = project(state, 5000U).home.runDetail;
     TEST_ASSERT_EQUAL_DOUBLE(9.0, *detail->completion->coolingTargetCelsius);
     TEST_ASSERT_FALSE(detail->completion->holdDurationMinutes.has_value());
@@ -240,8 +242,8 @@ void test_all_four_completion_modes_are_projected() {
 }
 
 void test_phase_time_is_exact_or_unknown() {
-    auto state = programState(ProcessState::Fermenting,
-                              CompletionMode::CoolThenFinish);
+    auto state =
+        programState(ProcessState::Fermenting, CompletionMode::CoolThenFinish);
     // 120 minute phase, entered at 1000 ms.
     auto time = project(state, 1000U + 61U * 1000U).home.runDetail->time;
     TEST_ASSERT_EQUAL_UINT64(61U, *time.elapsedSeconds);
@@ -273,21 +275,21 @@ void test_phase_time_is_exact_or_unknown() {
     TEST_ASSERT_EQUAL_UINT64(110U, *time.elapsedSeconds);
     // Wrong tag, unclear bounds or missing upper bound: unknown.
     state.priorBootPhaseElapsed->taggedState = ProcessState::CoolHolding;
-    TEST_ASSERT_FALSE(project(state, 20000U)
-                          .home.runDetail->time.elapsedSeconds.has_value());
+    TEST_ASSERT_FALSE(
+        project(state, 20000U).home.runDetail->time.elapsedSeconds.has_value());
     state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
         ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 200U}};
-    TEST_ASSERT_FALSE(project(state, 20000U)
-                          .home.runDetail->time.elapsedSeconds.has_value());
+    TEST_ASSERT_FALSE(
+        project(state, 20000U).home.runDetail->time.elapsedSeconds.has_value());
     state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
         ProcessState::Fermenting, PriorBootPhaseElapsed{100U, std::nullopt}};
-    TEST_ASSERT_FALSE(project(state, 20000U)
-                          .home.runDetail->time.elapsedSeconds.has_value());
+    TEST_ASSERT_FALSE(
+        project(state, 20000U).home.runDetail->time.elapsedSeconds.has_value());
 }
 
 void test_remaining_kind_per_phase() {
-    auto state = programState(ProcessState::Preheating,
-                              CompletionMode::CoolThenFinish);
+    auto state =
+        programState(ProcessState::Preheating, CompletionMode::CoolThenFinish);
     auto time = project(state, 5000U).home.runDetail->time;
     TEST_ASSERT_TRUE(time.elapsedSeconds.has_value());
     TEST_ASSERT_TRUE(time.remainingKind == RunDetailRemainingKind::Unknown);
@@ -304,13 +306,15 @@ void test_remaining_kind_per_phase() {
     TEST_ASSERT_TRUE(time.remainingKind == RunDetailRemainingKind::Unbounded);
     TEST_ASSERT_FALSE(time.remainingSeconds.has_value());
 
-    state = programState(ProcessState::Completed,
-                         CompletionMode::CoolThenFinish);
+    state =
+        programState(ProcessState::Completed, CompletionMode::CoolThenFinish);
     time = project(state, 5000U).home.runDetail->time;
-    TEST_ASSERT_TRUE(time.remainingKind == RunDetailRemainingKind::NotApplicable);
+    TEST_ASSERT_TRUE(time.remainingKind ==
+                     RunDetailRemainingKind::NotApplicable);
     TEST_ASSERT_FALSE(time.elapsedSeconds.has_value());
 
-    for (const auto phase : {ProcessState::Fault, ProcessState::RecoveryEvaluation}) {
+    for (const auto phase :
+         {ProcessState::Fault, ProcessState::RecoveryEvaluation}) {
         state.processState.state = phase;
         time = project(state, 5000U).home.runDetail->time;
         TEST_ASSERT_FALSE(time.elapsedSeconds.has_value());
@@ -319,15 +323,15 @@ void test_remaining_kind_per_phase() {
 }
 
 void test_phase_seconds_do_not_change_the_semantic_snapshot() {
-    const auto state = programState(ProcessState::Fermenting,
-                                    CompletionMode::CoolThenFinish);
+    const auto state =
+        programState(ProcessState::Fermenting, CompletionMode::CoolThenFinish);
     const auto first = project(state, 5000U);
     const auto later = project(state, 9000U);
     TEST_ASSERT_TRUE(equalFermentationUiSemanticSnapshot(first, later));
     auto changed = state;
     changed.processState.state = ProcessState::Cooling;
-    TEST_ASSERT_FALSE(equalFermentationUiSemanticSnapshot(
-        first, project(changed, 5000U)));
+    TEST_ASSERT_FALSE(
+        equalFermentationUiSemanticSnapshot(first, project(changed, 5000U)));
 }
 
 std::string status(const FermentationUiSnapshot& snapshot) {
@@ -440,9 +444,9 @@ void test_status_encoding_allocations_cover_cjson_and_operator_new() {
     const auto worst = worstCaseSnapshot();
     std::string standbyBody;
     std::string worstBody;
-    auto typicalState = programState(ProcessState::Fermenting,
-                                     CompletionMode::CoolThenFinish,
-                                     "Sauerteig 24h");
+    auto typicalState =
+        programState(ProcessState::Fermenting, CompletionMode::CoolThenFinish,
+                     "Sauerteig 24h");
     const auto typical = project(typicalState, 1000U + 61U * 1000U);
     std::string typicalBody;
     const auto typicalWindow = measure(typical, typicalBody);
@@ -459,8 +463,8 @@ void test_status_encoding_allocations_cover_cjson_and_operator_new() {
     std::printf(
         "STATUS_ALLOC standby: count=%zu bytes=%zu largest=%zu peak_live=%zu "
         "cjson_count=%zu body=%zu\n",
-        base.count, base.requestedBytes, base.largestBlock,
-        base.peakLiveBytes, base.cJsonCount, standbyBody.size());
+        base.count, base.requestedBytes, base.largestBlock, base.peakLiveBytes,
+        base.cJsonCount, standbyBody.size());
     std::printf(
         "STATUS_ALLOC worst:   count=%zu bytes=%zu largest=%zu peak_live=%zu "
         "cjson_count=%zu body=%zu\n",
@@ -469,8 +473,10 @@ void test_status_encoding_allocations_cover_cjson_and_operator_new() {
     // The cJSON path is really covered by the hooks and fully released; the
     // string is the only block allowed to outlive the window.
     TEST_ASSERT_TRUE(peak.cJsonCount > base.cJsonCount);
-    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(peak.cJsonLiveBytes));
-    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(base.cJsonLiveBytes));
+    TEST_ASSERT_EQUAL_UINT32(0U,
+                             static_cast<std::uint32_t>(peak.cJsonLiveBytes));
+    TEST_ASSERT_EQUAL_UINT32(0U,
+                             static_cast<std::uint32_t>(base.cJsonLiveBytes));
     TEST_ASSERT_TRUE(peak.peakLiveBytes > worstBody.size());
     TEST_ASSERT_TRUE(peak.peakLiveBytes > base.peakLiveBytes);
     TEST_ASSERT_TRUE(peak.largestBlock <= kMaximumWebApiResponseBodyBytes);

@@ -919,16 +919,18 @@ const char* remainingKindName(RunDetailRemainingKind value) {
 // by the projection).
 bool addOptionalNumber(cJSON* object, const char* key,
                        const std::optional<double>& value) {
-    if (!value.has_value()) return cJSON_AddNullToObject(object, key) != nullptr;
+    if (!value.has_value())
+        return cJSON_AddNullToObject(object, key) != nullptr;
     return addNumber(object, key, *value);
 }
 
 bool addOptionalSeconds(cJSON* object, const char* key,
                         const std::optional<std::uint64_t>& value) {
-    if (!value.has_value()) return cJSON_AddNullToObject(object, key) != nullptr;
+    if (!value.has_value())
+        return cJSON_AddNullToObject(object, key) != nullptr;
     return *value <= 9007199254740991ULL &&
-           cJSON_AddNumberToObject(object, key,
-                                   static_cast<double>(*value)) != nullptr;
+           cJSON_AddNumberToObject(object, key, static_cast<double>(*value)) !=
+               nullptr;
 }
 
 bool addRunDetail(cJSON* document, const FermentationHomeView& home) {

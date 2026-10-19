@@ -800,7 +800,8 @@ void test_active_run_with_long_program_name_allocates_nothing() {
     std::string longName;
     for (int i = 0; i < 48; ++i) longName += "\xC3\xA4";
     document->program.name = longName;
-    document->program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
     document->program.fermentationStages.front().durationMinutes = 120U;
     document->program.productSensorFailure.fallbackDelaySeconds = 30U;
     document->program.targetQualification.bandCelsius = 0.5;
