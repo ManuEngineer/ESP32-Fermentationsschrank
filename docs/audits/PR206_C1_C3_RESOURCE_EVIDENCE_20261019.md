@@ -85,6 +85,15 @@ davon neu 1). Ausfuehrender JS-Test `scripts/test_web_shell_polling.mjs`: 48 Fae
 PASS (Fake-Fetch, `browser_hardware=NOT_PROVEN`). Der vorherige Labelstand bleibt
 als eingefrorene Referenz `test/test_web_application_routes/shell_frozen_labels.json`.
 
+## Builder-Self-Check
+
+`bash scripts/run_pre_ready_gates.sh self-check` auf `0e2836d` (clang-format 21.1.3
+aus dem gepinnten esp-clang, danach clang-tidy): `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`.
+Der erste Lauf scheiterte an einem Formatverstoss (und anfangs an der falschen
+clang-format-Version 18); die Formatkorrektur `0e2836d` aendert nur Layout. Der ESP-
+Build oben stammt von `86f8ef0` (vor der reinen Formatierung); die Formatierung ist
+kein Beleg ueber einen erneuten ESP-Build. Kein vollstaendiger Pre-Ready-Lauf.
+
 ## Nicht ausgefuehrt / Grenzen
 
 Pre-Ready, Independent Review, Browser, Hardware (H-RAM-1, HW-27-R01), Peak-Heap,
