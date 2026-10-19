@@ -1,8 +1,6 @@
 #include <unity.h>
 
 #include <cstdio>
-#include <cstdlib>
-#include <new>
 #include <string>
 
 #include "cJSON.h"
@@ -12,83 +10,7 @@
 #include "standard_program_catalog.hpp"
 #include "web_json_codec.hpp"
 
-// Allocation accounting for the /status worst case. Global operator new and
-// cJSON (malloc/free through cJSON_InitHooks, installed only inside one test)
-// feed one set of counters, so the cJSON tree and the output string are
-// measured together. Every block carries a 16-byte header with its size and
-// a flag saying whether it was allocated inside the measurement window.
-// Limits: host build (64-bit, cJSON node 48 B instead of 40 B on Xtensa),
-// requested bytes without allocator block headers, no fragmentation, no
-// concurrency; this is not an ESP32 heap measurement.
-namespace {
-struct AllocationWindow {
-    bool active{false};
-    std::size_t count{0U};
-    std::size_t requestedBytes{0U};
-    std::size_t largestBlock{0U};
-    std::size_t liveBytes{0U};
-    std::size_t peakLiveBytes{0U};
-    std::size_t cJsonCount{0U};
-    std::size_t cJsonLiveBytes{0U};
-};
-AllocationWindow gWindow;
-constexpr std::size_t kHeader = 16U;
-struct Header {
-    std::size_t size;
-    bool tracked;
-};
-
-void* trackedAllocate(std::size_t size, bool fromCJson) {
-    auto* raw = static_cast<char*>(std::malloc(size + kHeader));
-    if (raw == nullptr) return nullptr;
-    auto* header = reinterpret_cast<Header*>(raw);
-    header->size = size;
-    header->tracked = gWindow.active;
-    if (gWindow.active) {
-        ++gWindow.count;
-        gWindow.requestedBytes += size;
-        if (size > gWindow.largestBlock) gWindow.largestBlock = size;
-        gWindow.liveBytes += size;
-        if (gWindow.liveBytes > gWindow.peakLiveBytes) {
-            gWindow.peakLiveBytes = gWindow.liveBytes;
-        }
-        if (fromCJson) {
-            ++gWindow.cJsonCount;
-            gWindow.cJsonLiveBytes += size;
-        }
-    }
-    return raw + kHeader;
-}
-
-void trackedFree(void* pointer, bool fromCJson) {
-    if (pointer == nullptr) return;
-    auto* raw = static_cast<char*>(pointer) - kHeader;
-    const auto* header = reinterpret_cast<const Header*>(raw);
-    if (header->tracked) {
-        gWindow.liveBytes -= header->size;
-        if (fromCJson) gWindow.cJsonLiveBytes -= header->size;
-    }
-    std::free(raw);
-}
-
-void* cJsonMalloc(std::size_t size) { return trackedAllocate(size, true); }
-void cJsonFree(void* pointer) { trackedFree(pointer, true); }
-}  // namespace
-
-void* operator new(std::size_t size) {
-    void* pointer = trackedAllocate(size == 0U ? 1U : size, false);
-    if (pointer == nullptr) throw std::bad_alloc();
-    return pointer;
-}
-void* operator new[](std::size_t size) { return operator new(size); }
-void operator delete(void* pointer) noexcept { trackedFree(pointer, false); }
-void operator delete[](void* pointer) noexcept { trackedFree(pointer, false); }
-void operator delete(void* pointer, std::size_t) noexcept {
-    trackedFree(pointer, false);
-}
-void operator delete[](void* pointer, std::size_t) noexcept {
-    trackedFree(pointer, false);
-}
+#include "../common/allocation_window.hpp"
 
 namespace {
 
@@ -425,17 +347,14 @@ void test_worst_case_status_body_fits_and_oversized_name_fails_closed() {
     TEST_ASSERT_EQUAL_STRING("unchanged", output.c_str());
 }
 
-AllocationWindow measure(const FermentationUiSnapshot& snapshot,
-                         std::string& output) {
-    cJSON_Hooks hooks{cJsonMalloc, cJsonFree};
-    cJSON_InitHooks(&hooks);
-    gWindow = AllocationWindow{};
-    gWindow.active = true;
-    const bool encoded = encodeWebApiStatus(snapshot, output);
-    gWindow.active = false;
-    cJSON_InitHooks(nullptr);
+using alloc_window::Window;
+
+Window measure(const FermentationUiSnapshot& snapshot, std::string& output) {
+    bool encoded = false;
+    const auto window = alloc_window::measure(
+        [&] { encoded = encodeWebApiStatus(snapshot, output); });
     TEST_ASSERT_TRUE(encoded);
-    return gWindow;
+    return window;
 }
 
 void test_status_encoding_allocations_cover_cjson_and_operator_new() {

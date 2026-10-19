@@ -28,9 +28,12 @@
 #include "program_limits.hpp"
 #include "mock_secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "standard_program_catalog.hpp"
 #include "virtual_time_source.hpp"
 #include "web_application_routes.hpp"
 #include "web_json_codec.hpp"
+
+#include "../common/allocation_window.hpp"
 
 namespace fermentation {
 
@@ -3844,6 +3847,102 @@ void test_shell_run_information_is_bound_to_the_status_codec() {
     TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "manual-timed"));
 }
 
+// Installs a state-conforming active run (frozen program with a name of the
+// 96 byte maximum, 48 byte run id, Fermenting with a consistent run snapshot)
+// through the application's own runtime state, so the status handler projects
+// it through the real application path.
+void installActiveRunForStatus(FermentationApplication& application,
+                               const std::string& name) {
+    auto document = FactoryProgramCatalog::find("water-kefir");
+    TEST_ASSERT_TRUE(document.has_value());
+    document->program.name = name;
+    document->program.fermentationStages.front().targetTemperatureCelsius =
+        38.0;
+    document->program.fermentationStages.front().durationMinutes = 120U;
+    document->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    document->program.targetQualification.bandCelsius = 0.5;
+    document->program.targetQualification.durationMinutes = 10U;
+    document->program.maximumTargetReachMinutes = 180U;
+    document->program.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    document->program.completion.coolingTargetCelsius = 9.0;
+    document->program.completion.holdDurationMinutes = 30U;
+    document->program.preheat = false;
+    document->program.maximumProductWaitMinutes = std::nullopt;
+    TEST_ASSERT_TRUE(validateProgram(*document).valid());
+    const auto run =
+        ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog,
+                         RunProgramSourceRevision{1U});
+    TEST_ASSERT_TRUE(run.has_value());
+    auto& state = FermentationApplicationTestAccess::runtimeState(application);
+    state.processState.state = ProcessState::Fermenting;
+    state.activeProgramRun = *run;
+    state.activeRunId = std::string(48U, 'r');
+    state.activeRunSensorMode = RunSensorMode::Product;
+    state.processRunSnapshot = makeProcessRunSnapshot(*state.activeProgramRun);
+    TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
+}
+
+// Whole GET /api/v1/status path through the composed dispatcher (session
+// check, application snapshot with the UI refresh tracker, encoding, response
+// takeover), measured over operator new and cJSON. The encoder-only window is
+// in test_run_detail_projection. Host measurement, not an ESP32 heap proof.
+void test_status_handler_allocation_window_covers_snapshot_encode_and_response() {
+    ComposedFixture fixture(true);
+    TEST_ASSERT_TRUE(FermentationApplicationTestAccess::provision(
+        fixture.application, "correct horse battery", "1234"));
+    const auto session = loginComposed(fixture);
+    auto* routes = fixture.http.routes();
+
+    const auto handle = [&](bool expectRun, const char* label) {
+        auto request =
+            makeAuthenticatedRequest("GET", "/api/v1/status", session.cookie);
+        device_platform::HttpResponse response;
+        bool handled = false;
+        const auto window = alloc_window::measure(
+            [&] { handled = routes->handle(request, response); });
+        TEST_ASSERT_TRUE(handled);
+        TEST_ASSERT_EQUAL_UINT16(200U, response.statusCode);
+        const auto body = completeBody(response);
+        TEST_ASSERT_TRUE(contains(body, "\"version\":1,\"ready\":"));
+        TEST_ASSERT_TRUE(contains(body, "\"revisions\":{"));
+        TEST_ASSERT_TRUE(body.size() <= kMaximumWebApiResponseBodyBytes);
+        if (expectRun) {
+            TEST_ASSERT_TRUE(contains(body, "\"run\":{\"id\":\"rrrrrrrr"));
+            TEST_ASSERT_TRUE(contains(body, "\"programName\":\"\xC3\xA4"));
+            TEST_ASSERT_TRUE(contains(body, "\"targetCelsius\":38"));
+            TEST_ASSERT_TRUE(contains(body, "\"mode\":\"cool-hold-duration\""));
+            TEST_ASSERT_TRUE(contains(body, "\"scope\":\"phase\""));
+        } else {
+            TEST_ASSERT_TRUE(contains(body, "\"run\":null"));
+        }
+        TEST_ASSERT_EQUAL_UINT32(
+            0U, static_cast<std::uint32_t>(window.cJsonLiveBytes));
+        TEST_ASSERT_TRUE(window.count > 0U);
+        TEST_ASSERT_TRUE(window.peakLiveBytes >= body.size());
+        std::printf(
+            "STATUS_HANDLER_ALLOC %s: count=%zu bytes=%zu largest=%zu "
+            "peak_live=%zu cjson_count=%zu body=%zu\n",
+            label, window.count, window.requestedBytes, window.largestBlock,
+            window.peakLiveBytes, window.cJsonCount, body.size());
+        return window;
+    };
+
+    // Standby: the first call also fills the refresh-tracker copy.
+    handle(false, "standby cold");
+    const auto standbyWarm = handle(false, "standby warm");
+
+    // 48 two byte scalars: the 96 byte maximum of a visible name.
+    std::string name;
+    for (int i = 0; i < 48; ++i) name += "\xC3\xA4";
+    installActiveRunForStatus(fixture.application, name);
+    const auto runCold = handle(true, "active run, 96 B name, cold");
+    const auto runWarm = handle(true, "active run, 96 B name, warm");
+    // The run block adds allocations over standby; a repeated request with an
+    // unchanged state never needs more than the cold one.
+    TEST_ASSERT_TRUE(runWarm.requestedBytes > standbyWarm.requestedBytes);
+    TEST_ASSERT_TRUE(runWarm.requestedBytes <= runCold.requestedBytes);
+}
+
 void test_dashboard_shell_labels_cover_every_codec_token() {
     ComposedFixture fixture;
     const auto body = loggedInShell(fixture);
@@ -4741,6 +4840,8 @@ int main() {
     RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
     RUN_TEST(test_shell_run_information_is_bound_to_the_status_codec);
+    RUN_TEST(
+        test_status_handler_allocation_window_covers_snapshot_encode_and_response);
     RUN_TEST(test_dashboard_feed_fields_in_standby_and_constructed_states);
     RUN_TEST(test_dashboard_missing_and_stale_data_contract);
     RUN_TEST(test_dashboard_ordering_guard_and_age_contract_in_the_shell_text);

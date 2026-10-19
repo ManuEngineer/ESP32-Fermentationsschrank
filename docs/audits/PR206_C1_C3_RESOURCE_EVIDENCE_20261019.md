@@ -75,13 +75,70 @@ Wert liegt damit um rund 0,2–0,4 KB ueber der oberen Bandbreite der Planschaet
 inklusive Allocator-Overhead) korrigiert. Weiterhin `ESTIMATED`. Der groesste
 Einzelblock bleibt <= 1,2 KB (Mindestblock in den Altproben 3 584 B).
 
+## Gesamter Handler `GET /api/v1/status` (MEASURED im Host-Test, ESTIMATED fuer ESP32)
+
+Korrekturauftrag zum Implementierungsreview (B1): Das Encoder-Fenster oben deckt
+nur `encodeWebApiStatus` ab. Zusaetzlich misst
+`test_web_application_routes::test_status_handler_allocation_window_covers_snapshot_encode_and_response`
+den **gesamten** Pfad `routes->handle(GET /api/v1/status)` im zusammengesetzten
+Dispatcher (Session-Pruefung, `uiSnapshot()` mit Refresh-Tracker,
+Encodierung, Uebernahme des Bodys in die Antwort). Beide Allokationswege
+(`operator new` und cJSON-Hooks) laufen ueber die gemeinsame, wiederverwendete
+Testinstrumentierung `test/common/allocation_window.hpp` (dieselbe wie im Encoder-
+Test, keine Produktions-Allocator-Abstraktion). Request und Antwortobjekt werden
+ausserhalb des Fensters angelegt; der Antwortbody bleibt nach dem Fenster am Leben.
+Die Antwort ist gueltiges Status-JSON (`version`, `ready`, `revisions`), im Laufzustand
+mit `run` aus der echten Application-Projektion (Run-ID 48 B, Name, `targetCelsius`
+38, Abschluss `cool-hold-duration`, `scope:"phase"`).
+
+Zustandskonformer Laufzustand: ein ueber `ActiveRun::start` gueltig gestartetes
+Programm, Name 48 Skalare zu je 2 Bytes (96 B, das Maximum eines sichtbaren Namens),
+48-B-Run-ID, Phase Fermenting mit konsistentem Run-Snapshot (ueber den
+TestAccess des Application-Laufzustands gesetzt; einen echten Programmstart per
+Kommando erlaubt das Fixture ohne Commissioning-Werte nicht). Der Name mit
+Steuerzeichen (6 B pro Byte beim Escapen) aus dem Encoder-Worst-Case ist **nicht**
+zustandskonform, weil sichtbare Namen validiert werden; er bleibt nur im Encoder-Test
+als Grenzfall.
+
+| Fall (Handler-Fenster) | Allokationen (davon cJSON) | angeforderte Bytes | groesster Block | max. gleichzeitig lebend | Body |
+|---|---:|---:|---:|---:|---:|
+| Standby, kalt (erster Abruf, fuellt die Tracker-Kopie) | 54 (36) | 4 654 | 672 | 3 156 | 261 |
+| Standby, warm | 50 (36) | 2 974 | 504 | 1 980 | 261 |
+| Lauf, 96-B-Name, kalt | 86 (68) | 4 858 | 669 | 3 864 | 668 |
+| Lauf, 96-B-Name, warm | 84 (68) | 4 712 | 669 | 3 718 | 668 |
+
+Unterschiede zu den Encoder-Fenstern: Das Handler-Fenster enthaelt zusaetzlich die
+Snapshot-Beschaffung (Temperaturen, Meldungen, String-Kopien) und die
+Antwortuebernahme (`std::move`, keine zweite Kopie) und im Standby alle
+Revisionsmitglieder (auch `userConfiguration`, `programCatalog`), die der
+Encoder-Standby-Fall nicht hatte (daher 36 statt 22 cJSON-Allokationen). Der
+Encoder-Worst-Case mit Steuerzeichen-Name (Body 1 159 B) setzte diese beiden
+Revisionen ebenfalls nicht; seine Werte sind deshalb als Grenzfall des Encoders zu
+lesen, die Handler-Werte sind die realistischeren Gesamtzahlen. Delta Lauf gegen
+Standby (warm): **+34 Allokationen, +1 738 B angeforderte Bytes, +1 738 B
+Spitze**. cJSON ist in allen Faellen nach dem Fenster vollstaendig freigegeben.
+Kalt gegen warm unterscheidet sich um die einmalige Tracker-Kopie (Standby +1,7 KB
+angefordert, Lauf +0,15 KB).
+
+Einordnung fuer ESP32 (**ESTIMATED**, `RAM_PASS=NOT_PROVEN`): Allocator-Overhead
+(rund 8 B je Block, 84 Bloecke, also rund +0,7 KB) und kleinere cJSON-Knoten
+(40 statt 48 B, rund −0,2 KB) ergeben eine transiente Spitze von etwa **4,2 KB** im
+Lauf (Standby etwa 2,4 KB), das Delta durch den Lauf rund **+2,0 KB**. Das liegt
+innerhalb der korrigierten Bandbreite +1,3…+3,0 KB. Es bleibt der groesste Einzelbefund
+zur Heap-Seite: die absolute Spitze von etwa 4,2 KB ist gegen das niedrigste in den
+Altproben beobachtete Shell-Phasen-Minimum (10 336 B frei, Vier-Session-Stresslauf,
+anderes Image) nicht vernachlaessigbar, ein einzelner Abruf bleibt aber der
+einzige gleichzeitige Handler (ein HTTPD-Task). Die groessten Einzelbloecke
+(<= 0,7 KB) liegen weit unter den Skip-Schwellen (13 312 B). Kein Stopp-Befund; die
+Messung auf dem Geraet (H-RAM-1) bleibt der einzige Nachweis. Grenzen unveraendert:
+Xtensa-Layout, Fragmentierung, WLAN-Nebenlaeufigkeit, Stack-HWM.
+
 ## Tests (alle `native`, voller Lauf `pio test -e native`: 1 804 PASS vor den C3-Tests, danach Teilmengen)
 
-Projektion/Zeitmatrix/Codec/Allokationsfenster: `test_run_detail_projection` (10).
+Projektion/Zeitmatrix/Codec/Encoder-Allokationsfenster: `test_run_detail_projection` (10). Handler-Allokationsfenster: `test_web_application_routes` (102, davon neu 2).
 UI-Steady-State mit 96-Byte-Namen allokationsfrei und ohne Redraw durch
 Phasensekunden: `test_ui_steady_state_allocations` (29, davon neu 1). Shell,
-Golden, Label-Vertrag, Bindung Shell/Codec: `test_web_application_routes` (101,
-davon neu 1). Ausfuehrender JS-Test `scripts/test_web_shell_polling.mjs`: 48 Faelle
+Golden, Label-Vertrag, Bindung Shell/Codec: `test_web_application_routes`. Ausfuehrender JS-Test `scripts/test_web_shell_polling.mjs`: 48 Faelle
 PASS (Fake-Fetch, `browser_hardware=NOT_PROVEN`). Der vorherige Labelstand bleibt
 als eingefrorene Referenz `test/test_web_application_routes/shell_frozen_labels.json`.
 
