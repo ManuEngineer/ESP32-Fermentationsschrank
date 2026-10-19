@@ -1447,6 +1447,12 @@ void FermentationApplication::refreshUiSnapshot(
     input.factoryReset = factoryResetView(
         timeSource_ != nullptr ? timeSource_->monotonicMillis() : 0U);
     input.refreshTracker = &uiRefreshTracker_;
+    // One monotonic reading under the same serializer guard feeds the
+    // phase-scoped run time; without a time source the time stays unknown.
+    input.monotonicMillis.reset();
+    if (timeSource_ != nullptr) {
+        input.monotonicMillis = timeSource_->monotonicMillis();
+    }
     FermentationUiProjector::projectInto(snapshot, input);
 }
 

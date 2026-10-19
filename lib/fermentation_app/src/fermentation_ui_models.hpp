@@ -40,11 +40,45 @@ enum class FermentationHomeMode : std::uint8_t {
     Unavailable,
 };
 
+enum class RunDetailRemainingKind : std::uint8_t {
+    Timed,
+    Unknown,
+    Unbounded,
+    NotApplicable,
+};
+
+struct RunDetailCompletion {
+    CompletionMode mode{CompletionMode::FinishWithoutCooling};
+    std::optional<double> coolingTargetCelsius;
+    std::optional<std::uint32_t> holdDurationMinutes;
+};
+
+// Phase-scoped time (plan D2-A): never a whole-run clock. `elapsedSeconds` is
+// empty whenever the exact phase time cannot be derived.
+struct RunDetailTime {
+    std::optional<std::uint64_t> elapsedSeconds;
+    std::optional<std::uint64_t> remainingSeconds;
+    RunDetailRemainingKind remainingKind{RunDetailRemainingKind::Unknown};
+};
+
+// Read-only run information from the frozen run source. The program name is
+// kept in FermentationHomeView::programName (empty when the source has none).
+struct FermentationRunDetail {
+    // Empty for a pure manual hold.
+    std::optional<ProgramSourceKind> sourceKind;
+    std::optional<double> targetCelsius;
+    std::optional<RunDetailCompletion> completion;
+    RunDetailTime time;
+};
+
 struct FermentationHomeView {
     FermentationHomeMode mode{FermentationHomeMode::Unavailable};
     ProcessState processState{ProcessState::Boot};
     std::string activeRunId;
+    // Name of the frozen run program (<= 96 bytes); empty for no name.
+    std::string programName;
     std::optional<EffectiveRunValues> effectiveValues;
+    std::optional<FermentationRunDetail> runDetail;
     device_platform::TextKey primaryAction;
 };
 

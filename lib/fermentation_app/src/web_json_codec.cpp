@@ -872,6 +872,124 @@ WebLoginDecodeStatus decodeWebLogin(const std::string& exactBody,
     return WebLoginDecodeStatus::Success;
 }
 
+namespace {
+
+const char* sourceKindName(ProgramSourceKind value) {
+    switch (value) {
+        case ProgramSourceKind::FactoryCatalog:
+            return "factory-catalog";
+        case ProgramSourceKind::UserProgram:
+            return "user-program";
+        case ProgramSourceKind::ManualTimed:
+            return "manual-timed";
+    }
+    return nullptr;
+}
+
+const char* completionModeName(CompletionMode value) {
+    switch (value) {
+        case CompletionMode::FinishWithoutCooling:
+            return "finish";
+        case CompletionMode::CoolThenFinish:
+            return "cool-finish";
+        case CompletionMode::CoolAndHoldForDuration:
+            return "cool-hold-duration";
+        case CompletionMode::CoolAndHoldUntilManualStop:
+            return "cool-hold-manual";
+    }
+    return nullptr;
+}
+
+const char* remainingKindName(RunDetailRemainingKind value) {
+    switch (value) {
+        case RunDetailRemainingKind::Timed:
+            return "timed";
+        case RunDetailRemainingKind::Unknown:
+            return "unknown";
+        case RunDetailRemainingKind::Unbounded:
+            return "unbounded";
+        case RunDetailRemainingKind::NotApplicable:
+            return "not-applicable";
+    }
+    return nullptr;
+}
+
+// Nullable members are emitted as explicit JSON null, never as a number
+// default. Seconds are plain integers (already limited to the JSON-safe range
+// by the projection).
+bool addOptionalNumber(cJSON* object, const char* key,
+                       const std::optional<double>& value) {
+    if (!value.has_value()) return cJSON_AddNullToObject(object, key) != nullptr;
+    return addNumber(object, key, *value);
+}
+
+bool addOptionalSeconds(cJSON* object, const char* key,
+                        const std::optional<std::uint64_t>& value) {
+    if (!value.has_value()) return cJSON_AddNullToObject(object, key) != nullptr;
+    return *value <= 9007199254740991ULL &&
+           cJSON_AddNumberToObject(object, key,
+                                   static_cast<double>(*value)) != nullptr;
+}
+
+bool addRunDetail(cJSON* document, const FermentationHomeView& home) {
+    if (!home.runDetail.has_value()) {
+        return cJSON_AddNullToObject(document, "run") != nullptr;
+    }
+    const auto& detail = *home.runDetail;
+    auto* run = cJSON_AddObjectToObject(document, "run");
+    if (run == nullptr) return false;
+    if (home.activeRunId.empty()
+            ? cJSON_AddNullToObject(run, "id") == nullptr
+            : !addString(run, "id", home.activeRunId.c_str())) {
+        return false;
+    }
+    if (detail.sourceKind.has_value()) {
+        if (!addString(run, "sourceKind", sourceKindName(*detail.sourceKind))) {
+            return false;
+        }
+    } else if (cJSON_AddNullToObject(run, "sourceKind") == nullptr) {
+        return false;
+    }
+    if (home.programName.empty()
+            ? cJSON_AddNullToObject(run, "programName") == nullptr
+            : !addString(run, "programName", home.programName.c_str())) {
+        return false;
+    }
+    if (!addOptionalNumber(run, "targetCelsius", detail.targetCelsius)) {
+        return false;
+    }
+    if (!detail.completion.has_value()) {
+        if (cJSON_AddNullToObject(run, "completion") == nullptr) return false;
+    } else {
+        auto* completion = cJSON_AddObjectToObject(run, "completion");
+        if (completion == nullptr ||
+            !addString(completion, "mode",
+                       completionModeName(detail.completion->mode)) ||
+            !addOptionalNumber(completion, "coolingTargetCelsius",
+                               detail.completion->coolingTargetCelsius)) {
+            return false;
+        }
+        if (detail.completion->holdDurationMinutes.has_value()
+                ? cJSON_AddNumberToObject(
+                      completion, "holdDurationMinutes",
+                      *detail.completion->holdDurationMinutes) == nullptr
+                : cJSON_AddNullToObject(completion, "holdDurationMinutes") ==
+                      nullptr) {
+            return false;
+        }
+    }
+    auto* time = cJSON_AddObjectToObject(run, "time");
+    return time != nullptr && addString(time, "scope", "phase") &&
+           addOptionalSeconds(time, "elapsedSeconds",
+                              detail.time.elapsedSeconds) &&
+           addOptionalSeconds(time, "remainingSeconds",
+                              detail.time.remainingSeconds) &&
+           addString(time, "remainingKind",
+                     remainingKindName(detail.time.remainingKind));
+}
+
+}  // namespace
+
 bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
                         std::string& output) {
     const auto* homeMode = homeModeName(snapshot.home.mode);
@@ -940,6 +1058,7 @@ bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
             return false;
         }
     }
+    if (!addRunDetail(document.get(), snapshot.home)) return false;
     return serializeBounded(document.get(), output);
 }
 
