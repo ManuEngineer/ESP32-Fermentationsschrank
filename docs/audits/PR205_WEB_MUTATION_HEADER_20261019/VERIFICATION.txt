@@ -1,0 +1,102 @@
+IMPLEMENTATION_SOURCE_TEST_COMMIT=fd9fdccbcdf3211b6b16123d7ea2eb35e82d48a9
+APPROVED_PLAN_COMMIT=912d37e976114eedd5bb305aabbfc630659c3e56
+JS_RED_FINAL=EXPECTED_FAILURE: undefined canonical header, expected sequence 1
+JS_RED_PRODUCT_SOURCE=912d37e; JS_REGRESSION_SOURCE=fd9fdccbcdf3211b6b16123d7ea2eb35e82d48a9
+PRODUCT_DELTA=one header spelling replacement, +3 bytes
+HTTP_HOST_NETWORK=isolated user/network namespace, loopback only
+OMISSIONS=build chatter, local tool paths, system-header diagnostics; raw logs unchanged locally
+
+PASS real send(): canonical sequence and CSRF headers across successive mutations
+PASS initial fetch, normal five-second ticks and fresh Online
+PASS headers do not release the lock; skipped ticks keep stale age current
+PASS 24-second success is not timed out, but remains stale; next group recovers
+PASS 30-second headers deadline aborts all siblings; no immediate retry or backlog
+PASS 30-second body deadline aborts all siblings; no immediate retry or backlog
+PASS early transport failure aborts siblings and waits for delayed abort settlement
+PASS early http failure aborts siblings and waits for delayed abort settlement
+PASS early json failure aborts siblings and waits for delayed abort settlement
+PASS real send(): applied, refresh fresh, no old action basis
+PASS real send(): applied, refresh aborted, no old action basis
+PASS real send(): applied, refresh failed, no old action basis
+PASS real send(): applied, refresh old, no old action basis
+PASS real send(): stale, refresh fresh, no old action basis
+PASS real send(): stale, refresh aborted, no old action basis
+PASS real send(): stale, refresh failed, no old action basis
+PASS real send(): stale, refresh old, no old action basis
+PASS real send(): busy, refresh fresh, no old action basis
+PASS real send(): busy, refresh aborted, no old action basis
+PASS real send(): busy, refresh failed, no old action basis
+PASS real send(): busy, refresh old, no old action basis
+PASS real send(): confirmation-required, refresh fresh, no old action basis
+PASS real send(): confirmation-required, refresh aborted, no old action basis
+PASS real send(): confirmation-required, refresh failed, no old action basis
+PASS real send(): confirmation-required, refresh old, no old action basis
+PASS real send(): rejected, refresh fresh, no old action basis
+PASS real send(): rejected, refresh aborted, no old action basis
+PASS real send(): rejected, refresh failed, no old action basis
+PASS real send(): rejected, refresh old, no old action basis
+PASS real send(): too-large, refresh fresh, no old action basis
+PASS real send(): too-large, refresh aborted, no old action basis
+PASS real send(): too-large, refresh failed, no old action basis
+PASS real send(): too-large, refresh old, no old action basis
+PASS real send(): write-failed, refresh fresh, no old action basis
+PASS real send(): write-failed, refresh aborted, no old action basis
+PASS real send(): write-failed, refresh failed, no old action basis
+PASS real send(): write-failed, refresh old, no old action basis
+PASS mutation at group completion and one coalesced refresh reservation
+PASS real send(): no-active-group, fresh snapshot even within the same clock millisecond
+PASS real send(): pending-headers, fresh snapshot even within the same clock millisecond
+PASS an unacknowledged abort keeps the lock across deadline and further ticks
+{"result":"PASS","cases":41,"node":"v20.19.2","network":"FAKE_ONLY","browser_hardware":"NOT_PROVEN"}
+
+NATIVE_SUMMARY
+native         test_web_application_routes  PASSED    00:00:18.882
+native         test_web_browser_policy      PASSED    00:00:00.931
+native         test_web_session             PASSED    00:00:01.200
+native         test_http_server_lifecycle   PASSED    00:00:00.941
+================ 129 test cases: 129 succeeded in 00:00:21.955 ================
+
+NATIVE_BUDGET
+WEB_SHELL_AUTH_BYTES=8059 RESERVE=133
+WEB_SHELL_DISABLED_BYTES=8058 RESERVE=134
+================ 100 test cases: 100 succeeded in 00:00:01.974 ================
+
+HTTP_ADAPTER
+HTTP_ADAPTER_CASE=server-start=PASS
+HTTP_ADAPTER_CASE=get-root-reaches-route-sink=PASS
+HTTP_ADAPTER_CASE=allowed-get-metadata-extracted=PASS
+HTTP_ADAPTER_CASE=post-reaches-route-sink=PASS
+HTTP_ADAPTER_CASE=allowed-post-metadata-extracted=PASS
+HTTP_ADAPTER_CASE=duplicate-security-header-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=oversized-metadata-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=empty-security-metadata-rejected-before-route=PASS
+HTTP_ADAPTER_CASE=invalid-control-metadata-fails-closed=PASS
+HTTP_ADAPTER_CASE=public-api-observed-each-dispatch=PASS
+HTTP_ADAPTER_CASE=public-raw-api-handler-data-is-header-only=PASS
+HTTP_ADAPTER_CASE=public-raw-api-preserves-duplicates-single-value-api-returns-first=PASS
+HTTP_ADAPTER_CASE=public-value-api-distinguishes-absent-from-empty-header=PASS
+HTTP_ADAPTER_CASE=server-stop=PASS
+HTTP_ADAPTER_CASE=suffix-server-start=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-chunk-bytes-and-single-terminator=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-chunk-bytes-and-single-terminator=PASS
+HTTP_ADAPTER_CASE=suffix-complete-headers=PASS
+HTTP_ADAPTER_CASE=suffix-json-503-no-suffix=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-first-send-error-propagated-no-later-chunks=PASS
+HTTP_ADAPTER_CASE=suffix-server-stop=PASS
+ESP_IDF_HTTP_ADAPTER_DISPATCH=PASS
+
+BUILDER_SELF_CHECK
+BOARD_PROFILE_SINGLE_SOURCE=PASS
+CLANG_FORMAT=PASS
+CLANG_TIDY=PASS
+BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS
+
+SOURCE_FILE_SHA256
+056446dcc5dca30482e3b3ab645e4c53e68fd619cd86ccbfde0a6d244cda6c36  lib/fermentation_app/src/web_application_routes.cpp
+dbed7490d78129f9a72f580141100e3fadcdff59b93c961e7388f015a4301189  scripts/test_web_shell_polling.mjs
+555fed9e265142a006584531a6afa3c85d6627cbed96facfe895251c3449d713  test/test_web_application_routes/test_main.cpp
+43d10f9a4766928724f5e6dcfbfea62f16623610d2e9ebda9b1ed54beb9aed3f  test/test_web_application_routes/shell_golden.hpp
