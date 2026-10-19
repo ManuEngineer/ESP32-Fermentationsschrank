@@ -3,7 +3,8 @@
 // Frozen generator from product ab0ae55, independent of the split
 // implementation. Approved single-flight JS delta and spelling-only aliases
 // applied explicitly for plan 8094b7f; the head/provisioning generator is
-// frozen.
+// frozen. Canonical mutation header spelling updated explicitly for plan
+// 912d37e; no other generator changes.
 namespace shell_golden {
 using fermentation::WebAuthenticationState;
 constexpr std::size_t kMaximumWebShellBytes = 8192U;
@@ -238,7 +239,7 @@ std::string webShell(WebAuthenticationState state, const std::string& csrfToken,
         "ody=JSON.stringify({v:1,r:o,i}),n=Q;let r=null,j=null;for(let t="
         "0;t<2&&!r;t++){try{r=await fetch('/internal/ui/run',{method:'POS"
         "T',headers:{'Content-Type':'application/json','X-CSRF-Token':win"
-        "dow.__WEB_CSRF__,'X-Mutation-Seq':String(n)},body});}catch(e){}}"
+        "dow.__WEB_CSRF__,'X-UI-Mutation-Seq':String(n)},body});}catch(e){}}"
         "if(r&&r.status!==503){try{j=await r.json();}catch(e){}}if(!j||!/"
         "^(applied|stale|busy|confirmation-required|rejected|too-large|wr"
         "ite-failed)$/.test(j.outcome)){location.reload();return;}Q=n+1;P"
