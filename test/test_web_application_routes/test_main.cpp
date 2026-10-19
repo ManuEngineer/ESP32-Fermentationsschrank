@@ -3769,6 +3769,80 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
 }
 
+// C3: the shell reads exactly the run members the codec writes, and every
+// token the codec can emit for the run information has a label in all locales.
+void test_shell_run_information_is_bound_to_the_status_codec() {
+    ComposedFixture fixture;
+    const auto body = loggedInShell(fixture);
+
+    FermentationUiSnapshot snapshot;
+    snapshot.home.mode = FermentationHomeMode::ActiveRun;
+    snapshot.home.activeRunId = "run-1";
+    snapshot.home.programName = "Brot";
+    FermentationRunDetail detail;
+    detail.sourceKind = ProgramSourceKind::UserProgram;
+    detail.targetCelsius = 24.5;
+    detail.completion = RunDetailCompletion{
+        CompletionMode::CoolAndHoldForDuration, 8.0, 30U};
+    detail.time.elapsedSeconds = 61U;
+    detail.time.remainingSeconds = 7139U;
+    detail.time.remainingKind = RunDetailRemainingKind::Timed;
+    snapshot.home.runDetail = detail;
+    std::string status;
+    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, status));
+    for (const char* member :
+         {"programName", "sourceKind", "targetCelsius", "completion",
+          "coolingTargetCelsius", "holdDurationMinutes", "elapsedSeconds",
+          "remainingSeconds", "remainingKind", "scope"}) {
+        TEST_ASSERT_TRUE(contains(status, (std::string("\"") + member + "\":").c_str()));
+        TEST_ASSERT_TRUE(contains(body, member));
+    }
+    TEST_ASSERT_TRUE(contains(body, "a.run"));
+
+    std::set<std::string> modes;
+    std::set<std::string> kinds;
+    std::set<std::string> states;
+    for (unsigned value = 0U; value < 4U; ++value) {
+        detail.completion->mode = static_cast<CompletionMode>(value);
+        for (unsigned kind = 0U; kind < 4U; ++kind) {
+            detail.time.remainingKind =
+                static_cast<RunDetailRemainingKind>(kind);
+            snapshot.home.runDetail = detail;
+            std::string encoded;
+            TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, encoded));
+            for (const auto& token : jsonTokens(encoded, "mode")) {
+                modes.insert(token);
+            }
+            for (const auto& token : jsonTokens(encoded, "remainingKind")) {
+                kinds.insert(token);
+            }
+        }
+    }
+    for (unsigned value = 0U; value < 32U; ++value) {
+        FermentationUiSnapshot plain;
+        plain.home.processState = static_cast<ProcessState>(value);
+        std::string encoded;
+        if (encodeWebApiStatus(plain, encoded)) {
+            for (const auto& token : jsonTokens(encoded, "processState")) {
+                states.insert(token);
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(4U, static_cast<std::uint32_t>(modes.size()));
+    TEST_ASSERT_EQUAL_UINT32(4U, static_cast<std::uint32_t>(kinds.size()));
+    TEST_ASSERT_EQUAL_UINT32(15U, static_cast<std::uint32_t>(states.size()));
+    for (const auto& token : modes) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "c-" + token));
+    }
+    for (const auto& token : states) {
+        TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "p-" + token));
+    }
+    // Timed and unknown need no text of their own; the other kinds do.
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "unbounded"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "not-applicable"));
+    TEST_ASSERT_EQUAL_UINT32(3U, labelCount(body, "manual-timed"));
+}
+
 void test_dashboard_shell_labels_cover_every_codec_token() {
     ComposedFixture fixture;
     const auto body = loggedInShell(fixture);
@@ -4665,6 +4739,7 @@ int main() {
     RUN_TEST(test_dashboard_shell_structure_and_responsive_contract);
     RUN_TEST(test_dashboard_shell_texts_are_complete_in_all_locales);
     RUN_TEST(test_dashboard_shell_labels_cover_every_codec_token);
+    RUN_TEST(test_shell_run_information_is_bound_to_the_status_codec);
     RUN_TEST(test_dashboard_feed_fields_in_standby_and_constructed_states);
     RUN_TEST(test_dashboard_missing_and_stale_data_contract);
     RUN_TEST(test_dashboard_ordering_guard_and_age_contract_in_the_shell_text);

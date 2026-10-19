@@ -261,9 +261,8 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-8192 Bytes (Ownerentscheid fuer #27, Gesamtlaenge aus besessenem Kopf und
-statischem Anhang; sie
-betrug bis zur Startseiten-Umsetzung 6656 Bytes, siehe unten).
+10752 Bytes (Ownerentscheid D1-C fuer #27, einmalig von 8192 Bytes erhoeht;
+Gesamtlaenge aus besessenem Kopf und statischem Anhang, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
 (optional `charset=utf-8`), gleiche Origin-/Fetch-Metadata-Pruefung wie die
@@ -389,8 +388,8 @@ der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
 Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
 
 Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
-6651-B-Anhang liegt im Flash. Die Provisionierungs-Shell teilt ebenfalls ihren
-konstanten Script-Anhang ab. Die 8192-B-Grenze gilt für Kopf **plus** Anhang.
+Anhang (9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
+konstanten Script-Anhang ab. Die 10752-B-Grenze (Ownerentscheid D1-C, zuvor 8192 B) gilt für Kopf **plus** Anhang.
 Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
 auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
 Status 503, `application/json; charset=utf-8` und
@@ -463,15 +462,43 @@ unveraendert). Es gibt keinen neuen Endpunkt und keine Codec-Aenderung.
   (`H`) wird verworfen, ohne Wirkung auf Stand, Alter oder Verbindungsstatus.
 - **Darstellung:** einspaltig mit grossen Bedienflaechen, ab 40 rem zwei
   Spalten; dynamischer Text nur ueber `textContent`.
-- **Groessenschranke:** 8192 Bytes (Ownerentscheid D1 = A); die gemessene
-  authentifizierte Shell hat 8048 Bytes (Reserve 144 Bytes, inklusive der
-  19 Bytes fuer die breiteste Mutationssequenz).
+- **Groessenschranke:** 10752 Bytes (Ownerentscheid D1-C, Plan 3376a19); die
+  gemessene authentifizierte Shell hat 10410 Bytes (Reserve 342 Bytes, davon
+  214 Bytes ueber der 128-Byte-Normalreserve, die die 19 Bytes fuer die
+  breiteste Mutationssequenz enthaelt). Keine zweite Erhoehung vorgesehen.
 
-Nicht Teil dieses Slices (benoetigen neue API-Felder, eigener Slice): Geraete-
-und Programmname, Solltemperatur, verstrichene/verbleibende Zeit,
-Abschlussverhalten, Netzwerk-/Zeitstatus, Aktorstatus und die Mehrseiten-
-Navigation. Browsertests, Hardware-Heapmessung der groesseren Shell und die
-dynamischen Reihenfolge-/Stale-Szenarien sind `NOT_RUN`.
+### Laufinformationen (Issue #27, Plan 3376a19)
+
+`/api/v1/status` (Version 1) enthaelt additiv `run`: `null` ohne kanonischen Lauf,
+sonst ein Objekt aus der unveraenderlichen Laufquelle:
+
+- `id` (Run-ID oder `null`), `sourceKind` (`factory-catalog`, `user-program`,
+  `manual-timed`, bei reinem manuellem Halten `null`), `programName` (Name des
+  eingefrorenen Programms, `null` ohne Namen; kein Katalog-Join im Browser);
+- `targetCelsius`: endliche Zahl aus dem bestehenden Control-Context-Resolver
+  (in Cooling/CoolHolding das Kuehlziel, nicht das Fermentationsziel), sonst
+  `null`; ein Sollwert ist keine Sensor- oder Aktorfreigabe;
+- `completion`: `null` oder `{mode, coolingTargetCelsius, holdDurationMinutes}` mit
+  `mode` in `finish`, `cool-finish`, `cool-hold-duration`, `cool-hold-manual`;
+- `time`: `{scope:"phase", elapsedSeconds, remainingSeconds, remainingKind}` mit
+  `remainingKind` in `timed`, `unknown`, `unbounded`, `not-applicable`.
+
+Die Zeit ist **phasenbezogen** (D2-A), keine Gesamtlaufzeit. `elapsedSeconds` ist
+die monotone Zeit seit Phaseneintritt plus nur ein exakter (untere gleich obere
+Grenze) Vorzeitwert, der fuer genau diese Phase getaggt ist; fehlende Zeitquelle,
+Ruecklauf, falsches Tag oder unklare Grenzen ergeben `null` und `unknown`, nie 0.
+Ein Rest existiert nur fuer Fermenting und zeitbegrenztes CoolHolding (nicht
+unter 0), `unbounded` fuer CoolHolding bis manuelles Ende und ManualHolding,
+`not-applicable` fuer Standby/Completed. Das Ende einer Phase folgt aus dem
+Prozesszustand, nie aus Rest 0. Die Sekunden sind kein fachlicher Anteil der
+UI-Refresh-Revision. Der Browser zaehlt nicht weiter; bei Fehler oder Stale
+bleibt die Anzeige gedimmt mit Abrufalter. Eine Zeitzahl ueber 2^53−1 oder
+fehlerhafte Daten ergeben den bestehenden 503 ohne Suffix.
+
+Nicht Teil dieses Slices: Geraetename, Netzwerk-/Zeitstatus, Aktorstatus,
+Gesamtlaufzeit/Programmende-ETA und die Mehrseiten-Navigation. Browsertests,
+die Hardware-Heapmessung (Gate H-RAM-1, Image-Wahl M) und die dynamischen
+Reihenfolge-/Stale-Szenarien im Browser sind `NOT_RUN`.
 
 ## Servicebereich in der Weboberflaeche
 
