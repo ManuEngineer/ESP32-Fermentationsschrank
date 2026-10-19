@@ -1,8 +1,11 @@
 # PR #206 / Issue #27 – C1–C3 Ressourcenevidence (offline), 2026-10-19
 
 Plan [`3376a19`](../tasks/issue-27-r1-run-dashboard-info-plan.md) (Ownerfreigabe, D1-C und H-RAM-1 = M bestaetigt).
-**`RAM_PASS=NOT_PROVEN`; Ergebnis hoechstens `RAM_OFFLINE_ESTIMATED`.** H-RAM-1 ist
-**NOT_RUN** (kein Flash, UART, Browser, Reset). Offline-Messquelle: Build des
+**Dieses Dokument ist der Offline-Stand vor H-RAM-1; die spaetere Hardwaremessung steht in
+[PR206_H_RAM_1_EVIDENCE_20261019.md](PR206_H_RAM_1_EVIDENCE_20261019.md)** (begrenzter
+positiver Teilnachweis, `RAM_PASS=NOT_PROVEN` fuer das vollstaendige Laufprofil). Aussagen
+unten zu Hardware, HWM und Browser beschreiben den damaligen Offline-Stand.
+`RAM_PASS=NOT_PROVEN`; Offline-Ergebnis hoechstens `RAM_OFFLINE_ESTIMATED`. Offline-Messquelle: Build des
 sauberen Implementierungscommits `86f8ef0` (`build_esp_idf_profiles.py all
 --require-clean-source-tree`: `esp32_bringup` und `esp32_release` PASS, Profil-/
 Driftpruefung PASS); Vergleichsbasis ist der Planstand (Offline-Probe aus
@@ -153,7 +156,10 @@ kein Beleg ueber einen erneuten ESP-Build. Kein vollstaendiger Pre-Ready-Lauf.
 
 ## Nicht ausgefuehrt / Grenzen
 
-Pre-Ready, Independent Review, Browser, Hardware (H-RAM-1, HW-27-R01), Peak-Heap,
-HTTPD-/Main-HWM, `ui_skipped_low_memory`, Recovery: `NOT_RUN`/`NOT_PROVEN`.
+Stand dieses Offline-Dokuments (historisch): Pre-Ready, Independent Review, Browser,
+Hardware (H-RAM-1, HW-27-R01), Peak-Heap, HTTPD-/Main-HWM, `ui_skipped_low_memory`,
+Recovery waren `NOT_RUN`/`NOT_PROVEN`. Seither: Independent Implementation Review
+`GO`; H-RAM-1 ausgefuehrt (siehe Banner oben). HWM-Spitzen im **Produktimage P** und
+der aktive Lauf (S4) bleiben `NOT_PROVEN`.
 AdjustRun-Neubaseline der Phasenzeit ist nur ueber die bestehende FSM-/Kommando-
 semantik abgedeckt (kein eigener Fall). `ACTUATOR_RELEASE=NO`.

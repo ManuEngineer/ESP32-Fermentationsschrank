@@ -1,6 +1,7 @@
 # PR #206 / Issue #27 – RAM-Tauglichkeit des Laufdaten-Slice C1–C3, 2026-10-19
 
 **C1=FAIL_BUDGET / HOLD unveraendert; C2/C3=NOT_STARTED. `RAM_PASS=NOT_CLAIMED`.**
+*Stand-Hinweis: Dieses Dokument ist die historische Bilanz vor Umsetzung und Hardwaremessung. Aktueller Stand: C1–C3 umgesetzt, Review `GO`, H-RAM-1 ausgefuehrt ([Evidence](PR206_H_RAM_1_EVIDENCE_20261019.md)). Die Aussagen unten bleiben als damalige Aussagen stehen.*
 `DECISION=GO_FOR_OWNER_GATE` heisst ausschliesslich: Die Offline-Bilanz traegt es,
 dem Owner **zwei Entscheidungen** vorzulegen (einmaliges Shell-Limit D1-C,
 Hardware-Gate H-RAM-1). Es ist weder RAM-Qualifikation noch Implementierungs-

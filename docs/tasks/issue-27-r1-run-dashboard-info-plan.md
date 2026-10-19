@@ -7,14 +7,16 @@ Branch `agent/issue-27-r1-run-dashboard-info-plan`.
 
 **Freigabestand.** Diese Revision (Plan-SHA `3376a19c43abdd6507b51aef5566de4aa428ae58`)
 ist vom Owner freigegeben, **D1-C = JA** (einmalig 10 752 B) und **H-RAM-1 = M**
-(Mess-Overlay-Image) bestaetigt. Umsetzungsstand: **C1, C2 und C3 implementiert**,
-Builder-Self-Check siehe PR; Evidence
-[C1–C3-Ressourcen](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md) (offline,
-`RAM_PASS=NOT_PROVEN`). Der fruehere C1-Befund bei 8192 B bleibt als
-[Evidence](../audits/PR206_C1_BUDGET_20261019.md) erhalten. **H-RAM-1 ist NOT_RUN**
-und braucht je eine gesonderte Ownerfreigabe fuer Flash, UART, Browser und Reset.
-D2=A bleibt bestehen. Nach dem Builder-Self-Check wartet der Builder auf den
-Independent Review.
+(Mess-Overlay-Image). Umsetzungsstand: **C1, C2 und C3 implementiert**, Builder-
+Self-Check PASS, Independent Implementation Review `GO` (`OPEN_BLOCKERS=0`).
+**H-RAM-1 wurde am 2026-10-19 ausgefuehrt** (Mess-Overlay M, Standby/Ein-Client-HTTP,
+gescriptetes Replay und echter headless Chromium; Rueckfall auf `a9a1156` verifiziert):
+begrenzter positiver Teilnachweis, [Evidence](../audits/PR206_H_RAM_1_EVIDENCE_20261019.md).
+`RAM_PASS=NOT_PROVEN` fuer das vollstaendige R1-/Laufprofil, S4 `NOT_RUN`, Produktimage
+nicht hardwarequalifiziert. Weitere Ressourcenevidence:
+[C1–C3 offline](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md). Der fruehere
+C1-Befund bei 8192 B bleibt als [Evidence](../audits/PR206_C1_BUDGET_20261019.md)
+erhalten. D2=A bleibt bestehen.
 
 ## 1. Basis, Ziel und Schnitt
 
@@ -184,9 +186,9 @@ den Kandidaten mit Reserve um 298 B und wird nicht vorgeschlagen.
 | Suffix-Sendepfad | Chunk ohne Heap-Kopie; `TCP_SND_BUF=5760` ist nur die Sendepuffer-Konfiguration, **keine belegte Obergrenze** des gesamten HTTP-/WLAN-Heaps; +29 % bezieht sich auf Shell-Bytes, **keine Sendedauer gemessen**; Vor-F1-Sendeanteil gemessen rund −6,9 KB | ESTIMATED (Code/Konfiguration), Messung in H-RAM-1 nicht ersetzt |
 | C2/C3 dauerhaft, getrennt | Dauerzustand ca. 152 B (Tracker 136 + Input 16); Main-Stack 136 B (`UiRenderGate`); Heap bis ca. 210 B (zwei lange Namenskopien); Summe der Beispielzahlen 498 B, kein belastbarer Hoechstwert | ESTIMATED bis zur Messung des echten C2-Layouts |
 | C2/C3 transient pro `/status` | Heap-Spitze +1,2 … +2,6 KB (cJSON-Baum und String, Baum vor dem Senden frei) | ESTIMATED |
-| HTTPD-Stack | +0,24 … +0,34 KB gegen zuletzt 2336 B frei (frueherer Testfloor 2080 B) | ESTIMATED / **NOT_PROVEN**, engste Grenze |
-| Main-Stack | +0,14 … 0,5 KB gegen mind. 11 752 B frei (Floor 11 160 B) | ESTIMATED |
-| Heap-/Stack-Spitzen, Erholung, F4-Skips auf aktuellem Stand | keine Messung vorhanden | **NOT_PROVEN** |
+| HTTPD-Stack | +0,24 … +0,34 KB gegen zuletzt 2336 B frei (frueherer Testfloor 2080 B) | ESTIMATED (Planstand); **gemessen in H-RAM-1 (Messbild M): 2 196 B frei**, 116 B ueber dem historischen Testfloor; im Produktimage P `NOT_PROVEN` |
+| Main-Stack | +0,14 … 0,5 KB gegen mind. 11 752 B frei (Floor 11 160 B) | ESTIMATED (Planstand); **gemessen in H-RAM-1: 11 272 B frei**, 112 B ueber dem historischen Testfloor |
+| Heap-/Stack-Spitzen, Erholung, F4-Skips | Planstand: keine Messung. **H-RAM-1 (Standby/Ein-Client, Messbild M): min. Heap 19 896 B, Erholung ca. 99 %, keine OOM-/Skip-/Reset-Ereignisse**; Produktimage P und aktiver Lauf (S4) | P/S4: **NOT_PROVEN** |
 
 `sizeof`/Bytebilanz allein ist kein `RAM_PASS`; Abschlusswertung nach C3 ist
 hoechstens `RAM_OFFLINE_ESTIMATED` bis zum Gate H-RAM-1.
@@ -299,7 +301,7 @@ Lauf-/Gesamtzeit nur nach D2-Entscheidung; Commissioning/D9/Regelung/Aktoren
 separat. Issue #27 erst nach gesamtem genehmigtem R1-Umfang oder ausdruecklicher
 Owner-Neuabgrenzung schliessen.
 
-**H-RAM-1 – vorgeschlagenes Hardware-Gate (nicht ausgefuehrt, nicht freigegeben):**
+**H-RAM-1 – Hardware-Gate (Vorschlag, am 2026-10-19 mit Ownerfreigabe ausgefuehrt, Ergebnis siehe Evidence; der folgende Text ist der damalige Vorschlag):**
 aktorfreies Board mit dem vollstaendigen C1–C3-Image (ein vergroesserter Shell-
 Prototyp beweist den JSON-/Projektions-Heap nicht), ein normaler Browser/1 Client,
 Login, Shellabruf, bestehendes 5-s-Polling, Schliessen und Erholung; keine
@@ -315,9 +317,11 @@ Unterschieden, keine neuen Schwellen. Flash, UART, Browserzugriff und Reset
 brauchen je eine gesonderte Ownerfreigabe. Details und Schrittprofil:
 [RAM-Bilanz §7](../audits/PR206_RAM_FEASIBILITY_20261019.md).
 
-**Stand nach Umsetzung:** C1–C3 sind umgesetzt (Commits siehe PR), Builder-Self-Check
-und Ressourcenevidence siehe [Evidence](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md).
-Danach halten: unabhaengiger Review durch den Owner-Reviewkanal. Kein Pre-Ready,
-kein Ready/Merge, kein H-RAM-1 ohne gesonderte Ownerfreigabe. `ACTUATOR_RELEASE=NO`,
-G1' storniert/NOT_RUN, F4 PROVISIONAL, offene R1-U/D9-Abnahme und saemtliche
-historischen FAIL/HOLDs unveraendert.
+**Stand nach Umsetzung:** C1–C3 sind umgesetzt, der Builder-Self-Check und die
+Ressourcenevidence stehen in der [Offline-Evidence](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md),
+die Hardwaremessung in der [H-RAM-1-Evidence](../audits/PR206_H_RAM_1_EVIDENCE_20261019.md).
+Der Independent Implementation Review ist `GO`. Der lokale Pre-Ready-Lauf ist vom
+Owner ausdruecklich autorisiert; sein Ergebnis steht im PR-Handover. Kein
+Ready/Merge durch den Builder. `ACTUATOR_RELEASE=NO`, G1' storniert/NOT_RUN, F4
+PROVISIONAL, offene R1-U/D9-Abnahme und saemtliche historischen FAIL/HOLDs
+unveraendert.

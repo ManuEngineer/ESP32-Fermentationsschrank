@@ -496,9 +496,13 @@ bleibt die Anzeige gedimmt mit Abrufalter. Eine Zeitzahl ueber 2^53−1 oder
 fehlerhafte Daten ergeben den bestehenden 503 ohne Suffix.
 
 Nicht Teil dieses Slices: Geraetename, Netzwerk-/Zeitstatus, Aktorstatus,
-Gesamtlaufzeit/Programmende-ETA und die Mehrseiten-Navigation. Browsertests,
-die Hardware-Heapmessung (Gate H-RAM-1, Image-Wahl M) und die dynamischen
-Reihenfolge-/Stale-Szenarien im Browser sind `NOT_RUN`.
+Gesamtlaufzeit/Programmende-ETA und die Mehrseiten-Navigation. Die Hardware-
+Heapmessung H-RAM-1 (Mess-Overlay M, Standby/Ein-Client, gescriptetes Replay und
+echt headless Chromium) wurde ausgefuehrt: begrenzter positiver Teilnachweis, siehe
+[Evidence](audits/PR206_H_RAM_1_EVIDENCE_20261019.md); `RAM_PASS=NOT_PROVEN` fuer das
+vollstaendige Laufprofil, aktiver Lauf (S4) `NOT_RUN`, Produktimage nicht
+hardwarequalifiziert. Die dynamischen Reihenfolge-/Stale-Szenarien sind nur im
+ausfuehrenden Fake-Fetch-Test, nicht gegen Hardware belegt.
 
 ## Servicebereich in der Weboberflaeche
 
