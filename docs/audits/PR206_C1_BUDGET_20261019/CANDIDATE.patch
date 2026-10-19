@@ -2,10 +2,7 @@ diff --git a/lib/fermentation_app/src/web_application_routes.cpp b/lib/fermentat
 index a0462a6..f744d54 100644
 --- a/lib/fermentation_app/src/web_application_routes.cpp
 +++ b/lib/fermentation_app/src/web_application_routes.cpp
-@@ -150,108 +150,145 @@ std::string retryAfterSeconds(std::uint64_t retryAfterMs) {
- constexpr char kWebShellSuffix[] =
-     ";const E='password-protected',D='password-disabled',N=Date.now,V"
-     "='no-store',J='hidden',X='textContent',Y='replaceChildren',Z='pr"
+@@ -153,102 +153,139 @@ constexpr char kWebShellSuffix[] =
 -    "ogramCatalog';const L={de:{login:'Anmelden',logout:'Abmelden',of"
 -    "fline:'Offline',stale:'Veraltet',online:'Online',rq:'Lokale Prov"
 -    "isionierung oder Recovery erforderlich',pl:'Passwort',pt:'Passwo"
@@ -247,43 +244,19 @@ index a0462a6..f744d54 100644
 +    "{pg[Y](...j.programs.map(x=>new Option(x.name,x.id)));PC=j.catal"
 +    "ogRevision;}}catch(e){}LB=0;ui();}window.__WEB_CSRF__=S;dr();rf("
 +    ");setInterval(rf,5000);</script></body></html>";
- 
- std::string provisioningShell(std::string_view& staticBodySuffix) {
-     static constexpr char kSuffix[] =
 diff --git a/scripts/test_web_shell_polling.mjs b/scripts/test_web_shell_polling.mjs
 index ca70264..900f946 100644
 --- a/scripts/test_web_shell_polling.mjs
 +++ b/scripts/test_web_shell_polling.mjs
-@@ -38,7 +38,7 @@ function snapshot(mode = 'active-run', run = '1') {
-   ];
- }
- 
+@@ -41 +41 @@ function snapshot(mode = 'active-run', run = '1') {
 -async function fixture() {
 +async function fixture(language = 'en') {
-   const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
-   let timerId = 0;
-   const elements = new Map();
-@@ -51,6 +51,7 @@ async function fixture() {
-   h.buttons = buttons;
-   h.connection = element('#connection');
-   h.board = element('#board');
+@@ -53,0 +54 @@ async function fixture() {
 +  h.rows = () => element('#temps').children.map(e => e.textContent);
-   const setTimer = (callback, delay, interval = false) => {
-     const id = ++timerId;
-     h.timers.set(id, { callback, delay, due: h.time + delay, interval });
-@@ -58,7 +59,7 @@ async function fixture() {
-   };
-   const context = vm.createContext({
-     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
+@@ -61 +62 @@ async function fixture() {
 -    navigator: { language: 'en' }, window: { __WEB_CSRF__: csrfToken },
 +    navigator: { language }, window: { __WEB_CSRF__: csrfToken },
-     location: { reload: () => { ++h.reloads; } },
-     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
-     Date: { now: () => h.time }, AbortController,
-@@ -139,6 +140,77 @@ async function fixture() {
- const tests = [];
- function test(name, run) { tests.push({ name, run }); }
- 
+@@ -141,0 +143,71 @@ function test(name, run) { tests.push({ name, run }); }
 +test('C1 shared locale keys preserve every frozen label and English fallback', async () => {
 +  const golden = readFileSync(new URL('../test/test_web_application_routes/shell_golden.hpp', import.meta.url), 'utf8');
 +  const text = [...golden.matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.parse(x[0])).join('');
@@ -355,6 +328,3 @@ index ca70264..900f946 100644
 +  });
 +}
 +
- test('real send(): canonical sequence and CSRF headers across successive mutations', async () => {
-   const h = await fixture(); await h.finish();
-   for (const sequence of ['1', '2']) {

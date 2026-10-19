@@ -4,7 +4,7 @@
     "D1": "A",
     "D2": "A"
   },
-  "candidate_patch_sha256": "edfebc73d23d7dab3b41d729055ee80fc193f693f53625d5ef2702cab414919a",
+  "candidate_patch_sha256": "1b35cf033a1f308ca82113c0d49192761b1bdfb2d3ce7d299985880bd05d3a30",
   "candidate_source_sha256": {
     "lib/fermentation_app/src/web_application_routes.cpp": "959b62f9574876df82db0e9b2fa01f7dfa8bc238800ebcd16d3da10025ab24b4",
     "scripts/test_web_shell_polling.mjs": "c6c482019d65b2fa1cc5c791bc8b34729e9bcf16e77ed237f8b8035e3c092b73"
@@ -25,5 +25,6 @@
   "normal_reserve_deficit_bytes": 2346,
   "hard_limit_excess_bytes": 2218,
   "candidate_not_a_shipped_http_body": true,
-  "hardware": "NOT_RUN"
+  "hardware": "NOT_RUN",
+  "patch_format": "unified diff with zero context; git apply --unidiff-zero"
 }
