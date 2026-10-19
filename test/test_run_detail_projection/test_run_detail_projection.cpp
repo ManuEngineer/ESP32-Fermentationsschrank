@@ -440,6 +440,20 @@ void test_status_encoding_allocations_cover_cjson_and_operator_new() {
     const auto worst = worstCaseSnapshot();
     std::string standbyBody;
     std::string worstBody;
+    auto typicalState = programState(ProcessState::Fermenting,
+                                     CompletionMode::CoolThenFinish,
+                                     "Sauerteig 24h");
+    const auto typical = project(typicalState, 1000U + 61U * 1000U);
+    std::string typicalBody;
+    const auto typicalWindow = measure(typical, typicalBody);
+    std::printf(
+        "STATUS_ALLOC typical: count=%zu bytes=%zu largest=%zu peak_live=%zu "
+        "cjson_count=%zu body=%zu\n",
+        typicalWindow.count, typicalWindow.requestedBytes,
+        typicalWindow.largestBlock, typicalWindow.peakLiveBytes,
+        typicalWindow.cJsonCount, typicalBody.size());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(typicalWindow.cJsonLiveBytes));
     const auto base = measure(standby, standbyBody);
     const auto peak = measure(worst, worstBody);
     std::printf(

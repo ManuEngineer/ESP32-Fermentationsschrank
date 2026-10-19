@@ -1,19 +1,20 @@
 # Issue #27 – R1-Laufinformationen im Web-Dashboard
 
-**2026-10-19 · PLAN-REVISION 2 (vorgeschlagenes Delta) · OWNER_DECISION_PENDING.**
+**2026-10-19 · PLAN-REVISION 2 · FREIGEGEBEN (Owner, D1-C, H-RAM-1 = M) · UMGESETZT C1–C3.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN; [Draft-PR #206](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/206),
-Branch `agent/issue-27-r1-run-dashboard-info-plan`. Kein Implementierungsauftrag.
+Branch `agent/issue-27-r1-run-dashboard-info-plan`.
 
-**Freigabestand.** Zuletzt freigegeben ist Plan-Commit
-`f013ec0c8428a204b5c53b70d7fd6fcbb088c75d` mit **D1=A, D2=A**. Die darin
-vereinbarte C1-Abbruchregel ist eingetreten: **C1=FAIL_BUDGET / HOLD** bei
-unveraendert 8192 B ([Bytebefund](../audits/PR206_C1_BUDGET_20261019.md));
-**C2 und integriertes C3 NOT_STARTED.** Diese Revision ist **nicht freigegeben**:
-sie legt nach der Ressourcenpruefung ([RAM-Bilanz](../audits/PR206_RAM_FEASIBILITY_20261019.md))
-zwei neue Ownerentscheidungen vor (**D1-C** in §5, **H-RAM-1** in §7). Vor jeder
-Umsetzung braucht es die ausdrueckliche Freigabe der exakten SHA **dieser
-Revision**. D2=A bleibt bestehen.
+**Freigabestand.** Diese Revision (Plan-SHA `3376a19c43abdd6507b51aef5566de4aa428ae58`)
+ist vom Owner freigegeben, **D1-C = JA** (einmalig 10 752 B) und **H-RAM-1 = M**
+(Mess-Overlay-Image) bestaetigt. Umsetzungsstand: **C1, C2 und C3 implementiert**,
+Builder-Self-Check siehe PR; Evidence
+[C1–C3-Ressourcen](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md) (offline,
+`RAM_PASS=NOT_PROVEN`). Der fruehere C1-Befund bei 8192 B bleibt als
+[Evidence](../audits/PR206_C1_BUDGET_20261019.md) erhalten. **H-RAM-1 ist NOT_RUN**
+und braucht je eine gesonderte Ownerfreigabe fuer Flash, UART, Browser und Reset.
+D2=A bleibt bestehen. Nach dem Builder-Self-Check wartet der Builder auf den
+Independent Review.
 
 ## 1. Basis, Ziel und Schnitt
 
@@ -314,10 +315,9 @@ Unterschieden, keine neuen Schwellen. Flash, UART, Browserzugriff und Reset
 brauchen je eine gesonderte Ownerfreigabe. Details und Schrittprofil:
 [RAM-Bilanz §7](../audits/PR206_RAM_FEASIBILITY_20261019.md).
 
-**Jetzt:** nur dieser Planrevisions-Commit, die RAM-Bilanz und Statusdokumentation;
-keine Produkt-/Test-/Build-/Toolchainaenderung, kein Pre-Ready, kein
-Geraetezugriff. Die offline gebauten Sektionsproben (Wegwerfkopien, nur
-`esp32_release`) sind keine ESP-Gate-Builds. Exakte Plan-SHA zur unabhaengigen
-Pruefung vorlegen, danach STOP und auf den Ownerentscheid D1-C und H-RAM-1
-warten. `ACTUATOR_RELEASE=NO`, G1' storniert/NOT_RUN, F4 PROVISIONAL, offene
-R1-U/D9-Abnahme und saemtliche historischen FAIL/HOLDs unveraendert.
+**Stand nach Umsetzung:** C1–C3 sind umgesetzt (Commits siehe PR), Builder-Self-Check
+und Ressourcenevidence siehe [Evidence](../audits/PR206_C1_C3_RESOURCE_EVIDENCE_20261019.md).
+Danach halten: unabhaengiger Review durch den Owner-Reviewkanal. Kein Pre-Ready,
+kein Ready/Merge, kein H-RAM-1 ohne gesonderte Ownerfreigabe. `ACTUATOR_RELEASE=NO`,
+G1' storniert/NOT_RUN, F4 PROVISIONAL, offene R1-U/D9-Abnahme und saemtliche
+historischen FAIL/HOLDs unveraendert.
