@@ -179,9 +179,9 @@ den Kandidaten mit Reserve um 298 B und wird nicht vorgeschlagen.
 
 | Posten | Ergebnis | Status |
 |---|---|---|
-| Suffix-Zuwachs +2351 B | `.flash.rodata` +2352 B; `.dram0.data/.bss`, `.iram0.text`, `.flash.text` je 0 B; Image +2352 B (57 % der 3 080 192-B-Partition) | **MEASURED** (Offline-Sektionsprobe, `esp32_release`) |
-| Suffix-Sendepfad | Chunk ohne Heap-Kopie; Sendespitze durch `TCP_SND_BUF=5760` begrenzt, schon der heutige Body liegt darueber; laengere Sendedauer (+29 %) | ESTIMATED (Code/Konfiguration) |
-| C2/C3 dauerhaft | ca. +0,15 KB, bis ca. +0,4 KB bei langem Namen | ESTIMATED |
+| Suffix-Zuwachs +2351 B (nur isolierter C1-Suffixkandidat) | `.flash.rodata` +2352 B; `.dram0.data/.bss`, `.iram0.text`, `.flash.text` je 0 B; Image +2352 B (57 % der 3 080 192-B-Partition); gilt nicht fuer C2/C3 | **MEASURED** (Offline-Sektionsprobe, `esp32_release`) |
+| Suffix-Sendepfad | Chunk ohne Heap-Kopie; `TCP_SND_BUF=5760` ist nur die Sendepuffer-Konfiguration, **keine belegte Obergrenze** des gesamten HTTP-/WLAN-Heaps; +29 % bezieht sich auf Shell-Bytes, **keine Sendedauer gemessen**; Vor-F1-Sendeanteil gemessen rund −6,9 KB | ESTIMATED (Code/Konfiguration), Messung in H-RAM-1 nicht ersetzt |
+| C2/C3 dauerhaft, getrennt | Dauerzustand ca. 152 B (Tracker 136 + Input 16); Main-Stack 136 B (`UiRenderGate`); Heap bis ca. 210 B (zwei lange Namenskopien); Summe der Beispielzahlen 498 B, kein belastbarer Hoechstwert | ESTIMATED bis zur Messung des echten C2-Layouts |
 | C2/C3 transient pro `/status` | Heap-Spitze +1,2 … +2,6 KB (cJSON-Baum und String, Baum vor dem Senden frei) | ESTIMATED |
 | HTTPD-Stack | +0,24 … +0,34 KB gegen zuletzt 2336 B frei (frueherer Testfloor 2080 B) | ESTIMATED / **NOT_PROVEN**, engste Grenze |
 | Main-Stack | +0,14 … 0,5 KB gegen mind. 11 752 B frei (Floor 11 160 B) | ESTIMATED |
@@ -234,12 +234,17 @@ Voraussetzung fuer jeden Schnitt: Ownerfreigabe der exakten SHA dieser Revision
    Routen unveraendert. Keine Aenderung an FSM-/Run-/Recovery-/Persistenzlogik,
    Plattformports, Adapter, Mutations- oder Sessionvertraegen. **Ressourcen-
    nachweis in diesem Schnitt (offline, ohne Geraet):** `static_assert`/Xtensa-
-   `sizeof` fuer das reale Laufdetail gegen die Schaetzung; Allokationszaehlung im
-   nativen Codec-Test nach dem **vorhandenen** Muster von
-   `test_ui_steady_state_allocations` (ersetzte globale `operator new`; keine
-   neue Testinfrastruktur): Blockzahl, Summe, groesster Block fuer den Worst-Case-
-   Body mit 96-B-/Escape-Name, Run-ID 48 B, alle vier Abschlussmodi; zusaetzlich
-   ein 96-B-Namensfall im stationaeren 0-Allokations-Test des UI-Schritts; statische
+   `sizeof` fuer das reale Laufdetail gegen die Schaetzung; Allokationsnachweis im
+   nativen `/status`-Worst-Case-Test ueber **beide** Wege: der vorhandene
+   `operator new`-Zaehler sieht cJSON-`malloc`/`free` nicht, daher zusaetzlich
+   eine isolierte Testinstrumentierung ueber `cJSON_InitHooks` (nur im Test, keine
+   Produktions-Allocator-Abstraktion). Ausweisen: Allokationsanzahl, angeforderte
+   Bytes, groesster Einzelblock und maximal gleichzeitig lebende Bytes inklusive
+   cJSON-Baum und Ausgabestring (Worst-Case-Body mit 96-B-/Escape-Name, Run-ID
+   48 B, alle vier Abschlussmodi); Messfenster und Aussagegrenzen (Host, keine
+   Blockkoepfe/Fragmentierung/WLAN-Nebenlaeufigkeit) im Ergebnis dokumentieren.
+   Der vorhandene `operator new`-0-Allokations-Test des UI-Steady-State bleibt
+   separat unveraendert; dort nur ein zusaetzlicher 96-B-Namensfall; statische
    Framegroesse (`-fstack-usage`) fuer Status-Handler und Codec, als Zahl berichten,
    nicht als Geraetebeweis.
 3. **C3 – integrierte Anzeige und Nachweis:** C1-Shell an reale API-Projektion
@@ -262,7 +267,7 @@ Voraussetzung fuer jeden Schnitt: Ownerfreigabe der exakten SHA dieser Revision
 | Codec/produktiver GET /status | nullable Typen, alle vier Abschlussmodi, neue Felder mit bestehenden Revisionen aus einem Snapshot; maximale Namen inkl. UTF-8/Escaping, sichere Zahlengrenzen, 3072 B und kompletter 503-Fehler ohne Suffix. Auth/Same-Origin/GET-only unveraendert |
 | Echter extrahierter JS-Shelltest | DE/EN/ES, fremder Name als Text, unbekannte Tokens/Fallback; vorhandener/neuer/fehlender run-Block; alte/verzoegerte Antworten, Mutation/Refresh, langsame Gruppe, Abort, Stale/Offline und Recovery. LP-Details allein geben niemals Aktionen frei; alle bestehenden 41 Szenarien erhalten |
 | Shell/F1/Abhaengige Konsumenten | Alle Auth-/Provisionierungs-/Recoveryzustaende plus maximale Sequenz, D1-Grenze/Reserve, kompletter Kopf+Suffix; alle bisherigen Funktionen/Texte/CSRF-/Sequenzheader erhalten; native Renderer-/UI-Revision-Regression wegen gemeinsamem Viewmodell |
-| Ressourcen offline (C2/C3) | Xtensa-`sizeof` des realen Laufdetails gegen die Schaetzung; zaehlender Allokator im nativen Codec-Worst-Case (96-B-/Escape-Name, vier Abschlussmodi, 3072 B, 503); statische Framegroessen von Status-Handler und Codec; ELF-Sektionsvergleich gegen die Basis (`.dram0.*`, `.iram0.*` unveraendert, `.flash.rodata` im erwarteten Rahmen). Ergebnis hoechstens `RAM_OFFLINE_ESTIMATED`, nie `RAM_PASS` |
+| Ressourcen offline (C2/C3) | Xtensa-`sizeof` des realen Laufdetails gegen die Schaetzung; Allokationsnachweis ueber beide Wege (`operator new` und cJSON-Hooks) im nativen Codec-Worst-Case: Anzahl, angeforderte Bytes, groesster Block, maximal gleichzeitig lebende Bytes (96-B-/Escape-Name, vier Abschlussmodi, 3072 B, 503); statische Framegroessen von Status-Handler und Codec; ELF-Sektions- und Symbolvergleich gegen die Basis: tatsaechliche Deltas aller Sektionen (`.dram0.*`, `.iram0.*`, `.flash.*`) berichten und ihren Grund nennen; die Nulldifferenz des C1-Suffixkandidaten wird fuer C2/C3 **nicht** vorausgesetzt. Ergebnis hoechstens `RAM_OFFLINE_ESTIMATED`, nie `RAM_PASS` |
 
 Geplante Befehle nach Umsetzung (nicht jetzt):
 

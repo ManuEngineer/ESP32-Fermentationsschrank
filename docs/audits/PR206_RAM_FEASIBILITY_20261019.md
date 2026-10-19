@@ -18,16 +18,22 @@ gemessen), **NOT_PROVEN** (kein Nachweis vorhanden).
 ## 1. Kernbefund
 
 1. **Das 8192-B-Limit ist seit F1 kein RAM-Limit mehr.** Der Shell-Suffix liegt als
-   `const`-Literal in `.flash.rodata` (DROM). Eine Vergroesserung auf 9013 B Suffix
-   aendert `.dram0.data`, `.dram0.bss`, `.iram0.text` und `.flash.text` um **0 B**
-   (MEASURED, Abschnitt 2). RAM-relevant bleibt der besessene Kopf
+   `const`-Literal in `.flash.rodata` (DROM). Fuer den **isolierten C1-Suffixkandidaten**
+   (nur das Literal waechst auf 9013 B) bleiben `.dram0.data`, `.dram0.bss`,
+   `.iram0.text` und `.flash.text` um **0 B** veraendert (MEASURED, Abschnitt 2).
+   Das gilt **nicht** fuer die noch nicht implementierten C2/C3 (Abschnitt 4). RAM-relevant bleibt der besessene Kopf
    (1397 B, reserviert 1536 B), und der ist unveraendert.
-2. **Das Netzwerk-Sendemaximum ist durch lwIP begrenzt, nicht durch die Bodylaenge**
-   (ESTIMATED, Abschnitt 2.3): Schon der heutige Body (8059 B) uebersteigt
-   `TCP_SND_BUF=5760`. Ein groesserer Suffix verlaengert die Sendedauer
-   (+2351 B auf der Leitung), erhoeht die Spitze nicht proportional.
-3. **C2/C3 kosten dauerhaft rund 0,15 KB (bis ca. 0,4 KB mit langen Namen),
-   transient rund 1,2–2,6 KB Heap pro `/status`-Antwort und 0,1–0,35 KB HTTPD-Stack**
+2. **Sendepfad (ESTIMATED, Abschnitt 2.3):** `TCP_SND_BUF=5760` ist die
+   Sendepuffer-Konfiguration je Verbindung, **keine belegte Obergrenze** des
+   gesamten gleichzeitigen HTTP-/WLAN-Heapverbrauchs. Der heutige Body (8059 B)
+   uebersteigt sie bereits; das Vor-F1-Image zeigte gemessen rund −6,9 KB
+   Sendephasenkosten. Der Suffix waechst um 2351 B (+29 % **Shell-Bytes**); eine
+   Sendedauer wurde **nicht gemessen**. Die Messung in H-RAM-1 wird dadurch nicht
+   ersetzt.
+3. **C2/C3 kosten dauerhaft rund 0,5 KB in der Summe (Dauerzustand ca. 152 B,
+   Main-Stack 136 B, Heap bis ca. 210 B bei langen Namen; Aufschluesselung in
+   Abschnitt 4), transient rund 1,2–2,6 KB Heap pro `/status`-Antwort und
+   0,24–0,34 KB HTTPD-Stack**
    (alles ESTIMATED, Abschnitt 4). Engste Grenze ist der **HTTPD-Stack**
    (zuletzt 2336 B frei), nicht der Heap.
 4. **Kein Peak-Nachweis existiert** fuer HTTP-Heap, HTTPD-Stack und Erholung auf dem
@@ -88,13 +94,17 @@ Generierte Release-`sdkconfig`: `LWIP_TCP_SND_BUF_DEFAULT=5760`,
 `LWIP_TCP_WND_DEFAULT=5760`, `LWIP_TCP_MSS=1440`, `LWIP_MAX_ACTIVE_TCP=16`,
 `LWIP_MAX_SOCKETS=10`, `ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32`,
 `ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32`, `ESP_WIFI_STATIC_RX_BUFFER_NUM=10`; kein PSRAM.
-Der lwIP-Socket kopiert Sendedaten in Heap-pbufs, begrenzt durch `TCP_SND_BUF`
-(5760 B je Verbindung) plus Segment-/WLAN-Overhead. Der Sendeanteil ist fuer das Vor-F1-Image **gemessen** (Abschnitt 3, D3: median
-−6,9 KB bis zur ACK, unabhaengig davon, wo der Body liegt). Weil bereits der heutige Body
-diese Grenze uebersteigt (Kopf 1397 + Suffix 6662 = 8059 B), steigt die
-**Spitze** durch 2351 weitere Suffix-Bytes nicht proportional. Es steigen die
-**Sendedauer** und damit das Zeitfenster, in dem WLAN-RX- und HTTP-Allokationen
-konkurrieren (+2351 B Luftzeit, rund +29 % gegenueber 8059 B).
+Der lwIP-Socket kopiert Sendedaten in Heap-pbufs; `TCP_SND_BUF` (5760 B je
+Verbindung) ist dafuer die Sendepuffer-Konfiguration, aber **keine belegte Obergrenze**
+des gesamten gleichzeitigen HTTP-/WLAN-Heapverbrauchs (Segment-/pbuf-Overhead,
+WLAN-TX/RX-Puffer, mehrere Verbindungen). Gemessen ist nur der Sendeanteil des
+Vor-F1-Images (Abschnitt 3, D3: median −6,9 KB bis zur ACK, unabhaengig davon, wo
+der Body liegt). Ob die Spitze durch 2351 zusaetzliche Suffix-Bytes steigt, ist
+**nicht gemessen**; angenommen wird nur, dass sie nicht proportional steigt, weil
+schon der heutige Body (Kopf 1397 + Suffix 6662 = 8059 B) die Sendepuffergroesse
+uebersteigt. Der Suffix waechst um 2351 B, das sind rund **+29 % Shell-Bytes**
+gegenueber 8059 B; eine Sendedauer oder Luftzeit wurde **nicht gemessen**. Die
+Annahme ersetzt die Messung in H-RAM-1 nicht.
 Code-Befund zum Sendetimeout (lwIP `api_msg.c`): `SO_SNDTIMEO` (5 s) wird je
 `send()`-Aufruf ab dessen Start gemessen; ohne jeden geschriebenen Byte nach 5 s
 folgt `EAGAIN`, bei Teilfortschritt ein Teilschreiben mit Fortsetzung in
@@ -160,10 +170,11 @@ Kopierstellen von `FermentationUiSnapshot` (Code gelesen):
 
 | Posten | Art | Wert | Status | Grundlage |
 |---|---|---:|---|---|
-| Tracker `published_` waechst um Laufdetail | dauerhaft, DRAM/Heap | +136 B (+ ca. 105 B Heap bei Name > 15 B) | ESTIMATED | Scratch-Struct, Halter oben |
-| `uiProjectionInput_` (wiederverwendet) + aktueller Monotonwert | dauerhaft | +ca. 16 B | ESTIMATED | `optional<uint64>` |
-| `UiRenderGate::snapshot_` | dauerhaft, **Main-Stack** | +136 B (+ ca. 105 B Heap bei langem Namen) | ESTIMATED | wie oben |
-| **Dauerhaft gesamt** | | **ca. +0,15 KB, bis ca. +0,4 KB bei langem Namen** | ESTIMATED | Summe |
+| Tracker `published_` waechst um Laufdetail | Dauerzustand (Ort in `FermentationApplication`, DRAM/Heap nicht geprueft) | +136 B | ESTIMATED | Scratch-Struct, Halter oben |
+| `uiProjectionInput_` (wiederverwendet) + aktueller Monotonwert | Dauerzustand | +ca. 16 B | ESTIMATED | `optional<uint64>` |
+| `UiRenderGate::snapshot_` | **Main-Stack** (dauerhaft) | +136 B | ESTIMATED | wie oben |
+| Namenskopien Tracker + Gate (je 97 B + Blockkopf, nur bei Name > 15 B) | **Heap** (dauerhaft) | bis ca. 2 x 105 = 210 B | ESTIMATED | SSO-Grenze 15 B |
+| **Dauerhaft, getrennt** | Dauerzustand 152 B / Main-Stack 136 B / Heap bis 210 B | **Summe der Beispielzahlen 498 B** (kein belastbarer Hoechstwert) | ESTIMATED | bis das echte C2-Layout gemessen ist |
 | Web-Snapshot im `/status`-Handler | pro Request, **HTTPD-Stack** | +136 B (+ ca. 105 B Heap) | ESTIMATED | |
 | `std::array<char,3079>` in `serializeBounded` | pro Request, HTTPD-Stack | unveraendert 3 079 B | MEASURED (Code) | steckt bereits in der HTTPD-HWM, da alle JSON-Routen ihn nutzen |
 | cJSON-Baum (Knoten 40 B + Blockkopf, Key per `strdup`, String-Werte dupliziert) heute | pro Request, Heap | rund 1,1 KB (15 Knoten) | ESTIMATED | Codec gelesen |
@@ -173,10 +184,35 @@ Kopierstellen von `FermentationUiSnapshot` (Code gelesen):
 | groesster zusammenhaengender Einzelblock dieses Pfads | Heap | <= ca. 1,5 KB (String), Baum aus kleinen Bloecken | ESTIMATED | vgl. Mindestblock 3 584 B in Phasenproben (Baseline 120 s; C0 Gesamtlauf), 12 288 B im C0-120-s-Fenster |
 | Codec-/Projektions-Frames im HTTPD-Task | HTTPD-Stack | +0,1 … 0,2 KB zusaetzlich zum Snapshot | ESTIMATED | keine `-fstack-usage`-Messung vorhanden |
 | **HTTPD-Stack gesamt** | | **ca. +0,24 … +0,34 KB** gegen zuletzt **2 336 B frei** (Plan-Untergrenze 2 080 B, Spielraum 256 B) | ESTIMATED / **NOT_PROVEN** | engste Grenze |
-| Main-Stack gesamt (Gate-Snapshot + Projektionsframes) | Main-Stack | rund +0,14 … 0,5 KB gegen mind. 11 752 B frei (Untergrenze 11 160 B) | ESTIMATED | |
+| Main-Stack gesamt (Gate-Snapshot 136 B + Projektionsframes) | Main-Stack | rund +0,14 … 0,5 KB gegen mind. 11 752 B frei (Untergrenze 11 160 B) | ESTIMATED | |
 | API-Bodylimit | Vertrag | 3 072 B unveraendert | – | |
 | F4 | Schwellen | 13 312 / 16 640 B unveraendert; Einzelblock <= ca. 1,5 KB liegt weit darunter | – | F4 haengt am groessten Block, nicht an dieser Allokation |
 | Flash fuer C2/C3-Code | Flash | nicht gemessen | **NOT_PROVEN** | 1,32 MB frei |
+
+**Allokationsnachweis in C2 (Methode und Grenzen).** Der vorhandene Zaehler in
+`test_ui_steady_state_allocations` ersetzt nur globales C++-`operator new` und
+sieht **keine** cJSON-Allokationen (cJSON nutzt `malloc`/`free`). Fuer den nativen
+`/status`-Worst-Case-Test erfasst eine isolierte Testinstrumentierung beide Wege:
+den bestehenden `operator new`/`delete`-Zaehler und cJSON ueber die oeffentliche
+Schnittstelle `cJSON_InitHooks` (nur im Test installiert und danach zurueckgesetzt,
+keine Produktions-Allocator-Abstraktion). Jeder Block traegt seine Groesse in einem
+Testkopf, damit Freigaben bilanziert werden. Ausgewiesen werden Allokationsanzahl,
+angeforderte Bytes, groesster Einzelblock und **maximal gleichzeitig lebende
+Bytes** ueber beide Wege (Baum und Ausgabestring). Messfenster: von vor
+`encodeWebApiStatus` bis nach Rueckkehr, getrennt davon der gesamte Handler
+(Snapshot, Encode, Response-Move). Aussagegrenzen: Host-Lauf (64-Bit, cJSON-Knoten
+dort 48 B statt 40 B auf Xtensa), angeforderte statt vom ESP-Heap belegte Bytes,
+kein Blockkopf/Alignment, keine Fragmentierung, keine Nebenlaeufigkeit mit WLAN,
+daher kein ESP32-Heapbeweis; Zielwerte werden ueber die Blockzahlen und die
+Xtensa-`sizeof`-Werte umgerechnet und bleiben `ESTIMATED`. Der
+`operator new`-basierte 0-Allokations-Test des UI-Steady-State bleibt separat und
+unveraendert gueltig.
+
+**Sektionsdeltas C2/C3.** Die Nulldifferenz bei `.dram0.*`/`.iram0.*` gilt nur fuer
+den isolierten Suffixkandidaten. Fuer C2/C3 sind tatsaechliche Deltas (Sektionen
+und Symbole, BASE gegen den Umsetzungscommit) zu messen und mit Grund zu berichten
+(z. B. `.flash.text` fuer neuen Code, `.dram0.bss/.data` fuer neue statische Objekte
+oder Tabellen, `.iram0.text`), nicht vorauszusetzen.
 
 **Wertung.** Der Heapzuwachs liegt im Bereich weniger KB bei beobachteten
 Idle-Reserven von rund 42 KB und groesstem Block 32–39 KB; der Zuwachs besteht aus
@@ -194,8 +230,8 @@ kann. `sizeof`-Summen allein sind kein `RAM_PASS`.
 
 | Variante | RAM | Aufwand / Vertrag | Wertung |
 |---|---|---|---|
-| **A** F1-Flashsuffix, vorhandene schlichte Anzeige, einmaliges Limit | Kopf/Heap unveraendert (MEASURED 0 B DRAM); Sendespitze durch `TCP_SND_BUF` begrenzt (ESTIMATED); +2,35 KB Flash, +2,35 KB Leitung je Shell-Abruf | Konstante `kMaximumWebShellBytes`, Budget-/Golden-Assertions, WEB_UI; kein neuer Pfad | **bevorzugt** |
-| **B** separates cachebares Flash-Asset | kein RAM-Vorteil nachgewiesen: Sendespitze je Request ebenfalls begrenzt | zusaetzlicher GET mit Route-, Auth-, Cache- und Gesamtbudgetvertrag; mehr Verbindungen je Seitenaufruf; Kopf mit Session-Werten bleibt inline | **nicht ausgeloest** |
+| **A** F1-Flashsuffix, vorhandene schlichte Anzeige, einmaliges Limit | Kopf/Heap unveraendert (MEASURED 0 B DRAM, nur C1-Suffixkandidat); Sendespitze nicht proportional angenommen, nicht gemessen (ESTIMATED); +2,35 KB Flash, +2,35 KB Leitung je Shell-Abruf | Konstante `kMaximumWebShellBytes`, Budget-/Golden-Assertions, WEB_UI; kein neuer Pfad | **bevorzugt** |
+| **B** separates cachebares Flash-Asset | kein RAM-Vorteil nachgewiesen: kein Nachweis, dass die Sendespitze je Request kleiner waere | zusaetzlicher GET mit Route-, Auth-, Cache- und Gesamtbudgetvertrag; mehr Verbindungen je Seitenaufruf; Kopf mit Session-Werten bleibt inline | **nicht ausgeloest** |
 
 Im 1-Client-Normalprofil wird die Shell einmal je Seitenaufruf geholt; ein
 Asset-Cache saeubert nur wiederholte Aufrufe. B nur, falls das Gate H-RAM-1 eine
@@ -278,7 +314,7 @@ Restrisiken, ausdruecklich offen: (a) HTTPD-Stack-Spielraum klein, nur geschaetz
 (b) keine Spitzen-/Erholungsmessung auf dem aktuellen Stand; (c) `heap_alloc_failed`
 (WLAN-RX) und Boot-Minimum 5 228 B nicht ursaechlich geklaert; (d) Chunk-Transport:
 einmal `ERR_INCOMPLETE_CHUNKED_ENCODING`, danach nichtterminale Resets, Ursache
-`NOT_PROVEN`, +29 % Luftzeit je Shell; (e) alle C2/C3-Zahlen sind Schaetzungen mit
+`NOT_PROVEN`, +29 % Shell-Bytes (Sendedauer nicht gemessen); (e) alle C2/C3-Zahlen sind Schaetzungen mit
 Scratch-Layout; (f) 195–214 B C3-Spielraum ist knapp; (g) Mehrclient- und
 gleichzeitige Touch-/Web-Last bleiben ausserhalb des Ownerprofils (eine Person);
 (h) nur `esp32_release` offline gebaut, `esp32_bringup` und der Pre-Ready-Pfad
