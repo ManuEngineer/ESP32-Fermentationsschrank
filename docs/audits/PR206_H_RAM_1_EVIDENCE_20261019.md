@@ -75,7 +75,7 @@ Lauf, Spitze 3 718 B Host) bleibt Teilnachweis.
 | `result` der HTTP-Antworten im Geraet (710 + 712 Zeilen) | **immer 0** | |
 | **HTTPD-Stack-HWM** (Messbild, obere Schranke durch das Logging) | **2 260 B** (gescriptet), **2 196 B** (Browser); Reserve 116 B ueber dem alten Testfloor 2 080 B | G0-R3: 2 336 B; Messbild-Wert nahe am Floor |
 | **Main-Stack-HWM** (gleiche Stelle im Boot wie a9a1156) | **11 272 B** gegen 11 704 B auf a9a1156 (−432 B; `after_platform_begin` 18 232 gegen 18 536 B, −304 B) | Reserve 112 B ueber dem alten Testfloor 11 160 B; Differenz entspricht der statischen Schaetzung (app_main +288 B) |
-| Erholung nach S5 gescriptet | 42 368 B frei (99,1 % der Baseline), groesster Block 40 960 B (100 %) bei der ersten Probe nach 120 s und stabil | Kriterium G0-R3 (>= 90 % in 120 s) erfuellt |
+| Erholung nach S5 gescriptet | 42 368 B frei (99,1 % der Baseline), groesster Block 40 960 B (100 %) bereits bei der ersten 30-s-Probe nach Ende der Last und stabil bis zum Ende der 5 min | Kriterium G0-R3 (>= 90 % in 120 s) erfuellt |
 | Erholung nach S5 Browser | 42 348 B (99,0 %), Block 40 960 B | |
 | Browser-Netz (CDP) | 355 x HTTP 200, 1 x 401 (anonyme Gruppe vor dem Login, erwartet), 3 x `ERR_ABORTED` (Geschwister der anonymen Gruppe); 20 Proben `online`, Gating `P` stets true, Gruppen 1→111, `run=null`, Anmeldestatus `password-protected` | |
 
