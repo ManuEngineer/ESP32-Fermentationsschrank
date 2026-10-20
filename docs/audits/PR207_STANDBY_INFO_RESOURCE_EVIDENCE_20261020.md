@@ -3,8 +3,11 @@
 Plan [`9656a18`](../tasks/issue-27-r1-web-standby-info-plan.md) (Ownerfreigabe der exakten
 SHA; D1 = F2, Limit 11 264 B, D2 domaenenreine Tokens, D3 alle Modi, D4 keine
 obligatorische Hardware-RAM-Messung). Offline-Messquelle: sauberer Implementierungscommit
-`33c7b36` (`build_esp_idf_profiles.py all --require-clean-source-tree`: `esp32_bringup`
-und `esp32_release` PASS, Profil-/Driftpruefung PASS). Vergleichsbasis: `main`
+`f09d937` (`build_esp_idf_profiles.py all --require-clean-source-tree`: `esp32_bringup`
+und `esp32_release` PASS, Profil-/Driftpruefung PASS; Sektionen und Bin-Groesse
+identisch zum frueheren Build auf `33c7b36`, dazwischen nur Formatierung und
+`BottomSlot::visible` als `static` wegen clang-tidy). Builder-Static-Analysis-Self-Check
+auf `f09d937`: `CLANG_TIDY=PASS`, `BUILDER_STATIC_ANALYSIS_SELF_CHECK=PASS`. Vergleichsbasis: `main`
 `45e7e63`, gebaut als `esp32_release` in einem separaten Worktree mit derselben
 Toolchain (ESP-IDF 6.1). Der Basisabgleich reproduziert die #206-Evidence
 (Frames 544/3120/80/32/800 B, Sektionen 18 975/74 488/100 815 B).
