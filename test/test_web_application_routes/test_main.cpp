@@ -1922,7 +1922,7 @@ void test_composed_dispatcher_authenticates_read_only_sessions_and_expires() {
     TEST_ASSERT_TRUE(completeBody(response).find("const U=true") !=
                      std::string::npos);
     TEST_ASSERT_TRUE(
-        completeBody(response).find("document.documentElement.lang=lc") !=
+        completeBody(response).find("document.documentElement.lang=sw.value=lc") !=
         std::string::npos);
     // The raw JSON placeholder is gone; the board replaces it.
     TEST_ASSERT_TRUE(completeBody(response).find("id=\"board\"") !=
@@ -3348,10 +3348,10 @@ size_t occurrences(const std::string& text, const std::string& needle) {
     return count;
 }
 
-// Owner limit of the web shell (Issue #27 standby-information slice, D1 = D:
-// at most 11264 bytes, one time) and the required reserve below it, including
+// Owner limit of the web shell (Issue #27 language-selection slice, D1 = A:
+// at most 11456 bytes, one time) and the required reserve below it, including
 // the 19 byte reserve for the widest mutation sequence.
-constexpr size_t kShellLimit = 11264U;
+constexpr size_t kShellLimit = 11456U;
 constexpr size_t kShellMinimumReserve = 128U;
 
 void test_unprovisioned_shell_shows_the_setup_form_within_the_size_limit() {
@@ -3466,7 +3466,13 @@ void test_shell_run_controls_text_contract() {
             1U, occurrences(body, std::string("data-a=\"") + action + "\""));
     }
     TEST_ASSERT_FALSE(contains(body, "confirm("));
-    TEST_ASSERT_FALSE(contains(body, "localStorage"));
+    // The only browser storage is the validated language code (plan a671c33):
+    // one read and one guarded write of localStorage.lang; no cookie and no
+    // session storage.
+    TEST_ASSERT_EQUAL_UINT32(2U, occurrences(body, "localStorage"));
+    TEST_ASSERT_EQUAL_UINT32(2U, occurrences(body, "localStorage.lang"));
+    TEST_ASSERT_FALSE(contains(body, "sessionStorage"));
+    TEST_ASSERT_FALSE(contains(body, "document.cookie"));
     TEST_ASSERT_EQUAL_UINT32(1U, occurrences(body, "/internal/ui/run"));
     TEST_ASSERT_TRUE(contains(body, "X-UI-Mutation-Seq"));
     TEST_ASSERT_FALSE(contains(body, "X-Mutation-Seq"));
@@ -3768,7 +3774,8 @@ void test_dashboard_shell_texts_are_complete_in_all_locales() {
     }
     // Value order de, en, es; English fallback is kept (lc falls back to 'en').
     TEST_ASSERT_TRUE(contains(body, "{de:0,en:1,es:2}[lc]"));
-    TEST_ASSERT_TRUE(contains(body, "lc=/^(de|en|es)$/.test(g)?g:'en'"));
+    TEST_ASSERT_TRUE(contains(body, "ok=/^(de|en|es)$/"));
+    TEST_ASSERT_TRUE(contains(body, "lc=ok.test(c)?c:'en'"));
     // The warning text of the disabled mode stays as before.
     TEST_ASSERT_TRUE(contains(body, "Password protection is disabled"));
 }
