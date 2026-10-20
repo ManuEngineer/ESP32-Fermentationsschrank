@@ -1,11 +1,11 @@
 # Issue #27 – R1-Web-Restumfang (integrierter Gesamtplan, ein Draft-PR)
 
-**2026-10-20 · PLAN-REVISION 2 · OWNERENTSCHEIDE D1–D9 BESTAETIGT · REVISION NICHT FREIGEGEBEN · UMSETZUNG GESPERRT.**
+**2026-10-20 · PLAN-REVISION 2.1 (gezielte Korrekturen zu 2) · OWNERENTSCHEIDE D1–D9 BESTAETIGT · REVISION NICHT FREIGEGEBEN · UMSETZUNG GESPERRT.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-navigation-plan` (Name historisch), Draft-PR
 [#209](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/209). Dieser Plan ist
 die einzige kanonische, vollstaendige Fassung. Historisch und nicht mehr massgeblich:
-Revision 1 (Plan-SHA `4927e856df8cb3474a7b0ed74aa92917dd23cc6b`) und der fruehere reine
+Revision 1 (Plan-SHA `4927e856df8cb3474a7b0ed74aa92917dd23cc6b`), Revision 2 (Plan-SHA `d940c2db329151c4a55a63385cce6bd18473e6f7`, ersetzt durch diese Fassung) und der fruehere reine
 Navigationsplan (`0614c054e3303ef2aacd495b8221e512eb4c0714`); deren Messbelege bleiben
 unter `audits/WEB_NAV_BUDGET_20261020/`. Die Ownerentscheide unten sind **keine** Freigabe
 dieser Revision: Umgesetzt wird erst nach ausdruecklicher Freigabe der exakten Plan-SHA.
@@ -63,7 +63,8 @@ Quellen: [WEB_UI](../WEB_UI.md), [SPECIFICATION_REVIEW](../SPECIFICATION_REVIEW.
 | Read-only-API | `GET /api/v1/status` (Revisionen, Lauf-/Standby-/Netzwerk-/Zeitinfo), `/temperatures`, `/alerts` (id, code, severity, active, acknowledged, resolved, decisionRequired, muted, revision; ≤ 16), `/programs` (nur `id`/`name`, `catalogRevision`) |
 | Mutationsroute | `POST /internal/ui/run`, geschlossene Intents im Codec: `start-program` (`c` mit `p,x,d,h,s,c,k,l`), `stop-run`, `complete-run`, `ack-message`, `mute-message`, `adjust-run`, `recovery-time-correction`, `reset-fault`, `sensor-selection`, `start-manual-timed`, `start-manual-holding`; Revisionsschluessel `s,r,m,f,e,u,c`; Application entscheidet (Outcome-Matrix `applied/stale/busy/confirmation-required/rejected/too-large/write-failed`) |
 | Programmpraesentation | `FermentationUiProgramSummaryView` und `makeProgramSummary(...)` in `fermentation_touch_workspace.*` (kanonische Zusammenfassung mit angewendeten Overrides ueber `applyStartCandidateOverrides`; fehlende Werte bleiben `nullopt`, nie 0); `makeProgramSummary` ist heute **dateilokal** |
-| Konfigurationsweg | `FermentationApplication::applyUserSettings(change, expectedRevision)` (nur `deviceName`; lehnt bei aktivem Lauf ab; Rueckgabe `ApplicationConfigurationChangeResult{Preview, Commit}`), `commitUserConfigurationChange(...)` |
+| Konfigurationsweg | `FermentationApplication::applyUserSettings(change, expectedRevision)` (nur `deviceName`; lehnt bei aktivem Lauf ab; Rueckgabe `ApplicationConfigurationChangeResult{Preview, Commit}`); der dateilokale Helper `commitUserConfigurationChange(...)` persistiert fest die Herkunft `{ChangeOriginKind::LocalDisplay, 2U}`; das kanonische Modell kennt `{ChangeOriginKind::WebInterface, 3U}` (`configuration_graph.*`). Bei fehlgeschlagener Vorschau ist der Commit-Status nur ein Platzhalter (`ConfigurationRuntimeFailure`) |
+| Mutationsrouten-Aufbau | `WebRunMutationDto` enthaelt ausschliesslich `FermentationUiEnvelopePayload` (Run-/Persistence-`CommandEnvelope`); `WebRunMutationHandler::handle` prueft in fester Reihenfolge Methode, Metadaten, Content-Type, Same-Origin, Body, Dekodierung, Digest, Session, CSRF, Sequenz, `touch`, `reserveMutation`, fuehrt dann immer `prepareEnvelope` → `confirmPrepared` → `applyConfirmedPrepared` aus und schliesst mit `completeMutation` und einem Wert aus dem **geschlossenen** `ReplayOutcomeCode` {Applied, Unavailable, Stale, Rejected, Busy, ConfirmationRequired, WriteFailed, TooLarge}; Konfigurations-, Netzwerk- und unbekannte Details sind fuer diese Route ausdruecklich `Unavailable` |
 | Zeitzonen | `kSupportedTimeZones` (device_platform) enthaelt **genau einen** Eintrag, `Europe/Zurich`; `ITimeZoneResolver::prepare` validiert; `SETTINGS_AND_STORAGE`: Aenderung nicht neustartpflichtig und veraendert keinen Lauf; **kein** Application-Befehl zum Aendern der Zone |
 | Sitzung | `WebSessionManager` mit Service-Lease; keine HTTP-Route (bleibt so, D7) |
 | Auslieferung | Kopf (Heap-String) + `staticBodySuffix` (Flash, Chunk-Send ohne Heap-Kopie); ein Wildcard-`httpd_uri_t`, Routing in `WebRouteDispatcher::handle`; Antwort-Metadaten nur `Set-Cookie`/`Retry-After`; `request.path` enthaelt die Query |
@@ -285,81 +286,121 @@ bindet die Bestaetigung an Modus, Laufrevision, Katalogrevision, Programm **und 
 eingegebenen Anpassungen**; jeder Wechsel davon verwirft sie; zwei Klicks, Single-Flight,
 Mutationssequenz und CSRF unveraendert.
 
-### 6.3 Einstellungen (C3, D5 = a) – Geraetename und Zeitzone (B3-Korrektur)
+### 6.3 Einstellungen (C3, D5 = a) – Geraetename und Zeitzone
 
-**Grundregel.** Der HTTP-Handler schreibt **nie** direkt auf Konfigurationsdaten. Er dekodiert
-einen geschlossenen Intent und ruft ausschliesslich einen Application-Befehl; Preview, Commit,
-Validierung, Revisionsschutz und Persistenz bleiben bei Application/Konfigurationsdienst.
+**Grundregel.** Der HTTP-Handler schreibt **nie** direkt auf Konfigurationsdaten und beruehrt
+den Run-/Persistence-`CommandEnvelope` nicht. Konfigurationsoperationen werden **nicht** in
+`FermentationUiEnvelopePayload` hineinmodelliert (dieser Vertrag schliesst sie ausdruecklich
+aus); eine implizite Erfolgsprojektion ueber `DeviceUiCommandOutcomeCategory` ist ausgeschlossen.
 
 **Lesepfad.** `GET /api/v1/settings` (nur GET, Session, Body ≤ 3 072 B) liefert, aus einer
 Lease: `{"version":1,"revision":"<userConfiguration>","deviceName":"…","timeZone":"Europe/Zurich","timeZones":["Europe/Zurich"],"nameEditable":<bool>}`
 (`nameEditable:false` bei aktivem Programm-/Manuallauf, wie Touch; `timeZones` aus der
 kanonischen Tabelle). Die Seite laedt es beim Betreten und bei Aenderung von
-`revisions.userConfiguration`; Fehler/503 sperren die Aktionen (kein Raten).
+`revisions.userConfiguration`; Fehler/503 sperren die Aktionen (kein Raten). Ist die Zone nicht
+schreibbar (Q2 = zurueckstellen) oder hat der Katalog nur einen Eintrag, wird sie als
+lesbarer Wert ohne Bedienelement gezeigt.
 
-**Geraetename – bestehender Weg.** Neuer geschlossener Intent
-`{"t":"set-device-name","n":"<name>"}` mit `r.u` = `expectedUserConfigurationRevision`.
-Der Handler ruft `FermentationApplication::applyUserSettings({deviceName}, expectedRevision)`
-unveraendert. Validierung (`validateVisibleName`, ≤ 96 B, kein Steuerzeichen) und
-Laufsperre (aktiver Programm-/Manuallauf → `NotAllowed`) liegen dort.
+**C3-F1 – geschlossener typisierter Dispatch in der bestehenden Route (B3-F1).**
+`POST /internal/ui/run` bleibt die einzige Mutationsroute. Der Codec dekodiert einen
+geschlossenen Typ `WebMutationDto = std::variant<WebRunMutationDto, WebConfigurationMutationDto>`
+(`WebConfigurationMutationDto` = erwartete `userConfiguration`-Revision + genau eine Aenderung
+`DeviceName{name}` bzw., nur bei bestaetigtem Q2, `TimeZone{canonicalId}`); unbekannte
+Intent-Typen und fehlende/ueberzaehlige Schluessel schlagen fail-closed fehl (`400`). **Alle**
+gemeinsamen Pruefungen bleiben **vor** der Verzweigung und fuer beide Befehlsfamilien
+identisch und in derselben Reihenfolge: Methode, Metadaten, Content-Type, Same-Origin, Body,
+Dekodierung, Digest, Session, CSRF, Mutationssequenz, `touch`, `reserveMutation` (inkl.
+Replay-Treffer) und der Abschluss `completeMutation`. Erst danach unterscheidet sich der
+Zweig: die Run-Familie laeuft unveraendert `prepareEnvelope` → `confirmPrepared` →
+`applyConfirmedPrepared`; die Konfigurationsfamilie ruft einen Application-Eintrag
+`applyWebConfigurationChange(const WebConfigurationChange&, expectedRevision)` und projiziert
+dessen typisiertes Ergebnis mit der unten stehenden **vollstaendigen** Abbildung auf den
+geschlossenen `ReplayOutcomeCode`. Kein zweiter Auth-/Replay-Mechanismus, keine neue
+Route, kein direkter Konfigurationszugriff aus dem Handler. Replay (gleiche Sequenz und
+gleicher Digest) liefert die gespeicherte Antwort und fuehrt **keine** zweite
+Konfigurationsmutation aus; ein Replay mit anderem Digest ist ein Sequenzkonflikt wie bisher.
+Replay-Budget: Body ≤ 1 024 B, gespeicherte Antwort wie fuer Run-Intents (nativer
+Maximalfall).
 
-**Zeitzone – ausdruecklich neuer Application-Befehl.** Im oeffentlichen
-`FermentationUiUserSettingsChange` existiert nur `deviceName`; es gibt keinen Befehl zum
-Aendern der Zone. Spezifikation: `FermentationApplication::applyTimeZone(canonicalId,
-expectedRevision)` im selben Muster wie `applyUserSettings` (ueber
-`commitUserConfigurationChange`, setzt `timeZoneId`; die Validierung der Konfiguration
+**C3-F2 – serverseitig bestimmte Herkunft (B3-F2).** `commitUserConfigurationChange`
+persistiert heute fest `{LocalDisplay, 2U}`; `applyUserSettings` fuer Web unveraendert zu
+rufen waere falsch, weil Mutationsquellen als `display` oder `web` unterscheidbar bleiben
+muessen. Regel: die Herkunft ist ein **interner, typisierter Parameter** des Application-
+Eintritts und nie ein Feld der Anfrage. Umsetzung ohne doppelte Logik: die bestehende Logik
+(Laufsperre, Validierung, Revisionspruefung, Preview/Commit ueber `commitConfigurationChange`)
+wird in **einen** privaten Eintritt `applyUserConfigurationChange(ChangeOrigin, change,
+expectedRevision)` gezogen; `applyUserSettings(...)` bleibt als duenner Touch-Eintritt mit
+fest `{LocalDisplay, 2U}` (Signatur und Verhalten unveraendert), der neue
+`applyWebConfigurationChange(...)` ist der duenne Web-Eintritt mit fest
+`{WebInterface, 3U}`. Der Wert `WebInterface` steht allein im Web-Eintritt (nicht aus DTO,
+Header oder Cookie). Dieselbe Regel gilt fuer die Zeitzone, falls Q2 sie einschliesst.
+
+**Vollstaendige Ergebnisabbildung auf `ReplayOutcomeCode`.** Massgeblich ist zuerst der
+Preview-Status; bei einem Preview-Fehler ist der Commit-Status nur ein Platzhalter und wird
+ignoriert. Jede Enumeratorstufe erscheint in einer `switch` ohne `default` (Compiler
+erzwingt Vollstaendigkeit) und in einem Test, der **alle** Werte durchlaeuft:
+
+| Status | Outcome | Begruendung |
+|---|---|---|
+| Preview `Success` | weiter mit Commit-Status | – |
+| Preview `ConfigurationRuntimeUnavailable` | `Unavailable` | nichts geaendert |
+| Preview `ConfigurationModelBudgetBusy` | `Busy` | Wiederholung moeglich, nichts geaendert |
+| Preview `InvalidCandidate` | `Rejected` | Name/Zone ungueltig |
+| Preview `NotAllowed` | `Rejected` | aktiver Lauf beim Namen |
+| Preview `StateChanged` | `Stale` | Revision veraltet/fehlt |
+| Preview `PreviewNotFound` | `Unavailable` | interne Inkonsistenz, fail-closed |
+| Preview `PreviewSuperseded` | `Busy` | konkurrierende Vorschau, nichts geaendert |
+| Commit `Activated` | `Applied` | – |
+| Commit `NoChange` | `Applied` | angeforderter Zustand ist bereits aktuell; kein Manifest wird geschrieben |
+| Commit `ConfigurationMutationBusy` | `Busy` | Wiederholung moeglich |
+| Commit `ConfigurationConflictFailure` | `Stale` | – |
+| Commit `ConfigurationValidationFailure` | `Rejected` | – |
+| Commit `PersistenceFailure` | `WriteFailed` | sicher nicht geschrieben |
+| Commit `CapacityFailure` | `WriteFailed` | bestehender fail-closed Outcome; `TooLarge` meint die Groesse der **Anfrage** und waere hier irrefuehrend (Name/Zone haben feste Groessen, der Speicher ist voll) |
+| Commit `ConfigurationCommitIndeterminate` | `Unavailable` | **niemals** `Applied` und **nie** als sicher fehlgeschrieben ausgewiesen; die UI laedt Settings und Status neu und zeigt „Ergebnis unbestimmt, bitte pruefen“ |
+| Commit `ConfigurationRuntimeFailure` | `Unavailable` | – |
+| Commit `PreviewNotFound` / `PreviewSuperseded` | `Unavailable` / `Busy` | wie oben |
+| Commit `ReadyForConfirmation` | `Unavailable` | Zwischenstatus, nie ein Endzustand an dieser Stelle |
+
+Unbekannte/kuenftige Enumeratoren fuehren zu `Unavailable`, nie zu `Applied`.
+
+**Geraetename.** Intent-Koerper `{"v":1,"r":{"u":"<revision>"},"i":{"t":"set-device-name","n":"<name>"}}`,
+Application-Eintritt `applyWebConfigurationChange` mit `DeviceName`. Validierung
+(`validateVisibleName`, ≤ 96 B, kein Steuerzeichen) und Laufsperre (aktiver Programm-/Manuallauf
+→ `NotAllowed` → `Rejected`) liegen in der gemeinsamen Application-Logik.
+
+**Zeitzone – ausdruecklich eigener Application-Befehl (nur bei Q2 = jetzt).** Es gibt keinen
+Befehl zum Aendern der Zone; er wird als weitere Variante desselben privaten Eintritts
+spezifiziert: setzt `timeZoneId` ueber `commitConfigurationChange`; Validierung
 (`UnknownTimeZoneId`/`TimeZoneRejected`) und `ITimeZoneResolver::prepare` laufen im
-Konfigurationsdienst; die Aktivierung erfolgt, indem der Commit den Runtime-Snapshot mit der
-neu vorbereiteten `PreparedTimeZone` austauscht). Laufzustand: erlaubt (die Zone aendert nur
-Anzeige/Lokalzeit, nicht neustartpflichtig, veraendert keinen Lauf – SETTINGS_AND_STORAGE);
-fehlt die Revision oder der Zustand, schlaegt der Befehl fail-closed fehl. Intent
-`{"t":"set-time-zone","z":"<canonical id>"}` mit `r.u`; Wirkung sichtbar ab dem naechsten
-Status (`clock.zone`, `clock.local`).
+Konfigurationsdienst; die Aktivierung erfolgt durch den Commit (Runtime-Snapshot mit neuer
+`PreparedTimeZone`, nicht neustartpflichtig, veraendert keinen Lauf – SETTINGS_AND_STORAGE;
+daher auch im Lauf erlaubt). Intent `{"t":"set-time-zone","z":"<canonical id>"}` mit `r.u`.
 
-**Web-Vertrag fuer beide Intents.** Ausschliesslich `POST /internal/ui/run` (Session, CSRF,
-`X-UI-Mutation-Seq`, Replay-Cache); die Revisionsschluessel-Tabelle erhaelt `userConfiguration:'u'`
-bereits; neue Pflicht: `r.u` ist fuer diese Intents Pflicht. Codec: geschlossene Schluessel,
-Laengen-/Zeichenvalidierung, Replay-Budget (Body ≤ 1 024 B, Antwort-Cache wie fuer Run-Intents)
-mit nativem Maximalfall. Zwei-Klick-Bestaetigung im Browser (gebunden an Revision und
-Eingabewert); eine Aenderung der Revision verwirft sie.
-
-**Fehlermapping bis zur Application-Grenze (Tabelle als nativer Test, ohne neue Outcome-Namen).**
-
-| Application-Ergebnis | Web-Outcome |
-|---|---|
-| Preview `StateChanged` / Commit `ConfigurationConflictFailure` (Revision veraltet/fehlt) | `stale` (409) |
-| Preview `InvalidCandidate` / Commit `ConfigurationValidationFailure` (Name/Zone ungueltig) | `rejected` (422) |
-| Preview `NotAllowed` (aktiver Lauf beim Namen) | `rejected` (422), UI zeigt „waehrend eines Laufs nicht aenderbar“ |
-| Preview `ConfigurationRuntimeUnavailable` / Commit `ConfigurationRuntimeFailure` | `unavailable` (503), nichts geaendert |
-| Persistenzfehler beim Commit | `write-failed` |
-| Erfolg | `applied`; danach frischer Status/Settings |
-
-**Wirkung einer Namensaenderung (Netz, Aussperrrisiko).** Nach dem Code wird der Hostname bzw.
-die SoftAP-SSID aus dem Namen nur bei `initializeNetwork` und `applyNetworkMode` abgeleitet
-(`deriveSoftApSsid`, `setHostname`); `applyUserSettings` ruft beides **nicht**. Eine
-Namensaenderung laeuft also nicht in eine laufende AP-/WLAN-Verbindung und kappt keine
-Sitzung; die neue Bezeichnung (mDNS/SSID) greift erst beim naechsten Netzwerkstart bzw.
-Geraetestart. C0 belegt das mit einem nativen Test (`MockNetworkLifecycle`: nach
-`applyUserSettings` unveraenderter Hostname/AP-Name, keine `start`/`stop`-Aufrufe,
-Session bleibt gueltig) und die Seite zeigt einen entsprechenden Hinweis. Netzwerkmodus,
+**Wirkung einer Namensaenderung (Netz, Aussperrrisiko).** Nach dem Lesen von
+`applyUserSettings` wird Hostname/SoftAP-SSID nur bei `initializeNetwork` und
+`applyNetworkMode` aus dem Namen abgeleitet; die Namensaenderung ruft kein
+`setHostname`/`setAccessPointCredentials`. Das ist der **heutige Ist-Stand**, kein
+entschiedener Soll-Vertrag (Q1). Ein Charakterisierungstest (`MockNetworkLifecycle`: nach dem
+Web-Commit unveraenderter Hostname/AP-Name, keine `start`/`stop`-Aufrufe, Session bleibt
+gueltig) gehoert zu **C3.1 (Name)** und gilt nur bei Q1 = „Ist-Stand beibehalten“. Netzwerkmodus,
 Heim-WLAN-Zugang, Webzugang und Display-Sprache werden **nicht** per Web angeboten (lokal,
 Sitzungsentzug/Aussperrrisiko).
 
-**Offene fachliche Fragen – HOLD nur fuer den jeweils betroffenen Teil von C3:**
+**Offene Ownerfragen (noch nicht entschieden; keine stillschweigende Entscheidung, keine
+Implementierung dieser Teile bis zur Antwort):**
 
-- **Q1 (Geraetename).** Ist „Hostname/mDNS/SoftAP-Name wirksam erst beim naechsten
-  Netzwerkstart/Geraetestart“ (aktuelles Verhalten) das gewollte R1-Verhalten, oder soll eine
-  Namensaenderung den Netzwerkstack sofort neu konfigurieren? Letzteres waere ein
-  Netzwerk-/Sitzungsvertrag (Aussperrrisiko im AP-Betrieb) und ist **nicht** Teil dieses
-  Plans. Empfehlung: aktuelles Verhalten beibehalten. Ohne Antwort bleibt der Namensteil von C3
-  im HOLD (der Zeitzonenteil laeuft unabhaengig).
-- **Q2 (Zeitzone).** `kSupportedTimeZones` enthaelt nur `Europe/Zurich`; es gibt weder einen
-  Application-Befehl noch eine zweite waehlbare Zone. Soll der Befehl `applyTimeZone` samt
-  Intent jetzt gebaut werden (vertragskonform, die Auswahl hat heute genau einen Eintrag und
-  wird als schreibgeschuetzter Wert ohne toten Knopf gezeigt, wirksam sobald der Katalog waechst),
-  oder erst gemeinsam mit einer Katalogerweiterung? Empfehlung: Befehl und Intent jetzt, UI
-  zeigt bei einem Katalogeintrag nur den Wert. Ohne Antwort bleibt der Zeitzonenteil von C3
-  im HOLD; kein stilles Weglassen von D5-a.
+- **Q1 (Geraetename).** Soll „Hostname/mDNS/SoftAP-Name wirksam erst beim naechsten
+  Netzwerkstart/Geraetestart“ (Ist-Stand) gelten, oder soll eine Namensaenderung den
+  Netzwerkstack sofort neu konfigurieren (Netzwerk-/Sitzungsvertrag, Aussperrrisiko im
+  AP-Betrieb, nicht Teil dieses Plans)? Empfehlung: Ist-Stand beibehalten. Sperrt nur **C3.1**.
+- **Q2 (Zeitzone).** `kSupportedTimeZones` enthaelt nur `Europe/Zurich`. Soll
+  `applyTimeZone` samt Intent jetzt gebaut werden (Empfehlung: ja; die Auswahl zeigt bei einem
+  Eintrag nur den Wert ohne toten Knopf) oder zurueckgestellt werden? Bei **Q2 = zurueckstellen**
+  wird die Zone in der Web-UI lesbar, aber nicht schreibbar gezeigt und `applyTimeZone`, der
+  Intent `set-time-zone`, deren Codec-/Mapping-/Application-Tests sowie die zugehoerigen Teile
+  von C3 werden **aus dem aktuellen Scope gestrichen** (Plan-Delta). Sperrt nur **C3.2**.
+- Die exakte Ownerentscheidung zu Q1/Q2 wird als separates Plan-Delta nachgefuehrt.
 
 ### 6.4 Konfliktdarstellung (C5)
 
@@ -369,8 +410,8 @@ Anzeige, keine Aenderung der Outcome-Matrix.
 
 ## 7. Verbindliche Slice-/Commit-Abfolge (ein PR)
 
-0. **C0 – Ressourcen-, Navigations- und Vertragsgrundlage** (vor C1–C3, mit den drei
-   Voraussetzungen davor):
+0. **C0 – Ressourcen-, Navigations- und Vertragsgrundlage** (vor C1–C3, mit den Vertrags-
+   voraussetzungen B1 und B2):
    a. *Vertragsvoraussetzung B1:* getrennte Konstanten und Grenztests fuer normale Shell,
       Setup-Shell und Asset (§4.2), Reservenachweis je Shell.
    b. Plattform: `HttpResponseMetadata::cache` (Validierung, Adapter-Header, Host-Tests).
@@ -382,23 +423,26 @@ Anzeige, keine Aenderung der Outcome-Matrix.
    d. *Vertragsvoraussetzung B2:* Messung des Programmdetail-Bodys (96-B-Namen, Escaping,
       16 Programme) und Verschiebung von `makeProgramSummary` in einen gemeinsamen Ort ohne
       Verhaltensaenderung (bestehende Touch-Tests gruen).
-   e. *Vertragsvoraussetzung B3:* nativer Test „Namensaenderung rekonfiguriert das Netz nicht“,
-      Spezifikation `applyTimeZone`, Fragen Q1/Q2 im Plan-Delta beantwortet.
    *Zwischenreview optional (gezielt).*
 1. **C1 – Navigation und Meldungen.** Kandidat B1 als Messbasis; Fragment-Routing; Labels;
    Zeilenknoepfe.
 2. **C2 – Programme.** `GET /api/v1/programs/<id>` (Codec/Handler/Tests), Detail- und
    Anpassungsansicht, Anbindung an `start-program`.
-3. **C3 – Einstellungen.** `GET /api/v1/settings`, Intents `set-device-name`/`set-time-zone`,
-   `applyTimeZone`, UI mit Bestaetigung; Teile mit offener Frage Q1/Q2 bleiben bis zur Antwort
-   im HOLD, der uebrige Teil laeuft.
+3. **C3 – Einstellungen** (Abhaengigkeiten: nur diese Teile; C0, C1, C2 und C5 sind **unabhaengig** von Q1/Q2):
+   - **C3.0 Konfigurationsmutations-Infrastruktur** (erst mit dem ersten freigegebenen Verbraucher, kein
+     Vorbau): `WebMutationDto`-Variante und geschlossener Dispatch (C3-F1), vollstaendige Ergebnisabbildung,
+     privater Eintritt mit serverseitiger Herkunft (C3-F2), `GET /api/v1/settings`.
+   - **C3.1 Geraetename** (`set-device-name`, `applyWebConfigurationChange`, UI mit Bestaetigung,
+     Charakterisierungstest der Netzwerkwirkung) – **HOLD bis Q1 beantwortet**.
+   - **C3.2 Zeitzone** (`applyTimeZone`, `set-time-zone`, UI) – **HOLD bis Q2 beantwortet**; bei
+     „zurueckstellen“ gestrichen, Zone nur lesbar.
 4. **C5 – Integration, Regression, Evidence.** Outcome-Anzeige, WEB_UI-Angleichung
    (Werksreset nur lokal, Asset/Navigation/Seiten), ACCEPTANCE_TESTS, ROADMAP, Issue-Status,
    vollstaendige Offline-Ressourcenevidence, Builder-Self-Check; danach **ein**
    unabhaengiger Full Review ueber den gesamten PR (optionale gezielte Zwischenreviews nach C0
    und C2, kein Full Review je Commit). **C4 entfaellt (D7).**
 
-Jeder Schnitt wird auf seinen Quell-/Testcommit gebunden und bleibt einzeln revertierbar.
+Jeder Schnitt wird auf seinen Quell-/Testcommit gebunden und bleibt einzeln revertierbar. Offene Q1/Q2 verzoegern nur C3.1/C3.2; sie sind keine Voraussetzung fuer C0, C1, C2 oder C5.
 
 ## 8. Gezielte Nachweise
 
@@ -406,7 +450,7 @@ Jeder Schnitt wird auf seinen Quell-/Testcommit gebunden und bleibt einzeln reve
 |---|---|
 | Echter extrahierter JS-Test (`scripts/test_web_shell_polling.mjs`, Fake-DOM erweitert) | bisherige 74 Faelle erhalten; je Slice: Navigation nur mit `LP`, Fragment gueltig/ungueltig, Sichtwechsel ohne Request, DE/EN/ES vollstaendig, `sl()`-Umrendern; Meldungen: Reihenfolge, 16 Eintraege, richtige `id`/Intent, Sperren bei `B`/`!P`/Stale/Offline/erledigt; Programme: Detail aus Beispielantwort, `null`/`startable:false` → Start gesperrt, Revisionsvergleich verwirft veraltete Auswahl, Anpassungen werden nur bei Abweichung gesendet, Bestaetigung an Eingaben gebunden; Einstellungen: Revisionsbindung, Zwei-Klick, kein Request ohne Bestaetigung, `nameEditable:false`; Mutationsgegenproben (fehlende `P`-Pruefung, falsche `id`, ungueltiges Fragment, Override ohne Bestaetigungsbindung) |
 | Native `test_web_application_routes` | Grenztests je Shell/Asset (§4.2); Asset-Route (GET-only, 405, 404 fuer falsche/alte Version, Header nur beim exakten Pfad, byte-identisch in allen Auth-Zustaenden, kein Cookie); Programmdetail-Route (alle Fehlerfaelle der Tabelle, Identifier-Grenzen, Bodygrenze mit 96-B-Name, Revisionsbindung, Auth); Settings-Route; Intents `set-device-name`/`set-time-zone` (Codec-Grenzen, Replay-Budget, Outcome-Mapping-Tabelle, kein direkter Konfigurationszugriff im Handler, Laufsperre, Session bleibt nach Namensaenderung gueltig) |
-| Application/Konfiguration | `applyTimeZone` (gueltig, unbekannte Zone, fehlende Revision, Konflikt, Zone im Lauf erlaubt, Aktivierung im naechsten Snapshot); Namensaenderung ohne Netzwerkaufrufe; bestehende `applyUserSettings`-Tests unveraendert |
+| Application/Konfiguration (C3) | **Dispatch/Gates:** Settings-Intents passieren dieselben realen Session-/CSRF-/Sequenz-/Digest-/Replay-Gates (jeder Gate-Fehler ohne Konfigurationsaufruf, gezaehlt am Application-Mock/Testzugriff); Replay (gleiche Sequenz + Digest) fuehrt zu **keiner** zweiten Mutation; unbekannte Intents, fehlende/ueberzaehlige Schluessel und unzulaessige Revisionen (fehlt, nicht dezimal, > Bereich) fail-closed `400`; kein Konfigurationszugriff im Handler (Architekturtest: Handler ruft nur `applyWebConfigurationChange`). **Outcome-Mapping:** Test durchlaeuft **alle** `ConfigurationPreviewStatus`- und `ConfigurationCommitStatus`-Werte gegen die Tabelle in §6.3 (Compile-Zeit-Vollstaendigkeit); `ConfigurationCommitIndeterminate` wird nie `Applied` und nie als sicher fehlgeschrieben (`WriteFailed`) ausgewiesen; Preview-Fehler ignoriert den Commit-Platzhalter. **Herkunft:** erfolgreicher Web-Namenscommit persistiert `{WebInterface, 3U}` (Manifest ueber den Store gelesen und mit `decodeChangeOrigin` geprueft); Touch-Namenscommit (`applyUserSettings`) bleibt `{LocalDisplay, 2U}`; ein `stale`/abgelehnter Web-Commit (und `NoChange`) schreibt **kein** neues Manifest (Store-Generation unveraendert); die Herkunft ist nicht aus Anfrage-Feldern ableitbar. **C3.2 (nur bei Q2 = jetzt):** `applyTimeZone` (gueltig, unbekannte Zone, fehlende Revision, Konflikt, im Lauf erlaubt, Aktivierung im naechsten Snapshot, Herkunft `WebInterface`). **C3.1:** Namensaenderung ohne Netzwerkaufrufe (Charakterisierung, nur bei Q1 = Ist-Stand); bestehende `applyUserSettings`-Tests unveraendert |
 | Plattform/Adapter | `test_http_server_lifecycle` (Metadatenvalidierung), `esp_idf_http_server_adapter_host` (Header nur beim Asset, Chunk-Reihenfolge, Fehler in Kopf/Anhang/Terminator, suffixlose Antworten unveraendert) |
 | Regression | `test_fermentation_ui_models`, `test_renderer_boundary`, `test_ui_steady_state_allocations`, `test_run_detail_projection`, `test_run_commands`, `test_configuration_service`, `test_local_touch_ui` (Programmzusammenfassung), `check_architecture_boundaries.py` |
 | Ressourcen offline | Sektionsvergleich (`.dram0.*`, `.iram0.*`, `.flash.*`) gegen `main`, `-fstack-usage` (`handleAsset`, `handleShell`, Programm-/Settings-Handler, Codec), Asset-/Shell-Bytes je Slice, Allokationsfenster neuer Handler, beide ESP-Profile; hoechstens `RAM_OFFLINE_ESTIMATED` |
@@ -446,8 +490,11 @@ dieses Gate nicht und es gilt kein implizites Gate-PASS.
 ## 10. Verbleibende Ownerfragen
 
 Nur noch **Q1** (Hostname-/SSID-Wirkung einer Namensaenderung) und **Q2**
-(`applyTimeZone` jetzt oder mit Katalogerweiterung), beide mit Empfehlung in §6.3 und mit
-HOLD ausschliesslich fuer den betroffenen C3-Teil. Sie stehen nicht vor C0, C1, C2 oder C5.
+(`applyTimeZone` jetzt oder zurueckstellen), beide **nicht entschieden**, mit Empfehlung in §6.3.
+Q1 sperrt ausschliesslich **C3.1**, Q2 ausschliesslich **C3.2** (und bei „zurueckstellen“ deren
+Scope-Streichung). Sie sind keine Voraussetzung fuer C0, C1, C2 oder C5. Die Entscheidung wird
+separat als Plan-Delta nachgefuehrt; bis dahin keine stillschweigende Entscheidung oder
+Implementierung dieser Teile.
 
 ## 11. Risiken
 
@@ -457,6 +504,8 @@ HOLD ausschliesslich fuer den betroffenen C3-Teil. Sie stehen nicht vor C0, C1, 
 - Veralteter Tab nach Firmwareupdate: alte Asset-URL → 404; Hinweis, Neuladen genuegt.
 - Asset-Wachstum: Limit 16 384 B; danach seitenweise Assets (eigener Plan), keine stille
   Erhoehung.
-- Einstellungen sind die erste neue Mutationsfamilie ausser dem Lauf; Revisionsschutz,
-  Replay-Budget und Laufsperre muessen im Test belegt sein.
+- Einstellungen sind die erste neue Mutationsfamilie ausser dem Lauf und teilen sich Session-/Replay-Mechanik mit der
+  Run-Familie (geschlossener Dispatch, kein zweiter Mechanismus); Revisionsschutz, Replay-Budget,
+  Laufsperre, vollstaendige Ergebnisabbildung (insbesondere `ConfigurationCommitIndeterminate`) und die
+  persistierte Herkunft `WebInterface` muessen im Test belegt sein.
 - Matrixzeilen H/X bleiben offen; R1-U/D9/G2 und Aktorfreigabe unveraendert offen.
