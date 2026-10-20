@@ -377,27 +377,6 @@ void sampleStableNetworkResources(
     samplingState.hasObservedState = true;
 }
 
-// Maps the existing renderer-independent #164 network lifecycle state to the
-// existing renderer-independent header status contract. No new network
-// state is introduced; SetupAccessPoint/ConnectingHome/CandidateTesting are
-// presented as Disconnected (a transition is in progress, not yet usable).
-device_platform::DeviceUiNetworkStatus toDeviceUiNetworkStatus(
-    device_platform::NetworkLifecycleState state) noexcept {
-    switch (state) {
-        case device_platform::NetworkLifecycleState::AccessPointOnly:
-        case device_platform::NetworkLifecycleState::HomeConnected:
-            return device_platform::DeviceUiNetworkStatus::Connected;
-        case device_platform::NetworkLifecycleState::SetupAccessPoint:
-        case device_platform::NetworkLifecycleState::ConnectingHome:
-        case device_platform::NetworkLifecycleState::CandidateTesting:
-            return device_platform::DeviceUiNetworkStatus::Disconnected;
-        case device_platform::NetworkLifecycleState::Stopped:
-        case device_platform::NetworkLifecycleState::Failed:
-            return device_platform::DeviceUiNetworkStatus::Unavailable;
-    }
-    return device_platform::DeviceUiNetworkStatus::Unavailable;
-}
-
 void loadTouchCalibration(
     device_platform::IStateStore& stateStore,
     fermentation::main_ui::ProductiveLvglRenderer& displayRenderer) {
@@ -498,8 +477,8 @@ bool updateProductUi(
         return false;
     }
     const auto& loopSnapshot = renderGate.snapshot();
-    const auto loopNetworkStatus =
-        toDeviceUiNetworkStatus(networkLifecycle.status().state);
+    const auto loopNetworkStatus = device_platform::toDeviceUiNetworkStatus(
+        networkLifecycle.status().state);
 
     // The existing #26 target/interaction path (calibrated touch
     // -> targetAt()/Workspace::press() -> existing typed
@@ -777,8 +756,8 @@ extern "C" void app_main(void) {
         // safe defaults (English, empty catalog), as before.
         auto uiPresentation = application.uiPresentationSource().value_or(
             fermentation::FermentationUiPresentationSource{});
-        const auto uiNetworkStatus =
-            toDeviceUiNetworkStatus(networkLifecycle.status().state);
+        const auto uiNetworkStatus = device_platform::toDeviceUiNetworkStatus(
+            networkLifecycle.status().state);
         const device_platform::ClockViewInput uiClock{
             timeSource.unixTimeSeconds(), uiPresentation.canonicalTimeZoneId,
             uiPresentation.timeZoneRule};

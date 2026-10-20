@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "device_ui_contracts.hpp"
+#include "network_lifecycle.hpp"
 
 namespace device_platform {
 
@@ -13,6 +14,13 @@ enum class DeviceUiNetworkStatus : std::uint8_t {
     Disconnected,
     Unavailable,
 };
+
+// Maps the renderer-independent network lifecycle state to the header status
+// contract. No new network state is introduced; SetupAccessPoint,
+// ConnectingHome and CandidateTesting are Disconnected (a transition is in
+// progress, not yet usable); an unknown value is Unavailable.
+[[nodiscard]] DeviceUiNetworkStatus toDeviceUiNetworkStatus(
+    NetworkLifecycleState state) noexcept;
 
 struct DeviceShellHeader {
     BrandingId branding;
@@ -31,7 +39,7 @@ struct BottomSlot {
     TextKey label;
     bool enabled{true};
 
-    [[nodiscard]] bool visible() const noexcept { return true; }
+    [[nodiscard]] static bool visible() noexcept { return true; }
 };
 
 enum class PageExitRequirement : std::uint8_t {

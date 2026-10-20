@@ -4,6 +4,23 @@
 
 namespace device_platform {
 
+DeviceUiNetworkStatus toDeviceUiNetworkStatus(
+    NetworkLifecycleState state) noexcept {
+    switch (state) {
+        case NetworkLifecycleState::AccessPointOnly:
+        case NetworkLifecycleState::HomeConnected:
+            return DeviceUiNetworkStatus::Connected;
+        case NetworkLifecycleState::SetupAccessPoint:
+        case NetworkLifecycleState::ConnectingHome:
+        case NetworkLifecycleState::CandidateTesting:
+            return DeviceUiNetworkStatus::Disconnected;
+        case NetworkLifecycleState::Stopped:
+        case NetworkLifecycleState::Failed:
+            return DeviceUiNetworkStatus::Unavailable;
+    }
+    return DeviceUiNetworkStatus::Unavailable;
+}
+
 LocalNavigationAction homeOrBackAction(const ShellRoute& route) noexcept {
     if (route.segments.empty()) return LocalNavigationAction::None;
     return route.segments.size() == 1U ? LocalNavigationAction::Home

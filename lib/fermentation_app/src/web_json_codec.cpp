@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 #include <limits>
@@ -992,7 +993,54 @@ bool addRunDetail(cJSON* document, const FermentationHomeView& home) {
 
 }  // namespace
 
+const char* networkStateName(device_platform::DeviceUiNetworkStatus value) {
+    switch (value) {
+        case device_platform::DeviceUiNetworkStatus::Connected:
+            return "connected";
+        case device_platform::DeviceUiNetworkStatus::Disconnected:
+            return "disconnected";
+        case device_platform::DeviceUiNetworkStatus::Unavailable:
+            return "unavailable";
+    }
+    return "unavailable";
+}
+
+// Display-only device information: absent or unrepresentable parts are
+// reported as null/"unavailable", never as a substitute value, and never
+// fail the whole status response.
+bool addDeviceInfo(cJSON* document, const FermentationDeviceInfoView& device) {
+    if (device.deviceName.has_value()
+            ? !addString(document, "deviceName", device.deviceName->c_str())
+            : cJSON_AddNullToObject(document, "deviceName") == nullptr) {
+        return false;
+    }
+    if (!addString(document, "networkState",
+                   networkStateName(device.connection))) {
+        return false;
+    }
+    const auto& local = device.localTime;
+    const bool representable = local.has_value() &&
+                               !device.timeZoneId.empty() && local->year >= 0 &&
+                               local->year <= 9999;
+    if (!representable) {
+        return cJSON_AddNullToObject(document, "clock") != nullptr;
+    }
+    char text[17];
+    const int written = std::snprintf(
+        text, sizeof(text), "%04d-%02u-%02u %02u:%02u",
+        static_cast<int>(local->year), static_cast<unsigned>(local->month),
+        static_cast<unsigned>(local->day), static_cast<unsigned>(local->hour),
+        static_cast<unsigned>(local->minute));
+    if (written != 16) {
+        return cJSON_AddNullToObject(document, "clock") != nullptr;
+    }
+    auto* clock = cJSON_AddObjectToObject(document, "clock");
+    return clock != nullptr && addString(clock, "local", text) &&
+           addString(clock, "zone", device.timeZoneId.c_str());
+}
+
 bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
+                        const FermentationDeviceInfoView& device,
                         std::string& output) {
     const auto* homeMode = homeModeName(snapshot.home.mode);
     const auto* processState = processStateName(snapshot.home.processState);
@@ -1061,6 +1109,7 @@ bool encodeWebApiStatus(const FermentationUiSnapshot& snapshot,
         }
     }
     if (!addRunDetail(document.get(), snapshot.home)) return false;
+    if (!addDeviceInfo(document.get(), device)) return false;
     return serializeBounded(document.get(), output);
 }
 

@@ -196,7 +196,7 @@ for (const [language, phase] of [['de', 'Gaerung'], ['en', 'Fermenting'], ['es',
     await h.finish(data);
     const unavailable = h.run('T.unavailable');
     assert.ok(h.rows().some(x => x.endsWith('future-phase')));
-    assert.equal(h.rows().slice(3).filter(x => x.endsWith(unavailable)).length, 4);
+    assert.equal(h.rows().slice(4, 10).filter(x => x.endsWith(unavailable)).length, 4, 'run detail rows only');
     assert.ok(h.rows().some(x => x.endsWith(h.run("T['manual-timed']"))));
     assert.equal(h.buttons.find(b => b.dataset.a === 'stop').disabled, false, 'display fields never create a new command gate');
     for (const kind of ['unbounded', 'not-applicable', 'future-kind']) {
@@ -204,9 +204,78 @@ for (const [language, phase] of [['de', 'Gaerung'], ['en', 'Fermenting'], ['es',
       assert.ok(h.rows().some(x => x.endsWith(kind === 'future-kind' ? kind : h.run('T[' + JSON.stringify(kind) + ']'))));
     }
     await h.tick(); await h.finish(snapshot('standby', '2'));
-    assert.equal(h.rows().length, 3, 'old run details disappear with the new snapshot');
+    assert.equal(h.rows().length, 6, 'old run details disappear with the new snapshot (name, 3 temperatures, network, clock)');
   });
 }
+
+const deviceLabels = {
+  de: { network: 'Netzwerk', clock: 'Uhrzeit', ap: 'Eigener AP', wifi: 'Heimnetz', up: 'verbunden', down: 'getrennt', untrusted: 'nicht synchronisiert', unavailable: 'Nicht verfuegbar' },
+  en: { network: 'Network', clock: 'Time', ap: 'Own AP', wifi: 'Home Wi-Fi', up: 'connected', down: 'disconnected', untrusted: 'not synchronized', unavailable: 'Unavailable' },
+  es: { network: 'Red', clock: 'Hora', ap: 'AP propio', wifi: 'Wi-Fi domestico', up: 'conectado', down: 'desconectado', untrusted: 'no sincronizada', unavailable: 'No disponible' },
+};
+const infoModes = ['standby', 'active-run', 'waiting', 'completed', 'restricted', 'recovery', 'unavailable'];
+
+for (const language of ['de', 'en', 'es']) {
+  const l = deviceLabels[language];
+  test(`PR207 ${language}: device name, separate network mode/state and local clock`, async () => {
+    const h = await fixture(language), data = snapshot('standby', '1');
+    Object.assign(data[0], { deviceName: '<b>Schrank & Co</b>', networkMode: 'ap-only', networkState: 'connected', clock: { local: '2026-10-20 14:03', zone: 'Europe/Zurich' } });
+    await h.finish(data);
+    let rows = h.rows();
+    assert.equal(rows[0], '<b>Schrank & Co</b>', 'device name is literal text');
+    assert.ok(rows.includes(`${l.network}: ${l.ap} · ${l.up}`), rows.join('|'));
+    assert.ok(rows.includes(`${l.clock}: 2026-10-20 14:03 Europe/Zurich`));
+    // The network words never reuse the browser poll status words.
+    const online = h.run('T.online'), offline = h.run('T.offline');
+    for (const row of rows.filter(x => x.startsWith(l.network))) {
+      assert.ok(!row.includes(online) && !row.includes(offline), row);
+    }
+    await h.tick(); data[0].networkMode = 'home-wifi'; data[0].networkState = 'disconnected'; await h.finish(data);
+    assert.ok(h.rows().includes(`${l.network}: ${l.wifi} · ${l.down}`));
+    // Mode and state are independent values.
+    await h.tick(); data[0].networkMode = 'ap-only'; data[0].networkState = 'disconnected'; await h.finish(data);
+    assert.ok(h.rows().includes(`${l.network}: ${l.ap} · ${l.down}`));
+  });
+
+  test(`PR207 ${language}: unknown, missing and untrusted values are never shown as valid`, async () => {
+    const h = await fixture(language), data = snapshot('standby', '1');
+    // Fields absent (older/partial response): everything unavailable.
+    await h.finish(data);
+    let rows = h.rows();
+    assert.equal(rows[0], l.unavailable);
+    assert.ok(rows.includes(`${l.network}: ${l.unavailable} · ${l.unavailable}`));
+    assert.ok(rows.includes(`${l.clock}: ${l.untrusted}`));
+    for (const [mode, state] of [['selection-required', 'unavailable'], ['future-mode', 'future-state']]) {
+      await h.tick(); Object.assign(data[0], { deviceName: null, networkMode: mode, networkState: state, clock: null }); await h.finish(data);
+      rows = h.rows();
+      assert.equal(rows[0], l.unavailable);
+      assert.ok(rows.includes(`${l.network}: ${l.unavailable} · ${l.unavailable}`), rows.join('|'));
+      assert.ok(rows.includes(`${l.clock}: ${l.untrusted}`));
+    }
+  });
+}
+
+test('PR207 all home modes show the read-only info without changing any action gate', async () => {
+  for (const mode of infoModes) {
+    const plain = await fixture('en'); await plain.finish(snapshot(mode, '1'));
+    const gates = plain.buttons.map(b => b.disabled);
+    const h = await fixture('en'), data = snapshot(mode, '1');
+    Object.assign(data[0], { deviceName: 'Fermenter', networkMode: 'home-wifi', networkState: 'connected', clock: { local: '2026-10-20 14:03', zone: 'Europe/Zurich' } });
+    await h.finish(data);
+    assert.ok(h.rows().includes('Fermenter'), mode);
+    assert.ok(h.rows().includes('Network: Home Wi-Fi · connected'), mode);
+    assert.deepEqual(h.buttons.map(b => b.disabled), gates, 'display fields never open or close an action: ' + mode);
+  }
+});
+
+test('PR207 info rows come only from the fetched status and never advance on their own', async () => {
+  const h = await fixture('en'), data = snapshot('standby', '1');
+  Object.assign(data[0], { deviceName: 'Fermenter', networkMode: 'ap-only', networkState: 'connected', clock: { local: '2026-10-20 14:03', zone: 'Europe/Zurich' } });
+  await h.finish(data);
+  const before = h.rows();
+  for (let i = 0; i < 4; ++i) await h.tick();
+  assert.deepEqual(h.rows(), before, 'the browser clock is never used as device time');
+});
 
 test('real send(): canonical sequence and CSRF headers across successive mutations', async () => {
   const h = await fixture(); await h.finish();

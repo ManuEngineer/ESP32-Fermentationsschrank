@@ -289,6 +289,34 @@ void test_content_cell_target_carries_indices_and_follows_the_interaction_gate()
         static_cast<int>(sleeping.outcome));
 }
 
+void test_network_lifecycle_state_maps_to_header_status() {
+    using device_platform::DeviceUiNetworkStatus;
+    using device_platform::NetworkLifecycleState;
+    using device_platform::toDeviceUiNetworkStatus;
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Connected,
+        toDeviceUiNetworkStatus(NetworkLifecycleState::AccessPointOnly));
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Connected,
+        toDeviceUiNetworkStatus(NetworkLifecycleState::HomeConnected));
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Disconnected,
+        toDeviceUiNetworkStatus(NetworkLifecycleState::SetupAccessPoint));
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Disconnected,
+        toDeviceUiNetworkStatus(NetworkLifecycleState::ConnectingHome));
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Disconnected,
+        toDeviceUiNetworkStatus(NetworkLifecycleState::CandidateTesting));
+    TEST_ASSERT_EQUAL(DeviceUiNetworkStatus::Unavailable,
+                      toDeviceUiNetworkStatus(NetworkLifecycleState::Stopped));
+    TEST_ASSERT_EQUAL(DeviceUiNetworkStatus::Unavailable,
+                      toDeviceUiNetworkStatus(NetworkLifecycleState::Failed));
+    TEST_ASSERT_EQUAL(
+        DeviceUiNetworkStatus::Unavailable,
+        toDeviceUiNetworkStatus(static_cast<NetworkLifecycleState>(0xFFU)));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -308,5 +336,6 @@ int main(int, char**) {
     RUN_TEST(test_touch_and_web_session_policies_remain_separate);
     RUN_TEST(test_expired_session_activity_cannot_resurrect_or_move_backwards);
     RUN_TEST(test_command_outcome_categories_stay_bounded);
+    RUN_TEST(test_network_lifecycle_state_maps_to_header_status);
     return UNITY_END();
 }

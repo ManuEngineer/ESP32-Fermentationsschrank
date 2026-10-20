@@ -371,6 +371,13 @@ class FermentationApplication {
     [[nodiscard]] std::optional<FermentationUiPresentationSource>
     uiPresentationSource() const;
 
+    // Narrow, transient read for the web status: device name and canonical
+    // zone from one configuration lease, one UTC reading converted by
+    // toLocalTime(), and the lifecycle state mapped by
+    // toDeviceUiNetworkStatus() only while the lifecycle runs the configured
+    // network mode. Does not copy the program catalog and holds nothing.
+    [[nodiscard]] FermentationDeviceInfoView deviceInfoView() const;
+
     [[nodiscard]] WebAuthenticationState webAuthenticationState() const;
     [[nodiscard]] WebAuthenticationResult authenticateWebPassword(
         const std::string& password, std::uint64_t nowMs);

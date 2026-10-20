@@ -1482,6 +1482,33 @@ FermentationApplication::uiPresentationSource() const {
     return source;
 }
 
+FermentationDeviceInfoView FermentationApplication::deviceInfoView() const {
+    const auto guard = applicationCallSerializer_.enter();
+    FermentationDeviceInfoView view;
+    if (configurationService_ != nullptr) {
+        const auto runtime = configurationService_->acquireRuntime();
+        if (runtime.status ==
+            RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            const auto& zone = runtime.lease.get().preparedTimeZone();
+            view.deviceName =
+                runtime.lease.get().userConfiguration().deviceName;
+            view.timeZoneId = zone.canonicalIdentifier;
+            if (timeSource_ != nullptr) {
+                view.localTime = device_platform::toLocalTime(
+                    timeSource_->unixTimeSeconds(), zone.rule);
+            }
+        }
+    }
+    if (networkLifecycle_ != nullptr) {
+        const auto status = networkLifecycle_->status();
+        if (status.selectedMode == networkMode()) {
+            view.connection =
+                device_platform::toDeviceUiNetworkStatus(status.state);
+        }
+    }
+    return view;
+}
+
 WebAuthenticationState FermentationApplication::webAuthenticationStateUnlocked()
     const {
     if (authenticationDomain_ == nullptr ||

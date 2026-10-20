@@ -258,7 +258,8 @@ void test_phase_seconds_do_not_change_the_semantic_snapshot() {
 
 std::string status(const FermentationUiSnapshot& snapshot) {
     std::string body;
-    TEST_ASSERT_TRUE(encodeWebApiStatus(snapshot, body));
+    TEST_ASSERT_TRUE(
+        encodeWebApiStatus(snapshot, FermentationDeviceInfoView{}, body));
     return body;
 }
 
@@ -343,7 +344,8 @@ void test_worst_case_status_body_fits_and_oversized_name_fails_closed() {
     auto oversized = worstCaseSnapshot();
     oversized.home.programName.assign(600U, '\x01');
     std::string output = "unchanged";
-    TEST_ASSERT_FALSE(encodeWebApiStatus(oversized, output));
+    TEST_ASSERT_FALSE(
+        encodeWebApiStatus(oversized, FermentationDeviceInfoView{}, output));
     TEST_ASSERT_EQUAL_STRING("unchanged", output.c_str());
 }
 
@@ -351,8 +353,10 @@ using alloc_window::Window;
 
 Window measure(const FermentationUiSnapshot& snapshot, std::string& output) {
     bool encoded = false;
-    const auto window = alloc_window::measure(
-        [&] { encoded = encodeWebApiStatus(snapshot, output); });
+    const auto window = alloc_window::measure([&] {
+        encoded =
+            encodeWebApiStatus(snapshot, FermentationDeviceInfoView{}, output);
+    });
     TEST_ASSERT_TRUE(encoded);
     return window;
 }
@@ -401,6 +405,38 @@ void test_status_encoding_allocations_cover_cjson_and_operator_new() {
     TEST_ASSERT_TRUE(peak.largestBlock <= kMaximumWebApiResponseBodyBytes);
 }
 
+void test_status_with_maximum_device_info_stays_bounded_and_is_released() {
+    FermentationDeviceInfoView device;
+    // 96 control bytes escape to 576 bytes: a boundary beyond what a
+    // validated visible name can produce.
+    device.deviceName = std::string(96U, '\x01');
+    device.timeZoneId = std::string(64U, 'z');
+    device.connection = device_platform::DeviceUiNetworkStatus::Connected;
+    device_platform::LocalTime local;
+    local.year = 2026;
+    local.month = 10;
+    local.day = 20;
+    local.hour = 14;
+    local.minute = 3;
+    device.localTime = local;
+    const auto worst = worstCaseSnapshot();
+    std::string withDevice;
+    bool encoded = false;
+    const auto window = alloc_window::measure(
+        [&] { encoded = encodeWebApiStatus(worst, device, withDevice); });
+    TEST_ASSERT_TRUE(encoded);
+    std::printf(
+        "STATUS_ALLOC worst+device: count=%zu bytes=%zu largest=%zu "
+        "peak_live=%zu cjson_count=%zu body=%zu\n",
+        window.count, window.requestedBytes, window.largestBlock,
+        window.peakLiveBytes, window.cJsonCount, withDevice.size());
+    TEST_ASSERT_TRUE(withDevice.size() <= kMaximumWebApiResponseBodyBytes);
+    TEST_ASSERT_TRUE(has(withDevice, "\"networkState\":\"connected\""));
+    TEST_ASSERT_TRUE(has(withDevice, "\"local\":\"2026-10-20 14:03\""));
+    TEST_ASSERT_EQUAL_UINT32(0U,
+                             static_cast<std::uint32_t>(window.cJsonLiveBytes));
+}
+
 }  // namespace
 
 void setUp() {}
@@ -418,5 +454,7 @@ int main(int, char**) {
     RUN_TEST(test_status_codec_emits_nullable_run_object);
     RUN_TEST(test_worst_case_status_body_fits_and_oversized_name_fails_closed);
     RUN_TEST(test_status_encoding_allocations_cover_cjson_and_operator_new);
+    RUN_TEST(
+        test_status_with_maximum_device_info_stays_bounded_and_is_released);
     return UNITY_END();
 }
