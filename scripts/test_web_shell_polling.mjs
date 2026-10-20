@@ -38,7 +38,7 @@ function snapshot(mode = 'active-run', run = '1') {
   ];
 }
 
-async function fixture(language = 'en') {
+async function fixture(language = 'en', storage) {
   const h = { time: 100000, timers: new Map(), requests: [], posts: [], maxGroups: 0, maxRequests: 0, reloads: 0 };
   let timerId = 0;
   const elements = new Map();
@@ -49,6 +49,7 @@ async function fixture(language = 'en') {
   const buttons = actions.map(a => Object.assign(new Element(), { dataset: { a }, disabled: true }));
   element('#ops').querySelectorAll = () => buttons;
   h.buttons = buttons;
+  h.el = element;
   h.connection = element('#connection');
   h.board = element('#board');
   h.rows = () => element('#temps').children.map(e => e.textContent);
@@ -60,6 +61,7 @@ async function fixture(language = 'en') {
   const context = vm.createContext({
     document: { querySelector: element, createElement: () => new Element(), documentElement: {} },
     navigator: { language }, window: { __WEB_CSRF__: csrfToken },
+    ...(storage ? { localStorage: storage } : {}),
     location: { reload: () => { ++h.reloads; } },
     Option: class extends Element { constructor(name, id) { super(); this.textContent = name; this.value = id; } },
     Date: { now: () => h.time }, AbortController,
@@ -109,6 +111,7 @@ async function fixture(language = 'en') {
       return headers.promise;
     },
   });
+  h.ctx = context;
   h.run = code => vm.runInContext(code, context);
   h.state = () => JSON.parse(h.run('JSON.stringify({P,LP,LT,B,Q})'));
   h.group = () => h.requests.slice(-3);
@@ -444,6 +447,179 @@ test('an unacknowledged abort keeps the lock across deadline and further ticks',
   h.group().forEach(r => r.finishAbort()); await drain(); h.noDeadline();
   await h.tick(); assert.equal(h.requests.length, 9); await h.finish();
 });
+
+// ---- Plan a671c33: browser-individual language selection (PR 208) ----
+const staticTexts = {
+  de: { login: 'Anmelden', pl: 'Passwort', logout: 'Abmelden', pt: 'Passwortschutz aktiv', stop: 'Stop', sure: 'Sicher?', online: 'Online' },
+  en: { login: 'Login', pl: 'Password', logout: 'Logout', pt: 'Password protection enabled', stop: 'Stop', sure: 'Sure?', online: 'Online' },
+  es: { login: 'Iniciar sesion', pl: 'Contrasena', logout: 'Cerrar sesion', pt: 'Proteccion por contrasena activa', stop: 'Parar', sure: 'Seguro?', online: 'En linea' },
+};
+const selectLanguage = (h, value) => h.run(`(()=>{sw.value=${JSON.stringify(value)};sw.onchange();})()`);
+const memory = (initial) => { const store = {}; if (initial !== undefined) store.lang = initial; return store; };
+const throwingStorage = { get lang() { throw new DOMException('blocked', 'SecurityError'); }, set lang(value) { throw new DOMException('quota', 'QuotaExceededError'); } };
+const writeThrowsStorage = { get lang() { return undefined; }, set lang(value) { throw new DOMException('quota', 'QuotaExceededError'); } };
+
+test('language: browser suggestion on first visit, English fallback, stored valid code wins', async () => {
+  for (const [navigatorLanguage, expected] of [['de-CH', 'de'], ['en-US', 'en'], ['es-ES', 'es'], ['fr-FR', 'en'], ['', 'en'], ['constructor', 'en']]) {
+    const h = await fixture(navigatorLanguage, memory());
+    assert.equal(h.run('lc'), expected, navigatorLanguage);
+    assert.equal(h.run('document.documentElement.lang'), expected);
+    assert.equal(h.el('#lang').value, expected, 'the selector shows the active language');
+  }
+  for (const stored of ['de', 'en', 'es']) {
+    const h = await fixture('fr-FR', memory(stored));
+    assert.equal(h.run('lc'), stored, 'stored choice has priority over the suggestion');
+  }
+});
+
+test('language: invalid or tampered stored values are ignored and never reused', async () => {
+  for (const stored of ['xx', 'DE', 'de ', 'constructor', '__proto__', '', 'deutsch', 'de,en', null, 7]) {
+    const h = await fixture('es-ES', memory(stored));
+    assert.equal(h.run('lc'), 'es', 'falls back to the suggestion: ' + String(stored));
+    assert.deepEqual(Object.keys(staticTexts.es).every(k => h.run(`typeof T[${JSON.stringify(k)}]`) === 'string'), true);
+  }
+  const h = await fixture('fr-FR', memory('xx'));
+  assert.equal(h.run('lc'), 'en');
+});
+
+test('language: switching re-renders static, dynamic and action texts in each language', async () => {
+  const h = await fixture('en', memory()); const data = snapshot('active-run', '1');
+  await h.finish(data);
+  for (const language of ['de', 'es', 'en', 'de']) {
+    const requests = h.requests.length;
+    selectLanguage(h, language);
+    const t = staticTexts[language];
+    assert.equal(h.run('lc'), language);
+    assert.equal(h.run('document.documentElement.lang'), language);
+    assert.equal(h.el('#login button').textContent, t.login);
+    assert.equal(h.el('#password-label').textContent, t.pl);
+    assert.equal(h.el('#logout').textContent, t.logout);
+    assert.equal(h.el('#auth-state').textContent, t.pt);
+    assert.equal(h.buttons.find(b => b.dataset.a === 'stop').textContent, t.stop);
+    assert.equal(h.connection.textContent, t.online, 'dashboard connection text');
+    assert.ok(h.rows().some(x => x.startsWith(h.run("T['cabinet-air']"))), 'temperature rows');
+    assert.equal(h.requests.length, requests, 'a language change sends no request');
+    assert.equal(h.posts.length, 0);
+  }
+});
+
+test('language: choice survives a reload and stays independent between browsers', async () => {
+  const first = memory(); const other = memory();
+  const a = await fixture('en', first); selectLanguage(a, 'de');
+  assert.equal(first.lang, 'de');
+  const reloaded = await fixture('en', first);          // same browser storage
+  assert.equal(reloaded.run('lc'), 'de');
+  const partner = await fixture('en', other); selectLanguage(partner, 'es');
+  assert.equal(other.lang, 'es'); assert.equal(first.lang, 'de');
+  assert.equal((await fixture('en', first)).run('lc'), 'de');
+  assert.equal((await fixture('en', other)).run('lc'), 'es');
+});
+
+test('language: invalid selector values are rejected and only validated codes are stored', async () => {
+  const store = memory(); const h = await fixture('de-DE', store);
+  for (const bad of ['zz', 'constructor', '', 'EN']) {
+    selectLanguage(h, bad);
+    assert.equal(h.run('lc'), 'en', 'falls back to English: ' + bad);
+    assert.ok(['en'].includes(store.lang) && /^(de|en|es)$/.test(store.lang));
+  }
+  selectLanguage(h, 'es'); assert.equal(store.lang, 'es');
+});
+
+test('language: missing, blocked or write-throwing storage never throws and keeps the page language', async () => {
+  for (const [name, storage] of [['no storage', undefined], ['blocked', throwingStorage], ['write throws', writeThrowsStorage]]) {
+    const h = await fixture('en-US', storage);
+    assert.equal(h.run('lc'), 'en', name);
+    selectLanguage(h, 'de');
+    assert.equal(h.run('lc'), 'de', name + ': switched');
+    assert.equal(h.el('#login button').textContent, 'Anmelden', name);
+    selectLanguage(h, 'es');
+    assert.equal(h.run('lc'), 'es', name + ': stays effective for the page');
+  }
+});
+
+test('language: an active confirmation is re-rendered in the new language without changing K/KC/gates', async () => {
+  const h = await fixture('en', memory()); await h.finish();
+  const stop = h.buttons.find(b => b.dataset.a === 'stop');
+  h.ctx.__t = stop; h.run('ops.onclick({target:__t})');
+  assert.equal(h.run('K'), 'stop'); assert.equal(stop.textContent, 'Sure?');
+  const kc = h.run('KC'), gates = h.buttons.map(b => b.disabled), posts = h.posts.length;
+  for (const language of ['es', 'de', 'en']) {
+    selectLanguage(h, language);
+    assert.equal(stop.textContent, staticTexts[language].sure);
+    assert.equal(h.run('K'), 'stop'); assert.equal(h.run('KC'), kc);
+    assert.deepEqual(h.buttons.map(b => b.disabled), gates);
+    assert.equal(h.posts.length, posts);
+  }
+  h.run('ops.onclick({target:__t})');                   // second click still confirms once
+  assert.equal(h.run('K'), ''); await drain(); assert.equal(h.posts.length, posts + 1);
+});
+
+test('language: no home mode changes P or any action gate', async () => {
+  for (const mode of infoModes) {
+    const plain = await fixture('en', memory()); await plain.finish(snapshot(mode, '1'));
+    const h = await fixture('en', memory()); await h.finish(snapshot(mode, '1'));
+    const before = JSON.stringify([h.buttons.map(b => b.disabled), h.state().P === null]);
+    selectLanguage(h, 'de'); selectLanguage(h, 'es');
+    assert.equal(JSON.stringify([h.buttons.map(b => b.disabled), h.state().P === null]), before, mode);
+    assert.deepEqual(h.buttons.map(b => b.disabled), plain.buttons.map(b => b.disabled), mode);
+  }
+});
+
+// Setup (provisioning) shell: its own small script, same selection contract.
+const provisioningLiteral = source.match(/static constexpr char kSuffix\[\] =([\s\S]*?);\n\s+staticBodySuffix = kSuffix;/);
+assert.ok(provisioningLiteral, 'extract the actual provisioning suffix');
+const provisioningScript = [...provisioningLiteral[1].matchAll(/"(?:[^"\\]|\\.)*"/g)].map(x => JSON.parse(x[0])).join('').split('</script>')[0];
+const provisioningIds = ['a', 'b', 'c', 'e', 'x', 'y', 'g'];
+
+function provisioning(language, storage) {
+  const elements = new Map();
+  const id = name => { if (!elements.has(name)) elements.set(name, { textContent: '', hidden: false, value: '', checked: false }); return elements.get(name); };
+  const context = vm.createContext({
+    document: {
+      getElementById: id, documentElement: {},
+      querySelector: () => ({ value: 'p' }), querySelectorAll: () => [],
+    },
+    navigator: { language }, fetch: () => { throw new Error('no request'); },
+    ...(storage ? { localStorage: storage } : {}),
+  });
+  vm.runInContext(provisioningScript, context);
+  return { id, run: code => vm.runInContext(code, context), context };
+}
+
+test('language (setup shell): suggestion, stored choice, validation and independent texts', async () => {
+  for (const [navigatorLanguage, expected] of [['de-CH', 'de'], ['es-AR', 'es'], ['en-GB', 'en'], ['fr-FR', 'en'], ['constructor', 'en']]) {
+    const p = provisioning(navigatorLanguage, memory());
+    assert.equal(p.context.document.documentElement.lang, expected, navigatorLanguage);
+    for (const key of provisioningIds) assert.equal(p.id(key).textContent, p.run(`L.${expected}.${key}`), expected + ':' + key);
+  }
+  for (const stored of ['xx', 'constructor', 'DE', '']) {
+    assert.equal(provisioning('es-ES', memory(stored)).context.document.documentElement.lang, 'es', String(stored));
+  }
+  assert.equal(provisioning('fr-FR', memory('de')).context.document.documentElement.lang, 'de');
+});
+
+test('language (setup shell): switching sets every text, stores only validated codes and tolerates blocked storage', async () => {
+  const store = memory(); const p = provisioning('en-US', store);
+  for (const language of ['de', 'es', 'en']) {
+    p.id('lang').value = language; p.id('lang').onchange();
+    assert.equal(p.context.document.documentElement.lang, language);
+    assert.equal(store.lang, language);
+    for (const key of provisioningIds) assert.equal(p.id(key).textContent, p.run(`L.${language}.${key}`), language + ':' + key);
+  }
+  p.id('lang').value = 'zz'; p.id('lang').onchange();
+  assert.equal(p.context.document.documentElement.lang, 'en'); assert.equal(store.lang, 'en');
+  for (const storage of [undefined, throwingStorage, writeThrowsStorage]) {
+    const q = provisioning('en-US', storage);
+    q.id('lang').value = 'de'; q.id('lang').onchange();
+    assert.equal(q.context.document.documentElement.lang, 'de');
+    assert.equal(q.id('c').textContent, q.run('L.de.c'));
+  }
+  // Dashboard and setup shell share the key: the choice made in setup carries over.
+  const shared = memory(); provisioning('en-US', shared).id('lang').onchange;
+  const setup = provisioning('en-US', shared); setup.id('lang').value = 'es'; setup.id('lang').onchange();
+  assert.equal((await fixture('en-US', shared)).run('lc'), 'es');
+});
+
 
 for (const { name, run } of tests) {
   await run(); console.log('PASS ' + name);
