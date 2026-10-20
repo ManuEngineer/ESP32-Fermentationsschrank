@@ -261,7 +261,7 @@ Sitzungsbedienung haben in diesem Zustand keine Funktion):
 
 Das Formular prueft keine Passwort- oder PIN-Regeln; diese gehoeren der
 Authentisierungsdomaene. Die Shell bleibt innerhalb der Groessenschranke von
-10752 Bytes (Ownerentscheid D1-C fuer #27, einmalig von 8192 Bytes erhoeht;
+11264 Bytes (Ownerentscheid D1 = D fuer #27, Plan 9656a18, einmalig von 10752 Bytes erhoeht; zuvor D1-C von 8192 Bytes;
 Gesamtlaenge aus besessenem Kopf und statischem Anhang, siehe unten).
 
 **Route.** `POST /api/v1/provision`, nur mit `Content-Type: application/json`
@@ -388,8 +388,8 @@ der Adapter gibt diesen Fehler zurück. Ohne Anhang gilt weiterhin der bisherige
 Content-Length; ihre zusammengesetzten HTML-/JS-Bytes bleiben gleich.
 
 Die normale Shell reserviert 1536 B für ihren variablen Kopf; ihr konstanter
-Anhang (9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
-konstanten Script-Anhang ab. Die 10752-B-Grenze (Ownerentscheid D1-C, zuvor 8192 B) gilt für Kopf **plus** Anhang.
+Anhang (9619 B, vor den Standbyinformationen 9013 B, vor den Laufinformationen 6662 B) liegt im Flash (`.flash.rodata`; der Zuwachs ändert DRAM/IRAM des Kandidaten nicht, siehe [RAM-Bilanz](audits/PR206_RAM_FEASIBILITY_20261019.md)). Die Provisionierungs-Shell teilt ebenfalls ihren
+konstanten Script-Anhang ab. Die 11264-B-Grenze (Ownerentscheid D1 = D, Plan 9656a18, zuvor 10752 B und 8192 B) gilt für Kopf **plus** Anhang.
 Alle Antwort-Ersetzungen löschen den Anhang, insbesondere JSON und Fehler:
 auch eine zunächst aufgebaute, anschließend zu große Shell liefert ausschließlich
 Status 503, `application/json; charset=utf-8` und
@@ -462,10 +462,11 @@ unveraendert). Es gibt keinen neuen Endpunkt und keine Codec-Aenderung.
   (`H`) wird verworfen, ohne Wirkung auf Stand, Alter oder Verbindungsstatus.
 - **Darstellung:** einspaltig mit grossen Bedienflaechen, ab 40 rem zwei
   Spalten; dynamischer Text nur ueber `textContent`.
-- **Groessenschranke:** 10752 Bytes (Ownerentscheid D1-C, Plan 3376a19); die
-  gemessene authentifizierte Shell hat 10410 Bytes (Reserve 342 Bytes, davon
-  214 Bytes ueber der 128-Byte-Normalreserve, die die 19 Bytes fuer die
-  breiteste Mutationssequenz enthaelt). Keine zweite Erhoehung vorgesehen.
+- **Groessenschranke:** 11264 Bytes (Ownerentscheid D1 = D, Plan 9656a18,
+  einmalig; zuvor 10752 Bytes); die gemessene authentifizierte Shell hat
+  11016 Bytes (Reserve 248 Bytes, davon 128 Bytes Normalreserve, die die 19
+  Bytes fuer die breiteste Mutationssequenz enthaelt, und 120 Bytes
+  Bindungsspielraum, der unverbraucht ist). Keine weitere Erhoehung vorgesehen.
 
 ### Laufinformationen (Issue #27, Plan 3376a19)
 
@@ -495,7 +496,41 @@ UI-Refresh-Revision. Der Browser zaehlt nicht weiter; bei Fehler oder Stale
 bleibt die Anzeige gedimmt mit Abrufalter. Eine Zeitzahl ueber 2^53−1 oder
 fehlerhafte Daten ergeben den bestehenden 503 ohne Suffix.
 
-Nicht Teil dieses Slices: Geraetename, Netzwerk-/Zeitstatus, Aktorstatus,
+### Standbyinformationen (Issue #27, Plan 9656a18)
+
+`/api/v1/status` (Version 1) enthaelt zusaetzlich, rein lesend und in **allen**
+`homeMode`-Werten angezeigt:
+
+- `deviceName`: sichtbarer Geraetename der `UserConfiguration` oder `null`, wenn
+  die Konfiguration nicht lesbar ist (Anzeige „Nicht verfuegbar“);
+- `networkState`: genau `connected`, `disconnected` oder `unavailable` als
+  tatsaechlicher Zustand des Netzwerktransports des Geraets, abgebildet von
+  `toDeviceUiNetworkStatus` (AccessPointOnly/HomeConnected → `connected`;
+  SetupAccessPoint/ConnectingHome/CandidateTesting → `disconnected`; Stopped/
+  Failed/unbekannt → `unavailable`). Der Zustand wird nur gemeldet, wenn der
+  Lifecycle den **konfigurierten** Modus (`networkMode`) betreibt, sonst
+  `unavailable`. Er sagt weder etwas ueber Internet noch ueber den Abrufstatus
+  des Browsers aus;
+- `clock`: `null` ohne vertrauenswuerdige UTC-Zeit, ohne darstellbare Zone oder
+  ausserhalb der Jahre 0..9999, sonst `{local:"YYYY-MM-DD HH:MM", zone:"<kanonische
+  Id>"}` aus dem einzigen UTC→Lokal-Owner `toLocalTime`; Minutenaufloesung, ohne
+  Offset.
+
+`networkMode` bleibt das separate Feld des gewaehlten Modus. Die Shell zeigt den
+Namen als erste Zeile, danach „Netzwerk: <Modus> · <Zustand>“ (Modus: Eigener AP/
+Heimnetz, Zustand: verbunden/getrennt, sonst „Nicht verfuegbar“) und
+„Uhrzeit: <lokal> <Zone>“ beziehungsweise „nicht synchronisiert“, in Deutsch,
+Englisch und Spanisch. Die Woerter `Online`/`Offline` bleiben dem Abrufstatus
+vorbehalten. Nie wird eine Browseruhr verwendet; die Zeit gilt zum Abrufzeitpunkt
+und wird bei Fehler oder Stale gedimmt mit Abrufalter angezeigt. Es entstehen
+keine SSID, kein Passwort, keine SoftAP-Daten und keine Adresse in der Ausgabe.
+Name/Zone und `revisions.userConfiguration` stammen aus zwei Guard-Eintritten
+und sind nicht atomar zueinander (naechster Abruf konvergiert).
+Die Daten kommen aus einem schmalen Application-Accessor (`deviceInfoView`),
+nicht aus `FermentationUiSnapshot`; die Display-Refresh-Revision bleibt
+unveraendert. Ressourcen: [Evidence](audits/PR207_STANDBY_INFO_RESOURCE_EVIDENCE_20261020.md).
+
+Nicht Teil dieser Slices: Aktorstatus,
 Gesamtlaufzeit/Programmende-ETA und die Mehrseiten-Navigation. Die Hardware-
 Heapmessung H-RAM-1 (Mess-Overlay M, Standby/Ein-Client, gescriptetes Replay und
 echt headless Chromium) wurde ausgefuehrt: begrenzter positiver Teilnachweis, siehe
