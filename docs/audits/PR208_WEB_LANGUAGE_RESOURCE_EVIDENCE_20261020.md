@@ -2,7 +2,7 @@
 
 Plan [`a671c33`](../tasks/issue-27-r1-web-language-plan.md) (Ownerfreigabe der exakten SHA;
 D1 = A, Limit 11 456 B, D2 `localStorage`, D3 Auswahl am Seitenanfang). Offline-Messquelle:
-sauberer Implementierungscommit `d37b375` (`build_esp_idf_profiles.py all
+sauberer Implementierungscommit `386c302` (nach Review-Korrektur der Setup-Meldung; Stand davor `d37b375`) (`build_esp_idf_profiles.py all
 --require-clean-source-tree`: `esp32_bringup` und `esp32_release` PASS, Profil-/Driftpruefung
 PASS). Vergleichsbasis: `main` `43f0338` (Code identisch zu `f09d937`, dem Messstand der
 [PR-207-Evidence](PR207_STANDBY_INFO_RESOURCE_EVIDENCE_20261020.md); seit `f09d937` nur
@@ -19,8 +19,8 @@ Authentifiziert **11 312 B**, Passwortschutz aus 11 311 B; Limit **11 456 B**; R
 dem Messkandidaten des Plans (A2 / Endonyme, +296 B gegenueber 11 016 B; Suffix 9 797 B,
 Kopf +118 B). Kopf mit maximaler Sequenz 1 534 B (Testlimit 1 536 B, unveraendert). Die
 gewaehlte Grenze wurde nicht ueberschritten; `kMaximumWebShellBytes` ist (neben Golden und
-Test-`kShellLimit`) die einzige Limitaenderung. Setup-Shell: 3 886 B (Kopf 1 029 B,
-Suffix 2 857 B; vorher 3 561 B), weit unter jeder Grenze.
+Test-`kShellLimit`) die einzige Limitaenderung. Setup-Shell: 3 916 B (Kopf 1 029 B,
+Suffix 2 887 B; vorher 3 561 B; davon +30 B durch die Review-Korrektur der Meldungsschluessel), weit unter jeder Grenze.
 
 ## Sektionsdeltas (MEASURED, `esp32_release`, `xtensa-esp32-elf-size -A`)
 
@@ -29,9 +29,9 @@ Suffix 2 857 B; vorher 3 561 B), weit unter jeder Grenze.
 | `.dram0.data` | 18 975 | 18 975 | **0** | keine neuen statischen Objekte |
 | `.dram0.bss` | 74 488 | 74 488 | **0** | dito |
 | `.iram0.text` | 100 815 | 100 815 | **0** | kein neuer Code |
-| `.flash.rodata` | 237 212 | 237 836 | +624 | Shell-Suffix +178 B, Kopf-Literal +118 B, Setup-Shell +325 B (Literale, Ausrichtung) |
+| `.flash.rodata` | 237 212 | 237 868 | +656 | Shell-Suffix +178 B, Kopf-Literal +118 B, Setup-Shell +355 B (Literale, Ausrichtung) |
 | `.flash.text` | 1 405 758 | 1 405 758 | **0** | keine neue C++-Logik |
-| `.bin` | 1 764 224 | 1 764 848 | +624 | Summe, rund 57 % der 3 080 192-B-Partition |
+| `.bin` | 1 764 224 | 1 764 880 | +656 | Summe, rund 57 % der 3 080 192-B-Partition |
 
 ## Statische Stack-Frames (MEASURED, GCC `-fstack-usage`, `esp32_release`)
 
@@ -44,10 +44,10 @@ Laufzeitnachweis; HWM bleibt **NOT_PROVEN**.
 
 ## Weitere Nachweise (Builder-Self-Check)
 
-- JS: `scripts/test_web_shell_polling.mjs` **66/66 PASS** (bisherige 56 plus 10 neue
-  Sprachfaelle, Fake-DOM, kein Browser). Mutationsgegenproben schlagen fehl:
+- JS: `scripts/test_web_shell_polling.mjs` **74/74 PASS** (bisherige 56 plus 18 neue
+  Sprachfaelle inklusive acht Setup-Meldungsfaelle, Fake-DOM, kein Browser). Mutationsgegenproben schlagen fehl:
   ungeschuetztes Schreiben (`ReferenceError`), alte `ui()`-Regel (Bestaetigungstext in alter
-  Sprache), fehlende Validierung in `sl()`.
+  Sprache), fehlende Validierung in `sl()` und fehlendes Neu-Rendern der Setup-Meldung.
 - Native: `test_web_application_routes` 109/109, `test_fermentation_ui_models`,
   `test_renderer_boundary`, `test_ui_steady_state_allocations`, `test_run_detail_projection`,
   `test_device_ui_contracts`, `test_web_session`, `test_web_browser_policy` (gesamt 279/279);

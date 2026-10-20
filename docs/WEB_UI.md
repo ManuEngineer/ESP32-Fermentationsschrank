@@ -180,6 +180,10 @@ Shell in jedem Authentifizierungszustand. Rein clientseitig und ohne Request:
   faellt beim naechsten Laden auf den Vorschlag zurueck. Der Schluessel gilt fuer Setup- und
   Dashboard-Shell gemeinsam und je Browser und Ursprung; Browser/Endgeraete sind
   unabhaengig voneinander und von der Sprache des Touchdisplays.
+- In der Setup-Shell behaelt eine sichtbare Ergebnis- oder Fehlermeldung beim Wechsel ihre
+  Art (Schluessel) und wird in der neuen Sprache neu gerendert; eine ausstehende Antwort
+  erscheint in der zum Antwortzeitpunkt gewaehlten Sprache. Der Wechsel veraendert keinen
+  Formularzustand und loest keinen Request aus.
 - Es gibt keinen serverseitigen Sprachzustand (kein Cookie, kein Header, keine API), keine
   Aenderung an Geraetekonfiguration, Prozessdaten, Authentifizierung, Session, CSRF,
   Polling oder Mutation. Der Ergebnistext der zuletzt ausgefuehrten Aktion behaelt bis zur
