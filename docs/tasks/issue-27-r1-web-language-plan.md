@@ -1,19 +1,30 @@
 # Issue #27 – R1-Web: browserindividuelle Sprachwahl (DE/EN/ES)
 
-**2026-10-20 · PLAN-REVISION 1 · NICHT FREIGEGEBEN · UMSETZUNG GESPERRT (Ownerentscheid D1 zum Shell-Limit offen).**
+**2026-10-20 · PLAN-REVISION 2 · OWNERENTSCHEIDE D1–D3 ERTEILT · REVISION NICHT FREIGEGEBEN · UMSETZUNG GESPERRT.**
 [Issue #27](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/27)
 bleibt OPEN. Branch `agent/issue-27-r1-web-language-plan`, Draft-PR zu Issue #27.
 Dieser Plan ist die einzige kanonische Fassung. Eine Umsetzung beginnt erst nach
-unabhaengigem Planreview und ausdruecklicher Freigabe der exakten Plan-SHA.
+ausdruecklicher Freigabe der exakten Plan-SHA dieser Revision; die Ownerentscheide
+(unten) sind **keine** Freigabe dieser SHA. Revision 1 (Plan-SHA
+`d4bb71d9c7b8e6286beb7ecad05fa7634d58a6b2`) ist historisch.
+
+**Entschieden (Owner, 2026-10-20):** **D1 = A** (einmaliges Shell-Limit **11 456 B**, Endonyme
+mit `aria-label`), **D2 = `localStorage`**, **D3 = Auswahlfeld am Seitenanfang**. Keine
+weitere Limiterhoehung und keine Umstellung auf Cookie/Serverimplementierung.
+
+**Planreview-Korrektur (Revision 2).** (1) Schreiben nach `localStorage` ist geschuetzt:
+auch fehlender oder beim Schreiben blockierter Speicher loest keine unbehandelte Exception
+aus, die gewaehlte Sprache bleibt fuer die Seite wirksam. (2) Eine bereits aktive
+Bestaetigung („Sicher?“) wird beim Sprachwechsel in der neuen Sprache neu gerendert, ohne
+`K`, `KC`, Aktionssperren oder Bestaetigungssemantik zu aendern. Der Kandidat wurde
+entsprechend geaendert und **neu vermessen** (§5).
 
 **Kernbefund.** Die Sprachwahl ist rein clientseitig machbar und braucht keine neue
 Uebersetzungsarchitektur. Sie passt aber **nicht** in die 120 B Spielraum oberhalb der
 128-B-Normalreserve des Limits 11 264 B: die kleinste gemessene bedienbare Variante
-kostet **+215 B**, die empfohlene (Endonyme, beschriftetes Auswahlfeld) **+278 B**. Es
-gibt keine Variante, die ohne Streichen bestehender Inhalte oder ohne Architekturumbau
-hineinpasst. Die Entscheidung ueber ein weiteres, einmaliges Limit (oder den
-Architekturweg E, §6) ist eine Ownerentscheidung (§8); der Planer erhoeht nichts und
-reduziert nichts eigenmaechtig.
+kostet **+233 B**, die gewaehlte (Endonyme, beschriftetes Auswahlfeld, mit beiden
+Korrekturen) **+296 B** (Shell 11 312 B). Der Owner hat dafuer das einmalige Limit
+**11 456 B** (Reserve danach 144 B = 128 B Normalreserve + 16 B) entschieden (§8).
 
 ## 1. Live-Basis
 
@@ -83,9 +94,10 @@ gleich. Das Feld ist kein Formular-Submit und loest keinen Request aus.
 2. `sl(c)` validiert `c` erneut (ungueltig → `en`), setzt `lc`, fuellt `T`, `<html lang>`,
    das Auswahlfeld und alle einmaligen statischen Texte.
 3. Wechsel durch den Benutzer: `sl(select.value); dr(); ui();`, danach
-   `localStorage.lang = lc`. Es wird ausschliesslich der **bereits validierte** Code
-   geschrieben; ein Schreibfehler (blockierter Speicher) ist folgenlos, weil die Sprache
-   zuvor schon umgeschaltet wurde und der Rest der Sitzung korrekt bleibt.
+   `try { localStorage.lang = lc } catch (e) {}`. Es wird ausschliesslich der **bereits
+   validierte** Code geschrieben. Fehlender Speicher (`localStorage` nicht definiert) oder
+   ein werfender Schreibzugriff (blockiert, Quota) loest keine unbehandelte Exception aus;
+   die Sprache wurde zuvor schon umgeschaltet und bleibt fuer die Seite wirksam.
 4. Ohne verfuegbaren Speicher (Privatmodus, blockiert) bleibt die Wahl fuer die Lebensdauer
    der Seite wirksam und faellt beim naechsten Laden auf den Vorschlag zurueck – kein
    Fehler, kein Funktionsverlust.
@@ -100,57 +112,69 @@ Programmkatalogbindung und alle Aktionssperren; `sl` liest/aendert keinen dieser
 Es gibt keinen Request durch den Sprachwechsel und keine Aenderung an Codec, Handler,
 Application oder Display.
 
+**Aktive Bestaetigung.** `ui()` schrieb den Knopftext bisher nur bei `K!==k`; bei laufender
+Bestaetigung (`K===k`) blieb „Sicher?“ in der alten Sprache stehen. `ui()` setzt den Text
+nun fuer jeden Knopf: `b[X]=K===k?T.sure:T[k]+(g[k]?' #'+g[k].id:'')`. Das aendert weder
+`K`, `KC` noch die Sperren (`b.disabled`) noch die Klicklogik (erster Klick setzt
+`K`/„Sicher?“, zweiter Klick sendet genau einmal); es rendert nur denselben Text, den der
+Klick bereits setzt, in der aktuellen Sprache. Der Aufruf `ui()` im Sprachwechsel genuegt
+damit.
+
 **Bekannte, bewusst akzeptierte Grenzen.** Der Ergebnistext der zuletzt ausgefuehrten
-Aktion (`#note`) und ein bereits angezeigtes „Sicher?“ behalten bis zur naechsten
-Aktualisierung die alte Sprache bzw. werden durch `ui()` neu gesetzt (Bestaetigung bleibt
-erhalten, Text wird neu gerendert). Benutzerprogramm- und Geraetename, Meldungscodes und
-Zeitzonen-Id bleiben unuebersetzt (WEB_UI).
+Aktion (`#note`) behaelt bis zur naechsten Aktion die alte Sprache. Benutzerprogramm- und
+Geraetename, Meldungscodes und Zeitzonen-Id bleiben unuebersetzt (WEB_UI).
 
 ## 5. Shell-Budget (MEASURED) und HOLD
 
 Messbasis: 11 016 B (Basisabgleich `kWebShellSuffix` = 9 619 B reproduziert), Limit
 11 264 B, Normalreserve 128 B ⇒ **120 B Spielraum**. Verfahren und Kandidaten dauerhaft in
 [`audits/WEB_LANGUAGE_BUDGET_20261020/`](../audits/WEB_LANGUAGE_BUDGET_20261020/)
-(`measure.py`, `candidates/`). Alle Kandidaten sind nach Einbau in den extrahierten
-Produktsuffix mit dem ausfuehrenden JS-Test geprueft: der empfohlene Kandidat laeuft mit den
-bestehenden **56/56** Faellen PASS (inklusive des Pfads ohne `localStorage`) und in einem
-Ad-hoc-Wechseltest (de/en/es, ungueltiger Code → `en`, Schreiben des validierten Codes);
-das ist Fake-DOM, kein Browser.
+(`measure.py`, `candidates/`). Die Kandidaten der A2-Familie enthalten beide Korrekturen. Der gewaehlte Kandidat wurde in
+den extrahierten Produktsuffix eingebaut und mit dem ausfuehrenden JS-Test geprueft: die
+bestehenden **56** Faelle plus zwei Regressionsfaelle fuer die Korrekturen = **58/58 PASS**
+(Fake-DOM, kein Browser): **FIX1** Wechsel ohne `localStorage`, mit werfendem Schreibzugriff
+(`QuotaExceededError`), nur validierter Code wird geschrieben, ungueltiger Code → `en`;
+**FIX2** aktive Bestaetigung → Sprachwechsel → „Seguro?“/„Sicher?“, `K`, `KC` und alle
+`disabled`-Flags unveraendert, kein Request, zweiter Klick sendet genau einmal. Negativ-
+kontrolle: der Kandidat vor der Korrektur wirft im Wechsel eine unbehandelte
+`ReferenceError`. Test und Verfahren: `audits/WEB_LANGUAGE_BUDGET_20261020/`.
 
 | Kandidat | Kopf+ | Suffix+ | Gesamt | Kopf mit max. Sequenz | Spielraum bei 11 264 (negativ = ueber) | Limit mind. (mit 128 B) |
 |---|---:|---:|---:|---:|---:|---:|
-| **A2 / Endonyme + `aria-label`** (empfohlen) | 118 | 160 | **11 294** | 1 534 (<= 1 536) | **−158** | **11 422** |
-| A2 / Codes `de en es` + `aria-label` | 75 | 160 | 11 251 | 1 491 | −115 | 11 379 |
-| A2 / Codes ohne `aria-label` | 55 | 160 | 11 231 | 1 471 | −95 | 11 359 |
-| R (Reload statt In-Place) / Endonyme | 118 | 155 | 11 289 | 1 534 | −153 | 11 417 |
-| R / Codes + `aria-label` | 75 | 155 | 11 246 | 1 491 | −110 | 11 374 |
-| R / Codes ohne `aria-label` | 55 | 155 | 11 226 | 1 471 | −90 | 11 354 |
+| **A2 / Endonyme + `aria-label`** (gewaehlt) | 118 | 178 | **11 312** | 1 534 (<= 1 536) | −176 | **11 440** |
+| A2 / Codes `de en es` + `aria-label` | 75 | 178 | 11 269 | 1 491 | −133 | 11 397 |
+| A2 / Codes ohne `aria-label` | 55 | 178 | 11 249 | 1 471 | −113 | 11 377 |
+| R (Reload statt In-Place), *vor der Korrektur gemessen* | 55…118 | 155 | 11 226…11 289 | 1 471…1 534 | −90…−153 | 11 354…11 417 |
 
-Ergebnis: **keine** Variante passt in die 120 B (kleinste: +215 B, Ueberschreitung 95 B).
-R spart nur 5 B, ist aber schlechter (zusaetzlicher voller Shell-Abruf pro Wechsel, geht
-verloren: laufende Bestaetigung/Anzeige, und ohne Speicher wirkungslos) und wird
-verworfen. Codes ohne Beschriftung wuerden die Bedienbarkeit (Barrierefreiheit,
-Verstaendlichkeit) einschraenken und werden nicht empfohlen. Die Provisionierungs-Shell
-ist von der Grenze nicht betroffen (rund 3,6 KB gesamt, grosse Reserve unter 11 264 B;
+Ergebnis: **keine** Variante passt in die 120 B (kleinste: +233 B). Der gewaehlte Kandidat
+(+296 B) liegt unter dem Owner-Limit 11 456 B (Reserve 144 B). R (Reload) spart nur etwa 23
+B, ist aber schlechter (zusaetzlicher voller Shell-Abruf je Wechsel, laufende Bestaetigung
+und Anzeige gehen verloren, ohne Speicher wirkungslos) und bleibt verworfen; seine Zeilen
+sind nicht korrigiert. Codes ohne Beschriftung wuerden die Bedienbarkeit einschraenken. Die
+Provisionierungs-Shell ist von der Grenze nicht betroffen (3 561 B gesamt, grosse Reserve;
 exakte Messung bei der Umsetzung).
 
 **Kopfgrenze.** Der empfohlene Kandidat belegt den Kopf mit maximaler Sequenz bis
-1 534 B, 2 B unter dem Testlimit 1 536 B; jede weitere Kopfmehrung fuehrt zu HOLD (kein
-stilles Anheben von `reserve`/Testlimit).
+1 534 B, 2 B unter dem Testlimit 1 536 B (die Korrekturen betreffen nur den Suffix); jede
+weitere Kopfmehrung fuehrt zu HOLD (kein stilles Anheben von `reserve`/Testlimit).
 
-**Regel (HOLD).** Ohne ausdrueckliche Ownerentscheidung zu D1 wird nichts umgesetzt. Nach
-einer Entscheidung gilt: die gemessene Shell darf den Messstand des gewaehlten
-Kandidaten nicht um mehr als den dann ausgewiesenen Spielraum ueberschreiten; Ueberschreitung
-fuehrt zu HOLD, nicht zu einer weiteren Erhoehung oder Kompaktierung.
+**Regel (HOLD).** Das Limit **11 456 B** gilt einmalig fuer diesen Slice. Die in der
+Umsetzung gemessene authentifizierte Shell darf den Messstand 11 312 B um hoechstens
+**16 B** ueberschreiten (Normalreserve 128 B inklusive 19 B Sequenzaufschlag bleibt
+bindend); der Kopf bleibt <= 1 536 B mit maximaler Sequenz. Ueberschreitung fuehrt zu HOLD
+und neuer Ownerentscheidung, nicht zu einer weiteren Erhoehung, Kompaktierung oder
+Umstellung auf Cookie/Serverimplementierung. Wortlautaenderungen am Kandidaten sind nur im
+Rahmen dieser 16 B zulaessig und werden ausgewiesen.
 
 ## 6. Bewertete Alternativen (kleinste tragfaehige zuerst)
 
-1. **Clientseitige Wahl A2 mit einmaliger Limiterhoehung (empfohlen, D1-A).** Kleinste
-   Aenderung: ein Feld im Kopf, ca. 160 B JS, keine Server-/Adapter-/Tabellenaenderung,
-   keine neue Laufzeitlast. Benoetigt mindestens 11 422 B, praktisch **11 456 B**
-   (Vielfaches von 64, +192 B ueber 11 264 B; Reserve danach 162 B = 128 B + 34 B).
-2. **Codes statt Endonyme (D1-B).** −43 B, Limit mind. 11 379 B, praktisch **11 392 B**
-   (+128 B, Reserve 141 B). Funktioniert, ist aber weniger verstaendlich.
+1. **Clientseitige Wahl A2 mit einmaliger Limiterhoehung (vom Owner gewaehlt, D1-A).**
+   Kleinste Aenderung: ein Feld im Kopf, ca. 178 B JS, keine Server-/Adapter-/Tabellen-
+   aenderung, keine neue Laufzeitlast. Limit **11 456 B** (Vielfaches von 64, +192 B
+   ueber 11 264 B; Mindestbedarf 11 440 B; Reserve danach 144 B = 128 B + 16 B).
+2. **Codes statt Endonyme (D1-B, nicht gewaehlt).** Mindestbedarf 11 397 B und damit
+   ebenfalls das 64er-Raster 11 456 B (11 392 B reichte nicht); kein Vorteil beim Limit,
+   aber weniger verstaendlich.
 3. **Serverseitig gewaehlter Einzelsprachen-Suffix (Weg E, nicht empfohlen fuer diesen
    Slice).** Der Suffix wird heute als ein `string_view` ausgeliefert; drei vollstaendige
    Einzelsprachen-Suffixe (je ca. 7,6–7,8 KB statt 9,6 KB) liessen die Gesamtgroesse je
@@ -171,7 +195,7 @@ fuehrt zu HOLD, nicht zu einer weiteren Erhoehung oder Kompaktierung.
 
 | Posten | Folge | Status |
 |---|---|---|
-| Shell-Flash / Antwortgroesse | A2: +160 B Suffix im Flash, +118 B Kopf pro Antwort (Heap-String < `reserve(1536)`, keine Reallokation bei <= 1 534 B), Gesamt +278 B je Shell-Abruf | MEASURED (Bytes) |
+| Shell-Flash / Antwortgroesse | A2: +178 B Suffix im Flash, +118 B Kopf pro Antwort (Heap-String < `reserve(1536)`, keine Reallokation bei <= 1 534 B), Gesamt +296 B je Shell-Abruf | MEASURED (Bytes) |
 | Code-Flash / Dauer-RAM / Stack / Heap im Geraet | keine C++-Logik, kein Codec, kein Handler, keine Application: **0 B** Dauer-RAM, kein neuer Stackframe; Heap nur die +118 B im vorhandenen Kopf-String je Shell-Abruf (transient) | Designziel, per Sektions- und `-fstack-usage`-Vergleich offline zu belegen |
 | Provisionierungs-Shell | ca. +300 B Kopf/Suffix, weit unter der Grenze | ESTIMATED, exakte Messung bei Umsetzung |
 | Browser | Wechsel: ein Lauf von `sl`, `dr`, `ui`; kein Netzwerk | Fake-DOM-Test |
@@ -181,22 +205,24 @@ Laufzeit-Codepfad im Geraet, nur statische Bytes); `RAM_PASS=NOT_PROVEN` bleibt,
 `RAM_OFFLINE_ESTIMATED`. Falls der Owner dennoch eine Messung wuenscht, ist das ein eigener
 Auftrag.
 
-## 8. Ownerentscheidungen (offen)
+## 8. Ownerentscheidungen (erteilt, 2026-10-20)
 
-| ID | Frage | Empfehlung |
-|---|---|---|
-| **D1** | Einmaliges weiteres Shell-Limit: **(A)** 11 456 B mit A2 / Endonyme (mind. 11 422 B), **(B)** 11 392 B mit Codes + `aria-label` (mind. 11 379 B), **(C)** Weg E (Einzelsprachen-Suffix) in eigenem Plan, Limit unveraendert, **(D)** zurueckstellen | **(A)** |
-| D2 | Speicherort: `localStorage` (bleibt nach Browser-Neustart, gilt in neuen Tabs) oder `sessionStorage` (nur Tab/Sitzung); WEB_UI erlaubt beides | `localStorage` |
-| D3 | Platzierung des Auswahlfelds: am Seitenanfang vor allen Abschnitten (kostenneutral) | am Seitenanfang |
+| ID | Entscheid |
+|---|---|
+| **D1 = A** | einmaliges Shell-Limit 11 456 B; A2 mit Endonymen (Deutsch / English / Español) und `aria-label`; keine weitere Erhoehung, kein Cookie-/Serverweg |
+| **D2** | `localStorage` (Schluessel `lang`, gemeinsam fuer Setup- und Dashboard-Shell) |
+| **D3** | Auswahlfeld am Seitenanfang |
 
-D2/D3 sind kleine Festlegungen mit Vorschlag; D1 ist das einzige Gate. Hardware-/Aktor-
-freigabe gibt es nicht (`ACTUATOR_RELEASE=NO`).
+Diese Entscheide sind **keine Freigabe dieser Planrevision**: Umgesetzt wird erst nach
+ausdruecklicher Freigabe der exakten neuen Plan-SHA. Weiter offen: Planreview-/Fix-
+Verification dieser Revision, Browserqualifikation (`NOT_PROVEN`). Hardware-/Aktorfreigabe
+gibt es nicht (`ACTUATOR_RELEASE=NO`).
 
 ## 9. Umsetzungsschnitte nach Freigabe der exakten Plan-SHA und D1
 
 1. **C1 – Dashboard-Shell.** Kopf: Auswahlfeld; Suffix: `sl`, Speicherlesen/-schreiben,
    Validierung. `kMaximumWebShellBytes`, eingefrorenes Golden (`shell_golden.hpp`) und
-   Test-`kShellLimit` auf den gewaehlten Wert (nur wenn D1 es entscheidet).
+   Test-`kShellLimit` auf 11 456 B; `ui()` rendert aktive Bestaetigung neu (siehe §4).
 2. **C2 – Provisionierungs-Shell.** Gleiche Wahlmechanik fuer deren Tabelle, `T` neu
    zuweisbar, Regex-Validierung statt `L[g]`, gemeinsamer Speicherschluessel.
 3. **C3 – Tests, Doku, Evidence.** JS-/Native-Tests, WEB_UI („Sprache je Browser“ umgesetzt,
@@ -207,7 +233,7 @@ freigabe gibt es nicht (`ACTUATOR_RELEASE=NO`).
 
 | Bereich | Faelle |
 |---|---|
-| Echter extrahierter JS-Test (`scripts/test_web_shell_polling.mjs`, Fake-DOM + `localStorage`-Mock) | Vorschlag aus `navigator.language` (de/en/es/fr→en); gespeicherter gueltiger Wert hat Vorrang; **ungueltig/manipuliert** (`xx`, `constructor`, leer, zu lang) wird ignoriert; Wechsel de→en→es: alle statischen Texte (Login, Passwort-Label, Abmelden, Auth-Status, Warntext, `<html lang>`), Dashboard-Ueberschrift, Zeilen, Verbindungsstatus, Aktionsknoepfe und „Sicher?“ in der neuen Sprache; **Reload-Simulation** (neue Fixture mit gleichem Speicher) stellt die Wahl wieder her; **zwei Fixtures mit getrenntem Speicher** bleiben unabhaengig; **blockierter Speicher** (Lesen und Schreiben werfen) → kein Fehler, Wechsel wirkt fuer die Seite; Wechsel loest **keinen** Request aus; `P`, Generation, Frische, Single-Flight und alle Aktionssperren in allen `homeMode`-Werten unveraendert; alle bisherigen 56 Faelle erhalten |
+| Echter extrahierter JS-Test (`scripts/test_web_shell_polling.mjs`, Fake-DOM + `localStorage`-Mock) | Vorschlag aus `navigator.language` (de/en/es/fr→en); gespeicherter gueltiger Wert hat Vorrang; **ungueltig/manipuliert** (`xx`, `constructor`, leer, zu lang) wird ignoriert; Wechsel de→en→es: alle statischen Texte (Login, Passwort-Label, Abmelden, Auth-Status, Warntext, `<html lang>`), Dashboard-Ueberschrift, Zeilen, Verbindungsstatus, Aktionsknoepfe und „Sicher?“ in der neuen Sprache; **Reload-Simulation** (neue Fixture mit gleichem Speicher) stellt die Wahl wieder her; **zwei Fixtures mit getrenntem Speicher** bleiben unabhaengig; **fehlender Speicher und werfender Schreibzugriff** (Wechsel bei `localStorage` nicht definiert, bei werfendem Setter und bei werfendem Lesen) → keine unbehandelte Exception, Wechsel wirkt fuer die Seite, nur validierter Code wird geschrieben; **aktive Bestaetigung** (Klick → „Sicher?“, dann Wechsel de/en/es) → Text des zu bestaetigenden Knopfs in der neuen Sprache, `K`/`KC`/`disabled` unveraendert, kein Request, zweiter Klick sendet genau einmal; Wechsel loest **keinen** Request aus; `P`, Generation, Frische, Single-Flight und alle Aktionssperren in allen `homeMode`-Werten unveraendert; alle bisherigen 56 Faelle erhalten (Soll: 58 mit den beiden Korrekturfaellen plus die Faelle dieser Tabelle) |
 | Native `test_web_application_routes` | Kopf enthaelt genau ein Auswahlfeld mit drei Optionen in jedem Authentifizierungszustand; Provisionierungs-Shell enthaelt es ebenfalls; kein serverseitiger Sprachzustand (kein Cookie/Header, Schluessel `lang` nur im Shell-Text); jede Locale-Tabelle weiterhin vollstaendig (`labelCount`==3); eingefrorener Generator stimmt byteweise; Kopf <= 1 536 B mit maximaler Sequenz; Gesamtgroesse <= gewaehltes Limit und Reserve >= 128 B in allen Zustaenden; Fehlerpfade loeschen den Suffix unveraendert; `/api/v1/*` und Codec unveraendert |
 | Setup-/Login-Texte | Provisionierungs-Shell: alle Texte (`a,b,c,e,x,y,g` plus Ergebnistexte) in allen drei Sprachen vorhanden und beim Wechsel neu gesetzt; Login-Text der Dashboard-Shell |
 | Ressourcen offline | Sektionsvergleich (`.dram0.*`, `.iram0.*` Nulldelta erwartet), `-fstack-usage`-Frames unveraendert, Shell-Bytemessung; beide ESP-Profile bauen |
@@ -227,9 +253,9 @@ Kein Browser-/Geraetetest in diesem Slice (Browserqualifikation weiter `NOT_PROV
 
 ## 11. Risiken
 
-- Kopfgrenze 1 534/1 536 B (2 B Luft) – jede Kopfmehrung ist HOLD.
-- `localStorage` kann fehlen oder werfen; Lesen ist geschuetzt, Schreiben folgenlos
-  (siehe §4); beides wird getestet.
+- Kopfgrenze 1 534/1 536 B (2 B Luft) und 16 B Reserve ueber der Normalreserve – jede Mehrung ist HOLD.
+- `localStorage` kann fehlen oder werfen; Lesen und Schreiben sind geschuetzt (siehe §4);
+  beides wird getestet.
 - Fake-DOM-Test beweist die Logik, nicht das Verhalten echter Browser (Autofill der
   Auswahl, assistive Technik); Browserqualifikation bleibt `NOT_PROVEN`.
 - Entscheidung E (Weg 3) waere ein eigener, groesserer Vertrags-/Architekturplan; sie
